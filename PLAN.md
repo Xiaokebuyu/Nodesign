@@ -10,7 +10,7 @@
 | **P1 前端骨架** | ✅ 完成 | 2026-04-29 | `c7ddf23` | 半天 |
 | **P2 前端交互层 + 产品壳** | ✅ 完成（A+B+C 全做） | 2026-04-29 | `abf20f9` | 半天 |
 | **P2.5 Claude Design 补刀（7 项）** | ✅ 完成 | 2026-04-29 | `6479177` | 半天 |
-| **P3 后端最小集** | 🟡 进行中（agent 模块完成）| 2026-04-29 部分 | `a939054` + 进行中 | 估剩 3-4 天 |
+| **P3 后端最小集** | 🟡 进行中（agent 模块 + e2e ✅，REST/WS 待做）| 2026-04-29 部分 | `4381663` + e2e | 估剩 2-3 天 |
 | **P4 真 agent 接入** | ⚪ 待启动 | — | — | 估 1-2 周 |
 | **P5 inline comment + slider 真接** | ⚪ 待启动 | — | — | 估 1 周 |
 | **P6 参照模式 + 多 skill** | ⚪ 部分占位 | UI 占位已完成 | `abf20f9` | 估 2 周 |
@@ -81,8 +81,14 @@
 - `engine/skills/hello-world/SKILL.md`：P3 链路验证 skill
 - `engine/agent/_smoke.js`：4 类测试全过（EventBus / AgentContext / parseFrontmatter / loadSkill），live LLM 等 key
 
+**Live E2E 验证 ✅**（2026-04-29，跟 commit `4381663` 同日）：
+- 实际 gateway URL：`https://tokendance.space/gateway`（不带 `/anthropic` 段，最终发到 `/v1/messages`）
+- run_mojy3ii6_lkmn：8 turns / 7 工具调用 / cache read 43k tokens / 花费 $0.103
+- agent 真生成一份 5 页 DeskSkill 风格 deck.html（cover/text/cards 三种 layout，亮黑 + 深棕 配色对齐）
+- 全套事件流推 EventBus：run.start / sdk.session / 7×tool_use / 7×tool_result / text / done
+- SQLite 状态机正确流转 + metadata 落库（cost/turns/cacheRead/toolCalls）
+
 **P3 后续**（按依赖顺序）：
-- 等用户填 `.env` 的 `NODESIGN_GATEWAY_KEY` → 跑 live e2e（hello-world skill 真生成 deck.html）
 - `server/index.js`：Express 启动入口（4001 端口，CORS，/api 路由）
 - `server/api/projects.js`：REST CRUD
 - `server/api/runs.js`：POST 创建 run（背景调 runAgent）
