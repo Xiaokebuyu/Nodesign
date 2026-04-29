@@ -1,0 +1,33 @@
+/* 极小 reset。组件内部用 inline style + theme.js token，不依赖全局类。*/
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #F9F8F6;
+  color: #3a2a18;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button, input, textarea, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; border: none; background: transparent; padding: 0; }
+
+a { color: inherit; text-decoration: none; }
+
+/* iframe 沙盒预览容器，去掉默认 border */
+iframe { border: 0; }
+
+/* 滚动条美化（仅 webkit）*/
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }

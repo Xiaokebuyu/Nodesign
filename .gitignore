@@ -1,0 +1,39 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+.DS_Store
+
+# 数据库
+server/db/*.db
+server/db/*.db-wal
+server/db/*.db-shm
+
+# 运行时产物（每个 run 一个 workspace）
+server/runs/*/
+!server/runs/.gitkeep
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# 已安装 skill 的本地副本（symlink 不入库；部署时由 ci 打包）
+server/skills/installed/*/
+!server/skills/installed/.gitkeep
+
+# 日志
+logs/
+*.log
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+
+# 前端构建产物（Nodesign/web/）
+web/dist/
+web/.vite/
+web/coverage/
+
+# 锁文件（暂时全保留；如果未来分仓只保留各自的，再细化）

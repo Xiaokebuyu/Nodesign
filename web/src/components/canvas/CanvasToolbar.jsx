@@ -1,0 +1,89 @@
+import { Edit3, Eye, Code2, RotateCcw } from 'lucide-react';
+import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
+
+const MODES = [
+  { id: 'edit',    label: 'Edit',    icon: Edit3 },
+  { id: 'preview', label: 'Preview', icon: Eye },
+  { id: 'code',    label: 'Code',    icon: Code2 },
+];
+
+export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, onZoomChange }) {
+  return (
+    <div style={{
+      height: 44,
+      flexShrink: 0,
+      borderBottom: `1px solid ${COLOR.border}`,
+      background: '#fff',
+      display: 'flex',
+      alignItems: 'center',
+      padding: `0 ${GAP.lg}px`,
+      gap: GAP.lg,
+    }}>
+      {/* Mode 切换 */}
+      <div style={{
+        display: 'inline-flex',
+        background: 'rgba(0,0,0,0.04)',
+        borderRadius: 6,
+        padding: 2,
+      }}>
+        {MODES.map(m => {
+          const Icon = m.icon;
+          const active = mode === m.id;
+          return (
+            <button
+              key={m.id}
+              onClick={() => onModeChange?.(m.id)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+                padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
+                fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, fontWeight: 500,
+                color: active ? COLOR.text : COLOR.sub,
+                background: active ? '#fff' : 'transparent',
+                borderRadius: 4,
+                boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                transition: 'all 0.15s',
+              }}
+            >
+              <Icon size={11} />
+              {m.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1 }} />
+
+      {/* Zoom */}
+      {onZoomChange && (
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
+        }}>
+          <button onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))} style={zoomBtnStyle}>−</button>
+          <span style={{ minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+          <button onClick={() => onZoomChange(Math.min(2, zoom + 0.1))} style={zoomBtnStyle}>+</button>
+        </div>
+      )}
+
+      {/* Reload */}
+      {onReload && (
+        <button onClick={onReload} style={{
+          padding: `${GAP.xs + 1}px ${GAP.md}px`,
+          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.text4,
+          display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+          borderRadius: 4,
+        }} title="重载 iframe">
+          <RotateCcw size={11} /> Reload
+        </button>
+      )}
+    </div>
+  );
+}
+
+const zoomBtnStyle = {
+  width: 22, height: 22,
+  fontFamily: 'inherit', fontSize: 12,
+  color: '#3a2a18',
+  background: 'rgba(0,0,0,0.04)',
+  borderRadius: 4,
+};

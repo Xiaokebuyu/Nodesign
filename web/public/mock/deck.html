@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nodesign 内部介绍</title>
+<style>
+  :root {
+    --c-text:    #3a2a18;
+    --c-text-2:  #4a4540;
+    --c-sub:     #8a7a62;
+    --c-bg:      #F9F8F6;
+    --c-bg-card: #fdfcfa;
+    --c-accent:  #8a6a3a;
+    --c-btn:     #2d2418;
+    --c-btn-fg:  #f5f0e8;
+    --c-border:  rgba(0,0,0,0.08);
+    --c-error:   #b83a2a;
+    --c-success: #4a8a4a;
+
+    --font-display: 'SF Mono', 'Cascadia Code', 'Menlo', monospace;
+    --font-body:    -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+    --shadow-card:  0 1px 4px rgba(0,0,0,0.1), 0 0 0 0.5px rgba(0,0,0,0.04);
+    --shadow-deep:  0 12px 32px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--c-bg); color: var(--c-text); font-family: var(--font-body); -webkit-font-smoothing: antialiased; }
+
+  .deck { width: 100%; }
+  section[data-page] {
+    width: 100%; min-height: 100vh; padding: 64px 80px;
+    display: flex; flex-direction: column; justify-content: center;
+    border-bottom: 1px solid var(--c-border);
+    animation: fadeIn 0.6s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* layout: cover */
+  section[data-layout="cover"] { text-align: center; align-items: center; }
+  section[data-layout="cover"] .eyebrow { font-family: var(--font-display); font-size: 13px; color: var(--c-sub); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 24px; }
+  section[data-layout="cover"] h1 { font-family: var(--font-display); font-size: 64px; font-weight: 600; color: var(--c-text); letter-spacing: -0.02em; line-height: 1.1; margin-bottom: 24px; }
+  section[data-layout="cover"] p { font-size: 18px; color: var(--c-text-2); max-width: 560px; line-height: 1.6; }
+  section[data-layout="cover"] .meta { margin-top: 64px; font-family: var(--font-display); font-size: 12px; color: var(--c-sub); }
+
+  /* layout: title-content */
+  section[data-layout="title-content"] h2 { font-family: var(--font-display); font-size: 36px; font-weight: 600; color: var(--c-text); margin-bottom: 16px; letter-spacing: -0.01em; }
+  section[data-layout="title-content"] .lead { font-size: 16px; color: var(--c-sub); margin-bottom: 48px; max-width: 720px; }
+  section[data-layout="title-content"] ul { list-style: none; }
+  section[data-layout="title-content"] ul li { padding: 20px 24px; background: var(--c-bg-card); border: 1px solid var(--c-border); border-radius: 12px; margin-bottom: 12px; box-shadow: var(--shadow-card); display: flex; gap: 16px; align-items: baseline; }
+  section[data-layout="title-content"] ul li::before { content: counter(item, decimal-leading-zero); counter-increment: item; font-family: var(--font-display); font-size: 13px; color: var(--c-accent); font-weight: 500; min-width: 32px; }
+  section[data-layout="title-content"] ul { counter-reset: item; }
+
+  /* layout: two-column */
+  section[data-layout="two-column"] h2 { font-family: var(--font-display); font-size: 32px; font-weight: 600; margin-bottom: 48px; letter-spacing: -0.01em; }
+  section[data-layout="two-column"] .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  section[data-layout="two-column"] .col { padding: 32px; background: var(--c-bg-card); border: 1px solid var(--c-border); border-radius: 16px; box-shadow: var(--shadow-card); }
+  section[data-layout="two-column"] .col h3 { font-family: var(--font-display); font-size: 14px; color: var(--c-sub); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 24px; }
+  section[data-layout="two-column"] .col.a h3 { color: var(--c-error); }
+  section[data-layout="two-column"] .col.b h3 { color: var(--c-success); }
+  section[data-layout="two-column"] .col p { font-size: 15px; line-height: 1.6; color: var(--c-text-2); margin-bottom: 16px; }
+
+  /* layout: chart */
+  section[data-layout="chart"] h2 { font-family: var(--font-display); font-size: 32px; font-weight: 600; margin-bottom: 12px; letter-spacing: -0.01em; }
+  section[data-layout="chart"] .lead { font-size: 15px; color: var(--c-sub); margin-bottom: 56px; }
+  section[data-layout="chart"] .bars { display: flex; align-items: flex-end; gap: 64px; height: 320px; padding: 0 32px; border-bottom: 2px solid var(--c-border); position: relative; }
+  section[data-layout="chart"] .bar { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+  section[data-layout="chart"] .bar .fill { width: 80%; background: var(--c-btn); border-radius: 4px 4px 0 0; box-shadow: var(--shadow-card); transition: height 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+  section[data-layout="chart"] .bar .label { font-family: var(--font-display); font-size: 13px; color: var(--c-text-2); }
+  section[data-layout="chart"] .bar .value { font-family: var(--font-display); font-size: 20px; font-weight: 600; color: var(--c-text); margin-top: -4px; }
+  section[data-layout="chart"] .axis { margin-top: 16px; font-family: var(--font-display); font-size: 11px; color: var(--c-sub); display: flex; justify-content: space-between; padding: 0 32px; }
+
+  /* page indicator (固定右下) */
+  .indicator { position: fixed; right: 32px; bottom: 32px; font-family: var(--font-display); font-size: 12px; color: var(--c-sub); background: var(--c-bg-card); padding: 8px 14px; border-radius: 100px; border: 1px solid var(--c-border); box-shadow: var(--shadow-card); }
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- Page 0: cover -->
+  <section data-page="0" data-layout="cover">
+    <div class="eyebrow">Nodesign · 内部介绍</div>
+    <h1>设计代理工作台</h1>
+    <p>云端 SaaS skill engine ——把"做 deck"从手工艺，变成可复用、可探索、可反向优化的基础设施。</p>
+    <div class="meta">2026 · April</div>
+  </section>
+
+  <!-- Page 1: title-content -->
+  <section data-page="1" data-layout="title-content">
+    <h2>当前的问题</h2>
+    <div class="lead">为什么"AI 帮我做 PPT"还远远不够。</div>
+    <ul>
+      <li>每个项目都从零 brief 开始，设计意图没有持久化。</li>
+      <li>下一次想用同样风格做新 deck —— skill 不记得你上次的选择。</li>
+      <li>skill 黑盒，效果不达标也不知道从哪里改起。</li>
+    </ul>
+  </section>
+
+  <!-- Page 2: two-column -->
+  <section data-page="2" data-layout="two-column">
+    <h2>两种范式的对比</h2>
+    <div class="columns">
+      <div class="col a">
+        <h3>传统：单次手工艺</h3>
+        <p>每次都重新构思 metaphor、重新选 palette、重新写 prompt。</p>
+        <p>设计决策散落在 chat 历史里，不可检索。</p>
+        <p>skill 是黑盒，不达标只能换 prompt 试运气。</p>
+      </div>
+      <div class="col b">
+        <h3>Nodesign：基础设施</h3>
+        <p>spec 持久化设计意图，跨 run 跨项目可复用。</p>
+        <p>HTML 产物 + 局部修改链路，所见即所得。</p>
+        <p>skill 是被工作台反向优化的对象，不是天花板。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Page 3: chart -->
+  <section data-page="3" data-layout="chart">
+    <h2>迭代速度的转变</h2>
+    <div class="lead">同一份 deck 的三种修改场景，在 Nodesign 里大约耗时（mock 估算）。</div>
+    <div class="bars">
+      <div class="bar"><div class="value">30 min</div><div class="fill" style="height: 95%"></div><div class="label">首跑（agent 完整 round）</div></div>
+      <div class="bar"><div class="value">5 min</div><div class="fill" style="height: 18%"></div><div class="label">重设计（chat 触发新 run）</div></div>
+      <div class="bar"><div class="value">30 s</div><div class="fill" style="height: 3%"></div><div class="label">局部修改（直改 HTML）</div></div>
+    </div>
+    <div class="axis"><span>耗时（越短越好）</span><span>—</span></div>
+  </section>
+
+  <!-- Page 4: cover (thank-you) -->
+  <section data-page="4" data-layout="cover">
+    <div class="eyebrow">Thank You</div>
+    <h1>一起把 skill 反向优化起来</h1>
+    <p>探索新流程是手段，让 skill 持续变好是目的。下一步：去 P3 把后端串起来，跑通第一个真实 brief。</p>
+    <div class="meta">Nodesign · v0.0.1 — P1 mock deck</div>
+  </section>
+
+</div>
+
+<div class="indicator"><span id="curPage">1</span> / 5 · 方向键 / 空格 翻页</div>
+
+<script>
+  // 极简键盘导航：上下键、PageUp/Down、空格 / Shift+空格 翻页
+  (function() {
+    const sections = Array.from(document.querySelectorAll('section[data-page]'));
+    const indicator = document.getElementById('curPage');
+    let idx = 0;
+    function scrollTo(i) {
+      idx = Math.max(0, Math.min(sections.length - 1, i));
+      sections[idx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      indicator.textContent = String(idx + 1);
+    }
+    document.addEventListener('keydown', (e) => {
+      // Edit 模式 contenteditable focus 时不拦截
+      if (document.activeElement && document.activeElement.isContentEditable) return;
+      if (e.key === 'ArrowDown' || e.key === 'PageDown' || (e.key === ' ' && !e.shiftKey)) { e.preventDefault(); scrollTo(idx + 1); }
+      else if (e.key === 'ArrowUp' || e.key === 'PageUp' || (e.key === ' ' && e.shiftKey)) { e.preventDefault(); scrollTo(idx - 1); }
+      else if (e.key === 'Home') { e.preventDefault(); scrollTo(0); }
+      else if (e.key === 'End') { e.preventDefault(); scrollTo(sections.length - 1); }
+    });
+    // 滚动联动 indicator
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          const p = parseInt(e.target.getAttribute('data-page'), 10);
+          if (!isNaN(p)) { idx = p; indicator.textContent = String(p + 1); }
+        }
+      });
+    }, { threshold: 0.5 });
+    sections.forEach(s => io.observe(s));
+  })();
+</script>
+
+</body>
+</html>
