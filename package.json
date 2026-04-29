@@ -31,5 +31,8 @@
       "playwright vs puppeteer — playwright 更现代但带 chromium ~150MB，部署环境吃得消？",
       "better-sqlite3 vs pg — SaaS 数据规模会涨，可能要切 PostgreSQL；MVP 先 SQLite 起步"
     ]
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.123"
   }
 }
