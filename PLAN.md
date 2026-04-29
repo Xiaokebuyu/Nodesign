@@ -9,8 +9,8 @@
 |---|---|---|---|---|
 | **P1 前端骨架** | ✅ 完成 | 2026-04-29 | `c7ddf23` | 半天 |
 | **P2 前端交互层 + 产品壳** | ✅ 完成（A+B+C 全做） | 2026-04-29 | `abf20f9` | 半天 |
-| **P2.5 Claude Design 补刀（7 项）** | ✅ 完成 | 2026-04-29 | （本次） | 半天 |
-| **P3 后端最小集** | ⚪ 待启动 | — | — | 估 1 周 |
+| **P2.5 Claude Design 补刀（7 项）** | ✅ 完成 | 2026-04-29 | `6479177` | 半天 |
+| **P3 后端最小集** | 🟡 进行中（agent 模块完成）| 2026-04-29 部分 | `a939054` + 进行中 | 估剩 3-4 天 |
 | **P4 真 agent 接入** | ⚪ 待启动 | — | — | 估 1-2 周 |
 | **P5 inline comment + slider 真接** | ⚪ 待启动 | — | — | 估 1 周 |
 | **P6 参照模式 + 多 skill** | ⚪ 部分占位 | UI 占位已完成 | `abf20f9` | 估 2 周 |
@@ -30,6 +30,7 @@
 | 2026-04-29 | P2 范围扩展为 A+B+C（含产品壳全套）| 用户全要 |
 | 2026-04-29 | 迁入 Nodesign repo（PLAN.md），改成 living doc | 跟代码一起 versioned |
 | 2026-04-29 | P2.5：对照 Claude_design.md 1591 行做 gap 审计，补 7 项核心交互 | 进 P3 前端形态对齐 Claude Design 完整度 |
+| 2026-04-29 | P3 战略转向：弃自写 agent-loop，包 Claude Agent SDK 的 query() | 用户提供 tokendance gateway，确认 Kimi 在 Claude Code/SDK 全功能可用，借力 SDK 23 工具 + 30 hooks + sub-agents + plan mode + budget control + checkpoint，省下 1 周自写工作量 |
 
 ## 实施日志
 
@@ -63,7 +64,33 @@
 - 新建：`web/src/components/canvas/SlideNavigator.jsx`、`CanvasCandidateBar.jsx`、`A11yReviewPopover.jsx`、`web/src/components/project/SnapshotModal.jsx`
 - 改造：`CanvasFrame.jsx`（toolbar 上挂 candidate bar + slide nav + a11y）、`CanvasToolbar.jsx`（加 A11y 按钮）、`projectStore.js`（snapshots/candidates + version 1→2 migrate）、`Project.jsx`（wire 全部 handler）、`InputsTab.jsx`（连接代码库独立按钮）、`CreateProjectModal.jsx`（更详细字段）、`ExportMenu.jsx`（加 handoff 项）、`ProjectActionsMenu.jsx`（加快照入口）、`mock/projects.js`（每条加 snapshots/candidates）
 
-### P3-P7 / v2
+### P3 第一阶段（agent 模块，2026-04-29，进行中）
+
+**战略转向**：弃自写 agent-loop，包 Claude Agent SDK 的 `query()`。
+- SDK 实际是 Claude Code 子进程的程序化包装（spawn native `claude` binary）
+- 通过 `ANTHROPIC_BASE_URL` env 透传给子进程，路由到 tokendance gateway → Kimi
+- 借力：23 工具 / 30 hooks / sub-agents / plan mode / file checkpointing / budget control / output_format json_schema / sessions / effort levels / adaptive thinking
+
+**已完成**：
+- 装 `@anthropic-ai/claude-agent-sdk` (devDep, ~80MB native binary 各平台 fat bundle)
+- 删废文件：`shared/agent-loop.js` / `shared/anthropic-client.js` / `engine/agent/tool-registry.js` / `engine/agent/tools/read-file.js`
+- `engine/agent/context.js`：AgentContext（runId / EventBus / abort / counters）+ 适配 SDK message 流
+- `engine/agent/events.js`：EventBus（pattern 订阅）+ Events 构造器
+- `engine/agent/loop.js`：包 SDK query() 的 orchestrator（cwd 沙盒 / env 路由 gateway / 工具白名单 / SDK message → Nodesign EventBus 翻译层 / 状态机切换 / metadata 落库）
+- `engine/agent/skill.js`：SKILL.md loader（YAML frontmatter + body → systemPrompt）
+- `engine/skills/hello-world/SKILL.md`：P3 链路验证 skill
+- `engine/agent/_smoke.js`：4 类测试全过（EventBus / AgentContext / parseFrontmatter / loadSkill），live LLM 等 key
+
+**P3 后续**（按依赖顺序）：
+- 等用户填 `.env` 的 `NODESIGN_GATEWAY_KEY` → 跑 live e2e（hello-world skill 真生成 deck.html）
+- `server/index.js`：Express 启动入口（4001 端口，CORS，/api 路由）
+- `server/api/projects.js`：REST CRUD
+- `server/api/runs.js`：POST 创建 run（背景调 runAgent）
+- `server/api/assets.js`：multipart 上传
+- `server/ws/`：WebSocket（每 project 一连接，订阅 EventBus）
+- 前端 `useProjectStore` 切真后端
+
+### P4-P7 / v2
 （待启动；每完成一阶段补一段日志）
 
 ## Context

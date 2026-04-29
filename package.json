@@ -8,7 +8,8 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "probe:kimi": "node server/_probe-kimi.js",
-    "smoke:engine": "node server/engine/_smoke.js"
+    "smoke:engine": "node server/engine/_smoke.js",
+    "smoke:agent": "node server/engine/agent/_smoke.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

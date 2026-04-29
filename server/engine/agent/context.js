@@ -1,24 +1,20 @@
 /**
- * AgentContext — 一次 run 的运行时上下文
+ * AgentContext — 一次 run 的运行时上下文（SDK 包装版）
  *
- * 把 runId / workspace / 事件总线 / 取消信号 / 工具共享 state 包成一个对象，
- * 让 tools 和 agent loop 不必各自接一堆 props。
+ * 形态变更（2026-04-29 战略转向）：
+ *   - 之前：自写 agent-loop + tool-registry，ctx 含 todoState / forTool() 给 tool execute 用
+ *   - 现在：包 Claude Agent SDK 的 query()，工具由 SDK 内置 + 子进程跑，ctx 不再管 tool 执行
  *
- * 设计要点：
- *   - 一个 ctx 服务**一次** run，run 结束后丢弃
- *   - tools 通过 ctx.workspace.* 访问受沙盒约束的文件操作
- *   - tools 通过 ctx.todoState 共享 todo list（todo_write 工具读写）
- *   - tools 通过 ctx.signal 检查取消（长任务该 throw 'AbortError'）
- *   - 事件通过 ctx.emit(event) 推到 EventBus，外层（HTTP / WS）订阅消费
+ * 职责：
+ *   - 串起 runId / skillId / EventBus / AbortController
+ *   - 提供 workspace.* 包装供 skill loader / 业务逻辑读取沙盒
+ *   - 暴露 emit() 把业务事件推到 EventBus（给 WS 桥接）
+ *   - 跟踪 SDK 返回的 sessionId（从首条 message 提取，存 metadata）
+ *   - 维护 counters（rounds / tokens / cost / errors）落 run.metadata
  *
- * 使用示例：
- *   const ctx = new AgentContext({ runId, skillId, eventBus });
- *   await ctx.ensureWorkspace();
- *   ctx.emit({ type: 'run.start' });
- *   await runAgentLoop({ executeTool: (name, input, opts) => {
- *     const tool = registry.get(name);
- *     return tool.execute(input, ctx.forTool(opts.signal));
- *   }, ... });
+ * 不再管：
+ *   - todoState（SDK TodoWrite 工具自管）
+ *   - forTool()（SDK 自己管 tool execute 上下文）
  */
 
 import { ensureWorkspace, getWorkspaceRoot, readFile, writeFile, listDir, exists, safeResolve } from '../runtime/workspace.js';
@@ -29,9 +25,9 @@ export class AgentContext {
    * @param {object} opts
    * @param {string} opts.runId
    * @param {string} opts.skillId
-   * @param {EventBus} [opts.eventBus]              - 不传则自建一个（单测/独立调用）
-   * @param {AbortController} [opts.abortController] - 不传则自建
-   * @param {object} [opts.metadata={}]              - 自由透传到事件 / 日志的元数据
+   * @param {EventBus} [opts.eventBus]
+   * @param {AbortController} [opts.abortController]
+   * @param {object} [opts.metadata={}]
    */
   constructor({ runId, skillId, eventBus, abortController, metadata = {} }) {
     if (!runId) throw new Error('AgentContext: runId required');
@@ -43,21 +39,25 @@ export class AgentContext {
     this.abortController = abortController || new AbortController();
     this.metadata = metadata;
 
-    // 工具共享状态（todo_write 落这里）
-    this.todoState = [];
+    // SDK 在 message 流里返回 session_id，首次见到时记下
+    this.sdkSessionId = null;
 
-    // 一些可观测计数器（方便 metadata 落库）
+    // 可观测计数器（落 run.metadata 用）
     this.counters = {
-      rounds: 0,
+      turns: 0,                  // SDK num_turns
       toolCalls: 0,
       toolFailures: 0,
-      textTokens: 0,
-      thinkingTokens: 0,
-      cacheRead: 0,
-      cacheWrite: 0,
+      compactBoundaries: 0,
+      apiRetries: 0,
+      durationMs: 0,
+      durationApiMs: 0,
+      totalCostUsd: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreateTokens: 0,
     };
 
-    // 起始时间，给计算 elapsed 用
     this.startedAt = Date.now();
   }
 
@@ -82,10 +82,6 @@ export class AgentContext {
 
   // ── 事件 ──
 
-  /**
-   * 推一个事件到 EventBus。会自动补 runId / ts。
-   * 调用方只需提供 type 和业务字段。
-   */
   emit(event) {
     if (!event || !event.type) throw new Error('emit: event.type required');
     const enriched = {
@@ -97,7 +93,7 @@ export class AgentContext {
     return enriched;
   }
 
-  // ── workspace 包装（让 tools 不直接 import 模块路径）──
+  // ── workspace 包装 ──
 
   workspace = {
     ensure: () => ensureWorkspace(this.runId),
@@ -109,31 +105,44 @@ export class AgentContext {
     resolve: (rel) => safeResolve(this.runId, rel),
   };
 
-  /**
-   * 给 tool.execute 用的轻量上下文（只暴露需要的能力）。
-   * 第二个参数 signal 可选，调用方（agent-loop）会传入 per-tool signal
-   * （含 timeout 派生的 AbortController）。
-   */
-  forTool(signal) {
-    return {
-      runId: this.runId,
-      skillId: this.skillId,
-      workspace: this.workspace,
-      todoState: this.todoState,
-      signal: signal || this.signal,
-      emit: (event) => this.emit(event),
-    };
+  // ── 跟踪 SDK 数据 ──
+
+  /** SDK 第一条 message 带 session_id，记下供 metadata / debug 用 */
+  recordSdkSession(sessionId) {
+    if (!this.sdkSessionId && sessionId) {
+      this.sdkSessionId = sessionId;
+      this.emit({ type: 'run.sdk.session', sessionId });
+    }
+  }
+
+  /** SDK SDKResultMessage 含全套统计；一次性吸收 */
+  absorbResult(result) {
+    if (!result) return;
+    this.counters.turns = result.num_turns ?? this.counters.turns;
+    this.counters.durationMs = result.duration_ms ?? this.counters.durationMs;
+    this.counters.durationApiMs = result.duration_api_ms ?? this.counters.durationApiMs;
+    this.counters.totalCostUsd = result.total_cost_usd ?? this.counters.totalCostUsd;
+    if (result.usage) {
+      this.counters.inputTokens = result.usage.input_tokens || 0;
+      this.counters.outputTokens = result.usage.output_tokens || 0;
+      this.counters.cacheReadTokens = result.usage.cache_read_input_tokens || 0;
+      this.counters.cacheCreateTokens = result.usage.cache_creation_input_tokens || 0;
+    }
+  }
+
+  incrementTool(failed = false) {
+    this.counters.toolCalls += 1;
+    if (failed) this.counters.toolFailures += 1;
   }
 
   // ── observability ──
 
-  /** 返回当前可序列化的快照（给 metadata / debug 端点用） */
   snapshot() {
     return {
       runId: this.runId,
       skillId: this.skillId,
+      sdkSessionId: this.sdkSessionId,
       counters: { ...this.counters },
-      todoCount: this.todoState.length,
       elapsedMs: Date.now() - this.startedAt,
       aborted: this.signal.aborted,
     };

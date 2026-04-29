@@ -1,51 +1,110 @@
 # server/engine/ — Skill Runner
 
-Nodesign 后端核心。**通用的 agent loop 框架**，可加载任意 skill（首个客户：`deskskill-engine-v0.7.5`）。
+Nodesign 后端核心。**包 Claude Agent SDK 的 query() 跑 agent 循环**，加载任意 SKILL.md。
 
-## 设计哲学
+## 设计哲学（2026-04-29 战略调整后）
 
-- 不做 R0/R1/R2/R3 的硬编码 orchestrator——agent **自己**按 SKILL.md 推进
-- 跟 Cursor / Claude Code 同范式：**一个 agent 一直跑，自己用工具落盘中间产物**
-- Skill 是 prompt + 文档（加载到 system prompt 带 cache_control）
-- 工具是能力，可加装（FS / preview / web / 自定义）
-- Runtime 是沙盒（每个 run 一个 workspace 目录）
+- 不再造 agent loop 轮子 —— 包 Claude Agent SDK 的 `query()`（SDK 是 Claude Code 子进程的程序化包装）
+- 通过 `ANTHROPIC_BASE_URL` env 透传给子进程，路由到 Kimi gateway（tokendance 等）
+- 工具用 SDK 内置 23 个，按 Nodesign 业务 allowlist：`Read / Write / Edit / Glob / Grep / TodoWrite`
+- Skill 是 `SKILL.md`（YAML frontmatter + Markdown body），body 直接当 systemPrompt
+- Workspace 是沙盒（每 run 独占 `runs/<runId>/workspace/`），SDK `cwd` 指过去
+- Run 状态机走 SQLite（`runs/store.js`），SDK 自己的 session 持久化关掉（`persistSession: false`）
 
-## 计划目录结构（待实现）
+## 当前目录结构
 
 ```
 engine/
-├── agent/
-│   ├── loop.js                # 包 server/shared/agent-loop.js
-│   ├── system-prompt.js       # 基础 prompt（不含 skill 内容）
-│   └── context.js             # AgentContext（runId / workspace / signal / streamer）
-├── skills/
-│   ├── loader.js              # 读 SKILL.md + references/ → 拼 system prompt
-│   └── registry.js            # 已注册 skill 列表
-├── tools/
-│   ├── _registry.js           # 工具注册表
-│   ├── filesystem.js          # read_file / write_file / edit_file / list_dir
-│   ├── shell.js               # execute_command（受限，限定 cwd=workspace）
-│   ├── todo.js                # todo_write
-│   └── preview/               # preview 子模块（playwright）
-│       ├── start.js, stop.js, screenshot.js, eval.js, inspect.js
-│       └── _server.js         # 内嵌 http server + Playwright 控制
+├── agent/                       ★ Agent 模块（包 SDK）
+│   ├── context.js               AgentContext（runId / EventBus / abort / counters）
+│   ├── events.js                EventBus + 标准事件 schema
+│   ├── loop.js                  ★ 包 SDK query() 的 orchestrator
+│   ├── skill.js                 SKILL.md loader（frontmatter + body）
+│   └── _smoke.js                烟雾测试（无 key 也能跑非 LLM 部分）
+│
+├── skills/                      内置 skill 库
+│   └── hello-world/SKILL.md     P3 链路验证 skill
+│
+├── runs/
+│   └── store.js                 SQLite 状态机（pending → running → succeeded/failed/cancelled）
+│
 ├── runtime/
-│   ├── workspace.js           # runs/<run-id>/workspace/ 沙盒
-│   ├── sandbox.js             # 路径越界检查 / 命令白名单
-│   └── artifact.js            # 产物收集
-└── runs/
-    ├── store.js               # engine_runs 表 CRUD
-    └── status.js              # 状态机：pending → running → done/failed/cancelled
+│   └── workspace.js             沙盒路径解析 + safeResolve + read/write/list 包装
+│
+└── _smoke.js                    底层骨架烟雾测试（store + workspace）
 ```
 
-## 入口（待对齐后选）
+## 入口（待 P3 起 Express 后实现）
 
-- HTTP：`POST /engine/runs { skill, brief, tools? }` → 异步返回 run_id
-- SSE：`GET /engine/runs/:id/stream` → 实时进度
-- 内部：`engineApi.createRun(...)` 给小合调用
+- HTTP：`POST /api/runs { skillId, brief }` → 异步返回 runId
+- WebSocket：每 project 一条连接，订阅 EventBus 把事件推前端
+- 内部：`runAgent({ runId, skillId, brief, eventBus })` from `agent/loop.js`
 
-## 第一个客户：deskskill-engine
+## 跑测试
 
-放在 [server/skills/installed/deskskill-engine/](../skills/installed/) （symlink 自 `/Users/edy/Desktop/html_designer/v0.7.5/deskskill-engine-v0.7.5/`）。
+```bash
+# 不需要 gateway key，验证非 LLM 部分（EventBus / AgentContext / parseFrontmatter / loadSkill）
+npm run smoke:agent
 
-⚠️ `postprocess.py` 不接入——组长已决定移除。G1-G11 gates 改成 JS 工具实现（阶段 P3）。
+# 验证底层骨架（runs/store + runtime/workspace）
+npm run smoke:engine
+
+# Live LLM 调用（需要 NODESIGN_GATEWAY_KEY 在 .env）
+NODESIGN_GATEWAY_KEY=xxx npm run smoke:agent
+```
+
+## SDK 配置要点
+
+```js
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
+query({
+  prompt: brief,
+  options: {
+    cwd: workspaceRoot,                        // 沙盒
+    abortController: ctx.abortController,
+    env: {
+      ...process.env,
+      ANTHROPIC_BASE_URL: NODESIGN_GATEWAY_URL,
+      ANTHROPIC_API_KEY:  NODESIGN_GATEWAY_KEY,
+    },
+    model: 'kimi-k2.6',
+    tools: ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite'],
+    allowedTools: [...同上...],                // 自动允许，不弹权限
+    systemPrompt: skill.systemPrompt,         // 我们自己拼，不用 claude_code preset
+    persistSession: false,                    // 不写 ~/.claude/projects 的 session
+    settingSources: [],                       // 不读外部 settings 文件
+    includePartialMessages: true,             // 流增量
+    thinking: { type: 'adaptive' },
+    effort: 'medium',
+    maxTurns: 50,
+  },
+});
+```
+
+## 事件流（EventBus 标准 schema）
+
+```
+run.start
+run.sdk.session         { sessionId }
+run.delta.text          { round, text }
+run.delta.thinking      { round, text }
+run.delta.tool_use      { round, blockId, name, input }
+run.delta.tool_result   { round, blockId, name, ok, output | error }
+run.compact_boundary    { compactMetadata }       // 上下文压缩点
+run.status              { status }                 // compacting | requesting | null
+run.rate_limit          { info }
+run.cancelled           { reason }
+run.done                { finalText, artifactPath?, snapshot }
+run.error               { message, code, stack }
+```
+
+外层把 `eventBus.subscribe('*', handler)` 桥到 WebSocket / 审计日志 / 测试 buffer。
+
+## 决定 / 不做的事
+
+- ❌ 不消费 MCP（HANDOVER §11；Nodesign 暴露 REST/WS，不做 MCP client）
+- ❌ 不开 Bash 工具（沙盒 cwd 隔离了，但 shell 越界风险高；P5+ 真要 chart 库时再开）
+- ❌ 不开 WebFetch/WebSearch（P5 真做参考系统时再开，需要 SSRF 防护）
+- ❌ 不开 Sub-agents/Task（P5+ 多方向探索可考虑，前期单 agent 单 run）
+- ❌ 不用 SDK 的 `skills: ['xxx']` 自动加载（我们自己读 SKILL.md，给 systemPrompt 字段）
