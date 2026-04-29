@@ -13,7 +13,7 @@ import { COLOR } from '../../lib/theme.js';
  * P1：sandbox 暂时给 allow-scripts allow-same-origin（开发同源）；部署不同 origin 时
  *     退化成 postMessage 通信，bridge 文件预埋 listener。
  */
-export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTextEdit, zoom = 1 }) {
+export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTextEdit, onIframeReady, zoom = 1 }) {
   const ref = useRef(null);
   const loadedRef = useRef(false);
 
@@ -33,6 +33,7 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
     loadedRef.current = true;
     const iframe = ref.current;
     if (!iframe) return;
+    onIframeReady?.(iframe); // 把 iframe 元素回报给父，父可以拿 .contentDocument
     if (mode === 'edit') {
       attachEditMode(iframe, { onSelect, onTextEdit });
     }
@@ -42,11 +43,10 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
     <div style={{
       flex: 1,
       minHeight: 0,
-      overflow: 'auto',
+      overflow: 'hidden',  // iframe 自己处理内部滚动，外层不要再加滚动条
       background: COLOR.bgCard,
       display: 'flex',
-      justifyContent: 'center',
-      padding: 0,
+      flexDirection: 'column',  // ★ column flex 让 iframe flex:1 真正撑满高度
     }}>
       <iframe
         ref={ref}
@@ -55,9 +55,10 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
         onLoad={handleLoad}
         sandbox="allow-scripts allow-same-origin"
         style={{
+          display: 'block',
           width: zoom === 1 ? '100%' : `${100 / zoom}%`,
-          height: '100%',
-          minHeight: 600,
+          flex: 1,           // ★ 撑满 column 剩余高度（wrap 高度由父 flex:1 决定）
+          minHeight: 0,
           border: 0,
           background: '#fff',
           transform: zoom === 1 ? 'none' : `scale(${zoom})`,

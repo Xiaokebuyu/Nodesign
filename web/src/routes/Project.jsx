@@ -1,19 +1,25 @@
-import { useState, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useState, useMemo, useCallback, useRef } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Share2, Download, MoreHorizontal } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import ThreeColumnLayout from '../components/layout/ThreeColumnLayout.jsx';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
 import ContextPanel from '../components/context-panel/ContextPanel.jsx';
+import ShareModal from '../components/project/ShareModal.jsx';
+import ExportMenu from '../components/project/ExportMenu.jsx';
+import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
+import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../lib/theme.js';
-import { findMockProject } from '../mock/projects.js';
+import { useProjectStore } from '../stores/projectStore.js';
+import { useGlobalStore } from '../stores/globalStore.js';
 import { MOCK_DECK_SPEC } from '../mock/deck-spec.js';
 import { newId } from '../lib/helpers.js';
+import { findElementByAnchor } from '../lib/html-utils.js';
 
 const INITIAL_MESSAGES = [
   { id: 'm1', role: 'user',      content: '做一个介绍 Nodesign 的内部 deck，5 页左右。受众是团队同事，重点说明"工作台"和"反向优化 skill"两个概念。不要 emoji。' },
-  { id: 'm2', role: 'thinking',  content: '用户要的是内部技术沟通向 deck，metaphor 应该走"基础设施"路线（不是"魔法 AI"路线）。\n5 页结构推荐：\n1. cover — 立"工作台"心智\n2. 当前问题 — 手工艺式生成\n3. 对比 — 传统 vs Nodesign 范式\n4. 数据 — 迭代速度变化\n5. 收尾 — 反向优化 skill 的承诺\n\npalette 用亮黑 + 深棕 + 暖白系，对齐组织视觉语言。' },
+  { id: 'm2', role: 'thinking',  content: '用户要的是内部技术沟通向 deck，metaphor 应该走"基础设施"路线（不是"魔法 AI"路线）。\n5 页结构推荐：\n1. cover — 立"工作台"心智\n2. 当前问题 — 手工艺式生成\n3. 对比 — 传统 vs Nodesign 范式\n4. 数据 — 迭代速度变化\n5. 收尾 — 反向优化 skill 的承诺' },
   { id: 'm3', role: 'tool',      toolName: 'write_file', toolInput: { path: '00-peer-candidates.md' }, status: 'success', toolOutput: '✓ 写入 metaphor 候选三元组（3 个）' },
   { id: 'm4', role: 'tool',      toolName: 'write_file', toolInput: { path: '01-design-intent.md' }, status: 'success', toolOutput: '✓ 写入设计意图' },
   { id: 'm5', role: 'tool',      toolName: 'write_file', toolInput: { path: 'deck.html' }, status: 'success', toolOutput: '✓ 写入 5 页 self-contained HTML' },
@@ -22,10 +28,33 @@ const INITIAL_MESSAGES = [
 
 export default function Project() {
   const { id } = useParams();
-  const project = findMockProject(id);
+  const navigate = useNavigate();
+  const project = useProjectStore(s => s.getProject(s.projects.find(p => p.id === id)?.id || id) || s.projects.find(p => p.id === id));
+  const updateProject = useProjectStore(s => s.updateProject);
+  const deleteProject = useProjectStore(s => s.deleteProject);
+  const duplicateProject = useProjectStore(s => s.duplicateProject);
+  const showToast = useGlobalStore(s => s.showToast);
+
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
   const [inputs, setInputs] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [selectedAnchor, setSelectedAnchor] = useState(null);
+  const [iframeDoc, setIframeDoc] = useState(null);
+
+  const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [directEditOpen, setDirectEditOpen] = useState(false);
+  const [directEditAnchor, setDirectEditAnchor] = useState(null);
+  const [patches, setPatches] = useState([]);  // [{ id, type, anchor, oldValue, newValue, ts }]
+  const [comments, setComments] = useState([]);  // [{ id, anchor, aiContext, text, status, createdAt }]
+  const exportBtnRef = useRef(null);
+  const actionsBtnRef = useRef(null);
+  const setChatDraft = useGlobalStore(s => s.setChatDraft);
+
+  const handleIframeReady = useCallback((iframe) => {
+    try { setIframeDoc(iframe.contentDocument); } catch { /* cross-origin */ }
+  }, []);
 
   const deckSpec = useMemo(() => MOCK_DECK_SPEC, []);
 
@@ -41,7 +70,6 @@ export default function Project() {
 
   const handleSend = (text) => {
     setMessages(ms => [...ms, { id: newId('msg'), role: 'user', content: text }]);
-    // P1：模拟 agent 反馈（不接后端）
     setIsStreaming(true);
     setTimeout(() => {
       setMessages(ms => [...ms, {
@@ -53,16 +81,139 @@ export default function Project() {
     }, 800);
   };
 
-  const handleAddInput = (asset) => {
-    setInputs(arr => [...arr, asset]);
-  };
-  const handleRemoveInput = (assetId) => {
-    setInputs(arr => arr.filter(a => a.id !== assetId));
-  };
+  const handleAddInput = (asset) => setInputs(arr => [...arr, asset]);
+  const handleRemoveInput = (assetId) => setInputs(arr => arr.filter(a => a.id !== assetId));
 
   const handleTextEdit = (info) => {
-    // P1 只 console.log；P2 落本地 patch state；P3 PATCH 后端
-    console.log('[Project] text edit', info);
+    setPatches(arr => [...arr, {
+      id: newId('patch'),
+      type: 'text-edit',
+      anchor: info.anchor,
+      oldValue: info.oldText,
+      newValue: info.newText,
+      ts: new Date().toISOString(),
+    }]);
+    showToast(`已修改文字：「${info.newText.slice(0, 20)}」`, 'success');
+  };
+
+  const handleAddComment = (ctx) => {
+    const text = window.prompt('为这个元素写评论（之后 AI 会按这条评论改它）：');
+    if (!text || !text.trim()) return;
+    setComments(arr => [...arr, {
+      id: newId('cmt'),
+      anchor: ctx.anchor,
+      aiContext: ctx.aiContext,
+      text: text.trim(),
+      status: 'open',
+      createdAt: new Date().toISOString(),
+    }]);
+    showToast('评论已添加', 'success');
+  };
+  const handleJumpToComment = (comment) => {
+    if (!iframeDoc) return;
+    const el = findElementByAnchor(comment.anchor, iframeDoc.body);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setSelectedAnchor(comment.anchor);
+    } else {
+      showToast('元素已不存在（可能已被改动）', 'error');
+    }
+  };
+  const handleResolveComment = (id) => {
+    setComments(arr => arr.map(c =>
+      c.id === id ? { ...c, status: c.status === 'resolved' ? 'open' : 'resolved' } : c
+    ));
+  };
+  const handleDeleteComment = (id) => {
+    setComments(arr => arr.filter(c => c.id !== id));
+    showToast('评论已删除', 'info');
+  };
+  const handleDirectEdit = (ctx) => {
+    setDirectEditAnchor(ctx.anchor);
+    setDirectEditOpen(true);
+  };
+  const handleApplyDirectEdit = ({ anchor, changes }) => {
+    setPatches(arr => [...arr, {
+      id: newId('patch'),
+      type: 'attr',
+      anchor,
+      changes,
+      ts: new Date().toISOString(),
+    }]);
+    const keys = Object.keys(changes).join(' / ');
+    showToast(`已应用：${keys}`, 'success');
+  };
+  const handleTriggerRun = (ctx) => {
+    const ai = ctx.aiContext;
+    const tag = ai?.tag || 'element';
+    const pageInfo = ai?.pageInfo;
+    const pagePart = pageInfo?.index != null ? `第 ${pageInfo.index + 1} 页` : '';
+    const scopeText = {
+      'this': '只改这一处',
+      'sameType-page': `这页所有 ${tag}`,
+      'sameType-deck': `整 deck 所有 ${tag}`,
+      'spec': '改 spec 重生成',
+    }[ctx.scope] || ctx.scope;
+    const draft = `针对 ${pagePart}的 <${tag}>（${scopeText}）：\n\n…`;
+    setChatDraft(draft);
+    showToast('已填回对话框，编辑后发送', 'info');
+  };
+
+  // 顶栏 actions
+  const handleRename = () => {
+    setActionsOpen(false);
+    const next = window.prompt('重命名为：', project.name);
+    if (next && next.trim() && next !== project.name) {
+      updateProject(project.id, { name: next.trim() });
+      showToast(`已重命名为「${next.trim()}」`, 'success');
+    }
+  };
+  const handleDuplicate = () => {
+    setActionsOpen(false);
+    const copy = duplicateProject(project.id);
+    if (copy) {
+      showToast(`已复制为「${copy.name}」`, 'success');
+      navigate(`/projects/${copy.id}`);
+    }
+  };
+  const handleDelete = () => {
+    setActionsOpen(false);
+    if (window.confirm(`删除「${project.name}」？此操作不可撤销。`)) {
+      deleteProject(project.id);
+      showToast('项目已删除', 'info');
+      navigate('/');
+    }
+  };
+  const handleHistory = () => {
+    setActionsOpen(false);
+    showToast('P3+：运行历史页', 'info');
+  };
+  const handleViewCode = () => {
+    setActionsOpen(false);
+    console.log('[spec]', deckSpec);
+    showToast('spec JSON 已 console.log', 'info');
+  };
+
+  // 导出
+  const handleExport = (format) => {
+    if (format === 'html') {
+      // P2 mock：fetch mock/deck.html → 触发下载
+      fetch('/mock/deck.html')
+        .then(r => r.text())
+        .then(html => {
+          const blob = new Blob([html], { type: 'text/html' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${project.name || 'deck'}.html`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast(`HTML 已下载：${a.download}`, 'success');
+        })
+        .catch(() => showToast('下载失败', 'error'));
+    } else {
+      showToast(`${format.toUpperCase()} 导出 P7 实现`, 'info');
+    }
   };
 
   return (
@@ -71,24 +222,84 @@ export default function Project() {
       status={status}
       actions={
         <>
-          <button style={iconBtnStyle} title="分享（P2）"><Share2 size={13} /> 分享</button>
-          <button style={primaryBtnStyle} title="导出（P7）"><Download size={13} /> 导出</button>
-          <button style={iconBtnStyle} title="更多"><MoreHorizontal size={14} /></button>
+          <button style={iconBtnStyle} onClick={() => setShareOpen(true)}>
+            <Share2 size={13} /> 分享
+          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              ref={exportBtnRef}
+              style={primaryBtnStyle}
+              onClick={() => { setExportOpen(v => !v); setActionsOpen(false); }}
+            >
+              <Download size={13} /> 导出
+            </button>
+            <ExportMenu
+              open={exportOpen}
+              onClose={() => setExportOpen(false)}
+              onExport={handleExport}
+              anchorRef={exportBtnRef}
+            />
+          </div>
+          <div style={{ position: 'relative' }}>
+            <button
+              ref={actionsBtnRef}
+              style={iconBtnStyle}
+              onClick={() => { setActionsOpen(v => !v); setExportOpen(false); }}
+            >
+              <MoreHorizontal size={14} />
+            </button>
+            <ProjectActionsMenu
+              open={actionsOpen}
+              onClose={() => setActionsOpen(false)}
+              anchorRef={actionsBtnRef}
+              onRename={handleRename}
+              onDuplicate={handleDuplicate}
+              onDelete={handleDelete}
+              onHistory={handleHistory}
+              onViewCode={handleViewCode}
+            />
+          </div>
         </>
       }
     >
       <ThreeColumnLayout
         left={<ChatPanel messages={messages} onSend={handleSend} isStreaming={isStreaming} />}
-        center={<CanvasFrame htmlSrc="/mock/deck.html" onTextEdit={handleTextEdit} />}
+        center={
+          <CanvasFrame
+            htmlSrc="/mock/deck.html"
+            selectedAnchor={selectedAnchor}
+            onSelectChange={setSelectedAnchor}
+            onTextEdit={handleTextEdit}
+            onIframeReady={handleIframeReady}
+          />
+        }
         right={
           <ContextPanel
             project={project}
             deckSpec={deckSpec}
             inputs={inputs}
+            comments={comments}
             onAddInput={handleAddInput}
             onRemoveInput={handleRemoveInput}
+            selectedAnchor={selectedAnchor}
+            iframeDoc={iframeDoc}
+            onAddComment={handleAddComment}
+            onDirectEdit={handleDirectEdit}
+            onTriggerRun={handleTriggerRun}
+            onJumpToComment={handleJumpToComment}
+            onResolveComment={handleResolveComment}
+            onDeleteComment={handleDeleteComment}
           />
         }
+      />
+
+      <ShareModal show={shareOpen} onClose={() => setShareOpen(false)} project={project} />
+      <DirectEditModal
+        show={directEditOpen}
+        onClose={() => setDirectEditOpen(false)}
+        anchor={directEditAnchor}
+        iframeDoc={iframeDoc}
+        onApply={handleApplyDirectEdit}
       />
     </AppShell>
   );
@@ -126,6 +337,8 @@ const iconBtnStyle = {
   fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2,
   background: 'rgba(0,0,0,0.04)',
   borderRadius: 6,
+  border: 'none',
+  cursor: 'pointer',
 };
 
 const primaryBtnStyle = {
@@ -135,4 +348,5 @@ const primaryBtnStyle = {
   color: COLOR.btnText, background: COLOR.btn,
   border: `1px solid ${COLOR.btn}`,
   borderRadius: 6,
+  cursor: 'pointer',
 };

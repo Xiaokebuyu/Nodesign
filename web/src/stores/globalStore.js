@@ -24,6 +24,15 @@ export const useGlobalStore = create((set) => ({
   selectedAnchor: null,
   setSelectedAnchor: (a) => set({ selectedAnchor: a }),
 
+  // ── Chat draft（让 Inspect "触发新 run" 把元素意图填回 ChatComposer）──
+  chatDraft: '',
+  setChatDraft: (s) => set({ chatDraft: s }),
+  consumeChatDraft: () => {
+    const draft = useGlobalStore.getState().chatDraft;
+    set({ chatDraft: '' });
+    return draft;
+  },
+
   // ── 模拟登录态（MVP 单用户）──
   user: { id: 'u_self', name: '我', avatar: null },
 }));

@@ -1,23 +1,40 @@
-import { useState } from 'react';
-import { Upload, MessageCircle, Sliders, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Upload, Crosshair, MessageCircle, Sliders, Settings } from 'lucide-react';
 import InputsTab from './InputsTab.jsx';
 import SystemTab from './SystemTab.jsx';
+import InspectTab from './InspectTab.jsx';
+import CommentsTab from './CommentsTab.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 /**
- * Context Panel — 右栏 4 tab
+ * Context Panel — 右栏 5 tab（含 Design Principle §8 的 Inspect tab）
  *
- * P1：Inputs / System tab 实现，Comments / Tweaks 占位
+ * Tab 顺序：Inputs · Inspect · Comments · Tweaks · System
+ *
+ * 受控 tab：Project 持有 selectedAnchor，selectedAnchor 变时切到 Inspect。
+ *
+ * P2：Inputs / Inspect / System 实现，Comments / Tweaks 占位（Comments 等 P5 接 LLM）
  */
 const TABS = [
   { id: 'inputs',   label: 'Inputs',   icon: Upload },
+  { id: 'inspect',  label: 'Inspect',  icon: Crosshair },
   { id: 'comments', label: 'Comments', icon: MessageCircle },
   { id: 'tweaks',   label: 'Tweaks',   icon: Sliders },
   { id: 'system',   label: 'System',   icon: Settings },
 ];
 
-export default function ContextPanel({ project, deckSpec, comments = [], inputs = [], onAddInput, onRemoveInput }) {
+export default function ContextPanel({
+  project, deckSpec, comments = [], inputs = [], onAddInput, onRemoveInput,
+  selectedAnchor, iframeDoc,
+  onAddComment, onDirectEdit, onTriggerRun,
+  onJumpToComment, onResolveComment, onDeleteComment,
+}) {
   const [tab, setTab] = useState('inputs');
+
+  // 选中元素时自动切到 Inspect tab
+  useEffect(() => {
+    if (selectedAnchor) setTab('inspect');
+  }, [selectedAnchor]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -55,7 +72,23 @@ export default function ContextPanel({ project, deckSpec, comments = [], inputs 
       {/* Tab content */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         {tab === 'inputs'   && <InputsTab inputs={inputs} onAdd={onAddInput} onRemove={onRemoveInput} />}
-        {tab === 'comments' && <PlaceholderTab title="Comments" desc="点击 canvas 元素 → 写指令 → agent 改它。P2 实现 UI / P5 接 simple-LLM。" count={comments.length} />}
+        {tab === 'inspect'  && (
+          <InspectTab
+            selectedAnchor={selectedAnchor}
+            iframeDoc={iframeDoc}
+            onAddComment={onAddComment}
+            onDirectEdit={onDirectEdit}
+            onTriggerRun={onTriggerRun}
+          />
+        )}
+        {tab === 'comments' && (
+          <CommentsTab
+            comments={comments}
+            onJump={onJumpToComment}
+            onResolve={onResolveComment}
+            onDelete={onDeleteComment}
+          />
+        )}
         {tab === 'tweaks'   && <PlaceholderTab title="Tweaks" desc="agent 暴露的可调参数（color / spacing / layout variant）。P2 占位 / P5 真接。" />}
         {tab === 'system'   && <SystemTab project={project} deckSpec={deckSpec} />}
       </div>

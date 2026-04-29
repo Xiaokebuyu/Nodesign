@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, AtSign, Wand2, FolderInput } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
+import { useGlobalStore } from '../../stores/globalStore.js';
 
 /**
  * Chat 输入框 — 双层结构（参考用户提供的设计图）
@@ -26,6 +27,8 @@ import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
 export default function ChatComposer({ onSend, disabled }) {
   const [text, setText] = useState('');
   const ref = useRef(null);
+  const chatDraft = useGlobalStore(s => s.chatDraft);
+  const setChatDraft = useGlobalStore(s => s.setChatDraft);
 
   // textarea 自动增高
   useEffect(() => {
@@ -34,6 +37,19 @@ export default function ChatComposer({ onSend, disabled }) {
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
   }, [text]);
+
+  // 监听 chatDraft（外部注入：Inspect "触发新 run" 等）→ 同步到 textarea + focus
+  useEffect(() => {
+    if (chatDraft) {
+      setText(chatDraft);
+      setChatDraft('');  // 消费后清掉，避免重复触发
+      // 等下一帧 textarea 可见 + 自动增高完成后 focus + 光标到末尾
+      requestAnimationFrame(() => {
+        const el = ref.current;
+        if (el) { el.focus(); el.setSelectionRange(chatDraft.length, chatDraft.length); }
+      });
+    }
+  }, [chatDraft, setChatDraft]);
 
   const submit = () => {
     const trimmed = text.trim();

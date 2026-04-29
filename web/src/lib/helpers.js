@@ -35,3 +35,12 @@ export function timeAgo(iso) {
 export function safeJsonParse(s, fallback = null) {
   try { return JSON.parse(s); } catch { return fallback; }
 }
+
+/** 文件大小人话：123 → "123 B" / "1.2 KB" / "3.4 MB" */
+export function formatSize(bytes) {
+  if (!bytes && bytes !== 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}

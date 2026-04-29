@@ -1,18 +1,31 @@
-import { Link } from 'react-router-dom';
-import { Plus, Sparkles, FileText, Layers, Wrench } from 'lucide-react';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, Sparkles, FileText, Layers, Wrench, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
+import CreateProjectModal from '../components/project/CreateProjectModal.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../lib/theme.js';
-import { MOCK_PROJECTS } from '../mock/projects.js';
+import { useProjectStore } from '../stores/projectStore.js';
+import { useGlobalStore } from '../stores/globalStore.js';
 import { timeAgo } from '../lib/helpers.js';
 
 export default function Home() {
+  const navigate = useNavigate();
+  const projects = useProjectStore(s => s.projects);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createInitialMode, setCreateInitialMode] = useState('free');
+
+  const openCreate = (mode = 'free') => {
+    setCreateInitialMode(mode);
+    setCreateOpen(true);
+  };
+
   return (
     <AppShell
       actions={
         <>
           <Link to="/design-systems" style={iconBtnStyle}><Layers size={14} /> 设计系统</Link>
           <Link to="/skills" style={iconBtnStyle}><Wrench size={14} /> Skill</Link>
-          <button style={primaryBtnStyle} onClick={() => alert('P2 实现：创建项目 modal')}>
+          <button style={primaryBtnStyle} onClick={() => openCreate('free')}>
             <Plus size={14} /> 新建项目
           </button>
         </>
@@ -27,12 +40,14 @@ export default function Home() {
             title="自由创作"
             desc="输入 brief，agent 从 metaphor 推审美生成 deck"
             action="开始"
+            onClick={() => openCreate('free')}
           />
           <EntryCard
-            icon={<FileText size={20} color={COLOR.accent || COLOR.brown} />}
+            icon={<FileText size={20} color={COLOR.brown} />}
             title="参照模式"
-            desc="上传 PPT/PDF/HTML 或选已有设计系统，按品牌生成"
+            desc="基于已有设计系统生成（P6 实现，先占位）"
             action="选参考"
+            onClick={() => openCreate('reference')}
           />
         </section>
 
@@ -44,39 +59,52 @@ export default function Home() {
               color: COLOR.text, letterSpacing: '-0.01em', margin: 0,
             }}>最近项目</h2>
             <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub }}>
-              {MOCK_PROJECTS.length} 个项目（mock 数据）
+              {projects.length} 个项目
             </span>
           </div>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: GAP.lg,
-          }}>
-            {MOCK_PROJECTS.map(p => <ProjectCard key={p.id} project={p} />)}
-          </div>
+          {projects.length === 0 ? (
+            <EmptyState onCreate={() => openCreate('free')} />
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: GAP.lg,
+            }}>
+              {projects.map(p => <ProjectCard key={p.id} project={p} />)}
+            </div>
+          )}
         </section>
       </div>
+
+      <CreateProjectModal
+        show={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(proj) => navigate(`/projects/${proj.id}`)}
+        initialMode={createInitialMode}
+      />
     </AppShell>
   );
 }
 
-function EntryCard({ icon, title, desc, action }) {
+function EntryCard({ icon, title, desc, action, onClick }) {
   return (
-    <div style={{
-      padding: GAP.xl + 4,
-      background: '#fff',
-      border: `1px solid ${COLOR.border}`,
-      borderRadius: 16,
-      boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-      display: 'flex',
-      gap: GAP.lg,
-      alignItems: 'flex-start',
-      cursor: 'pointer',
-      transition: 'all 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
-    }}
-    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; }}
-    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.04)'; }}
+    <div
+      onClick={onClick}
+      style={{
+        padding: GAP.xl + 4,
+        background: '#fff',
+        border: `1px solid ${COLOR.border}`,
+        borderRadius: 16,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+        display: 'flex',
+        gap: GAP.lg,
+        alignItems: 'flex-start',
+        cursor: 'pointer',
+        transition: 'all 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.04)'; }}
     >
       <div style={{
         width: 44, height: 44, borderRadius: 12,
@@ -93,41 +121,170 @@ function EntryCard({ icon, title, desc, action }) {
 }
 
 function ProjectCard({ project }) {
-  const dot = project.status === 'running' ? COLOR.warn : project.status === 'failed' ? COLOR.error : COLOR.success;
-  return (
-    <Link to={`/projects/${project.id}`} style={{
-      display: 'block',
-      padding: GAP.lg,
-      background: '#fff',
-      border: `1px solid ${COLOR.border}`,
-      borderRadius: 12,
-      boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-      transition: 'all 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
-    }}
-    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; e.currentTarget.style.borderColor = COLOR.borderMd; }}
-    onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = COLOR.border; }}
-    >
-      {/* Thumbnail 占位 */}
-      <div style={{
-        height: 120,
-        background: COLOR.bgCard,
-        borderRadius: 8,
-        marginBottom: GAP.lg,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.dim,
-      }}>{project.summary}</div>
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hover, setHover] = useState(false);
+  const navigate = useNavigate();
+  const updateProject = useProjectStore(s => s.updateProject);
+  const deleteProject = useProjectStore(s => s.deleteProject);
+  const duplicateProject = useProjectStore(s => s.duplicateProject);
+  const showToast = useGlobalStore(s => s.showToast);
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: GAP.sm }}>
-        <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.lg, fontWeight: 500, color: COLOR.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-          {project.name}
+  const dot = project.status === 'running' ? COLOR.warn : project.status === 'failed' ? COLOR.error : COLOR.success;
+
+  const handleRename = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setMenuOpen(false);
+    const next = window.prompt('重命名为：', project.name);
+    if (next && next.trim() && next !== project.name) {
+      updateProject(project.id, { name: next.trim() });
+      showToast(`已重命名为「${next.trim()}」`, 'success');
+    }
+  };
+  const handleDuplicate = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setMenuOpen(false);
+    const copy = duplicateProject(project.id);
+    if (copy) showToast(`已复制为「${copy.name}」`, 'success');
+  };
+  const handleDelete = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setMenuOpen(false);
+    if (window.confirm(`删除「${project.name}」？此操作不可撤销。`)) {
+      deleteProject(project.id);
+      showToast('项目已删除', 'info');
+    }
+  };
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => { setHover(false); setMenuOpen(false); }}
+      style={{ position: 'relative' }}
+    >
+      <Link to={`/projects/${project.id}`} style={{
+        display: 'block',
+        padding: GAP.lg,
+        background: '#fff',
+        border: `1px solid ${COLOR.border}`,
+        borderRadius: 12,
+        boxShadow: hover ? '0 6px 18px rgba(0,0,0,0.08)' : '0 1px 3px rgba(0,0,0,0.03)',
+        borderColor: hover ? COLOR.borderMd : COLOR.border,
+        transform: hover ? 'translateY(-2px)' : 'none',
+        transition: 'all 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
+      }}>
+        {/* Thumbnail 占位 */}
+        <div style={{
+          height: 120,
+          background: COLOR.bgCard,
+          borderRadius: 8,
+          marginBottom: GAP.lg,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.dim,
+        }}>{project.summary || '新项目'}</div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: GAP.sm }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.lg, fontWeight: 500, color: COLOR.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {project.name}
+          </div>
+          <span style={{ width: 6, height: 6, borderRadius: 3, background: dot, flexShrink: 0, marginLeft: GAP.md }} />
         </div>
-        <span style={{ width: 6, height: 6, borderRadius: 3, background: dot, flexShrink: 0, marginLeft: GAP.md }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{project.skill}</span>
+          <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{timeAgo(project.updatedAt)}</span>
+        </div>
+      </Link>
+
+      {/* Hover 时显示 ⋯ */}
+      {hover && (
+        <button
+          onMouseDown={(e) => { e.stopPropagation(); }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(v => !v); }}
+          style={{
+            position: 'absolute', top: 8, right: 8,
+            width: 28, height: 28, borderRadius: 6,
+            background: 'rgba(255,255,255,0.95)',
+            border: `1px solid ${COLOR.borderMd}`,
+            color: COLOR.text2,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+            zIndex: 2,
+          }}
+        >
+          <MoreHorizontal size={14} />
+        </button>
+      )}
+
+      {menuOpen && (
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          style={{
+            position: 'absolute', top: 40, right: 8,
+            minWidth: 140,
+            background: '#fff',
+            border: `1px solid ${COLOR.borderMd}`,
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
+            padding: 4,
+            zIndex: 5,
+          }}>
+          <MenuItem icon={<Edit2 size={12} />} label="重命名" onClick={handleRename} />
+          <MenuItem icon={<Copy size={12} />} label="复制" onClick={handleDuplicate} />
+          <MenuItem icon={<Trash2 size={12} />} label="删除" onClick={handleDelete} danger />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MenuItem({ icon, label, onClick, danger }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%',
+        display: 'flex', alignItems: 'center', gap: GAP.sm,
+        padding: `${GAP.sm}px ${GAP.md + 2}px`,
+        fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+        color: danger ? COLOR.error : COLOR.text2,
+        background: 'transparent',
+        borderRadius: 4,
+        cursor: 'pointer',
+        textAlign: 'left',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = danger ? 'rgba(184,58,42,0.08)' : 'rgba(0,0,0,0.04)'; }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      {icon} {label}
+    </button>
+  );
+}
+
+function EmptyState({ onCreate }) {
+  return (
+    <div style={{
+      padding: `${GAP.page * 1.5}px ${GAP.page}px`,
+      textAlign: 'center',
+      background: '#fff',
+      border: `1px dashed ${COLOR.borderMd}`,
+      borderRadius: 12,
+    }}>
+      <Sparkles size={36} color={COLOR.dim} style={{ marginBottom: GAP.lg }} />
+      <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.h2, color: COLOR.text2, marginBottom: GAP.sm }}>
+        还没有项目
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{project.skill}</span>
-        <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{timeAgo(project.updatedAt)}</span>
+      <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: COLOR.sub, marginBottom: GAP.xl }}>
+        从一份 brief 开始你的第一个 deck
       </div>
-    </Link>
+      <button onClick={onCreate} style={{
+        padding: `${GAP.md}px ${GAP.xxl}px`,
+        fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, fontWeight: 500,
+        color: '#fff', background: COLOR.btn,
+        border: `1px solid ${COLOR.btn}`,
+        borderRadius: 8,
+      }}>
+        + 新建项目
+      </button>
+    </div>
   );
 }
 

@@ -1,36 +1,79 @@
+import { useEffect, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
+import { Save } from 'lucide-react';
+import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 /**
  * CodeCanvas — Monaco 显示/编辑 HTML 源
  *
- * P1：只读显示（onChange 回调存在但不接后端）。
- * P2：blur 后存到本地 state。
- * P3：blur 后 PATCH /api/projects/:id/artifacts/:aid。
+ * P2：可编辑。本地 draft 状态 + 800ms debounce 同步到父（避免每个 keystroke
+ *      都重 render iframe）。手动按"应用"按钮立即同步。
+ * P3：onChange 触发 PATCH 后端 artifact source。
  */
-export default function CodeCanvas({ value = '', onChange }) {
+export default function CodeCanvas({ value = '', onChange, readOnly = false }) {
+  const [draft, setDraft] = useState(value);
+  const dirty = draft !== value;
+
+  // 外部 value 变化时同步进 draft（不要覆盖用户正在编辑的内容）
+  useEffect(() => {
+    if (!dirty) setDraft(value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  // debounce 同步：800ms 静止后 commit
+  useEffect(() => {
+    if (!dirty) return;
+    const t = setTimeout(() => onChange?.(draft), 800);
+    return () => clearTimeout(t);
+  }, [draft, dirty, onChange]);
+
+  const applyNow = () => {
+    if (dirty) onChange?.(draft);
+  };
+
   return (
-    <div style={{ flex: 1, minHeight: 0, position: 'relative', background: COLOR.bgCard }}>
+    <div style={{ flex: 1, minHeight: 0, position: 'relative', background: COLOR.bgCard, display: 'flex', flexDirection: 'column' }}>
       <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0,
+        flexShrink: 0,
         padding: `${GAP.sm}px ${GAP.lg}px`,
         background: 'rgba(0,0,0,0.04)',
         borderBottom: `1px solid ${COLOR.borderLt}`,
         fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        zIndex: 1,
       }}>
-        <span>deck.html</span>
-        <span style={{ fontSize: 10 }}>P1: 只读 · P3 后可编辑落库</span>
+        <span>
+          deck.html
+          {dirty && <span style={{ color: COLOR.warn, marginLeft: GAP.sm }}>· 已修改</span>}
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm }}>
+          {dirty && (
+            <button
+              onClick={applyNow}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+                padding: `2px ${GAP.md}px`,
+                fontFamily: FONT_SANS, fontSize: 11, fontWeight: 500,
+                color: COLOR.btnText, background: COLOR.btn,
+                border: 'none', borderRadius: 4,
+                cursor: 'pointer',
+              }}
+            >
+              <Save size={10} /> 应用
+            </button>
+          )}
+          <span style={{ fontSize: 10 }}>
+            {readOnly ? '只读' : '改完会同步到 Edit / Preview'}
+          </span>
+        </div>
       </div>
-      <div style={{ position: 'absolute', top: 28, bottom: 0, left: 0, right: 0 }}>
+      <div style={{ flex: 1, minHeight: 0 }}>
         <Editor
           defaultLanguage="html"
-          value={value}
-          onChange={onChange}
+          value={draft}
+          onChange={(v) => setDraft(v ?? '')}
           theme="light"
           options={{
-            readOnly: true,
+            readOnly,
             minimap: { enabled: false },
             fontSize: 12,
             fontFamily: "'SF Mono', 'Cascadia Code', 'Menlo', monospace",
