@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
-import { Download, FileCode, FileText, Presentation, Package } from 'lucide-react';
+import { Download, FileCode, FileText, Presentation, Package, Hammer } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 const ITEMS = [
-  { id: 'html',  icon: FileCode,     label: 'Standalone HTML',   desc: '单文件，可双击打开' },
-  { id: 'pdf',   icon: FileText,     label: 'PDF',               desc: 'P7：playwright print' },
-  { id: 'pptx',  icon: Presentation, label: 'PowerPoint (.pptx)', desc: 'P7：HTML → PPTX' },
-  { id: 'zip',   icon: Package,      label: 'ZIP（含资料）',      desc: 'P7：项目完整打包' },
+  { id: 'html',     icon: FileCode,     label: 'Standalone HTML',    desc: '单文件，可双击打开' },
+  { id: 'pdf',      icon: FileText,     label: 'PDF',                desc: 'P7：playwright print' },
+  { id: 'pptx',     icon: Presentation, label: 'PowerPoint (.pptx)', desc: 'P7：HTML → PPTX' },
+  { id: 'zip',      icon: Package,      label: 'ZIP（含资料）',       desc: 'P7：项目完整打包' },
+  { id: 'handoff',  icon: Hammer,       label: '工程交付包',           desc: 'HTML + chat + spec + README + prompt' },
 ];
 
 /**

@@ -1,4 +1,4 @@
-import { Edit3, Eye, Code2, RotateCcw } from 'lucide-react';
+import { Edit3, Eye, Code2, RotateCcw, ShieldCheck } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
 
 const MODES = [
@@ -7,7 +7,7 @@ const MODES = [
   { id: 'code',    label: 'Code',    icon: Code2 },
 ];
 
-export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, onZoomChange }) {
+export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, onZoomChange, onA11yClick, a11yBtnRef }) {
   return (
     <div style={{
       height: 44,
@@ -63,6 +63,23 @@ export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, 
           <span style={{ minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
           <button onClick={() => onZoomChange(Math.min(2, zoom + 0.1))} style={zoomBtnStyle}>+</button>
         </div>
+      )}
+
+      {/* A11y review */}
+      {onA11yClick && (
+        <button
+          ref={a11yBtnRef}
+          onClick={onA11yClick}
+          style={{
+            padding: `${GAP.xs + 1}px ${GAP.md}px`,
+            fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.text4,
+            display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+            borderRadius: 4,
+          }}
+          title="无障碍审查（mock）"
+        >
+          <ShieldCheck size={11} /> A11y
+        </button>
       )}
 
       {/* Reload */}

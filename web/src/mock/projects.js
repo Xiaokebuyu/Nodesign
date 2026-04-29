@@ -1,5 +1,9 @@
 /** P1 mock 项目数据。P3 后端起来后由 GET /api/projects 替换 */
 
+const DEFAULT_CANDIDATES = [
+  { id: 'c-default', label: '候选 A', createdAt: '2026-04-22T10:00:00+08:00', summary: '初始候选' },
+];
+
 export const MOCK_PROJECTS = [
   {
     id: 'proj-001',
@@ -10,6 +14,9 @@ export const MOCK_PROJECTS = [
     updatedAt: '2026-04-28T15:30:00+08:00',
     thumbnail: null,
     summary: '12 页，metaphor: 从画板到工厂',
+    snapshots: [],
+    candidates: DEFAULT_CANDIDATES,
+    activeCandidateId: 'c-default',
   },
   {
     id: 'proj-002',
@@ -20,6 +27,9 @@ export const MOCK_PROJECTS = [
     updatedAt: '2026-04-28T11:20:00+08:00',
     thumbnail: null,
     summary: '5 页 demo',
+    snapshots: [],
+    candidates: DEFAULT_CANDIDATES,
+    activeCandidateId: 'c-default',
   },
   {
     id: 'proj-003',
@@ -30,6 +40,9 @@ export const MOCK_PROJECTS = [
     updatedAt: '2026-04-29T09:00:00+08:00',
     thumbnail: null,
     summary: '运行中…Round 2 / 8 页',
+    snapshots: [],
+    candidates: DEFAULT_CANDIDATES,
+    activeCandidateId: 'c-default',
   },
   {
     id: 'proj-004',
@@ -40,6 +53,9 @@ export const MOCK_PROJECTS = [
     updatedAt: '2026-04-25T18:45:00+08:00',
     thumbnail: null,
     summary: '草稿',
+    snapshots: [],
+    candidates: DEFAULT_CANDIDATES,
+    activeCandidateId: 'c-default',
   },
   {
     id: 'proj-005',
@@ -50,6 +66,9 @@ export const MOCK_PROJECTS = [
     updatedAt: '2026-04-22T22:10:00+08:00',
     thumbnail: null,
     summary: 'R3 装配失败',
+    snapshots: [],
+    candidates: DEFAULT_CANDIDATES,
+    activeCandidateId: 'c-default',
   },
 ];
 

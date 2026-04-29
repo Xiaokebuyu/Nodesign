@@ -9,6 +9,7 @@ import ContextPanel from '../components/context-panel/ContextPanel.jsx';
 import ShareModal from '../components/project/ShareModal.jsx';
 import ExportMenu from '../components/project/ExportMenu.jsx';
 import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
+import SnapshotModal from '../components/project/SnapshotModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../lib/theme.js';
 import { useProjectStore } from '../stores/projectStore.js';
@@ -29,10 +30,17 @@ const INITIAL_MESSAGES = [
 export default function Project() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const project = useProjectStore(s => s.getProject(s.projects.find(p => p.id === id)?.id || id) || s.projects.find(p => p.id === id));
+  const project = useProjectStore(s => s.projects.find(p => p.id === id));
   const updateProject = useProjectStore(s => s.updateProject);
   const deleteProject = useProjectStore(s => s.deleteProject);
   const duplicateProject = useProjectStore(s => s.duplicateProject);
+  const saveSnapshot = useProjectStore(s => s.saveSnapshot);
+  const deleteSnapshotStore = useProjectStore(s => s.deleteSnapshot);
+  const renameSnapshot = useProjectStore(s => s.renameSnapshot);
+  const addCandidate = useProjectStore(s => s.addCandidate);
+  const removeCandidate = useProjectStore(s => s.removeCandidate);
+  const renameCandidate = useProjectStore(s => s.renameCandidate);
+  const selectCandidate = useProjectStore(s => s.selectCandidate);
   const showToast = useGlobalStore(s => s.showToast);
 
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
@@ -44,6 +52,7 @@ export default function Project() {
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [snapshotOpen, setSnapshotOpen] = useState(false);
   const [directEditOpen, setDirectEditOpen] = useState(false);
   const [directEditAnchor, setDirectEditAnchor] = useState(null);
   const [patches, setPatches] = useState([]);  // [{ id, type, anchor, oldValue, newValue, ts }]
@@ -184,14 +193,52 @@ export default function Project() {
       navigate('/');
     }
   };
-  const handleHistory = () => {
-    setActionsOpen(false);
-    showToast('P3+：运行历史页', 'info');
-  };
   const handleViewCode = () => {
     setActionsOpen(false);
     console.log('[spec]', deckSpec);
     showToast('spec JSON 已 console.log', 'info');
+  };
+
+  // 快照
+  const handleSaveSnapshotQuick = () => {
+    setActionsOpen(false);
+    const snap = saveSnapshot(project.id);
+    if (snap) showToast(`快照「${snap.label}」已保存`, 'success');
+  };
+  const handleOpenSnapshots = () => {
+    setActionsOpen(false);
+    setSnapshotOpen(true);
+  };
+  const handleSnapshotSave = (label) => {
+    const snap = saveSnapshot(project.id, label);
+    if (snap) showToast(`快照「${snap.label}」已保存`, 'success');
+  };
+  const handleSnapshotRestore = (snapshot) => {
+    showToast(`P3+：恢复到「${snapshot.label}」（mock：未真改 HTML）`, 'info');
+  };
+  const handleSnapshotDelete = (snapshot) => {
+    deleteSnapshotStore(project.id, snapshot.id);
+    showToast('快照已删除', 'info');
+  };
+  const handleSnapshotRename = (snapshotId, label) => {
+    renameSnapshot(project.id, snapshotId, label);
+  };
+
+  // 候选
+  const handleAddCandidate = () => {
+    const cand = addCandidate(project.id);
+    if (cand) showToast(`已添加「${cand.label}」（mock：复制当前）`, 'success');
+  };
+  const handleRemoveCandidate = (candidateId) => {
+    removeCandidate(project.id, candidateId);
+    showToast('候选已删除', 'info');
+  };
+  const handleRenameCandidate = (candidateId, label) => {
+    renameCandidate(project.id, candidateId, label);
+  };
+  const handleSelectCandidate = (candidateId) => {
+    selectCandidate(project.id, candidateId);
+    setSelectedAnchor(null);
   };
 
   // 导出
@@ -211,6 +258,8 @@ export default function Project() {
           showToast(`HTML 已下载：${a.download}`, 'success');
         })
         .catch(() => showToast('下载失败', 'error'));
+    } else if (format === 'handoff') {
+      showToast('P7 工程交付包：HTML + chat history + spec + README + prompt', 'info');
     } else {
       showToast(`${format.toUpperCase()} 导出 P7 实现`, 'info');
     }
@@ -255,7 +304,9 @@ export default function Project() {
               onRename={handleRename}
               onDuplicate={handleDuplicate}
               onDelete={handleDelete}
-              onHistory={handleHistory}
+              onSaveSnapshot={handleSaveSnapshotQuick}
+              onOpenSnapshots={handleOpenSnapshots}
+              snapshotCount={(project.snapshots || []).length}
               onViewCode={handleViewCode}
             />
           </div>
@@ -271,6 +322,12 @@ export default function Project() {
             onSelectChange={setSelectedAnchor}
             onTextEdit={handleTextEdit}
             onIframeReady={handleIframeReady}
+            candidates={project.candidates || []}
+            activeCandidateId={project.activeCandidateId}
+            onSelectCandidate={handleSelectCandidate}
+            onAddCandidate={handleAddCandidate}
+            onRemoveCandidate={handleRemoveCandidate}
+            onRenameCandidate={handleRenameCandidate}
           />
         }
         right={
@@ -294,6 +351,15 @@ export default function Project() {
       />
 
       <ShareModal show={shareOpen} onClose={() => setShareOpen(false)} project={project} />
+      <SnapshotModal
+        show={snapshotOpen}
+        onClose={() => setSnapshotOpen(false)}
+        project={project}
+        onSave={handleSnapshotSave}
+        onRestore={handleSnapshotRestore}
+        onDelete={handleSnapshotDelete}
+        onRename={handleSnapshotRename}
+      />
       <DirectEditModal
         show={directEditOpen}
         onClose={() => setDirectEditOpen(false)}

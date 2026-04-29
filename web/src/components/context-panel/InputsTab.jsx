@@ -41,7 +41,7 @@ export default function InputsTab({ inputs = [], onAdd, onRemove }) {
   };
 
   const handlePasteUrl = () => {
-    const url = window.prompt('粘贴 URL（GitHub repo / 网页 / 在线 PDF）');
+    const url = window.prompt('粘贴 URL（网页 / 在线 PDF / 任意公开链接）');
     if (!url || !url.trim()) return;
     const trimmed = url.trim();
     onAdd?.({
@@ -49,6 +49,21 @@ export default function InputsTab({ inputs = [], onAdd, onRemove }) {
       type: detectUrlType(trimmed),
       filename: trimmed,
       addedAt: new Date().toISOString(),
+    });
+  };
+
+  const handleConnectRepo = () => {
+    const url = window.prompt(
+      '连接代码库（GitHub URL）\n\n建议挂指定子目录而不是整个 monorepo（参考 Claude_design §13.3）\n例如：https://github.com/your-org/repo/tree/main/src/components'
+    );
+    if (!url || !url.trim()) return;
+    const trimmed = url.trim();
+    onAdd?.({
+      id: newId('asset'),
+      type: 'repo',
+      filename: trimmed,
+      addedAt: new Date().toISOString(),
+      meta: { connector: 'github' },
     });
   };
 
@@ -93,23 +108,38 @@ export default function InputsTab({ inputs = [], onAdd, onRemove }) {
         />
       </div>
 
-      {/* URL paste */}
-      <button
-        onClick={handlePasteUrl}
-        style={{
-          width: '100%',
-          padding: `${GAP.md}px ${GAP.lg}px`,
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2,
-          background: 'rgba(0,0,0,0.03)',
-          border: `1px solid ${COLOR.borderLt}`,
-          borderRadius: 8,
-          marginBottom: GAP.lg,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: GAP.sm,
-          cursor: 'pointer',
-        }}
-      >
-        <Link2 size={13} /> 粘贴 URL（repo / 网页）
-      </button>
+      {/* 链接类入口（GitHub / 网页 URL）*/}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: GAP.sm, marginBottom: GAP.lg }}>
+        <button
+          onClick={handleConnectRepo}
+          style={{
+            padding: `${GAP.md}px ${GAP.sm}px`,
+            fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text2,
+            background: 'rgba(0,0,0,0.03)',
+            border: `1px solid ${COLOR.borderLt}`,
+            borderRadius: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: GAP.xs,
+            cursor: 'pointer',
+          }}
+          title="挂代码库子目录让 agent 看实际组件结构"
+        >
+          <Github size={12} /> 连接代码库
+        </button>
+        <button
+          onClick={handlePasteUrl}
+          style={{
+            padding: `${GAP.md}px ${GAP.sm}px`,
+            fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text2,
+            background: 'rgba(0,0,0,0.03)',
+            border: `1px solid ${COLOR.borderLt}`,
+            borderRadius: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: GAP.xs,
+            cursor: 'pointer',
+          }}
+        >
+          <Link2 size={12} /> 网页 URL
+        </button>
+      </div>
 
       {/* List */}
       {inputs.length > 0 && (

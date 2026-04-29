@@ -3,6 +3,9 @@ import CanvasToolbar from './CanvasToolbar.jsx';
 import HtmlIframe from './HtmlIframe.jsx';
 import EditOverlay from './EditOverlay.jsx';
 import CodeCanvas from './CodeCanvas.jsx';
+import SlideNavigator from './SlideNavigator.jsx';
+import CanvasCandidateBar from './CanvasCandidateBar.jsx';
+import A11yReviewPopover from './A11yReviewPopover.jsx';
 import { COLOR } from '../../lib/theme.js';
 
 /**
@@ -13,24 +16,41 @@ import { COLOR } from '../../lib/theme.js';
  *   - preview iframe 纯展示（无 bridge）
  *   - code    Monaco（可编辑，blur/debounce 同步回 srcDoc → iframe reload）
  *
- * 数据流：
- *   1. 初次加载 fetch htmlSrc → sourceText
- *   2. Code mode 改 sourceText → 标记 dirty
- *   3. dirty 时 iframe 用 srcDoc=sourceText（不再用 src）
- *   4. 用户按 Reload → 重新 fetch + 重置 dirty
+ * 多候选：候选 tab 条 + + 新候选 + 删候选（同 htmlSrc，agent 真生成时各 candidate 独立）
+ *
+ * Slide navigator：扫描 section[data-page]，水平 tab 条 + 当前页高亮
+ *
+ * A11y：toolbar ✓ A11y 按钮 → popover 显示 mock review 结果
  */
 export default function CanvasFrame({
   htmlSrc, htmlContent,
   selectedAnchor, onSelectChange,
   onTextEdit,
   onIframeReady,
+  candidates,
+  activeCandidateId,
+  onSelectCandidate,
+  onAddCandidate,
+  onRemoveCandidate,
+  onRenameCandidate,
 }) {
   const [mode, setMode] = useState('edit');
   const [zoom, setZoom] = useState(1);
   const [reloadKey, setReloadKey] = useState(0);
   const [sourceText, setSourceText] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [iframeDoc, setIframeDoc] = useState(null);
+  const [a11yOpen, setA11yOpen] = useState(false);
   const iframeWrapRef = useRef(null);
+  const a11yBtnRef = useRef(null);
+
+  const showCandidateBar = candidates && candidates.length >= 1;
+
+  // 当 candidate 切换时，重置 dirty
+  useEffect(() => {
+    setDirty(false);
+    setIframeDoc(null);
+  }, [activeCandidateId]);
 
   // 加载源码（用于 Code mode 显示 + dirty 后切 srcDoc）
   useEffect(() => {
@@ -59,6 +79,13 @@ export default function CanvasFrame({
     setDirty(true);
   }, []);
 
+  const handleIframeReady = useCallback((iframe) => {
+    try {
+      setIframeDoc(iframe.contentDocument);
+    } catch { /* cross-origin */ }
+    onIframeReady?.(iframe);
+  }, [onIframeReady]);
+
   const handleReload = () => {
     setReloadKey(k => k + 1);  // 重新 fetch 源码
     onSelectChange?.(null);    // 清掉选中
@@ -70,24 +97,43 @@ export default function CanvasFrame({
       display: 'flex', flexDirection: 'column',
       background: COLOR.bg,
     }}>
+      {/* 多候选切换条（≥1 个候选时显示）*/}
+      {showCandidateBar && (
+        <CanvasCandidateBar
+          candidates={candidates}
+          activeId={activeCandidateId}
+          onSelect={onSelectCandidate}
+          onAdd={onAddCandidate}
+          onRemove={onRemoveCandidate}
+          onRename={onRenameCandidate}
+        />
+      )}
+
       <CanvasToolbar
         mode={mode}
         onModeChange={(m) => { setMode(m); onSelectChange?.(null); }}
         zoom={zoom}
         onZoomChange={setZoom}
         onReload={handleReload}
+        onA11yClick={() => setA11yOpen(o => !o)}
+        a11yBtnRef={a11yBtnRef}
       />
+
+      {/* Slide navigator — Edit/Preview 时扫 section[data-page]，多于 1 页才显示 */}
+      {(mode === 'edit' || mode === 'preview') && (
+        <SlideNavigator iframeDoc={iframeDoc} />
+      )}
 
       {(mode === 'edit' || mode === 'preview') && (
         <div ref={iframeWrapRef} style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
           <HtmlIframe
-            key={`${reloadKey}-${dirty ? 'doc' : 'src'}`}  // dirty 切换时强制 reload
+            key={`${activeCandidateId || 'default'}-${reloadKey}-${dirty ? 'doc' : 'src'}`}
             src={dirty ? undefined : htmlSrc}
             srcDoc={dirty ? sourceText : (!htmlSrc ? htmlContent : undefined)}
             mode={mode}
             onSelect={handleSelect}
             onTextEdit={handleTextEdit}
-            onIframeReady={onIframeReady}
+            onIframeReady={handleIframeReady}
             zoom={zoom}
           />
           {mode === 'edit' && selectedAnchor && (
@@ -101,6 +147,14 @@ export default function CanvasFrame({
 
       {mode === 'code' && (
         <CodeCanvas value={sourceText} onChange={handleSourceChange} readOnly={false} />
+      )}
+
+      {a11yOpen && (
+        <A11yReviewPopover
+          anchorRef={a11yBtnRef}
+          onClose={() => setA11yOpen(false)}
+          iframeDoc={iframeDoc}
+        />
       )}
     </div>
   );

@@ -1,11 +1,15 @@
 import { useEffect, useRef } from 'react';
-import { Edit2, Copy, Trash2, History, Code2 } from 'lucide-react';
+import { Edit2, Copy, Trash2, History, Code2, Camera } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
 
 /**
  * 顶栏 ⋯ 菜单（项目操作）
  */
-export default function ProjectActionsMenu({ open, onClose, anchorRef, onRename, onDuplicate, onDelete, onHistory, onViewCode }) {
+export default function ProjectActionsMenu({
+  open, onClose, anchorRef,
+  onRename, onDuplicate, onDelete, onHistory, onViewCode,
+  onSaveSnapshot, onOpenSnapshots, snapshotCount = 0,
+}) {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -37,7 +41,14 @@ export default function ProjectActionsMenu({ open, onClose, anchorRef, onRename,
     >
       <Item icon={<Edit2 size={12} />} label="重命名" onClick={onRename} />
       <Item icon={<Copy size={12} />} label="复制项目" onClick={onDuplicate} />
-      <Item icon={<History size={12} />} label="运行历史" onClick={onHistory} subtle="P3+" />
+      <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />
+      <Item icon={<Camera size={12} />} label="保存快照" onClick={onSaveSnapshot} />
+      <Item
+        icon={<History size={12} />}
+        label="快照与历史"
+        onClick={onOpenSnapshots}
+        subtle={snapshotCount > 0 ? String(snapshotCount) : null}
+      />
       <Item icon={<Code2 size={12} />} label="查看 spec JSON" onClick={onViewCode} subtle="debug" />
       <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />
       <Item icon={<Trash2 size={12} />} label="删除项目" onClick={onDelete} danger />

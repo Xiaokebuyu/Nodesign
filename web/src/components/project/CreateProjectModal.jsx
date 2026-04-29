@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, FileText } from 'lucide-react';
+import { Sparkles, FileText, ChevronRight } from 'lucide-react';
 import Modal, { ModalFooter } from '../ui/Modal.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { useProjectStore } from '../../stores/projectStore.js';
@@ -9,14 +9,21 @@ import { useProjectStore } from '../../stores/projectStore.js';
  *
  * 流程：
  *   1. 选模式（自由创作 / 参照模式 — 后者标 P6 占位）
- *   2. 项目名 + 初始 brief
- *   3. 创建并跳转
+ *   2. 项目名 + 初始 brief（自由文本）
+ *   3. 可选：展开"更详细" — 4 个结构化字段（goal / audience / keyMessages / style）
+ *      参考 Claude_design §4 第 8 条：好 prompt 含 goal/layout/content/audience
+ *   4. 创建并跳转
  */
 export default function CreateProjectModal({ show, onClose, onCreated, initialMode = 'free' }) {
   const createProject = useProjectStore(s => s.createProject);
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState('');
   const [brief, setBrief] = useState('');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [goal, setGoal] = useState('');
+  const [audience, setAudience] = useState('');
+  const [keyMessages, setKeyMessages] = useState('');
+  const [stylePref, setStylePref] = useState('');
 
   // show 切换时重置
   useEffect(() => {
@@ -24,13 +31,28 @@ export default function CreateProjectModal({ show, onClose, onCreated, initialMo
       setMode(initialMode);
       setName('');
       setBrief('');
+      setAdvancedOpen(false);
+      setGoal(''); setAudience(''); setKeyMessages(''); setStylePref('');
     }
   }, [show, initialMode]);
 
   const submit = () => {
+    const details = (goal || audience || keyMessages || stylePref)
+      ? { goal: goal.trim(), audience: audience.trim(), keyMessages: keyMessages.trim(), stylePref: stylePref.trim() }
+      : null;
+    // 把结构化字段拼到 brief（agent 看 brief，details 作为元数据存）
+    const expanded = [
+      brief.trim(),
+      goal && `目标：${goal.trim()}`,
+      audience && `受众：${audience.trim()}`,
+      keyMessages && `关键消息：${keyMessages.trim()}`,
+      stylePref && `风格偏好：${stylePref.trim()}`,
+    ].filter(Boolean).join('\n');
+
     const proj = createProject({
       name: name.trim() || '未命名项目',
-      brief: brief.trim(),
+      brief: expanded,
+      briefDetails: details,
       mode,
     });
     onCreated?.(proj);
@@ -84,6 +106,51 @@ export default function CreateProjectModal({ show, onClose, onCreated, initialMo
           />
         </Section>
 
+        {/* 更详细（可选）— 结构化字段 */}
+        <button
+          onClick={() => setAdvancedOpen(o => !o)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+            padding: `${GAP.xs}px ${GAP.sm}px`,
+            fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
+            background: 'transparent',
+            borderRadius: 4,
+            marginBottom: advancedOpen ? GAP.lg : 0,
+            cursor: 'pointer',
+          }}
+        >
+          <ChevronRight
+            size={11}
+            style={{ transform: advancedOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}
+          />
+          更详细（可选 · 4 个结构化字段帮 agent 抓重点）
+        </button>
+
+        {advancedOpen && (
+          <div style={{
+            padding: GAP.lg,
+            background: COLOR.bgCard,
+            border: `1px solid ${COLOR.borderLt}`,
+            borderRadius: 8,
+            marginBottom: GAP.lg,
+            display: 'flex', flexDirection: 'column', gap: GAP.md,
+          }}>
+            <Field label="目标（goal）" placeholder="比如：说服客户接受 Q3 报价方案" value={goal} onChange={setGoal} />
+            <Field label="受众（audience）" placeholder="比如：技术 leader + 财务 leader 各一位" value={audience} onChange={setAudience} />
+            <Field
+              label="关键消息（key messages）"
+              placeholder="3 条核心信息，逗号或换行分隔"
+              value={keyMessages}
+              onChange={setKeyMessages}
+              multiline
+            />
+            <Field label="风格偏好（style）" placeholder="比如：理性克制、不要 emoji、配色低饱和" value={stylePref} onChange={setStylePref} />
+            <div style={{ fontFamily: FONT_SANS, fontSize: 10, color: COLOR.sub, lineHeight: 1.5 }}>
+              填了的字段会拼进 brief 一起送给 agent；不填也没事，brief 自由文本就够了。
+            </div>
+          </div>
+        )}
+
         <div style={{
           fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub,
           marginTop: GAP.sm,
@@ -110,6 +177,37 @@ function Section({ label, children }) {
         marginBottom: GAP.sm,
       }}>{label}</div>
       {children}
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, placeholder, multiline }) {
+  const Comp = multiline ? 'textarea' : 'input';
+  const commonStyle = {
+    width: '100%',
+    padding: `${GAP.sm}px ${GAP.md}px`,
+    fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+    color: COLOR.text,
+    background: '#fff',
+    border: `1px solid ${COLOR.borderMd}`,
+    borderRadius: 6,
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+  return (
+    <div>
+      <div style={{
+        fontFamily: FONT_MONO, fontSize: 10, color: COLOR.sub,
+        textTransform: 'uppercase', letterSpacing: '0.05em',
+        marginBottom: 4,
+      }}>{label}</div>
+      <Comp
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={multiline ? 2 : undefined}
+        style={multiline ? { ...commonStyle, resize: 'vertical', lineHeight: 1.5 } : commonStyle}
+      />
     </div>
   );
 }

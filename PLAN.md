@@ -9,6 +9,7 @@
 |---|---|---|---|---|
 | **P1 前端骨架** | ✅ 完成 | 2026-04-29 | `c7ddf23` | 半天 |
 | **P2 前端交互层 + 产品壳** | ✅ 完成（A+B+C 全做） | 2026-04-29 | `abf20f9` | 半天 |
+| **P2.5 Claude Design 补刀（7 项）** | ✅ 完成 | 2026-04-29 | （本次） | 半天 |
 | **P3 后端最小集** | ⚪ 待启动 | — | — | 估 1 周 |
 | **P4 真 agent 接入** | ⚪ 待启动 | — | — | 估 1-2 周 |
 | **P5 inline comment + slider 真接** | ⚪ 待启动 | — | — | 估 1 周 |
@@ -28,6 +29,7 @@
 | 2026-04-29 | §4.1 Floating Card：从"layout 钉死"调整为"待真实参考激活" | 整体 layout floating card 实验撤回，仅保留 popover/modal/Tweaks 浮窗用 |
 | 2026-04-29 | P2 范围扩展为 A+B+C（含产品壳全套）| 用户全要 |
 | 2026-04-29 | 迁入 Nodesign repo（PLAN.md），改成 living doc | 跟代码一起 versioned |
+| 2026-04-29 | P2.5：对照 Claude_design.md 1591 行做 gap 审计，补 7 项核心交互 | 进 P3 前端形态对齐 Claude Design 完整度 |
 
 ## 实施日志
 
@@ -41,6 +43,25 @@
 **B 级 Inspect 三动作**：DirectEditModal（颜色/字号/字重/对齐/行高/字距）+ chatDraft 跨组件注入（触发新 run）+ patches state（text-edit/attr）+ CommentsTab（按页分组+jump+resolve）+ EditOverlay 实时跟随 fix
 **C 级次要页面**：DS list/new/detail mock + Skill list mock
 **技术教训**：iframe display:flex column 链路 + EditOverlay 不能用 stale anchor.bbox + 跨组件文本注入用 store 比 forwardRef 简单 + Monaco 改源 → iframe reload 用 800ms debounce
+
+### P2.5（2026-04-29，本次）
+对照 `Claude_design.md` 完整功能原子表（44 条）做 gap 审计，补齐 7 项前端核心交互：
+
+1. **Slide Navigator**：扫描 `iframe.contentDocument.querySelectorAll('section[data-page]')` → 顶部水平 thumbnail 条 + IntersectionObserver 跟踪当前页 + 点击 scrollIntoView。响应 Claude_design §14.2"On slide 3..."用法。
+2. **A11y Review Popover**：CanvasToolbar `✓ A11y` 按钮 → floating popover 跑 6 个启发式扫描（img alt / 标题层级 / button 文本 / lang / 对比度 mock / 焦点顺序 mock）。Claude_design §10.1。
+3. **Multi-candidate Compare**：`CanvasCandidateBar` 候选切换条 + projectStore.addCandidate/removeCandidate/renameCandidate/selectCandidate。Claude_design §11 / §12.2。
+4. **Snapshot 机制**：projectStore.saveSnapshot/deleteSnapshot/renameSnapshot + ⋯ 菜单"保存快照" + "快照与历史"入口 + SnapshotModal 列表 UI。Claude_design §11。
+5. **Engineering Handoff Bundle**：ExportMenu 加"工程交付包"项（HTML + chat history + spec + README + prompt），P7 mock toast。Claude_design §16.3。
+6. **GitHub Repo Connection**：InputsTab 拆出独立"连接代码库"按钮（github icon）+ 原有"网页 URL"按钮。Claude_design §13。
+7. **Structured Prompt Fields**：CreateProjectModal 加"更详细"折叠区，4 字段（goal / audience / keyMessages / stylePref）展开后填写 → 提交时拼进 brief。Claude_design §4 第 8 条。
+
+**遗留待修**（P3 进行中或之后再来）：
+- #7 CreateProjectModal 更详细字段提交后 brief 拼装效果待打磨（用户报告：UX 还不顺）
+- #6 GitHub 连接按钮的实际 ingest 行为待真接（P6 时连 git → 子目录 picker；当前只是 prompt 加 type='repo' 条目）
+
+**关键文件**：
+- 新建：`web/src/components/canvas/SlideNavigator.jsx`、`CanvasCandidateBar.jsx`、`A11yReviewPopover.jsx`、`web/src/components/project/SnapshotModal.jsx`
+- 改造：`CanvasFrame.jsx`（toolbar 上挂 candidate bar + slide nav + a11y）、`CanvasToolbar.jsx`（加 A11y 按钮）、`projectStore.js`（snapshots/candidates + version 1→2 migrate）、`Project.jsx`（wire 全部 handler）、`InputsTab.jsx`（连接代码库独立按钮）、`CreateProjectModal.jsx`（更详细字段）、`ExportMenu.jsx`（加 handoff 项）、`ProjectActionsMenu.jsx`（加快照入口）、`mock/projects.js`（每条加 snapshots/candidates）
 
 ### P3-P7 / v2
 （待启动；每完成一阶段补一段日志）
