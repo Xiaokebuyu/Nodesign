@@ -54,12 +54,33 @@ function makeAlwaysAllowCanUseTool() {
 }
 
 /**
+ * 把 BetaContentBlockParam[] 包成 SDK 期望的 AsyncIterable<SDKUserMessage>。
+ *
+ * 单条 yield 后 iterator 自然结束 —— SDK 收到唯一一条 user message 后
+ * 进入 agent loop。后续 turn 由前端再次调 POST /turn 触发新 query。
+ *
+ * 如果未来要做 streamInput 多轮复用（P0+ stage 2），这个 generator
+ * 改成持续监听外部 push 的 message 队列，yield 的同时 iterator 不结束。
+ */
+async function* buildUserMessageStream(contentBlocks) {
+  yield {
+    type: 'user',
+    message: {
+      role: 'user',
+      content: contentBlocks,
+    },
+    parent_tool_use_id: null,
+  };
+}
+
+/**
  * 跑一次 agent run。
  *
  * @param {object} opts
  * @param {string} opts.runId             - 已经 createRun 创建好的 run id（pending 状态）
  * @param {string} opts.skillId           - skill 名（loadSkill 解析）
- * @param {string} opts.brief             - 用户输入
+ * @param {string} opts.brief             - 用户输入（文本）；当 userContentBlocks 缺省时
+ *                                          会被包成单个 text content block 走 SDK
  * @param {EventBus} [opts.eventBus]      - 事件总线（不传则 ctx 自建）
  * @param {AbortController} [opts.abortController]
  * @param {object} [opts.modelOverride]   - { model?, effort?, thinking?, maxTurns? }
@@ -67,6 +88,9 @@ function makeAlwaysAllowCanUseTool() {
  * @param {string} [opts.workspaceRoot]   - 外部 workspace 绝对路径（P0 per-project 目录）；
  *                                          不传则 fallback runId workspace（旧 smoke 行为）
  * @param {string} [opts.resumeSessionId] - SDK 续 session（同 project 跨 turn 用）
+ * @param {Array} [opts.userContentBlocks] - SDK BetaContentBlockParam[]（C2 多模态接口）；
+ *                                          传入时走 prompt: AsyncIterable<SDKUserMessage> 流，
+ *                                          不传则 fallback brief 文本（旧 string 接口）
  *
  * @returns {Promise<{ finalText, artifactPath, snapshot }>}
  */
@@ -80,6 +104,7 @@ export async function runAgent({
   toolAllowlist = DEFAULT_TOOL_ALLOWLIST,
   workspaceRoot = null,
   resumeSessionId = null,
+  userContentBlocks = null,
 }) {
   if (!runId) throw new Error('runAgent: runId required');
   if (!skillId) throw new Error('runAgent: skillId required');
@@ -164,9 +189,17 @@ export async function runAgent({
   let finalText = '';
   let artifactPath = null;
 
+  // prompt 包装：
+  // - 有 userContentBlocks → 走 SDK 多模态流式接口（AsyncIterable<SDKUserMessage>）
+  //   一次性 yield 一条 user message，iterator 关闭 → SDK 进 agent loop。
+  // - 没有 → fallback 直接传 brief 字符串（兼容旧 smoke 路径）
+  const promptInput = userContentBlocks && Array.isArray(userContentBlocks) && userContentBlocks.length > 0
+    ? buildUserMessageStream(userContentBlocks)
+    : brief;
+
   try {
     const stream = query({
-      prompt: brief,
+      prompt: promptInput,
       options: sdkOptions,
     });
 

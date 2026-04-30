@@ -11,10 +11,11 @@
  *
  * 行为：
  *   1. 校验 project + 解析 input
- *   2. 拼 brief 字符串（chat + 附件元信息前缀）
- *   3. createRun（pending） — projectId 写入
+ *   2. composeUserMessage：拼成 SDK content blocks（P0+ s1 C2 切流式之前是字符串）
+ *   3. createRun（pending） — projectId 写入；brief 落 displayText 作审计
  *   4. 立即返回 runId（agent 异步在后端跑）
- *   5. 后台 runAgent：cwd = project workspace，事件流走 project EventBus
+ *   5. 后台 runAgent：cwd = project workspace，事件流走 project EventBus；
+ *      content blocks 走 SDK 的 prompt: AsyncIterable<SDKUserMessage> 接口
  *   6. 跑完：把 sdkSessionId 写回 project.activeSessionId（下次 turn resume）
  *
  * 错误：
@@ -43,10 +44,10 @@ router.post('/:pid/turn', async (req, res, next) => {
     }
 
     const finalSkillId = (typeof skillId === 'string' && skillId) || project.skillId;
-    const brief = composeBrief(chat, attachments);
+    const { displayText, blocks } = composeUserMessage(chat, attachments);
 
-    // 创建 run（pending）— 关联 project
-    const run = createRun({ skillId: finalSkillId, brief, projectId: project.id });
+    // 创建 run（pending）— displayText 落 brief 字段做审计 / fallback 显示
+    const run = createRun({ skillId: finalSkillId, brief: displayText, projectId: project.id });
 
     // 立即返回，agent 后台跑
     res.status(202).json({ runId: run.id });
@@ -58,7 +59,8 @@ router.post('/:pid/turn', async (req, res, next) => {
     runAgent({
       runId: run.id,
       skillId: finalSkillId,
-      brief,
+      brief: displayText,
+      userContentBlocks: blocks,           // C2：走 SDK 多模态 content blocks
       eventBus: bus,
       workspaceRoot: wsRoot,
       resumeSessionId: project.activeSessionId,
@@ -75,25 +77,49 @@ router.post('/:pid/turn', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/** 把 chat 文本 + attachments 元信息拼成 brief 字符串前缀给 agent */
-function composeBrief(chat, attachments) {
-  if (!Array.isArray(attachments) || attachments.length === 0) return chat;
+/**
+ * 把 chat 文本 + attachments 拼成 SDK content blocks 数组。
+ *
+ * 返回：
+ *   - displayText: 用于 createRun 审计 + run.error 时前端显示 fallback
+ *   - blocks: BetaContentBlockParam[]（喂 SDK 的 user message content）
+ *
+ * 当前策略（按用户拍版）：附件统一用文本路径塞 content block，让 agent
+ * 用 Read 工具读取（不内联 base64 image，避免大文件爆 user message token）。
+ *
+ * 未来扩展：
+ *   - anchor 类型（D 流）：text 描述选中元素的语义路径（page+tag+text）
+ *   - comment 类型（D 流）：text 描述评论内容 + anchor 序列化
+ *   - 如果某天要让 agent 一次看图（不用 Read 工具）：加 image content block
+ *     { type: 'image', source: { type: 'base64', media_type, data } }
+ */
+function composeUserMessage(chat, attachments) {
+  const blocks = [{ type: 'text', text: chat }];
 
-  const lines = [];
-  for (const a of attachments) {
-    if (!a || typeof a !== 'object') continue;
-    if (a.type === 'asset' || a.path) {
-      lines.push(`- ${a.path}${a.name ? `（${a.name}）` : ''}`);
-    } else if (a.type === 'anchor') {
-      lines.push(`- 选中元素: page=${a.pageIndex} ${a.tag || 'element'} ${a.text ? `"${a.text}"` : ''}`);
-    } else if (a.type === 'comment') {
-      lines.push(`- 评论: ${a.text} (anchor: ${JSON.stringify(a.anchor || {})})`);
+  if (Array.isArray(attachments) && attachments.length > 0) {
+    const lines = [];
+    for (const a of attachments) {
+      if (!a || typeof a !== 'object') continue;
+      if (a.type === 'asset' || a.path) {
+        lines.push(`- ${a.path}${a.name ? `（${a.name}）` : ''}`);
+      } else if (a.type === 'anchor') {
+        lines.push(`- 选中元素: page=${a.pageIndex} ${a.tag || 'element'} ${a.text ? `"${a.text}"` : ''}`);
+      } else if (a.type === 'comment') {
+        lines.push(`- 评论: ${a.text} (anchor: ${JSON.stringify(a.anchor || {})})`);
+      }
+    }
+    if (lines.length > 0) {
+      blocks.push({
+        type: 'text',
+        text: `可用素材（用 Read 工具读取，路径相对 workspace）：\n${lines.join('\n')}`,
+      });
     }
   }
 
-  if (lines.length === 0) return chat;
+  // displayText：合并 blocks 用 \n\n，给 DB 审计 / fallback 显示用
+  const displayText = blocks.map((b) => b.text || `[${b.type}]`).join('\n\n');
 
-  return `可用素材：\n${lines.join('\n')}\n\n---\n\n${chat}`;
+  return { displayText, blocks };
 }
 
 export default router;
