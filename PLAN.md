@@ -3,6 +3,79 @@
 > **这份 plan 是 living document**——跟代码一起 commit，每完成一个 phase 更新状态 + 实施日志。
 > 起点：`~/.claude/plans/plan-parallel-harbor.md`（2026-04-29 plan mode 通过）；2026-04-29 迁入 repo。
 
+---
+
+## 🟢 当前状态（2026-04-30 收尾，必读）
+
+> 这一节是**所有读者的入口**。下面老的 Design Principles / Architecture / 9 流 MVP
+> 切分等是 P1-P3 时代的 living plan，部分内容在 2026-04-30 stage 1 SDK 接通后已经
+> 被替代。**实施细节请优先看 SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md**。
+
+### 一句话定位
+NoDesign = **Claude Code 之上的画布编辑层**。底层 agent 能力（LLM / agent loop /
+工具集 / session / file checkpoint / MCP / hooks / subagent）**完全来自 Claude Agent
+SDK（@anthropic-ai/claude-agent-sdk）**，我们只做：薄壳后端（包 SDK + REST/WS）+
+前端画布编辑层 + 1 个默认 SKILL.md + 4 件套 hooks + 3 件套 MCP tools + 3 个 subagent
+骨架。
+
+### 已 ship 的关键设施（截至 2026-04-30）
+
+| 层 | 现状 |
+|---|---|
+| **agent 入口** | server/engine/agent/loop.js 单一 `runAgent()` 函数包 SDK `query()` |
+| **prompt 接口** | `AsyncIterable<SDKUserMessage>` + content blocks（多模态 ready） |
+| **工具白名单** | Read / Write / Edit / Glob / Grep / TodoWrite / Bash / **AskUserQuestion** |
+| **Hooks 4 件套** | FileChanged / PreToolUse(Bash) / Stop / PostCompact（hooks.js） |
+| **MCP 工具集** | screenshot_canvas / export_handoff / record_decision（mcp/tools/） |
+| **Subagent 骨架** | vision-checker / ds-extractor / tweak-proposer（agents/）—— 当前不主动调，schemas/ 已就位 |
+| **SDK 高级 options** | enableFileCheckpointing / agentProgressSummaries / promptSuggestions / canUseTool 占位 |
+| **流式打字** | stream_event → 逐 token 推 text/thinking |
+| **前端可视化** | Tool icon / elapsed / image 渲染 / Thinking 默认展开 / SuggestionChip / ContextUsageBar / Decisions tab / ExportsList / SystemMessage / AskUserQuestionView / Subagent Task→agentType / iframe scroll 保留 |
+| **过时设计已移除** | 自由创作 vs 参照模式 mode 区分（C30，agent 自己根据输入判断） |
+
+### 5 条新设计原则（覆盖原 §1-§8，未来不踩老路）
+
+1. **agent 能力 = Claude Agent SDK**。不要自撸 LLM 调用 / agent loop / 工具实现 /
+   session 管理 / file checkpoint —— SDK 都有。"产品代码"集中在画布编辑层 +
+   SKILL.md + hooks/MCP/subagent 业务逻辑。**偏不远**：删了产品代码 SDK 仍能跑。
+2. **可见性优先**。"agent 在做什么"是产品核心信号 —— 工具调用 / 思考过程 /
+   subagent 调用 / 决策记录 / 文件改动 都要在前端可见。不要把信息埋折叠里默认
+   关闭。
+3. **不框定模式**。SDK 接通后 agent 看输入和附件能自决，不需要前端预设 mode
+   /skill type / scenario。给 agent 信息 + 工具，让它自判。
+4. **双轨持久化**。session 内细粒度 = SDK rewindFiles；跨 session 长期 = git
+   commit。两层叠加，互不冲突。
+5. **沙盒分阶段**。stage 1 cwd + Bash 白名单 + canUseTool 三层兜底；stage 2 公测
+   时上 Docker per project（用 SDK `spawnClaudeCodeProcess` 钩子，改一处即可）。
+
+### 哪些老段落已被替代（看下面 P1-P3 段时心里有数）
+
+- ❌ **§7 参照系统工作流** → 已被 SDK content blocks + Read 工具替代（C30 移除 mode）。
+  H 流（DS 抽取）实施改走 ds-extractor subagent + design-system.json schema（C15）。
+- ❌ **page-spec Schema v0.1**（commitment device 那段）→ 实际 spec.json 由 agent 自己
+  维护，结构 `{ history: [...], decisions: [...] }`，不是文档里那个固定 schema。
+  agent 通过 `mcp__nodesign__record_decision` 工具写入。
+- ❌ **WS 双向流事件类型** → 实际 30+ 种事件（events.js 头部完整列表），文档里那
+  几个只覆盖了 P3 时代。
+- ❌ **9 个核心交互流的 P1-P7 MVP 切分** → 实际走的是 P0 → P0+ stage 1 → Phase H
+  路径，老切分作废。当前 P0 5 流（A/B/C/E/I）通；D/F/H 留 stage 2。
+- 🟡 **§8 Inspector 双视图** → 仍 valid，但 D 流盲区（anchor 序列化）尚未敲定，留
+  stage 2。
+- 🟡 **Architecture Decision § 统一 iframe canvas** → 大方向不变，但实现细节（iframe
+  reload / FileChanged 自动 bump）已切到 SDK 驱动。
+
+### 下一步候选（按优先级）
+
+详见 SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md 的"延后清单"。简版：
+1. canUseTool 接 UI 权限弹窗
+2. SessionStore 自定义实现
+3. streamInput 多轮 query 复用
+4. subagent 真调用流（H/F 流接通的入口）
+5. rewindFiles per-query 接通
+6. Docker 沙盒 per project（多用户公测前）
+
+---
+
 ## 完成度速查
 
 | Phase | 状态 | 完成日期 | Commit | 工作量（实际）|
@@ -197,6 +270,13 @@ stage 1 ship 后用户给了几条产品反馈：
 
 ### P4-P7 / v2
 （待启动；每完成一阶段补一段日志）
+
+---
+
+> ⚠️ **以下章节是 P1-P3 时代（2026-04-29 起草）的设计文档**。stage 1 SDK
+> 接通后，部分原则 / 架构 / 9 流 MVP 切分已被替代。**当前实施以上方
+> "🟢 当前状态（2026-04-30 收尾）"段 + SESSION 文档为准**。本节保留作历史
+> 档案，方便理解决策演进。
 
 ## Context
 
