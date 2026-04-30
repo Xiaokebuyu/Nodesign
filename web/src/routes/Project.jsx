@@ -129,6 +129,8 @@ export default function Project() {
                 status: evt.ok ? 'success' : 'error',
                 toolOutput: evt.output,
                 toolError: evt.error,
+                // C24：image content blocks（screenshot_canvas 等返回的图片）
+                toolImages: evt.images,
               }
             : m,
         ));

@@ -42,6 +42,13 @@ const DEFAULT_TOOL_ALLOWLIST = [
 // 其余兼容 deec72d 之前的 e2e smoke / 旧 deskskill-engine 输出。
 const ARTIFACT_CANDIDATES = ['canvas.html', 'deck.html', 'index.html', 'output.html'];
 
+// P0+ s1 C24：流式打字效果（text / thinking 逐 token 推送）。
+// 跟 sdkOptions.includePartialMessages 同步 —— 我们默认开（前端要打字效果）。
+// 启用时 handleAssistantBlocks 跳过 text/thinking blocks（已经从 stream_event 推完，
+// 避免双推），但仍推 tool_use（stream_event 里 tool_use input 是 partial JSON delta
+// 不好用，等 assistant message 完整 block 来一次更省事）。
+const STREAMING_ENABLED = true;
+
 /**
  * canUseTool 占位 callback —— P0+ stage 1 接 always-allow。
  *
@@ -292,7 +299,8 @@ function handleSDKMessage(ctx, msg) {
   switch (msg.type) {
     case 'assistant':
       // BetaMessage 含 content[] (text / thinking / tool_use blocks)
-      handleAssistantBlocks(ctx, msg.message?.content || []);
+      // STREAMING_ENABLED 时 text/thinking 已从 stream_event 推完，跳过避免双推
+      handleAssistantBlocks(ctx, msg.message?.content || [], STREAMING_ENABLED);
       break;
 
     case 'user':
@@ -305,8 +313,9 @@ function handleSDKMessage(ctx, msg) {
       break;
 
     case 'stream_event':
-      // SDKPartialAssistantMessage —— 流增量（includePartialMessages: true 时）
-      // 不细粒度推；assistant 整块 block 推一次足够。前端不依赖。
+      // SDKPartialAssistantMessage —— 流增量（includePartialMessages: true）
+      // 推逐 token text_delta / thinking_delta 给前端实现打字效果
+      if (STREAMING_ENABLED) handleStreamEvent(ctx, msg);
       break;
 
     case 'tool_use_summary':
@@ -456,16 +465,23 @@ function handleSystemMessage(ctx, msg) {
   }
 }
 
-function handleAssistantBlocks(ctx, content) {
+function handleAssistantBlocks(ctx, content, skipTextThinking = false) {
   for (const block of content) {
     switch (block.type) {
       case 'text':
-        if (block.text) ctx.emit(Events.deltaText(ctx.counters.turns, block.text));
+        // 流式开了 → text 已通过 stream_event 推完，跳过避免重复
+        if (!skipTextThinking && block.text) {
+          ctx.emit(Events.deltaText(ctx.counters.turns, block.text));
+        }
         break;
       case 'thinking':
-        if (block.thinking) ctx.emit(Events.deltaThinking(ctx.counters.turns, block.thinking));
+        if (!skipTextThinking && block.thinking) {
+          ctx.emit(Events.deltaThinking(ctx.counters.turns, block.thinking));
+        }
         break;
       case 'tool_use':
+        // tool_use 不论流式与否都在 assistant 完成时推一次（SDK stream_event
+        // 里 tool_use input 是 partial JSON delta，前端拼起来不划算）
         ctx.emit(Events.deltaToolUse(ctx.counters.turns, block.id, block.name, block.input));
         ctx.incrementTool(false);
         break;
@@ -474,24 +490,76 @@ function handleAssistantBlocks(ctx, content) {
   }
 }
 
+/**
+ * C24：处理 SDK stream_event message（含 BetaRawMessageStreamEvent）。
+ * 推逐 token 增量给前端实现打字效果。
+ *
+ * BetaRawMessageStreamEvent.type 值：
+ *   message_start / content_block_start / content_block_delta /
+ *   content_block_stop / message_delta / message_stop
+ *
+ * 我们只关心 content_block_delta（含 text_delta / thinking_delta /
+ * input_json_delta / signature_delta / citations_delta）。
+ * input_json_delta 不处理（tool_use input 等完整 block 在 assistant message 里推）。
+ */
+function handleStreamEvent(ctx, msg) {
+  const evt = msg.event;
+  if (!evt || evt.type !== 'content_block_delta') return;
+
+  const delta = evt.delta;
+  if (!delta) return;
+
+  if (delta.type === 'text_delta' && delta.text) {
+    ctx.emit(Events.deltaText(ctx.counters.turns, delta.text));
+  } else if (delta.type === 'thinking_delta' && delta.thinking) {
+    ctx.emit(Events.deltaThinking(ctx.counters.turns, delta.thinking));
+  }
+  // input_json_delta / signature_delta / citations_delta 暂不处理
+}
+
 function handleUserBlocks(ctx, content) {
   if (!Array.isArray(content)) return;
   for (const block of content) {
     if (block.type === 'tool_result') {
       const ok = !block.is_error;
-      // tool_result 的 content 可能是 string 或 block[]
-      const output = typeof block.content === 'string'
-        ? block.content
-        : Array.isArray(block.content)
-          ? block.content.map(b => b.text || JSON.stringify(b)).join('\n')
-          : null;
+
+      // C24：tool_result 的 content 可能是：
+      //   - string（简单文本输出）
+      //   - block[]（含 type:'text' / type:'image' 等多模态 content blocks）
+      // P0 时把 image block JSON.stringify 序列化丢到文本里 → 前端显示
+      // 一段难看的 base64 字符串。本提取分离：text 部分合并到 output，
+      // image 部分单独传 images[] 数组让前端 <img src="data:..."> 渲染。
+      let output = null;
+      const images = [];
+
+      if (typeof block.content === 'string') {
+        output = block.content;
+      } else if (Array.isArray(block.content)) {
+        const textParts = [];
+        for (const b of block.content) {
+          if (b?.type === 'text' && b.text) {
+            textParts.push(b.text);
+          } else if (b?.type === 'image' && b.source?.data) {
+            images.push({
+              mediaType: b.source.media_type || 'image/png',
+              data: b.source.data,
+            });
+          } else if (b) {
+            // 未识别 block 类型 → fallback JSON.stringify 留痕（不丢数据）
+            textParts.push(JSON.stringify(b));
+          }
+        }
+        output = textParts.length > 0 ? textParts.join('\n') : null;
+      }
+
       ctx.emit(Events.deltaToolResult(
         ctx.counters.turns,
         block.tool_use_id,
         '<sdk-tool>',                  // SDK 不在 tool_result 里带 name；前端可以从 tool_use 配对
         ok,
         ok ? output : undefined,
-        ok ? undefined : { message: output || 'tool failed' }
+        ok ? undefined : { message: output || 'tool failed' },
+        images.length > 0 ? images : undefined,
       ));
       if (!ok) ctx.counters.toolFailures += 1;
     }

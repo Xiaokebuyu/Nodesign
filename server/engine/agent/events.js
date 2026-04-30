@@ -105,10 +105,12 @@ export const Events = {
   deltaText: (round, text) => ({ type: 'run.delta.text', round, text }),
   deltaThinking: (round, text) => ({ type: 'run.delta.thinking', round, text }),
   deltaToolUse: (round, blockId, name, input) => ({ type: 'run.delta.tool_use', round, blockId, name, input }),
-  deltaToolResult: (round, blockId, name, ok, output, error) => ({
+  deltaToolResult: (round, blockId, name, ok, output, error, images) => ({
     type: 'run.delta.tool_result', round, blockId, name, ok,
     ...(output !== undefined ? { output } : {}),
     ...(error ? { error } : {}),
+    // C24：image content blocks（base64）单独传，让前端 <img src="data:..."> 渲染
+    ...(images && images.length > 0 ? { images } : {}),
   }),
   todoUpdated: (todos) => ({ type: 'run.todo.updated', todos }),
   cancelled: (reason) => ({ type: 'run.cancelled', reason }),
