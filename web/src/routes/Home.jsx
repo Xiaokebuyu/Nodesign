@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Sparkles, FileText, Layers, Wrench, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
@@ -11,8 +11,18 @@ import { timeAgo } from '../lib/helpers.js';
 export default function Home() {
   const navigate = useNavigate();
   const projects = useProjectStore(s => s.projects);
+  const hydrated = useProjectStore(s => s.hydrated);
+  const hydrating = useProjectStore(s => s.hydrating);
+  const error = useProjectStore(s => s.error);
+  const hydrate = useProjectStore(s => s.hydrate);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialMode, setCreateInitialMode] = useState('free');
+
+  useEffect(() => {
+    if (!hydrated && !hydrating) {
+      hydrate().catch(() => { /* error 由 store 记录 */ });
+    }
+  }, [hydrated, hydrating, hydrate]);
 
   const openCreate = (mode = 'free') => {
     setCreateInitialMode(mode);
@@ -63,7 +73,11 @@ export default function Home() {
             </span>
           </div>
 
-          {projects.length === 0 ? (
+          {!hydrated && hydrating ? (
+            <LoadingState />
+          ) : error ? (
+            <ErrorState message={error} onRetry={() => hydrate().catch(() => {})} />
+          ) : projects.length === 0 ? (
             <EmptyState onCreate={() => openCreate('free')} />
           ) : (
             <div style={{
@@ -131,27 +145,37 @@ function ProjectCard({ project }) {
 
   const dot = project.status === 'running' ? COLOR.warn : project.status === 'failed' ? COLOR.error : COLOR.success;
 
-  const handleRename = (e) => {
+  const handleRename = async (e) => {
     e.preventDefault(); e.stopPropagation();
     setMenuOpen(false);
     const next = window.prompt('重命名为：', project.name);
-    if (next && next.trim() && next !== project.name) {
-      updateProject(project.id, { name: next.trim() });
+    if (!next || !next.trim() || next === project.name) return;
+    try {
+      await updateProject(project.id, { name: next.trim() });
       showToast(`已重命名为「${next.trim()}」`, 'success');
+    } catch (err) {
+      showToast(`重命名失败：${err.message}`, 'error');
     }
   };
-  const handleDuplicate = (e) => {
+  const handleDuplicate = async (e) => {
     e.preventDefault(); e.stopPropagation();
     setMenuOpen(false);
-    const copy = duplicateProject(project.id);
-    if (copy) showToast(`已复制为「${copy.name}」`, 'success');
+    try {
+      const copy = await duplicateProject(project.id);
+      if (copy) showToast(`已复制为「${copy.name}」`, 'success');
+    } catch (err) {
+      showToast(`复制失败：${err.message}`, 'error');
+    }
   };
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.preventDefault(); e.stopPropagation();
     setMenuOpen(false);
-    if (window.confirm(`删除「${project.name}」？此操作不可撤销。`)) {
-      deleteProject(project.id);
+    if (!window.confirm(`删除「${project.name}」？此操作不可撤销。`)) return;
+    try {
+      await deleteProject(project.id);
       showToast('项目已删除', 'info');
+    } catch (err) {
+      showToast(`删除失败：${err.message}`, 'error');
     }
   };
 
@@ -256,6 +280,46 @@ function MenuItem({ icon, label, onClick, danger }) {
     >
       {icon} {label}
     </button>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div style={{
+      padding: `${GAP.page}px ${GAP.page}px`,
+      textAlign: 'center',
+      fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: COLOR.sub,
+    }}>
+      加载项目中…
+    </div>
+  );
+}
+
+function ErrorState({ message, onRetry }) {
+  return (
+    <div style={{
+      padding: `${GAP.page}px ${GAP.page}px`,
+      textAlign: 'center',
+      background: '#fff',
+      border: `1px dashed ${COLOR.borderMd}`,
+      borderRadius: 12,
+    }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.h2, color: COLOR.error, marginBottom: GAP.sm }}>
+        加载失败
+      </div>
+      <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: COLOR.sub, marginBottom: GAP.xl }}>
+        {message || '后端可能没启动。检查 server 是否在 :4001 上跑。'}
+      </div>
+      <button onClick={onRetry} style={{
+        padding: `${GAP.md}px ${GAP.xxl}px`,
+        fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, fontWeight: 500,
+        color: '#fff', background: COLOR.btn,
+        border: `1px solid ${COLOR.btn}`,
+        borderRadius: 8,
+      }}>
+        重试
+      </button>
+    </div>
   );
 }
 

@@ -3,6 +3,8 @@ import { Sparkles, FileText, ChevronRight } from 'lucide-react';
 import Modal, { ModalFooter } from '../ui/Modal.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { useProjectStore } from '../../stores/projectStore.js';
+import { useGlobalStore } from '../../stores/globalStore.js';
+import { Turn } from '../../lib/api.js';
 
 /**
  * CreateProjectModal — 新建项目向导
@@ -16,6 +18,7 @@ import { useProjectStore } from '../../stores/projectStore.js';
  */
 export default function CreateProjectModal({ show, onClose, onCreated, initialMode = 'free' }) {
   const createProject = useProjectStore(s => s.createProject);
+  const showToast = useGlobalStore(s => s.showToast);
   const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState('');
   const [brief, setBrief] = useState('');
@@ -24,6 +27,7 @@ export default function CreateProjectModal({ show, onClose, onCreated, initialMo
   const [audience, setAudience] = useState('');
   const [keyMessages, setKeyMessages] = useState('');
   const [stylePref, setStylePref] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   // show 切换时重置
   useEffect(() => {
@@ -33,14 +37,14 @@ export default function CreateProjectModal({ show, onClose, onCreated, initialMo
       setBrief('');
       setAdvancedOpen(false);
       setGoal(''); setAudience(''); setKeyMessages(''); setStylePref('');
+      setSubmitting(false);
     }
   }, [show, initialMode]);
 
-  const submit = () => {
-    const details = (goal || audience || keyMessages || stylePref)
-      ? { goal: goal.trim(), audience: audience.trim(), keyMessages: keyMessages.trim(), stylePref: stylePref.trim() }
-      : null;
-    // 把结构化字段拼到 brief（agent 看 brief，details 作为元数据存）
+  const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    // 把结构化字段拼到 brief（agent 看 brief；前端不再单独存 details）
     const expanded = [
       brief.trim(),
       goal && `目标：${goal.trim()}`,
@@ -49,14 +53,27 @@ export default function CreateProjectModal({ show, onClose, onCreated, initialMo
       stylePref && `风格偏好：${stylePref.trim()}`,
     ].filter(Boolean).join('\n');
 
-    const proj = createProject({
-      name: name.trim() || '未命名项目',
-      brief: expanded,
-      briefDetails: details,
-      mode,
-    });
-    onCreated?.(proj);
-    onClose?.();
+    try {
+      // 1. 创建项目（后端 ensureProjectWorkspace + git init）
+      const proj = await createProject({
+        name: name.trim() || '未命名项目',
+      });
+
+      // 2. 有 brief 就立即起首跑（agent 在后端异步跑，前端 Project.jsx 通过 WS 看流）
+      if (expanded.trim()) {
+        try {
+          await Turn.send({ pid: proj.id, chat: expanded, attachments: [] });
+        } catch (err) {
+          showToast(`首跑触发失败：${err.message}（项目已创建，可在 chat 重发）`, 'error');
+        }
+      }
+
+      onCreated?.(proj);
+      onClose?.();
+    } catch (err) {
+      showToast(`创建失败：${err.message}`, 'error');
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -162,7 +179,8 @@ export default function CreateProjectModal({ show, onClose, onCreated, initialMo
       <ModalFooter
         onCancel={onClose}
         onConfirm={submit}
-        confirmLabel="创建并打开"
+        confirmLabel={submitting ? '创建中…' : '创建并打开'}
+        confirmDisabled={submitting}
       />
     </Modal>
   );
