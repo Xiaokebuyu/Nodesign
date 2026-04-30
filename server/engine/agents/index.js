@@ -30,9 +30,36 @@
  *   permissionMode?: PermissionMode
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * 同步读 agents/<name>.md 作为 agent prompt。模块加载时一次性读完，
+ * 后续每次 createAgents() 复用 cache，避免 spawn 时 IO。
+ *
+ * 缺失或读失败时降级到 STUB_PROMPT —— SDK 不至于 crash，main agent
+ * 调用时收到说明文字。
+ */
+const PROMPT_CACHE = {};
+function loadPrompt(name) {
+  if (PROMPT_CACHE[name] !== undefined) return PROMPT_CACHE[name];
+  const file = path.join(HERE, `${name}.md`);
+  try {
+    PROMPT_CACHE[name] = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    console.warn(`[agents] failed to load ${name}.md (${err.message}); using stub`);
+    PROMPT_CACHE[name] = STUB_PROMPT(name);
+  }
+  return PROMPT_CACHE[name];
+}
+
 const STUB_PROMPT = (name) =>
-  `(P0+ stage 1 placeholder for ${name} agent. Real prompt is filled in C14/C15/C16 — `
-  + `read from agents/${name}.md when this agent is invoked. Until then, this stub returns "TODO".)`;
+  `(P0+ stage 1 placeholder for ${name} agent. agents/${name}.md not found — `
+  + `the file should ship with this commit. If you're an agent reading this, `
+  + `report "agents/${name}.md missing" and stop.)`;
 
 /**
  * 创建 agents 配置 —— 喂给 query options.agents 字段。
@@ -47,8 +74,9 @@ export function createAgents() {
         + 'Use this when you need an independent second-pair-of-eyes review on '
         + 'whether the design looks right — alignment, contrast, hierarchy, spacing, '
         + 'a11y readability. Returns a structured critique with concrete fix suggestions.',
-      prompt: STUB_PROMPT('vision-checker'),
-      // tools: ['Read', 'Bash', 'mcp__nodesign__screenshot_canvas'],  // C14 fills
+      prompt: loadPrompt('vision-checker'),
+      // C14 read-only; 主要工具是 mcp__nodesign__screenshot_canvas + Read（看 spec.json）
+      // omit tools 让 SDK 继承父 agent 的工具集 + MCP server 自动可见
     },
 
     'ds-extractor': {
