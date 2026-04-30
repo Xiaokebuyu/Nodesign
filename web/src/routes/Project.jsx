@@ -11,6 +11,7 @@ import ExportMenu from '../components/project/ExportMenu.jsx';
 import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
 import SnapshotModal from '../components/project/SnapshotModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
+import UndoButton from '../components/canvas/UndoButton.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../lib/theme.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
@@ -419,6 +420,20 @@ export default function Project() {
       status={status}
       actions={
         <>
+          <UndoButton
+            projectId={id}
+            onUndone={() => {
+              setReloadToken(t => t + 1);
+              showToast('已撤销到上一版', 'success');
+            }}
+            onError={(err) => {
+              if (err.code === 'NO_PREV_COMMIT') {
+                showToast('已经是最早版本，没法再撤销', 'info');
+              } else {
+                showToast(`撤销失败：${err.message}`, 'error');
+              }
+            }}
+          />
           <button style={iconBtnStyle} onClick={() => setShareOpen(true)}>
             <Share2 size={13} /> 分享
           </button>

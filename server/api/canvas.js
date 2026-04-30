@@ -109,6 +109,39 @@ router.post('/:pid/canvas/revert', async (req, res, next) => {
   }
 });
 
+/**
+ * POST /:pid/canvas/undo —— 简版"撤销到上一个版本"
+ *
+ * 前端 UndoButton 直接点 → 自动取倒数第二个 commit checkout 到工作区。
+ * 用户不必手动选 commit hash（complex 交互留给 history modal）。
+ *
+ * 双轨设计的 git 端：跨 session 长期持久。
+ * SDK rewindFiles 端（per-query 细粒度）留 P0+ stage 2 接通——需要在
+ * loop.js 把活跃 query 实例存到 activeQueries Map，这次先做最小可用版。
+ */
+router.post('/:pid/canvas/undo', async (req, res, next) => {
+  try {
+    if (!projectGuard(req, res)) return;
+    const entries = await listHistory(req.params.pid, { limit: 5 });
+    if (!entries || entries.length < 2) {
+      return res.status(400).json({
+        error: 'no previous version to undo to',
+        code: 'NO_PREV_COMMIT',
+      });
+    }
+    // entries[0] 是当前 HEAD，entries[1] 是上一版（按 git log 时序，最新在前）
+    const prevCommit = entries[1].commit || entries[1].hash || entries[1].sha;
+    if (!prevCommit) {
+      return res.status(500).json({ error: 'history entry missing commit hash' });
+    }
+    const newCommit = await revertWorkspace(req.params.pid, prevCommit);
+    res.json({ ok: true, commit: newCommit, revertedTo: prevCommit });
+  } catch (err) {
+    if (err.code === 'INVALID_COMMIT') return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
 const EMPTY_CANVAS_HTML = `<!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><title>NoDesign canvas</title>
 <style>html,body{margin:0;height:100%;font-family:system-ui;background:#F9F8F6}

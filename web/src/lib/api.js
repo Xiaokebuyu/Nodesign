@@ -66,6 +66,8 @@ export const Canvas = {
     jsonRequest('PUT', `/api/projects/${pid}/canvas`, { html, source }),
   history: (pid) => jsonRequest('GET', `/api/projects/${pid}/canvas/history`),
   revert: (pid, commit) => jsonRequest('POST', `/api/projects/${pid}/canvas/revert`, { commit }),
+  /** 简版 undo：自动回退到上一个 commit（git checkout HEAD~1 等价） */
+  undo: (pid) => jsonRequest('POST', `/api/projects/${pid}/canvas/undo`, {}),
   /** iframe src 用 */
   artifactUrl: (pid, version) =>
     `/api/projects/${pid}/canvas${version ? `?v=${encodeURIComponent(version)}` : ''}`,
