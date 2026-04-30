@@ -55,6 +55,8 @@ export default function Project() {
   const [systemInfo, setSystemInfo] = useState(null);
   const [promptSuggestion, setPromptSuggestion] = useState(null);
   const [agentProgress, setAgentProgress] = useState(null);
+  // C29：DecisionsTab 自动刷新触发器（agent 调 record_decision / compact 后 bump）
+  const [decisionsReloadKey, setDecisionsReloadKey] = useState(0);
 
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -267,7 +269,9 @@ export default function Project() {
 
       case 'run.decision_recorded':
         // MCP record_decision 调用成功 —— agent 沉淀了一条设计决策
-        // 不弹 toast 避免噪音；console 留痕即可
+        // 不弹 toast 避免噪音（agent 可能频繁调）；
+        // 触发 DecisionsTab 自动刷新 + console 留痕
+        setDecisionsReloadKey(k => k + 1);
         if (typeof window !== 'undefined') {
           // eslint-disable-next-line no-console
           console.log(`[decision] ${evt.title} (now ${evt.decisionsCount} decisions)`);
@@ -275,7 +279,8 @@ export default function Project() {
         break;
 
       case 'run.compact_persisted':
-        // PostCompact hook 写完 spec.json
+        // PostCompact hook 写完 spec.json → DecisionsTab 也更新
+        setDecisionsReloadKey(k => k + 1);
         showToast(`已沉淀 compact 摘要（${evt.summaryLength || '?'} chars）`, 'info');
         break;
 
@@ -657,6 +662,7 @@ export default function Project() {
             onJumpToComment={handleJumpToComment}
             onResolveComment={handleResolveComment}
             onDeleteComment={handleDeleteComment}
+            decisionsReloadKey={decisionsReloadKey}
           />
         }
       />

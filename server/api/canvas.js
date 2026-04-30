@@ -119,6 +119,38 @@ router.post('/:pid/canvas/revert', async (req, res, next) => {
  * SDK rewindFiles 端（per-query 细粒度）留 P0+ stage 2 接通——需要在
  * loop.js 把活跃 query 实例存到 activeQueries Map，这次先做最小可用版。
  */
+/**
+ * GET /:pid/spec —— 读 workspace/spec.json
+ *
+ * spec.json 是 agent 私域的"设计意图档案"，结构（约定）：
+ *   {
+ *     history: [{ ts, source, summary }],         // C7 PostCompact hook 写
+ *     decisions: [{ ts, title, rationale, ... }], // C11 record_decision tool 写
+ *     ...
+ *   }
+ *
+ * 不存在或解析失败时返回 {} —— 让前端不会因 spec 缺失崩。
+ * 这是只读 endpoint —— spec.json 完全由 agent 维护（P0 决策禁止给 spec
+ * 独立 PUT endpoint）。
+ */
+router.get('/:pid/spec', async (req, res, next) => {
+  try {
+    if (!projectGuard(req, res)) return;
+    const wsRoot = getProjectWorkspace(req.params.pid);
+    const file = path.join(wsRoot, 'spec.json');
+    try {
+      const raw = await fs.readFile(file, 'utf8');
+      let spec = {};
+      try { spec = JSON.parse(raw); } catch { spec = {}; }
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) spec = {};
+      res.json({ spec });
+    } catch (err) {
+      if (err.code === 'ENOENT') return res.json({ spec: {} });
+      throw err;
+    }
+  } catch (err) { next(err); }
+});
+
 router.post('/:pid/canvas/undo', async (req, res, next) => {
   try {
     if (!projectGuard(req, res)) return;

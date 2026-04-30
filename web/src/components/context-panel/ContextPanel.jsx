@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Upload, Crosshair, MessageCircle, Sliders, Settings } from 'lucide-react';
+import { Upload, Crosshair, MessageCircle, Sliders, Settings, Bookmark } from 'lucide-react';
 import InputsTab from './InputsTab.jsx';
 import SystemTab from './SystemTab.jsx';
 import InspectTab from './InspectTab.jsx';
 import CommentsTab from './CommentsTab.jsx';
+import DecisionsTab from './DecisionsTab.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 /**
@@ -16,11 +17,12 @@ import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js'
  * P2：Inputs / Inspect / System 实现，Comments / Tweaks 占位（Comments 等 P5 接 LLM）
  */
 const TABS = [
-  { id: 'inputs',   label: 'Inputs',   icon: Upload },
-  { id: 'inspect',  label: 'Inspect',  icon: Crosshair },
-  { id: 'comments', label: 'Comments', icon: MessageCircle },
-  { id: 'tweaks',   label: 'Tweaks',   icon: Sliders },
-  { id: 'system',   label: 'System',   icon: Settings },
+  { id: 'inputs',    label: 'Inputs',    icon: Upload },
+  { id: 'inspect',   label: 'Inspect',   icon: Crosshair },
+  { id: 'comments',  label: 'Comments',  icon: MessageCircle },
+  { id: 'decisions', label: 'Decisions', icon: Bookmark },
+  { id: 'tweaks',    label: 'Tweaks',    icon: Sliders },
+  { id: 'system',    label: 'System',    icon: Settings },
 ];
 
 export default function ContextPanel({
@@ -28,6 +30,7 @@ export default function ContextPanel({
   selectedAnchor, iframeDoc,
   onAddComment, onDirectEdit, onTriggerRun,
   onJumpToComment, onResolveComment, onDeleteComment,
+  decisionsReloadKey = 0,
 }) {
   const [tab, setTab] = useState('inputs');
 
@@ -89,7 +92,10 @@ export default function ContextPanel({
             onDelete={onDeleteComment}
           />
         )}
-        {tab === 'tweaks'   && <PlaceholderTab title="Tweaks" desc="agent 暴露的可调参数（color / spacing / layout variant）。P2 占位 / P5 真接。" />}
+        {tab === 'decisions' && (
+          <DecisionsTab projectId={project?.id} reloadKey={decisionsReloadKey} />
+        )}
+        {tab === 'tweaks'   && <PlaceholderTab title="Tweaks" desc="agent 暴露的可调参数（color / spacing / layout variant）。P0+ stage 2 接 tweak-proposer subagent → schemas/tweak-schema.json 渲染 sliders。" />}
         {tab === 'system'   && <SystemTab project={project} deckSpec={deckSpec} />}
       </div>
     </div>

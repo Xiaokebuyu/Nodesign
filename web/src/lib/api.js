@@ -68,6 +68,12 @@ export const Canvas = {
   revert: (pid, commit) => jsonRequest('POST', `/api/projects/${pid}/canvas/revert`, { commit }),
   /** 简版 undo：自动回退到上一个 commit（git checkout HEAD~1 等价） */
   undo: (pid) => jsonRequest('POST', `/api/projects/${pid}/canvas/undo`, {}),
+};
+
+// ── Spec（设计意图档案）──
+export const Spec = {
+  /** 读 spec.json（含 decisions / history）。不存在时返回 { spec: {} } */
+  read: (pid) => jsonRequest('GET', `/api/projects/${pid}/spec`),
   /** iframe src 用 */
   artifactUrl: (pid, version) =>
     `/api/projects/${pid}/canvas${version ? `?v=${encodeURIComponent(version)}` : ''}`,
