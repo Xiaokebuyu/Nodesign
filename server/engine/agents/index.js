@@ -83,9 +83,13 @@ export function createAgents() {
       description:
         'Extract a design system spec (color tokens, type scale, spacing scale, '
         + 'shadow tokens, border radius) from the current canvas.html. Returns a '
-        + 'JSON schema-conformant design system document.',
-      prompt: STUB_PROMPT('ds-extractor'),
-      // outputFormat: { type: 'json_schema', schema: <design-system.json> } — C15 fills
+        + 'JSON document conformant to schemas/design-system.json. '
+        + 'Use this when the user asks "抽 design system" / "extract design tokens" / '
+        + '"capture the visual rules" — typically right before reusing the style.',
+      prompt: loadPrompt('ds-extractor'),
+      // SDK AgentDefinition 没有 outputFormat 字段（query options 级别才有）。
+      // 子代理走 prompt 内嵌 JSON Schema 引导输出，main agent 收到后 JSON.parse。
+      // schema 文件在 agents/schemas/design-system.json，prompt 里有完整摘录。
     },
 
     'tweak-proposer': {

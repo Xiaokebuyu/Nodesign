@@ -1,0 +1,156 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "nodesign://schemas/design-system.json",
+  "title": "Design System",
+  "description": "Token-based design system extracted from a canvas.html. Captures the visual rules so a different agent or designer can replicate the style in a new artifact.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "colors", "typography", "spacing", "radius", "shadow"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["extractedAt", "sourceArtifact"],
+      "properties": {
+        "extractedAt": { "type": "string", "format": "date-time" },
+        "sourceArtifact": { "type": "string", "description": "Relative path of the canvas this DS was extracted from (usually 'canvas.html')." },
+        "summary": { "type": "string", "description": "One-sentence vibe of the system (e.g., 'editorial monochrome with a single warm accent')." }
+      }
+    },
+
+    "colors": {
+      "type": "object",
+      "description": "Semantic color tokens. Hex with alpha allowed (#RRGGBBAA).",
+      "additionalProperties": false,
+      "required": ["text", "background"],
+      "properties": {
+        "primary":    { "$ref": "#/definitions/colorToken" },
+        "secondary":  { "$ref": "#/definitions/colorToken" },
+        "accent":     { "$ref": "#/definitions/colorToken" },
+        "text":       { "$ref": "#/definitions/colorPalette" },
+        "background": { "$ref": "#/definitions/colorPalette" },
+        "border":     { "$ref": "#/definitions/colorPalette" },
+        "status":     {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "success": { "$ref": "#/definitions/colorToken" },
+            "warning": { "$ref": "#/definitions/colorToken" },
+            "error":   { "$ref": "#/definitions/colorToken" },
+            "info":    { "$ref": "#/definitions/colorToken" }
+          }
+        }
+      }
+    },
+
+    "typography": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["families", "scale"],
+      "properties": {
+        "families": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sans":  { "type": "string" },
+            "serif": { "type": "string" },
+            "mono":  { "type": "string" }
+          }
+        },
+        "scale": {
+          "type": "object",
+          "description": "Type scale steps. px values (numeric).",
+          "additionalProperties": false,
+          "properties": {
+            "h1":      { "$ref": "#/definitions/typeStep" },
+            "h2":      { "$ref": "#/definitions/typeStep" },
+            "h3":      { "$ref": "#/definitions/typeStep" },
+            "h4":      { "$ref": "#/definitions/typeStep" },
+            "body":    { "$ref": "#/definitions/typeStep" },
+            "small":   { "$ref": "#/definitions/typeStep" },
+            "caption": { "$ref": "#/definitions/typeStep" }
+          }
+        }
+      }
+    },
+
+    "spacing": {
+      "type": "object",
+      "description": "Spacing tokens. px values (numeric). Should follow a consistent rhythm (e.g., 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64).",
+      "additionalProperties": false,
+      "properties": {
+        "xs":   { "type": "number" },
+        "sm":   { "type": "number" },
+        "md":   { "type": "number" },
+        "lg":   { "type": "number" },
+        "xl":   { "type": "number" },
+        "xxl":  { "type": "number" },
+        "page": { "type": "number", "description": "Outer page padding" }
+      }
+    },
+
+    "radius": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sm":   { "type": "number" },
+        "md":   { "type": "number" },
+        "lg":   { "type": "number" },
+        "pill": { "type": "number", "description": "For badges / chips" }
+      }
+    },
+
+    "shadow": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sm": { "type": "string" },
+        "md": { "type": "string" },
+        "lg": { "type": "string" }
+      }
+    },
+
+    "idioms": {
+      "type": "array",
+      "description": "Recurring composition patterns observed in the canvas (e.g., 'stat row uses 3-column grid with 24px gap', 'each section starts with a 1px border-top'). Capture these so a new artifact can repeat them.",
+      "items": { "type": "string" }
+    }
+  },
+
+  "definitions": {
+    "colorToken": {
+      "type": "string",
+      "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$",
+      "description": "Hex color, 6 or 8 chars (RGB or RGBA)."
+    },
+    "colorPalette": {
+      "type": "object",
+      "description": "Tonal scale for semantic role. Keys 100-900 like Tailwind, but only the steps actually used need to appear.",
+      "additionalProperties": false,
+      "properties": {
+        "50":  { "$ref": "#/definitions/colorToken" },
+        "100": { "$ref": "#/definitions/colorToken" },
+        "200": { "$ref": "#/definitions/colorToken" },
+        "300": { "$ref": "#/definitions/colorToken" },
+        "400": { "$ref": "#/definitions/colorToken" },
+        "500": { "$ref": "#/definitions/colorToken" },
+        "600": { "$ref": "#/definitions/colorToken" },
+        "700": { "$ref": "#/definitions/colorToken" },
+        "800": { "$ref": "#/definitions/colorToken" },
+        "900": { "$ref": "#/definitions/colorToken" },
+        "default": { "$ref": "#/definitions/colorToken", "description": "Fallback when no tonal step is needed." }
+      }
+    },
+    "typeStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fontSize"],
+      "properties": {
+        "fontSize":   { "type": "number", "description": "px" },
+        "lineHeight": { "type": ["number", "string"] },
+        "weight":     { "type": "number", "minimum": 100, "maximum": 900 },
+        "letterSpacing": { "type": ["number", "string"] }
+      }
+    }
+  }
+}
