@@ -115,6 +115,7 @@ SDK（@anthropic-ai/claude-agent-sdk）**，我们只做：薄壳后端（包 SD
 | 2026-04-30 | Phase H 前端可视化补完（10 commit）| agent 在做什么完整可见：工具图标/elapsed/折叠/image 渲染/流式打字/Thinking 暴露/AskUserQuestion 卡片/subagent Task→agentType/Decisions tab/ExportsList/移除 mode 区分/iframe scroll 保留 |
 | 2026-04-30 | "自由创作 vs 参照模式"过时设计移除 | SDK 接通后 agent 看附件能自己判断，不再框定 mode（C30）|
 | 2026-04-30 | "工作区虚拟容器"路线确认 | 当前用 cwd + Bash 白名单 + canUseTool 三层兜底；多用户上 Docker via spawnClaudeCodeProcess hook（详细估算见 SESSION 文档"沙盒 / 工作区虚拟容器"段）|
+| 2026-04-30 | memory.md 同步 stage 1 + Phase H 状态 | 新建 `nodesign_sdk_principle.md`（核心原则：agent 能力 = SDK 不要自撸）+ `nodesign_p0plus_stage1_summary.md`（32 commit 总览）；标 `p3_full_stack_progress_2026-04-29.md` 为已废弃；MEMORY.md index 更新 |
 
 ## 实施日志
 
