@@ -124,37 +124,57 @@ function SystemMessage({ variant = 'warn', content }) {
   );
 }
 
+/**
+ * ThinkingMessage —— C26：thinking 默认展开 + 视觉区分
+ *
+ * 用户要求"暴露思维链"。P0 时 thinking 默认折叠（"思考过程 ▼"），
+ * 用户得点开才看到——agent 思考过程几乎不可见。本次改为：
+ * - 默认展开
+ * - 左侧 2px 细条（视觉区分自 assistant 文本）
+ * - 浅灰背景 + 等宽字体
+ * - 流式时尾部 blinking 光标（typing 效果）
+ * - 头部小 chip "思考中" / "思考过程" + 折叠按钮（用户想收起仍可以）
+ *
+ * isStreaming：父级（MessageList → Message → 这里）传是不是当前最后一条
+ * thinking 在打字。但 MessageList 不知道流式状态——用 message.isStreaming
+ * 字段检测。当前没维护此字段，先做"默认展开 + 视觉区分"，光标动画 stage 2。
+ */
 function ThinkingMessage({ content }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);  // C26：默认展开
   return (
     <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub,
-          padding: `${GAP.xs}px ${GAP.md}px`, borderRadius: 6,
-          background: 'rgba(0,0,0,0.03)',
+          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
+          padding: `${GAP.xs}px ${GAP.md - 2}px`,
+          borderRadius: 4,
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          letterSpacing: '0.04em',
         }}
       >
         <ChevronRight
-          size={12}
+          size={11}
           style={{
             transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
             transition: 'transform 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
           }}
         />
-        思考过程
+        THINKING
       </button>
       {open && (
         <div style={{
-          marginTop: GAP.sm,
-          padding: GAP.lg,
-          background: COLOR.bgCard,
-          borderRadius: 8,
-          fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm,
+          marginLeft: GAP.md,
+          marginTop: 2,
+          paddingLeft: GAP.md,
+          borderLeft: `2px solid ${COLOR.borderMd}`,
+          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
           color: COLOR.text4, lineHeight: 1.6,
           whiteSpace: 'pre-wrap',
+          opacity: 0.85,
         }}>{content}</div>
       )}
     </div>
