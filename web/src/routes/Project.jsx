@@ -123,7 +123,17 @@ export default function Project() {
         break;
       case 'run.done':
         setIsStreaming(false);
+        // 双保险：FileChanged hook（run.file_changed）应该已 bump 过 reloadToken
+        // 但万一 hook 不触发（如 SDK 边角问题），这里兜底再 bump 一次
         setReloadToken(t => t + 1);
+        break;
+      case 'run.file_changed':
+        // C4: FileChanged hook → 仅对 canvas.html / *.html 后缀触发 iframe reload
+        // 其他文件（spec.json / assets/* / .git/*）忽略
+        if (typeof evt.filePath === 'string'
+            && (evt.filePath.endsWith('canvas.html') || evt.filePath.endsWith('.html'))) {
+          setReloadToken(t => t + 1);
+        }
         break;
       case 'run.error':
         setIsStreaming(false);

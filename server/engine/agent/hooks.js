@@ -29,6 +29,8 @@
  *   - hook handler 通过 ctx.emit 发事件让前端可见，但不阻塞返回
  */
 
+import { Events } from './events.js';
+
 /**
  * 工厂：根据当前 run 上下文 + workspace 路径生成 hooks 配置。
  *
@@ -38,9 +40,13 @@
  * @param {string} [deps.projectId]
  * @returns {Partial<Record<string, Array<{ matcher?: string, hooks: Function[], timeout?: number }>>>}
  */
-export function createHooks({ ctx: _ctx, workspaceRoot: _workspaceRoot, projectId: _projectId } = {}) {
+export function createHooks({ ctx, workspaceRoot: _workspaceRoot, projectId: _projectId } = {}) {
   return {
-    // C4 FileChanged: [{ hooks: [makeFileChangedHandler({ ctx })] }],
+    // C4 FileChanged → EventBus emit run.file_changed → 前端 reload iframe
+    FileChanged: [{
+      hooks: [makeFileChangedHandler({ ctx })],
+    }],
+
     // C5 PreToolUse:  [{ matcher: 'Bash', hooks: [makeBashWhitelistHandler({ workspaceRoot })] }],
     // C6 Stop:        [{ hooks: [makeStopReflectionHandler({ ctx })] }],
     // C7 PreCompact:  [{ hooks: [makePreCompactHandler({ workspaceRoot })] }],
@@ -50,11 +56,37 @@ export function createHooks({ ctx: _ctx, workspaceRoot: _workspaceRoot, projectI
       hooks: [
         // eslint-disable-next-line no-unused-vars
         async (_input, _toolUseId, _options) => {
-          // 不干预，仅留 hook 系统已启用的痕迹
-          // C4-C7 各 hook 真实业务逻辑在自己的 handler 函数里
           return {};
         },
       ],
     }],
+  };
+}
+
+// ── hook handlers ──
+
+/**
+ * C4 FileChanged handler：agent 写文件后 SDK 触发，转发给 EventBus
+ * 让前端 reload iframe（仅 .html 文件 / canvas.html）。
+ *
+ * input 字段（FileChangedHookInput）：
+ *   - file_path: string         绝对路径或相对 cwd
+ *   - event: 'change' | 'add' | 'unlink'
+ *
+ * 不在这里做 .html 过滤 —— 全部转发让前端按需消费（C18 ContextUsageBar /
+ * C20 file changes 列表都可能用）。前端 Project.jsx 只对 canvas.html
+ * bump reloadToken。
+ *
+ * 返回 {}：不干预 SDK，不影响 agent loop。
+ */
+function makeFileChangedHandler({ ctx }) {
+  // eslint-disable-next-line no-unused-vars
+  return async (input, _toolUseId, _options) => {
+    try {
+      ctx.emit(Events.fileChanged(input.file_path, input.event));
+    } catch (err) {
+      console.warn(`[hooks/FileChanged] handler threw:`, err.message);
+    }
+    return {};
   };
 }

@@ -143,4 +143,7 @@ export const Events = {
   hookResponse: (hookName, hookEvent, outcome, output, exitCode) => ({
     type: 'run.hook.response', hookName, hookEvent, outcome, output, exitCode,
   }),
+
+  // C4 FileChanged hook → 前端 reload iframe
+  fileChanged: (filePath, event) => ({ type: 'run.file_changed', filePath, event }),
 };
