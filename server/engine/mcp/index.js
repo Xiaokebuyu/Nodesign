@@ -28,6 +28,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { makeScreenshotCanvasTool } from './tools/screenshot.js';
 import { makeExportHandoffTool } from './tools/export-handoff.js';
+import { makeRecordDecisionTool } from './tools/record-decision.js';
 
 /**
  * 创建 Nodesign 的 MCP server，绑定当前 run 的依赖。
@@ -66,7 +67,8 @@ export function createNodesignMcpServer({ workspaceRoot, projectId, ctx } = {}) 
       // C10 export_handoff — 复用 exports.js 的 buildHandoffZip，写到 workspace/exports/
       makeExportHandoffTool({ workspaceRoot, projectId, ctx }),
 
-      // C11 makeRecordDecisionTool({ workspaceRoot, ctx }),
+      // C11 record_decision — 写入 spec.json decisions[] 设计意图档案
+      makeRecordDecisionTool({ workspaceRoot, ctx }),
     ],
   });
 }
