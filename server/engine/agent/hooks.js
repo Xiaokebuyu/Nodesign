@@ -29,6 +29,8 @@
  *   - hook handler 通过 ctx.emit 发事件让前端可见，但不阻塞返回
  */
 
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Events } from './events.js';
 
 /**
@@ -40,7 +42,7 @@ import { Events } from './events.js';
  * @param {string} [deps.projectId]
  * @returns {Partial<Record<string, Array<{ matcher?: string, hooks: Function[], timeout?: number }>>>}
  */
-export function createHooks({ ctx, workspaceRoot: _workspaceRoot, projectId: _projectId } = {}) {
+export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) {
   return {
     // C4 FileChanged → EventBus emit run.file_changed → 前端 reload iframe
     FileChanged: [{
@@ -53,7 +55,11 @@ export function createHooks({ ctx, workspaceRoot: _workspaceRoot, projectId: _pr
       hooks: [makeBashWhitelistHandler({ ctx })],
     }],
 
-    // C6 Stop:        [{ hooks: [makeStopReflectionHandler({ ctx })] }],
+    // C6 Stop —— agent 准备结束 query 时触发，发自检事件给前端
+    Stop: [{
+      hooks: [makeStopReflectionHandler({ ctx, workspaceRoot })],
+    }],
+
     // C7 PreCompact:  [{ hooks: [makePreCompactHandler({ workspaceRoot })] }],
 
     // 占位 noop SessionStart：验证 hook 系统通路 + 留一处可见的"启动"日志钩子
@@ -183,6 +189,41 @@ const DANGEROUS_PATTERNS = [
   /\bkill(?:all)?\s+-9\b/,  // kill -9（一般 kill 允许）
   />\s*\/dev\//, />\s*\/etc\//, />\s*\/sys\//, />\s*\/proc\//,  // 输出到系统目录
 ];
+
+/**
+ * C6 Stop handler —— agent 准备结束 query 时触发。
+ *
+ * P0+ stage 1 范围：温和提示，不强迫继续。
+ * - 检查 canvas.html 是否存在（agent 有产物）
+ * - 如果有产物 + 本 turn 没用过 mcp__nodesign__screenshot_canvas /
+ *   mcp__nodesign__export_handoff（C9/C10 接入后）→ emit run.stop_reflection
+ *   让前端可见这个 hook 触发了
+ * - 不返回 decision: 'block' / 不注入 systemMessage —— 避免无限循环风险，
+ *   让 agent 自然结束。stage 2 真按设计需要 block 时再加。
+ *
+ * 实际上这个 hook 在 stage 1 几乎是 noop —— 主要价值是给 stage 2
+ * 留个挂载点 + emit 让前端可见 hook 系统在跑。
+ */
+function makeStopReflectionHandler({ ctx, workspaceRoot }) {
+  return async (_input, _toolUseId, _options) => {
+    try {
+      const hasCanvas = workspaceRoot
+        ? await fs.access(path.join(workspaceRoot, 'canvas.html'))
+            .then(() => true).catch(() => false)
+        : false;
+
+      ctx.emit({
+        type: 'run.stop_reflection',
+        hasCanvas,
+        // stage 2 加 toolsUsedThisTurn 字段（从 ctx.counters 或 ctx.snapshot 抽）
+        // 用来判断是否提示 screenshot/export
+      });
+    } catch (err) {
+      console.warn(`[hooks/Stop] handler threw:`, err.message);
+    }
+    return {};
+  };
+}
 
 function checkBashCommand(command) {
   // 先扫危险关键字（任何 token 命中就拒）
