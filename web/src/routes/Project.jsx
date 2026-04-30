@@ -45,6 +45,16 @@ export default function Project() {
   const [iframeDoc, setIframeDoc] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
 
+  // ── P0+ s1 C17：SDK 高频事件提升的 state（被 C18/C19/C20 各组件消费）──
+  // systemInfo: SDK 'system init' 事件（model / tools / mcp_servers / agents 元信息）
+  // promptSuggestion: 每轮后 piggyback 预测的下条 prompt
+  // agentProgress: subagent 30s 摘要（"正在分析颜色对比度…"）
+  // toolElapsed: { [blockId]: seconds }，工具长任务计时（C20 可显示）
+  const [systemInfo, setSystemInfo] = useState(null);
+  const [promptSuggestion, setPromptSuggestion] = useState(null);
+  const [agentProgress, setAgentProgress] = useState(null);
+  const [toolElapsed, setToolElapsed] = useState({});
+
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -147,10 +157,90 @@ export default function Project() {
         break;
       case 'run.cancelled':
         setIsStreaming(false);
+        setPromptSuggestion(null);
+        setAgentProgress(null);
         showToast('已取消', 'info');
         break;
-      // ws.connected / run.sdk.session / run.compact_boundary / run.todo.updated
-      // P0 不展示在 chat，只 console（C0+ 加 todo UI 时改）
+
+      // ── P0+ s1 C17：新事件类型 ──
+
+      case 'run.system_init':
+        // SDK 启动元信息：model / tools / mcp_servers / agents
+        setSystemInfo(evt.info);
+        break;
+
+      case 'run.prompt_suggestion':
+        // 每轮后预测的下条 prompt（C19 SuggestionChip 消费）
+        setPromptSuggestion(evt.suggestion);
+        break;
+
+      case 'run.task.progress':
+        // subagent 30s 摘要（C20 progress chip 消费）
+        setAgentProgress({
+          taskId: evt.taskId,
+          description: evt.description,
+          summary: evt.summary || null,
+          lastTool: evt.lastToolName || null,
+        });
+        break;
+
+      case 'run.task.notification':
+        // subagent 完成 / 失败 / 停止
+        setAgentProgress(null);
+        if (evt.status === 'failed') {
+          showToast(`子代理失败：${evt.summary || ''}`, 'error');
+        } else if (evt.status === 'stopped') {
+          showToast('子代理已停止', 'info');
+        }
+        break;
+
+      case 'run.tool_progress':
+        // 工具执行 >1s 时定期推（C20 可在 tool message 上显示 elapsed）
+        if (evt.blockId) {
+          setToolElapsed(prev => ({ ...prev, [evt.blockId]: evt.elapsedSeconds }));
+        }
+        break;
+
+      case 'run.bash_blocked':
+        // PreToolUse hook 拦了一条 Bash —— 在 chat 里留痕
+        setMessages(prev => [...prev, {
+          id: newId('msg'),
+          role: 'assistant',
+          content: `_⚠️ 拦截 Bash 命令：${evt.command || ''}\n（${evt.reason || '不在白名单'}）_`,
+        }]);
+        break;
+
+      case 'run.screenshot_taken':
+        // MCP screenshot_canvas 调用成功（agent 在自检）
+        showToast('agent 正在视觉自检', 'info');
+        break;
+
+      case 'run.export_built':
+        // MCP export_handoff 调用成功 —— agent 主动打了交付包
+        showToast(`已生成交付包：${evt.path || ''}`, 'success');
+        break;
+
+      case 'run.decision_recorded':
+        // MCP record_decision 调用成功 —— agent 沉淀了一条设计决策
+        // 不弹 toast 避免噪音；console 留痕即可
+        if (typeof window !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.log(`[decision] ${evt.title} (now ${evt.decisionsCount} decisions)`);
+        }
+        break;
+
+      case 'run.compact_persisted':
+        // PostCompact hook 写完 spec.json
+        showToast(`已沉淀 compact 摘要（${evt.summaryLength || '?'} chars）`, 'info');
+        break;
+
+      case 'run.stop_reflection':
+        // C6 Stop hook（占位，stage 1 不消费）
+        break;
+
+      // ws.connected / run.sdk.session / run.compact_boundary / run.todo.updated /
+      // run.hook.* / run.notification / run.task.started / run.task.updated /
+      // run.memory_recall / run.session_state 等暂不展示在 chat，console 即可
       default:
         break;
     }
