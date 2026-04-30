@@ -7,6 +7,7 @@
  *   - 监听器订阅时可选择全订（'*'）或按前缀（'run.delta'）或按 type 精确匹配
  *
  * 标准事件 schema（type）：
+ *   ── 主流程 ──
  *   run.start                  开始
  *   run.round.start            { round }
  *   run.round.end              { round, stopReason, usage? }
@@ -18,6 +19,24 @@
  *   run.cancelled              { reason }
  *   run.done                   { finalText, artifactPath?, snapshot }
  *   run.error                  { message, code?, stack? }
+ *
+ *   ── P0+ stage 1 新增（SDK 28+ 种 message 类型映射）──
+ *   run.tool_progress          { blockId, toolName, elapsedSeconds }      工具执行中（>1s 才发）
+ *   run.prompt_suggestion      { suggestion }                              每轮后预测下条 prompt
+ *   run.task.started           { taskId, description, taskType }           subagent 启动
+ *   run.task.progress          { taskId, description, summary?, lastToolName? }  subagent 30s 摘要（agentProgressSummaries）
+ *   run.task.updated           { taskId, patch }                           subagent 状态 patch
+ *   run.task.notification      { taskId, status, summary }                 subagent 完成/失败/停止
+ *   run.files_persisted        { files: [{ filename, file_id }], failed }  agent 写完文件
+ *   run.memory_recall          { mode, memories }                          自动 memory 召回
+ *   run.notification           { key, text, priority }                     系统通知（弹 toast）
+ *   run.session_state          { state: 'idle' | 'running' | 'requires_action' }
+ *   run.system_init            { agents, tools, mcp_servers, model, ... }  init 元信息
+ *   run.hook.started           { hookName, hookEvent }                     hook 生命周期（仅 includeHookEvents）
+ *   run.hook.response          { hookName, hookEvent, outcome }
+ *   run.compact_boundary       { compactMetadata }                          compact 边界
+ *   run.status                 { status }                                  compacting / requesting / null
+ *   run.rate_limit             { info }                                    rate limit 变化
  *
  * 外层把 EventBus 桥接到：
  *   - WebSocket：subscribe('*') → ws.send(JSON.stringify(evt))
@@ -97,4 +116,31 @@ export const Events = {
     type: 'run.done', finalText, artifactPath, snapshot,
   }),
   error: (message, code, stack) => ({ type: 'run.error', message, code, stack }),
+
+  // ── P0+ stage 1 新增（28+ 种 SDK message 翻译）──
+  toolProgress: (blockId, toolName, elapsedSeconds) => ({
+    type: 'run.tool_progress', blockId, toolName, elapsedSeconds,
+  }),
+  promptSuggestion: (suggestion) => ({ type: 'run.prompt_suggestion', suggestion }),
+  taskStarted: (taskId, description, taskType, prompt) => ({
+    type: 'run.task.started', taskId, description, taskType, prompt,
+  }),
+  taskProgress: (taskId, description, summary, lastToolName, usage) => ({
+    type: 'run.task.progress', taskId, description, summary, lastToolName, usage,
+  }),
+  taskUpdated: (taskId, patch) => ({ type: 'run.task.updated', taskId, patch }),
+  taskNotification: (taskId, status, summary, usage) => ({
+    type: 'run.task.notification', taskId, status, summary, usage,
+  }),
+  filesPersisted: (files, failed) => ({ type: 'run.files_persisted', files, failed }),
+  memoryRecall: (mode, memories) => ({ type: 'run.memory_recall', mode, memories }),
+  notification: (key, text, priority, color, timeoutMs) => ({
+    type: 'run.notification', key, text, priority, color, timeoutMs,
+  }),
+  sessionState: (state) => ({ type: 'run.session_state', state }),
+  systemInit: (info) => ({ type: 'run.system_init', info }),
+  hookStarted: (hookName, hookEvent) => ({ type: 'run.hook.started', hookName, hookEvent }),
+  hookResponse: (hookName, hookEvent, outcome, output, exitCode) => ({
+    type: 'run.hook.response', hookName, hookEvent, outcome, output, exitCode,
+  }),
 };

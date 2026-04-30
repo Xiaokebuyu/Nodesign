@@ -40,6 +40,20 @@ const DEFAULT_TOOL_ALLOWLIST = [
 const ARTIFACT_CANDIDATES = ['canvas.html', 'deck.html', 'index.html', 'output.html'];
 
 /**
+ * canUseTool 占位 callback —— P0+ stage 1 接 always-allow。
+ *
+ * 后续接 D 流权限交互时改成真处理：
+ * - 弹前端 UI 让用户决定（accept once / always / deny）
+ * - 根据 toolName + input 走不同策略（Bash 走白名单走 PreToolUse hook，Edit/Write 直接 allow）
+ *
+ * 现在 default permission mode 是 'default'，配合这个 always-allow 不会弹 CLI prompt。
+ * Bash 等危险工具的拦截走 PreToolUse hook（C5 实现）。
+ */
+function makeAlwaysAllowCanUseTool() {
+  return async (_toolName, _input, _options) => ({ behavior: 'allow' });
+}
+
+/**
  * 跑一次 agent run。
  *
  * @param {object} opts
@@ -121,6 +135,25 @@ export async function runAgent({
     // 续 session：同 project 跨 turn 时传入上次 sessionId，prompt cache 自然命中
     ...(resumeSessionId ? { resume: resumeSessionId } : {}),
 
+    // ── P0+ stage 1 新增 ──
+    // file checkpoint：开后 SDK 在每个 user message 处快照文件状态，
+    // Query.rewindFiles(userMessageId) 可以回滚。session 内 undo 走这条
+    // （C12 接前端 Undo button）；跨 session 长期追溯仍依赖 git commit。
+    enableFileCheckpointing: true,
+
+    // subagent 30s 进度摘要 —— 子代理跑 vision-checker / ds-extractor
+    // 等长任务时，每 30s 由 SDK 自动 fork 子 session 产出"正在 X"摘要事件。
+    // piggyback 父 prompt cache，几乎免费。
+    agentProgressSummaries: true,
+
+    // 每轮后预测下条 user prompt —— 前端 SuggestionChip 用（C19）。
+    // 第一轮、API error、plan mode 下不发；piggyback 父 prompt cache 几乎免费。
+    promptSuggestions: true,
+
+    // 自定义权限处理器 —— 现在占位 always-allow，Bash 危险命令拦截走
+    // PreToolUse hook（C5）。D 流定型后改成真 UI 弹窗。
+    canUseTool: makeAlwaysAllowCanUseTool(),
+
     stderr: (data) => {
       // 子进程 stderr → 调试日志（不入 EventBus 避免噪声）
       console.error(`[run ${runId}/claude.stderr]`, data.trim());
@@ -192,7 +225,12 @@ export async function runAgent({
 
 /**
  * 把 SDK 各种 message 类型翻译成 Nodesign 内部事件。
- * SDKMessage union 见 sdk.d.ts:2988
+ * SDKMessage union 见 sdk.d.ts:2988（28+ 种 type/subtype 组合）。
+ *
+ * 翻译策略：
+ * - 主流程消息（assistant / user / result）：走 handleAssistantBlocks / handleUserBlocks
+ * - SDK system subtype 多达 14 种：分派到对应 Events 构造器
+ * - 旁路类型（stream_event / tool_use_summary / keep_alive）：noop（前端不需要）
  */
 function handleSDKMessage(ctx, msg) {
   // 首条 message 含 session_id，记下
@@ -210,24 +248,31 @@ function handleSDKMessage(ctx, msg) {
       break;
 
     case 'system':
-      // 多种 subtype：compact_boundary / plugin_install / etc
-      if (msg.subtype === 'compact_boundary') {
-        ctx.counters.compactBoundaries += 1;
-        ctx.emit({ type: 'run.compact_boundary', compactMetadata: msg.compact_metadata });
-      }
+      handleSystemMessage(ctx, msg);
       break;
 
     case 'stream_event':
-      // 流增量（includePartialMessages: true 时）
-      // 暂不细粒度推；用 assistant 完整 block 推一次足够
+      // SDKPartialAssistantMessage —— 流增量（includePartialMessages: true 时）
+      // 不细粒度推；assistant 整块 block 推一次足够。前端不依赖。
       break;
 
     case 'tool_use_summary':
-      // 工具调用摘要事件，仅日志
+      // SDKToolUseSummaryMessage —— 工具调用摘要（旁路审计），不入 EventBus
+      break;
+
+    case 'tool_progress':
+      // SDKToolProgressMessage —— 工具执行 >1s 时定期推（前端可显示"读取中 12s..."）
+      ctx.emit(Events.toolProgress(msg.tool_use_id, msg.tool_name, msg.elapsed_time_seconds));
+      break;
+
+    case 'prompt_suggestion':
+      // SDKPromptSuggestionMessage —— 每轮后 piggyback 预测的下条 prompt
+      // 前端 SuggestionChip（C19）渲染
+      ctx.emit(Events.promptSuggestion(msg.suggestion));
       break;
 
     case 'status':
-      // 'compacting' | 'requesting' | null
+      // SDKStatusMessage —— 'compacting' | 'requesting' | null
       ctx.emit({ type: 'run.status', status: msg.status });
       break;
 
@@ -242,12 +287,118 @@ function handleSDKMessage(ctx, msg) {
       }
       break;
 
+    case 'keep_alive':
+      // SDKKeepAliveMessage —— WS 心跳，不入 EventBus
+      break;
+
     case 'result':
       // 由外层 for await 捕获处理（finalText / artifactPath / counters）
       break;
 
     default:
-      // 其他类型（hook lifecycle / task / notification 等）暂不处理
+      // 兜底：未识别的新 type 留个调试痕迹，方便 SDK 升级时发现
+      console.warn(`[run ${ctx.runId}] unknown SDK message type:`, msg.type);
+      break;
+  }
+}
+
+/**
+ * SDK type:'system' 下的 14 种 subtype 派发。集中放一处便于维护。
+ */
+function handleSystemMessage(ctx, msg) {
+  switch (msg.subtype) {
+    case 'init':
+      // 初始化元信息：agents / tools / mcp_servers / model / permissionMode 等
+      ctx.emit(Events.systemInit({
+        agents: msg.agents,
+        tools: msg.tools,
+        mcpServers: msg.mcp_servers,
+        model: msg.model,
+        permissionMode: msg.permissionMode,
+        skills: msg.skills,
+        plugins: msg.plugins,
+        claudeCodeVersion: msg.claude_code_version,
+        cwd: msg.cwd,
+      }));
+      break;
+
+    case 'compact_boundary':
+      ctx.counters.compactBoundaries += 1;
+      ctx.emit({ type: 'run.compact_boundary', compactMetadata: msg.compact_metadata });
+      break;
+
+    case 'files_persisted':
+      // SDKFilesPersistedEvent —— agent 写完 file checkpoint 持久化通知
+      // FileChanged hook 触发的 file.changed 事件是更直接的；这个仅审计
+      ctx.emit(Events.filesPersisted(msg.files, msg.failed));
+      break;
+
+    case 'memory_recall':
+      // 自动 memory 召回 —— 前端可显示"recalled from memory"
+      ctx.emit(Events.memoryRecall(msg.mode, msg.memories));
+      break;
+
+    case 'task_started':
+      ctx.emit(Events.taskStarted(msg.task_id, msg.description, msg.task_type, msg.prompt));
+      break;
+
+    case 'task_progress':
+      // agentProgressSummaries: true 时每 ~30s 一次："正在调整字号节奏" 之类
+      ctx.emit(Events.taskProgress(
+        msg.task_id, msg.description, msg.summary, msg.last_tool_name, msg.usage,
+      ));
+      break;
+
+    case 'task_updated':
+      ctx.emit(Events.taskUpdated(msg.task_id, msg.patch));
+      break;
+
+    case 'task_notification':
+      ctx.emit(Events.taskNotification(msg.task_id, msg.status, msg.summary, msg.usage));
+      break;
+
+    case 'notification':
+      // SDKNotificationMessage —— 系统级 toast（priority: low/medium/high/immediate）
+      ctx.emit(Events.notification(msg.key, msg.text, msg.priority, msg.color, msg.timeout_ms));
+      break;
+
+    case 'session_state_changed':
+      ctx.emit(Events.sessionState(msg.state));
+      break;
+
+    case 'hook_started':
+      ctx.emit(Events.hookStarted(msg.hook_name, msg.hook_event));
+      break;
+
+    case 'hook_progress':
+      // hook 执行中 stdout/stderr 流（仅 includeHookEvents: true 时）
+      // 前端不需要，旁路日志即可
+      break;
+
+    case 'hook_response':
+      ctx.emit(Events.hookResponse(
+        msg.hook_name, msg.hook_event, msg.outcome, msg.output, msg.exit_code,
+      ));
+      break;
+
+    case 'plugin_install':
+      // 插件安装进度（headless mode），不入 EventBus
+      break;
+
+    case 'local_command_output':
+      // 本地 slash command 输出（/voice / /usage 等），不入 EventBus
+      break;
+
+    case 'elicitation_complete':
+      // MCP elicitation URL 模式完成确认，旁路
+      break;
+
+    case 'mirror_error':
+      // SessionStore mirror 失败，旁路（我们没用 SessionStore）
+      break;
+
+    default:
+      console.warn(`[run ${ctx.runId}] unknown system subtype:`, msg.subtype);
       break;
   }
 }
