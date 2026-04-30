@@ -26,6 +26,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { AgentContext } from './context.js';
 import { Events } from './events.js';
 import { markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata } from '../runs/store.js';
+import { registerRun, unregisterRun } from '../runs/active-runs.js';
 import { loadSkill } from './skill.js';
 import { createHooks } from './hooks.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
@@ -118,6 +119,10 @@ export async function runAgent({
   if (!brief) throw new Error('runAgent: brief required');
 
   const ctx = new AgentContext({ runId, skillId, eventBus, abortController, workspaceRoot });
+
+  // 注册到 active-runs registry，让 cancel endpoint 能找到 controller
+  // finally 块 unregister 避免泄漏
+  registerRun(runId, ctx.abortController);
 
   // 1. 进 running 状态 + 推开始事件
   markRunStarted(runId);
@@ -292,6 +297,10 @@ export async function runAgent({
       ctx.emit(Events.error(err.message, err.code, err.stack));
     }
     throw err;
+  } finally {
+    // 不论 succeeded / failed / cancelled，从 registry 注销 controller
+    // 防止 in-memory map 泄漏（也防 cancel endpoint 拿到已死 controller）
+    unregisterRun(runId);
   }
 }
 

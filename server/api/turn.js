@@ -28,6 +28,7 @@ import { validateProjectId, getProject, setActiveSession } from '../projects/sto
 import { ensureProjectWorkspace } from '../projects/workspace.js';
 import { createRun } from '../engine/runs/store.js';
 import { runAgent } from '../engine/agent/loop.js';
+import { cancelRun } from '../engine/runs/active-runs.js';
 import { getProjectBus } from '../ws/broker.js';
 
 const router = express.Router();
@@ -121,5 +122,33 @@ function composeUserMessage(chat, attachments) {
 
   return { displayText, blocks };
 }
+
+/**
+ * POST /api/projects/:pid/runs/:runId/cancel
+ *
+ * 用户点"停止生成"按钮 → 触发活跃 run 的 AbortController.abort()。
+ * SDK 看到 abort signal → query 中断 → loop.js try/catch 走 aborted 路径
+ * → emit run.cancelled 事件给前端。
+ *
+ * 200 { ok: true }                  成功 trigger abort
+ * 404 { error: 'run not active' }  runId 不在 registry（已结束 / 不存在）
+ */
+router.post('/:pid/runs/:runId/cancel', async (req, res, next) => {
+  try {
+    validateProjectId(req.params.pid);
+    const project = getProject(req.params.pid);
+    if (!project) return res.status(404).json({ error: 'project not found' });
+
+    const { runId } = req.params;
+    const ok = cancelRun(runId, 'user_cancel');
+    if (!ok) {
+      return res.status(404).json({
+        error: 'run not active or already finished',
+        code: 'RUN_NOT_ACTIVE',
+      });
+    }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
 
 export default router;
