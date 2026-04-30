@@ -60,7 +60,12 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
       hooks: [makeStopReflectionHandler({ ctx, workspaceRoot })],
     }],
 
-    // C7 PreCompact:  [{ hooks: [makePreCompactHandler({ workspaceRoot })] }],
+    // C7 PostCompact —— compact 后把摘要写入 spec.json 长期记忆
+    // （plan 原写的是 PreCompact，但 PreCompact 没有 compact_summary 字段；
+    //  正确语义是 PostCompact 拿 summary 持久化）
+    PostCompact: [{
+      hooks: [makePostCompactHandler({ ctx, workspaceRoot })],
+    }],
 
     // 占位 noop SessionStart：验证 hook 系统通路 + 留一处可见的"启动"日志钩子
     SessionStart: [{
@@ -220,6 +225,71 @@ function makeStopReflectionHandler({ ctx, workspaceRoot }) {
       });
     } catch (err) {
       console.warn(`[hooks/Stop] handler threw:`, err.message);
+    }
+    return {};
+  };
+}
+
+/**
+ * C7 PostCompact handler —— SDK 自动 compact 后把 summary 持久化到 spec.json。
+ *
+ * 为什么要持久化：
+ * - SDK compact 后 session 内的旧 messages 被丢弃，只留 summary 在 SDK 内
+ * - 跨 session（用户 reload / 服务重启）SDK summary 是否保留依赖 SessionStore
+ *   实现 —— 我们没用 SessionStore，靠 ~/.claude/projects/<sid>.jsonl 持久化
+ * - spec.json 是 agent 私域的"设计意图档案"，按设计就是用来跨 session 记忆
+ *   关键决策的；这里把 compact summary 沉淀进去，下次 turn 起来时 agent
+ *   通过 Read spec.json 拿到历史
+ *
+ * spec.json 结构（约定）：
+ *   {
+ *     history: [
+ *       { ts, source: 'compact' | 'decision', trigger?, summary }
+ *     ],
+ *     decisions: [...],   // C11 record_decision tool 写
+ *     ...
+ *   }
+ *
+ * 失败 fail-soft：spec.json 写不进去 console.warn 但不抛错（不阻塞 query）。
+ */
+function makePostCompactHandler({ ctx, workspaceRoot }) {
+  return async (input, _toolUseId, _options) => {
+    try {
+      if (!workspaceRoot) return {};
+      const summary = input?.compact_summary;
+      if (!summary || typeof summary !== 'string') return {};
+
+      const specPath = path.join(workspaceRoot, 'spec.json');
+      let spec = {};
+      try {
+        const raw = await fs.readFile(specPath, 'utf8');
+        spec = JSON.parse(raw);
+        if (!spec || typeof spec !== 'object') spec = {};
+      } catch {
+        // spec.json 不存在或解析失败 —— 起新对象
+        spec = {};
+      }
+
+      if (!Array.isArray(spec.history)) spec.history = [];
+      spec.history.push({
+        ts: new Date().toISOString(),
+        source: 'compact',
+        trigger: input.trigger || 'auto',
+        summary,
+      });
+
+      await fs.writeFile(specPath, JSON.stringify(spec, null, 2), 'utf8');
+
+      try {
+        ctx.emit({
+          type: 'run.compact_persisted',
+          trigger: input.trigger || 'auto',
+          summaryLength: summary.length,
+          historyCount: spec.history.length,
+        });
+      } catch { /* emit fail-safe */ }
+    } catch (err) {
+      console.warn(`[hooks/PostCompact] handler threw:`, err.message);
     }
     return {};
   };
