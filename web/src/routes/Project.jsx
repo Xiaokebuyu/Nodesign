@@ -50,11 +50,11 @@ export default function Project() {
   // systemInfo: SDK 'system init' 事件（model / tools / mcp_servers / agents 元信息）
   // promptSuggestion: 每轮后 piggyback 预测的下条 prompt
   // agentProgress: subagent 30s 摘要（"正在分析颜色对比度…"）
-  // toolElapsed: { [blockId]: seconds }，工具长任务计时（C20 可显示）
+  // P0+ s1 C23：toolElapsed 从单独 state 改为写到 message 对象的 elapsed 字段，
+  // 消除 prop drilling，Message 组件直接读 message.elapsed。
   const [systemInfo, setSystemInfo] = useState(null);
   const [promptSuggestion, setPromptSuggestion] = useState(null);
   const [agentProgress, setAgentProgress] = useState(null);
-  const [toolElapsed, setToolElapsed] = useState({});
 
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -196,9 +196,14 @@ export default function Project() {
         break;
 
       case 'run.tool_progress':
-        // 工具执行 >1s 时定期推（C20 可在 tool message 上显示 elapsed）
+        // 工具执行 >1s 时定期推 → 写到对应 tool message 的 elapsed 字段
+        // C23 Message ToolMessage 渲染 "· 12s" 在工具调用 chip 旁边
         if (evt.blockId) {
-          setToolElapsed(prev => ({ ...prev, [evt.blockId]: evt.elapsedSeconds }));
+          setMessages(prev => prev.map(m =>
+            m.role === 'tool' && m.id === evt.blockId
+              ? { ...m, elapsed: evt.elapsedSeconds }
+              : m,
+          ));
         }
         break;
 
