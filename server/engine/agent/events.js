@@ -124,15 +124,19 @@ export const Events = {
     type: 'run.tool_progress', blockId, toolName, elapsedSeconds,
   }),
   promptSuggestion: (suggestion) => ({ type: 'run.prompt_suggestion', suggestion }),
-  taskStarted: (taskId, description, taskType, prompt) => ({
-    type: 'run.task.started', taskId, description, taskType, prompt,
+  // toolUseId 关键 —— main agent 用 Task 工具调子代理时，SDK 推 task_*
+  // events 都带 tool_use_id，前端用它把 task 状态绑到对应的 Task tool message
+  taskStarted: (taskId, description, taskType, prompt, toolUseId) => ({
+    type: 'run.task.started', taskId, description, taskType, prompt, toolUseId,
   }),
-  taskProgress: (taskId, description, summary, lastToolName, usage) => ({
-    type: 'run.task.progress', taskId, description, summary, lastToolName, usage,
+  taskProgress: (taskId, description, summary, lastToolName, usage, toolUseId) => ({
+    type: 'run.task.progress', taskId, description, summary, lastToolName, usage, toolUseId,
   }),
-  taskUpdated: (taskId, patch) => ({ type: 'run.task.updated', taskId, patch }),
-  taskNotification: (taskId, status, summary, usage) => ({
-    type: 'run.task.notification', taskId, status, summary, usage,
+  taskUpdated: (taskId, patch, toolUseId) => ({
+    type: 'run.task.updated', taskId, patch, toolUseId,
+  }),
+  taskNotification: (taskId, status, summary, usage, toolUseId) => ({
+    type: 'run.task.notification', taskId, status, summary, usage, toolUseId,
   }),
   filesPersisted: (files, failed) => ({ type: 'run.files_persisted', files, failed }),
   memoryRecall: (mode, memories) => ({ type: 'run.memory_recall', mode, memories }),

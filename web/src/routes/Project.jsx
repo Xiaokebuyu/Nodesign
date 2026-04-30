@@ -177,19 +177,55 @@ export default function Project() {
         setPromptSuggestion(evt.suggestion);
         break;
 
+      case 'run.task.started':
+        // C28：把 task 元信息绑到 main agent 的 Task tool message
+        // tool_use_id 关联 → 用户能在 Task chip 上看到 agentType / description
+        if (evt.toolUseId) {
+          setMessages(prev => prev.map(m =>
+            m.role === 'tool' && m.id === evt.toolUseId
+              ? {
+                  ...m,
+                  taskId: evt.taskId,
+                  agentType: evt.taskType,
+                  taskDescription: evt.description,
+                  taskStatus: 'running',
+                }
+              : m,
+          ));
+        }
+        break;
+
       case 'run.task.progress':
-        // subagent 30s 摘要（C20 progress chip 消费）
+        // subagent 30s 摘要（ChatPanel header progress chip 消费）+ 同步到 Task tool message
         setAgentProgress({
           taskId: evt.taskId,
           description: evt.description,
           summary: evt.summary || null,
           lastTool: evt.lastToolName || null,
         });
+        if (evt.toolUseId) {
+          setMessages(prev => prev.map(m =>
+            m.role === 'tool' && m.id === evt.toolUseId
+              ? { ...m, taskSummary: evt.summary, taskLastTool: evt.lastToolName }
+              : m,
+          ));
+        }
         break;
 
       case 'run.task.notification':
-        // subagent 完成 / 失败 / 停止
+        // subagent 完成 / 失败 / 停止 → 更新对应 Task tool message status
         setAgentProgress(null);
+        if (evt.toolUseId) {
+          setMessages(prev => prev.map(m =>
+            m.role === 'tool' && m.id === evt.toolUseId
+              ? {
+                  ...m,
+                  taskStatus: evt.status,           // 'completed' | 'failed' | 'stopped'
+                  taskSummary: evt.summary,
+                }
+              : m,
+          ));
+        }
         if (evt.status === 'failed') {
           showToast(`子代理失败：${evt.summary || ''}`, 'error');
         } else if (evt.status === 'stopped') {

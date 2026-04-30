@@ -405,22 +405,26 @@ function handleSystemMessage(ctx, msg) {
       break;
 
     case 'task_started':
-      ctx.emit(Events.taskStarted(msg.task_id, msg.description, msg.task_type, msg.prompt));
+      ctx.emit(Events.taskStarted(
+        msg.task_id, msg.description, msg.task_type, msg.prompt, msg.tool_use_id,
+      ));
       break;
 
     case 'task_progress':
       // agentProgressSummaries: true 时每 ~30s 一次："正在调整字号节奏" 之类
       ctx.emit(Events.taskProgress(
-        msg.task_id, msg.description, msg.summary, msg.last_tool_name, msg.usage,
+        msg.task_id, msg.description, msg.summary, msg.last_tool_name, msg.usage, msg.tool_use_id,
       ));
       break;
 
     case 'task_updated':
-      ctx.emit(Events.taskUpdated(msg.task_id, msg.patch));
+      ctx.emit(Events.taskUpdated(msg.task_id, msg.patch, msg.tool_use_id));
       break;
 
     case 'task_notification':
-      ctx.emit(Events.taskNotification(msg.task_id, msg.status, msg.summary, msg.usage));
+      ctx.emit(Events.taskNotification(
+        msg.task_id, msg.status, msg.summary, msg.usage, msg.tool_use_id,
+      ));
       break;
 
     case 'notification':

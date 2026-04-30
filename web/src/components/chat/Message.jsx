@@ -56,6 +56,11 @@ export default function Message({ message }) {
         toolImages={toolImages}
         status={status}
         elapsed={elapsed}
+        // C28：subagent 调用时 SDK 推 task_* events，前端绑到 Task tool message
+        agentType={message.agentType}
+        taskStatus={message.taskStatus}
+        taskSummary={message.taskSummary}
+        taskLastTool={message.taskLastTool}
       />
     );
   }
@@ -398,18 +403,37 @@ function formatElapsed(s) {
   return `${Math.floor(s / 60)}m${Math.round(s % 60)}s`;
 }
 
-function ToolMessage({ toolName, toolInput, toolOutput, toolError, toolImages, status, elapsed }) {
+function ToolMessage({
+  toolName, toolInput, toolOutput, toolError, toolImages, status, elapsed,
+  agentType, taskStatus, taskSummary, taskLastTool,
+}) {
   const [open, setOpen] = useState(false);
   const Icon = getToolIcon(toolName);
-  const isError = status === 'failed' || status === 'error';
-  const isRunning = status === 'running';
+
+  // C28：Task 工具状态优先用 taskStatus（subagent 实际生命周期），
+  // fallback 到 status（main agent tool_result）
+  const effectiveStatus =
+    toolName === 'Task'
+      ? (taskStatus === 'completed' ? 'success'
+        : taskStatus === 'failed' ? 'error'
+        : taskStatus === 'stopped' ? 'error'
+        : taskStatus === 'running' ? 'running'
+        : status)
+      : status;
+
+  const isError = effectiveStatus === 'failed' || effectiveStatus === 'error';
+  const isRunning = effectiveStatus === 'running';
   const dot = isError ? COLOR.error : isRunning ? COLOR.warn : COLOR.success;
   const summary = summarizeToolInput(toolName, toolInput);
 
   // 显示标签（截短 mcp__nodesign__ 前缀以省空间）
-  const displayName = toolName?.startsWith('mcp__nodesign__')
+  // Task 工具：显示 "Task → vision-checker"
+  let displayName = toolName?.startsWith('mcp__nodesign__')
     ? toolName.replace('mcp__nodesign__', '')
     : toolName;
+  if (toolName === 'Task' && agentType) {
+    displayName = `Task → ${agentType}`;
+  }
 
   return (
     <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
@@ -447,6 +471,21 @@ function ToolMessage({ toolName, toolInput, toolOutput, toolError, toolImages, s
           flexShrink: 0, marginLeft: 'auto',
         }} />
       </button>
+
+      {/* C28：subagent 30s 进度摘要直接显示在 chip 下方（不必展开）*/}
+      {toolName === 'Task' && (taskSummary || taskLastTool) && (
+        <div style={{
+          marginTop: GAP.xs,
+          marginLeft: GAP.lg,
+          fontFamily: FONT_MONO,
+          fontSize: 10,
+          color: COLOR.sub,
+          fontStyle: 'italic',
+          lineHeight: 1.4,
+        }}>
+          {taskSummary || `· ${taskLastTool}`}
+        </div>
+      )}
 
       {open && (
         <div style={{ marginTop: GAP.sm, display: 'flex', flexDirection: 'column', gap: GAP.sm }}>
