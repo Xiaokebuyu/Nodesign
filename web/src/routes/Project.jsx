@@ -17,7 +17,7 @@ import { useGlobalStore } from '../stores/globalStore.js';
 import { MOCK_DECK_SPEC } from '../mock/deck-spec.js';
 import { newId } from '../lib/helpers.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
-import { Canvas, Turn } from '../lib/api.js';
+import { Canvas, Turn, Assets } from '../lib/api.js';
 import { openProjectWS } from '../lib/ws-client.js';
 
 export default function Project() {
@@ -171,13 +171,21 @@ export default function Project() {
 
   // ── handlers ──
 
-  /** ChatComposer send → POST /turn（流 A/C） */
+  /**
+   * ChatComposer send → POST /turn（流 A/C/B）
+   * 把托盘里的 attachments（已上传成功的 asset）一起带；上传中 / 失败的不发。
+   * send 成功后清空托盘。
+   */
   const handleSend = async (text) => {
     if (!text || !text.trim()) return;
+    const attachments = inputs
+      .filter(it => it.type === 'asset' && it.path)
+      .map(it => ({ type: 'asset', path: it.path, name: it.name, size: it.size }));
+
     setMessages(ms => [...ms, { id: newId('msg'), role: 'user', content: text }]);
     try {
-      await Turn.send({ pid: id, chat: text, attachments: [] });
-      // 事件流通过 WS 回来，不在这里 append assistant
+      await Turn.send({ pid: id, chat: text, attachments });
+      setInputs([]);  // 已发送的托盘清空
     } catch (err) {
       setMessages(ms => [...ms, {
         id: newId('msg'),
@@ -188,9 +196,43 @@ export default function Project() {
     }
   };
 
-  // ── 以下 handlers P0 留 mock，C7/C8 真接 ──
-
-  const handleAddInput = (asset) => setInputs(arr => [...arr, asset]);
+  /**
+   * 流 B：附件入托盘。File → 立即 push pending 占位 → Assets.upload → 拿到 path 后 patch
+   * 失败：标记 error，留在托盘里让用户决定（删 / 重传）。
+   *
+   * 兼容：旧路径（InputsTab 的 handlePasteUrl / handleConnectRepo）传 metadata 对象，
+   * 不是 File；直接 push 到托盘。这些 P0 不真发给 agent（attachments filter 只取
+   * type=asset+path），P0+ 接通 URL ingest 时再扩展。
+   */
+  const handleAddInput = async (input) => {
+    // metadata 对象（URL / repo）走原路径
+    if (!(input instanceof File)) {
+      setInputs(arr => [...arr, input]);
+      return;
+    }
+    const tempId = newId('asset');
+    setInputs(arr => [...arr, {
+      id: tempId,
+      type: 'asset',
+      name: input.name,
+      size: input.size,
+      mime: input.type,
+      // path: undefined → 渲染为 uploading
+    }]);
+    try {
+      const { asset } = await Assets.upload(id, input);
+      setInputs(arr => arr.map(it => it.id === tempId
+        ? { ...it, path: asset.path, size: asset.size, name: asset.name, mime: asset.mime }
+        : it,
+      ));
+    } catch (err) {
+      setInputs(arr => arr.map(it => it.id === tempId
+        ? { ...it, error: err.message }
+        : it,
+      ));
+      showToast(`上传失败：${err.message}`, 'error');
+    }
+  };
   const handleRemoveInput = (assetId) => setInputs(arr => arr.filter(a => a.id !== assetId));
 
   /**
@@ -392,7 +434,16 @@ export default function Project() {
       }
     >
       <ThreeColumnLayout
-        left={<ChatPanel messages={messages} onSend={handleSend} isStreaming={isStreaming} />}
+        left={
+          <ChatPanel
+            messages={messages}
+            onSend={handleSend}
+            isStreaming={isStreaming}
+            trayItems={inputs}
+            onRemoveTrayItem={handleRemoveInput}
+            onPickFile={handleAddInput}
+          />
+        }
         center={
           <CanvasFrame
             htmlSrc={Canvas.artifactUrl(id, reloadToken)}

@@ -13,6 +13,10 @@ server/db/*.db-shm
 server/runs/*/
 !server/runs/.gitkeep
 
+# Per-project workspace 目录（持久化，含 canvas.html / spec.json / .git / assets）
+# 每个 project 一个子目录，纯 dev 数据，不入仓
+server/projects-data/
+
 # Playwright
 test-results/
 playwright-report/

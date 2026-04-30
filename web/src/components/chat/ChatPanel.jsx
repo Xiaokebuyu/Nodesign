@@ -8,7 +8,10 @@ import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
  * P1：纯 UI，messages 由父组件传入，发送只调 onSend 不接后端。
  * P3：onSend 走 WS，messages 从 SSE/WS delta 累加。
  */
-export default function ChatPanel({ messages = [], onSend, isStreaming = false }) {
+export default function ChatPanel({
+  messages = [], onSend, isStreaming = false,
+  trayItems, onRemoveTrayItem, onPickFile,
+}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       {/* 顶部小 header（项目级 chat 概念）*/}
@@ -31,7 +34,13 @@ export default function ChatPanel({ messages = [], onSend, isStreaming = false }
       </div>
 
       <MessageList messages={messages} />
-      <ChatComposer onSend={onSend} disabled={isStreaming} />
+      <ChatComposer
+        onSend={onSend}
+        disabled={isStreaming}
+        trayItems={trayItems}
+        onRemoveTrayItem={onRemoveTrayItem}
+        onPickFile={onPickFile}
+      />
     </div>
   );
 }

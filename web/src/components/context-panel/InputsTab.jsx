@@ -16,28 +16,11 @@ import { formatSize, newId } from '../../lib/helpers.js';
 export default function InputsTab({ inputs = [], onAdd, onRemove }) {
   const fileRef = useRef(null);
 
+  // 直接把 File 上抛给父级（由父级走 multipart Assets.upload + 进托盘）；
+  // 不再 FileReader 本地预览（缩略图依赖 Assets.upload 后的 thumbnail —— P0+ 加）
   const handleFile = (files) => {
     if (!files || files.length === 0) return;
-    Array.from(files).forEach(file => {
-      const baseItem = {
-        id: newId('asset'),
-        type: detectType(file.name),
-        filename: file.name,
-        size: file.size,
-        addedAt: new Date().toISOString(),
-      };
-      // 图片：读 dataURL 当缩略图
-      if (baseItem.type === 'image') {
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          onAdd?.({ ...baseItem, thumbnail: ev.target.result });
-        };
-        reader.onerror = () => onAdd?.(baseItem);
-        reader.readAsDataURL(file);
-      } else {
-        onAdd?.(baseItem);
-      }
-    });
+    Array.from(files).forEach((file) => onAdd?.(file));
   };
 
   const handlePasteUrl = () => {

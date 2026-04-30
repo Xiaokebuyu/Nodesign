@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, AtSign, Wand2, FolderInput } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import ComposerTray from './ComposerTray.jsx';
 
 /**
  * Chat 输入框 — 双层结构（参考用户提供的设计图）
@@ -24,9 +25,10 @@ import { useGlobalStore } from '../../stores/globalStore.js';
  *
  * Import 按钮（P2/P6 接通）：从外部一键导入参考素材到当前 chat
  */
-export default function ChatComposer({ onSend, disabled }) {
+export default function ChatComposer({ onSend, disabled, trayItems, onRemoveTrayItem, onPickFile }) {
   const [text, setText] = useState('');
   const ref = useRef(null);
+  const fileInputRef = useRef(null);
   const chatDraft = useGlobalStore(s => s.chatDraft);
   const setChatDraft = useGlobalStore(s => s.setChatDraft);
 
@@ -83,6 +85,9 @@ export default function ChatComposer({ onSend, disabled }) {
         gap: GAP.sm,
         transition: 'border-color 0.15s, box-shadow 0.15s',
       }}>
+        {/* 顶层：附件托盘（多 modality 信号；空时不渲染）*/}
+        <ComposerTray items={trayItems} onRemove={onRemoveTrayItem} />
+
         {/* 上层：textarea */}
         <textarea
           ref={ref}
@@ -123,8 +128,21 @@ export default function ChatComposer({ onSend, disabled }) {
           />
           <IconBtn
             icon={<Paperclip size={14} />}
-            title="附件"
-            onClick={() => alert('P2 实现：上传附件')}
+            title="上传附件（图片 / PDF / HTML / 等）"
+            onClick={() => fileInputRef.current?.click()}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".pdf,.pptx,.docx,.html,.htm,.png,.jpg,.jpeg,.svg,.webp"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              files.forEach(f => onPickFile?.(f));
+              // 重置 value 让同名文件能再选一次
+              e.target.value = '';
+            }}
+            style={{ display: 'none' }}
           />
           <IconBtn
             icon={<Wand2 size={14} />}
