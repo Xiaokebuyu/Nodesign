@@ -12,6 +12,7 @@ import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
 import SnapshotModal from '../components/project/SnapshotModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
 import UndoButton from '../components/canvas/UndoButton.jsx';
+import ContextUsageBar from '../components/project/ContextUsageBar.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../lib/theme.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
@@ -510,6 +511,7 @@ export default function Project() {
       status={status}
       actions={
         <>
+          {systemInfo && <ContextUsageBar info={systemInfo} />}
           <UndoButton
             projectId={id}
             onUndone={() => {
