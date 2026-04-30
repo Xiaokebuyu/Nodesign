@@ -193,8 +193,14 @@ export default function Project() {
   const handleAddInput = (asset) => setInputs(arr => [...arr, asset]);
   const handleRemoveInput = (assetId) => setInputs(arr => arr.filter(a => a.id !== assetId));
 
-  // C7 真接（PUT /canvas）
-  const handleTextEdit = (info) => {
+  /**
+   * 流 E direct edit：bridge 在 blur 时已清 contentEditable=false（见 DirectEditBridge
+   * cleanup() 在 onTextEdit 回调之前），此时 iframeDoc 是用户改过的最新最干净状态。
+   *
+   * 序列化整页 outerHTML（前缀 <!doctype html> 避免 doctype 丢失）→ PUT /canvas。
+   * 不 bump reloadToken — iframe DOM 已经是最新，重 fetch 反而会闪一下还会丢用户操作焦点。
+   */
+  const handleTextEdit = async (info) => {
     setPatches(arr => [...arr, {
       id: newId('patch'),
       type: 'text-edit',
@@ -203,7 +209,17 @@ export default function Project() {
       newValue: info.newText,
       ts: new Date().toISOString(),
     }]);
-    showToast(`已修改文字（P0 中：尚未落库，C7 真接）`, 'info');
+    if (!iframeDoc) {
+      showToast('iframe 未就绪', 'error');
+      return;
+    }
+    try {
+      const html = '<!doctype html>\n' + iframeDoc.documentElement.outerHTML;
+      await Canvas.write(id, html, 'user');
+      showToast(`已保存：「${info.newText.slice(0, 20)}」`, 'success');
+    } catch (err) {
+      showToast(`保存失败：${err.message}`, 'error');
+    }
   };
 
   // D 流（不在 P0）
