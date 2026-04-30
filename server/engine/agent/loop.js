@@ -27,6 +27,7 @@ import { AgentContext } from './context.js';
 import { Events } from './events.js';
 import { markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata } from '../runs/store.js';
 import { loadSkill } from './skill.js';
+import { createHooks } from './hooks.js';
 
 // 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）
 // 沙盒由 cwd=project workspace 保证，git binary 通过 PATH 拿；agent 不能写
@@ -178,6 +179,10 @@ export async function runAgent({
     // 自定义权限处理器 —— 现在占位 always-allow，Bash 危险命令拦截走
     // PreToolUse hook（C5）。D 流定型后改成真 UI 弹窗。
     canUseTool: makeAlwaysAllowCanUseTool(),
+
+    // hooks 4 件套（C3 骨架，C4-C7 逐个填实）：
+    // FileChanged / PreToolUse(Bash) / Stop / PreCompact
+    hooks: createHooks({ ctx, workspaceRoot: wsRoot }),
 
     stderr: (data) => {
       // 子进程 stderr → 调试日志（不入 EventBus 避免噪声）
