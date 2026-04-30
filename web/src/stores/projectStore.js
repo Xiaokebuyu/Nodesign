@@ -1,184 +1,149 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { MOCK_PROJECTS } from '../mock/projects.js';
-import { newId } from '../lib/helpers.js';
-
 /**
- * 项目 store —— localStorage 持久化（zustand persist middleware）
+ * 项目 store — REST 真接版（弃 zustand persist localStorage）
  *
- * 数据范围：projects 列表（含 snapshots[] / candidates[] 元数据）
- * 不存：deckSpec / 真 HTML 工件（这些是 P3 后端的事）
+ * projects 数组从 GET /api/projects 拉，所有 mutation 走 REST。
  *
- * 初次加载时 seed mock 5 个项目，之后用户操作后所有改动落 localStorage
- * key: 'nodesign:projects'
+ * - hydrate()                   列项目（Home mount）
+ * - hydrateOne(id)              单读单条（Project mount）
+ * - getProject(id)              本地查（同步，前提：已 hydrate）
+ * - createProject(...)          POST /api/projects
+ * - updateProject(id, patch)    PATCH /api/projects/:id
+ * - deleteProject(id)           DELETE /api/projects/:id
+ * - duplicateProject(id)        简版：新建同名+副本（P0 不深拷贝 workspace）
+ * - applyRunEvent(pid, evt)     WS run.* 事件 → 本地 status patch
+ *
+ * Snapshots / Candidates 字段保留（前端 UI 形态依赖），但 P0 不真接：
+ *   - 用 git history 取代 snapshot（C9 加 history UI）
+ *   - candidate 由 agent fork_variant 主动开（P0+）
  */
-export const useProjectStore = create(
-  persist(
-    (set, get) => ({
-      projects: MOCK_PROJECTS,
 
-      getProject: (id) => get().projects.find(p => p.id === id) || null,
+import { create } from 'zustand';
+import { Projects } from '../lib/api.js';
 
-      createProject: ({ name, skillId = 'deskskill-engine', designSystemId = null, brief = '', briefDetails = null, mode = 'free' }) => {
-        const proj = {
-          id: newId('proj'),
-          name: name || '未命名项目',
-          skill: skillId,
-          designSystemId,
-          status: 'idle',
-          updatedAt: new Date().toISOString(),
-          thumbnail: null,
-          summary: brief ? brief.slice(0, 40) : '新项目',
-          createdMode: mode,  // 'free' | 'reference'
-          initialBrief: brief,
-          briefDetails,        // { goal, audience, keyMessages, stylePref } | null
-          snapshots: [],
-          candidates: [
-            { id: 'c-default', label: '候选 A', createdAt: new Date().toISOString(), summary: brief ? brief.slice(0, 40) : '初始候选' },
-          ],
-          activeCandidateId: 'c-default',
-        };
-        set((s) => ({ projects: [proj, ...s.projects] }));
-        return proj;
-      },
+export const useProjectStore = create((set, get) => ({
+  projects: [],
+  hydrated: false,
+  hydrating: false,
+  error: null,
 
-      updateProject: (id, patch) => {
-        set((s) => ({
-          projects: s.projects.map(p =>
-            p.id === id ? { ...p, ...patch, updatedAt: new Date().toISOString() } : p
-          ),
-        }));
-      },
-
-      deleteProject: (id) => {
-        set((s) => ({ projects: s.projects.filter(p => p.id !== id) }));
-      },
-
-      duplicateProject: (id) => {
-        const src = get().projects.find(p => p.id === id);
-        if (!src) return null;
-        const copy = {
-          ...src,
-          id: newId('proj'),
-          name: `${src.name}（副本）`,
-          status: 'idle',
-          updatedAt: new Date().toISOString(),
-        };
-        set((s) => ({ projects: [copy, ...s.projects] }));
-        return copy;
-      },
-
-      // ── Snapshot（轻量版本，每个 snapshot 只存 metadata，HTML 真实内容等 P3 后端落库）
-      saveSnapshot: (projectId, label = '') => {
-        const proj = get().projects.find(p => p.id === projectId);
-        if (!proj) return null;
-        const snap = {
-          id: newId('snap'),
-          label: label || `快照 ${(proj.snapshots?.length || 0) + 1}`,
-          createdAt: new Date().toISOString(),
-          candidateId: proj.activeCandidateId || null,
-          summary: '当前 HTML + spec 状态（mock：实际内容 P3 后端存）',
-        };
-        set((s) => ({
-          projects: s.projects.map(p =>
-            p.id === projectId
-              ? { ...p, snapshots: [snap, ...(p.snapshots || [])], updatedAt: new Date().toISOString() }
-              : p
-          ),
-        }));
-        return snap;
-      },
-
-      deleteSnapshot: (projectId, snapshotId) => {
-        set((s) => ({
-          projects: s.projects.map(p =>
-            p.id === projectId
-              ? { ...p, snapshots: (p.snapshots || []).filter(sn => sn.id !== snapshotId) }
-              : p
-          ),
-        }));
-      },
-
-      renameSnapshot: (projectId, snapshotId, label) => {
-        set((s) => ({
-          projects: s.projects.map(p =>
-            p.id === projectId
-              ? { ...p, snapshots: (p.snapshots || []).map(sn => sn.id === snapshotId ? { ...sn, label } : sn) }
-              : p
-          ),
-        }));
-      },
-
-      // ── Candidates（多方向探索）
-      addCandidate: (projectId, label = '') => {
-        const proj = get().projects.find(p => p.id === projectId);
-        if (!proj) return null;
-        const existing = proj.candidates || [];
-        const cand = {
-          id: newId('cand'),
-          label: label || `候选 ${String.fromCharCode(65 + existing.length)}`,  // A/B/C/...
-          createdAt: new Date().toISOString(),
-          summary: '复制自当前（mock：P5 后 agent 真生成另一方向）',
-        };
-        set((s) => ({
-          projects: s.projects.map(p =>
-            p.id === projectId
-              ? { ...p, candidates: [...existing, cand], activeCandidateId: cand.id, updatedAt: new Date().toISOString() }
-              : p
-          ),
-        }));
-        return cand;
-      },
-
-      removeCandidate: (projectId, candidateId) => {
-        set((s) => ({
-          projects: s.projects.map(p => {
-            if (p.id !== projectId) return p;
-            const remaining = (p.candidates || []).filter(c => c.id !== candidateId);
-            const fallbackId = p.activeCandidateId === candidateId
-              ? (remaining[0]?.id || null)
-              : p.activeCandidateId;
-            return { ...p, candidates: remaining, activeCandidateId: fallbackId };
-          }),
-        }));
-      },
-
-      renameCandidate: (projectId, candidateId, label) => {
-        set((s) => ({
-          projects: s.projects.map(p =>
-            p.id === projectId
-              ? { ...p, candidates: (p.candidates || []).map(c => c.id === candidateId ? { ...c, label } : c) }
-              : p
-          ),
-        }));
-      },
-
-      selectCandidate: (projectId, candidateId) => {
-        set((s) => ({
-          projects: s.projects.map(p =>
-            p.id === projectId ? { ...p, activeCandidateId: candidateId } : p
-          ),
-        }));
-      },
-    }),
-    {
-      name: 'nodesign:projects',
-      version: 2,
-      // version 1 → 2 迁移：旧 project 没有 snapshots / candidates 字段，加上空默认
-      migrate: (persistedState, fromVersion) => {
-        if (!persistedState || !persistedState.projects) return persistedState;
-        if (fromVersion < 2) {
-          persistedState.projects = persistedState.projects.map(p => ({
-            ...p,
-            snapshots: p.snapshots || [],
-            candidates: p.candidates || [
-              { id: 'c-default', label: '候选 A', createdAt: p.updatedAt || new Date().toISOString(), summary: '初始候选' },
-            ],
-            activeCandidateId: p.activeCandidateId || 'c-default',
-          }));
-        }
-        return persistedState;
-      },
+  // 拉项目列表（Home mount 时调）
+  hydrate: async () => {
+    if (get().hydrating) return get().projects;
+    set({ hydrating: true });
+    try {
+      const { projects } = await Projects.list();
+      const enriched = projects.map(enrich);
+      set({ projects: enriched, hydrated: true, hydrating: false, error: null });
+      return enriched;
+    } catch (err) {
+      set({ hydrating: false, error: err.message });
+      throw err;
     }
-  )
-);
+  },
+
+  // 单读一条（Project mount 时调）
+  hydrateOne: async (id) => {
+    const { project } = await Projects.get(id);
+    const e = enrich(project);
+    set((s) => ({
+      projects: s.projects.some((p) => p.id === id)
+        ? s.projects.map((p) => (p.id === id ? e : p))
+        : [e, ...s.projects],
+    }));
+    return e;
+  },
+
+  getProject: (id) => get().projects.find((p) => p.id === id) || null,
+
+  createProject: async ({ name, skillId }) => {
+    const { project } = await Projects.create({ name, skillId });
+    const e = enrich(project);
+    set((s) => ({ projects: [e, ...s.projects] }));
+    return e;
+  },
+
+  updateProject: async (id, patch) => {
+    // 本地先乐观更新（status 类瞬时字段不走 PATCH）
+    set((s) => ({
+      projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)),
+    }));
+    // 后端只接受 name / skillId
+    const apiPatch = {};
+    if (typeof patch.name === 'string') apiPatch.name = patch.name;
+    if (typeof patch.skillId === 'string') apiPatch.skillId = patch.skillId;
+    if (Object.keys(apiPatch).length === 0) return get().getProject(id);
+    const { project } = await Projects.update(id, apiPatch);
+    const e = enrich(project);
+    set((s) => ({
+      projects: s.projects.map((p) => (p.id === id ? { ...p, ...e } : p)),
+    }));
+    return e;
+  },
+
+  deleteProject: async (id) => {
+    await Projects.remove(id);
+    set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
+  },
+
+  /**
+   * 复制项目（P0 简版：新建同名 + 副本后缀）。不深拷贝 workspace —— 新项目是空的。
+   * 完整深拷贝（agent fork_variant 那种）留 P0+。
+   */
+  duplicateProject: async (id) => {
+    const src = get().projects.find((p) => p.id === id);
+    if (!src) return null;
+    const { project } = await Projects.create({
+      name: `${src.name}（副本）`,
+      skillId: src.skillId,
+    });
+    const e = enrich(project);
+    set((s) => ({ projects: [e, ...s.projects] }));
+    return e;
+  },
+
+  /**
+   * WS run 事件 → 本地 status patch。
+   * 前端 status 字段：'idle' | 'generating' | 'error'
+   */
+  applyRunEvent: (pid, evt) => {
+    if (!evt || !evt.type) return;
+    const next = (() => {
+      switch (evt.type) {
+        case 'run.start': return 'generating';
+        case 'run.done': return 'idle';
+        case 'run.error': return 'error';
+        case 'run.cancelled': return 'idle';
+        default: return null;
+      }
+    })();
+    if (!next) return;
+    set((s) => ({
+      projects: s.projects.map((p) =>
+        p.id === pid ? { ...p, status: next, updatedAt: new Date().toISOString() } : p,
+      ),
+    }));
+  },
+
+  // ── Snapshots / Candidates 字段保留（UI 占位），P0 全为 noop ──
+  // 真实现：snapshot → git commit；candidate → agent fork_variant + cp -r（P0+）
+  saveSnapshot: () => null,
+  deleteSnapshot: () => {},
+  renameSnapshot: () => {},
+  addCandidate: () => null,
+  removeCandidate: () => {},
+  renameCandidate: () => {},
+  selectCandidate: () => {},
+}));
+
+/** 把后端 project 行补齐前端 UI 期望的字段 */
+function enrich(p) {
+  return {
+    ...p,
+    skill: p.skillId,                  // 兼容老前端字段名（个别组件还用 .skill）
+    status: 'idle',                    // WS 事件来时再 patch
+    summary: p.name || '',             // Home 卡片副标占位
+    snapshots: [],                     // P0 占位
+    candidates: [],                    // P0 占位
+    activeCandidateId: null,
+  };
+}
