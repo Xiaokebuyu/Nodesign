@@ -28,6 +28,7 @@ import { Events } from './events.js';
 import { markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata } from '../runs/store.js';
 import { loadSkill } from './skill.js';
 import { createHooks } from './hooks.js';
+import { createNodesignMcpServer } from '../mcp/index.js';
 
 // 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）
 // 沙盒由 cwd=project workspace 保证，git binary 通过 PATH 拿；agent 不能写
@@ -181,8 +182,17 @@ export async function runAgent({
     canUseTool: makeAlwaysAllowCanUseTool(),
 
     // hooks 4 件套（C3 骨架，C4-C7 逐个填实）：
-    // FileChanged / PreToolUse(Bash) / Stop / PreCompact
+    // FileChanged / PreToolUse(Bash) / Stop / PostCompact
     hooks: createHooks({ ctx, workspaceRoot: wsRoot }),
+
+    // C8 自定义 MCP 工具集（in-process）：
+    // - mcp__nodesign__ping（占位）
+    // - C9 mcp__nodesign__screenshot_canvas
+    // - C10 mcp__nodesign__export_handoff
+    // - C11 mcp__nodesign__record_decision
+    mcpServers: {
+      nodesign: createNodesignMcpServer({ workspaceRoot: wsRoot, ctx }),
+    },
 
     stderr: (data) => {
       // 子进程 stderr → 调试日志（不入 EventBus 避免噪声）
