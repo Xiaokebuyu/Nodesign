@@ -579,6 +579,7 @@ export default function Project() {
             onPickFile={handleAddInput}
             promptSuggestion={promptSuggestion}
             onDismissSuggestion={() => setPromptSuggestion(null)}
+            agentProgress={agentProgress}
           />
         }
         center={
