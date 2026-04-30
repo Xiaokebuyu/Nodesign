@@ -17,6 +17,10 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
   const ref = useRef(null);
   const loadedRef = useRef(false);
 
+  // C32：保留 reload 前的 scrollY，让 FileChanged hook 触发的 reload 不丢用户位置
+  // 用 useRef 而非 state（避免 reload 触发额外 re-render）
+  const lastScrollY = useRef(0);
+
   // mode 切换 → 重新挂/卸 bridge（不需要 reload）
   useEffect(() => {
     const iframe = ref.current;
@@ -28,7 +32,21 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
     return () => detachAll(iframe);
   }, [mode, onSelect, onTextEdit]);
 
-  // src / srcDoc 切换 → reload。loaded 后再 attach bridge
+  // C32：src 变化（reloadToken bump）前，从当前 iframe 内捕获 scrollY
+  // useEffect 在 src prop 变化时跑，DOM 还没换 → contentWindow 仍是旧 doc
+  useEffect(() => {
+    return () => {
+      // cleanup 在 src 变化前跑（React effect 卸载时）—— 此时 iframe 仍是旧内容
+      try {
+        const win = ref.current?.contentWindow;
+        if (win && typeof win.scrollY === 'number') {
+          lastScrollY.current = win.scrollY;
+        }
+      } catch { /* cross-origin / window null */ }
+    };
+  }, [src, srcDoc]);
+
+  // src / srcDoc 切换 → reload。loaded 后再 attach bridge + 还原 scrollY
   const handleLoad = () => {
     loadedRef.current = true;
     const iframe = ref.current;
@@ -36,6 +54,15 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
     onIframeReady?.(iframe); // 把 iframe 元素回报给父，父可以拿 .contentDocument
     if (mode === 'edit') {
       attachEditMode(iframe, { onSelect, onTextEdit });
+    }
+    // C32：还原 scrollY（agent reload 后用户位置不丢）
+    if (lastScrollY.current > 0) {
+      try {
+        // 等下一帧 layout 稳定再 scroll，避免 0 位置撞回
+        requestAnimationFrame(() => {
+          try { iframe.contentWindow?.scrollTo(0, lastScrollY.current); } catch { /* cross-origin */ }
+        });
+      } catch { /* ignore */ }
     }
   };
 
