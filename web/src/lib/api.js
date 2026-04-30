@@ -139,6 +139,14 @@ export const Turn = {
   /** body: { chat, attachments[], skillId? } → { runId } */
   send: ({ pid, chat, attachments = [], skillId }) =>
     jsonRequest('POST', `/api/projects/${pid}/turn`, { chat, attachments, skillId }),
+
+  /**
+   * 终止生成。后端 cancelRun → ctrl.abort('user_cancel') → SDK 中断 →
+   * 触发 ctx.signal.aborted → emit run.cancelled。
+   * 200 ok / 404 code='RUN_NOT_ACTIVE' (run 已结束 / 不存在)
+   */
+  cancel: ({ pid, runId }) =>
+    jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/cancel`, {}),
 };
 
 // ── Health ──

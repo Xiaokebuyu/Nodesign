@@ -58,6 +58,8 @@ export default function Project() {
   const [agentProgress, setAgentProgress] = useState(null);
   // C29：DecisionsTab 自动刷新触发器（agent 调 record_decision / compact 后 bump）
   const [decisionsReloadKey, setDecisionsReloadKey] = useState(0);
+  // 终止生成：当前活跃 run 的 id（Turn.send 返回时记，run.done/error/cancelled 清）
+  const [currentRunId, setCurrentRunId] = useState(null);
 
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -141,6 +143,7 @@ export default function Project() {
         break;
       case 'run.done':
         setIsStreaming(false);
+        setCurrentRunId(null);
         // 双保险：FileChanged hook（run.file_changed）应该已 bump 过 reloadToken
         // 但万一 hook 不触发（如 SDK 边角问题），这里兜底再 bump 一次
         setReloadToken(t => t + 1);
@@ -155,6 +158,7 @@ export default function Project() {
         break;
       case 'run.error':
         setIsStreaming(false);
+        setCurrentRunId(null);
         setMessages(prev => [...prev, {
           id: newId('msg'),
           role: 'assistant',
@@ -164,6 +168,7 @@ export default function Project() {
         break;
       case 'run.cancelled':
         setIsStreaming(false);
+        setCurrentRunId(null);
         setPromptSuggestion(null);
         setAgentProgress(null);
         showToast('已取消', 'info');
@@ -337,7 +342,8 @@ export default function Project() {
 
     setMessages(ms => [...ms, { id: newId('msg'), role: 'user', content: text }]);
     try {
-      await Turn.send({ pid: id, chat: text, attachments });
+      const { runId } = await Turn.send({ pid: id, chat: text, attachments });
+      setCurrentRunId(runId);  // 终止生成用
       setInputs([]);  // 已发送的托盘清空
     } catch (err) {
       setMessages(ms => [...ms, {
@@ -346,6 +352,24 @@ export default function Project() {
         content: `_⚠️ 发送失败：${err.message}_`,
       }]);
       showToast(`发送失败：${err.message}`, 'error');
+    }
+  };
+
+  /** 终止当前活跃 run（用户点 ChatPanel 的 Stop 按钮） */
+  const handleStop = async () => {
+    if (!currentRunId) return;
+    try {
+      await Turn.cancel({ pid: id, runId: currentRunId });
+      // 真正的状态清理走 run.cancelled WS 事件（SDK abort 后端会 emit）
+      // 这里只触发请求；UI 立即响应：currentRunId 暂不清，等事件回
+    } catch (err) {
+      if (err.code === 'RUN_NOT_ACTIVE') {
+        // run 已结束（race：用户点的瞬间 agent 自然完成）
+        setCurrentRunId(null);
+        setIsStreaming(false);
+      } else {
+        showToast(`取消失败：${err.message}`, 'error');
+      }
     }
   };
 
@@ -632,6 +656,7 @@ export default function Project() {
             promptSuggestion={promptSuggestion}
             onDismissSuggestion={() => setPromptSuggestion(null)}
             agentProgress={agentProgress}
+            onStop={currentRunId ? handleStop : null}
           />
         }
         center={

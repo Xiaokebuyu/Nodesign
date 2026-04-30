@@ -1,6 +1,7 @@
+import { Square } from 'lucide-react';
 import MessageList from './MessageList.jsx';
 import ChatComposer from './ChatComposer.jsx';
-import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
+import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 /**
  * Chat Panel — 左栏整体壳
@@ -13,6 +14,7 @@ export default function ChatPanel({
   trayItems, onRemoveTrayItem, onPickFile,
   promptSuggestion, onDismissSuggestion,
   agentProgress,
+  onStop,
 }) {
   // C20：subagent 30s 摘要 > "思考中…" 占位
   // - agentProgress 非空 → 用具体描述（"正在分析颜色对比度…"）
@@ -38,18 +40,43 @@ export default function ChatPanel({
           flexShrink: 0,
         }}>对话</span>
         {isStreaming && (
-          <span style={{
-            fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.warn,
-            // agentProgress 时可能很长，省略号截断
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            minWidth: 0,
-          }}
-          title={agentProgress ? `${agentProgress.description || ''}${agentProgress.lastTool ? ` · ${agentProgress.lastTool}` : ''}` : undefined}
-          >
-            {statusText}
-          </span>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: GAP.sm,
+            minWidth: 0, flex: 1, justifyContent: 'flex-end',
+          }}>
+            <span style={{
+              fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.warn,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+            title={agentProgress ? `${agentProgress.description || ''}${agentProgress.lastTool ? ` · ${agentProgress.lastTool}` : ''}` : undefined}
+            >
+              {statusText}
+            </span>
+            {onStop && (
+              <button
+                onClick={onStop}
+                title="终止生成（Esc）"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  padding: `2px ${GAP.sm}px`,
+                  fontFamily: FONT_SANS, fontSize: 11, fontWeight: 500,
+                  color: '#fff',
+                  background: COLOR.error,
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.opacity = 0.85; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = 1; }}
+              >
+                <Square size={9} fill="#fff" /> 停止
+              </button>
+            )}
+          </div>
         )}
       </div>
 
