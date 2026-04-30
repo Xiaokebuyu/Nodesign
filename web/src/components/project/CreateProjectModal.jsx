@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles, FileText, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import Modal, { ModalFooter } from '../ui/Modal.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { useProjectStore } from '../../stores/projectStore.js';
@@ -7,19 +7,22 @@ import { useGlobalStore } from '../../stores/globalStore.js';
 import { Turn } from '../../lib/api.js';
 
 /**
- * CreateProjectModal — 新建项目向导
+ * CreateProjectModal — 新建项目向导（C30 简化）
  *
  * 流程：
- *   1. 选模式（自由创作 / 参照模式 — 后者标 P6 占位）
- *   2. 项目名 + 初始 brief（自由文本）
- *   3. 可选：展开"更详细" — 4 个结构化字段（goal / audience / keyMessages / style）
+ *   1. 项目名 + 初始 brief（自由文本，可附素材后由 agent 自己判断怎么用）
+ *   2. 可选：展开"更详细" — 4 个结构化字段（goal / audience / keyMessages / style）
  *      参考 Claude_design §4 第 8 条：好 prompt 含 goal/layout/content/audience
- *   4. 创建并跳转
+ *   3. 创建并跳转
+ *
+ * C30 移除"自由创作 vs 参照模式"分支：现在 agent 能力够强（Claude
+ * Agent SDK 内置 Read 工具 + content blocks 接附件），用户输入啥
+ * 就处理啥，不需要"模式"框定（参照模式那块原本是 P6 设计文档
+ * 的入口，但有附件 = 参照、没附件 = 自由的判断 agent 自己做就行）。
  */
-export default function CreateProjectModal({ show, onClose, onCreated, initialMode = 'free' }) {
+export default function CreateProjectModal({ show, onClose, onCreated }) {
   const createProject = useProjectStore(s => s.createProject);
   const showToast = useGlobalStore(s => s.showToast);
-  const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState('');
   const [brief, setBrief] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -32,14 +35,13 @@ export default function CreateProjectModal({ show, onClose, onCreated, initialMo
   // show 切换时重置
   useEffect(() => {
     if (show) {
-      setMode(initialMode);
       setName('');
       setBrief('');
       setAdvancedOpen(false);
       setGoal(''); setAudience(''); setKeyMessages(''); setStylePref('');
       setSubmitting(false);
     }
-  }, [show, initialMode]);
+  }, [show]);
 
   const submit = async () => {
     if (submitting) return;
@@ -79,27 +81,6 @@ export default function CreateProjectModal({ show, onClose, onCreated, initialMo
   return (
     <Modal show={show} onClose={onClose} title="新建项目" width={560}>
       <div style={{ padding: GAP.xl }}>
-
-        {/* 模式选择 */}
-        <Section label="创作模式">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: GAP.md }}>
-            <ModeCard
-              icon={<Sparkles size={18} color={COLOR.btn} />}
-              title="自由创作"
-              desc="输入 brief，agent 从 metaphor 推审美生成"
-              selected={mode === 'free'}
-              onClick={() => setMode('free')}
-            />
-            <ModeCard
-              icon={<FileText size={18} color={COLOR.brown} />}
-              title="参照模式"
-              desc="基于已有设计系统生成（P6 实现）"
-              selected={mode === 'reference'}
-              onClick={() => setMode('reference')}
-              disabled
-            />
-          </div>
-        </Section>
 
         {/* 项目名 */}
         <Section label="项目名">
@@ -227,35 +208,6 @@ function Field({ label, value, onChange, placeholder, multiline }) {
         style={multiline ? { ...commonStyle, resize: 'vertical', lineHeight: 1.5 } : commonStyle}
       />
     </div>
-  );
-}
-
-function ModeCard({ icon, title, desc, selected, onClick, disabled }) {
-  return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      style={{
-        textAlign: 'left',
-        padding: GAP.lg,
-        background: selected ? 'rgba(45,36,24,0.05)' : '#fff',
-        border: `1.5px solid ${selected ? COLOR.btn : COLOR.borderLt}`,
-        borderRadius: 12,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        transition: 'all 0.15s',
-      }}
-    >
-      <div style={{ marginBottom: GAP.sm }}>{icon}</div>
-      <div style={{
-        fontFamily: FONT_MONO, fontSize: FONT_SIZE.base, fontWeight: 600,
-        color: COLOR.text, marginBottom: 2,
-      }}>{title}</div>
-      <div style={{
-        fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub,
-        lineHeight: 1.5,
-      }}>{desc}</div>
-    </button>
   );
 }
 

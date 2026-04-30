@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Sparkles, FileText, Layers, Wrench, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Sparkles, Layers, Wrench, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import CreateProjectModal from '../components/project/CreateProjectModal.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../lib/theme.js';
@@ -16,7 +16,6 @@ export default function Home() {
   const error = useProjectStore(s => s.error);
   const hydrate = useProjectStore(s => s.hydrate);
   const [createOpen, setCreateOpen] = useState(false);
-  const [createInitialMode, setCreateInitialMode] = useState('free');
 
   useEffect(() => {
     if (!hydrated && !hydrating) {
@@ -24,10 +23,8 @@ export default function Home() {
     }
   }, [hydrated, hydrating, hydrate]);
 
-  const openCreate = (mode = 'free') => {
-    setCreateInitialMode(mode);
-    setCreateOpen(true);
-  };
+  // C30：移除 mode 区分（agent 自己根据输入判断）
+  const openCreate = () => setCreateOpen(true);
 
   return (
     <AppShell
@@ -35,7 +32,7 @@ export default function Home() {
         <>
           <Link to="/design-systems" style={iconBtnStyle}><Layers size={14} /> 设计系统</Link>
           <Link to="/skills" style={iconBtnStyle}><Wrench size={14} /> Skill</Link>
-          <button style={primaryBtnStyle} onClick={() => openCreate('free')}>
+          <button style={primaryBtnStyle} onClick={openCreate}>
             <Plus size={14} /> 新建项目
           </button>
         </>
@@ -43,21 +40,14 @@ export default function Home() {
     >
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: `${GAP.page}px ${GAP.page}px` }}>
 
-        {/* Hero / 入口卡片 */}
-        <section style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: GAP.xl, marginBottom: GAP.page }}>
+        {/* C30：单入口（不再分自由 vs 参照模式 —— agent 自己判断怎么用附件）*/}
+        <section style={{ marginBottom: GAP.page }}>
           <EntryCard
             icon={<Sparkles size={20} color={COLOR.btn} />}
-            title="自由创作"
-            desc="输入 brief，agent 从 metaphor 推审美生成 deck"
+            title="开始一个新项目"
+            desc="描述想做什么，可选附素材；agent 看了输入会自己判断要不要参考"
             action="开始"
-            onClick={() => openCreate('free')}
-          />
-          <EntryCard
-            icon={<FileText size={20} color={COLOR.brown} />}
-            title="参照模式"
-            desc="基于已有设计系统生成（P6 实现，先占位）"
-            action="选参考"
-            onClick={() => openCreate('reference')}
+            onClick={openCreate}
           />
         </section>
 
@@ -78,7 +68,7 @@ export default function Home() {
           ) : error ? (
             <ErrorState message={error} onRetry={() => hydrate().catch(() => {})} />
           ) : projects.length === 0 ? (
-            <EmptyState onCreate={() => openCreate('free')} />
+            <EmptyState onCreate={openCreate} />
           ) : (
             <div style={{
               display: 'grid',
@@ -95,7 +85,6 @@ export default function Home() {
         show={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={(proj) => navigate(`/projects/${proj.id}`)}
-        initialMode={createInitialMode}
       />
     </AppShell>
   );
