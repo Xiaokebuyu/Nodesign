@@ -29,6 +29,7 @@ import { markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata } fro
 import { loadSkill } from './skill.js';
 import { createHooks } from './hooks.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
+import { createAgents } from '../agents/index.js';
 
 // 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）
 // 沙盒由 cwd=project workspace 保证，git binary 通过 PATH 拿；agent 不能写
@@ -193,6 +194,10 @@ export async function runAgent({
     mcpServers: {
       nodesign: createNodesignMcpServer({ workspaceRoot: wsRoot, ctx }),
     },
+
+    // C13 子代理定义（vision-checker / ds-extractor / tweak-proposer）
+    // 这次只挂骨架；main agent 通过 SKILL.md 引导不主动调，stage 2 接通流程
+    agents: createAgents(),
 
     stderr: (data) => {
       // 子进程 stderr → 调试日志（不入 EventBus 避免噪声）
