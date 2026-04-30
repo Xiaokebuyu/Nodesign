@@ -94,12 +94,13 @@ export function createAgents() {
 
     'tweak-proposer': {
       description:
-        'Propose a slider schema describing tweakable dimensions of the current '
-        + 'canvas (e.g., heading scale, spacing density, accent color hue range, '
-        + 'corner roundness). Returns JSON describing each tweak\'s name / min / max '
-        + '/ step / current value, ready for the frontend to render as sliders.',
-      prompt: STUB_PROMPT('tweak-proposer'),
-      // outputFormat: { type: 'json_schema', schema: <tweak-schema.json> } — C16 fills
+        'Propose 4–10 tweakable dimensions of the current canvas (e.g., heading '
+        + 'scale, spacing density, accent color, corner style). Returns JSON '
+        + 'conformant to schemas/tweak-schema.json — the frontend renders each '
+        + 'tweak as slider / select / color picker / toggle. Use this when the '
+        + 'user wants to fine-tune without rewriting.',
+      prompt: loadPrompt('tweak-proposer'),
+      // 同 ds-extractor：SDK 不支持 per-agent outputFormat，schema 内嵌 prompt
     },
   };
 }

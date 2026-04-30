@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "nodesign://schemas/tweak-schema.json",
+  "title": "Tweak Schema",
+  "description": "Schema for slider/select controls the frontend renders to let the user fine-tune a finished canvas without rewriting it. Each tweak names a dimension that can be adjusted with one degree of freedom.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["meta", "tweaks"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposedAt", "sourceArtifact"],
+      "properties": {
+        "proposedAt": { "type": "string", "format": "date-time" },
+        "sourceArtifact": { "type": "string" },
+        "summary": { "type": "string", "description": "One sentence: what kind of tweaks does this canvas afford?" }
+      }
+    },
+    "tweaks": {
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 12,
+      "items": { "$ref": "#/definitions/tweak" }
+    }
+  },
+
+  "definitions": {
+    "tweak": {
+      "oneOf": [
+        { "$ref": "#/definitions/numberTweak" },
+        { "$ref": "#/definitions/selectTweak" },
+        { "$ref": "#/definitions/colorTweak" },
+        { "$ref": "#/definitions/booleanTweak" }
+      ]
+    },
+
+    "numberTweak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "current", "min", "max", "step", "affects"],
+      "properties": {
+        "id":     { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$", "description": "camelCase stable identifier" },
+        "label":  { "type": "string", "description": "Display label, max ~30 chars" },
+        "type":   { "const": "number" },
+        "current": { "type": "number" },
+        "min":    { "type": "number" },
+        "max":    { "type": "number" },
+        "step":   { "type": "number", "exclusiveMinimum": 0 },
+        "unit":   { "type": "string", "description": "Display unit (e.g., 'px', '%', 'x', 'deg')" },
+        "affects":     { "$ref": "#/definitions/affectsList" },
+        "description": { "type": "string" }
+      }
+    },
+
+    "selectTweak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "current", "options", "affects"],
+      "properties": {
+        "id":      { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+        "label":   { "type": "string" },
+        "type":    { "const": "select" },
+        "current": { "type": "string" },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "items": { "type": "string" }
+        },
+        "affects":     { "$ref": "#/definitions/affectsList" },
+        "description": { "type": "string" }
+      }
+    },
+
+    "colorTweak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "current", "affects"],
+      "properties": {
+        "id":      { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+        "label":   { "type": "string" },
+        "type":    { "const": "color" },
+        "current": { "type": "string", "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$" },
+        "affects":     { "$ref": "#/definitions/affectsList" },
+        "description": { "type": "string" }
+      }
+    },
+
+    "booleanTweak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "current", "affects"],
+      "properties": {
+        "id":      { "type": "string", "pattern": "^[a-z][a-zA-Z0-9]*$" },
+        "label":   { "type": "string" },
+        "type":    { "const": "boolean" },
+        "current": { "type": "boolean" },
+        "affects":     { "$ref": "#/definitions/affectsList" },
+        "description": { "type": "string" }
+      }
+    },
+
+    "affectsList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "description": "Token path or selector this tweak applies to (e.g., 'colors.accent', 'typography.scale.h1.fontSize', 'spacing.*', '#hero h1')."
+      }
+    }
+  }
+}
