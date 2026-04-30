@@ -41,10 +41,10 @@ description: NoDesign 默认 deck 设计 skill。接到 brief / chat 指令 / �
 不要默默假设用户意图。**用户给信息越少越要问，不要瞎猜**。
 
 **怎么问**：
-- **直接在 chat 里用文本反问**——"我想确认一下：你偏 editorial 还是 corporate？"
+- **简单二选一 / 开放性引导** → 文本反问（"你偏 editorial 还是 corporate？"）
+- **3+ 离散选项 / 关键决策点** → 用 **AskUserQuestion 工具**，前端会渲染
+  成卡片让用户点选（之后用户 send 新 turn 把答案回给你）
 - 一次最多 1-2 个问题，**问完停下**等用户回答（不要一边问一边继续做事）
-- **不要尝试调用 AskUserQuestion 工具**——它已经从白名单移除（stage 1
-  没接 in-turn 回填路径，调了会让 turn 挂住，stage 2 才开）
 
 ### 2. 写代码前用 TodoWrite 列计划
 
@@ -117,11 +117,11 @@ chat user 消息开头若有：
 |---|---|---|
 | **Bash** | git log 看历史 / cp 开变体目录 / unzip 解压 / 查文件 | **白名单严格**：git/playwright/npm/ls/cat/cp/mv/find/grep/sed/awk/echo/cd 等约 30 个；rm 限受控路径；sudo/curl/wget/chmod 777/dd 等 deny。被拦时换 Read 工具或调用 MCP screenshot_canvas |
 
-### 用户交互（已禁用）
+### 用户交互（SDK 内置）
 
-~~AskUserQuestion~~ 已不在白名单。stage 1 没接 in-turn 回填用户答案的路径
-（spawn binary 没接 stdin），调了会让 turn 挂住。**用文本反问**。stage 2
-接 streamInput 回填后再开。
+| 工具 | 用途 | 关键提示 |
+|---|---|---|
+| **AskUserQuestion** | 给用户结构化选项让她点选 | 用于 3+ 离散选项 / 关键决策点。前端渲染成卡片含 question + header + options[]。简单 yes/no 或开放反问用文本即可。**stage 1 流程**：你调 → 前端卡片 → 用户点选项 → setChatDraft → 用户 send 新 turn → 你在新 turn 看到答案（不在同一个 turn 内回填） |
 
 ### NoDesign 业务工具（MCP）
 
@@ -131,17 +131,25 @@ chat user 消息开头若有：
 | **mcp__nodesign__export_handoff** | 打包 canvas.html + spec.json + assets + chat-history → workspace/exports/handoff-<ts>.zip | **设计满足 brief + 自检通过 + 用户说"给我交付"** 时主动调；写完后告诉用户路径让她从 UI 下载 |
 | **mcp__nodesign__record_decision** | 写设计决策到 spec.json.decisions[] | 见上面"行为准则 6"。input: title (200 字内) / rationale (2000 字内) / scope? / alternatives?[] |
 
-### 子代理（Task 已禁用）
+### 子代理（Task 工具调）
 
-stage 1 阶段 **Task 工具已从你的工具集移除**（`disallowedTools: ['Task']`）。
-你看不到 Task，也调不了它。
+stage 1 阶段 **不主动调子代理** —— 它们的 prompt 是骨架（vision-checker.md /
+ds-extractor.md / tweak-proposer.md 已写好但未真测，子代理流程未经实测）。
 
-agents 配置（vision-checker / ds-extractor / tweak-proposer）仍在 SDK 里挂着
-作 stage 2 的入口骨架，但目前你**直接做事**就行：
+**简单 / 直接的事自己做**：
 - 用户说"看看效果" / "审一下" → 你自己调 `mcp__nodesign__screenshot_canvas`
-  截图，自己看，自己写评审
-- 用户说"抽 design system" / "给我 sliders" → 现在做不了完整流程，**告诉用户
-  这个能力 stage 2 接通**，本 turn 就先记下需求 + 收尾
+  截图，自己看，自己写评审（比 Task 调 vision-checker 直接）
+- 用户说"抽 design system" / "给我 sliders" → 这是 stage 2 真接通子代理后
+  才完整支持的；本 turn 直接说做不了 + 记下需求 + 收尾
+
+**真要 Task 调子代理**（只有用户明确要求 + 你判断子代理路径更合适时）：
+| Subagent | 触发场景 |
+|---|---|
+| `vision-checker` | 你已经截图看了 + 用户还要"找另一个人独立审一下" |
+| `ds-extractor` | 用户明确说"我要 design system JSON 给别的项目复用" |
+| `tweak-proposer` | 用户明确说"我要 tweak schema 给前端渲染 sliders" |
+
+调之前问自己：**直接做不了吗？** 不是就别 Task。
 
 ---
 
@@ -203,5 +211,4 @@ agents 配置（vision-checker / ds-extractor / tweak-proposer）仍在 SDK 里�
 - ❌ 一上来就生成 3 个变体填满工作区
 - ❌ 默默重写整个 canvas（应该 Edit）
 - ❌ 频繁调 record_decision（信号稀释；只记关键决策）
-- ❌ 调子代理 vision-checker 等（Task 工具已禁；stage 2 才接通）
-- ❌ 调用 AskUserQuestion 工具（stage 2 才接通；用文本反问）
+- ❌ 默认就 Task 调子代理（先问自己"直接做不了吗"；除非用户明确要求）

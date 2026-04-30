@@ -31,21 +31,16 @@ import { createHooks } from './hooks.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
 import { createAgents } from '../agents/index.js';
 
-// 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）
+// 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）。
 // 沙盒由 cwd=project workspace 保证 + PreToolUse hook 命令白名单兜底。
 //
-// 不在这里的（hotfix-sdk-usage 后撤掉）：
-// - AskUserQuestion：SDK 默认走 binary stdio prompt → 我们 spawn 没接 stdin
-//   会 hang。stage 2 接通 streamInput 回填路径再加。
+// AskUserQuestion 在白名单 —— permissionMode='bypassPermissions' 后 binary
+// 跳过 stdio prompt，AskUserQuestion 走正常 tool_use → 前端 AskUserQuestionView
+// 渲染卡片 → 用户点选项 → setChatDraft → 用户 send 新 turn → agent 看到答案
 const DEFAULT_TOOL_ALLOWLIST = [
   'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'Bash',
+  'AskUserQuestion',
 ];
-
-// 禁用工具集：agents 字段挂了 3 个 subagent 骨架（vision-checker /
-// ds-extractor / tweak-proposer），SDK 自动给 main agent 暴露 Task 工具
-// 让它能 delegate。但 stage 1 不希望主动调 → 用 disallowedTools 把
-// Task 工具从 main agent 上下文里移除。stage 2 真接通子代理流程时撤掉。
-const DEFAULT_DISALLOWED_TOOLS = ['Task'];
 
 // 主产物候选 — canvas.html 列首位（P0 per-project workspace 主文件名），
 // 其余兼容 deec72d 之前的 e2e smoke / 旧 deskskill-engine 输出。
@@ -152,9 +147,6 @@ export async function runAgent({
     // 工具白名单
     tools: toolAllowlist,
     allowedTools: toolAllowlist,    // 同时白名单，避免每次问权限
-    // hotfix-sdk-usage：禁用 Task（防 main agent 主动 delegate 子代理；
-    // agents 字段仍挂 stage 1 骨架，stage 2 接通流程时移除这条）
-    disallowedTools: DEFAULT_DISALLOWED_TOOLS,
 
     // hotfix-sdk-usage：systemPrompt 改 preset 'claude_code' + append。
     // 之前用 string 完全替换 SDK 默认 prompt → 失去 Claude Code 的关键
