@@ -41,6 +41,74 @@ function safeFilename(name) {
   return (name || 'design').replace(/[^A-Za-z0-9._一-龥-]/g, '_').slice(0, 60);
 }
 
+// ── 已生成的交付包列表 ──
+// agent 调 mcp__nodesign__export_handoff 写到 workspace/exports/handoff-<ts>.zip。
+// 前端通过此 endpoint 列出供用户下载（不只是 toast 显示路径）。
+router.get('/:pid/exports', async (req, res, next) => {
+  try {
+    const project = projectGuard(req, res);
+    if (!project) return;
+    const wsRoot = getProjectWorkspace(req.params.pid);
+    const exportsDir = path.join(wsRoot, 'exports');
+
+    let entries;
+    try {
+      entries = await fs.readdir(exportsDir, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === 'ENOENT') return res.json({ files: [] });
+      throw err;
+    }
+
+    const files = [];
+    for (const e of entries) {
+      if (!e.isFile()) continue;
+      try {
+        const stat = await fs.stat(path.join(exportsDir, e.name));
+        files.push({
+          name: e.name,
+          size: stat.size,
+          mtime: stat.mtime.toISOString(),
+        });
+      } catch { /* skip unreadable */ }
+    }
+    // 最新在前
+    files.sort((a, b) => (a.mtime < b.mtime ? 1 : -1));
+    res.json({ files });
+  } catch (err) { next(err); }
+});
+
+// 单文件下载（流式）
+router.get('/:pid/exports/file/:filename', async (req, res, next) => {
+  try {
+    const project = projectGuard(req, res);
+    if (!project) return;
+    const wsRoot = getProjectWorkspace(req.params.pid);
+
+    // 安全：只允许 [a-zA-Z0-9._-] 文件名，防 path traversal
+    const filename = req.params.filename;
+    if (!/^[A-Za-z0-9._-]+$/.test(filename)) {
+      return res.status(400).json({ error: 'invalid filename' });
+    }
+    const filePath = path.join(wsRoot, 'exports', filename);
+    try {
+      await fs.access(filePath);
+    } catch {
+      return res.status(404).json({ error: 'file not found' });
+    }
+
+    const ext = filename.toLowerCase().split('.').pop();
+    const mime = ext === 'zip' ? 'application/zip'
+      : ext === 'pdf' ? 'application/pdf'
+      : ext === 'html' ? 'text/html; charset=utf-8'
+      : 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    const buf = await fs.readFile(filePath);
+    res.setHeader('Content-Length', buf.length);
+    res.end(buf);
+  } catch (err) { next(err); }
+});
+
 // ── HTML ──
 router.get('/:pid/exports/html', async (req, res, next) => {
   try {

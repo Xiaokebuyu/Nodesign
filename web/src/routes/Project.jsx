@@ -13,6 +13,7 @@ import SnapshotModal from '../components/project/SnapshotModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
 import UndoButton from '../components/canvas/UndoButton.jsx';
 import ContextUsageBar from '../components/project/ContextUsageBar.jsx';
+import ExportsListModal from '../components/project/ExportsListModal.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../lib/theme.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
@@ -60,6 +61,7 @@ export default function Project() {
 
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportsListOpen, setExportsListOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [snapshotOpen, setSnapshotOpen] = useState(false);
   const [directEditOpen, setDirectEditOpen] = useState(false);
@@ -590,6 +592,7 @@ export default function Project() {
               open={exportOpen}
               onClose={() => setExportOpen(false)}
               onExport={handleExport}
+              onOpenList={() => setExportsListOpen(true)}
               anchorRef={exportBtnRef}
             />
           </div>
@@ -668,6 +671,11 @@ export default function Project() {
       />
 
       <ShareModal show={shareOpen} onClose={() => setShareOpen(false)} project={project} />
+      <ExportsListModal
+        show={exportsListOpen}
+        onClose={() => setExportsListOpen(false)}
+        projectId={id}
+      />
       <SnapshotModal
         show={snapshotOpen}
         onClose={() => setSnapshotOpen(false)}

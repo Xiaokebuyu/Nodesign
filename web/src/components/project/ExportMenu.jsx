@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { FileCode, FileText, Presentation, Hammer } from 'lucide-react';
+import { FileCode, FileText, Presentation, Hammer, FolderOpen } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 const ITEMS = [
@@ -17,7 +17,7 @@ const ITEMS = [
  *
  * PPTX 标灰禁点，留 P0+。
  */
-export default function ExportMenu({ open, onClose, onExport, anchorRef }) {
+export default function ExportMenu({ open, onClose, onExport, anchorRef, onOpenList }) {
   const ref = useRef(null);
 
   // 点外面关闭
@@ -81,6 +81,34 @@ export default function ExportMenu({ open, onClose, onExport, anchorRef }) {
           </button>
         );
       })}
+
+      {/* C31：分隔线 + 已生成的交付文件入口（agent export_handoff 写到 workspace/exports/）*/}
+      {onOpenList && (
+        <>
+          <div style={{ height: 1, background: COLOR.borderLt, margin: `4px ${GAP.sm}px` }} />
+          <button
+            onClick={() => { onOpenList(); onClose?.(); }}
+            style={{
+              width: '100%',
+              display: 'flex', alignItems: 'center', gap: GAP.md,
+              padding: `${GAP.sm + 1}px ${GAP.md + 2}px`,
+              background: 'transparent',
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+          >
+            <FolderOpen size={14} color={COLOR.text4} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, fontWeight: 500, color: COLOR.text }}>已生成的交付文件</div>
+              <div style={{ fontFamily: FONT_SANS, fontSize: 10, color: COLOR.sub, marginTop: 1 }}>agent 主动 export_handoff 后产出</div>
+            </div>
+          </button>
+        </>
+      )}
     </div>
   );
 }

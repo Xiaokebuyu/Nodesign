@@ -110,6 +110,20 @@ export const Exports = {
     const filename = parseFilenameFromDisposition(res.headers.get('content-disposition'));
     return { blob, filename };
   },
+
+  /** C31：列已生成的交付文件（agent export_handoff 等写到 workspace/exports/）*/
+  list: (pid) => jsonRequest('GET', `/api/projects/${pid}/exports`),
+
+  /** C31：下载 workspace/exports/<filename> */
+  downloadFile: async (pid, filename) => {
+    const res = await fetch(`/api/projects/${pid}/exports/file/${encodeURIComponent(filename)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw Object.assign(new Error(data.error || res.statusText), { status: res.status });
+    }
+    const blob = await res.blob();
+    return { blob, filename };
+  },
 };
 
 function parseFilenameFromDisposition(disposition) {
