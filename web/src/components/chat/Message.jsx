@@ -5,9 +5,11 @@ import {
   Eye, Download, Bookmark, Send,
   ListChecks, FolderTree, Globe,
   ShieldAlert, Info, AlertCircle, CheckCircle2,
+  HelpCircle,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
+import { useGlobalStore } from '../../stores/globalStore.js';
 
 /**
  * 单条消息渲染。4 种 role：
@@ -41,6 +43,10 @@ export default function Message({ message }) {
   }
 
   if (role === 'tool') {
+    // C27：AskUserQuestion 走专门卡片渲染（不当普通 tool message）
+    if (toolName === 'AskUserQuestion') {
+      return <AskUserQuestionView toolInput={toolInput} toolOutput={toolOutput} status={status} />;
+    }
     return (
       <ToolMessage
         toolName={toolName}
@@ -77,6 +83,157 @@ export default function Message({ message }) {
         .md-content li { margin: 2px 0; }
         .md-content a { color: ${COLOR.btn}; text-decoration: underline; }
       `}</style>
+    </div>
+  );
+}
+
+/**
+ * AskUserQuestionView —— C27：agent 调用 SDK 内置 AskUserQuestion 工具的卡片渲染
+ *
+ * SDK 内置 AskUserQuestion 工具的 input schema：
+ *   {
+ *     questions: [{
+ *       question: string,
+ *       header: string,           // 12 字短 chip 标签
+ *       options: [{ label, description, preview? }],
+ *       multiSelect: boolean,
+ *     }]
+ *   }
+ *
+ * 用户点 option → setChatDraft(label) 把选项填入 chat composer，
+ * 用户确认 send 后回给 agent。这是简版交互（不走 SDK control flow
+ * 直接 inject 答案，stage 2 再做）。
+ */
+function AskUserQuestionView({ toolInput, toolOutput, status }) {
+  const setChatDraft = useGlobalStore(s => s.setChatDraft);
+  const questions = Array.isArray(toolInput?.questions) ? toolInput.questions : [];
+  const isAnswered = status === 'success' && toolOutput;
+
+  if (questions.length === 0) {
+    return (
+      <SystemMessage
+        variant="info"
+        content="Agent 调用了 AskUserQuestion 但 input 没有 questions"
+      />
+    );
+  }
+
+  const handlePickOption = (q, optionLabel) => {
+    if (isAnswered) return;
+    const headerLabel = q.header ? `[${q.header}] ` : '';
+    setChatDraft(`${headerLabel}${optionLabel}`);
+  };
+
+  return (
+    <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
+      {questions.map((q, qi) => (
+        <div
+          key={qi}
+          style={{
+            marginBottom: qi < questions.length - 1 ? GAP.md : 0,
+            padding: GAP.md,
+            border: `1px solid ${COLOR.borderMd}`,
+            borderRadius: 10,
+            background: '#fff',
+            opacity: isAnswered ? 0.6 : 1,
+          }}
+        >
+          {/* header chip */}
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: `2px ${GAP.sm}px`,
+            background: 'rgba(45, 36, 24, 0.06)',
+            borderRadius: 4,
+            fontFamily: FONT_MONO,
+            fontSize: 10,
+            color: COLOR.text2,
+            letterSpacing: '0.04em',
+            marginBottom: GAP.xs + 1,
+          }}>
+            <HelpCircle size={10} />
+            {q.header || 'AGENT 问'}
+          </div>
+
+          {/* question text */}
+          <div style={{
+            fontFamily: FONT_SANS,
+            fontSize: FONT_SIZE.base,
+            color: COLOR.text,
+            lineHeight: 1.5,
+            marginBottom: GAP.sm,
+          }}>
+            {q.question}
+          </div>
+
+          {/* options */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.xs }}>
+            {(q.options || []).map((opt, oi) => (
+              <button
+                key={oi}
+                onClick={() => handlePickOption(q, opt.label)}
+                disabled={isAnswered}
+                style={{
+                  textAlign: 'left',
+                  padding: `${GAP.sm}px ${GAP.md}px`,
+                  border: `1px solid ${COLOR.borderLt}`,
+                  borderRadius: 6,
+                  background: '#fff',
+                  cursor: isAnswered ? 'not-allowed' : 'pointer',
+                  fontFamily: FONT_SANS,
+                  fontSize: FONT_SIZE.sm,
+                  color: COLOR.text,
+                  transition: 'background 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={e => {
+                  if (isAnswered) return;
+                  e.currentTarget.style.background = 'rgba(45, 36, 24, 0.04)';
+                  e.currentTarget.style.borderColor = COLOR.borderHv;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = '#fff';
+                  e.currentTarget.style.borderColor = COLOR.borderLt;
+                }}
+              >
+                <div style={{ fontWeight: 500 }}>{opt.label}</div>
+                {opt.description && (
+                  <div style={{
+                    marginTop: 2,
+                    fontSize: 11,
+                    color: COLOR.sub,
+                    lineHeight: 1.4,
+                  }}>
+                    {opt.description}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {q.multiSelect && (
+            <div style={{
+              marginTop: GAP.xs,
+              fontSize: 10,
+              color: COLOR.sub,
+              fontStyle: 'italic',
+            }}>
+              （可多选 —— 简版只接受单选；多选请在 chat 里描述）
+            </div>
+          )}
+        </div>
+      ))}
+
+      {!isAnswered && (
+        <div style={{
+          marginTop: GAP.xs + 2,
+          fontSize: 10,
+          color: COLOR.sub,
+          paddingLeft: 2,
+        }}>
+          点选项 → 填到对话框，确认后发送给 agent
+        </div>
+      )}
     </div>
   );
 }

@@ -34,8 +34,12 @@ import { createAgents } from '../agents/index.js';
 // 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）
 // 沙盒由 cwd=project workspace 保证，git binary 通过 PATH 拿；agent 不能写
 // JS 直接调 fs 越界，工具是唯一入口。
+//
+// P0+ s1 C27：加 AskUserQuestion —— SDK 内置工具，让 agent 能在模糊
+// 时主动问用户结构化选项（前端 AskUserQuestionView 渲染卡片）。
 const DEFAULT_TOOL_ALLOWLIST = [
   'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'Bash',
+  'AskUserQuestion',
 ];
 
 // 主产物候选 — canvas.html 列首位（P0 per-project workspace 主文件名），
