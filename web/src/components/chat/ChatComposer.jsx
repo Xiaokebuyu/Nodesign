@@ -3,6 +3,7 @@ import { Send, Paperclip, AtSign, Wand2, FolderInput } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import ComposerTray from './ComposerTray.jsx';
+import SuggestionChip from './SuggestionChip.jsx';
 
 /**
  * Chat 输入框 — 双层结构（参考用户提供的设计图）
@@ -25,7 +26,10 @@ import ComposerTray from './ComposerTray.jsx';
  *
  * Import 按钮（P2/P6 接通）：从外部一键导入参考素材到当前 chat
  */
-export default function ChatComposer({ onSend, disabled, trayItems, onRemoveTrayItem, onPickFile }) {
+export default function ChatComposer({
+  onSend, disabled, trayItems, onRemoveTrayItem, onPickFile,
+  promptSuggestion, onDismissSuggestion,
+}) {
   const [text, setText] = useState('');
   const ref = useRef(null);
   const fileInputRef = useRef(null);
@@ -87,6 +91,19 @@ export default function ChatComposer({ onSend, disabled, trayItems, onRemoveTray
       }}>
         {/* 顶层：附件托盘（多 modality 信号；空时不渲染）*/}
         <ComposerTray items={trayItems} onRemove={onRemoveTrayItem} />
+
+        {/* C19：SDK 预测的下条 prompt（promptSuggestions: true）*/}
+        <SuggestionChip
+          suggestion={promptSuggestion}
+          onAccept={(s) => {
+            // 直接发送 suggestion；如果用户希望先编辑，把它填到 textarea：
+            //   setText(s); ref.current?.focus();
+            // 当前行为是直接发，参考 ChatGPT 之类的"接受建议立即提交"
+            onSend?.(s);
+            onDismissSuggestion?.();
+          }}
+          onDismiss={onDismissSuggestion}
+        />
 
         {/* 上层：textarea */}
         <textarea

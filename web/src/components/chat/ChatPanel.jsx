@@ -11,6 +11,7 @@ import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
 export default function ChatPanel({
   messages = [], onSend, isStreaming = false,
   trayItems, onRemoveTrayItem, onPickFile,
+  promptSuggestion, onDismissSuggestion,
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -40,6 +41,8 @@ export default function ChatPanel({
         trayItems={trayItems}
         onRemoveTrayItem={onRemoveTrayItem}
         onPickFile={onPickFile}
+        promptSuggestion={promptSuggestion}
+        onDismissSuggestion={onDismissSuggestion}
       />
     </div>
   );

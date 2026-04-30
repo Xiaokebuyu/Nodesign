@@ -577,6 +577,8 @@ export default function Project() {
             trayItems={inputs}
             onRemoveTrayItem={handleRemoveInput}
             onPickFile={handleAddInput}
+            promptSuggestion={promptSuggestion}
+            onDismissSuggestion={() => setPromptSuggestion(null)}
           />
         }
         center={
