@@ -1,4 +1,4 @@
-# SESSION 2026-04-30 — P0+ stage 1: 全量切换到 Claude Agent SDK 现成能力
+# SESSION 2026-04-30 — P0+ stage 1: 全量切换到 Claude Agent SDK 现成能力 + Phase H 前端可视化补完
 
 ## 起因
 
@@ -84,7 +84,26 @@ summaries / prompt suggestions / context usage / canUseTool）。
 | C21 | 本 SESSION 文档 | SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md |
 | C22 | PLAN.md 推进表 + 实施日志 | PLAN.md |
 
-**总计**：22 commits，每个 ≤ 4 文件（C12/C19 各 4 文件，其他 ≤ 3）。
+### Phase H — 前端可视化补完（10 commits）
+
+完成 stage 1 后用户反馈"agent 在做什么前端要完整可见"+ "暴露思维链"+
+"AskUserQuestion 没渲染" + "自由 / 参照模式过时" + "工作区可视化"——
+本 phase 补完缺口 + 移除过时设计。
+
+| # | 改动 | 文件 |
+|---|---|---|
+| C23 | Message tool 强化（工具图标 / 智能 input 摘要 / elapsed 计时 / 折叠展开 INPUT/OUTPUT/ERROR） | Message.jsx, Project.jsx |
+| C24 | 启用 SDK 流式打字（stream_event → 逐 token）+ tool_result image content block 渲染 | loop.js, events.js, Project.jsx |
+| C25 | 'system' role + SystemMessage 渲染（bash_blocked / 4 variant warn/info/error/success） | Message.jsx, Project.jsx |
+| C26 | Thinking 暴露（默认展开 + 视觉区分：左侧 2px 细条 + 等宽小字） | Message.jsx |
+| C27 | AskUserQuestion 进白名单 + AskUserQuestionView 卡片渲染（点 option → setChatDraft） | loop.js, Message.jsx |
+| C28 | subagent 调用 chat 可视化（task_* events 加 toolUseId / Task → agentType / 30s 摘要 chip） | events.js, loop.js, Project.jsx, Message.jsx |
+| C29 | Decisions tab + GET /api/projects/:pid/spec endpoint（agent record_decision 写完自动刷新） | canvas.js, api.js, DecisionsTab.jsx, ContextPanel.jsx, Project.jsx |
+| C30 | 移除"自由创作 vs 参照模式"区分（agent 自己根据输入判断怎么用附件） | CreateProjectModal.jsx, Home.jsx |
+| C31 | 已生成的交付包列表 + 单文件下载（agent export_handoff 写到 workspace/exports/） | exports.js, api.js, ExportsListModal.jsx, ExportMenu.jsx, Project.jsx |
+| C32 | iframe reload 保留滚动位置（FileChanged 触发自动 reload 不弹回顶） | HtmlIframe.jsx |
+
+**总计**：32 commits，每个 ≤ 5 文件。
 
 ## e2e 验证步骤（用户跑一遍）
 
@@ -113,14 +132,24 @@ cd web && npm run dev
 
 6. **顶栏 ContextUsageBar**：项目打开后，actions 起首应该看到 4 个 chip：model / tools / mcp / agents
 7. **UndoButton**：改字 → 点"撤销" → 文字回到改前。已经在最早版本时点 → toast "已经是最早版本"
-8. **FileChanged 自动 reload**：构造 chat 让 agent 写 canvas → 不需手动 reload 看到新版本
-9. **PreToolUse 拦截**：构造 chat 让 agent 跑 `rm /etc/passwd` → 拦截 deny → chat 留痕"⚠️ 拦截 Bash 命令…"
-10. **MCP screenshot_canvas**：chat "截图自检一下" → agent 调 mcp__nodesign__screenshot_canvas → toast "agent 正在视觉自检"
-11. **MCP export_handoff**：chat "把这个交付给我" → agent 调 export_handoff → toast "已生成交付包"
-12. **MCP record_decision**：chat "记下这次配色决策" → agent 调 record_decision → spec.json.decisions[] 多了一条
-13. **PostCompact**：跑超长 session 触发 compact → spec.json.history[] 多了一条 + toast
+8. **FileChanged 自动 reload + 滚动位置保留 (C32)**：构造 chat 让 agent 写 canvas → 不需手动 reload 看到新版本，且滚动位置不丢
+9. **PreToolUse 拦截 + SystemMessage (C25)**：构造 chat 让 agent 跑 `rm /etc/passwd` → 拦截 deny → chat 出现黄色 SystemWarning 卡片
+10. **MCP screenshot_canvas + 图片渲染 (C24)**：chat "截图自检一下" → agent 调 mcp__nodesign__screenshot_canvas → 展开 tool message 看到 PNG（不是 base64 字符串）
+11. **MCP export_handoff + ExportsList (C31)**：chat "把这个交付给我" → agent 调 export_handoff → 顶栏 Export 菜单底部"已生成的交付文件"打开 modal → 看到 zip 文件并下载
+12. **MCP record_decision + Decisions tab (C29)**：chat "记下这次配色决策" → agent 调 record_decision → 右栏 Decisions tab 自动刷新显示新决策
+13. **PostCompact**：跑超长 session 触发 compact → spec.json.history[] 多了一条 + Decisions tab 显示
 14. **promptSuggestions**：每轮 chat 后 ChatComposer 上方出 SuggestionChip
 15. **agentProgress**：长 turn 时 ChatPanel header 文字变成具体描述（"正在调整字号节奏…"）
+
+### Phase H 新功能
+
+16. **流式打字 (C24)**：agent 文字 / thinking 逐 token 流出来（不是一段一显示）
+17. **Thinking 默认展开 (C26)**：思考过程不再折叠，左条视觉锚点 + 等宽小字
+18. **工具图标 + elapsed (C23)**：每个 tool message 有专属 icon（Read 文档 / Write 加号 / Bash 终端 / Eye screenshot / Download export / Bookmark decision），运行 >1s 显示 "· 12s" 计时
+19. **AskUserQuestion 卡片 (C27)**：构造场景让 agent 调 AskUserQuestion → chat 出现专门卡片含 question + options 按钮 → 点选项填回 composer
+20. **Subagent 可视化 (C28)**：构造 chat "用 vision-checker 审查一下" → main agent 调 Task → chat 显示 "Task → vision-checker" + 30s 摘要 chip + completed/failed 状态
+21. **Home 单一入口 (C30)**：首页只有"开始一个新项目"，没有 mode 区分
+22. **Image content block (C24)**：tool_result 含图片直接 PNG 渲染
 
 任一步 fail 立即停下排查根因，不跳过。
 
@@ -134,6 +163,46 @@ cd web && npm run dev
 6. **events.js 新 message 翻译可能漏**：28 类 SDK message + 14 个 system subtype 都列了 case，但实测一遍要看 console.warn `unknown` 出现频率。
 7. **content blocks 结构 vs Kimi 兼容**：`prompt: AsyncIterable<SDKUserMessage>` 切了，但 Kimi 是否完整支持 BetaContentBlockParam 多模态结构未测。如果 Kimi 只接受 string 会 fall back（pure text content block 就是单 element 数组）。
 8. **22 commit 跨 Phase 依赖**：Phase 之间有依赖（B 依赖 A 的 hooks option，D 依赖 A 的 enableFileCheckpointing）。**不要 cherry-pick 中间 commit**——拉整个 stage 才一致。
+
+## 沙盒 / 工作区虚拟容器（stage 2 计划）
+
+用户提出"工作区虚拟容器"——指真沙盒（Docker per project）隔离 agent
+进程。当前 stage 1 用 cwd + Bash 白名单 + canUseTool 兜底，单用户测试
+够；多用户必须上容器。
+
+### 单 container 占用估算
+
+- 镜像 disk：~600 MB（Claude Code binary 206 MB + chromium 150 MB + alpine + 工具）
+- 运行内存（idle）：~250-350 MB
+- 运行内存（活跃）：~500-800 MB（含 LLM context + tool 调用）
+- CPU：idle <0.1 core，活跃 0.5-1 core 平均
+- 冷启动：~1-3s（spawn binary + SDK init）
+- chromium screenshot 单次：+200-400 MB / ~1-2s
+
+### 多用户规模
+
+| 并发 active | 内存 | CPU |
+|---|---|---|
+| 10  | ~5-8 GB | 10 cores |
+| 100 | ~50-80 GB | 100 cores |
+
+### 实施路径
+
+SDK 已经留了 `Options.spawnClaudeCodeProcess` 钩子 —— 自定义 spawn
+函数，上 Docker container / Firecracker microVM 时改这一处。
+
+阶段计划：
+- **stage 1（现在）**：server 进程内 spawn + workspace 目录 + Bash 白名单
+- **stage 2（公测 5-30 人）**：Docker container + spawnClaudeCodeProcess
+  - 共享 base image（Claude Code + chromium + git read-only layer）
+  - workspace 是唯一可写 volume
+  - 资源限额：mem 1GB / cpu 1
+  - **session pool**：keep-warm 5-15min idle 才回收
+- **stage 3（商业化 100+）**：+ chromium pool + image 优化 + cold/hot 分级
+- **stage 4（规模 1000+）**：Firecracker / K8s 多节点
+
+**目前不做的理由**：还在调 hook / MCP / subagent，每次改要 rebuild image
+太慢；单用户开发期 cwd 隔离足够。
 
 ## 延后清单（P0+ stage 2 之后）
 

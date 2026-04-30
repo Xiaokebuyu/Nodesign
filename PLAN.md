@@ -13,6 +13,7 @@
 | **P3 后端最小集** | 🟡 进行中（agent 模块 + e2e ✅，REST/WS 待做）| 2026-04-29 部分 | `4381663` + e2e | 估剩 2-3 天 |
 | **P0（重做）主线 5 流（A/B/C/E/I）**| ✅ 完成 | 2026-04-30 | `f489a3d`...`9e27924` | 一天（10 commit） |
 | **P0+ stage 1 全量切换 SDK 现成能力** | ✅ 完成 | 2026-04-30 | `05b5a11`...`ffe3331` | 一天（22 commit） |
+| **P0+ stage 1 Phase H 前端可视化补完** | ✅ 完成 | 2026-04-30 | `6e904dc`...（C33） | 半天（10 commit） |
 | **P4 真 agent 接入** | ⚪ 待启动 | — | — | 估 1-2 周 |
 | **P5 inline comment + slider 真接** | ⚪ 待启动 | — | — | 估 1 周 |
 | **P6 参照模式 + 多 skill** | ⚪ 部分占位 | UI 占位已完成 | `abf20f9` | 估 2 周 |
@@ -38,6 +39,9 @@
 | 2026-04-30 | 5 条产品/架构原则锁定 | 见 SESSION_2026-04-30_P0.md（解析→对齐→动手 / 多 modality 信号 = chat 附件 / 意图明确收敛模糊建议变体 / export 双入口 / 截图自检）|
 | 2026-04-30 | 深读 SDK 5524 行 d.ts，发现手撸了一批 SDK 已提供能力 | git checkpoint vs enableFileCheckpointing / brief 字符串 vs prompt: AsyncIterable<SDKUserMessage> / reloadToken bust vs FileChanged hook / cwd 沙盒 vs PreToolUse hook 白名单 |
 | 2026-04-30 | P0+ stage 1：22 commit 全量切换到 SDK 现成能力 | 见 SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md（4 件套 hooks / 3 件套 MCP / 3 个子代理骨架 / undo + double-track checkpoint / 4 个前端组件 / SDK message 翻译扩展）|
+| 2026-04-30 | Phase H 前端可视化补完（10 commit）| agent 在做什么完整可见：工具图标/elapsed/折叠/image 渲染/流式打字/Thinking 暴露/AskUserQuestion 卡片/subagent Task→agentType/Decisions tab/ExportsList/移除 mode 区分/iframe scroll 保留 |
+| 2026-04-30 | "自由创作 vs 参照模式"过时设计移除 | SDK 接通后 agent 看附件能自己判断，不再框定 mode（C30）|
+| 2026-04-30 | "工作区虚拟容器"路线确认 | 当前用 cwd + Bash 白名单 + canUseTool 三层兜底；多用户上 Docker via spawnClaudeCodeProcess hook（详细估算见 SESSION 文档"沙盒 / 工作区虚拟容器"段）|
 
 ## 实施日志
 
@@ -158,6 +162,38 @@
 - `prompt: AsyncIterable<SDKUserMessage>` 单 yield + 自然结束 → SDK
   进 agent loop（多轮 streamInput 复用留 stage 2）
 - file checkpoint 是 per-query 的，跨 session 失效 —— 必须双轨设计
+
+### P0+ stage 1 Phase H（2026-04-30，commit `6e904dc`...`?`）
+
+**前端可视化补完（10 commit）—— "agent 在做什么前端都可见"**
+
+stage 1 ship 后用户给了几条产品反馈：
+1. agent 在做什么完整可视（工具调用细节 / elapsed / image 渲染）
+2. 暴露思维链
+3. AskUserQuestion 没渲染
+4. 自由创作 vs 参照模式过时
+5. exports 文件入口
+6. iframe reload 不丢用户位置
+
+**Phase H commit 表（C23-C32）**：
+- C23 Message tool 强化（工具图标 + 智能 input 摘要 + elapsed 计时 + 折叠 INPUT/OUTPUT/ERROR）
+- C24 启用流式打字（stream_event → 逐 token） + tool_result image content block 渲染
+- C25 'system' role + SystemMessage（bash_blocked 专门样式 / 4 variant）
+- C26 Thinking 默认展开 + 视觉区分（左条 + 等宽小字）
+- C27 AskUserQuestion 进白名单 + 卡片渲染
+- C28 subagent 调用 chat 可视化（task_* events 加 toolUseId / Task → agentType / 30s 摘要）
+- C29 Decisions tab + GET /spec endpoint（agent record_decision 写完自动刷新）
+- C30 移除 "自由创作 vs 参照模式" 区分
+- C31 已生成的交付包列表 + 单文件下载
+- C32 iframe reload 保留滚动位置
+
+**新发现的设计原则**：
+- "agent 在做什么"是产品核心信号 —— stage 1 后用户立即提"看不清楚 agent
+  在做什么"，stage 2 设计要以可见性为优先（不是把信息埋在折叠里默认关闭）
+- "模式"框定不再合时宜 —— SDK 接通后 agent 能自己判断怎么用附件，
+  不需要前端预设 mode
+- 工作区虚拟容器路线 —— stage 1 cwd + Bash 白名单足够，stage 2 公测时
+  上 Docker per project（用 SDK `spawnClaudeCodeProcess` 钩子）
 
 ### P4-P7 / v2
 （待启动；每完成一阶段补一段日志）
