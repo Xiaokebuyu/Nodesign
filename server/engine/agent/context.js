@@ -17,6 +17,8 @@
  *   - forTool()（SDK 自己管 tool execute 上下文）
  */
 
+import { promises as fs } from 'fs';
+import path from 'path';
 import { ensureWorkspace, getWorkspaceRoot, readFile, writeFile, listDir, exists, safeResolve } from '../runtime/workspace.js';
 import { EventBus } from './events.js';
 
@@ -28,8 +30,10 @@ export class AgentContext {
    * @param {EventBus} [opts.eventBus]
    * @param {AbortController} [opts.abortController]
    * @param {object} [opts.metadata={}]
+   * @param {string} [opts.workspaceRoot]   - 外部 workspace（如 per-project 目录）；
+   *                                          传了就走它，否则用 runId 推路径（旧 smoke 兼容）
    */
-  constructor({ runId, skillId, eventBus, abortController, metadata = {} }) {
+  constructor({ runId, skillId, eventBus, abortController, metadata = {}, workspaceRoot = null }) {
     if (!runId) throw new Error('AgentContext: runId required');
     if (!skillId) throw new Error('AgentContext: skillId required');
 
@@ -38,6 +42,7 @@ export class AgentContext {
     this.eventBus = eventBus || new EventBus();
     this.abortController = abortController || new AbortController();
     this.metadata = metadata;
+    this._externalWorkspaceRoot = workspaceRoot;
 
     // SDK 在 message 流里返回 session_id，首次见到时记下
     this.sdkSessionId = null;
@@ -94,14 +99,33 @@ export class AgentContext {
   }
 
   // ── workspace 包装 ──
+  // 外部 workspaceRoot 模式（P0 per-project 目录）：直接走绝对路径，
+  // 由调用方负责 mkdir + git init（见 projects/workspace.js）。
+  // 旧 runId 模式（保留给 smoke 测试 / 单 run 沙盒）：走 runtime/workspace.js 那套。
 
   workspace = {
-    ensure: () => ensureWorkspace(this.runId),
-    root: () => getWorkspaceRoot(this.runId),
+    ensure: async () => {
+      if (this._externalWorkspaceRoot) {
+        await fs.mkdir(this._externalWorkspaceRoot, { recursive: true });
+        return this._externalWorkspaceRoot;
+      }
+      return ensureWorkspace(this.runId);
+    },
+    root: () => this._externalWorkspaceRoot || getWorkspaceRoot(this.runId),
+    exists: async (rel) => {
+      if (this._externalWorkspaceRoot) {
+        try {
+          await fs.access(path.resolve(this._externalWorkspaceRoot, rel));
+          return true;
+        } catch {
+          return false;
+        }
+      }
+      return exists(this.runId, rel);
+    },
     read: (rel) => readFile(this.runId, rel),
     write: (rel, content) => writeFile(this.runId, rel, content),
     list: (rel) => listDir(this.runId, rel),
-    exists: (rel) => exists(this.runId, rel),
     resolve: (rel) => safeResolve(this.runId, rel),
   };
 

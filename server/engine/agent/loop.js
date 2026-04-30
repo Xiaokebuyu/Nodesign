@@ -28,11 +28,16 @@ import { Events } from './events.js';
 import { markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata } from '../runs/store.js';
 import { loadSkill } from './skill.js';
 
+// 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）
+// 沙盒由 cwd=project workspace 保证，git binary 通过 PATH 拿；agent 不能写
+// JS 直接调 fs 越界，工具是唯一入口。
 const DEFAULT_TOOL_ALLOWLIST = [
-  'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite',
+  'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'Bash',
 ];
 
-const ARTIFACT_CANDIDATES = ['deck.html', 'index.html', 'output.html'];
+// 主产物候选 — canvas.html 列首位（P0 per-project workspace 主文件名），
+// 其余兼容 deec72d 之前的 e2e smoke / 旧 deskskill-engine 输出。
+const ARTIFACT_CANDIDATES = ['canvas.html', 'deck.html', 'index.html', 'output.html'];
 
 /**
  * 跑一次 agent run。
@@ -45,6 +50,9 @@ const ARTIFACT_CANDIDATES = ['deck.html', 'index.html', 'output.html'];
  * @param {AbortController} [opts.abortController]
  * @param {object} [opts.modelOverride]   - { model?, effort?, thinking?, maxTurns? }
  * @param {string[]} [opts.toolAllowlist] - 工具白名单 override（默认 DEFAULT_TOOL_ALLOWLIST）
+ * @param {string} [opts.workspaceRoot]   - 外部 workspace 绝对路径（P0 per-project 目录）；
+ *                                          不传则 fallback runId workspace（旧 smoke 行为）
+ * @param {string} [opts.resumeSessionId] - SDK 续 session（同 project 跨 turn 用）
  *
  * @returns {Promise<{ finalText, artifactPath, snapshot }>}
  */
@@ -56,24 +64,28 @@ export async function runAgent({
   abortController,
   modelOverride = {},
   toolAllowlist = DEFAULT_TOOL_ALLOWLIST,
+  workspaceRoot = null,
+  resumeSessionId = null,
 }) {
   if (!runId) throw new Error('runAgent: runId required');
   if (!skillId) throw new Error('runAgent: skillId required');
   if (!brief) throw new Error('runAgent: brief required');
 
-  const ctx = new AgentContext({ runId, skillId, eventBus, abortController });
+  const ctx = new AgentContext({ runId, skillId, eventBus, abortController, workspaceRoot });
 
   // 1. 进 running 状态 + 推开始事件
   markRunStarted(runId);
   ctx.emit(Events.start());
 
   // 2. 准备 workspace + skill
-  const workspaceRoot = await ctx.workspace.ensure();
+  // ctx.workspace.ensure() 内部判断：外部 workspaceRoot 模式直接 mkdir + 返回；
+  // 旧 runId 模式走 runtime/workspace.js。
+  const wsRoot = await ctx.workspace.ensure();
   const skill = await loadSkill(skillId);
 
   // 3. 拼 SDK options
   const sdkOptions = {
-    cwd: workspaceRoot,
+    cwd: wsRoot,
     abortController: ctx.abortController,
 
     // 关键：env 透传给子进程，让 claude binary 走 Nodesign gateway
@@ -105,6 +117,9 @@ export async function runAgent({
     effort: modelOverride.effort || 'medium',
 
     maxTurns: modelOverride.maxTurns || 50,
+
+    // 续 session：同 project 跨 turn 时传入上次 sessionId，prompt cache 自然命中
+    ...(resumeSessionId ? { resume: resumeSessionId } : {}),
 
     stderr: (data) => {
       // 子进程 stderr → 调试日志（不入 EventBus 避免噪声）
