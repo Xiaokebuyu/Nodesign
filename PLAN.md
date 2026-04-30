@@ -12,6 +12,7 @@
 | **P2.5 Claude Design 补刀（7 项）** | ✅ 完成 | 2026-04-29 | `6479177` | 半天 |
 | **P3 后端最小集** | 🟡 进行中（agent 模块 + e2e ✅，REST/WS 待做）| 2026-04-29 部分 | `4381663` + e2e | 估剩 2-3 天 |
 | **P0（重做）主线 5 流（A/B/C/E/I）**| ✅ 完成 | 2026-04-30 | `f489a3d`...`9e27924` | 一天（10 commit） |
+| **P0+ stage 1 全量切换 SDK 现成能力** | ✅ 完成 | 2026-04-30 | `05b5a11`...`ffe3331` | 一天（22 commit） |
 | **P4 真 agent 接入** | ⚪ 待启动 | — | — | 估 1-2 周 |
 | **P5 inline comment + slider 真接** | ⚪ 待启动 | — | — | 估 1 周 |
 | **P6 参照模式 + 多 skill** | ⚪ 部分占位 | UI 占位已完成 | `abf20f9` | 估 2 周 |
@@ -35,6 +36,8 @@
 | 2026-04-30 | reset 回 deec72d；4-29 晚 8 commit 移到 yolo-night-2026-04-29 分支 | 一晚串完 P3-P5 / 30+ 文件，用户失控感强；重新对齐 + 拆 10 commit 重做主线 |
 | 2026-04-30 | 战略再转向：NoDesign 重新定义为"Claude Code 之上的画布编辑层" | 不是独立 agent 系统；底层（session / 工具 / skill / file checkpoint）直接用 SDK，我们只做薄壳后端 + 前端画布层 + 一个默认 skill |
 | 2026-04-30 | 5 条产品/架构原则锁定 | 见 SESSION_2026-04-30_P0.md（解析→对齐→动手 / 多 modality 信号 = chat 附件 / 意图明确收敛模糊建议变体 / export 双入口 / 截图自检）|
+| 2026-04-30 | 深读 SDK 5524 行 d.ts，发现手撸了一批 SDK 已提供能力 | git checkpoint vs enableFileCheckpointing / brief 字符串 vs prompt: AsyncIterable<SDKUserMessage> / reloadToken bust vs FileChanged hook / cwd 沙盒 vs PreToolUse hook 白名单 |
+| 2026-04-30 | P0+ stage 1：22 commit 全量切换到 SDK 现成能力 | 见 SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md（4 件套 hooks / 3 件套 MCP / 3 个子代理骨架 / undo + double-track checkpoint / 4 个前端组件 / SDK message 翻译扩展）|
 
 ## 实施日志
 
@@ -99,6 +102,62 @@
 - `server/api/assets.js`：multipart 上传
 - `server/ws/`：WebSocket（每 project 一连接，订阅 EventBus）
 - 前端 `useProjectStore` 切真后端
+
+### P0+ stage 1（2026-04-30，commit `05b5a11`...`ffe3331`）
+
+**全量切换到 Claude Agent SDK 现成能力（22 commit）**
+
+吃完 SDK 5524 行 d.ts 后，发现我们手撸了一批 SDK 已提供能力。本次重构
+不是改用法，是**砍掉重复造的轮子 + 接进 SDK 没用上的层**。
+
+**Phase A 后端基础（C1-C2）**
+- loop.js 加 `enableFileCheckpointing` / `agentProgressSummaries` /
+  `promptSuggestions` / `canUseTool` 占位
+- events.js 翻译 28+ 种 SDK message 类型（含 system 14 subtype）
+- prompt 切 `AsyncIterable<SDKUserMessage>` + content blocks
+  （附件不内联 base64，仍走 Read 工具读路径）
+
+**Phase B Hooks 4 件套（C3-C7）**
+- FileChanged → 前端 iframe 自动 reload（替代手撸 reloadToken bust）
+- PreToolUse(Bash) → 30 个白名单 token + 12 条危险正则
+- Stop → 占位事件（stage 2 接 screenshot/export 自检）
+- PostCompact → spec.json.history 沉淀长期记忆（修正 plan PreCompact
+  错误：PreCompact 没 compact_summary 字段）
+
+**Phase C MCP 工具集（C8-C11）**
+- in-process MCP server (createSdkMcpServer + Zod schema)
+- screenshot_canvas (playwright headless → image content block)
+- export_handoff (复用 buildHandoffZip pipeline)
+- record_decision (写 spec.json.decisions 设计意图档案)
+
+**Phase D file checkpoint 双轨（C12）**
+- POST /canvas/undo 简版（git checkout HEAD~1）+ 前端 UndoButton
+- SDK rewindFiles per-query 路径留 stage 2
+
+**Phase E agents 子代理定义（C13-C16）**
+- 3 个 AgentDefinition 骨架（vision-checker / ds-extractor /
+  tweak-proposer），prompt 用 .md 文件 + 同步加载缓存
+- design-system.json + tweak-schema.json JSON Schema 完整定义
+- 实施修正：SDK AgentDefinition 没 outputFormat 字段，子代理走
+  prompt 内嵌 schema 引导（main agent JSON.parse），retry 留 stage 2
+
+**Phase F 前端配套（C17-C20）**
+- handleEvent 加 11 种新事件 case + 4 个新 state
+- ContextUsageBar 顶栏 chip（model/tools/mcp/agents 数）
+- SuggestionChip（promptSuggestions 预测的下条 prompt）
+- ChatPanel header 显示 subagent 30s 进度摘要
+
+**Phase G 文档（C21-C22）**
+- SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md：22 commit 清单
+  + e2e 15 步 + 8 风险点 + 15 项延后清单 + 关键 SDK 用法笔记
+
+**关键技术发现**：
+- AgentDefinition 没有 outputFormat —— 子代理强制 JSON 输出走 prompt
+  内嵌 schema 路线（C15 实测）
+- PreCompact 没 compact_summary —— 写 spec.json 长期记忆要 PostCompact
+- `prompt: AsyncIterable<SDKUserMessage>` 单 yield + 自然结束 → SDK
+  进 agent loop（多轮 streamInput 复用留 stage 2）
+- file checkpoint 是 per-query 的，跨 session 失效 —— 必须双轨设计
 
 ### P4-P7 / v2
 （待启动；每完成一阶段补一段日志）
