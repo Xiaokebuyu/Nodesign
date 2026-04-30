@@ -5,11 +5,11 @@
   "type": "module",
   "description": "Nodesign — 云端 SaaS skill engine（自由创作 + 风格参照 + 元素级 edit）",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "probe:kimi": "node server/_probe-kimi.js",
-    "smoke:engine": "node server/engine/_smoke.js",
-    "smoke:agent": "node server/engine/agent/_smoke.js"
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "dev": "node --env-file-if-exists=.env --watch server/index.js",
+    "probe:kimi": "node --env-file-if-exists=.env server/_probe-kimi.js",
+    "smoke:engine": "node --env-file-if-exists=.env server/engine/_smoke.js",
+    "smoke:agent": "node --env-file-if-exists=.env server/engine/agent/_smoke.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
