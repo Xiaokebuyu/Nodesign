@@ -1,5 +1,31 @@
 # Claude Design 深度拆解报告：产品形态、功能原子、技术实现推断与基础设施地图
 
+> ## 🟢 NoDesign 当前状态（2026-04-30 收尾，必读）
+>
+> **本文 1591 行是 P1 时代（2026-04-29）写的"北极星参考"**——拆解 Claude Design
+> 的产品形态作为 NoDesign 的对标。但 stage 1（2026-04-30）SDK 接通后，**实现路径
+> 已经变了**：
+>
+> - **agent 能力来自 Claude Agent SDK**（@anthropic-ai/claude-agent-sdk 0.2.123），
+>   不是文档里推断的"自定义 agent loop"或"4 轮 orchestrator"
+> - **工具集 = SDK 内置 + Nodesign MCP**：Read/Write/Edit/Glob/Grep/TodoWrite/Bash/
+>   AskUserQuestion + mcp__nodesign__{screenshot_canvas, export_handoff, record_decision}
+> - **session / file checkpoint / hooks / subagent / MCP** 全部走 SDK，不再"基础设施
+>   推断"
+> - **9 个交互流的 P1-P7 MVP 切分作废**，实际走 P0 → P0+ stage 1 → Phase H 路径，
+>   5 流（A/B/C/E/I）通；D/F/H 留 stage 2
+> - **"自由创作 vs 参照模式"** mode 区分已移除（C30）—— SDK 接通后 agent 自决
+>
+> **实施细节请优先看：**
+> - `PLAN.md`（顶部"🟢 当前状态"段）
+> - `SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md`（32 commit 完整改动）
+> - `server/engine/skills/deskskill-engine-mini/SKILL.md`（agent 行为约束）
+>
+> **本文继续保留作产品体验描述参考**（"用户看到什么 / 该有什么交互"），但**不再
+> 作为代码实现指南**——具体怎么实现以 SDK 文档 + SESSION 为准。
+
+---
+
 > 调研口径：截至 **2026-04-29** 的公开资料。
 > 核心来源：Anthropic 官方发布稿、Claude Help Center、Claude 官方教程、Canva 官方新闻稿、TechCrunch 报道。
 > 重要说明：Anthropic 没有公开 Claude Design 的内部架构、代码、服务拆分、Prompt Orchestration 细节或渲染沙箱实现。因此本文会把内容分成三类：
