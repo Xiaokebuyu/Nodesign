@@ -117,51 +117,15 @@ router.get('/:pid/exports/handoff', async (req, res, next) => {
     const project = projectGuard(req, res);
     if (!project) return;
     const wsRoot = getProjectWorkspace(req.params.pid);
-
-    const zip = new JSZip();
-
-    // design/canvas.html
-    try {
-      const html = await fs.readFile(path.join(wsRoot, 'canvas.html'), 'utf8');
-      zip.file('design/canvas.html', html);
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw err;
-      zip.file('design/canvas.html', '<!-- canvas.html not yet generated -->');
-    }
-
-    // design/spec.json
-    try {
-      const spec = await fs.readFile(path.join(wsRoot, 'spec.json'), 'utf8');
-      zip.file('design/spec.json', spec);
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw err;
-    }
-
-    // design/assets/*
-    const assetsDir = path.join(wsRoot, 'assets');
-    try {
-      const entries = await fs.readdir(assetsDir, { withFileTypes: true });
-      for (const e of entries) {
-        if (!e.isFile()) continue;
-        const buf = await fs.readFile(path.join(assetsDir, e.name));
-        zip.file(`design/assets/${e.name}`, buf);
-      }
-    } catch (err) {
-      if (err.code !== 'ENOENT') throw err;
-    }
-
-    // chat-history.json — 从 runs 抽简版
     const runs = listRunsForProject(req.params.pid);
-    const chatHistory = runs.map((row) => ({ runId: row.id }));
-    zip.file('chat-history.json', JSON.stringify({ projectId: project.id, runs: chatHistory }, null, 2));
 
-    // prompt.txt — 留空（P0 没保存最近一次 user input；C8 attachments 落到 brief 后可以补）
-    zip.file('prompt.txt', '');
+    const zipBuffer = await buildHandoffZip(wsRoot, {
+      projectId: project.id,
+      projectName: project.name,
+      skillId: project.skillId,
+      runs,
+    });
 
-    // README.md
-    zip.file('README.md', renderReadme(project));
-
-    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
     const filename = `${safeFilename(project.name)}-handoff.zip`;
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
@@ -169,6 +133,60 @@ router.get('/:pid/exports/handoff', async (req, res, next) => {
     res.end(zipBuffer);
   } catch (err) { next(err); }
 });
+
+/**
+ * 共享 handoff 打包逻辑 —— 同时给 HTTP 路由和 MCP tool（C10 export_handoff）调。
+ *
+ * @param {string} workspaceRoot  绝对路径
+ * @param {object} info
+ * @param {string} info.projectId
+ * @param {string} info.projectName
+ * @param {string} [info.skillId]
+ * @param {Array<{ id: string }>} [info.runs]  来自 listRunsForProject
+ * @returns {Promise<Buffer>}  完整 zip 内容
+ */
+export async function buildHandoffZip(workspaceRoot, { projectId, projectName, skillId, runs = [] } = {}) {
+  const zip = new JSZip();
+
+  // design/canvas.html
+  try {
+    const html = await fs.readFile(path.join(workspaceRoot, 'canvas.html'), 'utf8');
+    zip.file('design/canvas.html', html);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+    zip.file('design/canvas.html', '<!-- canvas.html not yet generated -->');
+  }
+
+  // design/spec.json
+  try {
+    const spec = await fs.readFile(path.join(workspaceRoot, 'spec.json'), 'utf8');
+    zip.file('design/spec.json', spec);
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+
+  // design/assets/*
+  const assetsDir = path.join(workspaceRoot, 'assets');
+  try {
+    const entries = await fs.readdir(assetsDir, { withFileTypes: true });
+    for (const e of entries) {
+      if (!e.isFile()) continue;
+      const buf = await fs.readFile(path.join(assetsDir, e.name));
+      zip.file(`design/assets/${e.name}`, buf);
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') throw err;
+  }
+
+  // chat-history.json — 从 runs 抽简版
+  const chatHistory = (runs || []).map((row) => ({ runId: row.id }));
+  zip.file('chat-history.json', JSON.stringify({ projectId, runs: chatHistory }, null, 2));
+
+  zip.file('prompt.txt', '');
+  zip.file('README.md', renderReadme({ id: projectId, name: projectName, skillId }));
+
+  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+}
 
 function renderReadme(project) {
   return `# ${project.name}
