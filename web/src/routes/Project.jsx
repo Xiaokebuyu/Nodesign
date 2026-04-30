@@ -210,11 +210,12 @@ export default function Project() {
         break;
 
       case 'run.bash_blocked':
-        // PreToolUse hook 拦了一条 Bash —— 在 chat 里留痕
+        // C25：PreToolUse hook 拦了一条 Bash —— 用 system role 区分自 assistant 消息
         setMessages(prev => [...prev, {
           id: newId('msg'),
-          role: 'assistant',
-          content: `_⚠️ 拦截 Bash 命令：${evt.command || ''}\n（${evt.reason || '不在白名单'}）_`,
+          role: 'system',
+          variant: 'warn',
+          content: `Bash 命令被拦截：${evt.command || ''}\n${evt.reason || '不在白名单'}`,
         }]);
         break;
 

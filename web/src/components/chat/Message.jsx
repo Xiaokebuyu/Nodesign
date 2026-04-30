@@ -4,6 +4,7 @@ import {
   FileText, FileEdit, FilePlus, Search, Terminal,
   Eye, Download, Bookmark, Send,
   ListChecks, FolderTree, Globe,
+  ShieldAlert, Info, AlertCircle, CheckCircle2,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
@@ -53,6 +54,10 @@ export default function Message({ message }) {
     );
   }
 
+  if (role === 'system') {
+    return <SystemMessage variant={message.variant} content={content} />;
+  }
+
   // assistant
   return (
     <div style={{
@@ -72,6 +77,49 @@ export default function Message({ message }) {
         .md-content li { margin: 2px 0; }
         .md-content a { color: ${COLOR.btn}; text-decoration: underline; }
       `}</style>
+    </div>
+  );
+}
+
+/**
+ * SystemMessage —— 系统级提示（区分自 assistant 消息）
+ *
+ * variant：
+ *   - 'warn' (默认): 黄色 - PreToolUse 拦截 / 工具拦截
+ *   - 'info'        : 蓝色 - 通用通知
+ *   - 'error'       : 红色 - 系统错误
+ *   - 'success'     : 绿色 - decision recorded / export built
+ */
+function SystemMessage({ variant = 'warn', content }) {
+  const config = {
+    warn:    { icon: ShieldAlert, color: COLOR.warn,    bgRgba: 'rgba(255, 193, 7, 0.08)',  border: 'rgba(255, 193, 7, 0.35)' },
+    info:    { icon: Info,        color: COLOR.btn,     bgRgba: 'rgba(45, 36, 24, 0.05)',   border: 'rgba(45, 36, 24, 0.18)' },
+    error:   { icon: AlertCircle, color: COLOR.error,   bgRgba: 'rgba(220, 53, 69, 0.06)',  border: 'rgba(220, 53, 69, 0.30)' },
+    success: { icon: CheckCircle2,color: COLOR.success, bgRgba: 'rgba(40, 167, 69, 0.06)',  border: 'rgba(40, 167, 69, 0.30)' },
+  }[variant] || { icon: Info, color: COLOR.text2, bgRgba: 'rgba(0,0,0,0.04)', border: COLOR.borderLt };
+
+  const Icon = config.icon;
+
+  return (
+    <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: GAP.sm,
+        padding: `${GAP.sm}px ${GAP.md}px`,
+        background: config.bgRgba,
+        border: `1px solid ${config.border}`,
+        borderRadius: 8,
+        fontFamily: FONT_SANS,
+        fontSize: FONT_SIZE.sm,
+        color: COLOR.text2,
+        lineHeight: 1.5,
+      }}>
+        <Icon size={14} color={config.color} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div style={{ flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {content}
+        </div>
+      </div>
     </div>
   );
 }
