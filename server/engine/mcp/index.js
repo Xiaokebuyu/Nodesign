@@ -26,6 +26,7 @@
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
+import { makeScreenshotCanvasTool } from './tools/screenshot.js';
 
 /**
  * 创建 Nodesign 的 MCP server，绑定当前 run 的依赖。
@@ -58,7 +59,9 @@ export function createNodesignMcpServer({ workspaceRoot, projectId, ctx } = {}) 
         }),
       ),
 
-      // C9 makeScreenshotCanvasTool({ workspaceRoot, ctx }),
+      // C9 screenshot_canvas — playwright headless 截图 → image content block
+      makeScreenshotCanvasTool({ workspaceRoot, ctx }),
+
       // C10 makeExportHandoffTool({ workspaceRoot, projectId, ctx }),
       // C11 makeRecordDecisionTool({ workspaceRoot, ctx }),
     ],
