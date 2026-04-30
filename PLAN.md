@@ -11,10 +11,11 @@
 | **P2 前端交互层 + 产品壳** | ✅ 完成（A+B+C 全做） | 2026-04-29 | `abf20f9` | 半天 |
 | **P2.5 Claude Design 补刀（7 项）** | ✅ 完成 | 2026-04-29 | `6479177` | 半天 |
 | **P3 后端最小集** | 🟡 进行中（agent 模块 + e2e ✅，REST/WS 待做）| 2026-04-29 部分 | `4381663` + e2e | 估剩 2-3 天 |
+| **P0（重做）主线 5 流（A/B/C/E/I）**| ✅ 完成 | 2026-04-30 | `f489a3d`...`9e27924` | 一天（10 commit） |
 | **P4 真 agent 接入** | ⚪ 待启动 | — | — | 估 1-2 周 |
 | **P5 inline comment + slider 真接** | ⚪ 待启动 | — | — | 估 1 周 |
 | **P6 参照模式 + 多 skill** | ⚪ 部分占位 | UI 占位已完成 | `abf20f9` | 估 2 周 |
-| **P7 导出** | ⚪ 部分占位 | HTML 已通，PDF/PPTX 占位 | `abf20f9` | 估 1 周 |
+| **P7 导出** | ✅ HTML/PDF/Handoff 全通 | 2026-04-30 | `e1d5c25` + `6178437` | 半天 |
 | **v2 CAD 拖动** | ⚪ 远期 | — | — | 待估 |
 
 **整体进度（按阶段权重粗估）**：~30%（前端壳 100% + 后端骨架 30% + 业务 0%）。
@@ -31,6 +32,9 @@
 | 2026-04-29 | 迁入 Nodesign repo（PLAN.md），改成 living doc | 跟代码一起 versioned |
 | 2026-04-29 | P2.5：对照 Claude_design.md 1591 行做 gap 审计，补 7 项核心交互 | 进 P3 前端形态对齐 Claude Design 完整度 |
 | 2026-04-29 | P3 战略转向：弃自写 agent-loop，包 Claude Agent SDK 的 query() | 用户提供 tokendance gateway，确认 Kimi 在 Claude Code/SDK 全功能可用，借力 SDK 23 工具 + 30 hooks + sub-agents + plan mode + budget control + checkpoint，省下 1 周自写工作量 |
+| 2026-04-30 | reset 回 deec72d；4-29 晚 8 commit 移到 yolo-night-2026-04-29 分支 | 一晚串完 P3-P5 / 30+ 文件，用户失控感强；重新对齐 + 拆 10 commit 重做主线 |
+| 2026-04-30 | 战略再转向：NoDesign 重新定义为"Claude Code 之上的画布编辑层" | 不是独立 agent 系统；底层（session / 工具 / skill / file checkpoint）直接用 SDK，我们只做薄壳后端 + 前端画布层 + 一个默认 skill |
+| 2026-04-30 | 5 条产品/架构原则锁定 | 见 SESSION_2026-04-30_P0.md（解析→对齐→动手 / 多 modality 信号 = chat 附件 / 意图明确收敛模糊建议变体 / export 双入口 / 截图自检）|
 
 ## 实施日志
 
