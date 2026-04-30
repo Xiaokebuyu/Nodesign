@@ -17,7 +17,7 @@ import { useGlobalStore } from '../stores/globalStore.js';
 import { MOCK_DECK_SPEC } from '../mock/deck-spec.js';
 import { newId } from '../lib/helpers.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
-import { Canvas, Turn, Assets } from '../lib/api.js';
+import { Canvas, Turn, Assets, Exports } from '../lib/api.js';
 import { openProjectWS } from '../lib/ws-client.js';
 
 export default function Project() {
@@ -380,9 +380,27 @@ export default function Project() {
   const handleRenameCandidate = () => {};
   const handleSelectCandidate = () => setSelectedAnchor(null);
 
-  // 导出（C9 真接）
-  const handleExport = (format) => {
-    showToast(`P0 中：${format} 导出 C9 真接（后端 endpoint 已 ready）`, 'info');
+  /**
+   * 流 I 导出（用户主动按钮）：调 GET /api/projects/:pid/exports/:format
+   * → blob → a.click() 触发浏览器下载
+   * filename 从 content-disposition 解析；解析失败退化为 <project-name>.<ext>
+   */
+  const handleExport = async (format) => {
+    try {
+      const { blob, filename } = await Exports.download(id, format);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename
+        || `${project.name || 'design'}.${format === 'handoff' ? 'zip' : format}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast(`已下载：${a.download}`, 'success');
+    } catch (err) {
+      showToast(`导出失败：${err.message}`, 'error');
+    }
   };
 
   return (

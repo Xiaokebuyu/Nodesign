@@ -1,20 +1,21 @@
 import { useEffect, useRef } from 'react';
-import { Download, FileCode, FileText, Presentation, Package, Hammer } from 'lucide-react';
+import { FileCode, FileText, Presentation, Hammer } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 const ITEMS = [
   { id: 'html',     icon: FileCode,     label: 'Standalone HTML',    desc: '单文件，可双击打开' },
-  { id: 'pdf',      icon: FileText,     label: 'PDF',                desc: 'P7：playwright print' },
-  { id: 'pptx',     icon: Presentation, label: 'PowerPoint (.pptx)', desc: 'P7：HTML → PPTX' },
-  { id: 'zip',      icon: Package,      label: 'ZIP（含资料）',       desc: 'P7：项目完整打包' },
-  { id: 'handoff',  icon: Hammer,       label: '工程交付包',           desc: 'HTML + chat + spec + README + prompt' },
+  { id: 'pdf',      icon: FileText,     label: 'PDF',                desc: 'playwright print 1280×720' },
+  { id: 'pptx',     icon: Presentation, label: 'PowerPoint (.pptx)', desc: 'P0+：调研 pptxgenjs', disabled: true },
+  { id: 'handoff',  icon: Hammer,       label: '工程交付包',           desc: 'ZIP: HTML + spec + assets + README' },
 ];
 
 /**
  * ExportMenu — 顶栏导出下拉
  *
- * P2：UI 完整，HTML 走 mock 下载（fetch /mock/deck.html → blob → 下载）
- *      其他三项暂时 alert "P7 实现"
+ * 三项 active（HTML / PDF / Handoff）调 GET /api/projects/:pid/exports/:format
+ * 由父级 onExport 接走 Exports.download → blob → a.click()
+ *
+ * PPTX 标灰禁点，留 P0+。
  */
 export default function ExportMenu({ open, onClose, onExport, anchorRef }) {
   const ref = useRef(null);
@@ -52,17 +53,24 @@ export default function ExportMenu({ open, onClose, onExport, anchorRef }) {
         return (
           <button
             key={item.id}
-            onClick={() => { onExport?.(item.id); onClose?.(); }}
+            disabled={item.disabled}
+            onClick={() => {
+              if (item.disabled) return;
+              onExport?.(item.id);
+              onClose?.();
+            }}
             style={{
               width: '100%',
               display: 'flex', alignItems: 'flex-start', gap: GAP.md,
               padding: `${GAP.sm + 1}px ${GAP.md + 2}px`,
               background: 'transparent',
+              border: 'none',
               borderRadius: 4,
-              cursor: 'pointer',
+              cursor: item.disabled ? 'not-allowed' : 'pointer',
               textAlign: 'left',
+              opacity: item.disabled ? 0.45 : 1,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; }}
+            onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
           >
             <Icon size={14} color={COLOR.text4} style={{ flexShrink: 0, marginTop: 2 }} />
