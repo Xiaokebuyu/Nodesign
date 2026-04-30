@@ -32,15 +32,20 @@ import { createNodesignMcpServer } from '../mcp/index.js';
 import { createAgents } from '../agents/index.js';
 
 // 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）
-// 沙盒由 cwd=project workspace 保证，git binary 通过 PATH 拿；agent 不能写
-// JS 直接调 fs 越界，工具是唯一入口。
+// 沙盒由 cwd=project workspace 保证 + PreToolUse hook 命令白名单兜底。
 //
-// P0+ s1 C27：加 AskUserQuestion —— SDK 内置工具，让 agent 能在模糊
-// 时主动问用户结构化选项（前端 AskUserQuestionView 渲染卡片）。
+// 不在这里的（hotfix-sdk-usage 后撤掉）：
+// - AskUserQuestion：SDK 默认走 binary stdio prompt → 我们 spawn 没接 stdin
+//   会 hang。stage 2 接通 streamInput 回填路径再加。
 const DEFAULT_TOOL_ALLOWLIST = [
   'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'Bash',
-  'AskUserQuestion',
 ];
+
+// 禁用工具集：agents 字段挂了 3 个 subagent 骨架（vision-checker /
+// ds-extractor / tweak-proposer），SDK 自动给 main agent 暴露 Task 工具
+// 让它能 delegate。但 stage 1 不希望主动调 → 用 disallowedTools 把
+// Task 工具从 main agent 上下文里移除。stage 2 真接通子代理流程时撤掉。
+const DEFAULT_DISALLOWED_TOOLS = ['Task'];
 
 // 主产物候选 — canvas.html 列首位（P0 per-project workspace 主文件名），
 // 其余兼容 deec72d 之前的 e2e smoke / 旧 deskskill-engine 输出。
@@ -53,19 +58,12 @@ const ARTIFACT_CANDIDATES = ['canvas.html', 'deck.html', 'index.html', 'output.h
 // 不好用，等 assistant message 完整 block 来一次更省事）。
 const STREAMING_ENABLED = true;
 
-/**
- * canUseTool 占位 callback —— P0+ stage 1 接 always-allow。
- *
- * 后续接 D 流权限交互时改成真处理：
- * - 弹前端 UI 让用户决定（accept once / always / deny）
- * - 根据 toolName + input 走不同策略（Bash 走白名单走 PreToolUse hook，Edit/Write 直接 allow）
- *
- * 现在 default permission mode 是 'default'，配合这个 always-allow 不会弹 CLI prompt。
- * Bash 等危险工具的拦截走 PreToolUse hook（C5 实现）。
- */
-function makeAlwaysAllowCanUseTool() {
-  return async (_toolName, _input, _options) => ({ behavior: 'allow' });
-}
+// canUseTool 已撤（hotfix-sdk-usage）：实测发现 canUseTool always-allow
+// 不能阻止 binary 子进程内部走 stdio prompt（permissionMode='default' 默认
+// 会 prompt for dangerous operations，spawn 没接 stdin → hang）。
+// 改用 permissionMode: 'bypassPermissions' + allowDangerouslySkipPermissions
+// 跳过所有 permission 检查；危险命令拦截走 PreToolUse hook（C5 Bash 白名单）。
+// stage 2 接 D 流权限交互时改成真处理（前端 UI 弹窗）。
 
 /**
  * 把 BetaContentBlockParam[] 包成 SDK 期望的 AsyncIterable<SDKUserMessage>。
@@ -154,9 +152,28 @@ export async function runAgent({
     // 工具白名单
     tools: toolAllowlist,
     allowedTools: toolAllowlist,    // 同时白名单，避免每次问权限
+    // hotfix-sdk-usage：禁用 Task（防 main agent 主动 delegate 子代理；
+    // agents 字段仍挂 stage 1 骨架，stage 2 接通流程时移除这条）
+    disallowedTools: DEFAULT_DISALLOWED_TOOLS,
 
-    // 自定义 systemPrompt（不用 claude_code preset）
-    systemPrompt: skill.systemPrompt,
+    // hotfix-sdk-usage：systemPrompt 改 preset 'claude_code' + append。
+    // 之前用 string 完全替换 SDK 默认 prompt → 失去 Claude Code 的关键
+    // 行为约束（何时停 / be concise / task completion 信号 / 工具最佳实践），
+    // 导致 agent 一个 turn 做 30+ 件事停不下来。
+    // 现在继承 preset + 把 SKILL.md 业务约束 append 在后。
+    systemPrompt: {
+      type: 'preset',
+      preset: 'claude_code',
+      append: skill.systemPrompt,
+    },
+
+    // hotfix-sdk-usage：跳过所有 permission 检查。
+    // 默认 permissionMode 'default' 会 prompt for dangerous operations，
+    // binary 子进程通过 stdio prompt → spawn 没接 stdin → hang（"ask 不
+    // pending"症状的根因）。canUseTool always-allow 不能 override 这个。
+    // 危险命令拦截已经走 PreToolUse hook（C5 Bash 白名单），bypass 安全。
+    permissionMode: 'bypassPermissions',
+    allowDangerouslySkipPermissions: true,
 
     // 不读外部 settings 文件 / 不写 session 文件
     persistSession: false,
@@ -169,7 +186,10 @@ export async function runAgent({
     thinking: modelOverride.thinking || { type: 'adaptive' },
     effort: modelOverride.effort || 'medium',
 
-    maxTurns: modelOverride.maxTurns || 50,
+    // hotfix-sdk-usage：50 太宽，agent 一个 turn 能做 30+ 件事（写文件 /
+    // 截图 / record_decision / 反复优化），用户感觉"停不下来"。
+    // 15 够做完一个 canvas + 1-2 次自检；做不完应该收尾让用户反馈。
+    maxTurns: modelOverride.maxTurns || 15,
 
     // 续 session：同 project 跨 turn 时传入上次 sessionId，prompt cache 自然命中
     ...(resumeSessionId ? { resume: resumeSessionId } : {}),
@@ -189,9 +209,7 @@ export async function runAgent({
     // 第一轮、API error、plan mode 下不发；piggyback 父 prompt cache 几乎免费。
     promptSuggestions: true,
 
-    // 自定义权限处理器 —— 现在占位 always-allow，Bash 危险命令拦截走
-    // PreToolUse hook（C5）。D 流定型后改成真 UI 弹窗。
-    canUseTool: makeAlwaysAllowCanUseTool(),
+    // canUseTool 已撤（hotfix-sdk-usage）—— 见 permissionMode: 'bypassPermissions' 注释
 
     // hooks 4 件套（C3 骨架，C4-C7 逐个填实）：
     // FileChanged / PreToolUse(Bash) / Stop / PostCompact
