@@ -102,20 +102,21 @@ function safeParseJson(text, fallback) {
 /**
  * 创建一个 pending 状态的 run。
  * @param {object} input
- * @param {string} input.skillId        - 要加载的 skill 名
- * @param {string} input.brief          - 用户输入
- * @param {object} [input.metadata={}]  - 初始元信息（如 client / requestId）
+ * @param {string} input.skillId           - 要加载的 skill 名
+ * @param {string} input.brief             - 用户输入
+ * @param {string} [input.projectId=null]  - 归属 project（P0 turn endpoint 必传）
+ * @param {object} [input.metadata={}]     - 初始元信息（如 client / requestId）
  * @returns {object} 完整 run 对象
  */
-export function createRun({ skillId, brief, metadata = {} }) {
+export function createRun({ skillId, brief, projectId = null, metadata = {} }) {
   if (!skillId || typeof skillId !== 'string') throw new Error('createRun: skillId 必填');
   if (!brief || typeof brief !== 'string') throw new Error('createRun: brief 必填');
 
   const id = newRunId();
   db.prepare(`
-    INSERT INTO runs (id, skill_id, brief, status, metadata)
-    VALUES (?, ?, ?, 'pending', ?)
-  `).run(id, skillId, brief, JSON.stringify(metadata));
+    INSERT INTO runs (id, skill_id, brief, project_id, status, metadata)
+    VALUES (?, ?, ?, ?, 'pending', ?)
+  `).run(id, skillId, brief, projectId, JSON.stringify(metadata));
 
   return getRun(id);
 }

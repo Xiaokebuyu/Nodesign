@@ -17,6 +17,11 @@ import express from 'express';
 import cors from 'cors';
 
 import { setupWS } from './ws/index.js';
+import projectsRouter from './api/projects.js';
+import canvasRouter from './api/canvas.js';
+import skillsRouter from './api/skills.js';
+import assetsRouter from './api/assets.js';
+import turnRouter from './api/turn.js';
 
 const PORT = Number(process.env.PORT || 4001);
 
@@ -35,10 +40,15 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// ── 业务路由（C3 起补齐，目前都是 501）──
-const notImplemented = (_req, res) => res.status(501).json({ error: 'C3+ implements' });
-app.use('/api/projects', notImplemented);
-app.use('/api/skills', notImplemented);
+// ── 业务路由 ──
+// projects router 挂在 /api/projects（CRUD）
+app.use('/api/projects', projectsRouter);
+// canvas / assets / turn 共用 /api/projects/:pid/* 命名空间，挂同前缀
+app.use('/api/projects', canvasRouter);
+app.use('/api/projects', assetsRouter);
+app.use('/api/projects', turnRouter);
+// skills 全局
+app.use('/api/skills', skillsRouter);
 
 // ── 错误兜底 ──
 app.use((err, _req, res, _next) => {
