@@ -6,10 +6,12 @@ import {
   ListChecks, FolderTree, Globe,
   ShieldAlert, Info, AlertCircle, CheckCircle2,
   HelpCircle,
+  Loader2,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import TimelineNode from './TimelineNode.jsx';
 
 /**
  * 单条消息渲染。4 种 role：
@@ -287,34 +289,43 @@ function SystemMessage({ variant = 'warn', content }) {
 }
 
 /**
- * ThinkingMessage —— thinking 默认展开 + 视觉区分 + 流式光标
+ * ThinkingMessage —— Timeline 风格：左圆 icon + 段落文本 + 流式光标
  *
- * - 默认展开（"暴露思维链"）
- * - 左侧 2px 细条 + 等宽字体 + 浅灰
- * - 头部 THINKING chip 可折叠
- * - isStreaming=true 时尾部一颗 blinking 光标（流式打字效果）；
- *   appendTextDelta 在 thinking 累加时设；其他内容产生 / run 收尾时清除
+ * - 流式中：节点 icon = Loader2（旋转）+ warn 色边框
+ * - 完成：节点 icon = CheckCircle2 + success 色边框
+ * - 内容用 sans 段落（不再 mono code 风格），符合"思维"场景
+ * - 头部 THINKING chip 可折叠（默认展开"暴露思维链"）
+ * - isStreaming=true 尾部一颗 blinking 光标块
  */
 function ThinkingMessage({ content, isStreaming }) {
   const [open, setOpen] = useState(true);
+  const StatusIcon = isStreaming ? Loader2 : CheckCircle2;
+  const statusColor = isStreaming ? COLOR.warn : COLOR.success;
+
   return (
-    <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
+    <TimelineNode
+      icon={StatusIcon}
+      iconColor={statusColor}
+      iconBorder={statusColor}
+      isSpinning={isStreaming}
+    >
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+          fontFamily: FONT_MONO, fontSize: 10, fontWeight: 500,
           color: isStreaming ? COLOR.warn : COLOR.sub,
-          padding: `${GAP.xs}px ${GAP.md - 2}px`,
-          borderRadius: 4,
+          padding: 0,
           background: 'transparent',
           border: 'none',
           cursor: 'pointer',
-          letterSpacing: '0.04em',
+          letterSpacing: '0.06em',
+          marginBottom: open ? GAP.xs : 0,
         }}
       >
         <ChevronRight
-          size={11}
+          size={10}
+          strokeWidth={1.75}
           style={{
             transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
             transition: 'transform 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
@@ -324,14 +335,10 @@ function ThinkingMessage({ content, isStreaming }) {
       </button>
       {open && (
         <div style={{
-          marginLeft: GAP.md,
-          marginTop: 2,
-          paddingLeft: GAP.md,
-          borderLeft: `2px solid ${COLOR.borderMd}`,
-          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
-          color: COLOR.text4, lineHeight: 1.6,
+          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+          color: COLOR.text2, lineHeight: 1.55,
           whiteSpace: 'pre-wrap',
-          opacity: 0.85,
+          wordBreak: 'break-word',
         }}>
           {content}
           {isStreaming && (
@@ -353,7 +360,7 @@ function ThinkingMessage({ content, isStreaming }) {
       <style>{`
         @keyframes nd-thinking-blink { to { visibility: hidden; } }
       `}</style>
-    </div>
+    </TimelineNode>
   );
 }
 
@@ -422,10 +429,9 @@ function ToolMessage({
   agentType, taskStatus, taskSummary, taskLastTool,
 }) {
   const [open, setOpen] = useState(false);
-  const Icon = getToolIcon(toolName);
+  const ToolIcon = getToolIcon(toolName);  // 工具特定 icon → inline 装饰
 
-  // C28：Task 工具状态优先用 taskStatus（subagent 实际生命周期），
-  // fallback 到 status（main agent tool_result）
+  // Task 工具状态优先用 taskStatus（subagent 实际生命周期），fallback status
   const effectiveStatus =
     toolName === 'Task'
       ? (taskStatus === 'completed' ? 'success'
@@ -437,11 +443,13 @@ function ToolMessage({
 
   const isError = effectiveStatus === 'failed' || effectiveStatus === 'error';
   const isRunning = effectiveStatus === 'running';
-  const dot = isError ? COLOR.error : isRunning ? COLOR.warn : COLOR.success;
   const summary = summarizeToolInput(toolName, toolInput);
 
-  // 显示标签（截短 mcp__nodesign__ 前缀以省空间）
-  // Task 工具：显示 "Task → vision-checker"
+  // 节点状态 icon（Timeline 上的圆环）
+  const StatusIcon = isRunning ? Loader2 : (isError ? AlertCircle : CheckCircle2);
+  const statusColor = isRunning ? COLOR.warn : (isError ? COLOR.error : COLOR.success);
+
+  // 显示标签（截短 mcp__nodesign__ 前缀；Task 显 "Task → vision-checker"）
   let displayName = toolName?.startsWith('mcp__nodesign__')
     ? toolName.replace('mcp__nodesign__', '')
     : toolName;
@@ -450,27 +458,31 @@ function ToolMessage({
   }
 
   return (
-    <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
+    <TimelineNode
+      icon={StatusIcon}
+      iconColor={statusColor}
+      iconBorder={statusColor}
+      isSpinning={isRunning}
+    >
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: GAP.sm,
           fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, color: COLOR.text2,
-          padding: `${GAP.xs}px ${GAP.md}px`, borderRadius: 6,
-          background: 'rgba(0,0,0,0.03)',
-          border: `1px solid ${COLOR.borderLt}`,
+          padding: 0,
+          background: 'transparent', border: 'none', cursor: 'pointer',
           maxWidth: '100%',
-          cursor: 'pointer',
         }}
         title={toolName}
       >
-        <Icon size={11} color={COLOR.text4} style={{ flexShrink: 0 }} />
+        <ToolIcon size={12} color={COLOR.text4} strokeWidth={1.75} style={{ flexShrink: 0 }} />
         <span style={{ fontWeight: 500, flexShrink: 0 }}>{displayName}</span>
         {summary && (
           <span style={{
-            color: COLOR.sub, opacity: 0.8,
+            color: COLOR.sub, opacity: 0.85,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             minWidth: 0, maxWidth: 240,
+            fontWeight: 400,
           }}>
             {summary}
           </span>
@@ -480,19 +492,24 @@ function ToolMessage({
             · {formatElapsed(elapsed)}
           </span>
         )}
-        <span style={{
-          width: 6, height: 6, borderRadius: 3, background: dot,
-          flexShrink: 0, marginLeft: 'auto',
-        }} />
+        <ChevronRight
+          size={10}
+          strokeWidth={1.75}
+          color={COLOR.dim}
+          style={{
+            flexShrink: 0,
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
+          }}
+        />
       </button>
 
-      {/* C28：subagent 30s 进度摘要直接显示在 chip 下方（不必展开）*/}
+      {/* subagent 30s 进度摘要 */}
       {toolName === 'Task' && (taskSummary || taskLastTool) && (
         <div style={{
           marginTop: GAP.xs,
-          marginLeft: GAP.lg,
-          fontFamily: FONT_MONO,
-          fontSize: 10,
+          fontFamily: FONT_SANS,
+          fontSize: FONT_SIZE.xs,
           color: COLOR.sub,
           fontStyle: 'italic',
           lineHeight: 1.4,
@@ -571,6 +588,6 @@ function ToolMessage({
           )}
         </div>
       )}
-    </div>
+    </TimelineNode>
   );
 }
