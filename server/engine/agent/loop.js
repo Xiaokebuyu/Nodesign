@@ -22,6 +22,8 @@
  *   WebFetch / WebSearch 等到 P5 真做参考系统时再开
  */
 
+import os from 'node:os';
+import path from 'node:path';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { AgentContext } from './context.js';
 import { Events } from './events.js';
@@ -273,11 +275,17 @@ export async function runAgent({
       // 文件系统：核心隔离层
       // - allowWrite: 仅允许写 project workspace（cwd），其他位置 SDK 工具 deny
       // - denyWrite: 系统目录硬封（即便 allowWrite 误配也兜底）
-      // - denyRead: 凭据 / SSH key / AWS 凭证（agent 不该读到的东西）
+      // - denyRead: /etc/* 系统凭据 + ~/.ssh / ~/.aws 用户凭据。
+      //   d.ts 没说支持 ~ 展开，所以用 os.homedir() 展成绝对路径喂给 sandbox。
       filesystem: {
         allowWrite: [wsRoot],
         denyWrite: ['/etc', '/usr', '/bin', '/sbin', '/private/etc'],
-        denyRead: ['/etc/passwd', '/etc/shadow', '/etc/sudoers'],
+        denyRead: [
+          '/etc/passwd', '/etc/shadow', '/etc/sudoers',
+          path.join(os.homedir(), '.ssh'),
+          path.join(os.homedir(), '.aws'),
+          path.join(os.homedir(), '.gnupg'),
+        ],
       },
     },
 
