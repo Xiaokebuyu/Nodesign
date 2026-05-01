@@ -1,13 +1,13 @@
 import { Square } from 'lucide-react';
 import MessageList from './MessageList.jsx';
 import ChatComposer from './ChatComposer.jsx';
+import TodoPanel from './TodoPanel.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 /**
  * Chat Panel — 左栏整体壳
  *
- * P1：纯 UI，messages 由父组件传入，发送只调 onSend 不接后端。
- * P3：onSend 走 WS，messages 从 SSE/WS delta 累加。
+ * 结构：header → TodoPanel（可选，agent 计划清单）→ MessageList → ChatComposer
  */
 export default function ChatPanel({
   messages = [], onSend, isStreaming = false,
@@ -15,6 +15,7 @@ export default function ChatPanel({
   promptSuggestion, onDismissSuggestion,
   agentProgress,
   onStop,
+  todos,
 }) {
   // C20：subagent 30s 摘要 > "思考中…" 占位
   // - agentProgress 非空 → 用具体描述（"正在分析颜色对比度…"）
@@ -80,6 +81,7 @@ export default function ChatPanel({
         )}
       </div>
 
+      <TodoPanel todos={todos} />
       <MessageList messages={messages} />
       <ChatComposer
         onSend={onSend}

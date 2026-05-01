@@ -60,6 +60,9 @@ export default function Project() {
   const [decisionsReloadKey, setDecisionsReloadKey] = useState(0);
   // 终止生成：当前活跃 run 的 id（Turn.send 返回时记，run.done/error/cancelled 清）
   const [currentRunId, setCurrentRunId] = useState(null);
+  // SDK TodoWrite 工具的实时计划清单（run.todo.updated 推）
+  // 新一轮 run.start 清空；done/cancelled/error 保留作"上一轮完成情况"
+  const [todos, setTodos] = useState([]);
 
   const [shareOpen, setShareOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -111,6 +114,10 @@ export default function Project() {
     switch (evt.type) {
       case 'run.start':
         setIsStreaming(true);
+        setTodos([]);
+        break;
+      case 'run.todo.updated':
+        setTodos(Array.isArray(evt.todos) ? evt.todos : []);
         break;
       case 'run.delta.text':
         setMessages(prev => appendTextDelta(prev, 'assistant', evt.text));
@@ -657,6 +664,7 @@ export default function Project() {
             onDismissSuggestion={() => setPromptSuggestion(null)}
             agentProgress={agentProgress}
             onStop={currentRunId ? handleStop : null}
+            todos={todos}
           />
         }
         center={
