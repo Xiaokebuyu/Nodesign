@@ -66,28 +66,28 @@ export default function TimelineGroup({ messages, closed, summary }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           gap: GAP.sm,
           width: '100%',
-          padding: `${GAP.sm}px ${GAP.lg}px`,
+          padding: `${GAP.sm + 2}px ${GAP.lg}px`,
           fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-          fontWeight: 500,
-          color: isActive ? COLOR.warn : COLOR.text2,
-          background: 'transparent',
+          fontWeight: 600,
+          color: isActive ? COLOR.warn : COLOR.text1,
+          background: 'rgba(0,0,0,0.03)',
           border: 'none',
+          borderRadius: 6,
           cursor: 'pointer',
           textAlign: 'left',
-          borderRadius: 6,
           transition: 'background 0.15s',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.025)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.03)'; }}
       >
         <span style={{
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           minWidth: 0, flex: 1,
         }}>{title}</span>
         <ChevronDown
-          size={14}
-          strokeWidth={1.75}
-          color={COLOR.sub}
+          size={16}
+          strokeWidth={2}
+          color={COLOR.text2}
           style={{
             flexShrink: 0,
             transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
