@@ -33,6 +33,7 @@ import { loadSkill } from './skill.js';
 import { createHooks } from './hooks.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
 import { createAgents } from '../agents/index.js';
+import { getOrStartProxy } from '../../lib/binary-fixup-proxy.js';
 
 // 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）。
 // 沙盒由 cwd=project workspace 保证 + PreToolUse hook 命令白名单兜底。
@@ -192,6 +193,23 @@ export async function runAgent({
   // 解析最终 model id —— thinking config 的 type 选择依赖它（pickThinkingConfig）。
   const model = modelOverride.model || process.env.NODESIGN_MODEL || 'kimi-k2.6';
 
+  // SDK binary 对非白名单 model（如 kimi-k2.6）会强制把 thinking type 转成
+  // 'adaptive'，但 Kimi gateway 不支持 adaptive → 0 thinking blocks。
+  // binary-fixup-proxy 在 binary 出口拦 /v1/messages POST 把 adaptive 改回
+  // enabled+budget_tokens，让 Kimi 正确输出 thinking。详见
+  // memory `feedback_kimi_thinking_blocks.md` + lib/binary-fixup-proxy.js 注释。
+  const realGatewayUrl = process.env.NODESIGN_GATEWAY_URL || process.env.ANTHROPIC_BASE_URL;
+  let baseUrlForBinary = realGatewayUrl;
+  if (realGatewayUrl) {
+    try {
+      const proxy = await getOrStartProxy(realGatewayUrl);
+      baseUrlForBinary = proxy.baseUrl;
+    } catch (err) {
+      console.warn(`[loop] binary-fixup-proxy start failed, using direct gateway:`, err.message);
+      // fail-soft：proxy 起不来回退到直连，thinking 可能仍丢失但 agent 能跑
+    }
+  }
+
   const sdkOptions = {
     cwd: cwdRoot,
     abortController: ctx.abortController,
@@ -202,10 +220,12 @@ export async function runAgent({
     // additionalDirectories 是 SDK 暴露给 cwd 之外的可访问目录
     ...(sharedRoot ? { additionalDirectories: [sharedRoot] } : {}),
 
-    // 关键：env 透传给子进程，让 claude binary 走 Nodesign gateway
+    // 关键：env 透传给子进程，让 claude binary 走 Nodesign gateway。
+    // ANTHROPIC_BASE_URL 不直连真 gateway，而是先经 binary-fixup-proxy
+    // （见 baseUrlForBinary 解析）。proxy 起不来时 fallback 到直连。
     env: {
       ...process.env,                                                  // 透传基础 env
-      ANTHROPIC_BASE_URL: process.env.NODESIGN_GATEWAY_URL || process.env.ANTHROPIC_BASE_URL,
+      ANTHROPIC_BASE_URL: baseUrlForBinary,
       ANTHROPIC_API_KEY: process.env.NODESIGN_GATEWAY_KEY || process.env.ANTHROPIC_API_KEY,
       CLAUDE_AGENT_SDK_CLIENT_APP: 'nodesign/0.0.1',
       // H3：per-session 隔离 —— SDK binary 子进程把 JSONL 落到 sessions/<sid>/.claude/。

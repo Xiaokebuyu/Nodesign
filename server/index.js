@@ -17,6 +17,7 @@ import express from 'express';
 import cors from 'cors';
 
 import { setupWS } from './ws/index.js';
+import { stopProxy } from './lib/binary-fixup-proxy.js';
 import projectsRouter from './api/projects.js';
 import canvasRouter from './api/canvas.js';
 import skillsRouter from './api/skills.js';
@@ -82,6 +83,9 @@ function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[server] ${signal} received, shutting down...`);
+  // 关闭 binary-fixup-proxy（agent 跑 Kimi 时会启的本地转发）。
+  // 不阻塞 httpServer close —— proxy close fail 也不影响主流程。
+  stopProxy().catch((err) => console.error('[server] proxy close error:', err.message));
   httpServer.close((err) => {
     if (err) console.error('[server] close error:', err);
     process.exit(err ? 1 : 0);
