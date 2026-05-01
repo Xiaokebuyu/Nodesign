@@ -17,13 +17,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 // ── 配置 ──
-const apiKey = process.env.KIMI_API_KEY;
-const baseURL = process.env.KIMI_BASE_URL || 'https://api.moonshot.ai/anthropic';
-const model = process.env.KIMI_MODEL || 'kimi-k2.6';
+// 优先 KIMI_*（直连 Moonshot），fallback NODESIGN_GATEWAY_*（tokendance gateway，
+// 同样转 Kimi 后端但走团队代理 + 计费）。
+const apiKey = process.env.KIMI_API_KEY || process.env.NODESIGN_GATEWAY_KEY;
+const baseURL = process.env.KIMI_BASE_URL
+  || process.env.NODESIGN_GATEWAY_URL
+  || 'https://api.moonshot.ai/anthropic';
+const model = process.env.KIMI_MODEL || process.env.NODESIGN_MODEL || 'kimi-k2.6';
 
 if (!apiKey) {
-  console.error('❌ KIMI_API_KEY 未配置');
-  console.error('   请在 .env 里填入 Kimi API key 后再跑：cp .env.example .env');
+  console.error('❌ 没找到 API key');
+  console.error('   设 KIMI_API_KEY 或 NODESIGN_GATEWAY_KEY 后再跑');
   process.exit(1);
 }
 

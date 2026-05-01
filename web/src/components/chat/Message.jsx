@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import {
   Wrench, ChevronRight,
-  FileText, FileEdit, FilePlus, Search, Terminal,
-  Eye, Download, Bookmark, Send,
+  FileText, Pencil, FilePlus, Search, Terminal,
+  Eye, Download, Bookmark, Bot, Activity,
   ListChecks, FolderTree, Globe,
   ShieldAlert, Info, AlertCircle, CheckCircle2,
   HelpCircle,
-  Loader2,
+  Clock4,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
@@ -289,24 +289,20 @@ function SystemMessage({ variant = 'warn', content }) {
 }
 
 /**
- * ThinkingMessage —— Timeline 风格：左圆 icon + 段落文本 + 流式光标
+ * ThinkingMessage —— Timeline 风格 v2：Clock 图标 + 段落 + 流式光标
  *
- * - 流式中：节点 icon = Loader2（旋转）+ warn 色边框
- * - 完成：节点 icon = CheckCircle2 + success 色边框
- * - 内容用 sans 段落（不再 mono code 风格），符合"思维"场景
- * - 头部 THINKING chip 可折叠（默认展开"暴露思维链"）
- * - isStreaming=true 尾部一颗 blinking 光标块
+ * 节点图标固定 Clock4（线性时钟），用颜色区分状态：
+ *   - 流式中：warn 色 + 旋转（时钟走针感）
+ *   - 完成：sub 色（沉默灰）
+ * 不再用 Loader2/CheckCircle2 + 外圆环，参考用户图里的克制视觉。
  */
 function ThinkingMessage({ content, isStreaming }) {
   const [open, setOpen] = useState(true);
-  const StatusIcon = isStreaming ? Loader2 : CheckCircle2;
-  const statusColor = isStreaming ? COLOR.warn : COLOR.success;
 
   return (
     <TimelineNode
-      icon={StatusIcon}
-      iconColor={statusColor}
-      iconBorder={statusColor}
+      icon={Clock4}
+      iconColor={isStreaming ? COLOR.warn : COLOR.sub}
       isSpinning={isStreaming}
     >
       <button
@@ -368,23 +364,51 @@ function ThinkingMessage({ content, isStreaming }) {
 const TOOL_ICONS = {
   Read: FileText,
   Write: FilePlus,
-  Edit: FileEdit,
+  Edit: Pencil,                                // 铅笔 = 改文件
   Glob: FolderTree,
   Grep: Search,
   Bash: Terminal,
   TodoWrite: ListChecks,
   WebFetch: Globe,
   WebSearch: Globe,
-  Task: Send,                                  // subagent 调用
+  Task: Bot,                                   // subagent → 机器人（派任务给子代理）
   // MCP nodesign 工具
   'mcp__nodesign__screenshot_canvas': Eye,
   'mcp__nodesign__export_handoff': Download,
   'mcp__nodesign__record_decision': Bookmark,
-  'mcp__nodesign__ping': Wrench,
+  'mcp__nodesign__ping': Activity,             // ping → 心跳/连接
 };
 
 function getToolIcon(toolName) {
   return TOOL_ICONS[toolName] || Wrench;
+}
+
+/** 路径 → 文件名（去目录） */
+function basename(p) {
+  if (!p) return '';
+  const s = String(p);
+  return s.split('/').pop() || s;
+}
+
+/**
+ * 估算 Edit / Write 的行数 diff。
+ * SDK Edit 工具 result 不直接暴露行数，从 toolInput 估算：
+ *   - Edit:  -<old_string 行数>  +<new_string 行数>（替换语义视为先删后增）
+ *   - Write: +<content 行数>（全新写入，无删除）
+ *   - 其他：null
+ */
+function computeFileDiff(toolName, input) {
+  if (!input || typeof input !== 'object') return null;
+  if (toolName === 'Edit') {
+    const old = String(input.old_string || '').split('\n');
+    const next = String(input.new_string || '').split('\n');
+    return { adds: next.length, dels: old.length };
+  }
+  if (toolName === 'Write') {
+    const lines = String(input.content || '').split('\n');
+    return { adds: lines.length, dels: 0 };
+  }
+  return null;
 }
 
 /**
@@ -429,9 +453,8 @@ function ToolMessage({
   agentType, taskStatus, taskSummary, taskLastTool,
 }) {
   const [open, setOpen] = useState(false);
-  const ToolIcon = getToolIcon(toolName);  // 工具特定 icon → inline 装饰
 
-  // Task 工具状态优先用 taskStatus（subagent 实际生命周期），fallback status
+  // Task 工具状态优先用 taskStatus，fallback status
   const effectiveStatus =
     toolName === 'Task'
       ? (taskStatus === 'completed' ? 'success'
@@ -443,13 +466,54 @@ function ToolMessage({
 
   const isError = effectiveStatus === 'failed' || effectiveStatus === 'error';
   const isRunning = effectiveStatus === 'running';
+
+  // v2：节点 icon 直接用工具特定 icon（去外环），颜色按状态变
+  const NodeIcon = getToolIcon(toolName);
+  const iconColor = isRunning ? COLOR.warn : (isError ? COLOR.error : COLOR.sub);
+
+  // Edit / Write 特殊渲染：文件名 + +N/-M 行数，不展开 input/output
+  const fileDiff = computeFileDiff(toolName, toolInput);
+  if (fileDiff && (toolName === 'Edit' || toolName === 'Write')) {
+    const filename = basename(toolInput?.file_path || toolInput?.path);
+    return (
+      <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'baseline', gap: GAP.sm,
+          fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, color: COLOR.text2,
+          maxWidth: '100%',
+        }}
+        title={toolInput?.file_path || toolInput?.path || ''}
+        >
+          <span style={{
+            fontWeight: 500,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            maxWidth: 200,
+          }}>
+            {filename || toolName}
+          </span>
+          {fileDiff.adds > 0 && (
+            <span style={{ color: COLOR.success, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+              +{fileDiff.adds}
+            </span>
+          )}
+          {fileDiff.dels > 0 && (
+            <span style={{ color: COLOR.error, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+              −{fileDiff.dels}
+            </span>
+          )}
+          {isRunning && elapsed != null && elapsed >= 1 && (
+            <span style={{ color: COLOR.warn, fontSize: 10 }}>· {formatElapsed(elapsed)}</span>
+          )}
+          {isError && (
+            <span style={{ color: COLOR.error, fontSize: 11 }}>失败</span>
+          )}
+        </div>
+      </TimelineNode>
+    );
+  }
+
+  // 其他工具：保留 chip 折叠展开 input/output
   const summary = summarizeToolInput(toolName, toolInput);
-
-  // 节点状态 icon（Timeline 上的圆环）
-  const StatusIcon = isRunning ? Loader2 : (isError ? AlertCircle : CheckCircle2);
-  const statusColor = isRunning ? COLOR.warn : (isError ? COLOR.error : COLOR.success);
-
-  // 显示标签（截短 mcp__nodesign__ 前缀；Task 显 "Task → vision-checker"）
   let displayName = toolName?.startsWith('mcp__nodesign__')
     ? toolName.replace('mcp__nodesign__', '')
     : toolName;
@@ -458,12 +522,7 @@ function ToolMessage({
   }
 
   return (
-    <TimelineNode
-      icon={StatusIcon}
-      iconColor={statusColor}
-      iconBorder={statusColor}
-      isSpinning={isRunning}
-    >
+    <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
@@ -475,7 +534,6 @@ function ToolMessage({
         }}
         title={toolName}
       >
-        <ToolIcon size={12} color={COLOR.text4} strokeWidth={1.75} style={{ flexShrink: 0 }} />
         <span style={{ fontWeight: 500, flexShrink: 0 }}>{displayName}</span>
         {summary && (
           <span style={{

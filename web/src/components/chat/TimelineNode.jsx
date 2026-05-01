@@ -1,41 +1,41 @@
 import { COLOR, GAP } from '../../lib/theme.js';
 
 /**
- * TimelineNode — agent 工作流时间轴的一个节点
+ * TimelineNode — agent 工作流时间轴的一个节点（v2：去外环）
  *
- * 视觉（参考用户提供图）：
- *   ┌─ 左 22px 圆形线性 icon（stroke 边框 + 内部 lucide 线性图标）
- *   │  + 下方 1px 灰色竖线（贯穿整条 message，相邻节点自然连成时间轴）
- *   └─ 右侧缩进的内容区
+ * 视觉：
+ *   ┌─ 左侧 14px 线性 icon（lucide stroke，直接亮出，无 border circle）
+ *   │  + 下方 1px 灰色竖线（贯穿 message，相邻节点连成一条时间轴）
+ *   └─ 右侧自然缩进的内容区
  *
- * 设计意图：
- *   - 统一 thinking / tool use 视觉，用户一眼看出"agent 在按步骤推进"
- *   - 线性 icon（lucide stroke）匹配项目克制审美，避免 filled 噪点
- *   - isSpinning 时 icon 旋转 → 流式信号
- *   - 节点边框颜色（iconBorder）随状态变（running=warn / success=success / error=error）
+ * v1 → v2 改动（参考用户图反馈）：
+ *   - 去掉外圆环 wrapper（22px circle + border + status 色边框）
+ *   - icon 直接亮出，背景白色"打断"时间轴线（避免线从 icon 中间穿过）
+ *   - 状态色不再靠外环表达，靠 iconColor 本身（warn / success / error / sub）
+ *
+ * 用户期望的视觉更克制：thinking 用 Clock 类、Edit 用 Pencil、Read 用
+ * FileText 等，每个 icon 只是简单的 stroke 形状，没有色环装饰。
  */
 export default function TimelineNode({
   icon: Icon,
-  iconColor = COLOR.text4,
-  iconBorder = COLOR.borderMd,
-  iconBackground = '#fff',
+  iconColor = COLOR.sub,
   isSpinning = false,
   children,
 }) {
-  const ICON_SIZE = 22;
-  const ICON_INNER = 12;
+  const ICON_SIZE = 14;
+  const NODE_AREA = 18;
   const PAD_LEFT = GAP.lg;
   const CONTENT_GAP = GAP.sm;
 
   return (
     <div style={{
       position: 'relative',
-      padding: `${GAP.sm}px ${GAP.lg}px ${GAP.sm}px ${PAD_LEFT + ICON_SIZE + CONTENT_GAP}px`,
+      padding: `${GAP.sm}px ${GAP.lg}px ${GAP.sm}px ${PAD_LEFT + NODE_AREA + CONTENT_GAP}px`,
       minWidth: 0,
     }}>
       <div style={{
         position: 'absolute',
-        left: PAD_LEFT + ICON_SIZE / 2 - 0.5,
+        left: PAD_LEFT + NODE_AREA / 2 - 0.5,
         top: 0, bottom: 0,
         width: 1,
         background: COLOR.borderLt,
@@ -43,17 +43,18 @@ export default function TimelineNode({
       }} />
       <div style={{
         position: 'absolute',
-        left: PAD_LEFT,
-        top: GAP.sm + 1,
-        width: ICON_SIZE, height: ICON_SIZE,
-        borderRadius: ICON_SIZE / 2,
-        background: iconBackground,
-        border: `1px solid ${iconBorder}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        left: PAD_LEFT + (NODE_AREA - ICON_SIZE) / 2,
+        top: GAP.sm + 3,
+        width: ICON_SIZE,
+        height: ICON_SIZE,
+        background: '#fff',
         zIndex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}>
         <Icon
-          size={ICON_INNER}
+          size={ICON_SIZE}
           color={iconColor}
           strokeWidth={1.75}
           style={isSpinning ? { animation: 'nd-tl-spin 1.4s linear infinite' } : undefined}
