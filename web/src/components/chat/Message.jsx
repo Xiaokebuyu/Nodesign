@@ -39,7 +39,7 @@ export default function Message({ message }) {
   }
 
   if (role === 'thinking') {
-    return <ThinkingMessage content={content} />;
+    return <ThinkingMessage content={content} isStreaming={message.isStreaming} />;
   }
 
   if (role === 'tool') {
@@ -287,29 +287,24 @@ function SystemMessage({ variant = 'warn', content }) {
 }
 
 /**
- * ThinkingMessage —— C26：thinking 默认展开 + 视觉区分
+ * ThinkingMessage —— thinking 默认展开 + 视觉区分 + 流式光标
  *
- * 用户要求"暴露思维链"。P0 时 thinking 默认折叠（"思考过程 ▼"），
- * 用户得点开才看到——agent 思考过程几乎不可见。本次改为：
- * - 默认展开
- * - 左侧 2px 细条（视觉区分自 assistant 文本）
- * - 浅灰背景 + 等宽字体
- * - 流式时尾部 blinking 光标（typing 效果）
- * - 头部小 chip "思考中" / "思考过程" + 折叠按钮（用户想收起仍可以）
- *
- * isStreaming：父级（MessageList → Message → 这里）传是不是当前最后一条
- * thinking 在打字。但 MessageList 不知道流式状态——用 message.isStreaming
- * 字段检测。当前没维护此字段，先做"默认展开 + 视觉区分"，光标动画 stage 2。
+ * - 默认展开（"暴露思维链"）
+ * - 左侧 2px 细条 + 等宽字体 + 浅灰
+ * - 头部 THINKING chip 可折叠
+ * - isStreaming=true 时尾部一颗 blinking 光标（流式打字效果）；
+ *   appendTextDelta 在 thinking 累加时设；其他内容产生 / run 收尾时清除
  */
-function ThinkingMessage({ content }) {
-  const [open, setOpen] = useState(true);  // C26：默认展开
+function ThinkingMessage({ content, isStreaming }) {
+  const [open, setOpen] = useState(true);
   return (
     <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
+          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+          color: isStreaming ? COLOR.warn : COLOR.sub,
           padding: `${GAP.xs}px ${GAP.md - 2}px`,
           borderRadius: 4,
           background: 'transparent',
@@ -325,7 +320,7 @@ function ThinkingMessage({ content }) {
             transition: 'transform 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
           }}
         />
-        THINKING
+        {isStreaming ? 'THINKING…' : 'THINKING'}
       </button>
       {open && (
         <div style={{
@@ -337,8 +332,27 @@ function ThinkingMessage({ content }) {
           color: COLOR.text4, lineHeight: 1.6,
           whiteSpace: 'pre-wrap',
           opacity: 0.85,
-        }}>{content}</div>
+        }}>
+          {content}
+          {isStreaming && (
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'inline-block',
+                width: 7,
+                height: '0.95em',
+                marginLeft: 2,
+                verticalAlign: 'text-bottom',
+                background: COLOR.warn,
+                animation: 'nd-thinking-blink 1s steps(2, start) infinite',
+              }}
+            />
+          )}
+        </div>
       )}
+      <style>{`
+        @keyframes nd-thinking-blink { to { visibility: hidden; } }
+      `}</style>
     </div>
   );
 }

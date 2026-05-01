@@ -151,6 +151,8 @@ export default function Project() {
       case 'run.done':
         setIsStreaming(false);
         setCurrentRunId(null);
+        // 收尾：清 thinking 流式光标（run 结束后最后一条 thinking 不该一直闪）
+        setMessages(prev => clearThinkingStreaming(prev));
         // 双保险：FileChanged hook（run.file_changed）应该已 bump 过 reloadToken
         // 但万一 hook 不触发（如 SDK 边角问题），这里兜底再 bump 一次
         setReloadToken(t => t + 1);
@@ -166,7 +168,7 @@ export default function Project() {
       case 'run.error':
         setIsStreaming(false);
         setCurrentRunId(null);
-        setMessages(prev => [...prev, {
+        setMessages(prev => [...clearThinkingStreaming(prev), {
           id: newId('msg'),
           role: 'assistant',
           content: `_⚠️ ${evt.message || '运行出错'}_`,
@@ -178,6 +180,7 @@ export default function Project() {
         setCurrentRunId(null);
         setPromptSuggestion(null);
         setAgentProgress(null);
+        setMessages(prev => clearThinkingStreaming(prev));
         showToast('已取消', 'info');
         break;
 
@@ -302,9 +305,61 @@ export default function Project() {
         // C6 Stop hook（占位，stage 1 不消费）
         break;
 
-      // ws.connected / run.sdk.session / run.compact_boundary / run.todo.updated /
-      // run.hook.* / run.notification / run.task.started / run.task.updated /
-      // run.memory_recall / run.session_state 等暂不展示在 chat，console 即可
+      // ── P1：Phase 1+2 漏接事件补齐 ──
+
+      case 'run.tool_failure':
+        // PostToolUseFailure hook → 让用户看到"哪个工具失败了"
+        setMessages(prev => [...prev, {
+          id: newId('msg'),
+          role: 'system',
+          variant: 'warn',
+          content: `工具失败：${evt.toolName} — ${formatToolError(evt.error)}`,
+        }]);
+        break;
+
+      case 'run.notification':
+        // SDK / hook 主动 emit 的通知 → toast
+        // priority 映射：error/high → error；success → success；其他 → info
+        showToast(evt.text || '通知', mapNotificationKind(evt.priority));
+        break;
+
+      case 'run.compact_boundary':
+        // 上下文压缩边界 —— 让用户知道"agent 重新整理了上下文"
+        showToast('上下文已压缩', 'info');
+        break;
+
+      case 'run.api_retry': {
+        // SDK API 重试（rate limit / server error 等）。
+        // 多次重试用 fixed id 替换，避免刷屏。
+        const text = `API 重试中（${evt.attempt}/${evt.maxRetries}）${evt.errorKind ? ` — ${evt.errorKind}` : ''}${evt.errorStatus != null ? ` HTTP ${evt.errorStatus}` : ''}`;
+        setMessages(prev => {
+          const idx = prev.findIndex(m => m.id === 'api-retry');
+          const msg = { id: 'api-retry', role: 'system', variant: 'warn', content: text };
+          if (idx >= 0) return [...prev.slice(0, idx), msg, ...prev.slice(idx + 1)];
+          return [...prev, msg];
+        });
+        break;
+      }
+
+      // 运维 / 调试信号——不展示 UI，只 console 留痕（dev 模式）。
+      // 这些事件用于排查问题，不该 spam 用户视图。
+      case 'run.subagent.start':
+      case 'run.subagent.stop':
+      case 'run.session_state':
+      case 'run.session_start':
+      case 'run.files_persisted':
+      case 'run.memory_recall':
+      case 'run.hook.started':
+      case 'run.hook.response':
+      case 'run.task.updated':
+      case 'run.round.start':
+      case 'run.round.end':
+        if (typeof window !== 'undefined' && import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.log(`[event] ${evt.type}`, evt);
+        }
+        break;
+
       default:
         break;
     }
@@ -731,14 +786,51 @@ export default function Project() {
 
 // ── helpers ──
 
-/** 同 role 连续 text delta 累加为一条消息；否则 push 新消息 */
+/**
+ * 同 role 连续 text delta 累加为一条消息；否则 push 新消息。
+ * thinking 自带 isStreaming=true（用于尾部光标）；非 thinking 内容产生时
+ * 自动关掉之前所有 thinking 的 isStreaming 标记（那段思考已经结束了）。
+ */
 function appendTextDelta(messages, role, text) {
   if (!text) return messages;
-  const last = messages[messages.length - 1];
+  const cleared = role === 'thinking' ? messages : clearThinkingStreaming(messages);
+  const last = cleared[cleared.length - 1];
   if (last && last.role === role) {
-    return [...messages.slice(0, -1), { ...last, content: (last.content || '') + text }];
+    const merged = { ...last, content: (last.content || '') + text };
+    if (role === 'thinking') merged.isStreaming = true;
+    return [...cleared.slice(0, -1), merged];
   }
-  return [...messages, { id: newId('msg'), role, content: text }];
+  const created = { id: newId('msg'), role, content: text };
+  if (role === 'thinking') created.isStreaming = true;
+  return [...cleared, created];
+}
+
+/** 关掉所有 thinking 消息的流式光标（run 结束 / 切到非 thinking 内容时调）*/
+function clearThinkingStreaming(messages) {
+  let changed = false;
+  const next = messages.map(m => {
+    if (m.role === 'thinking' && m.isStreaming) {
+      changed = true;
+      return { ...m, isStreaming: false };
+    }
+    return m;
+  });
+  return changed ? next : messages;
+}
+
+/** 工具错误对象 → 用户可读字符串 */
+function formatToolError(err) {
+  if (!err) return '未知错误';
+  if (typeof err === 'string') return err;
+  if (err.message) return err.message;
+  try { return JSON.stringify(err); } catch { return String(err); }
+}
+
+/** SDK notification priority → toast kind */
+function mapNotificationKind(priority) {
+  if (priority === 'error' || priority === 'high') return 'error';
+  if (priority === 'success') return 'success';
+  return 'info';
 }
 
 function NotFound({ id, error }) {
