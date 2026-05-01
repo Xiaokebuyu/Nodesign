@@ -149,6 +149,23 @@ export const Turn = {
     jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/cancel`, {}),
 };
 
+// ── Sessions（薄壳走 SDK listSessions / getSessionMessages）──
+export const Sessions = {
+  /** 列项目下所有 session（按 lastModified 倒序，SDK 默认） */
+  list: (pid, { limit, offset } = {}) => {
+    const qs = new URLSearchParams();
+    if (limit != null) qs.set('limit', String(limit));
+    if (offset != null) qs.set('offset', String(offset));
+    const tail = qs.toString() ? `?${qs.toString()}` : '';
+    return jsonRequest('GET', `/api/projects/${pid}/sessions${tail}`);
+  },
+  /** 拉单个 session 的完整 messages（SDK SessionMessage[]） */
+  read: (pid, sid, { includeSystem } = {}) => {
+    const tail = includeSystem ? '?includeSystem=1' : '';
+    return jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}${tail}`);
+  },
+};
+
 // ── Health ──
 export const Health = {
   check: () => jsonRequest('GET', '/api/health'),

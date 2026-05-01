@@ -23,6 +23,7 @@ import skillsRouter from './api/skills.js';
 import assetsRouter from './api/assets.js';
 import turnRouter from './api/turn.js';
 import exportsRouter from './api/exports.js';
+import sessionsRouter from './api/sessions.js';
 
 const PORT = Number(process.env.PORT || 4001);
 
@@ -49,6 +50,7 @@ app.use('/api/projects', canvasRouter);
 app.use('/api/projects', assetsRouter);
 app.use('/api/projects', turnRouter);
 app.use('/api/projects', exportsRouter);
+app.use('/api/projects', sessionsRouter);
 // skills 全局
 app.use('/api/skills', skillsRouter);
 

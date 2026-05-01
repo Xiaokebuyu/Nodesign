@@ -20,8 +20,9 @@ import { useGlobalStore } from '../stores/globalStore.js';
 import { MOCK_DECK_SPEC } from '../mock/deck-spec.js';
 import { newId } from '../lib/helpers.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
-import { Canvas, Turn, Assets, Exports } from '../lib/api.js';
+import { Canvas, Turn, Assets, Exports, Sessions } from '../lib/api.js';
 import { openProjectWS } from '../lib/ws-client.js';
+import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
 
 export default function Project() {
   const { id } = useParams();
@@ -93,6 +94,33 @@ export default function Project() {
       .catch((err) => { if (!cancelled) { setHydrated(true); setHydrateError(err); } });
     return () => { cancelled = true; };
   }, [id, hydrateOne]);
+
+  // ── S2: hydrate latest session messages ──
+  // mount + project ready → 列 session 取最新一条 → 拉 messages → 转换填充。
+  // 这里在 WS open 之前跑：WS 之后的 delta 是新 turn 触发的，跟 hydrate
+  // 的历史 message 不会重叠（hydrate 只看上次 turn 已落 JSONL 的内容）。
+  useEffect(() => {
+    if (!hydrated || hydrateError || !project) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { sessions = [] } = await Sessions.list(id, { limit: 1 });
+        if (cancelled || sessions.length === 0) return;
+        const latest = sessions[0];
+        const { messages: sessionMsgs = [] } = await Sessions.read(id, latest.sessionId);
+        if (cancelled) return;
+        const display = sessionMessagesToDisplay(sessionMsgs);
+        if (display.length > 0) {
+          setMessages(display);
+        }
+      } catch (err) {
+        // 不阻塞 — hydrate 失败让用户看空 chat 总比挂掉好
+        console.warn('[Project] hydrate session messages failed:', err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, hydrated, hydrateError, project?.id]);
 
   // ── open WS once project exists ──
   // 依赖 project?.id 而非整个 project 对象，避免 status patch 触发重连
