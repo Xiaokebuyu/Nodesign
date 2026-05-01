@@ -26,7 +26,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { AgentContext } from './context.js';
 import { Events } from './events.js';
 import { markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata } from '../runs/store.js';
-import { registerRun, unregisterRun } from '../runs/active-runs.js';
+import { registerRun, attachQuery, unregisterRun } from '../runs/active-runs.js';
 import { loadSkill } from './skill.js';
 import { createHooks } from './hooks.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
@@ -62,20 +62,35 @@ const STREAMING_ENABLED = true;
 // stage 2 接 D 流权限交互时改成真处理（前端 UI 弹窗）。
 
 /**
- * 把 BetaContentBlockParam[] 包成 SDK 期望的 AsyncIterable<SDKUserMessage>。
+ * 把 BetaContentBlockParam[] 或 string brief 包成 SDK 期望的
+ * AsyncIterable<SDKUserMessage>。
  *
  * 单条 yield 后 iterator 自然结束 —— SDK 收到唯一一条 user message 后
  * 进入 agent loop。后续 turn 由前端再次调 POST /turn 触发新 query。
  *
- * 如果未来要做 streamInput 多轮复用（P0+ stage 2），这个 generator
- * 改成持续监听外部 push 的 message 队列，yield 的同时 iterator 不结束。
+ * **为什么 Phase 1 强制走 AsyncIterable**：
+ *   SDK Query 上的 control 方法（interrupt / setModel / setPermissionMode /
+ *   getContextUsage / mcpServerStatus / rewindFiles / streamInput / stopTask /
+ *   toggleMcpServer / ...）**只在 streaming input/output 模式下可用**
+ *   （sdk.d.ts:2018-2022）。直接传 prompt: string 不是 streaming，control
+ *   方法对那条路径无效。统一包成 AsyncIterable 让所有 run 都能拿到完整
+ *   控制能力。
+ *
+ * 如果未来要做 streamInput 多轮复用（让一个 query handle 跨多个 user
+ * message），这个 generator 改成持续监听外部 push 的 message 队列，
+ * yield 的同时 iterator 不结束。
+ *
+ * @param {Array<object> | string} contentOrBrief - content blocks 数组或纯文本 brief
  */
-async function* buildUserMessageStream(contentBlocks) {
+async function* buildUserMessageStream(contentOrBrief) {
+  const content = typeof contentOrBrief === 'string'
+    ? [{ type: 'text', text: contentOrBrief }]
+    : contentOrBrief;
   yield {
     type: 'user',
     message: {
       role: 'user',
-      content: contentBlocks,
+      content,
     },
     parent_tool_use_id: null,
   };
@@ -120,9 +135,10 @@ export async function runAgent({
 
   const ctx = new AgentContext({ runId, skillId, eventBus, abortController, workspaceRoot });
 
-  // 注册到 active-runs registry，让 cancel endpoint 能找到 controller
-  // finally 块 unregister 避免泄漏
-  registerRun(runId, ctx.abortController);
+  // 注册到 active-runs registry，让 cancel endpoint 能控制本 run。
+  // 此时只有 abortController（query 还没调），后面拿到 query handle 再 attachQuery。
+  // finally 块 unregister 避免泄漏。
+  registerRun(runId, { abortController: ctx.abortController });
 
   // 1. 进 running 状态 + 推开始事件
   markRunStarted(runId);
@@ -235,19 +251,27 @@ export async function runAgent({
   let finalText = '';
   let artifactPath = null;
 
-  // prompt 包装：
-  // - 有 userContentBlocks → 走 SDK 多模态流式接口（AsyncIterable<SDKUserMessage>）
-  //   一次性 yield 一条 user message，iterator 关闭 → SDK 进 agent loop。
-  // - 没有 → fallback 直接传 brief 字符串（兼容旧 smoke 路径）
+  // prompt 包装：统一走 AsyncIterable<SDKUserMessage>（streaming 模式）。
+  // 这样 SDK Query 上的 control 方法（interrupt/setModel/rewindFiles/...）
+  // 对所有 run 都可用 —— sdk.d.ts:2018-2022 明确说明 control requests
+  // 只在 streaming input/output 模式下可用。
+  // - 有 userContentBlocks → buildUserMessageStream 直接包
+  // - 没有 → 把 brief 字符串包成 [{ type: 'text', text: brief }] 也走 streaming
   const promptInput = userContentBlocks && Array.isArray(userContentBlocks) && userContentBlocks.length > 0
     ? buildUserMessageStream(userContentBlocks)
-    : brief;
+    : buildUserMessageStream(brief);
 
   try {
     const stream = query({
       prompt: promptInput,
       options: sdkOptions,
     });
+
+    // query() 返回的就是 Query handle（继承 AsyncGenerator<SDKMessage, void>）。
+    // 立即把它 attach 到 active-runs，让上层 endpoint 能调
+    // interrupt/setModel/rewindFiles/getContextUsage/mcpServerStatus/...
+    // 在 attachQuery 之前的窗口里，cancelRun 会 fallback 到 abortController.abort。
+    attachQuery(runId, stream);
 
     for await (const message of stream) {
       ctx.ensureNotAborted();
@@ -412,6 +436,19 @@ function handleSystemMessage(ctx, msg) {
       ctx.emit({ type: 'run.compact_boundary', compactMetadata: msg.compact_metadata });
       break;
 
+    case 'api_retry':
+      // SDKAPIRetryMessage（sdk.d.ts:2322）：API 请求失败，可重试，将在 retry_delay_ms 后重试。
+      // 之前落到 default warn —— 改为 emit 让上层能看到"网络抖了，agent 还在重试"，
+      // 避免用户以为卡死。
+      ctx.emit(Events.apiRetry(
+        msg.attempt,
+        msg.max_retries,
+        msg.retry_delay_ms,
+        msg.error_status,        // number | null（连接错误时为 null）
+        msg.error,               // SDKAssistantMessageError union
+      ));
+      break;
+
     case 'files_persisted':
       // SDKFilesPersistedEvent —— agent 写完 file checkpoint 持久化通知
       // FileChanged hook 触发的 file.changed 事件是更直接的；这个仅审计
@@ -511,6 +548,16 @@ function handleAssistantBlocks(ctx, content, skipTextThinking = false) {
         // 里 tool_use input 是 partial JSON delta，前端拼起来不划算）
         ctx.emit(Events.deltaToolUse(ctx.counters.turns, block.id, block.name, block.input));
         ctx.incrementTool(false);
+
+        // Phase 1：TodoWrite 工具单独再 emit 一条 todoUpdated。
+        // SDK 不会在 type:'system' 里专门推 TodoWrite 状态 —— agent 用工具
+        // 写计划时，input.todos 就是完整的 [{ content, status, activeForm }] 列表
+        // （sdk-tools.d.ts:530 TodoWriteInput）。
+        // tool_use 只够前端展示"调了 TodoWrite"，但拿不到结构化的 todo 列表给
+        // 计划面板用，所以这里平行 emit 一次 run.todo.updated。
+        if (block.name === 'TodoWrite' && block.input && Array.isArray(block.input.todos)) {
+          ctx.emit(Events.todoUpdated(block.input.todos));
+        }
         break;
       // 其他 block 类型（redacted_thinking / image / document）忽略
     }

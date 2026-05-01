@@ -152,4 +152,19 @@ export const Events = {
 
   // C4 FileChanged hook → 前端 reload iframe
   fileChanged: (filePath, event) => ({ type: 'run.file_changed', filePath, event }),
+
+  // ── Phase 1 翻译补全 ──
+
+  // SDKAPIRetryMessage（sdk.d.ts:2322）：API 请求失败可重试。
+  // 当前 handleSystemMessage 把 'api_retry' subtype 落进 default warn —— 改为 emit
+  // 让上层（前端 / 监控）能看到"还在重试"。
+  // error_status: HTTP 状态码，连接错误/超时时为 null（无 HTTP 响应）。
+  apiRetry: (attempt, maxRetries, retryDelayMs, errorStatus, errorKind) => ({
+    type: 'run.api_retry',
+    attempt,
+    maxRetries,
+    retryDelayMs,
+    errorStatus,    // number | null
+    errorKind,      // SDKAssistantMessageError union: rate_limit / server_error / ...
+  }),
 };
