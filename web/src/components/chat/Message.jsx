@@ -317,31 +317,19 @@ function ThinkingMessage({ content, isStreaming }) {
     <TimelineNode
       icon={Clock4}
       iconColor={isStreaming ? COLOR.warn : COLOR.sub}
-      isSpinning={isStreaming}
     >
-      <div style={{
-        fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-        color: COLOR.text2, lineHeight: 1.55,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-      }}>
+      <div
+        className={isStreaming ? 'nd-shimmer' : undefined}
+        style={{
+          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+          color: COLOR.text2, lineHeight: 1.55,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}
+      >
         {displayed}
         {!showFull && (
           <span style={{ color: COLOR.dim }}>… </span>
-        )}
-        {isStreaming && (
-          <span
-            aria-hidden="true"
-            style={{
-              display: 'inline-block',
-              width: 7,
-              height: '0.95em',
-              marginLeft: 2,
-              verticalAlign: 'text-bottom',
-              background: COLOR.warn,
-              animation: 'nd-thinking-blink 1s steps(2, start) infinite',
-            }}
-          />
         )}
         {longEnough && (
           <div style={{ marginTop: 6 }}>
@@ -363,8 +351,30 @@ function ThinkingMessage({ content, isStreaming }) {
           </div>
         )}
       </div>
+      {/* shimmer effect — 流式中"一束光从左到右扫过文字"。代替原 icon 旋转
+          + 末尾闪光标。CSS gradient 在文字上动，background-clip: text 让
+          gradient 只显示在字形里。中文字符正常。 */}
       <style>{`
-        @keyframes nd-thinking-blink { to { visibility: hidden; } }
+        .nd-shimmer {
+          background: linear-gradient(
+            90deg,
+            ${COLOR.text2} 0%,
+            ${COLOR.text2} 40%,
+            ${COLOR.warn} 50%,
+            ${COLOR.text2} 60%,
+            ${COLOR.text2} 100%
+          );
+          background-size: 200% 100%;
+          background-clip: text;
+          -webkit-background-clip: text;
+          color: transparent;
+          -webkit-text-fill-color: transparent;
+          animation: nd-shimmer-sweep 2.4s linear infinite;
+        }
+        @keyframes nd-shimmer-sweep {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
       `}</style>
     </TimelineNode>
   );

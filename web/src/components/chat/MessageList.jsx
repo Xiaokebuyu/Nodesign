@@ -4,45 +4,24 @@ import TimelineGroup from './TimelineGroup.jsx';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE } from '../../lib/theme.js';
 
 /**
- * H5：thinking + tool + assistant 中间 text 都包进同一个 TimelineGroup。
- * 一个 turn 内 agent 的所有动作（思考、工具、中间说话）属于同一思考片段。
- * group 的 closed 信号：
- *   - 不是最后一个 group（后面有 user message 触发 break）→ closed=true（过去的 turn）
- *   - 是最后一个 group + isStreaming=false（run 结束）→ closed=true
- *   - 最后一个 group + isStreaming=true（运行中）→ closed=false（不显示 done）
+ * groupMessages —— 只 thinking + tool 进 timeline group，assistant 文字一律
+ * single 抽出。这样视觉上 agent 的"想 → 做 → 想 → 做"流程被中间正式回复
+ * 自然断开（前段 group 显示 done，后段开新 group），而不是跟正文连成一串。
  *
- * "正式回复"识别：!isStreaming 时，从末尾向前找最后一条 assistant text，
- * 如果它紧贴 thinking/tool（中间没 user）→ 视为 final → 抽出来作 single 显示
- * 在 group 之外（done 之后），让它像最终结论一样可读。
+ * group 的 closed 信号：
+ *   - 后面接非 timeline message（assistant / user / system）→ closed=true
+ *   - 最后一个 group + !isStreaming → closed=true（run 结束加 done）
+ *   - 最后一个 group + isStreaming → closed=false（运行中不显示 done）
+ *
+ * 历史：H5 之前 assistant 也进 group + 末尾 final text 抽出。新版抽出策略
+ * 统一为"assistant 全 single"，不再区分 final vs mid-turn —— 用户反馈
+ * mid-turn 正文回复跟前后 thinking 连在一起视觉上误导。
  */
 function groupMessages(messages, isStreaming) {
-  // 1. 找 final assistant text（仅当 !isStreaming）
-  let finalTextIdx = -1;
-  if (!isStreaming) {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === 'user') break;
-      if (m.role === 'assistant') {
-        finalTextIdx = i;
-        break;
-      }
-      // thinking / tool / system 等：继续向前找
-    }
-  }
-
-  // 2. group 化
   const groups = [];
   let current = null;
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i];
-    if (i === finalTextIdx) {
-      // final text 抽出 — 关上当前 group + single 显示
-      if (current) { current.closed = true; current = null; }
-      groups.push({ type: 'single', message: m });
-      continue;
-    }
-    const isTimeline =
-      m.role === 'thinking' || m.role === 'tool' || m.role === 'assistant';
+  for (const m of messages) {
+    const isTimeline = m.role === 'thinking' || m.role === 'tool';
     if (isTimeline) {
       if (!current) {
         current = { type: 'timeline', items: [], closed: false };
@@ -50,13 +29,13 @@ function groupMessages(messages, isStreaming) {
       }
       current.items.push(m);
     } else {
-      // user / system 等 break group
+      // user / assistant / system 全 break group
       if (current) { current.closed = true; current = null; }
       groups.push({ type: 'single', message: m });
     }
   }
 
-  // 3. 最后一个未关 group：!isStreaming 时也 close 显示 done；streaming 中保持 open
+  // 最后一个未关 group：!isStreaming 时也 close 显示 done；streaming 中保持 open
   if (current && !isStreaming) {
     current.closed = true;
   }

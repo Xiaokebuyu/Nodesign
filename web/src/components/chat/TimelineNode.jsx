@@ -79,18 +79,15 @@ export default function TimelineNode({
         alignItems: 'center',
         justifyContent: 'center',
       }}>
+        {/* isSpinning prop 保留接口（callers 还在传），但不再做 spin animation
+            —— 用户反馈 spin 不好看，改用 children 内容 shimmer 表达 streaming */}
         <Icon
           size={ICON_SIZE}
           color={iconColor}
           strokeWidth={1.75}
-          style={isSpinning ? { animation: 'nd-tl-spin 1.4s linear infinite' } : undefined}
         />
       </div>
       <div style={{ minWidth: 0 }}>{children}</div>
-
-      <style>{`
-        @keyframes nd-tl-spin { to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }
