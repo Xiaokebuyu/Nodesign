@@ -223,6 +223,121 @@ async function t4_interleavedThinking() {
   }
 }
 
+// ── T5: 不带 beta header 的 thinking 对照（验证 T4 推断）──
+//
+// 为什么加这个对照：T4 同时传 thinking + interleaved-thinking beta header，
+// 之前直接推断"Kimi 不输出 thinking 是因为缺 beta header"。但 Anthropic
+// 官方文档明确：basic extended thinking（type: 'enabled'）任何模型都不需要
+// beta header（interleaved-thinking 那个 header 只是允许 thinking 在多个
+// tool_use 之间穿插，不影响 thinking 本身能否产出）。
+//
+// 对照结果解读：
+// - T5 输出 thinking_delta → 真正起作用的是 thinking config，不是 beta header。
+//   说明 NoDesign 走 SDK binary 不输出 thinking 的根因不在 header，可能在
+//   model id 过滤 / 协议层 strip / 或别的地方
+// - T5 不输出 thinking → Kimi 确实需要某种特殊 hint，但不一定是 interleaved-thinking
+async function t5_thinkingNoBetaHeader() {
+  console.log('## T5 thinking 不带 beta header（对照 T4）\n');
+
+  try {
+    const stream = client.messages.stream({
+      model,
+      max_tokens: 1500,
+      thinking: { type: 'enabled', budget_tokens: 1024 },
+      messages: [{ role: 'user', content: '请思考后回答：为什么天空是蓝色的？' }],
+    });
+    // 注意：不传 headers，对照 T4
+
+    let thinkingChunks = 0;
+    let textChunks = 0;
+    stream.on('streamEvent', (evt) => {
+      if (evt.type === 'content_block_delta') {
+        if (evt.delta?.type === 'thinking_delta') thinkingChunks++;
+        if (evt.delta?.type === 'text_delta') textChunks++;
+      }
+    });
+
+    const final = await stream.finalMessage();
+    const blockTypes = final.content.map(b => b.type).join(',');
+    console.log(`- 请求 header: \`(无 anthropic-beta)\``);
+    console.log(`- thinking_delta 块数: **${thinkingChunks}**`);
+    console.log(`- text_delta 块数: ${textChunks}`);
+    console.log(`- final.content blocks: [${blockTypes}]`);
+    console.log(`- stop_reason: \`${final.stop_reason}\``);
+
+    if (thinkingChunks > 0 && blockTypes.includes('thinking')) {
+      console.log(`- 结论: ✅ Kimi 不带 beta header 也产 thinking — T4 的 header 不是必需\n`);
+      results.t5 = true;
+    } else if (blockTypes.includes('thinking')) {
+      console.log(`- 结论: ⚠️ thinking block 出现但流式没 thinking_delta\n`);
+      results.t5 = 'partial';
+    } else {
+      console.log(`- 结论: ❌ 不带 header → 没 thinking — 那 T4 起作用的真是 header（或某种 implicit signal）\n`);
+      results.t5 = false;
+    }
+  } catch (err) {
+    console.log(`- 错误: \`${err.message}\``);
+    console.log(`- 结论: ❌ 报错\n`);
+    results.t5 = false;
+  }
+}
+
+// ── T6: thinking type=adaptive（验证 SDK binary 的转换是否被 Kimi 接受）──
+//
+// 背景：_probe-binary-thinking.js 拦截到 SDK binary 把我们传的
+// `thinking: { type: 'enabled' }` 自动转换成 `{ type: 'adaptive' }` 发给 Kimi。
+// adaptive 在 Anthropic 协议里只 Opus 4.6+ 支持。Kimi gateway 是否兼容？
+//
+// 结果解读：
+// - T6 ✅（输出 thinking） → adaptive Kimi 也接受，问题在 SDK binary jsonl
+//   序列化（thinking blocks 没保存到 jsonl）
+// - T6 ❌（无 thinking） → adaptive 不被 Kimi 支持 → binary 自动转换是 bug，
+//   要让 NoDesign 绕过这个转换
+async function t6_thinkingAdaptive() {
+  console.log('## T6 thinking type=adaptive（验证 binary 转换）\n');
+
+  try {
+    const stream = client.messages.stream({
+      model,
+      max_tokens: 1500,
+      thinking: { type: 'adaptive' },
+      messages: [{ role: 'user', content: '请思考后回答：为什么天空是蓝色的？' }],
+    });
+
+    let thinkingChunks = 0;
+    let textChunks = 0;
+    stream.on('streamEvent', (evt) => {
+      if (evt.type === 'content_block_delta') {
+        if (evt.delta?.type === 'thinking_delta') thinkingChunks++;
+        if (evt.delta?.type === 'text_delta') textChunks++;
+      }
+    });
+
+    const final = await stream.finalMessage();
+    const blockTypes = final.content.map(b => b.type).join(',');
+    console.log(`- thinking 配置: \`{ type: 'adaptive' }\``);
+    console.log(`- thinking_delta 块数: **${thinkingChunks}**`);
+    console.log(`- text_delta 块数: ${textChunks}`);
+    console.log(`- final.content blocks: [${blockTypes}]`);
+    console.log(`- stop_reason: \`${final.stop_reason}\``);
+
+    if (thinkingChunks > 0 && blockTypes.includes('thinking')) {
+      console.log(`- 结论: ✅ Kimi 接受 adaptive — binary 的自动转换没问题，根因在别处\n`);
+      results.t6 = true;
+    } else if (blockTypes.includes('thinking')) {
+      console.log(`- 结论: ⚠️ thinking block 出现但流式没 thinking_delta\n`);
+      results.t6 = 'partial';
+    } else {
+      console.log(`- 结论: ❌ Kimi 不支持 adaptive → binary 转换是 bug，要绕过\n`);
+      results.t6 = false;
+    }
+  } catch (err) {
+    console.log(`- 错误: \`${err.message}\``);
+    console.log(`- 结论: ❌ adaptive 被 Kimi gateway 拒绝（API 错）\n`);
+    results.t6 = false;
+  }
+}
+
 // ── 跑全部 ──
 async function main() {
   const tests = [
@@ -230,6 +345,8 @@ async function main() {
     ['T2', t2_toolUse],
     ['T3', t3_cacheControl],
     ['T4', t4_interleavedThinking],
+    ['T5', t5_thinkingNoBetaHeader],
+    ['T6', t6_thinkingAdaptive],
   ];
 
   for (const [name, fn] of tests) {
@@ -249,7 +366,13 @@ async function main() {
   console.log(`| T2 Tool use | ${results.t2 ? '✅' : '❌'} |`);
   console.log(`| T3 cache_control | ${results.t3 ? '✅' : '❌'} |`);
   console.log(`| T4 interleaved-thinking | ${results.t4 === true ? '✅' : results.t4 === 'partial' ? '⚠️' : '❌'} |`);
-  console.log('\n下一步：把这份报告贴到 server/shared/README.md 的"待验证"章节，决定阶段 1 实现细节。');
+  console.log(`| T5 thinking 无 beta header | ${results.t5 === true ? '✅' : results.t5 === 'partial' ? '⚠️' : '❌'} |`);
+  console.log(`| T6 thinking type=adaptive | ${results.t6 === true ? '✅' : results.t6 === 'partial' ? '⚠️' : '❌'} |`);
+  console.log('\n## T4 vs T5 解读');
+  console.log('- T4 ✅ + T5 ✅ → 真正起作用的是 thinking config，beta header 多余 → 根因在别处（如 SDK binary model id 过滤）');
+  console.log('- T4 ✅ + T5 ❌ → Kimi 确实需要某种 implicit signal/header → 可能要在 SDK binary 路径注入');
+  console.log('- T4 ❌ + T5 ❌ → Kimi gateway 当前不支持 thinking → 上游问题，等修');
+  console.log('\n下一步：根据 T4/T5 结果决定 NoDesign 是否能让 Kimi 走 thinking。');
 }
 
 main().catch(err => {
