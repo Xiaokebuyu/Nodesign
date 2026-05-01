@@ -64,8 +64,9 @@ export default function CreateProjectModal({ show, onClose, onCreated }) {
         description: description.trim() || undefined,
       });
 
-      // 2. 有 brief 就立即起首跑（agent 在后端异步跑，前端 Project.jsx 通过 WS 看流）
-      if (expanded.trim()) {
+      // 2. 有 brief 就立即起首跑（agent 在后端异步跑，前端 Workspace 通过 WS 看流）
+      const hasFirstChat = !!expanded.trim();
+      if (hasFirstChat) {
         try {
           await Turn.send({ pid: proj.id, chat: expanded, attachments: [] });
         } catch (err) {
@@ -73,7 +74,8 @@ export default function CreateProjectModal({ show, onClose, onCreated }) {
         }
       }
 
-      onCreated?.(proj);
+      // H1：onCreated 第二参告诉调用方有没有首跑（决定跳 Hub 还是 Workspace）
+      onCreated?.(proj, hasFirstChat);
       onClose?.();
     } catch (err) {
       showToast(`创建失败：${err.message}`, 'error');

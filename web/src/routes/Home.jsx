@@ -84,7 +84,10 @@ export default function Home() {
       <CreateProjectModal
         show={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreated={(proj) => navigate(`/projects/${proj.id}`)}
+        onCreated={(proj, hasFirstChat) => {
+          // H1：有首跑 chat → 直接进 work 页看流；没填 brief → 进 Hub 让用户配置
+          navigate(hasFirstChat ? `/projects/${proj.id}/work` : `/projects/${proj.id}`);
+        }}
       />
     </AppShell>
   );

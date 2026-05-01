@@ -25,9 +25,15 @@ import { Canvas, Turn, Assets, Exports, Sessions } from '../lib/api.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
 
-export default function Project() {
-  const { id } = useParams();
+export default function ProjectWorkspace() {
+  // H1：URL 作为 session 唯一 source of truth
+  //   - /projects/:id/work        → 无 sid（新会话）
+  //   - /projects/:id/sessions/:sid → 带 sid（恢复某 session）
+  // 切换 session 走 navigate；run.done 后若 url 没 sid（新会话刚跑完）
+  // navigate replace 到 /sessions/<sid> 让 URL 反映真实 sid，刷新可恢复
+  const { id, sid: urlSid } = useParams();
   const navigate = useNavigate();
+  const currentSessionId = urlSid || null;
 
   // ── store ──
   const project = useProjectStore(s => s.projects.find(p => p.id === id));
@@ -65,8 +71,8 @@ export default function Project() {
   // SDK TodoWrite 工具的实时计划清单（run.todo.updated 推）
   // 新一轮 run.start 清空；done/cancelled/error 保留作"上一轮完成情况"
   const [todos, setTodos] = useState([]);
-  // S4：当前选中的 session（null = 新会话，发 chat 时 SDK 自动建新 sid）
-  const [currentSessionId, setCurrentSessionId] = useState(null);
+  // H1：currentSessionId 来自 URL（urlSid，已在 useParams 上面）
+  // title 用 list session 后 match URL sid 拿到
   const [currentSessionTitle, setCurrentSessionTitle] = useState('');
   const [sessionListOpen, setSessionListOpen] = useState(false);
 
@@ -100,33 +106,32 @@ export default function Project() {
     return () => { cancelled = true; };
   }, [id, hydrateOne]);
 
-  // ── S2: 选中最近 session（mount 后跑一次） ──
-  // S4：拆成两个 effect — 先选最近 session 设 currentSessionId；
-  // 再监听 currentSessionId 变化拉 messages（用户切换 session 时也走这条）
+  // H1：拉 session 元信息更新 title（依赖 url sid + project ready）
   useEffect(() => {
     if (!hydrated || hydrateError || !project) return;
+    if (!currentSessionId) {
+      setCurrentSessionTitle('');
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const { sessions = [] } = await Sessions.list(id, { limit: 1 });
+        const { sessions = [] } = await Sessions.list(id, { limit: 100 });
         if (cancelled) return;
-        if (sessions.length > 0) {
-          const latest = sessions[0];
-          setCurrentSessionId(latest.sessionId);
-          setCurrentSessionTitle(latest.customTitle || latest.summary || '');
-        }
+        const match = sessions.find(s => s.sessionId === currentSessionId);
+        if (match) setCurrentSessionTitle(match.customTitle || match.summary || '');
       } catch (err) {
         console.warn('[Project] list sessions failed:', err.message);
       }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, hydrated, hydrateError, project?.id]);
+  }, [id, hydrated, hydrateError, project?.id, currentSessionId]);
 
-  // ── S4: hydrate session messages（依赖 currentSessionId） ──
+  // H1：hydrate session messages（依赖 url sid）
   useEffect(() => {
     if (!currentSessionId) {
-      // 新会话 / 没历史 session → messages 空（让用户从空 chat 开始）
+      // /work 路径 = 新会话 → 空 chat 让用户从头开始
       setMessages([]);
       return;
     }
@@ -208,16 +213,16 @@ export default function Project() {
         // 双保险：FileChanged hook（run.file_changed）应该已 bump 过 reloadToken
         // 但万一 hook 不触发（如 SDK 边角问题），这里兜底再 bump 一次
         setReloadToken(t => t + 1);
-        // S4：run 完成后 re-list sessions 拿最新 sid。如果是从"新会话"开始
-        // 跑的，这时 SDK 已经建了新 sid，更新 current 让下一轮 turn 续约。
-        // 同 sid 的话 setCurrentSessionId 不会触发 re-hydrate（值不变）。
-        Sessions.list(id, { limit: 1 }).then(({ sessions = [] }) => {
-          if (sessions.length > 0) {
-            const latest = sessions[0];
-            setCurrentSessionId(latest.sessionId);
-            setCurrentSessionTitle(latest.customTitle || latest.summary || '');
-          }
-        }).catch(() => { /* ignore */ });
+        // H1：从"新会话"（/work 路径）刚跑完 → SDK 已建新 sid → navigate
+        // replace 到 /sessions/<sid>，让 URL 反映真实 sid（刷新可恢复，
+        // SessionListModal 现在能高亮当前 session）
+        if (!currentSessionId) {
+          Sessions.list(id, { limit: 1 }).then(({ sessions = [] }) => {
+            if (sessions.length > 0) {
+              navigate(`/projects/${id}/sessions/${sessions[0].sessionId}`, { replace: true });
+            }
+          }).catch(() => { /* ignore */ });
+        }
         break;
       case 'run.file_changed':
         // C4: FileChanged hook → 仅对 canvas.html / *.html 后缀触发 iframe reload
@@ -712,7 +717,11 @@ export default function Project() {
 
   return (
     <AppShell
-      breadcrumb={[{ label: '项目', to: '/' }, { label: project.name }]}
+      breadcrumb={[
+        { label: '项目', to: '/' },
+        { label: project.name, to: `/projects/${id}` },
+        { label: currentSessionTitle || '新会话' },
+      ]}
       status={status}
       actions={
         <>
@@ -856,13 +865,10 @@ export default function Project() {
         projectId={id}
         currentSessionId={currentSessionId}
         onSwitch={(sid) => {
-          // sid 为 null 表示"+ 新会话"——先清 current，下一次 send 时
-          // SDK 自动建新 sid，run.done 会 re-list 同步回来。
-          setCurrentSessionId(sid);
-          if (sid === null) {
-            setCurrentSessionTitle('');
-            setMessages([]);
-          }
+          // H1：切换 session 走 URL navigate（URL 是 sid 唯一 source of
+          // truth），useEffect 会自动重 hydrate messages。
+          // sid=null → 新会话路径 /work；有 sid → /sessions/<sid>
+          navigate(sid ? `/projects/${id}/sessions/${sid}` : `/projects/${id}/work`);
         }}
       />
     </AppShell>
