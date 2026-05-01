@@ -46,6 +46,41 @@ const DEFAULT_SPEC_JSON = JSON.stringify(
   2,
 ) + '\n';
 
+/**
+ * S1：项目级 instruction —— 用户在 NoDesign UI 里编辑这个文件，agent 进每次
+ * session 时由 SDK（settingSources: ['project']）自动读到 system prompt。
+ * 模板 starter 提示用户能写什么。
+ */
+const DEFAULT_CLAUDE_MD = `# Project Instructions
+
+This file is read by the AI agent at the start of every session as part of its
+system prompt. Write project-specific guidance here — design intent,
+constraints, vocabulary, must-do / must-not-do.
+
+The agent will see this verbatim. Keep it concise and actionable.
+
+## Examples
+- Design tone: minimal, editorial, generous whitespace
+- Hard constraints: never use red as a primary color
+- Vocabulary: refer to the user as "the team"
+
+(Edit this file from the NoDesign UI — the agent picks up changes on next session.)
+`;
+
+/**
+ * S1：项目级 settings.json —— SDK 启用 settingSources: ['project'] 后会读这个。
+ * NoDesign loop.js 已经程序化注入 hooks/permissions/sandbox/mcpServers，这个
+ * 文件留空给将来的项目级 override（hooks/model/permissions）。
+ */
+const DEFAULT_CLAUDE_SETTINGS = JSON.stringify(
+  {
+    $schema: 'https://json.schemastore.org/claude-code-settings.json',
+    _comment: 'Project-level Claude Code settings. NoDesign loop.js injects hooks/permissions/sandbox programmatically — keep this file minimal. Add project-specific overrides here only if needed.',
+  },
+  null,
+  2,
+) + '\n';
+
 /** 该 project 的 workspace 绝对路径（不保证存在） */
 export function getProjectWorkspace(projectId) {
   validateProjectId(projectId);
@@ -74,6 +109,13 @@ export async function ensureProjectWorkspace(projectId) {
   }
   if (!(await fileExists(path.join(root, 'spec.json')))) {
     await fs.writeFile(path.join(root, 'spec.json'), DEFAULT_SPEC_JSON, 'utf8');
+  }
+  // S1：.claude/CLAUDE.md + .claude/settings.json 模板（幂等补齐老 project）
+  if (!(await fileExists(path.join(root, '.claude', 'CLAUDE.md')))) {
+    await fs.writeFile(path.join(root, '.claude', 'CLAUDE.md'), DEFAULT_CLAUDE_MD, 'utf8');
+  }
+  if (!(await fileExists(path.join(root, '.claude', 'settings.json')))) {
+    await fs.writeFile(path.join(root, '.claude', 'settings.json'), DEFAULT_CLAUDE_SETTINGS, 'utf8');
   }
 
   if (!(await fileExists(path.join(root, '.git')))) {

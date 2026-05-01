@@ -2,10 +2,13 @@
  * server/api/projects.js — Project CRUD
  *
  * GET    /api/projects              列项目（按 updated_at 倒序）
- * POST   /api/projects              { name, skillId? } → 创建 + ensureProjectWorkspace
+ * POST   /api/projects              { name, skillId?, description? } → 创建 + ensureProjectWorkspace
  * GET    /api/projects/:pid         单项目
- * PATCH  /api/projects/:pid         { name?, skillId? } 部分更新
+ * PATCH  /api/projects/:pid         { name?, skillId?, description? } 部分更新
  * DELETE /api/projects/:pid         删项目 + workspace + 关联 runs
+ *
+ * description: 可选，<= 2000 字符。仅 NoDesign 后端/前端 UI 用，agent 不感知
+ * （agent 看的是项目级 instruction = workspace/.claude/CLAUDE.md）。
  */
 
 import express from 'express';
@@ -24,13 +27,21 @@ router.get('/', (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
+const DESCRIPTION_MAX = 2000;
+
 router.post('/', async (req, res, next) => {
   try {
-    const { name, skillId } = req.body || {};
+    const { name, skillId, description } = req.body || {};
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'name required' });
     }
-    const project = createProject({ name, skillId });
+    if (description != null && typeof description !== 'string') {
+      return res.status(400).json({ error: 'description must be string' });
+    }
+    if (typeof description === 'string' && description.length > DESCRIPTION_MAX) {
+      return res.status(400).json({ error: `description too long (max ${DESCRIPTION_MAX})` });
+    }
+    const project = createProject({ name, skillId, description });
     await ensureProjectWorkspace(project.id);
     res.status(201).json({ project });
   } catch (err) { next(err); }
@@ -53,6 +64,16 @@ router.patch('/:pid', (req, res, next) => {
     const patch = {};
     if (typeof req.body?.name === 'string') patch.name = req.body.name.trim();
     if (typeof req.body?.skillId === 'string') patch.skillId = req.body.skillId;
+    if ('description' in (req.body || {})) {
+      const d = req.body.description;
+      if (d != null && typeof d !== 'string') {
+        return res.status(400).json({ error: 'description must be string' });
+      }
+      if (typeof d === 'string' && d.length > DESCRIPTION_MAX) {
+        return res.status(400).json({ error: `description too long (max ${DESCRIPTION_MAX})` });
+      }
+      patch.description = (typeof d === 'string' && d.trim()) ? d.trim() : null;
+    }
     const updated = updateProject(req.params.pid, patch);
     res.json({ project: updated });
   } catch (err) { next(err); }

@@ -165,6 +165,14 @@ export async function runAgent({
       ANTHROPIC_BASE_URL: process.env.NODESIGN_GATEWAY_URL || process.env.ANTHROPIC_BASE_URL,
       ANTHROPIC_API_KEY: process.env.NODESIGN_GATEWAY_KEY || process.env.ANTHROPIC_API_KEY,
       CLAUDE_AGENT_SDK_CLIENT_APP: 'nodesign/0.0.1',
+      // S1：per-project session/config 隔离 —— SDK binary 子进程把 JSONL 转录、
+      // settings、agents 等都落到 <workspace>/.claude/ 下（默认是 ~/.claude/）。
+      // 项目自包含：删项目 = 删整个 workspace 目录（含 session 历史）。
+      // 多 project 并发零冲突（每次 query 独立 spawn，env 不共享）。
+      // NODESIGN_CONFIG_DIR env 可全局覆盖（生产容器统一持久化卷场景）。
+      // 不直接读 process.env.CLAUDE_CONFIG_DIR — 那是给子进程的目标变量，
+      // 开发机若设了会让所有 project 共享同一目录，破坏隔离。
+      CLAUDE_CONFIG_DIR: process.env.NODESIGN_CONFIG_DIR || path.join(wsRoot, '.claude'),
     },
 
     model: modelOverride.model || process.env.NODESIGN_MODEL || 'kimi-k2.6',
@@ -192,9 +200,14 @@ export async function runAgent({
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
 
-    // 不读外部 settings 文件 / 不写 session 文件
-    persistSession: false,
-    settingSources: [],
+    // S1：开 SDK 自带 session 持久化 + 项目级配置加载
+    //   persistSession: true → SDK 写 JSONL 到 CLAUDE_CONFIG_DIR/projects/<encoded-cwd>/<sid>.jsonl
+    //   settingSources: ['project'] → SDK 自动加载 <workspace>/.claude/CLAUDE.md
+    //     （项目 instruction，append 到 system prompt）+ .claude/settings.json
+    //     （项目级 hooks/permissions/model override，与 query options 合并，options 优先）
+    //   resume: <sid>（下方 spread）→ 真生效（之前 persistSession=false 导致 resume 假装跑）
+    persistSession: true,
+    settingSources: ['project'],
 
     // 流增量（用于细粒度推 WS）
     includePartialMessages: true,
@@ -329,10 +342,24 @@ export async function runAgent({
     : buildUserMessageStream(brief);
 
   try {
-    const stream = query({
-      prompt: promptInput,
-      options: sdkOptions,
-    });
+    // S1：resume 兜底 fallback。store.js 启动时已一次性清洗老 active_session_id
+    //（原 persistSession=false 时 setActiveSession 写入的 sid 全部无效），
+    // 但仍可能漏网（手工 INSERT、未来回归）。query() 抛 resume 相关错误时
+    // 重跑一次去掉 resume，避免整个 turn 因为一个失效 sid 直接挂掉。
+    let stream;
+    try {
+      stream = query({ prompt: promptInput, options: sdkOptions });
+    } catch (initErr) {
+      const msg = String(initErr?.message || '');
+      if (resumeSessionId && /resume|session.*not.*found|no.*such.*session/i.test(msg)) {
+        console.warn(`[run ${runId}] resume failed (${resumeSessionId.slice(0, 8)}…), retrying without resume:`, msg);
+        ctx.emit({ type: 'run.resume_failed_fallback', reason: msg, staleSessionId: resumeSessionId });
+        const { resume: _drop, ...rest } = sdkOptions;
+        stream = query({ prompt: promptInput, options: rest });
+      } else {
+        throw initErr;
+      }
+    }
 
     // query() 返回的就是 Query handle（继承 AsyncGenerator<SDKMessage, void>）。
     // 立即把它 attach 到 active-runs，让上层 endpoint 能调
