@@ -294,15 +294,17 @@ function SystemMessage({ variant = 'warn', content }) {
  *
  * 节点图标固定 Clock4，颜色区分状态（流式 warn 旋转 / 完成 sub 静态）。
  *
- * H5：超长 thinking 自动折叠 — content > LONG_THRESHOLD 字符时只显示前
- * PREVIEW_CHARS 字符 + "Show more" 按钮，保留刚开始的内容（用户看到 thinking
- * 起头）。展开后显示全部 + "Show less" 收回。流式中不折叠（用户要看实时打字）。
+ * 视觉变更（参照用户图 Claude Code 风格）：
+ *   - 删 inner "▼ THINKING" label —— Clock icon 已经传递"这是思考"语义
+ *   - 内容直接显示（不再嵌一层 collapse）
+ *   - 长 thinking（> LONG_THRESHOLD）默认显示 preview + "Show more" 底部独立行
+ *   - 展开后显示全部 + "Show less" 收回
+ *   - 流式中不折叠（用户要看实时打字）
  */
 const THINKING_LONG_THRESHOLD = 320;
 const THINKING_PREVIEW_CHARS = 220;
 
 function ThinkingMessage({ content, isStreaming }) {
-  const [open, setOpen] = useState(true);
   const [expanded, setExpanded] = useState(false);
 
   const text = content || '';
@@ -317,75 +319,50 @@ function ThinkingMessage({ content, isStreaming }) {
       iconColor={isStreaming ? COLOR.warn : COLOR.sub}
       isSpinning={isStreaming}
     >
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-          fontFamily: FONT_MONO, fontSize: 10, fontWeight: 500,
-          color: isStreaming ? COLOR.warn : COLOR.sub,
-          padding: 0,
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-          letterSpacing: '0.06em',
-          marginBottom: open ? GAP.xs : 0,
-        }}
-      >
-        <ChevronRight
-          size={10}
-          strokeWidth={1.75}
-          style={{
-            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-            transition: 'transform 0.25s cubic-bezier(0.25, 1, 0.5, 1)',
-          }}
-        />
-        {isStreaming ? 'THINKING…' : 'THINKING'}
-      </button>
-      {open && (
-        <div style={{
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-          color: COLOR.text2, lineHeight: 1.55,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}>
-          {displayed}
-          {!showFull && (
-            <span style={{ color: COLOR.dim }}>… </span>
-          )}
-          {isStreaming && (
-            <span
-              aria-hidden="true"
-              style={{
-                display: 'inline-block',
-                width: 7,
-                height: '0.95em',
-                marginLeft: 2,
-                verticalAlign: 'text-bottom',
-                background: COLOR.warn,
-                animation: 'nd-thinking-blink 1s steps(2, start) infinite',
-              }}
-            />
-          )}
-          {longEnough && (
+      <div style={{
+        fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+        color: COLOR.text2, lineHeight: 1.55,
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+      }}>
+        {displayed}
+        {!showFull && (
+          <span style={{ color: COLOR.dim }}>… </span>
+        )}
+        {isStreaming && (
+          <span
+            aria-hidden="true"
+            style={{
+              display: 'inline-block',
+              width: 7,
+              height: '0.95em',
+              marginLeft: 2,
+              verticalAlign: 'text-bottom',
+              background: COLOR.warn,
+              animation: 'nd-thinking-blink 1s steps(2, start) infinite',
+            }}
+          />
+        )}
+        {longEnough && (
+          <div style={{ marginTop: 6 }}>
             <button
               onClick={() => setExpanded(e => !e)}
               style={{
-                display: 'inline-block',
-                marginTop: 4,
                 padding: 0,
                 background: 'transparent',
                 border: 'none',
-                fontFamily: FONT_MONO, fontSize: 10,
-                color: COLOR.btn,
+                fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+                color: COLOR.sub,
                 cursor: 'pointer',
-                letterSpacing: '0.04em',
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = COLOR.text2; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = COLOR.sub; }}
             >
-              {expanded ? 'Show less' : `Show more (${text.length - THINKING_PREVIEW_CHARS} chars)`}
+              {expanded ? 'Show less' : 'Show more'}
             </button>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
       <style>{`
         @keyframes nd-thinking-blink { to { visibility: hidden; } }
       `}</style>
