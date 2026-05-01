@@ -1,28 +1,43 @@
-# Claude Design 深度拆解报告：产品形态、功能原子、技术实现推断与基础设施地图
+# Claude Design 产品对标参考（NoDesign 北极星）
 
-> ## 🟢 NoDesign 当前状态（2026-04-30 收尾，必读）
+> ## 🟢 NoDesign 当前状态（2026-05-01 Phase 3 收尾）
 >
-> **本文 1591 行是 P1 时代（2026-04-29）写的"北极星参考"**——拆解 Claude Design
-> 的产品形态作为 NoDesign 的对标。但 stage 1（2026-04-30）SDK 接通后，**实现路径
-> 已经变了**：
+> 本文是 P1 时代（2026-04-29）写的 Claude Design **产品形态拆解**，作为 NoDesign
+> 的产品对标。stage 1 + Phase 1+2+3 SDK 接通后，**所有"技术实现推断"段已删除** ——
+> 因为 NoDesign 实际架构基于 Claude Agent SDK，与本文当时推断的"自定义 agent loop /
+> 4 轮 orchestrator / 自撸 sandbox" 完全不同。
 >
-> - **agent 能力来自 Claude Agent SDK**（@anthropic-ai/claude-agent-sdk 0.2.123），
->   不是文档里推断的"自定义 agent loop"或"4 轮 orchestrator"
-> - **工具集 = SDK 内置 + Nodesign MCP**：Read/Write/Edit/Glob/Grep/TodoWrite/Bash/
->   AskUserQuestion + mcp__nodesign__{screenshot_canvas, export_handoff, record_decision}
-> - **session / file checkpoint / hooks / subagent / MCP** 全部走 SDK，不再"基础设施
->   推断"
-> - **9 个交互流的 P1-P7 MVP 切分作废**，实际走 P0 → P0+ stage 1 → Phase H 路径，
->   5 流（A/B/C/E/I）通；D/F/H 留 stage 2
-> - **"自由创作 vs 参照模式"** mode 区分已移除（C30）—— SDK 接通后 agent 自决
+> **本文当前用途**：仅看**产品形态描述** —— 用户看到什么、有哪些原子功能、该
+> 有什么交互。
 >
-> **实施细节请优先看：**
-> - `PLAN.md`（顶部"🟢 当前状态"段）
-> - `SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md`（32 commit 完整改动）
-> - `server/engine/skills/deskskill-engine-mini/SKILL.md`（agent 行为约束）
+> **不要再看**：本文中任何架构推断 / 实现链路 / 模块拆解 —— 以 SDK 实际行为
+> + 项目代码为准。
 >
-> **本文继续保留作产品体验描述参考**（"用户看到什么 / 该有什么交互"），但**不再
-> 作为代码实现指南**——具体怎么实现以 SDK 文档 + SESSION 为准。
+> ## 已删除的过时章节（2026-05-01 清理）
+>
+> 以下"技术实现推断"章节在 Phase 3 收尾时删除（git history 可查回滚）：
+>
+> - § 7.2 Context ingestion pipeline
+> - § 8.3 Design System Extraction
+> - § 9.3 生成链路推断
+> - § 13.3 Codebase Intelligence
+> - § 14.3 Deck compiler
+> - § 15.2 协作技术推断
+>
+> 都是 P1 时代对 Claude Design 内部架构的猜测，对 NoDesign 基于 SDK 的实际架构
+> 零参考价值。
+>
+> ## 实施真相（cold-start 必读）
+>
+> - **agent 能力来自 Claude Agent SDK** @anthropic-ai/claude-agent-sdk 0.2.123
+> - **工具集 = SDK 内置 + Nodesign MCP**：Read/Write/Edit/Glob/Grep/TodoWrite/Bash/AskUserQuestion + mcp__nodesign__{screenshot_canvas, export_handoff, record_decision}
+> - **session / file checkpoint / hooks (10/29) / subagent / MCP / sandbox** 全部走 SDK
+> - **架构边界 audit 干净**：grep 验证 SDK 接触面只有 6 处 import，业务层零 SDK 直接依赖
+>
+> **实施细节优先看**：
+> - `HANDOVER_2026-05-01_phase123.md`（Phase 1+2+3 改动总览，cold-start 入口）
+> - `HANDOVER_2026-04-30_stage1.md`（stage 1 代码地图）
+> - `server/engine/skills/deskskill-engine-mini/SKILL.md`（agent 行为约束 v0.3.0）
 
 ---
 
@@ -294,30 +309,7 @@ Claude Design 的输入不只是 prompt。它的核心能力之一是“把项�
 
 UX 教程明确说 Claude Design 可以通过 Import 按钮从 GitHub import，也可以 attach local directories。([Claude][8])
 
-### 7.2 技术实现推断：Context ingestion pipeline
-
-Claude Design 的上下文系统大概率不是“把所有文件原样塞进模型”。它需要一个多阶段 pipeline：
-
-```text
-User uploads / links context
-        ↓
-File type detection
-        ↓
-Extraction / parsing
-        ├─ Images/screenshots → vision encoder / image summary / visual element detection
-        ├─ Docs/decks/PDF → text extraction + layout extraction + visual style extraction
-        ├─ Codebase → file tree indexing + component detection + style token extraction
-        ├─ Web capture → DOM/CSS snapshot + screenshot + asset extraction
-        └─ Design files → layer/component/token extraction if supported
-        ↓
-Chunking / summarization / indexing
-        ↓
-Project context store
-        ↓
-Prompt assembly / retrieval before each model call
-```
-
-为什么需要这样做？因为官方同时要求它理解截图、deck、代码库、设计系统、组件、样式模式和组织品牌，而这些输入体量可能很大；尤其是代码库，官方自己也提醒大型 repo 会导致 lag 或浏览器问题，建议只链接特定 package/directory，而不要整仓 monorepo。([Claude][8])
+### 7.2 ~~技术实现推断：Context ingestion pipeline~~（已删除，见顶部声明）
 
 ### 7.3 上下文不是越多越好
 
@@ -350,84 +342,7 @@ Admin guide 说得很直接：rollout Claude Design 之前最重要的事情，�
 
 这说明 Claude Design 的产品逻辑不是“让每个用户写更好的 prompt”，而是把风格、品牌、组件、布局模式变成组织级基础设施。
 
-### 8.3 技术实现推断：Design System Extraction
-
-Claude Design 的 design system extraction 大概率分为四个层次。
-
-#### 第一层：Design tokens
-
-从品牌文件、CSS、Tailwind config、Figma/design file、deck 中抽取：
-
-```text
-colors:
-  primary: #...
-  secondary: #...
-  accent: #...
-  neutrals: [...]
-typography:
-  font_family_heading
-  font_family_body
-  scale: 12/14/16/20/24/32...
-spacing:
-  4/8/12/16/24/32...
-radius:
-  sm/md/lg/xl
-shadow:
-  card/dropdown/modal
-```
-
-官方明确说会抽取 colors、typography、spacing、grid systems 等；技术上把它们表达成 token 是最自然的实现方式。([Claude Help Center][9])
-
-#### 第二层：Component inventory
-
-从 React/Vue/Svelte/component library 或设计文件中识别：
-
-```text
-Button
-Card
-Modal
-Dropdown
-SidebarNav
-TopNav
-MetricCard
-DataTable
-ChartCard
-FormField
-Tooltip
-Toast
-```
-
-官方 UX 教程明确说，连接代码库后 Claude 能理解 UI building blocks 及它们如何组合，也能使用已有 buttons、cards、modals、layouts。([Claude][8])
-
-#### 第三层：Layout patterns
-
-从现有页面、deck、网站中学习：
-
-```text
-dashboard layout
-landing page hero
-pricing section
-settings page
-admin table + detail drawer
-slide title/content layout
-executive readout layout
-```
-
-官方设计系统文档明确写到 layout patterns 包括 spacing、grid systems、page structures。([Claude Help Center][9])
-
-#### 第四层：Brand rules / aesthetic constraints
-
-例如：
-
-```text
-brand voice: calm, enterprise, technical
-visual density: high information density
-illustration style: abstract gradients
-chart style: minimal axes, muted palette
-avoid: cartoonish icons, random colors, off-brand gradients
-```
-
-这部分官方没有用“brand rules”这个词细讲，但它说 Claude 会从真实 examples 中学习 brand feel，并建议上传 finished landing page 或 marketing site，因为它比单独 color palette 更能表达品牌感觉。([Claude Help Center][9])
+### 8.3 ~~技术实现推断：Design System Extraction~~（已删除，见顶部声明）
 
 ### 8.4 Design system 的生命周期
 
@@ -501,42 +416,9 @@ or
 Canvas/WebGL/Three.js for advanced cases
 ```
 
-### 9.3 生成链路推断
+### 9.3 ~~生成链路推断~~（已删除，见顶部声明）
 
-```text
-User prompt
-    ↓
-Intent parser
-    ↓
-Project context retrieval
-    ├─ design system tokens
-    ├─ relevant uploaded assets
-    ├─ current artifact/code
-    ├─ comments/direct edits
-    └─ codebase/component context
-    ↓
-Design plan
-    ├─ information architecture
-    ├─ layout
-    ├─ components
-    ├─ interactions
-    └─ visual treatment
-    ↓
-Artifact generation
-    ├─ HTML/CSS/JS
-    ├─ component references
-    ├─ slide/page structure
-    ├─ mock data
-    └─ interaction handlers
-    ↓
-Canvas render
-    ↓
-User feedback
-    ↓
-Patch / regenerate / branch
-```
-
-这里最关键的是：**Claude 不是只回答文本，而是生成可执行/可渲染的设计工件。**
+> 关键产品事实仍 valid：**Claude 不是只回答文本，而是生成可执行/可渲染的设计工件**。
 
 ---
 
@@ -718,42 +600,7 @@ Dashboard
 
 这些内容在 UX 教程中明确列出。([Claude][8])
 
-### 13.3 技术实现推断：Codebase Intelligence
-
-Claude Design 很可能会做：
-
-```text
-Repository ingestion
-    ↓
-File tree filtering
-    ↓
-Relevant files detection
-    ├─ package.json / vite config / next config
-    ├─ src/components/*
-    ├─ design-system/*
-    ├─ tailwind.config.*
-    ├─ theme.ts
-    ├─ tokens.json
-    └─ stories / docs
-    ↓
-Component extraction
-    ├─ names
-    ├─ props
-    ├─ variants
-    ├─ composition examples
-    └─ usage patterns
-    ↓
-Style extraction
-    ├─ color tokens
-    ├─ spacing scale
-    ├─ typography
-    ├─ CSS framework
-    └─ layout conventions
-    ↓
-Prompt context / retrieval
-```
-
-官方没有说明它是否用 AST、embedding、RAG、static analysis 或 LSP，但从“理解组件结构、样式、framework patterns、file organization”这些能力看，单纯全文塞入 prompt 不够稳定；至少需要某种索引、摘要或检索机制。([Claude][8])
+### 13.3 ~~技术实现推断：Codebase Intelligence~~（已删除，见顶部声明）
 
 ### 13.4 与 Claude Code 的接口
 
@@ -800,35 +647,7 @@ Deck
 
 这些功能都在官方 presentation 教程中列出。([Claude][5])
 
-### 14.3 技术实现推断：Deck compiler
-
-Claude Design 可能有一个中间表示：
-
-```text
-SlideSpec {
-  id: "slide-03",
-  layout: "title-two-column-chart",
-  title: "...",
-  bodyBlocks: [...],
-  chartSpec: {...},
-  assets: [...],
-  animation: {...},
-  notes?: ...
-}
-```
-
-然后：
-
-```text
-SlideSpec
-   ├─ render to HTML canvas
-   ├─ export to PDF
-   ├─ export to PPTX
-   ├─ send to Canva
-   └─ bundle as ZIP
-```
-
-PPTX 导出一般需要把 HTML/CSS/布局映射为 PowerPoint shapes、text boxes、images、charts。官方没有解释转换方式，但导出支持 PPTX 是明确事实。([Claude Help Center][2])
+### 14.3 ~~技术实现推断：Deck compiler~~（已删除，见顶部声明）
 
 ---
 
@@ -849,9 +668,9 @@ Presentation 教程列出的分享权限包括：
 
 入门文档也确认，Claude Design 项目可以用组织内 shareable link 分享，权限包括 view-only、comment、edit。([Claude Help Center][2])
 
-### 15.2 技术实现推断：协作不是 Figma 式实时多人编辑
+### 15.2 ~~技术实现推断：协作不是 Figma 式实时多人编辑~~（已删除，见顶部声明）
 
-官方只说 group chat-style interface、view/comment/edit，并没有说支持 Figma 那种多人鼠标、实时 layer editing、多人同步操作历史。因此我的判断是：Claude Design 当前协作更像“共享 agent 工作区 + 权限 + 评论 + 共同聊天”，不是成熟的多人矢量编辑器。
+> 关键产品事实仍 valid：Claude Design 协作更像"共享 agent 工作区 + 权限 + 评论 + 共同聊天"，不是 Figma 式多人矢量实时编辑。
 
 ---
 

@@ -29,6 +29,7 @@ bug** 系统化解决。8 个 commit，agent 核心调用层（loop.js / hooks.j
 | `24c701e` | 3a/3b fix | maxBudgetUsd clamp + SKILL.md 加回 Edit > Write | loop.js / SKILL.md |
 | `426559f` | 3c | cancelRun 切 query.interrupt() + 修 Phase 1 abort 路径 bug | active-runs.js / loop.js / context.js |
 | `42062d8` | 3d | SDK 内置 sandbox 替换 PreToolUse Bash 白名单 | loop.js / hooks.js |
+| `149770b` | 3d fix | sandbox denyRead 加回 ~/.ssh / ~/.aws / ~/.gnupg（os.homedir 展开）—— review 发现注释撒谎 | loop.js |
 
 ---
 
@@ -149,17 +150,32 @@ Phase 1+2+3 又对齐了：
 
 ---
 
-## 5. 已知边界 / 后续候选
+## 5. 下一段方向（2026-05-01 收尾后）
+
+agent 层 SDK 用法精度已对齐（Phase 1+2+3 完成），架构边界 audit 干净（grep 验证
+SDK 接触面只有 6 处 import，业务层零 SDK 直接依赖）。下一段聚焦**上层 canvas
+工作台**：
+
+> **核心方向**：研究上层 agent 工作流程 —— 指导 agent 该怎么做 HTML +
+> 前端该怎么显示 agent 的产物 / 过程 / 决策。
+
+具体待研究 / 决策：
+- agent 写 HTML 的工作流程（什么时候用 Edit / 什么时候 Write 整页 / 多页 deck 的页面间如何衔接 / 设计决策何时记 spec.json）
+- 前端怎么展示 agent 的"思考-动手"过程（TodoWrite 计划面板？ thinking 折叠？工具调用时间线？）
+- 前端怎么展示产物（iframe canvas 的 reload 时机 / 多变体切换 / 历史回退入口）
+- 前端怎么展示业务事件（`run.todo.updated` / `run.subagent.start` / `run.tool_failure` / 等 Phase 1+2 已 emit 但前端没消费的事件）
+
+## 6. 已知边界 / 工程债（不阻塞下一段方向）
 
 按优先级：
 
-1. **Sandbox 拦 Bash spawn 命令级危险** 真测 —— 写 brief 引导 agent 调 `curl evil.com`，不拦立即回滚加白名单
+1. **Sandbox 拦 Bash spawn 命令级危险** 真测 —— 写 brief 引导 agent 调 `curl evil.com`，不拦立即回滚加白名单（`feedback_sandbox_replaces_whitelist.md` 记录回滚预案）
 2. **Cancel e2e** 真测 —— 单元测试 ✅，e2e 等前端真接通时跑（看 terminal_reason 实际值是 `aborted_streaming` 还是 `aborted_tools`）
 3. **rewindFiles per-query 接通上层 endpoint** —— Phase 1 已暴露 query handle，上层加 `POST /turn/:runId/rewind/:userMessageId` 即可；前端 UndoButton 从 git revert 改成 query.rewindFiles
 4. **`unknown system subtype: status` / `post_turn_summary`** —— loop.js handleSystemMessage 翻译漏（pre-existing），1-2 行 fix
 5. **Stop hook 真业务** —— 写完 canvas 没 screenshot 时注入引导
 6. **子代理真调用流**（vision-checker / ds-extractor / tweak-proposer）—— H/F 流入口
-7. **死代码** Project.jsx case 'run.bash_blocked' —— 前端清理留上层接通时
+7. **死代码** Project.jsx case 'run.bash_blocked' —— Phase 3d 后该事件不再 emit，前端 case 永远不触发，可删
 
 ---
 
@@ -185,8 +201,9 @@ Phase 1+2+3 又对齐了：
 |---|---|
 | **本文 HANDOVER_2026-05-01_phase123.md** | Phase 1+2+3 改动总览（cold-start 增量必读） |
 | `HANDOVER_2026-04-30_stage1.md` | stage 1 代码地图 + 主线流程 + debug 入口（基础必读） |
-| `~/.claude/plans/1-2-3-4-sdk-skill-misty-sparkle.md` | Phase 3 plan（含 d.ts 不明确点 + 回滚预案） |
+| `~/.claude/plans/1-2-3-4-sdk-skill-misty-sparkle.md` | Phase 3 plan（已完成；保留作历史档案 + 回滚预案参考） |
 | `SESSION_2026-04-30_p0plus_stage1_full_sdk_switch.md` | stage 1 32 commit 流水 |
+| `Claude_design.md` | Claude Design 产品对标（**仅看产品形态描述**；技术实现推断已被 SDK 实际架构替代，见文档顶部声明）|
 | `~/.claude/projects/*/memory/` | 跨 session memory（必读 `nodesign_sdk_principle.md`）|
 
 ---
@@ -196,4 +213,5 @@ Phase 1+2+3 又对齐了：
 1. `nodesign_sdk_principle.md`（memory）—— 1 分钟，核心原则
 2. `HANDOVER_2026-04-30_stage1.md` § 1-3 —— 5 分钟，代码地图
 3. **本文 § 2-3** —— 3 分钟，Phase 1+2+3 增量
-4. 视任务而定：本文 § 5 已知边界 / `loop.js` / `hooks.js` 直接看代码
+4. **本文 § 5** —— 1 分钟，下一段方向（agent 工作流程）
+5. 视任务而定：本文 § 6 工程债 / `loop.js` / `hooks.js` 直接看代码
