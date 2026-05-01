@@ -136,9 +136,18 @@ function parseFilenameFromDisposition(disposition) {
 
 // ── Turn（唯一 LLM 入口）──
 export const Turn = {
-  /** body: { chat, attachments[], skillId? } → { runId } */
-  send: ({ pid, chat, attachments = [], skillId }) =>
-    jsonRequest('POST', `/api/projects/${pid}/turn`, { chat, attachments, skillId }),
+  /**
+   * body: { chat, attachments[], skillId?, sessionId? } → { runId }
+   * sessionId:
+   *   - 不传 → 后端 fallback project.activeSessionId（向后兼容）
+   *   - 显式 string → 续约该 session（前端切换 session 走这条）
+   *   - 显式 null → 新建 session（用户点"+ 新会话"后第一次发）
+   */
+  send: ({ pid, chat, attachments = [], skillId, sessionId }) => {
+    const body = { chat, attachments, skillId };
+    if (sessionId !== undefined) body.sessionId = sessionId;
+    return jsonRequest('POST', `/api/projects/${pid}/turn`, body);
+  },
 
   /**
    * 终止生成。后端 cancelRun → ctrl.abort('user_cancel') → SDK 中断 →
@@ -155,7 +164,7 @@ export const Instruction = {
   write: (pid, content) => jsonRequest('PUT', `/api/projects/${pid}/instruction`, { content }),
 };
 
-// ── Sessions（薄壳走 SDK listSessions / getSessionMessages）──
+// ── Sessions（薄壳走 SDK listSessions / getSessionMessages / forkSession / ...）──
 export const Sessions = {
   /** 列项目下所有 session（按 lastModified 倒序，SDK 默认） */
   list: (pid, { limit, offset } = {}) => {
@@ -170,6 +179,15 @@ export const Sessions = {
     const tail = includeSystem ? '?includeSystem=1' : '';
     return jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}${tail}`);
   },
+  /** Fork 出一个新 session，可指定截断点和标题 */
+  fork: (pid, sid, { upToMessageId, title } = {}) =>
+    jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/fork`, { upToMessageId, title }),
+  /** 改标题 / 标签（patch 任一字段） */
+  update: (pid, sid, patch) =>
+    jsonRequest('PATCH', `/api/projects/${pid}/sessions/${sid}`, patch),
+  /** 删 session JSONL（顺带清 active_session_id 如果指向它） */
+  remove: (pid, sid) =>
+    jsonRequest('DELETE', `/api/projects/${pid}/sessions/${sid}`),
 };
 
 // ── Health ──

@@ -39,13 +39,22 @@ router.post('/:pid/turn', async (req, res, next) => {
     const project = getProject(req.params.pid);
     if (!project) return res.status(404).json({ error: 'project not found' });
 
-    const { chat, attachments, skillId } = req.body || {};
+    const { chat, attachments, skillId, sessionId } = req.body || {};
     if (!chat || typeof chat !== 'string' || !chat.trim()) {
       return res.status(400).json({ error: 'chat string required' });
     }
 
     const finalSkillId = (typeof skillId === 'string' && skillId) || project.skillId;
     const { displayText, blocks } = composeUserMessage(chat, attachments);
+
+    // S4：sessionId 显式传 → 用前端选中的 session 续约（含 null 表示新建）；
+    // 不传 → fallback project.activeSessionId（向后兼容老前端）
+    let resumeSessionId;
+    if ('sessionId' in (req.body || {})) {
+      resumeSessionId = sessionId || null;
+    } else {
+      resumeSessionId = project.activeSessionId;
+    }
 
     // 创建 run（pending）— displayText 落 brief 字段做审计 / fallback 显示
     const run = createRun({ skillId: finalSkillId, brief: displayText, projectId: project.id });
@@ -64,7 +73,7 @@ router.post('/:pid/turn', async (req, res, next) => {
       userContentBlocks: blocks,           // C2：走 SDK 多模态 content blocks
       eventBus: bus,
       workspaceRoot: wsRoot,
-      resumeSessionId: project.activeSessionId,
+      resumeSessionId,
     })
       .then(({ snapshot }) => {
         if (snapshot?.sdkSessionId) {
