@@ -64,6 +64,26 @@ const STREAMING_ENABLED = true;
 // stage 2 接 D 流权限交互时改成真处理（前端 UI 弹窗）。
 
 /**
+ * 按 model id 选 thinking config（SDK 把 thinking 通道按模型分两路）。
+ *
+ * sdk.d.ts:1374-1385 + :5342-5368：
+ *   - { type: 'adaptive' } 仅 Opus 4.6+ 支持（Claude 自决何时/多少 thinking，是这些模型的 SDK 默认）
+ *   - { type: 'enabled', budgetTokens } 是 older-model 路径（Sonnet 4.5 / Sonnet 4 / Haiku 4.5 / 第三方）
+ *
+ * Kimi K2.6 走 Anthropic 协议但 capability 跟 Sonnet 4.5 同级 —— 视同 older
+ * model 走 enabled 路径。adaptive 在非 Opus 4.6+ 上等于不开 thinking
+ * （H3 实测：Kimi+adaptive → jsonl 0 thinking blocks），所以默认走 enabled。
+ *
+ * 加新 Opus 系列要扩 regex（4.6 / 4.7 已覆盖）。
+ */
+function pickThinkingConfig(model) {
+  if (model && /^claude-opus-4-[67]/.test(model)) {
+    return { type: 'adaptive' };
+  }
+  return { type: 'enabled', budgetTokens: 8192 };
+}
+
+/**
  * 把 BetaContentBlockParam[] 或 string brief 包成 SDK 期望的
  * AsyncIterable<SDKUserMessage>。
  *
@@ -169,6 +189,9 @@ export async function runAgent({
   const skill = await loadSkill(skillId);
 
   // 3. 拼 SDK options
+  // 解析最终 model id —— thinking config 的 type 选择依赖它（pickThinkingConfig）。
+  const model = modelOverride.model || process.env.NODESIGN_MODEL || 'kimi-k2.6';
+
   const sdkOptions = {
     cwd: cwdRoot,
     abortController: ctx.abortController,
@@ -193,7 +216,7 @@ export async function runAgent({
       CLAUDE_CONFIG_DIR: process.env.NODESIGN_CONFIG_DIR || path.join(cwdRoot, '.claude'),
     },
 
-    model: modelOverride.model || process.env.NODESIGN_MODEL || 'kimi-k2.6',
+    model,
 
     // 工具白名单
     tools: toolAllowlist,
@@ -231,11 +254,12 @@ export async function runAgent({
     includePartialMessages: true,
 
     // thinking + effort
-    // H5：默认走 'enabled' + budgetTokens（兼容 Kimi 等非 Opus-4.6+ 模型）。
-    // 'adaptive' 仅 Opus 4.6+ 支持（sdk.d.ts:1376），其他模型给 adaptive
-    // 等于不开 thinking → jsonl 全是 text block 没 thinking_delta。
-    // 实测 H3 smoke：Kimi + adaptive → 0 thinking blocks；改 enabled 后输出。
-    thinking: modelOverride.thinking || { type: 'enabled', budgetTokens: 8192 },
+    // 按 model id 分两路：Opus 4.6/4.7 → 'adaptive'（这俩模型独家支持，是 SDK
+    // 默认）；Sonnet 4.5 / Sonnet 4 / Haiku 4.5 / Kimi K2.6 等其他模型走
+    // 'enabled' + budgetTokens 8192（older-model 路径）。Kimi 视同 Sonnet 4.5。
+    // 详见 pickThinkingConfig() 注释 + sdk.d.ts:1374-1385。
+    // modelOverride.thinking 可显式覆盖（绕过自动选择）。
+    thinking: modelOverride.thinking || pickThinkingConfig(model),
     effort: modelOverride.effort || 'medium',
 
     // hotfix-sdk-usage：50 太宽，agent 一个 turn 能做 30+ 件事（写文件 /
