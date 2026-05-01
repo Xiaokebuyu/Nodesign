@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, CheckCircle2 } from 'lucide-react';
 import Message from './Message.jsx';
 import TimelineNode from './TimelineNode.jsx';
+import { TimelinePositionProvider } from './TimelineGroupContext.js';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../../lib/theme.js';
 
 /**
@@ -96,17 +97,38 @@ export default function TimelineGroup({ messages, closed, summary }) {
       </button>
       {open && (
         <>
-          {messages.map((m, i) => <Message key={m.id || `tl-${i}`} message={m} />)}
+          {messages.map((m, i) => {
+            // 给每个节点算 timeline 位置（Context 让 TimelineNode 自己读，
+            // 修最后一个节点线段溢出 + 第一个节点线段顶部多余的 bug）
+            const isFirst = i === 0;
+            const isLastMsg = i === messages.length - 1;
+            // 关上的 group 末尾还有 done node → 当前 message 不算 last
+            const isLast = isLastMsg && !closed;
+            const position = (isFirst && isLast)
+              ? 'only'
+              : isFirst
+                ? 'first'
+                : isLast
+                  ? 'last'
+                  : 'middle';
+            return (
+              <TimelinePositionProvider key={m.id || `tl-${i}`} value={position}>
+                <Message message={m} />
+              </TimelinePositionProvider>
+            );
+          })}
           {closed && (
-            <TimelineNode icon={CheckCircle2} iconColor={COLOR.success}>
-              <span style={{
-                fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
-                color: COLOR.sub, fontWeight: 500,
-                letterSpacing: '0.06em',
-              }}>
-                DONE
-              </span>
-            </TimelineNode>
+            <TimelinePositionProvider value="last">
+              <TimelineNode icon={CheckCircle2} iconColor={COLOR.success}>
+                <span style={{
+                  fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+                  color: COLOR.sub, fontWeight: 500,
+                  letterSpacing: '0.06em',
+                }}>
+                  DONE
+                </span>
+              </TimelineNode>
+            </TimelinePositionProvider>
           )}
         </>
       )}
