@@ -29,6 +29,8 @@ import { z } from 'zod';
 import { makeScreenshotCanvasTool } from './tools/screenshot.js';
 import { makeExportHandoffTool } from './tools/export-handoff.js';
 import { makeRecordDecisionTool } from './tools/record-decision.js';
+import { makeWebSearchTool } from './tools/web-search.js';
+import { makeWebFetchTool } from './tools/web-fetch.js';
 
 /**
  * 创建 Nodesign 的 MCP server，绑定当前 run 的依赖。
@@ -69,6 +71,13 @@ export function createNodesignMcpServer({ workspaceRoot, projectId, ctx } = {}) 
 
       // C11 record_decision — 写入 spec.json decisions[] 设计意图档案
       makeRecordDecisionTool({ workspaceRoot, ctx }),
+
+      // web_search — 4 provider 联网搜索（baidu/tavily/exa/zhipu，CJK auto route to baidu）
+      // 移植自 ~/.deskclaw/skills/deskclaw-search-pro/scripts/search.py，0 外部依赖
+      makeWebSearchTool({ ctx }),
+
+      // web_fetch — 直接 HTTP GET URL + HTML→text，不依赖任何 LLM API
+      makeWebFetchTool({ ctx }),
     ],
   });
 }

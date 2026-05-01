@@ -39,6 +39,8 @@ SDK 工具的"用法"由 SDK preset 教；这里只说**什么时候用 NoDesign
 | `mcp__nodesign__screenshot_canvas` | **写完 canvas / 改完关键页面后**主动调，自检视觉。用户问"看看效果"也调 |
 | `mcp__nodesign__export_handoff` | 用户说"差不多了" / "可以发了" / "给我交付" 时主动调 + 告诉路径让她从 UI 下载 |
 | `mcp__nodesign__record_decision` | 做了非平凡设计决策时调（颜色 / 长度 / 隐喻 / 文案策略）。**只记关键决策**——CSS 类名 / 文件结构等实现细节不记。同一个决策不要重复调 |
+| `mcp__nodesign__web_search` | 需要**最新设计参考 / 字体可用性 / 行业趋势 / 验证某事实**时用。CJK query 自动走 baidu，英文自动走 tavily。**单 turn 上限**：baidu 中文 ≤2 次、tavily ≤3 次、exa ≤2 次（会爆 context）。Query 加年份词（2025/2026）。**不要 baidu 英文**（实测严重跑题） |
+| `mcp__nodesign__web_fetch` | 仅在 web_search snippet 不够 + 必须看原页面时调（直接 HTTP GET URL，不跑 LLM 总结）。**baidu 的 snippet 通常已含 500-3000 字正文，不需要再 fetch**。SPA / 客户端渲染的页面拿不到内容（只取静态 HTML） |
 
 ---
 
