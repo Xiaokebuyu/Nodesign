@@ -38,6 +38,32 @@
 > - `HANDOVER_2026-05-01_phase123.md`（Phase 1+2+3 改动总览，cold-start 入口）
 > - `HANDOVER_2026-04-30_stage1.md`（stage 1 代码地图）
 > - `server/engine/skills/deskskill-engine-mini/SKILL.md`（agent 行为约束 v0.3.0）
+>
+> ## ⚠️ 工作形态差异（防误导）
+>
+> Claude Design 是 **Anthropic 封闭产品**，可能用预定义 orchestration pipeline /
+> 自撸 agent loop / 自撸 sandbox / 复杂层级架构。
+>
+> NoDesign 是 **基于 Claude Agent SDK 的薄壳工作台**：
+>
+> | 维度 | Claude Design（推断）| NoDesign（实际）|
+> |---|---|---|
+> | agent loop | 自撸多轮 orchestrator | SDK `query()` |
+> | 工具 | 自定义 tools + 预定义 schema | SDK 内置 8 个 + 3 个 MCP 工具 |
+> | 上下文 ingestion | pipeline（detection → extraction → chunking → indexing）| SDK Read 工具 + UserPromptSubmit hook 注入 |
+> | Design System 抽取 | 4 层 pipeline 推断 | 子代理 ds-extractor（stage 2 候选，未实施）|
+> | 沙箱 | "sandboxed preview" 自实现推断 | SDK 内置 `sandbox: SandboxSettings`（macOS sandbox-exec / Linux bubblewrap）|
+> | 协作 | RBAC + Group chat + Enterprise toggle | 单用户单 project，无协作 |
+> | 计费 / 配额 | Per-user weekly allowance / metering layer | 走 Anthropic gateway，无独立 metering |
+> | 版本 / 分支 | 产品级 candidate / fork | git commit + 双轨 file checkpoint（rewindFiles 未接通）|
+>
+> **最重要的一点**：原 § 3 列的 8-Layer 架构图（已删）暗示"需要自撸 8 个 Layer"。
+> **NoDesign 完全不需要这个架构** —— SDK 已经把 agent loop / 工具 / session /
+> hooks / sandbox / file checkpoint 全部包好了。我们只做画布层 + 业务桥接 +
+> 1 SKILL.md + hooks/MCP/subagent 业务逻辑。
+>
+> 阅读本文产品形态描述时，**仅参考"Claude Design 用户能用什么"**，不要默认
+> "我们也要这样实现"。
 
 ---
 
@@ -78,75 +104,15 @@ TechCrunch 的报道也把它描述成一个用 Claude 创建 prototypes、slide
 
 ---
 
-## 3. 总体架构：我认为 Claude Design 是一个“设计代理工作台”
+## 3. ~~总体架构 8-Layer 推断~~（已删除，见顶部"工作形态差异"声明）
 
-下面是一个基于公开功能反推的系统地图。注意：这是架构推断，不是 Anthropic 官方架构图。
-
-```text
-Claude Design
-├─ 1. Web Workspace Layer
-│  ├─ Chat panel
-│  ├─ Canvas preview/runtime
-│  ├─ Inline comment layer
-│  ├─ Direct edit layer
-│  └─ Tweaks / custom sliders panel
-│
-├─ 2. Project Context Layer
-│  ├─ Prompt history
-│  ├─ Uploaded screenshots/images/assets
-│  ├─ Docs / decks / spreadsheets
-│  ├─ Codebase context
-│  ├─ Existing design files / web capture
-│  └─ Current artifact state
-│
-├─ 3. Design System Layer
-│  ├─ Brand tokens: colors, typography, spacing
-│  ├─ Component inventory
-│  ├─ Layout patterns
-│  ├─ Approved imagery/assets
-│  ├─ Published organization design system
-│  └─ Multiple design systems per org
-│
-├─ 4. Agent Orchestration Layer
-│  ├─ Intent understanding
-│  ├─ Context retrieval / summarization
-│  ├─ Design planning
-│  ├─ Code/HTML generation
-│  ├─ Patch generation
-│  ├─ Design critique / accessibility review
-│  └─ Handoff packaging
-│
-├─ 5. Render & Execution Layer
-│  ├─ HTML/CSS/JS/SVG rendering
-│  ├─ Interactive prototype runtime
-│  ├─ Presentation runtime
-│  ├─ Animation and charts
-│  └─ Sandboxed preview
-│
-├─ 6. Collaboration & Governance Layer
-│  ├─ Org-scoped links
-│  ├─ View/comment/edit permissions
-│  ├─ Group chat with Claude
-│  ├─ RBAC / custom roles
-│  └─ Enterprise toggle
-│
-├─ 7. Export & Interop Layer
-│  ├─ Standalone HTML
-│  ├─ ZIP bundle
-│  ├─ PDF
-│  ├─ PPTX
-│  ├─ Send to Canva
-│  └─ Claude Code handoff bundle
-│
-└─ 8. Metering / Storage / Policy Layer
-   ├─ Per-user weekly allowance
-   ├─ Separate Claude Design usage meter
-   ├─ Persistent asset storage
-   ├─ Data retention/deletion policy
-   └─ Current gaps: audit logs, usage tracking, data residency
-```
-
-这个架构推断的证据包括：官方确认它是 web-only 的 claude.ai/design；它支持项目、上下文上传、画布渲染、inline comments、导出为 HTML/PPTX/PDF/ZIP、发送到 Canva、handoff 到 Claude Code；它还支持组织级 design system、RBAC、自定义角色和 Enterprise toggle。([Claude Help Center][2])
+> 原内容是基于公开功能反推的 Claude Design 8-Layer 系统地图（Web Workspace /
+> Project Context / Design System / Agent Orchestration / Render & Execution /
+> Collaboration & Governance / Export & Interop / Metering 等）。这是 Claude
+> Design 这个**封闭产品的功能 inventory**，不是 NoDesign 的实施蓝图。
+>
+> NoDesign 的实际架构基于 Claude Agent SDK，**不需要自撸 8 个 Layer**。
+> 详见 `HANDOVER_2026-04-30_stage1.md`（代码地图）+ `HANDOVER_2026-05-01_phase123.md`（架构边界 audit）。
 
 ---
 
