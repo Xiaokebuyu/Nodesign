@@ -233,7 +233,14 @@ export async function runAgent({
     // 一个失控的 turn 可能 > $5）。默认 $1，env NODESIGN_MAX_BUDGET_USD 可
     // override。SDK 会在跑到上限时返回 SDKResultMessage subtype:'error_max_budget_usd'，
     // 已被 loop.js 现有 result 处理捕获 → markRunFailed → emit run.error。
-    maxBudgetUsd: Number(process.env.NODESIGN_MAX_BUDGET_USD) || 1,
+    //
+    // clamp 行为：env 解析失败（NaN）/ 0 / 负数 一律 fallback 到默认 $1，
+    // 防止用户 typo（如 NODESIGN_MAX_BUDGET_USD=-5）pass through 到 SDK
+    // 触发未文档化行为。
+    maxBudgetUsd: (() => {
+      const v = Number(process.env.NODESIGN_MAX_BUDGET_USD);
+      return Number.isFinite(v) && v > 0 ? v : 1;
+    })(),
 
     // additionalDirectories: 跳过（无硬场景，每个 project workspace 是独立的）
     // outputFormat: 跳过（强制 main agent JSON 输出违反自然对话设计）

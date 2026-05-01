@@ -63,6 +63,7 @@ SDK 工具的"用法"由 SDK preset 教；这里只说**什么时候用 NoDesign
 - **字号节奏**：H1 48-64 / H2 28-36 / body 16-18 / mono 14
 - **留白**：克制但保持透气，间距用 8 / 16 / 24 / 32 / 48 / 64 节奏
 - **a11y**：text-on-bg 对比度 ≥ 4.5（AA），交互元素 ≥ 3:1，img 加 alt
+- **修改优先 Edit 而非 Write**：canvas.html 已存在时用 Edit 局部改；只有整体重构 / 首次创建才 Write。这样 git history 才干净，用户能精细回退每一处改动
 
 ---
 
