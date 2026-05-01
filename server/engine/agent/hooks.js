@@ -410,9 +410,11 @@ function makeUserPromptSubmitHandler({ ctx, workspaceRoot }) {
  * additionalContext 时已经能"看到"图（multimodal）—— 我们只是用文字提示
  * 它接下来该做什么，不替换 image。
  */
-function makePostToolUseScreenshotHandler({ ctx }) {
+function makePostToolUseScreenshotHandler({ ctx: _ctx }) {
+  // 不 emit run.screenshot_taken —— mcp/tools/screenshot.js:114 已经 emit
+  // 完整字段（sizeBytes / viewport / fullPage）。hook 只负责注 additionalContext
+  // 引导 agent 行为，业务事件由 MCP 工具内部负责。
   return async (_input, _toolUseId, _options) => {
-    try { ctx.emit({ type: 'run.screenshot_taken' }); } catch { /* ignore */ }
     return {
       hookSpecificOutput: {
         hookEventName: 'PostToolUse',
@@ -427,24 +429,11 @@ function makePostToolUseScreenshotHandler({ ctx }) {
 /**
  * PostToolUse(export_handoff) handler — agent 打交付包后引导它告知用户路径。
  */
-function makePostToolUseExportHandler({ ctx }) {
-  return async (input, _toolUseId, _options) => {
-    // tool_response 形态：MCP CallToolResult，可能是 { content: [{ type:'text', text:'path:...' }] }
-    let pathHint = '';
-    try {
-      const resp = input?.tool_response;
-      if (resp && typeof resp === 'object') {
-        const content = resp.content;
-        if (Array.isArray(content) && content[0]?.type === 'text') {
-          pathHint = String(content[0].text || '').slice(0, 300);
-        }
-      }
-    } catch { /* ignore */ }
-
-    try {
-      ctx.emit({ type: 'run.export_built', path: pathHint || undefined });
-    } catch { /* ignore */ }
-
+function makePostToolUseExportHandler({ ctx: _ctx }) {
+  // 不 emit run.export_built —— mcp/tools/export-handoff.js:83 已经 emit
+  // 完整字段（format / path / sizeBytes / notes）。hook 从 tool_response 字符串
+  // substring 拼出来的 path 反而不准。hook 只负责注 additionalContext。
+  return async (_input, _toolUseId, _options) => {
     return {
       hookSpecificOutput: {
         hookEventName: 'PostToolUse',
@@ -462,25 +451,11 @@ function makePostToolUseExportHandler({ ctx }) {
  * 防止 agent 一旦发现"记决策"工具有效，就反复记导致信号稀释（SKILL.md 已经
  * 教过"信号稀释比缺失记录还坏"，但 hook 是兜底）。
  */
-function makePostToolUseRecordDecisionHandler({ ctx, workspaceRoot }) {
-  return async (input, _toolUseId, _options) => {
-    let decisionsCount;
-    try {
-      // 最 cheap 的方式：读 spec.json 数 decisions 长度
-      const specPath = path.join(workspaceRoot, 'spec.json');
-      const raw = await fs.readFile(specPath, 'utf8');
-      const spec = JSON.parse(raw);
-      if (Array.isArray(spec?.decisions)) decisionsCount = spec.decisions.length;
-    } catch { /* ignore */ }
-
-    try {
-      ctx.emit({
-        type: 'run.decision_recorded',
-        title: input?.tool_input?.title,
-        decisionsCount,
-      });
-    } catch { /* ignore */ }
-
+function makePostToolUseRecordDecisionHandler({ ctx: _ctx, workspaceRoot: _workspaceRoot }) {
+  // 不 emit run.decision_recorded —— mcp/tools/record-decision.js:107 已经 emit
+  // 完整字段（title / scope / decisionsCount）。hook 不重复读 spec.json，
+  // 只负责注 additionalContext 引导 agent 行为。
+  return async (_input, _toolUseId, _options) => {
     return {
       hookSpecificOutput: {
         hookEventName: 'PostToolUse',
