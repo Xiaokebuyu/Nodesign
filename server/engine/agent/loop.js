@@ -44,6 +44,11 @@ import { getOrStartProxy } from '../../lib/binary-fixup-proxy.js';
 const DEFAULT_TOOL_ALLOWLIST = [
   'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'Bash',
   'AskUserQuestion',
+  // SDK 内置 WebFetch — binary 取 URL 后用当前 model 跑 prompt 总结，
+  // 自带上下文控制（不灌完整 HTML 给 model）。WebSearch 走我们自己的 MCP
+  // mcp__nodesign__web_search（4 provider，0 依赖），不用 SDK 内置 WebSearch
+  // （那个是 server_tool_use，Anthropic 收费 + Kimi gateway 透传不确定）。
+  'WebFetch',
 ];
 
 // 主产物候选 — canvas.html 列首位（P0 per-project workspace 主文件名），
