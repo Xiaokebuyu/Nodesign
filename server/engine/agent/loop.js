@@ -222,6 +222,22 @@ export async function runAgent({
     // 第一轮、API error、plan mode 下不发；piggyback 父 prompt cache 几乎免费。
     promptSuggestions: true,
 
+    // ── Phase 3a：SDK 高级 options ──
+    // 子代理 thinking/text 转发到主流（带 parent_tool_use_id）。当前 stage 1
+    // 子代理还没主动调用，但开关本身零成本：开了之后任何子代理调用（包括用户
+    // 手动让 agent Task）都立刻有 thinking/text 转发到前端 chat，便于
+    // 子代理可观测性。Phase 4 子代理真接通时直接生效。
+    forwardSubagentText: true,
+
+    // 成本预算上限（USD）—— 防 agent 烧成本失控（KIMI / Claude 价位差大，
+    // 一个失控的 turn 可能 > $5）。默认 $1，env NODESIGN_MAX_BUDGET_USD 可
+    // override。SDK 会在跑到上限时返回 SDKResultMessage subtype:'error_max_budget_usd'，
+    // 已被 loop.js 现有 result 处理捕获 → markRunFailed → emit run.error。
+    maxBudgetUsd: Number(process.env.NODESIGN_MAX_BUDGET_USD) || 1,
+
+    // additionalDirectories: 跳过（无硬场景，每个 project workspace 是独立的）
+    // outputFormat: 跳过（强制 main agent JSON 输出违反自然对话设计）
+
     // canUseTool 已撤（hotfix-sdk-usage）—— 见 permissionMode: 'bypassPermissions' 注释
 
     // hooks 4 件套（C3 骨架，C4-C7 逐个填实）：
