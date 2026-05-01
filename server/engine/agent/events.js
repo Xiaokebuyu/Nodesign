@@ -105,6 +105,11 @@ export const Events = {
   deltaText: (round, text) => ({ type: 'run.delta.text', round, text }),
   deltaThinking: (round, text) => ({ type: 'run.delta.thinking', round, text }),
   deltaToolUse: (round, blockId, name, input) => ({ type: 'run.delta.tool_use', round, blockId, name, input }),
+
+  // 工具 streaming 起点 —— SDK content_block_start (type: tool_use) 触发，
+  // 只携 blockId + name，input 此时还没流完。让前端立刻显示 icon + 名字
+  // status='running'，等后续 deltaToolUse 来时同 blockId update 完整 input。
+  toolUseStarted: (round, blockId, name) => ({ type: 'run.tool_use.started', round, blockId, name }),
   deltaToolResult: (round, blockId, name, ok, output, error, images) => ({
     type: 'run.delta.tool_result', round, blockId, name, ok,
     ...(output !== undefined ? { output } : {}),

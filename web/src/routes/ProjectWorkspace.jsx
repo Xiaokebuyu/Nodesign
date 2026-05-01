@@ -222,14 +222,40 @@ export default function ProjectWorkspace() {
       case 'run.delta.thinking':
         setMessages(prev => appendTextDelta(prev, 'thinking', evt.text));
         break;
+      case 'run.tool_use.started':
+        // 工具 streaming 起点（SDK content_block_start 触发）。立即推 icon + name
+        // 让用户看到"agent 在调 X 工具"，input 待 run.delta.tool_use 来时补。
+        setMessages(prev => {
+          // 防御：如果同 blockId 已经在（理论上不会，但 ws 重连重放可能），noop
+          if (prev.some(m => m.role === 'tool' && m.id === evt.blockId)) return prev;
+          return [...prev, {
+            id: evt.blockId,
+            role: 'tool',
+            toolName: evt.name,
+            toolInput: undefined,  // 还没流完
+            status: 'running',
+          }];
+        });
+        break;
       case 'run.delta.tool_use':
-        setMessages(prev => [...prev, {
-          id: evt.blockId || newId('tool'),
-          role: 'tool',
-          toolName: evt.name,
-          toolInput: evt.input,
-          status: 'running',
-        }]);
+        // assistant message 完成时 SDK 推完整 tool_use block 来。如果同 blockId
+        // 的 tool message 已存在（被 run.tool_use.started 推过），就 update input；
+        // 否则补 push（兼容 SDK 没出 content_block_start 的情况，如某些 stream 边界）。
+        setMessages(prev => {
+          const existingIdx = prev.findIndex(m => m.role === 'tool' && m.id === evt.blockId);
+          if (existingIdx >= 0) {
+            const updated = [...prev];
+            updated[existingIdx] = { ...updated[existingIdx], toolInput: evt.input };
+            return updated;
+          }
+          return [...prev, {
+            id: evt.blockId || newId('tool'),
+            role: 'tool',
+            toolName: evt.name,
+            toolInput: evt.input,
+            status: 'running',
+          }];
+        });
         break;
       case 'run.delta.tool_result':
         setMessages(prev => prev.map(m =>

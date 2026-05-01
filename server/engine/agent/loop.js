@@ -774,7 +774,21 @@ function handleAssistantBlocks(ctx, content, skipTextThinking = false) {
  */
 function handleStreamEvent(ctx, msg) {
   const evt = msg.event;
-  if (!evt || evt.type !== 'content_block_delta') return;
+  if (!evt) return;
+
+  // tool_use 起点 —— content_block_start { content_block: { type: 'tool_use', id, name } }
+  // 推 toolUseStarted 让前端立即显示 icon + tool name（status='running'）。
+  // input 还没流完，等 assistant message 完成后 deltaToolUse 同 blockId update。
+  // 体感：agent "想完→开干" 之间几乎没延迟，工具图标第一时间出现。
+  if (evt.type === 'content_block_start') {
+    const cb = evt.content_block;
+    if (cb && cb.type === 'tool_use' && cb.id && cb.name) {
+      ctx.emit(Events.toolUseStarted(ctx.counters.turns, cb.id, cb.name));
+    }
+    return;
+  }
+
+  if (evt.type !== 'content_block_delta') return;
 
   const delta = evt.delta;
   if (!delta) return;
