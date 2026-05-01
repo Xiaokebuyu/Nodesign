@@ -5,7 +5,62 @@
 
 ---
 
-## 🟢 当前状态（2026-04-30 收尾，必读）
+## 🟢 当前状态（2026-05-01 H5 收尾，必读）
+
+> **入口**：从这往下到下面 ⬇️ "🟡 P0/stage1 时代状态" 段是当前状态。
+> 实施细节首选 `HANDOVER_2026-05-01_session_scoped_workspace.md`（最新接力文档）。
+
+### 一句话定位
+NoDesign = **Claude Code 之上的画布编辑层**，按 Anthropic Projects 模式做：
+- **Project** = 项目元数据（name + description）+ workspace 目录
+- **Workspace** = `shared/` 共享配置（CLAUDE.md / agent-memory / assets）+
+  `sessions/<sid>/` 独立沙盒（canvas / spec / .git / SDK JSONL 转录）
+- **Project Hub 二级页** （`/projects/:id`）= 管理控制台（Memory / Instructions / Files cards + sessions list + 新会话 input）
+- **Project Workspace 三级页**（`/projects/:id/work` 或 `/projects/:id/sessions/:sid`）= chat + canvas + context 工作台
+
+### 已 ship 的关键设施（截至 2026-05-01 H5）
+
+| 层 | 现状 |
+|---|---|
+| **agent 入口** | loop.js 单一 runAgent()，cwd=sessions/<sid>/，shared 通过 additionalDirectories + 软链 |
+| **prompt 接口** | AsyncIterable<SDKUserMessage> + content blocks |
+| **SDK options** | persistSession=true / settingSources:['project'] / sessionId 预生成 / thinking enabled+budgetTokens 8192 / additionalDirectories=[shared] / sandbox per-session |
+| **session 持久化** | SDK JSONL 落 sessions/<sid>/.claude/projects/<encoded-cwd>/<sid>.jsonl，per-session 隔离 |
+| **session API** | listSessions / getSessionMessages / forkSession / renameSession / tagSession / deleteSession 全套（薄壳调 SDK + withConfigDir mutex） |
+| **Workspace 结构** | shared/ + sessions/<sid>/ 二级；ensureProjectWorkspace + ensureSessionWorkspace + forkSessionWorkspace + removeRootLegacyArtifacts 全套 helper |
+| **Project Hub 二级页** | header + HubInput（auto-send to Workspace）+ sessions list view + 右栏 InstructionsCard / FilesCard / MemoryCard 真接后端 |
+| **Project Workspace** | URL 驱动 sid（/work 或 /sessions/:sid）+ mount hydrate latest session messages + ChatPanel header session selector + SessionListModal + canvas iframe + ContextPanel 5 tab |
+| **Hooks 4 件套** | FileChanged / PreToolUse(Bash) / Stop / PostCompact + 6 个新接（PostToolUse×3 / SessionStart / SubagentStart/Stop / PostToolUseFailure 等 — 10/29） |
+| **MCP 工具集** | screenshot_canvas / export_handoff / record_decision / ping |
+| **Subagent 骨架** | vision-checker / ds-extractor / tweak-proposer（schemas/ 就位但当前不主动调） |
+| **前端 timeline** | Thinking + Tool + 中间 text 进同一 group；isStreaming 决定 closed；final text 抽出作正式回复；超长 thinking 折叠 show more |
+
+### 11 commit 累积链（S1-S4 + H1-H5，本日 2026-05-01）
+
+| | Commit | 范围 |
+|---|---|---|
+| S1 | `a871696` | per-project workspace + SDK 自持久化 + .claude/CLAUDE.md/settings.json + description 列 |
+| S2 | `11e0f7e` | 后端 sessions API 走 SDK + 前端 mount hydrate 历史 messages |
+| S3 | `a87c6ba` | description UI + ContextPanel 项目背景 tab + instruction GET/PUT |
+| S4 | `a47f7ac` | SessionList sidebar + fork/rename/tag/delete + sessionId override |
+| H1 | `beb1d0a` | routing 重构（Hub 二级页 + URL 驱动 sid） |
+| H2 | `84071e9` | Hub 两栏布局对齐 Anthropic 参考图 |
+| H3 | `afe63cc` | session-scoped workspace（canvas/spec/.git 真随 session 隔离） |
+| H4a | `8c31cff` | Workspace mount auto-send + ContextPanel 清理 |
+| H4b | `19b9873` | Hub 三 cards 真接后端 + memory API + assets DELETE + 路径漏改修 |
+| H5 | `90720f6` | timeline done 时机修正 + thinking 折叠 + thinking config 修复 |
+
+### 已知 follow-up（不阻塞主路径）
+
+1. **Kimi 走 SDK binary 不输出 thinking blocks** — 详见 memory `feedback_kimi_thinking_blocks.md` 4 条候选路径
+2. **agent 不会主动用 agent-memory** — SKILL.md 没教写 memory，要补
+3. **agent 用 shared/assets 验证** — probe brief 让 agent 引用上传的图，确认 additionalDirectories 真 work
+4. **多 user 并发隔离** — 当前 process.env.CLAUDE_CONFIG_DIR mutation（mutex 串行化），生产部署多 user 上要重审
+5. **subagent 真调用流接通**（vision-checker / ds-extractor / tweak-proposer）
+
+---
+
+## 🟡 P0/stage1 时代状态（2026-04-30 收尾）
 
 > 这一节是**所有读者的入口**。下面老的 Design Principles / Architecture / 9 流 MVP
 > 切分等是 P1-P3 时代的 living plan，部分内容在 2026-04-30 stage 1 SDK 接通后已经
@@ -116,6 +171,9 @@ SDK（@anthropic-ai/claude-agent-sdk）**，我们只做：薄壳后端（包 SD
 | 2026-04-30 | "自由创作 vs 参照模式"过时设计移除 | SDK 接通后 agent 看附件能自己判断，不再框定 mode（C30）|
 | 2026-04-30 | "工作区虚拟容器"路线确认 | 当前用 cwd + Bash 白名单 + canUseTool 三层兜底；多用户上 Docker via spawnClaudeCodeProcess hook（详细估算见 SESSION 文档"沙盒 / 工作区虚拟容器"段）|
 | 2026-04-30 | memory.md 同步 stage 1 + Phase H 状态 | 新建 `nodesign_sdk_principle.md`（核心原则：agent 能力 = SDK 不要自撸）+ `nodesign_p0plus_stage1_summary.md`（32 commit 总览）；标 `p3_full_stack_progress_2026-04-29.md` 为已废弃；MEMORY.md index 更新 |
+| 2026-05-01 | agent 层 Phase 1+2+3：SDK 用法精度对齐（8 commit）| query handle 暴露 / hooks 4→10 / 子代理 thinking 转发 / SKILL.md 精简 / cancelRun 切 query.interrupt() / SDK sandbox 替换白名单。HANDOVER_2026-05-01_phase123.md |
+| 2026-05-01 | agent 侧边栏 P0-P4：前端工作流细化（5 commit）| 流式滚动 + TodoPanel + Timeline 风格 thinking/tool + Edit 真 unified diff + 漏接事件 |
+| 2026-05-01 | S1-S4 + H1-H5：session-scoped 重构（11 commit）| 用户对齐 Anthropic Projects 模式 → workspace 改 shared/+sessions/<sid>/ + Hub 二级页 + 三 cards 真接后端 + timeline done 修正 + ContextPanel 清理。详见 HANDOVER_2026-05-01_session_scoped_workspace.md + memory `nodesign_session_scoped_summary.md` |
 
 ## 实施日志
 
