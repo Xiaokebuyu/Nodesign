@@ -14,14 +14,14 @@ import { Canvas } from '../../lib/api.js';
  * - 失败时不抛，回 toast，让父级处理
  * - loading 状态防双击
  */
-export default function UndoButton({ projectId, onUndone, onError, label = '撤销' }) {
+export default function UndoButton({ projectId, sessionId, onUndone, onError, label = '撤销' }) {
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
-    if (loading || !projectId) return;
+    if (loading || !projectId || !sessionId) return;
     setLoading(true);
     try {
-      const result = await Canvas.undo(projectId);
+      const result = await Canvas.undo(projectId, sessionId);
       onUndone?.(result);
     } catch (err) {
       onError?.(err);
@@ -30,10 +30,12 @@ export default function UndoButton({ projectId, onUndone, onError, label = '撤�
     }
   };
 
+  const disabled = loading || !sessionId;
+
   return (
     <button
       onClick={handleClick}
-      disabled={loading}
+      disabled={disabled}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -42,13 +44,13 @@ export default function UndoButton({ projectId, onUndone, onError, label = '撤�
         fontFamily: FONT_SANS,
         fontSize: FONT_SIZE.sm,
         color: COLOR.text2,
-        background: loading ? 'rgba(0,0,0,0.02)' : 'rgba(0,0,0,0.04)',
+        background: disabled ? 'rgba(0,0,0,0.02)' : 'rgba(0,0,0,0.04)',
         borderRadius: 6,
         border: 'none',
-        cursor: loading ? 'wait' : 'pointer',
-        opacity: loading ? 0.6 : 1,
+        cursor: disabled ? (loading ? 'wait' : 'not-allowed') : 'pointer',
+        opacity: disabled ? 0.4 : 1,
       }}
-      title="回到上一个 git commit 的 canvas.html"
+      title={!sessionId ? '请先选中一个会话' : '回到上一个 git commit 的 canvas.html'}
     >
       <Undo2 size={13} />
       {loading ? '撤销中…' : label}

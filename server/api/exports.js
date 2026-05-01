@@ -1,32 +1,37 @@
 /**
- * server/api/exports.js — 用户主动导出 endpoints
+ * server/api/exports.js — 用户主动导出（H3：session-scoped）
  *
- * GET /api/projects/:pid/exports/html       stream canvas.html (text/html, attachment)
- * GET /api/projects/:pid/exports/pdf        playwright print → PDF stream
- * GET /api/projects/:pid/exports/handoff    JSZip 打包工程交付 zip
+ * 路径全加 sid（H3 改造）：
+ *   GET /api/projects/:pid/sessions/:sid/exports                列已生成交付包
+ *   GET /api/projects/:pid/sessions/:sid/exports/file/:filename 单文件下载
+ *   GET /api/projects/:pid/sessions/:sid/exports/html           导出 canvas.html
+ *   GET /api/projects/:pid/sessions/:sid/exports/pdf            playwright print → PDF
+ *   GET /api/projects/:pid/sessions/:sid/exports/handoff        JSZip 工程交付包
  *
- * 注：
- *  - PDF 依赖 playwright chromium：首次需要 `npx playwright install chromium`
- *  - 每次 PDF 导出 spawn headless chrome（~1-2s 启动延迟）；P0+ 上 pool
- *  - PPTX 留 P0+，本 commit 不实现
- *  - agent export 工具（agent 自己调）也留 P0+，需要给 agent 装 SKILL.md 提示
+ * 文件位置：
+ *   <workspace>/sessions/<sid>/exports/  ← 已生成的导出包（agent 调
+ *                                            mcp__nodesign__export_handoff 也写这）
+ *   <workspace>/sessions/<sid>/canvas.html, spec.json
+ *   <workspace>/shared/assets/           ← handoff 打包时从这取共享 assets
  */
 
 import express from 'express';
 import { promises as fs } from 'fs';
 import path from 'path';
 import JSZip from 'jszip';
-import { validateProjectId, getProject } from '../projects/store.js';
-import { getProjectWorkspace } from '../projects/workspace.js';
-import { listRunsForProject } from '../projects/store.js';
+import { validateProjectId, getProject, listRunsForProject } from '../projects/store.js';
+import {
+  getSessionWorkspace, getSharedDir, validateSessionId,
+} from '../projects/workspace.js';
 
 const router = express.Router();
 
-function projectGuard(req, res) {
+function guard(req, res) {
   try {
     validateProjectId(req.params.pid);
-  } catch {
-    res.status(400).json({ error: 'invalid pid' });
+    validateSessionId(req.params.sid);
+  } catch (err) {
+    res.status(400).json({ error: err.message || 'invalid pid/sid' });
     return null;
   }
   const project = getProject(req.params.pid);
@@ -42,14 +47,11 @@ function safeFilename(name) {
 }
 
 // ── 已生成的交付包列表 ──
-// agent 调 mcp__nodesign__export_handoff 写到 workspace/exports/handoff-<ts>.zip。
-// 前端通过此 endpoint 列出供用户下载（不只是 toast 显示路径）。
-router.get('/:pid/exports', async (req, res, next) => {
+router.get('/:pid/sessions/:sid/exports', async (req, res, next) => {
   try {
-    const project = projectGuard(req, res);
-    if (!project) return;
-    const wsRoot = getProjectWorkspace(req.params.pid);
-    const exportsDir = path.join(wsRoot, 'exports');
+    if (!guard(req, res)) return;
+    const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
+    const exportsDir = path.join(sessionRoot, 'exports');
 
     let entries;
     try {
@@ -64,32 +66,24 @@ router.get('/:pid/exports', async (req, res, next) => {
       if (!e.isFile()) continue;
       try {
         const stat = await fs.stat(path.join(exportsDir, e.name));
-        files.push({
-          name: e.name,
-          size: stat.size,
-          mtime: stat.mtime.toISOString(),
-        });
+        files.push({ name: e.name, size: stat.size, mtime: stat.mtime.toISOString() });
       } catch { /* skip unreadable */ }
     }
-    // 最新在前
     files.sort((a, b) => (a.mtime < b.mtime ? 1 : -1));
     res.json({ files });
   } catch (err) { next(err); }
 });
 
-// 单文件下载（流式）
-router.get('/:pid/exports/file/:filename', async (req, res, next) => {
+router.get('/:pid/sessions/:sid/exports/file/:filename', async (req, res, next) => {
   try {
-    const project = projectGuard(req, res);
-    if (!project) return;
-    const wsRoot = getProjectWorkspace(req.params.pid);
+    if (!guard(req, res)) return;
+    const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
 
-    // 安全：只允许 [a-zA-Z0-9._-] 文件名，防 path traversal
     const filename = req.params.filename;
     if (!/^[A-Za-z0-9._-]+$/.test(filename)) {
       return res.status(400).json({ error: 'invalid filename' });
     }
-    const filePath = path.join(wsRoot, 'exports', filename);
+    const filePath = path.join(sessionRoot, 'exports', filename);
     try {
       await fs.access(filePath);
     } catch {
@@ -109,13 +103,12 @@ router.get('/:pid/exports/file/:filename', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── HTML ──
-router.get('/:pid/exports/html', async (req, res, next) => {
+router.get('/:pid/sessions/:sid/exports/html', async (req, res, next) => {
   try {
-    const project = projectGuard(req, res);
+    const project = guard(req, res);
     if (!project) return;
-    const wsRoot = getProjectWorkspace(req.params.pid);
-    const file = path.join(wsRoot, 'canvas.html');
+    const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
+    const file = path.join(sessionRoot, 'canvas.html');
     let html;
     try {
       html = await fs.readFile(file, 'utf8');
@@ -130,13 +123,12 @@ router.get('/:pid/exports/html', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── PDF ──
-router.get('/:pid/exports/pdf', async (req, res, next) => {
+router.get('/:pid/sessions/:sid/exports/pdf', async (req, res, next) => {
   try {
-    const project = projectGuard(req, res);
+    const project = guard(req, res);
     if (!project) return;
-    const wsRoot = getProjectWorkspace(req.params.pid);
-    const file = path.join(wsRoot, 'canvas.html');
+    const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
+    const file = path.join(sessionRoot, 'canvas.html');
     try {
       await fs.access(file);
     } catch {
@@ -157,7 +149,6 @@ router.get('/:pid/exports/pdf', async (req, res, next) => {
     try {
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
       const page = await ctx.newPage();
-      // file:// 加载本地 HTML，让相对资源（assets/）能被解析
       const fileUrl = 'file://' + file;
       await page.goto(fileUrl, { waitUntil: 'networkidle', timeout: 30_000 });
       const pdfBuffer = await page.pdf({
@@ -179,18 +170,19 @@ router.get('/:pid/exports/pdf', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Handoff zip ──
-router.get('/:pid/exports/handoff', async (req, res, next) => {
+router.get('/:pid/sessions/:sid/exports/handoff', async (req, res, next) => {
   try {
-    const project = projectGuard(req, res);
+    const project = guard(req, res);
     if (!project) return;
-    const wsRoot = getProjectWorkspace(req.params.pid);
+    const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
+    const sharedRoot = getSharedDir(req.params.pid);
     const runs = listRunsForProject(req.params.pid);
 
-    const zipBuffer = await buildHandoffZip(wsRoot, {
+    const zipBuffer = await buildHandoffZip(sessionRoot, sharedRoot, {
       projectId: project.id,
       projectName: project.name,
       skillId: project.skillId,
+      sessionId: req.params.sid,
       runs,
     });
 
@@ -203,38 +195,31 @@ router.get('/:pid/exports/handoff', async (req, res, next) => {
 });
 
 /**
- * 共享 handoff 打包逻辑 —— 同时给 HTTP 路由和 MCP tool（C10 export_handoff）调。
+ * 共享 handoff 打包逻辑 —— HTTP 路由 + MCP tool（export_handoff）共用。
  *
- * @param {string} workspaceRoot  绝对路径
- * @param {object} info
- * @param {string} info.projectId
- * @param {string} info.projectName
- * @param {string} [info.skillId]
- * @param {Array<{ id: string }>} [info.runs]  来自 listRunsForProject
- * @returns {Promise<Buffer>}  完整 zip 内容
+ * @param {string} sessionRoot  sessions/<sid>/ 绝对路径（canvas/spec 在这）
+ * @param {string} sharedRoot   shared/ 绝对路径（assets 在这）
  */
-export async function buildHandoffZip(workspaceRoot, { projectId, projectName, skillId, runs = [] } = {}) {
+export async function buildHandoffZip(sessionRoot, sharedRoot, { projectId, projectName, skillId, sessionId, runs = [] } = {}) {
   const zip = new JSZip();
 
-  // design/canvas.html
   try {
-    const html = await fs.readFile(path.join(workspaceRoot, 'canvas.html'), 'utf8');
+    const html = await fs.readFile(path.join(sessionRoot, 'canvas.html'), 'utf8');
     zip.file('design/canvas.html', html);
   } catch (err) {
     if (err.code !== 'ENOENT') throw err;
     zip.file('design/canvas.html', '<!-- canvas.html not yet generated -->');
   }
 
-  // design/spec.json
   try {
-    const spec = await fs.readFile(path.join(workspaceRoot, 'spec.json'), 'utf8');
+    const spec = await fs.readFile(path.join(sessionRoot, 'spec.json'), 'utf8');
     zip.file('design/spec.json', spec);
   } catch (err) {
     if (err.code !== 'ENOENT') throw err;
   }
 
-  // design/assets/*
-  const assetsDir = path.join(workspaceRoot, 'assets');
+  // assets 来自 shared/（跨 session 共享）
+  const assetsDir = path.join(sharedRoot, 'assets');
   try {
     const entries = await fs.readdir(assetsDir, { withFileTypes: true });
     for (const e of entries) {
@@ -246,12 +231,11 @@ export async function buildHandoffZip(workspaceRoot, { projectId, projectName, s
     if (err.code !== 'ENOENT') throw err;
   }
 
-  // chat-history.json — 从 runs 抽简版
   const chatHistory = (runs || []).map((row) => ({ runId: row.id }));
-  zip.file('chat-history.json', JSON.stringify({ projectId, runs: chatHistory }, null, 2));
+  zip.file('chat-history.json', JSON.stringify({ projectId, sessionId, runs: chatHistory }, null, 2));
 
   zip.file('prompt.txt', '');
-  zip.file('README.md', renderReadme({ id: projectId, name: projectName, skillId }));
+  zip.file('README.md', renderReadme({ id: projectId, name: projectName, skillId, sessionId }));
 
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
@@ -265,9 +249,9 @@ NoDesign 工程交付包。
 
 - \`design/canvas.html\` — 单文件 self-contained HTML，主产物
 - \`design/spec.json\` — 设计意图档案（agent 私域记忆）
-- \`design/assets/\` — 用户上传的素材
-- \`chat-history.json\` — 此 project 跑过的 runs 摘要
-- \`prompt.txt\` — 最近一次 user input
+- \`design/assets/\` — 项目共享素材
+- \`chat-history.json\` — runs 摘要
+- \`prompt.txt\` — 占位
 
 ## 怎么用
 
@@ -277,6 +261,7 @@ NoDesign 工程交付包。
 ---
 导出时间：${new Date().toISOString()}
 项目 ID：${project.id}
+Session ID：${project.sessionId}
 Skill：${project.skillId}
 `;
 }

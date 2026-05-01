@@ -569,7 +569,11 @@ export default function ProjectWorkspace() {
     }
     try {
       const html = '<!doctype html>\n' + iframeDoc.documentElement.outerHTML;
-      await Canvas.write(id, html, 'user');
+      if (!currentSessionId) {
+        showToast('请先开始一个会话再编辑 canvas', 'error');
+        return;
+      }
+      await Canvas.write(id, currentSessionId, html, 'user');
       showToast(`已保存：「${info.newText.slice(0, 20)}」`, 'success');
     } catch (err) {
       showToast(`保存失败：${err.message}`, 'error');
@@ -699,7 +703,11 @@ export default function ProjectWorkspace() {
    */
   const handleExport = async (format) => {
     try {
-      const { blob, filename } = await Exports.download(id, format);
+      if (!currentSessionId) {
+        showToast('请先选中一个会话再导出', 'error');
+        return;
+      }
+      const { blob, filename } = await Exports.download(id, currentSessionId, format);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -728,6 +736,7 @@ export default function ProjectWorkspace() {
           {systemInfo && <ContextUsageBar info={systemInfo} />}
           <UndoButton
             projectId={id}
+            sessionId={currentSessionId}
             onUndone={() => {
               setReloadToken(t => t + 1);
               showToast('已撤销到上一版', 'success');
@@ -803,7 +812,7 @@ export default function ProjectWorkspace() {
         }
         center={
           <CanvasFrame
-            htmlSrc={Canvas.artifactUrl(id, reloadToken)}
+            htmlSrc={currentSessionId ? Canvas.artifactUrl(id, currentSessionId, reloadToken) : null}
             selectedAnchor={selectedAnchor}
             onSelectChange={setSelectedAnchor}
             onTextEdit={handleTextEdit}
@@ -833,6 +842,7 @@ export default function ProjectWorkspace() {
             onResolveComment={handleResolveComment}
             onDeleteComment={handleDeleteComment}
             decisionsReloadKey={decisionsReloadKey}
+            sessionId={currentSessionId}
           />
         }
       />
@@ -842,6 +852,7 @@ export default function ProjectWorkspace() {
         show={exportsListOpen}
         onClose={() => setExportsListOpen(false)}
         projectId={id}
+        sessionId={currentSessionId}
       />
       <SnapshotModal
         show={snapshotOpen}

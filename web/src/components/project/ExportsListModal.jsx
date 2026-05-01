@@ -15,24 +15,27 @@ import { Exports } from '../../lib/api.js';
  *
  * 用户从这里点 → 浏览器下载（GET /exports/file/:filename）
  */
-export default function ExportsListModal({ show, onClose, projectId }) {
+export default function ExportsListModal({ show, onClose, projectId, sessionId }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId || !sessionId) {
+      setFiles([]);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const result = await Exports.list(projectId);
+      const result = await Exports.list(projectId, sessionId);
       setFiles(result?.files || []);
     } catch (err) {
       setError(err);
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, sessionId]);
 
   useEffect(() => {
     if (show) refresh();
@@ -40,7 +43,7 @@ export default function ExportsListModal({ show, onClose, projectId }) {
 
   const handleDownload = async (file) => {
     try {
-      const { blob, filename } = await Exports.downloadFile(projectId, file.name);
+      const { blob, filename } = await Exports.downloadFile(projectId, sessionId, file.name);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

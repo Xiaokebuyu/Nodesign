@@ -14,26 +14,29 @@ import { Spec } from '../../lib/api.js';
  * 触发刷新：mount + 手动 refresh button + run.decision_recorded /
  *           run.compact_persisted 事件（Project.jsx 通过 reloadKey 传入）
  */
-export default function DecisionsTab({ projectId, reloadKey = 0 }) {
+export default function DecisionsTab({ projectId, sessionId, reloadKey = 0 }) {
   const [spec, setSpec] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
-    if (!projectId) return;
+    if (!projectId || !sessionId) {
+      setSpec({});
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const result = await Spec.read(projectId);
+      const result = await Spec.read(projectId, sessionId);
       setSpec(result?.spec || {});
     } catch (err) {
       setError(err);
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, sessionId]);
 
-  // mount + 外部 reloadKey 变 → 重读
+  // mount + sessionId 变 + reloadKey 变 → 重读
   useEffect(() => {
     refresh();
   }, [refresh, reloadKey]);

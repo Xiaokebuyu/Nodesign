@@ -33,6 +33,7 @@ export default function ContextPanel({
   onAddComment, onDirectEdit, onTriggerRun,
   onJumpToComment, onResolveComment, onDeleteComment,
   decisionsReloadKey = 0,
+  sessionId,
 }) {
   const [tab, setTab] = useState('background');
 
@@ -96,7 +97,7 @@ export default function ContextPanel({
           />
         )}
         {tab === 'decisions' && (
-          <DecisionsTab projectId={project?.id} reloadKey={decisionsReloadKey} />
+          <DecisionsTab projectId={project?.id} sessionId={sessionId} reloadKey={decisionsReloadKey} />
         )}
         {tab === 'tweaks'   && <PlaceholderTab title="Tweaks" desc="agent 暴露的可调参数（color / spacing / layout variant）。P0+ stage 2 接 tweak-proposer subagent → schemas/tweak-schema.json 渲染 sliders。" />}
         {tab === 'system'   && <SystemTab project={project} deckSpec={deckSpec} />}

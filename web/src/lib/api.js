@@ -52,31 +52,30 @@ export const Skills = {
     jsonRequest('GET', `/api/skills${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ''}`),
 };
 
-// ── Canvas ──
+// ── Canvas（H3：session-scoped）──
 export const Canvas = {
-  read: async (pid) => {
-    const res = await fetch(`/api/projects/${pid}/canvas`);
+  read: async (pid, sid) => {
+    const res = await fetch(`/api/projects/${pid}/sessions/${sid}/canvas`);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw Object.assign(new Error(data.error || res.statusText), { status: res.status });
     }
     return res.text();
   },
-  write: (pid, html, source = 'user') =>
-    jsonRequest('PUT', `/api/projects/${pid}/canvas`, { html, source }),
-  history: (pid) => jsonRequest('GET', `/api/projects/${pid}/canvas/history`),
-  revert: (pid, commit) => jsonRequest('POST', `/api/projects/${pid}/canvas/revert`, { commit }),
-  /** 简版 undo：自动回退到上一个 commit（git checkout HEAD~1 等价） */
-  undo: (pid) => jsonRequest('POST', `/api/projects/${pid}/canvas/undo`, {}),
-  /** iframe src 用 */
-  artifactUrl: (pid, version) =>
-    `/api/projects/${pid}/canvas${version ? `?v=${encodeURIComponent(version)}` : ''}`,
+  write: (pid, sid, html, source = 'user') =>
+    jsonRequest('PUT', `/api/projects/${pid}/sessions/${sid}/canvas`, { html, source }),
+  history: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/canvas/history`),
+  revert: (pid, sid, commit) =>
+    jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/canvas/revert`, { commit }),
+  undo: (pid, sid) => jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/canvas/undo`, {}),
+  /** iframe src 用 — sid 必传 */
+  artifactUrl: (pid, sid, version) =>
+    `/api/projects/${pid}/sessions/${sid}/canvas${version ? `?v=${encodeURIComponent(version)}` : ''}`,
 };
 
-// ── Spec（设计意图档案）──
+// ── Spec（设计意图档案，session-scoped）──
 export const Spec = {
-  /** 读 spec.json（含 decisions / history）。不存在时返回 { spec: {} } */
-  read: (pid) => jsonRequest('GET', `/api/projects/${pid}/spec`),
+  read: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/spec`),
 };
 
 // ── Assets ──
@@ -97,11 +96,11 @@ export const Assets = {
   list: (pid) => jsonRequest('GET', `/api/projects/${pid}/assets`),
 };
 
-// ── Exports ──
+// ── Exports（H3：session-scoped）──
 export const Exports = {
   /** 下载文件，返回 { blob, filename }，调用方自行触发 a.click() */
-  download: async (pid, format) => {
-    const res = await fetch(`/api/projects/${pid}/exports/${format}`);
+  download: async (pid, sid, format) => {
+    const res = await fetch(`/api/projects/${pid}/sessions/${sid}/exports/${format}`);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw Object.assign(new Error(data.error || res.statusText), { status: res.status });
@@ -111,12 +110,10 @@ export const Exports = {
     return { blob, filename };
   },
 
-  /** C31：列已生成的交付文件（agent export_handoff 等写到 workspace/exports/）*/
-  list: (pid) => jsonRequest('GET', `/api/projects/${pid}/exports`),
+  list: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/exports`),
 
-  /** C31：下载 workspace/exports/<filename> */
-  downloadFile: async (pid, filename) => {
-    const res = await fetch(`/api/projects/${pid}/exports/file/${encodeURIComponent(filename)}`);
+  downloadFile: async (pid, sid, filename) => {
+    const res = await fetch(`/api/projects/${pid}/sessions/${sid}/exports/file/${encodeURIComponent(filename)}`);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw Object.assign(new Error(data.error || res.statusText), { status: res.status });

@@ -101,21 +101,26 @@ async function* buildUserMessageStream(contentOrBrief) {
 /**
  * 跑一次 agent run。
  *
+ * H3：sessionWorkspaceRoot 是新的"agent cwd 起点"——sessions/<sid>/ 目录。
+ * shared 资源（assets、CLAUDE.md 等）通过软链 + additionalDirectories 让
+ * agent 能读到。
+ *
  * @param {object} opts
- * @param {string} opts.runId             - 已经 createRun 创建好的 run id（pending 状态）
- * @param {string} opts.skillId           - skill 名（loadSkill 解析）
- * @param {string} opts.brief             - 用户输入（文本）；当 userContentBlocks 缺省时
- *                                          会被包成单个 text content block 走 SDK
- * @param {EventBus} [opts.eventBus]      - 事件总线（不传则 ctx 自建）
+ * @param {string} opts.runId
+ * @param {string} opts.skillId
+ * @param {string} opts.brief
+ * @param {EventBus} [opts.eventBus]
  * @param {AbortController} [opts.abortController]
- * @param {object} [opts.modelOverride]   - { model?, effort?, thinking?, maxTurns? }
- * @param {string[]} [opts.toolAllowlist] - 工具白名单 override（默认 DEFAULT_TOOL_ALLOWLIST）
- * @param {string} [opts.workspaceRoot]   - 外部 workspace 绝对路径（P0 per-project 目录）；
- *                                          不传则 fallback runId workspace（旧 smoke 行为）
- * @param {string} [opts.resumeSessionId] - SDK 续 session（同 project 跨 turn 用）
- * @param {Array} [opts.userContentBlocks] - SDK BetaContentBlockParam[]（C2 多模态接口）；
- *                                          传入时走 prompt: AsyncIterable<SDKUserMessage> 流，
- *                                          不传则 fallback brief 文本（旧 string 接口）
+ * @param {object} [opts.modelOverride]
+ * @param {string[]} [opts.toolAllowlist]
+ * @param {string} [opts.projectId]              - 用来推断 shared 路径（additionalDirectories）
+ * @param {string} [opts.sessionId]              - SDK options.sessionId（新建/fork 时传）
+ * @param {string} [opts.sessionWorkspaceRoot]   - sessions/<sid>/ 绝对路径。cwd
+ *                                                  用这个；CLAUDE_CONFIG_DIR 落到下面
+ * @param {string} [opts.workspaceRoot]          - 老接口（兼容 _smoke / 老 runId 模式）；
+ *                                                  H3 turn endpoint 走 sessionWorkspaceRoot 那条
+ * @param {string} [opts.resumeSessionId]        - SDK 续 session
+ * @param {Array} [opts.userContentBlocks]       - SDK BetaContentBlockParam[]
  *
  * @returns {Promise<{ finalText, artifactPath, snapshot }>}
  */
@@ -127,6 +132,9 @@ export async function runAgent({
   abortController,
   modelOverride = {},
   toolAllowlist = DEFAULT_TOOL_ALLOWLIST,
+  projectId = null,
+  sessionId = null,
+  sessionWorkspaceRoot = null,
   workspaceRoot = null,
   resumeSessionId = null,
   userContentBlocks = null,
@@ -135,7 +143,13 @@ export async function runAgent({
   if (!skillId) throw new Error('runAgent: skillId required');
   if (!brief) throw new Error('runAgent: brief required');
 
-  const ctx = new AgentContext({ runId, skillId, eventBus, abortController, workspaceRoot });
+  // H3：cwd 优先 session 子目录，shared 通过 additionalDirectories
+  const cwdRoot = sessionWorkspaceRoot || workspaceRoot;
+  const sharedRoot = (projectId && sessionWorkspaceRoot)
+    ? path.join(sessionWorkspaceRoot, '..', '..', 'shared')
+    : null;
+
+  const ctx = new AgentContext({ runId, skillId, eventBus, abortController, workspaceRoot: cwdRoot });
 
   // 注册到 active-runs registry，让 cancel endpoint 能控制本 run。
   // 此时只有 abortController + ctx（query 还没调），后面拿到 query handle 再 attachQuery。
@@ -156,8 +170,14 @@ export async function runAgent({
 
   // 3. 拼 SDK options
   const sdkOptions = {
-    cwd: wsRoot,
+    cwd: cwdRoot,
     abortController: ctx.abortController,
+    // H3：新建 session 时显式传 sessionId 让 SDK 用我们预生成的 UUID
+    // （d.ts:1537 sessionId 单独可传，不能跟 resume 同用）
+    ...(sessionId && !resumeSessionId ? { sessionId } : {}),
+    // H3：让 agent 能 Read shared/.claude（已通过软链）+ shared/assets/
+    // additionalDirectories 是 SDK 暴露给 cwd 之外的可访问目录
+    ...(sharedRoot ? { additionalDirectories: [sharedRoot] } : {}),
 
     // 关键：env 透传给子进程，让 claude binary 走 Nodesign gateway
     env: {
@@ -165,14 +185,12 @@ export async function runAgent({
       ANTHROPIC_BASE_URL: process.env.NODESIGN_GATEWAY_URL || process.env.ANTHROPIC_BASE_URL,
       ANTHROPIC_API_KEY: process.env.NODESIGN_GATEWAY_KEY || process.env.ANTHROPIC_API_KEY,
       CLAUDE_AGENT_SDK_CLIENT_APP: 'nodesign/0.0.1',
-      // S1：per-project session/config 隔离 —— SDK binary 子进程把 JSONL 转录、
-      // settings、agents 等都落到 <workspace>/.claude/ 下（默认是 ~/.claude/）。
-      // 项目自包含：删项目 = 删整个 workspace 目录（含 session 历史）。
-      // 多 project 并发零冲突（每次 query 独立 spawn，env 不共享）。
+      // H3：per-session 隔离 —— SDK binary 子进程把 JSONL 落到 sessions/<sid>/.claude/。
+      // session 自包含：删 session = 删 sessions/<sid>/ 子目录（含转录 + canvas + git）。
+      // 跨 session 共享配置（CLAUDE.md / agent-memory / assets）通过软链拿到，
+      // SDK settingSources: ['project'] 读 cwd/.claude/CLAUDE.md → 软链 → shared。
       // NODESIGN_CONFIG_DIR env 可全局覆盖（生产容器统一持久化卷场景）。
-      // 不直接读 process.env.CLAUDE_CONFIG_DIR — 那是给子进程的目标变量，
-      // 开发机若设了会让所有 project 共享同一目录，破坏隔离。
-      CLAUDE_CONFIG_DIR: process.env.NODESIGN_CONFIG_DIR || path.join(wsRoot, '.claude'),
+      CLAUDE_CONFIG_DIR: process.env.NODESIGN_CONFIG_DIR || path.join(cwdRoot, '.claude'),
     },
 
     model: modelOverride.model || process.env.NODESIGN_MODEL || 'kimi-k2.6',
@@ -286,12 +304,15 @@ export async function runAgent({
       },
 
       // 文件系统：核心隔离层
-      // - allowWrite: 仅允许写 project workspace（cwd），其他位置 SDK 工具 deny
+      // - allowWrite: session 沙盒（cwdRoot）+ shared/agent-memory（agent 写
+      //   跨 session memory）。shared/CLAUDE.md / assets 是用户写不让 agent 改。
       // - denyWrite: 系统目录硬封（即便 allowWrite 误配也兜底）
-      // - denyRead: /etc/* 系统凭据 + ~/.ssh / ~/.aws 用户凭据。
-      //   d.ts 没说支持 ~ 展开，所以用 os.homedir() 展成绝对路径喂给 sandbox。
+      // - denyRead: /etc/* 系统凭据 + ~/.ssh / ~/.aws 用户凭据
       filesystem: {
-        allowWrite: [wsRoot],
+        allowWrite: [
+          cwdRoot,
+          ...(sharedRoot ? [path.join(sharedRoot, '.claude', 'agent-memory')] : []),
+        ],
         denyWrite: ['/etc', '/usr', '/bin', '/sbin', '/private/etc'],
         denyRead: [
           '/etc/passwd', '/etc/shadow', '/etc/sudoers',

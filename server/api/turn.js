@@ -24,8 +24,13 @@
  */
 
 import express from 'express';
+import { randomUUID } from 'crypto';
 import { validateProjectId, getProject, setActiveSession } from '../projects/store.js';
-import { ensureProjectWorkspace } from '../projects/workspace.js';
+import {
+  ensureProjectWorkspace,
+  ensureSessionWorkspace,
+  validateSessionId,
+} from '../projects/workspace.js';
 import { createRun } from '../engine/runs/store.js';
 import { runAgent } from '../engine/agent/loop.js';
 import { cancelRun } from '../engine/runs/active-runs.js';
@@ -47,23 +52,33 @@ router.post('/:pid/turn', async (req, res, next) => {
     const finalSkillId = (typeof skillId === 'string' && skillId) || project.skillId;
     const { displayText, blocks } = composeUserMessage(chat, attachments);
 
-    // S4：sessionId 显式传 → 用前端选中的 session 续约（含 null 表示新建）；
-    // 不传 → fallback project.activeSessionId（向后兼容老前端）
+    // H3：session id 解析逻辑
+    //   - body.sessionId === string → 续约该 session（cwd=sessions/<sid>，传 resume）
+    //   - body.sessionId === null → 新建 session（前端"+新会话"显式触发）
+    //   - body.sessionId 不传 → fallback project.activeSessionId（向后兼容）
+    //
+    // 新建场景下用 randomUUID 预生成 sid，传给 SDK options.sessionId 让 SDK
+    // 用我们的 sid（d.ts:1537 sessionId 单独可传，只要不跟 resume 同用）。
+    // 这样 cwd 能提前切到 sessions/<sid>/，agent 一启动就在 session 沙盒里跑。
     let resumeSessionId;
     if ('sessionId' in (req.body || {})) {
       resumeSessionId = sessionId || null;
     } else {
       resumeSessionId = project.activeSessionId;
     }
+    const isNewSession = !resumeSessionId;
+    const sid = isNewSession ? randomUUID() : resumeSessionId;
+    validateSessionId(sid);
 
     // 创建 run（pending）— displayText 落 brief 字段做审计 / fallback 显示
     const run = createRun({ skillId: finalSkillId, brief: displayText, projectId: project.id });
 
     // 立即返回，agent 后台跑
-    res.status(202).json({ runId: run.id });
+    res.status(202).json({ runId: run.id, sessionId: sid });
 
     // 异步启动 agent
-    const wsRoot = await ensureProjectWorkspace(project.id);
+    await ensureProjectWorkspace(project.id);
+    const sessionRoot = await ensureSessionWorkspace(project.id, sid);
     const bus = getProjectBus(project.id);
 
     runAgent({
@@ -72,13 +87,16 @@ router.post('/:pid/turn', async (req, res, next) => {
       brief: displayText,
       userContentBlocks: blocks,           // C2：走 SDK 多模态 content blocks
       eventBus: bus,
-      workspaceRoot: wsRoot,
-      resumeSessionId,
+      projectId: project.id,
+      sessionId: sid,
+      sessionWorkspaceRoot: sessionRoot,
+      // 续约场景传 resume；新建不传（SDK 用 options.sessionId 当我们传的 sid）
+      resumeSessionId: isNewSession ? null : sid,
     })
       .then(({ snapshot }) => {
-        if (snapshot?.sdkSessionId) {
-          try { setActiveSession(project.id, snapshot.sdkSessionId); } catch { /* ignore */ }
-        }
+        // 写回 active_session_id（让下次不带 sessionId 的 turn fallback 续到这个）
+        const finalSid = snapshot?.sdkSessionId || sid;
+        try { setActiveSession(project.id, finalSid); } catch { /* ignore */ }
       })
       .catch((err) => {
         // run.error 已通过 EventBus 推；这里只做 console 留痕
