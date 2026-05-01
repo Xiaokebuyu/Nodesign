@@ -136,9 +136,11 @@ export async function runAgent({
   const ctx = new AgentContext({ runId, skillId, eventBus, abortController, workspaceRoot });
 
   // 注册到 active-runs registry，让 cancel endpoint 能控制本 run。
-  // 此时只有 abortController（query 还没调），后面拿到 query handle 再 attachQuery。
+  // 此时只有 abortController + ctx（query 还没调），后面拿到 query handle 再 attachQuery。
+  // ctx 必传：cancelRun 走 ctx.cancel() 统一 emit run.cancelled，避免 abort
+  // 路径下前端永远卡 streaming（Phase 1 遗留 bug）。
   // finally 块 unregister 避免泄漏。
-  registerRun(runId, { abortController: ctx.abortController });
+  registerRun(runId, { abortController: ctx.abortController, ctx });
 
   // 1. 进 running 状态 + 推开始事件
   markRunStarted(runId);
@@ -301,6 +303,30 @@ export async function runAgent({
       handleSDKMessage(ctx, message);
 
       if (message.type === 'result') {
+        // Phase 3c：先识别 cancellation。query.interrupt() 让 SDK 自然结束时
+        // SDKResultMessage 可能 subtype='success' 但 terminal_reason='aborted_*'
+        // （sdk.d.ts:5339 'aborted_streaming' | 'aborted_tools'）。在 success/error
+        // 分派之前优先识别这条路径，否则会被当作正常完成 emit run.done。
+        //
+        // d.ts 未明确 interrupt 触发哪个 terminal_reason，两个值都覆盖。
+        // ctx.signal.aborted 兜底（cancelRun 走 ctx.cancel() 设了 abort 也算）。
+        const isCancelled = ctx.signal.aborted
+          || message.terminal_reason === 'aborted_streaming'
+          || message.terminal_reason === 'aborted_tools';
+
+        if (isCancelled) {
+          ctx.absorbResult(message);
+          // ctx.cancel() 幂等：
+          // - interrupt 路径走到这里时 ctx.signal.aborted 可能还是 false
+          //   （interrupt 不直接触发 abort）→ ctx.cancel() set abort + emit run.cancelled
+          // - abort 路径（race / 5s 兜底）走到这里时 cancelRun 已经调过 ctx.cancel()
+          //   → context.js._cancelled=true noop，不会双 emit
+          ctx.cancel(ctx.signal.reason || 'user_interrupt');
+          const err = new Error(`run cancelled: ${message.terminal_reason || ctx.signal.reason || 'aborted'}`);
+          err.code = 'AGENT_CANCELLED';
+          throw err;
+        }
+
         if (message.subtype === 'success') {
           finalText = message.result || '';
           ctx.absorbResult(message);
@@ -332,7 +358,11 @@ export async function runAgent({
     if (ctx.signal.aborted) {
       mergeRunMetadata(runId, { aborted: true, abortReason: ctx.signal.reason || 'unknown' });
       try { markRunFailed(runId, `cancelled: ${ctx.signal.reason || 'user_cancel'}`); } catch { /* state may have moved */ }
-      // run.cancelled 在 ctx.cancel() 时已推
+      // Phase 3c：run.cancelled 已由 ctx.cancel() emit（幂等保证恰好一次）—— 三条路径覆盖：
+      //   1. cancelRun race window → cancelRun 直接调 ctx.cancel()
+      //   2. cancelRun → query.interrupt() → result 'aborted_*' → ctx.cancel()
+      //   3. cancelRun → 5s 兜底 → cancelViaCtxOrAbort → ctx.cancel()
+      // 之前 Phase 1 这条注释是错的（实际没人调 ctx.cancel()），导致前端永远卡 streaming。
     } else {
       mergeRunMetadata(runId, {
         sdkSessionId: ctx.sdkSessionId,

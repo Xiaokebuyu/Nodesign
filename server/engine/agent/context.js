@@ -72,7 +72,18 @@ export class AgentContext {
     return this.abortController.signal;
   }
 
+  /**
+   * 取消 run。Phase 3c 加幂等保证 —— cancel 多次只触发一次 abort + 一次
+   * run.cancelled emit。两条调用路径都依赖此幂等：
+   *   1. cancelRun（active-runs.js）race window / interrupt 兜底时直接调
+   *   2. loop.js result 处理识别 terminal_reason: 'aborted_*' 时调（interrupt 路径）
+   *
+   * 没有这个 flag，interrupt 路径 + abort 兜底会双 emit run.cancelled，
+   * 前端 toast '已取消' 弹两次。
+   */
   cancel(reason = 'user_cancel') {
+    if (this._cancelled) return;
+    this._cancelled = true;
     this.abortController.abort(reason);
     this.emit({ type: 'run.cancelled', reason });
   }
