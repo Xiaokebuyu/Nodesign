@@ -52,11 +52,13 @@ NoDesign = **Claude Code 之上的画布编辑层**，按 Anthropic Projects 模
 
 ### 已知 follow-up（不阻塞主路径）
 
-1. **Kimi 走 SDK binary 不输出 thinking blocks** — 详见 memory `feedback_kimi_thinking_blocks.md` 4 条候选路径
+1. ~~**Kimi 走 SDK binary 不输出 thinking blocks**~~ ✅ 已修（2026-05-01 binary-fixup-proxy）
 2. **agent 不会主动用 agent-memory** — SKILL.md 没教写 memory，要补
 3. **agent 用 shared/assets 验证** — probe brief 让 agent 引用上传的图，确认 additionalDirectories 真 work
 4. **多 user 并发隔离** — 当前 process.env.CLAUDE_CONFIG_DIR mutation（mutex 串行化），生产部署多 user 上要重审
-5. **subagent 真调用流接通**（vision-checker / ds-extractor / tweak-proposer）
+5. **vision-checker subagent 真接通** — 主 agent MCP screenshot 自检够用一般场景；vision-checker 价值在「角色 prompt 挑剔 / 不污染主上下文 / multi-turn 评估 / 独立 agent-memory 沉淀」，适合多页 deck 终审。骨架 agents/ 已在；需要：① 加专门 prompt（"挑剔的设计审稿人"）② 工具白名单（Read/Glob/screenshot_canvas，无 Write/Edit）③ Agent tool 进 toolAllowlist ④ SKILL.md 教主 agent 何时调（"整体 deck 完成后调 vision-checker 终审"）
+6. **Plan mode 接入** — 用户明确要做。permissionMode='plan' 跟当前 'bypassPermissions' 互斥，需要先 probe 验证 Kimi binary 链路下 plan mode 是否 stuck，再做后端接入 + 前端 UI
+7. **ds-extractor / tweak-proposer subagent 真接通** — 跟 vision-checker 同框架，参考 1 实施
 
 ---
 
