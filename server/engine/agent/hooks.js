@@ -1,11 +1,12 @@
 /**
  * server/engine/agent/hooks.js — agent hooks 集中定义
  *
- * P0+ stage 1（C3-C7）：4 件套
+ * P0+ stage 1（C3-C7）：4 件套（Phase 3d 改为 3 件套，PreToolUse 删）
  *   FileChanged    — 文件改动 → EventBus emit file.changed → 前端 reload iframe
- *   PreToolUse     — Bash 命令白名单（拦危险命令）
  *   Stop           — agent 收尾自检（占位，stage 2 接真业务）
  *   PostCompact    — compact 摘要写 spec.json 长期记忆
+ *   ~~PreToolUse(Bash)~~ — Phase 3d 删，改用 SDK 内置 sandbox（loop.js sandbox 字段）。
+ *                          OS 级隔离（macOS sandbox-exec / Linux bubblewrap）替代正则白名单。
  *
  * Phase 2（agent 层升级）：新增 5 类 hook
  *   UserPromptSubmit         — 每次用户输入前自动注入 spec.json 摘要 + canvas 页数
@@ -69,11 +70,10 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
       hooks: [makeFileChangedHandler({ ctx })],
     }],
 
-    // PreToolUse Bash 白名单 —— 拦截危险命令（rm 根 / sudo / curl 等）
-    PreToolUse: [{
-      matcher: 'Bash',
-      hooks: [makeBashWhitelistHandler({ ctx })],
-    }],
+    // ~~PreToolUse(Bash) 白名单~~ Phase 3d 删 —— 改用 loop.js sandbox option
+    // OS 级隔离（macOS sandbox-exec / Linux bubblewrap），filesystem.allowWrite/denyRead
+    // 替代命令级正则。如未来要 per-tool 拦截（非 Bash 工具如 Write 越界），可在
+    // PreToolUse 数组重新加 matcher。
 
     // Stop —— agent 准备结束 query 时触发，发自检事件给前端
     Stop: [{
@@ -162,45 +162,9 @@ function makeFileChangedHandler({ ctx }) {
   };
 }
 
-/**
- * PreToolUse(Bash) handler（P0+ s1 C5）—— 命令白名单。
- * 详见原文档（沙盒 / fail-open / SDK 形状）。
- *
- * input: PreToolUseHookInput (sdk.d.ts:1957)
- *   - tool_name: string
- *   - tool_input: unknown
- *   - tool_use_id: string
- */
-function makeBashWhitelistHandler({ ctx }) {
-  return async (input, _toolUseId, _options) => {
-    try {
-      const command = input?.tool_input?.command;
-      if (!command || typeof command !== 'string') return {};
-
-      const verdict = checkBashCommand(command);
-      if (verdict.allow) return {};
-
-      try {
-        ctx.emit({
-          type: 'run.bash_blocked',
-          command: command.slice(0, 200),
-          reason: verdict.reason,
-        });
-      } catch { /* emit fail-safe */ }
-
-      return {
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'deny',
-          permissionDecisionReason: verdict.reason,
-        },
-      };
-    } catch (err) {
-      console.warn(`[hooks/PreToolUse Bash] handler threw:`, err.message);
-      return {};  // fail-open：解析错误时让 SDK 继续
-    }
-  };
-}
+// makeBashWhitelistHandler / ALLOWED_FIRST_TOKEN / DANGEROUS_PATTERNS / checkBashCommand
+// Phase 3d 删除 —— 命令级正则白名单换成 SDK sandbox（loop.js）的 OS 级隔离。
+// 如需回滚：git revert 3d commit，本段恢复。
 
 /**
  * Stop handler（P0+ s1 C6）—— agent 准备结束 query 时触发。
@@ -503,10 +467,10 @@ function makePostToolUseFailureHandler({ ctx }) {
         + '  3. fullPage 截图太大 → 换 fullPage:false 截视口';
     } else if (tool === 'Bash') {
       advice =
-        'Bash 命令被拦或失败。常见：\n'
-        + '  1. 不在 ALLOWED_FIRST_TOKEN 白名单 → 换 Read / Glob / Grep / MCP 工具\n'
-        + '  2. 含危险模式（curl/wget/sudo/rm 根目录）→ 用 Read 工具\n'
-        + '  3. cwd 越界 → 路径相对 workspace';
+        'Bash 命令失败。常见：\n'
+        + '  1. sandbox 拦截（命令访问越界文件 / 不允许的网络）→ 换 Read / Glob / Grep / MCP 工具\n'
+        + '  2. cwd 越界 → 路径相对 workspace\n'
+        + '  3. 命令本身错（参数 / 文件不存在）→ 检查 stderr';
     } else if (tool === 'Write' || tool === 'Edit') {
       advice =
         `${tool} 失败。检查：\n`
@@ -583,61 +547,6 @@ function makeSubagentStopHandler({ ctx }) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Bash 白名单 / 危险正则（沿用 P0+ s1 C5 配置）
-// ─────────────────────────────────────────────────────────────────────
-
-/**
- * 第一个 token 白名单 —— P0+ stage 1 范围，覆盖 SKILL.md 引导的典型命令：
- *   - git（commit/log/status/diff/checkout）—— history / variant fork 必需
- *   - playwright / npx playwright —— C9 screenshot
- *   - zip / unzip / tar —— C10 export handoff
- *   - 文件浏览（ls/cat/head/tail/find/wc/tree）
- *   - 文件操作（mkdir/cp/mv/touch；不含 rm，rm 走 DANGEROUS_PATTERNS）
- *   - 文本处理（grep/sed/awk/jq/sort/uniq/cut）
- *   - node/npm/npx
- *   - 元命令（pwd/which/whoami/env/date/echo/printf/test）
- *   - cd —— 复合 `cd workspace && git status` 必需
- */
-const ALLOWED_FIRST_TOKEN = new Set([
-  'git', 'playwright', 'node', 'npm', 'npx',
-  'zip', 'unzip', 'tar', 'gzip', 'gunzip',
-  'ls', 'cat', 'head', 'tail', 'wc', 'find', 'tree',
-  'mkdir', 'cp', 'mv', 'touch',
-  'echo', 'printf', 'pwd', 'which', 'whoami', 'env', 'date',
-  'grep', 'rg', 'sed', 'awk', 'jq', 'sort', 'uniq', 'cut', 'tr',
-  'cd', 'true', 'false', 'test',
-]);
-
-const DANGEROUS_PATTERNS = [
-  /\bsudo\b/, /(?:^|[\s;&|])su\s/,
-  /\bcurl\b/, /\bwget\b/, /\bnc\b\s/, /\bnetcat\b/,
-  /\bchmod\s+(?:[0-7]{3,4}|[ugoa]?\+x)/,
-  /\brm\s+(?:-[rRf]+\s+)?(?:\/|~|\$HOME)/,
-  /\bdd\s+if=/, /\bmkfs\b/, /\bfdisk\b/,
-  /\bshutdown\b/, /\breboot\b/, /\bhalt\b/, /\bpoweroff\b/,
-  /\bkill(?:all)?\s+-9\b/,
-  />\s*\/dev\//, />\s*\/etc\//, />\s*\/sys\//, />\s*\/proc\//,
-];
-
-function checkBashCommand(command) {
-  for (const pat of DANGEROUS_PATTERNS) {
-    if (pat.test(command)) {
-      return { allow: false, reason: `命令含危险模式（${pat.source}）：${command.slice(0, 100)}` };
-    }
-  }
-
-  const tokens = command.trim().split(/\s+/);
-  let i = 0;
-  while (i < tokens.length && /^[A-Z_][A-Z0-9_]*=/.test(tokens[i])) i++;
-  const first = tokens[i] || '';
-
-  if (!ALLOWED_FIRST_TOKEN.has(first)) {
-    return {
-      allow: false,
-      reason: `命令 "${first}" 不在 Bash 白名单。允许集合见 hooks.js ALLOWED_FIRST_TOKEN。`,
-    };
-  }
-
-  return { allow: true };
-}
+// Phase 3d 删除：Bash 白名单 / 危险正则 / checkBashCommand
+// 替换为 SDK 内置 sandbox（loop.js sandbox 字段）。OS 级隔离比正则白名单更稳。
+// 如需回滚：git revert 3d commit，恢复 ALLOWED_FIRST_TOKEN / DANGEROUS_PATTERNS / checkBashCommand。

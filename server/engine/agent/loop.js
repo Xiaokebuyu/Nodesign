@@ -247,6 +247,40 @@ export async function runAgent({
     // additionalDirectories: 跳过（无硬场景，每个 project workspace 是独立的）
     // outputFormat: 跳过（强制 main agent JSON 输出违反自然对话设计）
 
+    // ── Phase 3d：SDK 内置 sandbox 替换 PreToolUse Bash 白名单 ──
+    // SDK SandboxSettings 是 OS 级隔离（macOS sandbox-exec / Linux bubblewrap）。
+    // 替换原 hooks.js 的正则 ALLOWED_FIRST_TOKEN + DANGEROUS_PATTERNS（命令级 deny）。
+    //
+    // d.ts 未明确：sandbox 是否拦 Bash 子进程 spawn 出去的命令（curl/wget/sudo
+    // 这种命令级危险）。autoAllowBashIfSandboxed 字段名暗示 sandbox 知道 Bash
+    // 但行为不明。真跑 smoke 验证后如发现 sandbox 不拦命令级危险，回滚 hooks.js
+    // 的删除（git revert 3d.2 commit），sandbox 部分保留（filesystem 限制仍有价值）。
+    //
+    // 用户决策：failIfUnavailable: true —— 不静默降级。开发机不支持 sandbox 时
+    // NoDesign 直接拒绝跑（macOS sandbox-exec 通常可用 / Linux 需要 bubblewrap）。
+    sandbox: {
+      enabled: true,
+      failIfUnavailable: true,
+
+      // 网络：暂不 deny 所有外网 —— claude binary 子进程要联 NODESIGN_GATEWAY_URL
+      // （anthropic gateway），太激进会让 SDK 自己挂。仅在 NoDesign 业务上明确不
+      // 需要的子进程外网才用。当前只声明 SDK WebFetch/WebSearch 的限制（这两个
+      // 工具不在白名单 → SDK 不调）+ 禁止本地 socket 绑定（防 agent 起内部服务）。
+      network: {
+        allowLocalBinding: false,
+      },
+
+      // 文件系统：核心隔离层
+      // - allowWrite: 仅允许写 project workspace（cwd），其他位置 SDK 工具 deny
+      // - denyWrite: 系统目录硬封（即便 allowWrite 误配也兜底）
+      // - denyRead: 凭据 / SSH key / AWS 凭证（agent 不该读到的东西）
+      filesystem: {
+        allowWrite: [wsRoot],
+        denyWrite: ['/etc', '/usr', '/bin', '/sbin', '/private/etc'],
+        denyRead: ['/etc/passwd', '/etc/shadow', '/etc/sudoers'],
+      },
+    },
+
     // canUseTool 已撤（hotfix-sdk-usage）—— 见 permissionMode: 'bypassPermissions' 注释
 
     // hooks 4 件套（C3 骨架，C4-C7 逐个填实）：
