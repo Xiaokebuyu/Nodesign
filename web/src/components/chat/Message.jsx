@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Wrench, ChevronRight,
   FileText, Pencil, FilePlus, Search, Terminal,
@@ -8,6 +8,7 @@ import {
   HelpCircle,
   Clock4,
 } from 'lucide-react';
+import { diffLines } from 'diff';
 import ReactMarkdown from 'react-markdown';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
@@ -471,18 +472,27 @@ function ToolMessage({
   const NodeIcon = getToolIcon(toolName);
   const iconColor = isRunning ? COLOR.warn : (isError ? COLOR.error : COLOR.sub);
 
-  // Edit / Write 特殊渲染：文件名 + +N/-M 行数，不展开 input/output
+  // Edit / Write 特殊渲染：文件名 + +N/-M 行数 + 展开看真 diff
   const fileDiff = computeFileDiff(toolName, toolInput);
   if (fileDiff && (toolName === 'Edit' || toolName === 'Write')) {
     const filename = basename(toolInput?.file_path || toolInput?.path);
+    const canExpand = toolName === 'Edit' && (fileDiff.adds > 0 || fileDiff.dels > 0);
     return (
       <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning}>
-        <div style={{
-          display: 'inline-flex', alignItems: 'baseline', gap: GAP.sm,
-          fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, color: COLOR.text2,
-          maxWidth: '100%',
-        }}
-        title={toolInput?.file_path || toolInput?.path || ''}
+        <button
+          onClick={() => canExpand && setOpen(o => !o)}
+          disabled={!canExpand}
+          style={{
+            display: 'inline-flex', alignItems: 'baseline', gap: GAP.sm,
+            fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, color: COLOR.text2,
+            maxWidth: '100%',
+            padding: 0,
+            background: 'transparent',
+            border: 'none',
+            cursor: canExpand ? 'pointer' : 'default',
+            textAlign: 'left',
+          }}
+          title={toolInput?.file_path || toolInput?.path || ''}
         >
           <span style={{
             fontWeight: 500,
@@ -507,7 +517,26 @@ function ToolMessage({
           {isError && (
             <span style={{ color: COLOR.error, fontSize: 11 }}>失败</span>
           )}
-        </div>
+          {canExpand && (
+            <ChevronRight
+              size={10}
+              strokeWidth={1.75}
+              color={COLOR.dim}
+              style={{
+                flexShrink: 0,
+                alignSelf: 'center',
+                transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
+              }}
+            />
+          )}
+        </button>
+        {canExpand && open && (
+          <DiffView
+            oldStr={String(toolInput?.old_string || '')}
+            newStr={String(toolInput?.new_string || '')}
+          />
+        )}
       </TimelineNode>
     );
   }
@@ -647,5 +676,79 @@ function ToolMessage({
         </div>
       )}
     </TimelineNode>
+  );
+}
+
+/**
+ * DiffView —— Edit 工具展开后的 unified diff 渲染
+ *
+ * 数据来源：toolInput.old_string / new_string，前端用 `diff` 包 diffLines
+ * 算行级 diff（chunks of added / removed / context lines）。SDK Edit 工具
+ * 的 tool_result 是给模型看的文本，不是结构化 diff —— 前端自己算最干净，
+ * 也能任意控制视觉。
+ *
+ * 视觉：等宽 + 行级背景色（绿 add / 红 del / 灰 context）+ 行首 +/-/空格 标记。
+ * 长 diff 内滚（maxHeight 320），不挤占消息流。
+ */
+function DiffView({ oldStr, newStr }) {
+  const rows = useMemo(() => {
+    const chunks = diffLines(oldStr || '', newStr || '');
+    const out = [];
+    chunks.forEach((c) => {
+      const lines = c.value.split('\n');
+      // diffLines 每个 chunk value 末尾通常带 \n，split 后多一个 ''
+      if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+      const type = c.added ? 'add' : c.removed ? 'del' : 'ctx';
+      lines.forEach((line) => out.push({ type, text: line }));
+    });
+    return out;
+  }, [oldStr, newStr]);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div style={{
+      marginTop: GAP.sm,
+      background: COLOR.bgCard,
+      border: `1px solid ${COLOR.borderLt}`,
+      borderRadius: 6,
+      fontFamily: FONT_MONO, fontSize: 11,
+      lineHeight: 1.5,
+      maxHeight: 320,
+      overflow: 'auto',
+    }}>
+      {rows.map((r, i) => {
+        const bg = r.type === 'add'
+          ? 'rgba(74,138,74,0.10)'
+          : r.type === 'del'
+            ? 'rgba(184,58,42,0.08)'
+            : 'transparent';
+        const prefixColor = r.type === 'add'
+          ? COLOR.success
+          : r.type === 'del'
+            ? COLOR.error
+            : COLOR.dim;
+        const textColor = r.type === 'ctx' ? COLOR.text4 : COLOR.text2;
+        return (
+          <div key={i} style={{
+            display: 'flex',
+            background: bg,
+            color: textColor,
+            padding: '0 8px',
+            whiteSpace: 'pre',
+          }}>
+            <span style={{
+              flexShrink: 0,
+              width: 14,
+              color: prefixColor,
+              userSelect: 'none',
+            }}>
+              {r.type === 'add' ? '+' : r.type === 'del' ? '−' : ' '}
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>{r.text || ' '}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
