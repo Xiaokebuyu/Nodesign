@@ -21,7 +21,7 @@ import express from 'express';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { validateProjectId, getProject } from '../projects/store.js';
-import { getProjectWorkspace, ensureProjectWorkspace } from '../projects/workspace.js';
+import { getSharedDir, ensureProjectWorkspace } from '../projects/workspace.js';
 
 const router = express.Router();
 
@@ -37,7 +37,7 @@ router.get('/:pid/instruction', async (req, res, next) => {
     // ensureProjectWorkspace 幂等补齐（老 project 第一次进 instruction tab 也能读到）
     await ensureProjectWorkspace(req.params.pid);
 
-    const filePath = path.join(getProjectWorkspace(req.params.pid), '.claude', INSTRUCTION_FILE);
+    const filePath = path.join(getSharedDir(req.params.pid), '.claude', INSTRUCTION_FILE);
     try {
       const content = await fs.readFile(filePath, 'utf8');
       res.json({ content, exists: true });
@@ -67,7 +67,7 @@ router.put('/:pid/instruction', async (req, res, next) => {
     }
 
     await ensureProjectWorkspace(req.params.pid);
-    const filePath = path.join(getProjectWorkspace(req.params.pid), '.claude', INSTRUCTION_FILE);
+    const filePath = path.join(getSharedDir(req.params.pid), '.claude', INSTRUCTION_FILE);
     await fs.writeFile(filePath, content, 'utf8');
     res.json({ ok: true });
   } catch (err) { next(err); }

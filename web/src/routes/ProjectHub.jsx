@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowUp, MoreHorizontal, Pin, Plus, Lock, Pencil, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowUp, MoreHorizontal, Pin, Plus } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
+import InstructionsCard from '../components/project/InstructionsCard.jsx';
+import FilesCard from '../components/project/FilesCard.jsx';
+import MemoryCard from '../components/project/MemoryCard.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../lib/theme.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { Sessions } from '../lib/api.js';
@@ -137,34 +140,16 @@ export default function ProjectHub() {
           <SessionList projectId={id} sessions={sessions} />
         </div>
 
-        {/* ── 右栏 cards（H3 接通后端） ── */}
+        {/* ── 右栏 cards（H4b 真接通后端） ── */}
         <div style={{
           display: 'flex', flexDirection: 'column',
           gap: GAP.lg,
           position: 'sticky',
           top: GAP.xl,
         }}>
-          <SidebarCard
-            title="Memory"
-            icon={<Lock size={11} />}
-            iconLabel="Only you"
-            actionIcon={<Pencil size={13} />}
-            placeholder="agent 在 session 中按需记录的长期记忆。还没有内容。"
-            disabled
-          />
-          <SidebarCard
-            title="Instructions"
-            actionIcon={<Plus size={14} />}
-            placeholder="Add instructions to tailor Claude's responses"
-            disabled
-          />
-          <SidebarCard
-            title="Files"
-            actionIcon={<Plus size={14} />}
-            placeholder="Add PDFs, documents, or other text to reference in this project."
-            illustration={<FilesIllustration />}
-            disabled
-          />
+          <MemoryCard projectId={id} />
+          <InstructionsCard projectId={id} />
+          <FilesCard projectId={id} />
         </div>
       </div>
     </AppShell>
@@ -339,105 +324,6 @@ function SessionList({ projectId, sessions }) {
       ))}
     </div>
   );
-}
-
-// ── SidebarCard ── H3 占位
-
-function SidebarCard({ title, icon, iconLabel, actionIcon, placeholder, illustration, disabled }) {
-  return (
-    <div style={{
-      background: '#fff',
-      border: `1px solid ${COLOR.borderLt}`,
-      borderRadius: 12,
-      padding: `${GAP.lg}px ${GAP.lg}px`,
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: GAP.sm,
-        marginBottom: GAP.sm,
-      }}>
-        <span style={{
-          fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, fontWeight: 500,
-          color: COLOR.text,
-        }}>{title}</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: GAP.xs }}>
-          {iconLabel && (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 3,
-              padding: '1px 6px',
-              background: 'rgba(45,36,24,0.05)',
-              borderRadius: 4,
-              fontFamily: FONT_SANS, fontSize: 10, color: COLOR.sub,
-            }}>
-              {icon}{iconLabel}
-            </span>
-          )}
-          {actionIcon && (
-            <button
-              disabled={disabled}
-              style={{
-                width: 24, height: 24, borderRadius: 4,
-                background: 'transparent',
-                color: disabled ? COLOR.dim : COLOR.text2,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: disabled ? 'not-allowed' : 'pointer',
-              }}
-              title={disabled ? 'H3 接通' : ''}
-            >
-              {actionIcon}
-            </button>
-          )}
-        </div>
-      </div>
-      {illustration ? (
-        <div style={{
-          padding: `${GAP.lg}px 0`,
-          background: 'rgba(45,36,24,0.025)',
-          borderRadius: 8,
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: GAP.sm,
-          color: COLOR.sub,
-        }}>
-          {illustration}
-          <span style={{
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs,
-            color: COLOR.sub,
-            textAlign: 'center',
-            padding: `0 ${GAP.lg}px`,
-            lineHeight: 1.55,
-          }}>{placeholder}</span>
-        </div>
-      ) : (
-        <div style={{
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub,
-          lineHeight: 1.55,
-        }}>{placeholder}</div>
-      )}
-    </div>
-  );
-}
-
-function FilesIllustration() {
-  return (
-    <div style={{
-      display: 'flex', gap: -8, alignItems: 'flex-end', padding: `${GAP.sm}px 0`,
-    }}>
-      <div style={fileTileStyle(-6, '#fff', COLOR.borderMd)}><FileText size={20} color={COLOR.dim} /></div>
-      <div style={fileTileStyle(0, '#fff', COLOR.borderMd)}><FileText size={22} color={COLOR.dim} /></div>
-      <div style={fileTileStyle(6, '#faf8f4', COLOR.borderLt, true)}><Plus size={18} color={COLOR.dim} /></div>
-    </div>
-  );
-}
-
-function fileTileStyle(rotate, bg, border, dashed) {
-  return {
-    width: 44, height: 56,
-    borderRadius: 6,
-    background: bg,
-    border: `${dashed ? '1px dashed' : '1px solid'} ${border}`,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    transform: `rotate(${rotate}deg)`,
-    margin: '0 -3px',
-  };
 }
 
 function IconButton({ icon, title, onClick, disabled }) {

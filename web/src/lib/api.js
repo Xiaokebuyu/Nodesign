@@ -78,7 +78,7 @@ export const Spec = {
   read: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/spec`),
 };
 
-// ── Assets ──
+// ── Assets（project 共享，写到 shared/assets/）──
 export const Assets = {
   upload: async (pid, file) => {
     const fd = new FormData();
@@ -91,9 +91,11 @@ export const Assets = {
       const data = await res.json().catch(() => ({}));
       throw Object.assign(new Error(data.error || res.statusText), { status: res.status });
     }
-    return res.json(); // { asset: { path, name, originalName, size, mime } }
+    return res.json();
   },
   list: (pid) => jsonRequest('GET', `/api/projects/${pid}/assets`),
+  remove: (pid, filename) =>
+    jsonRequest('DELETE', `/api/projects/${pid}/assets/${encodeURIComponent(filename)}`),
 };
 
 // ── Exports（H3：session-scoped）──
@@ -159,6 +161,21 @@ export const Turn = {
 export const Instruction = {
   read: (pid) => jsonRequest('GET', `/api/projects/${pid}/instruction`),
   write: (pid, content) => jsonRequest('PUT', `/api/projects/${pid}/instruction`, { content }),
+};
+
+// ── Memory（项目级 shared/.claude/agent-memory/<agentType>/） ──
+export const Memory = {
+  /** 列所有 agent 的 memory 概要 */
+  list: (pid) => jsonRequest('GET', `/api/projects/${pid}/memory`),
+  /** 读单个 agent 全文（agentType='_root' 表示顶层 main agent memory.md） */
+  read: (pid, agentType) =>
+    jsonRequest('GET', `/api/projects/${pid}/memory/${encodeURIComponent(agentType)}`),
+  /** 覆盖写 memory.md */
+  write: (pid, agentType, content) =>
+    jsonRequest('PUT', `/api/projects/${pid}/memory/${encodeURIComponent(agentType)}`, { content }),
+  /** 删整个 agent memory 子目录 / 顶层 memory.md */
+  remove: (pid, agentType) =>
+    jsonRequest('DELETE', `/api/projects/${pid}/memory/${encodeURIComponent(agentType)}`),
 };
 
 // ── Sessions（薄壳走 SDK listSessions / getSessionMessages / forkSession / ...）──

@@ -25,6 +25,7 @@ import turnRouter from './api/turn.js';
 import exportsRouter from './api/exports.js';
 import sessionsRouter from './api/sessions.js';
 import instructionRouter from './api/instruction.js';
+import memoryRouter from './api/memory.js';
 
 const PORT = Number(process.env.PORT || 4001);
 
@@ -53,6 +54,7 @@ app.use('/api/projects', turnRouter);
 app.use('/api/projects', exportsRouter);
 app.use('/api/projects', sessionsRouter);
 app.use('/api/projects', instructionRouter);
+app.use('/api/projects', memoryRouter);
 // skills 全局
 app.use('/api/skills', skillsRouter);
 
