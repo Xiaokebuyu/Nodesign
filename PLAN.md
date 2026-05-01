@@ -60,6 +60,7 @@ NoDesign = **Claude Code 之上的画布编辑层**，按 Anthropic Projects 模
 6. **Plan mode 接入** — 用户明确要做。permissionMode='plan' 跟当前 'bypassPermissions' 互斥，需要先 probe 验证 Kimi binary 链路下 plan mode 是否 stuck，再做后端接入 + 前端 UI
 7. **ds-extractor / tweak-proposer subagent 真接通** — 跟 vision-checker 同框架，参考 1 实施
 8. **NoDesign agent 接 Claude Preview 同款 inspect 能力** — 当前 agent 只有 `screenshot_canvas`（看自己写的 canvas.html，playwright headless 加载 file://）；缺"看整个 NoDesign 应用 UI"能力（像 Claude Code 的 `preview_screenshot` + `preview_eval` + `preview_click` 那种连浏览器实例）。两条路径：(a) 加新 MCP tool `nodesign_open_url`（playwright 加载任意 URL + 截图）（b) 把 Claude Preview 当外部 MCP server 接进 loop.js options.mcpServers。Plan mode 真做时（agent 验证整个 UI flow）才用得上，当前 deck 自检 screenshot_canvas 够
+9. **当前上下文容量实时显示** — SDK 提供 `query.getContextUsage()`（sdk.d.ts:2109）返完整 breakdown（categories / messageBreakdown.toolCallsByType / memoryFiles / mcpTools / apiUsage / autoCompactThreshold / percentage 等）。当前 ContextUsageBar 只静态显示 model/tools/mcp/agents 数，**没接 token 实时用量**。做：loop.js 在每个 assistant message 后 await query.getContextUsage() → emit `run.context_usage` 事件 → 前端 ContextUsageBar 显示进度条（当前 / 230k 阈值 / autoCompact 触发线）+ 展开看 toolCallsByType 排名（Edit / Read / Bash 各占多少 token）。**用户主动要的 follow-up**，做了能直观看到 autoCompact 触发前还剩多少、哪个工具吃 context 最多
 
 ---
 
