@@ -84,13 +84,54 @@ The agent will see this verbatim. Keep it concise and actionable.
 (Edit this file from the NoDesign UI — the agent picks up changes on next session.)
 `;
 
-const DEFAULT_CLAUDE_SETTINGS = JSON.stringify(
-  {
-    $schema: 'https://json.schemastore.org/claude-code-settings.json',
-    _comment: 'Project-level Claude Code settings. NoDesign loop.js injects hooks/permissions/sandbox programmatically — keep this file minimal. Add project-specific overrides here only if needed.',
-  },
-  null, 2,
-) + '\n';
+/**
+ * NoDesign 全局默认 settings.json — 代码是 source of truth。
+ *
+ * 每次 ensureProjectWorkspace 都会跟 shared/.claude/settings.json merge
+ * （existing 字段优先，新增 default 字段补上）。这样升级现存 project 不需要
+ * 用户手动改文件。
+ *
+ * autoCompactEnabled / autoCompactWindow：
+ *   2026-05-01 加 — Kimi gateway 上下文上限 256k（262144 tokens）。当前默认
+ *   模型 kimi-k2.6 一旦 prompt 累积超 256k → gateway 直接 400 报错（用户实测
+ *   request id 20260501104913995449543DV62Dl5F：requested 418547 tokens）。
+ *   留 10% 阈值 → 230000 tokens 触发自动 compact，SDK 用同模型压缩对话历史。
+ *   PostCompact hook（hooks.js:84）已就位，compact 后摘要写 spec.json 长期记忆。
+ *   1M context 模型（如 claude-opus-4-7[1m]）使用时建议手动调高这个值。
+ */
+const DEFAULT_NODESIGN_SETTINGS = {
+  $schema: 'https://json.schemastore.org/claude-code-settings.json',
+  autoCompactEnabled: true,
+  autoCompactWindow: 230000,
+};
+
+/**
+ * Merge NoDesign defaults 到现存 settings.json（existing 字段优先）。
+ * 文件不存在时直接落 defaults。
+ *
+ * @returns {Promise<boolean>} 是否有改动（true = 写入了，false = 完全相同跳过）
+ */
+async function mergeSettingsDefaults(settingsPath) {
+  let existing = {};
+  if (await fileExists(settingsPath)) {
+    try {
+      existing = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
+    } catch (err) {
+      // 损坏的 JSON：保留备份后用 defaults 覆盖
+      const backup = settingsPath + `.broken-${Date.now()}`;
+      await fs.rename(settingsPath, backup).catch(() => {});
+      console.warn(`[workspace] settings.json parse failed, backed up to ${backup}`);
+      existing = {};
+    }
+  }
+  const merged = { ...DEFAULT_NODESIGN_SETTINGS, ...existing };
+  // 旧 _comment 字段不再写默认（曾经的 placeholder），用户自定义保留
+  const before = JSON.stringify(existing);
+  const after = JSON.stringify(merged);
+  if (before === after) return false;
+  await fs.writeFile(settingsPath, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+  return true;
+}
 
 // 5 个共享子项软链名（CLAUDE.md / settings.json 是文件，其余是目录）
 const SHARED_LINKS = ['CLAUDE.md', 'settings.json', 'skills', 'agents', 'agent-memory'];
@@ -143,9 +184,9 @@ export async function ensureProjectWorkspace(projectId) {
   if (!(await fileExists(path.join(shared, '.claude', 'CLAUDE.md')))) {
     await fs.writeFile(path.join(shared, '.claude', 'CLAUDE.md'), DEFAULT_CLAUDE_MD, 'utf8');
   }
-  if (!(await fileExists(path.join(shared, '.claude', 'settings.json')))) {
-    await fs.writeFile(path.join(shared, '.claude', 'settings.json'), DEFAULT_CLAUDE_SETTINGS, 'utf8');
-  }
+  // settings.json：每次 merge defaults 让代码层 default 升级时现存 project 自动跟上
+  // （用户字段优先，缺失的 NoDesign default 字段补进去）
+  await mergeSettingsDefaults(path.join(shared, '.claude', 'settings.json'));
 
   return getProjectWorkspace(projectId);
 }
