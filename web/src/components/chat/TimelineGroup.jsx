@@ -66,28 +66,35 @@ export default function TimelineGroup({ messages, closed, summary }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           gap: GAP.sm,
           width: '100%',
-          padding: `${GAP.sm + 2}px ${GAP.lg}px`,
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-          fontWeight: 600,
-          color: isActive ? COLOR.warn : COLOR.text1,
-          background: 'rgba(0,0,0,0.03)',
+          padding: `${GAP.xs + 2}px ${GAP.lg}px`,
+          fontFamily: FONT_SANS, fontSize: 13,
+          fontWeight: 500,
+          color: isActive ? COLOR.warn : COLOR.text2,
+          background: 'transparent',
           border: 'none',
-          borderRadius: 6,
+          borderRadius: 4,
           cursor: 'pointer',
           textAlign: 'left',
-          transition: 'background 0.15s',
+          transition: 'background 0.15s, color 0.15s',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.03)'; }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'rgba(0,0,0,0.025)';
+          e.currentTarget.style.color = isActive ? COLOR.warn : COLOR.text1;
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = isActive ? COLOR.warn : COLOR.text2;
+        }}
       >
         <span style={{
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           minWidth: 0, flex: 1,
+          lineHeight: 1.5,
         }}>{title}</span>
         <ChevronDown
-          size={16}
-          strokeWidth={2}
-          color={COLOR.text2}
+          size={14}
+          strokeWidth={1.75}
+          color={COLOR.sub}
           style={{
             flexShrink: 0,
             transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
