@@ -167,4 +167,34 @@ export const Events = {
     errorStatus,    // number | null
     errorKind,      // SDKAssistantMessageError union: rate_limit / server_error / ...
   }),
+
+  // ── Phase 2 hooks 主动捕事件 ──
+
+  // SessionStart hook：source 'startup' | 'resume' | 'clear' | 'compact'
+  // 上层据此可决定要不要展示"接续上次会话"提示
+  sessionStart: (source, agentType, model) => ({
+    type: 'run.session_start', source, agentType, model,
+  }),
+
+  // SubagentStart hook（sdk.d.ts:5258）：主动捕子代理启动。
+  // SDK system 'task_started' message 是间接路径（依赖 agentProgressSummaries），
+  // 这条 hook 是更可靠的主入口。
+  subagentStart: (agentId, agentType) => ({
+    type: 'run.subagent.start', agentId, agentType,
+  }),
+
+  // SubagentStop hook（sdk.d.ts:5269）：子代理结束。带 last_assistant_message 字段
+  // 不用读 transcript 也能拿到收尾文本。
+  subagentStop: (agentId, agentType, lastAssistantMessage, transcriptPath) => ({
+    type: 'run.subagent.stop',
+    agentId, agentType,
+    lastAssistantMessage,    // 可选；agent 收尾的最后一句
+    transcriptPath,          // 可选；子代理转录文件路径，前端展开"完整对话"用
+  }),
+
+  // PostToolUseFailure hook：工具失败，hook 已注入了恢复建议给 agent，
+  // 上层只需可见"哪个工具失败了"做监控/告警。
+  toolFailure: (toolName, error) => ({
+    type: 'run.tool_failure', toolName, error,
+  }),
 };
