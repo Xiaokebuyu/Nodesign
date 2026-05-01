@@ -231,7 +231,11 @@ export async function runAgent({
     includePartialMessages: true,
 
     // thinking + effort
-    thinking: modelOverride.thinking || { type: 'adaptive' },
+    // H5：默认走 'enabled' + budgetTokens（兼容 Kimi 等非 Opus-4.6+ 模型）。
+    // 'adaptive' 仅 Opus 4.6+ 支持（sdk.d.ts:1376），其他模型给 adaptive
+    // 等于不开 thinking → jsonl 全是 text block 没 thinking_delta。
+    // 实测 H3 smoke：Kimi + adaptive → 0 thinking blocks；改 enabled 后输出。
+    thinking: modelOverride.thinking || { type: 'enabled', budgetTokens: 8192 },
     effort: modelOverride.effort || 'medium',
 
     // hotfix-sdk-usage：50 太宽，agent 一个 turn 能做 30+ 件事（写文件 /

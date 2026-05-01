@@ -111,7 +111,7 @@ export default function ChatPanel({
       </div>
 
       <TodoPanel todos={todos} />
-      <MessageList messages={messages} />
+      <MessageList messages={messages} isStreaming={isStreaming} />
       <ChatComposer
         onSend={onSend}
         disabled={isStreaming}

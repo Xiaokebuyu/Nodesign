@@ -290,15 +290,26 @@ function SystemMessage({ variant = 'warn', content }) {
 }
 
 /**
- * ThinkingMessage —— Timeline 风格 v2：Clock 图标 + 段落 + 流式光标
+ * ThinkingMessage —— Timeline 风格：Clock 图标 + 段落 + 流式光标
  *
- * 节点图标固定 Clock4（线性时钟），用颜色区分状态：
- *   - 流式中：warn 色 + 旋转（时钟走针感）
- *   - 完成：sub 色（沉默灰）
- * 不再用 Loader2/CheckCircle2 + 外圆环，参考用户图里的克制视觉。
+ * 节点图标固定 Clock4，颜色区分状态（流式 warn 旋转 / 完成 sub 静态）。
+ *
+ * H5：超长 thinking 自动折叠 — content > LONG_THRESHOLD 字符时只显示前
+ * PREVIEW_CHARS 字符 + "Show more" 按钮，保留刚开始的内容（用户看到 thinking
+ * 起头）。展开后显示全部 + "Show less" 收回。流式中不折叠（用户要看实时打字）。
  */
+const THINKING_LONG_THRESHOLD = 320;
+const THINKING_PREVIEW_CHARS = 220;
+
 function ThinkingMessage({ content, isStreaming }) {
   const [open, setOpen] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  const text = content || '';
+  // 流式中不折叠（要看打字）；非流式且超长才提供折叠
+  const longEnough = !isStreaming && text.length > THINKING_LONG_THRESHOLD;
+  const showFull = isStreaming || expanded || !longEnough;
+  const displayed = showFull ? text : text.slice(0, THINKING_PREVIEW_CHARS);
 
   return (
     <TimelineNode
@@ -337,7 +348,10 @@ function ThinkingMessage({ content, isStreaming }) {
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
         }}>
-          {content}
+          {displayed}
+          {!showFull && (
+            <span style={{ color: COLOR.dim }}>… </span>
+          )}
           {isStreaming && (
             <span
               aria-hidden="true"
@@ -351,6 +365,24 @@ function ThinkingMessage({ content, isStreaming }) {
                 animation: 'nd-thinking-blink 1s steps(2, start) infinite',
               }}
             />
+          )}
+          {longEnough && (
+            <button
+              onClick={() => setExpanded(e => !e)}
+              style={{
+                display: 'inline-block',
+                marginTop: 4,
+                padding: 0,
+                background: 'transparent',
+                border: 'none',
+                fontFamily: FONT_MONO, fontSize: 10,
+                color: COLOR.btn,
+                cursor: 'pointer',
+                letterSpacing: '0.04em',
+              }}
+            >
+              {expanded ? 'Show less' : `Show more (${text.length - THINKING_PREVIEW_CHARS} chars)`}
+            </button>
           )}
         </div>
       )}

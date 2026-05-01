@@ -4,15 +4,45 @@ import TimelineGroup from './TimelineGroup.jsx';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE } from '../../lib/theme.js';
 
 /**
- * 把连续的 thinking + tool message 分组到一个 TimelineGroup（带折叠 header
- * + 可选 Done 节点）。其他 message（user / assistant text / system / etc）
- * 单独渲染，并且会"关闭"前面的 group（closed=true → 显示 DONE）。
+ * H5：thinking + tool + assistant 中间 text 都包进同一个 TimelineGroup。
+ * 一个 turn 内 agent 的所有动作（思考、工具、中间说话）属于同一思考片段。
+ * group 的 closed 信号：
+ *   - 不是最后一个 group（后面有 user message 触发 break）→ closed=true（过去的 turn）
+ *   - 是最后一个 group + isStreaming=false（run 结束）→ closed=true
+ *   - 最后一个 group + isStreaming=true（运行中）→ closed=false（不显示 done）
+ *
+ * "正式回复"识别：!isStreaming 时，从末尾向前找最后一条 assistant text，
+ * 如果它紧贴 thinking/tool（中间没 user）→ 视为 final → 抽出来作 single 显示
+ * 在 group 之外（done 之后），让它像最终结论一样可读。
  */
-function groupMessages(messages) {
+function groupMessages(messages, isStreaming) {
+  // 1. 找 final assistant text（仅当 !isStreaming）
+  let finalTextIdx = -1;
+  if (!isStreaming) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === 'user') break;
+      if (m.role === 'assistant') {
+        finalTextIdx = i;
+        break;
+      }
+      // thinking / tool / system 等：继续向前找
+    }
+  }
+
+  // 2. group 化
   const groups = [];
   let current = null;
-  for (const m of messages) {
-    const isTimeline = m.role === 'thinking' || m.role === 'tool';
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (i === finalTextIdx) {
+      // final text 抽出 — 关上当前 group + single 显示
+      if (current) { current.closed = true; current = null; }
+      groups.push({ type: 'single', message: m });
+      continue;
+    }
+    const isTimeline =
+      m.role === 'thinking' || m.role === 'tool' || m.role === 'assistant';
     if (isTimeline) {
       if (!current) {
         current = { type: 'timeline', items: [], closed: false };
@@ -20,11 +50,17 @@ function groupMessages(messages) {
       }
       current.items.push(m);
     } else {
-      if (current) current.closed = true;
-      current = null;
+      // user / system 等 break group
+      if (current) { current.closed = true; current = null; }
       groups.push({ type: 'single', message: m });
     }
   }
+
+  // 3. 最后一个未关 group：!isStreaming 时也 close 显示 done；streaming 中保持 open
+  if (current && !isStreaming) {
+    current.closed = true;
+  }
+
   return groups;
 }
 
@@ -38,7 +74,7 @@ function groupMessages(messages) {
  */
 const STICK_THRESHOLD = 80;
 
-export default function MessageList({ messages = [] }) {
+export default function MessageList({ messages = [], isStreaming = false }) {
   const ref = useRef(null);
   const stickRef = useRef(true);
 
@@ -57,7 +93,7 @@ export default function MessageList({ messages = [] }) {
     return () => cancelAnimationFrame(id);
   }, [messages]);
 
-  const groups = useMemo(() => groupMessages(messages), [messages]);
+  const groups = useMemo(() => groupMessages(messages, isStreaming), [messages, isStreaming]);
 
   return (
     <div ref={ref} onScroll={handleScroll} style={{
