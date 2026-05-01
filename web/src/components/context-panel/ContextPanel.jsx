@@ -1,25 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Upload, Crosshair, MessageCircle, Sliders, Settings, Bookmark, BookOpen } from 'lucide-react';
-import InputsTab from './InputsTab.jsx';
+import { Crosshair, MessageCircle, Sliders, Settings, Bookmark } from 'lucide-react';
 import SystemTab from './SystemTab.jsx';
 import InspectTab from './InspectTab.jsx';
 import CommentsTab from './CommentsTab.jsx';
 import DecisionsTab from './DecisionsTab.jsx';
-import BackgroundTab from './BackgroundTab.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 /**
- * Context Panel — 右栏 5 tab（含 Design Principle §8 的 Inspect tab）
+ * Context Panel — 工作台右栏 tab（H4a 清理后聚焦"运行时上下文"）
  *
- * Tab 顺序：Inputs · Inspect · Comments · Tweaks · System
+ * Tab 顺序：Inspect · Comments · Decisions · Tweaks · System
  *
- * 受控 tab：Project 持有 selectedAnchor，selectedAnchor 变时切到 Inspect。
- *
- * P2：Inputs / Inspect / System 实现，Comments / Tweaks 占位（Comments 等 P5 接 LLM）
+ * H4a 改动：
+ * - 删 "项目背景"（搬到 Hub Instructions card 编辑 .claude/CLAUDE.md）
+ * - 删 Inputs（搬到 Hub Files card 管理 shared/assets）
+ * - 默认 tab 改 inspect（工作时常用）
+ * - 顺手解决 7 tab 中文挤压成竖排的 cosmetic 问题
  */
 const TABS = [
-  { id: 'background', label: '项目背景', icon: BookOpen },
-  { id: 'inputs',     label: 'Inputs',    icon: Upload },
   { id: 'inspect',    label: 'Inspect',   icon: Crosshair },
   { id: 'comments',   label: 'Comments',  icon: MessageCircle },
   { id: 'decisions',  label: 'Decisions', icon: Bookmark },
@@ -28,14 +26,14 @@ const TABS = [
 ];
 
 export default function ContextPanel({
-  project, deckSpec, comments = [], inputs = [], onAddInput, onRemoveInput,
+  project, deckSpec, comments = [],
   selectedAnchor, iframeDoc,
   onAddComment, onDirectEdit, onTriggerRun,
   onJumpToComment, onResolveComment, onDeleteComment,
   decisionsReloadKey = 0,
   sessionId,
 }) {
-  const [tab, setTab] = useState('background');
+  const [tab, setTab] = useState('inspect');
 
   // 选中元素时自动切到 Inspect tab
   useEffect(() => {
@@ -77,8 +75,6 @@ export default function ContextPanel({
 
       {/* Tab content */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
-        {tab === 'background' && <BackgroundTab projectId={project?.id} />}
-        {tab === 'inputs'   && <InputsTab inputs={inputs} onAdd={onAddInput} onRemove={onRemoveInput} />}
         {tab === 'inspect'  && (
           <InspectTab
             selectedAnchor={selectedAnchor}

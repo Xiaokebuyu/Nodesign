@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Share2, Download, MoreHorizontal } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import ThreeColumnLayout from '../components/layout/ThreeColumnLayout.jsx';
@@ -33,6 +33,7 @@ export default function ProjectWorkspace() {
   // navigate replace 到 /sessions/<sid> 让 URL 反映真实 sid，刷新可恢复
   const { id, sid: urlSid } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const currentSessionId = urlSid || null;
 
   // ── store ──
@@ -165,6 +166,45 @@ export default function ProjectWorkspace() {
     return () => ws.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, hydrated, hydrateError, project?.id]);
+
+  // ── H4a: auto-send initialMessage from location.state（HubInput 入口）──
+  // Hub 用户在 input box 输入 → navigate('/work', { state: { initialMessage } })
+  // 这里 mount 完毕 + project hydrated + WS 上线后自动发送一次，无感跳转。
+  // 用 ref 防双发（StrictMode + state 闭包都可能触发重入）；发完 navigate
+  // replace 清 state 防刷新重发。
+  const initialMessageSentRef = useRef(false);
+  useEffect(() => {
+    if (!hydrated || hydrateError || !project) return;
+    if (initialMessageSentRef.current) return;
+    const initial = location.state?.initialMessage;
+    if (typeof initial !== 'string' || !initial.trim()) return;
+    initialMessageSentRef.current = true;
+
+    const text = initial.trim();
+    // 等 WS 连上一两个 tick 再发，确保 run.start 等事件能收到
+    const t = setTimeout(async () => {
+      setMessages((ms) => [...ms, { id: newId('msg'), role: 'user', content: text }]);
+      try {
+        const { runId } = await Turn.send({
+          pid: id,
+          chat: text,
+          attachments: [],
+          sessionId: currentSessionId,  // /work 路径 → null（新会话）；/sessions/:sid → 续约
+        });
+        setCurrentRunId(runId);
+      } catch (err) {
+        setMessages((ms) => [...ms, {
+          id: newId('msg'), role: 'assistant',
+          content: `_⚠️ 发送失败：${err.message}_`,
+        }]);
+        showToast(`发送失败：${err.message}`, 'error');
+      }
+      // 清 location.state 防 navigate 后退/刷新重发
+      navigate(location.pathname, { replace: true, state: null });
+    }, 250);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, hydrateError, project?.id, location.state]);
 
   /** WS 事件 → chat messages / iframe reload 翻译层 */
   function handleEvent(evt) {
@@ -829,10 +869,7 @@ export default function ProjectWorkspace() {
           <ContextPanel
             project={project}
             deckSpec={deckSpec}
-            inputs={inputs}
             comments={comments}
-            onAddInput={handleAddInput}
-            onRemoveInput={handleRemoveInput}
             selectedAnchor={selectedAnchor}
             iframeDoc={iframeDoc}
             onAddComment={handleAddComment}
