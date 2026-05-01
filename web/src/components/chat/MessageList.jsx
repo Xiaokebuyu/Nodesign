@@ -4,24 +4,44 @@ import TimelineGroup from './TimelineGroup.jsx';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE } from '../../lib/theme.js';
 
 /**
- * groupMessages —— 只 thinking + tool 进 timeline group，assistant 文字一律
- * single 抽出。这样视觉上 agent 的"想 → 做 → 想 → 做"流程被中间正式回复
- * 自然断开（前段 group 显示 done，后段开新 group），而不是跟正文连成一串。
+ * groupMessages —— thinking + tool + 短过场 assistant 进 timeline group；
+ * 长 assistant 正式回复 break group 显示 single。
+ *
+ * 启发式判断"短过场" vs "正式回复"：
+ *   - 含 `\n\n`（多段）→ 正式回复，break
+ *   - 长度 > 200 字符 → 正式回复，break
+ *   - 末尾是问号 → agent 在问用户，break
+ *   - 否则（短单行过程叙述如"接下来改 page 4"）→ 留 group 作 timeline node
+ *
+ * 这样视觉上：
+ *   - agent "想→做→说一句→做→说一句→做" 这种连续工作 → 一个 group 视觉连贯
+ *   - agent "[做完一坨] 我做了 A/B/C 三件事，markdown 表格..." → break 让正式
+ *     回复独立显示
  *
  * group 的 closed 信号：
- *   - 后面接非 timeline message（assistant / user / system）→ closed=true
- *   - 最后一个 group + !isStreaming → closed=true（run 结束加 done）
- *   - 最后一个 group + isStreaming → closed=false（运行中不显示 done）
+ *   - 后面接 break message（长 assistant / user / system）→ closed=true
+ *   - 最后一个 group + !isStreaming → closed=true
+ *   - 最后一个 group + isStreaming → closed=false
  *
- * 历史：H5 之前 assistant 也进 group + 末尾 final text 抽出。新版抽出策略
- * 统一为"assistant 全 single"，不再区分 final vs mid-turn —— 用户反馈
- * mid-turn 正文回复跟前后 thinking 连在一起视觉上误导。
+ * 历史：H5 是 thinking+tool+assistant 全进 group + 末尾 final text 抽出。
+ * 第一版改动是 assistant 全 break，但用户反馈"短过场也 break"导致每个
+ * Edit 自己一个 group 太碎。当前版本（启发式 break）是折中。
  */
+function isShortNarration(text) {
+  if (!text || typeof text !== 'string') return true;  // 空 assistant 当过场
+  if (text.length > 200) return false;
+  if (text.includes('\n\n')) return false;
+  if (/[?？]\s*$/.test(text.trim())) return false;
+  return true;
+}
+
 function groupMessages(messages, isStreaming) {
   const groups = [];
   let current = null;
   for (const m of messages) {
-    const isTimeline = m.role === 'thinking' || m.role === 'tool';
+    const isTimeline = m.role === 'thinking'
+      || m.role === 'tool'
+      || (m.role === 'assistant' && isShortNarration(m.content));
     if (isTimeline) {
       if (!current) {
         current = { type: 'timeline', items: [], closed: false };
@@ -29,13 +49,12 @@ function groupMessages(messages, isStreaming) {
       }
       current.items.push(m);
     } else {
-      // user / assistant / system 全 break group
+      // user / 长 assistant / system 全 break group
       if (current) { current.closed = true; current = null; }
       groups.push({ type: 'single', message: m });
     }
   }
 
-  // 最后一个未关 group：!isStreaming 时也 close 显示 done；streaming 中保持 open
   if (current && !isStreaming) {
     current.closed = true;
   }
