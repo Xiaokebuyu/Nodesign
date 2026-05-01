@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Upload, Crosshair, MessageCircle, Sliders, Settings, Bookmark } from 'lucide-react';
+import { Upload, Crosshair, MessageCircle, Sliders, Settings, Bookmark, BookOpen } from 'lucide-react';
 import InputsTab from './InputsTab.jsx';
 import SystemTab from './SystemTab.jsx';
 import InspectTab from './InspectTab.jsx';
 import CommentsTab from './CommentsTab.jsx';
 import DecisionsTab from './DecisionsTab.jsx';
+import BackgroundTab from './BackgroundTab.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 /**
@@ -17,12 +18,13 @@ import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js'
  * P2：Inputs / Inspect / System 实现，Comments / Tweaks 占位（Comments 等 P5 接 LLM）
  */
 const TABS = [
-  { id: 'inputs',    label: 'Inputs',    icon: Upload },
-  { id: 'inspect',   label: 'Inspect',   icon: Crosshair },
-  { id: 'comments',  label: 'Comments',  icon: MessageCircle },
-  { id: 'decisions', label: 'Decisions', icon: Bookmark },
-  { id: 'tweaks',    label: 'Tweaks',    icon: Sliders },
-  { id: 'system',    label: 'System',    icon: Settings },
+  { id: 'background', label: '项目背景', icon: BookOpen },
+  { id: 'inputs',     label: 'Inputs',    icon: Upload },
+  { id: 'inspect',    label: 'Inspect',   icon: Crosshair },
+  { id: 'comments',   label: 'Comments',  icon: MessageCircle },
+  { id: 'decisions',  label: 'Decisions', icon: Bookmark },
+  { id: 'tweaks',     label: 'Tweaks',    icon: Sliders },
+  { id: 'system',     label: 'System',    icon: Settings },
 ];
 
 export default function ContextPanel({
@@ -32,7 +34,7 @@ export default function ContextPanel({
   onJumpToComment, onResolveComment, onDeleteComment,
   decisionsReloadKey = 0,
 }) {
-  const [tab, setTab] = useState('inputs');
+  const [tab, setTab] = useState('background');
 
   // 选中元素时自动切到 Inspect tab
   useEffect(() => {
@@ -74,6 +76,7 @@ export default function ContextPanel({
 
       {/* Tab content */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        {tab === 'background' && <BackgroundTab projectId={project?.id} />}
         {tab === 'inputs'   && <InputsTab inputs={inputs} onAdd={onAddInput} onRemove={onRemoveInput} />}
         {tab === 'inspect'  && (
           <InspectTab

@@ -149,6 +149,12 @@ export const Turn = {
     jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/cancel`, {}),
 };
 
+// ── Instruction（项目级 .claude/CLAUDE.md 读写）──
+export const Instruction = {
+  read: (pid) => jsonRequest('GET', `/api/projects/${pid}/instruction`),
+  write: (pid, content) => jsonRequest('PUT', `/api/projects/${pid}/instruction`, { content }),
+};
+
 // ── Sessions（薄壳走 SDK listSessions / getSessionMessages）──
 export const Sessions = {
   /** 列项目下所有 session（按 lastModified 倒序，SDK 默认） */

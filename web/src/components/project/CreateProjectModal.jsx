@@ -24,6 +24,7 @@ export default function CreateProjectModal({ show, onClose, onCreated }) {
   const createProject = useProjectStore(s => s.createProject);
   const showToast = useGlobalStore(s => s.showToast);
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [brief, setBrief] = useState('');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [goal, setGoal] = useState('');
@@ -36,6 +37,7 @@ export default function CreateProjectModal({ show, onClose, onCreated }) {
   useEffect(() => {
     if (show) {
       setName('');
+      setDescription('');
       setBrief('');
       setAdvancedOpen(false);
       setGoal(''); setAudience(''); setKeyMessages(''); setStylePref('');
@@ -59,6 +61,7 @@ export default function CreateProjectModal({ show, onClose, onCreated }) {
       // 1. 创建项目（后端 ensureProjectWorkspace + git init）
       const proj = await createProject({
         name: name.trim() || '未命名项目',
+        description: description.trim() || undefined,
       });
 
       // 2. 有 brief 就立即起首跑（agent 在后端异步跑，前端 Project.jsx 通过 WS 看流）
@@ -90,6 +93,18 @@ export default function CreateProjectModal({ show, onClose, onCreated }) {
             placeholder="例如：Q3 产品发布会 deck"
             style={inputStyle}
             autoFocus
+          />
+        </Section>
+
+        {/* 项目描述（可选 — 给你自己看的项目摘要，agent 不读这个）*/}
+        <Section label="项目描述（可选 · 给团队看的项目摘要）">
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="例如：年度发布会主 deck，团队内部协作用。AI 看的是「项目背景」tab 里的 instruction。"
+            rows={2}
+            maxLength={2000}
+            style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT_SANS, lineHeight: 1.5 }}
           />
         </Section>
 

@@ -55,8 +55,8 @@ export const useProjectStore = create((set, get) => ({
 
   getProject: (id) => get().projects.find((p) => p.id === id) || null,
 
-  createProject: async ({ name, skillId }) => {
-    const { project } = await Projects.create({ name, skillId });
+  createProject: async ({ name, skillId, description }) => {
+    const { project } = await Projects.create({ name, skillId, description });
     const e = enrich(project);
     set((s) => ({ projects: [e, ...s.projects] }));
     return e;
@@ -67,10 +67,11 @@ export const useProjectStore = create((set, get) => ({
     set((s) => ({
       projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)),
     }));
-    // 后端只接受 name / skillId
+    // 后端接受 name / skillId / description
     const apiPatch = {};
     if (typeof patch.name === 'string') apiPatch.name = patch.name;
     if (typeof patch.skillId === 'string') apiPatch.skillId = patch.skillId;
+    if ('description' in patch) apiPatch.description = patch.description;
     if (Object.keys(apiPatch).length === 0) return get().getProject(id);
     const { project } = await Projects.update(id, apiPatch);
     const e = enrich(project);

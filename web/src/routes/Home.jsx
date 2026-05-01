@@ -201,6 +201,20 @@ function ProjectCard({ project }) {
           </div>
           <span style={{ width: 6, height: 6, borderRadius: 3, background: dot, flexShrink: 0, marginLeft: GAP.md }} />
         </div>
+        {project.description && (
+          <div style={{
+            fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text2,
+            lineHeight: 1.5,
+            marginBottom: GAP.sm,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {project.description}
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{project.skill}</span>
           <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{timeAgo(project.updatedAt)}</span>
