@@ -119,10 +119,11 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
         matcher: 'mcp__nodesign__export_handoff',
         hooks: [makePostToolUseExportHandler({ ctx })],
       },
-      {
-        matcher: 'mcp__nodesign__record_decision',
-        hooks: [makePostToolUseRecordDecisionHandler({ ctx, workspaceRoot })],
-      },
+      // record_decision 后**不再**注 additionalContext —— 之前注的"继续主任务"
+      // 跟 SDK preset 'claude_code' 教的"工具调用不是任务结束"重复，agent 模型
+      // 自己已经懂。删除让 agent 行为更接近 SDK 默认（不"被牵着走"）。
+      // screenshot / export 那两条仍保留：截图后要求 3 条具体视觉问题、export
+      // 后防重复打包，都是 SDK 不知道的 NoDesign 业务约束。
     ],
 
     // PostToolUseFailure —— 任意工具失败时统一处理：emit 事件 + 给 agent
@@ -475,27 +476,11 @@ function makePostToolUseExportHandler({ ctx: _ctx }) {
   };
 }
 
-/**
- * PostToolUse(record_decision) handler — agent 记决策后引导它继续主任务。
- *
- * 防止 agent 一旦发现"记决策"工具有效，就反复记导致信号稀释（SKILL.md 已经
- * 教过"信号稀释比缺失记录还坏"，但 hook 是兜底）。
- */
-function makePostToolUseRecordDecisionHandler({ ctx: _ctx, workspaceRoot: _workspaceRoot }) {
-  // 不 emit run.decision_recorded —— mcp/tools/record-decision.js:107 已经 emit
-  // 完整字段（title / scope / decisionsCount）。hook 不重复读 spec.json，
-  // 只负责注 additionalContext 引导 agent 行为。
-  return async (_input, _toolUseId, _options) => {
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PostToolUse',
-        additionalContext:
-          '已记录决策到 spec.json。继续做用户的当前任务，不要为同一件事重复 record_decision。'
-          + '\n下一步该回到主线（继续 Edit canvas / 截图自检 / 收尾文本，按当前阶段判断）。',
-      },
-    };
-  };
-}
+// makePostToolUseRecordDecisionHandler — 已移除（git 历史可查）。
+// 之前注 "继续做用户的当前任务" 跟 SDK preset 'claude_code' 教的内容重复，
+// 让 agent 行为像被牵着走。删除后 agent 记完决策自己判断下一步，更接近
+// SDK 默认行为。如未来观察到 agent 反复 record_decision 信号稀释，再考虑
+// 加回（那时改成更精准的 anti-loop 检测，不是无脑注引导）。
 
 /**
  * PostToolUseFailure handler — 工具失败时给 agent 恢复建议。
