@@ -31,3 +31,27 @@ iframe { border: 0; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+
+/* shimmer effect — 工具调用 running 状态用。"一束光从左到右扫过文字"
+   表示"工具在跑，不是卡住"。thinking 不用（thinking 自带逐字打字效果）。
+   gradient 在文字上动，background-clip:text 让 gradient 只在字形里显示。*/
+.nd-shimmer {
+  background: linear-gradient(
+    90deg,
+    #4a4540 0%,
+    #4a4540 40%,
+    #d97706 50%,
+    #4a4540 60%,
+    #4a4540 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: nd-shimmer-sweep 2.4s linear infinite;
+}
+@keyframes nd-shimmer-sweep {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

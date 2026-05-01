@@ -318,15 +318,12 @@ function ThinkingMessage({ content, isStreaming }) {
       icon={Clock4}
       iconColor={isStreaming ? COLOR.warn : COLOR.sub}
     >
-      <div
-        className={isStreaming ? 'nd-shimmer' : undefined}
-        style={{
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-          color: COLOR.text2, lineHeight: 1.55,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}
-      >
+      <div style={{
+        fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+        color: COLOR.text2, lineHeight: 1.55,
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+      }}>
         {displayed}
         {!showFull && (
           <span style={{ color: COLOR.dim }}>… </span>
@@ -351,31 +348,8 @@ function ThinkingMessage({ content, isStreaming }) {
           </div>
         )}
       </div>
-      {/* shimmer effect — 流式中"一束光从左到右扫过文字"。代替原 icon 旋转
-          + 末尾闪光标。CSS gradient 在文字上动，background-clip: text 让
-          gradient 只显示在字形里。中文字符正常。 */}
-      <style>{`
-        .nd-shimmer {
-          background: linear-gradient(
-            90deg,
-            ${COLOR.text2} 0%,
-            ${COLOR.text2} 40%,
-            ${COLOR.warn} 50%,
-            ${COLOR.text2} 60%,
-            ${COLOR.text2} 100%
-          );
-          background-size: 200% 100%;
-          background-clip: text;
-          -webkit-background-clip: text;
-          color: transparent;
-          -webkit-text-fill-color: transparent;
-          animation: nd-shimmer-sweep 2.4s linear infinite;
-        }
-        @keyframes nd-shimmer-sweep {
-          0%   { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-      `}</style>
+      {/* thinking 不用 shimmer —— thinking 本身就有逐字打字效果，用户能看到
+          内容在动。shimmer 留给非流式 tool 调用的 running 状态（globals.css）。 */}
     </TimelineNode>
   );
 }
@@ -513,11 +487,14 @@ function ToolMessage({
           }}
           title={toolInput?.file_path || toolInput?.path || ''}
         >
-          <span style={{
-            fontWeight: 500,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            maxWidth: 200,
-          }}>
+          <span
+            className={isRunning ? 'nd-shimmer' : undefined}
+            style={{
+              fontWeight: 500,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              maxWidth: 200,
+            }}
+          >
             {filename || toolName}
           </span>
           {fileDiff.adds > 0 && (
@@ -582,7 +559,12 @@ function ToolMessage({
         }}
         title={toolName}
       >
-        <span style={{ fontWeight: 500, flexShrink: 0 }}>{displayName}</span>
+        <span
+          className={isRunning ? 'nd-shimmer' : undefined}
+          style={{ fontWeight: 500, flexShrink: 0 }}
+        >
+          {displayName}
+        </span>
         {summary && (
           <span style={{
             color: COLOR.sub, opacity: 0.85,
