@@ -103,6 +103,14 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
     // PostToolUse —— 按 MCP 工具名分别注 additionalContext，引导 agent 利用
     // 工具结果。matcher 字段是 SDK 标准（与 PreToolUse 'Bash' 同语义）。
     PostToolUse: [
+      // Edit/Write 后干掉 tool_response.originalFile：FileEditOutput/FileWriteOutput
+      // 默认含完整原文件（sdk-tools.d.ts:2270, 2328），这是上下文累积大头。
+      // canvas.html 25KB 一次 Edit ≈ 6k tokens，30 turn 累积可达 180k+ → 触发 256k 上限。
+      // 模型有 structuredPatch (diff 行) 看改动够了，原文件需要再用 Read 拿。
+      {
+        matcher: 'Edit|Write',
+        hooks: [makePostToolUseEditWriteTrimHandler({ ctx })],
+      },
       {
         matcher: 'mcp__nodesign__screenshot_canvas',
         hooks: [makePostToolUseScreenshotHandler({ ctx })],
@@ -355,6 +363,64 @@ function makeUserPromptSubmitHandler({ ctx, workspaceRoot }) {
       };
     } catch (err) {
       console.warn(`[hooks/UserPromptSubmit] handler threw:`, err.message);
+      return {};
+    }
+  };
+}
+
+/**
+ * PostToolUse(Edit|Write) handler —— 干掉 tool_response.originalFile 防上下文累积。
+ *
+ * 背景：
+ *   FileEditOutput.originalFile / FileWriteOutput.originalFile (sdk-tools.d.ts:2270, 2328)
+ *   是完整原文件内容。canvas.html 25KB 一次 Edit 在 tool_result 里等于 6k tokens。
+ *   30 turn 累积 ≈ 180k tokens → 跟 Kimi 256k 上限挤爆（用户实测 418k 报错）。
+ *
+ *   structuredPatch（diff 行）是模型理解改动所需的全部信息；oldString/newString
+ *   是模型自己刚才传的 input，本来就在上下文里。originalFile 对模型基本无用 —
+ *   要看完整文件后续再 Read 即可。
+ *
+ * 行为：
+ *   updatedToolOutput 是 SDK 提供的"改写发给 model 的 tool_result"通道
+ *   (sdk.d.ts:1944)。**只影响 model 视图**，jsonl 持久化仍是原 tool_response。
+ *   也就是 forkSession / 断线恢复看到的还是完整产物 — 不丢数据。
+ *
+ *   保留字段：filePath / oldString / newString / structuredPatch / type / gitDiff
+ *   清掉字段：originalFile（替换为 null，保持类型 string|null）
+ *
+ *   非 Edit/Write 的 tool_response 形态（如 input 不带 originalFile） noop。
+ *
+ * input: PostToolUseHookInput (sdk.d.ts:1926)
+ * output: PostToolUseHookSpecificOutput (sdk.d.ts:1938)
+ */
+function makePostToolUseEditWriteTrimHandler({ ctx }) {
+  return async (input, _toolUseId, _options) => {
+    try {
+      const resp = input?.tool_response;
+      if (!resp || typeof resp !== 'object') return {};
+      if (!('originalFile' in resp)) return {};
+      const originalSize = typeof resp.originalFile === 'string' ? resp.originalFile.length : 0;
+      if (originalSize === 0) return {};  // 新建文件 originalFile 本就是 null
+
+      const trimmed = { ...resp, originalFile: null };
+
+      try {
+        ctx.emit({
+          type: 'run.tool_response_trimmed',
+          tool: input?.tool_name || 'Edit/Write',
+          field: 'originalFile',
+          savedChars: originalSize,
+        });
+      } catch { /* emit fail-safe */ }
+
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PostToolUse',
+          updatedToolOutput: trimmed,
+        },
+      };
+    } catch (err) {
+      console.warn(`[hooks/PostToolUse Edit|Write trim] handler threw:`, err.message);
       return {};
     }
   };
