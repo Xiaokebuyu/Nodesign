@@ -165,11 +165,56 @@ function maybeFixupMessagesBody(body) {
 
   if (!parsed.model || typeof parsed.model !== 'string') return body;
   if (!/^kimi/i.test(parsed.model)) return body;  // 只动 kimi-*
-  if (!parsed.thinking || parsed.thinking.type !== 'adaptive') return body;
 
-  // 改写：adaptive → enabled + budget_tokens 8192
-  parsed.thinking = { type: 'enabled', budget_tokens: 8192 };
-  return Buffer.from(JSON.stringify(parsed), 'utf8');
+  // S8 workaround：Kimi 网关不识别 tool_result.content 里嵌套的 image content
+  // block（实测同样 base64 image 在 user message 顶层 Kimi 完美 vision，但放到
+  // tool_result 嵌套里 model 报"看不到图"凭文件名 hallucinate）。我们 lift
+  // image 到 user message 顶层 + tool_result 里替换为占位文本，保持工具关联
+  // 同时让 Kimi 真看到图。
+  let mutated = false;
+  if (Array.isArray(parsed.messages) && liftImagesFromToolResult(parsed.messages)) {
+    mutated = true;
+  }
+
+  // thinking adaptive→enabled
+  if (parsed.thinking && parsed.thinking.type === 'adaptive') {
+    parsed.thinking = { type: 'enabled', budget_tokens: 8192 };
+    mutated = true;
+  }
+
+  return mutated ? Buffer.from(JSON.stringify(parsed), 'utf8') : body;
+}
+
+/**
+ * Kimi tool_result-image fix（S8）：把 tool_result.content 里的 image block
+ * 提到外层 user message content 顶层；原位置替换为占位文本说明图片在末尾。
+ *
+ * @returns true if mutated
+ */
+function liftImagesFromToolResult(messages) {
+  let mutated = false;
+  for (const msg of messages) {
+    if (msg?.role !== 'user' || !Array.isArray(msg.content)) continue;
+    const liftedImages = [];
+    for (const block of msg.content) {
+      if (block?.type !== 'tool_result' || !Array.isArray(block.content)) continue;
+      block.content = block.content.map((inner) => {
+        if (inner?.type === 'image' && inner.source?.data) {
+          liftedImages.push({ ...inner });
+          mutated = true;
+          return {
+            type: 'text',
+            text: '[image content lifted to user message top-level for Kimi vision compat — see image block at end of this message]',
+          };
+        }
+        return inner;
+      });
+    }
+    if (liftedImages.length > 0) {
+      msg.content.push(...liftedImages);
+    }
+  }
+  return mutated;
 }
 
 /**
@@ -178,6 +223,7 @@ function maybeFixupMessagesBody(body) {
  */
 function scanImageBlocks(messages) {
   const stats = { total: 0, inToolResult: 0, inUserMsg: 0, unknownImageRefs: 0 };
+  let firstSample = null;
   for (const msg of messages) {
     if (!Array.isArray(msg.content)) continue;
     for (const block of msg.content) {
@@ -185,6 +231,7 @@ function scanImageBlocks(messages) {
         stats.total++;
         stats.inUserMsg++;
         if (!block.source?.data) stats.unknownImageRefs++;
+        if (!firstSample) firstSample = imageBlockSummary(block, 'userMsg');
       }
       if (block?.type === 'tool_result' && Array.isArray(block.content)) {
         for (const inner of block.content) {
@@ -192,12 +239,25 @@ function scanImageBlocks(messages) {
             stats.total++;
             stats.inToolResult++;
             if (!inner.source?.data) stats.unknownImageRefs++;
+            if (!firstSample) firstSample = imageBlockSummary(inner, 'toolResult');
           }
         }
       }
     }
   }
+  // 第一次出现 image 时打 sample 看具体 schema 形态
+  if (firstSample) {
+    console.info(`[binary-fixup vision sample] ${firstSample}`);
+  }
   return stats;
+}
+
+function imageBlockSummary(block, where) {
+  const src = block?.source;
+  if (!src) return `${where}: type=${block?.type} (no source field)`;
+  const dataLen = typeof src.data === 'string' ? src.data.length : 'N/A';
+  const dataHead = typeof src.data === 'string' ? src.data.slice(0, 24) + '...' : 'N/A';
+  return `${where}: keys=[${Object.keys(block).join(',')}] source.keys=[${Object.keys(src).join(',')}] source.type=${src.type} source.media_type=${src.media_type} dataLen=${dataLen} dataHead=${dataHead}`;
 }
 
 /**
