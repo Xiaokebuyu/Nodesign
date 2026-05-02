@@ -32,6 +32,7 @@ import {
   ensureProjectWorkspace,
   ensureSessionWorkspace,
   validateSessionId,
+  readAssetsSummary,
 } from '../projects/workspace.js';
 import { createRun } from '../engine/runs/store.js';
 import { runSession } from '../engine/agent/session-loop.js';
@@ -87,11 +88,15 @@ router.post('/:pid/turn', async (req, res, next) => {
     const sid = isNewSession ? randomUUID() : resumeSessionId;
     validateSessionId(sid);
 
-    // C4：取 sessionRoot + pending-changes 摘要，注入到 composeUserMessage
+    // 取 sessionRoot + 两类 workspace 主动提示：
+    //   - pendingSummary（C4）：用户在 chat 间隔做的直接编辑/评论 buffer
+    //   - assetsSummary（C8）：./assets/ 里的参考素材（图/文档），新 session 必报，
+    //     续 session 仅当 buffer/旧素材的存在仍可能影响判断时报（这里简化为"非空就报"）
     await ensureProjectWorkspace(project.id);
     const sessionRoot = await ensureSessionWorkspace(project.id, sid);
     const pendingSummary = isNewSession ? { count: 0, summary: '' } : await readPendingSummary(sessionRoot);
-    const { displayText, blocks } = await composeUserMessage(chat, attachments, pendingSummary, sessionRoot);
+    const assetsSummary = await readAssetsSummary(sessionRoot);
+    const { displayText, blocks } = await composeUserMessage(chat, attachments, pendingSummary, assetsSummary, sessionRoot);
 
     // 创建 run（pending）— per-turn record，displayText 落 brief 字段做审计
     const run = createRun({ skillId: finalSkillId, brief: displayText, projectId: project.id });
@@ -173,7 +178,7 @@ function startNewRunSession({ runId, sid, sessionRoot, blocks, eventBus, project
  * Anthropic image content block 仅支持 jpeg/png/gif/webp，不支持 svg/heic 等。
  * 不在白名单的 image mime → 按文本路径降级。
  */
-async function composeUserMessage(chat, attachments, pendingSummary, sessionRoot) {
+async function composeUserMessage(chat, attachments, pendingSummary, assetsSummary, sessionRoot) {
   const blocks = [];
 
   // C4：用户在过去时段做的 direct edit + comment → prepend system 提示
@@ -182,6 +187,15 @@ async function composeUserMessage(chat, attachments, pendingSummary, sessionRoot
     blocks.push({
       type: 'text',
       text: `<system>${pendingSummary.summary}。可调 mcp__nodesign__get_pending_changes 查看详情；处理完调 mcp__nodesign__clear_pending_changes 清 buffer。</system>`,
+    });
+  }
+
+  // C8：assets/ 主动提醒（替代 prelude 硬规则"必先 Glob assets"）—— workspace
+  // 检测到有素材时温和提示 agent，没素材就不注入，agent 不必每个 turn 硬查
+  if (assetsSummary && assetsSummary.count > 0) {
+    blocks.push({
+      type: 'text',
+      text: `<system>${assetsSummary.summary}。建议挑 1 张关键图 Read 看一眼（你能直接 vision 看到颜色/质感/排版），再决定动手。如果跟用户的 brief 不相关可以先不看。</system>`,
     });
   }
 

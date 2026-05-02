@@ -257,6 +257,68 @@ export async function ensureSessionWorkspace(projectId, sessionId) {
   return sessionRoot;
 }
 
+// ── workspace 主动提醒（C8 SKILL/prelude 改造）──
+//
+// 给 turn.js composeUserMessage 用 —— 检测 sessionRoot 下 assets/ 软链指向的
+// shared/assets/ 是否有内容，有就让 agent 看见 "<system>workspace 里有 N 个文
+// 件……" 提示。空目录就不注入，agent 不必每个 turn 都硬 Glob 一遍。
+//
+// 之前的设计：prelude 强制 agent 首跑前 Glob assets/**/* —— 浪费一次 turn 即便
+// 目录是空的。改成 workspace 主动 prepend 提示，把"是否需要看 assets" 这个
+// 决策从"agent 必须先做"翻译成"agent 看到提示自己判断"。
+
+const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg']);
+const DOC_EXT = new Set(['.md', '.txt', '.pdf', '.json']);
+
+/**
+ * @param {string} sessionRoot - sessions/<sid>/ 绝对路径
+ * @returns {Promise<{ count: number, summary: string }>}
+ *   count=0 时 summary 为空字符串，调用方据此判断是否注入提示。
+ *   summary 形如 "workspace 里已有 3 个素材（2 张图 cover.png/palette.jpg、1 个文档 brief.md）"
+ */
+export async function readAssetsSummary(sessionRoot) {
+  try {
+    const assetsLink = path.join(sessionRoot, 'assets');
+    const stat = await fs.stat(assetsLink).catch(() => null);
+    if (!stat) return { count: 0, summary: '' };
+
+    const entries = await fs.readdir(assetsLink, { withFileTypes: true }).catch(() => []);
+    const files = entries.filter((e) => !e.name.startsWith('.') && (e.isFile() || e.isSymbolicLink()));
+    if (files.length === 0) return { count: 0, summary: '' };
+
+    const images = [];
+    const docs = [];
+    const others = [];
+    for (const f of files) {
+      const ext = path.extname(f.name).toLowerCase();
+      if (IMAGE_EXT.has(ext)) images.push(f.name);
+      else if (DOC_EXT.has(ext)) docs.push(f.name);
+      else others.push(f.name);
+    }
+
+    // 摘要：种类 + 头几个文件名（避免太长）
+    const parts = [];
+    if (images.length > 0) {
+      const sample = images.slice(0, 3).join('、');
+      parts.push(`${images.length} 张图（${sample}${images.length > 3 ? ` 等` : ''}）`);
+    }
+    if (docs.length > 0) {
+      const sample = docs.slice(0, 3).join('、');
+      parts.push(`${docs.length} 个文档（${sample}${docs.length > 3 ? ` 等` : ''}）`);
+    }
+    if (others.length > 0) {
+      parts.push(`${others.length} 个其他文件`);
+    }
+
+    return {
+      count: files.length,
+      summary: `workspace 里已有 ${files.length} 个参考素材：${parts.join('、')}`,
+    };
+  } catch {
+    return { count: 0, summary: '' };
+  }
+}
+
 // ── 老结构清理（用户决策"删了"）──
 
 /**
