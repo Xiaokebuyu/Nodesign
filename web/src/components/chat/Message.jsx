@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import {
-  Wrench, ChevronRight,
+  Wrench, ChevronRight, ChevronLeft,
   FileText, Pencil, FilePlus, Search, Terminal,
   Eye, Download, Bookmark, Bot, Activity,
   ListChecks, FolderTree, Globe,
   ShieldAlert, Info, AlertCircle, CheckCircle2,
-  HelpCircle,
+  HelpCircle, SkipForward, Send, Check,
   Clock4,
 } from 'lucide-react';
 import { diffLines } from 'diff';
@@ -106,42 +106,47 @@ export default function Message({ message }) {
 }
 
 /**
- * AskUserQuestionView —— SDK 内置 AskUserQuestion 工具的卡片渲染
+ * AskUserQuestionView —— SDK 内置 AskUserQuestion 工具的卡片渲染（wizard 步进版）
  *
  * SDK 内置 AskUserQuestion 工具的 input schema：
  *   {
  *     questions: [{
  *       question: string,
- *       header: string,           // 12 字短 chip 标签
+ *       header: string,
  *       options: [{ label, description, preview? }],
  *       multiSelect: boolean,
  *     }]
- *   }
+ *   } —— 单次调用 1-4 个 question，每题 2-4 个 option
  *
- * A4.3：用户点 option 直接 POST /api/projects/:pid/runs/:runId/answer：
- *   1. 后端 provideAnswer resolve loop.js canUseTool 等待的 Promise
- *   2. canUseTool 返 { behavior: 'allow', updatedInput: { ...input, answers } }
- *   3. SDK binary 调 tool.call → answers 直接当 result 返给模型
- *   4. 模型看到 "User has answered: q1=A"
- *   5. 前端收到 run.delta.tool_result（status='success'），卡片自动 disable
+ * UX：一次只显示当前一题，所有题答完后**一并提交**（而不是答一题就提交一题）。
+ *   - 单选 q：点 option 高亮选中；改主意可点别的覆盖
+ *   - 多选 q：option 可勾可去；至少选 1 个才能下一步
+ *   - 导航：[← 上一题] [跳过本题] [下一题 →] / [✓ 提交全部 (N 题)]
+ *   - 跳过的题不进 answers payload —— 模型看不到这条 q（SDK 工具
+ *     mapToolResultToToolResultBlockParam 只 iterate Object.entries，缺的不显示）
+ *   - 全部答完按"提交全部"才一次性 POST，对应 SDK answers map 的真实语义
  *
- * pid + runId 走 globalStore.activeRun（ProjectWorkspace run 生命周期里维护）。
- * toolUseId 由 Message.jsx 传入（= 当前 tool message.id = SDK blockId）。
+ * 提交后流程（同 A4.3）：POST /answer → backend resolve canUseTool →
+ * binary tool.call → run.delta.tool_result → status='success' → 卡片 disable
  *
- * 历史卡片（已 cancelled / 已答 / 老 session）也用同 endpoint，POST 会
- * 返 404 NO_PENDING_QUESTION，前端 toast 提示，按钮立即恢复 enable 让
- * 用户能换个选项重试 —— 但实际上历史卡 status 已经是 success/error，
- * isAnswered 会先把按钮 disable，根本点不动。
+ * 历史卡片（已 cancelled / 已答 / 老 session）：isAnswered=true 一开始就 disable
+ * 整张卡，progress 直接显 "已完成"，所有按钮灰；POST 路径不会触发。
  */
 function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
   const showToast = useGlobalStore(s => s.showToast);
   const activeRun = useGlobalStore(s => s.activeRun);
+  // collected: { [questionText]: answerString }；submitted 后等 status 推回
+  const [collected, setCollected] = useState({});
+  // currentQuestionIdx：wizard 当前在第几题
+  const [stepIdx, setStepIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
-  const [pickedLabel, setPickedLabel] = useState(null);  // optimistic UI：立即标记选中
-  const questions = Array.isArray(toolInput?.questions) ? toolInput.questions : [];
-  const isAnswered = (status === 'success' && toolOutput) || status === 'error';
 
-  if (questions.length === 0) {
+  const questions = Array.isArray(toolInput?.questions) ? toolInput.questions : [];
+  const total = questions.length;
+  const isAnswered = (status === 'success' && toolOutput) || status === 'error';
+  const disabled = isAnswered || submitting;
+
+  if (total === 0) {
     return (
       <SystemMessage
         variant="info"
@@ -150,10 +155,71 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
     );
   }
 
-  const disabled = isAnswered || submitting;
+  const currentQ = questions[Math.min(stepIdx, total - 1)];
+  const currentAnswer = collected[currentQ.question];  // string（单选 label / 多选 csv）/ undefined
+  const isLast = stepIdx === total - 1;
+  const canBack = stepIdx > 0;
 
-  const handlePickOption = async (q, optionLabel) => {
+  // 多选：当前题 selected set（从 csv 反解析；空 set 表示未选）
+  const multiSet = useMemo(() => {
+    if (!currentQ.multiSelect || !currentAnswer) return new Set();
+    return new Set(currentAnswer.split(', '));
+  }, [currentQ, currentAnswer]);
+
+  const setQuestionAnswer = (answerStr) => {
+    setCollected(prev => {
+      const next = { ...prev };
+      if (answerStr === undefined) delete next[currentQ.question];
+      else next[currentQ.question] = answerStr;
+      return next;
+    });
+  };
+
+  const handlePickSingle = (label) => {
     if (disabled) return;
+    setQuestionAnswer(label);
+  };
+
+  const handleToggleMulti = (label) => {
+    if (disabled) return;
+    const next = new Set(multiSet);
+    if (next.has(label)) next.delete(label);
+    else next.add(label);
+    setQuestionAnswer(next.size === 0 ? undefined : [...next].join(', '));
+  };
+
+  const handleBack = () => {
+    if (!canBack || disabled) return;
+    setStepIdx(stepIdx - 1);
+  };
+
+  const handleSkip = () => {
+    if (disabled) return;
+    setQuestionAnswer(undefined);  // 跳过 = 不提供答案
+    if (isLast) submitAll({ ...collected, [currentQ.question]: undefined });
+    else setStepIdx(stepIdx + 1);
+  };
+
+  const handleNext = () => {
+    if (disabled) return;
+    if (!currentAnswer) {
+      showToast('请先选一个选项，或点"跳过本题"', 'info');
+      return;
+    }
+    setStepIdx(stepIdx + 1);
+  };
+
+  const handleSubmit = () => {
+    if (disabled) return;
+    if (!currentAnswer) {
+      showToast('请先选一个选项，或点"跳过本题"', 'info');
+      return;
+    }
+    submitAll(collected);
+  };
+
+  // 真正的 POST。allCollected：可能含 undefined 表示跳过 → 过滤掉
+  const submitAll = async (allCollected) => {
     if (!activeRun?.pid || !activeRun?.runId) {
       showToast('当前无活跃 run，无法回答历史问题', 'info');
       return;
@@ -163,23 +229,24 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
       return;
     }
 
-    setPickedLabel(optionLabel);
+    // 过滤 undefined（跳过的题）+ 防御非空 string
+    const answers = {};
+    for (const [k, v] of Object.entries(allCollected)) {
+      if (typeof v === 'string' && v.length > 0) answers[k] = v;
+    }
+
     setSubmitting(true);
     try {
-      // SDK answers map: { [question text]: option label }（multi-select 用 ", "）
-      // 简版只支持单选，多选 q 也只回最后一个 label
       await Turn.answer({
         pid: activeRun.pid,
         runId: activeRun.runId,
         toolUseId,
-        answers: { [q.question]: optionLabel },
+        answers,
       });
       // 不 setSubmitting(false) —— 等 run.delta.tool_result 把 status 推成
-      // success，isAnswered 接管 disable。这样用户视觉上"按一次就锁住"，
-      // 不会闪一下重新可点。
+      // success，isAnswered 接管 disable。
     } catch (err) {
       setSubmitting(false);
-      setPickedLabel(null);
       const msg = err.code === 'NO_PENDING_QUESTION'
         ? '问题已不在等待中（可能已被回答 / cancel / run 结束）'
         : `回答失败：${err.message}`;
@@ -187,21 +254,53 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
     }
   };
 
+  // 进度点（小圆点 + 当前数字）
+  const progress = (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontFamily: FONT_MONO, fontSize: 10, color: COLOR.sub,
+      letterSpacing: '0.04em',
+    }}>
+      {questions.map((q, i) => {
+        const filled = !!collected[q.question];
+        const isCurrent = i === stepIdx && !isAnswered;
+        return (
+          <span
+            key={i}
+            title={q.header || `Q${i + 1}`}
+            style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: filled
+                ? COLOR.btn
+                : (isCurrent ? COLOR.borderHv : COLOR.borderMd),
+              outline: isCurrent ? `1px solid ${COLOR.borderHv}` : 'none',
+              outlineOffset: 2,
+            }}
+          />
+        );
+      })}
+      <span style={{ marginLeft: 6 }}>{Math.min(stepIdx + 1, total)} / {total}</span>
+    </div>
+  );
+
   return (
     <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
-      {questions.map((q, qi) => (
-        <div
-          key={qi}
-          style={{
-            marginBottom: qi < questions.length - 1 ? GAP.md : 0,
-            padding: GAP.md,
-            border: `1px solid ${COLOR.borderMd}`,
-            borderRadius: 10,
-            background: '#fff',
-            opacity: isAnswered ? 0.6 : 1,
-          }}
-        >
-          {/* header chip */}
+      <div
+        style={{
+          padding: GAP.md,
+          border: `1px solid ${COLOR.borderMd}`,
+          borderRadius: 10,
+          background: '#fff',
+          opacity: isAnswered ? 0.6 : 1,
+        }}
+      >
+        {/* header chip + progress */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: GAP.xs + 1,
+        }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -213,31 +312,36 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
             fontSize: 10,
             color: COLOR.text2,
             letterSpacing: '0.04em',
-            marginBottom: GAP.xs + 1,
           }}>
             <HelpCircle size={10} />
-            {q.header || 'AGENT 问'}
+            {currentQ.header || 'AGENT 问'}
           </div>
+          {progress}
+        </div>
 
-          {/* question text */}
-          <div style={{
-            fontFamily: FONT_SANS,
-            fontSize: FONT_SIZE.base,
-            color: COLOR.text,
-            lineHeight: 1.5,
-            marginBottom: GAP.sm,
-          }}>
-            {q.question}
-          </div>
+        {/* question text */}
+        <div style={{
+          fontFamily: FONT_SANS,
+          fontSize: FONT_SIZE.base,
+          color: COLOR.text,
+          lineHeight: 1.5,
+          marginBottom: GAP.sm,
+        }}>
+          {currentQ.question}
+        </div>
 
-          {/* options */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.xs }}>
-            {(q.options || []).map((opt, oi) => {
-              const isPicked = pickedLabel === opt.label;
-              return (
+        {/* options */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.xs }}>
+          {(currentQ.options || []).map((opt, oi) => {
+            const isPicked = currentQ.multiSelect
+              ? multiSet.has(opt.label)
+              : currentAnswer === opt.label;
+            return (
               <button
                 key={oi}
-                onClick={() => handlePickOption(q, opt.label)}
+                onClick={() => currentQ.multiSelect
+                  ? handleToggleMulti(opt.label)
+                  : handlePickSingle(opt.label)}
                 disabled={disabled}
                 style={{
                   textAlign: 'left',
@@ -250,6 +354,7 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
                   fontSize: FONT_SIZE.sm,
                   color: COLOR.text,
                   transition: 'background 0.15s, border-color 0.15s',
+                  display: 'flex', alignItems: 'flex-start', gap: GAP.sm,
                 }}
                 onMouseEnter={e => {
                   if (disabled) return;
@@ -261,57 +366,149 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
                   e.currentTarget.style.borderColor = isPicked ? COLOR.btn : COLOR.borderLt;
                 }}
               >
-                <div style={{ fontWeight: 500 }}>{opt.label}</div>
-                {opt.description && (
-                  <div style={{
-                    marginTop: 2,
-                    fontSize: 11,
-                    color: COLOR.sub,
-                    lineHeight: 1.4,
-                  }}>
-                    {opt.description}
-                  </div>
-                )}
+                {/* checkbox / radio dot indicator */}
+                <span style={{
+                  width: 14, height: 14,
+                  marginTop: 2,
+                  flexShrink: 0,
+                  border: `1.5px solid ${isPicked ? COLOR.btn : COLOR.borderHv}`,
+                  borderRadius: currentQ.multiSelect ? 3 : '50%',
+                  background: isPicked ? COLOR.btn : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {isPicked && <Check size={10} color={COLOR.btnText} strokeWidth={3} />}
+                </span>
+                <span style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 500 }}>{opt.label}</div>
+                  {opt.description && (
+                    <div style={{
+                      marginTop: 2,
+                      fontSize: 11,
+                      color: COLOR.sub,
+                      lineHeight: 1.4,
+                    }}>
+                      {opt.description}
+                    </div>
+                  )}
+                </span>
               </button>
-              );
-            })}
+            );
+          })}
+        </div>
+
+        {currentQ.multiSelect && !isAnswered && (
+          <div style={{
+            marginTop: GAP.xs,
+            fontSize: 10,
+            color: COLOR.sub,
+            fontStyle: 'italic',
+          }}>
+            （多选：可勾多个，至少选 1 个再"下一题"）
           </div>
+        )}
 
-          {q.multiSelect && (
-            <div style={{
-              marginTop: GAP.xs,
-              fontSize: 10,
-              color: COLOR.sub,
-              fontStyle: 'italic',
-            }}>
-              （可多选 —— 简版只接受单选；多选请在 chat 里描述）
-            </div>
-          )}
-        </div>
-      ))}
+        {/* nav buttons */}
+        {!isAnswered && (
+          <div style={{
+            marginTop: GAP.md,
+            paddingTop: GAP.sm,
+            borderTop: `1px dashed ${COLOR.borderLt}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: GAP.xs,
+          }}>
+            <NavBtn
+              onClick={handleBack}
+              disabled={disabled || !canBack}
+              icon={ChevronLeft}
+              label="上一题"
+            />
+            <NavBtn
+              onClick={handleSkip}
+              disabled={disabled}
+              icon={SkipForward}
+              label="跳过"
+              variant="ghost"
+            />
+            <span style={{ flex: 1 }} />
+            {isLast ? (
+              <NavBtn
+                onClick={handleSubmit}
+                disabled={disabled || !currentAnswer}
+                icon={Send}
+                label={`提交全部 (${Object.values(collected).filter(Boolean).length}/${total})`}
+                variant="primary"
+              />
+            ) : (
+              <NavBtn
+                onClick={handleNext}
+                disabled={disabled || !currentAnswer}
+                icon={ChevronRight}
+                label="下一题"
+                variant="primary"
+                iconRight
+              />
+            )}
+          </div>
+        )}
 
-      {!isAnswered && !submitting && (
-        <div style={{
-          marginTop: GAP.xs + 2,
-          fontSize: 10,
-          color: COLOR.sub,
-          paddingLeft: 2,
-        }}>
-          点选项即直接回复给 agent
-        </div>
-      )}
-      {submitting && (
-        <div style={{
-          marginTop: GAP.xs + 2,
-          fontSize: 10,
-          color: COLOR.sub,
-          paddingLeft: 2,
-          fontStyle: 'italic',
-        }}>
-          已发送给 agent，等它继续…
-        </div>
-      )}
+        {submitting && (
+          <div style={{
+            marginTop: GAP.xs + 2,
+            fontSize: 10,
+            color: COLOR.sub,
+            fontStyle: 'italic',
+          }}>
+            已发送给 agent，等它继续…
+          </div>
+        )}
+
+        {isAnswered && (
+          <div style={{
+            marginTop: GAP.sm,
+            paddingTop: GAP.sm,
+            borderTop: `1px dashed ${COLOR.borderLt}`,
+            fontSize: 10,
+            color: COLOR.sub,
+          }}>
+            已完成
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function NavBtn({ onClick, disabled, icon: Icon, label, variant = 'default', iconRight = false }) {
+  const styles = {
+    default: { bg: '#fff', color: COLOR.text2, border: COLOR.borderMd },
+    ghost:   { bg: 'transparent', color: COLOR.sub, border: 'transparent' },
+    primary: { bg: COLOR.btn, color: COLOR.btnText, border: COLOR.btn },
+  }[variant];
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: `4px ${GAP.sm}px`,
+        background: styles.bg,
+        border: `1px solid ${styles.border}`,
+        borderRadius: 5,
+        fontFamily: FONT_SANS,
+        fontSize: 11,
+        color: styles.color,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+      }}
+    >
+      {!iconRight && <Icon size={11} />}
+      {label}
+      {iconRight && <Icon size={11} />}
+    </button>
   );
 }
 
