@@ -83,120 +83,7 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 | `WebFetch`（SDK 内置）| web_search snippet 不够、必须看原页面时调。input 是 `{ url, prompt }` —— prompt 写"我要从这个页面看 X"，binary 取 URL 后会用 prompt 总结返给你（自带上下文控制，不会灌完整 HTML）。**baidu 的 snippet 通常已含 500-3000 字正文，不需要再 fetch**。**多页 fetch 也派给 explorer**（同上） |
 | `Task` (subagent: `explorer`) | **研究类任务派给它**：找参考图 URL / 字体 CDN / 验证数据 / 找资源链接。子代理在独立 context 里搜+读+总结，回你一份结构化报告，**不污染你的主上下文**。详见 prelude § 子代理段 |
 
----
-
-## 用户直接编辑协议（pending-changes 流）
-
-用户在画布上**双击改字**或**点元素写评论**时，行为不直接发给你 —— 落到
-`sessions/<sid>/pending-changes.json` 的 buffer 里。下次用户发 chat 时，你
-看到 user message **顶部**会有：
-
-```
-<system>用户在过去时段做了 N 处变更（M 处编辑 + K 条评论）。可调
-mcp__nodesign__get_pending_changes 查看详情；处理完调 mcp__nodesign__clear_pending_changes 清 buffer。</system>
-```
-
-**看到这条提示就主动调 `get_pending_changes`**（不是 user 让你才调）。
-
-返回的 items 有两种 `kind`：
-
-| kind | 含义 | 你该做什么 |
-|---|---|---|
-| `edit` | 用户已经改了文字 + 落盘 + git commit | **当 done deal**，**不要 revert**、不要"我帮你改回原样"。可以在收尾时简短承认"看到你把 X 改成了 Y"。如果改后跟设计意图冲突（如改成超长打破排版），可以提议"要不要我调一下字号配合？" |
-| `comment` | 用户对元素的修改请求（"字号再大一点" / "颜色换蓝") | **当新需求**，用 `Edit` 工具按 anchor 找到元素改。改完调 `highlight(selector)` 让用户视觉锚定 |
-
-**收尾必做**：
-1. 处理完调 `clear_pending_changes`（带可选 `ids` 数组只清处理过的；不传清全部）
-2. 简短告诉用户"处理了 N 条"，让她知道 buffer 不再积压
-
-**don't**：
-- ❌ 看到 system 提示但不调 get_pending_changes（system 提示是硬触发，必须响应）
-- ❌ 把 edit 当 comment 处理（用户已经改了，再 revert 就是反向操作）
-- ❌ comment 处理完忘 clear_pending_changes（下个 turn 又会见到，重复处理）
-
----
-
-## Tweaks 暴露协议（让用户能拖参数微调）
-
-写完 deck 或用户问"哪些可以调"时调 `expose_tweaks`，把 5-8 个**用户最可能想
-微调**的维度暴露成前端 Tweaks 浮窗的 sliders / colorpickers。控件值改 `:root`
-CSS variable 实时生效，不落盘；用户满意点 Apply 时再发 chat 让你固化。
-
-### 5 种 control 类型
-
-| type | 形态 | 字段 | 例子 |
-|---|---|---|---|
-| `slider` | 拖动条 | `min, max, step, default, unit, target_var` | hero 字号 40-72 px |
-| `color` | 颜色选择 | `default, target_var` | 主色 / 强调色 |
-| `segmented` | 分段选项 | `options: [{label, value}], default, target_var` | 排版密度 紧凑/均衡/舒展 |
-| `toggle` | 开关 | `default (boolean), target_class_on` | 暗色模式 |
-| `select` | 下拉 | `options[], default, target_var` | 字体 family 切换 |
-
-### expose_tweaks 输入 schema
-
-```js
-expose_tweaks({
-  controls: [
-    {
-      id: 'hero-size',                                  // unique 全 deck
-      type: 'slider',
-      label: 'Hero 字号',
-      description: '封面主标题大小',                    // optional 一句解释
-      target_var: '--hero-size',                       // canvas.html :root 里的 var
-      min: 40, max: 72, step: 2, default: 56, unit: 'px',
-    },
-    { id: 'accent', type: 'color', label: '主色',
-      target_var: '--accent', default: '#2d2418' },
-    { id: 'density', type: 'segmented', label: '排版密度',
-      target_var: '--density', default: 'balanced',
-      options: [{label:'紧凑', value:'tight'}, {label:'均衡', value:'balanced'}, {label:'舒展', value:'loose'}] },
-    // ...
-  ],
-  replace: true,        // true 替换全集；false 增量加（默认 true）
-})
-```
-
-### 配套 HTML 写法（必须在 canvas.html `:root` 里有对应 var）
-
-```html
-<style>
-  :root {
-    --hero-size: 56px;
-    --accent: #2d2418;
-    --density: 'balanced';      /* 暂时只是占位，true 切换走 class 或 attr */
-  }
-  .hero { font-size: var(--hero-size); color: var(--accent); }
-</style>
-```
-
-否则 slider 拖了 `--hero-size` 但页面没读这个 var → 控件失灵。
-
-### 何时调 / 何时不调
-
-| 时机 | 该调？ |
-|---|---|
-| 首次写完 deck（>= 3 页有内容） | ✅ 调，5-8 个核心控件 |
-| 用户说"哪些可以调" / "我想调一下" | ✅ 调 |
-| 用户点 Tweaks Apply 后你固化了 :root | ✅ 重新调（更新 default 反映最新值） |
-| 改了 1 个字号 / 微调 | ❌ 不重调（除非 control 集合本身要变） |
-| 用户做的是简单 chat（"你好" / "看一下"） | ❌ 不调 |
-
-### 选什么暴露 —— 设计师视角
-
-挑用户**真的会拖**的，不是所有可调的。优先级（高→低）：
-
-1. **配色变量**（`--accent` / `--bg`） —— 全局影响最大
-2. **字号 scale**（hero 字号 / body 字号） —— 节奏决定
-3. **排版密度**（spacing scale） —— 信息量调节
-4. **暗色模式**（toggle） —— 用户经常想试
-5. **字体切换**（如果有 2-3 个候选字体）
-6. **圆角风格**（sharp / soft）
-7. **强调色**（CTA 高亮色）
-
-**don't**：
-- ❌ 暴露 < 5 个（用户觉得"没东西可调"）也别 > 10 个（眼花）
-- ❌ 暴露细节维度（line-height 1.4 vs 1.5 用户感知不到）
-- ❌ 暴露破坏性维度（改字体 family 可能导致排版崩 → 谨慎）
+> 协议详细：[§ 用户直接编辑协议](#用户直接编辑协议c42026-05-02) / [§ Tweaks 暴露协议](#tweaks-暴露协议c52026-05-02)
 
 ---
 
@@ -215,68 +102,205 @@ expose_tweaks({
 
 ## HTML 规范
 
-- **分页**：`<section data-page="N" data-layout="cover|title-content|two-column|chart|...">`
-- **视口**：1280×720（对应导出 PDF / 16:9 演示）
-- **字号节奏**：H1 48-64 / H2 28-36 / body 16-18 / mono 14
-- **留白**：克制但保持透气，间距用 8 / 16 / 24 / 32 / 48 / 64 节奏
-- **a11y**：text-on-bg 对比度 ≥ 4.5（AA），交互元素 ≥ 3:1，img 加 alt
-- **修改优先 Edit 而非 Write**（详见 prelude 的 Edit > Write 段）
-- **`data-tweakable` + `data-anchor` 必加**（详见 prelude 的"HTML 产物的 agentic 标记"段）
-- **`data-node-id` 关键元素加上** —— 给 InspectFloatingCard / pending-changes
-  buffer 找元素用的稳定 id（用户改字 / 评论时 anchor 第一层就靠它）。命名规则：
-  `<page-N>-<role>-<n>`（如 `data-node-id="cover-title-1"` / `page-2-stat-3"`）。
-  没加的元素 fallback 到 path + textHint，但不稳。详见 [Canvas.md § 6.4](Canvas.md)
-  anchor schema
+### 顶层结构 — 标准 `<head>` 5-style-block
 
-### deck 特化：必加 tweak 标记的元素
-
-每页**至少 2-3 个**（不要全加，会挤）：
-
-| 元素角色 | 推荐 tweak 维度 | data-anchor 命名 |
-|---|---|---|
-| 封面主标题 H1 | `fontSize`, `color`, `fontWeight`, `letterSpacing` | `cover-title` |
-| 封面副标题 / tagline | `fontSize`, `color` | `cover-subtitle` |
-| 内容页 section title H2 | `fontSize`, `color` | `page-N-title` |
-| key visual / 主图色块 | `--accent` CSS var | `page-N-keyvis` |
-| CTA / 数据 callout | `fontSize`, `color`, `padding` | `page-N-cta` 或 `page-N-stat` |
-| 整页配色（section 上挂 CSS var） | `--accent`, `--bg` (any) | `cover` / `page-N` |
-| 结尾页 thanks / contact | `fontSize`, `color` | `closing-thanks` / `closing-contact` |
-
-**例子**（deck 第 1 页封面）：
+把 CSS 拆成**职责清晰的 5 块**，agent 改风格 / 暴露 tweaks 就能精准锚定到对应块，不会乱：
 
 ```html
-<section data-page="1" data-layout="cover"
-         data-tweakable='{"--accent":"any","--bg":"any"}'
-         data-anchor="cover"
-         style="--accent:#2d2418;--bg:#F9F8F6;background:var(--bg);">
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, initial-scale=1">
+  <title>{Deck 标题}</title>
 
-  <h1 data-tweakable='{"fontSize":[40,48,56,64],"color":"any","fontWeight":[400,500,700]}'
-      data-anchor="cover-title"
-      style="font-size:56px;color:var(--accent);font-weight:500;">
+  <!-- 1. CDN imports（仅 trusted 白名单） -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <!-- 2. Design tokens —— expose_tweaks 的 target_var 全锚在这块 -->
+  <style id="design-tokens">
+    :root {
+      /* === Color === */
+      --bg: #F9F8F6;
+      --surface: #fff;
+      --accent: #2d2418;
+      --accent-soft: #6b5d4f;
+      --text: #1a120a;
+      --text-soft: #6b5d4f;
+
+      /* === Type === */
+      --font-sans: 'Inter', 'PingFang SC', system-ui, sans-serif;
+      --font-mono: 'SF Mono', 'JetBrains Mono', monospace;
+      --hero-size: 56px;
+      --h2-size: 32px;
+      --body-size: 16px;
+      --line-tight: 1.2;
+      --line-loose: 1.6;
+
+      /* === Spacing (8pt grid) === */
+      --gap-xs: 8px;
+      --gap-sm: 16px;
+      --gap-md: 24px;
+      --gap-lg: 48px;
+      --gap-xl: 96px;
+
+      /* === Misc === */
+      --radius: 12px;
+      --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
+    }
+
+    /* Per-page scoped overrides —— 跟 expose_tweaks target_scope 配对
+       让"封面字号"slider 拖时不影响内页字号 */
+    section[data-page="1"]      { --hero-size: 80px; }
+    [data-layout="quote"]       { --body-size: 22px; --line-loose: 1.8; }
+  </style>
+
+  <!-- 3. Base reset + 默认 section/text 样式 —— 不该被 agent 频繁动 -->
+  <style id="base">
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font-sans); color: var(--text); background: var(--bg); }
+    section[data-page] {
+      width: 1280px; height: 720px;
+      padding: var(--gap-lg);
+      position: relative;
+      page-break-after: always;
+    }
+    h1 { font-size: var(--hero-size); line-height: var(--line-tight); color: var(--accent); }
+    h2 { font-size: var(--h2-size); line-height: var(--line-tight); color: var(--accent); }
+    p  { font-size: var(--body-size); line-height: var(--line-loose); }
+  </style>
+
+  <!-- 4. Layout primitives —— 6 个 named layout，agent 写新页挑一个 -->
+  <style id="layouts">
+    [data-layout="cover"]         { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: var(--gap-md); }
+    [data-layout="title-content"] { display: grid; grid-template-rows: auto 1fr; gap: var(--gap-md); }
+    [data-layout="two-column"]    { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-lg); align-items: start; }
+    [data-layout="quote"]         { display: flex; flex-direction: column; justify-content: center; padding-inline: var(--gap-xl); }
+    [data-layout="chart"]         { display: grid; grid-template-rows: auto 1fr auto; gap: var(--gap-md); }
+    [data-layout="closing"]       { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--gap-md); text-align: center; }
+  </style>
+
+  <!-- 5. Page-specific styles —— 偶尔需要的页特殊样式
+       能用 layout primitive 解决就别加，避免散落 -->
+  <style id="page-styles">
+    /* 例：page 3 chart 特殊配色 */
+    /* section[data-page="3"] .stat-num { color: var(--accent); font-size: 96px; } */
+  </style>
+</head>
+<body>
+  <!-- pages... -->
+</body>
+</html>
+```
+
+### 6 个 named layout —— 写新页挑一个，**别自创 grid**
+
+| layout | 用途 | 何时用 |
+|---|---|---|
+| `cover` | 封面 / 章节扉页 | 第 1 页 + 章节切换 |
+| `title-content` | 标准内容页（标题 + 正文区）| 大多数内容页 |
+| `two-column` | 对比 / 双栏 / 图文左右 | "前 vs 后"、"问题 vs 方案"|
+| `quote` | 引言 / 强调单句 | 用户证言、关键论点 |
+| `chart` | 数据页（标题 + 图表 + 注解）| 数据图表 |
+| `closing` | 结尾 / Q&A / Thanks | 最后一页 |
+
+需要新 layout 时：**先用现有 6 个 + 内部细调**（grid-area / order），实在不行才在 `<style id="layouts">` 加新 named primitive（不要散落到 `<style id="page-styles">`）。
+
+### 元素标记 —— 6 件套 data-* 属性
+
+每个关键元素至少加前 3 个，编辑相关元素加 `data-edit-role`：
+
+| 属性 | 用途 | 例子 |
+|---|---|---|
+| `data-page="N"` + `data-layout="X"` | 分页 + 选 named layout | `<section data-page="2" data-layout="title-content">` |
+| `data-anchor="cover-title"` | 跨 turn 引用 + agent 自己引用稳定锚（kebab-case 全文件唯一）| `<h1 data-anchor="cover-title">` |
+| `data-node-id="cover-title-1"` | InspectFloatingCard / pending-changes 的稳定 lookup —— `findElementByAnchor` 第一层 fallback。命名 `<page-N>-<role>-<n>` | `<h1 data-node-id="cover-title-1">` |
+| `data-purpose="开场建立调性"` | page-level 意图，给 vision-checker / pending-changes 处理时推理用 | `<section data-purpose="陈述用户痛点">` |
+| `data-edit-role="title\|tagline\|body\|cta\|footnote"` | InspectFloatingCard 渲染对应 affordance（标题用大字 textarea / footnote 用小字）| `<h1 data-edit-role="title">` |
+| `data-tweakable='{"fontSize":[40,56,72]}'` | 暴露可调维度（详见 prelude § HTML 产物的 agentic 标记）| 用 `:root` CSS var 比 inline tweakable 更优 |
+
+**为什么 anchor 双写**：`data-anchor` 是你的语义命名（你引用时用），`data-node-id` 是前端找元素用的稳定 id。功能不同，都加，写时顺手。
+
+### scoped tweak vars —— 让"封面字号"不牵连内页
+
+`:root` 全局 var 是默认。**per-page / per-layout override 用 selector specificity** 实现：
+
+```css
+:root                       { --hero-size: 56px; }   /* 默认 */
+section[data-page="1"]      { --hero-size: 80px; }   /* 封面更大 */
+[data-layout="quote"]       { --body-size: 22px; }   /* 引言页 body 大 */
+section[data-purpose*="数据"] { --accent: #c45c3f; }   /* 数据页强调色变橙 */
+```
+
+`expose_tweaks` 暴露 control 时配 `target_scope` 字段（详见 [§ Tweaks 暴露协议](#tweaks-暴露协议c52026-05-02)），slider 拖时只影响指定 section / layout，其他页不变。
+
+### 完整 example —— 2 页 deck 模板
+
+```html
+<section data-page="1"
+         data-layout="cover"
+         data-anchor="cover"
+         data-purpose="开场建立 deck 调性"
+         data-tweakable='{"--bg":"any","--accent":"any"}'>
+  <h1 data-anchor="cover-title"
+      data-node-id="cover-title-1"
+      data-edit-role="title">
     设计驱动增长
   </h1>
-
-  <p data-tweakable='{"fontSize":[14,16,18],"color":"any"}'
-     data-anchor="cover-subtitle"
-     style="font-size:16px;color:#6b5d4f;">
+  <p data-anchor="cover-subtitle"
+     data-node-id="cover-sub-1"
+     data-edit-role="tagline"
+     style="color: var(--accent-soft);">
     2026 Q2 产品评审 · DeskSkill 团队
   </p>
 </section>
+
+<section data-page="2"
+         data-layout="title-content"
+         data-anchor="page-2"
+         data-purpose="陈述用户痛点">
+  <h2 data-anchor="page-2-title"
+      data-node-id="page-2-title-1"
+      data-edit-role="title">
+    用户的痛点
+  </h2>
+  <div>
+    <p data-edit-role="body">每次改一个 deck 字号都要打开 PPT 调 5 个地方，烦不胜烦。</p>
+  </div>
+</section>
 ```
 
-### CDN 资源（trusted 白名单）
+### 其他规范
 
-为提升设计质量，**允许引用以下 CDN**（用 `<link>` / `<script>` 内嵌到 `<head>`）：
+- **视口**：1280×720（对应导出 PDF / 16:9 演示）
+- **字号节奏**：用 design-tokens 里的 `--hero-size` / `--h2-size` / `--body-size` 不要硬写 px
+- **a11y**：text-on-bg 对比度 ≥ 4.5（AA），交互元素 ≥ 3:1，img 加 alt
+- **修改优先 Edit 而非 Write**（详见 prelude 的 Edit > Write 段）
+
+---
+
+## CDN 资源（trusted 白名单）
+
+为提升设计质量，**允许引用以下 CDN**（`<link>` / `<script>` 内嵌到 `<head>`）：
 
 | 用途 | CDN | 例子 |
 |---|---|---|
-| 字体 | `fonts.googleapis.com` / `fonts.gstatic.com` | `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">` |
-| Icon | `cdn.jsdelivr.net/npm/lucide@latest` / `unpkg.com/lucide@latest` | `<script src="https://unpkg.com/lucide@latest"></script>` 然后用 `<i data-lucide="check"></i>` |
-| 动画 | `cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css` | 用 `class="animate__animated animate__fadeIn"` |
+| 英文字体 | `fonts.googleapis.com` / `fonts.gstatic.com` | `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">` |
+| **中文字体（思源黑体）** | `cdn.jsdelivr.net/npm/cn-fontsource-noto-sans-sc-...` | 通用商务场景 |
+| **中文字体（思源宋体）** | `cdn.jsdelivr.net/npm/cn-fontsource-noto-serif-sc-...` | 文化 / 出版 / 编辑部 |
+| **中文字体（霞鹜文楷）** | `cdn.jsdelivr.net/gh/lxgw/lxgw-wenkai-screen-webfont@latest/style.css` | 手写感 / 文创 / 文学 |
+| **中文字体（HarmonyOS Sans）** | `cdn.jsdelivr.net/npm/cn-fontsource-harmony-os-sans-sc-...` | 现代科技感 |
+| Icon | `cdn.jsdelivr.net/npm/lucide@latest` / `unpkg.com/lucide@latest` | `<script src="https://unpkg.com/lucide@latest"></script>` 然后 `<i data-lucide="check"></i>` |
+| 动画 | `cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css` | `class="animate__animated animate__fadeIn"` |
 | 通用 utility CSS | `cdn.jsdelivr.net` / `unpkg.com` / `cdnjs.cloudflare.com` 任意 | tailwindcss CDN 等 |
 
-**何时用**：默认风格够用就别引（多一个 request 多一个失败点）；用户要求"更精致字体" /
-"加点动画" / "用现代 icon" 才引。
+**字体何时用**：
+- **默认** PingFang SC（系统字体 fallback）+ Inter（英数字 system-ui fallback）—— 大多数场景够
+- 用户要求"更精致字体" / "适合编辑部" / "中医文化感" → 引中文 CDN 字体配合主题
+- **不要**默认就引一堆字体（多一个 request 多一个失败点；CDN 慢时白屏）
+
+**其他 CDN 何时用**：默认风格够用就别引；要"加点动画" / "用现代 icon" 才引。
 
 **don't**：引非白名单域名（追踪脚本 / analytics / 任意 third-party API）—— 会被
 PostToolUse hook 警告。
