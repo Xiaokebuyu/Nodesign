@@ -8,6 +8,7 @@ import CanvasCandidateBar from './CanvasCandidateBar.jsx';
 import A11yReviewPopover from './A11yReviewPopover.jsx';
 import SystemPopover from './SystemPopover.jsx';
 import InspectFloatingCard from './InspectFloatingCard.jsx';
+import { usePanelManager } from '../layout/PanelManager.jsx';
 import { COLOR, STAGE } from '../../lib/theme.js';
 
 /**
@@ -46,7 +47,13 @@ export default function CanvasFrame({
   comments = [],
   onAddComment, onResolveComment, onDeleteComment,
   onDirectEdit, onTriggerRun,
+  // Tweaks 浮窗 toggle 按钮：仅 agent expose 过 controls 才显示
+  tweaksAvailable = false,
 }) {
+  // 直接 hook PanelManager 拿 tweaks 浮窗当前 visible 状态 + setter（用于 toggle）
+  const { panels, setPanelVisible } = usePanelManager();
+  const tweaksOpen = !!panels?.tweaks?.visible;
+  const handleToggleTweaks = () => setPanelVisible('tweaks', !tweaksOpen);
   const [mode, setMode] = useState('edit');
   const [zoom, setZoom] = useState('fit');     // 'fit' | number
   const [wrapSize, setWrapSize] = useState({ width: 0, height: 0 });
@@ -186,6 +193,9 @@ export default function CanvasFrame({
         onSystemClick={() => { setA11yOpen(false); setSystemOpen(o => !o); }}
         systemBtnRef={systemBtnRef}
         systemActive={systemOpen}
+        onTweaksClick={handleToggleTweaks}
+        tweaksAvailable={tweaksAvailable}
+        tweaksOpen={tweaksOpen}
       />
 
       {/* Slide navigator — Edit/Preview 时扫 section[data-page]，多于 1 页才显示 */}

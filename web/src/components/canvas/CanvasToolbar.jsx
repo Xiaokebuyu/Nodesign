@@ -1,4 +1,4 @@
-import { Edit3, Eye, Code2, RotateCcw, ShieldCheck, Maximize2, Settings } from 'lucide-react';
+import { Edit3, Eye, Code2, RotateCcw, ShieldCheck, Maximize2, Settings, Sliders } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, STAGE } from '../../lib/theme.js';
 
 const MODES = [
@@ -12,6 +12,7 @@ export default function CanvasToolbar({
   zoom = 1, isAutoFit = false, onZoomChange, onFitToggle,
   onA11yClick, a11yBtnRef,
   onSystemClick, systemBtnRef, systemActive = false,
+  onTweaksClick, tweaksAvailable = false, tweaksOpen = false,
 }) {
   return (
     <div style={{
@@ -83,6 +84,24 @@ export default function CanvasToolbar({
           <span style={{ minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
           <button onClick={() => onZoomChange(Math.min(3, zoom + 0.1))} style={zoomBtnStyle}>+</button>
         </div>
+      )}
+
+      {/* Tweaks 浮窗 toggle — agent expose 过控件后才显示 */}
+      {tweaksAvailable && onTweaksClick && (
+        <button
+          onClick={onTweaksClick}
+          style={{
+            padding: `${GAP.xs + 1}px ${GAP.md}px`,
+            fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+            color: tweaksOpen ? COLOR.text : COLOR.text4,
+            background: tweaksOpen ? 'rgba(0,0,0,0.06)' : 'transparent',
+            display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+            borderRadius: 4,
+          }}
+          title={tweaksOpen ? '关闭 Tweaks 面板' : '打开 Tweaks 面板（拖控件实时改样式）'}
+        >
+          <Sliders size={11} /> Tweaks
+        </button>
       )}
 
       {/* A11y review */}

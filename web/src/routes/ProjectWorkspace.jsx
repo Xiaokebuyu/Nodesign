@@ -1185,7 +1185,6 @@ export default function ProjectWorkspace() {
             onOpenSessionList={() => setSessionListOpen(true)}
             onCloseSession={handleCloseSession}
             hasActiveSession={!!currentSessionId}
-            tweaksAvailable={isTweaksExposed}
           />
         </aside>
 
@@ -1220,6 +1219,7 @@ export default function ProjectWorkspace() {
             onDeleteComment={handleDeleteComment}
             onDirectEdit={handleDirectEdit}
             onTriggerRun={handleTriggerRun}
+            tweaksAvailable={isTweaksExposed}
           />
 
           {/* 浮窗层 —— bounds='parent' = 不出 canvas section
