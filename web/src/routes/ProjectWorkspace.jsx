@@ -1070,6 +1070,8 @@ export default function ProjectWorkspace() {
             todos={todos}
             sessionTitle={currentSessionTitle}
             onOpenSessionList={() => setSessionListOpen(true)}
+            contextSystemInfo={systemInfo}
+            contextLiveUsage={contextUsage}
           />
         </aside>
 

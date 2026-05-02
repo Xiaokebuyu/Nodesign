@@ -6,7 +6,7 @@ import {
   ListChecks, FolderTree, Globe,
   ShieldAlert, Info, AlertCircle, CheckCircle2,
   HelpCircle, SkipForward, Send, Check,
-  Clock4,
+  Clock4, Compass, ScanEye, Palette, Sliders,
 } from 'lucide-react';
 import { diffLines } from 'diff';
 import ReactMarkdown from 'react-markdown';
@@ -660,7 +660,7 @@ const TOOL_ICONS = {
   TodoWrite: ListChecks,
   WebFetch: Globe,
   WebSearch: Globe,
-  Task: Bot,                                   // subagent → 机器人（派任务给子代理）
+  Task: Bot,                                   // 通用 fallback（无 agentType 时）
   AskUserQuestion: HelpCircle,                 // 问号 = 主动问用户
   // MCP nodesign 工具
   'mcp__nodesign__screenshot_canvas': Eye,
@@ -669,7 +669,18 @@ const TOOL_ICONS = {
   'mcp__nodesign__ping': Activity,             // ping → 心跳/连接
 };
 
-function getToolIcon(toolName) {
+// Subagent 类型 → 专属 icon（Task 工具特化，让用户一眼分清派的是哪个子代理）
+const SUBAGENT_ICONS = {
+  'explorer': Compass,                          // 罗盘 = 研究员探索
+  'vision-checker': ScanEye,                    // 扫描眼 = 视觉评审
+  'ds-extractor': Palette,                      // 调色板 = 抽 design system
+  'tweak-proposer': Sliders,                    // 滑块 = 推 tweak schema
+};
+
+function getToolIcon(toolName, agentType) {
+  if (toolName === 'Task' && agentType && SUBAGENT_ICONS[agentType]) {
+    return SUBAGENT_ICONS[agentType];
+  }
   return TOOL_ICONS[toolName] || Wrench;
 }
 
@@ -959,7 +970,7 @@ function ToolMessage({
   const isRunning = effectiveStatus === 'running';
 
   // v2：节点 icon 直接用工具特定 icon（去外环），颜色按状态变
-  const NodeIcon = getToolIcon(toolName);
+  const NodeIcon = getToolIcon(toolName, agentType);
   const iconColor = isRunning ? COLOR.warn : (isError ? COLOR.error : COLOR.sub);
 
   // Edit / Write 特殊渲染：文件名 + +N/-M 行数 + 展开看真 diff

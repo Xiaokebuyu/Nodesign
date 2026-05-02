@@ -21,6 +21,9 @@ export default function ChatPanel({
   todos,
   sessionTitle,
   onOpenSessionList,
+  // S7：context usage 显眼版 — header 下方一行 strip
+  contextSystemInfo,
+  contextLiveUsage,
 }) {
   // C20：subagent 30s 摘要 > "思考中…" 占位
   const statusText = agentProgress
@@ -109,6 +112,25 @@ export default function ChatPanel({
           </div>
         )}
       </div>
+
+      {/* S7：context usage 显眼条 — header 之下，永远可见 */}
+      {(contextSystemInfo || contextLiveUsage) && (
+        <div style={{
+          padding: `${GAP.xs}px ${GAP.lg}px`,
+          borderBottom: `1px solid ${COLOR.borderLt}`,
+          background: 'rgba(0,0,0,0.015)',
+          display: 'flex',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+          flexShrink: 0,
+        }}>
+          <ContextUsageBar
+            info={contextSystemInfo}
+            liveUsage={contextLiveUsage}
+            variant="full"
+          />
+        </div>
+      )}
 
       <TodoPanel todos={todos} />
       <MessageList messages={messages} isStreaming={isStreaming} />

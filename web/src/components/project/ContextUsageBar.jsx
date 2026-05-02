@@ -20,8 +20,10 @@ import { COLOR, GAP, FONT_MONO } from '../../lib/theme.js';
  *
  * 一行紧凑布局，跟 Claude Code 顶栏视觉对齐。
  */
-export default function ContextUsageBar({ info, liveUsage }) {
+export default function ContextUsageBar({ info, liveUsage, variant = 'compact' }) {
   if (!info && !liveUsage) return null;
+
+  const isFull = variant === 'full';
 
   return (
     <div style={{
@@ -36,7 +38,14 @@ export default function ContextUsageBar({ info, liveUsage }) {
       color: COLOR.text2,
       letterSpacing: '0.02em',
     }}>
-      {liveUsage && <UsageProgress usage={liveUsage} />}
+      {liveUsage
+        ? <UsageProgress usage={liveUsage} isFull={isFull} />
+        : info && (
+            <span style={{ color: COLOR.sub, fontStyle: 'italic' }} title="SDK control request 还没返回 — Kimi binary 可能不实现 getContextUsage">
+              📊 等待 context 数据…
+            </span>
+          )
+      }
       {info && liveUsage && (
         <span style={{ width: 1, height: 12, background: COLOR.borderMd }} />
       )}
@@ -45,7 +54,7 @@ export default function ContextUsageBar({ info, liveUsage }) {
   );
 }
 
-function UsageProgress({ usage }) {
+function UsageProgress({ usage, isFull = false }) {
   const pct = clamp(usage.percentage || 0, 0, 100);
   const totalK = (usage.totalTokens / 1000).toFixed(1);
   const maxK = (usage.maxTokens / 1000).toFixed(0);
@@ -89,7 +98,7 @@ function UsageProgress({ usage }) {
       {/* 进度条 */}
       <span style={{
         position: 'relative',
-        width: 80, height: 6,
+        width: isFull ? 200 : 80, height: isFull ? 8 : 6,
         background: 'rgba(0,0,0,0.08)',
         borderRadius: 3,
         overflow: 'hidden',

@@ -527,16 +527,34 @@ export async function runAgent({
     // - **粒度**：per-assistant 比 per-turn 灵敏 —— 用户能看到上下文随每个
     //   thinking/tool block 真实涨。control request 走 stdio JSON IPC，开销很小
     let usageInFlight = false;
+    let usageOkCount = 0;
+    let usageFailCount = 0;
     const emitContextUsage = () => {
       if (usageInFlight) return;
       usageInFlight = true;
       stream.getContextUsage()
         .then((usage) => {
-          if (usage) ctx.emit(Events.contextUsage(usage));
+          if (usage) {
+            ctx.emit(Events.contextUsage(usage));
+            usageOkCount++;
+            // 第一次成功打个 info 日志便于诊断（前端没看到 ContextUsageBar 进度条时
+            // 用户能看 backend 终端是否有 'getContextUsage ok' 行）
+            if (usageOkCount === 1) {
+              console.info(`[run ${runId}] getContextUsage ok — totalTokens=${usage.totalTokens} maxTokens=${usage.maxTokens} pct=${usage.percentage?.toFixed(1)}%`);
+            }
+          } else {
+            usageFailCount++;
+            if (usageFailCount === 1) {
+              console.warn(`[run ${runId}] getContextUsage returned null/undefined — binary 可能不实现 control request`);
+            }
+          }
         })
         .catch((err) => {
           // 不是错；可能 binary 还没 init 完 / stream 已 end / control request race
-          console.warn(`[run ${runId}] getContextUsage failed:`, err.message);
+          usageFailCount++;
+          if (usageFailCount === 1) {
+            console.warn(`[run ${runId}] getContextUsage failed (1st time, will keep trying silently):`, err.message);
+          }
         })
         .finally(() => {
           usageInFlight = false;
