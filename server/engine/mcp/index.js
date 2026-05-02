@@ -31,6 +31,14 @@ import { makeExportHandoffTool } from './tools/export-handoff.js';
 import { makeRecordDecisionTool } from './tools/record-decision.js';
 import { makeWebSearchTool } from './tools/web-search.js';
 import { makeReadPageTool } from './tools/read-page.js';
+import { makeListPagesTool } from './tools/list-pages.js';
+import { makeQueryElementsTool } from './tools/query-elements.js';
+import { makeGetComputedStylesTool } from './tools/get-computed-styles.js';
+import { makeNavigateToPageTool } from './tools/navigate-to-page.js';
+import { makeHighlightTool } from './tools/highlight.js';
+import { makeExposeTweaksTool } from './tools/expose-tweaks.js';
+import { makeGetPendingChangesTool } from './tools/get-pending-changes.js';
+import { makeClearPendingChangesTool } from './tools/clear-pending-changes.js';
 
 /**
  * 创建 Nodesign 的 MCP server，绑定当前 run 的依赖。
@@ -82,6 +90,25 @@ export function createNodesignMcpServer({ workspaceRoot, projectId, ctx } = {}) 
       // （`<section data-page="N">` 一段），不必 Read 整文件 + Grep + offset/limit。
       // 解 2026-05-02 用户观察"agent 只看第一页"痛点。
       makeReadPageTool({ workspaceRoot, ctx }),
+
+      // ── Canvas 焕新 C1（2026-05-02）：完整 agent "感知 + 操作" 工具链 ──
+      // 感知层：list_pages / query_elements / get_computed_styles —— playwright
+      // headless 跑出来真实 render 后的元数据，agent 不再盲改
+      makeListPagesTool({ workspaceRoot, ctx }),
+      makeQueryElementsTool({ workspaceRoot, ctx }),
+      makeGetComputedStylesTool({ workspaceRoot, ctx }),
+
+      // 控制层：emit 反向事件给前端，server 主动操作 canvas UI
+      makeNavigateToPageTool({ ctx }),
+      makeHighlightTool({ ctx }),
+
+      // 反馈层：用户在 canvas 上的直接编辑 + 评论 buffer
+      // 前端在 chat 时由 turn.js 注入 system 提示，agent 主动调下面两个工具读 + 清
+      makeGetPendingChangesTool({ workspaceRoot, ctx }),
+      makeClearPendingChangesTool({ workspaceRoot, ctx }),
+
+      // Tweaks 协议：agent 暴露 deck 专属可调参数 schema → 前端按 schema 渲染控件
+      makeExposeTweaksTool({ workspaceRoot, ctx }),
     ],
   });
 }

@@ -224,6 +224,27 @@ export const Events = {
     ...(page !== undefined ? { page } : {}),
   }),
 
+  // ── Canvas 焕新 C1（2026-05-02）：MCP 工具反向通道 + tweaks/buffer 通知 ──
+
+  // navigate_to_page 工具触发，前端 ProjectWorkspace 收到后切到第 N 页
+  // （SlideNavigator setActivePage / iframe 内 scrollIntoView section[data-page="N"]）
+  canvasNavigate: (page) => ({ type: 'run.canvas_navigate', page }),
+
+  // highlight 工具触发，前端在 InspectFloatingCard 同层挂 pulse overlay
+  canvasHighlight: (selector, durationMs = 1500) => ({
+    type: 'run.canvas_highlight', selector, durationMs,
+  }),
+
+  // expose_tweaks 工具完成，前端 TweaksPanel reload spec.tweaks
+  tweaksExposed: (count, added, replaced) => ({
+    type: 'run.tweaks_exposed', count, added, replaced,
+  }),
+
+  // clear_pending_changes 工具完成，前端可清相应本地 pending hint
+  pendingChangesCleared: (removed, remaining) => ({
+    type: 'run.pending_changes_cleared', removed, remaining,
+  }),
+
   // ── A4.1（2026-05-02）：AskUserQuestion 走 SDK canUseTool 路径 ──
   //
   // SDK binary 把 AskUserQuestion 设为 `shouldDefer: true` + `requiresUserInteraction: true`，

@@ -8,6 +8,8 @@
  *   mcp__nodesign__screenshot_canvas
  *     viewport?: { width, height }   默认 1280x720
  *     fullPage?: boolean              默认 true（完整可滚动页面）
+ *     selector?: string               若给则截匹配的第一个元素 bbox（覆盖 fullPage）
+ *     pageIndex?: number              若给则截 section[data-page="N"] 整页（覆盖 fullPage）
  *
  * 返回 CallToolResult：
  *   content: [
@@ -48,6 +50,10 @@ The screenshot uses headless chromium at the given viewport (default
 1280x720). Set fullPage=true (default) to capture the full scrollable page,
 or false to only capture the visible viewport.
 
+Targeted captures (overrides fullPage):
+- selector: capture only the first element matching this CSS selector
+- pageIndex: capture only section[data-page="N"]
+
 Returns: image content block (you see it directly via vision) plus a short
 text caption with size info.
 
@@ -55,6 +61,7 @@ Use this tool when:
 - You finished writing or editing canvas.html and want to verify it looks right
 - The user asks "what does it look like" or "show me the result"
 - You suspect a layout bug and want to see the rendered output
+- You want a closeup of one specific page or element (use pageIndex / selector)
 
 Do NOT use this tool when:
 - canvas.html doesn't exist yet (write it first)
@@ -70,9 +77,19 @@ Do NOT use this tool when:
       fullPage: z
         .boolean()
         .optional()
-        .describe('Capture full scrollable page instead of just viewport (default true)'),
+        .describe('Capture full scrollable page instead of just viewport (default true). Ignored if selector or pageIndex is given.'),
+      selector: z
+        .string()
+        .optional()
+        .describe('If given, capture only the first element matching this CSS selector (overrides fullPage)'),
+      pageIndex: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe('If given, capture only section[data-page="N"] (overrides fullPage)'),
     },
-    async ({ viewport, fullPage }) => {
+    async ({ viewport, fullPage, selector, pageIndex }) => {
       const canvasPath = path.join(workspaceRoot, 'canvas.html');
       try {
         await fs.access(canvasPath);
@@ -103,10 +120,30 @@ Do NOT use this tool when:
           timeout: 15000,
         });
 
-        const buf = await page.screenshot({
-          fullPage: fp,
-          type: 'png',
-        });
+        // selector / pageIndex 优先，命中则截元素 bbox（locator.screenshot），
+        // 都不给走 fullPage / viewport。
+        let buf;
+        let mode;
+        const targetSelector = selector
+          || (pageIndex ? `section[data-page="${pageIndex}"]` : null);
+        if (targetSelector) {
+          const locator = page.locator(targetSelector).first();
+          const count = await locator.count();
+          if (count === 0) {
+            return {
+              content: [{
+                type: 'text',
+                text: `Selector matched no elements: ${targetSelector}`,
+              }],
+              isError: true,
+            };
+          }
+          buf = await locator.screenshot({ type: 'png' });
+          mode = `selector="${targetSelector}"`;
+        } else {
+          buf = await page.screenshot({ fullPage: fp, type: 'png' });
+          mode = `fullPage=${fp}`;
+        }
 
         // emit 让前端可见 agent 在自检
         try {
@@ -114,7 +151,7 @@ Do NOT use this tool when:
             type: 'run.screenshot_taken',
             sizeBytes: buf.length,
             viewport: vp,
-            fullPage: fp,
+            mode,
           });
         } catch { /* emit fail-safe */ }
 
@@ -122,7 +159,7 @@ Do NOT use this tool when:
           content: [
             {
               type: 'text',
-              text: `Screenshot of canvas.html (${vp.width}x${vp.height}, fullPage=${fp}, ${(buf.length / 1024).toFixed(1)} KB)`,
+              text: `Screenshot of canvas.html (${vp.width}x${vp.height}, ${mode}, ${(buf.length / 1024).toFixed(1)} KB)`,
             },
             {
               type: 'image',
