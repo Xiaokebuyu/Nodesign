@@ -39,9 +39,15 @@ async function jsonRequest(method, path, body, opts = {}) {
 
 // ── Projects ──
 export const Projects = {
-  list: () => jsonRequest('GET', '/api/projects'),
+  /** 列项目；kind 选填 'project' / 'quick' 过滤 */
+  list: ({ kind } = {}) => {
+    const tail = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+    return jsonRequest('GET', `/api/projects${tail}`);
+  },
   get: (pid) => jsonRequest('GET', `/api/projects/${pid}`),
-  create: ({ name, skillId }) => jsonRequest('POST', '/api/projects', { name, skillId }),
+  /** create：name 必填；description / kind 可选（kind 默认 'project'） */
+  create: ({ name, skillId, description, kind }) =>
+    jsonRequest('POST', '/api/projects', { name, skillId, description, kind }),
   update: (pid, patch) => jsonRequest('PATCH', `/api/projects/${pid}`, patch),
   remove: (pid) => jsonRequest('DELETE', `/api/projects/${pid}`),
 };
@@ -78,9 +84,16 @@ export const Spec = {
   read: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/spec`),
 };
 
-// ── DesignPlan（S4b-2：深度对齐后 agent Write 的 design-plan.md，markdown）──
-export const DesignPlan = {
-  read: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/plan`),
+// ── Plan（Phase 3.2：SDK 原生 plan mode 审批流）──
+// 用户在 PlanReviewCard 点按钮 → approve 切 SDK permissionMode='default'；
+// reject 走 cancelRun 中断
+export const Plan = {
+  approve: ({ pid, runId, editedPlan }) =>
+    jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/plan-approve`,
+      editedPlan !== undefined ? { editedPlan } : {}),
+  reject: ({ pid, runId, reason }) =>
+    jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/plan-reject`,
+      reason ? { reason } : {}),
 };
 
 // ── PendingChanges（C4：用户直接编辑 + 评论 buffer，session-scoped）──
@@ -154,15 +167,19 @@ function parseFilenameFromDisposition(disposition) {
 // ── Turn（唯一 LLM 入口）──
 export const Turn = {
   /**
-   * body: { chat, attachments[], skillId?, sessionId? } → { runId }
+   * body: { chat, attachments[], skillId?, sessionId?, permissionMode? } → { runId }
    * sessionId:
    *   - 不传 → 后端 fallback project.activeSessionId（向后兼容）
    *   - 显式 string → 续约该 session（前端切换 session 走这条）
    *   - 显式 null → 新建 session（用户点"+ 新会话"后第一次发）
+   * permissionMode（Phase 3.2）：
+   *   - 'plan' → 启用 SDK 原生 plan mode（read-only + ExitPlanMode 审批流）
+   *   - 其他/不传 → 默认 bypassPermissions
    */
-  send: ({ pid, chat, attachments = [], skillId, sessionId }) => {
+  send: ({ pid, chat, attachments = [], skillId, sessionId, permissionMode }) => {
     const body = { chat, attachments, skillId };
     if (sessionId !== undefined) body.sessionId = sessionId;
+    if (permissionMode) body.permissionMode = permissionMode;
     return jsonRequest('POST', `/api/projects/${pid}/turn`, body);
   },
 
@@ -183,6 +200,30 @@ export const Turn = {
    */
   answer: ({ pid, runId, toolUseId, answers }) =>
     jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/answer`, { toolUseId, answers }),
+
+  /**
+   * SDK Query control: rewindFiles —— 把 cwd 文件回滚到指定 user message 时点。
+   * 配合 enableFileCheckpointing。前端 user message 旁的 undo 按钮调这个。
+   * 200 { ok:true } / 404 code='RUN_NOT_ACTIVE' / 501 code='METHOD_NOT_AVAILABLE'
+   */
+  rewind: ({ pid, runId, messageId }) =>
+    jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/rewind`, { messageId }),
+
+  /**
+   * SDK Query control: setPermissionMode —— 运行时切权限模式。
+   * mode: 'default' | 'acceptEdits' | 'plan' | 'bypassPermissions' | 'dontAsk' | 'auto'
+   * Phase 3 plan-mode native 路径必需。
+   */
+  setPermissionMode: ({ pid, runId, mode }) =>
+    jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/permission-mode`, { mode }),
+
+  /**
+   * SDK Query control: setModel —— 运行时切模型。
+   * model: 'kimi-k2.6' / 'claude-sonnet-4-6' / 'claude-opus-4-7' 等。
+   * 传 null 让 SDK 用默认。
+   */
+  setModel: ({ pid, runId, model }) =>
+    jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/model`, { model }),
 };
 
 // ── Instruction（项目级 .claude/CLAUDE.md 读写）──
@@ -230,6 +271,21 @@ export const Sessions = {
   /** 删 session JSONL（顺带清 active_session_id 如果指向它） */
   remove: (pid, sid) =>
     jsonRequest('DELETE', `/api/projects/${pid}/sessions/${sid}`),
+  /**
+   * 跨项目最近 session 聚合（GET /api/sessions/recent）
+   * @param {object} opts
+   * @param {number} [opts.limit=20]
+   * @param {'project'|'quick'} [opts.kind]
+   * @returns Promise<{ sessions: Array<{ projectId, projectName, projectKind,
+   *   sessionId, customTitle?, summary?, firstPrompt?, lastModified, tag? }> }>
+   */
+  recent: ({ limit, kind } = {}) => {
+    const qs = new URLSearchParams();
+    if (limit != null) qs.set('limit', String(limit));
+    if (kind) qs.set('kind', kind);
+    const tail = qs.toString() ? `?${qs.toString()}` : '';
+    return jsonRequest('GET', `/api/sessions/recent${tail}`);
+  },
 };
 
 // ── Health ──

@@ -41,3 +41,4 @@ web/.vite/
 web/coverage/
 
 # 锁文件（暂时全保留；如果未来分仓只保留各自的，再细化）
+.claude/scheduled_tasks.lock

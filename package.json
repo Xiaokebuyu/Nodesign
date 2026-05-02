@@ -7,12 +7,10 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server/index.js",
     "dev": "node --env-file-if-exists=.env --watch server/index.js",
-    "probe:kimi": "node --env-file-if-exists=.env server/_probe-kimi.js",
     "smoke:engine": "node --env-file-if-exists=.env server/engine/_smoke.js",
     "smoke:agent": "node --env-file-if-exists=.env server/engine/agent/_smoke.js"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.90.0",
     "async-mutex-lite": "^1.0.0",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",
@@ -25,6 +23,7 @@
   },
   "comments": {
     "_intentionally_omitted": [
+      "@anthropic-ai/sdk — Phase 4 删了；agent SDK 已包 LLM 通信，server/ 生产代码 0 直连用法。回退见 git revert（同 commit 删了 _probe-*.js）",
       "@larksuiteoapi/node-sdk — 飞书入口走小合 → 调 Nodesign HTTP API；本服务不直接连飞书",
       "@modelcontextprotocol/sdk — MCP 是 dev/ 工作台的事；Nodesign 暴露的是 REST/SSE",
       "bcryptjs / jsonwebtoken — 鉴权方案待组长确认（'已有平台'是什么），先不锁",

@@ -26,12 +26,55 @@ export const useProjectStore = create((set, get) => ({
   hydrating: false,
   error: null,
 
-  // 拉项目列表（Home mount 时调）
-  hydrate: async () => {
+  // V2 持久化 context 状态（用户反馈："不要搞的动不动就丢失信息"）：
+  //   - 老方案：ProjectWorkspace 用 useState — mount/unmount 重置；session 切换 reset；
+  //     partial event 来时整体覆盖 → 缺字段被清掉
+  //   - 新方案：keyed by pid 落 store；setSystemInfo 替换（init 一次性数据），
+  //     mergeContextUsage 浅 merge（partial event 不会覆盖已有非空字段）
+  //   - 不进 localStorage —— 跨刷新还是依赖 WS replay buffer + 新一轮 system_init
+  /** @type {{ [pid: string]: { systemInfo?: object, contextUsage?: object } }} */
+  contextByProject: {},
+
+  setProjectSystemInfo: (pid, info) => {
+    if (!pid || !info) return;
+    set((s) => ({
+      contextByProject: {
+        ...s.contextByProject,
+        [pid]: { ...(s.contextByProject[pid] || {}), systemInfo: info },
+      },
+    }));
+  },
+
+  /**
+   * Merge contextUsage —— partial 中 null/undefined 字段不覆盖已有值。
+   * eg run.context_usage 偶尔少传 messageBreakdown，旧值保留。
+   */
+  mergeProjectContextUsage: (pid, partial) => {
+    if (!pid || !partial) return;
+    set((s) => {
+      const prev = s.contextByProject[pid]?.contextUsage || {};
+      const merged = { ...prev };
+      for (const [k, v] of Object.entries(partial)) {
+        if (v != null) merged[k] = v;
+      }
+      return {
+        contextByProject: {
+          ...s.contextByProject,
+          [pid]: { ...(s.contextByProject[pid] || {}), contextUsage: merged },
+        },
+      };
+    });
+  },
+
+  getProjectContext: (pid) => get().contextByProject[pid] || {},
+
+  // 拉项目列表（Home mount 时调）。kind 选填：传 'project' 只拉标准项目（Home 网格用）；
+  // 闪聊不在此 store —— 走 Sessions.recent({ kind: 'quick' }) 拉聚合 session。
+  hydrate: async ({ kind = 'project' } = {}) => {
     if (get().hydrating) return get().projects;
     set({ hydrating: true });
     try {
-      const { projects } = await Projects.list();
+      const { projects } = await Projects.list({ kind });
       const enriched = projects.map(enrich);
       set({ projects: enriched, hydrated: true, hydrating: false, error: null });
       return enriched;
@@ -55,9 +98,11 @@ export const useProjectStore = create((set, get) => ({
 
   getProject: (id) => get().projects.find((p) => p.id === id) || null,
 
-  createProject: async ({ name, skillId, description }) => {
-    const { project } = await Projects.create({ name, skillId, description });
+  createProject: async ({ name, skillId, description, kind }) => {
+    const { project } = await Projects.create({ name, skillId, description, kind });
     const e = enrich(project);
+    // 闪聊（kind=quick）也写入 store，方便首跑后 Workspace 能从 store 读到 project；
+    // Home 网格用 hydrate({ kind:'project' }) 过滤，不会显示 quick。
     set((s) => ({ projects: [e, ...s.projects] }));
     return e;
   },
@@ -67,11 +112,12 @@ export const useProjectStore = create((set, get) => ({
     set((s) => ({
       projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)),
     }));
-    // 后端接受 name / skillId / description
+    // 后端接受 name / skillId / description / kind
     const apiPatch = {};
     if (typeof patch.name === 'string') apiPatch.name = patch.name;
     if (typeof patch.skillId === 'string') apiPatch.skillId = patch.skillId;
     if ('description' in patch) apiPatch.description = patch.description;
+    if (typeof patch.kind === 'string') apiPatch.kind = patch.kind;
     if (Object.keys(apiPatch).length === 0) return get().getProject(id);
     const { project } = await Projects.update(id, apiPatch);
     const e = enrich(project);
@@ -79,6 +125,14 @@ export const useProjectStore = create((set, get) => ({
       projects: s.projects.map((p) => (p.id === id ? { ...p, ...e } : p)),
     }));
     return e;
+  },
+
+  /**
+   * 升级闪聊为标准项目（PATCH name + description + kind='project'）。
+   * Workspace 顶栏「升级为项目」入口调用。升级后该项目会出现在 Home 网格。
+   */
+  upgradeQuickProject: async (id, { name, description }) => {
+    return get().updateProject(id, { name, description, kind: 'project' });
   },
 
   deleteProject: async (id) => {
@@ -140,6 +194,7 @@ export const useProjectStore = create((set, get) => ({
 function enrich(p) {
   return {
     ...p,
+    kind: p.kind || 'project',         // 后端默认 'project'，老数据兜底
     skill: p.skillId,                  // 兼容老前端字段名（个别组件还用 .skill）
     status: 'idle',                    // WS 事件来时再 patch
     summary: p.name || '',             // Home 卡片副标占位

@@ -5,85 +5,96 @@ import { useProjectStore } from '../../stores/projectStore.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 
 /**
- * CreateProjectModal — 新建标准项目（Anthropic Projects 风格）
+ * UpgradeQuickModal — 把闪聊（kind='quick'）升级为标准项目（kind='project'）
  *
- * 极简版：只填项目名 + 描述。提交后落 Hub（不直接进 Workspace）—— 让 Hub
- * 成为「持久能力的家」：用户在 Hub 配置 Memory / Instructions / Files，
- * 然后在 Hub 的输入框起第一个 session。
+ * 触发：Workspace 顶栏 ⋯ 菜单「升级为项目」（仅闪聊项目可见）
+ * 行为：PATCH name + description + kind='project' → 该项目从此出现在 Home 网格
  *
- * 闪聊（一句话开聊）走另一条路：Home 顶部大输入框 → 自动建 kind=quick
- * 的项目 + 首跑 → 跳 Workspace。详见 Home.jsx 的 QuickEntry。
+ * 不复用 CreateProjectModal —— 语义是 update 不是 create，预填项目名（闪聊
+ * 自动取 prompt 前 30 字命的名往往太长 / 太随意，让用户在升级时整理一下）。
  */
-export default function CreateProjectModal({ show, onClose, onCreated }) {
-  const createProject = useProjectStore(s => s.createProject);
+export default function UpgradeQuickModal({ show, onClose, project, onUpgraded }) {
+  const upgradeQuickProject = useProjectStore(s => s.upgradeQuickProject);
   const showToast = useGlobalStore(s => s.showToast);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // show 切换时用 project 字段预填
   useEffect(() => {
-    if (show) {
-      setName('');
-      setDescription('');
+    if (show && project) {
+      setName(project.name || '');
+      setDescription(project.description || '');
       setSubmitting(false);
     }
-  }, [show]);
+  }, [show, project]);
 
   const submit = async () => {
     if (submitting) return;
+    const finalName = name.trim();
+    if (!finalName) {
+      showToast('项目名必填', 'error');
+      return;
+    }
     setSubmitting(true);
     try {
-      const proj = await createProject({
-        name: name.trim() || '未命名项目',
-        description: description.trim() || undefined,
-        kind: 'project',
+      const updated = await upgradeQuickProject(project.id, {
+        name: finalName,
+        description: description.trim() || null,
       });
-      onCreated?.(proj);
+      onUpgraded?.(updated);
       onClose?.();
     } catch (err) {
-      showToast(`创建失败：${err.message}`, 'error');
+      showToast(`升级失败：${err.message}`, 'error');
       setSubmitting(false);
     }
   };
 
+  if (!project) return null;
+
   return (
-    <Modal show={show} onClose={onClose} title="新建项目" width={520}>
+    <Modal show={show} onClose={onClose} title="升级为项目" width={520}>
       <div style={{ padding: GAP.xl }}>
+        <div style={{
+          padding: GAP.md,
+          background: 'rgba(45,36,24,0.04)',
+          border: `1px solid ${COLOR.borderLt}`,
+          borderRadius: 8,
+          marginBottom: GAP.xl,
+          fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text2,
+          lineHeight: 1.55,
+        }}>
+          升级后这个项目会出现在 Home「我的项目」网格里。所有会话、记忆、文件、
+          指引保留不变；你随时可以继续在这里工作。
+        </div>
 
         <Section label="项目名">
           <input
             value={name}
             onChange={e => setName(e.target.value)}
-            placeholder="例如：Q3 产品发布会 deck"
+            placeholder="给这个项目起个名字"
             style={inputStyle}
             autoFocus
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
           />
         </Section>
 
-        <Section label="项目描述（可选 · 给团队看的项目摘要）">
+        <Section label="项目描述（可选）">
           <textarea
             value={description}
             onChange={e => setDescription(e.target.value)}
-            placeholder="例如：年度发布会主 deck，团队内部协作用"
+            placeholder="给团队看的项目摘要（agent 不读）"
             rows={3}
             maxLength={2000}
             style={{ ...inputStyle, resize: 'vertical', fontFamily: FONT_SANS, lineHeight: 1.5 }}
           />
         </Section>
-
-        <div style={{
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub,
-          marginTop: GAP.sm, lineHeight: 1.5,
-        }}>
-          创建后会进入项目主页，在那里配置项目指引、上传参考素材，再起第一个会话。
-        </div>
       </div>
 
       <ModalFooter
         onCancel={onClose}
         onConfirm={submit}
-        confirmLabel={submitting ? '创建中…' : '创建并打开'}
+        confirmLabel={submitting ? '升级中…' : '升级为项目'}
         confirmDisabled={submitting}
       />
     </Modal>

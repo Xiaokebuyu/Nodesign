@@ -118,11 +118,13 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
         matcher: 'Edit|Write',
         hooks: [makePostToolUseCanvasFocusPageHandler({ ctx })],
       },
-      // S4b-2 — Write design-plan.md 时 emit run.plan_doc_ready 给前端。
-      // 前端 ToolMessage 写工具渲染加"📄 查看设计计划"按钮，开 modal markdown 渲染。
+      // Phase 3.2 — SDK plan mode：agent 调 ExitPlanMode 工具提交 plan，
+      // host emit run.plan_for_approval 让前端弹 PlanReviewCard。
+      // SDK 自身在 plan mode 下会停 agent 等待 host 切 mode 才继续，所以本 handler
+      // 不需要返回 hookSpecificOutput.decision='block'，纯 emit 即可。
       {
-        matcher: 'Write',
-        hooks: [makePostToolUsePlanDocHandler({ ctx })],
+        matcher: 'ExitPlanMode',
+        hooks: [makePostToolUseExitPlanModeHandler({ ctx })],
       },
       {
         matcher: 'mcp__nodesign__screenshot_canvas',
@@ -510,22 +512,32 @@ function makePostToolUseCanvasFocusPageHandler({ ctx }) {
 }
 
 /**
- * PostToolUse(Write design-plan.md) handler — S4b-2。
+ * PostToolUse(ExitPlanMode) handler — Phase 3.2 SDK plan mode 接通。
  *
- * agent 用 SDK Write 工具写 design-plan.md 后 emit run.plan_doc_ready，让前端
- * 渲染"📄 查看设计计划"按钮 / toast。不阻塞 / 不返 hookSpecificOutput。
+ * agent 在 permissionMode='plan' 下调 ExitPlanMode 工具提交 plan：
+ *   tool_input: { plan: string, allowedPrompts?: [...] }
  *
- * basename 匹配 design-plan.md（兼容相对/绝对路径）。
+ * SDK 自身在 plan mode 下会停 agent 等待 host 处理（切 mode 或 interrupt）；
+ * 我们的工作是 emit 事件让前端展示 PlanReviewCard。审批通过后 host 调
+ * POST /plan-approve 走 query.setPermissionMode('default')，agent 自然继续。
+ *
+ * input: PostToolUseHookInput (sdk.d.ts:1926)
+ *   - tool_name: 'ExitPlanMode'
+ *   - tool_input: ExitPlanModeInput
+ *   - tool_use_id: string
  */
-function makePostToolUsePlanDocHandler({ ctx }) {
+function makePostToolUseExitPlanModeHandler({ ctx }) {
   return async (input, _toolUseId, _options) => {
     try {
-      const filePath = input?.tool_input?.file_path;
-      if (!filePath || typeof filePath !== 'string') return {};
-      if (!/(?:^|[/\\])design-plan\.md$/i.test(filePath)) return {};
-      ctx.emit(Events.planDocReady(filePath));
+      const plan = String(input?.tool_input?.plan || '').trim();
+      const toolUseId = input?.tool_use_id;
+      if (!plan) {
+        console.warn(`[hooks/ExitPlanMode] empty plan input — skip emit`);
+        return {};
+      }
+      ctx.emit(Events.planForApproval(toolUseId, plan));
     } catch (err) {
-      console.warn(`[hooks/plan_doc_ready] handler threw:`, err.message);
+      console.warn(`[hooks/ExitPlanMode] handler threw:`, err.message);
     }
     return {};
   };

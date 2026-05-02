@@ -28,6 +28,7 @@ import sessionsRouter from './api/sessions.js';
 import instructionRouter from './api/instruction.js';
 import memoryRouter from './api/memory.js';
 import pendingChangesRouter from './api/pending-changes.js';
+import recentRouter from './api/recent.js';
 
 const PORT = Number(process.env.PORT || 4001);
 
@@ -58,6 +59,8 @@ app.use('/api/projects', sessionsRouter);
 app.use('/api/projects', instructionRouter);
 app.use('/api/projects', memoryRouter);
 app.use('/api/projects', pendingChangesRouter);  // C4: 用户直接编辑 + 评论 buffer
+// 跨项目聚合：/api/sessions/recent
+app.use('/api', recentRouter);
 // skills 全局
 app.use('/api/skills', skillsRouter);
 

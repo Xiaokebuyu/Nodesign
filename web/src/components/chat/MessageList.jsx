@@ -4,44 +4,40 @@ import TimelineGroup from './TimelineGroup.jsx';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE } from '../../lib/theme.js';
 
 /**
- * groupMessages —— thinking + tool 进 timeline group；任何 assistant text
- * 都 break group 让 DONE 出现 + assistant 内容作 single 显示。
+ * groupMessages —— thinking + tool 进 timeline group；中间穿插的 assistant
+ * 也进 group（让 timeline 跨 narration 不断）；末尾连续的 assistant 剥出来
+ * 作 single（"真正的最终回复"——后面没工具调用了，让用户看到独立大字号）。
  *
  * 演进史：
  *   - H5：thinking+tool+assistant 全进 group + 末尾抽 final text
- *   - V2：assistant 全 break —— 用户反馈"每个 Edit 后的 1 句话也 break，太碎"
- *   - V3：启发式 isShortNarration（< 200 字 + 无 \n\n + 不带 ?）当过场不 break
- *   - V4（本次）：去 isShortNarration —— 用户反馈交错模式下 60-150 字的真实
- *     内容（"已完成 page 2，接下来…"）被当过场，DONE 永远不显示。
- *     现在：任何 assistant text 都 break，每段 thinking/tool 工作收尾就出 DONE。
- *
- * 为什么 V4 不再担心 V3 的"碎"问题：
- *   - Kimi 交错模式下 assistant text 频率本来就低（它喜欢做完一坨再总结）
- *   - 如果真出现 "Edit→narration→Edit→narration" 这种碎模式，那是 SKILL.md
- *     该约束的事（让 agent "做完一段再报告"），不是前端该兜底的
- *   - 缺 DONE 比多碎 group 更坏 —— 用户没法判断 agent "这段做完没"
+ *   - V2：assistant 全 break
+ *   - V3：启发式 isShortNarration 当过场不 break（被 V4 撤）
+ *   - V4：assistant 全 break，每段工作收尾出 DONE
+ *   - V5：assistant 全进 group → 用户反 push："最终回复也被塞 timeline 里了"
+ *   - V6（本次）：assistant 进 group 但 closed group 末尾的连续 assistant
+ *     被剥出 → 中间穿插的窄 narration 进 timeline 不断线，末尾大段 final
+ *     reply 出来正常 markdown 大字号显示。
  *
  * group 的 closed 信号：
- *   - 后面接任何非 timeline message（assistant / user / system）→ closed=true
+ *   - 后面接 user / system → closed=true（新一轮 turn 起点 / 系统拦截独立）
  *   - 最后一个 group + !isStreaming → closed=true
- *   - 最后一个 group + isStreaming → closed=false
+ *   - 最后一个 group + isStreaming → closed=false（不剥尾，因为可能还有 tool 在路上）
  */
 function groupMessages(messages, isStreaming) {
-  const groups = [];
+  const raw = [];
   let current = null;
   for (const m of messages) {
-    // assistant 任何内容都不进 group —— 让 DONE 显示在工作段尾
-    const isTimeline = m.role === 'thinking' || m.role === 'tool';
+    const isTimeline = m.role === 'thinking' || m.role === 'tool' || m.role === 'assistant';
     if (isTimeline) {
       if (!current) {
         current = { type: 'timeline', items: [], closed: false };
-        groups.push(current);
+        raw.push(current);
       }
       current.items.push(m);
     } else {
-      // assistant / user / system 全 break group
+      // user / system break group
       if (current) { current.closed = true; current = null; }
-      groups.push({ type: 'single', message: m });
+      raw.push({ type: 'single', message: m });
     }
   }
 
@@ -49,6 +45,28 @@ function groupMessages(messages, isStreaming) {
     current.closed = true;
   }
 
+  // Post-pass：closed timeline group 末尾连续的 assistant 剥成 single
+  // （"final reply" 不进 timeline）。!closed group 不剥，避免 streaming 中
+  // 当前 assistant 假装是 final 但其实下一帧又有 tool 来。
+  const groups = [];
+  for (const g of raw) {
+    if (g.type !== 'timeline' || !g.closed) {
+      groups.push(g);
+      continue;
+    }
+    let lastNonAssistant = g.items.length - 1;
+    while (lastNonAssistant >= 0 && g.items[lastNonAssistant].role === 'assistant') {
+      lastNonAssistant--;
+    }
+    const inGroup = g.items.slice(0, lastNonAssistant + 1);
+    const tail = g.items.slice(lastNonAssistant + 1);
+    if (inGroup.length > 0) {
+      groups.push({ type: 'timeline', items: inGroup, closed: true });
+    }
+    for (const m of tail) {
+      groups.push({ type: 'single', message: m });
+    }
+  }
   return groups;
 }
 

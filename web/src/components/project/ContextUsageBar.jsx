@@ -1,4 +1,4 @@
-import { Cpu, Wrench, Plug, Users } from 'lucide-react';
+import { Cpu, Wrench, Plug, Users, Activity } from 'lucide-react';
 import { COLOR, GAP, FONT_MONO } from '../../lib/theme.js';
 
 /**
@@ -41,8 +41,12 @@ export default function ContextUsageBar({ info, liveUsage, variant = 'compact' }
       {liveUsage
         ? <UsageProgress usage={liveUsage} isFull={isFull} />
         : info && (
-            <span style={{ color: COLOR.sub, fontStyle: 'italic' }} title="SDK control request 还没返回 — Kimi binary 可能不实现 getContextUsage">
-              📊 等待 context 数据…
+            <span
+              style={{ color: COLOR.sub, fontStyle: 'italic', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              title="SDK control request 还没返回 — Kimi binary 可能不实现 getContextUsage"
+            >
+              <Activity size={11} strokeWidth={1.5} />
+              等待 context 数据…
             </span>
           )
       }
@@ -184,7 +188,7 @@ function InfoChips({ info }) {
             cursor: 'help',
           }}
         >
-          <it.icon size={11} color={COLOR.sub} />
+          <it.icon size={11} strokeWidth={1.5} color={COLOR.sub} />
           <span>{it.label}</span>
         </span>
       ))}

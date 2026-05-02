@@ -6,7 +6,7 @@ import AppShell from '../components/layout/AppShell.jsx';
 // 限制在 canvas section 内（chat / canvas 不再可拖动 — PLAN.md:431 旧决策回归）。
 import FloatingPanel from '../components/layout/FloatingPanel.jsx';
 import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
-import PanelMenu from '../components/layout/PanelMenu.jsx';
+// PanelMenu 已下架（用户反馈"面板"按钮太冗余）— 浮窗仍可通过 hooks 直接 toggle
 import { Sliders } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
@@ -19,8 +19,9 @@ import ShareModal from '../components/project/ShareModal.jsx';
 import ExportMenu from '../components/project/ExportMenu.jsx';
 import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
 import SnapshotModal from '../components/project/SnapshotModal.jsx';
+import UpgradeQuickModal from '../components/project/UpgradeQuickModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
-import DesignPlanModal from '../components/project/DesignPlanModal.jsx';
+import PlanReviewCard from '../components/project/PlanReviewCard.jsx';
 import UndoButton from '../components/canvas/UndoButton.jsx';
 import ContextUsageBar from '../components/project/ContextUsageBar.jsx';
 import ExportsListModal from '../components/project/ExportsListModal.jsx';
@@ -54,6 +55,12 @@ export default function ProjectWorkspace() {
   const deleteProject = useProjectStore(s => s.deleteProject);
   const duplicateProject = useProjectStore(s => s.duplicateProject);
   const applyRunEvent = useProjectStore(s => s.applyRunEvent);
+  // V2：context 状态从局部 useState 提到 projectStore（per-pid map）—— mount/unmount 不丢，
+  // partial event 走 merge 不覆盖已有非空字段。
+  const setProjectSystemInfo = useProjectStore(s => s.setProjectSystemInfo);
+  const mergeProjectContextUsage = useProjectStore(s => s.mergeProjectContextUsage);
+  const systemInfo = useProjectStore(s => s.contextByProject[id]?.systemInfo || null);
+  const contextUsage = useProjectStore(s => s.contextByProject[id]?.contextUsage || null);
   const showToast = useGlobalStore(s => s.showToast);
   const setChatDraft = useGlobalStore(s => s.setChatDraft);
   // A4.3：维护活跃 run 的 (pid, runId)，让 AskUserQuestionView 能直接 POST /answer
@@ -75,11 +82,8 @@ export default function ProjectWorkspace() {
   // agentProgress: subagent 30s 摘要（"正在分析颜色对比度…"）
   // P0+ s1 C23：toolElapsed 从单独 state 改为写到 message 对象的 elapsed 字段，
   // 消除 prop drilling，Message 组件直接读 message.elapsed。
-  const [systemInfo, setSystemInfo] = useState(null);
-  // A2.2：实时 context usage（run.context_usage 事件，每个 assistant 块更新）。
-  // session 跨 turn 累积，run.start 不清零 —— 第一个 assistant 后会推新值
-  // 自动 overwrite。换 session 时 SessionListModal/Hub 入口已重置整个组件。
-  const [contextUsage, setContextUsage] = useState(null);
+  // V2：systemInfo / contextUsage 已上提到 projectStore（contextByProject[id]），
+  // 走 setProjectSystemInfo / mergeProjectContextUsage 更新；旧的局部 useState 删掉。
   const [promptSuggestion, setPromptSuggestion] = useState(null);
   const [agentProgress, setAgentProgress] = useState(null);
   // C29：DecisionsTab 自动刷新触发器（agent 调 record_decision / compact 后 bump）
@@ -101,6 +105,7 @@ export default function ProjectWorkspace() {
   const [exportsListOpen, setExportsListOpen] = useState(false);
   const [actionsOpen, setActionsOpen] = useState(false);
   const [snapshotOpen, setSnapshotOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [directEditOpen, setDirectEditOpen] = useState(false);
   const [directEditAnchor, setDirectEditAnchor] = useState(null);
   const [patches, setPatches] = useState([]);     // P0 mock：D 流盲区，C7 真接
@@ -314,6 +319,7 @@ export default function ProjectWorkspace() {
         setIsStreaming(false);
         setCurrentRunId(null);
         setActiveRun(null);
+        useGlobalStore.getState().clearPlanForApproval();  // Phase 3.2：run 终止时清残留 plan 卡
         // 收尾：清 thinking 流式光标（run 结束后最后一条 thinking 不该一直闪）
         setMessages(prev => clearThinkingStreaming(prev));
         // 双保险：FileChanged hook（run.file_changed）应该已 bump 过 reloadToken
@@ -342,6 +348,7 @@ export default function ProjectWorkspace() {
         setIsStreaming(false);
         setCurrentRunId(null);
         setActiveRun(null);
+        useGlobalStore.getState().clearPlanForApproval();  // Phase 3.2：run 终止时清残留 plan 卡
         setMessages(prev => [...clearThinkingStreaming(prev), {
           id: newId('msg'),
           role: 'assistant',
@@ -353,6 +360,7 @@ export default function ProjectWorkspace() {
         setIsStreaming(false);
         setCurrentRunId(null);
         setActiveRun(null);
+        useGlobalStore.getState().clearPlanForApproval();  // Phase 3.2：run 终止时清残留 plan 卡
         setPromptSuggestion(null);
         setAgentProgress(null);
         setMessages(prev => clearThinkingStreaming(prev));
@@ -363,14 +371,16 @@ export default function ProjectWorkspace() {
 
       case 'run.system_init':
         // SDK 启动元信息：model / tools / mcp_servers / agents
-        setSystemInfo(evt.info);
+        setProjectSystemInfo(id, evt.info);
         break;
 
       case 'run.context_usage': {
         // A2.1 后端 loop.js 每个 assistant message 后推一次。
         // 整条 evt 已是 ContextUsageBar 期望的 liveUsage 形态（events.js
-        // Events.contextUsage 已轻量化），直接 setState 即可。
-        setContextUsage(evt);
+        // Events.contextUsage 已轻量化）。merge 而非 replace —— partial event 缺字段时不
+        // 覆盖已有值（用户反馈"动不动丢失信息"，根因是直接 replace 把上次的 messageBreakdown
+        // 等慢字段清掉了）。
+        mergeProjectContextUsage(id, evt);
         // A2.3：autoCompact 阈值预警。当 totalTokens >= 90% threshold 时
         // toast 提示"快压缩了"。compactWarnedRef 防止同一轮重复 toast；
         // 真 compact_boundary 触发时 reset，让下一段可以再次预警。
@@ -616,10 +626,14 @@ export default function ProjectWorkspace() {
         break;
       }
 
-      case 'run.plan_doc_ready': {
-        // S4b-3：agent Write design-plan.md 完成 → 主动开 modal + toast 通知用户
-        useGlobalStore.getState().openDesignPlan();
-        showToast('📄 设计计划已生成，点击右上 × 关闭', 'info');
+      case 'run.plan_for_approval': {
+        // Phase 3.2：SDK 原生 plan mode — agent 调 ExitPlanMode 提交 plan，
+        // 显示 PlanReviewCard 让用户 approve / edit / reject
+        useGlobalStore.getState().setPlanForApproval({
+          toolUseId: evt.toolUseId,
+          plan: evt.plan,
+        });
+        showToast('设计计划待审批', 'info');
         break;
       }
 
@@ -664,11 +678,10 @@ export default function ProjectWorkspace() {
     return <NotFound id={id} error={hydrateError?.message} />;
   }
 
-  const status = project.status === 'generating'
-    ? { dot: 'running', text: '运行中' }
-    : project.status === 'error'
-      ? { dot: 'failed', text: '上次失败' }
-      : { dot: 'idle', text: '就绪' };
+  // V2：TopBar status chip 整个去掉（用户反馈"运行中"/"上次失败"/"就绪"全违和）
+  //   - running 由 ChatComposer 的 Send → 停止 按钮承担
+  //   - failed 由 chat 内 ⚠️ inline assistant 消息承担
+  //   - idle 没信息价值，删掉
 
   // ── handlers ──
 
@@ -679,9 +692,13 @@ export default function ProjectWorkspace() {
    */
   const handleSend = async (text) => {
     if (!text || !text.trim()) return;
+    // mime 字段必传：Phase 1.4 后端 image inline 检测用 mime 判断是不是图
     const attachments = inputs
       .filter(it => it.type === 'asset' && it.path)
-      .map(it => ({ type: 'asset', path: it.path, name: it.name, size: it.size }));
+      .map(it => ({ type: 'asset', path: it.path, name: it.name, size: it.size, mime: it.mime }));
+
+    // Phase 3.2：plan-mode toggle 状态决定本次 turn 走 SDK 原生 plan mode
+    const planModeEnabled = useGlobalStore.getState().planModeEnabled;
 
     setMessages(ms => [...ms, { id: newId('msg'), role: 'user', content: text }]);
     try {
@@ -691,6 +708,7 @@ export default function ProjectWorkspace() {
         attachments,
         // S4：显式传选中的 sessionId；null 时后端识别为"新建 session"
         sessionId: currentSessionId,
+        permissionMode: planModeEnabled ? 'plan' : undefined,
       });
       setCurrentRunId(runId);  // 终止生成用
       setActiveRun({ pid: id, runId });  // A4.3：让 AskUserQuestionView 直 POST /answer
@@ -717,6 +735,7 @@ export default function ProjectWorkspace() {
         // run 已结束（race：用户点的瞬间 agent 自然完成）
         setCurrentRunId(null);
         setActiveRun(null);
+        useGlobalStore.getState().clearPlanForApproval();  // Phase 3.2：run 终止时清残留 plan 卡
         setIsStreaming(false);
       } else {
         showToast(`取消失败：${err.message}`, 'error');
@@ -976,10 +995,8 @@ export default function ProjectWorkspace() {
         { label: project.name, to: `/projects/${id}` },
         { label: currentSessionTitle || '新会话' },
       ]}
-      status={status}
       actions={
         <>
-          <PanelMenu />
           {(systemInfo || contextUsage) && (
             <ContextUsageBar info={systemInfo} liveUsage={contextUsage} />
           )}
@@ -1036,6 +1053,8 @@ export default function ProjectWorkspace() {
               onOpenSnapshots={handleOpenSnapshots}
               snapshotCount={(project.snapshots || []).length}
               onViewCode={handleViewCode}
+              isQuickProject={project.kind === 'quick'}
+              onUpgrade={() => { setActionsOpen(false); setUpgradeOpen(true); }}
             />
           </div>
         </>
@@ -1070,8 +1089,6 @@ export default function ProjectWorkspace() {
             todos={todos}
             sessionTitle={currentSessionTitle}
             onOpenSessionList={() => setSessionListOpen(true)}
-            contextSystemInfo={systemInfo}
-            contextLiveUsage={contextUsage}
           />
         </aside>
 
@@ -1157,7 +1174,15 @@ export default function ProjectWorkspace() {
           navigate(sid ? `/projects/${id}/sessions/${sid}` : `/projects/${id}/work`);
         }}
       />
-      <DesignPlanModal pid={id} sid={currentSessionId} />
+      <UpgradeQuickModal
+        show={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        project={project}
+        onUpgraded={(updated) => {
+          showToast(`已升级为标准项目「${updated.name}」`, 'success');
+        }}
+      />
+      <PlanReviewCard />
 
     </AppShell>
     </PanelManagerProvider>

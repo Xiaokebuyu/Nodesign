@@ -41,12 +41,25 @@ export const useGlobalStore = create((set) => ({
   activeRun: null,
   setActiveRun: (activeRun) => set({ activeRun }),
 
-  // ── S4b-3：DesignPlan modal 开关 ──
-  // run.plan_doc_ready 触发 / Message Write tool 按钮触发都走这里。
-  // ProjectWorkspace 持有 <DesignPlanModal />，按这个 flag 显示。
-  designPlanOpen: false,
-  openDesignPlan: () => set({ designPlanOpen: true }),
-  closeDesignPlan: () => set({ designPlanOpen: false }),
+  // ── Phase 3.2：SDK 原生 plan mode 审批 ──
+  // run.plan_for_approval 事件 → 设 planForApproval state → ProjectWorkspace
+  // 渲染 <PlanReviewCard />。用户 approve/reject 后调 Plan.approve/reject API
+  // 然后清空 state。
+  planForApproval: null,  // { toolUseId, plan }
+  setPlanForApproval: (planForApproval) => set({ planForApproval }),
+  clearPlanForApproval: () => set({ planForApproval: null }),
+
+  // ── Phase 3.2：plan-mode toggle ──
+  // ChatComposer 旁边的 segmented control "快速做 / 深度对齐"。开 plan-mode
+  // 时下次 turn 会走 SDK 原生 plan mode（permissionMode='plan' + ExitPlanMode 流程）。
+  // toggle 持久化到 localStorage（用户偏好），单 session 内保持。
+  planModeEnabled: (() => {
+    try { return localStorage.getItem('nodesign:planMode') === '1'; } catch { return false; }
+  })(),
+  setPlanModeEnabled: (enabled) => {
+    try { localStorage.setItem('nodesign:planMode', enabled ? '1' : '0'); } catch { /* ignore */ }
+    set({ planModeEnabled: enabled });
+  },
 
   // ── 模拟登录态（MVP 单用户）──
   user: { id: 'u_self', name: '我', avatar: null },

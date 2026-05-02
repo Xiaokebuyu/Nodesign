@@ -1,14 +1,17 @@
 import { useEffect, useRef } from 'react';
-import { Edit2, Copy, Trash2, History, Code2, Camera } from 'lucide-react';
+import { Edit2, Copy, Trash2, History, Code2, Camera, ArrowUpRight } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
 
 /**
  * 顶栏 ⋯ 菜单（项目操作）
+ *
+ * isQuickProject=true 时显示「升级为项目」入口（闪聊→标准项目，PATCH kind）
  */
 export default function ProjectActionsMenu({
   open, onClose, anchorRef,
   onRename, onDuplicate, onDelete, onHistory, onViewCode,
   onSaveSnapshot, onOpenSnapshots, snapshotCount = 0,
+  onUpgrade, isQuickProject = false,
 }) {
   const ref = useRef(null);
 
@@ -39,6 +42,17 @@ export default function ProjectActionsMenu({
         zIndex: 50,
       }}
     >
+      {isQuickProject && (
+        <>
+          <Item
+            icon={<ArrowUpRight size={12} />}
+            label="升级为项目"
+            onClick={onUpgrade}
+            subtle="对话"
+          />
+          <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />
+        </>
+      )}
       <Item icon={<Edit2 size={12} />} label="重命名" onClick={onRename} />
       <Item icon={<Copy size={12} />} label="复制项目" onClick={onDuplicate} />
       <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />

@@ -162,28 +162,10 @@ router.get('/:pid/sessions/:sid/spec', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-/**
- * GET /:pid/sessions/:sid/plan —— 读 sessions/<sid>/design-plan.md (S4b-2)
- *
- * agent 在深度对齐后用 SDK Write 工具写到 cwd 的 design-plan.md。前端 modal
- * fetch 这个 endpoint 用 react-markdown 渲染。
- *
- * 不存在 → 200 + { plan: null }，让前端友好提示"还没生成设计计划"。
- */
-router.get('/:pid/sessions/:sid/plan', async (req, res, next) => {
-  try {
-    if (!guard(req, res)) return;
-    const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
-    const file = path.join(sessionRoot, 'design-plan.md');
-    try {
-      const markdown = await fs.readFile(file, 'utf8');
-      res.json({ plan: markdown });
-    } catch (err) {
-      if (err.code === 'ENOENT') return res.json({ plan: null });
-      throw err;
-    }
-  } catch (err) { next(err); }
-});
+// GET /plan endpoint 已删（Phase 4）：业务层 design-plan.md modal 路径下线，
+// 统一走 SDK 原生 plan mode（PlanReviewCard）。design-plan.md 文件作为
+// SDK plan-approve 的产物保留（turn.js 落档），但前端不再有只读 modal。
+// vision-checker 子代理仍可 Read design-plan.md，走子代理的 cwd Read 路径。
 
 const EMPTY_CANVAS_HTML = `<!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><title>NoDesign canvas</title>

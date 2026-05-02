@@ -1,16 +1,23 @@
 /**
- * web/src/lib/ws-client.js — WebSocket 客户端，含指数退避重连
+ * web/src/lib/ws-client.js — WebSocket 客户端，含指数退避重连 + replay-on-reconnect
  *
  * 用法：
  *   const ws = openProjectWS({ projectId, onEvent, onClose? });
  *   ws.close();   // 停止重连 + 关闭连接
  *
  * 行为：
- *   - 自动连 ws://<host>/ws/projects/:pid
- *   - 收到 message → JSON.parse → onEvent(evt)
+ *   - 自动连 ws://<host>/ws/projects/:pid（重连时拼 ?since=<lastSeq>）
+ *   - 收到 message → JSON.parse → onEvent(evt)；event.seq 单调递增 → 更新 lastSeq
  *   - close → 等 backoff 重连（1s → 2s → ... → 30s 上限）
  *   - 4xx/服务认为不该重连的 close code → 停止
  *   - 调用方 close() → 立即停止 + 不再重连
+ *
+ * Replay 机制（2026-05-03 加）：
+ *   server EventBus 维护 ring buffer (2000 条)；首次连不带 since → live。重连时拼
+ *   ?since=lastSeq → server 同步 replay buffer 里 seq > since 的事件再切 live。
+ *   ws.connected 帧带 { since, replayed, gap }；gap=true 表示中间被挤掉一段，
+ *   客户端可据此决定要不要全量 hydrate（当前 ProjectWorkspace mount 时已经 hydrate 一次，
+ *   gap 警告作为日志先打 console）。
  */
 
 const MIN_BACKOFF_MS = 1000;
@@ -28,10 +35,13 @@ export function openProjectWS({ projectId, onEvent, onClose }) {
   let reconnectTimer = null;
   let backoff = MIN_BACKOFF_MS;
   let stopped = false;
+  /** 最后一条收到的事件 seq；重连时拼 ?since= 用 */
+  let lastSeq = 0;
 
   function buildUrl() {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${proto}://${window.location.host}/ws/projects/${encodeURIComponent(projectId)}`;
+    const base = `${proto}://${window.location.host}/ws/projects/${encodeURIComponent(projectId)}`;
+    return lastSeq > 0 ? `${base}?since=${lastSeq}` : base;
   }
 
   function connect() {
@@ -55,6 +65,13 @@ export function openProjectWS({ projectId, onEvent, onClose }) {
         data = JSON.parse(evt.data);
       } catch {
         return;
+      }
+      // 更新 lastSeq —— EventBus 单调 seq；ws.connected 没 seq 不动。
+      // gap=true 时打 warn，方便日后排查丢事件场景。
+      if (typeof data.seq === 'number' && data.seq > lastSeq) {
+        lastSeq = data.seq;
+      } else if (data.type === 'ws.connected' && data.gap) {
+        console.warn(`[ws] replay gap detected (since=${data.since}, replayed=${data.replayed}); some events may be missing — refresh if state looks wrong`);
       }
       try {
         onEvent?.(data);

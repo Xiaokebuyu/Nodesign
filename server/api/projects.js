@@ -21,9 +21,15 @@ import { disposeProjectBus } from '../ws/broker.js';
 
 const router = express.Router();
 
-router.get('/', (_req, res, next) => {
+const KIND_VALUES = new Set(['project', 'quick']);
+
+router.get('/', (req, res, next) => {
   try {
-    res.json({ projects: listProjects() });
+    const kind = typeof req.query.kind === 'string' ? req.query.kind : undefined;
+    if (kind && !KIND_VALUES.has(kind)) {
+      return res.status(400).json({ error: `kind must be project|quick (got ${kind})` });
+    }
+    res.json({ projects: listProjects({ kind }) });
   } catch (err) { next(err); }
 });
 
@@ -31,7 +37,7 @@ const DESCRIPTION_MAX = 2000;
 
 router.post('/', async (req, res, next) => {
   try {
-    const { name, skillId, description } = req.body || {};
+    const { name, skillId, description, kind } = req.body || {};
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'name required' });
     }
@@ -41,7 +47,10 @@ router.post('/', async (req, res, next) => {
     if (typeof description === 'string' && description.length > DESCRIPTION_MAX) {
       return res.status(400).json({ error: `description too long (max ${DESCRIPTION_MAX})` });
     }
-    const project = createProject({ name, skillId, description });
+    if (kind != null && !KIND_VALUES.has(kind)) {
+      return res.status(400).json({ error: `kind must be project|quick (got ${kind})` });
+    }
+    const project = createProject({ name, skillId, description, kind });
     await ensureProjectWorkspace(project.id);
     res.status(201).json({ project });
   } catch (err) { next(err); }
@@ -73,6 +82,12 @@ router.patch('/:pid', (req, res, next) => {
         return res.status(400).json({ error: `description too long (max ${DESCRIPTION_MAX})` });
       }
       patch.description = (typeof d === 'string' && d.trim()) ? d.trim() : null;
+    }
+    if ('kind' in (req.body || {})) {
+      if (!KIND_VALUES.has(req.body.kind)) {
+        return res.status(400).json({ error: `kind must be project|quick (got ${req.body.kind})` });
+      }
+      patch.kind = req.body.kind;
     }
     const updated = updateProject(req.params.pid, patch);
     res.json({ project: updated });

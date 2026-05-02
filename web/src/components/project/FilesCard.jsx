@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, FileText, Image as ImageIcon, X } from 'lucide-react';
+import { Plus, FileText, Image as ImageIcon, X, Upload } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { Assets } from '../../lib/api.js';
 import { formatSize } from '../../lib/helpers.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { useDropzone } from '../../lib/useDropzone.js';
 
 /**
  * FilesCard —— Hub 右栏卡片：项目共享 files（shared/assets/）
@@ -33,9 +34,9 @@ export default function FilesCard({ projectId }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleUpload = async (e) => {
-    const fileList = Array.from(e.target.files || []);
-    if (fileList.length === 0) return;
+  /** 复用：input picker 和 drag-drop 都走这条 — 同条 Assets.upload 路径 → shared/assets/ */
+  const uploadFiles = useCallback(async (fileList) => {
+    if (!fileList || fileList.length === 0) return;
     setUploading(true);
     try {
       for (const f of fileList) {
@@ -47,9 +48,20 @@ export default function FilesCard({ projectId }) {
       showToast(`上传失败：${err.message}`, 'error');
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  }, [projectId, refresh, showToast]);
+
+  const handleUpload = async (e) => {
+    const fileList = Array.from(e.target.files || []);
+    await uploadFiles(fileList);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  // V2：拖文件入卡片整体（包括空状态 + 列表 + header）—— 路径同 picker
+  const { dragging, dropProps } = useDropzone({
+    onFiles: uploadFiles,
+    disabled: uploading,
+  });
 
   const handleDelete = async (filename) => {
     if (!window.confirm(`删除「${filename}」？`)) return;
@@ -63,9 +75,33 @@ export default function FilesCard({ projectId }) {
   };
 
   return (
-    <div style={cardStyle}>
+    <div
+      {...dropProps}
+      style={{
+        ...cardStyle,
+        position: 'relative',
+        border: dragging ? `1.5px dashed ${COLOR.btn}` : cardStyle.border,
+        background: dragging ? 'rgba(45,36,24,0.04)' : cardStyle.background,
+        transition: 'border-color 0.15s, background 0.15s',
+      }}
+    >
+      {dragging && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(45,36,24,0.06)',
+          borderRadius: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          gap: GAP.sm,
+          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+          color: COLOR.text,
+          pointerEvents: 'none',
+          zIndex: 2,
+        }}>
+          <Upload size={14} /> 松开上传到 shared/assets/
+        </div>
+      )}
       <div style={cardHeader}>
-        <span style={cardTitle}>Files</span>
+        <span style={cardTitle}>项目文件</span>
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
@@ -98,7 +134,7 @@ export default function FilesCard({ projectId }) {
             color: COLOR.sub, textAlign: 'center',
             padding: `0 ${GAP.lg}px`, lineHeight: 1.55,
           }}>
-            Add PDFs, documents, or other text to reference in this project.
+            上传 PDF、文档或图片，agent 在 session 里能直接 Read 到这些素材。
           </span>
         </div>
       )}

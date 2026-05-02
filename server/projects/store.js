@@ -65,6 +65,15 @@ if (!projectsColNames.has('description')) {
   console.log('[projects/store] projects.description column added; active_session_id cleared');
 }
 
+// 入口流程重构：kind 区分「标准项目（project）」vs「闪聊（quick）」。
+// 默认 'project' 让老数据零行为变化；闪聊由 Home 大输入框隐式建出，标 'quick'。
+// 用户可在 Workspace 顶栏「升级为项目」把 quick → project（PATCH kind）。
+if (!projectsColNames.has('kind')) {
+  db.exec("ALTER TABLE projects ADD COLUMN kind TEXT NOT NULL DEFAULT 'project'");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_projects_kind_updated ON projects(kind, updated_at DESC)");
+  console.log('[projects/store] projects.kind column added (default project)');
+}
+
 // ── ID ──
 
 export function newProjectId() {
@@ -90,6 +99,7 @@ function rowToProject(row) {
     name: row.name,
     skillId: row.skill_id,
     description: row.description || null,
+    kind: row.kind || 'project',
     activeSessionId: row.active_session_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -98,8 +108,14 @@ function rowToProject(row) {
 
 // ── CRUD ──
 
-/** 列项目（按 updated_at 倒序） */
-export function listProjects({ limit = 100 } = {}) {
+/** 列项目（按 updated_at 倒序）。kind 选填：传 'project' / 'quick' 过滤 */
+export function listProjects({ limit = 100, kind } = {}) {
+  if (kind) {
+    const rows = db.prepare(
+      'SELECT * FROM projects WHERE kind = ? ORDER BY updated_at DESC LIMIT ?',
+    ).all(kind, limit);
+    return rows.map(rowToProject);
+  }
   const rows = db.prepare('SELECT * FROM projects ORDER BY updated_at DESC LIMIT ?').all(limit);
   return rows.map(rowToProject);
 }
@@ -117,25 +133,39 @@ export function getProject(id) {
  * @param {string} opts.name
  * @param {string} [opts.skillId='deskskill-engine-mini']
  * @param {string} [opts.description]   人类可读的项目描述（agent 不读，仅 UI 用）
+ * @param {'project'|'quick'} [opts.kind='project']  标准项目 / 闪聊（Home 隐式建）
  */
-export function createProject({ name, skillId = 'deskskill-engine-mini', description = null }) {
+export function createProject({
+  name,
+  skillId = 'deskskill-engine-mini',
+  description = null,
+  kind = 'project',
+}) {
   if (!name || typeof name !== 'string') throw new Error('createProject: name 必填');
+  if (kind !== 'project' && kind !== 'quick') {
+    throw new Error(`createProject: kind 非法 (${kind})`);
+  }
   const id = newProjectId();
   const desc = (typeof description === 'string' && description.trim()) ? description.trim() : null;
-  db.prepare(`INSERT INTO projects (id, name, skill_id, description) VALUES (?, ?, ?, ?)`).run(
-    id, name.trim(), skillId, desc,
-  );
+  db.prepare(
+    `INSERT INTO projects (id, name, skill_id, description, kind) VALUES (?, ?, ?, ?, ?)`,
+  ).run(id, name.trim(), skillId, desc, kind);
   return getProject(id);
 }
 
-/** 更新（仅允许 name / skill_id / description / active_session_id） */
+/** 更新（仅允许 name / skill_id / description / active_session_id / kind） */
 export function updateProject(id, patch) {
   validateProjectId(id);
+  // kind 只允许枚举值（升级闪聊用 PATCH { kind: 'project' }）
+  if ('kind' in patch && patch.kind !== 'project' && patch.kind !== 'quick') {
+    throw new Error(`updateProject: kind 非法 (${patch.kind})`);
+  }
   const map = {
     name: 'name',
     skillId: 'skill_id',
     description: 'description',
     activeSessionId: 'active_session_id',
+    kind: 'kind',
   };
   const sets = [];
   const args = [];

@@ -121,6 +121,71 @@ input 长这样（注意：**单次调用 1-4 个 question，每个 question 2-4
 - ❌ 把 chat 已经能问的转成 AskUserQuestion 走形式（卡片有 UI 成本，不必要）
 - ❌ 选项 description 写到 100+ 字 —— 用户读卡片 ≤ 5 秒，超过就回归 chat 文字
 
+### `preview` 字段 —— 给选项塞视觉 mockup
+
+每个 option 还有一个**可选的 `preview` 字段**，前端用 sandbox iframe 渲染
+**self-contained HTML fragment**（NoDesign 已配 `previewFormat: 'html'`）。
+当问题是**视觉方向 / 配色 / 字体 / 排版风格** 时，光读 label + description
+判断不直观，preview 给出一张 240×140px 的小卡片让用户**眼睛直接看到差异**，
+比想象准 10 倍。
+
+**preview HTML 写法约定**：
+
+- **self-contained**：所有 CSS 写在 `<style>` 里或 inline style，不引外部 JS / 不引外部图片（sandbox iframe 同源限制）
+- **小**：单个 preview ≤ 5KB（超过会让卡片渲染卡顿）；只画核心视觉锚点，不要塞整页
+- **比例 240×140**：iframe 默认这个大小，按这个比例排版；超出会被裁切
+- **不用 emoji**（UI 一致性）；中文字用 `font-family: 'PingFang SC', system-ui`
+- **每个 option 的 preview 视觉差异要明显**——否则用户分不清
+
+**示例 1：视觉方向问题**
+
+```json
+{
+  "question": "deck 整体视觉调性走哪种？",
+  "header": "视觉调性",
+  "options": [
+    {
+      "label": "暖灰商务",
+      "description": "克制、高信息密度",
+      "preview": "<div style='width:240px;height:140px;background:#F9F8F6;padding:16px;font-family:system-ui;color:#2d2418'><div style='font-size:18px;font-weight:700;margin-bottom:8px'>2026 Q1 Review</div><div style='display:flex;gap:8px'><div style='background:#fff;padding:8px;border:1px solid #e5e0d8;flex:1'><div style='font-size:10px;color:#6b5d4f'>Revenue</div><div style='font-size:16px;font-weight:600'>$12.4M</div></div><div style='background:#fff;padding:8px;border:1px solid #e5e0d8;flex:1'><div style='font-size:10px;color:#6b5d4f'>Growth</div><div style='font-size:16px;font-weight:600'>+34%</div></div></div></div>"
+    },
+    {
+      "label": "暗色赛博",
+      "description": "强烈、年轻冲击",
+      "preview": "<div style='width:240px;height:140px;background:#0a0a14;padding:16px;font-family:system-ui;color:#fff;background-image:linear-gradient(135deg,#0a0a14 0%,#1a1530 100%)'><div style='font-size:18px;font-weight:700;color:#9333ea;margin-bottom:8px;text-shadow:0 0 12px rgba(147,51,234,0.5)'>FUTURE STACK</div><div style='font-size:11px;color:#a78bfa;letter-spacing:0.1em'>2026 Q1 // VELOCITY</div></div>"
+    },
+    {
+      "label": "淡彩水墨",
+      "description": "柔和、留白多",
+      "preview": "<div style='width:240px;height:140px;background:#F4EFE6;padding:20px;font-family:system-ui;color:#2c2818'><div style='font-size:20px;font-weight:300;letter-spacing:0.05em;margin-bottom:12px'>江南 · 春</div><div style='width:60px;height:1px;background:#8b7355;margin-bottom:8px'></div><div style='font-size:11px;color:#7a6b55;line-height:1.6'>水气朦胧，山色空明</div></div>"
+    }
+  ]
+}
+```
+
+**示例 2：字体方案问题**
+
+```json
+{
+  "options": [
+    {
+      "label": "Inter + PingFang",
+      "preview": "<div style='width:240px;height:140px;padding:16px;font-family:Inter,PingFang SC,system-ui;background:#fff;color:#1a120a'><div style='font-size:24px;font-weight:700;margin-bottom:6px'>Hello 你好</div><div style='font-size:11px;color:#6b5d4f'>The quick brown fox 敏捷的棕色狐狸</div></div>"
+    },
+    {
+      "label": "Playfair + Noto Serif",
+      "preview": "<div style='width:240px;height:140px;padding:16px;font-family:Georgia,Noto Serif SC,serif;background:#fff;color:#1a120a'><div style='font-size:26px;font-style:italic;font-weight:600;margin-bottom:6px'>Hello 你好</div><div style='font-size:11px;color:#6b5d4f;font-style:italic'>The quick brown fox 敏捷的棕色狐狸</div></div>"
+    }
+  ]
+}
+```
+
+**什么时候不写 preview**：
+
+- 离散决策没有视觉成分（"是否需要导出 PDF" 之类） → label + description 够
+- 选项之间视觉差异太抽象画不出来（"克制 vs 张扬"，无具体色 / 字体落点）→ 别凑数
+- 你对选项的视觉具象不确定 → 直接 label + description 让用户用文字答
+
 ---
 
 ## Claude Code 工具用法速学

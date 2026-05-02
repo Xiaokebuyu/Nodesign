@@ -39,18 +39,18 @@ export default function InstructionsCard({ projectId }) {
 
   const isEmpty = !content.trim();
   const preview = isEmpty
-    ? 'Add instructions to tailor Claude\'s responses'
+    ? '添加项目指引来定制 agent 的设计风格与约束'
     : content.replace(/^#+ .*\n+/g, '').slice(0, 240);
 
   return (
     <>
       <div style={cardStyle}>
         <div style={cardHeader}>
-          <span style={cardTitle}>Instructions</span>
+          <span style={cardTitle}>项目指引</span>
           <button
             onClick={() => setEditOpen(true)}
             disabled={loading}
-            title="编辑项目指令"
+            title="编辑项目指引"
             style={iconBtnStyle}
           >
             <Pencil size={13} />
@@ -77,7 +77,7 @@ export default function InstructionsCard({ projectId }) {
         onSaved={(next) => {
           setContent(next);
           setExists(true);
-          showToast('项目指令已保存', 'success');
+          showToast('项目指引已保存', 'success');
         }}
       />
     </>
@@ -110,7 +110,7 @@ function InstructionEditModal({ show, onClose, projectId, initialContent, onSave
   };
 
   return (
-    <Modal show={show} onClose={onClose} title="项目背景（Instructions）" width={680}>
+    <Modal show={show} onClose={onClose} title="项目指引" width={680}>
       <div style={{ padding: `${GAP.md}px ${GAP.xl}px`, display: 'flex', flexDirection: 'column', gap: GAP.md }}>
         <div style={{
           fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub,

@@ -50,18 +50,25 @@ export function setupWS(httpServer) {
       return socket.destroy();
     }
 
+    // ?since=N — 客户端最后看到的 EventBus seq；server 通过 buffer 回放 (since, _seq] 段
+    // 第一次连不带 since → since=0 → 不 replay 直接 live。
+    const sinceRaw = url.searchParams.get('since');
+    const since = sinceRaw != null ? Math.max(0, parseInt(sinceRaw, 10) || 0) : 0;
+
     wss.handleUpgrade(req, socket, head, (ws) => {
-      handleProjectWS(ws, pid);
+      handleProjectWS(ws, pid, since);
     });
   });
 
   return wss;
 }
 
-function handleProjectWS(ws, pid) {
+function handleProjectWS(ws, pid, since = 0) {
   const bus = getProjectBus(pid);
 
-  const unsubscribe = bus.subscribe('*', (event) => {
+  // subscribeFromSeq 同步先 replay buffer 里 seq > since 的，然后切 live。
+  // listener 抛错被 EventBus 内部吞 + warn —— ws.send 失败也只是 warn 不抛，避免影响别人。
+  const { unsubscribe, replayed, gap } = bus.subscribeFromSeq(since, (event) => {
     if (ws.readyState === ws.OPEN) {
       try {
         ws.send(JSON.stringify(event));
@@ -88,12 +95,16 @@ function handleProjectWS(ws, pid) {
     cleanup();
   });
 
-  // 连上时发一条确认（前端用来同步 hydrate 完成）
+  // 确认 + replay 元信息（gap=true 客户端可决定全量 hydrate）。
+  // 故意放在 replay 之后发：客户端看到 ws.connected 就知道 backlog 已 drain，可切回正常 live 状态。
   try {
     ws.send(JSON.stringify({
       type: 'ws.connected',
       projectId: pid,
       ts: new Date().toISOString(),
+      since,
+      replayed,
+      gap,
     }));
   } catch { /* immediate close edge */ }
 }

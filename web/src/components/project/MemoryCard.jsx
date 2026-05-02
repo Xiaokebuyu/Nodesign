@@ -26,7 +26,10 @@ export default function MemoryCard({ projectId }) {
     setLoading(true);
     try {
       const result = await Memory.list(projectId);
-      setMemory(result?.memory || []);
+      // 过滤 'brand' agentType — 它由独立的 BrandCard 管理（同一份后端文件夹但
+      // 概念上是「品牌档案」，不是 agent 自由记忆，避免在两个 card 重复出现）
+      const filtered = (result?.memory || []).filter(m => m.agentType !== 'brand');
+      setMemory(filtered);
     } catch (err) {
       console.warn('[MemoryCard] list failed:', err.message);
     } finally {
@@ -52,7 +55,7 @@ export default function MemoryCard({ projectId }) {
     <>
       <div style={cardStyle}>
         <div style={cardHeader}>
-          <span style={cardTitle}>Memory</span>
+          <span style={cardTitle}>记忆</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.xs }}>
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3,
@@ -61,7 +64,7 @@ export default function MemoryCard({ projectId }) {
               borderRadius: 4,
               fontFamily: FONT_SANS, fontSize: 10, color: COLOR.sub,
             }}>
-              <Lock size={10} /> Only you
+              <Lock size={10} /> 仅你可见
             </span>
             <button
               onClick={() => setEditingType('_root')}
@@ -203,7 +206,7 @@ function MemoryEditModal({ show, onClose, projectId, agentType, onSaved }) {
   };
 
   return (
-    <Modal show={show} onClose={onClose} title={`Memory — ${label || ''}`} width={680}>
+    <Modal show={show} onClose={onClose} title={`记忆 — ${label || ''}`} width={680}>
       <div style={{ padding: `${GAP.md}px ${GAP.xl}px`, display: 'flex', flexDirection: 'column', gap: GAP.md }}>
         <div style={{
           fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub,
