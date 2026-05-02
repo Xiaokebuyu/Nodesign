@@ -11,6 +11,7 @@
     "smoke:agent": "node --env-file-if-exists=.env server/engine/agent/_smoke.js"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.123",
     "async-mutex-lite": "^1.0.0",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",
@@ -35,7 +36,5 @@
       "better-sqlite3 vs pg — SaaS 数据规模会涨，可能要切 PostgreSQL；MVP 先 SQLite 起步"
     ]
   },
-  "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.123"
-  }
+  "devDependencies": {}
 }
