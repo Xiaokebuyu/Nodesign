@@ -365,6 +365,16 @@ export default function ProjectWorkspace() {
         setAgentProgress(null);
         setMessages(prev => clearThinkingStreaming(prev));
         showToast('已取消', 'info');
+        // streamInput 模式：cancel 只是 interrupt 当前 turn，query 仍活着接下条 message。
+        // 跟 run.done 同步：从"新会话"（/work）路径 cancel 时也要 navigate 到 /sessions/<sid>，
+        // 否则 URL 还是 /work，下次发 chat sessionId=null 会起新 session 跟原 session 脱钩
+        if (!currentSessionId) {
+          Sessions.list(id, { limit: 1 }).then(({ sessions = [] }) => {
+            if (sessions.length > 0) {
+              navigate(`/projects/${id}/sessions/${sessions[0].sessionId}`, { replace: true });
+            }
+          }).catch(() => { /* ignore */ });
+        }
         break;
 
       // ── P0+ s1 C17：新事件类型 ──

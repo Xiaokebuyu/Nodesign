@@ -233,13 +233,13 @@ export default function ChatComposer({
 
           <div style={{ flex: 1 }} />
 
-          {/* streamInput 重构：停止 + 发送 两个按钮并排
-              isRunning 时停止按钮显示（中断当前 turn，query 不死）
-              发送按钮始终显示，isRunning 时点击 = 追加排队 */}
+          {/* streamInput 重构：发送按钮始终显示+始终叫"发送"。
+              isRunning 时 Enter / 点发送 = 追加排队（agent 跑完当前 turn 自然吃下一条）。
+              停止按钮在 isRunning 时显示在左侧 —— 中断当前 turn，query 不死继续等下条 */}
           {isRunning && onStop && (
             <button
               onClick={onStop}
-              title="打断当前 turn（query 不退，下条 message 仍能继续）"
+              title="打断当前 turn（会话保留，可继续追加消息）"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
                 padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
@@ -261,7 +261,7 @@ export default function ChatComposer({
           <button
             onClick={submit}
             disabled={disabled || empty}
-            title={empty ? '输入内容后发送' : (isRunning ? '追加发送（agent 跑完当前会自动处理）' : '发送（Enter）')}
+            title={empty ? '输入内容后发送' : (isRunning ? '发送（追加排队，agent 跑完当前自动处理）' : '发送（Enter）')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
               padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
@@ -277,7 +277,7 @@ export default function ChatComposer({
             onMouseLeave={e => { if (!disabled && !empty) e.currentTarget.style.background = COLOR.btn; }}
           >
             <Send size={13} />
-            {isRunning ? '追加' : '发送'}
+            发送
           </button>
         </div>
       </div>
