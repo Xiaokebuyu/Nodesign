@@ -44,7 +44,7 @@ import { getOrStartProxy } from '../../lib/binary-fixup-proxy.js';
 // 必看 / 信息不足先问 / git 不自管）。所有 NoDesign agent 共用，跟具体 skill
 // 解耦。模块级 readFileSync 一次性读入，避免每次 runAgent 重读。
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const NODESIGN_PRELUDE = (() => {
+export const NODESIGN_PRELUDE = (() => {
   try {
     return fs.readFileSync(
       path.join(__dirname, 'prompts/nodesign-prelude.md'),
@@ -61,7 +61,7 @@ const NODESIGN_PRELUDE = (() => {
 // 自动包 read-only enforcement preamble + ExitPlanMode protocol footer。
 // 内容是 NoDesign 设计场景特化版（设计 plan / 隐喻 / per-page 决策等），
 // 不是 code implementation。
-const NODESIGN_PLAN_INSTRUCTIONS = (() => {
+export const NODESIGN_PLAN_INSTRUCTIONS = (() => {
   try {
     return fs.readFileSync(
       path.join(__dirname, 'prompts/nodesign-plan-instructions.md'),
@@ -90,7 +90,7 @@ const NODESIGN_PLAN_INSTRUCTIONS = (() => {
 //   - tools 字段是"可见集合"白名单，不在里面的内置工具会被剥离
 //   - 不是 auto-allow（auto-allow 由 permissionMode='bypassPermissions' 已经全
 //     跳）。之前 sdkOptions 同设 allowedTools 是冗余，已删
-const DEFAULT_TOOL_ALLOWLIST = [
+export const DEFAULT_TOOL_ALLOWLIST = [
   'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'Bash',
   'AskUserQuestion',
   'WebFetch',
@@ -107,7 +107,7 @@ const ARTIFACT_CANDIDATES = ['canvas.html', 'deck.html', 'index.html', 'output.h
 // 启用时 handleAssistantBlocks 跳过 text/thinking blocks（已经从 stream_event 推完，
 // 避免双推），但仍推 tool_use（stream_event 里 tool_use input 是 partial JSON delta
 // 不好用，等 assistant message 完整 block 来一次更省事）。
-const STREAMING_ENABLED = true;
+export const STREAMING_ENABLED = true;
 
 // canUseTool 已撤（hotfix-sdk-usage）：实测发现 canUseTool always-allow
 // 不能阻止 binary 子进程内部走 stdio prompt（permissionMode='default' 默认
@@ -132,7 +132,7 @@ const STREAMING_ENABLED = true;
  *   - claude-opus-[5-9] 覆盖 5.x/6.x/7.x/8.x/9.x（默认假设 Opus 新一代仍走 adaptive）
  *   - 新一代 Opus 改了行为时再扩 regex
  */
-function pickThinkingConfig(model) {
+export function pickThinkingConfig(model) {
   if (model && /^claude-opus-(?:4-[6789]|[5-9])/.test(model)) {
     return { type: 'adaptive' };
   }
@@ -754,7 +754,7 @@ export async function runAgent({
  * - SDK system subtype 多达 14 种：分派到对应 Events 构造器
  * - 旁路类型（stream_event / tool_use_summary / keep_alive）：noop（前端不需要）
  */
-function handleSDKMessage(ctx, msg) {
+export function handleSDKMessage(ctx, msg) {
   // 首条 message 含 session_id，记下
   if (msg.session_id) ctx.recordSdkSession(msg.session_id);
 
@@ -1071,7 +1071,7 @@ function handleUserBlocks(ctx, content) {
 
 // ── 产物检测 ──
 
-async function detectArtifact(ctx) {
+export async function detectArtifact(ctx) {
   for (const candidate of ARTIFACT_CANDIDATES) {
     if (await ctx.workspace.exists(candidate)) return candidate;
   }

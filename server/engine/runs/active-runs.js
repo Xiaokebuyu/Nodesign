@@ -53,11 +53,27 @@
  * @property {import('../agent/context.js').AgentContext} ctx  - AgentContext 引用，cancelRun 走 ctx.cancel() 统一 emit run.cancelled
  * @property {import('@anthropic-ai/claude-agent-sdk').Query|null} query  - query handle，先注册时为 null，attachQuery 后填
  * @property {Map<string, PendingQuestion>} pendingQuestions - A4.1：tool_use_id → Promise resolver，AskUserQuestion 等用户答案用
+ * @property {Map<string, PendingQuestion>} pendingElicitations - Phase 2.3：reqId → Promise resolver，MCP onElicitation 等用户答案用
  * @property {number} startedAt
  */
 
 /** @type {Map<string, ActiveRunRecord>} */
 const activeRuns = new Map();
+
+/**
+ * @typedef {object} ActiveQuerySession  - per-sid long-running query（streamInput 模式）
+ * @property {AbortController} abortController  - session 级；close session 时触发
+ * @property {import('../agent/context.js').AgentContext|null} ctx  - 当前 turn 的 ctx（per-turn 切换）
+ * @property {import('@anthropic-ai/claude-agent-sdk').Query|null} query
+ * @property {import('../../lib/async-queue.js').AsyncQueue} inputQueue  - SDK 消费 user message 的源
+ * @property {string|null} currentRunId  - 当前正处理的 turn run record id
+ * @property {Map<string, PendingQuestion>} pendingQuestions  - tool_use_id → resolver
+ * @property {Map<string, PendingQuestion>} pendingElicitations
+ * @property {number} startedAt
+ */
+
+/** @type {Map<string, ActiveQuerySession>} */
+const activeQuerySessions = new Map();
 
 /**
  * 注册 run。runAgent 启动后立即调（query 还没拿到 handle）。
@@ -75,6 +91,7 @@ export function registerRun(runId, { abortController, ctx } = {}) {
     ctx: ctx || null,
     query: null,
     pendingQuestions: new Map(),
+    pendingElicitations: new Map(),
     startedAt: Date.now(),
   });
 }
@@ -110,6 +127,12 @@ export function unregisterRun(runId) {
       try { p.reject(new Error('run ended before user answered question')); } catch { /* ignore */ }
     }
     rec.pendingQuestions.clear();
+  }
+  if (rec?.pendingElicitations) {
+    for (const [, p] of rec.pendingElicitations) {
+      try { p.reject(new Error('run ended before MCP elicitation answered')); } catch { /* ignore */ }
+    }
+    rec.pendingElicitations.clear();
   }
   activeRuns.delete(runId);
 }
@@ -167,6 +190,75 @@ export function registerPendingQuestion(runId, toolUseId) {
       rec.abortController.signal.addEventListener('abort', onAbort, { once: true });
     }
   });
+}
+
+/**
+ * Phase 2.3：注册一个等待 MCP elicitation 答案的 Promise。
+ * loop.js onElicitation 回调拦到 MCP server elicit 请求时调，emit 事件后 await
+ * 返回的 Promise；用户在前端答完 → POST /elicit/:reqId/answer → provideElicitation。
+ *
+ * @param {string} runId
+ * @param {string} reqId  - host 端生成的 elicitation 请求 id
+ * @returns {Promise<import('@anthropic-ai/claude-agent-sdk').ElicitationResult>}
+ */
+export function registerPendingElicitation(runId, reqId) {
+  const rec = activeRuns.get(runId);
+  if (!rec) return Promise.reject(new Error(`run ${runId} not active`));
+  if (!reqId) return Promise.reject(new Error('reqId required'));
+
+  const existing = rec.pendingElicitations.get(reqId);
+  if (existing) {
+    try { existing.reject(new Error('superseded by new elicitation with same reqId')); } catch { /* ignore */ }
+  }
+
+  return new Promise((resolve, reject) => {
+    rec.pendingElicitations.set(reqId, {
+      resolve: (result) => {
+        rec.pendingElicitations.delete(reqId);
+        resolve(result);
+      },
+      reject: (err) => {
+        rec.pendingElicitations.delete(reqId);
+        reject(err);
+      },
+      createdAt: Date.now(),
+    });
+
+    const onAbort = () => {
+      const p = rec.pendingElicitations.get(reqId);
+      if (p) {
+        rec.pendingElicitations.delete(reqId);
+        reject(new Error(`run aborted before elicitation answered: ${rec.abortController.signal.reason || 'unknown'}`));
+      }
+    };
+    if (rec.abortController.signal.aborted) {
+      onAbort();
+    } else {
+      rec.abortController.signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+/**
+ * Phase 2.3：用户答完 MCP elicitation，由 POST /elicit/:reqId/answer endpoint 调。
+ *
+ * @param {string} runId
+ * @param {string} reqId
+ * @param {import('@anthropic-ai/claude-agent-sdk').ElicitationResult} result
+ *   - { action: 'accept', content?: {...} } / { action: 'cancel' } / { action: 'decline' }
+ * @returns {boolean}
+ */
+export function provideElicitation(runId, reqId, result) {
+  const rec = activeRuns.get(runId);
+  if (!rec) return false;
+  const p = rec.pendingElicitations.get(reqId);
+  if (!p) return false;
+  try {
+    p.resolve(result);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -278,4 +370,144 @@ function cancelViaCtxOrAbort(rec, reason) {
  */
 export function listActiveRuns() {
   return Array.from(activeRuns.keys());
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// streamInput 模式（Phase 1.2，per-session long-running query）
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * 注册一个 long-running query session。session-loop.js runSession 启动时立即调，
+ * query handle 在 attachSessionQuery 后填上。
+ *
+ * @param {string} sessionId
+ * @param {object} deps
+ * @param {AbortController} deps.abortController
+ * @param {import('../../lib/async-queue.js').AsyncQueue} deps.inputQueue
+ */
+export function registerQuerySession(sessionId, { abortController, inputQueue } = {}) {
+  if (!sessionId || !abortController || !inputQueue) return;
+  activeQuerySessions.set(sessionId, {
+    abortController,
+    ctx: null,
+    query: null,
+    inputQueue,
+    currentRunId: null,
+    pendingQuestions: new Map(),
+    pendingElicitations: new Map(),
+    startedAt: Date.now(),
+  });
+}
+
+/**
+ * @param {string} sessionId
+ * @param {import('@anthropic-ai/claude-agent-sdk').Query} query
+ */
+export function attachSessionQuery(sessionId, query) {
+  const rec = activeQuerySessions.get(sessionId);
+  if (!rec) return;
+  rec.query = query;
+}
+
+/**
+ * @param {string} sessionId
+ * @returns {ActiveQuerySession | undefined}
+ */
+export function getQuerySession(sessionId) {
+  return activeQuerySessions.get(sessionId);
+}
+
+/**
+ * @param {string} sessionId
+ * @returns {boolean} true=session 已存在且 query 活着
+ */
+export function hasActiveQuerySession(sessionId) {
+  const rec = activeQuerySessions.get(sessionId);
+  if (!rec) return false;
+  if (rec.abortController.signal.aborted) return false;
+  return true;
+}
+
+/**
+ * 推一条 user message 到 session 的 input queue + 标记当前 turn runId。
+ * runSession for-await-of 那头会拉到这条 message → SDK 处理 → 出 result message
+ * → runSession 用 currentRunId 做 markRunSucceeded / emit run.done。
+ *
+ * @param {string} sessionId
+ * @param {string} runId  - 当前 turn 的 run record id（前端 UI 跟踪用）
+ * @param {object} sdkUserMessage  - { type:'user', message:{role,content}, parent_tool_use_id }
+ * @returns {boolean} true=成功 push
+ */
+export function pushUserMessage(sessionId, runId, sdkUserMessage) {
+  const rec = activeQuerySessions.get(sessionId);
+  if (!rec) return false;
+  if (rec.abortController.signal.aborted) return false;
+  // 把 runId 关联到 SDK message，runSession 那头收到 user message echo 时拿出来
+  // 用作 currentTurn 标记。SDKUserMessage 没有自定义字段，我们走旁路：先在
+  // session record 上设 currentRunId，runSession 收到 user message 时读这个值
+  rec.currentRunId = runId;
+  try {
+    rec.inputQueue.push(sdkUserMessage);
+    return true;
+  } catch (err) {
+    console.warn(`[active-runs] pushUserMessage failed for ${sessionId}: ${err.message}`);
+    return false;
+  }
+}
+
+/**
+ * @param {string} sessionId
+ * @returns {string|null}
+ */
+export function getCurrentTurnRunId(sessionId) {
+  return activeQuerySessions.get(sessionId)?.currentRunId || null;
+}
+
+/**
+ * 关闭 session 的 input queue → runSession 那头 for-await-of 自然结束 → query
+ * 自动 unregister。
+ *
+ * 跟 cancelRun（per-turn interrupt）不同 —— close session 是终结整个 query，
+ * 包括所有未处理消息，下次 turn 必须新建 session。
+ *
+ * @param {string} sessionId
+ * @param {string} reason
+ * @returns {boolean}
+ */
+export function closeQuerySession(sessionId, reason = 'user_close') {
+  const rec = activeQuerySessions.get(sessionId);
+  if (!rec) return false;
+  try { rec.inputQueue.close(); } catch { /* */ }
+  try { rec.abortController.abort(reason); } catch { /* */ }
+  return true;
+}
+
+/**
+ * 注销 session — runSession 自然结束（inputQueue.close 后 for-await-of 退出）
+ * 时 finally 里调。
+ *
+ * 顺手 reject 所有 pending questions / elicitations 防止外部 await 永久挂。
+ *
+ * @param {string} sessionId
+ */
+export function unregisterQuerySession(sessionId) {
+  if (!sessionId) return;
+  const rec = activeQuerySessions.get(sessionId);
+  if (!rec) return;
+  for (const [, p] of rec.pendingQuestions) {
+    try { p.reject(new Error('session ended before user answered question')); } catch { /* */ }
+  }
+  rec.pendingQuestions.clear();
+  for (const [, p] of rec.pendingElicitations) {
+    try { p.reject(new Error('session ended before MCP elicitation answered')); } catch { /* */ }
+  }
+  rec.pendingElicitations.clear();
+  activeQuerySessions.delete(sessionId);
+}
+
+/**
+ * 仅供测试 / debug：列当前活跃 sessionId
+ */
+export function listActiveQuerySessions() {
+  return Array.from(activeQuerySessions.keys());
 }
