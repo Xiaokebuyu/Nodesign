@@ -150,10 +150,10 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
       --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06);
     }
 
-    /* Per-page scoped overrides —— 跟 expose_tweaks target_scope 配对
-       让"封面字号"slider 拖时不影响内页字号 */
+    /* Per-page / per-layout scoped overrides —— 跟 expose_tweaks target_scope 配对
+       让 slider 拖时只影响指定 section / layout，不牵连其他页 */
     section[data-page="1"]      { --hero-size: 80px; }
-    [data-layout="quote"]       { --body-size: 22px; --line-loose: 1.8; }
+    /* [data-layout="<your-layout-name>"] { --body-size: 22px; }  按你自己起的 layout 名写 */
   </style>
 
   <!-- 3. Base reset + 默认 section/text 样式 —— 不该被 agent 频繁动 -->
@@ -171,14 +171,12 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
     p  { font-size: var(--body-size); line-height: var(--line-loose); }
   </style>
 
-  <!-- 4. Layout primitives —— 6 个 named layout，agent 写新页挑一个 -->
+  <!-- 4. Layout primitives —— 自由发挥；按 deck 的核心隐喻自己起 layout 名
+       一个 deck 内词汇尽量收敛 3-5 个，便于 list_pages 总览 + 自己复用 -->
   <style id="layouts">
-    [data-layout="cover"]         { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: var(--gap-md); }
-    [data-layout="title-content"] { display: grid; grid-template-rows: auto 1fr; gap: var(--gap-md); }
-    [data-layout="two-column"]    { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-lg); align-items: start; }
-    [data-layout="quote"]         { display: flex; flex-direction: column; justify-content: center; padding-inline: var(--gap-xl); }
-    [data-layout="chart"]         { display: grid; grid-template-rows: auto 1fr auto; gap: var(--gap-md); }
-    [data-layout="closing"]       { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--gap-md); text-align: center; }
+    /* 例：你做"考古图鉴" deck，可起 [data-layout="dig-cross-section"]
+           你做"金融年报"，可起 [data-layout="data-stack"] / [data-layout="quote-bleed"]
+       layout 名是任意字串，由你按隐喻自由命名 + 自己写 CSS selector */
   </style>
 
   <!-- 5. Page-specific styles —— 偶尔需要的页特殊样式
@@ -194,43 +192,45 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 </html>
 ```
 
-### 6 个 named layout —— 写新页挑一个，**别自创 grid**
+### Layout 自由发挥 —— 按隐喻自命名，**不预设固定词汇**
 
-| layout | 用途 | 何时用 |
-|---|---|---|
-| `cover` | 封面 / 章节扉页 | 第 1 页 + 章节切换 |
-| `title-content` | 标准内容页（标题 + 正文区）| 大多数内容页 |
-| `two-column` | 对比 / 双栏 / 图文左右 | "前 vs 后"、"问题 vs 方案"|
-| `quote` | 引言 / 强调单句 | 用户证言、关键论点 |
-| `chart` | 数据页（标题 + 图表 + 注解）| 数据图表 |
-| `closing` | 结尾 / Q&A / Thanks | 最后一页 |
+`data-layout` 的值是**任意字符串**，由你按 deck 的核心隐喻自由起名 + 自己写 CSS selector。
+不再有"6 选 1"的罐头清单 —— 罐头会绑死创意。
 
-需要新 layout 时：**先用现有 6 个 + 内部细调**（grid-area / order），实在不行才在 `<style id="layouts">` 加新 named primitive（不要散落到 `<style id="page-styles">`）。
+**例**：
+- 做"考古图鉴" deck → 你可以起 `data-layout="dig-cross-section"` / `data-layout="artifact-card"`
+- 做"金融年报" → 可起 `data-layout="data-stack"` / `data-layout="quote-bleed"`
+- 做"音乐唱片" → 可起 `data-layout="vinyl-spread"` / `data-layout="liner-notes"`
 
-### 元素标记 —— 6 件套 data-* 属性
+**硬约束**（前端 / MCP 工具依赖的）：
+- 每页一个 `<section data-page="N">`（`N` 从 1 起递增）
+- 视口 1280×720（`<style id="base">` 块已锁）
 
-每个关键元素至少加前 3 个，编辑相关元素加 `data-edit-role`：
+**软建议**：
+- 一个 deck 内 layout 词汇尽量收敛 **3-5 个**，便于 `list_pages` 总览 + 你自己复用
+- layout primitive 写在 `<style id="layouts">` 块（别散落到 `<style id="page-styles">`）
 
-| 属性 | 用途 | 例子 |
-|---|---|---|
-| `data-page="N"` + `data-layout="X"` | 分页 + 选 named layout | `<section data-page="2" data-layout="title-content">` |
-| `data-anchor="cover-title"` | 跨 turn 引用 + agent 自己引用稳定锚（kebab-case 全文件唯一）| `<h1 data-anchor="cover-title">` |
-| `data-node-id="cover-title-1"` | InspectFloatingCard / pending-changes 的稳定 lookup —— `findElementByAnchor` 第一层 fallback。命名 `<page-N>-<role>-<n>` | `<h1 data-node-id="cover-title-1">` |
-| `data-purpose="开场建立调性"` | page-level 意图，给 vision-checker / pending-changes 处理时推理用 | `<section data-purpose="陈述用户痛点">` |
-| `data-edit-role="title\|tagline\|body\|cta\|footnote"` | InspectFloatingCard 渲染对应 affordance（标题用大字 textarea / footnote 用小字）| `<h1 data-edit-role="title">` |
-| `data-tweakable='{"fontSize":[40,56,72]}'` | 暴露可调维度（详见 prelude § HTML 产物的 agentic 标记）| 用 `:root` CSS var 比 inline tweakable 更优 |
+### 元素标记 —— 3 件套必装 + 1 件可选
+
+| 属性 | 必装？ | 用途 | 例子 |
+|---|---|---|---|
+| `data-page="N"` | ✅ section 必装 | 分页（前端 SlideNavigator / list_pages 全靠它） | `<section data-page="2">` |
+| `data-anchor="kebab-name"` | ✅ 关键元素必装 | 跨 turn 引用 / agent 自己引用 / 评论 pin / pending-changes 找元素（全文件唯一） | `<h1 data-anchor="cover-title">` |
+| `data-node-id="..."` | ✅ 关键元素必装 | 前端找元素的稳定 id —— `findElementByAnchor` 第一层 fallback。命名 `<page-N>-<role>-<n>` | `<h1 data-node-id="cover-title-1">` |
+| `data-layout="<自由词>"` | 🟡 section 选填 | layout 名 hint，list_pages 会回给你做总览；按隐喻自由命名 | `<section data-page="2" data-layout="dig-cross-section">` |
 
 **为什么 anchor 双写**：`data-anchor` 是你的语义命名（你引用时用），`data-node-id` 是前端找元素用的稳定 id。功能不同，都加，写时顺手。
+
+**Tweakable 维度怎么暴露**：**不要**在元素上装 `data-tweakable`。改在 `<style id="design-tokens">` 写 CSS variable，再用 `expose_tweaks` 把 var 暴露成 control（配 `target_var: "--xxx"`）。元素就保持干净。
 
 ### scoped tweak vars —— 让"封面字号"不牵连内页
 
 `:root` 全局 var 是默认。**per-page / per-layout override 用 selector specificity** 实现：
 
 ```css
-:root                       { --hero-size: 56px; }   /* 默认 */
-section[data-page="1"]      { --hero-size: 80px; }   /* 封面更大 */
-[data-layout="quote"]       { --body-size: 22px; }   /* 引言页 body 大 */
-section[data-purpose*="数据"] { --accent: #c45c3f; }   /* 数据页强调色变橙 */
+:root                            { --hero-size: 56px; }   /* 默认 */
+section[data-page="1"]           { --hero-size: 80px; }   /* 封面更大 */
+[data-layout="quote-bleed"]      { --body-size: 22px; }   /* 你自创的 quote layout body 大 */
 ```
 
 `expose_tweaks` 暴露 control 时配 `target_scope` 字段（详见 [§ Tweaks 暴露协议](#tweaks-暴露协议c52026-05-02)），slider 拖时只影响指定 section / layout，其他页不变。
@@ -239,34 +239,28 @@ section[data-purpose*="数据"] { --accent: #c45c3f; }   /* 数据页强调色�
 
 ```html
 <section data-page="1"
-         data-layout="cover"
-         data-anchor="cover"
-         data-purpose="开场建立 deck 调性"
-         data-tweakable='{"--bg":"any","--accent":"any"}'>
+         data-layout="hero-split"
+         data-anchor="cover">
   <h1 data-anchor="cover-title"
-      data-node-id="cover-title-1"
-      data-edit-role="title">
+      data-node-id="cover-title-1">
     设计驱动增长
   </h1>
   <p data-anchor="cover-subtitle"
      data-node-id="cover-sub-1"
-     data-edit-role="tagline"
      style="color: var(--accent-soft);">
     2026 Q2 产品评审 · DeskSkill 团队
   </p>
 </section>
 
 <section data-page="2"
-         data-layout="title-content"
-         data-anchor="page-2"
-         data-purpose="陈述用户痛点">
+         data-layout="title-stack"
+         data-anchor="page-2">
   <h2 data-anchor="page-2-title"
-      data-node-id="page-2-title-1"
-      data-edit-role="title">
+      data-node-id="page-2-title-1">
     用户的痛点
   </h2>
   <div>
-    <p data-edit-role="body">每次改一个 deck 字号都要打开 PPT 调 5 个地方，烦不胜烦。</p>
+    <p>每次改一个 deck 字号都要打开 PPT 调 5 个地方，烦不胜烦。</p>
   </div>
 </section>
 ```
@@ -437,16 +431,15 @@ selector specificity 让该 section 内的 `var(--hero-size)` 取这个 scoped �
 **配套 HTML 写法**（详见 § HTML 规范 § scoped tweak vars）：
 
 ```css
-:root                       { --hero-size: 56px; }   /* 默认 */
-section[data-page="1"]      { --hero-size: 80px; }   /* 封面 override */
-[data-layout="quote"]       { --body-size: 22px; }
-section[data-purpose*="数据"] { --accent: #c45c3f; }
+:root                            { --hero-size: 56px; }   /* 默认 */
+section[data-page="1"]           { --hero-size: 80px; }   /* 封面 override */
+[data-layout="quote-bleed"]      { --body-size: 22px; }    /* 你自创的 quote layout */
+[data-layout="data-stack"]       { --accent: #c45c3f; }    /* 你自创的数据 layout */
 ```
 
 **何时用 target_scope**：
 - ✅ 封面跟内页字号差很多 —— `target_scope: 'section[data-page="1"]'`
-- ✅ 引言页 body 字号比一般大 —— `target_scope: '[data-layout="quote"]'`
-- ✅ 数据页强调色想跟其他页区别 —— `target_scope: '[data-purpose*="数据"]'`
+- ✅ 某 layout 类型字号 / 配色不同（按你自起的 layout 名）—— `target_scope: '[data-layout="<your-layout>"]'`
 - ❌ 全局 token（主色 / 主字体 / 8pt grid） —— 不传 scope 默认 `:root` 就好
 
 **别犯的错**：

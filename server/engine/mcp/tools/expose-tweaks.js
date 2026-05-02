@@ -37,10 +37,10 @@ const ControlSchema = z.object({
     .optional(),
   target_class_on: z.string().optional(),
   // A6.2：CSS selector 限定 control 影响范围。不传默认 ":root"（全局）。
-  // 例：'section[data-page="1"]' / '[data-layout="cover"]' / '[data-purpose*="数据"]'
-  // 配合 SKILL.md HTML 规范的"per-page scoped override"教学（让"封面字号"slider
-  // 不牵连内页字号）。前端 TweaksPanel 应用时 doc.querySelector(scope) 找元素
-  // 在它身上 setProperty 而不是 :root。
+  // 例：'section[data-page="1"]' / '[data-layout="hero-split"]'（layout 名由 agent
+  // 按隐喻自由命名）。配合 SKILL.md HTML 规范的"per-page scoped override"教学
+  // （让"封面字号"slider 不牵连内页字号）。前端 TweaksPanel 应用时
+  // doc.querySelector(scope) 找元素在它身上 setProperty 而不是 :root。
   target_scope: z
     .string()
     .max(120)

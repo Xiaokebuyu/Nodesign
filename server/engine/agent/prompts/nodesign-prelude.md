@@ -193,45 +193,16 @@ in_progress。
 
 ---
 
-## HTML 产物的 agentic 标记（重要！）
+## HTML 产物的 agentic 标记
 
-> 2026-05-02 canvas 焕新升级 S1 起，**所有 NoDesign agent 写的 HTML 产物**
-> 必须在关键元素上加两类 data-* 标记。这套标记是「agentic 化」的基础——
-> 用户不再自己点 InspectTab 调属性，而是 agent 改完后**通过这些标记**给用户
-> emit tweak 浮窗（slider / colorpicker），用户在画布上拖一拖就微调完。
-
-### `data-tweakable` —— 暴露可调维度
-
-装在你认为"用户最可能想微调"的元素上。值是 JSON object，key 是 CSS 维度名，
-value 是允许的取值范围。
-
-**支持的维度 + value 形态**：
-
-| 维度 | value 形态 | 例子 |
-|---|---|---|
-| `fontSize` | array（离散档位）/ `{min,max,step}`（连续） | `[40,48,64]` 或 `{"min":16,"max":64,"step":2}` |
-| `color` | array（色板）/ `"any"`（开放） | `["#2d2418","#c45c3f","#7c3aed"]` 或 `"any"` |
-| `fontWeight` | array | `[400,500,700]` |
-| `textAlign` | array | `["left","center","right"]` |
-| `letterSpacing` | `{min,max,step}` 单位 px | `{"min":-2,"max":4,"step":0.5}` |
-| `lineHeight` | `{min,max,step}` 单位 unitless | `{"min":1.0,"max":2.0,"step":0.1}` |
-| `padding` | `{min,max,step}` 单位 px | `{"min":0,"max":80,"step":4}` |
-| `borderRadius` | array / `{min,max,step}` | `[0,4,8,16,9999]` |
-
-**例子**：
-
-```html
-<h1 data-tweakable='{"fontSize":[40,48,64],"color":"any","fontWeight":[400,500,700]}'
-    data-anchor="cover-title"
-    style="font-size:48px;color:#2d2418;font-weight:500;">
-  设计驱动增长
-</h1>
-```
+> 你写 HTML 时给关键元素加稳定锚点，让 agent 跨 turn 引用 / 用户评论 pin /
+> 前端 InspectFloatingCard 找元素都有靠。详细规范见 deskskill SKILL.md
+> § HTML 规范 / 元素标记。这里只讲核心两条。
 
 ### `data-anchor` —— 元素稳定锚点
 
-装在 tweakable 元素 + 其他"用户可能想引用"的关键元素上（如每页主标题/CTA/key
-visual）。值是 kebab-case 字符串，**全文件唯一**。
+装在每页"用户可能想引用 / 你可能跨 turn 引用"的关键元素上（主标题 / CTA /
+key visual / 关键数据）。值是 kebab-case 字符串，**全文件唯一**。
 
 用途：
 - agent 自己跨 turn 引用（"我之前改的 cover-title"）
@@ -243,26 +214,24 @@ visual）。值是 kebab-case 字符串，**全文件唯一**。
 - `page-2-section-title` / `page-2-keyvis` / `page-2-data-chart`
 - `closing-thanks` / `closing-contact`
 
+### Tweakable 维度怎么暴露
+
+**不要**在元素上装 `data-tweakable`。改在 `<style id="design-tokens">` 写
+CSS variable，再用 `expose_tweaks` 把 var 暴露成 control（配 `target_var: "--xxx"`）。
+元素就保持干净，可调维度集中在 design-tokens 块，全局可见。
+
+详见 deskskill SKILL.md § Tweaks 暴露协议。
+
 ### 给标记加多少 / 何时加
 
-- **每页至少 2-4 个**：主标题 / CTA / 主视觉 / 主色块（任选 2-4）
+- **每页至少 2-4 个 anchor**：主标题 / CTA / 主视觉 / 关键文本（任选 2-4）
 - **首跑写的时候就加**——不要"先写完再补"，写时顺手加 30 秒就够
-- **不要全加**：每个 div/p/span 都加 → 浮窗满屏不能用。**克制，挑用户最可能调的**
-- **配色变量直接挂 CSS variable + tweak 在 root 元素**：
-
-```html
-<section data-page="1"
-         data-tweakable='{"--accent":"any","--bg":"any"}'
-         data-anchor="cover"
-         style="--accent:#2d2418;--bg:#F9F8F6;background:var(--bg);">
-  ...
-</section>
-```
+- **不要全加**：每个 div/p/span 都加 → 噪音满屏。**克制，挑你和用户最可能引用的**
 
 ### 升级老 canvas.html
 
-如果 cwd 已有 canvas.html 但**没标记**（v0.3 之前生成的），用户跟你说要"调整"
-时，**先 Edit 加标记再做改动**——加几个高优先元素就行（封面标题 / 配色变量
+如果 cwd 已有 canvas.html 但**没标记**（早期生成的），用户跟你说要"调整"
+时，**先 Edit 加标记再做改动**——加几个高优先元素就行（封面标题 / 关键数据
 等），别一次重构整文件。
 
 ---
