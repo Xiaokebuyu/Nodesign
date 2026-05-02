@@ -7,6 +7,7 @@ import AppShell from '../components/layout/AppShell.jsx';
 import { createPortal } from 'react-dom';
 import FloatingPanel from '../components/layout/FloatingPanel.jsx';
 import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
+import PanelMenu from '../components/layout/PanelMenu.jsx';
 import { MessageCircle, Image as ImageIcon, Crosshair, MessageSquare, Bookmark, Sliders, Settings } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
@@ -125,6 +126,17 @@ export default function ProjectWorkspace() {
       system:    { position: { x: rightX, y: topOffset + 220 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
     };
   }, []);
+
+  // F2.3：PanelMeta —— PanelMenu 列出 panel 时用
+  const panelMeta = useMemo(() => ({
+    chat:      { label: 'Chat',      icon: MessageCircle },
+    canvas:    { label: 'Canvas',    icon: ImageIcon },
+    inspect:   { label: 'Inspect',   icon: Crosshair },
+    comments:  { label: 'Comments',  icon: MessageSquare },
+    decisions: { label: 'Decisions', icon: Bookmark },
+    tweaks:    { label: 'Tweaks',    icon: Sliders },
+    system:    { label: 'System',    icon: Settings },
+  }), []);
 
   const handleIframeReady = useCallback((iframe) => {
     try { setIframeDoc(iframe.contentDocument); } catch { /* cross-origin */ }
@@ -824,7 +836,7 @@ export default function ProjectWorkspace() {
   };
 
   return (
-    <PanelManagerProvider projectId={id} defaultPanels={defaultPanels}>
+    <PanelManagerProvider projectId={id} defaultPanels={defaultPanels} panelMeta={panelMeta}>
     <AppShell
       breadcrumb={[
         { label: '项目', to: '/' },
@@ -834,6 +846,7 @@ export default function ProjectWorkspace() {
       status={status}
       actions={
         <>
+          <PanelMenu />
           {systemInfo && <ContextUsageBar info={systemInfo} />}
           <UndoButton
             projectId={id}

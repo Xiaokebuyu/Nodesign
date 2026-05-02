@@ -35,7 +35,7 @@ const PanelManagerContext = createContext(null);
 const Z_BASE = 100;
 const PERSIST_DEBOUNCE_MS = 150;
 
-export function PanelManagerProvider({ projectId, defaultPanels, children }) {
+export function PanelManagerProvider({ projectId, defaultPanels, panelMeta = {}, children }) {
   // Init: 从 localStorage 读 + merge defaults。null 时纯 default。
   const [panels, setPanels] = useState(() => {
     const saved = loadLayout(projectId);
@@ -103,6 +103,7 @@ export function PanelManagerProvider({ projectId, defaultPanels, children }) {
 
   const value = {
     panels,
+    panelMeta,
     setPanelPosition,
     setPanelSize,
     setPanelVisible,
