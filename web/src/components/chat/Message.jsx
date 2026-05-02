@@ -164,10 +164,12 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
   const canBack = stepIdx > 0;
 
   // 多选：当前题 selected set（从 csv 反解析；空 set 表示未选）
-  const multiSet = useMemo(() => {
-    if (!currentQ.multiSelect || !currentAnswer) return new Set();
-    return new Set(currentAnswer.split(', '));
-  }, [currentQ, currentAnswer]);
+  // 注意：不用 useMemo —— Hook 不能在 early return（line 152 total===0）后调用，
+  // 否则第一次 render total=0 走早返跳过此 hook、下次 render 时 total>0 调到此 hook 就
+  // 报 "Rendered more hooks than during the previous render"。Set 构造很轻，inline 算即可。
+  const multiSet = (currentQ.multiSelect && currentAnswer)
+    ? new Set(currentAnswer.split(', '))
+    : new Set();
 
   const setQuestionAnswer = (answerStr) => {
     setCollected(prev => {
