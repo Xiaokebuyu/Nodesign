@@ -122,11 +122,13 @@ export default function TweaksPanel({
       const scope = c.target_scope || ':root';
       return `- ${c.id} → ${target} = ${display}  @ ${scope}`;
     }).join('\n');
-    onChat?.(`把当前 tweaks 的实时数值固化到 canvas.html 对应 CSS rule 里（按下方 @ scope —— ":root" 写到 :root 块；其他 selector 写 \`<scope> { --xxx: value; }\` 加在 design-tokens style 块底部 per-page override 区），不要改其他东西：\n${summary}\n\n固化完后调 mcp__nodesign__expose_tweaks 用更新后的 default 值重新暴露这套 schema。`);
+    // 精简版 prompt — 明确"一次 Edit 全改完 + 一次 expose_tweaks 收尾"，避免 agent
+    // 把它当大手术分多步搞（之前用户反映 agent 花大量时间在 tweak 调整）
+    onChat?.(`Apply：把这些数值固化到 canvas.html。**一个 Edit 改完所有 :root 变量**（同 scope 合并到一处 CSS rule，不要逐个 Edit），然后调一次 expose_tweaks(replace=true) 把 default 更新即可。不动 deck 其他内容。\n\n${summary}`);
   };
 
   const handleExposeCTA = () => {
-    onChat?.('请基于当前 deck 暴露 5-8 个最有价值的可调参数（hero 字号 / 主色 / 间距密度 / layout variant 等），调 mcp__nodesign__expose_tweaks 写入 spec。');
+    onChat?.('基于当前 deck **一次性**暴露 5-8 个最有价值的可调参数（hero 字号 / 主色 / 间距密度 / layout variant 等），调 mcp__nodesign__expose_tweaks 写入 spec.tweaks。这是一次性动作，不要后续每次改 deck 都重 expose。');
   };
 
   if (loading && controls.length === 0) {

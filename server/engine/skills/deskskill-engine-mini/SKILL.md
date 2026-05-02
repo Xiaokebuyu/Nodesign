@@ -375,8 +375,21 @@ select），前端渲染成控件让用户**实时拖动预览**。target_var �
 让用户自助微调，agent 只在用户点 Apply 时把数值固化进 :root。**这是 NoDesign 区别于
 "普通 LLM 写 HTML"的核心差异化能力之一，不暴露等于自废武功。**
 
-**怎么用**：写完 / 大改完 deck 后**主动 expose_tweaks**；用户问"哪些可以调"也调；
-用户点 Apply 后再调一次更新 default。详见下方"Tweaks 暴露协议"。
+**这是一次性基础设施动作，不是每个 turn 都做的事**——deck 第一版完整写完后调
+**一次** expose_tweaks，从此交给用户拖；Apply 后调**一次**更新 default 值。
+日常 chat 修改 deck 时**不要重新 expose**（除非用户明确要加新的可调维度）。
+
+**怎么用**：
+
+| 场景 | 调？ |
+|---|:---:|
+| deck 第一版写完 / 整体重构 | ✅ 一次 expose 5-8 个核心 control |
+| 用户点了 Tweaks 面板的 Apply 按钮（chat 会带固化指令） | ✅ Edit canvas.html 改 :root + 重 expose 更新 default |
+| 用户问"哪些可以调" | ✅ 第一次问就 expose；后续重复问只需指 Tweaks 面板 |
+| 用户改字 / 改 page 内容 / 加页 / 调 layout（不动 token 变量） | ❌ **不要重 expose**——schema 没变 |
+| 截图自检发现 layout 错位 → 改完 | ❌ **不要重 expose** |
+
+详见下方"Tweaks 暴露协议"。
 
 #### `record_decision` — 你的设计意图档案
 
@@ -795,15 +808,22 @@ Claude Design 的核心差异化能力之一：deck 不只是"静态输出"，�
 的可参数化 artifact。用户拖 sliders / 切 color picker → 实时预览 → 满意了点 Apply
 → 你把数值固化到 canvas.html 的 `:root` CSS variables 里。
 
-**何时调 `mcp__nodesign__expose_tweaks`**：
+**何时调 `mcp__nodesign__expose_tweaks`**（**重要：一次性，不是每 turn 都做**）：
 
-1. **写完 / 大改完 deck 后**主动暴露 5-8 个最有价值的可调参数
-2. 用户问"哪些可以调" / "我想 finetune 一下"
-3. 用户在前端 Tweaks 面板点了 **Apply** 按钮时（chat 会带"把当前 tweaks 数值固化进
-   :root...固化完后调 expose_tweaks 用更新的 default 值重新暴露"）—— 你应该：
-   1. 用 Edit 工具把 canvas.html 里 `:root { --xxx: ... }` 的值改成 chat 里给出的
-      新数值
-   2. 重新调 expose_tweaks，把 controls 里每个 control 的 `default` 也更新为新值
+1. **deck 第一版完整写完后**主动暴露 5-8 个最有价值的可调参数 —— **一次**就够，
+   后续日常修改 deck 内容（改文字 / 加页 / 调 layout）**不重新 expose**，schema 没变
+2. **用户点 Apply 时**（chat 会带固化指令）——这是唯一需要"重 expose"的场景：
+   1. 用 Edit 工具把 canvas.html 里 `:root { --xxx: ... }` 的值**一次性**改完
+      （多个变量同 :root 块尽量打包成一个 Edit，不要逐个 Edit）
+   2. 调 expose_tweaks 用 `replace: true`，把所有 control 的 `default` 更新为新值
+      （不要 merge，schema 跟旧的一样只是 default 变了）
+3. 用户问"哪些可以调"且 spec.tweaks 还没建过 → 第一次问就 expose；后续问指 Tweaks 面板
+
+**反模式**（这就是为什么用户感觉"agent 花大量时间在 tweak"）：
+- ❌ 每改一处 deck 都重 expose_tweaks（schema 没变还重写 spec.json）
+- ❌ Apply 时把 5 个 :root 变量分 5 次 Edit（应该一次 Edit 改完整个 :root 块）
+- ❌ deck 还在反复对齐阶段就 expose（早期 deck 形态会变，schema 必跟着改 → 浪费）
+- ❌ 暴露 15+ 个 control（信息过载，5-8 个核心维度就够）
 
 **Schema 例子**（这就是 expose_tweaks 的 controls 入参）：
 
