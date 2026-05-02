@@ -99,29 +99,57 @@ AskUserQuestion 第 2 轮，例如：
 
 ---
 
-## 何时写 design-plan.md（S4a，2026-05-02）
+## 何时写 design plan（Phase 4，统一走 SDK plan mode）
 
-上面已经讲了 deck 默认走 1-3 轮 ask 对齐方向。**对齐对完了之后**，这个 plan-doc
-是要不要落档的问题：
+上面已经讲了 deck 默认走 1-3 轮 ask 对齐方向。**对齐对完了之后**，把答案凝固
+成一份**设计计划**让用户审批后再执行——这是 paradigm "plan" 阶段的本质。
 
-| 信号 | 写 plan-doc？ |
-|---|:---:|
-| Brief 含具体主题 + 多页 deck（≥3 页） | ✅ 写 — 主 agent 按 plan 执行，vision-checker 按 plan critique |
-| 单页 deck / 改错字 / 单参数 tweak | ❌ 不写 — 没必要落档 |
-| 用户喊"赶时间 / 别 plan 了" | ❌ 不写 |
-| 已有 `design-plan.md`（续 session） | ⚠️ 不重写，按现有 plan 继续；方向重转才覆盖 |
+NoDesign 走**SDK 原生 plan mode**接通这个流程，**不要自己 Write design-plan.md**
+当 plan-doc（业务层旧路径已下线）。
 
-写 plan-doc 不是额外问 ask 阶段——你 ask 阶段已经收齐了答案，**plan-doc 只是把
-答案凝固成一份执行 brief**，让你写每页前能 grep、让 vision-checker 能拿来当 spec
-反差异。所以是 ask 完之后顺手 Write，不是另起一套 wizard。
+### plan-mode（用户开了"深度对齐"toggle）
 
-### 流程
+用户在 ChatComposer 旁边的 **"深度对齐"toggle 开了** → 后端 `permissionMode='plan'`
+→ 你跑在 SDK 原生 plan mode：
+
+- **read-only 强制**：你**不能 Write、不能 Edit、不能 Bash**、不能调
+  generate 类 MCP 工具（screenshot_canvas / expose_tweaks / record_decision
+  等）。Read / Glob / Grep / WebFetch / mcp__nodesign__web_search /
+  AskUserQuestion / Task(explorer) 这些 read-only 工具都还能用。
+- **唯一出口是 `ExitPlanMode` 工具**：写完 plan 调它把 plan 文本喂给 host：
+  ```
+  ExitPlanMode({ plan: "<<plan markdown 全文>>" })
+  ```
+- host 弹 PlanReviewCard 给用户审批：
+  - **批准** → host 切 `permissionMode='default'`，你自然继续，**Write canvas.html**
+  - **编辑后批准** → host 把改过的 plan 落 `design-plan.md` + 切 mode，你按改后版本执行
+  - **拒绝** → host interrupt run，session 中止
+- **plan 模板**详见 plan-mode workflow body（SDK 自动注入到 system reminder，
+  你看到 "Core Metaphor / 4-stage chain / Per-page plan / Sealed-test" 那段就是）
+
+### 用户没开 toggle 时
+
+- **不要自己 Write design-plan.md**（业务层旧路径下线了，前端不会弹 modal）
+- 简单 brief（改错字 / 单元素调整 / 单页 deck）→ 直接 ask 一两题 + Edit / Write
+- 复杂 brief 但用户没开 toggle → 仍按 ask 结果直接做；如果你判断"应该让用户先看
+  到 plan 再做"，**chat 里建议用户开"深度对齐"toggle**，他确认后下次 turn 走 plan mode
+
+### 何时**不**走 plan mode
+
+| 信号 | 不走 plan mode |
+|---|---|
+| 单页 deck / 改错字 / 单参数 tweak | 直接 Edit |
+| 用户喊"赶时间 / 别 plan 了 / 直接做" | escape hatch（plan-mode 下也走极简版 ExitPlanMode；非 plan-mode 直接动手）|
+| 已有 `design-plan.md`（续 session） | Read 现有 plan 继续；方向重转才需要重新走 plan mode 重写 |
+
+### plan-mode + 写 deck 的完整流程
 
 1. **ask 1-3 轮**（见上方 § 深度对齐 段）
-2. **Write `design-plan.md`** to cwd（用 SDK Write 工具）—— 模板见下方
-3. **每写一页前**：grep / Read 对应 plan 行，确认 purpose + 反默认决策 + 视觉锚点
-4. **deck 写完后跑 vision-checker**：prompt 里点名 "对照 design-plan.md critique 兑现度"
-   （详见 § vision-checker 协议）
+2. **派 explorer 搜外部参考**（如需要，可在 plan-mode 下用 Task 工具）
+3. **写出 plan，调 `ExitPlanMode`** —— **不要** Write design-plan.md（plan mode 下 Write 被 SDK deny）
+4. host 切 mode 后你自然回到 default → **Write canvas.html** 实施 plan
+5. **每写一页前**：Read `design-plan.md`（plan-approve endpoint 已落档）确认 per-page 反默认决策
+6. **deck 写完后跑 vision-checker**：prompt 点名 "对照 design-plan.md critique 兑现度"
 
 ### plan-doc 模板
 
@@ -179,8 +207,8 @@ AskUserQuestion 第 2 轮，例如：
 |---|---|
 | `mcp__nodesign__screenshot_canvas` | **写完 canvas / 改完关键页面后**主动调，自检视觉。用户问"看看效果"也调。可传 `selector` / `pageIndex` 单元素 / 单页精截 |
 | `mcp__nodesign__list_pages` | 想要 deck 总览（多少页 / 每页 layout 和标题）时调，比 read_page 轻 — 只回每页 1 行摘要 |
-| `mcp__nodesign__read_page` | 要看某页**完整 outerHTML**时调（list_pages 摘要不够 / 准备改某页结构）。**比 Read canvas.html limit:N 准** —— 后端按 `<section data-page=N>` 精确切片，不依赖行号 |
-| `mcp__nodesign__query_elements` | 用 CSS selector 找一组元素返 anchor + bbox + text，准备批量改之前调一次拿全清单（"把所有 H1 字号统一" 这种） |
+| `mcp__nodesign__read_page` | **读 canvas.html 永远先用这个**，不用 Read。后端按 `<section data-page=N>` 精确切片返完整 outerHTML，不依赖行号。Read 只用于读其他文件（assets / spec.json / design-plan.md） |
+| `mcp__nodesign__query_elements` | **找 canvas 元素永远先用这个**，不用 Grep。CSS selector → 一组元素的 anchor + bbox + computed text，准备批量改之前一次拿全清单（"把所有 H1 字号统一"）。Grep 找文本能找到，但拿不到 bbox / 跨 page 分布 / 渲染态 |
 | `mcp__nodesign__get_computed_styles` | 改某属性前先查当前 px / rgb 实际渲染值，**不要凭印象猜**。也可拿来算对比度 |
 | `mcp__nodesign__navigate_to_page` | 用户问"第 N 页那个东西怎么改"时主动切到该页让用户视觉同步 |
 | `mcp__nodesign__highlight` | 你想强调"我建议改这块"或"我刚改了这里" 时 pulse 元素，用户视觉就跟得上 |

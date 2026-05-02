@@ -46,6 +46,7 @@
 
 import http from 'node:http';
 import https from 'node:https';
+import fs from 'node:fs';
 
 let _instance = null;
 
@@ -71,12 +72,24 @@ export async function getOrStartProxy(realUrl) {
       let body = Buffer.concat(chunks);
 
       // 仅对 POST /v1/messages 做 fixup（其他 endpoint 直接透传）
+      let modelHint = null;
       if (req.method === 'POST' && /\/v1\/messages\b/.test(req.url)) {
         body = maybeFixupMessagesBody(body);
+        try { modelHint = JSON.parse(body.toString('utf8'))?.model || null; } catch { /* ignore */ }
       }
 
       // 转发请求体到真实 gateway
       const headers = { ...req.headers, host: target.hostname };
+      // S9：kimi-k2.5（helper / subagent / WebFetch 路）剥 anthropic-beta 头里的
+      // interleaved-thinking-* —— 不让 Moonshot 走交错思考路径，配合 body.thinking=disabled
+      if (modelHint === 'kimi-k2.5' && headers['anthropic-beta']) {
+        const stripped = String(headers['anthropic-beta'])
+          .split(',').map((s) => s.trim())
+          .filter((b) => b && !/^interleaved-thinking-/i.test(b))
+          .join(',');
+        if (stripped) headers['anthropic-beta'] = stripped;
+        else delete headers['anthropic-beta'];
+      }
       headers['content-length'] = String(body.length);
       // host 必须重设 — incoming host 是 localhost:port，target 不接
 
@@ -87,6 +100,23 @@ export async function getOrStartProxy(realUrl) {
         method: req.method,
         headers,
       }, (proxyRes) => {
+        // S9 调查：4xx response 下 dump request body 到 /tmp 看哪个具体请求触发
+        if (process.env.NODESIGN_DEBUG_KIMI_400 === '1' && proxyRes.statusCode >= 400) {
+          const tag = `400-${Date.now()}-${Math.random().toString(36).slice(2,6)}.json`;
+          try {
+            fs.writeFileSync('/tmp/nodesign-fail-req-' + tag, body);
+            console.warn(`[binary-fixup-proxy] ${proxyRes.statusCode} response — request body saved: /tmp/nodesign-fail-req-${tag}`);
+          } catch (e) { /* ignore */ }
+          // 也 capture response body
+          const respChunks = [];
+          proxyRes.on('data', c => respChunks.push(c));
+          proxyRes.on('end', () => {
+            try {
+              fs.writeFileSync('/tmp/nodesign-fail-resp-' + tag, Buffer.concat(respChunks));
+              console.warn(`[binary-fixup-proxy] response body saved: /tmp/nodesign-fail-resp-${tag}`);
+            } catch (e) { /* ignore */ }
+          });
+        }
         // 透传 status + headers + body（流式）
         res.writeHead(proxyRes.statusCode, proxyRes.headers);
         proxyRes.pipe(res);
@@ -163,6 +193,41 @@ function maybeFixupMessagesBody(body) {
     }
   }
 
+  // Kimi/Moonshot 诊断（NODESIGN_DEBUG_KIMI=1 时打开）：dump outgoing
+  // /v1/messages body 的 messages 数组结构 —— 验证 SDK binary 续 turn 时
+  // 是否把同 message.id 的多条 JSONL entries merge 回单条 message，还是直接
+  // 拆开发出去（拆开 → Moonshot 严格模式拒"reasoning_content missing"）。
+  if (process.env.NODESIGN_DEBUG_KIMI === '1' && Array.isArray(parsed.messages)) {
+    console.info(`[binary-fixup kimi] model=${parsed.model || '?'} messages.length=${parsed.messages.length} system.len=${typeof parsed.system === 'string' ? parsed.system.length : (Array.isArray(parsed.system) ? parsed.system.reduce((s, b) => s + (b?.text?.length || 0), 0) : 0)} thinking=${JSON.stringify(parsed.thinking)}`);
+    // S9 调查：抓到含 tool_use 的 assistant message 时 dump 它的完整 JSON
+    // 看 thinking block 的 signature / 字段顺序 — Moonshot index 2 拒
+    // "reasoning_content missing" 但 outgoing 看似正确
+    if (process.env.NODESIGN_DEBUG_KIMI_FULL === '1') {
+      const tag = `nodesign-kimi-dump-${Date.now()}-${Math.random().toString(36).slice(2,8)}.json`;
+      try {
+        fs.writeFileSync('/tmp/' + tag, JSON.stringify(parsed, null, 2));
+        console.info(`[binary-fixup kimi] full body written: /tmp/${tag}`);
+      } catch (e) { /* ignore */ }
+    }
+    parsed.messages.forEach((msg, i) => {
+      const role = msg?.role || '?';
+      let blockTypes = '?';
+      if (typeof msg?.content === 'string') {
+        blockTypes = `string(${msg.content.length}ch)`;
+      } else if (Array.isArray(msg?.content)) {
+        blockTypes = msg.content.map(b => {
+          if (b?.type === 'tool_use') return `tool_use[${b.name || '?'}]`;
+          if (b?.type === 'tool_result') return `tool_result(${typeof b.content === 'string' ? b.content.length + 'ch' : Array.isArray(b.content) ? b.content.length + 'blocks' : '?'})`;
+          if (b?.type === 'thinking') return `thinking(${(b.thinking || '').length}ch)`;
+          if (b?.type === 'text') return `text(${(b.text || '').length}ch)`;
+          if (b?.type === 'image') return `image`;
+          return b?.type || '?';
+        }).join(',');
+      }
+      console.info(`[binary-fixup kimi]   [${i}] role=${role} blocks=[${blockTypes}]`);
+    });
+  }
+
   if (!parsed.model || typeof parsed.model !== 'string') return body;
   if (!/^kimi/i.test(parsed.model)) return body;  // 只动 kimi-*
 
@@ -176,6 +241,17 @@ function maybeFixupMessagesBody(body) {
     mutated = true;
   }
 
+  // S9 workaround（保守版，仅针对 kimi-k2.5）：SDK helper / subagent / WebFetch
+  // 全显式分流到 kimi-k2.5（loop.js / agents/index.js 选这个 model 名），
+  // proxy 检测 model === 'kimi-k2.5' → body.thinking → 'disabled'，避免 Moonshot
+  // 严格拒 "reasoning_content missing"。主 agent 走 kimi-k2.6 不受影响。
+  // 不动 messages 内容（不插 thinking / tool_result，不删 thinking blocks）。
+  // 主 agent 偶发因 Kimi 不返 thinking 而 400 的情况不兜底（保守 = 只动 helper 路）。
+  if (parsed.model === 'kimi-k2.5' && parsed.thinking && parsed.thinking.type !== 'disabled') {
+    parsed.thinking = { type: 'disabled' };
+    mutated = true;
+  }
+
   // thinking adaptive→enabled
   if (parsed.thinking && parsed.thinking.type === 'adaptive') {
     parsed.thinking = { type: 'enabled', budget_tokens: 8192 };
@@ -184,6 +260,7 @@ function maybeFixupMessagesBody(body) {
 
   return mutated ? Buffer.from(JSON.stringify(parsed), 'utf8') : body;
 }
+
 
 /**
  * Kimi tool_result-image fix（S8）：把 tool_result.content 里的 image block

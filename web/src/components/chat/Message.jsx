@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import {
   Wrench, ChevronRight, ChevronLeft,
   FileText, Pencil, FilePlus, Search, Terminal,
-  Eye, Download, Bookmark, Bot, Activity,
+  Eye, Download, Bookmark, Bot,
   ListChecks, FolderTree, Globe,
   ShieldAlert, Info, AlertCircle, CheckCircle2,
   HelpCircle, SkipForward, Send, Check,
@@ -14,6 +14,7 @@ import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js'
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { Turn } from '../../lib/api.js';
 import TimelineNode from './TimelineNode.jsx';
+import { useTimelinePosition } from './TimelineGroupContext.js';
 
 /**
  * 单条消息渲染。4 种 role：
@@ -23,6 +24,12 @@ import TimelineNode from './TimelineNode.jsx';
  *   - tool      工具调用 + 状态（含 input/output 折叠 + elapsed time）
  */
 export default function Message({ message }) {
+  // V7：assistant 进 timeline group（V6 grouping 决定）但**不包 TimelineNode**——
+  // 用户反馈：默认给个对话气泡 icon 不 OK，"实在不行也别给 icon，就放那"。
+  // 所以 assistant 在 group 内 / group 外都走 bare 渲染，timeline 竖线在那段断开
+  // 是接受的。useTimelinePosition 只用来调左 padding 让正文跟其他 timeline 节点
+  // 内容对齐（不左对节点 icon 列）。
+  const inTimeline = useTimelinePosition() !== null;
   const { role, content, toolName, toolInput, toolOutput, toolError, toolImages, status, elapsed } = message;
 
   if (role === 'user') {
@@ -86,12 +93,8 @@ export default function Message({ message }) {
   }
 
   // assistant
-  return (
-    <div style={{
-      padding: `${GAP.sm}px ${GAP.lg}px`,
-      fontFamily: FONT_SANS, fontSize: FONT_SIZE.base,
-      color: COLOR.text2, lineHeight: 1.6,
-    }}>
+  const mdContent = (
+    <>
       <div className="md-content">
         <ReactMarkdown>{content || ''}</ReactMarkdown>
       </div>
@@ -104,6 +107,20 @@ export default function Message({ message }) {
         .md-content li { margin: 2px 0; }
         .md-content a { color: ${COLOR.btn}; text-decoration: underline; }
       `}</style>
+    </>
+  );
+
+  // V7：bare 渲染（无 icon、无 TimelineNode）。在 group 内左 padding 加大让正文
+  // 跟其他 timeline 节点的 children 对齐（PAD_LEFT + NODE_AREA + CONTENT_GAP =
+  // 12 + 18 + 6 = 36px）；group 外保留原来 GAP.lg 的左 padding。
+  const padLeft = inTimeline ? 36 : GAP.lg;
+  return (
+    <div style={{
+      padding: `${GAP.sm}px ${GAP.lg}px ${GAP.sm}px ${padLeft}px`,
+      fontFamily: FONT_SANS, fontSize: FONT_SIZE.base,
+      color: COLOR.text2, lineHeight: 1.6,
+    }}>
+      {mdContent}
     </div>
   );
 }
@@ -288,17 +305,23 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
     </div>
   );
 
-  // 时间轴 icon 颜色：success → 绿；error → 红；submitting/running → warn；其余 sub
+  // 时间轴 icon 颜色 + 形状：
+  //   - 等待用户答 / 提交中：HelpCircle（`?`）warn
+  //   - 已答 success：CheckCircle2 绿（题答过去了，问号 stale）
+  //   - 已答 error：AlertCircle 红
   const tlIconColor = status === 'success'
     ? COLOR.success
     : status === 'error'
       ? COLOR.error
-      : (submitting || !isAnswered)
-        ? COLOR.warn
-        : COLOR.sub;
+      : COLOR.warn;
+  const TlIcon = status === 'success'
+    ? CheckCircle2
+    : status === 'error'
+      ? AlertCircle
+      : HelpCircle;
 
   return (
-    <TimelineNode icon={HelpCircle} iconColor={tlIconColor}>
+    <TimelineNode icon={TlIcon} iconColor={tlIconColor}>
       <div
         style={{
           padding: GAP.md,
@@ -401,6 +424,35 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
                       lineHeight: 1.4,
                     }}>
                       {opt.description}
+                    </div>
+                  )}
+                  {/* preview HTML（sandbox iframe）—— agent 在 preview 字段塞
+                      self-contained HTML 给视觉/字体/排版方向 question 用。
+                      sandbox 不带 allow-same-origin / allow-scripts → 完全
+                      隔离的 iframe，srcdoc 渲染但无法 escape。配合 SDK
+                      toolConfig.askUserQuestion.previewFormat='html'。 */}
+                  {opt.preview && (
+                    <div style={{
+                      marginTop: GAP.xs + 2,
+                      width: '100%',
+                      borderRadius: 4,
+                      overflow: 'hidden',
+                      border: `1px solid ${COLOR.borderLt}`,
+                      background: '#fafafa',
+                    }}>
+                      <iframe
+                        title={`preview-${opt.label}`}
+                        srcDoc={opt.preview}
+                        sandbox=""
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          height: 140,
+                          border: 'none',
+                          background: '#fff',
+                          pointerEvents: 'none',  // 点击穿透到 button onClick
+                        }}
+                      />
                     </div>
                   )}
                 </span>
@@ -668,7 +720,6 @@ const TOOL_ICONS = {
   'mcp__nodesign__screenshot_canvas': Eye,
   'mcp__nodesign__export_handoff': Download,
   'mcp__nodesign__record_decision': Bookmark,
-  'mcp__nodesign__ping': Activity,             // ping → 心跳/连接
 };
 
 // Subagent 类型 → 专属 icon（Task 工具特化，让用户一眼分清派的是哪个子代理）
@@ -980,7 +1031,6 @@ function ToolMessage({
   if (fileDiff && (toolName === 'Edit' || toolName === 'Write')) {
     const filename = basename(toolInput?.file_path || toolInput?.path);
     const canExpand = toolName === 'Edit' && (fileDiff.adds > 0 || fileDiff.dels > 0);
-    const isPlanDoc = filename === 'design-plan.md';
     return (
       <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning}>
         <button
@@ -1043,26 +1093,6 @@ function ToolMessage({
             oldStr={String(toolInput?.old_string || '')}
             newStr={String(toolInput?.new_string || '')}
           />
-        )}
-        {/* S4b-3：design-plan.md 写完显示"查看设计计划"按钮，开 modal */}
-        {isPlanDoc && (
-          <button
-            onClick={() => useGlobalStore.getState().openDesignPlan()}
-            style={{
-              marginTop: GAP.xs,
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: `4px 10px`,
-              background: COLOR.bgCard,
-              border: `1px solid ${COLOR.borderLt}`,
-              borderRadius: 6,
-              fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs,
-              color: COLOR.text2,
-              cursor: 'pointer',
-            }}
-          >
-            <span>📄</span>
-            <span>查看设计计划</span>
-          </button>
         )}
       </TimelineNode>
     );

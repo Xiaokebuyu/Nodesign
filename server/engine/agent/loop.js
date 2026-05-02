@@ -31,7 +31,8 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { AgentContext } from './context.js';
 import { Events } from './events.js';
 import { markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata } from '../runs/store.js';
-import { registerRun, attachQuery, unregisterRun, registerPendingQuestion } from '../runs/active-runs.js';
+import { randomUUID } from 'node:crypto';
+import { registerRun, attachQuery, unregisterRun, registerPendingQuestion, registerPendingElicitation } from '../runs/active-runs.js';
 import { loadSkill } from './skill.js';
 import { createHooks } from './hooks.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
@@ -55,26 +56,46 @@ const NODESIGN_PRELUDE = (() => {
   }
 })();
 
-// 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）。
-// 沙盒由 cwd=project workspace 保证 + PreToolUse hook 命令白名单兜底。
+// Phase 3.1：plan-mode workflow instructions（替换 SDK 默认 code-impl phases）
+// SDK 在 permissionMode='plan' 时把这段嵌入到 plan-mode system reminder 里，
+// 自动包 read-only enforcement preamble + ExitPlanMode protocol footer。
+// 内容是 NoDesign 设计场景特化版（设计 plan / 隐喻 / per-page 决策等），
+// 不是 code implementation。
+const NODESIGN_PLAN_INSTRUCTIONS = (() => {
+  try {
+    return fs.readFileSync(
+      path.join(__dirname, 'prompts/nodesign-plan-instructions.md'),
+      'utf8',
+    ).trim();
+  } catch (err) {
+    console.warn(`[loop] failed to load nodesign-plan-instructions.md:`, err.message);
+    return '';
+  }
+})();
+
+// SDK base 工具白名单（Options.tools，sdk.d.ts:1216）—— 限定主 agent 可见的
+// **内置工具**集合。MCP 工具（mcp__nodesign__*）由 mcpServers 字段独立暴露，
+// 不需要列在这里；新加内置工具（如 ExitPlanMode）按需追加。
 //
-// AskUserQuestion 在白名单 —— permissionMode='bypassPermissions' 后 binary
-// 跳过 stdio prompt，AskUserQuestion 走正常 tool_use → 前端 AskUserQuestionView
-// 渲染卡片 → 用户点选项 → setChatDraft → 用户 send 新 turn → agent 看到答案
+// 设计要点：
+//   - Bash 是必需（git/playwright/zip 都靠它）。沙盒由 OS 级 sandbox 字段保证
+//   - AskUserQuestion 是 deferred 工具：bypassPermissions 不影响它；canUseTool
+//     callback 拦截它注入用户答案（loop.js canUseTool 段）
+//   - WebFetch（SDK 内置）走 binary 自带的 prompt 总结，不灌完整 HTML 给 model；
+//     WebSearch 走我们自己的 mcp__nodesign__web_search（4 provider，免 server_tool_use）
+//   - Task 是子代理调用入口；agents 字段注册的子代理通过 Task 暴露给主 agent。
+//     **Task 漏挂 = 所有子代理形同摆设**（P0+ stage 1 修复过一次的隐性 bug）
+//
+// 非显式语义：
+//   - tools 字段是"可见集合"白名单，不在里面的内置工具会被剥离
+//   - 不是 auto-allow（auto-allow 由 permissionMode='bypassPermissions' 已经全
+//     跳）。之前 sdkOptions 同设 allowedTools 是冗余，已删
 const DEFAULT_TOOL_ALLOWLIST = [
   'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'Bash',
   'AskUserQuestion',
-  // SDK 内置 WebFetch — binary 取 URL 后用当前 model 跑 prompt 总结，
-  // 自带上下文控制（不灌完整 HTML 给 model）。WebSearch 走我们自己的 MCP
-  // mcp__nodesign__web_search（4 provider，0 依赖），不用 SDK 内置 WebSearch
-  // （那个是 server_tool_use，Anthropic 收费 + Kimi gateway 透传不确定）。
   'WebFetch',
-  // Task —— 子代理调用入口。SDK 把 query options.agents 注册的子代理
-  // （explorer / vision-checker / ds-extractor / tweak-proposer）通过 Task
-  // 工具暴露给主 agent。**Task 不在白名单 = 所有子代理形同摆设**（之前
-  // P0+ stage 1 漏挂的隐性 bug，子代理 agents/index.js 注册了但永远不会被
-  // 调用）。本次 explorer 接通时一并修复。
   'Task',
+  'ExitPlanMode',
 ];
 
 // 主产物候选 — canvas.html 列首位（P0 per-project workspace 主文件名），
@@ -106,10 +127,13 @@ const STREAMING_ENABLED = true;
  * model 走 enabled 路径。adaptive 在非 Opus 4.6+ 上等于不开 thinking
  * （H3 实测：Kimi+adaptive → jsonl 0 thinking blocks），所以默认走 enabled。
  *
- * 加新 Opus 系列要扩 regex（4.6 / 4.7 已覆盖）。
+ * Future-proof 设计：
+ *   - claude-opus-4-[6789] 覆盖 4.6/4.7/4.8/4.9
+ *   - claude-opus-[5-9] 覆盖 5.x/6.x/7.x/8.x/9.x（默认假设 Opus 新一代仍走 adaptive）
+ *   - 新一代 Opus 改了行为时再扩 regex
  */
 function pickThinkingConfig(model) {
-  if (model && /^claude-opus-4-[67]/.test(model)) {
+  if (model && /^claude-opus-(?:4-[6789]|[5-9])/.test(model)) {
     return { type: 'adaptive' };
   }
   return { type: 'enabled', budgetTokens: 8192 };
@@ -173,6 +197,7 @@ async function* buildUserMessageStream(contentOrBrief) {
  *                                                  H3 turn endpoint 走 sessionWorkspaceRoot 那条
  * @param {string} [opts.resumeSessionId]        - SDK 续 session
  * @param {Array} [opts.userContentBlocks]       - SDK BetaContentBlockParam[]
+ * @param {string} [opts.sessionTitle]           - 新建 session 的自定义标题（SDK options.title）
  *
  * @returns {Promise<{ finalText, artifactPath, snapshot }>}
  */
@@ -190,6 +215,8 @@ export async function runAgent({
   workspaceRoot = null,
   resumeSessionId = null,
   userContentBlocks = null,
+  sessionTitle = null,
+  initialPermissionMode = null,  // Phase 3.1：'plan' 启用 SDK 原生 plan-mode；其他保留 bypassPermissions
 }) {
   if (!runId) throw new Error('runAgent: runId required');
   if (!skillId) throw new Error('runAgent: skillId required');
@@ -247,6 +274,9 @@ export async function runAgent({
     // H3：新建 session 时显式传 sessionId 让 SDK 用我们预生成的 UUID
     // （d.ts:1537 sessionId 单独可传，不能跟 resume 同用）
     ...(sessionId && !resumeSessionId ? { sessionId } : {}),
+    // 新建 session 时传自定义 title（sdk.d.ts:1758）。resume 场景 SDK 用持久化
+    // 的 title，传 title 也会被忽略 —— 但避免传歧义值，仅新建场景传。
+    ...(sessionTitle && !resumeSessionId ? { title: sessionTitle.slice(0, 80) } : {}),
     // H3：让 agent 能 Read shared/.claude（已通过软链）+ shared/assets/
     // additionalDirectories 是 SDK 暴露给 cwd 之外的可访问目录
     ...(sharedRoot ? { additionalDirectories: [sharedRoot] } : {}),
@@ -265,13 +295,25 @@ export async function runAgent({
       // SDK settingSources: ['project'] 读 cwd/.claude/CLAUDE.md → 软链 → shared。
       // NODESIGN_CONFIG_DIR env 可全局覆盖（生产容器统一持久化卷场景）。
       CLAUDE_CONFIG_DIR: process.env.NODESIGN_CONFIG_DIR || path.join(cwdRoot, '.claude'),
+      // ANTHROPIC_SMALL_FAST_MODEL（S9 保守版）：
+      // SDK helper（promptSuggestions / agentProgressSummaries / askUserQuestion
+      // classifier / title gen / WebFetch summarize 等）默认走 claude-haiku
+      // → Kimi gateway 返 400 "模型不存在"，WebFetch 整个错传回 agent。
+      //
+      // 主 agent 用 kimi-k2.6 时，helper 改用 kimi-k2.5（同一 Moonshot 后端，
+      // 但 model 名不同 → proxy 可针对 k2.5 单独关 thinking，不影响 k2.6 主 agent）。
+      // proxy fix 在 binary-fixup-proxy.js：parsed.model === 'kimi-k2.5' 时
+      // 强制 thinking: disabled，避免 Moonshot "reasoning_content missing" 严格拒。
+      ...(model && /^kimi-k2\.6/i.test(model) ? {
+        ANTHROPIC_SMALL_FAST_MODEL: 'kimi-k2.5',
+      } : {}),
     },
 
     model,
 
-    // 工具白名单
+    // 工具白名单（base 内置工具集合，sdk.d.ts:1216）
+    // permissionMode='bypassPermissions' 已经跳所有 prompt → 不需要 allowedTools
     tools: toolAllowlist,
-    allowedTools: toolAllowlist,    // 同时白名单，避免每次问权限
 
     // hotfix-sdk-usage：systemPrompt 改 preset 'claude_code' + append。
     // 之前用 string 完全替换 SDK 默认 prompt → 失去 Claude Code 的关键
@@ -289,13 +331,21 @@ export async function runAgent({
       append: [NODESIGN_PRELUDE, skill.systemPrompt].filter(Boolean).join('\n\n---\n\n'),
     },
 
-    // hotfix-sdk-usage：跳过所有 permission 检查。
-    // 默认 permissionMode 'default' 会 prompt for dangerous operations，
-    // binary 子进程通过 stdio prompt → spawn 没接 stdin → hang（"ask 不
-    // pending"症状的根因）。canUseTool always-allow 不能 override 这个。
-    // 危险命令拦截已经走 PreToolUse hook（C5 Bash 白名单），bypass 安全。
-    permissionMode: 'bypassPermissions',
-    allowDangerouslySkipPermissions: true,
+    // permissionMode 优先级：
+    //   - initialPermissionMode='plan' → SDK 原生 plan mode（read-only + ExitPlanMode）
+    //     plan 通过审批后 host 调 query.setPermissionMode('default') 切回，agent 继续 generate
+    //   - 其他场景 → bypassPermissions（跳所有 prompt；危险命令由 sandbox 隔离）
+    //
+    // 'bypassPermissions' 仍是默认：default mode 会 prompt for dangerous
+    // operations（binary 子进程通过 stdio prompt → spawn 没接 stdin → hang）；
+    // canUseTool always-allow 不能 override 这个。所以默认走 bypass，唯独 plan
+    // mode 显式选时切 plan（plan mode 自身是 read-only，不会触发 dangerous prompt）。
+    permissionMode: initialPermissionMode === 'plan' ? 'plan' : 'bypassPermissions',
+    allowDangerouslySkipPermissions: initialPermissionMode !== 'plan',
+
+    // Phase 3.1：plan mode workflow body（仅在 permissionMode='plan' 时生效）
+    // SDK 自动包 read-only preamble + ExitPlanMode footer
+    planModeInstructions: NODESIGN_PLAN_INSTRUCTIONS,
 
     // A4.1：canUseTool 回归 —— 专门处理 AskUserQuestion 这种 deferred + 需要
     // 用户交互的工具。bypassPermissions 跳的是 standard prompt，但 deferred
@@ -315,6 +365,10 @@ export async function runAgent({
     //
     // 其他工具 always-allow（不阻塞）。canUseTool 出错（如 run cancel）→
     // deny + interrupt 让 SDK 走错误路径。
+    //
+    // 注意（2026-05-02 EXPERIMENT Round 1）：实验注释掉这段后续 turn 仍然报
+    // "reasoning_content is missing"，证实 canUseTool **不是** binary 续 turn
+    // 不 merge 的 culprit。已恢复。下次调查方向看 memory feedback_kimi_split_messages_strict.md。
     canUseTool: async (toolName, input, options) => {
       if (toolName !== 'AskUserQuestion') {
         return { behavior: 'allow' };
@@ -339,6 +393,49 @@ export async function runAgent({
           interrupt: true,
         };
       }
+    },
+
+    // Phase 2.3：onElicitation 回调框架（sdk.d.ts:1320）
+    // MCP server 想要 elicit 用户输入（form / URL auth）时 SDK 调这个。
+    // 当前 13 个 NoDesign MCP 工具都没用 elicit；本框架是 future-proof：未来
+    // 任何 NoDesign 或外接 MCP 工具想 elicit 时立即可用。
+    //
+    // 流程跟 AskUserQuestion 类似：
+    //   1. SDK 调 onElicitation(request, options)
+    //   2. host 生成 reqId + emit 事件 + await Promise
+    //   3. 前端展示 form / URL auth 卡片（待 UI 实现）
+    //   4. 用户填完 POST /elicit/:reqId/answer → provideElicitation → resolve
+    //   5. SDK 拿到 ElicitationResult 继续
+    //
+    // 当前没前端 UI，临时策略：emit 事件后默认 decline（不 hang），后续接通 UI
+    // 时把 decline 改成真 await。
+    onElicitation: async (request, _options) => {
+      const reqId = randomUUID();
+      try {
+        ctx.emit({ type: 'run.elicitation_request', reqId, request });
+      } catch { /* ignore */ }
+      // TODO: 接通前端 UI 后改成 await registerPendingElicitation(runId, reqId)
+      // 当前直接 decline，避免 hang
+      try {
+        const p = registerPendingElicitation(runId, reqId);
+        // 5s 内等不到答案 → 自动 decline（防 MCP 工具卡死整个 agent loop）
+        const timeoutPromise = new Promise(resolve =>
+          setTimeout(() => resolve({ action: 'decline' }), 5000),
+        );
+        return await Promise.race([p, timeoutPromise]);
+      } catch {
+        return { action: 'decline' };
+      }
+    },
+
+    // toolConfig.askUserQuestion.previewFormat='html' (sdk.d.ts:5381)：
+    // 让 SDK 工具 schema 告诉 model option.preview 字段是 self-contained HTML
+    // fragment（不是 markdown）—— 配合前端 AskUserQuestionView 的 sandbox iframe
+    // 渲染，agent 能给"视觉方向 / 字体方案 / 排版风格"等问题塞真实视觉变体
+    // mockup（240x140 小卡片样式）。paradigm "ask 阶段多变体 preview 当问题用"
+    // 的接通点。SKILL.md / prelude 会教 agent 怎么写这种 HTML。
+    toolConfig: {
+      askUserQuestion: { previewFormat: 'html' },
     },
 
     // S1：开 SDK 自带 session 持久化 + 项目级配置加载
@@ -457,11 +554,10 @@ export async function runAgent({
     // FileChanged / PreToolUse(Bash) / Stop / PostCompact
     hooks: createHooks({ ctx, workspaceRoot: wsRoot }),
 
-    // C8 自定义 MCP 工具集（in-process）：
-    // - mcp__nodesign__ping（占位）
-    // - C9 mcp__nodesign__screenshot_canvas
-    // - C10 mcp__nodesign__export_handoff
-    // - C11 mcp__nodesign__record_decision
+    // 自定义 MCP 工具集（in-process）：13 个 nodesign 业务工具
+    // 感知层 / 控制层 / 反馈层 / 产物层 / 研究层（详见 mcp/index.js 顶部注释）
+    // alwaysLoad: true 在 createNodesignMcpServer 里设了 — 全 schema 注入 system
+    // prompt，避免 SDK 默认 defer 行为让 agent 看不见这些工具
     mcpServers: {
       nodesign: createNodesignMcpServer({ workspaceRoot: wsRoot, ctx }),
     },

@@ -94,6 +94,13 @@ export function createAgents() {
         + 'and findings — no code, no design judgment, just facts. '
         + 'Saves the main agent\'s context window by offloading research turns.',
       prompt: loadPrompt('explorer'),
+      // 2026-05-02 实验：直接写死 'kimi-k2.6' 验证 SDK binary 的 'inherit'
+      // 字面解析是不是 root cause。如果写死后续 turn 不报 reasoning_content
+      // 错，证实是 'inherit' 字符串问题；如果还报错，root cause 在别处。
+      //
+      // TODO：跑通后 createAgents 改成接 { mainModel } 参数，subagent 跟着主
+      // agent model 动态切（避免 hardcode 让 user 切 sonnet 时 subagent 还跑 Kimi）。
+      model: 'kimi-k2.5',
       tools: [
         'mcp__nodesign__web_search',
         'WebFetch',
@@ -112,8 +119,16 @@ export function createAgents() {
         + 'whether the design looks right — alignment, contrast, hierarchy, spacing, '
         + 'a11y readability. Returns a structured critique with concrete fix suggestions.',
       prompt: loadPrompt('vision-checker'),
-      // C14 read-only; 主要工具是 mcp__nodesign__screenshot_canvas + Read（看 spec.json）
-      // omit tools 让 SDK 继承父 agent 的工具集 + MCP server 自动可见
+      // 显式列 tools：read-only 视觉评审需要的最小集合。
+      // SDK doc 说"omit tools 继承父" 但跨 mcp 工具的继承行为不确定（explorer 也
+      // 显式列 mcp__nodesign__web_search 是同样的稳妥做法）。Phase 1.1 audit 后
+      // 改成显式声明，保证 vision-checker.md 里写的 mcp__nodesign__screenshot_canvas
+      // 真实可调。
+      model: 'kimi-k2.5',
+      tools: [
+        'mcp__nodesign__screenshot_canvas',
+        'Read', 'Glob',
+      ],
     },
 
     'ds-extractor': {
@@ -127,6 +142,13 @@ export function createAgents() {
       // SDK AgentDefinition 没有 outputFormat 字段（query options 级别才有）。
       // 子代理走 prompt 内嵌 JSON Schema 引导输出，main agent 收到后 JSON.parse。
       // schema 文件在 agents/schemas/design-system.json，prompt 里有完整摘录。
+      model: 'kimi-k2.5',
+      tools: [
+        'Read', 'Glob', 'Grep',
+        'mcp__nodesign__list_pages',
+        'mcp__nodesign__read_page',
+        'mcp__nodesign__get_computed_styles',
+      ],
     },
 
     'tweak-proposer': {
@@ -138,6 +160,13 @@ export function createAgents() {
         + 'user wants to fine-tune without rewriting.',
       prompt: loadPrompt('tweak-proposer'),
       // 同 ds-extractor：SDK 不支持 per-agent outputFormat，schema 内嵌 prompt
+      model: 'kimi-k2.5',
+      tools: [
+        'Read', 'Glob',
+        'mcp__nodesign__list_pages',
+        'mcp__nodesign__read_page',
+        'mcp__nodesign__expose_tweaks',
+      ],
     },
   };
 }
