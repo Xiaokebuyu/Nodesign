@@ -24,6 +24,7 @@ import {
   deleteSession,
 } from '@anthropic-ai/claude-agent-sdk';
 import { validateProjectId, getProject, setActiveSession } from '../projects/store.js';
+import { closeQuerySession, hasActiveQuerySession } from '../engine/runs/active-runs.js';
 import {
   getProjectWorkspace,
   getSessionWorkspace,
@@ -44,6 +45,48 @@ function encodeCwdForSDK(cwd) {
 
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * 列指定 project 的所有 session（按 lastModified 倒序）。共享给：
+ * 1. GET /api/projects/:pid/sessions（这文件下面的路由）
+ * 2. GET /api/sessions/recent（recent.js 跨项目聚合）
+ *
+ * 后端实现：readdir sessions/ → 对每个 sid 调 SDK getSessionInfo
+ * （per-session CLAUDE_CONFIG_DIR）→ filter null → sort by lastModified。
+ *
+ * @param {string} pid
+ * @returns {Promise<object[]>} sessions 数组（每条至少含 sessionId / lastModified；
+ *   SDK 还会补 customTitle / summary / firstPrompt / tag 等字段）
+ */
+export async function listSessionsForProject(pid) {
+  const sessionsRoot = path.join(getProjectWorkspace(pid), 'sessions');
+  let entries;
+  try {
+    entries = await fs.readdir(sessionsRoot, { withFileTypes: true });
+  } catch (err) {
+    if (err.code === 'ENOENT') return [];
+    throw err;
+  }
+  const sids = entries
+    .filter(e => e.isDirectory() && SESSION_ID_RE.test(e.name))
+    .map(e => e.name);
+  const results = await Promise.all(sids.map(async (sid) => {
+    const sessionRoot = path.join(sessionsRoot, sid);
+    const sessionClaudeDir = path.join(sessionRoot, '.claude');
+    try {
+      const info = await withConfigDir(sessionClaudeDir, () =>
+        getSessionInfo(sid, { dir: sessionRoot }),
+      );
+      return info || null;
+    } catch (err) {
+      console.warn(`[sessions list] ${sid.slice(0, 8)} info failed:`, err.message);
+      return null;
+    }
+  }));
+  return results
+    .filter(Boolean)
+    .sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0));
+}
+
 // ── List：自实现（readdir sessions/ + per-sid getSessionInfo）──
 router.get('/:pid/sessions', async (req, res, next) => {
   try {
@@ -51,41 +94,11 @@ router.get('/:pid/sessions', async (req, res, next) => {
     const project = getProject(req.params.pid);
     if (!project) return res.status(404).json({ error: 'project not found' });
 
-    const sessionsRoot = path.join(getProjectWorkspace(req.params.pid), 'sessions');
-    let entries;
-    try {
-      entries = await fs.readdir(sessionsRoot, { withFileTypes: true });
-    } catch (err) {
-      if (err.code === 'ENOENT') return res.json({ sessions: [] });
-      throw err;
-    }
+    const all = await listSessionsForProject(req.params.pid);
 
-    const sids = entries
-      .filter(e => e.isDirectory() && SESSION_ID_RE.test(e.name))
-      .map(e => e.name);
-
-    const limit = req.query.limit ? Math.min(Number(req.query.limit), 200) : sids.length;
+    const limit = req.query.limit ? Math.min(Number(req.query.limit), 200) : all.length;
     const offset = req.query.offset ? Number(req.query.offset) : 0;
-
-    // 对每个 sid 调 SDK getSessionInfo（per-session CLAUDE_CONFIG_DIR）
-    const results = await Promise.all(sids.map(async (sid) => {
-      const sessionRoot = path.join(sessionsRoot, sid);
-      const sessionClaudeDir = path.join(sessionRoot, '.claude');
-      try {
-        const info = await withConfigDir(sessionClaudeDir, () =>
-          getSessionInfo(sid, { dir: sessionRoot }),
-        );
-        return info || null;
-      } catch (err) {
-        console.warn(`[sessions list] ${sid.slice(0, 8)} info failed:`, err.message);
-        return null;
-      }
-    }));
-
-    const sessions = results
-      .filter(Boolean)
-      .sort((a, b) => (b.lastModified || 0) - (a.lastModified || 0))
-      .slice(offset, offset + limit);
+    const sessions = all.slice(offset, offset + limit);
 
     res.json({ sessions });
   } catch (err) { next(err); }
@@ -201,6 +214,23 @@ router.patch('/:pid/sessions/:sid', async (req, res, next) => {
       );
     }
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ── Close：终结活跃 query session（streamInput 模式）──
+//   POST /api/projects/:pid/sessions/:sid/close
+//   关掉 inputQueue → runSession for-await-of 自然退出 → query 进程死。
+//   下次 turn 该 sid 起新 runSession（resume 旧 jsonl）。
+//   200 { ok: true, wasActive }
+router.post('/:pid/sessions/:sid/close', async (req, res, next) => {
+  try {
+    validateProjectId(req.params.pid);
+    validateSessionId(req.params.sid);
+    const project = getProject(req.params.pid);
+    if (!project) return res.status(404).json({ error: 'project not found' });
+    const wasActive = hasActiveQuerySession(req.params.sid);
+    if (wasActive) closeQuerySession(req.params.sid, 'user_close');
+    res.json({ ok: true, wasActive });
   } catch (err) { next(err); }
 });
 

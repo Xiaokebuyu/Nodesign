@@ -39,6 +39,7 @@ import {
   attachSessionQuery,
   unregisterQuerySession,
   getCurrentTurnRunId,
+  setCurrentTurnRunId,
   registerPendingQuestion,
 } from '../runs/active-runs.js';
 import { loadSkill } from './skill.js';
@@ -75,6 +76,9 @@ import {
  * @param {object} [opts.modelOverride={}]
  * @param {string[]} [opts.toolAllowlist=DEFAULT_TOOL_ALLOWLIST]
  * @param {string} [opts.initialPermissionMode]
+ * @param {string} [opts.initialRunId] - 首条 turn 的 run record id；若给则 register
+ *                                       完立即设 currentRunId，避免 turn.js race
+ *                                       condition（push 早于 register 没法关联 runId）
  * @returns {Promise<void>}  - inputQueue 关闭时 resolve
  */
 export async function runSession({
@@ -88,6 +92,7 @@ export async function runSession({
   modelOverride = {},
   toolAllowlist = DEFAULT_TOOL_ALLOWLIST,
   initialPermissionMode = null,
+  initialRunId = null,
 }) {
   if (!sessionId) throw new Error('runSession: sessionId required');
   if (!sessionWorkspaceRoot) throw new Error('runSession: sessionWorkspaceRoot required');
@@ -106,6 +111,10 @@ export async function runSession({
     abortController: sessionAbortController,
     inputQueue,
   });
+  // initialRunId：register 后立刻设 currentRunId，让 for-await-of 第一次见到
+  // SDK 转发首条 user message 时直接知道当前 turn 的 runId（否则 turn.js 那边
+  // 必须在 register 之后才能调 pushUserMessage —— race window）
+  if (initialRunId) setCurrentTurnRunId(sessionId, initialRunId);
 
   // sharedCtx：跨 turn 复用。每个 turn 边界覆盖 runId + 重置 counters。
   // hooks / mcp 闭包持稳定引用即可。

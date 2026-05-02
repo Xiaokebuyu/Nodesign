@@ -324,17 +324,35 @@ export function getQuery(runId) {
  * @returns {boolean} true=成功 trigger；false=run 不在 registry（已结束 / 不存在）
  */
 export function cancelRun(runId, reason = 'user_cancel') {
+  // streamInput 模式优先：runId 是某个 active query session 的 currentRunId →
+  // 调 session.query.interrupt() 中断当前 turn，query 不死继续等下条 message
+  for (const [sid, qRec] of activeQuerySessions) {
+    if (qRec.currentRunId === runId) {
+      if (qRec.query && typeof qRec.query.interrupt === 'function') {
+        qRec.query.interrupt().catch((err) => {
+          console.warn(`[active-runs] query.interrupt failed for run ${runId} in session ${sid.slice(0, 8)}:`, err?.message);
+          // 失败兜底：close 整个 session（用户预期 stop 起码能停下来）
+          closeQuerySession(sid, reason + ':interrupt_failed');
+        });
+      } else {
+        // race：query handle 还没 attach（runSession 启动 race window）
+        // 直接 close session 兜底
+        console.warn(`[active-runs] cancelRun race: query handle not yet attached for ${sid.slice(0, 8)}, closing session`);
+        closeQuerySession(sid, reason + ':no_query_handle');
+      }
+      return true;
+    }
+  }
+
+  // 老路径（per-turn runAgent）—— activeRuns 里的 record
   const rec = activeRuns.get(runId);
   if (!rec) return false;
 
   if (rec.query && typeof rec.query.interrupt === 'function') {
-    // 优雅路径：query.interrupt() async + 5s 兜底
     rec.query.interrupt().catch((err) => {
       console.warn(`[active-runs] query.interrupt failed for ${runId}:`, err?.message);
       cancelViaCtxOrAbort(rec, reason);
     });
-
-    // 5s 兜底：防止 SDK 自然结束流程卡住（如 reasoning 中、stream hang）
     setTimeout(() => {
       const stillActive = activeRuns.get(runId);
       if (stillActive && stillActive === rec) {
@@ -342,12 +360,8 @@ export function cancelRun(runId, reason = 'user_cancel') {
       }
     }, 5000).unref();
   } else {
-    // race window：query 还没 attach（用户极快点停止）→ 直接 ctx.cancel()
     cancelViaCtxOrAbort(rec, reason);
   }
-
-  // 不在这里 delete record。让 loop.js finally 的 unregisterRun 统一清理，
-  // 避免 cancel 后 loop.js 还要查 record 时找不到。
   return true;
 }
 
@@ -461,6 +475,20 @@ export function pushUserMessage(sessionId, runId, sdkUserMessage) {
  */
 export function getCurrentTurnRunId(sessionId) {
   return activeQuerySessions.get(sessionId)?.currentRunId || null;
+}
+
+/**
+ * 直接设 currentRunId（不 push message）。给 turn.js 起新 runSession 时
+ * 提前设第一 turn runId 用 —— pushUserMessage 在 register 之前没法调，
+ * runSession 启动后用 initialRunId 参数把 currentRunId 提前填上。
+ *
+ * @param {string} sessionId
+ * @param {string|null} runId
+ */
+export function setCurrentTurnRunId(sessionId, runId) {
+  const rec = activeQuerySessions.get(sessionId);
+  if (!rec) return;
+  rec.currentRunId = runId || null;
 }
 
 /**
