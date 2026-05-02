@@ -116,7 +116,7 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
       // 不返 hookSpecificOutput，纯 emit；不阻塞 agent，不注 additionalContext。
       {
         matcher: 'Edit|Write',
-        hooks: [makePostToolUseCanvasObservableHandler({ ctx })],
+        hooks: [makePostToolUseCanvasFocusPageHandler({ ctx })],
       },
       // S4b-2 — Write design-plan.md 时 emit run.plan_doc_ready 给前端。
       // 前端 ToolMessage 写工具渲染加"📄 查看设计计划"按钮，开 modal markdown 渲染。
@@ -458,7 +458,7 @@ function makePostToolUseEditWriteTrimHandler({ ctx }) {
  *
  * 失败 fail-soft：emit fail / 解析炸都不抛，console.warn 一行。
  */
-function makePostToolUseCanvasObservableHandler({ ctx }) {
+function makePostToolUseCanvasFocusPageHandler({ ctx }) {
   return async (input, _toolUseId, _options) => {
     try {
       const filePath = input?.tool_input?.file_path;
@@ -478,7 +478,7 @@ function makePostToolUseCanvasObservableHandler({ ctx }) {
       }
       if (!changeText) return {};
 
-      // 1. focus_page —— 找 <section ... data-page="N"> + 可选 data-anchor
+      // focus_page —— 找 <section ... data-page="N"> + 可选 data-anchor
       try {
         const pageMatches = [...changeText.matchAll(
           /<section\b[^>]*\bdata-page\s*=\s*['"]?(\d+)['"]?/gi
@@ -503,7 +503,7 @@ function makePostToolUseCanvasObservableHandler({ ctx }) {
 
       return {};
     } catch (err) {
-      console.warn(`[hooks/canvas observable] handler threw:`, err.message);
+      console.warn(`[hooks/canvas_focus_page] outer handler threw:`, err.message);
       return {};
     }
   };
