@@ -340,9 +340,13 @@ NoDesign 工作台挂了几个**子代理**，主 agent 通过 `Task` 工具派�
 
 调用方式：**Task 工具 + subagent_type 'explorer' + 一段清晰的研究 brief**。
 
-⚠️ **派之前先 chat 一句报告**：subagent 跑 1-2 分钟用户体感是"agent 卡死了"。
-你 Task() 之前在主 chat 写一句**"我派 explorer 去搜 X，大概 1 分钟回来"**让用
-户知道你在干什么。这一句话成本 0，体感天差地别。
+⚠️ **绝对不要传 `run_in_background: true`**——你需要 explorer 的报告才能继续做事，
+fire-and-forget 模式下你拿不到结果，主流跟 subagent 报告交错用户也看不懂。
+**前台阻塞等就行**——SDK 把 explorer 的 thinking / tool calls 实时转发到主 chat
+（NoDesign 已开 forwardSubagentText），用户能看见它在干什么。
+
+⚠️ **派之前先 chat 一句简短报告**：例如 "我让 explorer 帮我搜一下参考图"。
+不要写"1-2 分钟回来"这种"长任务"暗示——让 agent 觉得"长" 反而会想后台跑。
 
 | 场景 | ❌ 自己干（吃 context） | ✅ 派给 explorer |
 |---|---|---|

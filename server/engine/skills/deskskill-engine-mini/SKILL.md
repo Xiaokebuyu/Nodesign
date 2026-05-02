@@ -431,8 +431,9 @@ Query 加年份词（2025/2026）。**不要 baidu 英文**（实测严重跑题
 子代理截图 canvas.html 按 Tier 1-3 标准挑毛病，返结构化 `VERDICT + ISSUES + OVERALL`。
 **整个 deck 写完 / 关键页改完 / 用户问"看着怎么样" / 自己截图后心里没底**时派。
 
-**派之前必先在 chat 报一句**"我派 vision-checker 自检视觉，30 秒回来"——避免用户
-看着主 chat 静默就以为卡死。详见下方 § vision-checker 协议。
+**派之前必先在 chat 报一句**"我让 vision-checker 帮我自检视觉"——避免用户看着
+主 chat 静默以为卡死。**绝对不传 `run_in_background: true`**——前台等结果才能
+基于 critique 改 deck，fire-and-forget 等于自检结果丢了。详见下方 § vision-checker 协议。
 
 > 协议详细：[§ 用户直接编辑协议](#用户直接编辑协议c42026-05-02) / [§ Tweaks 暴露协议](#tweaks-暴露协议c52026-05-02) / [§ vision-checker 协议](#vision-checker-协议s3a2026-05-02)
 
@@ -456,10 +457,12 @@ Query 加年份词（2025/2026）。**不要 baidu 英文**（实测严重跑题
    Q3: 章节切分 — [线性叙事] / [元素对比] / [角色群像]
 
 2. (用户选「暗色秽雨 + 大量留白 + 角色群像」)
-   → chat 报告："基于你的方向，我派 explorer 找 5 张 Ender Lilies 官方艺术图，1 分钟回来"
+   → chat 报告："让 explorer 找几张 Ender Lilies 官方艺术图"
    → Task(subagent_type='explorer',
           prompt='找 5 个 Ender Lilies 高分辨率艺术图 hotlink URL（官方 CDN
                   / wikipedia commons / steam capsule），返结构化 URL 列表')
+   ⚠️ **不要传 run_in_background:true** —— 主 agent 必须等 explorer 报告才能写
+   canvas.html 引用图片 URL；fire-and-forget 等于 URL 列表丢了
 
 3. AskUserQuestion 第 2 轮：配色 + 字体（preview HTML 关键，让用户视觉对比）
    Q1: palette 三选 — [#0a0812 / #e2d8f0 / #4a2e3a 暗紫秽雨]
@@ -486,9 +489,9 @@ Query 加年份词（2025/2026）。**不要 baidu 英文**（实测严重跑题
 7. 自检循环
    - mcp__nodesign__screenshot_canvas { pageIndex: 1 } → 看封面 PNG → "标题
      位置 OK，但 hero 图被 vignette 压得过暗" → Edit 调 vignette opacity
-   - chat 报："我派 vision-checker 全 deck 自检，30 秒"
+   - chat 报："让 vision-checker 帮我自检全 deck 视觉"
    - Task(subagent_type='vision-checker', prompt='对照 design-plan critique
-          全 deck 视觉合理性')
+          全 deck 视觉合理性')   ⚠️ 不传 run_in_background:true
    - 收 ISSUES → 修 1-2 条最影响第一印象的 → 剩下挂"后续可调"
 
 8. expose_tweaks + export_handoff —— 收尾

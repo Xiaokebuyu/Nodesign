@@ -72,8 +72,17 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
 
     // ~~PreToolUse(Bash) 白名单~~ Phase 3d 删 —— 改用 loop.js sandbox option
     // OS 级隔离（macOS sandbox-exec / Linux bubblewrap），filesystem.allowWrite/denyRead
-    // 替代命令级正则。如未来要 per-tool 拦截（非 Bash 工具如 Write 越界），可在
-    // PreToolUse 数组重新加 matcher。
+    // 替代命令级正则。
+
+    // PreToolUse Task：拦截 run_in_background:true，强制前台等结果
+    // sdk-tools.d.ts Task input 含 `run_in_background?: boolean` 字段，model 可
+    // 自己传 true 让 subagent fire-and-forget 跑。NoDesign 体验下这等于"agent
+    // 自己派任务出去后继续往下做"，主流文本 chunk 跟 subagent 报告交错，用户看不
+    // 懂。硬拦：true → deny + 提示重试不带这个字段。
+    PreToolUse: [{
+      matcher: 'Task',
+      hooks: [makePreToolUseTaskBackgroundDenyHandler()],
+    }],
 
     // Stop —— agent 准备结束 query 时触发，发自检事件给前端
     Stop: [{
@@ -161,6 +170,34 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
 // ─────────────────────────────────────────────────────────────────────
 // hook handlers
 // ─────────────────────────────────────────────────────────────────────
+
+/**
+ * PreToolUse(Task) Background Deny —— 强制 subagent 前台等。
+ *
+ * 拦 `Task` 工具调用且 input.run_in_background === true 的情况，返
+ * permissionDecision='deny' 让 SDK 拒掉这次 tool call，agent 看到 deny 提示
+ * 后会重试不带 run_in_background 字段 —— 自然就走前台阻塞了。
+ *
+ * 不动 background 字段 false / undefined（默认前台）的 case。
+ */
+function makePreToolUseTaskBackgroundDenyHandler() {
+  return async (input) => {
+    const t = input?.tool_input;
+    if (t && t.run_in_background === true) {
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason:
+            'NoDesign 不允许 run_in_background:true —— subagent 必须前台跑（你需要等它的报告才能继续做事）。' +
+            '重试时去掉这个参数，等 1 分钟左右收 explorer/vision-checker 的结构化报告。',
+        },
+      };
+    }
+    return {};
+  };
+}
+
 
 /**
  * FileChanged handler（P0+ s1 C4）：agent 写文件后 SDK 触发，转发给 EventBus。
