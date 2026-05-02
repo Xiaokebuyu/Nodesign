@@ -1,7 +1,8 @@
-import { ChevronDown, XCircle } from 'lucide-react';
+import { ChevronDown, XCircle, Sliders } from 'lucide-react';
 import MessageList from './MessageList.jsx';
 import ChatComposer from './ChatComposer.jsx';
 import TodoPanel from './TodoPanel.jsx';
+import { usePanelManager } from '../layout/PanelManager.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
 
 /**
@@ -26,7 +27,11 @@ export default function ChatPanel({
   onOpenSessionList,
   onCloseSession,            // streamInput 重构：用户主动结束当前 session（终结 query）
   hasActiveSession = false,  // 有 currentSessionId 才显示"结束会话"入口
+  tweaksAvailable = false,   // C1：agent expose 过 tweaks 才显示打开按钮
 }) {
+  // C1: 直接 hook PanelManager（ChatPanel 渲染在 PanelManagerProvider 内部）
+  const { setPanelVisible } = usePanelManager();
+  const handleOpenTweaks = () => setPanelVisible('tweaks', true);
   // V2：streaming 状态从 header 移到 Send 按钮，header 不再显示文字。
   // agentProgress 还保留——后续如果想加进度气泡（hover Send 看 last tool）可用。
   void agentProgress;
@@ -72,6 +77,34 @@ export default function ChatPanel({
           </span>
           <ChevronDown size={12} strokeWidth={1.75} color={COLOR.sub} style={{ flexShrink: 0 }} />
         </button>
+
+        {/* C1：Tweaks 入口 — agent expose 过控件后才显示。点击打开 Tweaks 浮窗 */}
+        {tweaksAvailable && (
+          <button
+            onClick={handleOpenTweaks}
+            title="打开 Tweaks 面板（agent 已暴露可调控件）"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: `${GAP.xs}px ${GAP.sm}px`,
+              fontFamily: FONT_MONO, fontSize: 10, color: COLOR.sub,
+              background: 'transparent', border: 'none', borderRadius: 4,
+              cursor: 'pointer',
+              letterSpacing: '0.04em',
+              transition: 'background 0.15s, color 0.15s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
+              e.currentTarget.style.color = COLOR.text2;
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = COLOR.sub;
+            }}
+          >
+            <Sliders size={12} strokeWidth={1.75} />
+            Tweaks
+          </button>
+        )}
 
         {/* 结束本会话：streamInput query 终结 + URL 跳回 /work（前端 state 由 effect reset）
             仅当有 active session 时显示，避免 /work 路径误触 */}

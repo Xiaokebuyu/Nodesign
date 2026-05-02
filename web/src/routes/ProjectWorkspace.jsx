@@ -73,6 +73,7 @@ export default function ProjectWorkspace() {
   const [inputs, setInputs] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [queueDepth, setQueueDepth] = useState(0);  // streamInput 模式下 inputQueue 积压数（"已排队 N 条"）
+  const [isTweaksExposed, setIsTweaksExposed] = useState(false);  // agent 调过 expose_tweaks 才在 ChatPanel 显示打开按钮
   const [wsStatus, setWsStatus] = useState('connecting');     // 'connecting' | 'open' | 'reconnecting' | 'closed'
   const [lastEventAt, setLastEventAt] = useState(Date.now()); // 用来检测"isStreaming 但长时间无事件"
   const [stuckSeconds, setStuckSeconds] = useState(0);        // 0=正常；>=30=显示"agent 还在思考"
@@ -234,6 +235,7 @@ export default function ProjectWorkspace() {
     setQueueDepth(0);                 // 清 queue depth（切 session 跨 query 不延续）
     setStuckSeconds(0);               // 清 stuck 计时
     setLastEventAt(Date.now());       // 重置事件时间避免切 session 时误报"卡住"
+    setIsTweaksExposed(false);        // 切 session 时清，新 session 待 agent 重 expose
     useGlobalStore.getState().clearPlanForApproval();  // 清 plan 卡（如果切 session 时还在等 approval）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, currentSessionId]);
@@ -574,6 +576,7 @@ export default function ProjectWorkspace() {
       case 'run.tweaks_exposed':
         // C5: agent 调 expose_tweaks 写 spec.tweaks → TweaksPanel reload schema
         setTweaksReloadKey(k => k + 1);
+        setIsTweaksExposed(true);  // ChatPanel header 上显示打开按钮（PanelMenu 下架后唯一入口）
         showToast(`Tweaks 已更新（${evt.count} 个控件）`, 'info');
         break;
 
@@ -1182,6 +1185,7 @@ export default function ProjectWorkspace() {
             onOpenSessionList={() => setSessionListOpen(true)}
             onCloseSession={handleCloseSession}
             hasActiveSession={!!currentSessionId}
+            tweaksAvailable={isTweaksExposed}
           />
         </aside>
 
