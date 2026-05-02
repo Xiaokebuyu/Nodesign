@@ -101,29 +101,31 @@ export default function ProjectWorkspace() {
   // ── memo / callback（必须在 early return 之前）──
   const deckSpec = useMemo(() => MOCK_DECK_SPEC, []);
 
-  // F2.1：FloatingPanel 默认 layout —— 三浮窗位置接近原三栏（左 chat / 中
-  // canvas / 右 inspect），其他 4 tab 默认 hidden（F2.2 加）。
-  // 用 viewport 宽度算，1600+ 显示器友好；小屏用 Math.max 兜底防负数（preview
-  // headless 窗口可能 421x12 这种极小尺寸）。
+  // F2.1+F3.1：FloatingPanel 默认 layout —— 三浮窗紧凑布局，最大化空间利用
+  // 用 viewport 算，Math.max 兜底防小窗口（preview headless 实测可能 421x12）
   const defaultPanels = useMemo(() => {
     const rawW = typeof window !== 'undefined' ? window.innerWidth : 1600;
     const rawH = typeof window !== 'undefined' ? window.innerHeight : 900;
-    const W = Math.max(rawW, 1200);   // 兜底最低 1200 防小窗口算出负数
+    const W = Math.max(rawW, 1200);
     const H = Math.max(rawH, 700);
-    const topOffset = 80;
-    const sideMargin = 12;
-    const panelHeight = Math.max(H - topOffset - 24, 400);    // 至少 400 高
-    const canvasWidth = Math.max(W - 760 - 24, 400);          // 至少 400 宽
-    const rightX = Math.max(W - 360 - sideMargin, 600);
+    const TOP = 60;            // 紧贴 TopBar（之前 80 留太多）
+    const SIDE = 6;            // 边缘 6px（之前 12）
+    const GAP_BETWEEN = 6;     // panel 之间 6px（之前 12）
+    const CHAT_W = 340;        // 左侧 Chat 宽（缩 20）
+    const INSPECT_W = 340;     // 右侧 Inspect 宽
+    const panelH = Math.max(H - TOP - SIDE, 400);
+    const canvasW = Math.max(W - CHAT_W - INSPECT_W - SIDE * 2 - GAP_BETWEEN * 2, 400);
+    const canvasX = SIDE + CHAT_W + GAP_BETWEEN;
+    const inspectX = W - INSPECT_W - SIDE;
     return {
-      chat:    { position: { x: sideMargin, y: topOffset }, size: { width: 360, height: panelHeight }, visible: true, zIndex: 100 },
-      canvas:  { position: { x: sideMargin + 372, y: topOffset }, size: { width: canvasWidth, height: panelHeight }, visible: true, zIndex: 101 },
-      inspect: { position: { x: rightX, y: topOffset }, size: { width: 348, height: panelHeight }, visible: true, zIndex: 102 },
-      // F2.2 加：comments / decisions / tweaks / system 默认 hidden
-      comments:  { position: { x: rightX, y: topOffset + 100 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
-      decisions: { position: { x: rightX, y: topOffset + 140 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
-      tweaks:    { position: { x: rightX, y: topOffset + 180 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
-      system:    { position: { x: rightX, y: topOffset + 220 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
+      chat:    { position: { x: SIDE,     y: TOP }, size: { width: CHAT_W,    height: panelH }, visible: true, zIndex: 100 },
+      canvas:  { position: { x: canvasX,  y: TOP }, size: { width: canvasW,   height: panelH }, visible: true, zIndex: 101 },
+      inspect: { position: { x: inspectX, y: TOP }, size: { width: INSPECT_W, height: panelH }, visible: true, zIndex: 102 },
+      // 4 tab 默认 hidden，position 接近右栏方便用户开了不会找不到
+      comments:  { position: { x: inspectX, y: TOP + 60 }, size: { width: INSPECT_W, height: 360 }, visible: false, zIndex: 100 },
+      decisions: { position: { x: inspectX, y: TOP + 90 }, size: { width: INSPECT_W, height: 360 }, visible: false, zIndex: 100 },
+      tweaks:    { position: { x: inspectX, y: TOP + 120 }, size: { width: INSPECT_W, height: 360 }, visible: false, zIndex: 100 },
+      system:    { position: { x: inspectX, y: TOP + 150 }, size: { width: INSPECT_W, height: 360 }, visible: false, zIndex: 100 },
     };
   }, []);
 
