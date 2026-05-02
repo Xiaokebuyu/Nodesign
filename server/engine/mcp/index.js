@@ -30,6 +30,7 @@ import { makeScreenshotCanvasTool } from './tools/screenshot.js';
 import { makeExportHandoffTool } from './tools/export-handoff.js';
 import { makeRecordDecisionTool } from './tools/record-decision.js';
 import { makeWebSearchTool } from './tools/web-search.js';
+import { makeReadPageTool } from './tools/read-page.js';
 
 /**
  * 创建 Nodesign 的 MCP server，绑定当前 run 的依赖。
@@ -76,6 +77,11 @@ export function createNodesignMcpServer({ workspaceRoot, projectId, ctx } = {}) 
       // WebFetch 不在这里 — 用 SDK 内置（loop.js DEFAULT_TOOL_ALLOWLIST 启用），
       // 它自带 LLM summarize 能控制上下文，不需要自实现。
       makeWebSearchTool({ ctx }),
+
+      // S1c canvas 焕新升级 — read_page 让 agent 精确读 canvas.html 任意页
+      // （`<section data-page="N">` 一段），不必 Read 整文件 + Grep + offset/limit。
+      // 解 2026-05-02 用户观察"agent 只看第一页"痛点。
+      makeReadPageTool({ workspaceRoot, ctx }),
     ],
   });
 }
