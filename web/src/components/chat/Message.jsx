@@ -283,8 +283,17 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
     </div>
   );
 
+  // 时间轴 icon 颜色：success → 绿；error → 红；submitting/running → warn；其余 sub
+  const tlIconColor = status === 'success'
+    ? COLOR.success
+    : status === 'error'
+      ? COLOR.error
+      : (submitting || !isAnswered)
+        ? COLOR.warn
+        : COLOR.sub;
+
   return (
-    <div style={{ padding: `${GAP.sm}px ${GAP.lg}px` }}>
+    <TimelineNode icon={HelpCircle} iconColor={tlIconColor}>
       <div
         style={{
           padding: GAP.md,
@@ -294,7 +303,7 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
           opacity: isAnswered ? 0.6 : 1,
         }}
       >
-        {/* header chip + progress */}
+        {/* header chip（agent 自己写的 q.header）+ 进度点 */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -313,7 +322,6 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
             color: COLOR.text2,
             letterSpacing: '0.04em',
           }}>
-            <HelpCircle size={10} />
             {currentQ.header || 'AGENT 问'}
           </div>
           {progress}
@@ -475,7 +483,7 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
           </div>
         )}
       </div>
-    </div>
+    </TimelineNode>
   );
 }
 
@@ -632,6 +640,7 @@ const TOOL_ICONS = {
   WebFetch: Globe,
   WebSearch: Globe,
   Task: Bot,                                   // subagent → 机器人（派任务给子代理）
+  AskUserQuestion: HelpCircle,                 // 问号 = 主动问用户
   // MCP nodesign 工具
   'mcp__nodesign__screenshot_canvas': Eye,
   'mcp__nodesign__export_handoff': Download,
