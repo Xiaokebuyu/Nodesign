@@ -298,6 +298,10 @@ export async function runSession({
       sharedCtx.emit(Events.error(info?.message || 'unknown', info?.code, info?.stack));
     }
     activeTurnRunId = null;
+    // 同步清 active-runs 的 currentRunId —— 否则 SDK 在 result 之后推的"尾巴
+    // system message"（status / post_turn_summary 等）进 stream 时，cid 仍 = 已结束
+    // 的老 runId 会触发 startTurn() 再调 markRunStarted() 抛"不在 pending 状态"
+    setCurrentTurnRunId(sessionId, null);
   };
 
   // ── main stream loop ──
