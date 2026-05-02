@@ -3,10 +3,11 @@ import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Share2, Download, MoreHorizontal } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import ThreeColumnLayout from '../components/layout/ThreeColumnLayout.jsx';
-// F0：临时 demo 验证 react-rnd —— 装库 + HMR + 拖拽 + resize 在浏览器里能跑。
-// 验证完会在 F1 抽成 FloatingPanel 组件后删掉这段 demo。
-import { Rnd } from 'react-rnd';
+// F1.1：FloatingPanel 抽出来后用这个组件 demo（原 react-rnd 直接调
+// 删掉，改为 FloatingPanel 包装）。F2 真接业务时把所有功能 panel 替换。
 import { createPortal } from 'react-dom';
+import FloatingPanel from '../components/layout/FloatingPanel.jsx';
+import { Sparkles } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
 import ContextPanel from '../components/context-panel/ContextPanel.jsx';
@@ -950,54 +951,32 @@ export default function ProjectWorkspace() {
         }}
       />
 
-      {/* F0：临时 demo Rnd 验证 react-rnd 装库可用。F1 抽 FloatingPanel 后删 */}
+      {/* F1.1 demo：用 FloatingPanel 组件替代 F0 直接调 Rnd，验证抽象可用。
+          F2 真接业务时把所有功能模块替换，这个 demo 删掉。 */}
       {createPortal(
-        <Rnd
-          default={{ x: 80, y: 100, width: 280, height: 180 }}
-          minWidth={200}
-          minHeight={120}
-          bounds="window"
-          dragHandleClassName="rnd-demo-handle"
-          style={{
-            zIndex: 9999,
-            background: '#fff',
-            borderRadius: 12,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.08)',
-            border: '1px solid rgba(190, 160, 130, 0.2)',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
+        <FloatingPanel
+          id="f1-demo"
+          title="F1 demo · FloatingPanel"
+          icon={Sparkles}
+          defaultPosition={{ x: 80, y: 100 }}
+          defaultSize={{ width: 320, height: 200 }}
+          zIndex={9999}
+          onClose={() => console.log('[FloatingPanel demo] close clicked')}
         >
-          <div
-            className="rnd-demo-handle"
-            style={{
-              cursor: 'move',
-              padding: '10px 14px',
-              background: 'rgba(255,255,255,0.95)',
-              borderBottom: '1px solid rgba(190, 160, 130, 0.15)',
-              fontFamily: "'SF Mono', monospace",
-              fontSize: 12,
-              fontWeight: 500,
-              color: '#3a2a18',
-              userSelect: 'none',
-            }}
-          >
-            ◇ F0 demo · 拖我 / 拖右下角 resize
-          </div>
           <div style={{
             padding: 14,
             fontFamily: "-apple-system, sans-serif",
             fontSize: 12,
             color: '#5a5550',
             lineHeight: 1.6,
-            flex: 1,
           }}>
-            如果你能拖动我 + 改我大小，<br/>
-            说明 react-rnd 已经 OK ✓<br/>
-            <span style={{ color: '#a09888' }}>F1 抽 FloatingPanel 后这个 demo 会删掉。</span>
+            FloatingPanel 抽象 OK ✓<br/>
+            <span style={{ color: '#a09888' }}>
+              拖 title bar 移动 / 拖右下角 resize / 点 X 关闭（看 console.log）。<br/>
+              F2 真接业务时所有功能 panel 都用这个组件，这段 demo 删掉。
+            </span>
           </div>
-        </Rnd>,
+        </FloatingPanel>,
         document.body
       )}
     </AppShell>
