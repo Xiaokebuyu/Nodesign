@@ -760,6 +760,25 @@ export default function ProjectWorkspace() {
     }
   };
 
+  /** streamInput 重构：用户主动结束当前 session（终结 query handle）
+   *  - 调 close endpoint → backend inputQueue.close + abortController.abort
+   *  - navigate to /work → currentSessionId 变 null → useEffect 自动 reset 前端 state
+   *  - session JSONL 不删，从 SessionListModal 仍可找回（resume 走 forkSession）
+   */
+  const handleCloseSession = async () => {
+    if (!currentSessionId) return;
+    try {
+      await Sessions.close(id, currentSessionId);
+    } catch (err) {
+      // close 失败不阻塞前端 — 仍 navigate 让用户能继续
+      console.warn('[Project] close session failed:', err.message);
+    }
+    setIsStreaming(false);
+    setCurrentRunId(null);
+    setActiveRun(null);
+    navigate(`/projects/${id}/work`, { replace: true });
+  };
+
   /** 终止当前活跃 run（用户点 ChatPanel 的 Stop 按钮） */
   const handleStop = async () => {
     if (!currentRunId) return;
@@ -1127,6 +1146,8 @@ export default function ProjectWorkspace() {
             todos={todos}
             sessionTitle={currentSessionTitle}
             onOpenSessionList={() => setSessionListOpen(true)}
+            onCloseSession={handleCloseSession}
+            hasActiveSession={!!currentSessionId}
           />
         </aside>
 

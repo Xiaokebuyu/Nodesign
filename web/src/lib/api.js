@@ -271,6 +271,10 @@ export const Sessions = {
   /** 删 session JSONL（顺带清 active_session_id 如果指向它） */
   remove: (pid, sid) =>
     jsonRequest('DELETE', `/api/projects/${pid}/sessions/${sid}`),
+  /** 关闭活跃 query session（streamInput 模式，inputQueue.close + abortController.abort）。
+   *  query 进程退出，下次 turn 该 sid 起新 runSession。session JSONL 不删，jsonl 仍可 resume */
+  close: (pid, sid) =>
+    jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/close`),
   /**
    * 跨项目最近 session 聚合（GET /api/sessions/recent）
    * @param {object} opts

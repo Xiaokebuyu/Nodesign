@@ -587,24 +587,11 @@ export async function runAgent({
     : buildUserMessageStream(brief);
 
   try {
-    // S1：resume 兜底 fallback。store.js 启动时已一次性清洗老 active_session_id
-    //（原 persistSession=false 时 setActiveSession 写入的 sid 全部无效），
-    // 但仍可能漏网（手工 INSERT、未来回归）。query() 抛 resume 相关错误时
-    // 重跑一次去掉 resume，避免整个 turn 因为一个失效 sid 直接挂掉。
-    let stream;
-    try {
-      stream = query({ prompt: promptInput, options: sdkOptions });
-    } catch (initErr) {
-      const msg = String(initErr?.message || '');
-      if (resumeSessionId && /resume|session.*not.*found|no.*such.*session/i.test(msg)) {
-        console.warn(`[run ${runId}] resume failed (${resumeSessionId.slice(0, 8)}…), retrying without resume:`, msg);
-        ctx.emit({ type: 'run.resume_failed_fallback', reason: msg, staleSessionId: resumeSessionId });
-        const { resume: _drop, ...rest } = sdkOptions;
-        stream = query({ prompt: promptInput, options: rest });
-      } else {
-        throw initErr;
-      }
-    }
+    // 注：resume 失败 fallback 已删（Phase 4.1 cleanup）。原本是为 streamInput
+    // 之前的 per-turn jsonl resume 路径兜底——现在生产 turn endpoint 走 runSession
+    // 完全不依赖 jsonl resume；此 runAgent 入口仅留给 _probe-* 测试脚本，它们
+    // 都不传 resumeSessionId，永远不会触发那个兜底。
+    const stream = query({ prompt: promptInput, options: sdkOptions });
 
     // query() 返回的就是 Query handle（继承 AsyncGenerator<SDKMessage, void>）。
     // 立即把它 attach 到 active-runs，让上层 endpoint 能调

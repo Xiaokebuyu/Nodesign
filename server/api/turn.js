@@ -7,20 +7,24 @@
  *     attachments: [{ path, ... }],  // 附件托盘里的内容（asset / anchor / comment）
  *     skillId?:    string,           // 默认走 project.skillId
  *   }
- *   return 202 { runId }
+ *   return 202 { runId, sessionId }
  *
- * 行为：
+ * 行为（streamInput 重构后）：
  *   1. 校验 project + 解析 input
- *   2. composeUserMessage：拼成 SDK content blocks（P0+ s1 C2 切流式之前是字符串）
- *   3. createRun（pending） — projectId 写入；brief 落 displayText 作审计
- *   4. 立即返回 runId（agent 异步在后端跑）
- *   5. 后台 runAgent：cwd = project workspace，事件流走 project EventBus；
- *      content blocks 走 SDK 的 prompt: AsyncIterable<SDKUserMessage> 接口
- *   6. 跑完：把 sdkSessionId 写回 project.activeSessionId（下次 turn resume）
+ *   2. composeUserMessage：拼成 SDK content blocks（多模态 / system 提示注入）
+ *   3. createRun（pending） — per-turn record，前端按 runId 跟踪
+ *   4. 立即返回 runId + sessionId（agent 异步在后端跑）
+ *   5. 看 hasActiveQuerySession(sid)：
+ *      - 已有 → pushUserMessage 进 inputQueue，runSession 拉走处理（追加 / 续 chat）
+ *      - 没有 → startNewRunSession 起新 long-running query handle，预 push 首条 message
+ *   6. setActiveSession：写 project.activeSessionId 让下次不带 sid 的 turn fallback
+ *
+ * 续 turn 不依赖 jsonl resume —— streamInput 模式 query 横跨整个 session，
+ * conversation state 在 SDK binary 内存里。
  *
  * 错误：
- *   - runAgent throw → 已通过 EventBus 推 run.error；console 留痕；
- *     HTTP 已经 202 返回，不再回 5xx
+ *   - runSession throw → 已通过 EventBus 推 run.error；console 留痕
+ *   - HTTP 已经 202 返回，不再回 5xx
  */
 
 import express from 'express';
@@ -71,14 +75,18 @@ router.post('/:pid/turn', async (req, res, next) => {
     // C4：先确定 sessionRoot，给 composeUserMessage 看 pending-changes buffer
     // （sid 解析逻辑下面已写）—— 提早 ensure 一次让 buffer 检查能命中真路径。
 
-    // H3：session id 解析逻辑
-    //   - body.sessionId === string → 续约该 session（cwd=sessions/<sid>，传 resume）
+    // session id 解析逻辑（streamInput 模式）：
+    //   - body.sessionId === string → 用该 sid（已有活 query 就 push，没有就起新 runSession）
     //   - body.sessionId === null → 新建 session（前端"+新会话"显式触发）
     //   - body.sessionId 不传 → fallback project.activeSessionId（向后兼容）
     //
-    // 新建场景下用 randomUUID 预生成 sid，传给 SDK options.sessionId 让 SDK
-    // 用我们的 sid（d.ts:1537 sessionId 单独可传，只要不跟 resume 同用）。
-    // 这样 cwd 能提前切到 sessions/<sid>/，agent 一启动就在 session 沙盒里跑。
+    // 新建场景用 randomUUID 预生成 sid，传给 SDK options.sessionId 让 SDK 用
+    // 我们的 sid（d.ts:1537 sessionId 单独可传）。cwd 提前切到 sessions/<sid>/，
+    // agent 一启动就在 session 沙盒里跑。
+    //
+    // 变量名仍叫 resumeSessionId 是历史遗留——streamInput 模式不真"resume jsonl"，
+    // 它只是"当前要用的 sid"。Phase 4 cleanup 时未 rename 是因为有大量 callsite
+    // 兼容成本（loop.js 老路径仍用此名）。
     let resumeSessionId;
     if ('sessionId' in (req.body || {})) {
       resumeSessionId = sessionId || null;
