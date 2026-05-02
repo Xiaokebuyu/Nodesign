@@ -4,44 +4,34 @@ import TimelineGroup from './TimelineGroup.jsx';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE } from '../../lib/theme.js';
 
 /**
- * groupMessages —— thinking + tool + 短过场 assistant 进 timeline group；
- * 长 assistant 正式回复 break group 显示 single。
+ * groupMessages —— thinking + tool 进 timeline group；任何 assistant text
+ * 都 break group 让 DONE 出现 + assistant 内容作 single 显示。
  *
- * 启发式判断"短过场" vs "正式回复"：
- *   - 含 `\n\n`（多段）→ 正式回复，break
- *   - 长度 > 200 字符 → 正式回复，break
- *   - 末尾是问号 → agent 在问用户，break
- *   - 否则（短单行过程叙述如"接下来改 page 4"）→ 留 group 作 timeline node
+ * 演进史：
+ *   - H5：thinking+tool+assistant 全进 group + 末尾抽 final text
+ *   - V2：assistant 全 break —— 用户反馈"每个 Edit 后的 1 句话也 break，太碎"
+ *   - V3：启发式 isShortNarration（< 200 字 + 无 \n\n + 不带 ?）当过场不 break
+ *   - V4（本次）：去 isShortNarration —— 用户反馈交错模式下 60-150 字的真实
+ *     内容（"已完成 page 2，接下来…"）被当过场，DONE 永远不显示。
+ *     现在：任何 assistant text 都 break，每段 thinking/tool 工作收尾就出 DONE。
  *
- * 这样视觉上：
- *   - agent "想→做→说一句→做→说一句→做" 这种连续工作 → 一个 group 视觉连贯
- *   - agent "[做完一坨] 我做了 A/B/C 三件事，markdown 表格..." → break 让正式
- *     回复独立显示
+ * 为什么 V4 不再担心 V3 的"碎"问题：
+ *   - Kimi 交错模式下 assistant text 频率本来就低（它喜欢做完一坨再总结）
+ *   - 如果真出现 "Edit→narration→Edit→narration" 这种碎模式，那是 SKILL.md
+ *     该约束的事（让 agent "做完一段再报告"），不是前端该兜底的
+ *   - 缺 DONE 比多碎 group 更坏 —— 用户没法判断 agent "这段做完没"
  *
  * group 的 closed 信号：
- *   - 后面接 break message（长 assistant / user / system）→ closed=true
+ *   - 后面接任何非 timeline message（assistant / user / system）→ closed=true
  *   - 最后一个 group + !isStreaming → closed=true
  *   - 最后一个 group + isStreaming → closed=false
- *
- * 历史：H5 是 thinking+tool+assistant 全进 group + 末尾 final text 抽出。
- * 第一版改动是 assistant 全 break，但用户反馈"短过场也 break"导致每个
- * Edit 自己一个 group 太碎。当前版本（启发式 break）是折中。
  */
-function isShortNarration(text) {
-  if (!text || typeof text !== 'string') return true;  // 空 assistant 当过场
-  if (text.length > 200) return false;
-  if (text.includes('\n\n')) return false;
-  if (/[?？]\s*$/.test(text.trim())) return false;
-  return true;
-}
-
 function groupMessages(messages, isStreaming) {
   const groups = [];
   let current = null;
   for (const m of messages) {
-    const isTimeline = m.role === 'thinking'
-      || m.role === 'tool'
-      || (m.role === 'assistant' && isShortNarration(m.content));
+    // assistant 任何内容都不进 group —— 让 DONE 显示在工作段尾
+    const isTimeline = m.role === 'thinking' || m.role === 'tool';
     if (isTimeline) {
       if (!current) {
         current = { type: 'timeline', items: [], closed: false };
@@ -49,7 +39,7 @@ function groupMessages(messages, isStreaming) {
       }
       current.items.push(m);
     } else {
-      // user / 长 assistant / system 全 break group
+      // assistant / user / system 全 break group
       if (current) { current.closed = true; current = null; }
       groups.push({ type: 'single', message: m });
     }
