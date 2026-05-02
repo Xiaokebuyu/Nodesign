@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Rnd } from 'react-rnd';
 import { X } from 'lucide-react';
 import { COLOR, FONT_MONO, FONT_SIZE, GAP, STAGE } from '../../lib/theme.js';
@@ -51,6 +52,8 @@ export default function FloatingPanel({
   bodyStyle,
 }) {
   const state = usePanelState(id);
+  const [dragging, setDragging] = useState(false);
+  const [resizing, setResizing] = useState(false);
 
   // 受控 vs 非受控
   const controlled = !!state;
@@ -63,11 +66,46 @@ export default function FloatingPanel({
   const size = controlled && state.size ? state.size : defaultSize;
   const zIndex = controlled ? state.zIndex : 100;
 
+  const handleDragStart = () => setDragging(true);
   const handleDragStop = (_e, d) => {
-    if (controlled) state.setPosition({ x: d.x, y: d.y });
+    setDragging(false);
+    if (!controlled) return;
+
+    // F3.1：拖到边缘自动 snap（macOS / Aero Snap 风）
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const SNAP_THRESHOLD = 40;            // 拖到边缘 40px 以内触发 snap
+    const TOP_OFFSET = 60;                // 留 TopBar 空间
+    const PAD = 8;
+    const usableH = H - TOP_OFFSET - PAD;
+
+    // 顶部 → max（全屏，不含 TopBar）
+    if (d.y < TOP_OFFSET) {
+      state.setPosition({ x: PAD, y: TOP_OFFSET });
+      state.setSize({ width: W - PAD * 2, height: usableH });
+      return;
+    }
+    // 左边缘 → 左半屏
+    if (d.x < SNAP_THRESHOLD) {
+      state.setPosition({ x: PAD, y: TOP_OFFSET });
+      state.setSize({ width: Math.floor(W / 2) - PAD * 2, height: usableH });
+      return;
+    }
+    // 右边缘 → 右半屏（panel 自身宽度也算，X + width 接近 W）
+    const panelWidth = (controlled && state.size?.width) || defaultSize.width;
+    if (d.x + panelWidth > W - SNAP_THRESHOLD) {
+      const halfW = Math.floor(W / 2) - PAD * 2;
+      state.setPosition({ x: Math.floor(W / 2) + PAD, y: TOP_OFFSET });
+      state.setSize({ width: halfW, height: usableH });
+      return;
+    }
+    // 自由位置
+    state.setPosition({ x: d.x, y: d.y });
   };
 
+  const handleResizeStart = () => setResizing(true);
   const handleResizeStop = (_e, _direction, ref, _delta, pos) => {
+    setResizing(false);
     if (controlled) {
       state.setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
       state.setPosition({ x: pos.x, y: pos.y });
@@ -77,6 +115,9 @@ export default function FloatingPanel({
   const handleMouseDown = () => {
     if (controlled) state.bringToFront();
   };
+
+  // F3.1：拖拽 / resize 时 panel 半透明 + shadow 加深（macOS 拖窗口同款感）
+  const interacting = dragging || resizing;
 
   // 受控模式下没传 onClose → 默认 X = setVisible(false)
   // 非受控模式没传 onClose → X 不显示
@@ -90,6 +131,8 @@ export default function FloatingPanel({
         ? { position, size, onDragStop: handleDragStop, onResizeStop: handleResizeStop }
         : { default: { ...defaultPosition, ...defaultSize } }
       )}
+      onDragStart={handleDragStart}
+      onResizeStart={handleResizeStart}
       minWidth={minWidth}
       minHeight={minHeight}
       bounds="window"
@@ -104,11 +147,15 @@ export default function FloatingPanel({
         zIndex,
         background: '#fff',
         borderRadius: STAGE.radius,
-        boxShadow: STAGE.shadow,
+        boxShadow: interacting
+          ? '0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08)'
+          : STAGE.shadow,
         border: `1px solid ${STAGE.borderWarm}`,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        opacity: interacting ? 0.92 : 1,
+        transition: 'opacity 0.15s ease, box-shadow 0.15s ease',
       }}
     >
       {/* Title bar */}
