@@ -202,4 +202,25 @@ export const Events = {
   toolFailure: (toolName, error) => ({
     type: 'run.tool_failure', toolName, error,
   }),
+
+  // ── Canvas 焕新升级 S1（2026-05-02）──
+
+  // S1d PostToolUse(Edit|Write canvas.html) hook 自动检测改动的 page 号 emit。
+  // 前端 SlideNavigator 收到后自动 scrollIntoView + 1.5s pulse 高亮该 section。
+  // pages: number[] —— 一次 Edit 可能跨多页（罕见），通常单元素。
+  // anchor: 可选，data-anchor 值（如 'cover-title'），前端能精确高亮元素而非整页。
+  canvasFocusPage: (pages, anchor) => ({
+    type: 'run.canvas_focus_page',
+    pages,
+    ...(anchor ? { anchor } : {}),
+  }),
+
+  // S1b PostToolUse(Edit|Write canvas.html) hook 发现引用了非白名单 CDN URL。
+  // 不阻塞 agent —— agent 已经写完了，hook 软警告 + emit 给前端可见。
+  // 前端可在 Inputs 旁显示 "⚠ 检测到外部资源引用 X 不在 trusted 白名单"。
+  cdnWarning: (urls, page) => ({
+    type: 'run.cdn_warning',
+    urls,    // 数组，可能多个
+    ...(page !== undefined ? { page } : {}),
+  }),
 };
