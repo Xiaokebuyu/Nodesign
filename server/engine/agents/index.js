@@ -100,9 +100,9 @@ export function createAgents() {
         'Read', 'Glob', 'Grep',
         'TodoWrite',
       ],
-      // maxTurns 限制：研究是有限动作，5 turn 足够 search → fetch → 报告。
-      // 主 agent 等子代理回应是阻塞的，太长会让用户体感"卡住"。
-      maxTurns: 5,
+      // maxTurns 限制：研究是有限动作。8 turn 够拆 brief → 1-3 search → ≤5 hotlink
+      // 验证 → 报告。主 agent 等子代理回应是阻塞的，太长会让用户体感"卡住"。
+      maxTurns: 8,
     },
 
     'vision-checker': {
