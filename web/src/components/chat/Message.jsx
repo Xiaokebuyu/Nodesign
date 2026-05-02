@@ -568,24 +568,32 @@ function SystemMessage({ variant = 'warn', content }) {
  *
  * 节点图标固定 Clock4，颜色区分状态（流式 warn 旋转 / 完成 sub 静态）。
  *
- * 视觉变更（参照用户图 Claude Code 风格）：
- *   - 删 inner "▼ THINKING" label —— Clock icon 已经传递"这是思考"语义
- *   - 内容直接显示（不再嵌一层 collapse）
- *   - 长 thinking（> LONG_THRESHOLD）默认显示 preview + "Show more" 底部独立行
- *   - 展开后显示全部 + "Show less" 收回
- *   - 流式中不折叠（用户要看实时打字）
+ * 折叠规则（两套 threshold）：
+ *   1. 流式 + 内容 > STREAMING_AUTO_COLLAPSE_AT(1000 字) → 自动收起到
+ *      STREAMING_PREVIEW(500 字)，不给"展开"按钮（防 thinking 无限增长占满屏）。
+ *      显示总字数提示，等 streaming 结束再走规则 2。
+ *   2. 非流式 + 内容 > THINKING_LONG_THRESHOLD(320 字) → 默认显示
+ *      THINKING_PREVIEW_CHARS(220 字) preview + "Show more"，可手动展开。
+ *
+ * 流式短内容（< 1000 字）一直显示全文 —— 用户要看打字效果。
  */
 const THINKING_LONG_THRESHOLD = 320;
 const THINKING_PREVIEW_CHARS = 220;
+const STREAMING_AUTO_COLLAPSE_AT = 1000;
+const STREAMING_PREVIEW = 500;
 
 function ThinkingMessage({ content, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
 
   const text = content || '';
-  // 流式中不折叠（要看打字）；非流式且超长才提供折叠
+  // 流式中超长 → 强制收起防视觉爆炸
+  const veryLongStreaming = isStreaming && text.length > STREAMING_AUTO_COLLAPSE_AT;
+  // 非流式长内容 → 可手动展开
   const longEnough = !isStreaming && text.length > THINKING_LONG_THRESHOLD;
-  const showFull = isStreaming || expanded || !longEnough;
-  const displayed = showFull ? text : text.slice(0, THINKING_PREVIEW_CHARS);
+  // 显示全文条件：流式中超长强制 false；其余按现有逻辑
+  const showFull = !veryLongStreaming && (isStreaming || expanded || !longEnough);
+  const previewLen = veryLongStreaming ? STREAMING_PREVIEW : THINKING_PREVIEW_CHARS;
+  const displayed = showFull ? text : text.slice(0, previewLen);
 
   return (
     <TimelineNode
@@ -601,6 +609,16 @@ function ThinkingMessage({ content, isStreaming }) {
         {displayed}
         {!showFull && (
           <span style={{ color: COLOR.dim }}>… </span>
+        )}
+        {veryLongStreaming && (
+          <div style={{
+            marginTop: 6,
+            fontSize: FONT_SIZE.xs,
+            color: COLOR.dim,
+            fontStyle: 'italic',
+          }}>
+            思考中… 已 {text.length} 字（先收起防刷屏，思考完毕后可展开）
+          </div>
         )}
         {longEnough && (
           <div style={{ marginTop: 6 }}>
