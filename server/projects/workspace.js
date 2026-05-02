@@ -224,6 +224,25 @@ export async function ensureSessionWorkspace(projectId, sessionId) {
     }
   }
 
+  // sessions/<sid>/assets → ../../shared/assets/
+  // 让 agent 用 prelude/SKILL.md 教的 `./assets/` 直接访问（Glob/Read），
+  // 不必关心 ../../shared/ 内部结构。修 H3 session-scoped 重构后的路径漂移
+  // —— 之前 prelude 教 `./assets/` 但实际路径是 `../../shared/assets/`，
+  // Glob `assets/**/*` 永远返 0 让 agent 误以为没素材，连带 Read 图片也
+  // 因 ENOENT 失败（用户报告的"Read 无法读取图片"）。
+  //
+  // 相对路径：从 sessions/<sid>/ 看 ../../shared/assets/（出 sid → 出 sessions → 入 shared）。
+  // additionalDirectories 已含 sharedRoot（loop.js），软链只是给 agent 一个
+  // 自然的 cwd-相对入口；权限走 SDK sandbox.allowRead。
+  const assetsLink = path.join(sessionRoot, 'assets');
+  if (!(await pathExists(assetsLink))) {
+    try {
+      await fs.symlink(path.join('..', '..', 'shared', 'assets'), assetsLink);
+    } catch (err) {
+      console.warn(`[workspace] assets symlink failed (${err.code || err.message}); agent 将看不到 ./assets/，需手动用 ../../shared/assets/`);
+    }
+  }
+
   // per-session .git
   if (!(await fileExists(path.join(sessionRoot, '.git')))) {
     await runGit(sessionRoot, ['init', '-q', '-b', 'main']);
