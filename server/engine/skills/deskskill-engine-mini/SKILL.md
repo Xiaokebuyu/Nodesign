@@ -69,6 +69,7 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 |---|---|
 | `mcp__nodesign__screenshot_canvas` | **写完 canvas / 改完关键页面后**主动调，自检视觉。用户问"看看效果"也调。可传 `selector` / `pageIndex` 单元素 / 单页精截 |
 | `mcp__nodesign__list_pages` | 想要 deck 总览（多少页 / 每页 layout 和标题）时调，比 read_page 轻 — 只回每页 1 行摘要 |
+| `mcp__nodesign__read_page` | 要看某页**完整 outerHTML**时调（list_pages 摘要不够 / 准备改某页结构）。**比 Read canvas.html limit:N 准** —— 后端按 `<section data-page=N>` 精确切片，不依赖行号 |
 | `mcp__nodesign__query_elements` | 用 CSS selector 找一组元素返 anchor + bbox + text，准备批量改之前调一次拿全清单（"把所有 H1 字号统一" 这种） |
 | `mcp__nodesign__get_computed_styles` | 改某属性前先查当前 px / rgb 实际渲染值，**不要凭印象猜**。也可拿来算对比度 |
 | `mcp__nodesign__navigate_to_page` | 用户问"第 N 页那个东西怎么改"时主动切到该页让用户视觉同步 |
@@ -81,6 +82,121 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 | `mcp__nodesign__web_search` | 需要**最新设计参考 / 字体可用性 / 行业趋势 / 验证某事实**时用。CJK query 自动走 baidu，英文自动走 tavily。**单 turn 上限**：baidu 中文 ≤2 次、tavily ≤3 次、exa ≤2 次（会爆 context）。Query 加年份词（2025/2026）。**不要 baidu 英文**（实测严重跑题）。**重要**：要是这次任务里搜 + 读要花 3+ turn，**派给 explorer 子代理**（见 prelude § 子代理段），别在自己主上下文里搜 |
 | `WebFetch`（SDK 内置）| web_search snippet 不够、必须看原页面时调。input 是 `{ url, prompt }` —— prompt 写"我要从这个页面看 X"，binary 取 URL 后会用 prompt 总结返给你（自带上下文控制，不会灌完整 HTML）。**baidu 的 snippet 通常已含 500-3000 字正文，不需要再 fetch**。**多页 fetch 也派给 explorer**（同上） |
 | `Task` (subagent: `explorer`) | **研究类任务派给它**：找参考图 URL / 字体 CDN / 验证数据 / 找资源链接。子代理在独立 context 里搜+读+总结，回你一份结构化报告，**不污染你的主上下文**。详见 prelude § 子代理段 |
+
+---
+
+## 用户直接编辑协议（pending-changes 流）
+
+用户在画布上**双击改字**或**点元素写评论**时，行为不直接发给你 —— 落到
+`sessions/<sid>/pending-changes.json` 的 buffer 里。下次用户发 chat 时，你
+看到 user message **顶部**会有：
+
+```
+<system>用户在过去时段做了 N 处变更（M 处编辑 + K 条评论）。可调
+mcp__nodesign__get_pending_changes 查看详情；处理完调 mcp__nodesign__clear_pending_changes 清 buffer。</system>
+```
+
+**看到这条提示就主动调 `get_pending_changes`**（不是 user 让你才调）。
+
+返回的 items 有两种 `kind`：
+
+| kind | 含义 | 你该做什么 |
+|---|---|---|
+| `edit` | 用户已经改了文字 + 落盘 + git commit | **当 done deal**，**不要 revert**、不要"我帮你改回原样"。可以在收尾时简短承认"看到你把 X 改成了 Y"。如果改后跟设计意图冲突（如改成超长打破排版），可以提议"要不要我调一下字号配合？" |
+| `comment` | 用户对元素的修改请求（"字号再大一点" / "颜色换蓝") | **当新需求**，用 `Edit` 工具按 anchor 找到元素改。改完调 `highlight(selector)` 让用户视觉锚定 |
+
+**收尾必做**：
+1. 处理完调 `clear_pending_changes`（带可选 `ids` 数组只清处理过的；不传清全部）
+2. 简短告诉用户"处理了 N 条"，让她知道 buffer 不再积压
+
+**don't**：
+- ❌ 看到 system 提示但不调 get_pending_changes（system 提示是硬触发，必须响应）
+- ❌ 把 edit 当 comment 处理（用户已经改了，再 revert 就是反向操作）
+- ❌ comment 处理完忘 clear_pending_changes（下个 turn 又会见到，重复处理）
+
+---
+
+## Tweaks 暴露协议（让用户能拖参数微调）
+
+写完 deck 或用户问"哪些可以调"时调 `expose_tweaks`，把 5-8 个**用户最可能想
+微调**的维度暴露成前端 Tweaks 浮窗的 sliders / colorpickers。控件值改 `:root`
+CSS variable 实时生效，不落盘；用户满意点 Apply 时再发 chat 让你固化。
+
+### 5 种 control 类型
+
+| type | 形态 | 字段 | 例子 |
+|---|---|---|---|
+| `slider` | 拖动条 | `min, max, step, default, unit, target_var` | hero 字号 40-72 px |
+| `color` | 颜色选择 | `default, target_var` | 主色 / 强调色 |
+| `segmented` | 分段选项 | `options: [{label, value}], default, target_var` | 排版密度 紧凑/均衡/舒展 |
+| `toggle` | 开关 | `default (boolean), target_class_on` | 暗色模式 |
+| `select` | 下拉 | `options[], default, target_var` | 字体 family 切换 |
+
+### expose_tweaks 输入 schema
+
+```js
+expose_tweaks({
+  controls: [
+    {
+      id: 'hero-size',                                  // unique 全 deck
+      type: 'slider',
+      label: 'Hero 字号',
+      description: '封面主标题大小',                    // optional 一句解释
+      target_var: '--hero-size',                       // canvas.html :root 里的 var
+      min: 40, max: 72, step: 2, default: 56, unit: 'px',
+    },
+    { id: 'accent', type: 'color', label: '主色',
+      target_var: '--accent', default: '#2d2418' },
+    { id: 'density', type: 'segmented', label: '排版密度',
+      target_var: '--density', default: 'balanced',
+      options: [{label:'紧凑', value:'tight'}, {label:'均衡', value:'balanced'}, {label:'舒展', value:'loose'}] },
+    // ...
+  ],
+  replace: true,        // true 替换全集；false 增量加（默认 true）
+})
+```
+
+### 配套 HTML 写法（必须在 canvas.html `:root` 里有对应 var）
+
+```html
+<style>
+  :root {
+    --hero-size: 56px;
+    --accent: #2d2418;
+    --density: 'balanced';      /* 暂时只是占位，true 切换走 class 或 attr */
+  }
+  .hero { font-size: var(--hero-size); color: var(--accent); }
+</style>
+```
+
+否则 slider 拖了 `--hero-size` 但页面没读这个 var → 控件失灵。
+
+### 何时调 / 何时不调
+
+| 时机 | 该调？ |
+|---|---|
+| 首次写完 deck（>= 3 页有内容） | ✅ 调，5-8 个核心控件 |
+| 用户说"哪些可以调" / "我想调一下" | ✅ 调 |
+| 用户点 Tweaks Apply 后你固化了 :root | ✅ 重新调（更新 default 反映最新值） |
+| 改了 1 个字号 / 微调 | ❌ 不重调（除非 control 集合本身要变） |
+| 用户做的是简单 chat（"你好" / "看一下"） | ❌ 不调 |
+
+### 选什么暴露 —— 设计师视角
+
+挑用户**真的会拖**的，不是所有可调的。优先级（高→低）：
+
+1. **配色变量**（`--accent` / `--bg`） —— 全局影响最大
+2. **字号 scale**（hero 字号 / body 字号） —— 节奏决定
+3. **排版密度**（spacing scale） —— 信息量调节
+4. **暗色模式**（toggle） —— 用户经常想试
+5. **字体切换**（如果有 2-3 个候选字体）
+6. **圆角风格**（sharp / soft）
+7. **强调色**（CTA 高亮色）
+
+**don't**：
+- ❌ 暴露 < 5 个（用户觉得"没东西可调"）也别 > 10 个（眼花）
+- ❌ 暴露细节维度（line-height 1.4 vs 1.5 用户感知不到）
+- ❌ 暴露破坏性维度（改字体 family 可能导致排版崩 → 谨慎）
 
 ---
 
@@ -106,6 +222,11 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 - **a11y**：text-on-bg 对比度 ≥ 4.5（AA），交互元素 ≥ 3:1，img 加 alt
 - **修改优先 Edit 而非 Write**（详见 prelude 的 Edit > Write 段）
 - **`data-tweakable` + `data-anchor` 必加**（详见 prelude 的"HTML 产物的 agentic 标记"段）
+- **`data-node-id` 关键元素加上** —— 给 InspectFloatingCard / pending-changes
+  buffer 找元素用的稳定 id（用户改字 / 评论时 anchor 第一层就靠它）。命名规则：
+  `<page-N>-<role>-<n>`（如 `data-node-id="cover-title-1"` / `page-2-stat-3"`）。
+  没加的元素 fallback 到 path + textHint，但不稳。详见 [Canvas.md § 6.4](Canvas.md)
+  anchor schema
 
 ### deck 特化：必加 tweak 标记的元素
 
