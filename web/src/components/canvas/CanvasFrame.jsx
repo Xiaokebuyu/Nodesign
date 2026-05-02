@@ -6,7 +6,7 @@ import CodeCanvas from './CodeCanvas.jsx';
 import SlideNavigator from './SlideNavigator.jsx';
 import CanvasCandidateBar from './CanvasCandidateBar.jsx';
 import A11yReviewPopover from './A11yReviewPopover.jsx';
-import { COLOR } from '../../lib/theme.js';
+import { COLOR, STAGE } from '../../lib/theme.js';
 
 /**
  * CanvasFrame — Canvas 中栏总壳
@@ -95,7 +95,11 @@ export default function CanvasFrame({
     <div style={{
       flex: 1, minHeight: 0,
       display: 'flex', flexDirection: 'column',
-      background: COLOR.bg,
+      background: '#fff',                          // stage 卡片底
+      borderRadius: STAGE.radius,
+      boxShadow: STAGE.shadow,
+      border: `1px solid ${STAGE.borderWarm}`,
+      overflow: 'hidden',                          // 让 toolbar 上圆角 + iframe 下圆角对齐
     }}>
       {/* 多候选切换条（≥1 个候选时显示）*/}
       {showCandidateBar && (

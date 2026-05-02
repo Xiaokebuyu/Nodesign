@@ -121,6 +121,17 @@ export const PANEL = {
   transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)",
 };
 
+// Stage — Canvas 焕新升级 S2（2026-05-02）：把 iframe 从"贴边平铺"变成
+// "浮在暖底上的卡片"。CanvasFrame 用 STAGE.shadow + STAGE.radius，
+// ThreeColumnLayout 中间 main 用 STAGE.bg + padding 形成呼吸空间。
+export const STAGE = {
+  bg: "#FAF8F5",                                  // 比 COLOR.bg 暖 1-2 度
+  shadow: "0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05)",
+  borderWarm: "rgba(190, 160, 130, 0.15)",        // 暖棕极淡边
+  radius: 12,
+  pad: 12,                                        // stage 周围呼吸（main padding）
+};
+
 // Browse page — 锚定 CardBrowse
 export const BROWSE = {
   backRadius: 10,

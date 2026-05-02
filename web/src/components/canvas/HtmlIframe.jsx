@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { attachEditMode, detachAll } from './DirectEditBridge.js';
 import { COLOR } from '../../lib/theme.js';
+// STAGE token 在父 CanvasFrame 用；HtmlIframe 内层不再用浅棕米色，改纯白让
+// 自己融入 stage 卡片。
 
 /**
  * HtmlIframe — 加载 HTML 产物的核心 iframe
@@ -71,7 +73,7 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
       flex: 1,
       minHeight: 0,
       overflow: 'hidden',  // iframe 自己处理内部滚动，外层不要再加滚动条
-      background: COLOR.bgCard,
+      background: '#fff',  // S2：原 COLOR.bgCard 浅棕；融入 stage 卡片改纯白
       display: 'flex',
       flexDirection: 'column',  // ★ column flex 让 iframe flex:1 真正撑满高度
     }}>

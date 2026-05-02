@@ -1,5 +1,5 @@
 import { Edit3, Eye, Code2, RotateCcw, ShieldCheck } from 'lucide-react';
-import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
+import { COLOR, GAP, FONT_SIZE, FONT_MONO, STAGE } from '../../lib/theme.js';
 
 const MODES = [
   { id: 'edit',    label: 'Edit',    icon: Edit3 },
@@ -12,8 +12,8 @@ export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, 
     <div style={{
       height: 44,
       flexShrink: 0,
-      borderBottom: `1px solid ${COLOR.border}`,
-      background: '#fff',
+      borderBottom: `1px solid ${STAGE.borderWarm}`,    // 暖棕极淡边对齐 stage
+      background: 'rgba(255,255,255,0.95)',             // 半透明白，融入 stage 卡片
       display: 'flex',
       alignItems: 'center',
       padding: `0 ${GAP.lg}px`,

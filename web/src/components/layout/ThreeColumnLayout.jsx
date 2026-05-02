@@ -1,4 +1,4 @@
-import { COLOR } from '../../lib/theme.js';
+import { COLOR, STAGE } from '../../lib/theme.js';
 
 /**
  * ThreeColumnLayout — 项目工作台三栏容器
@@ -32,7 +32,8 @@ export default function ThreeColumnLayout({ left, center, right, leftWidth = 360
         minWidth: 0,
         display: 'flex',
         flexDirection: 'column',
-        background: COLOR.bg,
+        background: STAGE.bg,         // 暖底（#FAF8F5）
+        padding: STAGE.pad,           // 12px 周围呼吸 → 形成 stage
       }}>
         {center}
       </main>
