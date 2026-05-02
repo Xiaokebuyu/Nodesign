@@ -503,6 +503,40 @@ export default function ProjectWorkspace() {
         showToast(`Tweaks 已更新（${evt.count} 个控件）`, 'info');
         break;
 
+      case 'run.canvas_navigate': {
+        // C6: agent 调 navigate_to_page → 前端 scrollIntoView 该 section
+        try {
+          const iframeEl = document.querySelector('iframe');
+          const target = iframeEl?.contentDocument?.querySelector(`section[data-page="${evt.page}"]`);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch { /* cross-origin / iframe missing */ }
+        break;
+      }
+
+      case 'run.canvas_highlight': {
+        // C6: agent 调 highlight → pulse outline 短暂高亮匹配元素
+        try {
+          const iframeEl = document.querySelector('iframe');
+          const target = iframeEl?.contentDocument?.querySelector(evt.selector);
+          if (target) {
+            const origOutline = target.style.outline;
+            const origOffset = target.style.outlineOffset;
+            const origTransition = target.style.transition;
+            target.style.transition = 'outline 0.2s ease, outline-offset 0.2s ease';
+            target.style.outline = '3px solid rgba(255, 196, 0, 0.85)';
+            target.style.outlineOffset = '4px';
+            setTimeout(() => {
+              try {
+                target.style.outline = origOutline;
+                target.style.outlineOffset = origOffset;
+                target.style.transition = origTransition;
+              } catch { /* element might be gone */ }
+            }, evt.durationMs || 1500);
+          }
+        } catch { /* */ }
+        break;
+      }
+
       case 'run.stop_reflection':
         // C6 Stop hook（占位，stage 1 不消费）
         break;
