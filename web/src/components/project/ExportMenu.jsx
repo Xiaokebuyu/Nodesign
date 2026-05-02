@@ -4,8 +4,8 @@ import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js'
 
 const ITEMS = [
   { id: 'html',     icon: FileCode,     label: 'Standalone HTML',    desc: '单文件，可双击打开' },
-  { id: 'pdf',      icon: FileText,     label: 'PDF',                desc: 'playwright print 1280×720' },
-  { id: 'pptx',     icon: Presentation, label: 'PowerPoint (.pptx)', desc: 'P0+：调研 pptxgenjs', disabled: true },
+  { id: 'pdf',      icon: FileText,     label: 'PDF',                desc: 'playwright print 1280×720（矢量文字）' },
+  { id: 'pptx',     icon: Presentation, label: 'PowerPoint (.pptx)', desc: '每页截图嵌 PPTX（位图，文字不可编辑）' },
   { id: 'handoff',  icon: Hammer,       label: '工程交付包',           desc: 'ZIP: HTML + spec + assets + README' },
 ];
 

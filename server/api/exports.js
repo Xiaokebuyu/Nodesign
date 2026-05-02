@@ -170,6 +170,87 @@ router.get('/:pid/sessions/:sid/exports/pdf', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PPTX：playwright 截每个 section[data-page] PNG → pptxgenjs 嵌图
+// MVP 位图方案：用户拿到的 PPTX 文字不可编辑（每页是图），但视觉 1:1 还原
+// 16:9 默认 layout（10" × 5.625"）匹配 deck 1280×720 比例
+router.get('/:pid/sessions/:sid/exports/pptx', async (req, res, next) => {
+  try {
+    const project = guard(req, res);
+    if (!project) return;
+    const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
+    const file = path.join(sessionRoot, 'canvas.html');
+    try {
+      await fs.access(file);
+    } catch {
+      return res.status(404).json({ error: 'canvas.html not yet generated' });
+    }
+
+    const { chromium } = await import('playwright');
+    const PptxGenJS = (await import('pptxgenjs')).default;
+
+    let browser;
+    try {
+      browser = await chromium.launch({ headless: true });
+    } catch (err) {
+      return res.status(500).json({
+        error: 'playwright chromium not installed — run `npx playwright install chromium`',
+        details: err.message,
+      });
+    }
+
+    try {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+      const page = await ctx.newPage();
+      const fileUrl = 'file://' + file;
+      await page.goto(fileUrl, { waitUntil: 'networkidle', timeout: 30_000 });
+
+      // 找所有 <section data-page="N">，按 data-page 升序截图
+      const sectionHandles = await page.$$('section[data-page]');
+      if (sectionHandles.length === 0) {
+        await ctx.close();
+        return res.status(400).json({
+          error: 'canvas.html 没有 <section data-page="N"> 分页结构 — 无法转 PPTX',
+        });
+      }
+
+      // 按 data-page 排序（防 DOM 顺序跟 page index 不一致）
+      const pageInfos = [];
+      for (const handle of sectionHandles) {
+        const pageNum = await handle.getAttribute('data-page');
+        pageInfos.push({ handle, pageNum: parseInt(pageNum, 10) || 0 });
+      }
+      pageInfos.sort((a, b) => a.pageNum - b.pageNum);
+
+      // pptxgenjs 默认 LAYOUT_16x9 = 10" × 5.625"（hugely 适合 1280×720 deck）
+      const pres = new PptxGenJS();
+      pres.layout = 'LAYOUT_16x9';
+      pres.title = safeFilename(project.name);
+
+      for (const { handle, pageNum } of pageInfos) {
+        const buf = await handle.screenshot({ type: 'png' });
+        const slide = pres.addSlide();
+        slide.addImage({
+          data: `data:image/png;base64,${buf.toString('base64')}`,
+          x: 0, y: 0, w: 10, h: 5.625,
+        });
+        // 顺手填 slide notes 标 page number 给 PPT 用户参考
+        slide.addNotes(`Page ${pageNum} — exported from NoDesign canvas.html`);
+      }
+      await ctx.close();
+
+      // pptxgenjs write 到 nodebuffer
+      const pptxBuffer = await pres.write({ outputType: 'nodebuffer' });
+      const filename = `${safeFilename(project.name)}.pptx`;
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+      res.setHeader('Content-Length', pptxBuffer.length);
+      res.end(pptxBuffer);
+    } finally {
+      await browser.close().catch(() => { /* ignore */ });
+    }
+  } catch (err) { next(err); }
+});
+
 router.get('/:pid/sessions/:sid/exports/handoff', async (req, res, next) => {
   try {
     const project = guard(req, res);
