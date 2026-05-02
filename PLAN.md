@@ -262,6 +262,8 @@ SDK（@anthropic-ai/claude-agent-sdk）**，我们只做：薄壳后端（包 SD
 | 2026-05-01 | agent 层 Phase 1+2+3：SDK 用法精度对齐（8 commit）| query handle 暴露 / hooks 4→10 / 子代理 thinking 转发 / SKILL.md 精简 / cancelRun 切 query.interrupt() / SDK sandbox 替换白名单。HANDOVER_2026-05-01_phase123.md |
 | 2026-05-01 | agent 侧边栏 P0-P4：前端工作流细化（5 commit）| 流式滚动 + TodoPanel + Timeline 风格 thinking/tool + Edit 真 unified diff + 漏接事件 |
 | 2026-05-01 | S1-S4 + H1-H5：session-scoped 重构（11 commit）| 用户对齐 Anthropic Projects 模式 → workspace 改 shared/+sessions/<sid>/ + Hub 二级页 + 三 cards 真接后端 + timeline done 修正 + ContextPanel 清理。详见 HANDOVER_2026-05-01_session_scoped_workspace.md + memory `nodesign_session_scoped_summary.md` |
+| 2026-05-02 | F0-F3 FloatingPanel 布局重构 + S1-S4 canvas 焕新升级 | 浮动 panel 布局体系 → F2.x chat/canvas 改回固定栏 + 5 个次级 UI 浮窗；canvas S1 加 data-tweakable 标记 + S2 stage 视觉重做 |
+| 2026-05-02 | **A1-A6 + C1-C6 + agent paradigm 锚定（21 commit）** | 5 阶段 paradigm（ask→plan→explore→generate→vision-check）框架成型；Canvas v0.6 13 MCP 工具齐全；HTML 单文件 5-style-block 标准锁定；AskUserQuestion 走 SDK canUseTool 接通 + wizard；实时 context usage；assets 路径修；中文字体 CDN；scoped tweak vars。**详见 HANDOVER_2026-05-02_a4_a6_canvas_alignment.md + memory `nodesign_paradigm_5stage.md` + `nodesign_canvas_v06_html_standard.md` + `feedback_agent_not_junior.md`** |
 
 ## 实施日志
 
