@@ -17,8 +17,8 @@
 
 | 维度 | 现状 | 焕新后 |
 |---|---|---|
-| 用户角色 | 设计师（Inspect 自调字号/颜色/字重六维度） | 客户（说需求 / 看效果 / agent 给的 tweak 浮窗微调） |
-| 画布形态 | iframe 贴左上 + toolbar 顶 + 右栏 4 tab 平铺 | stage 居中 + 暖底 + 协作信号区，右栏极简（只 Inputs） |
+| 用户角色 | 设计师（Inspect 自调字号/颜色/字重六维度） | 客户（说需求 / 看效果 / agent 给的 tweak 浮窗微调）。Direct Edits / InspectTab 保留作高级后路，**不聚焦** |
+| 画布形态 | iframe 贴左上 + toolbar 顶 + 右栏 4 tab 平铺 | stage 居中 + 暖底 + 协作信号区，右栏默认只显 InputsTab，其他 tab 收 collapse |
 | Comment 流转 | 写完手动复制到 chat | pin 在元素旁 + pending list + 下次 send 自动打包发 agent |
 | Tweak 来源 | 用户主动点 InspectTab | agent 改完后**主动 emit** tweak schema → 元素旁浮窗 |
 | Agent 视野 | 只看第一页 | 新工具 read_page(N) 精确读任意页 |
@@ -31,8 +31,8 @@
 |---|---|---|
 | **S0** plan 落档 | 本段 + 实施日志预留 | 1 |
 | **S1 Agent 端基础设施**（无前端改动 / 风险最低）| (a) prelude/SKILL.md 教 agent 写 HTML 时加 `data-tweakable` 标记 + `data-page-anchor` 锚 (b) follow-up #10 放开 trusted CDN（fonts/icons/animation lib）+ PostToolUse hook 软警告 (c) 新 MCP 工具 `read_page(N)` 让 agent 精确读任意页 (d) 新事件 `run.canvas_focus_page` —— PostToolUse(Edit canvas.html) hook 自动检测改动的 page 号 emit | 4-5 |
-| **S2 前端 Stage 重做 + 右栏减负** | (a) CanvasFrame 视觉重做（stage 感：居中 + 阴影 + 暖底 + 协作信号区）(b) 右栏 ContextPanel 减到只剩 InputsTab + 折叠 DecisionsTab/SystemTab（CommentsTab/TweaksTab/InspectTab 删）(c) Hover 元素显示人话角标（element-semantics 已有，挂上去）(d) SlideNavigator 接 focus_page event 自动跳 + 1.5s pulse 高亮 | 3-4 |
-| **S3 双向流：Comment pin + 攒批 + Tweak 浮窗** | (a) 元素点击 → 评论浮窗 pin 在元素旁 + pending list 在画布右下 (b) ChatComposer send 时打包所有 pending comments（结构化 payload：anchor + outerHTML + computedStyles + boundingBox + page + screenshot crop）(c) agent 暴露 tweak schema 通过新 MCP 工具 `expose_tweaks` → 前端在 `data-tweakable` 元素旁渲染浮窗 slider/colorpicker (d) Direct Edit Bridge 砍掉（不再让用户双击 contenteditable，统一走"agent 改 + tweak 微调"路径） | 4-5 |
+| **S2 前端 Stage 重做 + 右栏减负** | (a) CanvasFrame 视觉重做（stage 感：居中 + 阴影 + 暖底 + 协作信号区）(b) 右栏 ContextPanel 减到默认只显 InputsTab；InspectTab/CommentsTab/DecisionsTab/SystemTab 全保留但**默认 collapse**（按钮在 tab bar 上但不展开，用户主动点才出）(c) Hover 元素显示人话角标（element-semantics 已有，挂上去）(d) SlideNavigator 接 focus_page event 自动跳 + 1.5s pulse 高亮 | 3-4 |
+| **S3 双向流：Comment pin + 攒批 + Tweak 浮窗** | (a) 元素点击 → 评论浮窗 pin 在元素旁 + pending list 在画布右下 (b) ChatComposer send 时打包所有 pending comments（结构化 payload：anchor + outerHTML + computedStyles + boundingBox + page + screenshot crop）(c) agent 暴露 tweak schema 通过新 MCP 工具 `expose_tweaks` → 前端在 `data-tweakable` 元素旁渲染浮窗 slider/colorpicker (d) Direct Edit Bridge **保留**（用户双击 contenteditable 仍能用，作为高级用户后路）但不再是聚焦点——hover/click 元素优先呈现 agent emit 的 tweak 浮窗 | 4-5 |
 | **S4 时间轴雏形** | (a) 右下角时间轴 collapse panel，git log 拉 commit (b) 每个节点显示 commit message 摘要 + 缩略图占位 (c) UndoButton 升级为时间轴节点点击回退 | 2-3 |
 
 总 14-18 commit，每段 ship 后停下让用户 review 再走下一段。
@@ -42,7 +42,8 @@
 - **2026-05-02 用户决定**：HTML 形态升级 = 标记 + CDN 放开 + agent 操控画布，**不做** 13a 多文件 bundle / 13b React-Vue artifact（耦合 hot reload + git history + iframe / 是下一段大工程）；13c run-time tweaks 已被 S3 吃掉
 - **2026-05-02 用户判断**：tweak 控件**不持久化**——临时遗物 turn 结束自动收起，最终值进 spec.json.decisions（待 S3 实施确认）
 - **2026-05-02 用户判断**：HTML 标记策略 = agent 自己加（SKILL.md 教 + 灵活），hook 不做兜底（信任 agent；漏加是 SKILL.md 引导问题不是产物问题）
-- **2026-05-02 用户判断**：右栏 InspectTab/CommentsTab/TweaksTab 全砍，画布上承载（"agentic 化"核心 = 用户不点右栏自己调，agent 在画布上给 tweak）
+- **2026-05-02 用户判断**：右栏 InspectTab/CommentsTab/TweaksTab **不砍但不聚焦**——默认 collapse，用户点 tab bar 才展开。Direct Edits Bridge 保留。"agentic 化"核心 = 默认走 agent emit tweak 路径，老的"用户主导"路径仍可用但不在主流视野
+- **2026-05-02 course correction**：之前误以为"agentic 化"= 砍 Direct Edits。用户纠正：聚焦点在 agentic（让用户大部分时候不必自己调），但用户主导路径作为后路保留
 
 ### 实施日志
 

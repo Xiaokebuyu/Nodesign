@@ -1,7 +1,7 @@
 ---
 name: deskskill-engine-mini
-version: 0.4.0
-description: NoDesign 默认 deck 设计 skill。维护一份单文件 self-contained HTML（canvas.html），spec.json 作长期设计意图档案。本版（v0.4）：把"Claude Code 工具用法"和"NoDesign 工作台共性约束"抽到 nodesign-prelude.md（agent 通用），SKILL.md 只剩 deck 设计业务约束（视觉风格 / canvas.html 规范 / 业务工具时机 / deck specific 的"先问参考图"话术 / 业务 don'ts）。
+version: 0.5.0
+description: NoDesign 默认 deck 设计 skill。维护一份单文件 HTML（canvas.html，可引 trusted CDN），spec.json 作长期设计意图档案。本版（v0.5）：canvas 焕新升级 S1 — 加 data-tweakable / data-anchor 标记规范 + trusted CDN 白名单（fonts/icons/animation lib），让 agent 写 HTML 时为 agentic tweak 流铺好基础设施。
 ---
 
 # deskskill-engine-mini — deck 设计 agent
@@ -20,7 +20,7 @@ chat 协作把它改到满意。
 
 | 路径 | 含义 | 你的操作 |
 |---|---|---|
-| `canvas.html` | **主产物**（单文件 self-contained，`<section data-page="N">` 分页，视口 1280×720） | 用 Edit 优先；首跑或整体重构才 Write |
+| `canvas.html` | **主产物**（单文件，可引 trusted CDN，`<section data-page="N">` 分页，视口 1280×720，关键元素带 `data-tweakable` / `data-anchor` 标记） | 用 Edit 优先；首跑或整体重构才 Write |
 
 ---
 
@@ -75,13 +75,66 @@ prelude 教过元规则：信息不足先问。在 deck 设计场景，最关键
 
 ## HTML 规范
 
-- **单文件 self-contained**：CSS / JS 内嵌（不引外部 CDN，避免离线 / 网络不稳挂掉）
 - **分页**：`<section data-page="N" data-layout="cover|title-content|two-column|chart|...">`
 - **视口**：1280×720（对应导出 PDF / 16:9 演示）
 - **字号节奏**：H1 48-64 / H2 28-36 / body 16-18 / mono 14
 - **留白**：克制但保持透气，间距用 8 / 16 / 24 / 32 / 48 / 64 节奏
 - **a11y**：text-on-bg 对比度 ≥ 4.5（AA），交互元素 ≥ 3:1，img 加 alt
 - **修改优先 Edit 而非 Write**（详见 prelude 的 Edit > Write 段）
+- **`data-tweakable` + `data-anchor` 必加**（详见 prelude 的"HTML 产物的 agentic 标记"段）
+
+### deck 特化：必加 tweak 标记的元素
+
+每页**至少 2-3 个**（不要全加，会挤）：
+
+| 元素角色 | 推荐 tweak 维度 | data-anchor 命名 |
+|---|---|---|
+| 封面主标题 H1 | `fontSize`, `color`, `fontWeight`, `letterSpacing` | `cover-title` |
+| 封面副标题 / tagline | `fontSize`, `color` | `cover-subtitle` |
+| 内容页 section title H2 | `fontSize`, `color` | `page-N-title` |
+| key visual / 主图色块 | `--accent` CSS var | `page-N-keyvis` |
+| CTA / 数据 callout | `fontSize`, `color`, `padding` | `page-N-cta` 或 `page-N-stat` |
+| 整页配色（section 上挂 CSS var） | `--accent`, `--bg` (any) | `cover` / `page-N` |
+| 结尾页 thanks / contact | `fontSize`, `color` | `closing-thanks` / `closing-contact` |
+
+**例子**（deck 第 1 页封面）：
+
+```html
+<section data-page="1" data-layout="cover"
+         data-tweakable='{"--accent":"any","--bg":"any"}'
+         data-anchor="cover"
+         style="--accent:#2d2418;--bg:#F9F8F6;background:var(--bg);">
+
+  <h1 data-tweakable='{"fontSize":[40,48,56,64],"color":"any","fontWeight":[400,500,700]}'
+      data-anchor="cover-title"
+      style="font-size:56px;color:var(--accent);font-weight:500;">
+    设计驱动增长
+  </h1>
+
+  <p data-tweakable='{"fontSize":[14,16,18],"color":"any"}'
+     data-anchor="cover-subtitle"
+     style="font-size:16px;color:#6b5d4f;">
+    2026 Q2 产品评审 · DeskSkill 团队
+  </p>
+</section>
+```
+
+### CDN 资源（trusted 白名单）
+
+为提升设计质量，**允许引用以下 CDN**（用 `<link>` / `<script>` 内嵌到 `<head>`）：
+
+| 用途 | CDN | 例子 |
+|---|---|---|
+| 字体 | `fonts.googleapis.com` / `fonts.gstatic.com` | `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">` |
+| Icon | `cdn.jsdelivr.net/npm/lucide@latest` / `unpkg.com/lucide@latest` | `<script src="https://unpkg.com/lucide@latest"></script>` 然后用 `<i data-lucide="check"></i>` |
+| 动画 | `cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css` | 用 `class="animate__animated animate__fadeIn"` |
+| 通用 utility CSS | `cdn.jsdelivr.net` / `unpkg.com` / `cdnjs.cloudflare.com` 任意 | tailwindcss CDN 等 |
+
+**何时用**：默认风格够用就别引（多一个 request 多一个失败点）；用户要求"更精致字体" /
+"加点动画" / "用现代 icon" 才引。
+
+**don't**：引非白名单域名（追踪脚本 / analytics / 任意 third-party API）—— 会被
+PostToolUse hook 警告。
 
 ---
 

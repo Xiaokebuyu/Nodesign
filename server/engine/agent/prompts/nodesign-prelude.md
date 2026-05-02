@@ -143,6 +143,80 @@ in_progress。
 
 ---
 
+## HTML 产物的 agentic 标记（重要！）
+
+> 2026-05-02 canvas 焕新升级 S1 起，**所有 NoDesign agent 写的 HTML 产物**
+> 必须在关键元素上加两类 data-* 标记。这套标记是「agentic 化」的基础——
+> 用户不再自己点 InspectTab 调属性，而是 agent 改完后**通过这些标记**给用户
+> emit tweak 浮窗（slider / colorpicker），用户在画布上拖一拖就微调完。
+
+### `data-tweakable` —— 暴露可调维度
+
+装在你认为"用户最可能想微调"的元素上。值是 JSON object，key 是 CSS 维度名，
+value 是允许的取值范围。
+
+**支持的维度 + value 形态**：
+
+| 维度 | value 形态 | 例子 |
+|---|---|---|
+| `fontSize` | array（离散档位）/ `{min,max,step}`（连续） | `[40,48,64]` 或 `{"min":16,"max":64,"step":2}` |
+| `color` | array（色板）/ `"any"`（开放） | `["#2d2418","#c45c3f","#7c3aed"]` 或 `"any"` |
+| `fontWeight` | array | `[400,500,700]` |
+| `textAlign` | array | `["left","center","right"]` |
+| `letterSpacing` | `{min,max,step}` 单位 px | `{"min":-2,"max":4,"step":0.5}` |
+| `lineHeight` | `{min,max,step}` 单位 unitless | `{"min":1.0,"max":2.0,"step":0.1}` |
+| `padding` | `{min,max,step}` 单位 px | `{"min":0,"max":80,"step":4}` |
+| `borderRadius` | array / `{min,max,step}` | `[0,4,8,16,9999]` |
+
+**例子**：
+
+```html
+<h1 data-tweakable='{"fontSize":[40,48,64],"color":"any","fontWeight":[400,500,700]}'
+    data-anchor="cover-title"
+    style="font-size:48px;color:#2d2418;font-weight:500;">
+  设计驱动增长
+</h1>
+```
+
+### `data-anchor` —— 元素稳定锚点
+
+装在 tweakable 元素 + 其他"用户可能想引用"的关键元素上（如每页主标题/CTA/key
+visual）。值是 kebab-case 字符串，**全文件唯一**。
+
+用途：
+- agent 自己跨 turn 引用（"我之前改的 cover-title"）
+- 前端 comment pin 用（用户写"这里再深一点"时锚点稳定）
+- agent edit 完后 emit `canvas_focus_page` 时带 anchor，前端能精确高亮
+
+**命名规范**：`<page-context>-<role>` 或 `<page-N>-<role>`，例：
+- `cover-title` / `cover-subtitle` / `cover-cta`
+- `page-2-section-title` / `page-2-keyvis` / `page-2-data-chart`
+- `closing-thanks` / `closing-contact`
+
+### 给标记加多少 / 何时加
+
+- **每页至少 2-4 个**：主标题 / CTA / 主视觉 / 主色块（任选 2-4）
+- **首跑写的时候就加**——不要"先写完再补"，写时顺手加 30 秒就够
+- **不要全加**：每个 div/p/span 都加 → 浮窗满屏不能用。**克制，挑用户最可能调的**
+- **配色变量直接挂 CSS variable + tweak 在 root 元素**：
+
+```html
+<section data-page="1"
+         data-tweakable='{"--accent":"any","--bg":"any"}'
+         data-anchor="cover"
+         style="--accent:#2d2418;--bg:#F9F8F6;background:var(--bg);">
+  ...
+</section>
+```
+
+### 升级老 canvas.html
+
+如果 cwd 已有 canvas.html 但**没标记**（v0.3 之前生成的），用户跟你说要"调整"
+时，**先 Edit 加标记再做改动**——加几个高优先元素就行（封面标题 / 配色变量
+等），别一次重构整文件。
+
+---
+
 ## 通用 don'ts（NoDesign 共性）
 
 - ❌ 自己 git commit / git checkout（git 由 server 管）
