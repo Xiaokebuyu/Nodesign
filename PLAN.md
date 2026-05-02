@@ -5,6 +5,51 @@
 
 ---
 
+## 🟢 Canvas 焕新升级（2026-05-02 起，进行中）
+
+> **入口**：用户明确 2026-05-02 这次的目标是"完全升级 canvas"——把当前"工程师风
+> iframe + 平铺 toolbar + 高自由度右栏 InspectTab"换成"agentic 化的活的画布"。
+> 用户客户化（说需求 + 看效果 + 微调），而不是用户设计师化（自己点元素调属性）。
+> 这套方向跟 Claude Design § 10.2 / § 10.4 / § 14 描述基本一致，差异只在程度
+> （我们更彻底地砍 Direct Edits / 用户主导部分）。
+
+### 核心理念
+
+| 维度 | 现状 | 焕新后 |
+|---|---|---|
+| 用户角色 | 设计师（Inspect 自调字号/颜色/字重六维度） | 客户（说需求 / 看效果 / agent 给的 tweak 浮窗微调） |
+| 画布形态 | iframe 贴左上 + toolbar 顶 + 右栏 4 tab 平铺 | stage 居中 + 暖底 + 协作信号区，右栏极简（只 Inputs） |
+| Comment 流转 | 写完手动复制到 chat | pin 在元素旁 + pending list + 下次 send 自动打包发 agent |
+| Tweak 来源 | 用户主动点 InspectTab | agent 改完后**主动 emit** tweak schema → 元素旁浮窗 |
+| Agent 视野 | 只看第一页 | 新工具 read_page(N) 精确读任意页 |
+| 修改反馈 | iframe 闷头 reload | agent 改第 N 页 → SlideNavigator 自动跳 + 该 section 1.5s pulse 高亮 |
+| HTML 形态 | 硬 self-contained（不引外部资源） | 单文件但放开 trusted CDN（fonts/icons/animation lib）+ data-tweakable / data-page-anchor 标记 |
+
+### 5 阶段执行清单
+
+| 阶段 | 范围 | 估 commit |
+|---|---|---|
+| **S0** plan 落档 | 本段 + 实施日志预留 | 1 |
+| **S1 Agent 端基础设施**（无前端改动 / 风险最低）| (a) prelude/SKILL.md 教 agent 写 HTML 时加 `data-tweakable` 标记 + `data-page-anchor` 锚 (b) follow-up #10 放开 trusted CDN（fonts/icons/animation lib）+ PostToolUse hook 软警告 (c) 新 MCP 工具 `read_page(N)` 让 agent 精确读任意页 (d) 新事件 `run.canvas_focus_page` —— PostToolUse(Edit canvas.html) hook 自动检测改动的 page 号 emit | 4-5 |
+| **S2 前端 Stage 重做 + 右栏减负** | (a) CanvasFrame 视觉重做（stage 感：居中 + 阴影 + 暖底 + 协作信号区）(b) 右栏 ContextPanel 减到只剩 InputsTab + 折叠 DecisionsTab/SystemTab（CommentsTab/TweaksTab/InspectTab 删）(c) Hover 元素显示人话角标（element-semantics 已有，挂上去）(d) SlideNavigator 接 focus_page event 自动跳 + 1.5s pulse 高亮 | 3-4 |
+| **S3 双向流：Comment pin + 攒批 + Tweak 浮窗** | (a) 元素点击 → 评论浮窗 pin 在元素旁 + pending list 在画布右下 (b) ChatComposer send 时打包所有 pending comments（结构化 payload：anchor + outerHTML + computedStyles + boundingBox + page + screenshot crop）(c) agent 暴露 tweak schema 通过新 MCP 工具 `expose_tweaks` → 前端在 `data-tweakable` 元素旁渲染浮窗 slider/colorpicker (d) Direct Edit Bridge 砍掉（不再让用户双击 contenteditable，统一走"agent 改 + tweak 微调"路径） | 4-5 |
+| **S4 时间轴雏形** | (a) 右下角时间轴 collapse panel，git log 拉 commit (b) 每个节点显示 commit message 摘要 + 缩略图占位 (c) UndoButton 升级为时间轴节点点击回退 | 2-3 |
+
+总 14-18 commit，每段 ship 后停下让用户 review 再走下一段。
+
+### 决策档案
+
+- **2026-05-02 用户决定**：HTML 形态升级 = 标记 + CDN 放开 + agent 操控画布，**不做** 13a 多文件 bundle / 13b React-Vue artifact（耦合 hot reload + git history + iframe / 是下一段大工程）；13c run-time tweaks 已被 S3 吃掉
+- **2026-05-02 用户判断**：tweak 控件**不持久化**——临时遗物 turn 结束自动收起，最终值进 spec.json.decisions（待 S3 实施确认）
+- **2026-05-02 用户判断**：HTML 标记策略 = agent 自己加（SKILL.md 教 + 灵活），hook 不做兜底（信任 agent；漏加是 SKILL.md 引导问题不是产物问题）
+- **2026-05-02 用户判断**：右栏 InspectTab/CommentsTab/TweaksTab 全砍，画布上承载（"agentic 化"核心 = 用户不点右栏自己调，agent 在画布上给 tweak）
+
+### 实施日志
+
+（每段 ship 后追加。S0 commit hash 见 git log）
+
+---
+
 ## 🟢 当前状态（2026-05-01 H5 收尾，必读）
 
 > **入口**：从这往下到下面 ⬇️ "🟡 P0/stage1 时代状态" 段是当前状态。
@@ -69,6 +114,15 @@ NoDesign = **Claude Code 之上的画布编辑层**，按 Anthropic Projects 模
     - **(11c) 一图胜千言：教 agent 主动让用户上传** — 当用户描述很模糊（"做一个酷一点的"）但又没 reference，主动说"扔一张你喜欢的截图给我，我用它的取色和质感重做"。这是 SKILL.md 级别的指令（在"先追问"那段加例子）
 
 12. **Vision-checker 真接通 + 加"挑剔的设计审稿人"prompt**（同 #5，Kimi 反思后优先级提升） — Kimi 反思暴露：主 agent 自检截图后给"看起来 OK"是惯性。挑剔需要独立角色（"30 年品牌设计经验，看不顺眼直接说"）。skeleton 已在 `agents/vision-checker/`，缺：(a) prompt 写成"挑剔老设计师"风（具体例子：层级、节奏、留白、色相偏移、对比度、字距、视觉重量平衡）；(b) toolAllowlist = [Read, Glob, screenshot_canvas]（无 Write/Edit，纯审稿）；(c) Agent tool 进 main agent 白名单；(d) SKILL.md 教主 agent 何时调（写完关键页 / deck 完成 / 用户说"看起来怎么样" → 调 vision-checker，把它的反馈告诉用户而不是自己判断）
+
+13. **升级当前的自包含 HTML 产物**（开放式，2026-05-02 用户提出待思考） — 现在 canvas.html 是单文件 self-contained 形态：CSS/JS 内嵌、`<section data-page>` 分页、视口 1280×720、不引外部资源。这套对 deck/演示场景够用，但对**真产品形态**有限制。可考虑的升级方向（待用户明确范围再具体规划）：
+    - **(13a) 单文件 → 多文件 bundle**：HTML + CSS + JS + assets/ 分离（更接近 web 工程实践，便于二次开发 / engineering handoff 真出可读代码）；权衡：单文件预览/分享更方便，多文件部署门槛高
+    - **(13b) 纯 HTML → React/Vue artifact**：参考 Claude Artifacts 模式（Artifacts v0 已支持 React JSX），让 agent 写组件化的 interactive prototype（按钮真跳转、表单真校验），不只静态 deck
+    - **(13c) 产物自带 run-time tweaks UI**：HTML 内嵌 CSS variables + 简单 slider/colorpicker UI，用户在产物里直接调（不必走 chat），符合 Claude Design § 10.4 Custom Sliders 流派
+    - **(13d) 产物可持久化状态**：用户在 prototype 里点了什么 / 表单填了什么 → localStorage，不丢；适合做带流程的 prototype（onboarding / wizard / 多屏 flow）
+    - **(13e) 产物多分辨率适配**：现在硬编码 1280×720（演示），加响应式断点支持 mobile/tablet/desktop（真做产品 prototype 时必需）
+    - **(13f) 产物类型多元化**：不只 deck，加 dashboard / form / landing page / report 等 layout template，agent 按 brief 类型自选
+    - **触发条件**：用户明确"NoDesign 要做哪类产物"才好开干。当前主力是 deck（演讲场景），如果未来扩到"真做 web 产品 prototype"，13a-13e 都要做；如果继续聚焦 deck，13c/13e 就够
 
 ---
 
