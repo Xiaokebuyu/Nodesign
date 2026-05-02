@@ -210,6 +210,14 @@ export async function ensureSessionWorkspace(projectId, sessionId) {
 
   // 软链 shared/.claude/<name> → sessions/<sid>/.claude/<name>
   // 相对路径：从 sessions/<sid>/.claude/ 看 ../../../shared/.claude/<name>
+  //
+  // C2c：之前软链失败仅 warn 不阻塞 —— 隐性损坏 path 系统（agent 写到 sessions
+  // 本地真目录而不是 shared 软链下，前端 BrandCard / MemoryCard 读 shared 找不到，
+  // 用户体感"写完消失"但 agent 报"成功"。
+  // 改成 fail-loud：throw 让 ensureSessionWorkspace 失败前端能看到错。
+  // env NODESIGN_ALLOW_SYMLINK_FALLBACK=1 强制降级 warn（Windows / 不支持
+  // symlink 的边缘 docker volume 用）
+  const allowSymlinkFallback = process.env.NODESIGN_ALLOW_SYMLINK_FALLBACK === '1';
   for (const name of SHARED_LINKS) {
     const link = path.join(sessionRoot, '.claude', name);
     if (await pathExists(link)) continue;
@@ -217,10 +225,12 @@ export async function ensureSessionWorkspace(projectId, sessionId) {
     try {
       await fs.symlink(target, link);
     } catch (err) {
-      // Windows 无 admin 权限会失败 —— 降级 cp（CLAUDE.md / settings.json 是文件）
-      // skills/agents/agent-memory 是目录 —— Windows 上 fs.cp 也行，但失去"shared 改即 session 看到"语义。
-      // 暂时只 warn，不阻塞（macOS / Linux 部署不会触发）
-      console.warn(`[workspace] symlink failed for ${name} (${err.code || err.message}); session 将看不到 shared/<${name}>`);
+      const msg = `symlink failed for ${name} (${err.code || err.message}); session 将看不到 shared/<${name}>，agent 写 memory 会丢`;
+      if (allowSymlinkFallback) {
+        console.warn(`[workspace] ${msg}（NODESIGN_ALLOW_SYMLINK_FALLBACK=1，已降级 warn）`);
+      } else {
+        throw new Error(`[workspace] ${msg}。设 NODESIGN_ALLOW_SYMLINK_FALLBACK=1 强制降级（Windows / 部分 docker volume 不支持 symlink）`);
+      }
     }
   }
 
@@ -239,7 +249,12 @@ export async function ensureSessionWorkspace(projectId, sessionId) {
     try {
       await fs.symlink(path.join('..', '..', 'shared', 'assets'), assetsLink);
     } catch (err) {
-      console.warn(`[workspace] assets symlink failed (${err.code || err.message}); agent 将看不到 ./assets/，需手动用 ../../shared/assets/`);
+      const msg = `assets symlink failed (${err.code || err.message}); agent 将看不到 ./assets/，curl 下载也会写到错位置`;
+      if (allowSymlinkFallback) {
+        console.warn(`[workspace] ${msg}（NODESIGN_ALLOW_SYMLINK_FALLBACK=1，已降级 warn）`);
+      } else {
+        throw new Error(`[workspace] ${msg}。设 NODESIGN_ALLOW_SYMLINK_FALLBACK=1 强制降级`);
+      }
     }
   }
 

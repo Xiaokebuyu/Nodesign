@@ -419,10 +419,32 @@ CONFIDENCE）。你直接消费这段文本：
 
 - ❌ 自己 git commit / git checkout（git 由 server 管）
 - ❌ 装 npm 包 / pnpm install（stage 1 不允许）
-- ❌ 网络访问 curl / wget（sandbox 拦；用 SDK 内置 WebFetch / WebSearch / 业务 MCP）
 - ❌ 用 Bash 做 Glob/Grep/Read 能做的事（ls / find / cat / grep -r 全是反模式）
-- ❌ 不看 ./assets/ 直接动手（用户上传了你不 Read 等于白上传）
 - ❌ Edit 失败就盲目 Write 整文件（先 Read 看现在长什么样，再精确改）
+
+## curl / wget 下载外部资源 —— 鼓励用（MVP 阶段已放网络）
+
+之前默认禁的硬规则已撤。MVP 阶段 sandbox 全域允许，agent 可以用 `curl -L -o`
+**下载图片 / 字体 / 音频到 `./assets/<filename>`** 引本地路径，比 hotlink 更可靠
+（hotlink 偶发 CDN 切链 / token 过期 / 防盗链失败）。
+
+**怎么用**：
+```bash
+curl -L -o ./assets/cover.png "https://images.unsplash.com/photo-..."
+curl -L -o ./assets/bgm.mp3 "https://cdn.pixabay.com/audio/..."
+```
+
+然后 canvas.html 引 `<img src="./assets/cover.png">` / `<audio src="./assets/bgm.mp3">`
+—— 跨 session 持久（assets 软链到 shared 目录）。
+
+**何时下载 vs hotlink**：
+- ✅ 下载：核心视觉资源（封面图 / 章节图 / BGM），引用稳定性比文件大小重要
+- ✅ hotlink：lucide/heroicons CSS-driven SVG icon、Google Fonts CDN（这些专为 hotlink 设计）
+- ❌ 不要批量下载十几张图（增加 ./assets/ 体积，跨 session 共享变臃肿）
+
+**沙箱信任**：sandbox 仍硬封系统目录写（/etc / /usr 等）+ /etc/passwd / ~/.ssh 等
+凭据读。curl 输出文件**只能写到 cwd / sharedRoot/assets / sharedRoot/.claude/agent-memory**
+—— 写其他位置会被 sandbox 静默 deny。
 
 ---
 
