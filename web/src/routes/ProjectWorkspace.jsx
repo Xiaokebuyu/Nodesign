@@ -7,10 +7,13 @@ import AppShell from '../components/layout/AppShell.jsx';
 import { createPortal } from 'react-dom';
 import FloatingPanel from '../components/layout/FloatingPanel.jsx';
 import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
-import { MessageCircle, Image as ImageIcon, Crosshair } from 'lucide-react';
+import { MessageCircle, Image as ImageIcon, Crosshair, MessageSquare, Bookmark, Sliders, Settings } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
 import InspectTab from '../components/context-panel/InspectTab.jsx';
+import CommentsTab from '../components/context-panel/CommentsTab.jsx';
+import DecisionsTab from '../components/context-panel/DecisionsTab.jsx';
+import SystemTab from '../components/context-panel/SystemTab.jsx';
 import ShareModal from '../components/project/ShareModal.jsx';
 import ExportMenu from '../components/project/ExportMenu.jsx';
 import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
@@ -991,6 +994,44 @@ export default function ProjectWorkspace() {
               onDirectEdit={handleDirectEdit}
               onTriggerRun={handleTriggerRun}
             />
+          </FloatingPanel>
+
+          {/* F2.2：4 个 tab 拆独立 panel，默认 hidden（PanelMenu 重开）*/}
+          <FloatingPanel id="comments" title="Comments" icon={MessageSquare}>
+            <CommentsTab
+              comments={comments}
+              onJump={handleJumpToComment}
+              onResolve={handleResolveComment}
+              onDelete={handleDeleteComment}
+            />
+          </FloatingPanel>
+
+          <FloatingPanel id="decisions" title="Decisions" icon={Bookmark}>
+            <DecisionsTab
+              projectId={id}
+              sessionId={currentSessionId}
+              reloadKey={decisionsReloadKey}
+            />
+          </FloatingPanel>
+
+          <FloatingPanel id="tweaks" title="Tweaks" icon={Sliders}>
+            <div style={{ padding: GAP.lg }}>
+              <div style={{
+                fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, fontWeight: 500,
+                color: COLOR.text, marginBottom: GAP.sm,
+              }}>Tweaks</div>
+              <p style={{
+                fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub,
+                lineHeight: 1.6, margin: 0,
+              }}>
+                agent 暴露的可调参数（color / spacing / layout variant）。S3 接
+                expose_tweaks MCP 工具 → 在 data-tweakable 元素旁渲染 sliders。
+              </p>
+            </div>
+          </FloatingPanel>
+
+          <FloatingPanel id="system" title="System" icon={Settings}>
+            <SystemTab project={project} deckSpec={deckSpec} />
           </FloatingPanel>
         </>,
         document.body
