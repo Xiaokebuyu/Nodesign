@@ -1,16 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { attachEditMode, detachAll } from './DirectEditBridge.js';
-import { COLOR } from '../../lib/theme.js';
-// STAGE token 在父 CanvasFrame 用；HtmlIframe 内层不再用浅棕米色，改纯白让
-// 自己融入 stage 卡片。
 
 /**
  * HtmlIframe — 加载 HTML 产物的核心 iframe
  *
+ * iframe 视觉铺满 wrap 容器 — width + height 都按 100/zoom% 补偿，
+ * scale(zoom) 后视觉刚好 = wrap 尺寸（无外部 letterbox / 黑边）。
+ * iframe 内部视口 = wrap.size / zoom，deck CSS（一页 1280×720）
+ * 在 iframe 内部按自己的方式渲染 + 内部 scroll 翻页。
+ *
  * 模式行为：
  *   - 'edit'    iframe 加载完成后挂 dblclick / click bridge（contenteditable + select）
  *   - 'preview' 加载但不挂 bridge，纯展示
- *   - 隐藏 mode（父组件用 display:none 切到 Code）
  *
  * P1：sandbox 暂时给 allow-scripts allow-same-origin（开发同源）；部署不同 origin 时
  *     退化成 postMessage 通信，bridge 文件预埋 listener。
@@ -72,10 +73,9 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
     <div style={{
       flex: 1,
       minHeight: 0,
-      overflow: 'hidden',  // iframe 自己处理内部滚动，外层不要再加滚动条
-      background: '#fff',  // S2：原 COLOR.bgCard 浅棕；融入 stage 卡片改纯白
-      display: 'flex',
-      flexDirection: 'column',  // ★ column flex 让 iframe flex:1 真正撑满高度
+      overflow: 'hidden',
+      background: '#fff',
+      position: 'relative',
     }}>
       <iframe
         ref={ref}
@@ -84,10 +84,11 @@ export default function HtmlIframe({ src, srcDoc, mode = 'edit', onSelect, onTex
         onLoad={handleLoad}
         sandbox="allow-scripts allow-same-origin"
         style={{
-          display: 'block',
+          position: 'absolute',
+          top: 0, left: 0,
+          // width + height 都按 100/zoom% 补偿 → scale 后视觉刚好 = wrap 尺寸
           width: zoom === 1 ? '100%' : `${100 / zoom}%`,
-          flex: 1,           // ★ 撑满 column 剩余高度（wrap 高度由父 flex:1 决定）
-          minHeight: 0,
+          height: zoom === 1 ? '100%' : `${100 / zoom}%`,
           border: 0,
           background: '#fff',
           transform: zoom === 1 ? 'none' : `scale(${zoom})`,

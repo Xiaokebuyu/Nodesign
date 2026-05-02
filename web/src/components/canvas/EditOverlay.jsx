@@ -11,10 +11,17 @@ import { COLOR } from '../../lib/theme.js';
  *   - 监听 iframe 内 scroll + window resize → setTick 触发 re-render
  *   - 元素滚出 iframe 视口时 hide
  *
+ * Zoom 适配（fit-to-canvas + transform: scale 后必须）：
+ *   - elRect 是 iframe **内部** viewport 坐标（不受 transform 影响）
+ *   - iframeRect 是 iframe **外层** scale 后视觉 box
+ *   - 视觉位置 = iframeRect.{top,left} + elRect.{top,left} * zoom
+ *   - 视觉尺寸 = elRect.{width,height} * zoom
+ *   - 边界检查用内部坐标系：elRect 跟 contentWindow.{innerWidth,innerHeight} 比
+ *
  * 由 Project.jsx 把 selectedAnchor / iframe ref 传过来。
  * Overlay 用 absolute positioning，定位相对 iframe.offsetParent (即 iframeWrapRef)。
  */
-export default function EditOverlay({ selectedAnchor, iframeRef }) {
+export default function EditOverlay({ selectedAnchor, iframeRef, zoom = 1 }) {
   const [, setTick] = useState(0);
 
   // 监听 iframe scroll / resize → 重计算 overlay 位置
@@ -60,16 +67,21 @@ export default function EditOverlay({ selectedAnchor, iframeRef }) {
   const el = findElementByAnchor(selectedAnchor, doc.body);
   if (!el) return null;
 
-  // 实时计算位置：element 在 iframe viewport 中的位置 + iframe 在外层 viewport 中的位置
+  // elRect 是 iframe 内部 viewport 坐标（未 scale）
+  // iframeRect 是 iframe 外层 box（已 scale，视觉尺寸）
   const elRect = el.getBoundingClientRect();
   const iframeRect = iframe.getBoundingClientRect();
 
-  // 元素滚出 iframe 视口 → hide overlay（避免 overlay 漂在 deck 之外）
+  // 边界检查走 iframe 内部坐标系：用 contentWindow.innerWidth/Height 当 viewport
+  // （iframeRect.height/zoom 同效，但 innerHeight 更稳，避免浮点累积）
+  const win = iframe.contentWindow;
+  const innerW = win?.innerWidth ?? iframeRect.width / zoom;
+  const innerH = win?.innerHeight ?? iframeRect.height / zoom;
   if (
     elRect.bottom <= 0 ||
-    elRect.top >= iframeRect.height ||
+    elRect.top >= innerH ||
     elRect.right <= 0 ||
-    elRect.left >= iframeRect.width
+    elRect.left >= innerW
   ) {
     return null;
   }
@@ -79,9 +91,11 @@ export default function EditOverlay({ selectedAnchor, iframeRef }) {
   if (!offsetParent) return null;
   const containerRect = offsetParent.getBoundingClientRect();
 
-  // 转到 offsetParent 坐标系
-  const top = (iframeRect.top + elRect.top) - containerRect.top;
-  const left = (iframeRect.left + elRect.left) - containerRect.left;
+  // 转到 offsetParent 坐标系：内部坐标 * zoom 才能跟外层 iframeRect 对齐
+  const top = (iframeRect.top + elRect.top * zoom) - containerRect.top;
+  const left = (iframeRect.left + elRect.left * zoom) - containerRect.left;
+  const width = elRect.width * zoom;
+  const height = elRect.height * zoom;
 
   return (
     <div
@@ -90,8 +104,8 @@ export default function EditOverlay({ selectedAnchor, iframeRef }) {
         pointerEvents: 'none',
         top: top - 4,
         left: left - 4,
-        width: elRect.width + 8,
-        height: elRect.height + 8,
+        width: width + 8,
+        height: height + 8,
         border: `2px solid ${COLOR.btn}`,
         borderRadius: 4,
         boxShadow: '0 0 0 4px rgba(45, 36, 24, 0.08)',

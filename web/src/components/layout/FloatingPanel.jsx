@@ -79,6 +79,10 @@ export default function FloatingPanel({
   onClose,
   children,
   bodyStyle,
+  // Drag bounds：传 'window' / 'parent' / selector / HTMLElement。
+  // 默认 'parent' —— 浮窗只在父容器内拖（典型场景：浮在 canvas 上不出 canvas）。
+  // snap-to-edge 仅 bounds==='window' 时启用（小区域内 snap 没意义）。
+  bounds = 'parent',
 }) {
   const state = usePanelState(id);
   const [dragging, setDragging] = useState(false);
@@ -94,6 +98,7 @@ export default function FloatingPanel({
   const zIndex = controlled ? state.zIndex : 100;
 
   const panelWidth = size?.width || defaultSize.width;
+  const snapEnabled = bounds === 'window';
 
   const handleDragStart = () => {
     setDragging(true);
@@ -101,6 +106,7 @@ export default function FloatingPanel({
   };
 
   const handleDrag = (_e, d) => {
+    if (!snapEnabled) return;
     // 拖拽中实时检测 snap target，更新预览 overlay
     const W = window.innerWidth;
     const H = window.innerHeight;
@@ -175,7 +181,7 @@ export default function FloatingPanel({
         onResizeStart={handleResizeStart}
         minWidth={minWidth}
         minHeight={minHeight}
-        bounds="window"
+        bounds={bounds}
         dragHandleClassName="fp-drag-handle"
         enableResizing={{
           top: false, left: false,

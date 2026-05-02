@@ -1,4 +1,4 @@
-import { Edit3, Eye, Code2, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Edit3, Eye, Code2, RotateCcw, ShieldCheck, Maximize2 } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, STAGE } from '../../lib/theme.js';
 
 const MODES = [
@@ -7,7 +7,7 @@ const MODES = [
   { id: 'code',    label: 'Code',    icon: Code2 },
 ];
 
-export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, onZoomChange, onA11yClick, a11yBtnRef }) {
+export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, isAutoFit = false, onZoomChange, onFitToggle, onA11yClick, a11yBtnRef }) {
   return (
     <div style={{
       height: 44,
@@ -53,15 +53,30 @@ export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, 
 
       <div style={{ flex: 1 }} />
 
-      {/* Zoom */}
+      {/* Zoom — fit 模式自动按 canvas 宽算；+/- 切到 manual；Fit 按钮回 fit */}
       {onZoomChange && (
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
           fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
         }}>
-          <button onClick={() => onZoomChange(Math.max(0.5, zoom - 0.1))} style={zoomBtnStyle}>−</button>
+          {onFitToggle && (
+            <button
+              onClick={onFitToggle}
+              title={isAutoFit ? '已 fit canvas' : '自适应 canvas 宽度'}
+              style={{
+                ...zoomBtnStyle,
+                width: 'auto', padding: `0 ${GAP.sm}px`,
+                color: isAutoFit ? COLOR.text : COLOR.sub,
+                background: isAutoFit ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.04)',
+                display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+              }}
+            >
+              <Maximize2 size={10} /> Fit
+            </button>
+          )}
+          <button onClick={() => onZoomChange(Math.max(0.25, zoom - 0.1))} style={zoomBtnStyle}>−</button>
           <span style={{ minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-          <button onClick={() => onZoomChange(Math.min(2, zoom + 0.1))} style={zoomBtnStyle}>+</button>
+          <button onClick={() => onZoomChange(Math.min(3, zoom + 0.1))} style={zoomBtnStyle}>+</button>
         </div>
       )}
 

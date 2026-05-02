@@ -22,6 +22,11 @@ import { COLOR, STAGE } from '../../lib/theme.js';
  *
  * A11y：toolbar ✓ A11y 按钮 → popover 显示 mock review 结果
  */
+// SKILL.md 约束 agent 写出来的 deck 单页 1280px 宽（固定）。
+// fit = wrap.w / 1280 → iframe 整个铺满 canvas wrap（无外部 letterbox）。
+// 高度方向 iframe 补偿 wrap.h/zoom，内部 deck 自己滚（页 720 高 + 余地由 deck CSS 处理）。
+const DECK_WIDTH = 1280;
+
 export default function CanvasFrame({
   htmlSrc, htmlContent,
   selectedAnchor, onSelectChange,
@@ -35,7 +40,8 @@ export default function CanvasFrame({
   onRenameCandidate,
 }) {
   const [mode, setMode] = useState('edit');
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState('fit');     // 'fit' | number
+  const [wrapSize, setWrapSize] = useState({ width: 0, height: 0 });
   const [reloadKey, setReloadKey] = useState(0);
   const [sourceText, setSourceText] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -43,6 +49,30 @@ export default function CanvasFrame({
   const [a11yOpen, setA11yOpen] = useState(false);
   const iframeWrapRef = useRef(null);
   const a11yBtnRef = useRef(null);
+
+  // 测 iframe wrap 尺寸（W + H）— fit 取 min 让单页完整可见 letterbox
+  useEffect(() => {
+    const el = iframeWrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setWrapSize(prev => (prev.width === r.width && prev.height === r.height) ? prev : { width: r.width, height: r.height });
+    };
+    measure();
+    let ro = null;
+    try { ro = new ResizeObserver(measure); ro.observe(el); } catch { /* fallback to window */ }
+    window.addEventListener('resize', measure);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [mode]);
+
+  // fit = wrap.w / DECK_WIDTH：宽度铺满 canvas（无外部 letterbox）；
+  // 高度方向 iframe 内部由 deck CSS 自处理（720 一页 + 多页堆叠 + scroll）
+  const effectiveZoom = zoom === 'fit'
+    ? (wrapSize.width > 0 ? wrapSize.width / DECK_WIDTH : 1)
+    : zoom;
 
   const showCandidateBar = candidates && candidates.length >= 1;
 
@@ -95,11 +125,8 @@ export default function CanvasFrame({
     <div style={{
       flex: 1, minHeight: 0,
       display: 'flex', flexDirection: 'column',
-      background: '#fff',                          // stage 卡片底
-      borderRadius: STAGE.radius,
-      boxShadow: STAGE.shadow,
-      border: `1px solid ${STAGE.borderWarm}`,
-      overflow: 'hidden',                          // 让 toolbar 上圆角 + iframe 下圆角对齐
+      background: '#fff',
+      overflow: 'hidden',
     }}>
       {/* 多候选切换条（≥1 个候选时显示）*/}
       {showCandidateBar && (
@@ -116,8 +143,10 @@ export default function CanvasFrame({
       <CanvasToolbar
         mode={mode}
         onModeChange={(m) => { setMode(m); onSelectChange?.(null); }}
-        zoom={zoom}
-        onZoomChange={setZoom}
+        zoom={effectiveZoom}
+        isAutoFit={zoom === 'fit'}
+        onZoomChange={(z) => setZoom(z)}
+        onFitToggle={() => setZoom('fit')}
         onReload={handleReload}
         onA11yClick={() => setA11yOpen(o => !o)}
         a11yBtnRef={a11yBtnRef}
@@ -138,12 +167,13 @@ export default function CanvasFrame({
             onSelect={handleSelect}
             onTextEdit={handleTextEdit}
             onIframeReady={handleIframeReady}
-            zoom={zoom}
+            zoom={effectiveZoom}
           />
           {mode === 'edit' && selectedAnchor && (
             <EditOverlay
               selectedAnchor={selectedAnchor}
               iframeRef={{ current: iframeWrapRef.current?.querySelector('iframe') }}
+              zoom={effectiveZoom}
             />
           )}
         </div>
