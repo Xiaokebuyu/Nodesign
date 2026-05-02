@@ -1,7 +1,7 @@
 ---
 name: deskskill-engine-mini
 version: 0.5.0
-description: NoDesign 默认 deck 设计 skill。维护一份单文件 HTML（canvas.html，可引 trusted CDN），spec.json 作长期设计意图档案。本版（v0.5）：canvas 焕新升级 S1 — 加 data-tweakable / data-anchor 标记规范 + trusted CDN 白名单（fonts/icons/animation lib），让 agent 写 HTML 时为 agentic tweak 流铺好基础设施。
+description: NoDesign 默认 deck 设计 skill。维护一份单文件 HTML（canvas.html，可自由引 CDN/外部资源），spec.json 作长期设计意图档案。
 ---
 
 # deskskill-engine-mini — deck 设计 agent
@@ -20,7 +20,7 @@ chat 协作把它改到满意。
 
 | 路径 | 含义 | 你的操作 |
 |---|---|---|
-| `canvas.html` | **主产物**（单文件，可引 trusted CDN，`<section data-page="N">` 分页，视口 1280×720，关键元素带 `data-tweakable` / `data-anchor` 标记） | 用 Edit 优先；首跑或整体重构才 Write |
+| `canvas.html` | **主产物**（单文件，可自由引 CDN / 图片 / 音频 / 字体 / 任意外部资源，`<section data-page="N">` 分页，视口 1280×720） | 用 Edit 优先；首跑或整体重构才 Write |
 
 ---
 
@@ -114,7 +114,7 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
   <meta name="viewport" content="width=1280, initial-scale=1">
   <title>{Deck 标题}</title>
 
-  <!-- 1. CDN imports（仅 trusted 白名单） -->
+  <!-- 1. CDN imports（任意来源；写明出处） -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
 
@@ -280,30 +280,24 @@ section[data-purpose*="数据"] { --accent: #c45c3f; }   /* 数据页强调色�
 
 ---
 
-## CDN 资源（trusted 白名单）
+## CDN / 外部资源
 
-为提升设计质量，**允许引用以下 CDN**（`<link>` / `<script>` 内嵌到 `<head>`）：
+可在 `<head>` 自由引用 CDN 字体 / icon / 动画库 / utility CSS / 图片 / 音频 — **不限来源**，写明出处即可。常用源 cheatsheet（仅参考，不是约束）：
 
-| 用途 | CDN | 例子 |
+| 用途 | 常用源 | 一句话 |
 |---|---|---|
-| 英文字体 | `fonts.googleapis.com` / `fonts.gstatic.com` | `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">` |
-| **中文字体（思源黑体）** | `cdn.jsdelivr.net/npm/cn-fontsource-noto-sans-sc-...` | 通用商务场景 |
-| **中文字体（思源宋体）** | `cdn.jsdelivr.net/npm/cn-fontsource-noto-serif-sc-...` | 文化 / 出版 / 编辑部 |
-| **中文字体（霞鹜文楷）** | `cdn.jsdelivr.net/gh/lxgw/lxgw-wenkai-screen-webfont@latest/style.css` | 手写感 / 文创 / 文学 |
-| **中文字体（HarmonyOS Sans）** | `cdn.jsdelivr.net/npm/cn-fontsource-harmony-os-sans-sc-...` | 现代科技感 |
-| Icon | `cdn.jsdelivr.net/npm/lucide@latest` / `unpkg.com/lucide@latest` | `<script src="https://unpkg.com/lucide@latest"></script>` 然后 `<i data-lucide="check"></i>` |
+| 英文字体 | `fonts.googleapis.com` | `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">` |
+| 中文字体 | `cdn.jsdelivr.net/npm/cn-fontsource-*` / `cdn.jsdelivr.net/gh/lxgw/lxgw-wenkai-screen-webfont@latest/style.css` | 思源黑/宋（商务/出版）、霞鹜文楷（文创/手写）、HarmonyOS Sans（科技） |
+| Icon | `unpkg.com/lucide@latest` / `cdn.jsdelivr.net/npm/lucide@latest` | `<script src="https://unpkg.com/lucide@latest"></script>` + `<i data-lucide="check"></i>` |
 | 动画 | `cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css` | `class="animate__animated animate__fadeIn"` |
-| 通用 utility CSS | `cdn.jsdelivr.net` / `unpkg.com` / `cdnjs.cloudflare.com` 任意 | tailwindcss CDN 等 |
+| 图片 | unsplash / pexels / heroicons / lucide / wikipedia commons | hotlink 前先派 explorer 验链路 |
+| 音频 | pixabay-audio (CC0) / archive.org / soundbible | `<audio src="..." preload="auto" data-page="N">` + 在该页 `mouseenter` 或 `deck:page-enter` 事件 `.play()` |
 
-**字体何时用**：
-- **默认** PingFang SC（系统字体 fallback）+ Inter（英数字 system-ui fallback）—— 大多数场景够
-- 用户要求"更精致字体" / "适合编辑部" / "中医文化感" → 引中文 CDN 字体配合主题
-- **不要**默认就引一堆字体（多一个 request 多一个失败点；CDN 慢时白屏）
-
-**其他 CDN 何时用**：默认风格够用就别引；要"加点动画" / "用现代 icon" 才引。
-
-**don't**：引非白名单域名（追踪脚本 / analytics / 任意 third-party API）—— 会被
-PostToolUse hook 警告。
+**何时引 / 何时不引**：
+- **默认** PingFang SC + Inter（system fallback）—— 大多数场景够；不要默认就引一堆字体（多一个 request 多一个失败点）
+- 用户要"更精致字体" / "中医文化感" → 引中文 CDN 字体配合主题
+- 用户要"背景音 / 演示型 deck" → 加 `<audio>`，先派 explorer 找 CC0 hotlink 源验链路
+- 默认风格够用就别引外部 — 节流是设计师的纪律
 
 ---
 

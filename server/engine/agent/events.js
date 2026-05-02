@@ -215,15 +215,6 @@ export const Events = {
     ...(anchor ? { anchor } : {}),
   }),
 
-  // S1b PostToolUse(Edit|Write canvas.html) hook 发现引用了非白名单 CDN URL。
-  // 不阻塞 agent —— agent 已经写完了，hook 软警告 + emit 给前端可见。
-  // 前端可在 Inputs 旁显示 "⚠ 检测到外部资源引用 X 不在 trusted 白名单"。
-  cdnWarning: (urls, page) => ({
-    type: 'run.cdn_warning',
-    urls,    // 数组，可能多个
-    ...(page !== undefined ? { page } : {}),
-  }),
-
   // ── Canvas 焕新 C1（2026-05-02）：MCP 工具反向通道 + tweaks/buffer 通知 ──
 
   // navigate_to_page 工具触发，前端 ProjectWorkspace 收到后切到第 N 页
