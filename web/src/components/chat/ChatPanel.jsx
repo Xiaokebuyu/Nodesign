@@ -15,6 +15,8 @@ import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
 export default function ChatPanel({
   messages = [], onSend, isStreaming = false,
   queueDepth = 0,
+  wsStatus = 'open',          // 'connecting' | 'open' | 'reconnecting' | 'closed'
+  stuckSeconds = 0,           // isStreaming 期间长时间无事件的秒数（>=30 才显示警告）
   trayItems, onRemoveTrayItem, onPickFile,
   promptSuggestion, onDismissSuggestion,
   agentProgress,
@@ -103,6 +105,32 @@ export default function ChatPanel({
 
       <TodoPanel todos={todos} />
       <MessageList messages={messages} isStreaming={isStreaming} />
+
+      {/* WS 连接异常 / agent 长时间无事件 — 让用户知道情况，避免误以为前端卡死 */}
+      {(wsStatus === 'reconnecting' || wsStatus === 'closed' || stuckSeconds >= 30) && (
+        <div style={{
+          padding: `${GAP.xs}px ${GAP.lg}px`,
+          fontFamily: FONT_MONO,
+          fontSize: 10,
+          color: wsStatus === 'closed' ? COLOR.error : COLOR.sub,
+          letterSpacing: '0.04em',
+          background: wsStatus === 'closed' ? 'rgba(220, 53, 69, 0.06)' : 'rgba(255, 193, 7, 0.06)',
+          borderTop: `1px dashed ${COLOR.borderLt}`,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: wsStatus === 'closed' ? COLOR.error : COLOR.warn,
+            animation: wsStatus === 'reconnecting' || stuckSeconds >= 30 ? 'pulse 1.5s ease-in-out infinite' : 'none',
+          }} />
+          {wsStatus === 'closed'
+            ? '连接已关闭 · 请刷新页面'
+            : wsStatus === 'reconnecting'
+              ? '正在重连服务器…（已收到的事件不会丢，重连后会补 replay）'
+              : `Agent 已 ${stuckSeconds}s 无新输出 · 仍在深度思考（后端通常正常运行，可等或先做别的）`}
+        </div>
+      )}
+
       {/* streamInput 排队提示：当用户在 agent 跑时追加消息后 inputQueue 积压，
           显示"已排队 N 条"chip，agent 会跑完当前 turn 后自动吃下一条 */}
       {queueDepth > 0 && (

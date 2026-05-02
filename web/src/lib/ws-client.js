@@ -30,13 +30,18 @@ const FATAL_CLOSE_CODES = new Set([
   4404, // 自定义：project not found（如果将来 server 用 4xxx 段）
 ]);
 
-export function openProjectWS({ projectId, onEvent, onClose }) {
+export function openProjectWS({ projectId, onEvent, onClose, onStatusChange }) {
   let ws = null;
   let reconnectTimer = null;
   let backoff = MIN_BACKOFF_MS;
   let stopped = false;
   /** 最后一条收到的事件 seq；重连时拼 ?since= 用 */
   let lastSeq = 0;
+
+  /** 'connecting' | 'open' | 'reconnecting' — 给 UI 显示连接状态 */
+  function emitStatus(status) {
+    try { onStatusChange?.(status); } catch { /* ignore */ }
+  }
 
   function buildUrl() {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -47,6 +52,7 @@ export function openProjectWS({ projectId, onEvent, onClose }) {
   function connect() {
     if (stopped) return;
 
+    emitStatus(lastSeq > 0 ? 'reconnecting' : 'connecting');
     try {
       ws = new WebSocket(buildUrl());
     } catch (err) {
@@ -57,6 +63,7 @@ export function openProjectWS({ projectId, onEvent, onClose }) {
 
     ws.onopen = () => {
       backoff = MIN_BACKOFF_MS;
+      emitStatus('open');
     };
 
     ws.onmessage = (evt) => {
@@ -87,8 +94,10 @@ export function openProjectWS({ projectId, onEvent, onClose }) {
       if (FATAL_CLOSE_CODES.has(e.code)) {
         // 永久错误 — 不重连
         stopped = true;
+        emitStatus('closed');
         return;
       }
+      emitStatus('reconnecting');
       scheduleReconnect();
     };
 
