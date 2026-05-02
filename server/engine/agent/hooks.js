@@ -172,11 +172,19 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * PreToolUse(Task) Background Deny —— 强制 subagent 前台等。
+ * PreToolUse(Task) Background Force-Foreground —— 透明改 input，不 hard deny。
  *
- * 拦 `Task` 工具调用且 input.run_in_background === true 的情况，返
- * permissionDecision='deny' 让 SDK 拒掉这次 tool call，agent 看到 deny 提示
- * 后会重试不带 run_in_background 字段 —— 自然就走前台阻塞了。
+ * 拦 `Task` 工具调用且 input.run_in_background === true 的情况：
+ *   - updatedInput: 把 run_in_background 改成 false（subagent 真的前台跑）
+ *   - additionalContext: 温和提示 agent 为什么 NoDesign 偏好前台
+ *   - allow（不阻断 tool call）
+ *
+ * 这种设计避免了 hard deny 的"失败重试" churn —— agent 这次直接拿到 subagent
+ * 报告（前台等结果），additionalContext 教它下次别再传。
+ *
+ * HTML 创作的核心反馈环：agent 看 explorer/vision-checker 传回的素材 URL /
+ * critique → 基于此改 deck → 再自检。fire-and-forget 等于砍掉反馈环，agent
+ * 拿不到结果只能盲写。
  *
  * 不动 background 字段 false / undefined（默认前台）的 case。
  */
@@ -187,10 +195,13 @@ function makePreToolUseTaskBackgroundDenyHandler() {
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          permissionDecision: 'deny',
-          permissionDecisionReason:
-            'NoDesign 不允许 run_in_background:true —— subagent 必须前台跑（你需要等它的报告才能继续做事）。' +
-            '重试时去掉这个参数，等 1 分钟左右收 explorer/vision-checker 的结构化报告。',
+          permissionDecision: 'allow',
+          updatedInput: { ...t, run_in_background: false },
+          additionalContext:
+            'NoDesign 工作台已把 run_in_background 改回 false（前台跑）。HTML 创作'
+            + '需要你看到 subagent 报告才能改进设计——fire-and-forget 等于结果丢了。'
+            + '下次直接前台调（不传 run_in_background 字段），forwardSubagentText '
+            + '已开你能看到 subagent 实时进度，不会卡死。',
         },
       };
     }

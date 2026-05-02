@@ -340,10 +340,15 @@ NoDesign 工作台挂了几个**子代理**，主 agent 通过 `Task` 工具派�
 
 调用方式：**Task 工具 + subagent_type 'explorer' + 一段清晰的研究 brief**。
 
-⚠️ **绝对不要传 `run_in_background: true`**——你需要 explorer 的报告才能继续做事，
-fire-and-forget 模式下你拿不到结果，主流跟 subagent 报告交错用户也看不懂。
-**前台阻塞等就行**——SDK 把 explorer 的 thinking / tool calls 实时转发到主 chat
-（NoDesign 已开 forwardSubagentText），用户能看见它在干什么。
+⚠️ **不要传 `run_in_background: true`**：HTML 创作的反馈环靠你看 explorer 报告
+→ 基于素材 URL 改 deck，fire-and-forget 等于报告丢了你只能盲写。
+**前台跑**——SDK 把 explorer 的 thinking / tool calls 实时转发到主 chat
+（NoDesign 已开 forwardSubagentText），你能看到 subagent 实时进度不会卡死，
+等结果收完结构化报告自然继续。
+
+如果你不小心传了 `run_in_background:true`：工作台 PreToolUse hook 会透明改回
+false 让 subagent 前台跑（你不会看到 deny 错误），但同时给你注一条 system 提示
+"下次直接前台调"——别养成传这个参数的习惯。
 
 ⚠️ **派之前先 chat 一句简短报告**：例如 "我让 explorer 帮我搜一下参考图"。
 不要写"1-2 分钟回来"这种"长任务"暗示——让 agent 觉得"长" 反而会想后台跑。

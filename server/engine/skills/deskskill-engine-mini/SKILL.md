@@ -432,8 +432,9 @@ Query 加年份词（2025/2026）。**不要 baidu 英文**（实测严重跑题
 **整个 deck 写完 / 关键页改完 / 用户问"看着怎么样" / 自己截图后心里没底**时派。
 
 **派之前必先在 chat 报一句**"我让 vision-checker 帮我自检视觉"——避免用户看着
-主 chat 静默以为卡死。**绝对不传 `run_in_background: true`**——前台等结果才能
-基于 critique 改 deck，fire-and-forget 等于自检结果丢了。详见下方 § vision-checker 协议。
+主 chat 静默以为卡死。**不传 `run_in_background: true`**——前台等结果才能基于
+critique 改 deck，fire-and-forget 等于自检结果丢了。（万一传了，工作台 hook
+会透明改回前台 + 给你注 system 提示，你不会看到 deny 错误。）详见下方 § vision-checker 协议。
 
 > 协议详细：[§ 用户直接编辑协议](#用户直接编辑协议c42026-05-02) / [§ Tweaks 暴露协议](#tweaks-暴露协议c52026-05-02) / [§ vision-checker 协议](#vision-checker-协议s3a2026-05-02)
 
