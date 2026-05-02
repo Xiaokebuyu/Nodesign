@@ -223,4 +223,43 @@ export const Events = {
     urls,    // 数组，可能多个
     ...(page !== undefined ? { page } : {}),
   }),
+
+  // ── A1.2（2026-05-02）：实时上下文用量 ──
+  // SDKControlGetContextUsageResponse（sdk.d.ts:2451-2541）由 query.getContextUsage()
+  // 返回。loop.js 在每个 assistant message 后 await 一次 emit，前端 ContextUsageBar
+  // 接事件渲进度条 + breakdown + autoCompact 阈值预警。
+  //
+  // 关键字段（为前端做轻量化封装，不全量透传以节省 ws 带宽）：
+  //   totalTokens / maxTokens / percentage      — 主进度条数据
+  //   autoCompactThreshold                       — 触发 autoCompact 的阈值（绝对 token）
+  //   isAutoCompactEnabled                        — 当前开关状态（前端预警条件之一）
+  //   model                                       — 当前模型 id
+  //   messageBreakdown.toolCallsByType            — 工具消耗 token 排名（展开看）
+  //   memoryFiles / mcpTools / agents / skills    — 各类目消耗（展开看）
+  //
+  // categories / gridRows 不传 —— 前端不渲网格，只用 percentage + breakdown。
+  contextUsage: (usage) => ({
+    type: 'run.context_usage',
+    totalTokens: usage.totalTokens,
+    maxTokens: usage.maxTokens,
+    percentage: usage.percentage,
+    autoCompactThreshold: usage.autoCompactThreshold,
+    isAutoCompactEnabled: usage.isAutoCompactEnabled,
+    model: usage.model,
+    // 轻量化 breakdown — 前端 hover/expand 能看到细节，不渲细节时不占空间
+    messageBreakdown: usage.messageBreakdown ? {
+      toolCallTokens: usage.messageBreakdown.toolCallTokens,
+      toolResultTokens: usage.messageBreakdown.toolResultTokens,
+      attachmentTokens: usage.messageBreakdown.attachmentTokens,
+      assistantMessageTokens: usage.messageBreakdown.assistantMessageTokens,
+      userMessageTokens: usage.messageBreakdown.userMessageTokens,
+      // toolCallsByType 是排行（用于"哪个工具吃 token 最多"），保留 top 10
+      toolCallsByType: (usage.messageBreakdown.toolCallsByType || [])
+        .slice(0, 10),
+    } : null,
+    // 类目级别 token 数（聚合，不传完整数组）
+    memoryFilesTokens: (usage.memoryFiles || []).reduce((s, m) => s + (m.tokens || 0), 0),
+    mcpToolsTokens: (usage.mcpTools || []).reduce((s, t) => s + (t.tokens || 0), 0),
+    agentsTokens: (usage.agents || []).reduce((s, a) => s + (a.tokens || 0), 0),
+  }),
 };

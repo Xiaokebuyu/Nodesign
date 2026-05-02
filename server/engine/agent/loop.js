@@ -472,9 +472,39 @@ export async function runAgent({
     // 在 attachQuery 之前的窗口里，cancelRun 会 fallback 到 abortController.abort。
     attachQuery(runId, stream);
 
+    // A2.1：实时上下文用量推送。
+    // 每个 assistant message 后 fire-and-forget 一次 query.getContextUsage()
+    // → 前端 ContextUsageBar 渲进度条 + breakdown + autoCompact 阈值预警。
+    //
+    // - **fire-and-forget**：不 await，避免阻塞 message 流；in-flight 守护防堆积
+    //   （上一次还没返回 / 慢 control request 时下一次 skip）
+    // - **fail-soft**：getContextUsage 可能在 binary init 完成前调到，或者 stream
+    //   端到端 race，try/catch 警告但不抛
+    // - **粒度**：per-assistant 比 per-turn 灵敏 —— 用户能看到上下文随每个
+    //   thinking/tool block 真实涨。control request 走 stdio JSON IPC，开销很小
+    let usageInFlight = false;
+    const emitContextUsage = () => {
+      if (usageInFlight) return;
+      usageInFlight = true;
+      stream.getContextUsage()
+        .then((usage) => {
+          if (usage) ctx.emit(Events.contextUsage(usage));
+        })
+        .catch((err) => {
+          // 不是错；可能 binary 还没 init 完 / stream 已 end / control request race
+          console.warn(`[run ${runId}] getContextUsage failed:`, err.message);
+        })
+        .finally(() => {
+          usageInFlight = false;
+        });
+    };
+
     for await (const message of stream) {
       ctx.ensureNotAborted();
       handleSDKMessage(ctx, message);
+
+      // A2.1：assistant message 后推一次 context usage（不阻塞）
+      if (message.type === 'assistant') emitContextUsage();
 
       if (message.type === 'result') {
         // Phase 3c：先识别 cancellation。query.interrupt() 让 SDK 自然结束时
