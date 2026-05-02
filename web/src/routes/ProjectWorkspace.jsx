@@ -739,7 +739,7 @@ export default function ProjectWorkspace() {
 
     setMessages(ms => [...ms, { id: newId('msg'), role: 'user', content: text }]);
     try {
-      const { runId } = await Turn.send({
+      const { runId, sessionId: returnedSid } = await Turn.send({
         pid: id,
         chat: text,
         attachments,
@@ -750,6 +750,12 @@ export default function ProjectWorkspace() {
       setCurrentRunId(runId);  // 终止生成用
       setActiveRun({ pid: id, runId });  // A4.3：让 AskUserQuestionView 直 POST /answer
       setInputs([]);  // 已发送的托盘清空
+      // streamInput 重构修：从 /work 路径起新 session 时立刻 navigate 到 /sessions/<sid>
+      // —— 否则用户在第一 turn 跑完前发追加，currentSessionId 还是 null 会被当新 session
+      // 起，跟原 session 脱钩（之前只在 run.done/cancelled 后 navigate，慢了一拍）
+      if (!currentSessionId && returnedSid) {
+        navigate(`/projects/${id}/sessions/${returnedSid}`, { replace: true });
+      }
     } catch (err) {
       setMessages(ms => [...ms, {
         id: newId('msg'),
