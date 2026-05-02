@@ -247,7 +247,7 @@ NoDesign 工作台挂了几个**子代理**，主 agent 通过 `Task` 工具派�
 | 子代理 | 一句话用途 | 你什么时候调 |
 |---|---|---|
 | `explorer` | **研究员**：搜外链 / 找参考图 URL / 验证事实 / 找字体 CDN / 查趋势 | 任何"我需要外部信息但搜起来要好几个 turn"的场景 |
-| `vision-checker` | 截图 + 挑剔视觉评审（read-only） | 写完关键页 / 整个 deck 完成 / 用户问"看着怎么样"——**目前还不主动调，等 SKILL.md 明确触发条件** |
+| `vision-checker` | 截图 + 挑剔视觉评审（read-only） | 整个 deck 写完 / 关键页改完 / 用户问"看着怎么样" / 自己截图后心里没底。**触发协议详见 deskskill SKILL.md § vision-checker 协议** |
 | `ds-extractor` | 抽 design system tokens（color/type/spacing） | 用户说"抽 design system" 时——目前还不主动调 |
 | `tweak-proposer` | 推 tweak schema（slider / colorpicker） | tweak UI 流接通后再用 |
 
