@@ -60,17 +60,36 @@ export default function TweaksPanel({
     return () => { cancelled = true; };
   }, [projectId, sessionId, reloadKey]);
 
+  // A6.2：scope-aware CSS var 应用。control.target_scope 是 CSS selector，
+  // 不传默认 ":root"。用 doc.querySelector(scope) 找 scope 元素在它身上
+  // setProperty —— 配合 SKILL.md HTML 规范的 per-page scoped override 让
+  // "封面字号"slider 不牵连内页字号。
+  const resolveScopeEl = useCallback((doc, scope) => {
+    if (!doc) return null;
+    const sel = scope || ':root';
+    if (sel === ':root') return doc.documentElement;
+    try {
+      const el = doc.querySelector(sel);
+      if (!el) console.warn(`[TweaksPanel] target_scope "${sel}" not found in iframe`);
+      return el;
+    } catch (err) {
+      console.warn(`[TweaksPanel] invalid target_scope selector "${sel}":`, err.message);
+      return null;
+    }
+  }, []);
+
   const applyToIframe = useCallback((control, value) => {
     const doc = iframeDoc || iframeRef?.current?.contentDocument;
     if (!doc) return;
-    const root = doc.documentElement;
+    const scopeEl = resolveScopeEl(doc, control.target_scope);
+    if (!scopeEl) return;  // selector miss → 跳过本次 apply（已 console.warn）
     if (control.target_var) {
       const v = control.unit ? `${value}${control.unit}` : String(value);
-      root.style.setProperty(control.target_var, v);
+      scopeEl.style.setProperty(control.target_var, v);
     } else if (control.target_class_on) {
-      root.classList.toggle(control.target_class_on, !!value);
+      scopeEl.classList.toggle(control.target_class_on, !!value);
     }
-  }, [iframeDoc, iframeRef]);
+  }, [iframeDoc, iframeRef, resolveScopeEl]);
 
   const handleChange = (control, value) => {
     setValues(v => ({ ...v, [control.id]: value }));
@@ -80,10 +99,11 @@ export default function TweaksPanel({
   const handleReset = () => {
     const doc = iframeDoc || iframeRef?.current?.contentDocument;
     if (!doc) return;
-    const root = doc.documentElement;
     for (const c of controls) {
-      if (c.target_var) root.style.removeProperty(c.target_var);
-      else if (c.target_class_on) root.classList.remove(c.target_class_on);
+      const scopeEl = resolveScopeEl(doc, c.target_scope);
+      if (!scopeEl) continue;
+      if (c.target_var) scopeEl.style.removeProperty(c.target_var);
+      else if (c.target_class_on) scopeEl.classList.remove(c.target_class_on);
     }
     const init = {};
     for (const c of controls) init[c.id] = c.default;
@@ -92,13 +112,17 @@ export default function TweaksPanel({
 
   const handleApply = () => {
     if (controls.length === 0) return;
+    // A6.2：序列化 (target_var, target_scope, value) 让 agent 知道每条该写
+    // 哪个 selector 的 CSS rule。不传 scope = :root 全局；其他 selector 写
+    // <scope> { --xxx: value; } per-page scoped override（详见 SKILL.md）。
     const summary = controls.map(c => {
       const v = values[c.id];
       const display = c.unit ? `${v}${c.unit}` : v;
       const target = c.target_var || `class:${c.target_class_on}`;
-      return `- ${c.id} → ${target} = ${display}`;
+      const scope = c.target_scope || ':root';
+      return `- ${c.id} → ${target} = ${display}  @ ${scope}`;
     }).join('\n');
-    onChat?.(`把当前 tweaks 的实时数值固化到 canvas.html 的 :root CSS variables 定义里，不要改其他东西：\n${summary}\n\n固化完后调 mcp__nodesign__expose_tweaks 用更新后的 default 值重新暴露这套 schema。`);
+    onChat?.(`把当前 tweaks 的实时数值固化到 canvas.html 对应 CSS rule 里（按下方 @ scope —— ":root" 写到 :root 块；其他 selector 写 \`<scope> { --xxx: value; }\` 加在 design-tokens style 块底部 per-page override 区），不要改其他东西：\n${summary}\n\n固化完后调 mcp__nodesign__expose_tweaks 用更新后的 default 值重新暴露这套 schema。`);
   };
 
   const handleExposeCTA = () => {

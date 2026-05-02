@@ -420,11 +420,49 @@ Claude Design 的核心差异化能力之一：deck 不只是"静态输出"，�
 - 99% 用 `target_var` + 对应 CSS variable（更灵活，连续值也能改）
 - 只有 segmented / toggle 改的是"加 class 切样式分支"时才用 `target_class_on`
 
+**target_scope（A6.2 新增）—— per-page / per-layout 限定 control 影响范围**：
+
+不传 `target_scope` 时 control 默认作用于 `:root` 全局 —— 拖 `--hero-size`
+影响**所有页**字号。如果你想让 slider 只影响某 section（比如"封面字号"
+slider 拖时不牵连内页字号），加 `target_scope` 字段写 CSS selector：
+
+```json
+{
+  "id": "cover_hero_size",
+  "type": "slider",
+  "label": "封面 Hero 字号",
+  "target_var": "--hero-size",
+  "target_scope": "section[data-page=\"1\"]",
+  "min": 56, "max": 120, "step": 4, "default": 80, "unit": "px"
+}
+```
+
+前端 `setProperty` 会作用在 `<section data-page="1">` 元素上而不是 `:root`，
+selector specificity 让该 section 内的 `var(--hero-size)` 取这个 scoped 值。
+
+**配套 HTML 写法**（详见 § HTML 规范 § scoped tweak vars）：
+
+```css
+:root                       { --hero-size: 56px; }   /* 默认 */
+section[data-page="1"]      { --hero-size: 80px; }   /* 封面 override */
+[data-layout="quote"]       { --body-size: 22px; }
+section[data-purpose*="数据"] { --accent: #c45c3f; }
+```
+
+**何时用 target_scope**：
+- ✅ 封面跟内页字号差很多 —— `target_scope: 'section[data-page="1"]'`
+- ✅ 引言页 body 字号比一般大 —— `target_scope: '[data-layout="quote"]'`
+- ✅ 数据页强调色想跟其他页区别 —— `target_scope: '[data-purpose*="数据"]'`
+- ❌ 全局 token（主色 / 主字体 / 8pt grid） —— 不传 scope 默认 `:root` 就好
+
 **别犯的错**：
 - ❌ 暴露 20 个 control（信息过载，用户调不过来）—— 5-8 个核心维度就够
 - ❌ `target_var` 不以 `--` 开头（zod 校验会拒）
 - ❌ slider 没 unit（默认 px 也写明白）—— 前端就显示不了"56px"
 - ❌ Apply 后只改 :root，忘了再 expose_tweaks 更新 default
+- ❌ `target_scope` 写了但 canvas.html 里**没有**对应 selector 的 CSS rule
+  （前端 setProperty 会成功但没人 read 这个 var → 控件失灵）—— 写 control
+  之前先确保 HTML 里有对应 scoped rule，或在 Apply 时一并加
 
 ---
 

@@ -36,6 +36,16 @@ const ControlSchema = z.object({
     .regex(/^--[a-zA-Z0-9-]+$/, 'target_var must be a CSS custom property starting with --')
     .optional(),
   target_class_on: z.string().optional(),
+  // A6.2：CSS selector 限定 control 影响范围。不传默认 ":root"（全局）。
+  // 例：'section[data-page="1"]' / '[data-layout="cover"]' / '[data-purpose*="数据"]'
+  // 配合 SKILL.md HTML 规范的"per-page scoped override"教学（让"封面字号"slider
+  // 不牵连内页字号）。前端 TweaksPanel 应用时 doc.querySelector(scope) 找元素
+  // 在它身上 setProperty 而不是 :root。
+  target_scope: z
+    .string()
+    .max(120)
+    .optional()
+    .describe('CSS selector for scope (e.g. \'section[data-page="1"]\'); default ":root" applies globally. Use to limit one control to one page / one layout type.'),
   min: z.number().optional(),
   max: z.number().optional(),
   step: z.number().optional(),
