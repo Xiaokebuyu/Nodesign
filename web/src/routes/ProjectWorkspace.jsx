@@ -2,13 +2,12 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Share2, Download, MoreHorizontal } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
-// F2.1：删 ThreeColumnLayout，换 PanelManager + FloatingPanel 浮动 panel 风
-// F2.2：5 tab 拆独立 panel 后 ContextPanel 也会删
-import { createPortal } from 'react-dom';
+// 主区两栏固定（左 chat + 右 canvas 占满）；5 个次级 UI = 浮窗 bounds=parent
+// 限制在 canvas section 内（chat / canvas 不再可拖动 — PLAN.md:431 旧决策回归）。
 import FloatingPanel from '../components/layout/FloatingPanel.jsx';
 import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
 import PanelMenu from '../components/layout/PanelMenu.jsx';
-import { MessageCircle, Image as ImageIcon, Crosshair, MessageSquare, Bookmark, Sliders, Settings } from 'lucide-react';
+import { Crosshair, MessageSquare, Bookmark, Sliders, Settings } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
 import InspectTab from '../components/context-panel/InspectTab.jsx';
@@ -72,6 +71,10 @@ export default function ProjectWorkspace() {
   // P0+ s1 C23：toolElapsed 从单独 state 改为写到 message 对象的 elapsed 字段，
   // 消除 prop drilling，Message 组件直接读 message.elapsed。
   const [systemInfo, setSystemInfo] = useState(null);
+  // A2.2：实时 context usage（run.context_usage 事件，每个 assistant 块更新）。
+  // session 跨 turn 累积，run.start 不清零 —— 第一个 assistant 后会推新值
+  // 自动 overwrite。换 session 时 SessionListModal/Hub 入口已重置整个组件。
+  const [contextUsage, setContextUsage] = useState(null);
   const [promptSuggestion, setPromptSuggestion] = useState(null);
   const [agentProgress, setAgentProgress] = useState(null);
   // C29：DecisionsTab 自动刷新触发器（agent 调 record_decision / compact 后 bump）
@@ -97,42 +100,26 @@ export default function ProjectWorkspace() {
   const [comments, setComments] = useState([]);   // P0 mock：D 流不在范围
   const exportBtnRef = useRef(null);
   const actionsBtnRef = useRef(null);
+  // A2.2b：autoCompact 阈值预警的"已警告"flag。同一轮接近阈值只 toast 一次，
+  // 真 compact_boundary 触发时 reset 为 false（下一轮重新累积时可再次预警）。
+  const compactWarnedRef = useRef(false);
 
   // ── memo / callback（必须在 early return 之前）──
   const deckSpec = useMemo(() => MOCK_DECK_SPEC, []);
 
-  // F2.1+F3.1：FloatingPanel 默认 layout —— 三浮窗紧凑布局，最大化空间利用
-  // 用 viewport 算，Math.max 兜底防小窗口（preview headless 实测可能 421x12）
-  const defaultPanels = useMemo(() => {
-    const rawW = typeof window !== 'undefined' ? window.innerWidth : 1600;
-    const rawH = typeof window !== 'undefined' ? window.innerHeight : 900;
-    const W = Math.max(rawW, 1200);
-    const H = Math.max(rawH, 700);
-    const TOP = 60;            // 紧贴 TopBar（之前 80 留太多）
-    const SIDE = 6;            // 边缘 6px（之前 12）
-    const GAP_BETWEEN = 6;     // panel 之间 6px（之前 12）
-    const CHAT_W = 340;        // 左侧 Chat 宽（缩 20）
-    const INSPECT_W = 340;     // 右侧 Inspect 宽
-    const panelH = Math.max(H - TOP - SIDE, 400);
-    const canvasW = Math.max(W - CHAT_W - INSPECT_W - SIDE * 2 - GAP_BETWEEN * 2, 400);
-    const canvasX = SIDE + CHAT_W + GAP_BETWEEN;
-    const inspectX = W - INSPECT_W - SIDE;
-    return {
-      chat:    { position: { x: SIDE,     y: TOP }, size: { width: CHAT_W,    height: panelH }, visible: true, zIndex: 100 },
-      canvas:  { position: { x: canvasX,  y: TOP }, size: { width: canvasW,   height: panelH }, visible: true, zIndex: 101 },
-      inspect: { position: { x: inspectX, y: TOP }, size: { width: INSPECT_W, height: panelH }, visible: true, zIndex: 102 },
-      // 4 tab 默认 hidden，position 接近右栏方便用户开了不会找不到
-      comments:  { position: { x: inspectX, y: TOP + 60 }, size: { width: INSPECT_W, height: 360 }, visible: false, zIndex: 100 },
-      decisions: { position: { x: inspectX, y: TOP + 90 }, size: { width: INSPECT_W, height: 360 }, visible: false, zIndex: 100 },
-      tweaks:    { position: { x: inspectX, y: TOP + 120 }, size: { width: INSPECT_W, height: 360 }, visible: false, zIndex: 100 },
-      system:    { position: { x: inspectX, y: TOP + 150 }, size: { width: INSPECT_W, height: 360 }, visible: false, zIndex: 100 },
-    };
-  }, []);
+  // 浮窗默认 layout —— chat / canvas 改回固定栏（不浮）；
+  // 5 个次级 UI 仍是浮窗（bounds = canvas 容器），默认 hidden 按需 spawn。
+  // position 是相对 canvas 容器的坐标系（不是 viewport）。
+  // y 起点 64 = 避开 canvas toolbar（~44px）+ 留 20px 呼吸。
+  const defaultPanels = useMemo(() => ({
+    inspect:   { position: { x: 24, y: 64 },   size: { width: 320, height: 420 }, visible: false, zIndex: 100 },
+    comments:  { position: { x: 48, y: 96 },   size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
+    decisions: { position: { x: 72, y: 128 },  size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
+    tweaks:    { position: { x: 96, y: 160 },  size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
+    system:    { position: { x: 120, y: 192 }, size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
+  }), []);
 
-  // F2.3：PanelMeta —— PanelMenu 列出 panel 时用
   const panelMeta = useMemo(() => ({
-    chat:      { label: 'Chat',      icon: MessageCircle },
-    canvas:    { label: 'Canvas',    icon: ImageIcon },
     inspect:   { label: 'Inspect',   icon: Crosshair },
     comments:  { label: 'Comments',  icon: MessageSquare },
     decisions: { label: 'Decisions', icon: Bookmark },
@@ -372,6 +359,28 @@ export default function ProjectWorkspace() {
         setSystemInfo(evt.info);
         break;
 
+      case 'run.context_usage': {
+        // A2.1 后端 loop.js 每个 assistant message 后推一次。
+        // 整条 evt 已是 ContextUsageBar 期望的 liveUsage 形态（events.js
+        // Events.contextUsage 已轻量化），直接 setState 即可。
+        setContextUsage(evt);
+        // A2.3：autoCompact 阈值预警。当 totalTokens >= 90% threshold 时
+        // toast 提示"快压缩了"。compactWarnedRef 防止同一轮重复 toast；
+        // 真 compact_boundary 触发时 reset，让下一段可以再次预警。
+        if (evt.isAutoCompactEnabled && evt.autoCompactThreshold && evt.totalTokens) {
+          const ratio = evt.totalTokens / evt.autoCompactThreshold;
+          if (ratio >= 0.9 && !compactWarnedRef.current) {
+            compactWarnedRef.current = true;
+            const remainingK = ((evt.autoCompactThreshold - evt.totalTokens) / 1000).toFixed(0);
+            showToast(
+              `⚠ 上下文接近自动压缩阈值（${(ratio * 100).toFixed(0)}%），剩 ${remainingK}k tokens`,
+              'error',  // 用 error kind 拿橙红色配色凸显严重性
+            );
+          }
+        }
+        break;
+      }
+
       case 'run.prompt_suggestion':
         // 每轮后预测的下条 prompt（C19 SuggestionChip 消费）
         setPromptSuggestion(evt.suggestion);
@@ -504,10 +513,22 @@ export default function ProjectWorkspace() {
         showToast(evt.text || '通知', mapNotificationKind(evt.priority));
         break;
 
-      case 'run.compact_boundary':
+      case 'run.compact_boundary': {
         // 上下文压缩边界 —— 让用户知道"agent 重新整理了上下文"
-        showToast('上下文已压缩', 'info');
+        // A2.3：升级提示带 pre/post token 数 + trigger（manual/auto）
+        const meta = evt.compactMetadata;
+        let msg = '上下文已自动压缩';
+        if (meta?.pre_tokens && meta?.post_tokens) {
+          const preK = (meta.pre_tokens / 1000).toFixed(0);
+          const postK = (meta.post_tokens / 1000).toFixed(0);
+          const trigger = meta.trigger === 'manual' ? '手动' : '自动';
+          msg = `上下文已${trigger}压缩 ${preK}k → ${postK}k tokens`;
+        }
+        showToast(msg, 'info');
+        // reset 预警 flag，下一段再次接近阈值时可以重新提示
+        compactWarnedRef.current = false;
         break;
+      }
 
       case 'run.api_retry': {
         // SDK API 重试（rate limit / server error 等）。
@@ -849,7 +870,9 @@ export default function ProjectWorkspace() {
       actions={
         <>
           <PanelMenu />
-          {systemInfo && <ContextUsageBar info={systemInfo} />}
+          {(systemInfo || contextUsage) && (
+            <ContextUsageBar info={systemInfo} liveUsage={contextUsage} />
+          )}
           <UndoButton
             projectId={id}
             sessionId={currentSessionId}
@@ -908,22 +931,104 @@ export default function ProjectWorkspace() {
         </>
       }
     >
-      {/* F2.1：main area = 空 stage（暖底 + 提示文字），所有功能 panel 走
-          浮动 portal。F2.2 加 comments/decisions/tweaks/system 4 个 panel。 */}
+      {/* 主区两栏：左 ChatPanel 固定 + 右 Canvas section（占满 + 浮窗叠加） */}
+      {/* AppShell children 包装层是普通 div（非 flex），用 height:100% 拿满 */}
       <div style={{
-        flex: 1, position: 'relative',
+        height: '100%', display: 'flex', minHeight: 0,
         background: STAGE.bg,
         overflow: 'hidden',
       }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: COLOR.sub, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
-          pointerEvents: 'none',
-          opacity: 0.35,
+        {/* 左栏 chat 固定 */}
+        <aside style={{
+          width: 360, flexShrink: 0,
+          display: 'flex', flexDirection: 'column',
+          background: '#fff',
+          borderRight: `1px solid ${COLOR.border}`,
+          minHeight: 0,
         }}>
-          拖动 panel 调整布局 · F2.3 TopBar 重新打开关闭的 panel
-        </div>
+          <ChatPanel
+            messages={messages}
+            onSend={handleSend}
+            isStreaming={isStreaming}
+            trayItems={inputs}
+            onRemoveTrayItem={handleRemoveInput}
+            onPickFile={handleAddInput}
+            promptSuggestion={promptSuggestion}
+            onDismissSuggestion={() => setPromptSuggestion(null)}
+            agentProgress={agentProgress}
+            onStop={currentRunId ? handleStop : null}
+            todos={todos}
+            sessionTitle={currentSessionTitle}
+            onOpenSessionList={() => setSessionListOpen(true)}
+          />
+        </aside>
+
+        {/* 右主区：CanvasFrame 占满（边到边，无 padding 卡片）+ 5 浮窗叠加 */}
+        {/* bounds='parent' 限制浮窗在此 section 内，不跑屏外、不跑到 chat 上 */}
+        <section style={{
+          flex: 1, minWidth: 0,
+          position: 'relative',
+          display: 'flex', flexDirection: 'column',
+          background: '#fff',
+        }}>
+          <CanvasFrame
+            htmlSrc={currentSessionId ? Canvas.artifactUrl(id, currentSessionId, reloadToken) : null}
+            selectedAnchor={selectedAnchor}
+            onSelectChange={setSelectedAnchor}
+            onTextEdit={handleTextEdit}
+            onIframeReady={handleIframeReady}
+            candidates={project.candidates || []}
+            activeCandidateId={project.activeCandidateId}
+            onSelectCandidate={handleSelectCandidate}
+            onAddCandidate={handleAddCandidate}
+            onRemoveCandidate={handleRemoveCandidate}
+            onRenameCandidate={handleRenameCandidate}
+          />
+
+          {/* 浮窗层 —— bounds='parent' = 不出 canvas section */}
+          <FloatingPanel id="inspect" title="Inspect" icon={Crosshair}>
+            <InspectTab
+              selectedAnchor={selectedAnchor}
+              iframeDoc={iframeDoc}
+              onAddComment={handleAddComment}
+              onDirectEdit={handleDirectEdit}
+              onTriggerRun={handleTriggerRun}
+            />
+          </FloatingPanel>
+          <FloatingPanel id="comments" title="Comments" icon={MessageSquare}>
+            <CommentsTab
+              comments={comments}
+              onJump={handleJumpToComment}
+              onResolve={handleResolveComment}
+              onDelete={handleDeleteComment}
+            />
+          </FloatingPanel>
+          <FloatingPanel id="decisions" title="Decisions" icon={Bookmark}>
+            <DecisionsTab
+              projectId={id}
+              sessionId={currentSessionId}
+              reloadKey={decisionsReloadKey}
+            />
+          </FloatingPanel>
+          <FloatingPanel id="tweaks" title="Tweaks" icon={Sliders}>
+            <div style={{ padding: GAP.lg }}>
+              <div style={{
+                fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, fontWeight: 500,
+                color: COLOR.text, marginBottom: GAP.sm,
+              }}>Tweaks</div>
+              <p style={{
+                fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub,
+                lineHeight: 1.6, margin: 0,
+              }}>
+                agent 暴露的可调参数（color / spacing / layout variant）。S3 接
+                expose_tweaks MCP 工具 → 在 data-tweakable 元素旁渲染 sliders。
+              </p>
+            </div>
+          </FloatingPanel>
+          <FloatingPanel id="system" title="System" icon={Settings}>
+            <SystemTab project={project} deckSpec={deckSpec} />
+          </FloatingPanel>
+        </section>
       </div>
 
       <ShareModal show={shareOpen} onClose={() => setShareOpen(false)} project={project} />
@@ -962,95 +1067,6 @@ export default function ProjectWorkspace() {
         }}
       />
 
-      {/* F2.1：3 个浮动 panel（Chat / Canvas / Inspect）通过 portal 挂到 body
-          z-index 由 PanelManager 自动管理（点哪个升到最前）
-          F2.2 加 4 个 tab panel（默认 hidden，TopBar 重开） */}
-      {createPortal(
-        <>
-          <FloatingPanel id="chat" title="Chat" icon={MessageCircle}>
-            <ChatPanel
-              messages={messages}
-              onSend={handleSend}
-              isStreaming={isStreaming}
-              trayItems={inputs}
-              onRemoveTrayItem={handleRemoveInput}
-              onPickFile={handleAddInput}
-              promptSuggestion={promptSuggestion}
-              onDismissSuggestion={() => setPromptSuggestion(null)}
-              agentProgress={agentProgress}
-              onStop={currentRunId ? handleStop : null}
-              todos={todos}
-              sessionTitle={currentSessionTitle}
-              onOpenSessionList={() => setSessionListOpen(true)}
-            />
-          </FloatingPanel>
-
-          <FloatingPanel id="canvas" title="Canvas" icon={ImageIcon}>
-            <CanvasFrame
-              htmlSrc={currentSessionId ? Canvas.artifactUrl(id, currentSessionId, reloadToken) : null}
-              selectedAnchor={selectedAnchor}
-              onSelectChange={setSelectedAnchor}
-              onTextEdit={handleTextEdit}
-              onIframeReady={handleIframeReady}
-              candidates={project.candidates || []}
-              activeCandidateId={project.activeCandidateId}
-              onSelectCandidate={handleSelectCandidate}
-              onAddCandidate={handleAddCandidate}
-              onRemoveCandidate={handleRemoveCandidate}
-              onRenameCandidate={handleRenameCandidate}
-            />
-          </FloatingPanel>
-
-          <FloatingPanel id="inspect" title="Inspect" icon={Crosshair}>
-            <InspectTab
-              selectedAnchor={selectedAnchor}
-              iframeDoc={iframeDoc}
-              onAddComment={handleAddComment}
-              onDirectEdit={handleDirectEdit}
-              onTriggerRun={handleTriggerRun}
-            />
-          </FloatingPanel>
-
-          {/* F2.2：4 个 tab 拆独立 panel，默认 hidden（PanelMenu 重开）*/}
-          <FloatingPanel id="comments" title="Comments" icon={MessageSquare}>
-            <CommentsTab
-              comments={comments}
-              onJump={handleJumpToComment}
-              onResolve={handleResolveComment}
-              onDelete={handleDeleteComment}
-            />
-          </FloatingPanel>
-
-          <FloatingPanel id="decisions" title="Decisions" icon={Bookmark}>
-            <DecisionsTab
-              projectId={id}
-              sessionId={currentSessionId}
-              reloadKey={decisionsReloadKey}
-            />
-          </FloatingPanel>
-
-          <FloatingPanel id="tweaks" title="Tweaks" icon={Sliders}>
-            <div style={{ padding: GAP.lg }}>
-              <div style={{
-                fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, fontWeight: 500,
-                color: COLOR.text, marginBottom: GAP.sm,
-              }}>Tweaks</div>
-              <p style={{
-                fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub,
-                lineHeight: 1.6, margin: 0,
-              }}>
-                agent 暴露的可调参数（color / spacing / layout variant）。S3 接
-                expose_tweaks MCP 工具 → 在 data-tweakable 元素旁渲染 sliders。
-              </p>
-            </div>
-          </FloatingPanel>
-
-          <FloatingPanel id="system" title="System" icon={Settings}>
-            <SystemTab project={project} deckSpec={deckSpec} />
-          </FloatingPanel>
-        </>,
-        document.body
-      )}
     </AppShell>
     </PanelManagerProvider>
   );
