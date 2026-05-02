@@ -82,6 +82,22 @@ httpServer.listen(PORT, () => {
   console.log(`[server] health: http://localhost:${PORT}/api/health`);
 });
 
+// 守护进程级兜底：SDK binary 子进程偶发 stdio 异常（write EPIPE 之类）会
+// emit unhandled 'error' on Socket，nodejs 默认把整个 process 拉下水（之前
+// 实测 "Session ID already in use" 错让 server crash 用户连不上）。
+//
+// 这里只 log + 不退出 —— 单次 SDK call 的 socket 错不该影响其他正在跑的
+// session 或新 HTTP 请求。真严重的错（OOM / 不可恢复 state）会 log 后由
+// 上层 watch / supervisord 重启。
+process.on('uncaughtException', (err) => {
+  console.error('[server] uncaughtException:', err?.message || err);
+  if (err?.stack) console.error(err.stack);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandledRejection:', reason?.message || reason);
+  if (reason?.stack) console.error(reason.stack);
+});
+
 // graceful shutdown
 let shuttingDown = false;
 function shutdown(signal) {

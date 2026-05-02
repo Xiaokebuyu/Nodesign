@@ -29,6 +29,7 @@
  */
 
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { AgentContext } from './context.js';
@@ -145,11 +146,20 @@ export async function runSession({
     }
   }
 
+  // 检测 jsonl 是否已存在 —— 决定走 resume（已存在）还是 sessionId（新建）
+  // 之前的 bug：session-loop 永远传 sessionId，但如果用户 close session 后又
+  // 用同 sid 起 query（hasActiveQuerySession=false 走 startNewRunSession），
+  // SDK binary 看 jsonl 已存在抛 "Session ID ... is already in use"，
+  // 子进程死，nodejs 端 stdin write EPIPE 整个 server 挂。
+  const isResume = await jsonlExistsForSession(cwdRoot, sessionId);
+
   const sdkOptions = {
     cwd: cwdRoot,
     abortController: sessionAbortController,
-    sessionId,                                   // 新建 session：让 SDK 用我们的 sid
-    ...(sessionTitle ? { title: sessionTitle.slice(0, 80) } : {}),
+    // 新建 → sessionId 让 SDK 用我们的 sid；已存在 → resume 续 jsonl 历史
+    ...(isResume ? { resume: sessionId } : { sessionId }),
+    // title 仅在新建时有效（resume 用持久化的 title）
+    ...(sessionTitle && !isResume ? { title: sessionTitle.slice(0, 80) } : {}),
     ...(sharedRoot ? { additionalDirectories: [sharedRoot] } : {}),
 
     env: {
@@ -390,4 +400,30 @@ export async function runSession({
       });
     } catch { /* */ }
   }
+}
+
+/**
+ * 检查给定 sessionId 是否已经有 SDK jsonl 落盘 —— 决定走 resume 还是新建。
+ *
+ * SDK 落盘路径：<sessionRoot>/.claude/projects/<encoded-cwd>/<sid>.jsonl
+ * encoded-cwd 把 cwd 绝对路径里 '/' 换成 '-'。我们不复制 SDK 编码逻辑，
+ * 直接遍历 .claude/projects/* 看哪个子目录里有 <sid>.jsonl。
+ */
+async function jsonlExistsForSession(sessionRoot, sessionId) {
+  const projectsDir = path.join(sessionRoot, '.claude', 'projects');
+  let entries;
+  try {
+    entries = await fs.readdir(projectsDir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const f = path.join(projectsDir, e.name, `${sessionId}.jsonl`);
+    try {
+      await fs.access(f);
+      return true;
+    } catch { /* not here, try next */ }
+  }
+  return false;
 }
