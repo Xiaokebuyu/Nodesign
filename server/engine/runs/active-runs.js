@@ -153,8 +153,11 @@ export function unregisterRun(runId) {
  * @returns {Promise<Record<string, string>>}  - resolve 时返回 answers map（question text → label）
  */
 export function registerPendingQuestion(runId, toolUseId) {
-  const rec = activeRuns.get(runId);
-  if (!rec) return Promise.reject(new Error(`run ${runId} not active`));
+  // streamInput 模式优先：runId 是某个 active query session 的 currentRunId →
+  // 用 session 级 pendingQuestions Map（绑 sessionAbortController 寿命）
+  const sessionRec = findQuerySessionByRunId(runId);
+  const rec = sessionRec || activeRuns.get(runId);
+  if (!rec) return Promise.reject(new Error(`run ${runId} not active (no session, no per-turn run)`));
   if (!toolUseId) return Promise.reject(new Error('toolUseId required'));
 
   // 若已存在同 toolUseId 的 pending：reject 旧的避免漏 reject
@@ -176,12 +179,12 @@ export function registerPendingQuestion(runId, toolUseId) {
       createdAt: Date.now(),
     });
 
-    // run abort → reject pending（防 canUseTool 永久挂在 await）
+    // session-level / run-level abort → reject pending（防 canUseTool 永久挂）
     const onAbort = () => {
       const p = rec.pendingQuestions.get(toolUseId);
       if (p) {
         rec.pendingQuestions.delete(toolUseId);
-        reject(new Error(`run aborted before user answered: ${rec.abortController.signal.reason || 'unknown'}`));
+        reject(new Error(`aborted before user answered: ${rec.abortController.signal.reason || 'unknown'}`));
       }
     };
     if (rec.abortController.signal.aborted) {
@@ -190,6 +193,14 @@ export function registerPendingQuestion(runId, toolUseId) {
       rec.abortController.signal.addEventListener('abort', onAbort, { once: true });
     }
   });
+}
+
+/** runId → activeQuerySession（streamInput 模式）；找不到返 undefined */
+function findQuerySessionByRunId(runId) {
+  for (const [, qRec] of activeQuerySessions) {
+    if (qRec.currentRunId === runId) return qRec;
+  }
+  return undefined;
 }
 
 /**
@@ -202,8 +213,9 @@ export function registerPendingQuestion(runId, toolUseId) {
  * @returns {Promise<import('@anthropic-ai/claude-agent-sdk').ElicitationResult>}
  */
 export function registerPendingElicitation(runId, reqId) {
-  const rec = activeRuns.get(runId);
-  if (!rec) return Promise.reject(new Error(`run ${runId} not active`));
+  const sessionRec = findQuerySessionByRunId(runId);
+  const rec = sessionRec || activeRuns.get(runId);
+  if (!rec) return Promise.reject(new Error(`run ${runId} not active (no session, no per-turn run)`));
   if (!reqId) return Promise.reject(new Error('reqId required'));
 
   const existing = rec.pendingElicitations.get(reqId);
@@ -249,7 +261,8 @@ export function registerPendingElicitation(runId, reqId) {
  * @returns {boolean}
  */
 export function provideElicitation(runId, reqId, result) {
-  const rec = activeRuns.get(runId);
+  const sessionRec = findQuerySessionByRunId(runId);
+  const rec = sessionRec || activeRuns.get(runId);
   if (!rec) return false;
   const p = rec.pendingElicitations.get(reqId);
   if (!p) return false;
@@ -272,7 +285,8 @@ export function provideElicitation(runId, reqId, result) {
  * @returns {boolean} true=resolved；false=run/toolUseId 不存在或已 resolve
  */
 export function provideAnswer(runId, toolUseId, answers) {
-  const rec = activeRuns.get(runId);
+  const sessionRec = findQuerySessionByRunId(runId);
+  const rec = sessionRec || activeRuns.get(runId);
   if (!rec) return false;
   const p = rec.pendingQuestions.get(toolUseId);
   if (!p) return false;

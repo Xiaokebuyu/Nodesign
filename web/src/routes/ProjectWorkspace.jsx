@@ -195,6 +195,23 @@ export default function ProjectWorkspace() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, currentSessionId]);
 
+  // session/project 切换时重置 per-session UI state，防止跨 session/project 串话：
+  // - comments：纯前端 state（D 流接通前没持久化），切 session 旧 session 评论
+  //   仍残留在数组里，用户在新 session 看到错的评论
+  // - patches：同上
+  // - selectedAnchor：上个 session 选中的元素 anchor 切到新 session 不再有意义
+  // - 浮窗（inspect / a11y popover）切 session 时该关掉
+  useEffect(() => {
+    setComments([]);
+    setPatches([]);
+    setSelectedAnchor(null);
+    setInputs([]);                    // 清空附件托盘
+    setPromptSuggestion(null);        // 清掉上 session 残留 SuggestionChip
+    setAgentProgress(null);           // 清 subagent progress
+    useGlobalStore.getState().clearPlanForApproval();  // 清 plan 卡（如果切 session 时还在等 approval）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, currentSessionId]);
+
   // ── open WS once project exists ──
   // 依赖 project?.id 而非整个 project 对象，避免 status patch 触发重连
   useEffect(() => {
