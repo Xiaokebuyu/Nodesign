@@ -142,6 +142,27 @@ function maybeFixupMessagesBody(body) {
   }
 
   if (!parsed || typeof parsed !== 'object') return body;
+
+  // Vision 诊断（NODESIGN_DEBUG_VISION=1 时打开）：dump 走出去的 messages 里
+  // image content block 的统计，验证 SDK Read / MCP 工具到底有没有把 image
+  // base64 真的塞进 outgoing /v1/messages body。
+  if (process.env.NODESIGN_DEBUG_VISION === '1' && Array.isArray(parsed.messages)) {
+    const stats = scanImageBlocks(parsed.messages);
+    if (stats.total > 0 || stats.unknownImageRefs > 0) {
+      console.info(
+        `[binary-fixup vision] model=${parsed.model || '?'} `
+        + `images=${stats.total} (toolResult=${stats.inToolResult} userMsg=${stats.inUserMsg}) `
+        + `unknownRefs=${stats.unknownImageRefs} (file_id 等非 base64 引用)`
+      );
+      if (stats.unknownImageRefs > 0) {
+        console.warn(
+          `[binary-fixup vision] ⚠ 检测到 ${stats.unknownImageRefs} 个非标准 image 引用`
+          + `（可能 SDK Read 用 file_id 而非 base64 inline，binary 没 resolve 给 Kimi gateway）`
+        );
+      }
+    }
+  }
+
   if (!parsed.model || typeof parsed.model !== 'string') return body;
   if (!/^kimi/i.test(parsed.model)) return body;  // 只动 kimi-*
   if (!parsed.thinking || parsed.thinking.type !== 'adaptive') return body;
@@ -149,6 +170,34 @@ function maybeFixupMessagesBody(body) {
   // 改写：adaptive → enabled + budget_tokens 8192
   parsed.thinking = { type: 'enabled', budget_tokens: 8192 };
   return Buffer.from(JSON.stringify(parsed), 'utf8');
+}
+
+/**
+ * 扫 messages 数组里所有 image content block 出现位置 + 是否是标准
+ * base64 形态。返回 stats 用于 vision 诊断日志。
+ */
+function scanImageBlocks(messages) {
+  const stats = { total: 0, inToolResult: 0, inUserMsg: 0, unknownImageRefs: 0 };
+  for (const msg of messages) {
+    if (!Array.isArray(msg.content)) continue;
+    for (const block of msg.content) {
+      if (block?.type === 'image') {
+        stats.total++;
+        stats.inUserMsg++;
+        if (!block.source?.data) stats.unknownImageRefs++;
+      }
+      if (block?.type === 'tool_result' && Array.isArray(block.content)) {
+        for (const inner of block.content) {
+          if (inner?.type === 'image') {
+            stats.total++;
+            stats.inToolResult++;
+            if (!inner.source?.data) stats.unknownImageRefs++;
+          }
+        }
+      }
+    }
+  }
+  return stats;
 }
 
 /**
