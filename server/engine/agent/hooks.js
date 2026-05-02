@@ -118,6 +118,12 @@ export function createHooks({ ctx, workspaceRoot, projectId: _projectId } = {}) 
         matcher: 'Edit|Write',
         hooks: [makePostToolUseCanvasObservableHandler({ ctx })],
       },
+      // S4b-2 — Write design-plan.md 时 emit run.plan_doc_ready 给前端。
+      // 前端 ToolMessage 写工具渲染加"📄 查看设计计划"按钮，开 modal markdown 渲染。
+      {
+        matcher: 'Write',
+        hooks: [makePostToolUsePlanDocHandler({ ctx })],
+      },
       {
         matcher: 'mcp__nodesign__screenshot_canvas',
         hooks: [makePostToolUseScreenshotHandler({ ctx })],
@@ -500,6 +506,28 @@ function makePostToolUseCanvasObservableHandler({ ctx }) {
       console.warn(`[hooks/canvas observable] handler threw:`, err.message);
       return {};
     }
+  };
+}
+
+/**
+ * PostToolUse(Write design-plan.md) handler — S4b-2。
+ *
+ * agent 用 SDK Write 工具写 design-plan.md 后 emit run.plan_doc_ready，让前端
+ * 渲染"📄 查看设计计划"按钮 / toast。不阻塞 / 不返 hookSpecificOutput。
+ *
+ * basename 匹配 design-plan.md（兼容相对/绝对路径）。
+ */
+function makePostToolUsePlanDocHandler({ ctx }) {
+  return async (input, _toolUseId, _options) => {
+    try {
+      const filePath = input?.tool_input?.file_path;
+      if (!filePath || typeof filePath !== 'string') return {};
+      if (!/(?:^|[/\\])design-plan\.md$/i.test(filePath)) return {};
+      ctx.emit(Events.planDocReady(filePath));
+    } catch (err) {
+      console.warn(`[hooks/plan_doc_ready] handler threw:`, err.message);
+    }
+    return {};
   };
 }
 

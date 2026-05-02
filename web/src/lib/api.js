@@ -78,6 +78,11 @@ export const Spec = {
   read: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/spec`),
 };
 
+// ── DesignPlan（S4b-2：深度对齐后 agent Write 的 design-plan.md，markdown）──
+export const DesignPlan = {
+  read: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/plan`),
+};
+
 // ── PendingChanges（C4：用户直接编辑 + 评论 buffer，session-scoped）──
 // 前端 push edit / comment item，下次发 chat 时 turn.js 在 user message 前
 // prepend system 提示 → agent 主动调 mcp__nodesign__get_pending_changes 拉详情。

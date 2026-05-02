@@ -218,6 +218,13 @@ export const Events = {
     ...(anchor ? { anchor } : {}),
   }),
 
+  // S4b-2 PostToolUse(Write design-plan.md) hook：agent Write 完计划档后 emit。
+  // 前端 ProjectWorkspace 据此显示"📄 查看设计计划"按钮 / toast，开 modal 渲染 markdown。
+  planDocReady: (path) => ({
+    type: 'run.plan_doc_ready',
+    path,    // 相对 cwd 的路径，通常 'design-plan.md'
+  }),
+
   // ── Canvas 焕新 C1（2026-05-02）：MCP 工具反向通道 + tweaks/buffer 通知 ──
 
   // navigate_to_page 工具触发，前端 ProjectWorkspace 收到后切到第 N 页

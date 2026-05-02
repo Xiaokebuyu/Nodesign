@@ -162,6 +162,29 @@ router.get('/:pid/sessions/:sid/spec', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * GET /:pid/sessions/:sid/plan —— 读 sessions/<sid>/design-plan.md (S4b-2)
+ *
+ * agent 在深度对齐后用 SDK Write 工具写到 cwd 的 design-plan.md。前端 modal
+ * fetch 这个 endpoint 用 react-markdown 渲染。
+ *
+ * 不存在 → 200 + { plan: null }，让前端友好提示"还没生成设计计划"。
+ */
+router.get('/:pid/sessions/:sid/plan', async (req, res, next) => {
+  try {
+    if (!guard(req, res)) return;
+    const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
+    const file = path.join(sessionRoot, 'design-plan.md');
+    try {
+      const markdown = await fs.readFile(file, 'utf8');
+      res.json({ plan: markdown });
+    } catch (err) {
+      if (err.code === 'ENOENT') return res.json({ plan: null });
+      throw err;
+    }
+  } catch (err) { next(err); }
+});
+
 const EMPTY_CANVAS_HTML = `<!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><title>NoDesign canvas</title>
 <style>html,body{margin:0;height:100%;font-family:system-ui;background:#F9F8F6}
