@@ -29,6 +29,7 @@
  */
 
 import path from 'node:path';
+import os from 'node:os';
 import fs from 'node:fs/promises';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
@@ -233,10 +234,34 @@ export async function runSession({
       return Number.isFinite(v) && v > 0 ? v : 5;
     })(),
 
+    // Phase 3d 完整 sandbox（之前 streamInput 主路径漏配 filesystem，导致 agent
+    // 写 ./.claude/agent-memory/brand/memory.md 等被默认拒，看似"写完消失"）
     sandbox: {
       enabled: true,
       failIfUnavailable: true,
-      network: { allowLocalBinding: false },
+      network: {
+        allowLocalBinding: false,
+        // MVP 阶段开放外网（'*' = 全域允许）—— 让 agent 能 curl 下载图/字体/音频
+        // 到 ./assets/。生产可改成具体白名单（unsplash.com / fonts.googleapis.com
+        // / cdn.jsdelivr.net / pixabay.com 等业务实际需要的）
+        allowedDomains: ['*'],
+      },
+      filesystem: {
+        allowWrite: [
+          cwdRoot,
+          ...(sharedRoot ? [
+            path.join(sharedRoot, '.claude', 'agent-memory'),  // 跨 session memory
+            path.join(sharedRoot, 'assets'),                    // 用户/agent 共写 ./assets/（软链 → shared）
+          ] : []),
+        ],
+        denyWrite: ['/etc', '/usr', '/bin', '/sbin', '/private/etc'],
+        denyRead: [
+          '/etc/passwd', '/etc/shadow', '/etc/sudoers',
+          path.join(os.homedir(), '.ssh'),
+          path.join(os.homedir(), '.aws'),
+          path.join(os.homedir(), '.gnupg'),
+        ],
+      },
     },
 
     toolConfig: {

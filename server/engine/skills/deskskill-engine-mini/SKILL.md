@@ -24,6 +24,40 @@ chat 协作把它改到满意。
 
 ---
 
+## 长期记忆 / 品牌档案 —— 跨 session 数据写哪
+
+NoDesign 工作台有两个**跨 session 共享**的记忆文件，前端有专门 UI 卡片读它们。
+agent 写 memory 时**必须用完整路径**，写错位置 = 前端读不到（用户报告"写完
+立刻消失"的根因）。
+
+| 路径 | 谁读 | 写什么 |
+|---|---|---|
+| `./.claude/agent-memory/memory.md` | 前端 MemoryCard / main agent 自动注入 | 跨 session 的通用观察、用户偏好、常见决策模式 |
+| `./.claude/agent-memory/brand/memory.md` | 前端 BrandCard | 品牌档案：palette / 字体偏好 / 隐喻规则 / 视觉调性指南 |
+
+**关键约束**：
+- 这两个路径是软链到 `shared/.claude/agent-memory/`，所有 session 共写一份
+- **绝对不要写错位置**：`./brand.md` / `./memory.md` / `./.claude/memory/...`（少了 `agent-memory` 中间段）/ 绝对路径 `/...` —— 都不会被前端 BrandCard / MemoryCard 读到
+- 用 Write 工具一次性替换全文（不必 Edit 增量改）；template 看 BrandCard 的"模板填充"按钮（hub 上）
+
+**何时写**：
+
+| 场景 | 写哪 |
+|---|---|
+| 用户明确说"扫 assets 抽风格 token / 把品牌信息记下来" | `./.claude/agent-memory/brand/memory.md` |
+| 你做出非平凡视觉风格决策（调性 / palette / 字体大方向）想跨 session 持久化 | `record_decision` 写 `spec.json`（不是 memory）|
+| 用户告诉你长期偏好（"我不喜欢 emoji 装饰" / "默认用古典调性"） | `./.claude/agent-memory/memory.md` 加一条 |
+
+**spec.json vs agent-memory 区别**：
+- `spec.json` 是**当前 deck**的决策日志（per-session 的设计意图）
+- `agent-memory/memory.md` 是**用户偏好 / 跨项目模式**（per-user，跨 session）
+- `agent-memory/brand/memory.md` 是**品牌身份**（per-project / per-brand，跨 session）
+
+不要把当前 deck 的元喻写到 brand memory（污染品牌档案），也不要把品牌通用规则
+写到 spec.json（其他 session 看不到）。
+
+---
+
 ## 深度对齐 —— deck 场景的标准追问
 
 prelude 元规则：信息不足时**多问几轮直到粒度对齐**。Deck 设计是高维度任务（隐喻 /

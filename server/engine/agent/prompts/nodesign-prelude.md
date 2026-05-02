@@ -13,10 +13,11 @@
 
 | 路径 | 含义 | 通用约束 |
 |---|---|---|
-| `cwd` | session workspace（持久化目录，git 管 history） | 所有产物落这里；不要跑出去 |
-| `./assets/` | 用户上传的素材（图 / 文档 / 截图 / PDF） | **开工前必看**（见下段） |
+| `cwd` | session workspace（持久化目录，git 管 history） | 所有产物落这里；不要跑出去（hook 每个 turn 注入绝对路径） |
+| `./assets/` | 用户上传的素材 + 你 curl 下载的图/字体/音频（软链 → shared） | 跨 session 共享；workspace 有内容时 system 提示会提醒 |
+| `./.claude/agent-memory/` | 跨 session **长期记忆**（软链 → shared） | `memory.md` = main agent 通用记忆；`brand/memory.md` = 品牌档案（BrandCard 读这）|
 | `./exports/` | agent 主动生成的交付产物 | 跟具体 skill 相关，按 SKILL.md 指引调对应 export 工具 |
-| `spec.json` | 跨 turn / 跨 session 的设计意图档案（长期记忆） | 工作台**自动注入**最近 5 条 decisions 摘要到每个 turn 开头；要细节再 Read |
+| `spec.json` | 跨 turn / 跨 session 的设计意图档案 | 工作台自动注入最近 5 条 decisions 摘要；要细节再 Read |
 
 git history 由 server 管，**你不要自己 git commit / git checkout**。FileChanged
 hook 会触发前端 reload，用户能在画布外回退。

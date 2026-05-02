@@ -368,6 +368,21 @@ function makeUserPromptSubmitHandler({ ctx, workspaceRoot }) {
 
       const parts = [];
 
+      // 0. cwd + 关键路径常量（用户报告"agent 总找错路径"的根治）
+      // 每个 turn 都注入让 agent 不必凭记忆推路径，看一眼 hook 提示就有
+      // canonical 答案。especially: agent-memory 路径以前 prompt 0 提及，
+      // agent 写品牌档案常写错位置（./brand.md / ./memory.md 等）→ BrandCard 读不到
+      parts.push(
+        `你的 cwd 是 ${workspaceRoot}\n`
+        + `关键路径（用 ./ 相对路径访问，软链已挂好不要绕）：\n`
+        + `  ./canvas.html              主产物 deck（用 mcp__nodesign__read_page 切片读，不要 Read 全文件）\n`
+        + `  ./spec.json                设计意图档案（agent 决策日志）\n`
+        + `  ./assets/                  用户上传素材 + 你 curl 下载的资源（软链 → shared，跨 session 共享）\n`
+        + `  ./.claude/agent-memory/    跨 session 长期记忆（软链 → shared）\n`
+        + `    ├── memory.md            main agent 通用 memory（前端 MemoryCard 读这条）\n`
+        + `    └── brand/memory.md      品牌档案（前端 BrandCard 读这条；写品牌信息一定走这个完整路径）`,
+      );
+
       // 1. spec.json：取最近 N 条 decisions 拼摘要
       try {
         const specPath = path.join(workspaceRoot, 'spec.json');

@@ -520,23 +520,28 @@ export async function runAgent({
       enabled: true,
       failIfUnavailable: true,
 
-      // 网络：暂不 deny 所有外网 —— claude binary 子进程要联 NODESIGN_GATEWAY_URL
-      // （anthropic gateway），太激进会让 SDK 自己挂。仅在 NoDesign 业务上明确不
-      // 需要的子进程外网才用。当前只声明 SDK WebFetch/WebSearch 的限制（这两个
-      // 工具不在白名单 → SDK 不调）+ 禁止本地 socket 绑定（防 agent 起内部服务）。
+      // 网络：MVP 阶段全域允许（'*'）让 agent 能 curl 下载外部资源到 ./assets/。
+      // 生产可改具体白名单（unsplash / google-fonts / jsdelivr / pixabay 等）。
+      // 默认无 allowedDomains 时 SDK sandbox 是 deny-all，连 NODESIGN_GATEWAY_URL
+      // 都连不上 —— 必须显式设。
       network: {
         allowLocalBinding: false,
+        allowedDomains: ['*'],
       },
 
       // 文件系统：核心隔离层
-      // - allowWrite: session 沙盒（cwdRoot）+ shared/agent-memory（agent 写
-      //   跨 session memory）。shared/CLAUDE.md / assets 是用户写不让 agent 改。
+      // - allowWrite: session 沙盒（cwdRoot）+ shared/agent-memory（跨 session memory）
+      //   + shared/assets（agent 用 curl/Write 下载 / 保存外部资源到 ./assets/，
+      //   软链解析后是 sharedRoot/assets）
       // - denyWrite: 系统目录硬封（即便 allowWrite 误配也兜底）
       // - denyRead: /etc/* 系统凭据 + ~/.ssh / ~/.aws 用户凭据
       filesystem: {
         allowWrite: [
           cwdRoot,
-          ...(sharedRoot ? [path.join(sharedRoot, '.claude', 'agent-memory')] : []),
+          ...(sharedRoot ? [
+            path.join(sharedRoot, '.claude', 'agent-memory'),
+            path.join(sharedRoot, 'assets'),
+          ] : []),
         ],
         denyWrite: ['/etc', '/usr', '/bin', '/sbin', '/private/etc'],
         denyRead: [
