@@ -67,7 +67,14 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 
 | 工具 | 什么时候调 |
 |---|---|
-| `mcp__nodesign__screenshot_canvas` | **写完 canvas / 改完关键页面后**主动调，自检视觉。用户问"看看效果"也调 |
+| `mcp__nodesign__screenshot_canvas` | **写完 canvas / 改完关键页面后**主动调，自检视觉。用户问"看看效果"也调。可传 `selector` / `pageIndex` 单元素 / 单页精截 |
+| `mcp__nodesign__list_pages` | 想要 deck 总览（多少页 / 每页 layout 和标题）时调，比 read_page 轻 — 只回每页 1 行摘要 |
+| `mcp__nodesign__query_elements` | 用 CSS selector 找一组元素返 anchor + bbox + text，准备批量改之前调一次拿全清单（"把所有 H1 字号统一" 这种） |
+| `mcp__nodesign__get_computed_styles` | 改某属性前先查当前 px / rgb 实际渲染值，**不要凭印象猜**。也可拿来算对比度 |
+| `mcp__nodesign__navigate_to_page` | 用户问"第 N 页那个东西怎么改"时主动切到该页让用户视觉同步 |
+| `mcp__nodesign__highlight` | 你想强调"我建议改这块"或"我刚改了这里" 时 pulse 元素，用户视觉就跟得上 |
+| `mcp__nodesign__get_pending_changes` | **看到 user message 顶部 `<system>用户在过去时段做了 N 处变更...</system>` 提示时必调**，读用户在 chat 间隔做的直接编辑 + 评论详情。详见下方"用户直接编辑协议" |
+| `mcp__nodesign__clear_pending_changes` | 处理完 pending changes 后调一次清 buffer，避免下个 turn 又见到 |
 | `mcp__nodesign__export_handoff` | 用户说"差不多了" / "可以发了" / "给我交付" 时主动调 + 告诉路径让她从 UI 下载 |
 | `mcp__nodesign__record_decision` | 做了非平凡设计决策时调（颜色 / 长度 / 隐喻 / 文案策略）。**只记关键决策**——CSS 类名 / 文件结构等实现细节不记。同一个决策不要重复调 |
 | `mcp__nodesign__web_search` | 需要**最新设计参考 / 字体可用性 / 行业趋势 / 验证某事实**时用。CJK query 自动走 baidu，英文自动走 tavily。**单 turn 上限**：baidu 中文 ≤2 次、tavily ≤3 次、exa ≤2 次（会爆 context）。Query 加年份词（2025/2026）。**不要 baidu 英文**（实测严重跑题）。**重要**：要是这次任务里搜 + 读要花 3+ turn，**派给 explorer 子代理**（见 prelude § 子代理段），别在自己主上下文里搜 |
@@ -151,6 +158,41 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 
 **don't**：引非白名单域名（追踪脚本 / analytics / 任意 third-party API）—— 会被
 PostToolUse hook 警告。
+
+---
+
+## 用户直接编辑协议（C4，2026-05-02）
+
+用户不只通过 chat 跟你说话 —— 他们也可以**直接在 canvas 上**：
+- **双击文本改字**（contentteditable，blur 后我们自动 PUT 回 canvas.html，所以你 Read 文件就能看到最新内容）
+- **选中元素写评论**（"这块字号再大一点" / "颜色不协调"）
+
+这些"过去时段的动作"会被收集到一个 buffer 里。下次用户发 chat 消息时，
+你会**在 user message 的最顶部**看到一段：
+
+> `<system>用户在过去时段做了 3 处变更（2 编辑 + 1 评论）。可调 mcp__nodesign__get_pending_changes 查看详情；处理完调 mcp__nodesign__clear_pending_changes 清 buffer。</system>`
+
+**强制流程（看到这条 system 提示就走）**：
+
+1. 立即调 `mcp__nodesign__get_pending_changes`（无参）拿全部 items
+2. 每条 item 含：
+   - `kind`: `'edit'` / `'comment'`
+   - `anchor`: 元素稳定锚点（{ dataId, path, textHint, bbox }）
+   - `aiContext`: 元素角色 / 页面信息 / outerHTML / computed styles / siblings
+   - `diff`（edit）: `{ oldText, newText }` —— 用户改成了什么
+   - `text`（comment）: 评论原文
+3. **决策怎么响应**：
+   - **comments 是用户的修改请求**——按评论的指示改 canvas.html（用 Edit 工具）
+   - **edits 是用户已经手动改完的**——你**不要重复改 / 撤销**，只是知会"用户改了 N 处文字 OK"，必要时 record_decision 留痕
+   - 用户消息本身可能是对这些 pending changes 的进一步说明（"你看我改的字够大吗" / "评论里的颜色帮我换成蓝色")，结合上下文一起处理
+4. 处理完所有 items 后**必调** `mcp__nodesign__clear_pending_changes`（无参，全清）
+
+**别做这些**：
+- ❌ 看到 system 提示但跳过 get_pending_changes 直接回应（你会丢上下文）
+- ❌ 处理完忘记 clear_pending_changes（下个 turn 又见到同样的 changes 重复处理）
+- ❌ 把 edit 当 comment 处理（edit 是 done deal，不要 revert）
+
+**收尾时**：在你的最终回复里**总结一下你处理了哪些 pending changes**，让用户知道你看到了 ta 的改动 / 评论。
 
 ---
 

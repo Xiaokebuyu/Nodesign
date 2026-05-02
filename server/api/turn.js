@@ -35,6 +35,7 @@ import { createRun } from '../engine/runs/store.js';
 import { runAgent } from '../engine/agent/loop.js';
 import { cancelRun, provideAnswer } from '../engine/runs/active-runs.js';
 import { getProjectBus } from '../ws/broker.js';
+import { readPendingSummary } from './pending-changes.js';
 
 const router = express.Router();
 
@@ -50,7 +51,9 @@ router.post('/:pid/turn', async (req, res, next) => {
     }
 
     const finalSkillId = (typeof skillId === 'string' && skillId) || project.skillId;
-    const { displayText, blocks } = composeUserMessage(chat, attachments);
+
+    // C4：先确定 sessionRoot，给 composeUserMessage 看 pending-changes buffer
+    // （sid 解析逻辑下面已写）—— 提早 ensure 一次让 buffer 检查能命中真路径。
 
     // H3：session id 解析逻辑
     //   - body.sessionId === string → 续约该 session（cwd=sessions/<sid>，传 resume）
@@ -70,15 +73,17 @@ router.post('/:pid/turn', async (req, res, next) => {
     const sid = isNewSession ? randomUUID() : resumeSessionId;
     validateSessionId(sid);
 
+    // C4：取 sessionRoot + pending-changes 摘要，注入到 composeUserMessage
+    await ensureProjectWorkspace(project.id);
+    const sessionRoot = await ensureSessionWorkspace(project.id, sid);
+    const pendingSummary = isNewSession ? { count: 0, summary: '' } : await readPendingSummary(sessionRoot);
+    const { displayText, blocks } = composeUserMessage(chat, attachments, pendingSummary);
+
     // 创建 run（pending）— displayText 落 brief 字段做审计 / fallback 显示
     const run = createRun({ skillId: finalSkillId, brief: displayText, projectId: project.id });
 
     // 立即返回，agent 后台跑
     res.status(202).json({ runId: run.id, sessionId: sid });
-
-    // 异步启动 agent
-    await ensureProjectWorkspace(project.id);
-    const sessionRoot = await ensureSessionWorkspace(project.id, sid);
     const bus = getProjectBus(project.id);
 
     runAgent({
@@ -121,8 +126,19 @@ router.post('/:pid/turn', async (req, res, next) => {
  *   - 如果某天要让 agent 一次看图（不用 Read 工具）：加 image content block
  *     { type: 'image', source: { type: 'base64', media_type, data } }
  */
-function composeUserMessage(chat, attachments) {
-  const blocks = [{ type: 'text', text: chat }];
+function composeUserMessage(chat, attachments, pendingSummary) {
+  const blocks = [];
+
+  // C4：用户在过去时段做的 direct edit + comment → prepend system 提示
+  // 不灌详情（让 agent 主动调 mcp__nodesign__get_pending_changes 拉），省 token
+  if (pendingSummary && pendingSummary.count > 0) {
+    blocks.push({
+      type: 'text',
+      text: `<system>${pendingSummary.summary}。可调 mcp__nodesign__get_pending_changes 查看详情；处理完调 mcp__nodesign__clear_pending_changes 清 buffer。</system>`,
+    });
+  }
+
+  blocks.push({ type: 'text', text: chat });
 
   if (Array.isArray(attachments) && attachments.length > 0) {
     const lines = [];

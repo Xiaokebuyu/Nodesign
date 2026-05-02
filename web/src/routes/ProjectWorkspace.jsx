@@ -29,7 +29,8 @@ import { useGlobalStore } from '../stores/globalStore.js';
 import { MOCK_DECK_SPEC } from '../mock/deck-spec.js';
 import { newId } from '../lib/helpers.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
-import { Canvas, Turn, Assets, Exports, Sessions } from '../lib/api.js';
+import { serializeForAI } from '../lib/element-semantics.js';
+import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges } from '../lib/api.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
 
@@ -714,24 +715,53 @@ export default function ProjectWorkspace() {
       }
       await Canvas.write(id, currentSessionId, html, 'user');
       showToast(`已保存：「${info.newText.slice(0, 20)}」`, 'success');
+
+      // C4：push 进 pending-changes buffer，下次发 chat 时 agent 主动拉
+      try {
+        const el = findElementByAnchor(info.anchor, iframeDoc.body);
+        const aiContext = el ? serializeForAI(el) : null;
+        await PendingChanges.push(id, currentSessionId, {
+          kind: 'edit',
+          anchor: info.anchor,
+          aiContext,
+          diff: { oldText: info.oldText, newText: info.newText },
+        });
+      } catch (err) {
+        // buffer push 失败不影响主流程（落盘已成功）
+        console.warn('[pending-changes] push edit failed:', err.message);
+      }
     } catch (err) {
       showToast(`保存失败：${err.message}`, 'error');
     }
   };
 
-  // D 流（不在 P0）
-  const handleAddComment = (ctx) => {
-    const text = window.prompt('为这个元素写评论（之后 AI 会按这条评论改它）：');
+  // C3 起：InspectFloatingCard 内嵌 textarea 直接传 ctx.text；老调用兼容 prompt
+  const handleAddComment = async (ctx) => {
+    const text = (ctx?.text && ctx.text.trim())
+      || window.prompt('为这个元素写评论（之后 AI 会按这条评论改它）：');
     if (!text || !text.trim()) return;
+    const trimmed = text.trim();
     setComments(arr => [...arr, {
       id: newId('cmt'),
       anchor: ctx.anchor,
       aiContext: ctx.aiContext,
-      text: text.trim(),
+      text: trimmed,
       status: 'open',
       createdAt: new Date().toISOString(),
     }]);
-    showToast('评论已添加（P0 中：D 流真接留 P0+）', 'info');
+    // C4：push 进 pending-changes buffer
+    if (currentSessionId) {
+      try {
+        await PendingChanges.push(id, currentSessionId, {
+          kind: 'comment',
+          anchor: ctx.anchor,
+          aiContext: ctx.aiContext,
+          text: trimmed,
+        });
+      } catch (err) {
+        console.warn('[pending-changes] push comment failed:', err.message);
+      }
+    }
   };
   const handleJumpToComment = (comment) => {
     if (!iframeDoc) return;

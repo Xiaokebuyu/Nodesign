@@ -27,6 +27,7 @@ import exportsRouter from './api/exports.js';
 import sessionsRouter from './api/sessions.js';
 import instructionRouter from './api/instruction.js';
 import memoryRouter from './api/memory.js';
+import pendingChangesRouter from './api/pending-changes.js';
 
 const PORT = Number(process.env.PORT || 4001);
 
@@ -56,6 +57,7 @@ app.use('/api/projects', exportsRouter);
 app.use('/api/projects', sessionsRouter);
 app.use('/api/projects', instructionRouter);
 app.use('/api/projects', memoryRouter);
+app.use('/api/projects', pendingChangesRouter);  // C4: 用户直接编辑 + 评论 buffer
 // skills 全局
 app.use('/api/skills', skillsRouter);
 
