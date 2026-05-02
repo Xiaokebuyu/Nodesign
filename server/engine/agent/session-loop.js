@@ -116,6 +116,9 @@ export async function runSession({
   // 必须在 register 之后才能调 pushUserMessage —— race window）
   if (initialRunId) setCurrentTurnRunId(sessionId, initialRunId);
 
+  // session-level start event（Phase 2，前端识别 query alive）
+  eventBus.publish({ type: 'run.query.start', sessionId, ts: new Date().toISOString() });
+
   // sharedCtx：跨 turn 复用。每个 turn 边界覆盖 runId + 重置 counters。
   // hooks / mcp 闭包持稳定引用即可。
   const sharedCtx = new AgentContext({
@@ -344,5 +347,16 @@ export async function runSession({
     throw err;
   } finally {
     unregisterQuerySession(sessionId);
+    // session-level end event（Phase 2）
+    try {
+      eventBus.publish({
+        type: 'run.query.end',
+        sessionId,
+        reason: sessionAbortController.signal.aborted
+          ? (sessionAbortController.signal.reason || 'aborted')
+          : 'closed',
+        ts: new Date().toISOString(),
+      });
+    } catch { /* */ }
   }
 }

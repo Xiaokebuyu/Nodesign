@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, AtSign, Wand2, FolderInput } from 'lucide-react';
+import { Send, Square, Paperclip, AtSign, Wand2, ClipboardList, Upload } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { useDropzone } from '../../lib/useDropzone.js';
 import ComposerTray from './ComposerTray.jsx';
 import SuggestionChip from './SuggestionChip.jsx';
 
@@ -11,7 +12,7 @@ import SuggestionChip from './SuggestionChip.jsx';
  *   ┌──────────────────────────────────────┐
  *   │  描述你想做什么…                     │  ← textarea（单独占行，无装饰）
  *   │                                       │
- *   │  [@] [📎] [✨]    [⤓ Import]  [✈ 发送] │  ← toolbar：左 3 icon / 中 Import / 右 Send
+ *   │  [@] [📎] [✨]  [深度对齐]      [✈ 发送] │  ← toolbar：左 3 icon / plan-mode toggle / 右 Send
  *   └──────────────────────────────────────┘
  *
  * 视觉：
@@ -23,18 +24,22 @@ import SuggestionChip from './SuggestionChip.jsx';
  *   - AtSign     引用上下文（@ 引用项目内已上传的资料）
  *   - Paperclip  附件直传
  *   - Wand2      AI 建议（让 agent 帮写 brief 草稿）
- *
- * Import 按钮（P2/P6 接通）：从外部一键导入参考素材到当前 chat
  */
 export default function ChatComposer({
   onSend, disabled, trayItems, onRemoveTrayItem, onPickFile,
   promptSuggestion, onDismissSuggestion,
+  // V2：Send 按钮承担运行状态显示责任。isRunning=true 时按钮变"停止"红，点击 onStop。
+  // disabled 仍兼容（外部可强制禁用，如 hydrateError）但 isRunning 优先决定按钮形态。
+  isRunning = false,
+  onStop,
 }) {
   const [text, setText] = useState('');
   const ref = useRef(null);
   const fileInputRef = useRef(null);
   const chatDraft = useGlobalStore(s => s.chatDraft);
   const setChatDraft = useGlobalStore(s => s.setChatDraft);
+  const planModeEnabled = useGlobalStore(s => s.planModeEnabled);
+  const setPlanModeEnabled = useGlobalStore(s => s.setPlanModeEnabled);
 
   // textarea 自动增高
   useEffect(() => {
@@ -59,6 +64,8 @@ export default function ChatComposer({
 
   const submit = () => {
     const trimmed = text.trim();
+    // streamInput 重构：isRunning 时仍允许发 —— message 排队，agent 跑完当前 turn
+    // 后自然吃下一条。disabled / 空输入 仍阻止
     if (!trimmed || disabled) return;
     onSend?.(trimmed);
     setText('');
@@ -67,11 +74,19 @@ export default function ChatComposer({
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      // streamInput 模式下 Enter 始终 = submit（追加排队）；停止走专门按钮
       submit();
     }
   };
 
   const empty = !text.trim();
+
+  // V3：拖文件入复合器 → 走和 Paperclip 同条路（onPickFile）。
+  // disabled 状态不接受拖入（避免 streaming 中追加附件被忽略）。
+  const { dragging, dropProps } = useDropzone({
+    onFiles: (files) => files.forEach(f => onPickFile?.(f)),
+    disabled: disabled || isRunning,
+  });
 
   return (
     <div style={{
@@ -79,16 +94,38 @@ export default function ChatComposer({
       borderTop: `1px solid ${COLOR.border}`,
       background: '#fff',
     }}>
-      <div style={{
-        background: COLOR.bgCard,
-        border: `1px solid ${COLOR.border}`,
-        borderRadius: 14,
-        padding: `${GAP.md + 2}px ${GAP.lg}px ${GAP.md}px`,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: GAP.sm,
-        transition: 'border-color 0.15s, box-shadow 0.15s',
-      }}>
+      <div
+        {...dropProps}
+        style={{
+          // V2：用户反馈 bg 太重，改用 bgModal（#FDFCFA）— 比 bgCard 淡得多
+          background: COLOR.bgModal,
+          // V3：拖文件入时改 dashed 蓝边 + 浅高亮 → 视觉确认
+          border: dragging
+            ? `1.5px dashed ${COLOR.btn}`
+            : `1px solid ${COLOR.borderLt}`,
+          borderRadius: 14,
+          padding: `${GAP.md + 2}px ${GAP.lg}px ${GAP.md}px`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: GAP.sm,
+          position: 'relative',
+          transition: 'border-color 0.15s, box-shadow 0.15s, background 0.15s',
+        }}>
+        {dragging && (
+          <div style={{
+            position: 'absolute', inset: 0,
+            background: 'rgba(45,36,24,0.06)',
+            borderRadius: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: GAP.sm,
+            fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+            color: COLOR.text,
+            pointerEvents: 'none',
+            zIndex: 2,
+          }}>
+            <Upload size={14} /> 松开上传到附件托盘
+          </div>
+        )}
         {/* 顶层：附件托盘（多 modality 信号；空时不渲染）*/}
         <ComposerTray items={trayItems} onRemove={onRemoveTrayItem} />
 
@@ -167,35 +204,64 @@ export default function ChatComposer({
             onClick={() => alert('P5 实现：让 agent 给 brief 候选')}
           />
 
-          <div style={{ flex: 1 }} />
-
-          {/* 中：Import 按钮（outline 风格）*/}
+          {/* Phase 3.2：plan-mode toggle —— 开 SDK 原生 plan mode（agent 先写 plan
+              让用户审批再执行）。LocalStorage 持久化，开/关在 chip 文字 + 高亮区分。 */}
           <button
-            onClick={() => alert('P6 实现：从外部 import 参考素材')}
-            title="导入参考素材"
+            onClick={() => setPlanModeEnabled(!planModeEnabled)}
+            disabled={disabled}
+            title={planModeEnabled
+              ? 'plan-mode 已开：agent 会先写 design plan 让你审批 / 编辑后再执行（点击关闭）'
+              : 'plan-mode 关：agent 跑默认流程，复杂 brief 想先 review plan 再开（点击开启）'
+            }
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
-              padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
-              fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, fontWeight: 500,
-              color: COLOR.text2,
-              background: 'transparent',
-              border: `1px solid ${COLOR.borderMd}`,
-              borderRadius: 8,
-              cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: `4px ${GAP.sm}px`,
+              fontFamily: FONT_SANS, fontSize: 11, fontWeight: 500,
+              color: planModeEnabled ? COLOR.btnText : COLOR.text2,
+              background: planModeEnabled ? COLOR.warn : 'transparent',
+              border: `1px solid ${planModeEnabled ? COLOR.warn : COLOR.borderMd}`,
+              borderRadius: 6,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.5 : 1,
               transition: 'all 0.15s',
+              marginLeft: GAP.xs,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.03)'; e.currentTarget.style.borderColor = COLOR.borderHv; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = COLOR.borderMd; }}
           >
-            <FolderInput size={13} />
-            Import
+            <ClipboardList size={11} />
+            {planModeEnabled ? '深度对齐已开' : '深度对齐'}
           </button>
 
-          {/* 右：Send 按钮（亮黑 filled）*/}
+          <div style={{ flex: 1 }} />
+
+          {/* streamInput 重构：停止 + 发送 两个按钮并排
+              isRunning 时停止按钮显示（中断当前 turn，query 不死）
+              发送按钮始终显示，isRunning 时点击 = 追加排队 */}
+          {isRunning && onStop && (
+            <button
+              onClick={onStop}
+              title="打断当前 turn（query 不退，下条 message 仍能继续）"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
+                padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
+                fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, fontWeight: 500,
+                color: '#fff',
+                background: COLOR.error,
+                border: `1px solid ${COLOR.error}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = 0.85; }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = 1; }}
+            >
+              <Square size={11} fill="#fff" />
+              停止
+            </button>
+          )}
           <button
             onClick={submit}
             disabled={disabled || empty}
-            title={empty ? '输入内容后发送' : '发送（Enter）'}
+            title={empty ? '输入内容后发送' : (isRunning ? '追加发送（agent 跑完当前会自动处理）' : '发送（Enter）')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
               padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
@@ -211,19 +277,9 @@ export default function ChatComposer({
             onMouseLeave={e => { if (!disabled && !empty) e.currentTarget.style.background = COLOR.btn; }}
           >
             <Send size={13} />
-            发送
+            {isRunning ? '追加' : '发送'}
           </button>
         </div>
-      </div>
-
-      {/* 底部 hint（参考图没有，但保留键盘提示，给新用户一个知道）*/}
-      <div style={{
-        marginTop: GAP.xs + 1,
-        textAlign: 'center',
-        fontFamily: FONT_SANS, fontSize: 10, color: COLOR.sub,
-        opacity: 0.7,
-      }}>
-        Enter 发送 · Shift+Enter 换行
       </div>
     </div>
   );

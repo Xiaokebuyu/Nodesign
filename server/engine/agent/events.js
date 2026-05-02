@@ -44,10 +44,22 @@
  *   - 内存测试：buffer.push(evt) 然后断言
  */
 
+/**
+ * Replay buffer 容量：单 project bus 保留最近 N 条事件供 WS 重连回放。
+ * 一次 turn 可能 emit 上千条 delta（thinking / text / tool）；2000 够覆盖典型
+ * 几秒到几十秒的网络抖动重连窗口。FAR 旧的事件会被 client 通过 Sessions hydrate
+ * 重新拉，不依赖 buffer。
+ */
+const REPLAY_BUFFER_SIZE = 2000;
+
 export class EventBus {
   constructor() {
     /** @type {Set<{ pattern: string, fn: (evt: object) => void }>} */
     this._listeners = new Set();
+    /** 单调递增 seq，每个 publish 自增一；event.seq 已存在则不覆盖 */
+    this._seq = 0;
+    /** Ring buffer：保留最近 REPLAY_BUFFER_SIZE 条事件；FIFO 满了就 shift 最旧 */
+    this._buffer = [];
   }
 
   /**
@@ -66,8 +78,13 @@ export class EventBus {
 
   /**
    * 发布事件。listener 抛错会被吞 + 控制台 warn，不影响其他订阅者。
+   * 副作用：分配 event.seq（若调用方未显式带 seq）+ 进入 ring buffer。
    */
   publish(event) {
+    if (event.seq == null) event.seq = ++this._seq;
+    this._buffer.push(event);
+    if (this._buffer.length > REPLAY_BUFFER_SIZE) this._buffer.shift();
+
     for (const { pattern, fn } of this._listeners) {
       if (matches(pattern, event.type)) {
         try {
@@ -77,6 +94,54 @@ export class EventBus {
         }
       }
     }
+  }
+
+  /**
+   * Replay-then-live 订阅 — WS 重连用。
+   *
+   * 流程（单线程 Node 保证原子，subscribe 与 buffer 快照间无 publish 触发）：
+   *   1. subscribe('*') —— listener 把进来的事件先 push 到 queue（live=false）
+   *   2. 同步遍历 buffer，filter seq > since，对每条调 fn（dedupe 用 set）
+   *   3. drain queue —— 跳过 seq 已 replay 过的（buffer 和 queue 边界重叠）
+   *   4. 切 live，listener 直接 fn(evt)
+   *
+   * gap 判断：
+   *   - 客户端 since=0 → 首次连，无 replay 需求 → gap=false
+   *   - since > _seq → server 重启过，client 看过的 seq 现在不存在 → gap=true
+   *   - buffer 最旧 seq > since+1 → 中间一段被 ring 挤掉了 → gap=true
+   *   - 否则 buffer 完整覆盖 (since, _seq] → gap=false
+   *
+   * @param {number} since - 客户端最后看到的 seq（0 = 没看过任何事件）
+   * @param {(evt: object) => void} fn
+   * @returns {{ unsubscribe: () => void, replayed: number, gap: boolean }}
+   */
+  subscribeFromSeq(since, fn) {
+    let live = false;
+    const queue = [];
+    const off = this.subscribe('*', (evt) => {
+      if (!live) queue.push(evt);
+      else fn(evt);
+    });
+
+    const needsReplay = since > 0 && since < this._seq;
+    const buffered = this._buffer.length > 0;
+    const restarted = since > this._seq;
+    const gap = restarted || (needsReplay && (!buffered || this._buffer[0].seq > since + 1));
+
+    const replay = since > 0 ? this._buffer.filter(e => e.seq > since) : [];
+    const replayedSeqs = new Set();
+    for (const evt of replay) {
+      replayedSeqs.add(evt.seq);
+      try { fn(evt); }
+      catch (err) { console.warn(`[EventBus] replay listener threw:`, err.message); }
+    }
+    for (const evt of queue) {
+      if (replayedSeqs.has(evt.seq)) continue;
+      try { fn(evt); }
+      catch (err) { console.warn(`[EventBus] queue drain threw:`, err.message); }
+    }
+    live = true;
+    return { unsubscribe: off, replayed: replay.length, gap };
   }
 
   /**
@@ -123,6 +188,13 @@ export const Events = {
     type: 'run.done', finalText, artifactPath, snapshot,
   }),
   error: (message, code, stack) => ({ type: 'run.error', message, code, stack }),
+
+  // streamInput 重构（Phase 2）：session-level query 起停事件，跟 per-turn
+  // run.start/done 区分 —— 前端用它判断"会话还活着，能继续追加" vs "会话死了"
+  querySessionStart: (sessionId) => ({ type: 'run.query.start', sessionId }),
+  querySessionEnd: (sessionId, reason) => ({ type: 'run.query.end', sessionId, reason }),
+  // 排队提示：用户在 agent 跑时追加消息，UI 显示"已排队 N 条"
+  queueDepth: (sessionId, depth) => ({ type: 'run.queue.depth', sessionId, depth }),
 
   // ── P0+ stage 1 新增（28+ 种 SDK message 翻译）──
   toolProgress: (blockId, toolName, elapsedSeconds) => ({
@@ -218,11 +290,13 @@ export const Events = {
     ...(anchor ? { anchor } : {}),
   }),
 
-  // S4b-2 PostToolUse(Write design-plan.md) hook：agent Write 完计划档后 emit。
-  // 前端 ProjectWorkspace 据此显示"📄 查看设计计划"按钮 / toast，开 modal 渲染 markdown。
-  planDocReady: (path) => ({
-    type: 'run.plan_doc_ready',
-    path,    // 相对 cwd 的路径，通常 'design-plan.md'
+  // Phase 3.2 ExitPlanMode hook：plan-mode 下 agent 调 ExitPlanMode 工具提交 plan，
+  // host 据此弹 PlanReviewCard 给用户审批。审批通过 → POST /plan-approve 切 mode；
+  // 拒绝 → POST /plan-reject interrupt run。
+  planForApproval: (toolUseId, plan) => ({
+    type: 'run.plan_for_approval',
+    toolUseId,
+    plan,    // markdown 文本，agent 通过 ExitPlanMode input.plan 提交
   }),
 
   // ── Canvas 焕新 C1（2026-05-02）：MCP 工具反向通道 + tweaks/buffer 通知 ──
