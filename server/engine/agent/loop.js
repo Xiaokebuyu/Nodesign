@@ -2,10 +2,11 @@
  * engine/agent/loop.js — Run orchestrator（包 SDK query()）
  *
  * 一次 run 的完整生命周期：
- *   1. 创建 AgentContext（含 EventBus + AbortController）
+*   1. 创建 AgentContext（含 EventBus + AbortController）
  *   2. 推 run.start 事件 + store 标记 running
  *   3. ensureWorkspace
- *   4. 加载 skill（systemPrompt）
+ *   4. 加载 skill（业务 systemPrompt）—— 注意通用 prelude 走模块级 NODESIGN_PRELUDE
+ *      不每次重读；最终 systemPrompt 拼接：preset 'claude_code' + prelude + skill body
  *   5. 调 SDK query()：cwd=workspace，env 透传 ANTHROPIC_BASE_URL+KEY，工具白名单
  *   6. 异步迭代 SDK message 流 → 翻译成 Nodesign EventBus 事件
  *   7. 处理 SDKResultMessage（success / error）
@@ -24,6 +25,8 @@
 
 import os from 'node:os';
 import path from 'node:path';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import { AgentContext } from './context.js';
 import { Events } from './events.js';
@@ -34,6 +37,23 @@ import { createHooks } from './hooks.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
 import { createAgents } from '../agents/index.js';
 import { getOrStartProxy } from '../../lib/binary-fixup-proxy.js';
+
+// NoDesign agent 通用 prelude —— append 在 SDK preset 'claude_code' 之后、
+// SKILL.md 之前。教 Claude Code 工具用法 + NoDesign 工作台共性约束（assets
+// 必看 / 信息不足先问 / git 不自管）。所有 NoDesign agent 共用，跟具体 skill
+// 解耦。模块级 readFileSync 一次性读入，避免每次 runAgent 重读。
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const NODESIGN_PRELUDE = (() => {
+  try {
+    return fs.readFileSync(
+      path.join(__dirname, 'prompts/nodesign-prelude.md'),
+      'utf8',
+    ).trim();
+  } catch (err) {
+    console.warn(`[loop] failed to load nodesign-prelude.md:`, err.message);
+    return '';
+  }
+})();
 
 // 工具白名单 — Bash 是 P0 必需（agent 调 git/playwright/zip 都靠它）。
 // 沙盒由 cwd=project workspace 保证 + PreToolUse hook 命令白名单兜底。
@@ -251,11 +271,16 @@ export async function runAgent({
     // 之前用 string 完全替换 SDK 默认 prompt → 失去 Claude Code 的关键
     // 行为约束（何时停 / be concise / task completion 信号 / 工具最佳实践），
     // 导致 agent 一个 turn 做 30+ 件事停不下来。
-    // 现在继承 preset + 把 SKILL.md 业务约束 append 在后。
+    // 现在继承 preset + 拼两段 append：
+    //   1. NODESIGN_PRELUDE —— Claude Code 工具用法 + NoDesign 工作台共性约束
+    //      （所有 NoDesign agent 共用；模块级一次性读 prompts/nodesign-prelude.md）
+    //   2. skill.systemPrompt —— 当前 skill 自己的业务约束（视觉风格 / 业务工具
+    //      时机 / 收尾格式 / skill 级 don'ts）
+    // SDK 拼接顺序: preset → prelude → skill body —— 通用 → 业务，从抽象到具体。
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',
-      append: skill.systemPrompt,
+      append: [NODESIGN_PRELUDE, skill.systemPrompt].filter(Boolean).join('\n\n---\n\n'),
     },
 
     // hotfix-sdk-usage：跳过所有 permission 检查。

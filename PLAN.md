@@ -63,6 +63,13 @@ NoDesign = **Claude Code 之上的画布编辑层**，按 Anthropic Projects 模
 9. **当前上下文容量实时显示** — SDK 提供 `query.getContextUsage()`（sdk.d.ts:2109）返完整 breakdown（categories / messageBreakdown.toolCallsByType / memoryFiles / mcpTools / apiUsage / autoCompactThreshold / percentage 等）。当前 ContextUsageBar 只静态显示 model/tools/mcp/agents 数，**没接 token 实时用量**。做：loop.js 在每个 assistant message 后 await query.getContextUsage() → emit `run.context_usage` 事件 → 前端 ContextUsageBar 显示进度条（当前 / 230k 阈值 / autoCompact 触发线）+ 展开看 toolCallsByType 排名（Edit / Read / Bash 各占多少 token）。**用户主动要的 follow-up**，做了能直观看到 autoCompact 触发前还剩多少、哪个工具吃 context 最多
 10. **放开 CDN 外部资源引用**（参考 Claude Artifacts 流派） — 当前 SKILL.md 强约束"单文件 self-contained 不引 CDN"，限制了 agent 设计自由度（字体只能 system-ui / icon 用 emoji 凑）。放开后 agent 能用 Google Fonts / Heroicons / Animate.css 提升 deck 质量。实施：(a) 改 SKILL.md 加 trusted CDN 白名单（fonts.googleapis.com / cdn.jsdelivr.net / unpkg.com / cdnjs.cloudflare.com / fonts.gstatic.com）+ 教 agent 何时用（字体 / icon / 动画库）；(b) PostToolUse(Edit|Write) hook 检查 canvas.html 里 URL 是否在白名单，超出 emit 警告事件；(c) 可选：教 agent 用 Bash curl 把关键 CDN 资源下载到 sessions/<sid>/shared/assets/ 让 canvas 真 self-contained（要先验证 SDK sandbox 默认是否放开网络出站）。**不要做**直接调任意外部 API（D 类，烧钱/泄漏风险高）
 
+11. **Kimi 自我反思的 3 个设计师视角痛点**（2026-05-02，跑过几轮 deck 后用户记录） — Kimi 自己说："最大的天花板是没有真实插画素材；如果有 OP 截图或角色图传上来，整页风格立刻对齐。我应该第一版出之前就追着你要参考图，而不是先做了个暗黑底等你否定再改。" 三个具体痛点：
+    - **(11a) 无 reference 时必须先追问，不要先动手** — 当前 SKILL.md 只一句"挑最关键的 1-2 个问完停下"，太抽象。要在 SKILL.md 加显式开工自检：「用户没给参考图 / DS / 已有作品时 → **必须**先问"有没有视觉参考"再动手；用户明确说"自由发挥"或"先随便给个版本"才跳过」。**这条已在本次推进 SKILL.md 重写中落实**
+    - **(11b) 用户给了 assets 必须真用** — follow-up #3 的延伸。当前 SKILL.md "chat 里若有'可用素材：'列表 → 按需 Read"是软约束，agent 经常忽略。要：(i) UserPromptSubmit hook 里 ls assets/ 直接注入"可用素材清单"到上下文（不依赖 chat 提及）；(ii) SKILL.md 强约束"开工前 Read 完 assets/ 所有文件，至少看一眼图"。可能要做截图素材 vision pre-scan（hook 里调 vision LLM 把图描述成文字塞进 additionalContext，让 agent 不必每次都 Read 大图）
+    - **(11c) 一图胜千言：教 agent 主动让用户上传** — 当用户描述很模糊（"做一个酷一点的"）但又没 reference，主动说"扔一张你喜欢的截图给我，我用它的取色和质感重做"。这是 SKILL.md 级别的指令（在"先追问"那段加例子）
+
+12. **Vision-checker 真接通 + 加"挑剔的设计审稿人"prompt**（同 #5，Kimi 反思后优先级提升） — Kimi 反思暴露：主 agent 自检截图后给"看起来 OK"是惯性。挑剔需要独立角色（"30 年品牌设计经验，看不顺眼直接说"）。skeleton 已在 `agents/vision-checker/`，缺：(a) prompt 写成"挑剔老设计师"风（具体例子：层级、节奏、留白、色相偏移、对比度、字距、视觉重量平衡）；(b) toolAllowlist = [Read, Glob, screenshot_canvas]（无 Write/Edit，纯审稿）；(c) Agent tool 进 main agent 白名单；(d) SKILL.md 教主 agent 何时调（写完关键页 / deck 完成 / 用户说"看起来怎么样" → 调 vision-checker，把它的反馈告诉用户而不是自己判断）
+
 ---
 
 ## 🟡 P0/stage1 时代状态（2026-04-30 收尾）
