@@ -190,11 +190,14 @@ export const Events = {
 
   // SubagentStop hook（sdk.d.ts:5269）：子代理结束。带 last_assistant_message 字段
   // 不用读 transcript 也能拿到收尾文本。
-  subagentStop: (agentId, agentType, lastAssistantMessage, transcriptPath) => ({
+  // toolUseId：SDK callback 第 2 参，是触发该 subagent 启动的 main agent
+  // Task tool_use_id —— 前端能用它把 critique 挂回对应的 Task message。
+  subagentStop: (agentId, agentType, lastAssistantMessage, transcriptPath, toolUseId) => ({
     type: 'run.subagent.stop',
     agentId, agentType,
     lastAssistantMessage,    // 可选；agent 收尾的最后一句
     transcriptPath,          // 可选；子代理转录文件路径，前端展开"完整对话"用
+    ...(toolUseId ? { toolUseId } : {}),
   }),
 
   // PostToolUseFailure hook：工具失败，hook 已注入了恢复建议给 agent，

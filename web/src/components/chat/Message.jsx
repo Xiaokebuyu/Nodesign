@@ -74,6 +74,9 @@ export default function Message({ message }) {
         taskStatus={message.taskStatus}
         taskSummary={message.taskSummary}
         taskLastTool={message.taskLastTool}
+        // S3b：SubagentStop hook 收尾时挂的 lastAssistantMessage（vision-checker
+        // critique 卡的数据源）
+        subagentResult={message.subagentResult}
       />
     );
   }
@@ -735,9 +738,210 @@ function formatElapsed(s) {
   return `${Math.floor(s / 60)}m${Math.round(s % 60)}s`;
 }
 
+/**
+ * 解析 vision-checker 子代理的 lastAssistantMessage（S3b）。
+ * vision-checker.md 锁定输出 schema：
+ *   VERDICT: <ok | minor-issues | major-issues | error>
+ *   ISSUES:
+ *   1. [<severity>] <where>
+ *      PROBLEM: <one sentence>
+ *      FIX: <suggestion>
+ *   2. ...
+ *   OVERALL: <paragraph>
+ * 解析失败时返回 { raw } 让上层 fallback 显示原文，不抛错。
+ */
+function parseVisionCheckerCritique(text) {
+  if (!text || typeof text !== 'string') return { raw: '' };
+  try {
+    const verdictMatch = text.match(/VERDICT:\s*(ok|minor-issues|major-issues|error)\b/i);
+    const verdict = verdictMatch ? verdictMatch[1].toLowerCase() : null;
+
+    const overallMatch = text.match(/OVERALL:\s*([\s\S]*?)$/i);
+    const overall = overallMatch ? overallMatch[1].trim() : null;
+
+    // ISSUES 段在 VERDICT 后 / OVERALL 前
+    const issuesBlockMatch = text.match(/ISSUES:\s*([\s\S]*?)(?:\nOVERALL:|$)/i);
+    const issues = [];
+    if (issuesBlockMatch) {
+      const block = issuesBlockMatch[1];
+      // 按数字编号 split：'\n1. ' '\n2. ' ...
+      const items = block.split(/\n(?=\s*\d+\.\s)/);
+      for (const item of items) {
+        const trimmed = item.trim();
+        if (!trimmed) continue;
+        const headerMatch = trimmed.match(/^\d+\.\s*\[(high|medium|low)\]\s*(.*)$/im);
+        const problemMatch = trimmed.match(/PROBLEM:\s*(.+?)(?:\n|$)/i);
+        const fixMatch = trimmed.match(/FIX:\s*(.+?)(?:\n|$)/i);
+        if (!headerMatch && !problemMatch) continue;
+        issues.push({
+          severity: headerMatch?.[1]?.toLowerCase() || null,
+          where: headerMatch?.[2]?.trim() || null,
+          problem: problemMatch?.[1]?.trim() || null,
+          fix: fixMatch?.[1]?.trim() || null,
+        });
+      }
+    }
+    if (!verdict && issues.length === 0 && !overall) return { raw: text };
+    return { verdict, issues, overall, raw: text };
+  } catch {
+    return { raw: text };
+  }
+}
+
+const VERDICT_COLOR = {
+  ok: COLOR.success,
+  'minor-issues': COLOR.warn,
+  'major-issues': COLOR.error,
+  error: COLOR.dim,
+};
+
+const VERDICT_LABEL = {
+  ok: '✓ 看着 OK',
+  'minor-issues': '⚠ 小毛病',
+  'major-issues': '✗ 主要问题',
+  error: '⊘ 评审失败',
+};
+
+const SEVERITY_COLOR = {
+  high: COLOR.error,
+  medium: COLOR.warn,
+  low: COLOR.dim,
+};
+
+function VisionCheckerCard({ text }) {
+  const [open, setOpen] = useState(true);    // 默认展开 — 用户最想看 critique 内容
+  const parsed = parseVisionCheckerCritique(text);
+  const { verdict, issues, overall, raw } = parsed;
+
+  // 解析失败 → fallback 显示原文（折叠）
+  if (!verdict && (!issues || issues.length === 0) && !overall) {
+    return (
+      <div style={{
+        marginTop: GAP.sm,
+        padding: GAP.md,
+        background: COLOR.bgCard,
+        borderRadius: 8,
+        fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+        color: COLOR.text4, lineHeight: 1.5,
+        whiteSpace: 'pre-wrap',
+        maxHeight: 280, overflow: 'auto',
+      }}>
+        <div style={{ fontSize: 9, color: COLOR.sub, marginBottom: 4, letterSpacing: '0.04em' }}>
+          评审原文（解析未命中 schema）
+        </div>
+        {raw}
+      </div>
+    );
+  }
+
+  const verdictColor = VERDICT_COLOR[verdict] || COLOR.dim;
+  const verdictLabel = VERDICT_LABEL[verdict] || verdict;
+
+  return (
+    <div style={{
+      marginTop: GAP.sm,
+      border: `1px solid ${verdictColor}33`,
+      borderLeft: `3px solid ${verdictColor}`,
+      borderRadius: 8,
+      background: COLOR.bgCard,
+      overflow: 'hidden',
+    }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: GAP.sm,
+          width: '100%',
+          padding: `${GAP.sm}px ${GAP.md}px`,
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2,
+          textAlign: 'left',
+        }}
+      >
+        <span style={{ fontWeight: 600, color: verdictColor, flexShrink: 0 }}>
+          {verdictLabel}
+        </span>
+        {issues && issues.length > 0 && (
+          <span style={{ color: COLOR.sub, fontSize: FONT_SIZE.xs }}>
+            {issues.length} 条建议
+          </span>
+        )}
+        <ChevronRight
+          size={10}
+          strokeWidth={1.75}
+          color={COLOR.dim}
+          style={{
+            marginLeft: 'auto',
+            flexShrink: 0,
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
+          }}
+        />
+      </button>
+
+      {open && (
+        <div style={{
+          padding: `0 ${GAP.md}px ${GAP.md}px`,
+          display: 'flex', flexDirection: 'column', gap: GAP.sm,
+        }}>
+          {issues && issues.length > 0 && (
+            <ol style={{
+              margin: 0, paddingLeft: GAP.lg,
+              display: 'flex', flexDirection: 'column', gap: GAP.xs,
+              fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text3,
+              lineHeight: 1.5,
+            }}>
+              {issues.map((iss, i) => (
+                <li key={i} style={{ paddingLeft: 4 }}>
+                  {iss.severity && (
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '0 6px',
+                      marginRight: 6,
+                      background: `${SEVERITY_COLOR[iss.severity]}22`,
+                      color: SEVERITY_COLOR[iss.severity],
+                      borderRadius: 4,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.04em',
+                    }}>
+                      {iss.severity}
+                    </span>
+                  )}
+                  {iss.where && (
+                    <span style={{ color: COLOR.text2, fontWeight: 500 }}>{iss.where}</span>
+                  )}
+                  {iss.problem && (
+                    <div style={{ marginTop: 2 }}>{iss.problem}</div>
+                  )}
+                  {iss.fix && (
+                    <div style={{ marginTop: 2, color: COLOR.sub, fontStyle: 'italic' }}>
+                      → {iss.fix}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+          {overall && (
+            <div style={{
+              fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs,
+              color: COLOR.sub, lineHeight: 1.6,
+              borderTop: issues && issues.length > 0 ? `1px solid ${COLOR.borderLt}` : 'none',
+              paddingTop: issues && issues.length > 0 ? GAP.sm : 0,
+            }}>
+              {overall}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ToolMessage({
   toolName, toolInput, toolOutput, toolError, toolImages, status, elapsed,
-  agentType, taskStatus, taskSummary, taskLastTool,
+  agentType, taskStatus, taskSummary, taskLastTool, subagentResult,
 }) {
   const [open, setOpen] = useState(false);
 
@@ -897,6 +1101,13 @@ function ToolMessage({
         }}>
           {taskSummary || `· ${taskLastTool}`}
         </div>
+      )}
+
+      {/* S3b：vision-checker critique 卡（解析 VERDICT/ISSUES/OVERALL） */}
+      {toolName === 'Task'
+        && agentType === 'vision-checker'
+        && subagentResult?.lastAssistantMessage && (
+        <VisionCheckerCard text={subagentResult.lastAssistantMessage} />
       )}
 
       {open && (

@@ -589,10 +589,35 @@ export default function ProjectWorkspace() {
         break;
       }
 
+      case 'run.subagent.stop': {
+        // S3b：子代理收尾的 lastAssistantMessage 挂回对应 Task tool message。
+        // 前端 Message.jsx ToolMessage 在 agentType === 'vision-checker' 时
+        // 渲染 critique 卡（VERDICT/ISSUES/OVERALL），其他 subagent 暂不渲染（可拓展）。
+        if (evt.toolUseId) {
+          setMessages(prev => prev.map(m =>
+            m.role === 'tool' && m.id === evt.toolUseId
+              ? {
+                  ...m,
+                  subagentResult: {
+                    lastAssistantMessage: evt.lastAssistantMessage || null,
+                    transcriptPath: evt.transcriptPath || null,
+                    agentId: evt.agentId,
+                    agentType: evt.agentType,
+                  },
+                }
+              : m,
+          ));
+        }
+        if (typeof window !== 'undefined' && import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.log(`[event] ${evt.type}`, evt);
+        }
+        break;
+      }
+
       // 运维 / 调试信号——不展示 UI，只 console 留痕（dev 模式）。
       // 这些事件用于排查问题，不该 spam 用户视图。
       case 'run.subagent.start':
-      case 'run.subagent.stop':
       case 'run.session_state':
       case 'run.session_start':
       case 'run.files_persisted':

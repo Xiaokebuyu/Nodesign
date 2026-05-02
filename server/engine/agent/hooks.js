@@ -659,13 +659,14 @@ function makeSubagentStartHandler({ ctx }) {
  * 这里只 emit 不返 specific 输出，符合规范。
  */
 function makeSubagentStopHandler({ ctx }) {
-  return async (input, _toolUseId, _options) => {
+  return async (input, toolUseId, _options) => {
     try {
       ctx.emit(Events.subagentStop(
         input.agent_id,
         input.agent_type,
         input.last_assistant_message,
         input.agent_transcript_path,
+        toolUseId,    // main agent 调 Task 时的 tool_use_id；前端按它 match 卡
       ));
     } catch (err) {
       console.warn(`[hooks/SubagentStop] handler threw:`, err.message);
