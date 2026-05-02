@@ -201,7 +201,13 @@ export async function runSession({
 
     thinking: modelOverride.thinking || pickThinkingConfig(model),
     effort: modelOverride.effort || 'medium',
-    maxTurns: modelOverride.maxTurns || 15,
+    // streamInput 模式 query 横跨整个 session，maxTurns 是**全局累计**（每条
+    // user message 起一轮 agent loop，turn 数不重置）。15 太低 —— 用户聊几
+    // 轮就触顶导致 'error_max_turns' 误中断。改 50 给复杂 deck（多页 +
+    // 多次自检 + 子代理）足够余量；env override 给极端情况用
+    maxTurns: modelOverride.maxTurns
+      || Number(process.env.NODESIGN_MAX_TURNS)
+      || 50,
 
     // 不传 resume —— streamInput 模式 SDK 内存保 history，不依赖 jsonl
     enableFileCheckpointing: true,
@@ -209,9 +215,12 @@ export async function runSession({
     promptSuggestions: true,
     forwardSubagentText: true,
 
+    // streamInput 模式 budget 也是全局累计 —— 长 session 1$ 极易触顶。改默
+    // 认 5$（env override 仍生效）。Kimi 价位下 5$ 够跑很长一个 deck 项目；
+    // Claude/Opus 烧得快可以用 env 提到 10
     maxBudgetUsd: (() => {
       const v = Number(process.env.NODESIGN_MAX_BUDGET_USD);
-      return Number.isFinite(v) && v > 0 ? v : 1;
+      return Number.isFinite(v) && v > 0 ? v : 5;
     })(),
 
     sandbox: {
@@ -339,12 +348,27 @@ export async function runSession({
       await finishTurn('cancelled', { reason: 'session_closed' });
     }
   } catch (err) {
-    // SDK / for-await-of 抛错 —— 当前 turn 收尾为 error，session 终止
-    if (activeTurnRunId) {
-      await finishTurn('error', err);
+    // 区分两种"抛错"：
+    //   1. 用户主动 close session（abortController.abort() 触发 SDK binary
+    //      子进程被 SIGTERM kill → 抛"Claude Code process aborted by user"）
+    //      —— 这是预期行为，不是 error，不应该让前端弹"运行失败"toast
+    //   2. 真错（网络断、SDK init 失败、Kimi gateway 5xx 等）—— 走 error 路径
+    if (sessionAbortController.signal.aborted) {
+      // close session 路径：当前 turn 当 cancelled 收尾，不 emit run.error
+      if (activeTurnRunId) {
+        await finishTurn('cancelled', {
+          reason: sessionAbortController.signal.reason || 'session_closed',
+        });
+      }
+      // 静默退出 —— finally 仍 emit run.query.end 让前端识别 session 关了
+    } else {
+      // 真错路径
+      if (activeTurnRunId) {
+        await finishTurn('error', err);
+      }
+      sharedCtx.emit(Events.error(err.message, err.code, err.stack));
+      throw err;
     }
-    sharedCtx.emit(Events.error(err.message, err.code, err.stack));
-    throw err;
   } finally {
     unregisterQuerySession(sessionId);
     // session-level end event（Phase 2）
