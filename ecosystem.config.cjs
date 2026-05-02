@@ -1,8 +1,11 @@
 /**
- * ecosystem.config.js — pm2 进程配置
+ * ecosystem.config.cjs — pm2 进程配置
+ *
+ * 注：必须 .cjs 扩展名（不是 .js）—— package.json 有 "type": "module"，
+ * .js 文件默认当 ESM 处理跟 module.exports CommonJS 语法冲突。
  *
  * 用法（部署到生产服务器）：
- *   pm2 start ecosystem.config.js                启动
+ *   pm2 start ecosystem.config.cjs                启动
  *   pm2 logs nodesign                            看 log
  *   pm2 restart nodesign                         强制重启
  *   pm2 reload nodesign                          热重载（0-downtime）

@@ -126,11 +126,11 @@ build 时间 30-60s 取决于服务器性能。
 ## 5. pm2 启动
 
 ```bash
-# 检查 ecosystem.config.js 的 cwd（默认 __dirname 即仓库根）
-cat ecosystem.config.js | grep cwd
+# 检查 ecosystem.config.cjs 的 cwd（默认 __dirname 即仓库根）
+cat ecosystem.config.cjs | grep cwd
 
 # 启动
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 
 # 看启动 log（应该看到 "[server] listening on :4001"）
 pm2 logs nodesign --lines 30 --nostream
@@ -307,7 +307,7 @@ pm2 monit                                  # 进程列表 + CPU/mem 图
 pm2 prettylist                             # 详细 process info
 ```
 
-log 文件位置（`ecosystem.config.js` 配的）：
+log 文件位置（`ecosystem.config.cjs` 配的）：
 - `logs/nodesign-out.log` — stdout（含 `[server] listening`、`[engine/runs] ...`）
 - `logs/nodesign-error.log` — stderr（含 SDK binary 错、playwright 错、`[server] uncaughtException` 等）
 
