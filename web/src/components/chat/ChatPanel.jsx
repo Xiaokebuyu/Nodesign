@@ -2,6 +2,7 @@ import { Square, ChevronDown } from 'lucide-react';
 import MessageList from './MessageList.jsx';
 import ChatComposer from './ChatComposer.jsx';
 import TodoPanel from './TodoPanel.jsx';
+import ContextUsageBar from '../project/ContextUsageBar.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 
 /**
