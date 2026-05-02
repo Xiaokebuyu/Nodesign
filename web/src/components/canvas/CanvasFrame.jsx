@@ -6,6 +6,7 @@ import CodeCanvas from './CodeCanvas.jsx';
 import SlideNavigator from './SlideNavigator.jsx';
 import CanvasCandidateBar from './CanvasCandidateBar.jsx';
 import A11yReviewPopover from './A11yReviewPopover.jsx';
+import SystemPopover from './SystemPopover.jsx';
 import { COLOR, STAGE } from '../../lib/theme.js';
 
 /**
@@ -38,6 +39,8 @@ export default function CanvasFrame({
   onAddCandidate,
   onRemoveCandidate,
   onRenameCandidate,
+  // C2: System popover 数据透传
+  project, deckSpec, projectId, sessionId, decisionsReloadKey,
 }) {
   const [mode, setMode] = useState('edit');
   const [zoom, setZoom] = useState('fit');     // 'fit' | number
@@ -47,8 +50,10 @@ export default function CanvasFrame({
   const [dirty, setDirty] = useState(false);
   const [iframeDoc, setIframeDoc] = useState(null);
   const [a11yOpen, setA11yOpen] = useState(false);
+  const [systemOpen, setSystemOpen] = useState(false);
   const iframeWrapRef = useRef(null);
   const a11yBtnRef = useRef(null);
+  const systemBtnRef = useRef(null);
 
   // 测 iframe wrap 尺寸（W + H）— fit 取 min 让单页完整可见 letterbox
   useEffect(() => {
@@ -148,8 +153,11 @@ export default function CanvasFrame({
         onZoomChange={(z) => setZoom(z)}
         onFitToggle={() => setZoom('fit')}
         onReload={handleReload}
-        onA11yClick={() => setA11yOpen(o => !o)}
+        onA11yClick={() => { setSystemOpen(false); setA11yOpen(o => !o); }}
         a11yBtnRef={a11yBtnRef}
+        onSystemClick={() => { setA11yOpen(false); setSystemOpen(o => !o); }}
+        systemBtnRef={systemBtnRef}
+        systemActive={systemOpen}
       />
 
       {/* Slide navigator — Edit/Preview 时扫 section[data-page]，多于 1 页才显示 */}
@@ -188,6 +196,18 @@ export default function CanvasFrame({
           anchorRef={a11yBtnRef}
           onClose={() => setA11yOpen(false)}
           iframeDoc={iframeDoc}
+        />
+      )}
+
+      {systemOpen && (
+        <SystemPopover
+          anchorRef={systemBtnRef}
+          onClose={() => setSystemOpen(false)}
+          project={project}
+          deckSpec={deckSpec}
+          projectId={projectId}
+          sessionId={sessionId}
+          decisionsReloadKey={decisionsReloadKey}
         />
       )}
     </div>

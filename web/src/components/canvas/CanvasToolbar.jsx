@@ -1,4 +1,4 @@
-import { Edit3, Eye, Code2, RotateCcw, ShieldCheck, Maximize2 } from 'lucide-react';
+import { Edit3, Eye, Code2, RotateCcw, ShieldCheck, Maximize2, Settings } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, STAGE } from '../../lib/theme.js';
 
 const MODES = [
@@ -7,7 +7,12 @@ const MODES = [
   { id: 'code',    label: 'Code',    icon: Code2 },
 ];
 
-export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, isAutoFit = false, onZoomChange, onFitToggle, onA11yClick, a11yBtnRef }) {
+export default function CanvasToolbar({
+  mode, onModeChange, onReload,
+  zoom = 1, isAutoFit = false, onZoomChange, onFitToggle,
+  onA11yClick, a11yBtnRef,
+  onSystemClick, systemBtnRef, systemActive = false,
+}) {
   return (
     <div style={{
       height: 44,
@@ -94,6 +99,25 @@ export default function CanvasToolbar({ mode, onModeChange, onReload, zoom = 1, 
           title="无障碍审查（mock）"
         >
           <ShieldCheck size={11} /> A11y
+        </button>
+      )}
+
+      {/* System — 项目档案 popover */}
+      {onSystemClick && (
+        <button
+          ref={systemBtnRef}
+          onClick={onSystemClick}
+          style={{
+            padding: `${GAP.xs + 1}px ${GAP.sm + 1}px`,
+            fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+            color: systemActive ? COLOR.text : COLOR.text4,
+            background: systemActive ? 'rgba(0,0,0,0.06)' : 'transparent',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 4,
+          }}
+          title="System — skill / 设计系统 / 模型 / spec / 项目档案"
+        >
+          <Settings size={11} />
         </button>
       )}
 

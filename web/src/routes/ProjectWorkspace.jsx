@@ -7,13 +7,13 @@ import AppShell from '../components/layout/AppShell.jsx';
 import FloatingPanel from '../components/layout/FloatingPanel.jsx';
 import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
 import PanelMenu from '../components/layout/PanelMenu.jsx';
-import { Crosshair, MessageSquare, Bookmark, Sliders, Settings } from 'lucide-react';
+import { Crosshair, MessageSquare, Sliders } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
 import InspectTab from '../components/context-panel/InspectTab.jsx';
 import CommentsTab from '../components/context-panel/CommentsTab.jsx';
-import DecisionsTab from '../components/context-panel/DecisionsTab.jsx';
-import SystemTab from '../components/context-panel/SystemTab.jsx';
+// DecisionsTab / SystemTab 现在由 SystemPopover 间接使用（CanvasFrame 内）
+// 不在此处直接 import — C2 撤销 floating panel 注册
 import ShareModal from '../components/project/ShareModal.jsx';
 import ExportMenu from '../components/project/ExportMenu.jsx';
 import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
@@ -113,20 +113,17 @@ export default function ProjectWorkspace() {
   // 5 个次级 UI 仍是浮窗（bounds = canvas 容器），默认 hidden 按需 spawn。
   // position 是相对 canvas 容器的坐标系（不是 viewport）。
   // y 起点 64 = 避开 canvas toolbar（~44px）+ 留 20px 呼吸。
+  // C2：system / decisions 改 toolbar Settings popover（不再注册 floating panel）
   const defaultPanels = useMemo(() => ({
     inspect:   { position: { x: 24, y: 64 },   size: { width: 320, height: 420 }, visible: false, zIndex: 100 },
     comments:  { position: { x: 48, y: 96 },   size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
-    decisions: { position: { x: 72, y: 128 },  size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
     tweaks:    { position: { x: 96, y: 160 },  size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
-    system:    { position: { x: 120, y: 192 }, size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
   }), []);
 
   const panelMeta = useMemo(() => ({
     inspect:   { label: 'Inspect',   icon: Crosshair },
     comments:  { label: 'Comments',  icon: MessageSquare },
-    decisions: { label: 'Decisions', icon: Bookmark },
     tweaks:    { label: 'Tweaks',    icon: Sliders },
-    system:    { label: 'System',    icon: Settings },
   }), []);
 
   const handleIframeReady = useCallback((iframe) => {
@@ -991,6 +988,11 @@ export default function ProjectWorkspace() {
             onAddCandidate={handleAddCandidate}
             onRemoveCandidate={handleRemoveCandidate}
             onRenameCandidate={handleRenameCandidate}
+            project={project}
+            deckSpec={deckSpec}
+            projectId={id}
+            sessionId={currentSessionId}
+            decisionsReloadKey={decisionsReloadKey}
           />
 
           {/* 浮窗层 —— bounds='parent' = 不出 canvas section */}
@@ -1011,13 +1013,6 @@ export default function ProjectWorkspace() {
               onDelete={handleDeleteComment}
             />
           </FloatingPanel>
-          <FloatingPanel id="decisions" title="Decisions" icon={Bookmark}>
-            <DecisionsTab
-              projectId={id}
-              sessionId={currentSessionId}
-              reloadKey={decisionsReloadKey}
-            />
-          </FloatingPanel>
           <FloatingPanel id="tweaks" title="Tweaks" icon={Sliders}>
             <div style={{ padding: GAP.lg }}>
               <div style={{
@@ -1028,13 +1023,10 @@ export default function ProjectWorkspace() {
                 fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub,
                 lineHeight: 1.6, margin: 0,
               }}>
-                agent 暴露的可调参数（color / spacing / layout variant）。S3 接
-                expose_tweaks MCP 工具 → 在 data-tweakable 元素旁渲染 sliders。
+                agent 暴露的可调参数（color / spacing / layout variant）。C5 接
+                expose_tweaks MCP 工具 → 按 schema 渲染 sliders。
               </p>
             </div>
-          </FloatingPanel>
-          <FloatingPanel id="system" title="System" icon={Settings}>
-            <SystemTab project={project} deckSpec={deckSpec} />
           </FloatingPanel>
         </section>
       </div>
