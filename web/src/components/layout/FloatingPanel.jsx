@@ -78,6 +78,10 @@ export default function FloatingPanel({
     if (controlled) state.bringToFront();
   };
 
+  // 受控模式下没传 onClose → 默认 X = setVisible(false)
+  // 非受控模式没传 onClose → X 不显示
+  const effectiveOnClose = onClose || (controlled ? () => state.setVisible(false) : null);
+
   return (
     <Rnd
       // 受控模式：position/size 走 props（manager state）
@@ -128,9 +132,9 @@ export default function FloatingPanel({
       >
         {Icon && <Icon size={12} style={{ color: COLOR.text4 }} />}
         <span style={{ flex: 1 }}>{title}</span>
-        {onClose && (
+        {effectiveOnClose && (
           <button
-            onClick={(e) => { e.stopPropagation(); onClose(); }}
+            onClick={(e) => { e.stopPropagation(); effectiveOnClose(); }}
             onMouseDown={(e) => e.stopPropagation()}
             title="关闭"
             style={{

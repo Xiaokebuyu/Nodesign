@@ -2,15 +2,15 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Share2, Download, MoreHorizontal } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
-import ThreeColumnLayout from '../components/layout/ThreeColumnLayout.jsx';
-// F1.1：FloatingPanel 抽出来后用这个组件 demo（原 react-rnd 直接调
-// 删掉，改为 FloatingPanel 包装）。F2 真接业务时把所有功能 panel 替换。
+// F2.1：删 ThreeColumnLayout，换 PanelManager + FloatingPanel 浮动 panel 风
+// F2.2：5 tab 拆独立 panel 后 ContextPanel 也会删
 import { createPortal } from 'react-dom';
 import FloatingPanel from '../components/layout/FloatingPanel.jsx';
-import { Sparkles } from 'lucide-react';
+import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
+import { MessageCircle, Image as ImageIcon, Crosshair } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
-import ContextPanel from '../components/context-panel/ContextPanel.jsx';
+import InspectTab from '../components/context-panel/InspectTab.jsx';
 import ShareModal from '../components/project/ShareModal.jsx';
 import ExportMenu from '../components/project/ExportMenu.jsx';
 import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
@@ -20,7 +20,7 @@ import UndoButton from '../components/canvas/UndoButton.jsx';
 import ContextUsageBar from '../components/project/ContextUsageBar.jsx';
 import ExportsListModal from '../components/project/ExportsListModal.jsx';
 import SessionListModal from '../components/project/SessionListModal.jsx';
-import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../lib/theme.js';
+import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO, STAGE } from '../lib/theme.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { MOCK_DECK_SPEC } from '../mock/deck-spec.js';
@@ -96,6 +96,32 @@ export default function ProjectWorkspace() {
 
   // ── memo / callback（必须在 early return 之前）──
   const deckSpec = useMemo(() => MOCK_DECK_SPEC, []);
+
+  // F2.1：FloatingPanel 默认 layout —— 三浮窗位置接近原三栏（左 chat / 中
+  // canvas / 右 inspect），其他 4 tab 默认 hidden（F2.2 加）。
+  // 用 viewport 宽度算，1600+ 显示器友好；小屏用 Math.max 兜底防负数（preview
+  // headless 窗口可能 421x12 这种极小尺寸）。
+  const defaultPanels = useMemo(() => {
+    const rawW = typeof window !== 'undefined' ? window.innerWidth : 1600;
+    const rawH = typeof window !== 'undefined' ? window.innerHeight : 900;
+    const W = Math.max(rawW, 1200);   // 兜底最低 1200 防小窗口算出负数
+    const H = Math.max(rawH, 700);
+    const topOffset = 80;
+    const sideMargin = 12;
+    const panelHeight = Math.max(H - topOffset - 24, 400);    // 至少 400 高
+    const canvasWidth = Math.max(W - 760 - 24, 400);          // 至少 400 宽
+    const rightX = Math.max(W - 360 - sideMargin, 600);
+    return {
+      chat:    { position: { x: sideMargin, y: topOffset }, size: { width: 360, height: panelHeight }, visible: true, zIndex: 100 },
+      canvas:  { position: { x: sideMargin + 372, y: topOffset }, size: { width: canvasWidth, height: panelHeight }, visible: true, zIndex: 101 },
+      inspect: { position: { x: rightX, y: topOffset }, size: { width: 348, height: panelHeight }, visible: true, zIndex: 102 },
+      // F2.2 加：comments / decisions / tweaks / system 默认 hidden
+      comments:  { position: { x: rightX, y: topOffset + 100 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
+      decisions: { position: { x: rightX, y: topOffset + 140 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
+      tweaks:    { position: { x: rightX, y: topOffset + 180 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
+      system:    { position: { x: rightX, y: topOffset + 220 }, size: { width: 348, height: 400 }, visible: false, zIndex: 100 },
+    };
+  }, []);
 
   const handleIframeReady = useCallback((iframe) => {
     try { setIframeDoc(iframe.contentDocument); } catch { /* cross-origin */ }
@@ -795,6 +821,7 @@ export default function ProjectWorkspace() {
   };
 
   return (
+    <PanelManagerProvider projectId={id} defaultPanels={defaultPanels}>
     <AppShell
       breadcrumb={[
         { label: '项目', to: '/' },
@@ -863,57 +890,23 @@ export default function ProjectWorkspace() {
         </>
       }
     >
-      <ThreeColumnLayout
-        left={
-          <ChatPanel
-            messages={messages}
-            onSend={handleSend}
-            isStreaming={isStreaming}
-            trayItems={inputs}
-            onRemoveTrayItem={handleRemoveInput}
-            onPickFile={handleAddInput}
-            promptSuggestion={promptSuggestion}
-            onDismissSuggestion={() => setPromptSuggestion(null)}
-            agentProgress={agentProgress}
-            onStop={currentRunId ? handleStop : null}
-            todos={todos}
-            sessionTitle={currentSessionTitle}
-            onOpenSessionList={() => setSessionListOpen(true)}
-          />
-        }
-        center={
-          <CanvasFrame
-            htmlSrc={currentSessionId ? Canvas.artifactUrl(id, currentSessionId, reloadToken) : null}
-            selectedAnchor={selectedAnchor}
-            onSelectChange={setSelectedAnchor}
-            onTextEdit={handleTextEdit}
-            onIframeReady={handleIframeReady}
-            candidates={project.candidates || []}
-            activeCandidateId={project.activeCandidateId}
-            onSelectCandidate={handleSelectCandidate}
-            onAddCandidate={handleAddCandidate}
-            onRemoveCandidate={handleRemoveCandidate}
-            onRenameCandidate={handleRenameCandidate}
-          />
-        }
-        right={
-          <ContextPanel
-            project={project}
-            deckSpec={deckSpec}
-            comments={comments}
-            selectedAnchor={selectedAnchor}
-            iframeDoc={iframeDoc}
-            onAddComment={handleAddComment}
-            onDirectEdit={handleDirectEdit}
-            onTriggerRun={handleTriggerRun}
-            onJumpToComment={handleJumpToComment}
-            onResolveComment={handleResolveComment}
-            onDeleteComment={handleDeleteComment}
-            decisionsReloadKey={decisionsReloadKey}
-            sessionId={currentSessionId}
-          />
-        }
-      />
+      {/* F2.1：main area = 空 stage（暖底 + 提示文字），所有功能 panel 走
+          浮动 portal。F2.2 加 comments/decisions/tweaks/system 4 个 panel。 */}
+      <div style={{
+        flex: 1, position: 'relative',
+        background: STAGE.bg,
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: COLOR.sub, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+          pointerEvents: 'none',
+          opacity: 0.35,
+        }}>
+          拖动 panel 调整布局 · F2.3 TopBar 重新打开关闭的 panel
+        </div>
+      </div>
 
       <ShareModal show={shareOpen} onClose={() => setShareOpen(false)} project={project} />
       <ExportsListModal
@@ -951,35 +944,59 @@ export default function ProjectWorkspace() {
         }}
       />
 
-      {/* F1.1 demo：用 FloatingPanel 组件替代 F0 直接调 Rnd，验证抽象可用。
-          F2 真接业务时把所有功能模块替换，这个 demo 删掉。 */}
+      {/* F2.1：3 个浮动 panel（Chat / Canvas / Inspect）通过 portal 挂到 body
+          z-index 由 PanelManager 自动管理（点哪个升到最前）
+          F2.2 加 4 个 tab panel（默认 hidden，TopBar 重开） */}
       {createPortal(
-        <FloatingPanel
-          id="f1-demo"
-          title="F1 demo · FloatingPanel"
-          icon={Sparkles}
-          defaultPosition={{ x: 80, y: 100 }}
-          defaultSize={{ width: 320, height: 200 }}
-          zIndex={9999}
-          onClose={() => console.log('[FloatingPanel demo] close clicked')}
-        >
-          <div style={{
-            padding: 14,
-            fontFamily: "-apple-system, sans-serif",
-            fontSize: 12,
-            color: '#5a5550',
-            lineHeight: 1.6,
-          }}>
-            FloatingPanel 抽象 OK ✓<br/>
-            <span style={{ color: '#a09888' }}>
-              拖 title bar 移动 / 拖右下角 resize / 点 X 关闭（看 console.log）。<br/>
-              F2 真接业务时所有功能 panel 都用这个组件，这段 demo 删掉。
-            </span>
-          </div>
-        </FloatingPanel>,
+        <>
+          <FloatingPanel id="chat" title="Chat" icon={MessageCircle}>
+            <ChatPanel
+              messages={messages}
+              onSend={handleSend}
+              isStreaming={isStreaming}
+              trayItems={inputs}
+              onRemoveTrayItem={handleRemoveInput}
+              onPickFile={handleAddInput}
+              promptSuggestion={promptSuggestion}
+              onDismissSuggestion={() => setPromptSuggestion(null)}
+              agentProgress={agentProgress}
+              onStop={currentRunId ? handleStop : null}
+              todos={todos}
+              sessionTitle={currentSessionTitle}
+              onOpenSessionList={() => setSessionListOpen(true)}
+            />
+          </FloatingPanel>
+
+          <FloatingPanel id="canvas" title="Canvas" icon={ImageIcon}>
+            <CanvasFrame
+              htmlSrc={currentSessionId ? Canvas.artifactUrl(id, currentSessionId, reloadToken) : null}
+              selectedAnchor={selectedAnchor}
+              onSelectChange={setSelectedAnchor}
+              onTextEdit={handleTextEdit}
+              onIframeReady={handleIframeReady}
+              candidates={project.candidates || []}
+              activeCandidateId={project.activeCandidateId}
+              onSelectCandidate={handleSelectCandidate}
+              onAddCandidate={handleAddCandidate}
+              onRemoveCandidate={handleRemoveCandidate}
+              onRenameCandidate={handleRenameCandidate}
+            />
+          </FloatingPanel>
+
+          <FloatingPanel id="inspect" title="Inspect" icon={Crosshair}>
+            <InspectTab
+              selectedAnchor={selectedAnchor}
+              iframeDoc={iframeDoc}
+              onAddComment={handleAddComment}
+              onDirectEdit={handleDirectEdit}
+              onTriggerRun={handleTriggerRun}
+            />
+          </FloatingPanel>
+        </>,
         document.body
       )}
     </AppShell>
+    </PanelManagerProvider>
   );
 }
 
