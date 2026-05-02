@@ -967,6 +967,7 @@ function ToolMessage({
   if (fileDiff && (toolName === 'Edit' || toolName === 'Write')) {
     const filename = basename(toolInput?.file_path || toolInput?.path);
     const canExpand = toolName === 'Edit' && (fileDiff.adds > 0 || fileDiff.dels > 0);
+    const isPlanDoc = filename === 'design-plan.md';
     return (
       <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning}>
         <button
@@ -1029,6 +1030,26 @@ function ToolMessage({
             oldStr={String(toolInput?.old_string || '')}
             newStr={String(toolInput?.new_string || '')}
           />
+        )}
+        {/* S4b-3：design-plan.md 写完显示"查看设计计划"按钮，开 modal */}
+        {isPlanDoc && (
+          <button
+            onClick={() => useGlobalStore.getState().openDesignPlan()}
+            style={{
+              marginTop: GAP.xs,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: `4px 10px`,
+              background: COLOR.bgCard,
+              border: `1px solid ${COLOR.borderLt}`,
+              borderRadius: 6,
+              fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs,
+              color: COLOR.text2,
+              cursor: 'pointer',
+            }}
+          >
+            <span>📄</span>
+            <span>查看设计计划</span>
+          </button>
         )}
       </TimelineNode>
     );

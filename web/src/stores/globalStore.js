@@ -41,6 +41,13 @@ export const useGlobalStore = create((set) => ({
   activeRun: null,
   setActiveRun: (activeRun) => set({ activeRun }),
 
+  // ── S4b-3：DesignPlan modal 开关 ──
+  // run.plan_doc_ready 触发 / Message Write tool 按钮触发都走这里。
+  // ProjectWorkspace 持有 <DesignPlanModal />，按这个 flag 显示。
+  designPlanOpen: false,
+  openDesignPlan: () => set({ designPlanOpen: true }),
+  closeDesignPlan: () => set({ designPlanOpen: false }),
+
   // ── 模拟登录态（MVP 单用户）──
   user: { id: 'u_self', name: '我', avatar: null },
 }));

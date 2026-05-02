@@ -20,6 +20,7 @@ import ExportMenu from '../components/project/ExportMenu.jsx';
 import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
 import SnapshotModal from '../components/project/SnapshotModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
+import DesignPlanModal from '../components/project/DesignPlanModal.jsx';
 import UndoButton from '../components/canvas/UndoButton.jsx';
 import ContextUsageBar from '../components/project/ContextUsageBar.jsx';
 import ExportsListModal from '../components/project/ExportsListModal.jsx';
@@ -615,6 +616,13 @@ export default function ProjectWorkspace() {
         break;
       }
 
+      case 'run.plan_doc_ready': {
+        // S4b-3：agent Write design-plan.md 完成 → 主动开 modal + toast 通知用户
+        useGlobalStore.getState().openDesignPlan();
+        showToast('📄 设计计划已生成，点击右上 × 关闭', 'info');
+        break;
+      }
+
       // 运维 / 调试信号——不展示 UI，只 console 留痕（dev 模式）。
       // 这些事件用于排查问题，不该 spam 用户视图。
       case 'run.subagent.start':
@@ -1147,6 +1155,7 @@ export default function ProjectWorkspace() {
           navigate(sid ? `/projects/${id}/sessions/${sid}` : `/projects/${id}/work`);
         }}
       />
+      <DesignPlanModal pid={id} sid={currentSessionId} />
 
     </AppShell>
     </PanelManagerProvider>
