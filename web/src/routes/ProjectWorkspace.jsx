@@ -7,11 +7,11 @@ import AppShell from '../components/layout/AppShell.jsx';
 import FloatingPanel from '../components/layout/FloatingPanel.jsx';
 import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
 import PanelMenu from '../components/layout/PanelMenu.jsx';
-import { Crosshair, MessageSquare, Sliders } from 'lucide-react';
+import { Sliders } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
-import InspectTab from '../components/context-panel/InspectTab.jsx';
-import CommentsTab from '../components/context-panel/CommentsTab.jsx';
+// InspectTab 由 InspectFloatingCard 间接使用（不在此处直接 import）
+// CommentsTab 已删 — comments 嵌入到 InspectFloatingCard
 // DecisionsTab / SystemTab 现在由 SystemPopover 间接使用（CanvasFrame 内）
 // 不在此处直接 import — C2 撤销 floating panel 注册
 import ShareModal from '../components/project/ShareModal.jsx';
@@ -113,16 +113,15 @@ export default function ProjectWorkspace() {
   // 5 个次级 UI 仍是浮窗（bounds = canvas 容器），默认 hidden 按需 spawn。
   // position 是相对 canvas 容器的坐标系（不是 viewport）。
   // y 起点 64 = 避开 canvas toolbar（~44px）+ 留 20px 呼吸。
-  // C2：system / decisions 改 toolbar Settings popover（不再注册 floating panel）
+  // C2/C3：浮窗体系收口
+  //  - system / decisions → toolbar Settings popover（C2）
+  //  - inspect / comments → 选中元素自动弹的 contextual InspectFloatingCard（C3）
+  //  - 仅 tweaks 保留 floating panel（C5 schema 驱动）
   const defaultPanels = useMemo(() => ({
-    inspect:   { position: { x: 24, y: 64 },   size: { width: 320, height: 420 }, visible: false, zIndex: 100 },
-    comments:  { position: { x: 48, y: 96 },   size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
     tweaks:    { position: { x: 96, y: 160 },  size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
   }), []);
 
   const panelMeta = useMemo(() => ({
-    inspect:   { label: 'Inspect',   icon: Crosshair },
-    comments:  { label: 'Comments',  icon: MessageSquare },
     tweaks:    { label: 'Tweaks',    icon: Sliders },
   }), []);
 
@@ -993,26 +992,16 @@ export default function ProjectWorkspace() {
             projectId={id}
             sessionId={currentSessionId}
             decisionsReloadKey={decisionsReloadKey}
+            comments={comments}
+            onAddComment={handleAddComment}
+            onResolveComment={handleResolveComment}
+            onDeleteComment={handleDeleteComment}
+            onDirectEdit={handleDirectEdit}
+            onTriggerRun={handleTriggerRun}
           />
 
-          {/* 浮窗层 —— bounds='parent' = 不出 canvas section */}
-          <FloatingPanel id="inspect" title="Inspect" icon={Crosshair}>
-            <InspectTab
-              selectedAnchor={selectedAnchor}
-              iframeDoc={iframeDoc}
-              onAddComment={handleAddComment}
-              onDirectEdit={handleDirectEdit}
-              onTriggerRun={handleTriggerRun}
-            />
-          </FloatingPanel>
-          <FloatingPanel id="comments" title="Comments" icon={MessageSquare}>
-            <CommentsTab
-              comments={comments}
-              onJump={handleJumpToComment}
-              onResolve={handleResolveComment}
-              onDelete={handleDeleteComment}
-            />
-          </FloatingPanel>
+          {/* 浮窗层 —— bounds='parent' = 不出 canvas section
+              C3：inspect / comments 删 — 改用 InspectFloatingCard（CanvasFrame 内贴选中元素） */}
           <FloatingPanel id="tweaks" title="Tweaks" icon={Sliders}>
             <div style={{ padding: GAP.lg }}>
               <div style={{

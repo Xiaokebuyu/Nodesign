@@ -7,6 +7,7 @@ import SlideNavigator from './SlideNavigator.jsx';
 import CanvasCandidateBar from './CanvasCandidateBar.jsx';
 import A11yReviewPopover from './A11yReviewPopover.jsx';
 import SystemPopover from './SystemPopover.jsx';
+import InspectFloatingCard from './InspectFloatingCard.jsx';
 import { COLOR, STAGE } from '../../lib/theme.js';
 
 /**
@@ -41,6 +42,10 @@ export default function CanvasFrame({
   onRenameCandidate,
   // C2: System popover 数据透传
   project, deckSpec, projectId, sessionId, decisionsReloadKey,
+  // C3: Inspect contextual + Comments 嵌入
+  comments = [],
+  onAddComment, onResolveComment, onDeleteComment,
+  onDirectEdit, onTriggerRun,
 }) {
   const [mode, setMode] = useState('edit');
   const [zoom, setZoom] = useState('fit');     // 'fit' | number
@@ -86,6 +91,29 @@ export default function CanvasFrame({
     setDirty(false);
     setIframeDoc(null);
   }, [activeCandidateId]);
+
+  // C3：ESC 关 InspectFloatingCard / 清选中
+  // 同时挂 window + iframe.contentDocument keydown（iframe 内焦点不冒泡到 parent）
+  // 避开 contenteditable 编辑态（DirectEditBridge 的 ESC = revert 文本，优先级更高）
+  useEffect(() => {
+    if (!selectedAnchor) return;
+    const handler = (e) => {
+      if (e.key !== 'Escape') return;
+      const t = e.target;
+      if (t?.getAttribute?.('contenteditable') === 'true') return;
+      onSelectChange?.(null);
+    };
+    window.addEventListener('keydown', handler);
+    let iframeDocRef = null;
+    try {
+      iframeDocRef = iframeDoc;
+      iframeDocRef?.addEventListener('keydown', handler);
+    } catch { /* cross-origin: skip */ }
+    return () => {
+      window.removeEventListener('keydown', handler);
+      try { iframeDocRef?.removeEventListener('keydown', handler); } catch { /* */ }
+    };
+  }, [selectedAnchor, iframeDoc, onSelectChange]);
 
   // 加载源码（用于 Code mode 显示 + dirty 后切 srcDoc）
   useEffect(() => {
@@ -182,6 +210,22 @@ export default function CanvasFrame({
               selectedAnchor={selectedAnchor}
               iframeRef={{ current: iframeWrapRef.current?.querySelector('iframe') }}
               zoom={effectiveZoom}
+            />
+          )}
+          {mode === 'edit' && selectedAnchor && iframeDoc && (
+            <InspectFloatingCard
+              selectedAnchor={selectedAnchor}
+              iframeDoc={iframeDoc}
+              iframeRef={{ current: iframeWrapRef.current?.querySelector('iframe') }}
+              iframeRect={wrapSize}
+              zoom={effectiveZoom}
+              comments={comments}
+              onClose={() => onSelectChange?.(null)}
+              onAddComment={onAddComment}
+              onResolveComment={onResolveComment}
+              onDeleteComment={onDeleteComment}
+              onDirectEdit={onDirectEdit}
+              onTriggerRun={onTriggerRun}
             />
           )}
         </div>

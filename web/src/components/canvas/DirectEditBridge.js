@@ -83,6 +83,11 @@ export function attachEditMode(iframe, { onTextEdit, onSelect } = {}) {
     if (e.target.getAttribute?.('contenteditable') === 'true') return;
     const el = e.target;
     if (!el || el.nodeType !== 1) return;
+    // C3：点空白（body / html）→ 清选中（关 InspectFloatingCard）
+    if (el === doc.body || el === doc.documentElement) {
+      onSelect?.({ anchor: null });
+      return;
+    }
     onSelect?.({
       anchor: serializeAnchor(el),
     });

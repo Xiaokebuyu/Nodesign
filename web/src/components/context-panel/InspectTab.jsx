@@ -17,15 +17,16 @@ import { findElementByAnchor } from '../../lib/html-utils.js';
  * Props:
  *   - selectedAnchor   当前选中元素的 anchor（{ dataId, path, textHint, bbox }）
  *   - iframeDoc        iframe 内文档（contentDocument），用 anchor 找回真实元素
- *   - onAddComment     行动 1：写评论让 AI 改
+ *   - onAddComment     行动 1：写评论让 AI 改（compact 模式跳过 — 由外层 textarea 替代）
  *   - onDirectEdit     行动 2：直接改（弹小 form）
  *   - onTriggerRun     行动 3：触发新 run（chat 模式）
+ *   - compact          C3：嵌入 InspectFloatingCard 时去掉重复 header / 写评论按钮 + 缩 padding
  *
  * 内容分两层：
  *   - 人话视图（默认展开）：元素角色 + 当前样式人话 + 可调维度 + 改动范围 + 三动作
  *   - AI 上下文视图（默认折叠）：path / outerHTML / computed / siblings
  */
-export default function InspectTab({ selectedAnchor, iframeDoc, onAddComment, onDirectEdit, onTriggerRun }) {
+export default function InspectTab({ selectedAnchor, iframeDoc, onAddComment, onDirectEdit, onTriggerRun, compact = false }) {
   const [scope, setScope] = useState('this');         // this | sameType-page | sameType-deck | spec
   const [aiOpen, setAiOpen] = useState(false);
 
@@ -48,41 +49,47 @@ export default function InspectTab({ selectedAnchor, iframeDoc, onAddComment, on
   const textBrief = (el.textContent || '').trim().slice(0, 80);
 
   return (
-    <div style={{ padding: GAP.lg, display: 'flex', flexDirection: 'column', gap: GAP.lg }}>
+    <div style={{
+      padding: compact ? GAP.lg : GAP.lg,
+      display: 'flex', flexDirection: 'column',
+      gap: compact ? GAP.md : GAP.lg,
+    }}>
 
-      {/* 1. 元素语义 */}
-      <Section icon={<Crosshair size={11} />} label="选中">
-        <div style={{
-          padding: `${GAP.md}px ${GAP.lg}px`,
-          background: COLOR.bgCard,
-          border: `1px solid ${COLOR.borderLt}`,
-          borderRadius: 8,
-        }}>
+      {/* 1. 元素语义 — compact 模式跳过（外层 floating card header 已显示）*/}
+      {!compact && (
+        <Section icon={<Crosshair size={11} />} label="选中">
           <div style={{
-            fontFamily: FONT_MONO, fontSize: FONT_SIZE.lg, fontWeight: 500,
-            color: COLOR.text, marginBottom: GAP.xs,
+            padding: `${GAP.md}px ${GAP.lg}px`,
+            background: COLOR.bgCard,
+            border: `1px solid ${COLOR.borderLt}`,
+            borderRadius: 8,
           }}>
-            {page && page.index !== null && `第 ${page.index + 1} 页 · `}{role}
-            {pos && <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub, marginLeft: GAP.sm, fontWeight: 400 }}>
-              （同页第 {pos.index} / {pos.total}）
-            </span>}
-          </div>
-          {textBrief && (
             <div style={{
-              fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2, lineHeight: 1.5,
-              maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis',
+              fontFamily: FONT_MONO, fontSize: FONT_SIZE.lg, fontWeight: 500,
+              color: COLOR.text, marginBottom: GAP.xs,
             }}>
-              "{textBrief}"
+              {page && page.index !== null && `第 ${page.index + 1} 页 · `}{role}
+              {pos && <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub, marginLeft: GAP.sm, fontWeight: 400 }}>
+                （同页第 {pos.index} / {pos.total}）
+              </span>}
             </div>
-          )}
-          <div style={{
-            marginTop: GAP.sm,
-            fontFamily: FONT_MONO, fontSize: 10, color: COLOR.dim,
-          }}>
-            &lt;{aiContext.tag}&gt; {page?.layout && `· layout: ${page.layout}`}
+            {textBrief && (
+              <div style={{
+                fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2, lineHeight: 1.5,
+                maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>
+                "{textBrief}"
+              </div>
+            )}
+            <div style={{
+              marginTop: GAP.sm,
+              fontFamily: FONT_MONO, fontSize: 10, color: COLOR.dim,
+            }}>
+              &lt;{aiContext.tag}&gt; {page?.layout && `· layout: ${page.layout}`}
+            </div>
           </div>
-        </div>
-      </Section>
+        </Section>
+      )}
 
       {/* 2. 当前样式（人话）*/}
       {styles.length > 0 && (
@@ -174,18 +181,21 @@ export default function InspectTab({ selectedAnchor, iframeDoc, onAddComment, on
         </div>
       </Section>
 
-      {/* 5. 三动作 */}
+      {/* 5. 三动作 — compact 模式跳过"写评论"（外层 textarea 替代）*/}
       <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.sm }}>
-        <ActionBtn
-          icon={<MessageCircle size={13} />}
-          label="写评论给 AI"
-          onClick={() => onAddComment?.({ anchor: selectedAnchor, scope, aiContext })}
-          primary
-        />
+        {!compact && (
+          <ActionBtn
+            icon={<MessageCircle size={13} />}
+            label="写评论给 AI"
+            onClick={() => onAddComment?.({ anchor: selectedAnchor, scope, aiContext })}
+            primary
+          />
+        )}
         <ActionBtn
           icon={<Edit3 size={13} />}
           label="直接改属性"
           onClick={() => onDirectEdit?.({ anchor: selectedAnchor, scope, aiContext })}
+          primary={compact}
         />
         <ActionBtn
           icon={<RefreshCw size={13} />}
