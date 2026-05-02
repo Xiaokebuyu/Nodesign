@@ -157,6 +157,11 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
   const activeRun = useGlobalStore(s => s.activeRun);
   // collected: { [questionText]: answerString }；submitted 后等 status 推回
   const [collected, setCollected] = useState({});
+  // customReplies: { [questionText]: free-text }——textarea 自由输入，优先级高于 option
+  // 当 customReplies[q] 非空时 effective answer = trim 后的 textarea 内容（不走 options）
+  // SDK schema 注释明确 "There should be no 'Other' option, that will be provided automatically"
+  // —— SDK 期望宿主 UI 提供自由输入入口；我们用 textarea 实现这个。
+  const [customReplies, setCustomReplies] = useState({});
   // currentQuestionIdx：wizard 当前在第几题
   const [stepIdx, setStepIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
@@ -177,6 +182,9 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
 
   const currentQ = questions[Math.min(stepIdx, total - 1)];
   const currentAnswer = collected[currentQ.question];  // string（单选 label / 多选 csv）/ undefined
+  const currentCustom = customReplies[currentQ.question] || '';
+  // effective answer：textarea 自由输入优先；空白则走 options 选择
+  const currentEffective = currentCustom.trim() || currentAnswer;
   const isLast = stepIdx === total - 1;
   const canBack = stepIdx > 0;
 
@@ -218,14 +226,15 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
   const handleSkip = () => {
     if (disabled) return;
     setQuestionAnswer(undefined);  // 跳过 = 不提供答案
-    if (isLast) submitAll({ ...collected, [currentQ.question]: undefined });
+    setCustomReplies(prev => { const next = { ...prev }; delete next[currentQ.question]; return next; });
+    if (isLast) submitAll({ ...collected, [currentQ.question]: undefined }, customReplies);
     else setStepIdx(stepIdx + 1);
   };
 
   const handleNext = () => {
     if (disabled) return;
-    if (!currentAnswer) {
-      showToast('请先选一个选项，或点"跳过本题"', 'info');
+    if (!currentEffective) {
+      showToast('请先选一个选项 / 自由输入回复，或点"跳过本题"', 'info');
       return;
     }
     setStepIdx(stepIdx + 1);
@@ -233,15 +242,16 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
 
   const handleSubmit = () => {
     if (disabled) return;
-    if (!currentAnswer) {
-      showToast('请先选一个选项，或点"跳过本题"', 'info');
+    if (!currentEffective) {
+      showToast('请先选一个选项 / 自由输入回复，或点"跳过本题"', 'info');
       return;
     }
-    submitAll(collected);
+    submitAll(collected, customReplies);
   };
 
   // 真正的 POST。allCollected：可能含 undefined 表示跳过 → 过滤掉
-  const submitAll = async (allCollected) => {
+  // customMap：textarea 自由输入；非空时优先于 collected[q] 用作 answer
+  const submitAll = async (allCollected, customMap = {}) => {
     if (!activeRun?.pid || !activeRun?.runId) {
       showToast('当前无活跃 run，无法回答历史问题', 'info');
       return;
@@ -251,9 +261,14 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
       return;
     }
 
-    // 过滤 undefined（跳过的题）+ 防御非空 string
+    // 过滤 undefined（跳过的题）+ 合并 customReplies（textarea 优先级高于 option）
+    // 对每条 question：textarea 非空 trim 后用 textarea；否则 fallback option label
     const answers = {};
-    for (const [k, v] of Object.entries(allCollected)) {
+    const allKeys = new Set([...Object.keys(allCollected), ...Object.keys(customMap)]);
+    for (const k of allKeys) {
+      const custom = (customMap[k] || '').trim();
+      const opt = allCollected[k];
+      const v = custom || opt;
       if (typeof v === 'string' && v.length > 0) answers[k] = v;
     }
 
@@ -284,7 +299,7 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
       letterSpacing: '0.04em',
     }}>
       {questions.map((q, i) => {
-        const filled = !!collected[q.question];
+        const filled = !!((customReplies[q.question] || '').trim() || collected[q.question]);
         const isCurrent = i === stepIdx && !isAnswered;
         return (
           <span
@@ -472,6 +487,57 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
           </div>
         )}
 
+        {/* 自由输入 textarea —— 覆盖上方选项；选项不够全 / 想用自己的话答时用 */}
+        {!isAnswered && (
+          <div style={{ marginTop: GAP.sm }}>
+            <div style={{
+              fontSize: 10,
+              color: COLOR.sub,
+              marginBottom: 4,
+              fontFamily: FONT_MONO,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+            }}>
+              或自由输入（覆盖上方选项）
+            </div>
+            <textarea
+              value={currentCustom}
+              onChange={(e) => {
+                if (disabled) return;
+                const v = e.target.value;
+                setCustomReplies(prev => {
+                  const next = { ...prev };
+                  if (v) next[currentQ.question] = v;
+                  else delete next[currentQ.question];
+                  return next;
+                });
+              }}
+              disabled={disabled}
+              placeholder={currentAnswer
+                ? `已选「${currentAnswer.length > 30 ? currentAnswer.slice(0, 30) + '…' : currentAnswer}」；填这里会替换它`
+                : '想用自己的话回复就在这里写…'}
+              rows={2}
+              style={{
+                width: '100%',
+                padding: `${GAP.sm}px ${GAP.md}px`,
+                border: `1px solid ${currentCustom.trim() ? COLOR.btn : COLOR.borderLt}`,
+                borderRadius: 6,
+                fontFamily: FONT_SANS,
+                fontSize: FONT_SIZE.sm,
+                color: COLOR.text,
+                background: currentCustom.trim() ? 'rgba(45, 36, 24, 0.04)' : '#fff',
+                resize: 'vertical',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+              onFocus={e => { if (!disabled) e.currentTarget.style.borderColor = COLOR.borderHv; }}
+              onBlur={e => {
+                e.currentTarget.style.borderColor = currentCustom.trim() ? COLOR.btn : COLOR.borderLt;
+              }}
+            />
+          </div>
+        )}
+
         {/* nav buttons */}
         {!isAnswered && (
           <div style={{
@@ -499,15 +565,19 @@ function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
             {isLast ? (
               <NavBtn
                 onClick={handleSubmit}
-                disabled={disabled || !currentAnswer}
+                disabled={disabled || !currentEffective}
                 icon={Send}
-                label={`提交全部 (${Object.values(collected).filter(Boolean).length}/${total})`}
+                label={`提交全部 (${
+                  questions.filter(q =>
+                    (customReplies[q.question] || '').trim() || collected[q.question]
+                  ).length
+                }/${total})`}
                 variant="primary"
               />
             ) : (
               <NavBtn
                 onClick={handleNext}
-                disabled={disabled || !currentAnswer}
+                disabled={disabled || !currentEffective}
                 icon={ChevronRight}
                 label="下一题"
                 variant="primary"
