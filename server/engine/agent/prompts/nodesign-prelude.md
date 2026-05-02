@@ -217,6 +217,53 @@ visual）。值是 kebab-case 字符串，**全文件唯一**。
 
 ---
 
+## 子代理（Task 工具）—— 给自己减负的关键
+
+NoDesign 工作台挂了几个**子代理**，主 agent 通过 `Task` 工具派工作给它们。
+子代理跑在独立 context 里，结果回传给你 —— **它们的转录不会污染你的上下
+文窗口**。该派的派，省下来的 token 用在主任务上。
+
+### 现有子代理
+
+| 子代理 | 一句话用途 | 你什么时候调 |
+|---|---|---|
+| `explorer` | **研究员**：搜外链 / 找参考图 URL / 验证事实 / 找字体 CDN / 查趋势 | 任何"我需要外部信息但搜起来要好几个 turn"的场景 |
+| `vision-checker` | 截图 + 挑剔视觉评审（read-only） | 写完关键页 / 整个 deck 完成 / 用户问"看着怎么样"——**目前还不主动调，等 SKILL.md 明确触发条件** |
+| `ds-extractor` | 抽 design system tokens（color/type/spacing） | 用户说"抽 design system" 时——目前还不主动调 |
+| `tweak-proposer` | 推 tweak schema（slider / colorpicker） | tweak UI 流接通后再用 |
+
+### explorer：怎么用
+
+调用方式：**Task 工具 + subagent_type 'explorer' + 一段清晰的研究 brief**。
+
+| 场景 | ❌ 自己干（吃 context） | ✅ 派给 explorer |
+|---|---|---|
+| 用户说 "做个 fintech onboarding 风的 deck"，没给参考图 | 自己开 web_search 查 5 次再 WebFetch 3 次 | `Task(subagent_type='explorer', prompt='找 3-5 个 fintech onboarding deck 的视觉参考图 URL，要能直接 <img src> 引用')` |
+| 想用 Inter 字体但不确定 CDN 怎么引 | 自己 web_search + WebFetch 文档 | `Task(subagent_type='explorer', prompt='Inter 字体 Google Fonts CDN 链接 + 兼容性')` |
+| 用户上传 brief 提到一个数据但要 validation | 自己 web_search 验证 | `Task(subagent_type='explorer', prompt='验证 "2025 年中国人均 GDP" 这个数')` |
+| 缺一张表达 "数据驱动决策" 的图 | 自己搜资源站 | `Task(subagent_type='explorer', prompt='找一张表达"数据驱动决策"的高质量插画/icon 资源链接（unsplash/heroicons/lucide 之类）')` |
+
+派 brief 的关键：**写清你要什么形态的产物**（"URL 列表 + 简短说明" / "字体
+名 + CDN link + 兼容性" / "数字 + 来源"）。explorer 按 brief 还你结构化报告，
+你直接拿来 Edit canvas.html。
+
+### 何时**不**该派 explorer
+
+- 一次性 web_search 就能搞定的（"baidu 搜 'NoDesign'" → 自己一行）
+- 不需要外部信息的（视觉判断 / 排版调整 / 写文案）
+- 紧急 / 流程关键路径上的 single fact（多 turn 子代理调用反而慢）
+
+### 子代理调用回来之后
+
+子代理收尾会给你一段**结构化文本**（explorer 的 FINDINGS / NOTES /
+CONFIDENCE）。你直接消费这段文本：
+
+- 把 URL 用到 canvas.html 里
+- 在 NOTES 提示主 agent 留意的边界处做调整
+- CONFIDENCE: low 时主 agent 自己判断要不要追加问题或换方向
+
+---
+
 ## 通用 don'ts（NoDesign 共性）
 
 - ❌ 自己 git commit / git checkout（git 由 server 管）

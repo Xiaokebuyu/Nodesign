@@ -1,13 +1,16 @@
 /**
  * server/engine/agents/index.js — subagent 定义集合
  *
- * 通过 SDK 的 query options.agents 字段挂载 3 个子代理：
+ * 通过 SDK 的 query options.agents 字段挂载 4 个子代理：
  *
+ *   explorer          — 研究员（搜索 + 读资料 + 验证事实），给主 agent 找外链/参考/素材
  *   vision-checker    — 截图 + a11y / 视觉合理性评审（C14 真实 prompt 在 vision-checker.md）
  *   ds-extractor      — 抽 design system tokens（C15 真实 prompt + design-system.json schema）
  *   tweak-proposer    — 推可调 slider schema（C16 真实 prompt + tweak-schema.json schema）
  *
  * 调用：main agent 用 Task 工具调（SDK 自动暴露）。
+ * **注意**：'Task' 必须在主 agent 的 toolAllowlist 里（loop.js DEFAULT_TOOL_ALLOWLIST）
+ * 否则 SDK 拒绝调用，所有子代理形同摆设。
  *
  * P0+ stage 1 范围：
  *   - 只挂定义骨架，main agent 通过 SKILL.md 引导**不主动调**这些子代理
@@ -68,6 +71,40 @@ const STUB_PROMPT = (name) =>
  */
 export function createAgents() {
   return {
+    // explorer —— 研究员子代理。主 agent 在做 deck/产物时遇到"需要外部素材
+    // / 参考 / 事实验证" 就 Task 派给它。它去搜 + 读 + 总结，给主 agent 一份
+    // 结构化研究报告（URLs / 字体 / 数据 / 趋势）。主 agent 拿报告直接 Edit
+    // canvas.html 用，不必自己分心去搜。
+    //
+    // tools 显式收窄到 read-only researcher：
+    //   - mcp__nodesign__web_search（多 provider 联网搜）
+    //   - WebFetch（SDK 内置，按 prompt 总结 URL 内容）
+    //   - Read / Glob / Grep（看本地 ./assets 和 ./spec.json）
+    //   - TodoWrite（多步研究列计划）
+    // 不给：Write/Edit（不写代码）/ Bash（不要 shell shenanigans）/
+    //       AskUserQuestion（子代理不直接跟用户说话）/ screenshot/export/
+    //       record_decision（不是它的角色）/ Task（不允许嵌套子代理）
+    explorer: {
+      description:
+        'Research/explorer subagent. Use this when the main agent needs '
+        + 'external information that requires web search or URL fetching: '
+        + 'finding reference image URLs, looking up CDN font links, validating '
+        + 'facts/numbers, finding inspiration sources, or gathering '
+        + 'design references. Returns a structured research report with URLs '
+        + 'and findings — no code, no design judgment, just facts. '
+        + 'Saves the main agent\'s context window by offloading research turns.',
+      prompt: loadPrompt('explorer'),
+      tools: [
+        'mcp__nodesign__web_search',
+        'WebFetch',
+        'Read', 'Glob', 'Grep',
+        'TodoWrite',
+      ],
+      // maxTurns 限制：研究是有限动作，5 turn 足够 search → fetch → 报告。
+      // 主 agent 等子代理回应是阻塞的，太长会让用户体感"卡住"。
+      maxTurns: 5,
+    },
+
     'vision-checker': {
       description:
         'Visually inspect the current canvas.html design via screenshot. '

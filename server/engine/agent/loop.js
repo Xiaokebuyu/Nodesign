@@ -69,6 +69,12 @@ const DEFAULT_TOOL_ALLOWLIST = [
   // mcp__nodesign__web_search（4 provider，0 依赖），不用 SDK 内置 WebSearch
   // （那个是 server_tool_use，Anthropic 收费 + Kimi gateway 透传不确定）。
   'WebFetch',
+  // Task —— 子代理调用入口。SDK 把 query options.agents 注册的子代理
+  // （explorer / vision-checker / ds-extractor / tweak-proposer）通过 Task
+  // 工具暴露给主 agent。**Task 不在白名单 = 所有子代理形同摆设**（之前
+  // P0+ stage 1 漏挂的隐性 bug，子代理 agents/index.js 注册了但永远不会被
+  // 调用）。本次 explorer 接通时一并修复。
+  'Task',
 ];
 
 // 主产物候选 — canvas.html 列首位（P0 per-project workspace 主文件名），
