@@ -125,9 +125,30 @@ NoDesign = **Claude Code 之上的画布编辑层**，按 Anthropic Projects 模
     - **(13f) 产物类型多元化**：不只 deck，加 dashboard / form / landing page / report 等 layout template，agent 按 brief 类型自选
     - **触发条件**：用户明确"NoDesign 要做哪类产物"才好开干。当前主力是 deck（演讲场景），如果未来扩到"真做 web 产品 prototype"，13a-13e 都要做；如果继续聚焦 deck，13c/13e 就够
 
----
-
-## 🟡 P0/stage1 时代状态（2026-04-30 收尾）
+14. **Workspace layout 改 grid + auto reflow（react-grid-layout 风）**（2026-05-02 用户明确想要、当 session 失败撤退、新 session 重做）
+    - **用户语境**：当前 react-rnd 自由浮动 panel 不满意，要"拖动一个 panel 时其他自动避让；resize 一个 panel 时邻居被动调整大小；每个 panel 不是无限制拖拽而是遵循约束"。**业内对应 = react-grid-layout**（Trello / Notion / Grafana 同款 grid + reflow）。AskUserQuestion 已让用户在 Grid Layout / Tree Split / Free Split 三选一，她明确选 **Grid Layout (Trello / Notion 风)**
+    - **当前状态**：该方向已尝试 G0+G1+G2，**全失败回退**（git reset 9f5b900 回 react-rnd snap visual preview）。失败原因：
+      - **react-grid-layout v2.2.3 主入口 API 完全跟 v1 不同**：用 `gridConfig={{cols, rowHeight, margin}}` / `dragConfig={{handle}}` / `resizeConfig={{handles}}` 嵌套对象，而不是 v1 的平铺 props
+      - **v1 平铺 API 在 `/legacy` 入口**，但 `WidthProvider` 在 React 19 下报 `Cannot read properties of null (reading 'useState')` (hook null)
+      - 自测 width 给 GridLayout 后，RGL mount 时**自动调 onLayoutChange** 把 default layout（chat x=0, canvas x=6, inspect x=18）reflow 成竖向堆叠（chat y=0, canvas y=22, inspect y=44）
+      - panel h=22 × rowHeight=32 = 872px 超过 viewport 高 → 双 scrollbar
+      - 改 ProjectWorkspace 1045 行内嵌 layout 容器，问题混杂在大组件里，每次试错都改一堆文件
+    - **新 session 重做 plan**（学到的教训）：
+      - **阶段 1（隔离 demo 验证）**：不动 ProjectWorkspace，加新路由 `/grid-demo`，单独验证 RGL v2 在 React 19 + Vite 6 + JSX 真能跑：
+        - 决定用 v2 主入口（`gridConfig` 嵌套）还是 `/legacy` 平铺 props
+        - 解决 width 测量：自测 + 等真值再 render（`width=0` 时不 mount GridLayout）
+        - 解决 mount 时 RGL 自动 reflow 把 default layout 改了的问题（可能要 `preventCollision={true}` 或者 onLayoutChange 第一次调用要保留 default）
+        - 验证 panel h × rowHeight 跟 viewport 高的关系，确保不出 scrollbar
+        - 验证 drag/resize/reflow 真正 work + persist 到 localStorage
+      - **阶段 2（接 ProjectWorkspace）**：demo 摸清 API 后，重写 PanelManager + 新建 GridPanel + ProjectWorkspace 换 layout
+      - **关键复用**（从 9f5b900 回退后保留）：STAGE token / PanelMenu UI / 5 个 Tab 子组件 props 接口 / ChatPanel / CanvasFrame
+      - **库选型重审**：如果 react-grid-layout v2 在 React 19 真有 hook 阻断 bug 而无法解，备选 react-mosaic（Tree Split）或自撸 CSS Grid + 拖拽；不要再上 react-rnd（free-floating 已被否定）
+      - **工作量估**：阶段 1 demo 1-2 天（充分验证 + 几个 RGL 配置组合），阶段 2 接业务 1 天。
+    - **已 ship 但已 revert 的探索 commit**（git log 可查，参考但不复用）：
+      - `b6aac41` stage 视觉重做（保留——STAGE token 仍在）
+      - `c1fffad` ContextPanel multi-collapse（已被 react-rnd 时代 F2.2 替代删除，再被 reset 拉回）
+      - F0~F3.1+（react-rnd 9 commit）：保留作 react-rnd 时代功能，新 session 走 grid 路线时 UI 整体替换
+      - `6136f07` G0+G1（装 react-grid-layout + schema v1→v2）已 reset 撤掉。新 session 重新装库 + 写 schema v2
 
 > 这一节是**所有读者的入口**。下面老的 Design Principles / Architecture / 9 流 MVP
 > 切分等是 P1-P3 时代的 living plan，部分内容在 2026-04-30 stage 1 SDK 接通后已经
