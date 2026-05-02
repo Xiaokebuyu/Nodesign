@@ -224,6 +224,26 @@ export const Events = {
     ...(page !== undefined ? { page } : {}),
   }),
 
+  // ── A4.1（2026-05-02）：AskUserQuestion 走 SDK canUseTool 路径 ──
+  //
+  // SDK binary 把 AskUserQuestion 设为 `shouldDefer: true` + `requiresUserInteraction: true`，
+  // 工具的 checkPermissions 总返 `behavior: 'ask', message: 'Answer questions?'`，
+  // 等 host 程序通过 canUseTool callback 返 `behavior: 'allow', updatedInput: {
+  // ...input, answers: {...} }`，binary 拿到带 answers 的 input → 调 tool.call →
+  // 工具直接返回 answers 作 result（cli.js:GR6.call 实现）。
+  //
+  // 我们的 canUseTool（loop.js）拦到此事件 → emit run.ask_user_question →
+  // 前端 AskUserQuestionView 卡片 → 用户点选项 → POST /answer → resolve
+  // canUseTool 的 await，返回 updatedInput。
+  //
+  // questions 是从工具 input 摘出的 `{ question, header, options, multiSelect }[]`
+  // 数组（详见 cli.js:zHK schema），前端按现有卡片字段直接消费。
+  askUserQuestion: (toolUseId, questions) => ({
+    type: 'run.ask_user_question',
+    toolUseId,
+    questions,
+  }),
+
   // ── A1.2（2026-05-02）：实时上下文用量 ──
   // SDKControlGetContextUsageResponse（sdk.d.ts:2451-2541）由 query.getContextUsage()
   // 返回。loop.js 在每个 assistant message 后 await 一次 emit，前端 ContextUsageBar

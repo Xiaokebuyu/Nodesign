@@ -33,7 +33,7 @@ import {
 } from '../projects/workspace.js';
 import { createRun } from '../engine/runs/store.js';
 import { runAgent } from '../engine/agent/loop.js';
-import { cancelRun } from '../engine/runs/active-runs.js';
+import { cancelRun, provideAnswer } from '../engine/runs/active-runs.js';
 import { getProjectBus } from '../ws/broker.js';
 
 const router = express.Router();
@@ -172,6 +172,51 @@ router.post('/:pid/runs/:runId/cancel', async (req, res, next) => {
       return res.status(404).json({
         error: 'run not active or already finished',
         code: 'RUN_NOT_ACTIVE',
+      });
+    }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+/**
+ * A4.2：POST /api/projects/:pid/runs/:runId/answer
+ *
+ * 用户在 AskUserQuestionView 卡片点选项 → 前端 POST 来这个 endpoint →
+ * provideAnswer resolve 对应 toolUseId 的 Promise → loop.js canUseTool
+ * 返回 { behavior: 'allow', updatedInput: { ...input, answers } } → SDK
+ * binary 调 tool.call → 模型看到 "User has answered: q1=A"。
+ *
+ * Body：
+ *   {
+ *     toolUseId: string,            // run.ask_user_question 事件带的
+ *     answers: { [questionText]: optionLabel }  // multi-select 用 ", " 拼
+ *   }
+ *
+ * 200 { ok: true }                            成功 resolve
+ * 404 { error, code: 'NO_PENDING_QUESTION' }  run/toolUseId 不在 pending
+ *                                             （已答 / 已 cancel / 已结束）
+ * 400 { error }                               body 缺字段
+ */
+router.post('/:pid/runs/:runId/answer', async (req, res, next) => {
+  try {
+    validateProjectId(req.params.pid);
+    const project = getProject(req.params.pid);
+    if (!project) return res.status(404).json({ error: 'project not found' });
+
+    const { runId } = req.params;
+    const { toolUseId, answers } = req.body || {};
+    if (!toolUseId || typeof toolUseId !== 'string') {
+      return res.status(400).json({ error: 'toolUseId required (string)' });
+    }
+    if (!answers || typeof answers !== 'object') {
+      return res.status(400).json({ error: 'answers required (object: { [questionText]: label })' });
+    }
+
+    const ok = provideAnswer(runId, toolUseId, answers);
+    if (!ok) {
+      return res.status(404).json({
+        error: 'no pending question for this run/toolUseId',
+        code: 'NO_PENDING_QUESTION',
       });
     }
     res.json({ ok: true });

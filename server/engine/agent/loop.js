@@ -31,7 +31,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import { AgentContext } from './context.js';
 import { Events } from './events.js';
 import { markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata } from '../runs/store.js';
-import { registerRun, attachQuery, unregisterRun } from '../runs/active-runs.js';
+import { registerRun, attachQuery, unregisterRun, registerPendingQuestion } from '../runs/active-runs.js';
 import { loadSkill } from './skill.js';
 import { createHooks } from './hooks.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
@@ -296,6 +296,50 @@ export async function runAgent({
     // 危险命令拦截已经走 PreToolUse hook（C5 Bash 白名单），bypass 安全。
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
+
+    // A4.1：canUseTool 回归 —— 专门处理 AskUserQuestion 这种 deferred + 需要
+    // 用户交互的工具。bypassPermissions 跳的是 standard prompt，但 deferred
+    // 工具（cli.js GR6 定义 shouldDefer:true + requiresUserInteraction:true）
+    // 仍走 canUseTool callback 让 host 程序提供 input.answers。
+    //
+    // 流程：
+    //   1. 模型调 AskUserQuestion → tool checkPermissions 返 'ask'
+    //   2. SDK 调我们这个 canUseTool callback
+    //   3. 拦到 AskUserQuestion → registerPendingQuestion 拿 Promise →
+    //      emit run.ask_user_question 给前端 → await Promise
+    //   4. 用户在 AskUserQuestionView 点选项 → POST /answer →
+    //      provideAnswer(runId, toolUseId, answers) resolve Promise
+    //   5. canUseTool 返 { behavior: 'allow', updatedInput: { ...input, answers } }
+    //   6. binary 拿到 updatedInput → 调 tool.call → 工具直接返回 answers
+    //      → 模型看到 "User has answered: q1=A, q2=B"
+    //
+    // 其他工具 always-allow（不阻塞）。canUseTool 出错（如 run cancel）→
+    // deny + interrupt 让 SDK 走错误路径。
+    canUseTool: async (toolName, input, options) => {
+      if (toolName !== 'AskUserQuestion') {
+        return { behavior: 'allow' };
+      }
+      const toolUseId = options?.toolUseID;
+      if (!toolUseId) {
+        // 不该发生 —— SDK 总会传 toolUseID。fail-soft：deny 让模型重试或换工具
+        return { behavior: 'deny', message: 'AskUserQuestion missing toolUseID', interrupt: false };
+      }
+      try {
+        ctx.emit(Events.askUserQuestion(toolUseId, input?.questions || []));
+        const answers = await registerPendingQuestion(runId, toolUseId);
+        return {
+          behavior: 'allow',
+          updatedInput: { ...input, answers },
+        };
+      } catch (err) {
+        // 用户取消 / 超时 / 服务挂了 → deny + interrupt 让 SDK 走 cancelled 路径
+        return {
+          behavior: 'deny',
+          message: `AskUserQuestion: ${err.message}`,
+          interrupt: true,
+        };
+      }
+    },
 
     // S1：开 SDK 自带 session 持久化 + 项目级配置加载
     //   persistSession: true → SDK 写 JSONL 到 CLAUDE_CONFIG_DIR/projects/<encoded-cwd>/<sid>.jsonl

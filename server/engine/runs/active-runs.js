@@ -41,10 +41,18 @@
  */
 
 /**
+ * @typedef {object} PendingQuestion
+ * @property {(answers: Record<string, string>) => void} resolve
+ * @property {(err: Error) => void} reject
+ * @property {number} createdAt
+ */
+
+/**
  * @typedef {object} ActiveRunRecord
  * @property {AbortController} abortController
  * @property {import('../agent/context.js').AgentContext} ctx  - AgentContext 引用，cancelRun 走 ctx.cancel() 统一 emit run.cancelled
  * @property {import('@anthropic-ai/claude-agent-sdk').Query|null} query  - query handle，先注册时为 null，attachQuery 后填
+ * @property {Map<string, PendingQuestion>} pendingQuestions - A4.1：tool_use_id → Promise resolver，AskUserQuestion 等用户答案用
  * @property {number} startedAt
  */
 
@@ -66,6 +74,7 @@ export function registerRun(runId, { abortController, ctx } = {}) {
     abortController,
     ctx: ctx || null,
     query: null,
+    pendingQuestions: new Map(),
     startedAt: Date.now(),
   });
 }
@@ -89,10 +98,98 @@ export function attachQuery(runId, query) {
 /**
  * 注销 run（无论 succeeded / failed / cancelled）。
  * loop.js runAgent finally 调，避免引用泄漏。
+ *
+ * A4.1：reject 任何剩余 pendingQuestions（防止 Promise 永久 hang
+ * 让 canUseTool callback 卡死整个 SDK loop 释放）。
  */
 export function unregisterRun(runId) {
   if (!runId) return;
+  const rec = activeRuns.get(runId);
+  if (rec?.pendingQuestions) {
+    for (const [, p] of rec.pendingQuestions) {
+      try { p.reject(new Error('run ended before user answered question')); } catch { /* ignore */ }
+    }
+    rec.pendingQuestions.clear();
+  }
   activeRuns.delete(runId);
+}
+
+/**
+ * A4.1：注册一个等待用户答案的 Promise。
+ * loop.js canUseTool 拦到 AskUserQuestion 时调，emit 事件后 await 返回的
+ * Promise；用户在前端点选项 → POST /answer → provideAnswer → resolve。
+ *
+ * 同 toolUseId 重复 register 视作上一个被覆盖（reject 旧的 + 新建）—— 实际
+ * 不应发生（每个 tool_use_id 只 ask 一次），保险处理。
+ *
+ * 也会监听 abortController.signal —— run cancel 时 reject Promise，让
+ * canUseTool 抛错让 SDK 走 cancelled 路径。
+ *
+ * @param {string} runId
+ * @param {string} toolUseId  - SDK 的 tool_use_id（canUseTool options.toolUseID）
+ * @returns {Promise<Record<string, string>>}  - resolve 时返回 answers map（question text → label）
+ */
+export function registerPendingQuestion(runId, toolUseId) {
+  const rec = activeRuns.get(runId);
+  if (!rec) return Promise.reject(new Error(`run ${runId} not active`));
+  if (!toolUseId) return Promise.reject(new Error('toolUseId required'));
+
+  // 若已存在同 toolUseId 的 pending：reject 旧的避免漏 reject
+  const existing = rec.pendingQuestions.get(toolUseId);
+  if (existing) {
+    try { existing.reject(new Error('superseded by new question with same toolUseId')); } catch { /* ignore */ }
+  }
+
+  return new Promise((resolve, reject) => {
+    rec.pendingQuestions.set(toolUseId, {
+      resolve: (answers) => {
+        rec.pendingQuestions.delete(toolUseId);
+        resolve(answers);
+      },
+      reject: (err) => {
+        rec.pendingQuestions.delete(toolUseId);
+        reject(err);
+      },
+      createdAt: Date.now(),
+    });
+
+    // run abort → reject pending（防 canUseTool 永久挂在 await）
+    const onAbort = () => {
+      const p = rec.pendingQuestions.get(toolUseId);
+      if (p) {
+        rec.pendingQuestions.delete(toolUseId);
+        reject(new Error(`run aborted before user answered: ${rec.abortController.signal.reason || 'unknown'}`));
+      }
+    };
+    if (rec.abortController.signal.aborted) {
+      onAbort();
+    } else {
+      rec.abortController.signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+/**
+ * A4.1：用户在前端答完问题，由 POST /answer endpoint 调。
+ * resolve 对应 toolUseId 的 Promise，唤醒 canUseTool callback 让它返回
+ * updatedInput。
+ *
+ * @param {string} runId
+ * @param {string} toolUseId
+ * @param {Record<string, string>} answers  - { [question text]: option label }（multi-select 用 ", " 拼接）
+ * @returns {boolean} true=resolved；false=run/toolUseId 不存在或已 resolve
+ */
+export function provideAnswer(runId, toolUseId, answers) {
+  const rec = activeRuns.get(runId);
+  if (!rec) return false;
+  const p = rec.pendingQuestions.get(toolUseId);
+  if (!p) return false;
+  try {
+    p.resolve(answers);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
