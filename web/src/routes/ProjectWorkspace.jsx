@@ -53,6 +53,8 @@ export default function ProjectWorkspace() {
   const applyRunEvent = useProjectStore(s => s.applyRunEvent);
   const showToast = useGlobalStore(s => s.showToast);
   const setChatDraft = useGlobalStore(s => s.setChatDraft);
+  // A4.3：维护活跃 run 的 (pid, runId)，让 AskUserQuestionView 能直接 POST /answer
+  const setActiveRun = useGlobalStore(s => s.setActiveRun);
 
   // ── local state ──（所有 useState 必须在 early return 之前；hooks 顺序敏感）
   const [hydrated, setHydrated] = useState(false);
@@ -227,6 +229,7 @@ export default function ProjectWorkspace() {
           sessionId: currentSessionId,  // /work 路径 → null（新会话）；/sessions/:sid → 续约
         });
         setCurrentRunId(runId);
+        setActiveRun({ pid: id, runId });  // A4.3：让 AskUserQuestionView 直 POST /answer
       } catch (err) {
         setMessages((ms) => [...ms, {
           id: newId('msg'), role: 'assistant',
@@ -309,6 +312,7 @@ export default function ProjectWorkspace() {
       case 'run.done':
         setIsStreaming(false);
         setCurrentRunId(null);
+        setActiveRun(null);
         // 收尾：清 thinking 流式光标（run 结束后最后一条 thinking 不该一直闪）
         setMessages(prev => clearThinkingStreaming(prev));
         // 双保险：FileChanged hook（run.file_changed）应该已 bump 过 reloadToken
@@ -336,6 +340,7 @@ export default function ProjectWorkspace() {
       case 'run.error':
         setIsStreaming(false);
         setCurrentRunId(null);
+        setActiveRun(null);
         setMessages(prev => [...clearThinkingStreaming(prev), {
           id: newId('msg'),
           role: 'assistant',
@@ -346,6 +351,7 @@ export default function ProjectWorkspace() {
       case 'run.cancelled':
         setIsStreaming(false);
         setCurrentRunId(null);
+        setActiveRun(null);
         setPromptSuggestion(null);
         setAgentProgress(null);
         setMessages(prev => clearThinkingStreaming(prev));
@@ -614,6 +620,7 @@ export default function ProjectWorkspace() {
         sessionId: currentSessionId,
       });
       setCurrentRunId(runId);  // 终止生成用
+      setActiveRun({ pid: id, runId });  // A4.3：让 AskUserQuestionView 直 POST /answer
       setInputs([]);  // 已发送的托盘清空
     } catch (err) {
       setMessages(ms => [...ms, {
@@ -636,6 +643,7 @@ export default function ProjectWorkspace() {
       if (err.code === 'RUN_NOT_ACTIVE') {
         // run 已结束（race：用户点的瞬间 agent 自然完成）
         setCurrentRunId(null);
+        setActiveRun(null);
         setIsStreaming(false);
       } else {
         showToast(`取消失败：${err.message}`, 'error');

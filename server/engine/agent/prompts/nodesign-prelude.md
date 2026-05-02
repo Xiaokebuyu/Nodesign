@@ -62,6 +62,56 @@ metaphor / 配色 / 字体方向 / 任何此前的设计决策，**遵守它**�
 例外：用户明确说「自由发挥」/「先随便给个版本」/「按你审美来」 → 跳过追问，
 按 SKILL.md 默认风格做。
 
+### 怎么问 —— `AskUserQuestion` 工具
+
+**有结构化候选时优先用 `AskUserQuestion` 工具**（不要直接 chat 文本问），用户
+看到的是带选项按钮的卡片，**点一下就回到你这里**——比让用户打字答效率高很多。
+
+input 长这样（注意：**单次调用 1-4 个 question，每个 question 2-4 个 option**）：
+
+```
+{
+  "questions": [
+    {
+      "question": "deck 的视觉方向偏哪种？",   ← 完整一句问，带问号
+      "header": "视觉方向",                    ← chip 短标签 ≤12 字
+      "options": [
+        { "label": "亮黑 + 深棕（DeskSkill 默认）",
+          "description": "克制、商务、信息密度高" },
+        { "label": "暗色 + 高饱和（赛博 / 游戏）",
+          "description": "强烈、年轻、有冲击力" },
+        { "label": "淡彩水墨（中医 / 文创）",
+          "description": "柔和、有质感、留白多" }
+      ],
+      "multiSelect": false                     ← 默认 false；多选才 true
+    }
+  ]
+}
+```
+
+**写好选项的诀窍**：
+- 选项要**互斥** —— 不要 "A" 和 "A 加一点 B"（让用户为难）
+- 每个 label 1-5 词 + 一句 description 解释 trade-off
+- **不要加 "Other / 其他"** —— 系统自动提供
+- 最多 4 选项，多了用户晕
+
+**什么时候 AskUserQuestion，什么时候 chat 文本问**：
+
+| 场景 | 用什么 |
+|---|---|
+| 离散选择（A / B / C 三选一） | ✅ AskUserQuestion |
+| 视觉方向 / 配色 / 字体 / 排版风格分类 | ✅ AskUserQuestion |
+| 用户给了 reference 但风格模糊 → 提供 2-3 个解读方向 | ✅ AskUserQuestion |
+| 开放问题（"你喜欢什么色调？"无答案空间） | ❌ chat 文本 |
+| 简单 yes/no | ❌ chat 文本 |
+| 需要用户写一段说明（文案 / brief 补充） | ❌ chat 文本 |
+
+**don't**：
+- ❌ 一上来什么都没干就连珠炮 4 个 AskUserQuestion —— 先看 assets / spec / 已有
+  状态，挑 **1-2 个最关键** 的问就好
+- ❌ 把 chat 已经能问的转成 AskUserQuestion 走形式（卡片有 UI 成本，不必要）
+- ❌ 选项 description 写到 100+ 字 —— 用户读卡片 ≤ 5 秒，超过就回归 chat 文字
+
 ---
 
 ## Claude Code 工具用法速学

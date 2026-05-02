@@ -12,6 +12,7 @@ import { diffLines } from 'diff';
 import ReactMarkdown from 'react-markdown';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { Turn } from '../../lib/api.js';
 import TimelineNode from './TimelineNode.jsx';
 
 /**
@@ -47,8 +48,17 @@ export default function Message({ message }) {
 
   if (role === 'tool') {
     // C27：AskUserQuestion 走专门卡片渲染（不当普通 tool message）
+    // A4.3：toolUseId 直传 = message.id（ProjectWorkspace 创建 tool 消息时
+    // id 用 evt.blockId，blockId 就是 SDK tool_use_id）。
     if (toolName === 'AskUserQuestion') {
-      return <AskUserQuestionView toolInput={toolInput} toolOutput={toolOutput} status={status} />;
+      return (
+        <AskUserQuestionView
+          toolInput={toolInput}
+          toolOutput={toolOutput}
+          status={status}
+          toolUseId={message.id}
+        />
+      );
     }
     return (
       <ToolMessage
@@ -96,7 +106,7 @@ export default function Message({ message }) {
 }
 
 /**
- * AskUserQuestionView —— C27：agent 调用 SDK 内置 AskUserQuestion 工具的卡片渲染
+ * AskUserQuestionView —— SDK 内置 AskUserQuestion 工具的卡片渲染
  *
  * SDK 内置 AskUserQuestion 工具的 input schema：
  *   {
@@ -108,14 +118,28 @@ export default function Message({ message }) {
  *     }]
  *   }
  *
- * 用户点 option → setChatDraft(label) 把选项填入 chat composer，
- * 用户确认 send 后回给 agent。这是简版交互（不走 SDK control flow
- * 直接 inject 答案，stage 2 再做）。
+ * A4.3：用户点 option 直接 POST /api/projects/:pid/runs/:runId/answer：
+ *   1. 后端 provideAnswer resolve loop.js canUseTool 等待的 Promise
+ *   2. canUseTool 返 { behavior: 'allow', updatedInput: { ...input, answers } }
+ *   3. SDK binary 调 tool.call → answers 直接当 result 返给模型
+ *   4. 模型看到 "User has answered: q1=A"
+ *   5. 前端收到 run.delta.tool_result（status='success'），卡片自动 disable
+ *
+ * pid + runId 走 globalStore.activeRun（ProjectWorkspace run 生命周期里维护）。
+ * toolUseId 由 Message.jsx 传入（= 当前 tool message.id = SDK blockId）。
+ *
+ * 历史卡片（已 cancelled / 已答 / 老 session）也用同 endpoint，POST 会
+ * 返 404 NO_PENDING_QUESTION，前端 toast 提示，按钮立即恢复 enable 让
+ * 用户能换个选项重试 —— 但实际上历史卡 status 已经是 success/error，
+ * isAnswered 会先把按钮 disable，根本点不动。
  */
-function AskUserQuestionView({ toolInput, toolOutput, status }) {
-  const setChatDraft = useGlobalStore(s => s.setChatDraft);
+function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }) {
+  const showToast = useGlobalStore(s => s.showToast);
+  const activeRun = useGlobalStore(s => s.activeRun);
+  const [submitting, setSubmitting] = useState(false);
+  const [pickedLabel, setPickedLabel] = useState(null);  // optimistic UI：立即标记选中
   const questions = Array.isArray(toolInput?.questions) ? toolInput.questions : [];
-  const isAnswered = status === 'success' && toolOutput;
+  const isAnswered = (status === 'success' && toolOutput) || status === 'error';
 
   if (questions.length === 0) {
     return (
@@ -126,10 +150,41 @@ function AskUserQuestionView({ toolInput, toolOutput, status }) {
     );
   }
 
-  const handlePickOption = (q, optionLabel) => {
-    if (isAnswered) return;
-    const headerLabel = q.header ? `[${q.header}] ` : '';
-    setChatDraft(`${headerLabel}${optionLabel}`);
+  const disabled = isAnswered || submitting;
+
+  const handlePickOption = async (q, optionLabel) => {
+    if (disabled) return;
+    if (!activeRun?.pid || !activeRun?.runId) {
+      showToast('当前无活跃 run，无法回答历史问题', 'info');
+      return;
+    }
+    if (!toolUseId) {
+      showToast('卡片缺 toolUseId（不应发生）', 'error');
+      return;
+    }
+
+    setPickedLabel(optionLabel);
+    setSubmitting(true);
+    try {
+      // SDK answers map: { [question text]: option label }（multi-select 用 ", "）
+      // 简版只支持单选，多选 q 也只回最后一个 label
+      await Turn.answer({
+        pid: activeRun.pid,
+        runId: activeRun.runId,
+        toolUseId,
+        answers: { [q.question]: optionLabel },
+      });
+      // 不 setSubmitting(false) —— 等 run.delta.tool_result 把 status 推成
+      // success，isAnswered 接管 disable。这样用户视觉上"按一次就锁住"，
+      // 不会闪一下重新可点。
+    } catch (err) {
+      setSubmitting(false);
+      setPickedLabel(null);
+      const msg = err.code === 'NO_PENDING_QUESTION'
+        ? '问题已不在等待中（可能已被回答 / cancel / run 结束）'
+        : `回答失败：${err.message}`;
+      showToast(msg, 'error');
+    }
   };
 
   return (
@@ -177,31 +232,33 @@ function AskUserQuestionView({ toolInput, toolOutput, status }) {
 
           {/* options */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.xs }}>
-            {(q.options || []).map((opt, oi) => (
+            {(q.options || []).map((opt, oi) => {
+              const isPicked = pickedLabel === opt.label;
+              return (
               <button
                 key={oi}
                 onClick={() => handlePickOption(q, opt.label)}
-                disabled={isAnswered}
+                disabled={disabled}
                 style={{
                   textAlign: 'left',
                   padding: `${GAP.sm}px ${GAP.md}px`,
-                  border: `1px solid ${COLOR.borderLt}`,
+                  border: `1px solid ${isPicked ? COLOR.btn : COLOR.borderLt}`,
                   borderRadius: 6,
-                  background: '#fff',
-                  cursor: isAnswered ? 'not-allowed' : 'pointer',
+                  background: isPicked ? 'rgba(45, 36, 24, 0.06)' : '#fff',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
                   fontFamily: FONT_SANS,
                   fontSize: FONT_SIZE.sm,
                   color: COLOR.text,
                   transition: 'background 0.15s, border-color 0.15s',
                 }}
                 onMouseEnter={e => {
-                  if (isAnswered) return;
+                  if (disabled) return;
                   e.currentTarget.style.background = 'rgba(45, 36, 24, 0.04)';
                   e.currentTarget.style.borderColor = COLOR.borderHv;
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = '#fff';
-                  e.currentTarget.style.borderColor = COLOR.borderLt;
+                  e.currentTarget.style.background = isPicked ? 'rgba(45, 36, 24, 0.06)' : '#fff';
+                  e.currentTarget.style.borderColor = isPicked ? COLOR.btn : COLOR.borderLt;
                 }}
               >
                 <div style={{ fontWeight: 500 }}>{opt.label}</div>
@@ -216,7 +273,8 @@ function AskUserQuestionView({ toolInput, toolOutput, status }) {
                   </div>
                 )}
               </button>
-            ))}
+              );
+            })}
           </div>
 
           {q.multiSelect && (
@@ -232,14 +290,25 @@ function AskUserQuestionView({ toolInput, toolOutput, status }) {
         </div>
       ))}
 
-      {!isAnswered && (
+      {!isAnswered && !submitting && (
         <div style={{
           marginTop: GAP.xs + 2,
           fontSize: 10,
           color: COLOR.sub,
           paddingLeft: 2,
         }}>
-          点选项 → 填到对话框，确认后发送给 agent
+          点选项即直接回复给 agent
+        </div>
+      )}
+      {submitting && (
+        <div style={{
+          marginTop: GAP.xs + 2,
+          fontSize: 10,
+          color: COLOR.sub,
+          paddingLeft: 2,
+          fontStyle: 'italic',
+        }}>
+          已发送给 agent，等它继续…
         </div>
       )}
     </div>

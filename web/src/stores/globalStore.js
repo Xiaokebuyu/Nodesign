@@ -33,6 +33,14 @@ export const useGlobalStore = create((set) => ({
     return draft;
   },
 
+  // ── A4：当前活跃 run 上下文 ──
+  // AskUserQuestionView 直接 POST /answer 时需要 pid + runId。挂全局
+  // 避免 prop drilling 穿过 ChatPanel → MessageList → Message → AskUserQuestionView。
+  // ProjectWorkspace 在 run.start 时 setActiveRun({ pid, runId })，
+  // run.done/error/cancelled 时 setActiveRun(null)。
+  activeRun: null,
+  setActiveRun: (activeRun) => set({ activeRun }),
+
   // ── 模拟登录态（MVP 单用户）──
   user: { id: 'u_self', name: '我', avatar: null },
 }));

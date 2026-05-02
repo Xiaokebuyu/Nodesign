@@ -155,6 +155,16 @@ export const Turn = {
    */
   cancel: ({ pid, runId }) =>
     jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/cancel`, {}),
+
+  /**
+   * A4.2：把用户在 AskUserQuestionView 卡片里点的答案回传后端。
+   * 后端 provideAnswer resolve loop.js canUseTool 等待的 Promise →
+   * binary 拿到 updatedInput 调 tool.call → 模型看到 "User has answered..."。
+   * answers: { [questionText]: optionLabel }
+   * 200 ok / 400 缺字段 / 404 code='NO_PENDING_QUESTION'
+   */
+  answer: ({ pid, runId, toolUseId, answers }) =>
+    jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/answer`, { toolUseId, answers }),
 };
 
 // ── Instruction（项目级 .claude/CLAUDE.md 读写）──
