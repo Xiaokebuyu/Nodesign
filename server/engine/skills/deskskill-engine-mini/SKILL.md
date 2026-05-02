@@ -63,6 +63,86 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 
 ---
 
+## 深度对齐 + 设计计划档（S4a，2026-05-02）
+
+简单 brief 不需要这套 —— "做个测试 deck" / "改错字" / "调字号" 直接动手。
+
+但 brief 含**具体主题**（"中医文化" / "fintech onboarding" / "游戏团队介绍"）、
+**多页 deck（≥3 页）**、或用户明说"先做计划"——这种场景值得**深度对齐 + 写一份
+设计计划档**，主 agent 按计划执行，vision-checker 拿计划当 spec critique 兑现度。
+
+### 触发条件（你自判）
+
+| 信号 | 进 / 跳 |
+|---|:---:|
+| Brief 含具体主题 + 多页 | ✅ 进 |
+| 用户明说"先做计划" / "先对一下方向" | ✅ 进 |
+| 单页 / 改错字 / 调字号 / 单 element tweak | ❌ 跳 |
+| 用户说"按你审美来" / "随便给个版本" / "先做个测试 deck" | ❌ 跳 |
+| 已有 `design-plan.md`（这个 session 之前对齐过） | ⚠️ 不重写，按现有 plan 继续 / 用户明说"重做"才 overwrite |
+
+### 流程（4 步，cap 4 轮 ask）
+
+1. **AskUserQuestion 2-4 轮深度对齐**——别一次塞 N 题，wizard 一题一题问：
+   - **核心隐喻**（建议截多变体当 preview 选项；"哪个画面更对味"）
+   - **节奏倾向**（密集 vs 留白 / 严肃 vs 玩味 / 数据先 vs 故事先）
+   - **配色三选**（具体 palette 三选一，不是"温暖 vs 冷酷"抽象）
+   - **章节切分**（有几 part / 每 part 几页 / 转场怎么处理）
+2. **Write `design-plan.md`** to cwd（用 SDK Write 工具）—— 模板见下方
+3. **每写一页前**：grep / Read 对应 plan 行，确认 purpose + 反默认决策 + 视觉锚点
+4. **deck 写完后跑 vision-checker**：prompt 里点名 "对照 design-plan.md critique 兑现度"
+   （详见 § vision-checker 协议）
+
+### plan-doc 模板
+
+```markdown
+# Design Plan — {Brief 一句话复述}
+
+## Core Metaphor（核心隐喻）
+- **选定**：{一句话隐喻 + 为什么}
+- **拒掉的脑内默认**（2-3 个，每条带拒因）：
+  - "AI 默认会做的 X" → 拒因：太 SaaS / 太陈词
+  - ...
+
+## 4-stage chain（每段消费上一段）
+1. **隐喻 → 视觉锚点**：{核心元喻翻译成具体形象 / 几何 / 质感}
+2. **视觉语言**：palette {具体 hex 3-5 色}；字体 {主+辅+mono}；阴影 / 描边 / 圆角风格
+3. **节奏**：读者是 observer 还是 co-author（参考 0.7.7 reader-role 概念）；几个章节断点；转场风格
+4. **动效**（可选）：是否需要；触发路径（hover / scroll / 键盘 / 自动）；服务隐喻不是装饰
+
+## Per-page plan
+| Page | Purpose | 反默认决策（a 脑内默认 → b 拒掉换 → c REFERENCE/OPPOSITION/CONSTRAINT） |
+|------|---------|--|
+| 1 | 开场建调性 | a) 居中大标题 + 渐变底 b) 拒：太 SaaS → c) OPPOSITION：低饱和暖灰底 + 单色印章 + 偏左下排版 |
+| 2 | ... | ... |
+
+## Sealed-test checkpoint（自检）
+把每页文字遮了，画面是否还能看出隐喻？若不能 → 视觉太弱，回 step 2 调视觉锚点。
+
+## 风险 / 待解
+- {可能没法做到的事 / 需要素材但 brief 没给 / 用户没决定的取舍}
+```
+
+### 怎么用 plan
+
+- **Plan 是承诺不是装饰** —— 写完不要束之高阁。每写一页前 grep `## Per-page plan` 表
+  对应行，按 c 段决策做；决策跟当前页冲突时**先看是不是脑子里又默认回去了**，再决定改 plan 还是改页
+- **Plan 不是 spec.json 替代** —— spec.json 是决策日志（用 record_decision append），
+  plan 是执行前的 brief（一次写就，可改但少改）
+- **小改不动 plan** —— 用户后续 "page 3 字号大点" 这种，直接 Edit 不动 plan
+- **方向重转才重写 plan** —— 用户说"换隐喻 / 换节奏 / 换风格" → AskUserQuestion 再对一遍 →
+  Write 覆盖 plan（注明 v2，旧 plan 用 record_decision 留痕"已废弃，参考 v2"）
+
+### 反模式
+
+- ❌ 简单 brief 也强行 plan-doc → 用户体感"啰嗦 / 不肯动手"
+- ❌ Plan 写完不引用，自顾自做 → plan 等于摆设
+- ❌ AskUserQuestion 一次堆 5+ 题 → wizard 体验崩；问 2-4 题就够
+- ❌ Plan 里写"颜色：温暖" 这种抽象 → 留 4-stage chain 第 2 段写具体 hex
+- ❌ 用户说"按你审美来"还硬走 plan-doc → 跳过 plan 直接动手（escape hatch）
+
+---
+
 ## NoDesign 业务工具触发时机
 
 | 工具 | 什么时候调 |
