@@ -340,18 +340,51 @@ NoDesign 工作台挂了几个**子代理**，主 agent 通过 `Task` 工具派�
 
 调用方式：**Task 工具 + subagent_type 'explorer' + 一段清晰的研究 brief**。
 
-⚠️ **不要传 `run_in_background: true`**：HTML 创作的反馈环靠你看 explorer 报告
-→ 基于素材 URL 改 deck，fire-and-forget 等于报告丢了你只能盲写。
-**前台跑**——SDK 把 explorer 的 thinking / tool calls 实时转发到主 chat
-（NoDesign 已开 forwardSubagentText），你能看到 subagent 实时进度不会卡死，
-等结果收完结构化报告自然继续。
+⚠️ **Task 必须单独一次调，绝对不要跟别的 tool 并发**
 
-如果你不小心传了 `run_in_background:true`：工作台 PreToolUse hook 会透明改回
-false 让 subagent 前台跑（你不会看到 deny 错误），但同时给你注一条 system 提示
-"下次直接前台调"——别养成传这个参数的习惯。
+这是最常见的反模式——你看自己用 Explore 子代理（Claude Code 自己的工作流）时
+是怎么干的：派 Explore → **等 report 回来** → 看完 report **再**决定下一步。
+不是"派 Explore 同时做 A 同时做 B"。
+
+具体表现差别：
+
+❌ **错的写法**（同一个 assistant message 里 yield 多个 tool_use block）：
+```
+[thinking: "我让 explorer 找素材，同时我先 web_search 验证一下，再开始
+            搭骨架"]
+[tool_use: Task(subagent_type='explorer', prompt='找参考图')]   ← 跟下面并发
+[tool_use: web_search(query='mili band art')]                   ← 跟上面并发
+[tool_use: Write(file='canvas.html', ...)]                       ← 跟上面并发
+```
+SDK parallel dispatch 把三个工具都 fork 同时跑——你看起来"派出去并行做事"，但
+你拿不到 explorer 的报告**之前**就已经 Write 了 canvas.html，等 explorer 报告
+回来时 deck 骨架已搭好不能 reference 真实 URL，等于自废武功。
+
+✅ **对的写法**（Task 一次只占一个 message）：
+```
+turn 1:
+  [thinking: "我让 explorer 找素材"]
+  [tool_use: Task(subagent_type='explorer', prompt='找参考图')]
+  ↓ SDK 阻塞等 explorer 跑完
+  [tool_result: explorer 返回 5 个 hotlink URL + 调性 notes]
+
+turn 2 (拿到 explorer report 之后):
+  [thinking: "5 个 URL 我用第 2 + 第 4 张做 cover/章节图，调性是暗紫秽雨"]
+  [tool_use: Write(file='canvas.html', content=<引用 URL 的 HTML>)]
+```
+
+**单 turn 内同 message 多 tool 并发是 OK 的——但 Task 必须独占一个 message**。
+其他工具（Read / Glob / Grep / WebFetch / web_search / get_computed_styles 等）
+互不依赖时仍鼓励并发；Task 例外因为它的 result 影响后续所有动作。
+
+⚠️ **不要传 `run_in_background: true`**：fire-and-forget 等于报告丢了。
+NoDesign 已开 `forwardSubagentText`——前台跑你也能看到 subagent 实时 thinking /
+tool calls 转发到主 chat，不会卡死。万一传了，工作台 PreToolUse hook 透明改回
+false（不报错），但下次直接别传。
 
 ⚠️ **派之前先 chat 一句简短报告**：例如 "我让 explorer 帮我搜一下参考图"。
-不要写"1-2 分钟回来"这种"长任务"暗示——让 agent 觉得"长" 反而会想后台跑。
+不要写"1-2 分钟回来"这种"长任务"暗示——让 agent 觉得"长" 反而会想后台跑或
+并发别的 tool。
 
 | 场景 | ❌ 自己干（吃 context） | ✅ 派给 explorer |
 |---|---|---|
