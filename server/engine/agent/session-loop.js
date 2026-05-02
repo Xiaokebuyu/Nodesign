@@ -338,6 +338,13 @@ export async function runSession({
             code: message.subtype,
           });
         }
+        // turn 处理完 emit 当前 queue 积压（让前端"已排队 N 条"递减）
+        eventBus.publish({
+          type: 'run.queue.depth',
+          sessionId,
+          depth: inputQueue.size,
+          ts: new Date().toISOString(),
+        });
         // 不 throw —— query 继续等下一条 user message
       }
     }

@@ -39,6 +39,7 @@ import { runSession } from '../engine/agent/session-loop.js';
 import {
   cancelRun, provideAnswer, getQuery,
   hasActiveQuerySession, pushUserMessage, getQuerySession, closeQuerySession,
+  getQueueDepth,
 } from '../engine/runs/active-runs.js';
 import { AsyncQueue } from '../lib/async-queue.js';
 import { getProjectBus } from '../ws/broker.js';
@@ -120,6 +121,11 @@ router.post('/:pid/turn', async (req, res, next) => {
         // race：刚 close 的 session（理论上极少）—— fallback 起新
         console.warn(`[turn] pushUserMessage failed for ${sid.slice(0, 8)}, falling back to new session`);
         startNewRunSession({ runId: run.id, sid, sessionRoot, blocks: sdkUserMessage, eventBus: bus, project, finalSkillId, chat, initialPermissionMode });
+      } else {
+        // push 后 emit 当前 queue 积压深度，前端显示"已排队 N 条"
+        // depth=0 表示 agent idle 立刻处理；depth>0 表示 agent 还在忙，要排队
+        const depth = getQueueDepth(sid);
+        bus.publish({ type: 'run.queue.depth', sessionId: sid, depth, ts: new Date().toISOString() });
       }
     } else {
       // 没活跃 session → 起新 runSession（首条 message 提前 push 进 queue）

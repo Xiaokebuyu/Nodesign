@@ -72,6 +72,7 @@ export default function ProjectWorkspace() {
   const [messages, setMessages] = useState([]);
   const [inputs, setInputs] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [queueDepth, setQueueDepth] = useState(0);  // streamInput 模式下 inputQueue 积压数（"已排队 N 条"）
   const [selectedAnchor, setSelectedAnchor] = useState(null);
   const [iframeDoc, setIframeDoc] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -208,6 +209,7 @@ export default function ProjectWorkspace() {
     setInputs([]);                    // 清空附件托盘
     setPromptSuggestion(null);        // 清掉上 session 残留 SuggestionChip
     setAgentProgress(null);           // 清 subagent progress
+    setQueueDepth(0);                 // 清 queue depth（切 session 跨 query 不延续）
     useGlobalStore.getState().clearPlanForApproval();  // 清 plan 卡（如果切 session 时还在等 approval）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, currentSessionId]);
@@ -273,6 +275,14 @@ export default function ProjectWorkspace() {
       case 'run.start':
         setIsStreaming(true);
         setTodos([]);
+        break;
+      case 'run.queue.depth':
+        // streamInput 模式：inputQueue 积压数变化（push 后 / 处理完一条后）
+        setQueueDepth(typeof evt.depth === 'number' ? evt.depth : 0);
+        break;
+      case 'run.query.end':
+        // 整个 session 的 query 死了 —— 清 queue depth + 提示用户
+        setQueueDepth(0);
         break;
       case 'run.todo.updated':
         setTodos(Array.isArray(evt.todos) ? evt.todos : []);
@@ -1106,6 +1116,7 @@ export default function ProjectWorkspace() {
             messages={messages}
             onSend={handleSend}
             isStreaming={isStreaming}
+            queueDepth={queueDepth}
             trayItems={inputs}
             onRemoveTrayItem={handleRemoveInput}
             onPickFile={handleAddInput}

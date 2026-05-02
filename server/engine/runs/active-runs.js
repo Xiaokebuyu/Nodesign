@@ -492,6 +492,20 @@ export function getCurrentTurnRunId(sessionId) {
 }
 
 /**
+ * 取 inputQueue 当前积压深度（push 但尚未被 SDK pull 的 message 数）。
+ * 给前端显示"已排队 N 条"用。
+ *
+ * 0 = agent idle 立即处理；>0 = agent 还在忙，下一条要排队
+ *
+ * @param {string} sessionId
+ * @returns {number}
+ */
+export function getQueueDepth(sessionId) {
+  const rec = activeQuerySessions.get(sessionId);
+  return rec?.inputQueue?.size || 0;
+}
+
+/**
  * 直接设 currentRunId（不 push message）。给 turn.js 起新 runSession 时
  * 提前设第一 turn runId 用 —— pushUserMessage 在 register 之前没法调，
  * runSession 启动后用 initialRunId 参数把 currentRunId 提前填上。

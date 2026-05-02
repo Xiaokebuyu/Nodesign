@@ -14,6 +14,7 @@ import { COLOR, GAP, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
  */
 export default function ChatPanel({
   messages = [], onSend, isStreaming = false,
+  queueDepth = 0,
   trayItems, onRemoveTrayItem, onPickFile,
   promptSuggestion, onDismissSuggestion,
   agentProgress,
@@ -71,6 +72,26 @@ export default function ChatPanel({
 
       <TodoPanel todos={todos} />
       <MessageList messages={messages} isStreaming={isStreaming} />
+      {/* streamInput 排队提示：当用户在 agent 跑时追加消息后 inputQueue 积压，
+          显示"已排队 N 条"chip，agent 会跑完当前 turn 后自动吃下一条 */}
+      {queueDepth > 0 && (
+        <div style={{
+          padding: `${GAP.xs}px ${GAP.lg}px`,
+          fontFamily: FONT_MONO,
+          fontSize: 10,
+          color: COLOR.sub,
+          letterSpacing: '0.04em',
+          background: 'rgba(45, 36, 24, 0.04)',
+          borderTop: `1px dashed ${COLOR.borderLt}`,
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: COLOR.warn,
+          }} />
+          已排队 {queueDepth} 条 · agent 跑完当前会自动处理
+        </div>
+      )}
       <ChatComposer
         onSend={onSend}
         // disabled 给外部留口（hydrateError 等）；isRunning 单独控 Send/停止 形态

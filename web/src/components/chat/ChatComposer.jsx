@@ -233,13 +233,13 @@ export default function ChatComposer({
 
           <div style={{ flex: 1 }} />
 
-          {/* streamInput 重构：发送按钮始终显示+始终叫"发送"。
-              isRunning 时 Enter / 点发送 = 追加排队（agent 跑完当前 turn 自然吃下一条）。
-              停止按钮在 isRunning 时显示在左侧 —— 中断当前 turn，query 不死继续等下条 */}
-          {isRunning && onStop && (
+          {/* streamInput 重构：恢复一体切换按钮（原设计）—— isRunning 时显 stop（中断
+              当前 turn，query 不死），idle 时显 send。Enter 始终触发 submit（追加排队）—
+              用户想在 agent 跑时追加消息直接 Enter，按钮形态不影响 */}
+          {isRunning && onStop ? (
             <button
               onClick={onStop}
-              title="打断当前 turn（会话保留，可继续追加消息）"
+              title="停止当前 turn（按 Enter 可继续追加消息排队）"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
                 padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
@@ -257,28 +257,29 @@ export default function ChatComposer({
               <Square size={11} fill="#fff" />
               停止
             </button>
+          ) : (
+            <button
+              onClick={submit}
+              disabled={disabled || empty}
+              title={empty ? '输入内容后发送' : '发送（Enter）'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
+                padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
+                fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, fontWeight: 500,
+                color: COLOR.btnText,
+                background: disabled || empty ? 'rgba(45,36,24,0.35)' : COLOR.btn,
+                border: `1px solid ${disabled || empty ? 'rgba(45,36,24,0.35)' : COLOR.btn}`,
+                borderRadius: 8,
+                cursor: disabled || empty ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { if (!disabled && !empty) e.currentTarget.style.background = COLOR.btnHover; }}
+              onMouseLeave={e => { if (!disabled && !empty) e.currentTarget.style.background = COLOR.btn; }}
+            >
+              <Send size={13} />
+              发送
+            </button>
           )}
-          <button
-            onClick={submit}
-            disabled={disabled || empty}
-            title={empty ? '输入内容后发送' : (isRunning ? '发送（追加排队，agent 跑完当前自动处理）' : '发送（Enter）')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
-              padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
-              fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, fontWeight: 500,
-              color: COLOR.btnText,
-              background: disabled || empty ? 'rgba(45,36,24,0.35)' : COLOR.btn,
-              border: `1px solid ${disabled || empty ? 'rgba(45,36,24,0.35)' : COLOR.btn}`,
-              borderRadius: 8,
-              cursor: disabled || empty ? 'not-allowed' : 'pointer',
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { if (!disabled && !empty) e.currentTarget.style.background = COLOR.btnHover; }}
-            onMouseLeave={e => { if (!disabled && !empty) e.currentTarget.style.background = COLOR.btn; }}
-          >
-            <Send size={13} />
-            发送
-          </button>
         </div>
       </div>
     </div>
