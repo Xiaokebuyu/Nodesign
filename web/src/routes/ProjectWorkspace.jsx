@@ -12,6 +12,7 @@ import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
 // InspectTab 由 InspectFloatingCard 间接使用（不在此处直接 import）
 // CommentsTab 已删 — comments 嵌入到 InspectFloatingCard
+import TweaksPanel from '../components/context-panel/TweaksPanel.jsx';
 // DecisionsTab / SystemTab 现在由 SystemPopover 间接使用（CanvasFrame 内）
 // 不在此处直接 import — C2 撤销 floating panel 注册
 import ShareModal from '../components/project/ShareModal.jsx';
@@ -82,6 +83,8 @@ export default function ProjectWorkspace() {
   const [agentProgress, setAgentProgress] = useState(null);
   // C29：DecisionsTab 自动刷新触发器（agent 调 record_decision / compact 后 bump）
   const [decisionsReloadKey, setDecisionsReloadKey] = useState(0);
+  // C5：TweaksPanel 自动刷新触发器（agent 调 expose_tweaks 后 bump）
+  const [tweaksReloadKey, setTweaksReloadKey] = useState(0);
   // 终止生成：当前活跃 run 的 id（Turn.send 返回时记，run.done/error/cancelled 清）
   const [currentRunId, setCurrentRunId] = useState(null);
   // SDK TodoWrite 工具的实时计划清单（run.todo.updated 推）
@@ -492,6 +495,12 @@ export default function ProjectWorkspace() {
         // PostCompact hook 写完 spec.json → DecisionsTab 也更新
         setDecisionsReloadKey(k => k + 1);
         showToast(`已沉淀 compact 摘要（${evt.summaryLength || '?'} chars）`, 'info');
+        break;
+
+      case 'run.tweaks_exposed':
+        // C5: agent 调 expose_tweaks 写 spec.tweaks → TweaksPanel reload schema
+        setTweaksReloadKey(k => k + 1);
+        showToast(`Tweaks 已更新（${evt.count} 个控件）`, 'info');
         break;
 
       case 'run.stop_reflection':
@@ -1032,20 +1041,14 @@ export default function ProjectWorkspace() {
 
           {/* 浮窗层 —— bounds='parent' = 不出 canvas section
               C3：inspect / comments 删 — 改用 InspectFloatingCard（CanvasFrame 内贴选中元素） */}
-          <FloatingPanel id="tweaks" title="Tweaks" icon={Sliders}>
-            <div style={{ padding: GAP.lg }}>
-              <div style={{
-                fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, fontWeight: 500,
-                color: COLOR.text, marginBottom: GAP.sm,
-              }}>Tweaks</div>
-              <p style={{
-                fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub,
-                lineHeight: 1.6, margin: 0,
-              }}>
-                agent 暴露的可调参数（color / spacing / layout variant）。C5 接
-                expose_tweaks MCP 工具 → 按 schema 渲染 sliders。
-              </p>
-            </div>
+          <FloatingPanel id="tweaks" title="Tweaks" icon={Sliders} bodyStyle={{ padding: 0 }}>
+            <TweaksPanel
+              projectId={id}
+              sessionId={currentSessionId}
+              iframeDoc={iframeDoc}
+              reloadKey={tweaksReloadKey}
+              onChat={handleSend}
+            />
           </FloatingPanel>
         </section>
       </div>

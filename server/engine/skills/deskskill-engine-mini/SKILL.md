@@ -75,6 +75,7 @@ explorer 在子 context 里搜 + 验证完，给你一份结构化报告，你�
 | `mcp__nodesign__highlight` | 你想强调"我建议改这块"或"我刚改了这里" 时 pulse 元素，用户视觉就跟得上 |
 | `mcp__nodesign__get_pending_changes` | **看到 user message 顶部 `<system>用户在过去时段做了 N 处变更...</system>` 提示时必调**，读用户在 chat 间隔做的直接编辑 + 评论详情。详见下方"用户直接编辑协议" |
 | `mcp__nodesign__clear_pending_changes` | 处理完 pending changes 后调一次清 buffer，避免下个 turn 又见到 |
+| `mcp__nodesign__expose_tweaks` | 写完 deck / 用户问"哪些可以调" / 用户点 Tweaks Apply 时调，暴露 5-8 个核心可调参数让前端渲染 sliders / color picker。详见下方"Tweaks 暴露协议" |
 | `mcp__nodesign__export_handoff` | 用户说"差不多了" / "可以发了" / "给我交付" 时主动调 + 告诉路径让她从 UI 下载 |
 | `mcp__nodesign__record_decision` | 做了非平凡设计决策时调（颜色 / 长度 / 隐喻 / 文案策略）。**只记关键决策**——CSS 类名 / 文件结构等实现细节不记。同一个决策不要重复调 |
 | `mcp__nodesign__web_search` | 需要**最新设计参考 / 字体可用性 / 行业趋势 / 验证某事实**时用。CJK query 自动走 baidu，英文自动走 tavily。**单 turn 上限**：baidu 中文 ≤2 次、tavily ≤3 次、exa ≤2 次（会爆 context）。Query 加年份词（2025/2026）。**不要 baidu 英文**（实测严重跑题）。**重要**：要是这次任务里搜 + 读要花 3+ turn，**派给 explorer 子代理**（见 prelude § 子代理段），别在自己主上下文里搜 |
@@ -193,6 +194,92 @@ PostToolUse hook 警告。
 - ❌ 把 edit 当 comment 处理（edit 是 done deal，不要 revert）
 
 **收尾时**：在你的最终回复里**总结一下你处理了哪些 pending changes**，让用户知道你看到了 ta 的改动 / 评论。
+
+---
+
+## Tweaks 暴露协议（C5，2026-05-02）
+
+Claude Design 的核心差异化能力之一：deck 不只是"静态输出"，而是带**专属控制面板**
+的可参数化 artifact。用户拖 sliders / 切 color picker → 实时预览 → 满意了点 Apply
+→ 你把数值固化到 canvas.html 的 `:root` CSS variables 里。
+
+**何时调 `mcp__nodesign__expose_tweaks`**：
+
+1. **写完 / 大改完 deck 后**主动暴露 5-8 个最有价值的可调参数
+2. 用户问"哪些可以调" / "我想 finetune 一下"
+3. 用户在前端 Tweaks 面板点了 **Apply** 按钮时（chat 会带"把当前 tweaks 数值固化进
+   :root...固化完后调 expose_tweaks 用更新的 default 值重新暴露"）—— 你应该：
+   1. 用 Edit 工具把 canvas.html 里 `:root { --xxx: ... }` 的值改成 chat 里给出的
+      新数值
+   2. 重新调 expose_tweaks，把 controls 里每个 control 的 `default` 也更新为新值
+
+**Schema 例子**（这就是 expose_tweaks 的 controls 入参）：
+
+```json
+[
+  {
+    "id": "hero_size",
+    "type": "slider",
+    "label": "Hero 字号",
+    "target_var": "--hero-size",
+    "min": 32, "max": 96, "step": 2,
+    "default": 56,
+    "unit": "px"
+  },
+  {
+    "id": "accent_color",
+    "type": "color",
+    "label": "主色",
+    "target_var": "--accent",
+    "default": "#2d2418"
+  },
+  {
+    "id": "layout_density",
+    "type": "segmented",
+    "label": "排版密度",
+    "target_class_on": "density-compact",
+    "options": [
+      {"label": "紧凑", "value": "compact"},
+      {"label": "均衡", "value": "balanced"},
+      {"label": "舒展", "value": "spacious"}
+    ],
+    "default": "balanced"
+  }
+]
+```
+
+**前置条件 — 写 canvas.html 时就要把可调维度做成 CSS variables**：
+
+```html
+<style>
+  :root {
+    --hero-size: 56px;
+    --accent: #2d2418;
+    --bg: #F9F8F6;
+  }
+  h1.hero { font-size: var(--hero-size); color: var(--accent); }
+</style>
+```
+
+这样 expose_tweaks 暴露的 control 拖 slider 时，前端只要 `setProperty('--hero-size',
+'48px')` 就能实时改 — 不需要 reload。
+
+**5 种 control type 选哪种**：
+- `slider`：数值连续可调（字号 / 间距 / 圆角）
+- `color`：颜色（accent / bg）
+- `segmented`：少数互斥选项（density / variant），一般 2-4 个
+- `toggle`：on/off（暗色模式 / 简洁模式）
+- `select`：>4 个选项的 dropdown（字体家族）
+
+**target_var vs target_class_on**：
+- 99% 用 `target_var` + 对应 CSS variable（更灵活，连续值也能改）
+- 只有 segmented / toggle 改的是"加 class 切样式分支"时才用 `target_class_on`
+
+**别犯的错**：
+- ❌ 暴露 20 个 control（信息过载，用户调不过来）—— 5-8 个核心维度就够
+- ❌ `target_var` 不以 `--` 开头（zod 校验会拒）
+- ❌ slider 没 unit（默认 px 也写明白）—— 前端就显示不了"56px"
+- ❌ Apply 后只改 :root，忘了再 expose_tweaks 更新 default
 
 ---
 
