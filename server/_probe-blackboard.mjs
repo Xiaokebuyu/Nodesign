@@ -9,7 +9,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { makeReadBoardTool } from './engine/mcp/tools/read-board.js';
-import { makeSketchOnBoardTool, makeFinishSketchTool } from './engine/mcp/tools/sketch-on-board.js';
+import { makeFinishSketchTool } from './engine/mcp/tools/sketch-on-board.js';
+import { makeSketchOnBoardAlias } from './engine/mcp/tools/write-on-board.js';
 import { makeEditSketchTool } from './engine/mcp/tools/edit-sketch.js';
 import { makeWriteOnBoardTool } from './engine/mcp/tools/write-on-board.js';
 import { getSharedDir } from './projects/workspace.js';
@@ -33,7 +34,7 @@ const img = (r, name) => {
 };
 
 const read = makeReadBoardTool({ projectId });
-const sketch = makeSketchOnBoardTool({ projectId, ctx });
+const sketch = makeSketchOnBoardAlias({ projectId, sharedRoot: getSharedDir(projectId), sessionId: null, ctx });
 const finish = makeFinishSketchTool({ projectId, ctx });
 const edit = makeEditSketchTool({ projectId, ctx });
 const write = makeWriteOnBoardTool({ projectId, sharedRoot: getSharedDir(projectId), sessionId: null, ctx });

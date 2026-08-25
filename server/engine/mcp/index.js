@@ -65,9 +65,9 @@ import { makeRelateOnBoardTool } from './tools/relate-on-board.js';
 import { makeReadBoardTool } from './tools/read-board.js';
 import { makeArrangeOnBoardTool } from './tools/arrange-on-board.js';
 import { makeCreateOnBoardTool } from './tools/create-on-board.js';
-import { makeSketchOnBoardTool, makeFinishSketchTool } from './tools/sketch-on-board.js';
+import { makeFinishSketchTool } from './tools/sketch-on-board.js';
 import { makeEditSketchTool } from './tools/edit-sketch.js';
-import { makeWriteOnBoardTool } from './tools/write-on-board.js';
+import { makeWriteOnBoardTool, makeSketchOnBoardAlias } from './tools/write-on-board.js';
 import { makeLookAtBoardTool } from './tools/look-at-board.js';
 import { makeReadUserViewTool } from './tools/read-user-view.js';
 import { makeOrganizeBoardTool } from './tools/organize-board.js';
@@ -304,8 +304,9 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       makeArrangeOnBoardTool({ projectId, ctx }),
       makeCreateOnBoardTool({ projectId, ctx }),
       makeOrganizeBoardTool({ projectId, ctx }),
-      // 黑板（2026-08-23）：一次落一整张草图 / 落定或擦掉 / 看一眼 / 用户在看哪
-      makeSketchOnBoardTool({ projectId, ctx }),
+      // 黑板（2026-08-23；08-25 范式重做：写字入口只剩 write_on_board，
+      // 件数判据自动分流一句话/一张图；sketch_on_board = 薄别名防老会话 resume）
+      makeSketchOnBoardAlias({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
       makeFinishSketchTool({ projectId, ctx }),
       makeEditSketchTool({ projectId, ctx }),
       makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),

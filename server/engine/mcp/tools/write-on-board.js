@@ -1,139 +1,454 @@
 /**
- * mcp/tools/write-on-board.js —— write_on_board（2026-08-23 黑板三期）
+ * mcp/tools/write-on-board.js —— write_on_board 统一入口（2026-08-25 范式重做②）
  *
- * agent 在画布上**说话**的主通道：一段 md 板书，贴着它说的那件东西（`near`），或者
- * 接在用户/自己的某条板书下面（`reply_to` = 线程）。本体是文件
- * （notes/板书/<stamp>-<slug>.md，见 lib/chalk.js），board.json 只存位置和线。
+ * 总纲（站主拍板）：**一条板书 = 单节点图，是统一模型的退化情形。** 写字入口只有
+ * 这一个；本体选什么不由 agent 选、不由入口分，由一条服务端判据自动定 ——
+ * **这一次落板的件数（nodes + shapes 合计；text 简写 = 1 件）**：
  *
- * 落位纪律（gutter）：
- *   - reply_to：落在被回应那条的**正下方**（同列、间距 12），自动连 flow 线（读序）
- *   - near：落在锚点右侧、顶对齐，撞了往下让；自动连 annotates 线（这段话关于它）
- *   - 都没有：用户视口里的空地 > 桌面内容底下
- * 跟 create_on_board 的分工：那是"记号"（手写一句、画布原生、给人看），这是"话"
- * （md、文件本体、agent 要能读回来、有线程）。黑板模式下回复的主体走这里。
+ *   件数 = 1（一句话）           件数 ≥ 2（一张图）
+ *   本体   notes/板书/*.md 真文件   画布原生 text:/scribble: + data.lid
+ *   tag    不打（可显式传并组）      必有，缺省自动 sk-<stamp>
+ *   staging false                  true（finish 或回合末落定）
+ *   near 线 annotates/flow（relation） 不自动画（要线就写 edges）
+ *
+ * 验收判据：写一条板书过去填 {text, near} 两个字段，统一后还是两个。
+ * 落位全走 lib/board-place.js 的 resolvePlacement（reply_to > at > near+side >
+ * 视口 > 内容底下；没有失败分支）；返回文案由 describePlacement 从真实 resolution
+ * 生成 —— 08-25 体检陷阱之③「工具返回在撒谎」在这里断根。
+ *
+ * 旧名 sketch_on_board 注册成薄别名（同参数同 handler），防老会话 resume 断粮。
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { readBoard, patchBoard } from '../../../projects/board-store.js';
+import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope } from '../../../lib/canvas-id.js';
-import { textBox, findSpot, SKETCH_FIT } from '../../../lib/sketch-layout.js';
+import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
+import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
+import { resolvePlacement, describePlacement } from '../../../lib/board-place.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { Events } from '../../agent/events.js';
 
+const MAX_NODES = 40;
+const MAX_SHAPES = 30;
+const MAX_EDGES = 60;
+
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
+const COLORS = ['ink', 'red', 'pencil', 'brass'];
+
+const LOCAL_ID = z.string().regex(/^[A-Za-z0-9_-]{1,24}$/, 'local id: letters/digits/_/-');
+const GRID_PT = z.object({ x: z.number().min(-400).max(400), y: z.number().min(-400).max(400) });
+const WORLD_PT = z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6) });
+const TAG_RE = /^[\w一-鿿぀-ヿ-]{1,40}$/;
+
+/** md 侦测：正文带 markdown 记号却标 plain 会把 **加粗** 原样吐出来（ldx 案） */
+const looksLikeMd = (t) => /(\*\*|__|^#{1,4}\s|^\s*[-*]\s|\|.+\||```|\$[^$]+\$|\[.+\]\(.+\))/m.test(t);
+
+const SCHEMA = {
+  text: z.string().min(1).max(1500).optional()
+    .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
+  near: z.string().max(300).optional()
+    .describe('Canvas id or #tag this lands beside (annotates line for a single note)'),
+  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under`),
+  at: WORLD_PT.optional()
+    .describe('World-coord suggestion. The server always snaps/nudges to a free cell; far outside the working area it is politely rejected and the note lands near instead — placement never fails'),
+  side: z.enum(['right', 'left', 'above', 'below']).optional().describe('Which side of near to prefer (default right)'),
+  relation: z.enum(BINDING_TYPE_IDS).optional()
+    .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
+  chain: z.boolean().optional()
+    .describe('Single note: auto reply_to the latest board note of the same tag (chapter threads without hand-copying paths)'),
+  tag: z.string().regex(TAG_RE).optional()
+    .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
+  size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe('Single note text size (md default, lg headline)'),
+  width: z.number().min(8).max(30).optional().describe('Single note width in grid units (24px); default by content'),
+  title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
+  layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap']).optional()
+    .describe('Sketch layout. free needs at on EVERY node (missing ones are an error, not a silent column)'),
+  cols: z.number().int().min(1).max(8).optional().describe('grid columns'),
+  staging: z.boolean().optional().describe('Sketch default true (translucent until finish/turn end); single note default false'),
+  nodes: z.array(z.object({
+    id: LOCAL_ID.describe('Local id to reference from edges/shapes'),
+    text: z.string().min(1).max(4000),
+    format: z.enum(['plain', 'md']).optional().describe('Default: md when the text carries markdown marks, else plain'),
+    size: z.enum(['sm', 'md', 'lg', 'xl']).optional(),
+    font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(),
+    color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
+    at: GRID_PT.optional().describe('Grid position (layout free); top-left of the node'),
+    w: z.number().min(3).max(40).optional().describe('Width in grid units (≤40 = 960px; prefer ≤22 — paragraphs read better growing down)'),
+  })).max(MAX_NODES).optional(),
+  shapes: z.array(z.object({
+    id: LOCAL_ID.optional(),
+    kind: z.enum(['rect', 'ellipse', 'circle', 'line', 'arrow', 'underline', 'path']),
+    at: GRID_PT.optional(),
+    around: LOCAL_ID.optional().describe('rect/ellipse/circle/underline: wrap this node instead of at/w/h'),
+    w: z.number().min(0).max(200).optional(),
+    h: z.number().min(0).max(200).optional(),
+    to: GRID_PT.optional(),
+    toNode: LOCAL_ID.optional(),
+    d: z.string().max(8000).optional().describe('path kind: SVG M/L/Q/Z in local px'),
+    color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
+    width: z.number().min(1).max(12).optional(),
+  })).max(MAX_SHAPES).optional(),
+  edges: z.array(z.object({
+    from: z.string().min(1).max(300).describe('local node id or canvas id'),
+    to: z.string().min(1).max(300).describe('local node id or canvas id'),
+    type: z.enum(BINDING_TYPE_IDS).optional().describe('default link'),
+    material: z.enum(BINDING_MATERIALS).optional().describe('default pencil'),
+    label: z.string().max(60).optional(),
+  })).max(MAX_EDGES).optional(),
+};
+
+const DESCRIPTION = `Write on the board — the ONE way to put words and pictures on the canvas.
+The board is the conversation; the sidebar is the log.
+
+One thought = one call. What you pass decides what lands:
+- {text, near} → a single Markdown note beside the thing it is about, with an
+  annotates line. It is a real file (${CHALK_DIR}/…md) you can Read/Grep/Edit later.
+  reply_to = thread under another note (flow line); chain:true = auto-thread onto the
+  latest note of the same tag. relation/side pick the line type and the side.
+- {nodes, shapes, edges, …} → a whole sketch in one call (comparison table, flow,
+  mind map, detective board linking real artifacts). You describe STRUCTURE on a grid
+  (1 cell = ${UNIT}px); the server does pixels, hand-drawn shapes, and placement. The
+  sketch gets a #tag (read/select/erase as a group) and lands as STAGING (translucent)
+  until edit_board commits it or the turn ends.
+- at:{x,y} (either mode) is a world-coord suggestion: the server snaps to a free cell
+  nearby; placement never fails — if your spot is unusable it lands somewhere sensible
+  and the return says exactly where and why.
+Node text carrying markdown marks defaults to format md (KaTeX $…$ and \`\`\`mermaid fences work).
+Readability: user reads at 80–100% zoom — body text md/lg; one sketch ≤ ${SKETCH_FIT.w}x${SKETCH_FIT.h}
+world px, hard cap ${SKETCH_MAX.w}x${SKETCH_MAX.h} (split big ones, link with an edge).
+To change what is already on the board use edit_board — do not redraw.
+Per sketch ≤${MAX_NODES} nodes / ${MAX_SHAPES} shapes / ${MAX_EDGES} edges. Keep the chat reply to one line pointing here.`;
 
 export function makeWriteOnBoardTool({ projectId, sharedRoot, sessionId, ctx }) {
-  const turnStamp = { turn: -1, count: 0 };
-  return tool(
-    'write_on_board',
-    `Say it ON THE BOARD: write a short Markdown note on the canvas, beside the thing it is
-about (near) or right under a note you are replying to (reply_to). This is your main way
-to talk to the user when they work on the canvas — the sidebar is the log, the board is
-the conversation. The note is a real file (${CHALK_DIR}/…md) you can Read/Grep/Edit later.
+  const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
+  return tool('write_on_board', DESCRIPTION, SCHEMA, handler);
+}
 
-- near: canvas id the note is about (an artifact card, an image, another note) → lands to
-  its right, top-aligned, with an annotates line. Use it right after you finish something:
-  "what this is / why this way / what to look at".
-- reply_to: path of a board note (yours or the user's) → lands right under it with a
-  flow line (a thread). When the user annotates one of your notes, answer with reply_to.
-- neither → lands in the user's viewport (or below current content).
-- text: Markdown (+KaTeX, lists, tables; ≤1500 chars, keep it one thought — long
-  analysis belongs in a .md the user opens). size 'md' default, 'lg' for headlines.
-Keep the chat reply short — a line pointing at the board is enough.`,
-    {
-      text: z.string().min(1).max(1500),
-      near: z.string().max(300).optional(),
-      reply_to: z.string().max(300).optional().describe(`path like ${CHALK_DIR}/20260823-070809-xxx.md`),
-      tag: z.string().regex(/^[\w一-鿿぀-ヿ-]{1,40}$/).optional(),
-      size: z.enum(['md', 'lg']).optional(),
-      width: z.number().min(8).max(30).optional().describe('grid units (24px); default by content, max 30'),
-    },
-    async ({ text, near, reply_to: replyTo, tag, size, width }) => {
-      const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
-      if (!projectId || !sharedRoot) return err('No project bound.');
-      // 回合闸 08-23 用户拍板先不设：只记数不拦
-      const turn = ctx?.runId ?? -1;
-      if (turnStamp.turn !== turn) { turnStamp.turn = turn; turnStamp.count = 0; }
-      const body = String(text).trim();
+/** 旧名薄别名（一版）：老会话 resume 时还找得到 sketch_on_board */
+export function makeSketchOnBoardAlias({ projectId, sharedRoot, sessionId, ctx }) {
+  const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
+  return tool('sketch_on_board',
+    'Deprecated alias of write_on_board (same arguments). Use write_on_board.',
+    SCHEMA, handler);
+}
+
+function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
+  return async function handler(args) {
+    const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
+    if (!projectId || !sharedRoot) return err('No project bound.');
+
+    const nodesIn = args.nodes || [];
+    const shapesIn = args.shapes || [];
+    const edgesIn = args.edges || [];
+    const hasSketch = nodesIn.length || shapesIn.length;
+    if (args.text && hasSketch) {
+      return err('text 是"单节点图"的简写，跟 nodes/shapes 二选一：一句话给 text，一张图把它写成一个 node。');
+    }
+    if (!args.text && !hasSketch) {
+      return err('空手不上板：给 text（一句话）或 nodes/shapes（一张图）。只想画线用 edit_board 的 add_edge。');
+    }
+    // 单节点图 = 一句话（统一模型的退化情形）：转文件本体那条路，语义字段全保
+    if (!args.text && !args.title && nodesIn.length === 1 && !shapesIn.length && !edgesIn.length) {
+      const n = nodesIn[0];
+      return handler({
+        text: n.text, near: args.near, reply_to: args.reply_to, at: args.at, side: args.side,
+        relation: args.relation, chain: args.chain, tag: args.tag, size: n.size, width: n.w,
+      });
+    }
+
+    const board = await readBoard(projectId);
+    const known = new Set(Object.keys(board.zones || {}));
+    const sizeOf = (b) => (id, e) => estimateSizeOn(b, id, e);
+    const obstaclesOf = (b, zone) => Object.entries(b.objects || {})
+      .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
+      .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(b, id, e) }));
+    const contentBottomOf = (obstacles, zone) => {
+      let bottom = 0;
+      for (const o of obstacles) bottom = Math.max(bottom, o.y + o.h);
+      if (!zone) for (const zz of Object.values(board.zones || {})) if (Number.isFinite(zz?.y)) bottom = Math.max(bottom, zz.y + 240);
+      return bottom;
+    };
+    const vp = getViewpoint(projectId);
+    const fit = fitFor(vp);
+    const vpRectFor = (zone) => (vp && (vp.layer || '') === (zone || '') && vp.camera) ? vp.camera : null;
+    const visibleIn = (rect, vpRect) => !!vpRect && !(rect.x + rect.w < vpRect.x || vpRect.x + vpRect.w < rect.x
+      || rect.y + rect.h < vpRect.y || vpRect.y + vpRect.h < rect.y);
+
+    /** 锚点解析：真 id > tag 包络。返回 { rect, anchorId, zone } 或 null */
+    const resolveAnchor = (raw, b) => {
+      const nid = normalizeCanvasId(raw);
+      const e = nid ? b.objects?.[nid] : null;
+      if (e && Number.isFinite(e.x)) {
+        return { anchorId: nid, zone: layerOf(nid, e, known), rect: { x: e.x, y: e.y, ...estimateSizeOn(b, nid, e) } };
+      }
+      const env = tagEnvelope(b, raw, sizeOf(b));
+      if (env) {
+        return { anchorId: env.anchorId, zone: layerOf(env.anchorId, b.objects[env.anchorId], known), rect: { x: env.x, y: env.y, w: env.w, h: env.h } };
+      }
+      return null;
+    };
+
+    // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
+    if (args.text) {
+      const body = String(args.text).trim();
       if (!body) return err('空话不上板。');
-
-      const board = await readBoard(projectId);
-      const known = new Set(Object.keys(board.zones || {}));
-      // 默认宽度：散文按 14 格（336px）排，短句按内容；太窄会把一句话折成三行
-      const em = (l) => [...l].reduce((n, c) => n + (/[\u3000-\u9fff\uff00-\uffef]/.test(c) ? 1 : 0.62), 0);
-      const longest = Math.max(...body.split('\n').map(em));
-      const wUnits = width || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1)));
-      const box = textBox(body, size || 'md', { md: true, wUnits });
-      let zone = '';
-      let pos = null;
-      let anchorId = null; let parentId = null;
-      const obstaclesOf = (z) => Object.entries(board.objects || {})
-        .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === z)
-        .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
-      const avoid = (p, obstacles, w, h) => {
-        for (let g = 0; g < 40; g += 1) {
-          const b = obstacles.find(o => !(p.x + w <= o.x || o.x + o.w <= p.x || p.y + h <= o.y || o.y + o.h <= p.y));
-          if (!b) break;
-          p.y = b.y + b.h + 12;
-        }
-        return p;
-      };
-      if (replyTo) {
-        const pid = normalizeCanvasId(replyTo);
-        const e = pid ? board.objects?.[pid] : null;
-        if (!e || !Number.isFinite(e.x)) return err(`reply_to ${replyTo} 不在板上（read_board 里看不到就接不上）。`);
-        parentId = pid; zone = layerOf(pid, e, known);
-        const ps = estimateSizeOn(board, pid, e);
-        pos = avoid({ x: e.x, y: e.y + ps.h + 12 }, obstaclesOf(zone), box.w, box.h);
-      } else if (near) {
-        const nid = normalizeCanvasId(near);
-        const e = nid ? board.objects?.[nid] : null;
-        if (e && Number.isFinite(e.x)) {
-          anchorId = nid; zone = layerOf(nid, e, known);
-          const as = estimateSizeOn(board, nid, e);
-          pos = avoid({ x: e.x + as.w + 24, y: e.y }, obstaclesOf(zone), box.w, box.h);
-        } else {
-          // near 也认 tag（08-23 案）：落到那片东西的包络右侧，锚线连最右那个
-          const env = tagEnvelope(board, near, (id2, e2) => estimateSizeOn(board, id2, e2));
-          if (!env) return err(`锚点 ${near} 还没有座位，也不是板上任何 tag（read_board 里看不到就锚不上）。`);
-          anchorId = env.anchorId; zone = layerOf(env.anchorId, board.objects[env.anchorId], known);
-          pos = avoid({ x: env.x + env.w + 24, y: env.y }, obstaclesOf(zone), box.w, box.h);
-        }
-      } else {
-        const obstacles = obstaclesOf('');
-        let bottom = 0; for (const o of obstacles) bottom = Math.max(bottom, o.y + o.h);
-        for (const zz of Object.values(board.zones || {})) if (Number.isFinite(zz?.y)) bottom = Math.max(bottom, zz.y + 240);
-        const vp = getViewpoint(projectId);
-        const vpRect = (vp && !(vp.layer) && vp.camera) ? vp.camera : null;
-        const spot = findSpot({ w: box.w + 24, h: box.h + 24, obstacles, contentBottom: bottom, viewport: vpRect });
-        pos = { x: spot.x + 12, y: spot.y + 12 };
+      // chain：接在同 tag 最新一条板书后面（chapter 线程不再手抄路径）
+      let replyToRaw = args.reply_to || null;
+      if (!replyToRaw && args.chain) {
+        const chalks = Object.entries(board.objects)
+          .filter(([id, e]) => id.startsWith(`${CHALK_DIR}/`) && Number.isFinite(e?.x) && (!args.tag || e.tag === args.tag))
+          .map(([id]) => id).sort();
+        if (chalks.length) replyToRaw = chalks[chalks.length - 1];
       }
 
+      const em = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
+      const longest = Math.max(...body.split('\n').map(em));
+      const wUnits = args.width || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1)));
+      const box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
+
+      let zone = '';
+      let anchorId = null; let parentId = null;
+      let replyRect = null; let anchorRect = null;
+      if (replyToRaw) {
+        const pid2 = normalizeCanvasId(replyToRaw);
+        const e = pid2 ? board.objects?.[pid2] : null;
+        if (!e || !Number.isFinite(e.x)) return err(`reply_to ${replyToRaw} 不在板上（read_board 里看不到就接不上）。`);
+        parentId = pid2; zone = layerOf(pid2, e, known);
+        replyRect = { x: e.x, y: e.y, ...estimateSizeOn(board, pid2, e) };
+      }
+      if (args.near) {
+        const a = resolveAnchor(args.near, board);
+        if (!a && !parentId && !args.at) {
+          return err(`锚点 ${args.near} 还没有座位，也不是板上任何 tag（read_board 里看不到就锚不上）。`);
+        }
+        if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; }
+      }
+
+      const obstacles = obstaclesOf(board, zone);
+      const vpRect = vpRectFor(zone);
+      const placed = resolvePlacement({
+        box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
+        obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
+      });
+
       const fileName = chalkFileName(body);
-      const content = renderChalk({ body, by: 'agent', anchor: anchorId, replyTo: parentId, tag: tag || null, sessionId: sessionId || null });
+      const content = renderChalk({ body, by: 'agent', anchor: anchorId, replyTo: parentId, tag: args.tag || null, sessionId: sessionId || null });
       const rel = await writeChalkFile(sharedRoot, fileName, content);
 
-      const objects = { [rel]: { x: Math.round(pos.x), y: Math.round(pos.y), z: 1, w: box.w, h: box.h, zone, by: 'agent', seat: 'agent', ...(tag ? { tag } : {}) } };
+      const objects = { [rel]: {
+        x: Math.round(placed.x), y: Math.round(placed.y), z: 1, w: box.w, h: box.h,
+        zone, by: 'agent', seat: 'agent', ...(args.tag ? { tag: args.tag } : {}),
+      } };
       const bindings = {};
-      if (anchorId) bindings[`b:a${stamp()}`] = { type: 'annotates', from: rel, to: anchorId, by: 'agent', ...(tag ? { tag } : {}) };
-      if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by: 'agent', material: 'pencil', ...(tag ? { tag } : {}) };
+      if (anchorId) {
+        const type = args.relation || 'annotates';
+        // flow 是读序（旧 → 新）：锚在前板书在后；其余语义都是"这条说的是它"
+        const [from, to] = type === 'flow' ? [anchorId, rel] : [rel, anchorId];
+        bindings[`b:a${stamp()}`] = { type, from, to, by: 'agent', ...(args.tag ? { tag: args.tag } : {}) };
+      }
+      if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by: 'agent', material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
       await patchBoard(projectId, { objects, bindings });
-      turnStamp.count += 1;
-      const rect = { x: Math.round(pos.x), y: Math.round(pos.y), w: box.w, h: box.h };
+
+      const rect = { x: Math.round(placed.x), y: Math.round(placed.y), w: box.w, h: box.h };
       try {
         ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: parentId ? '回了一条板书' : '写了一条板书' });
-        // chalk 字段进精灵追踪链（08-24）：形状钉在 Events.boardFocus，别再内联对象
-        ctx?.emit?.(Events.boardFocus(rect, { tag: tag || null, layer: zone, soft: true, chalk: rel }));
-      } catch { /* */ }
-      const big = box.h > SKETCH_FIT.h * 0.6;
-      return { content: [{ type: 'text', text:
-        `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h}`
-        + (anchorId ? ` beside ${anchorId} (annotates line)` : parentId ? ` under ${parentId} (thread)` : ' in the user\'s view')
-        + `.${big ? ' ⚠ It is tall — next time split or shorten.' : ''} Mention it in one line in chat; the user can annotate it to reply.` }] };
-    },
-  );
+        ctx?.emit?.(Events.boardFocus(rect, { tag: args.tag || null, layer: zone, soft: true, chalk: rel }));
+      } catch { /* fail-soft */ }
+      const lines = [
+        `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describePlacement(placed, { requestedAt: args.at })}.`,
+        `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
+      ];
+      if (box.h > SKETCH_FIT.h * 0.6) lines.push('⚠ It is tall — next time split or shorten.');
+      lines.push('The user can annotate it to reply; answer with reply_to (or chain:true on the same tag).');
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+
+    // ───────────────────────── 件数 ≥ 2：一张图（画布原生） ─────────────────────────
+    // 单个形状（比如一个圈、一条下划线）是"记号"：画布原生，但不强打 tag、不进草稿态
+    const soloMark = !args.title && !nodesIn.length && shapesIn.length === 1;
+    const tag = args.tag || (soloMark ? null : `sk-${stamp()}`);
+    const staging = args.staging !== false && !soloMark;
+
+    const localIds = new Set();
+    const nodes = [];
+    if (args.title) {
+      nodes.push({ key: '__title', text: `## ${args.title}`, format: 'md', size: 'md', font: 'kai', color: 'ink', at: null, w: null });
+    }
+    for (const n of nodesIn) {
+      if (localIds.has(n.id)) return err(`节点 id 重复：${n.id}`);
+      localIds.add(n.id);
+      const size = (n.size === 'sm' && n.text.length > 40) ? 'md' : (n.size || 'md');
+      // 缺省 format 按内容侦测：带 markdown 记号标 plain 会把 **加粗** 吐成星号（ldx 案）
+      const format = n.format || (looksLikeMd(n.text) ? 'md' : 'plain');
+      nodes.push({ key: n.id, text: n.text, format, size, font: n.font || 'pen', color: n.color || 'ink', at: n.at || null, w: n.w || null });
+    }
+    for (const n of nodes) {
+      const box = textBox(n.text, n.size, { md: n.format === 'md', wUnits: n.w });
+      n.w = box.w; n.h = box.h;
+    }
+    const titleNode = nodes.find(n => n.key === '__title');
+    let tpl = args.layout || 'auto';
+    if (tpl === 'auto') tpl = nodes.some(n => n.at) ? 'free' : (nodes.length - (titleNode ? 1 : 0) <= 4 ? 'column' : 'grid');
+    if (tpl === 'free') {
+      // free 的合同：每个节点都要 at。缺 at 静默排成一列是 ldx 那晚两次重画的病根 —— 明拒，报名单。
+      const missing = nodes.filter(n => n !== titleNode && !n.at).map(n => n.key);
+      if (missing.length) {
+        return err(`layout free 要求每个节点都带 at（网格坐标），缺：${missing.join(', ')}。给它们补 at，或者去掉 layout:'free' 用模板排。`);
+      }
+    }
+    const layoutInput = titleNode && tpl === 'mindmap' ? nodes.filter(n => n !== titleNode) : nodes;
+    const pos = layoutNodes(layoutInput, { template: tpl, cols: args.cols });
+    if (titleNode && !pos.has('__title')) {
+      const bb = bboxOf([...pos.entries()].map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
+      pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
+    } else if (titleNode && tpl === 'free' && !titleNode.at) {
+      const bb = bboxOf([...pos.entries()].filter(([k]) => k !== '__title').map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
+      pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
+    }
+    const rectOfNode = (key) => { const n = nodes.find(x => x.key === key); const p = pos.get(key); return n && p ? { x: p.x, y: p.y, w: n.w, h: n.h } : null; };
+
+    // ── 形状（局部像素） ──
+    const shapes = [];
+    for (let i = 0; i < shapesIn.length; i += 1) {
+      const s = shapesIn[i];
+      const sid = s.id || `s${i + 1}`;
+      if (localIds.has(sid) || shapes.some(x => x.key === sid)) return err(`形状 id「${sid}」跟节点/别的形状重名（形状缺省叫 s1,s2…，节点别用这类名）`);
+      const seed = `${tag || 'solo'}:${sid}`;
+      const color = COLORS.includes(s.color) ? s.color : (s.kind === 'arrow' || s.kind === 'line' ? 'ink2' : 'ink');
+      const width = s.width || 2;
+      let rect; let d;
+      if (s.kind === 'path') {
+        if (!s.d || !/^[\dMLQCZ ,.\-eE]+$/.test(s.d)) return err(`形状 ${sid}：path 只收 M/L/Q/Z 与数字`);
+        const nums = s.d.match(/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g)?.map(Number) || [];
+        const xs = nums.filter((_, k) => k % 2 === 0); const ys = nums.filter((_, k) => k % 2 === 1);
+        const w = Math.max(4, Math.max(...xs) - Math.min(0, Math.min(...xs))); const h = Math.max(4, Math.max(...ys) - Math.min(0, Math.min(...ys)));
+        rect = { x: (s.at?.x || 0) * UNIT, y: (s.at?.y || 0) * UNIT, w: w + 6, h: h + 6 };
+        d = s.d;
+      } else if (s.kind === 'line' || s.kind === 'arrow' || s.kind === 'underline') {
+        let a; let b;
+        if (s.kind === 'underline' && s.around) {
+          const r = rectOfNode(s.around); if (!r) return err(`形状 ${sid}：around 指向不存在的节点 ${s.around}`);
+          a = { x: r.x + 2, y: r.y + r.h - 2 }; b = { x: r.x + r.w - 2, y: r.y + r.h - 2 };
+        } else {
+          if (!s.at) return err(`形状 ${sid}：${s.kind} 要 at 起点`);
+          a = { x: s.at.x * UNIT, y: s.at.y * UNIT };
+          if (s.toNode) {
+            const r = rectOfNode(s.toNode); if (!r) return err(`形状 ${sid}：toNode 指向不存在的节点 ${s.toNode}`);
+            b = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+          } else if (s.to) b = { x: s.to.x * UNIT, y: s.to.y * UNIT };
+          else if (s.kind === 'underline') b = { x: a.x + (s.w || 4) * UNIT, y: a.y };
+          else return err(`形状 ${sid}：${s.kind} 要 to 或 toNode`);
+        }
+        const sp = shapePath(s.kind, { to: { x: b.x - a.x, y: b.y - a.y } }, seed);
+        rect = { x: Math.min(a.x, b.x) - 6, y: Math.min(a.y, b.y) - 6, w: sp.w, h: sp.h };
+        d = sp.d;
+      } else {
+        let box;
+        if (s.around) {
+          const r = rectOfNode(s.around); if (!r) return err(`形状 ${sid}：around 指向不存在的节点 ${s.around}`);
+          const pad = s.kind === 'rect' ? 8 : 14;
+          box = { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2 };
+          if (s.kind === 'circle') { const dmax = Math.max(box.w, box.h); box = { x: box.x + (box.w - dmax) / 2, y: box.y + (box.h - dmax) / 2, w: dmax, h: dmax }; }
+        } else {
+          if (!s.at || !s.w) return err(`形状 ${sid}：${s.kind} 要 at + w（+h）或 around`);
+          box = { x: s.at.x * UNIT, y: s.at.y * UNIT, w: s.w * UNIT, h: (s.h || s.w) * UNIT };
+        }
+        const sp = shapePath(s.kind, { w: box.w, h: box.h }, seed);
+        rect = { x: box.x - 6, y: box.y - 6, w: sp.w, h: sp.h };
+        d = sp.d;
+      }
+      shapes.push({ key: sid, rect, d, color: COLORS.includes(color) ? color : 'ink', width });
+    }
+    // ── 线：先于落位（连到真实产物的线会改主角判断 → 尺寸） ──
+    const idOf = new Map();
+    for (const n of nodes) idOf.set(n.key, `text:a${stamp()}`);
+    for (const sh of shapes) idOf.set(sh.key, `scribble:a${stamp()}`);
+    const resolveEnd = (raw) => {
+      if (idOf.has(raw)) return idOf.get(raw);
+      const cid = normalizeCanvasId(raw);
+      if (cid && board.objects?.[cid]) return cid;
+      if (cid && board.zones?.[cid] !== undefined) return cid;
+      return null;
+    };
+    const bindings = {};
+    const badEdges = [];
+    for (const e of edgesIn) {
+      const from = resolveEnd(e.from); const to = resolveEnd(e.to);
+      if (!from || !to || from === to) { badEdges.push(`${e.from}→${e.to}`); continue; }
+      bindings[`b:a${stamp()}`] = {
+        type: e.type || 'link', from, to, by: 'agent', material: e.material || 'pencil',
+        ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}), ...(e.label ? { label: e.label } : {}),
+      };
+    }
+    const after = { ...board, bindings: { ...(board.bindings || {}), ...bindings } };
+
+    // ── 宏观落位（resolvePlacement 统一走） ──
+    const local = bboxOf([
+      ...nodes.map(n => ({ ...pos.get(n.key), w: n.w, h: n.h })),
+      ...shapes.map(sh => sh.rect),
+    ]);
+    if (local.w > SKETCH_MAX.w || local.h > SKETCH_MAX.h) {
+      return err(`这张图太大了（${Math.round(local.w)}x${Math.round(local.h)} 世界像素，上限 ${SKETCH_MAX.w}x${SKETCH_MAX.h}）：用户在 80%~100% 缩放下看不全。拆成两张（各自一个 tag，之间用线连），或减节点/缩 w。`);
+    }
+    let zone = '';
+    let anchorRect = null;
+    if (args.near) {
+      const a = resolveAnchor(args.near, { ...board, objects: board.objects });
+      if (!a && !args.at) return err(`锚点 ${args.near} 还没有座位，也不是板上任何 tag（read_board 里看不到就锚不上）。`);
+      if (a) {
+        zone = a.zone;
+        const e = board.objects[a.anchorId];
+        anchorRect = { x: a.rect.x, y: a.rect.y, ...estimateSizeOn(after, a.anchorId, e) };
+        if (a.rect.w > anchorRect.w) anchorRect = a.rect;   // tag 包络比单卡大就用包络
+      }
+    }
+    const obstacles = obstaclesOf(after, zone);
+    const vpRect = vpRectFor(zone);
+    const placed = resolvePlacement({
+      box: { w: local.w + 24, h: local.h + 24 },
+      at: args.at || null, anchor: anchorRect, side: args.side || null,
+      obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect,
+      screen: fit.screen ? fit : null,
+    });
+    const ox = placed.x - local.x + 12; const oy = placed.y - local.y + 12;
+
+    // ── 落盘 ──
+    const objects = {};
+    const common = { z: 1, zone, by: 'agent', seat: 'agent', ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}) };
+    for (const n of nodes) {
+      const p = pos.get(n.key);
+      objects[idOf.get(n.key)] = {
+        x: Math.round(p.x + ox), y: Math.round(p.y + oy), w: n.w, h: n.h, kind: 'text',
+        data: { t: n.text, ...(n.format === 'md' ? { format: 'md' } : {}), font: TEXT_FONTS.includes(n.font) ? n.font : 'pen', size: n.size, color: n.color, lid: n.key },
+        ...common,
+      };
+    }
+    for (const sh of shapes) {
+      objects[idOf.get(sh.key)] = { x: Math.round(sh.rect.x + ox), y: Math.round(sh.rect.y + oy), w: Math.round(sh.rect.w), h: Math.round(sh.rect.h), kind: 'scribble', data: { d: sh.d, color: sh.color, width: sh.width }, ...common };
+    }
+    const saved = await patchBoard(projectId, { objects, bindings });
+    const landed = Object.keys(objects).filter(id => saved.objects?.[id]).length;
+    if (!landed) return err('草图被 board 拒了（内容或字段不合法）。');
+    const world = { x: Math.round(local.x + ox), y: Math.round(local.y + oy), w: Math.round(local.w), h: Math.round(local.h) };
+    try {
+      ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: tag ? `画了一张草图 #${tag}` : '画了一个记号' });
+      ctx?.emit?.(Events.boardFocus(world, { tag: tag || null, layer: zone }));
+    } catch { /* fail-soft */ }
+    const lines = [
+      `Sketch${tag ? ` #${tag}` : ''} landed${staging ? ' as STAGING (半透明)' : ''}: ${nodes.length} nodes, ${shapes.length} shapes, ${Object.keys(bindings).length} lines; layout ${tpl}; at world (${world.x},${world.y}) ${world.w}x${world.h} — ${describePlacement(placed, { requestedAt: args.at })}.`,
+      `ids: ${[...idOf].map(([k, v]) => `${k}=${v}`).join(', ')}`,
+      `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
+    ];
+    if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}`);
+    if (world.w > fit.w || world.h > fit.h) lines.push(`⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
+    if (vp?.zoom && vp.zoom < 0.8) lines.push(`User's zoom is ${vp.zoom} (<0.8): keep nodes md/lg and say in one line that there is a sketch on the board.`);
+    lines.push(staging
+      ? `Next: look_at_board {tag:"${tag}"} to check it, then finish_sketch {tag:"${tag}"} (or it commits at turn end).`
+      : `Next: look_at_board ${tag ? `{tag:"${tag}"}` : '{around: one of the ids}'} to check it.`);
+    return { content: [{ type: 'text', text: lines.join('\n') }] };
+  };
 }
