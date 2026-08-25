@@ -27,7 +27,7 @@ import { useBlackboardWiring } from './useBlackboardMode.js';
 import { eyeParams } from './eye-mode.js';
 import { boxUnion } from '../../lib/board-camera.js';
 import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as presenceRectFor, MAIN_AGENT_ID, colorFor, hintPresence, expireHint } from '../../lib/board-presence.js';
-import { useStageState, splitStageCards, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
+import { useStageState, splitStageCards, ChalkLiveInk, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
 import { AmbientSpriteLayer, SpriteAskInput, useSpriteAmbient } from './SpriteSketchLayer.jsx';
 import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
 import { useBoardMoves } from './useBoardMoves.js';
@@ -243,7 +243,6 @@ export default function BoardCanvas({
   const [chalkEditMode, setChalkEditMode] = useState(false);
   const chalkEditModeRef = useRef(false);
   chalkEditModeRef.current = chalkEditMode;
-  const chalkArmedAtRef = useRef({ id: null, t: 0 });   // 双按武装的时间戳（吞掉同一手势的 dblclick）
   // 持久化 + agent 可拨（08-25）：存 ui-config.chalk_edit；agent 的 edit_board
   // chalk_edit op 经 WS → ProjectWorkspace → 窗口事件 nd:chalk-edit 当场生效
   useEffect(() => {
@@ -882,7 +881,7 @@ export default function BoardCanvas({
     recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
     zMaxRef, toolRef, drawModeRef, chalkEditModeRef, selectedIdsRef,
     setSelectedId, setSelectedIds, noteUserTakeover, camApiRef, scrollRef,
-    moveEntry, groupInto, chalkArmedAtRef,
+    moveEntry, groupInto,
   });
 
   const wasDrag = () => !!(dragRef.current?.moved || recentDragMovedRef.current);
@@ -1369,7 +1368,22 @@ export default function BoardCanvas({
   // （image 卡 2026-08-14 迁出 —— 幻影入座见 PhantomLayer.jsx，occupancy 参数
   //   连同它的唯一消费方 placeImageCard 一起拆除）
   const visibleIdSet = new Set(visibleObjects.map(o => o.id));
-  const { anchoredCards, dockPanels, dockChips, spriteCards } = splitStageCards({
+  // 板书直播的落点（08-25：直接写在画布上）：首见钉在视口内偏左上，进行中不追手；
+  // 卡收场后条目顺手清（防 Map 无限长）
+  const liveChalkSpotsRef = useRef(new Map());
+  const liveChalkSpotFor = (blockId) => {
+    const m = liveChalkSpotsRef.current;
+    if (!m.has(blockId)) {
+      const r = scrollRef.current?.getBoundingClientRect();
+      if (!r) return null;
+      const w = camera.toWorld(r.left + r.width * 0.3, r.top + r.height * 0.24);
+      m.set(blockId, { x: Math.round(w.x), y: Math.round(w.y) + m.size % 3 * 40 });
+      if (m.size > 12) { const k = m.keys().next().value; m.delete(k); }
+    }
+    return m.get(blockId);
+  };
+
+  const { anchoredCards, dockPanels, dockChips, spriteCards, chalkCards } = splitStageCards({
     stageCards, positioned, visibleIdSet, visibleZones, focusZone: '',
   });
 
@@ -1554,14 +1568,9 @@ export default function BoardCanvas({
         // 不冻的话窗里窗外是同一个站点的双实例全速跑 —— 08-24 性能案）
         previewPaused={deckOpen}
         onPrimary={() => {
-          if (!win && obj.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(obj.id)) {
-            setSelectedId(obj.id);
-            return;
-          }
-          // 武装那一下的 dblclick 到此为止 —— 编辑要武装态**再**双击（08-25 探针：
-          // 不吞的话武装即开就地编辑器，后续按下全进编辑框，卡永远拖不动）
-          const armed = chalkArmedAtRef.current;
-          if (!win && obj.chalk && armed.id === obj.id && Date.now() - armed.t < 600) return;
+          // 板书只认「改板书」开关（08-25 拍板）：关着时双击不开编辑器（这条
+          // dblclick 理论上到不了这儿 —— 空地按下被平移层捕获重定向；留闸兜底）
+          if (!win && obj.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(obj.id)) return;
           primaryOpen(obj);
         }}
         onAdd={() => handleAdd(obj)}
@@ -1729,6 +1738,7 @@ export default function BoardCanvas({
 
           {/* 关系线（世界坐标，铺在物件之下）*/}
           <TagHullLayer positioned={positioned} onGrab={onTagGrab} />
+          {chalkCards.map(c => <ChalkLiveInk key={c.blockId} card={c} spot={liveChalkSpotFor(c.blockId)} />)}
           <BindingLayer
             bindings={bindings}
             rectOf={rectOfId}

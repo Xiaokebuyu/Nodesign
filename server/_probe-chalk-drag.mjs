@@ -3,8 +3,8 @@
  * 用法：node --env-file=.env server/_probe-chalk-drag.mjs [--keep]
  *
  * 建探针项目 → 落两条板书（一条带 nd:controls 按钮、一条纯文字）→ 真浏览器
- * （admin cookie，普通 /work 页非 eye）→ 对每条：双击武装 → 按住拖 200px → 松手，
- * 读回 board.json 看 x 有没有动、seat 是否变 user。
+ * （admin cookie）。语义（08-25 拍板）：只认「改板书」开关 —— 关=拖不动，
+ * 开（chalk_edit op）=直接拖。两态都验。
  */
 import { launchPerceptionBrowser } from './engine/mcp/tools/helpers/perception-page.js';
 import { createProject, deleteProject } from './projects/store.js';
@@ -39,30 +39,34 @@ try {
   await page.waitForSelector('[data-board-object]', { timeout: 25_000 });
   await new Promise(r => setTimeout(r, 1500));
 
-  for (const id of ids) {
+  const dragOn = async (id, phase) => {
     const sel = `[data-board-object="${id.replace(/"/g, '\\"')}"]`;
     const el = page.locator(sel).first();
-    await el.scrollIntoViewIfNeeded().catch(() => {});
     const box = await el.boundingBox();
-    if (!box) { console.log('✗ 找不到元素：', id); continue; }
-    // 落点挑卡片顶部条（避开按钮区）：x 中心，y 顶部 +10
+    if (!box) { console.log('✗ 找不到元素：', id); return; }
     const px = box.x + box.width / 2; const py = box.y + 10;
-    console.log(`\n== ${id.split('/').pop()} ==`);
-    console.log('idle attr:', await el.getAttribute('data-chalk-idle'));
-    await page.mouse.dblclick(px, py);
-    await new Promise(r => setTimeout(r, 400));
-    console.log('武装后 idle attr:', await el.getAttribute('data-chalk-idle'));
+    const b = (await readBoard(proj.id)).objects[id];
     await page.mouse.move(px, py);
     await page.mouse.down();
     for (let i = 1; i <= 10; i += 1) { await page.mouse.move(px + i * 20, py + i * 8); await new Promise(r => setTimeout(r, 30)); }
     await page.mouse.up();
-    await new Promise(r => setTimeout(r, 1200));   // 800ms 防抖落盘
-    const after = await readBoard(proj.id);
-    const a = after.objects[id]; const b = before.objects[id];
-    console.log(`拖拽结果：(${b.x},${b.y}) → (${a.x},${a.y})  seat:${a.seat}  ${a.x !== b.x || a.y !== b.y ? '✓ 动了' : '✗ 没动'}`);
-    await page.keyboard.press('Escape');
-    await new Promise(r => setTimeout(r, 300));
-  }
+    await new Promise(r => setTimeout(r, 1200));
+    const a = (await readBoard(proj.id)).objects[id];
+    const moved = a.x !== b.x || a.y !== b.y;
+    console.log(`[${phase}] ${id.split('/').pop()}：(${b.x},${b.y}) → (${a.x},${a.y}) seat:${a.seat} ${moved ? '动了' : '没动'}`);
+    return moved;
+  };
+  console.log('\n== 开关关：都该拖不动 ==');
+  for (const id of ids) { const m = await dragOn(id, '关'); console.log(m ? '✗ 不该动' : '✓'); }
+  // agent 开「改板书」→ 前端当场生效（走真 WS 太绕：这里直接刷新读 ui-config）
+  const { makeEditBoardTool } = await import('./engine/mcp/tools/edit-board.js');
+  await makeEditBoardTool({ projectId: proj.id, sharedRoot: getSharedDir(proj.id), ctx: { emit() {} } })
+    .handler({ ops: [{ op: 'chalk_edit', on: true }] });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('[data-board-object]', { timeout: 25000 });
+  await new Promise(r => setTimeout(r, 1500));
+  console.log('\n== 开关开：都该直接拖动 ==');
+  for (const id of ids) { const m = await dragOn(id, '开'); console.log(m ? '✓' : '✗ 该动'); }
 } finally {
   try { await browser?.close(); } catch { /* */ }
   if (!keep) { deleteProject(proj.id); console.log('\ncleaned', proj.id); }

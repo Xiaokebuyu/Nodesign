@@ -7,7 +7,7 @@
  * 整组一起走）、相机补帧、边缘跟车、#tag 包络小标整组抓手、松手落点判定
  * （进夹/成夹/落地 + seat:'user' 标记）。语义与注释自 BoardCanvas 原样搬入。
  */
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useDragEdgePan } from './useDragEdgePan.js';
 import { computeDropHint } from '../../lib/board-drop-hint.js';
 
@@ -17,9 +17,8 @@ export function useBoardObjectDrag({
   recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
   zMaxRef, toolRef, drawModeRef, chalkEditModeRef, selectedIdsRef,
   setSelectedId, setSelectedIds, noteUserTakeover, camApiRef, scrollRef,
-  moveEntry, groupInto, chalkArmedAtRef,
+  moveEntry, groupInto,
 }) {
-  const lastChalkPressRef = useRef(null);   // 板书双按武装的计时
   const onObjectPointerDown = (e, o) => {
     if (e.button !== 0) return;
     if (e.target.closest('[data-board-action]')) return;   // 按钮不触发拖拽
@@ -27,23 +26,11 @@ export function useBoardObjectDrag({
     // 挂在外层，事件是**先卡片后画布**冒泡上去的 —— 卡片不主动让路的话，
     // 按在卡片上会同时起一个物件拖拽和一次平移，两边各拽各的。
     if (camApiRef.current?.isHandMode?.()) return;
-    // 板书防误触：编辑模式关着且这条板书没被双击武装 → 这一下不归卡
-    //（事件照常冒泡到画布层，board-hit 把它当空地 —— 平移/框选都照旧）。
-    // ⛔武装不能靠 dblclick 事件（08-25 探针实锤）：画布把这一按当空地后
-    // 平移层 setPointerCapture，click/dblclick 被重定向到公共祖先，卡上的
-    // onDoubleClick 永远收不到 —— 在 pointerdown 层自己数两连按。
-    if (o.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(o.id)) {
-      const now = Date.now(); const lp = lastChalkPressRef.current;
-      if (lp && lp.id === o.id && now - lp.t < 420) {
-        lastChalkPressRef.current = null;
-        if (chalkArmedAtRef) chalkArmedAtRef.current = { id: o.id, t: now };
-        setSelectedId(o.id);          // 武装（下一按就能拖）
-        e.stopPropagation();          // 这一按归武装，不给平移/框选
-        return;
-      }
-      lastChalkPressRef.current = { id: o.id, t: now };
-      return;
-    }
+    // 板书防误触（08-25 拍板收严）：只认「改板书」开关 —— 关着时未被选中的
+    // 板书对手势就是空地（平移/框选照旧；框选选中后可整批拖）。曾有"双按武装"
+    // 一档，让开关名存实亡（怎么按都能拖能编辑），当天撤掉：要动板书，开开关
+    //（agent 会替你开：edit_board chalk_edit）或框选。
+    if (o.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(o.id)) return;
     // 工具在手（画笔/批注）时这一下归工具：按在卡上是要在卡上画、标，不是要
     // 拖卡。少了这条，笔画起点落在卡上会同时武装一次物件拖拽 —— 抬 z、写盘，
     // 而笔画提交又吞掉抬手，dragRef 残骸让那张卡黏住光标

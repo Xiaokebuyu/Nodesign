@@ -276,6 +276,7 @@ export function splitStageCards({ stageCards, positioned, visibleIdSet, visibleZ
   const dockPanels = [];
   const dockChips = [];
   const spriteCards = [];
+  const chalkCards = [];
   const visibleZoneOf = (zid) => (zid ? visibleZones.find(v => !v.collapsed && v.id === zid) : null);
   // 同一块区里并发的同类卡各占一个坑位，不要叠在同一个点上
   const slots = new Map();
@@ -290,7 +291,8 @@ export function splitStageCards({ stageCards, positioned, visibleIdSet, visibleZ
     // 代码直播 / 终端 = 精灵的输出框（2026-08-14 用户拍板）：不再贴目标物件
     // 或掉 dock，跟着精灵走、绕它找位（AmbientSpriteLayer 的 findFrameSpot）。
     // 贴物件那条路留给"已更新"角标。
-    if (c.kind === 'code' || c.kind === 'terminal' || c.kind === 'chalk') { spriteCards.push(c); continue; }
+    if (c.kind === 'chalk') { chalkCards.push(c); continue; }   // 直接写在画布世界坐标里（08-25 拍板：不要浮层输入框）
+    if (c.kind === 'code' || c.kind === 'terminal') { spriteCards.push(c); continue; }
     if (c.kind === 'chip') { dockChips.push(c); continue; }
     if (c.kind === 'question') { dockPanels.push(c); continue; }
     const o = c.objectId ? positioned.find(it => it.id === c.objectId) : null;
@@ -302,7 +304,8 @@ export function splitStageCards({ stageCards, positioned, visibleIdSet, visibleZ
   }
   // 并发时序稳定：按开工时间排，"最近两张露出"的口径才不会抖
   spriteCards.sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
-  return { anchoredCards, dockPanels, dockChips, spriteCards };
+  chalkCards.sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
+  return { anchoredCards, dockPanels, dockChips, spriteCards, chalkCards };
 }
 
 // ── 板内坐标系那一面（角标 + 贴物件卡）──
@@ -412,10 +415,6 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
   void scale;   // 位移拖拽随子代理便利贴一起退役（2026-08-18），参数保留兼容调用方
   const running = card.status === 'running';
   const isTerm = card.kind === 'terminal';
-  // 板书直播（08-25）：agent 说的话不走墨底终端面 —— 纸面 + 楷体，粉笔字
-  // 一行行长出来。设计语言的分界照旧：机器写的（代码/终端）等宽墨底，
-  // 对人说的（板书）纸面。
-  if (card.kind === 'chalk') return <ChalkLiveCard card={card} />;
   // 身份跟着会话模型走（08-21）：边色和徽记都是"谁在写这段代码"，跑 DeepSeek 就不该是 Claude 的橙
   const brand = useCurrentModelBrand();
   const border = card.status === 'fail' ? '#b0554f' : card.status === 'ok' ? '#4f8f5b' : alpha(brandColor(brand) || '#D97757', 0.7);
@@ -476,37 +475,29 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
   );
 }
 
-/** 板书直播卡：纸面 + 楷体 md 渲染，随 token 长高、贴底滚动。落定（工具执行完）
- *  真板书由 board.updated 上墙，这张直播卡走原有的 ok→淡出节奏交棒。 */
-function ChalkLiveCard({ card }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [card.text]);
+/**
+ * 板书直播 —— **直接写在画布上**（08-25 拍板：不要浮层输入框）。
+ * 世界坐标裸板书的样子：楷体 md、无卡片外观、跟着镜头缩放平移；running 带光标，
+ * 工具执行完淡出，真板书经 board.updated 上墙接棒。位置由 BoardCanvas 定
+ * （视口里的一块空地，进行中钉死不追手）。
+ */
+export function ChalkLiveInk({ card, spot }) {
+  if (!spot) return null;
   const running = card.status === 'running';
   return (
-    <div data-stage="card" data-stage-kind="chalk" data-stage-status={card.status} style={{
-      borderRadius: RADIUS.lg, overflow: 'hidden', border: `1px solid ${alpha('#2b2117', 0.18)}`,
-      background: COLOR.bgWhite, boxShadow: '0 8px 24px rgba(40,32,16,0.22)',
-      animation: card.status === 'ok'
-        ? `${POP_IN}, ndStageOut 380ms ease 900ms forwards`
-        : POP_IN,
+    <div data-stage="chalk-live" style={{
+      position: 'absolute', left: spot.x, top: spot.y, width: 432, zIndex: 3,
+      pointerEvents: 'none', padding: '4px 6px', opacity: card.status === 'fail' ? 0.3 : 0.88,
+      animation: card.status === 'ok' ? 'ndStageOut 500ms ease 700ms forwards' : POP_IN,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `${GAP.xs}px ${GAP.base}px`, borderBottom: `1px solid ${alpha('#2b2117', 0.08)}` }}>
-        <PencilLine size={10} color={COLOR.sub} />
-        <span style={{ fontSize: FONT_SIZE.xs, color: COLOR.sub, flex: 1 }}>
-          {card.sketching ? '正在画图…' : running ? '正在写板书…' : '板书已上墙'}
-        </span>
-        {running && <span style={{ width: 9, height: 9, border: `1.5px solid ${alpha('#2b2117', 0.2)}`, borderTopColor: COLOR.sub, borderRadius: RADIUS.round, animation: 'ndSpin 800ms linear infinite', flexShrink: 0 }} />}
-      </div>
-      {card.text ? (
-        <div ref={ref} style={{ padding: `${GAP.sm}px ${GAP.base}px`, maxHeight: 220, overflowY: 'auto' }}>
-          <MdInk text={card.text} fontFamily={FONT_KAI} fontSize={13} color={COLOR.ink} />
-        </div>
-      ) : (
-        <div style={{ padding: `${GAP.sm}px ${GAP.base}px`, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>…</div>
-      )}
+      {card.sketching && !card.text
+        ? <span style={{ fontFamily: FONT_KAI, fontSize: 14, color: COLOR.sub }}>（正在画图…）</span>
+        : (
+          <>
+            <MdInk text={card.text || ''} fontFamily={FONT_KAI} fontSize={16} color={COLOR.ink} />
+            {running && <span style={{ color: COLOR.sub, animation: 'ndSpin 1s steps(2) infinite' }}>▍</span>}
+          </>
+        )}
     </div>
   );
 }
