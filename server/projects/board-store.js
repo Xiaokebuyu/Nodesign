@@ -122,7 +122,8 @@ export function patchBoard(pid, patch) {
       for (const [id, b] of Object.entries(patch.bindings)) {
         if (typeof id !== 'string' || id.length > 300) continue;
         if (b === null) { delete board.bindings[id]; continue; }
-        const s = sanitizeBinding(b);
+        // 合并语义同 objects（08-25）：改材质/label 的瘦 patch 别抹掉 follow 等字段
+        const s = sanitizeBinding(board.bindings[id] ? { ...board.bindings[id], ...b } : b);
         if (!s) continue;
         // 端点也要转发：agent 本轮拿旧路径连的线，落下来必须连到新名字上
         const fixed = { ...s, from: fwd(s.from), to: fwd(s.to) };

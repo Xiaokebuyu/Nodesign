@@ -51,6 +51,8 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('set_edge'), id: z.string().min(1).max(300), label: z.string().max(60).optional(), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), from: z.string().min(1).max(300).optional().describe('re-point the line: new source end'), to: z.string().min(1).max(300).optional().describe('re-point the line: new target end') }),
   z.object({ op: z.literal('remove_edge'), id: z.string().min(1).max(300) }),
   z.object({ op: z.literal('reflow'), tag: z.string().min(1).max(40), layout: z.enum(['column', 'row']).optional().describe('default column: restack the group in reading order with real sizes (use after set_text changes heights)') }),
+  z.object({ op: z.literal('follow'), group_tag: z.string().min(1).max(40).describe('the group that should follow (e.g. a status panel)'), target_tag: z.string().min(1).max(40).describe('whenever a new item with this tag lands, the group auto-moves beside it and the anchor line re-points'), side: z.enum(['right', 'left', 'above', 'below']).optional(), label: z.string().max(60).optional() }),
+  z.object({ op: z.literal('unfollow'), group_tag: z.string().min(1).max(40) }),
   z.object({ op: z.literal('commit'), tag: z.string().max(40).optional().describe('make staging solid; omit tag = everything staging') }),
   z.object({ op: z.literal('erase_group'), tag: z.string().min(1).max(40).describe('delete the whole tagged group (notes/shapes/lines; artifact cards only lose the tag)') }),
   z.object({ op: z.literal('feature'), id: z.string().min(1).max(300).describe('make this the hero of the desktop') }),
@@ -70,8 +72,10 @@ ops (run in order; a failing op is reported, the rest still apply):
  notes included: file + seat + lines go together) · add_node{id?,text,at:{ref,side,gap?},…} ·
  add_edge{from,to,type?,material?,label?} · set_edge{id,from?,to?,label?,type?,material?}
  (re-point a line in one op) · remove_edge{id} · reflow{tag,layout?} (restack a group after
- text edits changed heights) · commit{tag?} (staging → solid) · erase_group{tag} ·
- feature{id} / unfeature (hero of the desktop).
+ text edits changed heights) · follow{group_tag,target_tag,side?} (standing rule: whenever a
+ new item with target_tag lands, the group auto-moves beside it — a status panel that tracks
+ the latest chapter needs this ONCE, not per turn) · unfollow{group_tag} ·
+ commit{tag?} (staging → solid) · erase_group{tag} · feature{id} / unfeature (hero).
 Moves avoid collisions (nearest free cell, user-dragged seats are never displaced).
 For brand-new content use write_on_board.`,
     {
@@ -283,6 +287,24 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             cur += (horizontal ? m.r.w : m.r.h) + 16;
           }
           if (skipped.length) report.push(`· #${i + 1} reflow: 跳过用户拖过的 ${skipped.length} 件`);
+          ok += 1;
+        } else if (o.op === 'follow') {
+          const members = Object.entries(live).filter(([, e]) => e.tag === o.group_tag && Number.isFinite(e?.x));
+          if (!members.length) { fail(`没有 #${o.group_tag} 的东西`); continue; }
+          const targets = Object.entries(live).filter(([, e]) => e.tag === o.target_tag && Number.isFinite(e?.x));
+          if (!targets.length) { fail(`目标 tag #${o.target_tag} 板上还没有东西`); continue; }
+          const from = members.sort((a, b) => a[1].y - b[1].y)[0][0];   // 组里最上面那件当代表
+          const to = targets.sort((a, b) => (a[1].y + (a[1].h || 0)) - (b[1].y + (b[1].h || 0))).pop()[0];   // 最下面 = 最新
+          if (from === to) { fail('组代表和目标是同一件（group_tag/target_tag 传反了？）'); continue; }
+          const existing = Object.entries(liveBindings).find(([, b]) => b.follow === o.target_tag && live[b.from]?.tag === o.group_tag);
+          const id = existing ? existing[0] : `b:a${stamp()}`;
+          const binding = { type: 'annotates', from, to, by: 'agent', label: o.label || '跟随', follow: o.target_tag, ...(o.side ? { followSide: o.side } : {}) };
+          bindings[id] = binding; liveBindings[id] = binding; ok += 1;
+          report.push(`· follow：#${o.group_tag} 从此跟着 #${o.target_tag} 的最新一件（新件落板自动挪，不用每轮手搬）`);
+        } else if (o.op === 'unfollow') {
+          const hits = Object.entries(liveBindings).filter(([, b]) => b.follow && live[b.from]?.tag === o.group_tag);
+          if (!hits.length) { fail(`#${o.group_tag} 没有跟随线`); continue; }
+          for (const [id] of hits) { bindings[id] = null; delete liveBindings[id]; }
           ok += 1;
         } else if (o.op === 'commit') {
           const { committed: n } = await commitStaging(projectId, { tag: o.tag || null });

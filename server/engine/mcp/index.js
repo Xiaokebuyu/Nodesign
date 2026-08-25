@@ -48,7 +48,7 @@ import {
 } from './tools/browse.js';
 import { makeBrowserScreenshotTool } from './tools/browse-screenshot.js';
 import { makeBrowserComputerTool } from './tools/browse-computer.js';
-import { makeBrowserFindTool, makeBrowserBatchTool } from './tools/browse-find-batch.js';
+import { makeBrowserFindTool, makeBrowserBatchTool, makeBatchTool } from './tools/browse-find-batch.js';
 import { makeArtifactOpenTool, makeArtifactComputerTool, makeArtifactFindTool, makeArtifactMotionTool, makeArtifactBatchTool } from './tools/artifact-session.js';
 import { makeGetComputedStylesTool } from './tools/get-computed-styles.js';
 import { makeNavigateToPageTool } from './tools/navigate-to-page.js';
@@ -132,6 +132,12 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   // 浏览通道里能被 browser_batch 串起来的七件：先建一次，batch 拿**同一批实例**
   // （projectId/ctx 绑在 handler 里，不能再造第二份）。只有 request_help 不进
   // batch（它阻塞等人）；capture 在里面 —— 逐页采 token 正是 batch 要省的那种回合。
+  const boardBatchable = [
+    makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
+    makeEditBoardTool({ projectId, sharedRoot, ctx }),
+    makeReadBoardTool({ projectId }),
+    makeCreateOnBoardTool({ projectId, ctx }),
+  ];
   const browseBatchable = [
     makeBrowserNavigateTool({ projectId, ctx }),
     makeBrowserReadTool({ projectId }),
@@ -297,18 +303,28 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // **只有它知道**的关系画到画布上。画布知道每个产物是什么，但不知道它们
       // 之间是什么关系 —— 那是北极星（排出有版面感的布局）真正缺的那一块。
       makeRelateOnBoardAlias({ sharedRoot, projectId, ctx }),
-      // agent 摆位四件（2026-08-14）：看版面 / 语义摆位·立主角 / 落手写便签 / 归纳收纳
-      makeReadBoardTool({ projectId }),
+      // 黑板核心四件（08-25 范式重做）：写=write_on_board（件数判据分流一句话/
+      // 一张图），改=edit_board（吞 arrange/finish/relate/edit_sketch），看=read，
+      // 记号=create。board_batch 用**同一批实例**串行跑（一章 RP 的板面维护
+      // 八次往返收成一次）。旧名薄别名一版防 resume。
+      ...boardBatchable,
+      makeBatchTool({
+        name: 'board_batch',
+        description: `Run several board actions in ONE round-trip — write a note, update the
+status panel, re-thread lines, all in one call (a chapter's board upkeep is one batch, not
+eight calls). Same contract as artifact_batch: actions run in order, a failure stops the
+rest (already-ran steps are NOT rolled back — continue from the failed step). Batchable:
+write_on_board / edit_board / read_board / create_on_board. Later steps can reference
+things earlier steps made: chain:true threads onto the note a previous step wrote (same
+tag); sketch local ids (lid) resolve in edit_board ops.`,
+        tools: boardBatchable,
+        batchable: boardBatchable.map(t => t.name),
+      }),
       makeArrangeOnBoardAlias({ projectId, sharedRoot, ctx }),
-      makeCreateOnBoardTool({ projectId, ctx }),
       makeOrganizeBoardTool({ projectId, ctx }),
-      // 黑板（2026-08-23；08-25 范式重做：写字入口只剩 write_on_board，
-      // 件数判据自动分流一句话/一张图；sketch_on_board = 薄别名防老会话 resume）
       makeSketchOnBoardAlias({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
       makeFinishSketchTool({ projectId, ctx }),
-      makeEditBoardTool({ projectId, sharedRoot, ctx }),
       makeEditSketchAlias({ projectId, sharedRoot, ctx }),
-      makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
       makeLookAtBoardTool({ projectId, ctx }),
       makeReadUserViewTool({ projectId }),
 

@@ -32,13 +32,15 @@ rp-craft 不迟。
 
 ## 3. 状态板：一个组，跟着最新章走
 
-开场画一次：`write_on_board { tag:"状态板", layout:"column", nodes:[PC卡, 当前场景, 明骰表] }`，
-并画一条锚线 `add_edge {from:状态板首卡, to:第一章, type:"annotates", label:"状态锚"}`。
-每章收尾三步（都在一次 `edit_board` 里）：
+开场画一次：`write_on_board { tag:"状态板", layout:"column", staging:false, nodes:[PC卡, 当前场景, 明骰表] }`
+（staging:false —— 状态板是常设件不是草稿），
+然后立一条跟随规则（**只立一次**）：
+`edit_board { ops:[{ op:"follow", group_tag:"状态板", target_tag:"章节", side:"right" }] }`
+—— 从此每章板书一落，状态板自动挪到它右侧、锚线自动重指，你不用每轮手搬。
+每章收尾只剩两步（一次 `edit_board`）：
 1. `set_text` 更新变了的卡（内容变长没关系，下一步会重排）
 2. `reflow {tag:"状态板"}` —— set_text 改高后整组重堆，防叠字
-3. 重锚到新章：`move_group {tag:"状态板", to:{ref:新章板书, side:"right"}}` +
-   `set_edge {id:锚线, to:新章板书}` —— 状态永远跟着用户的眼睛走，旧章链留在原地可回看。
+用户把状态板拖到别处后它就不再被自动挪（用户的座位优先），锚线仍会重指。
 
 ## 4. 在场人物栏
 
@@ -79,5 +81,5 @@ rp-craft 不迟。
 
 - 侧栏只说一句「第 N 章上板了」，正文全在板上，别两头贴。
 - 板书是 md：对白、分镜留白按文字节奏排，不要塞 sketch 节点（那是画图的）。
-- 每章一次 `edit_board` 批量做完状态维护，别拆成五六次调用。
+- 一章的板面动作（正文、选项、状态维护）用一次 `board_batch` 跑完，别拆成七八次调用。
 - 开场先 `read_user_view` 看他的屏幕，版面宽度按他的视口定。

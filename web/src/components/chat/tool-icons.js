@@ -74,6 +74,7 @@ export const TOOL_ICONS = {
   'mcp__nodesign__write_on_board': Pencil,
   'mcp__nodesign__sketch_on_board': Pencil,
   'mcp__nodesign__edit_board': Move,
+  'mcp__nodesign__board_batch': ListOrdered,
   'mcp__nodesign__edit_sketch': Move,
   'mcp__nodesign__finish_sketch': ListChecks,
   'mcp__nodesign__look_at_board': ScanEye,

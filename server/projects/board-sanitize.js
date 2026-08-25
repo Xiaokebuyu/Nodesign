@@ -205,6 +205,11 @@ export function sanitizeBinding(b) {
     ...(isBindingMaterial(b.material) && b.material !== 'ink' ? { material: b.material } : {}),
     ...(sanitizeTag(b.tag) ? { tag: sanitizeTag(b.tag) } : {}),
     ...(b.staging === true ? { staging: true } : {}),
+    // 跟随线（2026-08-25 范式重做，RP「状态板重锚」案）：follow = 目标 tag ——
+    // 这条线的 to 端永远指向该 tag 最新落板的那件，服务端在新件落板时自动重指
+    // 并把 from 端所在的组挪过去（board-follow.js）。followSide = 挪到哪一侧。
+    ...(sanitizeTag(b.follow) ? { follow: sanitizeTag(b.follow) } : {}),
+    ...(['right', 'left', 'above', 'below'].includes(b.followSide) ? { followSide: b.followSide } : {}),
   };
 }
 

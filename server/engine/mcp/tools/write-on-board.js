@@ -30,6 +30,7 @@ import { resolvePlacement, describePlacement } from '../../../lib/board-place.js
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
+import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
 
 const MAX_NODES = 40;
@@ -268,6 +269,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       }
       if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by: 'agent', material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
       await patchBoard(projectId, { objects, bindings });
+      // 跟随线：这个 tag 有人跟着（状态板之类）就自动重锚挪组（fail-soft）
+      if (args.tag) { try { await applyFollows(projectId, { tag: args.tag, newId: rel }); } catch { /* */ } }
 
       const rect = { x: Math.round(placed.x), y: Math.round(placed.y), w: box.w, h: box.h };
       try {
@@ -452,6 +455,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const saved = await patchBoard(projectId, { objects, bindings });
     const landed = Object.keys(objects).filter(id => saved.objects?.[id]).length;
     if (!landed) return err('草图被 board 拒了（内容或字段不合法）。');
+    if (tag && nodes.length) { try { await applyFollows(projectId, { tag, newId: idOf.get(nodes[0].key) }); } catch { /* */ } }
     const world = { x: Math.round(local.x + ox), y: Math.round(local.y + oy), w: Math.round(local.w), h: Math.round(local.h) };
     try {
       ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: tag ? `画了一张草图 #${tag}` : '画了一个记号' });

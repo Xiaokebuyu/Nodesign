@@ -30,6 +30,7 @@ import { textBox } from '../../lib/sketch-layout.js';
 import { getViewpoint } from '../../projects/viewpoint-store.js';
 import { parseChalk, CHALK_DIR } from '../../lib/chalk.js';
 import { isReservedFile, HARD_IGNORE_DIRS, DRAFTS_DIR } from '../../lib/task-scan.js';
+import { applyFollows } from '../../lib/board-follow.js';
 import { canvasIdForRel } from './board-tasklist.js';
 
 const MAX_SEATS_PER_RUN = 24;   // 一轮生成几百个文件的（构建产物漏网）也别刷爆板
@@ -123,6 +124,10 @@ export async function seatArtifacts(projectId, rels) {
   }
 
   if (seated) await patchBoard(projectId, { objects, bindings });
+  // 领养的板书带 tag：有人跟着这个 tag（状态板）就自动重锚（fail-soft）
+  for (const [id, e] of Object.entries(objects)) {
+    if (e?.tag) { try { await applyFollows(projectId, { tag: e.tag, newId: id }); } catch { /* */ } }
+  }
   return { seated, lines };
 }
 
