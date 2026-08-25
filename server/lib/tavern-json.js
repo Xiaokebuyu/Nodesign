@@ -152,3 +152,51 @@ export function fetchEntries(doc, 选) {
   }
   return 出;
 }
+
+/**
+ * PNG 角色卡（2026-08-25，四方世界卡案：iss 上报「不是合法 JSON：�PNG」）。
+ * 酒馆的卡就是一张 PNG，角色数据 base64 后塞在 tEXt 块里：V3 用键 `ccv3`，
+ * V2 用键 `chara`。两个都在时 ccv3 赢（V3 是超集）。不是卡的普通 PNG 返回 null。
+ */
+export function extractCardFromPng(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 16) return null;
+  if (buf.readUInt32BE(0) !== 0x89504e47) return null;   // \x89PNG
+  let off = 8;
+  const found = {};
+  while (off + 12 <= buf.length) {
+    const len = buf.readUInt32BE(off);
+    const type = buf.toString('latin1', off + 4, off + 8);
+    if (type === 'tEXt' && len > 0 && off + 8 + len <= buf.length) {
+      const data = buf.subarray(off + 8, off + 8 + len);
+      const nul = data.indexOf(0);
+      if (nul > 0) {
+        const key = data.toString('latin1', 0, nul);
+        if (key === 'ccv3' || key === 'chara') found[key] = data.subarray(nul + 1).toString('latin1');
+      }
+    }
+    off += 12 + len;
+    if (type === 'IEND') break;
+  }
+  const payload = found.ccv3 || found.chara;
+  if (!payload) return null;
+  try { return JSON.parse(Buffer.from(payload, 'base64').toString('utf8')); } catch { return null; }
+}
+
+/**
+ * 世界书条目全量（带正文）——给 export_book 机械搬运用。判断归 agent（常驻挑选、
+ * 引擎条目丢弃），搬运归机器（375 条 61.8 万字符不该流经上下文）。
+ */
+export function listBookEntries(doc) {
+  const kind = detectKind(doc);
+  const book = kind === 'lorebook' ? doc : (doc?.data?.character_book || doc?.character_book);
+  if (!book) return [];
+  const list = Array.isArray(book.entries) ? book.entries : Object.values(book.entries || {});
+  return list.map((e, i) => ({
+    id: String(e.uid ?? e.id ?? i),
+    名字: e.comment || e.name || (Array.isArray(e.key) ? e.key.join('/') : '') || `条目${i + 1}`,
+    触发: Array.isArray(e.key) ? e.key : (Array.isArray(e.keys) ? e.keys : []),
+    常驻: !!(e.constant),
+    停用: e.enabled === false || e.disable === true,
+    正文: String(e.content || ''),
+  }));
+}
