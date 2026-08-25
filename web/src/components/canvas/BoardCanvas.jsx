@@ -604,7 +604,8 @@ export default function BoardCanvas({
       const next = { ...prev };
       for (const id of ids) {
         if (prev[id] && Number.isFinite(prev[id].x)) continue;   // 已经有坐标了
-        next[id] = { ...(prev[id] || {}), ...seatFixes[id], z: prev[id]?.z ?? 1 };
+        // seat:'auto' = 排出来的座（出处三值 auto/user/agent，user 的永不被重排）
+        next[id] = { ...(prev[id] || {}), ...seatFixes[id], seat: 'auto', z: prev[id]?.z ?? 1 };
         dirtyRef.current.objects.add(id);
         touched = true;
       }
@@ -1011,6 +1012,8 @@ export default function BoardCanvas({
       }
       dropHintRef.current = null;
       setDropHint(null);
+      // 用户亲手拖过 = 座位出处 'user'：服务端排座/跟随从此不许覆盖这个座
+      if (d.moved) setLayout(prev => (prev[d.id] ? { ...prev, [d.id]: { ...prev[d.id], seat: 'user' } } : prev));
       dirtyRef.current.objects.add(d.id);
       scheduleSave();
     }

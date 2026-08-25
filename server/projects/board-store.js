@@ -107,7 +107,14 @@ export function patchBoard(pid, patch) {
         if (!isSafeCanvasId(rawId)) continue;
         const id = fwd(rawId);
         if (o === null) { delete board.objects[id]; removed.add(id); continue; }
-        const s = sanitizeObject(o, board.size);
+        // **合并语义**（2026-08-25）：patch 条目盖在已有条目上，缺席字段保留。
+        // 病根：前端本地 layout 会落后于服务端（board.json 一次性加载闸门），
+        // 入座把 agent 刚写的条目当新客回写一条 {x,y,z} —— 整条替换语义下
+        // by/seat/w/h/tag/staging 全被抹掉且零报错（08-25 体检三陷阱之②）。
+        // 合并后瘦条目只更新它带来的字段。要删整条传 null；单字段清除走
+        // 各自的专用路（commitStaging 清 staging、removeByTag 摘 tag）。
+        const merged = board.objects[id] ? { ...board.objects[id], ...o } : o;
+        const s = sanitizeObject(merged, board.size);
         if (s && (board.objects[id] || Object.keys(board.objects).length < MAX_OBJECTS)) board.objects[id] = s;
       }
     }

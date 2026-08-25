@@ -117,7 +117,7 @@ Keep the chat reply short — a line pointing at the board is enough.`,
       const content = renderChalk({ body, by: 'agent', anchor: anchorId, replyTo: parentId, tag: tag || null, sessionId: sessionId || null });
       const rel = await writeChalkFile(sharedRoot, fileName, content);
 
-      const objects = { [rel]: { x: Math.round(pos.x), y: Math.round(pos.y), z: 1, w: box.w, h: box.h, zone, by: 'agent', ...(tag ? { tag } : {}) } };
+      const objects = { [rel]: { x: Math.round(pos.x), y: Math.round(pos.y), z: 1, w: box.w, h: box.h, zone, by: 'agent', seat: 'agent', ...(tag ? { tag } : {}) } };
       const bindings = {};
       if (anchorId) bindings[`b:a${stamp()}`] = { type: 'annotates', from: rel, to: anchorId, by: 'agent', ...(tag ? { tag } : {}) };
       if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by: 'agent', material: 'pencil', ...(tag ? { tag } : {}) };

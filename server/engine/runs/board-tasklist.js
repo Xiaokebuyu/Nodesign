@@ -79,7 +79,7 @@ async function upsert(st, items) {
   const vp = getViewpoint(st.projectId);
   const vpRect = (vp && !vp.layer && vp.camera) ? vp.camera : null;
   const spot = findSpot({ w: box.w + 24, h: box.h + 24, obstacles, contentBottom: bottom, viewport: vpRect });
-  await patchBoard(st.projectId, { objects: { [st.rel]: { x: spot.x + 12, y: spot.y + 12, z: 1, w: box.w, h: box.h, by: 'agent', tag: st.tag } } });
+  await patchBoard(st.projectId, { objects: { [st.rel]: { x: spot.x + 12, y: spot.y + 12, z: 1, w: box.w, h: box.h, by: 'agent', seat: 'auto', tag: st.tag } } });
 }
 
 export function attachBoardTasklist(bus, projectId) {

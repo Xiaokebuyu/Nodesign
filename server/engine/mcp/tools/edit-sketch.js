@@ -121,7 +121,7 @@ wrong line". For a brand-new diagram use sketch_on_board.`,
             const box = rectOf(id);
             const p = 'ref' in o.to ? placeRel(box, o.to) : { x: e.x + o.to.dx * UNIT, y: e.y + o.to.dy * UNIT };
             if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
-            setObj(id, { ...e, x: Math.round(p.x), y: Math.round(p.y) }); ok += 1;
+            setObj(id, { ...e, x: Math.round(p.x), y: Math.round(p.y), seat: 'agent' }); ok += 1;
           } else if (o.op === 'move_group') {
             const members = Object.entries(live).filter(([, e]) => e.tag === o.tag && Number.isFinite(e?.x));
             if (!members.length) { fail(`没有 #${o.tag} 的东西`); continue; }
@@ -131,7 +131,7 @@ wrong line". For a brand-new diagram use sketch_on_board.`,
             const p = 'ref' in o.to ? placeRel({ w, h }, o.to) : { x: bb.x + o.to.dx * UNIT, y: bb.y + o.to.dy * UNIT };
             if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
             const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
-            for (const [id, e] of members) setObj(id, { ...e, x: e.x + dx, y: e.y + dy });
+            for (const [id, e] of members) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, seat: 'agent' });
             ok += 1;
           } else if (o.op === 'remove') {
             const id = rid(o.id); const e = id && live[id];
@@ -150,7 +150,7 @@ wrong line". For a brand-new diagram use sketch_on_board.`,
             setObj(id, {
               x: Math.round(p.x), y: Math.round(p.y), z: 1, w: box.w, h: box.h, kind: 'text',
               data: { t: o.text, ...(o.format === 'md' ? { format: 'md' } : {}), font: TEXT_FONTS.includes(o.font) ? o.font : 'pen', size, color: o.color || 'ink' },
-              zone, by: 'agent', ...(tag ? { tag } : {}),
+              zone, by: 'agent', seat: 'agent', ...(tag ? { tag } : {}),
             });
             if (o.id) local.set(o.id, id);
             report.push(`+ node ${o.id ? `${o.id}=` : ''}${id}`); ok += 1;

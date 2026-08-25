@@ -155,9 +155,16 @@ export function sanitizeObject(o, size) {
     ...(o.expanded ? { expanded: true } : {}),
     // 显式归属：'' = 明确无归属（覆盖 sid 派生），非空 = 所属工作区 id
     ...(typeof o.zone === 'string' && o.zone.length <= 300 ? { zone: o.zone } : {}),
-    // 出处（2026-08-14 agent 摆位/建元素）：agent 落的座/写的字标出来，
-    // 用户的是默认不标 —— 跟关系线的 by 同一条纪律
-    ...(o.by === 'agent' ? { by: 'agent' } : {}),
+    // 出处（2026-08-14 agent 摆位/建元素）：谁**造**的这件东西。08-25 起也收
+    // 'user'（原来只认 agent，跟 bindings 三值不对称是口径病）
+    ...(o.by === 'agent' || o.by === 'user' ? { by: o.by } : {}),
+    // 座位出处（2026-08-25 范式重做）：谁**摆**的这个座。三值：
+    //   user  = 用户亲手拖的 —— 服务端排座/跟随/整理永远不许覆盖
+    //   auto  = 入座算法排的 —— 可以被重排
+    //   agent = agent 显式摆的 —— 用户可拖走（拖走后变 user）
+    // 没有这个字段，「用户拖过的东西 agent 不许动」在数据上根本表达不出来
+    // （08-25 体检结论：老数据 by 被前端回写抹掉，用户拖的和自动排的分不清）。
+    ...(o.seat === 'user' || o.seat === 'auto' || o.seat === 'agent' ? { seat: o.seat } : {}),
     // 分组标签 + 草稿位（2026-08-23 黑板）。staging = agent 这一轮还在打草稿：
     // 入座不看它、read_board 默认不列它、画面上半透明；落定（commitStaging）清位。
     ...(sanitizeTag(o.tag) ? { tag: sanitizeTag(o.tag) } : {}),

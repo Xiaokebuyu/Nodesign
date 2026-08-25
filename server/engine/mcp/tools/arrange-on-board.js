@@ -108,8 +108,9 @@ drag things afterwards — their move wins, do not fight it.`,
         .map(([id, e]) => ({ ...estimateSizeOn(board, id, e), x: e.x, y: e.y }));
       const pos = nudgeDown(want, sSize, obstacles);
 
+      // seat:'agent' = 这个**座**是 agent 摆的（by 是"谁造的"，别再拿它记摆位出处）
       await patchBoard(projectId, {
-        objects: { [subject]: { ...(subjectEntry || {}), x: pos.x, y: pos.y, by: 'agent' } },
+        objects: { [subject]: { ...(subjectEntry || {}), x: pos.x, y: pos.y, seat: 'agent' } },
       });
       try {
         ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `摆了 ${subject}` });

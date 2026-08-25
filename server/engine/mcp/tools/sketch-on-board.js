@@ -281,7 +281,7 @@ Per sketch: ≤${MAX_NODES} nodes, ${MAX_SHAPES} shapes, ${MAX_EDGES} edges (spl
 
       // ── 落盘 ──
       const objects = {};
-      const common = { z: 1, zone, by: 'agent', tag, ...(staging ? { staging: true } : {}) };
+      const common = { z: 1, zone, by: 'agent', seat: 'agent', tag, ...(staging ? { staging: true } : {}) };
       for (const n of nodes) {
         const p = pos.get(n.key);
         objects[idOf.get(n.key)] = {
