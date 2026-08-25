@@ -63,6 +63,9 @@ function BoardObject({
   const rootRef = useRef(null);
   const textual = o.type === 'text' || !!o.chalk;
   useMeasuredSize(rootRef, o, textual ? onMeasured : null, [o.data?.t, o.text, o.data?.size, o.data?.format]);
+  // 板书 MdInk 的 origin 要引用稳定（MdInk 已 memo：相机平移时 200 张板书别再
+  // 每帧重跑 markdown 解析 —— 08-25 性能探针 17fps 案）
+  const chalkOrigin = useMemo(() => ({ id: o.id, path: o.path || o.id, title: o.title || '' }), [o.id, o.path, o.title]);
   const armHover = () => { clearTimeout(hoverTimer.current); setHover(true); onHoverCard?.(o.id); };
   const disarmHover = () => {
     clearTimeout(hoverTimer.current);
@@ -349,7 +352,7 @@ function BoardObject({
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
           <MdInk
             text={o.text || ''} fontFamily={TEXT_FONT_CSS.kai} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
-            origin={{ id: o.id, path: o.path || o.id, title: o.title || '' }}
+            origin={chalkOrigin}
           />
         </div>
       )}

@@ -13,7 +13,7 @@
  * 状态机这种密而规整的才装进 mermaid 盒子。这条纪律写在 agent 的 prelude 里，
  * 不在这儿强制。
  */
-import { lazy, Suspense, Children, useMemo, useState } from 'react';
+import { lazy, Suspense, Children, useMemo, useState, memo } from 'react';
 import remarkBreaks from 'remark-breaks';
 import MarkdownMath from '../../ui/MarkdownMath.jsx';
 import { COLOR, FONT_MONO, FONT_SIZE, GAP, RADIUS, alpha } from '../../../lib/theme.js';
@@ -92,7 +92,7 @@ function ControlsBlock({ source, origin }) {
   );
 }
 
-export default function MdInk({ text, fontFamily, fontSize, color, origin }) {
+function MdInk({ text, fontFamily, fontSize, color, origin }) {
   const components = useMemo(() => ({
     pre: ({ node, children, ...props }) => {
       const mermaid = fenceSourceOf(children, MERMAID_RE);
@@ -132,3 +132,11 @@ export default function MdInk({ text, fontFamily, fontSize, color, origin }) {
     </>
   );
 }
+
+/**
+ * memo（2026-08-25 性能探针实证）：200 张板书时滚轮平移掉到 17fps —— 相机一动
+ * BoardCanvas 整棵重渲，每帧 200 次 remark/KaTeX 全量解析。markdown 解析是这棵
+ * 子树里最贵的活，props（text/字体/origin）在纯相机移动时全部不变，memo 直接
+ * 把这份钱省掉。origin 由调用方保证引用稳定（BoardObject useMemo）。
+ */
+export default memo(MdInk);
