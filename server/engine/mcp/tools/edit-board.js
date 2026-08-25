@@ -27,7 +27,7 @@ import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, textBox } from '../../../lib/sketch-layout.js';
 import { resolvePlacement } from '../../../lib/board-place.js';
-import { CHALK_DIR } from '../../../lib/chalk.js';
+import { CHALK_DIR, trashChalkFile } from '../../../lib/chalk.js';
 
 const MAX_OPS = 40;
 let seq = 0;
@@ -306,7 +306,8 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
     if (Object.keys(objects).length || Object.keys(bindings).length || heroPatch !== undefined) {
       await patchBoard(projectId, { objects, bindings, ...(heroPatch !== undefined ? { hero: heroPatch } : {}) });
     }
-    for (const abs of chalkUnlinks) { try { await fs.unlink(abs); } catch { /* 已经没了 */ } }
+    // 软删进 .nd/trash/（08-25：删掉的板书要捞得回来，别裸 unlink）
+    for (const abs of chalkUnlinks) await trashChalkFile(sharedRoot, abs);
     try { ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `改了黑板（${ok} 处）` }); } catch { /* */ }
     return { content: [{ type: 'text', text: `Applied ${ok}/${ops.length} op(s).${report.length ? `\n${report.join('\n')}` : ''}` }] };
   };

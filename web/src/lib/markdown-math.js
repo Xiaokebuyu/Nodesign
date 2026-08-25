@@ -17,6 +17,7 @@
  *   - 两步都只在**代码之外**做：围栏代码块和行内 code 里的 `\(`、`$` 是代码。
  */
 import remarkGfm from 'remark-gfm';
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
@@ -67,6 +68,9 @@ export function normalizeMath(text) {
 export const MATH_PLUGINS = Object.freeze({
   // 单美元开着：钱已经在 normalizeMath 里预转义了（CURRENCY），这里放行的
   // 全是真公式。⚠️ 两处是一对 —— 谁绕过 normalizeMath 直接渲染，价钱就会被吃
-  remarkPlugins: [remarkGfm, [remarkMath, { singleDollarTextMath: true }]],
+  // cjk-friendly：CommonMark 的 flanking 规则把 他说**「你好」**然后 里的加粗当
+  // 普通星号（闭合 ** 前是标点后是汉字 = 不算右翼）。板书/聊天里中文引号套加粗
+  // 是家常便饭（08-25 信箱案），这个插件按 CJK 语境放宽判定。
+  remarkPlugins: [remarkGfm, remarkCjkFriendly, [remarkMath, { singleDollarTextMath: true }]],
   rehypePlugins: [[rehypeKatex, { throwOnError: false, strict: 'ignore' }]],
 });

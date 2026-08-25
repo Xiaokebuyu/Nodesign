@@ -106,7 +106,10 @@ export const FONT_SIZE = {
 // ─── Font Families ────────────────────────────────
 
 // 楷体：全站正文。@font-face 在 styles/globals.css，全局只声明一次
-export const FONT_KAI = "'LXGW WenKai ND', 'LXGW WenKai', '霞鹜文楷', serif";
+// emoji 回落（2026-08-25 板书豆腐块案）：楷体/龙藏都没有 emoji 字形，栈里不列
+// emoji 字体的话 🎲✅⏳ 全渲成豆腐块 —— 挂在 serif 之前，只接管 emoji 码位。
+export const FONT_EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'";
+export const FONT_KAI = `'LXGW WenKai ND', 'LXGW WenKai', '霞鹜文楷', ${FONT_EMOJI}, serif`;
 // 等宽：**机器写的东西**才用（文件名、id、token 数、终端输出、时间码）
 export const FONT_MONO = "'SF Mono', 'Cascadia Code', 'Menlo', monospace";
 // FONT_SANS 指向楷体：269 处正文因此一次性归位。名字保留是为了不动那 269 个调用点，

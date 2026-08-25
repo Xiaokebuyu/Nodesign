@@ -90,6 +90,10 @@ describe('edit_board（吞四件 + 新能力）', () => {
     board = await readBoard(pid);
     expect(board.objects[chalkId]).toBeUndefined();
     await expect(fs.access(abs)).rejects.toThrow();
+    // 软删：真身进了 .nd/trash/<日期>/（08-25 信箱：rm 后无法恢复案）
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const trashed = await fs.readdir(path.join(sharedRoot, '.nd', 'trash', day));
+    expect(trashed.some(n => n === path.basename(abs))).toBe(true);
   });
 
   it('remove：用户的板书拒删', async () => {

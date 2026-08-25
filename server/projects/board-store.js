@@ -20,7 +20,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { getSharedDir, ensureProjectWorkspace, gitRenamesSince } from './workspace.js';
-import { CHALK_DIR } from '../lib/chalk.js';
+import { CHALK_DIR, trashChalkFile } from '../lib/chalk.js';
 
 export {
   DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS,
@@ -212,7 +212,8 @@ export function removeByTag(pid, tag) {
       // 以进程身份删任意文件；sanitize 现在也拒 `..`，这里是第二道闸）
       if (id.startsWith(`${CHALK_DIR}/`)) {
         const abs = chalkAbsPath(pid, id);
-        if (abs) { try { await fs.unlink(abs); } catch { /* 已经没了 */ } }
+        // 软删进 .nd/trash/（08-25：擦掉的板书要捞得回来）
+        if (abs) await trashChalkFile(getSharedDir(pid), abs);
         delete board.objects[id]; gone.add(id); removed += 1; continue;
       }
       delete o.tag;

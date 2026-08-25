@@ -79,6 +79,28 @@ export async function writeChalkFile(sharedRoot, fileName, content, { overwrite 
   return `${CHALK_DIR}/${name}`;
 }
 
+/**
+ * 软删（2026-08-25，信箱 iss_mt8cvn16：板书 rm 后无法恢复）：删除入口一律把文件
+ * 挪进 `.nd/trash/<YYYYMMDD>/` 而不是 unlink —— `.nd/` 不上画布不进 git，用户体感
+ * 就是删了，但捞得回来。挪不动（跨盘等）才退回真删。
+ */
+export async function trashChalkFile(sharedRoot, absPath) {
+  try {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const dir = path.join(sharedRoot, '.nd', 'trash', day);
+    await fs.mkdir(dir, { recursive: true });
+    let dest = path.join(dir, path.basename(absPath));
+    for (let i = 2; i < 100; i += 1) {
+      try { await fs.access(dest); dest = path.join(dir, path.basename(absPath).replace(/\.md$/, `-${i}.md`)); } catch { break; }
+    }
+    await fs.rename(absPath, dest);
+    return dest;
+  } catch {
+    try { await fs.unlink(absPath); } catch { /* 已经没了 */ }
+    return null;
+  }
+}
+
 /** 最近的板书（给注入用）：按文件名（=时间戳）倒序，读前几条的首行 */
 export async function recentChalk(sharedRoot, { limit = 8 } = {}) {
   const dir = path.join(sharedRoot, CHALK_DIR);
