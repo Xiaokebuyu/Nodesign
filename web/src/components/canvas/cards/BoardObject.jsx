@@ -44,6 +44,8 @@ function BoardObject({
   onMeasured = null,
   /** 板书防误触（2026-08-24）：闲置板书 —— 手势层把它当空地，双击才武装 */
   chalkIdle = false,
+  /** 选项板被更新的同 tag 选项板顶掉（08-25）：nd:controls 按钮失效 */
+  controlsStale = false,
   /** 产物窗开着（08-24）：卡片活预览立刻定格，别跟窗里的实例抢核 */
   previewPaused = false,
   onPointerDown, wasDrag, onPrimary, onAdd, onOpenViewer, onOpenFile, onDetail, onDeleteNote, onFocus, onOrchestrate,
@@ -65,7 +67,10 @@ function BoardObject({
   useMeasuredSize(rootRef, o, textual ? onMeasured : null, [o.data?.t, o.text, o.data?.size, o.data?.format]);
   // 板书 MdInk 的 origin 要引用稳定（MdInk 已 memo：相机平移时 200 张板书别再
   // 每帧重跑 markdown 解析 —— 08-25 性能探针 17fps 案）
-  const chalkOrigin = useMemo(() => ({ id: o.id, path: o.path || o.id, title: o.title || '' }), [o.id, o.path, o.title]);
+  const chalkOrigin = useMemo(() => ({
+    id: o.id, path: o.path || o.id, title: o.title || '',
+    at: o.chalk?.at || null, stale: controlsStale,
+  }), [o.id, o.path, o.title, o.chalk?.at, controlsStale]);
   const armHover = () => { clearTimeout(hoverTimer.current); setHover(true); onHoverCard?.(o.id); };
   const disarmHover = () => {
     clearTimeout(hoverTimer.current);

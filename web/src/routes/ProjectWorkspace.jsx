@@ -422,21 +422,45 @@ export default function ProjectWorkspace() {
   // 攒进 pending（同标注「攒着」一条路），触发件直接起轮（攒的那批靠每轮注入的
   // pending 提示一起被拉走）。handleAnnotate 定义在 early-return 之后，走 ref。
   const handleAnnotateRef = useRef(null);
+  const controlQueueRef = useRef(new Map());   // `${chalkId}|${label}|${prompt}` → 待发项 cid（二击取消要撤回）
   useEffect(() => {
     const onControl = (e) => {
       const d = e.detail || {};
       if (!d.chalkId) return;
-      const target = {
-        id: d.chalkId, path: d.path || d.chalkId, title: d.title || '板书',
-        typeLabel: '板书', chalk: true, by: 'agent',
-      };
+      const key = `${d.chalkId}|${d.label}|${d.prompt || ''}`;
+      if (d.cancel) {
+        // 取消勾选 = 从待发队列真撤回，不是再排一条（08-25 用户报）
+        const cid = controlQueueRef.current.get(key);
+        if (!cid) return;
+        controlQueueRef.current.delete(key);
+        setComments(arr => arr.filter(c => c.id !== cid));
+        PendingChanges.clear(id, [cid]).catch(() => {});
+        return;
+      }
       const text = d.prompt || d.label || '';
-      if (!text && !d.trigger) return;
-      handleAnnotateRef.current?.({ target, text: text || '按板上勾选的继续', queue: !d.trigger });
+      if (d.trigger) {
+        const target = {
+          id: d.chalkId, path: d.path || d.chalkId, title: d.title || '板书',
+          typeLabel: '板书', chalk: true, by: 'agent',
+        };
+        handleAnnotateRef.current?.({ target, text: text || '按板上勾选的继续', queue: false });
+        return;
+      }
+      if (!text) return;
+      // 排队走标注「攒着」同一条路，但 cid 记在本层 —— 取消要认领得到
+      const cid = newId('cmt');
+      const item = {
+        id: cid, kind: 'comment',
+        anchor: { board: d.chalkId, label: `板书「${d.title || '选项'}」` },
+        path: d.path || d.chalkId, text,
+      };
+      controlQueueRef.current.set(key, cid);
+      setComments(arr => [...arr, { ...item, board: d.chalkId, status: 'open', createdAt: new Date().toISOString() }]);
+      PendingChanges.push(id, item).catch((err) => console.warn('[controls] queue failed:', err.message));
     };
     window.addEventListener('nd:board-control', onControl);
     return () => window.removeEventListener('nd:board-control', onControl);
-  }, []);
+  }, [id]);
   useEffect(() => {
     if (!currentSessionId) {
       // /work 路径 = 新会话 → 空 chat 让用户从头开始

@@ -867,6 +867,26 @@ export default function BoardCanvas({
     positionedRef, objectsRef, zonesEffRef, folderViewRef,
   });
 
+  // 选项板失效判据②（08-25）：同 tag 更新的选项板落地，旧的自动失效 —— RP 里
+  // 章节推进本身就是旧选项的死期，agent 一个字不用多写。板书文件名带时间戳，
+  // 字典序即时间序。判据①（until 指令行）在 MdInk 里。
+  const staleControlIds = useMemo(() => {
+    const byTag = new Map();
+    for (const o of positioned) {
+      if (!o.chalk || typeof o.text !== 'string' || !o.text.includes('```nd:controls')) continue;
+      const tag = o.tag || o.pos?.tag;
+      if (!tag) continue;
+      if (!byTag.has(tag)) byTag.set(tag, []);
+      byTag.get(tag).push(o.id);
+    }
+    const stale = new Set();
+    for (const group of byTag.values()) {
+      if (group.length < 2) continue;
+      for (const oid of [...group].sort().slice(0, -1)) stale.add(oid);
+    }
+    return stale;
+  }, [positioned]);
+
   // 拖拽全家（pointerdown/move/up/相机补帧/边缘跟车/整组抓手/板书双按武装）
   // 2026-08-25 抽进 useBoardObjectDrag.js —— 语义与注释原样搬走，改拖拽行为去那看。
   const { onObjectPointerDown, onPointerMove, onPointerUp, onTagGrab } = useBoardObjectDrag({
@@ -1542,6 +1562,7 @@ export default function BoardCanvas({
         // 板书防误触：闲置板书（编辑模式关 + 未武装）双击先武装（选中），
         // 武装态再双击才进编辑 —— 单击已经在 board-hit 里被当成空地了
         chalkIdle={!win && !!obj.chalk && !chalkEditMode && !selectedIds.includes(obj.id)}
+        controlsStale={staleControlIds.has(obj.id)}
         // 产物窗开着 = 桌面被盖住：底下的活预览立刻定格（IO 不认遮挡，
         // 不冻的话窗里窗外是同一个站点的双实例全速跑 —— 08-24 性能案）
         previewPaused={deckOpen}

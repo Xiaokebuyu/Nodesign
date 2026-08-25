@@ -50,7 +50,12 @@ const CONTROLS_RE = /language-nd:controls\b/;
  */
 export function parseControls(src) {
   const out = [];
+  let until = null;
   for (const line of String(src).split('\n')) {
+    // 有效期指令行（08-25 用户提）：`until: 2026-08-26T12:00` 或 `until: +30m`
+    //（相对板书创建时间；m/h/d）。过期后按钮失效，防止陈年选项还往待发队列里进。
+    const u = /^\s*until:\s*(.+?)\s*$/i.exec(line);
+    if (u) { until = u[1]; continue; }
     const m = /^\s*[-*]\s*\[([^\]]{1,24})\]\s*(.*)$/.exec(line);
     if (!m) continue;
     const [, label, rest] = m;
@@ -60,34 +65,66 @@ export function parseControls(src) {
     const prompt = trigger ? '' : (arrow[1] || `${label} ${caption}`.trim());
     out.push({ label, caption, prompt, trigger });
   }
-  return out;
+  return { items: out, until };
+}
+
+/** 过期判据（纯函数好钉测试）：until 是 ISO 时刻，或 +30m/+2h/+1d（相对 createdAt） */
+export function controlsExpired({ until, createdAt, now = Date.now() }) {
+  if (!until) return false;
+  const rel = /^\+(\d+)\s*([mhd])$/i.exec(String(until).trim());
+  if (rel) {
+    const base = createdAt ? Date.parse(createdAt) : NaN;
+    if (!Number.isFinite(base)) return false;   // 没有创建时间就不敢判死，宁可多活
+    const ms = Number(rel[1]) * { m: 60_000, h: 3_600_000, d: 86_400_000 }[rel[2].toLowerCase()];
+    return now > base + ms;
+  }
+  const abs = Date.parse(until);
+  return Number.isFinite(abs) ? now > abs : false;
 }
 
 function ControlsBlock({ source, origin }) {
   const [picked, setPicked] = useState({});
-  const items = useMemo(() => parseControls(source), [source]);
+  const { items, until } = useMemo(() => parseControls(source), [source]);
   if (!items.length) return null;
+  // 失效两条路（08-25 用户提「陈年选项还能进待发队列」）：
+  //   1. until 指令行到期（agent 设的钟）
+  //   2. 同 tag 落了更新的选项板（origin.stale，BoardCanvas 算）—— RP 里章节推进
+  //      本身就是旧选项的死期，agent 一个字不用多写
+  const dead = controlsExpired({ until, createdAt: origin?.at }) || !!origin?.stale;
   const fire = (e, item, i) => {
     e.stopPropagation(); e.preventDefault();
+    if (dead) return;
+    // 二击取消 = 真撤回（08-25 用户报：原来第二击只是视觉取消，队列里又压一条）
+    const next = item.trigger ? false : !picked[i];
     window.dispatchEvent(new CustomEvent('nd:board-control', {
-      detail: { ...item, chalkId: origin?.id || null, path: origin?.path || origin?.id || null, title: origin?.title || null },
+      detail: {
+        ...item, cancel: !item.trigger && !next,
+        chalkId: origin?.id || null, path: origin?.path || origin?.id || null, title: origin?.title || null,
+      },
     }));
-    if (!item.trigger) setPicked(p => ({ ...p, [i]: !p[i] }));
+    if (!item.trigger) setPicked(p => ({ ...p, [i]: next }));
   };
   return (
-    <div data-nd-controls style={{ display: 'flex', flexWrap: 'wrap', gap: GAP.sm, margin: `${GAP.sm}px 0`, pointerEvents: 'auto' }}
-      onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+    // ⚠️ 容器不截停 pointerdown —— 截停整行会把按钮间缝隙和空白一起吃掉，选项板
+    // 大半张脸是按钮行，整张卡就此拖不动（08-25 用户报）。截停只归按钮本体：
+    // 按在按钮上=点击不拖拽，按在缝里=拖卡照常。
+    <div data-nd-controls style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: GAP.sm, margin: `${GAP.sm}px 0`, pointerEvents: 'auto' }}>
       {items.map((it, i) => (
-        <button key={i} type="button" onClick={(e) => fire(e, it, i)} title={it.trigger ? '发出（连同攒着的一起）' : it.prompt} style={{
-          font: 'inherit', fontSize: '0.92em', lineHeight: 1.4, cursor: 'pointer',
-          padding: `3px 10px`, borderRadius: RADIUS.md,
-          border: `1px solid ${alpha('#2b2117', it.trigger ? 0.45 : 0.25)}`,
-          background: picked[i] ? alpha('#2b2117', 0.12) : it.trigger ? alpha('#2b2117', 0.06) : 'transparent',
-          color: 'inherit', fontWeight: it.trigger ? 600 : 400,
-        }}>
+        <button key={i} type="button" disabled={dead}
+          onPointerDown={dead ? undefined : (e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onClick={(e) => fire(e, it, i)} title={dead ? '已过期' : it.trigger ? '发出（连同攒着的一起）' : it.prompt} style={{
+            font: 'inherit', fontSize: '0.92em', lineHeight: 1.4, cursor: dead ? 'default' : 'pointer',
+            padding: `3px 10px`, borderRadius: RADIUS.md,
+            border: `1px ${dead ? 'dashed' : 'solid'} ${alpha('#2b2117', dead ? 0.16 : it.trigger ? 0.45 : 0.25)}`,
+            background: picked[i] ? alpha('#2b2117', 0.12) : (!dead && it.trigger) ? alpha('#2b2117', 0.06) : 'transparent',
+            color: 'inherit', fontWeight: it.trigger ? 600 : 400, opacity: dead ? 0.45 : 1,
+            ...(dead ? { pointerEvents: 'none' } : {}),
+          }}>
           {picked[i] ? '✓ ' : ''}{it.label}{it.caption ? ` ${it.caption}` : ''}
         </button>
       ))}
+      {dead && <span style={{ fontSize: '0.8em', opacity: 0.5 }}>（已过期）</span>}
     </div>
   );
 }
