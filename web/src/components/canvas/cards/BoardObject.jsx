@@ -343,9 +343,14 @@ function BoardObject({
 
       {o.type === 'note' && !o.chalk && <NoteFaces o={o} />}
       {o.type === 'note' && o.chalk && (
-        /* 板书：agent/用户写在画布上的话 —— 裸 md 文字浮在纸上（同手写字的 md 档） */
+        /* 板书：agent/用户写在画布上的话 —— 裸 md 文字浮在纸上（同手写字的 md 档）。
+           pointerEvents none 让闲置板书对手势是空地；nd:controls 围栏的按钮在
+           MdInk 里自己开 auto（点选项不该要求先武装板书）。 */
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
-          <MdInk text={o.text || ''} fontFamily={TEXT_FONT_CSS.kai} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink} />
+          <MdInk
+            text={o.text || ''} fontFamily={TEXT_FONT_CSS.kai} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
+            origin={{ id: o.id, path: o.path || o.id, title: o.title || '' }}
+          />
         </div>
       )}
 

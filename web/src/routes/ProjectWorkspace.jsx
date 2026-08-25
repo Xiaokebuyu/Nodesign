@@ -417,6 +417,26 @@ export default function ProjectWorkspace() {
     window.addEventListener('nd-conversation-rewound', onRewound);
     return () => window.removeEventListener('nd-conversation-rewound', onRewound);
   }, [id, currentSessionId]);
+
+  // 板书控件（08-25 nd:controls 围栏）：MdInk 里的按钮点了发这个事件 —— 非触发件
+  // 攒进 pending（同标注「攒着」一条路），触发件直接起轮（攒的那批靠每轮注入的
+  // pending 提示一起被拉走）。handleAnnotate 定义在 early-return 之后，走 ref。
+  const handleAnnotateRef = useRef(null);
+  useEffect(() => {
+    const onControl = (e) => {
+      const d = e.detail || {};
+      if (!d.chalkId) return;
+      const target = {
+        id: d.chalkId, path: d.path || d.chalkId, title: d.title || '板书',
+        typeLabel: '板书', chalk: true, by: 'agent',
+      };
+      const text = d.prompt || d.label || '';
+      if (!text && !d.trigger) return;
+      handleAnnotateRef.current?.({ target, text: text || '按板上勾选的继续', queue: !d.trigger });
+    };
+    window.addEventListener('nd:board-control', onControl);
+    return () => window.removeEventListener('nd:board-control', onControl);
+  }, []);
   useEffect(() => {
     if (!currentSessionId) {
       // /work 路径 = 新会话 → 空 chat 让用户从头开始
@@ -1754,6 +1774,8 @@ export default function ProjectWorkspace() {
     }).join('、');
     await handleSend(`【画布标注】${desc}：${text}`);
   };
+  // 板书控件监听（early-return 之前那个 effect）要够到最新的 handleAnnotate
+  handleAnnotateRef.current = handleAnnotate;
 
   /**
    * 「发给 agent（N 条标注）」浮钮（E3）：元素评论攒批后的空间确认按钮。

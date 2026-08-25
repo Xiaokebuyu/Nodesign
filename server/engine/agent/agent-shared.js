@@ -364,6 +364,9 @@ function handleAssistantBlocks(ctx, content, skipTextThinking = false) {
 const TOOL_INPUT_STREAM_FIELDS = {
   Edit: 'new_string',
   Write: 'content',
+  // 板书直播（2026-08-25 流式路 A）：write_on_board 的 text 逐 token 流到画布上
+  // 的舞台粉笔卡（StageLayer chalk 档）—— 粉笔字在用户眼前一行行长出来。
+  mcp__nodesign__write_on_board: 'text',
 };
 const TOOL_INPUT_THROTTLE_MS = 120;
 

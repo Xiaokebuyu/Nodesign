@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { PencilLine, Terminal, X } from 'lucide-react';
-import { COLOR, GAP, RADIUS, FONT_MONO, FONT_SIZE, TERM, CANVAS, alpha } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_MONO, FONT_KAI, FONT_SIZE, TERM, CANVAS, alpha } from '../../lib/theme.js';
+import MdInk from './cards/MdInk.jsx';
 import { stageKindOf, resolveObjectId, zoneOfObjectId, fileNameOf, chipHintOf, toolLabelOf } from '../../lib/stage.js';
 import { ZONE, STAGE_CARD_W, POP_IN } from '../../lib/board-geometry.js';
 import { sizeOf } from '../../lib/board-kinds.js';
@@ -126,6 +127,10 @@ export function useStageState({
             const full = typeof input.new_string === 'string' ? input.new_string
               : typeof input.content === 'string' ? input.content : null;
             if (full != null && full.length > c.text.length) patch.text = full;
+          } else if (kind === 'chalk') {
+            // 完整入参快照兜底（不吐流式增量的模型也能看到全文）；画图调用没有 text
+            if (typeof input.text === 'string' && input.text.length > c.text.length) patch.text = input.text;
+            else if (!input.text && (input.nodes || input.shapes)) patch.sketching = true;
           } else if (kind === 'terminal') {
             patch.command = typeof input.command === 'string' ? input.command : '';
           } else if (kind === 'image') {
@@ -279,7 +284,7 @@ export function splitStageCards({ stageCards, positioned, visibleIdSet, visibleZ
     // 代码直播 / 终端 = 精灵的输出框（2026-08-14 用户拍板）：不再贴目标物件
     // 或掉 dock，跟着精灵走、绕它找位（AmbientSpriteLayer 的 findFrameSpot）。
     // 贴物件那条路留给"已更新"角标。
-    if (c.kind === 'code' || c.kind === 'terminal') { spriteCards.push(c); continue; }
+    if (c.kind === 'code' || c.kind === 'terminal' || c.kind === 'chalk') { spriteCards.push(c); continue; }
     if (c.kind === 'chip') { dockChips.push(c); continue; }
     if (c.kind === 'question') { dockPanels.push(c); continue; }
     const o = c.objectId ? positioned.find(it => it.id === c.objectId) : null;
@@ -401,6 +406,10 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
   void scale;   // 位移拖拽随子代理便利贴一起退役（2026-08-18），参数保留兼容调用方
   const running = card.status === 'running';
   const isTerm = card.kind === 'terminal';
+  // 板书直播（08-25）：agent 说的话不走墨底终端面 —— 纸面 + 楷体，粉笔字
+  // 一行行长出来。设计语言的分界照旧：机器写的（代码/终端）等宽墨底，
+  // 对人说的（板书）纸面。
+  if (card.kind === 'chalk') return <ChalkLiveCard card={card} />;
   // 身份跟着会话模型走（08-21）：边色和徽记都是"谁在写这段代码"，跑 DeepSeek 就不该是 Claude 的橙
   const brand = useCurrentModelBrand();
   const border = card.status === 'fail' ? '#b0554f' : card.status === 'ok' ? '#4f8f5b' : alpha(brandColor(brand) || '#D97757', 0.7);
@@ -456,6 +465,41 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
         <div style={{ padding: `5px ${GAP.base}px`, fontFamily: FONT_MONO, fontSize: 9.5, color: TERM.err, whiteSpace: 'pre-wrap', wordBreak: 'break-all', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           {card.error}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** 板书直播卡：纸面 + 楷体 md 渲染，随 token 长高、贴底滚动。落定（工具执行完）
+ *  真板书由 board.updated 上墙，这张直播卡走原有的 ok→淡出节奏交棒。 */
+function ChalkLiveCard({ card }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [card.text]);
+  const running = card.status === 'running';
+  return (
+    <div data-stage="card" data-stage-kind="chalk" data-stage-status={card.status} style={{
+      borderRadius: RADIUS.lg, overflow: 'hidden', border: `1px solid ${alpha('#2b2117', 0.18)}`,
+      background: COLOR.bgWhite, boxShadow: '0 8px 24px rgba(40,32,16,0.22)',
+      animation: card.status === 'ok'
+        ? `${POP_IN}, ndStageOut 380ms ease 900ms forwards`
+        : POP_IN,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `${GAP.xs}px ${GAP.base}px`, borderBottom: `1px solid ${alpha('#2b2117', 0.08)}` }}>
+        <PencilLine size={10} color={COLOR.sub} />
+        <span style={{ fontSize: FONT_SIZE.xs, color: COLOR.sub, flex: 1 }}>
+          {card.sketching ? '正在画图…' : running ? '正在写板书…' : '板书已上墙'}
+        </span>
+        {running && <span style={{ width: 9, height: 9, border: `1.5px solid ${alpha('#2b2117', 0.2)}`, borderTopColor: COLOR.sub, borderRadius: RADIUS.round, animation: 'ndSpin 800ms linear infinite', flexShrink: 0 }} />}
+      </div>
+      {card.text ? (
+        <div ref={ref} style={{ padding: `${GAP.sm}px ${GAP.base}px`, maxHeight: 220, overflowY: 'auto' }}>
+          <MdInk text={card.text} fontFamily={FONT_KAI} fontSize={13} color={COLOR.ink} />
+        </div>
+      ) : (
+        <div style={{ padding: `${GAP.sm}px ${GAP.base}px`, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>…</div>
       )}
     </div>
   );
