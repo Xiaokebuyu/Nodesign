@@ -29,6 +29,7 @@ import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, bboxOf, 
 import { resolvePlacement, describePlacement } from '../../../lib/board-place.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
+import { seatArtifacts } from '../../runs/board-seater.js';
 import { Events } from '../../agent/events.js';
 
 const MAX_NODES = 40;
@@ -178,16 +179,30 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const visibleIn = (rect, vpRect) => !!vpRect && !(rect.x + rect.w < vpRect.x || vpRect.x + vpRect.w < rect.x
       || rect.y + rect.h < vpRect.y || vpRect.y + vpRect.h < rect.y);
 
-    /** 锚点解析：真 id > tag 包络。返回 { rect, anchorId, zone } 或 null */
-    const resolveAnchor = (raw, b) => {
+    /** 锚点解析：真 id > tag 包络 > **救援入座**（文件真在只是还没座位 —— 当场
+     *  给它排一个再锚。入座下沉后防抖 1.5s 内的窗口、以及历史欠座都从这里兜住，
+     *  「还没有座位」这个失败类只剩"确实不存在"一种真情况）。 */
+    const resolveAnchor = async (raw, b) => {
       const nid = normalizeCanvasId(raw);
       const e = nid ? b.objects?.[nid] : null;
       if (e && Number.isFinite(e.x)) {
-        return { anchorId: nid, zone: layerOf(nid, e, known), rect: { x: e.x, y: e.y, ...estimateSizeOn(b, nid, e) } };
+        return { anchorId: nid, zone: layerOf(nid, e, known), rect: { x: e.x, y: e.y, ...estimateSizeOn(b, nid, e) }, board: b };
       }
       const env = tagEnvelope(b, raw, sizeOf(b));
       if (env) {
-        return { anchorId: env.anchorId, zone: layerOf(env.anchorId, b.objects[env.anchorId], known), rect: { x: env.x, y: env.y, w: env.w, h: env.h } };
+        return { anchorId: env.anchorId, zone: layerOf(env.anchorId, b.objects[env.anchorId], known), rect: { x: env.x, y: env.y, w: env.w, h: env.h }, board: b };
+      }
+      if (nid) {
+        const bare = nid.replace(/^(deck|site|docx|text|scribble):/, '');
+        const { seated } = await seatArtifacts(projectId, [bare]).catch(() => ({ seated: 0 }));
+        if (seated) {
+          const nb = await readBoard(projectId);
+          const ne = nb.objects?.[nid] || nb.objects?.[bare];
+          const realId = nb.objects?.[nid] ? nid : bare;
+          if (ne && Number.isFinite(ne.x)) {
+            return { anchorId: realId, zone: layerOf(realId, ne, known), rect: { x: ne.x, y: ne.y, ...estimateSizeOn(nb, realId, ne) }, board: nb, rescued: true };
+          }
+        }
       }
       return null;
     };
@@ -213,6 +228,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       let zone = '';
       let anchorId = null; let parentId = null;
       let replyRect = null; let anchorRect = null;
+      let b2 = board;   // 救援入座后换新板（新座要进障碍集）
       if (replyToRaw) {
         const pid2 = normalizeCanvasId(replyToRaw);
         const e = pid2 ? board.objects?.[pid2] : null;
@@ -221,14 +237,14 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         replyRect = { x: e.x, y: e.y, ...estimateSizeOn(board, pid2, e) };
       }
       if (args.near) {
-        const a = resolveAnchor(args.near, board);
+        const a = await resolveAnchor(args.near, board);
         if (!a && !parentId && !args.at) {
-          return err(`锚点 ${args.near} 还没有座位，也不是板上任何 tag（read_board 里看不到就锚不上）。`);
+          return err(`锚点 ${args.near} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件（read_board 看一眼现在都有谁）。`);
         }
-        if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; }
+        if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; if (a.board) b2 = a.board; }
       }
 
-      const obstacles = obstaclesOf(board, zone);
+      const obstacles = obstaclesOf(b2, zone);
       const vpRect = vpRectFor(zone);
       const placed = resolvePlacement({
         box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
@@ -396,17 +412,20 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     }
     let zone = '';
     let anchorRect = null;
+    let sketchBase = board;
     if (args.near) {
-      const a = resolveAnchor(args.near, { ...board, objects: board.objects });
-      if (!a && !args.at) return err(`锚点 ${args.near} 还没有座位，也不是板上任何 tag（read_board 里看不到就锚不上）。`);
+      const a = await resolveAnchor(args.near, board);
+      if (!a && !args.at) return err(`锚点 ${args.near} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件（read_board 看一眼现在都有谁）。`);
       if (a) {
         zone = a.zone;
-        const e = board.objects[a.anchorId];
+        if (a.board) sketchBase = a.board;
+        const e = sketchBase.objects[a.anchorId];
         anchorRect = { x: a.rect.x, y: a.rect.y, ...estimateSizeOn(after, a.anchorId, e) };
         if (a.rect.w > anchorRect.w) anchorRect = a.rect;   // tag 包络比单卡大就用包络
       }
     }
-    const obstacles = obstaclesOf(after, zone);
+    const afterEff = sketchBase === board ? after : { ...sketchBase, bindings: { ...(sketchBase.bindings || {}), ...bindings } };
+    const obstacles = obstaclesOf(afterEff, zone);
     const vpRect = vpRectFor(zone);
     const placed = resolvePlacement({
       box: { w: local.w + 24, h: local.h + 24 },

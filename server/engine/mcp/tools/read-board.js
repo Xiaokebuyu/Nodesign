@@ -52,11 +52,11 @@ export function makeReadBoardTool({ projectId }) {
     `Read the workbench canvas: an ASCII minimap, then GROUPS (things linked by lines or
 sharing a #tag), then loose items row by row, then relation lines.
 
-Use this BEFORE arranging (arrange_on_board), writing notes (create_on_board) or
-sketching (sketch_on_board) — placement without looking is guessing. Coordinates are
-world pixels. Only seated items appear (fresh artifacts get a seat within a second).
+Use this BEFORE moving things (edit_board) or writing/sketching (write_on_board) —
+placement without looking is guessing. Coordinates are world pixels. Only seated items
+appear (files you just wrote are seated automatically within a couple of seconds).
 Items marked 〔草稿〕 are still staging (yours from this turn, half-transparent until
-finish_sketch / end of turn). The user's current viewport (if known) is drawn as a box
+edit_board commit / end of turn). The user's current viewport (if known) is drawn as a box
 on the minimap and listed with what is inside it.`,
     {
       layer: z.string().max(300).optional()
@@ -174,7 +174,7 @@ on the minimap and listed with what is inside it.`,
           }).join('、')}`);
         }
       }
-      if (board.hero && !tag) lines.push('', `★ 显式主角：${board.hero}（arrange_on_board 的 feature/unfeature 管它）`);
+      if (board.hero && !tag) lines.push('', `★ 显式主角：${board.hero}（edit_board 的 feature/unfeature 管它）`);
 
       // 用户视点（有上报才有）
       if (vp && !tag) {

@@ -117,6 +117,24 @@ describe('write_on_board 统一入口（件数判据）', () => {
     expect(r.content[0].text).toContain('outside the working area');
   });
 
+  it('near 指向没座位但真实存在的文件：救援入座后照锚（「还没有座位」失败类收口）', async () => {
+    await fs.mkdir(path.join(sharedRoot, '小说'), { recursive: true });
+    await fs.writeFile(path.join(sharedRoot, '小说/序章.md'), '# 序章', 'utf8');
+    const r = await call({ text: '这一章写得不错', near: '小说/序章.md' });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    expect(board.objects['小说/序章.md']).toBeTruthy();
+    expect(board.objects['小说/序章.md'].seat).toBe('auto');
+    const line = Object.values(board.bindings).find(b => b.to === '小说/序章.md' && b.type === 'annotates');
+    expect(line).toBeTruthy();
+  });
+
+  it('near 指向确实不存在的东西：仍拒，错误话术说清三种可能', async () => {
+    const r = await call({ text: 'x', near: '虚空锚点' });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain('磁盘上也没有');
+  });
+
   it('text 与 nodes 同给：拒', async () => {
     const r = await call({ text: 'x', nodes: [{ id: 'n', text: 'y' }] });
     expect(r.isError).toBe(true);

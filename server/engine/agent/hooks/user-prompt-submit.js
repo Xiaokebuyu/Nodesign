@@ -111,7 +111,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
   try {
     const digest = await relationsDigest(projectId, { limit: 12 });
     if (digest) {
-      sections.push({ key: 'relations', title: '画布关系线', text: `画布关系线（用户和你手动画的连线，端点跟着改名走；语义看线上的词）：\n${digest}\n  产出新东西后记得用 relate_on_board 把「改自/对照/接着/取材」画上去。` });
+      sections.push({ key: 'relations', title: '画布关系线', text: `画布关系线（用户和你手动画的连线，端点跟着改名走；语义看线上的词）：\n${digest}\n  产出新东西后记得用 edit_board add_edge 把「改自/对照/接着/取材」画上去。` });
     }
   } catch { /* 板读不到就沉默 */ }
 
@@ -152,8 +152,8 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
     const cfg = withUiDefaults(await readUiConfigFile(workspaceRoot));
     if (cfg.blackboard_mode === true) {
       sections.push({ key: 'blackboard', title: '黑板模式', text:
-        '【黑板模式：开】用户此刻在画布上专注思考。这一轮默认这么做：想事情就画成图（sketch_on_board，'
-        + '小改动用 edit_sketch 原地改别重画）；做完一件东西在它旁边写一条板书（write_on_board near=）；'
+        '【黑板模式：开】用户此刻在画布上专注思考。这一轮默认这么做：想事情就画成图（write_on_board 给 nodes/edges，'
+        + '小改动用 edit_board 原地改别重画）；做完一件东西在它旁边写一条板书（write_on_board near=）；'
         + '用户标注了板上的东西就接在那条下面回（reply_to=）。侧栏照常回复，但板上已经写的别大段重复。'
         + '尺寸守规范（0.8 倍一屏可读、正文 md 起、一条板书说一件事）；画完 look_at_board 看一眼再收。' });
     }

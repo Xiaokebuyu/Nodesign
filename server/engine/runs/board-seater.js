@@ -126,30 +126,37 @@ export async function seatArtifacts(projectId, rels) {
   return { seated, lines };
 }
 
-/** 挂 project bus：收整轮的 file_changed，run 收尾一批入座（与 board-tasklist 同栖） */
+/**
+ * 挂 project bus（与 board-tasklist 同栖）。时机 = **即时**：file_changed 攒 1.5s
+ * 就排一批（回合中写完马上 near 它/read_board 都要看得见 —— 惰性到回合末只修
+ * 一半病）；run 收尾再冲一次兜底（防抖窗口里挂掉的尾巴）。
+ */
+const FLUSH_MS = 1500;
+
 export function attachBoardSeater(bus, projectId) {
-  const byRun = new Map();   // runId → Set<rel>
-  bus.subscribe('*', async (evt) => {
+  const pending = new Set();
+  let timer = null;
+  const flush = async () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (!pending.size) return;
+    const batch = [...pending]; pending.clear();
+    try {
+      const { seated } = await seatArtifacts(projectId, batch);
+      if (seated) bus.publish({ type: 'board.updated', sessionId: null, summary: `${seated} 件新产物入了座` });
+    } catch (err) {
+      console.warn('[board-seater]', projectId, err?.message || err);
+    }
+  };
+  bus.subscribe('*', (evt) => {
     if (!evt?.runId) return;
     if (evt.type === 'run.file_changed') {
-      // 两种历史载荷形状都认（Events.fileChanged 的 filePath / 内联对象的 path）
+      // 两种历史载荷形状都认（Events.fileChanged 的 filePath / 旧内联对象的 path）
       const rel = typeof evt.filePath === 'string' ? evt.filePath : (typeof evt.path === 'string' ? evt.path : null);
       if (!rel || !seatable(rel)) return;
-      let set = byRun.get(evt.runId);
-      if (!set) { set = new Set(); byRun.set(evt.runId, set); }
-      set.add(rel);
+      pending.add(rel);
+      if (!timer) timer = setTimeout(flush, FLUSH_MS);
       return;
     }
-    if (evt.type === 'run.done' || evt.type === 'run.cancelled' || evt.type === 'run.error') {
-      const set = byRun.get(evt.runId);
-      byRun.delete(evt.runId);
-      if (!set?.size) return;
-      try {
-        const { seated } = await seatArtifacts(projectId, [...set]);
-        if (seated) bus.publish({ type: 'board.updated', sessionId: null, summary: `${seated} 件新产物入了座` });
-      } catch (err) {
-        console.warn('[board-seater]', projectId, err?.message || err);
-      }
-    }
+    if (evt.type === 'run.done' || evt.type === 'run.cancelled' || evt.type === 'run.error') void flush();
   });
 }
