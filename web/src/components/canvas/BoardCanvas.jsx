@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, ChevronsUpDown, Focus } from 'lucide-react';
+import { LogOut, ChevronsUpDown, Focus, Group, Check, Download, Eraser, MessageSquarePlus } from 'lucide-react';
 import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
@@ -1516,12 +1516,48 @@ export default function BoardCanvas({
   const zoomByStable = useCallback((d) => cameraRef.current.zoomBy(d), []);
   const zoomToStable = useCallback((z) => cameraRef.current.zoomTo(z), []);
 
+  // 工具栏常驻评论钮（08-25 用户提）：选中集优先，否则对整块画布说一句
+  const openCanvasNote = useCallback(() => {
+    const sel = selectedIdsRef.current;
+    const targets = sel.length
+      ? sel.map(id => positionedRef.current.find(o => o.id === id)).filter(Boolean).map(o => annotTargetOf(o))
+      : [];
+    setAnnotate({
+      x: Math.round(window.innerWidth / 2 - 160), y: Math.round(window.innerHeight - 320),
+      ...(targets.length
+        ? { target: targets[0], targets }
+        : { target: { kind: 'canvas', id: '', path: '', title: '整块画布', typeLabel: '画布' } }),
+    });
+  }, []);
+
+  // #tag 小标右键 = 整组菜单（08-25 用户报「tag 级评论按钮丢了」的正门：chip 浮在
+  // 卡片层之上，右键落在它身上 closest 找不到 data-board-object，只能弹空白菜单 ——
+  // 索性让 chip 自己出组菜单：选中/落定/导出/擦/标注这组）
+  const openTagMenu = useCallback((tag, e) => {
+    e.preventDefault();
+    const members = positionedRef.current.filter(o => (o.tag || o.pos?.tag) === tag);
+    if (!members.length) return;
+    const anyStaging = members.some(o => o.staging || o.pos?.staging);
+    const items = [
+      { id: 'grp-sel', icon: Group, label: `选中整组 #${tag}`, onClick: () => selectGroup(tag) },
+      { id: 'grp-note', icon: MessageSquarePlus, label: '标注这组给 agent', hint: '发送即处理', onClick: () => setAnnotate({
+        x: e.clientX, y: e.clientY, target: annotTargetOf(members[0]), targets: members.map(o => annotTargetOf(o)),
+      }) },
+      ...(anyStaging ? [{ id: 'grp-commit', icon: Check, label: '落定这组草稿', onClick: () => commitGroup(tag) }] : []),
+      { id: 'grp-export', icon: Download, label: '导出这组（SVG）', onClick: () => exportGraph?.('svg', tag) },
+      { id: 'grp-export-zip', icon: Download, label: '导出这组 + 产物（zip）', onClick: () => exportGraph?.('zip', tag) },
+      { id: 'grp-erase', icon: Eraser, label: `擦掉整组 #${tag}`, danger: true, onClick: () => eraseGroup(tag) },
+    ];
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  }, [selectGroup, commitGroup, eraseGroup, exportGraph]);
+
   const boardToolGroups = useMemo(() => buildBoardToolGroups({
     tool, setTool, drawMode, setDrawMode, scale,
     tidyBoard, zoomFit: zoomFitStable, zoomBy: zoomByStable, zoomTo: zoomToStable, filterGroup,
     blackboardMode, toggleBlackboard,
     chalkEditMode, toggleChalkEdit,
-  }), [tool, drawMode, scale, tidyBoard, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit]);
+    openCanvasNote,
+  }), [tool, drawMode, scale, tidyBoard, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit, openCanvasNote]);
 
   useEffect(() => { onToolbarGroups?.(boardToolGroups); }, [boardToolGroups, onToolbarGroups]);
 
@@ -1737,7 +1773,7 @@ export default function BoardCanvas({
 
 
           {/* 关系线（世界坐标，铺在物件之下）*/}
-          <TagHullLayer positioned={positioned} onGrab={onTagGrab} />
+          <TagHullLayer positioned={positioned} onGrab={onTagGrab} onMenu={openTagMenu} />
           {chalkCards.map(c => <ChalkLiveInk key={c.blockId} card={c} spot={liveChalkSpotFor(c.blockId)} />)}
           <BindingLayer
             bindings={bindings}

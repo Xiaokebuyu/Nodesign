@@ -8,7 +8,7 @@
  * 调用方仍然要用 useMemo 包住它，而且**镜头动作必须先经 ref 转一手**：理由
  * 记在 BoardCanvas 那个 memo 的头上（每帧换身份 → 死循环，build 和单测都照不出来）。
  */
-import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, LayoutGrid, Presentation, NotebookPen } from 'lucide-react';
+import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, LayoutGrid, Presentation, NotebookPen, MessageSquarePlus } from 'lucide-react';
 
 /**
  * @param {object} p
@@ -25,6 +25,7 @@ export function buildBoardToolGroups({
   tidyBoard, zoomFit, zoomBy, zoomTo, filterGroup,
   blackboardMode = false, toggleBlackboard = null,
   chalkEditMode = false, toggleChalkEdit = null,
+  openCanvasNote = null,
 }) {
   return ([
     ...(filterGroup ? [filterGroup] : []),
@@ -54,9 +55,16 @@ export function buildBoardToolGroups({
         ...(toggleChalkEdit ? [{
           id: 'chalkEdit', icon: NotebookPen, label: '改板书', active: chalkEditMode,
           title: chalkEditMode
-            ? '板书编辑：开 —— 板书随时可选中拖动，双击进编辑。点一下关（关着时要双击先武装，防误触）'
-            : '板书编辑：关 —— 板书防误触：单击/拖它不动（挪镜头照常），双击武装后才能拖和编辑。要频繁整理板书就点开',
+            ? '板书编辑：开 —— 板书随时可拖动，双击进编辑。点一下关'
+            : '板书编辑：关 —— 板书防误触：对手势是空地（框选仍可整批选中拖动）。要动板书就点开，agent 也会替你开',
           onClick: toggleChalkEdit,
+        }] : []),
+        // 常驻评论钮（2026-08-25 用户提）：画布态也要有开口说话的地方 —— 选中了
+        // 东西就标注选中集，没选就对整块画布说一句（发给 agent / 攒着两条路照旧）
+        ...(openCanvasNote ? [{
+          id: 'canvasNote', icon: MessageSquarePlus, label: '评论',
+          title: '对选中的东西（没选就对整块画布）说一句：发给 agent 立刻处理，或先攒着一起发',
+          onClick: openCanvasNote,
         }] : []),
       ],
     },
