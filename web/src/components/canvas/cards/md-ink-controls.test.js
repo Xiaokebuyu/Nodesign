@@ -16,9 +16,10 @@ describe('parseControls', () => {
     expect(items[1].prompt).toBe('B 留在原地');
     expect(items[2].trigger).toBe(true);
   });
-  it('全角箭头 → 也认；trigger 三种写法；until 指令行', () => {
-    const { items, until } = parseControls('until: +30m\n- [标记] 药水已用 → (状态) 背包扣一瓶\n- [发出] trigger\n- [Go] 发送');
+  it('全角箭头 → 也认；trigger 三种写法；until/supersede 指令行不当按钮', () => {
+    const { items, until } = parseControls('until: +30m\nsupersede: 章节选项\n- [标记] 药水已用 → (状态) 背包扣一瓶\n- [发出] trigger\n- [Go] 发送');
     expect(until).toBe('+30m');
+    expect(items.length).toBe(3);
     expect(items[0].prompt).toBe('(状态) 背包扣一瓶');
     expect(items[1].trigger).toBe(true);
     expect(items[2].trigger).toBe(true);

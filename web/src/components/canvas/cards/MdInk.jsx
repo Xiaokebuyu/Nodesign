@@ -56,6 +56,7 @@ export function parseControls(src) {
     //（相对板书创建时间；m/h/d）。过期后按钮失效，防止陈年选项还往待发队列里进。
     const u = /^\s*until:\s*(.+?)\s*$/i.exec(line);
     if (u) { until = u[1]; continue; }
+    if (/^\s*supersede:\s*/i.test(line)) continue;   // 生命周期声明（lib/board-controls.js 消费）
     const m = /^\s*[-*]\s*\[([^\]]{1,24})\]\s*(.*)$/.exec(line);
     if (!m) continue;
     const [, label, rest] = m;
