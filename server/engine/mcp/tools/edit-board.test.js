@@ -162,3 +162,31 @@ describe('edit_board（吞四件 + 新能力）', () => {
     expect(good.isError).toBeUndefined();
   });
 });
+
+describe('08-25 二批：gap 单位收口 + chalk_edit + 挪动如实报', () => {
+  it('gap 上限 8 格（40 格=960px 的灾难案）：9 被 schema 拒、8 放行', async () => {
+    const { z } = await import('zod');
+    const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
+    const parse = (gap) => z.object(t.inputSchema).safeParse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap } }] });
+    expect(parse(9).success).toBe(false);
+    expect(parse(8).success).toBe(true);
+  });
+
+  it('move/move_group 结果报落点（Applied 1/1 什么都不说的病）', async () => {
+    const r = await edit({ ops: [{ op: 'move', id: 'assets/a.png', to: { dx: 2, dy: 0 } }] });
+    expect(r.content[0].text).toMatch(/move → \(-?\d+,-?\d+\)/);
+    const g = await edit({ ops: [{ op: 'move_group', tag: 'panel', to: { dx: 1, dy: 1 } }] });
+    expect(g.content[0].text).toMatch(/move_group #panel → 组左上 \(-?\d+,-?\d+\)/);
+  });
+
+  it('chalk_edit：写 ui-config 并广播事件', async () => {
+    const events = [];
+    const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: (e) => events.push(e) } });
+    const r = await t.handler({ ops: [{ op: 'chalk_edit', on: true }] });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toContain('改板书开关 → 开');
+    const cfg = JSON.parse(await fs.readFile(path.join(sharedRoot, 'ui-config.json'), 'utf8'));
+    expect(cfg.chalk_edit).toBe(true);
+    expect(events.some(e => e.type === 'ui.chalk_edit' && e.on === true)).toBe(true);
+  });
+});

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, ChevronsUpDown, Focus } from 'lucide-react';
-import { Assets, Canvas } from '../../lib/api.js';
+import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
 import { orderWithGroups } from '../../lib/relation-order.js';
@@ -38,13 +38,13 @@ import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../lib/text-fonts.js';
 import { splitNoteFaces, faceParts } from '../../lib/note-faces.js';
 import BindingLayer from './BindingLayer.jsx';
 import TagHullLayer from './TagHullLayer.jsx';
+import { useBoardObjectDrag } from './useBoardObjectDrag.js';
 import TextDraft from './TextDraft.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import LinkPopover from './LinkPopover.jsx';
 import AnnotatePopover from './AnnotatePopover.jsx';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
-import { useDragEdgePan } from './useDragEdgePan.js';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';
 import { useBoardAuthoring } from './useBoardAuthoring.js';
 import { useBoardOpen } from './useBoardOpen.js';
@@ -242,7 +242,24 @@ export default function BoardCanvas({
   const [chalkEditMode, setChalkEditMode] = useState(false);
   const chalkEditModeRef = useRef(false);
   chalkEditModeRef.current = chalkEditMode;
-  const toggleChalkEdit = useCallback(() => setChalkEditMode(v => !v), []);
+  const chalkArmedAtRef = useRef({ id: null, t: 0 });   // 双按武装的时间戳（吞掉同一手势的 dblclick）
+  // 持久化 + agent 可拨（08-25）：存 ui-config.chalk_edit；agent 的 edit_board
+  // chalk_edit op 经 WS → ProjectWorkspace → 窗口事件 nd:chalk-edit 当场生效
+  useEffect(() => {
+    let alive = true;
+    if (projectId) SessionConfig.read(projectId).then((r) => {
+      if (alive && typeof r?.config?.chalk_edit === 'boolean') setChalkEditMode(r.config.chalk_edit);
+    }).catch(() => {});
+    const onAgent = (e) => setChalkEditMode(!!e.detail?.on);
+    window.addEventListener('nd:chalk-edit', onAgent);
+    return () => { alive = false; window.removeEventListener('nd:chalk-edit', onAgent); };
+  }, [projectId]);
+  const toggleChalkEdit = useCallback(() => {
+    setChalkEditMode((v) => {
+      SessionConfig.patch(projectId, { chalk_edit: !v }).catch(() => {});
+      return !v;
+    });
+  }, [projectId]);
   /** 框选：{ a:{sx,sy,wx,wy}, b:{…} }（sx/sy 是画布视口内像素，wx/wy 是世界坐标）*/
   const handleDeleteNoteRef = useRef(null);   // Delete 键 effect 挂得早，函数定义在下面
   const [hoveredBinding, setHoveredBinding] = useState(null);
@@ -833,193 +850,6 @@ export default function BoardCanvas({
   // 站在哪一层 —— 那是两件事。
 
   // ── 拖拽（物件 / 工作区 / 背景平移共用 pointer 流）──
-  const onObjectPointerDown = (e, o) => {
-    if (e.button !== 0) return;
-    if (e.target.closest('[data-board-action]')) return;   // 按钮不触发拖拽
-    // 按着空格 = 挪镜头：这一下归相机。卡片的 handler 挂在卡片上、画布的
-    // 挂在外层，事件是**先卡片后画布**冒泡上去的 —— 卡片不主动让路的话，
-    // 按在卡片上会同时起一个物件拖拽和一次平移，两边各拽各的。
-    if (camApiRef.current?.isHandMode?.()) return;
-    // 板书防误触：编辑模式关着且这条板书没被双击武装 → 这一下不归卡
-    //（事件照常冒泡到画布层，board-hit 把它当空地 —— 平移/框选都照旧）
-    if (o.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(o.id)) return;
-    // 工具在手（画笔/批注）时这一下归工具：按在卡上是要在卡上画、标，不是要
-    // 拖卡。少了这条，笔画起点落在卡上会同时武装一次物件拖拽 —— 抬 z、写盘，
-    // 而笔画提交又吞掉抬手，dragRef 残骸让那张卡黏住光标
-    // （2026-08-13 查实的真 bug，三个症状同一根）。
-    //
-    // 两条豁免：
-    //   - 涂鸦的**摆放模式**对墨类放行 —— 那个模式存在的意义就是挪墨迹。
-    //   - **文字工具**整个放行 —— 它 2026-08-13 起只认双击（见 useCanvasTools），
-    //     单击这一下本来就该按指针工具那套走："单击不触发，当作操作文字本身"。
-    if (toolRef.current !== 'select' && toolRef.current !== 'text') {
-      const arrange = toolRef.current === 'draw' && drawModeRef.current === 'arrange';
-      if (!(arrange && o.native)) return;
-    }
-    recentDragMovedRef.current = false;
-    noteUserTakeover();
-    setDragActive(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const z = ++zMaxRef.current;
-    patchLayout(o.id, { x: o.pos.x, y: o.pos.y, z });
-    dragRef.current = {
-      kind: 'object', id: o.id, startX: e.clientX, startY: e.clientY,
-      // 抓点存**世界坐标**：move 时用「当前相机下光标处的世界点 − 抓点」求
-      // 位移。相机在拖拽中怎么动（滚轮平移、Ctrl+滚轮缩放），卡都钉在光标下。
-      grabWorld: camera.toWorld(e.clientX, e.clientY),
-      lastClientX: e.clientX, lastClientY: e.clientY,
-      origX: o.pos.x, origY: o.pos.y, moved: false,
-    };
-  };
-
-  const onPointerMove = (e) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const dx = e.clientX - d.startX; const dy = e.clientY - d.startY;
-    if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
-    d.lastClientX = e.clientX; d.lastClientY = e.clientY;
-    {
-      // 位移在**世界坐标系**里算：当前相机下光标处的世界点 − 按下时的抓点。
-      //
-      // 老算法是 `origX + 屏幕位移/scale`，公式里没有相机项 —— 拖着卡滚一格
-      // 滚轮，相机平移了，卡却按屏幕位移原地不动，光标底下的目标就这么丢了
-      // （2026-08-13 用户报）。Ctrl+滚轮缩放还会叠一个瞬间跳变（历史总位移
-      // 除以新 scale）。两次 screenToWorld 相减把相机自然消掉，怎么动都跟手。
-      //
-      // 落点不再夹范围（原来 x∈[-800,2160]、y≥-800）：画布已全向无限，
-      // "拖丢了找不回来"由小地图和 Shift+1 兜底，不由夹子兜底。
-      const w = camera.toWorld(e.clientX, e.clientY);
-      const nx = d.origX + (w.x - d.grabWorld.x);
-      const ny = d.origY + (w.y - d.grabWorld.y);
-      setLayout(prev => ({ ...prev, [d.id]: { ...prev[d.id], x: nx, y: ny } }));
-      // 实时落点提示：这个物件松手会归到哪（工作区高亮 / 文件夹卡高亮）。
-      //
-      // **只提示归属，不预告坐标**：2026-08-07 前这里还会算一个 244×210 的
-      // 吸附格并画成虚线 ghost，松手时把卡吸过去。那就是「拖动往鼠标反方向
-      // 跑」的全部原因 —— 拖拽过程逐帧是像素级跟手的，是松手那一下被吸到
-      // 格点上，向左拖 30px 能落到 −34px。落点由用户的手决定，不由格子决定。
-      const obj = positioned.find(o => o.id === d.id);
-      if (obj) {
-        const sz = sizeOf({ ...obj, pos: layoutRef.current[d.id] || obj.pos });
-        const cx = nx + sz.w / 2; const cy = ny + sz.h / 2;
-        // 板书拖拽不引发文件搬家（08-24 案）：它是画布上的**话**，位置自由、
-        // 归属钉死 notes/板书/。误触会丢 chalk 身份（判据住 board-kinds）
-        const canMoveFile = dragMovesFile(obj);
-        // 一层里只有文件夹方卡，判据从两条（收起态窄条 / 展开态框）收成一条
-        const folder = !canMoveFile ? null : folderView.find(z =>
-          cx >= z.x && cx < z.x + z.w && cy >= z.y && cy < z.y + z.h);
-        /**
-         * 没落在文件夹上 → 看是不是**摞在另一件东西上**：桌面语言里这就是
-         * "把这两件归到一起"，系统当场建个文件夹把两个都收进去（2026-08-13）。
-         *
-         * 判据用**被拖那张的中心**落在对方矩形里，跟落进文件夹同一套 ——
-         * 用矩形相交会太灵敏，挨着摆一下就成夹。
-         */
-        const over = (folder || !canMoveFile) ? null : positioned.find(it => {
-          if (it.id === d.id || it.native) return null;     // 涂鸦/文字不成夹
-          if (!dragMovesFile(it)) return null;              // 板书等：有磁盘位置但归属钉死
-          const s2 = sizeOf(it);
-          return cx >= it.pos.x && cx < it.pos.x + s2.w && cy >= it.pos.y && cy < it.pos.y + s2.h;
-        });
-        const hint = folder ? { kind: 'folder', id: folder.id }
-          : over ? { kind: 'group', id: over.id } : null;
-        if (JSON.stringify(dropHintRef.current) !== JSON.stringify(hint)) {
-          dropHintRef.current = hint;
-          setDropHint(hint);
-        }
-      }
-    }
-  };
-
-  // 拖拽中相机动了：滚轮不产生 pointermove，光标停着纯滚轮时上面那条换算
-  // 没机会跑，卡会在原世界坐标上"漂走"，直到鼠标动一像素才猛地追上。
-  // 这里在相机每次变化时用最后一次已知的光标位置补一帧。
-  useEffect(() => {
-    const d = dragRef.current;
-    if (!d || d.kind !== 'object' || !d.grabWorld) return;
-    const w = camera.toWorld(d.lastClientX, d.lastClientY);
-    setLayout(prev => ({
-      ...prev,
-      [d.id]: { ...prev[d.id], x: d.origX + (w.x - d.grabWorld.x), y: d.origY + (w.y - d.grabWorld.y) },
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cam]);
-
-  // 拖到视口边缘 → 画布自动跟着走。只推相机，卡由上面那条 [cam] effect 补帧（道理在 useDragEdgePan.js）
-  useDragEdgePan({ active: dragActive, dragRef, paneRef: scrollRef, camApiRef });
-
-  /**
-   * ⚠️ 这里曾有「拖到空白处 = 搬出当前文件夹」（DRAG_OUT_DETACHES / DETACH_MARGIN）。
-   * **2026-08-13 删掉，因为它在当前目录模型下必然误触** —— 用户报「我总是拖一下
-   * 就把文件移出文件夹了」，查出来是判据本身错了：
-   *
-   *   判定拿的是「物件在**这一层**的坐标」跟「`zones[当前文件夹]` 的矩形」比，
-   *   可后者是**那张文件夹卡在它父层里的位置**（288×352 的一张卡）。两个数字
-   *   活在不同的坐标空间里，比较毫无意义 —— 进了文件夹随便拖一下，中心大概率
-   *   就落在那张卡的 48px 之外，于是"明确拖出去了"，文件真的被搬回根目录。
-   *
-   * 修法不是给它换个正确的矩形（一层桌面是无限的，压根没有"这一层的边界"这种
-   * 东西），而是换成**显式动作**：右键「移动到…」挑目标（用户 2026-08-13 定）。
-   * 拖拽只剩两条语义，都要求落点上真有个东西：落在文件夹卡上=搬进去、
-   * 摞在另一件东西上=归成一夹。落在空地上就只是挪了个位置。
-   */
-
-  const onPointerUp = () => {
-    const d = dragRef.current;
-    dragRef.current = null;
-    setDragActive(false);
-    // click/dblclick 在 pointerup 之后才派发，此时 dragRef 已清 —— 拖完的
-    // "余韵"记在这个 ref 上，让点击类 handler 能区分"拖完松手"和"真点击"
-    recentDragMovedRef.current = !!d?.moved;
-    // 点了一下没拖动 = 选中（墨类进选中态；板书也进 —— 武装态点一下不该掉，
-    // 编辑模式开着时更是"随时可选中"。产物卡的动作是开窗/拖动，不选中）
-    if (d?.kind === 'object' && !d.moved) {
-      const obj = positioned.find(o => o.id === d.id);
-      setSelectedId((obj?.native || obj?.chalk) ? d.id : null);
-    }
-    if (d?.kind === 'object') {
-      // 落点判定 → **真的搬文件**（2026-08-08）：
-      //   落在文件夹卡上 = 搬进那个目录
-      //   摞在另一件东西上 = 两件归成一个新文件夹
-      //   落在空地 = 只是挪了个位置，什么也不搬（搬出去走右键「移动到…」）
-      if (d.moved) {
-        const obj = positioned.find(o => o.id === d.id);
-        const pos = layoutRef.current[d.id];
-        const hint = dropHintRef.current;
-        if (obj && pos) {
-          const prevZone = obj.zoneId || null;
-          let target = null;                       // null = 不搬；字符串 = 搬到这个目录（'' = 根）
-          if (hint?.kind === 'group') {
-            const other = positioned.find(it => it.id === hint.id);
-            if (other) groupInto(obj, other);
-            dropHintRef.current = null;
-            setDropHint(null);
-            // ⛔ 不再给旧 id 排写入：搬家发起后旧键的迟到 flush 会经 board-store
-            // 转发表把**新条目**删掉（null 删除也走 fwd，08-24 案）。位置与清账
-            // 由 moveEntry/groupInto 拿服务端回包处理。
-            return;
-          }
-          if (hint?.kind === 'folder' || hint?.kind === 'zone') {
-            if (hint.id !== prevZone) target = hint.id;
-          }
-          if (target !== null) {
-            moveEntry(obj, target, { x: pos.x, y: pos.y });
-            dropHintRef.current = null;
-            setDropHint(null);
-            return;   // 同上：搬家路上不给旧 id 排写入
-          }
-        }
-      }
-      dropHintRef.current = null;
-      setDropHint(null);
-      // 用户亲手拖过 = 座位出处 'user'：服务端排座/跟随从此不许覆盖这个座
-      if (d.moved) setLayout(prev => (prev[d.id] ? { ...prev, [d.id]: { ...prev[d.id], seat: 'user' } } : prev));
-      dirtyRef.current.objects.add(d.id);
-      scheduleSave();
-    }
-  };
-
-  // 「刚拖完」的余韵，点击类 handler 靠它区分"拖完松手"和"真点击"。
   // 必须声明在 useMarquee 之前 —— 那个 hook 在 render 期就把它读走了。
   const recentDragMovedRef = useRef(false);
   // 长按框选 → useMarquee.js（框的状态和三个手势口都在那儿）
@@ -1035,6 +865,17 @@ export default function BoardCanvas({
     setLayout, setZones, setBindings,
     layoutRef, dirtyRef, movingRef,
     positionedRef, objectsRef, zonesEffRef, folderViewRef,
+  });
+
+  // 拖拽全家（pointerdown/move/up/相机补帧/边缘跟车/整组抓手/板书双按武装）
+  // 2026-08-25 抽进 useBoardObjectDrag.js —— 语义与注释原样搬走，改拖拽行为去那看。
+  const { onObjectPointerDown, onPointerMove, onPointerUp, onTagGrab } = useBoardObjectDrag({
+    camera, cam, positioned, folderView, dragActive,
+    dragRef, dropHintRef, setDropHint, setDragActive,
+    recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
+    zMaxRef, toolRef, drawModeRef, chalkEditModeRef, selectedIdsRef,
+    setSelectedId, setSelectedIds, noteUserTakeover, camApiRef, scrollRef,
+    moveEntry, groupInto, chalkArmedAtRef,
   });
 
   const wasDrag = () => !!(dragRef.current?.moved || recentDragMovedRef.current);
@@ -1709,6 +1550,10 @@ export default function BoardCanvas({
             setSelectedId(obj.id);
             return;
           }
+          // 武装那一下的 dblclick 到此为止 —— 编辑要武装态**再**双击（08-25 探针：
+          // 不吞的话武装即开就地编辑器，后续按下全进编辑框，卡永远拖不动）
+          const armed = chalkArmedAtRef.current;
+          if (!win && obj.chalk && armed.id === obj.id && Date.now() - armed.t < 600) return;
           primaryOpen(obj);
         }}
         onAdd={() => handleAdd(obj)}
@@ -1875,7 +1720,7 @@ export default function BoardCanvas({
 
 
           {/* 关系线（世界坐标，铺在物件之下）*/}
-          <TagHullLayer positioned={positioned} />
+          <TagHullLayer positioned={positioned} onGrab={onTagGrab} />
           <BindingLayer
             bindings={bindings}
             rectOf={rectOfId}

@@ -1258,6 +1258,12 @@ export default function ProjectWorkspace() {
         if (evt.rect) setBoardFocus({ rect: evt.rect, tag: evt.tag || null, layer: evt.layer || '', soft: !!evt.soft, chalk: evt.chalk || null, at: Date.now() });
         break;
       }
+      // agent 拨「改板书」开关（08-25）：BoardCanvas 挂窗口事件接（免 prop 钻五层）
+      case 'ui.chalk_edit': {
+        window.dispatchEvent(new CustomEvent('nd:chalk-edit', { detail: { on: !!evt.on } }));
+        showToast(evt.on ? 'agent 打开了「改板书」：板书现在可以直接拖动/编辑' : 'agent 关上了「改板书」', 'info');
+        break;
+      }
 
       // Phase B 批次 3：SDK 自动 recall 写入 globalStore，MemoryCard 折叠区显示
       case 'run.memory_recall':

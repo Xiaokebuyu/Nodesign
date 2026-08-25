@@ -28,6 +28,7 @@ import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib
 import { UNIT, textBox } from '../../../lib/sketch-layout.js';
 import { resolvePlacement } from '../../../lib/board-place.js';
 import { CHALK_DIR, trashChalkFile } from '../../../lib/chalk.js';
+import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
 
 const MAX_OPS = 40;
 let seq = 0;
@@ -36,7 +37,7 @@ const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 const REL = z.object({
   ref: z.string().min(1).max(300).describe('canvas id to place relative to'),
   side: z.enum(['right', 'left', 'above', 'below']),
-  gap: z.number().min(0).max(40).optional().describe('grid units (default 1)'),
+  gap: z.number().min(0).max(8).optional().describe('grid CELLS, 1 cell = 24px (default 1; max 8 = 192px). NOT pixels — gap:2 means 48px'),
 });
 const DELTA = z.object({ dx: z.number().min(-200).max(200), dy: z.number().min(-200).max(200) }).describe('grid units');
 const TO = z.union([REL, DELTA]);
@@ -57,6 +58,7 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('erase_group'), tag: z.string().min(1).max(40).describe('delete the whole tagged group (notes/shapes/lines; artifact cards only lose the tag)') }),
   z.object({ op: z.literal('feature'), id: z.string().min(1).max(300).describe('make this the hero of the desktop') }),
   z.object({ op: z.literal('unfeature') }),
+  z.object({ op: z.literal('chalk_edit'), on: z.boolean().describe('true = turn ON the user-side 改板书 toggle (notes become freely draggable/editable for the user); false = back to guarded mode') }),
 ]);
 
 export function makeEditBoardTool({ projectId, sharedRoot, ctx }) {
@@ -75,7 +77,9 @@ ops (run in order; a failing op is reported, the rest still apply):
  text edits changed heights) · follow{group_tag,target_tag,side?} (standing rule: whenever a
  new item with target_tag lands, the group auto-moves beside it — a status panel that tracks
  the latest chapter needs this ONCE, not per turn) · unfollow{group_tag} ·
- commit{tag?} (staging → solid) · erase_group{tag} · feature{id} / unfeature (hero).
+ commit{tag?} (staging → solid) · erase_group{tag} · feature{id} / unfeature (hero) ·
+ chalk_edit{on} (flip the user's 改板书 toggle — turn it ON when the session leans on
+ board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming).
 Moves avoid collisions (nearest free cell, user-dragged seats are never displaced).
 For brand-new content use write_on_board.`,
     {
@@ -174,9 +178,11 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             const p = placeRel(id, box, o.to);
             if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
             setObj(id, { ...e, x: Math.round(p.x), y: Math.round(p.y), seat: 'agent' });
-            if (p.nudged) report.push(`· #${i + 1} move: 目标位被占，就近落在 ${p.resolution}`);
+            report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.nudged ? `（目标位被占，就近落在 ${p.resolution}）` : ''}`);
           } else {
-            setObj(id, { ...e, x: Math.round(e.x + o.to.dx * UNIT), y: Math.round(e.y + o.to.dy * UNIT), seat: 'agent' });
+            const nx = Math.round(e.x + o.to.dx * UNIT); const ny = Math.round(e.y + o.to.dy * UNIT);
+            setObj(id, { ...e, x: nx, y: ny, seat: 'agent' });
+            report.push(`· #${i + 1} move → (${nx},${ny})`);
           }
           ok += 1;
         } else if (o.op === 'move_group') {
@@ -195,12 +201,13 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             const obstacles = Object.entries(live)
               .filter(([id, e]) => !memberIds.has(id) && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
               .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
-            p = resolvePlacement({ box: { w, h }, anchor: r, side: o.to.side, gap: (o.to.gap ?? 1) * UNIT, obstacles, contentBottom: 0 });
+            p = resolvePlacement({ box: { w, h }, anchor: r, side: o.to.side, gap: Math.min(8, o.to.gap ?? 1) * UNIT, obstacles, contentBottom: 0 });
           } else {
             p = { x: bb.x + o.to.dx * UNIT, y: bb.y + o.to.dy * UNIT };
           }
           const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
           for (const [id, e] of members) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, seat: 'agent' });
+          report.push(`· #${i + 1} move_group #${o.tag} → 组左上 (${Math.round(p.x)},${Math.round(p.y)})${'ref' in o.to && p.resolution ? `（${p.resolution}${p.nudged ? '，就近避让过' : ''}）` : ''}`);
           ok += 1;
         } else if (o.op === 'remove') {
           const id = rid(o.id); const e = id && live[id];
@@ -321,6 +328,14 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           heroPatch = id; ok += 1;
         } else if (o.op === 'unfeature') {
           heroPatch = null; ok += 1;
+        } else if (o.op === 'chalk_edit') {
+          // 改板书开关（08-25 用户提：黑板 RP 这类板书密集会话该由 agent 帮忙打开）。
+          // 存 ui-config（重开页面还在），并广播给开着的前端当场生效。
+          const cfg = (await readUiConfigFile(sharedRoot)) || {};
+          await writeUiConfig(sharedRoot, { ...cfg, chalk_edit: !!o.on });
+          try { ctx?.emit?.({ type: 'ui.chalk_edit', sessionId: null, on: !!o.on }); } catch { /* */ }
+          report.push(`· 改板书开关 → ${o.on ? '开（用户现在可直接拖动/编辑板书）' : '关'}`);
+          ok += 1;
         }
       } catch (e) { fail(String(e?.message || e).slice(0, 120)); }
     }
