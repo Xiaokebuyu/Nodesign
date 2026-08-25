@@ -48,19 +48,19 @@ const CANVAS_NATIVE_KINDS = new Set(['scribble', 'text']);
 const COORD_LIMIT = 1e6;
 
 /** 涂鸦路径串上限。一条随手画的线约 300~800 字符，8000 够长且撑不爆 board.json */
-const MAX_SCRIBBLE_PATH = 8000;
+const MAX_SCRIBBLE_PATH = 24000;
 /**
  * 画布文字的字数上限。
  *
  * 它是"写在白板上的一句话"，不是文档 —— 长东西该写成 .md（那是便利贴，
  * agent 读得到）。2000 字够写一段说明，也撑不爆 board.json。
  */
-const MAX_TEXT_LEN = 2000;
+const MAX_TEXT_LEN = 8000;
 /**
  * md 档文字的上限（2026-08-23 黑板）。画布上的 markdown/KaTeX/mermaid 节点比手写
  * 一句话长，但它仍是"黑板上的一块"不是文档 —— 想写长的走 .md。
  */
-const MAX_MD_TEXT_LEN = 4000;
+const MAX_MD_TEXT_LEN = 8000;
 /** 文字的排版格式：plain = 原样手写；md = Markdown（含 KaTeX 与 mermaid 围栏） */
 const TEXT_FORMATS = ['plain', 'md'];
 /**

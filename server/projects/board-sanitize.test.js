@@ -27,14 +27,14 @@ describe('board-sanitize 黑板字段', () => {
     expect(b.objects['deck:x'].tag).toBe('g1');
   });
 
-  it('md 档字数上限比 plain 宽', () => {
-    const long = 'x'.repeat(3000);
+  it('正文上限 8000（08-25 移除画板上限批：容量墙只当失控兜底）', () => {
+    const long = 'x'.repeat(9000);
     const b = sanitizeBoard({ objects: {
       'text:p': { x: 0, y: 0, kind: 'text', data: { t: long } },
       'text:m': { x: 0, y: 0, kind: 'text', data: { t: long, format: 'md' } },
     } });
-    expect(b.objects['text:p'].data.t.length).toBe(2000);
-    expect(b.objects['text:m'].data.t.length).toBe(3000);
+    expect(b.objects['text:p'].data.t.length).toBe(8000);
+    expect(b.objects['text:m'].data.t.length).toBe(8000);
   });
 
   it('线：material 只收词汇表里的、ink 不落字段；tag/staging 同物件', () => {

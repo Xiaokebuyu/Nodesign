@@ -30,7 +30,7 @@ import { resolvePlacement } from '../../../lib/board-place.js';
 import { CHALK_DIR, trashChalkFile } from '../../../lib/chalk.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
 
-const MAX_OPS = 40;
+const MAX_OPS = 120;
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 
@@ -39,15 +39,15 @@ const REL = z.object({
   side: z.enum(['right', 'left', 'above', 'below']),
   gap: z.number().min(0).max(8).optional().describe('grid CELLS, 1 cell = 24px (default 1; max 8 = 192px). NOT pixels — gap:2 means 48px'),
 });
-const DELTA = z.object({ dx: z.number().min(-200).max(200), dy: z.number().min(-200).max(200) }).describe('grid units');
+const DELTA = z.object({ dx: z.number().min(-2000).max(2000), dy: z.number().min(-2000).max(2000) }).describe('grid units');
 const TO = z.union([REL, DELTA]);
 
 const OP = z.discriminatedUnion('op', [
-  z.object({ op: z.literal('set_text'), id: z.string().min(1).max(300), text: z.string().min(1).max(4000).optional(), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional() }),
+  z.object({ op: z.literal('set_text'), id: z.string().min(1).max(300), text: z.string().min(1).max(8000).optional(), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional() }),
   z.object({ op: z.literal('move'), id: z.string().min(1).max(300), to: TO }),
   z.object({ op: z.literal('move_group'), tag: z.string().min(1).max(40), to: TO }),
   z.object({ op: z.literal('remove'), id: z.string().min(1).max(300) }),
-  z.object({ op: z.literal('add_node'), id: z.string().regex(/^[A-Za-z0-9_-]{1,24}$/).optional().describe('local handle for later ops of this call'), text: z.string().min(1).max(4000), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), at: REL, tag: z.string().max(40).optional() }),
+  z.object({ op: z.literal('add_node'), id: z.string().regex(/^[A-Za-z0-9_-]{1,24}$/).optional().describe('local handle for later ops of this call'), text: z.string().min(1).max(8000), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), at: REL, tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('add_edge'), from: z.string().min(1).max(300), to: z.string().min(1).max(300), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), label: z.string().max(60).optional(), tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('set_edge'), id: z.string().min(1).max(300), label: z.string().max(60).optional(), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), from: z.string().min(1).max(300).optional().describe('re-point the line: new source end'), to: z.string().min(1).max(300).optional().describe('re-point the line: new target end') }),
   z.object({ op: z.literal('remove_edge'), id: z.string().min(1).max(300) }),

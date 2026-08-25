@@ -33,16 +33,18 @@ import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
 
-const MAX_NODES = 40;
-const MAX_SHAPES = 30;
-const MAX_EDGES = 60;
+// 08-25 用户拍板「移除画板上限」：容量类上限全放大成失控兜底，可读性走软提醒。
+// zod 硬拒（-32602 整调用作废）是最贵的失败模式 —— 别再用它管风格。
+const MAX_NODES = 200;
+const MAX_SHAPES = 120;
+const MAX_EDGES = 400;
 
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 const COLORS = ['ink', 'red', 'pencil', 'brass'];
 
-const LOCAL_ID = z.string().regex(/^[A-Za-z0-9_-]{1,24}$/, 'local id: letters/digits/_/-');
-const GRID_PT = z.object({ x: z.number().min(-400).max(400), y: z.number().min(-400).max(400) });
+const LOCAL_ID = z.string().regex(/^[A-Za-z0-9_-]{1,48}$/, 'local id: letters/digits/_/-');
+const GRID_PT = z.object({ x: z.number().min(-2000).max(2000), y: z.number().min(-2000).max(2000) });
 const WORLD_PT = z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6) });
 const TAG_RE = /^[\w一-鿿぀-ヿ-]{1,40}$/;
 
@@ -50,7 +52,7 @@ const TAG_RE = /^[\w一-鿿぀-ヿ-]{1,40}$/;
 const looksLikeMd = (t) => /(\*\*|__|^#{1,4}\s|^\s*[-*]\s|\|.+\||```|\$[^$]+\$|\[.+\]\(.+\))/m.test(t);
 
 const SCHEMA = {
-  text: z.string().min(1).max(1500).optional()
+  text: z.string().min(1).max(8000).optional()
     .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
   near: z.string().max(300).optional()
     .describe('Canvas id or #tag this lands beside (annotates line for a single note)'),
@@ -65,7 +67,7 @@ const SCHEMA = {
   tag: z.string().regex(TAG_RE).optional()
     .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
   size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe('Single note text size (md default, lg headline)'),
-  width: z.number().min(8).max(30).optional().describe('Single note width in grid units (24px); default by content'),
+  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px); default by content'),
   title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
   layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap']).optional()
     .describe('Sketch layout. free needs at on EVERY node (missing ones are an error, not a silent column)'),
@@ -73,13 +75,13 @@ const SCHEMA = {
   staging: z.boolean().optional().describe('Sketch default true (translucent until finish/turn end); single note default false'),
   nodes: z.array(z.object({
     id: LOCAL_ID.describe('Local id to reference from edges/shapes'),
-    text: z.string().min(1).max(4000),
+    text: z.string().min(1).max(8000),
     format: z.enum(['plain', 'md']).optional().describe('Default: md when the text carries markdown marks, else plain'),
     size: z.enum(['sm', 'md', 'lg', 'xl']).optional(),
     font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(),
     color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
     at: GRID_PT.optional().describe('Grid position (layout free); top-left of the node'),
-    w: z.number().min(3).max(40).optional().describe('Width in grid units (≤40 = 960px; prefer ≤22 — paragraphs read better growing down)'),
+    w: z.number().min(3).max(120).optional().describe('Width in grid units (prefer ≤22 = 528px: paragraphs read better growing down than wide)'),
   })).max(MAX_NODES).optional(),
   shapes: z.array(z.object({
     id: LOCAL_ID.optional(),
@@ -121,9 +123,9 @@ One thought = one call. What you pass decides what lands:
   and the return says exactly where and why.
 Node text carrying markdown marks defaults to format md (KaTeX $…$ and \`\`\`mermaid fences work).
 Readability: user reads at 80–100% zoom — body text md/lg; one sketch ≤ ${SKETCH_FIT.w}x${SKETCH_FIT.h}
-world px, hard cap ${SKETCH_MAX.w}x${SKETCH_MAX.h} (split big ones, link with an edge).
+world px (bigger lands with a warning — split big ones, link with an edge).
 To change what is already on the board use edit_board — do not redraw.
-Per sketch ≤${MAX_NODES} nodes / ${MAX_SHAPES} shapes / ${MAX_EDGES} edges. Keep the chat reply to one line pointing here.`;
+Keep the chat reply to one line pointing here.`;
 
 export function makeWriteOnBoardTool({ projectId, sharedRoot, sessionId, ctx }) {
   const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
@@ -410,9 +412,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       ...nodes.map(n => ({ ...pos.get(n.key), w: n.w, h: n.h })),
       ...shapes.map(sh => sh.rect),
     ]);
-    if (local.w > SKETCH_MAX.w || local.h > SKETCH_MAX.h) {
-      return err(`这张图太大了（${Math.round(local.w)}x${Math.round(local.h)} 世界像素，上限 ${SKETCH_MAX.w}x${SKETCH_MAX.h}）：用户在 80%~100% 缩放下看不全。拆成两张（各自一个 tag，之间用线连），或减节点/缩 w。`);
-    }
+    // 巨图不再硬拒（08-25 用户拍板移除上限）：照落，返回里强提醒拆分
+    const oversized = local.w > SKETCH_MAX.w || local.h > SKETCH_MAX.h;
     let zone = '';
     let anchorRect = null;
     let sketchBase = board;
@@ -466,6 +467,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       `ids: ${[...idOf].map(([k, v]) => `${k}=${v}`).join(', ')}`,
       `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
+    if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一屏（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。下次拆成几张 tag 图用线连。`);
     if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}`);
     if (world.w > fit.w || world.h > fit.h) lines.push(`⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
     if (vp?.zoom && vp.zoom < 0.8) lines.push(`User's zoom is ${vp.zoom} (<0.8): keep nodes md/lg and say in one line that there is a sketch on the board.`);
