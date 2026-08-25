@@ -98,7 +98,8 @@ export function useStageState({
               ...c,
               filePath: c.filePath || evt.filePath || null,
               objectId: c.objectId || oid,
-              text: c.text + (evt.append || ''),
+              // reset = 批里换了一条板书：另起一张（不清的话两条正文粘一起）
+              text: evt.reset ? (evt.append || '') : c.text + (evt.append || ''),
             },
           };
         });
@@ -128,9 +129,14 @@ export function useStageState({
               : typeof input.content === 'string' ? input.content : null;
             if (full != null && full.length > c.text.length) patch.text = full;
           } else if (kind === 'chalk') {
-            // 完整入参快照兜底（不吐流式增量的模型也能看到全文）；画图调用没有 text
-            if (typeof input.text === 'string' && input.text.length > c.text.length) patch.text = input.text;
-            else if (!input.text && (input.nodes || input.shapes)) patch.sketching = true;
+            // 完整入参快照兜底（不吐流式增量的模型也能看到全文）；画图调用没有 text；
+            // board_batch 认批内最后一条 write_on_board 的 text
+            const t = typeof input.text === 'string' ? input.text
+              : Array.isArray(input.actions)
+                ? [...input.actions].reverse().find(a => /write_on_board$/.test(String(a?.name || '')) && typeof a?.input?.text === 'string')?.input?.text
+                : null;
+            if (t && t.length > c.text.length) patch.text = t;
+            else if (!t && (input.nodes || input.shapes || input.actions)) patch.sketching = true;
           } else if (kind === 'terminal') {
             patch.command = typeof input.command === 'string' ? input.command : '';
           } else if (kind === 'image') {

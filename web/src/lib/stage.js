@@ -17,6 +17,7 @@ const TOOL_STAGE_KIND = {
   Bash: 'terminal',
   mcp__nodesign__generate_image: 'image',
   mcp__nodesign__write_on_board: 'chalk',   // 板书直播：text 逐 token 流进纸面卡
+  mcp__nodesign__board_batch: 'chalk',      // 批内 write_on_board 同样直播（服务端抽最新一条）
   AskUserQuestion: 'question',   // 交互卡直接上画布（dock），聊天栏那张照旧
 };
 

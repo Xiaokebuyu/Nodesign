@@ -307,7 +307,27 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           const id = existing ? existing[0] : `b:a${stamp()}`;
           const binding = { type: 'annotates', from, to, by: 'agent', label: o.label || '跟随', follow: o.target_tag, ...(o.side ? { followSide: o.side } : {}) };
           bindings[id] = binding; liveBindings[id] = binding; ok += 1;
-          report.push(`· follow：#${o.group_tag} 从此跟着 #${o.target_tag} 的最新一件（新件落板自动挪，不用每轮手搬）`);
+          // 立规则的同时把组摆到目标旁边：之后的跟随是**平移**（保留相对格局），
+          // 基线偏移必须在此刻就有意义 —— 不摆的话组停在原地，平移只是搬运一个
+          // 无意义的初始偏移（08-25 平移跟随改造时补）
+          {
+            const r = rectOf(to);
+            const memberIds = new Set(members.map(([mid]) => mid));
+            const zone = layerOf(to, live[to], known);
+            const rects = members.map(([mid]) => rectOf(mid));
+            const bb = {
+              x: Math.min(...rects.map(x => x.x)), y: Math.min(...rects.map(x => x.y)),
+              w: Math.max(...rects.map(x => x.x + x.w)) - Math.min(...rects.map(x => x.x)),
+              h: Math.max(...rects.map(x => x.y + x.h)) - Math.min(...rects.map(x => x.y)),
+            };
+            const obstacles = Object.entries(live)
+              .filter(([oid2, e2]) => !memberIds.has(oid2) && oid2 !== to && Number.isFinite(e2?.x) && layerOf(oid2, e2, known) === zone)
+              .map(([oid2, e2]) => ({ x: e2.x, y: e2.y, ...estimateSizeOn(board, oid2, e2) }));
+            const pp = resolvePlacement({ box: { w: bb.w, h: bb.h }, anchor: r, side: o.side || 'right', obstacles, contentBottom: 0 });
+            const mdx = Math.round(pp.x - bb.x); const mdy = Math.round(pp.y - bb.y);
+            if (mdx || mdy) for (const [mid, me] of members) setObj(mid, { ...me, x: me.x + mdx, y: me.y + mdy, seat: 'agent' });
+          }
+          report.push(`· follow：#${o.group_tag} 已摆到目标旁并从此跟着 #${o.target_tag} 的最新一件（整组平移，用户摆的相对位置保留）`);
         } else if (o.op === 'unfollow') {
           const hits = Object.entries(liveBindings).filter(([, b]) => b.follow && live[b.from]?.tag === o.group_tag);
           if (!hits.length) { fail(`#${o.group_tag} 没有跟随线`); continue; }

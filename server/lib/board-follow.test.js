@@ -53,16 +53,22 @@ describe('跟随线（状态板跟着最新章走，RP 案的正面解）', () =
     expect(Math.min(...panel.map(([, e]) => e.x))).toBeGreaterThan(ch2e.x);
   });
 
-  it('用户拖过的成员不被跟随挪动，线仍重指', async () => {
+  it('用户拖过 = 调整相对格局：整组随目标平移（user 座也挪），线重指', async () => {
     let board = await readBoard(pid);
     const [pcId] = Object.entries(board.objects).find(([, e]) => e.tag === '状态板' && e.data?.lid === 'pc');
-    await patchBoard(pid, { objects: { [pcId]: { x: 99000, y: 99000, seat: 'user' } } });
+    // 用户把 PC 卡拖到自定义相对位（旧章旁边自选的地方）
+    await patchBoard(pid, { objects: { [pcId]: { x: 3000, y: 100, seat: 'user' } } });
+    const ch2 = Object.entries(board.objects).find(([id, e]) => e.tag === '章节' && id.includes('第二章'));
     await write({ text: '第三章：雪原', tag: '章节', chain: true });
     board = await readBoard(pid);
-    expect(board.objects[pcId].x).toBe(99000);   // user 座没动
+    const ch3e = Object.entries(board.objects).find(([id, e]) => e.tag === '章节' && id.includes('第三章'))[1];
+    const dy = ch3e.y - ch2[1].y;
+    // user 座随位移平移（相对格局保留，跟随不罢工 —— 08-25 用户报修）
+    expect(board.objects[pcId].y).toBe(100 + dy);
+    expect(board.objects[pcId].x).toBe(3000 + (ch3e.x - ch2[1].x));
     const line = Object.values(board.bindings).find(b => b.follow === '章节');
     const ch3 = Object.entries(board.objects).find(([id, e]) => e.tag === '章节' && id.includes('第三章'))[0];
-    expect(line.to).toBe(ch3);                    // 线照样重指
+    expect(line.to).toBe(ch3);
   });
 
   it('unfollow 撤规则', async () => {

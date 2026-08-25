@@ -41,6 +41,7 @@ export async function applyFollows(projectId, { tag, newId }) {
     const fromEntry = board.objects?.[b.from];
     const groupTag = fromEntry?.tag || null;
     if (groupTag && board.objects?.[newId]?.tag === groupTag) continue;
+    const oldTarget = board.objects?.[b.to];
     bindings[bid] = { ...b, to: newId };
     followed += 1;
 
@@ -48,6 +49,20 @@ export async function applyFollows(projectId, { tag, newId }) {
     const members = groupTag
       ? Object.entries(board.objects).filter(([, e]) => e.tag === groupTag && Number.isFinite(e?.x))
       : (fromEntry && Number.isFinite(fromEntry.x) ? [[b.from, fromEntry]] : []);
+    if (!members.length) continue;
+
+    // **平移跟随**（08-25 用户报「跟随坏了」后改）：旧目标有座位时，整组按
+    // 新旧目标的位移平移 —— 全员照挪、seat:user 也挪。用户拖动 = 调整相对
+    // 格局（保留），不 = 取消跟随；旧行为（user 座罢工）在他把三张卡都拖过
+    // 之后让 follow 永久死掉。要真停用有 unfollow。
+    if (oldTarget && Number.isFinite(oldTarget.x)) {
+      const dx = Math.round(target.x - oldTarget.x);
+      const dy = Math.round(target.y - oldTarget.y);
+      if (dx || dy) for (const [id, e] of members) objects[id] = { ...e, x: e.x + dx, y: e.y + dy };
+      continue;
+    }
+
+    // 首跟（旧目标没座位可参照）：解一个位置放过去，只挪非 user 座
     const movable = members.filter(([, e]) => e.seat !== 'user');
     if (!movable.length) continue;
     const rects = members.map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
