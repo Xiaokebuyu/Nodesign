@@ -138,7 +138,7 @@ function sideOf(pos, box, anchor) {
  *   screen       {w,h}|null 用户一屏的世界像素（远场判据用；缺省 1750×1125）
  */
 export function resolvePlacement({
-  box, replyTo = null, at = null, anchor = null, side = null,
+  box, replyTo = null, at = null, anchor = null, side = null, gap = UNIT,
   obstacles = [], contentBottom = 0, viewport = null, screen = null,
 }) {
   const w = Math.max(1, Math.round(box?.w || 0));
@@ -180,11 +180,12 @@ export function resolvePlacement({
   //    落点的真实侧位事后量出来进 resolution —— 文案必须报实际发生的事。
   if (anchor) {
     const pref = side || 'right';
+    const g = Number.isFinite(gap) ? gap : UNIT;
     const ideals = {
-      right: { x: anchor.x + anchor.w + UNIT, y: anchor.y },
-      left: { x: anchor.x - UNIT - w, y: anchor.y },
-      below: { x: anchor.x, y: anchor.y + anchor.h + UNIT },
-      above: { x: anchor.x, y: anchor.y - UNIT - h },
+      right: { x: anchor.x + anchor.w + g, y: anchor.y },
+      left: { x: anchor.x - g - w, y: anchor.y },
+      below: { x: anchor.x, y: anchor.y + anchor.h + g },
+      above: { x: anchor.x, y: anchor.y - g - h },
     };
     const hit = ringSearch(ideals[pref], b, obstacles, { sidePref: pref, anchor });
     if (hit) {

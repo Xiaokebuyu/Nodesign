@@ -70,6 +70,14 @@ export const TOOL_ICONS = {
   'mcp__nodesign__arrange_on_board': Move,
   'mcp__nodesign__create_on_board': StickyNote,
   'mcp__nodesign__organize_board': FolderOpen,
+  // ── 黑板（08-25 范式重做：写=write_on_board，改=edit_board，旧名是别名同图标）──
+  'mcp__nodesign__write_on_board': Pencil,
+  'mcp__nodesign__sketch_on_board': Pencil,
+  'mcp__nodesign__edit_board': Move,
+  'mcp__nodesign__edit_sketch': Move,
+  'mcp__nodesign__finish_sketch': ListChecks,
+  'mcp__nodesign__look_at_board': ScanEye,
+  'mcp__nodesign__read_user_view': Binoculars,
   // ── 反馈 / 决策 ──
   'mcp__nodesign__get_pending_changes': Inbox,
   'mcp__nodesign__clear_pending_changes': Trash2,

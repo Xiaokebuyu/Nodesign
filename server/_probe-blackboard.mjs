@@ -11,7 +11,7 @@ import os from 'node:os';
 import { makeReadBoardTool } from './engine/mcp/tools/read-board.js';
 import { makeFinishSketchTool } from './engine/mcp/tools/sketch-on-board.js';
 import { makeSketchOnBoardAlias } from './engine/mcp/tools/write-on-board.js';
-import { makeEditSketchTool } from './engine/mcp/tools/edit-sketch.js';
+import { makeEditBoardTool as makeEditSketchTool } from './engine/mcp/tools/edit-board.js';
 import { makeWriteOnBoardTool } from './engine/mcp/tools/write-on-board.js';
 import { getSharedDir } from './projects/workspace.js';
 import { makeLookAtBoardTool } from './engine/mcp/tools/look-at-board.js';
