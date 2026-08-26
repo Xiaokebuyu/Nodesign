@@ -211,7 +211,8 @@ CDN 库随便拉（gsap / lenis / three / alpine / htmx），但动效是调味�
 
 ## 中文排版基线
 
-- 标点用**全角**（，。：；？！……），半角逗号冒号在中文里很扎眼
+- 标点跟**正文主体语言**走：中文正文用全角（，。：；？！……），半角逗号冒号在中文里很扎眼；
+  英文正文用半角加一个空格，全角标点混进英文句子里同样扎眼。混排按主体那一种算
 - 字体链每段 latin family 后面必须跟 CJK family：
   `'Inter', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif`
   少了 CJK 那段，换台机器中文就掉到系统默认字体

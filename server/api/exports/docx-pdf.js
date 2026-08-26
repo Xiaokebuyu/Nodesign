@@ -12,6 +12,7 @@
 
 import { renderDocx, cleanupRender } from '../../lib/docx/render.js';
 
+import { msg } from '../../shared/messages.js';
 /**
  * @param {import('express').Response} res
  * @param {{absPath:string, relPath:string}} target
@@ -22,7 +23,9 @@ export async function docxToPdfResponse(res, target) {
     out = await renderDocx(target.absPath, {});     // 只要 pdf，不出 png
   } catch (err) {
     return res.status(500).json({
-      error: 'LibreOffice 转换失败',
+      // 这个函数只收 res 不收 req（签名是给导出管线用的）。express 把请求挂在
+      // res.req 上，用它取语言，不为一句报错改所有调用点的签名。
+      error: msg(res.req, 'LibreOffice 转换失败'),
       details: String(err.message || err).slice(0, 500),
     });
   }

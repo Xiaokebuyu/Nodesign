@@ -15,9 +15,11 @@ import express from 'express';
 import {
   authEnabled, mintToken, requestUser, cookieSerialize, cookieClear,
 } from './session.js';
-import { getCredential, verifyPassword, getUserById, registerUser, openRegistrationEnabled } from './users-store.js';
+import { getCredential, verifyPassword, getUserById, registerUser, openRegistrationEnabled, updateUser } from './users-store.js';
+import { LOCALES, isLocale } from '../shared/locales.js';
 import { makeRateWindow } from '../lib/rate-window.js';
 import { platform } from '../runtime/platform.js';
+import { msg } from '../shared/messages.js';
 
 const MAX_FAILS = 10;
 const LOCK_MS = 15 * 60 * 1000;
@@ -56,7 +58,8 @@ function recordFail(ip) {
   failures.set(ip, next);
 }
 
-const publicUser = (u) => (u ? { id: u.id, username: u.username, role: u.role } : null);
+// locale：界面语言偏好，null = 没表过态（前端这时落浏览器语言，见 lib/i18n.js detect）
+const publicUser = (u) => (u ? { id: u.id, username: u.username, role: u.role, locale: u.locale ?? null } : null);
 
 export const authRouter = express.Router();
 
@@ -66,12 +69,32 @@ authRouter.get('/status', (req, res) => {
   res.json({ required: authEnabled(), authed: !!user, user: publicUser(user), openRegistration: openRegistrationEnabled(), profile: platform.profile });
 });
 
+/**
+ * 记住界面语言（2026-08-26 i18n）。
+ *
+ * 只有登录用户才写账号；没登录的人切语言只落 localStorage（前端自己管），
+ * 这里 401 让前端知道"没存上"，但前端**不该因此把切换器禁掉** —— 登录墙外面
+ * 也要能换语言，不然英文用户连注册按钮都读不懂。
+ *
+ * body: { locale: 'zh-CN' | 'en' | null }。null = 清掉偏好，回到跟浏览器走。
+ */
+authRouter.put('/locale', (req, res) => {
+  const user = requestUser(req);
+  if (!user) return res.status(401).json({ error: msg(req, '没登录，语言只记在这台机器上') });
+  const { locale } = req.body || {};
+  if (locale !== null && !isLocale(locale)) {
+    return res.status(400).json({ error: msg(req, 'locale 需为 {allowed} 或 null', { allowed: LOCALES.join(' / ') }) });
+  }
+  updateUser(user.id, { locale });
+  res.json({ ok: true, locale: locale ?? null });
+});
+
 authRouter.post('/login', (req, res) => {
   if (!authEnabled()) return res.json({ ok: true, note: 'auth disabled' });
 
   const ip = clientIp(req);
   const waitMin = locked(ip);
-  if (waitMin) return res.status(429).json({ error: `尝试次数过多，${waitMin} 分钟后再试` });
+  if (waitMin) return res.status(429).json({ error: msg(req, '尝试次数过多，{waitMin} 分钟后再试', { waitMin }) });
 
   const { username, password } = req.body || {};
   const cred = typeof username === 'string' ? getCredential(username.trim()) : null;
@@ -80,7 +103,7 @@ authRouter.post('/login', (req, res) => {
     && verifyPassword(typeof password === 'string' ? password : '', cred.passwordHash);
   if (!ok) {
     recordFail(ip);
-    return res.status(401).json({ error: '用户名或密码错误' });
+    return res.status(401).json({ error: msg(req, '用户名或密码错误') });
   }
 
   failures.delete(ip);
@@ -91,13 +114,13 @@ authRouter.post('/login', (req, res) => {
 authRouter.post('/register', (req, res) => {
   const ip = clientIp(req);
   const waitMin = locked(ip);
-  if (waitMin) return res.status(429).json({ error: `尝试次数过多，${waitMin} 分钟后再试` });
+  if (waitMin) return res.status(429).json({ error: msg(req, '尝试次数过多，{waitMin} 分钟后再试', { waitMin }) });
 
   const { username, password, inviteCode } = req.body || {};
   const hasInvite = typeof inviteCode === 'string' && inviteCode.trim();
   const perIpLimit = Number(process.env.NODESIGN_REGISTER_PER_IP_PER_DAY) || 5;
   if (!hasInvite && registerWindow.count(ip) >= perIpLimit) {
-    return res.status(429).json({ error: '这个网络今天开的号太多了，明天再来', code: 'REGISTER_RATE_LIMITED' });
+    return res.status(429).json({ error: msg(req, '这个网络今天开的号太多了，明天再来'), code: 'REGISTER_RATE_LIMITED' });
   }
   try {
     const user = registerUser({

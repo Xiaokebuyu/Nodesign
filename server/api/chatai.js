@@ -25,6 +25,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import express from 'express';
 import { guardProject } from './_guard.js';
+import { msg } from '../shared/messages.js';
 import { getWorkspaceRoot } from '../projects/workspace.js';
 import { performTurn } from '../engine/chatai/perform.js';
 import {
@@ -57,7 +58,7 @@ const playing = new Set();
 function gateApproved(req, res) {
   // 档位 + 逐人批准（auth/tier.js localGenApproved）：basic 档不开，pro 档要被站主批过
   if (localGenApproved(req.user)) return true;
-  res.status(403).json({ error: '演出通路尚未对这个账号开放' });
+  res.status(403).json({ error: msg(req, '演出通路尚未对这个账号开放') });
   return false;
 }
 
@@ -237,30 +238,30 @@ router.post('/:pid/chatai/turn', async (req, res, next) => {
     if (!gateApproved(req, res)) return;
 
     const input = String(req.body?.input ?? '').trim();
-    if (!input) return res.status(422).json({ error: 'input 是空的' });
+    if (!input) return res.status(422).json({ error: msg(req, 'input 是空的') });
     if (input.length > MAX_INPUT_CHARS) {
-      return res.status(422).json({ error: `input 超长（上限 ${MAX_INPUT_CHARS} 字符）` });
+      return res.status(422).json({ error: msg(req, 'input 超长（上限 {max} 字符）', { max: MAX_INPUT_CHARS }) });
     }
 
     // 08-21 经营态：演出通路烧的是带钥匙的 API 钱，公开注册号（免费档）不开 —— 跟订阅 Claude 同一把资格
     if (!can(req.user, 'subscription')) {
-      return res.status(403).json({ error: '演出模式仅限 Pro 档，暂未对外开放；当前档位请用设计会话', code: 'MODEL_LOCKED' });
+      return res.status(403).json({ error: msg(req, '演出模式仅限 Pro 档，暂未对外开放；当前档位请用设计会话'), code: 'MODEL_LOCKED' });
     }
     const quota = checkQuota(req.user);
     if (!quota.ok) {
-      const word = quota.kind === 'lifetime' ? '试用额度' : '今日额度';
-      return res.status(429).json({ error: `${word}用完了（${fmtUsd(quota.used)} / ${fmtUsd(quota.limit)}）` });
+      const word = quota.kind === 'lifetime' ? msg(req, '试用额度') : msg(req, '今日额度');
+      return res.status(429).json({ error: msg(req, '{word}用完了（{used} / {limit}）', { word, used: fmtUsd(quota.used), limit: fmtUsd(quota.limit) }) });
     }
     const r = rate.take(req.user?.id ?? 'anon');
     if (!r.ok) {
       res.setHeader('Retry-After', Math.ceil(r.retryAfterMs / 1000));
-      return res.status(429).json({ error: '太快了，歇几秒再发' });
+      return res.status(429).json({ error: msg(req, '太快了，歇几秒再发') });
     }
 
     const dir = await resolvePerformanceDir(req, res);
     if (!dir) return;
     if (playing.has(dir.abs)) {
-      return res.status(409).json({ error: '这场演出正有一轮在跑，等它回完' });
+      return res.status(409).json({ error: msg(req, '这场演出正有一轮在跑，等它回完') });
     }
 
     const stream = req.body?.stream !== false;
