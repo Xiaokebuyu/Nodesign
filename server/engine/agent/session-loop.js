@@ -439,8 +439,11 @@ export async function runSession({
         const owner = projectId ? getUserById(getProject(projectId)?.ownerId) : null;
         // 档位按模型通路取旋钮（08-20 两旋钮：订阅 / 本地与中转），model 是上面已解析的会话模型
         // 无主项目 fail-closed 到 tier.js 的默认（strict），别落 loose（生产 08-21 实查 0 个无主项目）
+        // locale：项目 owner 在账号上记的界面语言。null（没表过态）时 renderPrelude
+        // 落中文默认 —— 服务端拿不到浏览器语言，这里不猜，猜错比给中文更糟。
         return renderPrelude(owner ? levelFor(owner, model) : defaultModerationLevel(null), {
           uncensored: isUncensoredModel(model),
+          locale: owner?.locale || undefined,
         });
       })(),
     },

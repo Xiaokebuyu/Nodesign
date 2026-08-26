@@ -14,6 +14,7 @@
 import { collectCards } from '../../lib/export-collect.js';
 import { packageBundles } from '../../lib/export-package.js';
 
+import { msg } from '../../shared/messages.js';
 const FORMATS = ['raw', 'zip', 'md', 'handoff'];
 const MAX_CARDS = 200;
 
@@ -47,22 +48,22 @@ export function makeCardsExportHandler({ guard, rootOf }) {
       if (!project) return;
       const { cardIds, format } = req.body || {};
       if (!Array.isArray(cardIds) || !cardIds.length) {
-        return res.status(400).json({ error: '要导出哪几张卡（cardIds 不能为空）' });
+        return res.status(400).json({ error: msg(req, '要导出哪几张卡（cardIds 不能为空）') });
       }
       if (cardIds.length > MAX_CARDS) {
-        return res.status(400).json({ error: `一次最多导出 ${MAX_CARDS} 张卡` });
+        return res.status(400).json({ error: msg(req, '一次最多导出 {max} 张卡', { max: MAX_CARDS }) });
       }
       if (!FORMATS.includes(format)) {
-        return res.status(400).json({ error: `不认识的导出格式：${format}` });
+        return res.status(400).json({ error: msg(req, '不认识的导出格式：{format}', { format }) });
       }
 
       if (inflight >= MAX_INFLIGHT) {
         res.setHeader('Retry-After', '10');
-        return res.status(429).json({ error: '导出排队中（这台机器一次只打两个包），过几秒再点' });
+        return res.status(429).json({ error: msg(req, '导出排队中（这台机器一次只打两个包），过几秒再点') });
       }
       if (inflightByProject.get(project.id)) {
         res.setHeader('Retry-After', '10');
-        return res.status(429).json({ error: '这个项目已经有一个导出在跑了，等它完事' });
+        return res.status(429).json({ error: msg(req, '这个项目已经有一个导出在跑了，等它完事') });
       }
       inflight += 1;
       inflightByProject.set(project.id, true);
@@ -71,7 +72,7 @@ export function makeCardsExportHandler({ guard, rootOf }) {
       const { bundles, skipped } = await collectCards({ workspaceRoot, cardIds });
       if (!bundles.length) {
         return res.status(skipped[0]?.status === 404 ? 404 : 400)
-          .json({ error: '一张都没收到', skipped });
+          .json({ error: msg(req, '一张都没收到'), skipped });
       }
 
       // 格式合法性由 packageBundles 自己把关（raw 要单文件、md 要有 markdown），

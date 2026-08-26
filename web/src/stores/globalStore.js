@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_MODEL_ID } from '../lib/models.js';
+import { getLocale, setLocale as applyLocale } from '../lib/i18n.js';
 
 /**
  * 全局轻量状态（toast / modal / 跨组件共享的 UI 状态）
@@ -16,6 +17,14 @@ export const useGlobalStore = create((set) => ({
   // local 下账号徽记 / 额度横幅 / 用量面板这些 SaaS 界面整体不渲染（代码不删，只是藏）
   authProfile: 'hosted',
   setAuthProfile: (p) => set({ authProfile: p === 'local' ? 'local' : 'hosted' }),
+
+  // ── 界面语言（2026-08-26 i18n）──
+  // 真相源是 lib/i18n.js 的模块级 current（纯数据模块在 React 之外也要 t()）；
+  // 这里存一份只为触发重渲染。**唯一写入口是下面的 setLocale**，两处同时更新，
+  // 所以不是两个真相源。读语言值一律 getLocale()，别读这个字段。
+  locale: getLocale(),
+  /** opts.explicit=false 表示这是账号偏好回填，不覆盖本机的显式表态 */
+  setLocale: (id, opts) => set({ locale: applyLocale(id, opts) }),
 
   // ── Toast ──
   toasts: [],

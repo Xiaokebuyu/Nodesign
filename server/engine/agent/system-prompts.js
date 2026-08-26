@@ -14,6 +14,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_LOCALE } from '../../shared/locales.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,6 +41,13 @@ const ADULT_POLICY = {
   strict: '露骨的成人内容在这个账号档位下不写——涉及时收敛处理、用留白带过。',
 };
 
+// 界面语言的人话名（2026-08-26 i18n）。注给模型看的是「中文（zh-CN）」这种带 id 的写法：
+// 光写「中文」模型不知道对应哪个 tag，光写 tag 又不如人话直白。
+const UI_LOCALE_NAME = {
+  'zh-CN': '中文（zh-CN）',
+  en: 'English（en）',
+};
+
 /**
  * 「底线」那一节在 prelude 里有**两份并排写着**的版本，标记块框起来：
  * `nd:policy:full`（对外开放平台的完整产物政策）和 `nd:policy:min`。渲染时留一份、
@@ -62,6 +70,17 @@ const POLICY_BLOCK = /<!-- nd:policy:(full|min):start -->\n([\s\S]*?)<!-- nd:pol
   }
 }
 
+// 占位符也要断言：`.replace('{{X}}', v)` 在占位符不存在时**静默什么都不做**，
+// 于是线上会悄悄发出一份没有成人档、或者没有语言指令的提示词，不报错。
+// 标记块那套已经这么防了，占位符这两个之前漏了（08-26 补）。
+{
+  for (const ph of ['{{ADULT_POLICY}}', '{{UI_LOCALE}}']) {
+    if (NODESIGN_PRELUDE && !NODESIGN_PRELUDE.includes(ph)) {
+      throw new Error(`[system-prompts] nodesign-prelude.md 缺少 ${ph} 占位符 —— 渲染会静默少一段`);
+    }
+  }
+}
+
 /**
  * 渲染 prelude。
  *
@@ -79,8 +98,11 @@ const POLICY_BLOCK = /<!-- nd:policy:(full|min):start -->\n([\s\S]*?)<!-- nd:pol
  */
 export function renderPrelude(level = 'loose', opts = {}) {
   const keep = opts.uncensored === true ? 'min' : 'full';
+  // 认不出的 locale 落中文：这个产品是中文优先的，拿不准时给中文不给英文。
+  const localeName = UI_LOCALE_NAME[opts.locale] || UI_LOCALE_NAME[DEFAULT_LOCALE];
   return NODESIGN_PRELUDE
     .replace(POLICY_BLOCK, (_all, which, body) => (which === keep ? body : ''))
     .replace('{{ADULT_POLICY}}', ADULT_POLICY[level] || ADULT_POLICY.loose)
+    .replace('{{UI_LOCALE}}', localeName)
     .trim();
 }

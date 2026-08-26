@@ -13,6 +13,7 @@
 import express from 'express';
 import { guardProject } from './_guard.js';
 import { publishSite, unpublishSite, validTaskName, lookupPublished } from '../lib/site-publish.js';
+import { msg } from '../shared/messages.js';
 
 const router = express.Router();
 
@@ -44,7 +45,7 @@ router.post(['/:pid/publish', '/:pid/publish/:task'], async (req, res) => {
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[publish] deploy failed:', err.stderr || err.message);
-    res.status(502).json({ error: '发布失败：Cloudflare 部署没成功，稍后再试' });
+    res.status(502).json({ error: msg(req, '发布失败：Cloudflare 部署没成功，稍后再试') });
   }
 });
 
@@ -57,7 +58,7 @@ router.delete(['/:pid/publish', '/:pid/publish/:task'], async (req, res) => {
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error('[publish] delete failed:', err.stderr || err.message);
-    res.status(502).json({ error: '下线失败，稍后再试' });
+    res.status(502).json({ error: msg(req, '下线失败，稍后再试') });
   }
 });
 

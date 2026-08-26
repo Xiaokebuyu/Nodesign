@@ -90,3 +90,51 @@ describe('renderPrelude —— 标记块只留一份', () => {
     expect(renderPrelude('typo')).not.toContain('成人内容明确允许');
   });
 });
+
+/**
+ * 界面语言指令（2026-08-26 i18n）。
+ *
+ * 钉两件事：① 语言真的注进去了；② **认不出的值一律落中文** —— 这个产品中文优先，
+ * locale 拼错时给英文比给中文糟得多（中文用户突然被英文招呼），所以 fail-closed 的
+ * 方向是中文，跟成人档「拼错落 loose 不落 off」同一个道理。
+ */
+describe('renderPrelude —— 界面语言', () => {
+  it('locale 注进提示词，中英各自成句', () => {
+    expect(renderPrelude('loose', { locale: 'zh-CN' })).toContain('用户的界面语言是 **中文（zh-CN）**');
+    expect(renderPrelude('loose', { locale: 'en' })).toContain('用户的界面语言是 **English（en）**');
+  });
+
+  it('没给 locale / 给了认不出的值，都落中文', () => {
+    const zh = renderPrelude('loose', { locale: 'zh-CN' });
+    for (const opts of [undefined, {}, { locale: null }, { locale: 'ja' }, { locale: 'EN' }, { locale: 123 }]) {
+      expect(renderPrelude('loose', opts), `opts=${JSON.stringify(opts)}`).toBe(zh);
+    }
+  });
+
+  it('渲染完不许残留任何 {{占位符}}', () => {
+    for (const level of LEVELS) {
+      for (const opts of [{ locale: 'en' }, { locale: 'zh-CN' }, { locale: 'en', uncensored: true }]) {
+        const out = renderPrelude(level, opts);
+        expect(out, `${level}/${JSON.stringify(opts)} 残留占位符`).not.toMatch(/\{\{\w+\}\}/);
+      }
+    }
+  });
+
+  it('三种语言分开那条讲清楚了，且排版军规钉在产物语言上', () => {
+    const out = renderPrelude('loose', { locale: 'en' });
+    expect(out).toContain('**产物语言**跟着用户要的内容走');
+    expect(out).toContain('**排版规矩跟产物语言走**');
+    // 这句是 docx-craft / site-craft 那两条 skill 的条件化前提，改措辞要一起改
+    expect(out).toContain('只在产物正文主体是中文时生效');
+  });
+
+  it('换语言不影响成人档和 uncensored 那两个旋钮', () => {
+    for (const level of LEVELS) {
+      const zh = renderPrelude(level, { locale: 'zh-CN' });
+      const en = renderPrelude(level, { locale: 'en' });
+      // 两份只差语言名那一处
+      expect(en.replace('English（en）', '中文（zh-CN）')).toBe(zh);
+    }
+    expect(renderPrelude('off', { locale: 'en', uncensored: true })).toContain('## 无任何底线');
+  });
+});

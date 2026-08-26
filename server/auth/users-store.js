@@ -19,6 +19,7 @@
 import crypto from 'node:crypto';
 import db from '../engine/runs/store.js';
 import { PLANS, basicDefaultDailyUsd } from './tier.js';
+import { LOCALES } from '../shared/locales.js';
 import { platform } from '../runtime/platform.js';
 
 /**
@@ -116,6 +117,13 @@ if (!userCols.has('plan')) {
   const n = db.prepare("UPDATE users SET plan = 'pro' WHERE allow_subscription = 1").run().changes;
   console.log(`[users-store] users.plan column added（${n} 个账号按 allow_subscription 迁成 pro，其余 basic）`);
 }
+// 08-26 i18n：界面语言偏好。NULL = 没表过态（前端落浏览器语言），'zh-CN' / 'en' = 显式选过。
+// 不给 NOT NULL DEFAULT：存量账号必须是"没表过态"，不能被当成选了中文 —— 一个用惯英文
+// 浏览器的老用户下次进来该看见英文，而不是被这次迁移钉死在中文上。
+if (!userCols.has('locale')) {
+  db.exec('ALTER TABLE users ADD COLUMN locale TEXT');
+  console.log('[users-store] users.locale column added');
+}
 
 const inviteCols = new Set(db.prepare('PRAGMA table_info(invites)').all().map(c => c.name));
 if (!inviteCols.has('grant_lifetime_usd')) {
@@ -171,6 +179,7 @@ function rowToUser(row) {
     allowLocalGen: !!row.local_gen,                   // 本地产线逐人批准（叠在档位之上；见 auth/tier.js localGenApproved）
     plan: row.plan === 'pro' ? 'pro' : 'basic',       // 档位真相源：pro（邀请码）| basic（公开注册）；admin 看 role。能力问 auth/tier.js
     disabled: !!row.disabled,
+    locale: row.locale || null,                      // 界面语言偏好；null = 没表过态，前端落浏览器语言
     inviteCode: row.invite_code || null,
     createdAt: row.created_at,
   };
@@ -215,13 +224,17 @@ export function listUsers() {
   return db.prepare('SELECT * FROM users ORDER BY created_at ASC').all().map(rowToUser);
 }
 
-export function updateUser(id, { disabled, dailyTokenLimit, dailyCostLimitUsd, lifetimeCostLimitUsd, role, moderationLevel, moderationLevelApi, localGen, plan } = {}) {
+export function updateUser(id, { disabled, dailyTokenLimit, dailyCostLimitUsd, lifetimeCostLimitUsd, role, moderationLevel, moderationLevelApi, localGen, plan, locale } = {}) {
   const sets = [];
   const args = [];
   if (disabled !== undefined) { sets.push('disabled = ?'); args.push(disabled ? 1 : 0); }
   if (moderationLevel !== undefined) { sets.push('moderation_level = ?'); args.push(moderationLevel ?? null); }
   if (moderationLevelApi !== undefined) { sets.push('moderation_level_api = ?'); args.push(moderationLevelApi ?? null); }
   if (localGen !== undefined) { sets.push('local_gen = ?'); args.push(localGen ? 1 : 0); }
+  if (locale !== undefined) {
+    if (locale !== null && !LOCALES.includes(locale)) throw new Error(`updateUser: locale 需为 ${LOCALES.join('/')} 或 null，收到 '${locale}'`);
+    sets.push('locale = ?'); args.push(locale ?? null);
+  }
   if (plan !== undefined) {
     if (!PLANS.includes(plan)) throw new Error(`updateUser: plan 需为 ${PLANS.join('/')}，收到 '${plan}'`);
     sets.push('plan = ?'); args.push(plan);

@@ -24,6 +24,7 @@ import { probeCapabilities } from '../runtime/capabilities.js';
 import { envView, setEnvValues, envPath } from '../runtime/local-env.js';
 import { probeModel } from '../lib/ingress/slot-probe.js';
 import { selectableModelsFor } from '../engine/agent/model-context.js';
+import { msg } from '../shared/messages.js';
 
 export const RESTART_EXIT_CODE = 75;
 
@@ -61,13 +62,13 @@ router.get('/config', (_req, res) => {
 router.put('/config', (req, res) => {
   const raw = req.body;
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return res.status(400).json({ error: '配置必须是一个对象 { upstreams, models }' });
+    return res.status(400).json({ error: msg(req, '配置必须是一个对象 { upstreams, models }') });
   }
   try {
     const v = saveLocalConfig(raw);
     res.json({ ok: true, path: v.path, errors: v.errors, needsRestart: true });
   } catch (err) {
-    res.status(500).json({ error: `写配置失败：${err.message}` });
+    res.status(500).json({ error: msg(req, '写配置失败：{err}', { err: err.message }) });
   }
 });
 
@@ -93,15 +94,15 @@ router.put('/env', async (req, res) => {
 const probing = new Set();
 router.post('/models/:id/probe', async (req, res) => {
   const id = req.params.id;
-  if (!selectableModelsFor(req.user).some((m) => m.id === id)) return res.status(404).json({ error: `模型 ${id} 不在可选清单里（没配钥匙的行不体检）` });
-  if (probing.has(id)) return res.status(409).json({ error: '这一行正在体检，等它完' });
+  if (!selectableModelsFor(req.user).some((m) => m.id === id)) return res.status(404).json({ error: msg(req, '模型 {id} 不在可选清单里（没配钥匙的行不体检）', { id }) });
+  if (probing.has(id)) return res.status(409).json({ error: msg(req, '这一行正在体检，等它完') });
   probing.add(id);
   try {
     const vision = req.query.vision !== '0';
     const timeoutMs = Math.min(120_000, Math.max(5_000, Number(req.query.timeoutMs) || 45_000));
     res.json(await probeModel(id, { vision, timeoutMs }));
   } catch (err) {
-    res.status(500).json({ error: `体检出错：${err.message}` });
+    res.status(500).json({ error: msg(req, '体检出错：{err}', { err: err.message }) });
   } finally {
     probing.delete(id);
   }

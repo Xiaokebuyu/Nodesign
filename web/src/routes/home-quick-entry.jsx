@@ -20,6 +20,7 @@ import { Clip } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { Assets } from '../lib/api.js';
+import { t } from '../lib/i18n.js';
 
 
 /**
@@ -45,7 +46,9 @@ function pickGreeting() {
   if (h >= 6 && h < 11) pool = pool.concat(GREETINGS_MORNING);
   else if (h >= 13 && h < 18) pool = pool.concat(GREETINGS_AFTERNOON);
   else if (h >= 21 || h < 4) pool = pool.concat(GREETINGS_EVENING);
-  return pool[Math.floor(Math.random() * pool.length)];
+  // ⭐ 在取用处包 t()，不在上面的数组定义处：模块级 const 只求值一次，
+  // 在定义处包会把 import 那一刻的语言烤死，之后切语言不再变。
+  return t(pool[Math.floor(Math.random() * pool.length)]);
 }
 
 /**
@@ -64,7 +67,7 @@ const PLACEHOLDER_EXAMPLES = [
 ];
 
 function pickPlaceholder() {
-  return PLACEHOLDER_EXAMPLES[Math.floor(Math.random() * PLACEHOLDER_EXAMPLES.length)];
+  return t(PLACEHOLDER_EXAMPLES[Math.floor(Math.random() * PLACEHOLDER_EXAMPLES.length)]);
 }
 
 /** 红光标的高度。跟 home-styles.js 里 `.ndd-pad .caret` 的 height 是同一个数
@@ -190,7 +193,7 @@ export default function QuickEntry({ prefill }) {
       const seed = v || attachments[0]?.name || '';
       const projName = seed.slice(0, 24) + (seed.length > 24 ? '…' : '');
       const proj = await createProject({
-        name: projName || '新项目',
+        name: projName || t('新项目'),
         autoNamed: true,
       });
       // 2. 上传暂存的附件到新 project（单文件失败不阻塞其他，让用户看到 toast 自决）
@@ -201,7 +204,7 @@ export default function QuickEntry({ prefill }) {
           const { asset } = await Assets.upload(proj.id, a._file);
           ready.push({ type: 'asset', path: asset.path, name: asset.name, size: asset.size, mime: asset.mime });
         } catch (err) {
-          showToast(`${a.name} 上传失败：${err.message}`, 'error');
+          showToast(t('{name} 上传失败：{err}', { name: a.name, err: err.message }), 'error');
         }
       }
       // 3. 跳 Workspace 把首条消息 + attachments 塞 location.state；ProjectWorkspace 的
@@ -214,13 +217,13 @@ export default function QuickEntry({ prefill }) {
       // 一个字没写、附件又全传失败：项目已经建出来了，照旧进去，但得说一声
       // 为什么进去之后什么都没发生
       if (!v && ready.length === 0) {
-        showToast('附件都没传上去，进项目后可以重新上传再说', 'error');
+        showToast(t('附件都没传上去，进项目后可以重新上传再说'), 'error');
       }
       navigate(`/projects/${proj.id}/work`, {
         state: { initialMessage: v, attachments: ready },
       });
     } catch (err) {
-      showToast(`创建失败：${err.message}`, 'error');
+      showToast(t('创建失败：{err}', { err: err.message }), 'error');
       setSubmitting(false);
     }
   };
@@ -300,7 +303,7 @@ export default function QuickEntry({ prefill }) {
         <div className="bar">
           <button
             className="att"
-            title="上传附件（图片 / PDF / HTML / 等）"
+            title={t('上传附件（图片 / PDF / HTML / 等）')}
             onClick={() => fileInputRef.current?.click()}
             disabled={submitting}
           >
@@ -312,7 +315,7 @@ export default function QuickEntry({ prefill }) {
               往下开：这张纸贴着页顶，往上开会顶出视口。 */}
           <ModelPicker className="model" menuPlacement="down" disabled={submitting} />
           {/* 手指设备上这句是错的（没有 Shift+Enter，回车也不发送），不如不说 */}
-          {!coarse && <span className="tip">Enter 发送 · Shift + Enter 换行</span>}
+          {!coarse && <span className="tip">{t('Enter 发送 · Shift + Enter 换行')}</span>}
           <input
             ref={fileInputRef}
             type="file"
@@ -329,9 +332,9 @@ export default function QuickEntry({ prefill }) {
             className="go"
             onClick={submit}
             disabled={empty || submitting}
-            title={submitting ? '创建中…' : '发送（Enter）'}
+            title={submitting ? t('创建中…') : t('发送（Enter）')}
           >
-            {submitting ? '开 工 中' : '开 工'}
+            {submitting ? t('开 工 中') : t('开 工')}
           </button>
         </div>
       </div>
