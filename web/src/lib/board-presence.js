@@ -232,6 +232,17 @@ export function reducePresence(table, evt, resolve) {
       return { ...table, [id]: { ...cur, active, ...(active ? {} : { message: null }) } };
     }
 
+    // 角色退场（2026-08-26）：**唯一**的删除路径。
+    // 角色不跟主 run 收场（下面那个分支明确跳过它），所以没有这条它就永远留在画布上。
+    // ⚠️ 只认常驻角色：干活型子代理压根没进过这张表（上面那条 parentToolUseId 守卫挡掉了）。
+    case 'run.subagent.stop': {
+      const id = evt.agentType ? rolePresenceId(evt.agentType) : null;
+      if (!id || !isRolePresence(id) || !table[id]) return table;
+      const next = { ...table };
+      delete next[id];
+      return next;
+    }
+
     case 'run.done':
     case 'run.error':
     case 'run.cancelled': {

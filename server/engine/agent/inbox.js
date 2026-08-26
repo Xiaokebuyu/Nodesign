@@ -134,6 +134,22 @@ export function inboxStates(projectId) {
   return out;
 }
 
+/**
+ * 角色退场：把它的散场计数清零。
+ *
+ * ⛔ 不清的后果（2026-08-26 fable 验收跑出复现）：角色连着 2 次等空 → 散场 → GM 用
+ * SendMessage 把它召回 → 它**第一次**等空就是第 3 次 → 当场又被劝退。N=2 的宽限对
+ * 召回的角色完全失效，「召回」这个能力等于废掉。
+ * 语义上 streak 数的是「这一趟在场期间连着几次没人理」，退场就是这一趟结束。
+ *
+ * ⚠️ 不删整个 box：积压的队列要留着 —— 角色不在的时候用户说的话正是它下次
+ * 该看到的（deliver 回 'queued' 就是这个约定）。
+ */
+export function clearStreak(projectId, slug) {
+  const box = boxes.get(keyOf(projectId, slug));
+  if (box) box.emptyStreak = 0;
+}
+
 /** 会话收摊：把这个项目的等待者全放掉，别让它们永远挂着 */
 export function clearProject(projectId) {
   const prefix = `${projectId}::`;

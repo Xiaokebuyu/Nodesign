@@ -4,7 +4,7 @@
 // 没人等 = 进队列，而那时服务端叫不醒它。把后者当成"送达"，用户就会
 // 对着一个没人听的板子说话，而且不知道。
 import { describe, it, expect, beforeEach } from 'vitest';
-import { deliver, waitFor, drain, isWaiting, queueDepth, inboxStates, clearProject, emptyStreakOf, _resetInboxes } from './inbox.js';
+import { deliver, waitFor, drain, isWaiting, queueDepth, inboxStates, clearProject, emptyStreakOf, clearStreak, _resetInboxes } from './inbox.js';
 
 const P = 'proj_x';
 beforeEach(() => _resetInboxes());
@@ -132,5 +132,31 @@ describe('散场计数（emptyStreak）', () => {
     await waitFor(P, 'rp-y', 1);
     expect(emptyStreakOf(P, 'rp-x')).toBe(2);
     expect(emptyStreakOf(P, 'rp-y')).toBe(1);
+  });
+});
+
+describe('角色退场要清散场计数（2026-08-26 fable 验收 P2）', () => {
+  it('⭐ 不清的话：召回的角色第一次等空就被劝退（N=2 的宽限失效）', async () => {
+    await waitFor(P, 'rp-moli', 1);
+    await waitFor(P, 'rp-moli', 1);
+    expect(emptyStreakOf(P, 'rp-moli')).toBe(2);      // 第一趟：散场
+
+    clearStreak(P, 'rp-moli');                        // 退场（SubagentStop 钩子调）
+    expect(emptyStreakOf(P, 'rp-moli')).toBe(0);
+
+    await waitFor(P, 'rp-moli', 1);                   // 召回后第一次等空
+    expect(emptyStreakOf(P, 'rp-moli')).toBe(1);      // 不是 3 —— 重新给满宽限
+  });
+
+  it('⚠️ 只清计数，积压的话要留着（角色不在时用户说的正是它下次该看到的）', async () => {
+    deliver(P, 'rp-a', { text: '你不在的时候我说的' });
+    await waitFor(P, 'rp-b', 1);                      // 让别人也有个 streak
+    clearStreak(P, 'rp-a');
+    expect(queueDepth(P, 'rp-a')).toBe(1);
+    expect(drain(P, 'rp-a')).toHaveLength(1);
+  });
+
+  it('清不存在的角色不炸', () => {
+    expect(() => clearStreak(P, 'rp-nobody')).not.toThrow();
   });
 });

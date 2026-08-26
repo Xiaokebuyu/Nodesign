@@ -364,3 +364,33 @@ describe('常驻角色有自己的在场条目（2026-08-26 RP 线）', () => {
     expect(again['role:rp-moli'].color).toBe(t['role:rp-moli'].color);
   });
 });
+
+describe('角色退场要把精灵撤掉（2026-08-26 fable 验收 P2）', () => {
+  const focus = { type: 'board.focus', actor: 'rp-moli', chalk: 'notes/板书/a.md', layer: '' };
+  const id = 'role:rp-moli';
+
+  it('⭐ 没有这条删除路径，精灵会永远留在画布上当幽灵', () => {
+    let t = reducePresence({}, focus, () => null);
+    expect(t[id]).toBeTruthy();
+    t = reducePresence(t, { type: 'run.subagent.stop', agentType: 'rp-moli' }, () => null);
+    expect(t[id]).toBeUndefined();
+  });
+
+  it('主 run 收场仍然不带走角色（那条是对的，别回退）', () => {
+    let t = reducePresence({}, focus, () => null);
+    t = reducePresence(t, { type: 'run.done' }, () => null);
+    expect(t[id]).toBeTruthy();
+  });
+
+  it('干活型子代理的 stop 不动这张表', () => {
+    const t = reducePresence({}, focus, () => null);
+    expect(reducePresence(t, { type: 'run.subagent.stop', agentType: 'vision-checker' }, () => null)).toBe(t);
+  });
+
+  it('撤掉之后 run.role.wait 不该把它凭空立回来', () => {
+    let t = reducePresence({}, focus, () => null);
+    t = reducePresence(t, { type: 'run.subagent.stop', agentType: 'rp-moli' }, () => null);
+    t = reducePresence(t, { type: 'run.role.wait', slug: 'rp-moli', waiting: true }, () => null);
+    expect(t[id]).toBeUndefined();
+  });
+});

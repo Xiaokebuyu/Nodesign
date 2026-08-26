@@ -39,7 +39,12 @@ export const STAGE_EVENTS = new Set([
   // 角色挂上/离开 await_user（2026-08-26）：角色挂着等用户时事件流是**静默**的，
   // 没有这条在场表分不出「在等你回话」和「已经没了」，精灵只能一直显工作态。
   'run.role.wait',
-  // （run.task.* / run.subagent.stop 2026-08-18 移出名单：子代理便利贴与
+  // run.subagent.stop **2026-08-26 只为常驻角色重新入列**：角色的在场条目
+  // 由 board.focus 建立，而 run.done 分支明确跳过角色（它在后台自己活着）——
+  // 于是它**一条删除路径都没有**，退场后精灵永远留在画布上当幽灵，
+  // 而侧栏的 roleStage 会正确摘掉它 → 两个状态源背离。见 board-presence reducer。
+  'run.subagent.stop',
+  // （run.task.* 2026-08-18 移出名单：子代理便利贴与
   //   在场徽记退役，画布不再消费它们 —— 聊天侧栏的 Task 抽屉行走
   //   ProjectWorkspace 自己的 switch，不经这份名单。）
 ]);

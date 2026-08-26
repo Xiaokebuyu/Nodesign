@@ -21,6 +21,7 @@
  */
 
 import { isResidentRole } from '../cast.js';
+import { clearStreak } from '../inbox.js';
 
 export function makePostToolUseFailureRoleRelease({ roster = null } = {}) {
   return async (input) => {
@@ -61,10 +62,12 @@ export function makePostToolUseFailureRoleRelease({ roster = null } = {}) {
  * 里面的 `summary` 就是角色最后那句话（2026-08-26 实测）。所以这里只补一条
  * systemMessage 说清楚怎么叫它回来，不另推消息，免得同一件事把主控叫醒两次。
  */
-export function makeSubagentStopRoleNotice() {
+export function makeSubagentStopRoleNotice({ projectId = null } = {}) {
   return async (input) => {
     const type = input?.agent_type;
     if (!isResidentRole(type)) return {};
+    // 这一趟在场结束 → 散场计数归零，不然召回的角色只等一次就又被劝退（见 inbox.js）
+    if (projectId) clearStreak(projectId, type);
     // nd:rp-prompt
     return {
       systemMessage:
