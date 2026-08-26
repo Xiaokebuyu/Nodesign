@@ -13,6 +13,7 @@ import { AsyncQueue } from '../../lib/async-queue.js';
 import { registerQuerySession, unregisterQuerySession, getCurrentTurnRunId } from './active-runs.js';
 import {
   pushUserMessage, claimRunByUuid, releaseCurrentTurnRunId, promoteNextPendingRunId,
+  isBackgroundTurnOpener,
   getPendingRunCount, getQueueDepth,
 } from './turn-relay.js';
 
@@ -143,5 +144,26 @@ describe('unregister', () => {
     registerQuerySession(SID, { abortController: new AbortController(), inputQueue: new AsyncQueue() });
     expect(claimRunByUuid(SID, m2.uuid)).toBe(null);
     expect(getPendingRunCount(SID)).toBe(0);
+  });
+});
+
+describe('isBackgroundTurnOpener —— 子代理说话不许铸主回合', () => {
+  it('主循环的 assistant / user / stream_event 照常开回合', () => {
+    for (const type of ['assistant', 'user', 'stream_event']) {
+      expect(isBackgroundTurnOpener({ type })).toBe(true);
+      expect(isBackgroundTurnOpener({ type, parent_tool_use_id: null })).toBe(true);
+    }
+  });
+
+  it('⭐ 带 parent_tool_use_id 的一律不算 —— 那是子代理在说话', () => {
+    for (const type of ['assistant', 'user', 'stream_event']) {
+      expect(isBackgroundTurnOpener({ type, parent_tool_use_id: 'toolu_016znNw6tL1je1kXh2wBBWci' })).toBe(false);
+    }
+  });
+
+  it('别的类型本来就不开回合', () => {
+    expect(isBackgroundTurnOpener({ type: 'result' })).toBe(false);
+    expect(isBackgroundTurnOpener({ type: 'system' })).toBe(false);
+    expect(isBackgroundTurnOpener(null)).toBe(false);
   });
 });

@@ -47,6 +47,7 @@ import {
 } from '../runs/active-runs.js';
 import {
   promoteNextPendingRunId, claimRunByUuid, releaseCurrentTurnRunId, getPendingRunCount,
+  isBackgroundTurnOpener,
   closeMergedRun, publishQueueDepth, pushUnclaimedMessage,
 } from '../runs/turn-relay.js';
 // skill 起手文件拷贝已挪 hooks.js PreToolUse(Skill/Bash)（2026-07-27），
@@ -122,11 +123,6 @@ import { levelFor } from '../../lib/moderation.js';
  * 旁路事件**不算** —— 通知之后 SDK 不一定真的唤起模型，铸了 run 却等不来
  * result 收尾就是僵尸 run。
  */
-function isBackgroundTurnOpener(message) {
-  return message?.type === 'assistant'
-    || message?.type === 'stream_event'
-    || message?.type === 'user';
-}
 
 export async function runSession({
   sessionId,

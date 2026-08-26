@@ -215,3 +215,25 @@ export function closeMergedRun({ runId, intoRunId, sessionId, sdkSessionId, even
 export function publishQueueDepth(eventBus, sessionId) {
   eventBus.publish({ type: 'run.queue.depth', sessionId, depth: getQueueDepth(sessionId), ts: new Date().toISOString() });
 }
+
+/**
+ * 这条 SDK 消息算不算「自发了一个没主的回合」（session-loop 据此 mintBackgroundTurn）。
+ *
+ * ⛔ **子代理说话不算**（2026-08-26 用户真机复现）：判据原来只看 type，于是常驻角色
+ * 被用户的直达消息唤醒、开口第一句时就铸出一个主回合并 emit run.start。而那个 run
+ * **永远收不了** —— 角色跑的是子代理回合，不会有主循环的 result，finishTurn /
+ * releaseCurrentTurnRunId 都轮不到。连锁四个症状：
+ *   1. 侧栏按钮变「停止」，用户以为对话被占用
+ *   2. currentTurnRunId 挂死 → 每次重连 ws 的 activeRunId 又把「停止」确认一遍，回不去
+ *   3. 点「停止」= cancel 那个铸出来的 run → SDK abort 把**在飞的其他角色一起杀了**
+ *   4. 时间轴上多一条永远转的圈
+ *
+ * 后台自发回合这条路本身是对的（task_notification 唤起主代理时确实没主），
+ * 它只是分不出「主代理醒了」和「子代理说话了」—— 用 parent_tool_use_id 分。
+ */
+export function isBackgroundTurnOpener(message) {
+  if (message?.parent_tool_use_id) return false;
+  return message?.type === 'assistant'
+    || message?.type === 'stream_event'
+    || message?.type === 'user';
+}
