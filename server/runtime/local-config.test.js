@@ -37,7 +37,7 @@ describe('validateLocalConfig', () => {
     const v = validateLocalConfig({
       upstreams: { ...GOOD.upstreams, zenGo: { baseUrl: 'https://x.example.com', key: 'k' }, nokey: { baseUrl: 'https://y.example.com' } },
       models: [...GOOD.models,
-        { id: 'ox-alpha', label: '撞内置名', window: 100000, upstream: 'relay', wireModel: 'x' },
+        { id: 'glm-5.3-flash', label: '撞内置名', window: 100000, upstream: 'relay', wireModel: 'x' },
         { id: 'orphan', label: '指向不存在的上游', window: 100000, upstream: 'ghost', wireModel: 'x' },
         { id: 'badfast', label: 'fast 指错', window: 100000, upstream: 'relay', wireModel: 'x', fastModel: 'nope' },
         { id: 'toolong', label: '预算超线', window: 100000, upstream: 'relay', wireModel: 'x', emptyRetries: 3, retryBudgetMs: MAX_RETRY_BUDGET_MS + 1 },
@@ -49,7 +49,7 @@ describe('validateLocalConfig', () => {
     const text = v.errors.map((e) => `${e.where} ${e.message}`).join('\n');
     expect(text).toMatch(/upstreams\.zenGo .*内置上游名/);
     expect(text).toMatch(/upstreams\.nokey .*key 或 keyEnv/);
-    expect(text).toMatch(/ox-alpha.*内置模型名/);
+    expect(text).toMatch(/glm-5\.3-flash.*内置模型名/);
     expect(text).toMatch(/orphan.*upstream 'ghost' 不存在/);
     expect(text).toMatch(/badfast.*fastModel 'nope'/);
     expect(text).toMatch(/toolong.*retryBudgetMs/);
@@ -70,7 +70,7 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     const code = `
       import { resolveWireModel, resolveModelRoute, SHARED_SDK_ALIAS, MODEL_CONFIG_ERRORS, selectableModelsFor, UPSTREAMS } from '../engine/agent/model-context.js';
       import { registerIngressSession, resolveSessionWire } from '../lib/ingress/session-routes.js';
-      registerIngressSession('s1', 'kimi-k2'); registerIngressSession('s2', 'glm-5'); registerIngressSession('s3', 'ox-alpha');
+      registerIngressSession('s1', 'kimi-k2'); registerIngressSession('s2', 'glm-5'); registerIngressSession('s3', 'deepseek-v4-flash-vision');
       const bare = SHARED_SDK_ALIAS.replace(/\\[1m\\]$/, '');
       const pick = (r) => r && r.wire ? { app: r.wire.appModel, role: r.role, reason: r.reason, up: r.wire.upstreamId, proto: r.wire.protocol, wire: r.wire.wireModel } : null;
       console.log(JSON.stringify({
@@ -79,7 +79,7 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
         s1: pick(resolveSessionWire(bare, 's1')), s1full: pick(resolveSessionWire(SHARED_SDK_ALIAS, 's1')),
         s2: pick(resolveSessionWire(bare, 's2')), s2fast: pick(resolveSessionWire('kimi-k2', 's2')), s2unknown: pick(resolveSessionWire('claude-sonnet-5', 's2')),
         nosess: resolveSessionWire(bare, null).wire, byId: pick({ wire: resolveWireModel('kimi-k2'), role: 'main', reason: 'table' }),
-        s3: pick(resolveSessionWire('claude-opus-4-8', 's3')), s3helper: pick(resolveSessionWire('claude-haiku-4-5', 's3')), s3collide: pick(resolveSessionWire('claude-opus-4-7', 's3')),
+        s3: pick(resolveSessionWire('claude-opus-4-7', 's3')), s3helper: pick(resolveSessionWire('deepseek-v4-flash-helper', 's3')), s3collide: pick(resolveSessionWire('claude-opus-4-6', 's3')),
         picker: selectableModelsFor({ id: 'u', role: 'admin' }).filter((m) => ['kimi-k2', 'glm-5'].includes(m.id)).map((m) => m.id),
         relayKey: UPSTREAMS.relay.key,
       }));`;
@@ -97,9 +97,9 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     expect(o.nosess).toBeNull();
     expect(o.byId.app).toBe('kimi-k2');
     // 内置行：自己的 alias 解回自己、helper 行、撞名雷改道 —— 08-20 封的口子一个不松
-    expect(o.s3).toMatchObject({ app: 'ox-alpha', role: 'main', reason: 'table' });
-    expect(o.s3helper).toMatchObject({ app: 'ox-alpha-helper', role: 'helper', reason: 'table' });
-    expect(o.s3collide).toMatchObject({ app: 'ox-alpha-helper', role: 'helper', reason: 'collision' });
+    expect(o.s3).toMatchObject({ app: 'deepseek-v4-flash-vision', role: 'main', reason: 'table' });
+    expect(o.s3helper).toMatchObject({ app: 'deepseek-v4-flash-helper', role: 'helper', reason: 'table' });
+    expect(o.s3collide).toMatchObject({ app: 'deepseek-v4-flash-helper', role: 'helper', reason: 'collision' });   // opus-4-6 是 gemini 行的独占 alias：别家的钥匙，绝不放过去
     // hosted profile（子进程没设 NODESIGN_PROFILE）下外部行也进 picker（钥匙过滤只在 local），key 在条目上
     expect(o.picker.sort()).toEqual(['glm-5', 'kimi-k2']);
     expect(o.relayKey).toBe('sk-test');
@@ -121,7 +121,7 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     const without = run({});
     expect(without).toContain('kimi-k2');        // key 内联
     expect(without).not.toContain('glm-5');      // keyEnv MY_RELAY_KEY 没设
-    expect(without).not.toContain('ox-alpha');   // 内置行钥匙没配
+    expect(without).not.toContain('glm-5.3-flash');   // 内置行钥匙没配
     expect(run({ MY_RELAY_KEY: 'x' })).toContain('glm-5');
   });
 

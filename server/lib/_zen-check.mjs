@@ -1,14 +1,21 @@
 /**
- * 真跑探针：起 ingress，按 SDK 会说的 Anthropic 格式（alias 名）打 ox-alpha，验证转换层。
- *   node --env-file=.env server/lib/_zen-check.mjs [text|tool|image|stream|all]
+ * 真跑探针：起 ingress，按 SDK 会说的 Anthropic 格式（alias 名）打一条 openai-chat 行，验证转换层。
+ *   node --env-file=.env server/lib/_zen-check.mjs [text|tool|image|stream|parallel|count|all] [appModel]
+ *
+ * 08-26 起模型 id 是第二个参数（默认 glm-5.3-flash，接替下架的 ox-alpha）—— 换行不用再改这个文件。
+ * ⚠️ 请求路径必须带会话前缀 `/__nd/<sid>/`：今天的新行不写 sdkAlias、走共用别名，全表反查认不出它，
+ * 只有注册过的会话知道自己是谁（见 lib/ingress/session-routes.js）。直呼 appModel id 也行。
  */
 import { getOrStartIngress, registerIngressSession, stopIngress } from './model-ingress.js';
 import { resolveModelRoute } from '../engine/agent/model-context.js';
 
 const which = process.argv[2] || 'all';
-const route = resolveModelRoute('ox-alpha');
+const APP = process.argv[3] || 'glm-5.3-flash';
+const route = resolveModelRoute(APP);
+if (route.mode !== 'api') { console.error(`[zen-check] ${APP} 不是 API 行（mode=${route.mode}）—— 名字打错了？`); process.exit(1); }
+console.log(`[zen-check] ${APP} → ${route.upstreamId} / ${resolveModelRoute(APP).sdkAlias}  (wire 见下)`);
 const { baseUrl } = await getOrStartIngress();
-registerIngressSession('zenprobe-session', 'ox-alpha');
+registerIngressSession('zenprobe-session', APP);
 const url = `${baseUrl}/__nd/zenprobe-session/v1/messages`;
 const MODEL = route.sdkAlias;
 const TXT = (s) => [{ type: 'text', text: s }];

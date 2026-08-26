@@ -43,10 +43,12 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     // model-ingress.normalizeImages）。不填 = 什么都能吃，中转站那两个上游维持原样。
     imageFormats: Object.freeze(['image/png', 'image/jpeg']),
   }),
-  // OpenCode Zen（08-21）：免费 stealth 模型 Ox Alpha 只有 OpenAI chat 格式能用工具
+  // OpenCode Zen（08-21）：主入口 /zen/v1。这家**只有 OpenAI chat 格式能用工具**
   // （它的 /v1/messages 桥一带 tools 就 [1210]，四种写法探死）。protocol 'openai-chat'
   // 让 ingress 走 lib/ingress/openai-chat.js 的协议转换而不是透传；其余上游没有这个
-  // 字段 = 透传 Anthropic。钥匙在 .env（NODESIGN_UPSTREAM_ZEN_KEY）。
+  // 字段 = 透传 Anthropic。钥匙在 .env（NODESIGN_UPSTREAM_ZEN_KEY），两个入口同一把。
+  // 今天没有行挂在它上面（内置行全在下面的 zenGo）；留着的理由是这家的**免费 stealth 行只在这个
+  // 入口有**（Ox Alpha 曾经在这儿，08-26 下架；目录里换成了 big-pickle 那一批），下次要接免费行走这条。
   zen: Object.freeze({
     label: 'OpenCode Zen',
     // 覆盖旋钮跟 qwenLocal 同款，**只给探针用**（假上游跑真 ingress+转换层，见 _probe-truncation-e2e.mjs）；
@@ -57,8 +59,6 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     protocol: 'openai-chat',
     countTokens: false,   // 08-21 探针：404
   }),
-  // 08-21 晚：Zen 第二入口 /zen/go（= OpenCode Go 订阅入口）。同钥匙、目录不同（Ox 叫 ox-alpha-free，x-preview-f-free 它回 401）；
-  // 响应带 `cost`（流式在 [DONE] 之后补 {"choices":[],"cost":"…"}）与 cached_tokens → lib/ingress/upstream-billing.js。'zen' 留着可切回
   // GMI Cloud（08-25）：算力平台，转卖各家开源权重的部署。**它自己就说 Anthropic 协议**
   // （`/v1/messages` 原生，不是桥）—— 08-25 用 server/_probe-upstream.mjs 体检 M3 拿 8/9：
   // 顶层图 ✓ / tool_result 图原样直通 ✓ / prompt cache 真命中 ✓ / 流式 tool_use 分片 ✓ /
@@ -89,6 +89,9 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     protocol: 'openai-chat',
     countTokens: false,   // 08-25 体检：404
   }),
+  // 08-21 晚：Zen 第二入口 /zen/go（= OpenCode Go 订阅，$10/月换 $12/5h·$30/周·$60/月）。跟 'zen' 同一把钥匙、
+  // **目录不同**（免费 stealth 行只在 /zen/v1，Go 目录里是常驻付费款）。响应带 `cost`（流式在 [DONE] 之后
+  // 补 {"choices":[],"cost":"…"}）与 cached_tokens → lib/ingress/upstream-billing.js。今天内置的 API 行大半挂这儿。
   zenGo: Object.freeze({
     label: 'OpenCode Zen Go',
     baseUrl: process.env.NODESIGN_UPSTREAM_ZEN_GO_URL || 'https://opencode.ai/zen/go/v1',   // 探针覆盖，同上
@@ -134,9 +137,13 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
  *
  * 口径（08-21 用户拍板）：有自己标的用自己的（deepseek 蓝鲸、gemini 星），
  * **隐身/神秘的免费行一律用供应商 OpenCode 的方块标**（Ox 这类不公开身份的模型）。
+ *
+ * 08-26 补一家 'glm'：Ox 下架后接替它的 glm-5.3-flash 是**公开身份**的 Z.ai 模型，
+ * 按上面那条口径就该有自己的标，不再走供应商方块。'opencode' 那枚留着 —— 它是给
+ * 下一个隐身行准备的，Zen 目录里那类行一直有（big-pickle 之类）。
  */
 // 'custom'：本地分发版用户自己配的插槽（runtime/local-config.js）没填 brand 时的默认牌子，前端用通用标
-export const BRANDS = Object.freeze(['claude', 'deepseek', 'opencode', 'gemini', 'qwen', 'minimax', 'kimi', 'custom']);
+export const BRANDS = Object.freeze(['claude', 'deepseek', 'opencode', 'glm', 'gemini', 'qwen', 'minimax', 'kimi', 'custom']);
 
 /**
  * **共用 spoof 别名**：`sdkAlias` 不写时的默认值（model-context.js 派生时补上）。
@@ -174,13 +181,15 @@ export const MODELS_BUILTIN = Object.freeze([
   // 只当 alias 用的订阅名（08-20）：SDK 二进制认识的 1M 名里还空着的一个（strings 扫过：
   // opus-4-6/4-7/4-8/5、sonnet-4-5-20250929/4-6/5 七个 [1m]），给 gemini-3.7-flash 行做 spoof。
   { id: 'claude-opus-4-6[1m]',   window: 1_000_000, brand: 'claude' },
-  // 同上，给 ox-alpha 行做 spoof（08-21）
+  // 08-21 给 ox-alpha 做 spoof，08-26 随 Ox 整族下架**空出来**（行留着：它是 SDK 认识的 1M 名，是坑位不是垃圾）
   { id: 'claude-opus-4-8[1m]',   window: 1_000_000, brand: 'claude' },
-  // 同上，七个里最后一个空着的，给 ox-alpha-max 行做 spoof（08-21 晚）
+  // 同上，08-21 晚给 ox-alpha-max，08-26 也空出来了
   { id: 'claude-sonnet-4-5-20250929[1m]', window: 1_000_000, brand: 'claude' },
-  // 独占 alias 池现状（08-25 起已满员）：opus-4-6[1m]→gemini-3.7-flash、opus-4-7[1m]→deepseek-v4-flash-vision、opus-4-8[1m]→ox-alpha、
-  // opus-5[1m]→qwen、sonnet-4-5-20250929[1m]→ox-alpha-max、haiku-4-5→ox-alpha-helper；sonnet-5[1m] 是订阅默认行不许被路由；
-  // **sonnet-4-6[1m] = SHARED_SDK_ALIAS**（共用别名，永远不许被独占 —— 新行不写 sdkAlias 就用它）
+  // 独占 alias 池现状（08-26 更新）：opus-4-6[1m]→gemini-3.7-flash、opus-4-7[1m]→deepseek-v4-flash-vision、opus-5[1m]→qwen；
+  // **空着三个**：opus-4-8[1m]、sonnet-4-5-20250929[1m]、haiku-4-5（Ox 三行 08-26 下架腾出来的）；
+  // sonnet-5[1m] 是订阅默认行不许被路由；**sonnet-4-6[1m] = SHARED_SDK_ALIAS**（共用别名，永远不许被独占）。
+  // ⚠️ 空出来不等于新行该去占：08-25 起加新行的默认写法就是**不写 sdkAlias**（走共用别名 + 会话级路由），
+  // 这三个坑位留给真正需要"没会话也能按 alias 反查"的场合（探针、跨进程重放那类）。
 
   // ── API 通路 ──
   // kimi-k2.6 行与 moonshot 上游 08-21 深夜清掉（用户：「把 kimi 3.1pro 的槽都清理一下」）：NoDesk 退役后没走过流量，
@@ -274,71 +283,51 @@ export const MODELS_BUILTIN = Object.freeze([
     api: {
       upstream: 'zenGo', wireModel: 'deepseek-v4-flash-vision-exp',
       sdkAlias: 'claude-opus-4-7[1m]',   // kimi 退役腾出来的 1M 名；窗口由 CLAUDE_CODE_AUTO_COMPACT_WINDOW=272k 钉住
-      fastModel: 'ox-alpha-helper',      // 一句话的活仍走免费 Ox helper
+      // 08-26 从 ox-alpha-helper 改过来：Ox 整族下架（上游 401 "Model ox-alpha-free is not supported"），
+      // 那条 helper 一起没了。⚠️ 这处失效**完全不出声** —— helper 角色 ingress 不推 onNotice、不报
+      // onTruncated，用户只会觉得"标题没生成、压缩没做成"。改挂 08-25 建的通用 helper 行
+      fastModel: 'deepseek-v4-flash-helper',
       thinking: 'strip',
       reasoningEffort: 'high',
       maxOutput: 128_000,
       prices: { input: 0.44, output: 1.32, cacheRead: 0.014, cacheWrite: 0 },
     },
   },
-  // ── OpenCode Zen · Ox Alpha（08-21，用户称「大事」的第一块）──
-  // 真 id x-preview-f-free（models.dev name "Ox Alpha Free"；/models 列表里没有带 ox 的名，别按名猜）。
-  // 1M ctx / 131k out / 图+视频 / 工具 / reasoning effort low|high|max / 价 0；官方「free for
-  // the next week」（08-20 公告）+ zero-retention 不训练。大概率 GLM 系 stealth（错误码体系 +
-  // 社区指纹）。⚠️ 一周后要么变付费 GLM 要么下架 —— 这行是插件，闸和转换层才是耐久资产。
-  // 上线顺序：先 gate localGen 给 admin 试跑真任务，过关再开闸并设为全员默认。
+  // ── OpenCode Go · GLM-5.3-Flash（08-26，接替整族下架的 Ox Alpha）──
+  // ⛔ Ox 三行（ox-alpha / -max / -helper）08-26 一起删掉：上游把 `ox-alpha-free` 和主入口名
+  // `x-preview-f-free` **两个都下了**，四种组合全回 401「Model ... is not supported」，
+  // models.dev 上也标了 deprecated。08-21 那条注释里写的「一周后要么变付费 GLM 要么下架」
+  // 两头都应验了 —— 下架的同时，它猜中的那个 GLM 身份也在同一个目录里露面了。
+  //
+  // glm-5.3-flash 是 Z.ai 08-26 当天发的原生多模态款，能力位跟 Ox 几乎一一对上：
+  // 1M ctx / 131k out / 图+视频+**pdf** / 工具 / 结构化输出 / reasoning effort low|high|max。
+  // 08-26 真跑体检（/zen/go，OpenAI chat）：文本 2.2s ✓ / 工具 ✓ / 图 png+webp **答出图里真值** ✓ /
+  // 三档 effort 都收（reasoning_tokens 0 / 7 / 40）✓ / 流式首字 1.99s、reasoning_content 增量、
+  // 末块带 usage ✓ / prompt cache 真命中 3968/4017 ✓。
+  // ⭐ 没有 Ox 那个「max 想 28,930 字 / 4 分 20 秒才出首字」的病，所以**不再单开深想行**，
+  // 也不带 Ox 那套放宽的 emptyRetries（那是针对它吐字前想太久的体质配的，见 resolveWireModel）。
   {
-    id: 'ox-alpha', window: 1_000_000, brand: 'opencode',
-    // 08-21 经营态拍板：全员默认模型（default: true），公开注册号只能用它这类免费行。
-    select: { label: 'Ox Alpha（免费）', desc: '限时免费 · 1M 上下文 · 有视觉 · 人人可用 · 思考档 high', default: true },
+    // 真窗口 1M；这里按 272k 收口，跟 deepseek / minimax / kimi 三行同一个理由 —— 每轮都要重传
+    // 全量上下文，这台机器出网超 200GiB/月要真付钱。而且这行**不再是免费行**：缓存读 $0.03/M 是
+    // deepseek 那行（$0.014）的两倍多，满窗一轮光缓存读就 $0.03，而 Go 池给这个模型的月额度只有
+    // $15（全站共用）。272k 档下约 $0.008/轮。想放大就改这一个数（CLAUDE_CODE_AUTO_COMPACT_WINDOW 跟着它走）。
+    id: 'glm-5.3-flash', window: 272_000, brand: 'glm',
+    // 开闸给所有档（含 basic）：跟 deepseek 视觉行同一套管法 —— basic 的 $5/天日限 + 表价记账管着它。
+    // ⚠️ 它**不是免费行**（modelIsFree 看四价全 0），所以全员默认那把交椅 08-26 让给了 minimax-m3
+    select: { label: 'GLM-5.3-Flash', desc: '快 · 有视觉 · 272k 上下文 · 思考档 high · 按用量计入每日额度（$0.15/$0.50 缓存 $0.03）' },
     api: {
-      upstream: 'zenGo', wireModel: 'ox-alpha-free',   // 08-21 晚切 /zen/go 入口（主入口名 x-preview-f-free，upstream 'zen'）
-      emptyRetries: 6, retryBudgetMs: 360_000,   // 就地重发放宽，理由见 resolveWireModel 的 emptyRetries 注释
-      sdkAlias: 'claude-opus-4-8[1m]',
-      fastModel: 'ox-alpha-helper',   // helper 走独立行才分得出 role（会话 env SMALL_FAST_MODEL 发的是 app id）
+      upstream: 'zenGo', wireModel: 'glm-5.3-flash',
+      // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由，08-25 起的默认写法。
+      // ⚠️ 代价：没注册会话的请求用那个 alias 发过来一律 502，探针要带会话前缀 `/__nd/<sid>/v1/messages`
+      fastModel: 'deepseek-v4-flash-helper',   // 08-25 拍板的通用 helper 行：helper 挑最耐久的线，不挑最便宜的
       thinking: 'strip',              // 出口不带 Anthropic thinking 字段；转换层按 reasoningEffort 发 reasoning_effort
-      // Ox 三档 low|high|max。08-21 小题实测 reasoning_tokens：不传≈27、low=0、high=3、max=27；
-      // 但上生产后 'max' 在真会话里想了 28,930 字 / 4 分 20 秒才出第一个字（用户看到的是
-      // "只有绿点没有回复"）。改 'high'：还想，但不把一轮耗在想上
       reasoningEffort: 'high',
       maxOutput: 131_072,
       // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息
       // （OpenAI 的 tool 角色消息装不下图，上游放了会挂死 120s）。同一件事只留一条路。
-      prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    },
-  },
-  {
-    // 同一个 Ox，思考档 max：真会话里 max 想过 28,930 字 / 4 分 20 秒才出首字，所以不做默认、
-    // 单独一行给愿意等的人。两行 protocol 同为 openai-chat，会话中途互切不触发 LANE_SWITCH
-    id: 'ox-alpha-max', window: 1_000_000, brand: 'opencode',
-    select: { label: 'Ox Alpha · 深想（免费）', desc: '同一个 Ox · 思考档 max · 想得久，首字可能等几分钟 · 重活再开' },
-    api: {
-      upstream: 'zenGo', wireModel: 'ox-alpha-free',   // 08-21 晚切 /zen/go 入口（主入口名 x-preview-f-free，upstream 'zen'）
-      emptyRetries: 6, retryBudgetMs: 360_000,   // 就地重发放宽，理由见 resolveWireModel 的 emptyRetries 注释
-      sdkAlias: 'claude-sonnet-4-5-20250929[1m]',
-      fastModel: 'ox-alpha-helper',   // helper 一句话的活用 low 档那行，不跟着深想
-      thinking: 'strip',
-      reasoningEffort: 'max',
-      maxOutput: 131_072,
-      prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    },
-  },
-  {
-    // Ox 的 helper 行（08-21 晚）：不进 picker（无 select），只做两个 Ox 主行的 fastModel。
-    // 为什么要单独一行：session-loop 给 CLI 的 ANTHROPIC_SMALL_FAST_MODEL 是 app id，
-    // ox-alpha 主行自己当 fast 时 helper 请求和主请求同名，ingress 分不出 role、helper
-    // 也跟着 high 想。独立行 + alias haiku（表内空着的订阅名，helper 不需要 1M 窗）。
-    id: 'ox-alpha-helper', window: 1_000_000, brand: 'opencode',
-    api: {
-      upstream: 'zenGo', wireModel: 'ox-alpha-free',   // 08-21 晚切 /zen/go 入口（主入口名 x-preview-f-free，upstream 'zen'）
-      // helper 不放宽重发（走全局默认 2 次）：它就是标题/分类器一句话的活，
-      // 接不上无所谓，多打几发只是白占上游并发。
-      sdkAlias: 'claude-haiku-4-5',
-      fastModel: 'ox-alpha-helper',
-      thinking: 'strip',
-      reasoningEffort: 'low',
-      maxOutput: 131_072,
-      prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      // Go 文档表价，GLM 不分高峰/平峰（deepseek 那行才分）。额度内上游 cost 报 0，
+      // 真金额以上游为准（context.applyUpstreamBilling）；这里的表价管配额口径
+      prices: { input: 0.15, output: 0.50, cacheRead: 0.03, cacheWrite: 0 },
     },
   },
   // ── GMI Cloud · MiniMax（08-25）── 两行都是 GMI 标 `is_free` 的免费部署；账户无余额，付费行 402，
@@ -348,7 +337,11 @@ export const MODELS_BUILTIN = Object.freeze([
     // 真窗口 1048576。272k 是用户 08-25 拍板的档（跟 deepseek 行同一个理由：每轮都要重传全量上下文，
     // 这台机器的出网流量超 200GiB/月要真付钱；且正好落在 GMI「512k 以上翻倍」那道价格坎下面）。
     id: 'minimax-m3', window: 272_000, brand: 'minimax',
-    select: { label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久' },
+    // 08-26 接过全员默认那把交椅（default: true）：Ox 下架后它是表里**唯一**的免费行，而
+    // `default: true` 这一位管的不只是"选谁"—— 公开注册号的经营态靠的是免费行走 turn.js 的
+    // 按轮次闸（modelIsFree = 四价全 0）而不是金额闸。默认落在付费行等于公开注册就直接烧 Go 池。
+    // ⚠️ 这行的免费是 GMI「限时免费部署」，免费期一结束就得再挪一次 —— 挪之前先确认接手的行四价也是 0
+    select: { label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久', default: true },
     api: {
       upstream: 'gmi', wireModel: 'MiniMaxAI/MiniMax-M3',
       // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由：会话认得出，

@@ -4,10 +4,12 @@
  * ## 为什么有这层
  *
  * SDK binary 永远说 Anthropic Messages；model-ingress 以前只会**转发**（上游也说 Anthropic）。
- * OpenCode Zen 的免费模型 Ox Alpha（x-preview-f-free）只有 OpenAI chat 格式能用工具
- * （Zen 给它架的 /v1/messages 桥一带 tools 就 [1210]，08-21 四种写法探死），newapi 中转站
- * 同病。所以协议映射得自己做 —— 不上 gproxy（外部守护进程 + 四个已知洞 + 第二个 quirk
- * 真相源），在 ingress 里按上游 `protocol: 'openai-chat'` 分岔，其余上游一字不动。
+ * OpenCode Zen 整家**只有 OpenAI chat 格式能用工具**（它给模型架的 /v1/messages 桥一带 tools
+ * 就 [1210]，08-21 拿当时的 Ox Alpha 四种写法探死），newapi 中转站、NVIDIA build 同病。所以协议
+ * 映射得自己做 —— 不上 gproxy（外部守护进程 + 四个已知洞 + 第二个 quirk 真相源），在 ingress 里按
+ * 上游 `protocol: 'openai-chat'` 分岔，其余上游一字不动。
+ * ⭐ 逼出这层的 Ox 08-26 就下架了，这层照常服务着 zen/zenGo/nvidia 三家 —— **闸和转换层才是耐久
+ * 资产，模型行是插件**（08-21 加 Ox 时写下的判断，一周后应验）。
  *
  * ## 映射要点（都是探针实测逼出来的，不是抄规范）
  *
@@ -16,7 +18,7 @@
  *   文本混排 → 先吐 role:tool 条，再吐 role:user 条（文本 + 提出来的图）
  * - thinking 块不回传（没有 signature 机制）；assistant 历史里的 thinking 合成 reasoning_content
  *   （models.dev 标 interleaved.field=reasoning_content，回传给模型接着想）
- * - Anthropic thinking 参数 → reasoning_effort（行内 reasoningEffort，Ox 三档 low|high|max）
+ * - Anthropic thinking 参数 → reasoning_effort（行内 reasoningEffort；zen 系普遍是 low|high|max 三档，**没有 medium**）
  * - 流式：OpenAI chunk → 合成 message_start / content_block_* / message_delta / message_stop；
  *   usage 在最后一个 chunk（stream_options.include_usage），Anthropic 口径 input 不含 cache 命中
  * - stop_reason：tool_calls→tool_use · stop→end_turn · length→max_tokens；有 tool_calls 但

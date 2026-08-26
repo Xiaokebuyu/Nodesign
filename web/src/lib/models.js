@@ -22,16 +22,16 @@
  * 08-21 起默认模型的真相在服务端（model-context.js 表里 `default: true` 的行，
  * `GET /api/me/models` 的 `default` 字段按用户算好给前端）—— 这里的常量只是接口挂了时
  * 的最后一道兜底，跟 FALLBACK_MODELS 同级。改服务端默认时顺手核一眼这里。
- * （08-17 到 08-21 之间这里是 Sonnet 并且是一等真相；经营态转向后全员默认免费的 Ox。）
+ * （08-17 到 08-21 之间这里是 Sonnet 并且是一等真相；经营态转向后是免费的 Ox，
+ * 08-26 Ox 整族下架 → 挪到 minimax-m3，表里当时唯一的免费行。）
  */
-export const DEFAULT_MODEL_ID = 'ox-alpha';
+export const DEFAULT_MODEL_ID = 'minimax-m3';
 
 /**
  * `DEFAULT_MODEL_ID` 出自谁家（ui/ModelMark.jsx 的 brand）。⚠️ 跟上面那行**必须同时改** ——
  * 它是画布精灵在"还没有任何一轮跑过、服务端也没说过话"时的身份兜底。
- * Ox 是隐身模型，按 08-21 的口径用供应商 OpenCode 的标。
  */
-export const DEFAULT_BRAND = 'opencode';
+export const DEFAULT_BRAND = 'minimax';
 
 /**
  * 本地偏好过期了吗 —— 它指向的模型**已经不在服务端清单里**（模型下架了）。
@@ -58,7 +58,8 @@ export function isModelPrefStale(pref, serverOptions) {
 
 /** 服务端拿不到时的兜底清单（离线 / 接口挂了也别让按钮变成死的） */
 export const FALLBACK_MODELS = [
-  { id: DEFAULT_MODEL_ID, label: 'Ox Alpha（免费）', desc: '限时免费 · 1M 上下文 · 有视觉 · 人人可用', brand: DEFAULT_BRAND },
+  { id: DEFAULT_MODEL_ID, label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久', brand: DEFAULT_BRAND },
+  { id: 'glm-5.3-flash', label: 'GLM-5.3-Flash', desc: '快 · 有视觉 · 272k 上下文 · 思考档 high', brand: 'glm' },
   { id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '快 · 日常改稿和铺页够用', brand: 'claude' },
   { id: 'claude-opus-5[1m]', label: 'Opus 5', desc: '前端与审美更强 · 烧订阅额度快得多，重活再开', brand: 'claude' },
 ];

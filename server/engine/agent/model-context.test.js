@@ -29,7 +29,9 @@ describe('派生导出（旧签名不变）', () => {
     // helper 专用行（没写 select）一律不露出 —— 原来这里钉的是"没有任何 kimi"，
     // 08-25 接了 NVIDIA 的 kimi-k3（带闸的可选行）之后那条按名字写的断言就过期了，
     // 改成按**语义**钉：没有 select 的行不进清单
-    for (const id of ['ox-alpha-helper', 'deepseek-v4-flash-helper']) expect(ids).not.toContain(id);
+    for (const id of ['deepseek-v4-flash-helper']) expect(ids).not.toContain(id);
+    expect(ids).not.toContain('ox-alpha');          // Ox 三行 08-26 随上游下架整族删掉
+    expect(resolveWireModel('ox-alpha')).toBe(null);
     expect(resolveWireModel('deepseek-v4-flash-helper')?.appModel).toBe('deepseek-v4-flash-helper');   // 不进 picker ≠ 不在表里
     expect(SELECTABLE_MODELS.find((m) => m.id === 'gemini-3.7-flash')?.gate).toBe('localGen');
     expect(ids).not.toContain('gemini-3.1-pro');     // 3.1 Pro 行 08-21 深夜连同 kimi 行一起删了
@@ -62,51 +64,54 @@ describe('派生导出（旧签名不变）', () => {
     expect(anon).not.toContain('gemini-3.7-flash');
   });
 
-  it('订阅闸（08-21）：没订阅资格的账号看得见 Claude 行但 locked；邀请码号/admin 正常；默认模型=ox-alpha', () => {
+  it('订阅闸（08-21）：没订阅资格的账号看得见 Claude 行但 locked；邀请码号/admin 正常；默认模型=minimax-m3（08-26）', () => {
     const pub = { role: 'user', plan: 'basic' };
     const sub = { role: 'user', plan: 'pro' };
     const pubSel = selectableModelsFor(pub);
     expect(pubSel.find((m) => m.id === 'claude-sonnet-5[1m]')?.locked).toBe(true);
-    expect(pubSel.find((m) => m.id === 'ox-alpha')?.locked).toBeUndefined();
+    expect(pubSel.find((m) => m.id === 'minimax-m3')?.locked).toBeUndefined();
+    expect(pubSel.find((m) => m.id === 'glm-5.3-flash')?.locked).toBeUndefined();
     expect(allowedModelsFor(pub).map((m) => m.id)).not.toContain('claude-sonnet-5[1m]');
-    expect(allowedModelsFor(pub).map((m) => m.id)).toContain('ox-alpha');
+    expect(allowedModelsFor(pub).map((m) => m.id)).toContain('minimax-m3');
     expect(isModelLockedFor(pub, 'claude-opus-5[1m]')).toBe(true);
     expect(isModelLockedFor(sub, 'claude-opus-5[1m]')).toBe(false);
     expect(isModelLockedFor(pub, 'gemini-3.7-flash')).toBe(false);   // 看不见的不是 locked，是不存在
     expect(selectableModelsFor(sub).some((m) => m.locked)).toBe(false);
     expect(selectableModelsFor({ role: 'admin' }).some((m) => m.locked)).toBe(false);
-    for (const u of [pub, sub, { role: 'admin' }, null]) expect(defaultModelFor(u)).toBe('ox-alpha');
-    expect(modelIsFree('ox-alpha')).toBe(true);
+    for (const u of [pub, sub, { role: 'admin' }, null]) expect(defaultModelFor(u)).toBe('minimax-m3');
+    // ⭐ 默认行**必须是免费行**：公开注册号的经营态靠 turn.js 的按轮次免费闸，不是金额闸。
+    // 哪天默认再挪家，这条会先炸（08-26 从 Ox 挪到 M3 就是被它挡着重新想了一遍）
+    expect(modelIsFree(defaultModelFor(null)), '默认行不免费 = 公开注册直接烧钱').toBe(true);
+    expect(modelIsFree('minimax-m3')).toBe(true);
+    expect(modelIsFree('glm-5.3-flash')).toBe(false);   // Go 订阅池的付费行，走美元日限
     expect(modelIsFree('claude-sonnet-5[1m]')).toBe(false);
     expect(modelIsFree('gemini-3.7-flash')).toBe(false);
-    // 会话中途 Ox → Claude 拦（空签名 thinking 回传会 400）；其它方向放行
-    expect(crossLaneSwitchReason('ox-alpha', 'claude-sonnet-5[1m]')).toMatch(/新开一个会话/);
-    expect(crossLaneSwitchReason('claude-sonnet-5[1m]', 'ox-alpha')).toBeNull();
-    expect(crossLaneSwitchReason('ox-alpha', 'ox-alpha')).toBeNull();
-    // 08-25：MiniMax 是 Anthropic 原生透传，从 Ox 切过去同样要拦；反向和同通路内互切放行
-    expect(crossLaneSwitchReason('ox-alpha', 'minimax-m3')).toMatch(/新开一个会话/);
-    expect(crossLaneSwitchReason('ox-alpha', 'minimax-m3')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
-    expect(crossLaneSwitchReason('minimax-m3', 'ox-alpha')).toBeNull();
-    // 08-21 晚：高/深想两行同是 Ox，互切不算跨线；深想行也是免费行但不是默认
-    expect(crossLaneSwitchReason('ox-alpha', 'ox-alpha-max')).toBeNull();
-    expect(crossLaneSwitchReason('ox-alpha-max', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
-    expect(modelIsFree('ox-alpha-max')).toBe(true);
-    expect(pubSel.find((m) => m.id === 'ox-alpha-max')?.locked).toBeUndefined();
-    expect(resolveWireModel('ox-alpha-max')?.reasoningEffort).toBe('max');
-    expect(resolveWireModel('ox-alpha')?.reasoningEffort).toBe('high');
+    // 会话中途 openai-chat → 别的通路要拦（转换层合成的 thinking 块没 signature，回传会 400）；其它方向放行
+    expect(crossLaneSwitchReason('glm-5.3-flash', 'claude-sonnet-5[1m]')).toMatch(/新开一个会话/);
+    expect(crossLaneSwitchReason('claude-sonnet-5[1m]', 'glm-5.3-flash')).toBeNull();
+    expect(crossLaneSwitchReason('glm-5.3-flash', 'glm-5.3-flash')).toBeNull();
+    // 08-25：MiniMax 是 Anthropic 原生透传，从 openai-chat 行切过去同样要拦；反向放行
+    expect(crossLaneSwitchReason('glm-5.3-flash', 'minimax-m3')).toMatch(/新开一个会话/);
+    expect(crossLaneSwitchReason('glm-5.3-flash', 'minimax-m3')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
+    expect(crossLaneSwitchReason('minimax-m3', 'glm-5.3-flash')).toBeNull();
+    // 同为 openai-chat 的两行互切不算跨线（原先钉在 Ox 高/深想两行上，08-26 换成 glm ↔ deepseek 视觉）
+    expect(crossLaneSwitchReason('glm-5.3-flash', 'deepseek-v4-flash-vision')).toBeNull();
+    expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
+    expect(resolveWireModel('glm-5.3-flash')?.reasoningEffort).toBe('high');
+    expect(resolveWireModel('glm-5.3-flash')?.helperReasoningEffort).toBe('low');
   });
 
   it('⛔ hotSwitchLaneReason：运行中订阅 ↔ API 一律拒（env 在起 query 那刻定死，硬切会拿订阅额度跑 API 模型）', () => {
     // 订阅 → API：binary 没有 ingress 地址，会拿 OAuth 把 alias（真实 Claude 名）打到 anthropic.com = 花真钱
-    expect(hotSwitchLaneReason('claude-sonnet-5[1m]', 'ox-alpha')).toMatch(/订阅额度/);
+    expect(hotSwitchLaneReason('claude-sonnet-5[1m]', 'glm-5.3-flash')).toMatch(/订阅额度/);
     expect(hotSwitchLaneReason('claude-opus-5[1m]', 'minimax-m3')).toMatch(/新开一个会话/);
     // API → 订阅：那个名字进了入口反查不到，兜底到本会话 fast 行 = 切了没生效
     expect(hotSwitchLaneReason('minimax-m3', 'claude-sonnet-5[1m]')).toMatch(/换不回订阅模型/);
     // 同通路内互切这条闸不管（协议那条闸另外管，两条正交）
-    expect(hotSwitchLaneReason('minimax-m3', 'ox-alpha')).toBeNull();
+    expect(hotSwitchLaneReason('minimax-m3', 'glm-5.3-flash')).toBeNull();
     expect(hotSwitchLaneReason('claude-sonnet-5[1m]', 'claude-opus-5[1m]')).toBeNull();
-    expect(hotSwitchLaneReason('ox-alpha', 'ox-alpha')).toBeNull();
-    expect(hotSwitchLaneReason(null, 'ox-alpha')).toBeNull();
+    expect(hotSwitchLaneReason('glm-5.3-flash', 'glm-5.3-flash')).toBeNull();
+    expect(hotSwitchLaneReason(null, 'glm-5.3-flash')).toBeNull();
   });
 
   it('spoof：API 行给 alias，订阅/未知原样返回', () => {
@@ -144,8 +149,10 @@ describe('brand（模型出自谁家，08-21）', () => {
 
   it('brandOfModel：认识的按表回答，不认识的回 null（调用方自己兜底，不猜）', () => {
     expect(brandOfModel('deepseek-v4-flash-vision')).toBe('deepseek');
-    expect(brandOfModel('ox-alpha')).toBe('opencode');          // 隐身免费行画供应商的标
-    expect(brandOfModel('ox-alpha-max')).toBe('opencode');
+    // 08-26：Ox 下架，接替它的 glm 行是**公开身份**的 Z.ai 模型 → 自己的标，不再走供应商方块。
+    // 'opencode' 那枚仍在 BRANDS 里留给下一个隐身行（Zen 目录一直有那类行）
+    expect(brandOfModel('glm-5.3-flash')).toBe('glm');
+    expect(brandOfModel('ox-alpha')).toBeNull();                // 整族删了，查不到就该回 null
     expect(brandOfModel('claude-opus-5[1m]')).toBe('claude');
     expect(brandOfModel('gemini-3.7-flash')).toBe('gemini');
     expect(brandOfModel('没有这个模型')).toBeNull();
@@ -192,10 +199,10 @@ describe('路由', () => {
   });
 
   it('⚠️ 每个 API 行的 sdkAlias 容量必须 ≥ 真实 window —— SDK 压缩窗口取二者较小值（自动枚举全表，新行天然被盯上）', () => {
-    // 唯一豁免：ox-alpha-helper 故意用 200k 的 haiku 名（它只当 fastModel，永远不是会话主行，
-    // window 字段不会喂进 CLAUDE_CODE_AUTO_COMPACT_WINDOW；见 model-table.js 那行的注释）。
-    // 新行想进这个名单，先说清楚它为什么永远当不了主行。
-    const HELPER_ONLY_EXEMPT = ['ox-alpha-helper'];
+    // 名单 08-26 起是**空的**：唯一的豁免 ox-alpha-helper（故意用 200k 的 haiku 名）随 Ox 整族删了。
+    // 想再往里加，先说清楚那一行为什么永远当不了会话主行 —— 只有那样 window 才不会喂进
+    // CLAUDE_CODE_AUTO_COMPACT_WINDOW，容量不足才不会变成"压缩窗口悄悄缩水"。
+    const HELPER_ONLY_EXEMPT = [];
     for (const m of MODELS_BUILTIN.filter((m) => m.api && !HELPER_ONLY_EXEMPT.includes(m.id))) {
       const r = resolveModelRoute(m.id);
       const aliasWindow = resolveModelContextWindow(r.sdkAlias);
@@ -275,17 +282,17 @@ describe('repriceUsageDeltas', () => {
 });
 
 describe('modelSwitchRejection：三条写模型的路共用的那一个判断（08-25 收口）', () => {
-  it('协议闸：跑过的 Ox 会话换到别的通路要拦；同通路、反向、同模型放行', () => {
-    expect(modelSwitchRejection({ from: 'ox-alpha', to: 'claude-sonnet-5[1m]' })).toMatch(/新开一个会话/);
-    expect(modelSwitchRejection({ from: 'ox-alpha', to: 'minimax-m3' })).toMatch(/新开一个会话/);
-    expect(modelSwitchRejection({ from: 'minimax-m3', to: 'ox-alpha' })).toBe(null);
-    expect(modelSwitchRejection({ from: 'ox-alpha', to: 'ox-alpha' })).toBe(null);
+  it('协议闸：跑过的 openai-chat 会话换到别的通路要拦；同通路、反向、同模型放行', () => {
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash', to: 'claude-sonnet-5[1m]' })).toMatch(/新开一个会话/);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash', to: 'minimax-m3' })).toMatch(/新开一个会话/);
+    expect(modelSwitchRejection({ from: 'minimax-m3', to: 'glm-5.3-flash' })).toBe(null);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash', to: 'glm-5.3-flash' })).toBe(null);
   });
 
   it('⭐没跑过的会话不拦：这条闸防的是历史里没 signature 的 thinking 块，没历史就没这回事', () => {
-    expect(modelSwitchRejection({ from: 'ox-alpha', to: 'claude-sonnet-5[1m]', hasHistory: false })).toBe(null);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash', to: 'claude-sonnet-5[1m]', hasHistory: false })).toBe(null);
     // 但通路闸跟历史无关（env 定死在起 query 那一刻），running 时照拦
-    expect(modelSwitchRejection({ from: 'ox-alpha', to: 'claude-sonnet-5[1m]', hasHistory: false, running: true })).toMatch(/换不回订阅模型/);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash', to: 'claude-sonnet-5[1m]', hasHistory: false, running: true })).toMatch(/换不回订阅模型/);
   });
 
   it('通路闸只在 running 时加判：空闲切会重启 query（换的是新 env），不该拦', () => {
@@ -294,9 +301,9 @@ describe('modelSwitchRejection：三条写模型的路共用的那一个判断�
   });
 
   it('缺参数一律放行（调用方还没算出 from/to 时不该误伤）', () => {
-    expect(modelSwitchRejection({ from: null, to: 'ox-alpha' })).toBe(null);
-    expect(modelSwitchRejection({ from: 'ox-alpha', to: null })).toBe(null);
-    expect(modelSwitchRejection({ from: 'ox-alpha', to: undefined, running: true })).toBe(null);
+    expect(modelSwitchRejection({ from: null, to: 'glm-5.3-flash' })).toBe(null);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash', to: null })).toBe(null);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash', to: undefined, running: true })).toBe(null);
   });
 
   it('⛔ lint：三条写模型的路只许经这一个函数判，不许自己去调两条底层闸', () => {
@@ -393,7 +400,7 @@ describe('GMI Cloud · MiniMax 两行（08-25）—— 共用 sdkAlias 的内置
 });
 
 describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜）', () => {
-  it('走 zenGo 上游、真名 deepseek-v4-flash-vision-exp、alias opus-4-7[1m]、窗口 272k、gate localGen、helper 仍是免费 Ox', () => {
+  it('走 zenGo 上游、真名 deepseek-v4-flash-vision-exp、alias opus-4-7[1m]、窗口 272k、helper 是通用 helper 行', () => {
     const r = resolveModelRoute('deepseek-v4-flash-vision');
     expect(r.mode).toBe('api');
     expect(r.upstream).toBe(UPSTREAMS.zenGo);
@@ -401,7 +408,7 @@ describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜）', () => 
     expect(r.sdkAlias).toBe('claude-opus-4-7[1m]');   // kimi 退役腾出的 1M 名；窗口用户拍板 272k
     expect(r.window).toBe(272_000);
     expect(resolveModelContextWindow(r.sdkAlias)).toBeGreaterThanOrEqual(r.window);
-    expect(r.fastModel).toBe('ox-alpha-helper');
+    expect(r.fastModel).toBe('deepseek-v4-flash-helper');   // 08-26 从 ox-alpha-helper 改过来（Ox 整族下架，那条 helper 的失效不出声）
     expect(resolveWireModel('claude-opus-4-7')?.wireModel).toBe('deepseek-v4-flash-vision-exp');
     expect(resolveWireModel('claude-opus-4-5')).toBe(null);   // 那个 200k 空名没再占
     expect(resolveWireModel('claude-sonnet-4-6[1m]')).toBe(null);   // 3.1-pro 退役腾出的名 = 现在的共用别名，不进全表反查
@@ -412,10 +419,18 @@ describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜）', () => 
       expect(allowedModelsFor(u).map((m) => m.id)).toContain('deepseek-v4-flash-vision');
     }
     expect(modelIsFree('deepseek-v4-flash-vision')).toBe(false);   // 付费行：走 checkQuota 的美元日限，不走免费轮次闸
-    // Ox 三行已切 /zen/go
+    // 08-26 接替 Ox 的 glm 行：同一条 /zen/go 线，真名 glm-5.3-flash，共用别名（没写 sdkAlias）
+    const g = resolveModelRoute('glm-5.3-flash');
+    expect(g.upstream).toBe(UPSTREAMS.zenGo);
+    expect(g.sdkAlias).toBe(SHARED_SDK_ALIAS);
+    expect(g.window).toBe(272_000);
+    expect(resolveWireModel('glm-5.3-flash')?.wireModel).toBe('glm-5.3-flash');
+    expect(resolveWireModel('glm-5.3-flash')?.protocol).toBe('openai-chat');
+    expect(modelIsFree('glm-5.3-flash')).toBe(false);
+    // ⛔ 下架的名字一个都不许还查得到（留着 = 请求带着别人的钥匙打一个 401 的真名）
     for (const id of ['ox-alpha', 'ox-alpha-max', 'ox-alpha-helper']) {
-      expect(resolveModelRoute(id).upstream).toBe(UPSTREAMS.zenGo);
-      expect(resolveWireModel(id)?.wireModel).toBe('ox-alpha-free');
+      expect(resolveWireModel(id), id).toBe(null);
+      expect(resolveModelRoute(id).mode, id).toBe('subscription');   // 不认识的名字退回订阅通路，不瞎猜
     }
   });
 });

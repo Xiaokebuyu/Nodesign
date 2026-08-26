@@ -24,9 +24,10 @@ check('公开注册 201', reg.status === 201, `${reg.status} ${JSON.stringify(re
 const cookie = jar.last;
 const me = await call('GET', '/api/me/models', null, cookie);
 const opts = me.j?.options || [];
-check('默认模型=ox-alpha', me.j?.default === 'ox-alpha', JSON.stringify(me.j?.default));
+check('默认模型=minimax-m3（08-26 从下架的 ox-alpha 挪过来）', me.j?.default === 'minimax-m3', JSON.stringify(me.j?.default));
 check('Sonnet/Opus 在清单里且 locked', opts.filter(o => /claude-/.test(o.id)).length === 2 && opts.filter(o => /claude-/.test(o.id)).every(o => o.locked), JSON.stringify(opts.map(o => [o.id, !!o.locked])));
-check('ox-alpha 在清单里且不 locked', opts.some(o => o.id === 'ox-alpha' && !o.locked), '');
+check('minimax-m3 在清单里且不 locked', opts.some(o => o.id === 'minimax-m3' && !o.locked), '');
+check('glm-5.3-flash 在清单里且不 locked（付费行也对公开号开，靠 $5/天日限管）', opts.some(o => o.id === 'glm-5.3-flash' && !o.locked), '');
 const proj = await call('POST', '/api/projects', { name: `gateprobe ${tag}` }, cookie);
 const pid = proj.j?.project?.id || proj.j?.id;
 check('建项目', proj.status < 300 && !!pid, `${proj.status} ${pid}`);
@@ -39,7 +40,7 @@ if (pid) {
   const pm = await call('PUT', `/api/projects/${pid}/sessions/${sid}/model`, { model: 'claude-opus-5[1m]' }, cookie);
   check('PUT 会话模型 opus → 403', pm.status === 403 && pm.j?.code === 'MODEL_LOCKED', `${pm.status} ${pm.j?.code}`);
   const gm = await call('GET', `/api/projects/${pid}/sessions/${sid}/model`, null, cookie);
-  check('GET 会话模型 default=ox-alpha', gm.j?.default === 'ox-alpha' && gm.j?.model === 'ox-alpha', JSON.stringify({ model: gm.j?.model, default: gm.j?.default }));
+  check('GET 会话模型 default=minimax-m3', gm.j?.default === 'minimax-m3' && gm.j?.model === 'minimax-m3', JSON.stringify({ model: gm.j?.model, default: gm.j?.default }));
   const ca = await call('POST', `/api/projects/${pid}/chatai/turn`, { input: 'hi' }, cookie);
   check('chatai 演出 → 403', ca.status === 403, `${ca.status} ${JSON.stringify(ca.j).slice(0, 100)}`);
   const hot = await call('POST', `/api/projects/${pid}/runs/run_nonexistent/model`, { model: 'claude-sonnet-5[1m]' }, cookie);

@@ -186,7 +186,7 @@ export function isModelLockedFor(user, appModel) {
 }
 
 /**
- * 这个用户没选过时用哪个：表里标 `default: true` 的行（08-21 = ox-alpha），它对该用户
+ * 这个用户没选过时用哪个：表里标 `default: true` 的行（08-26 起 = minimax-m3），它对该用户
  * 不可选时退到第一个可选的。前端 picker 与新会话的兜底都问这条，不再各自硬编码。
  */
 export function defaultModelFor(user) {

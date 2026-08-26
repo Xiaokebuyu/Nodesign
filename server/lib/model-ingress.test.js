@@ -234,21 +234,17 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
     } finally { unregisterIngressSession(SID); }
   });
   it('role：主行 main；fast 行 / 兜底 / 撞名 都是 helper（08-21，helper 降思考档用）', () => {
-    const S2 = 'ingress-test-oxmax';
-    registerIngressSession(S2, 'ox-alpha-max');
+    // 08-26：这条原先钉在 Ox 三行上，那族随模型下架删了，换成接替它的 glm 行 —— 要点没变：
+    // **主行和 fast 行不同名**，入口才分得出 role，helper 才不会跟着主行 high 想
+    const S2 = 'ingress-test-glm';
+    registerIngressSession(S2, 'glm-5.3-flash');
     try {
-      expect(resolveSessionWire('claude-sonnet-4-5-20250929[1m]', S2)).toMatchObject({ reason: 'table', role: 'main', wire: { appModel: 'ox-alpha-max', reasoningEffort: 'max', helperReasoningEffort: 'low' } });
-      expect(resolveSessionWire('ox-alpha-helper', S2)).toMatchObject({ reason: 'table', role: 'helper', wire: { appModel: 'ox-alpha-helper', reasoningEffort: 'low' } });
-      expect(resolveSessionWire('claude-haiku-4-5', S2)).toMatchObject({ reason: 'table', role: 'helper', wire: { appModel: 'ox-alpha-helper' } });
-      expect(resolveSessionWire('claude-sonnet-5', S2)).toMatchObject({ reason: 'fallback', role: 'helper', wire: { appModel: 'ox-alpha-helper' } });
-      expect(resolveSessionWire('claude-opus-4-8[1m]', S2)).toMatchObject({ reason: 'collision', role: 'helper', wire: { appModel: 'ox-alpha-helper' } });   // ox-alpha 主行的 alias 在 max 会话里是别行
-      // ox-alpha 会话：主请求 main、helper 行 helper（两者不再同名）
-      const S3 = 'ingress-test-ox'; registerIngressSession(S3, 'ox-alpha');
-      try {
-        expect(resolveSessionWire('claude-opus-4-8[1m]', S3)).toMatchObject({ role: 'main', wire: { appModel: 'ox-alpha', reasoningEffort: 'high' } });
-        expect(resolveSessionWire('ox-alpha-helper', S3)).toMatchObject({ role: 'helper', wire: { reasoningEffort: 'low' } });
-      } finally { unregisterIngressSession(S3); }
-      expect(resolveSessionWire('ox-alpha', null)).toMatchObject({ role: 'main' });
+      expect(resolveSessionWire('glm-5.3-flash', S2)).toMatchObject({ reason: 'table', role: 'main', wire: { appModel: 'glm-5.3-flash', reasoningEffort: 'high', helperReasoningEffort: 'low' } });
+      expect(resolveSessionWire('deepseek-v4-flash-helper', S2)).toMatchObject({ reason: 'table', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper', reasoningEffort: 'low' } });
+      expect(resolveSessionWire('claude-sonnet-5', S2)).toMatchObject({ reason: 'fallback', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper' } });
+      // 别行的**独占** alias 在这个会话里是撞名雷（那是别家的钥匙）→ 改道本会话 fast
+      expect(resolveSessionWire('claude-opus-4-7[1m]', S2)).toMatchObject({ reason: 'collision', role: 'helper', collidesWith: 'deepseek-v4-flash-vision', wire: { appModel: 'deepseek-v4-flash-helper' } });
+      expect(resolveSessionWire('glm-5.3-flash', null)).toMatchObject({ role: 'main' });
     } finally { unregisterIngressSession(S2); }
   });
   it('⭐共用别名（MiniMax 三行 + 外部插槽同名）：主行优先 —— alias 解成会话主行，helper 按 app id 认', () => {
@@ -260,7 +256,7 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
       expect(resolveSessionWire('claude-sonnet-4-6', S)).toMatchObject({ role: 'main', wire: { appModel: 'minimax-m3' } });
       expect(resolveSessionWire('deepseek-v4-flash-helper', S)).toMatchObject({ role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper', thinking: 'strip', protocol: 'openai-chat' } });
       // 别家的 alias 仍然不跨行：改道本会话 fast（minimax 的 helper 行），并标 collision
-      expect(resolveSessionWire('claude-opus-4-8[1m]', S)).toMatchObject({ reason: 'collision', collidesWith: 'ox-alpha', wire: { appModel: 'deepseek-v4-flash-helper' } });
+      expect(resolveSessionWire('claude-opus-4-7[1m]', S)).toMatchObject({ reason: 'collision', collidesWith: 'deepseek-v4-flash-vision', wire: { appModel: 'deepseek-v4-flash-helper' } });
       // SDK 内部 helper 的默认 Claude 名（不在表里）→ fallback 到同一个 fast 行
       expect(resolveSessionWire('claude-sonnet-5', S)).toMatchObject({ reason: 'fallback', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper' } });
       // 没注册的会话用共用别名发过来 = 查不到 = 502（fail-loud，探针必须带会话前缀）
@@ -279,11 +275,14 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
       expect(resolveSessionWire('claude-opus-4-7', SID)).toMatchObject({ reason: 'collision', collidesWith: 'deepseek-v4-flash-vision', wire: { appModel: 'qwen3.8-27b' } });
     } finally { unregisterIngressSession(SID); }
   });
-  it('qwen 会话：不在表里的 helper 名 → fast 兜底（fallback）；haiku 名 08-21 起属于 ox-alpha-helper 行 → 撞名改道', () => {
+  it('qwen 会话：不在表里的 helper 名 → fast 兜底（fallback）—— haiku 名 08-26 起没主了，也走这条', () => {
     registerIngressSession(SID, 'qwen3.8-27b');
     try {
       expect(resolveSessionWire('claude-sonnet-5', SID)).toMatchObject({ reason: 'fallback', fastModel: 'qwen3.8-27b', wire: { appModel: 'qwen3.8-27b' } });
-      expect(resolveSessionWire('claude-haiku-4-5', SID)).toMatchObject({ reason: 'collision', collidesWith: 'ox-alpha-helper', wire: { appModel: 'qwen3.8-27b' } });
+      // 08-21~08-26 之间 haiku 是 ox-alpha-helper 的独占 alias（那时这里是 collision）；Ox 下架后它退回
+      // 「只是一个订阅名」——**订阅行不进 WIRE_LOOKUP**，所以全表反查查不到 → fallback。
+      // ⭐ 两种 reason 的处置是同一个（改道本会话 fast，绝不跨行），差别只在日志措辞
+      expect(resolveSessionWire('claude-haiku-4-5', SID)).toMatchObject({ reason: 'fallback', fastModel: 'qwen3.8-27b', wire: { appModel: 'qwen3.8-27b' } });
     } finally { unregisterIngressSession(SID); }
   });
   it('gemini 会话拿 deepseek alias → 改道 gemini 自己（反向同样封）；注销后回到全表反查', () => {
