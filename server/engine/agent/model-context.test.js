@@ -465,3 +465,77 @@ describe('加载期断言真的会炸（换一张毒表 import 一遍 —— 装
     expect(mc.resolveModelRoute('minimax-m3').sdkAlias).toBe(SHARED_SDK_ALIAS);
   });
 });
+
+describe('Z.ai 官方直连 · glm-5.3-flash-zai（08-26）', () => {
+  it('上游：Anthropic 原生透传、x-api-key、baseUrl 不带 /v1', () => {
+    const u = UPSTREAMS.zai;
+    expect(u).toBeTruthy();
+    expect(u.baseUrl).toBe('https://api.z.ai/api/anthropic');
+    // ⛔ 透传路是 baseUrl + 原始路径（model-ingress.js 的 joinPath）。baseUrl 带 /v1 就会拼成
+    // /api/anthropic/v1/v1/messages —— 404，而且是那种"看着像配错了名字"的 404
+    expect(u.baseUrl.endsWith('/v1'), 'baseUrl 带 /v1 会把路径拼重').toBe(false);
+    expect(u.authStyle).toBe('x-api-key');
+    // 不写 protocol = 透传 Anthropic（不过 openai-chat 转换层）
+    expect(u.protocol).toBeUndefined();
+    expect(resolveWireModel('glm-5.3-flash-zai').protocol).toBe('anthropic');
+  });
+
+  it('⛔⛔ countTokens 必须是 false —— 这家的 count_tokens 是恒回 0 的桩，不是 404', () => {
+    // 08-26 实测：/v1/messages/count_tokens 回 200 {"input_tokens":0}，而同一段文本
+    // 真实请求计 462。入口对 countTokens:true 的语义是「先转发、404 才回退本地」，
+    // 于是这个 200 的 0 会被当真话传给 CLI → **auto-compact 永远不触发** →
+    // 会话一路涨到撞上游硬上限才 400，而且全程没有任何报错。
+    // 这条断言是这个洞唯一的看守：改成 true 不会有任何测试失败，除了它。
+    expect(UPSTREAMS.zai.countTokens, 'Z.ai 的 count_tokens 会撒谎，必须本地估算').toBe(false);
+  });
+
+  it('行：跟 zenGo 那条是同一模型的两条独立线路（同 wireModel、不同 id、各自钉死自己的上游）', () => {
+    const go = resolveWireModel('glm-5.3-flash');
+    const zai = resolveWireModel('glm-5.3-flash-zai');
+    expect(go.wireModel).toBe('glm-5.3-flash');
+    expect(zai.wireModel).toBe('glm-5.3-flash');       // 上游真名相同
+    expect(go.appModel).not.toBe(zai.appModel);        // 但是两行
+    expect(go.upstreamId).toBe('zenGo');
+    expect(zai.upstreamId).toBe('zai');
+    // ⭐ 做成两行而不是一行加动态路由，是为了缓存：两家各有各的 prompt cache，
+    // 同一会话在两家之间跳每次都是冷的。会话钉死在一行 = 缓存热得起来。
+    const r = resolveModelRoute('glm-5.3-flash-zai');
+    expect(r.mode).toBe('api');
+    expect(r.window).toBe(272_000);                     // 跟 zenGo 那行同窗口：换线时上下文条分母不变
+    expect(r.window).toBe(resolveModelRoute('glm-5.3-flash').window);
+    expect(r.sdkAlias).toBe(SHARED_SDK_ALIAS);
+  });
+
+  it('helper 不留在这家：并发桶只有 3，标题那几发会跟主回合抢槽位', () => {
+    expect(resolveModelRoute('glm-5.3-flash-zai').fastModel).toBe('deepseek-v4-flash-helper');
+    expect(resolveWireModel('deepseek-v4-flash-helper').upstreamId).toBe('zenGo');   // 跨上游做 helper，同 kimi-k3
+  });
+
+  it('图原生直通不提升；thinking 删字段让上游自决（budget_tokens 在这家不管用）', () => {
+    const w = resolveWireModel('glm-5.3-flash-zai');
+    expect(w.liftImages).toBe(false);   // 08-26 体检 3b：tool_result 里的图原样过桥
+    expect(w.thinking).toBe('strip');
+    expect(w.maxOutput).toBe(131_072);
+  });
+
+  it('订阅行记 0 → 走按轮次的免费闸；但先 gate localGen，别拿公开流量试并发 3 的桶', () => {
+    expect(modelIsFree('glm-5.3-flash-zai')).toBe(true);
+    expect(SELECTABLE_MODELS.find((m) => m.id === 'glm-5.3-flash-zai')?.gate).toBe('localGen');
+    for (const u of [{ role: 'user', plan: 'basic' }, { role: 'user', plan: 'pro' }]) {
+      expect(allowedModelsFor(u).map((m) => m.id), '带 localGen 闸的行不该对普通号露出').not.toContain('glm-5.3-flash-zai');
+    }
+    expect(allowedModelsFor({ role: 'admin' }).map((m) => m.id)).toContain('glm-5.3-flash-zai');
+    // ⚠️ 免费闸只看四价全 0。它花的是站主的包月订阅额度，不是真免费 —— 开闸前先把额度口径查清
+    expect(modelIsFree(defaultModelFor(null)), '默认行仍必须是免费行').toBe(true);
+  });
+
+  it('⚠️ 两行互切：zenGo → zai 被跨通路闸拦（openai-chat → anthropic），反向放行', () => {
+    // 记在这儿是因为它反直觉：**同一个模型**的两条线路，中途只能单向换。
+    // 闸拦的是"转换层合成的无 signature thinking 块回传给原生 Anthropic 那一头"。
+    // 08-26 实测 Z.ai 其实**不校验 signature**（删掉/空串/瞎编都收），所以这一对客观上是安全的，
+    // 只是闸按 protocol 判、没有 per-upstream 的能力位。要放开就得先加那个字段。
+    expect(crossLaneSwitchReason('glm-5.3-flash', 'glm-5.3-flash-zai')).toMatch(/新开一个会话/);
+    expect(crossLaneSwitchReason('glm-5.3-flash-zai', 'glm-5.3-flash')).toBeNull();
+    expect(crossLaneSwitchReason('glm-5.3-flash-zai', 'minimax-m3')).toBeNull();   // 两边都是 anthropic
+  });
+});

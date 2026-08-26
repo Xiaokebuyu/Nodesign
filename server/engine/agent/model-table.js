@@ -100,6 +100,33 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     protocol: 'openai-chat',
     countTokens: false,
   }),
+  // Z.ai / 智谱官方（08-26）：站主自己的 **Coding Plan 订阅**钥匙。
+  // ⚠️ 这把钥匙只认订阅入口：按量的 `/api/paas/v4` 一律 1113「余额不足」，
+  // 能用的是 `/api/anthropic`（Anthropic 原生）和 `/api/coding/paas/v4`（OpenAI 格式）。
+  // **它自己就说 Anthropic 协议**，所以不写 protocol = 透传，不过 openai-chat 转换层
+  // （同 gmi 的理由：链路上少一层翻译就少一类 quirk）。
+  //
+  // 08-26 用 server/_probe-upstream.mjs 体检 glm-5.3-flash 拿 8/9：顶层图 ✓ /
+  // **tool_result 图原样直通** ✓（不需要 liftImages）/ 流式 tool_use 分片拼得回 ✓ /
+  // max_tokens 128k 不炸 ✓ / png+webp+jpeg 三种图都认 ✓；只差 prompt cache（没有）。
+  //
+  // ⛔⛔ **countTokens 必须是 false，而且理由跟别家不一样**：这家的 count_tokens
+  // **不是 404，是恒回 `{"input_tokens":0}` 的桩**（同一段文本真实请求计 462）。
+  // 入口对 `countTokens: true` 的语义是「先转发、404 才回退本地」—— 一个 200 的 0
+  // 会被当真话传给 CLI，**auto-compact 就永远不触发**，会话一路涨到撞上游硬上限才 400。
+  // 荒谬的数反而安全，这个"看起来是正常响应"的 0 才是最危险的那种。
+  //
+  // ⚠️ 并发上限 **3**（08-26 实测：并发 2/3 全过，并发 4 当场两发 429，0.5s 就回）。
+  // 串行完美（10 次间隔 1s 全 200）—— 跟 GMI 那种"串行都掉一半"是两种病。
+  zai: Object.freeze({
+    label: 'Z.ai / 智谱官方（订阅）',
+    // ⚠️ 不带 /v1：透传路是 baseUrl + 原始路径（joinPath，同 gmi）
+    baseUrl: process.env.NODESIGN_UPSTREAM_ZAI_URL || 'https://api.z.ai/api/anthropic',
+    keyEnv: 'NODESIGN_UPSTREAM_ZAI_KEY',
+    // x-api-key 和 bearer 实测都通，按 Anthropic 惯例取 x-api-key
+    authStyle: 'x-api-key',
+    countTokens: false,   // ⛔ 见上：不是 404，是恒 0 的桩
+  }),
 });
 
 /**
@@ -328,6 +355,49 @@ export const MODELS_BUILTIN = Object.freeze([
       // Go 文档表价，GLM 不分高峰/平峰（deepseek 那行才分）。额度内上游 cost 报 0，
       // 真金额以上游为准（context.applyUpstreamBilling）；这里的表价管配额口径
       prices: { input: 0.15, output: 0.50, cacheRead: 0.03, cacheWrite: 0 },
+    },
+  },
+  // ── Z.ai 官方直连 · GLM-5.3-Flash（08-26）── 跟上面那行**是同一个模型的两条独立线路**，
+  // 故意做成两行而不是一行加动态路由（用户 08-26 拍板，跟表里"别造 provider 抽象层"同一条判断）：
+  // ⭐ **动态路由会伤缓存** —— 两家各有各的 prompt cache，同一个会话在两家之间跳，
+  // 每跳一次两边都是冷的。两行 = 一个会话钉死在一条线上，zenGo 那条的缓存才热得起来。
+  //
+  // 两条线的真实差别（都是 08-26 实测，不是文档抄的）：
+  //   协议      zenGo = OpenAI chat 过转换层   ／  zai = **Anthropic 原生透传**
+  //   prompt cache  zenGo 真命中（3968/4017） ／  zai **没有**（同一段打两遍 cache_read 都是 0）
+  //   花钱      zenGo 记表价、进每日美元额度   ／  zai 站主包月订阅，边际成本 0 → 记 0
+  //   并发      zenGo 没撞到上限               ／  zai **上限 3**（第 4 发当场 429）
+  //   count_tokens  zenGo 404 → 本地估算      ／  zai 恒回 0 的桩（见上游注释，同样关掉）
+  // 缓存那条是这行最大的短板：agent 每轮重传全量上下文，没缓存 = 每轮都全价重算 prefill。
+  // 包月下这不花钱，但**慢**，而且订阅额度按什么口径扣目前查不出来（/usage、/account/quota
+  // 全 404，响应头里也没有任何 quota/limit/remaining 字段）。
+  {
+    // 窗口跟 zenGo 那行取同一个数：理由与它一致（每轮重传全量上下文，这台机器出网超 200GiB/月要钱）。
+    // 两行同窗口还有一个好处 —— 用户在两条线之间换行时 auto-compact 的分母不变，不会"换个线路
+    // 上下文条突然缩水一半"。
+    id: 'glm-5.3-flash-zai', window: 272_000, brand: 'glm',
+    // ⚠️ 先 gate localGen（admin + 获批），跟 kimi-k3 上线时同一个理由：**全站共用一把钥匙 = 一个
+    // 并发桶**，而这家的桶只有 3 —— 开给所有人的话高峰期（这台盒子实测峰值在飞 turn 4 个）
+    // 会互相挤掉。另外订阅额度口径还没查清，先别拿公开流量去试。
+    // 开闸就是删掉 gate 这一处（清单、PUT /model、turn.js 三个消费方都走 selectableModelsFor）。
+    select: { label: 'GLM-5.3-Flash · 官方直连', desc: '同一个模型走智谱官方线路 · 原生协议 · 不计入每日额度 · 并发只有 3，人多时要排队', gate: 'localGen' },
+    api: {
+      upstream: 'zai', wireModel: 'glm-5.3-flash',
+      // 不写 sdkAlias = 共用别名走会话级路由（08-25 起的默认写法）
+      // helper **特意不留在这家**：并发桶只有 3，标题/分类器那几发会直接跟主回合抢槽位。
+      // 跨上游做 helper 有先例（kimi-k3 同样把 helper 交给 /zen/go 这条常驻线）。
+      fastModel: 'deepseek-v4-flash-helper',
+      // 'strip' = 删掉 thinking 字段让上游自决。08-26 实测这家 **budget_tokens 不管用**
+      // （给 512 反而比给 8192 想得多，那是采样噪声不是控制），所以 'enabled8k' 在这儿没有意义；
+      // 而 `disabled` 是真能关掉的（难题下 thinking 从 1082 字塌到 24 字）—— 留着这条备注，
+      // 哪天要给它做一个"不想"的档位，走的是 disabled 不是 budget。
+      thinking: 'strip',
+      liftImages: false,   // 08-26 体检 3b：tool_result 里的图**原生直通**（跟 gmi 一样），不需要提升
+      maxOutput: 131_072,
+      // 站主包月订阅，边际成本 0 → 四价全 0 = modelIsFree → 走按轮次的免费闸而不是美元闸。
+      // ⚠️ 这不代表它"免费"：它花的是订阅额度，只是那笔钱按月付、不按 token 走。
+      // 真要把它开给公开号之前，先把订阅额度口径查清楚（今天查不出来，见上面）。
+      prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     },
   },
   // ── GMI Cloud · MiniMax（08-25）── 两行都是 GMI 标 `is_free` 的免费部署；账户无余额，付费行 402，
