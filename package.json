@@ -62,15 +62,15 @@
   },
   "comments": {
     "_intentionally_omitted": [
-      "@anthropic-ai/sdk — Phase 4 删了；agent SDK 已包 LLM 通信，server/ 生产代码 0 直连用法。回退见 git revert（同 commit 删了 _probe-*.js）",
-      "@larksuiteoapi/node-sdk — 飞书入口走小合 → 调 Nodesign HTTP API；本服务不直接连飞书",
-      "@modelcontextprotocol/sdk — MCP 是 dev/ 工作台的事；Nodesign 暴露的是 REST/SSE",
-      "bcryptjs / jsonwebtoken — 鉴权方案待组长确认（'已有平台'是什么），先不锁",
-      "react / vite — 前端在 Nodesign/web/（待建）；server 是纯后端"
+      "@anthropic-ai/sdk \u2014 Phase 4 \u5220\u4e86\uff1bagent SDK \u5df2\u5305 LLM \u901a\u4fe1\uff0cserver/ \u751f\u4ea7\u4ee3\u7801 0 \u76f4\u8fde\u7528\u6cd5\u3002\u56de\u9000\u89c1 git revert\uff08\u540c commit \u5220\u4e86 _probe-*.js\uff09",
+      "@larksuiteoapi/node-sdk \u2014 \u98de\u4e66\u5165\u53e3\u8d70\u5c0f\u5408 \u2192 \u8c03 Nodesign HTTP API\uff1b\u672c\u670d\u52a1\u4e0d\u76f4\u63a5\u8fde\u98de\u4e66",
+      "@modelcontextprotocol/sdk \u2014 MCP \u662f dev/ \u5de5\u4f5c\u53f0\u7684\u4e8b\uff1bNodesign \u66b4\u9732\u7684\u662f REST/SSE",
+      "bcryptjs / jsonwebtoken \u2014 \u9274\u6743\u65b9\u6848\u5f85\u7ec4\u957f\u786e\u8ba4\uff08'\u5df2\u6709\u5e73\u53f0'\u662f\u4ec0\u4e48\uff09\uff0c\u5148\u4e0d\u9501",
+      "react / vite \u2014 \u524d\u7aef\u5728 Nodesign/web/\uff08\u5f85\u5efa\uff09\uff1bserver \u662f\u7eaf\u540e\u7aef"
     ],
     "_pending_decisions": [
-      "playwright vs puppeteer — playwright 更现代但带 chromium ~150MB，部署环境吃得消？",
-      "better-sqlite3 vs pg — SaaS 数据规模会涨，可能要切 PostgreSQL；MVP 先 SQLite 起步"
+      "playwright vs puppeteer \u2014 playwright \u66f4\u73b0\u4ee3\u4f46\u5e26 chromium ~150MB\uff0c\u90e8\u7f72\u73af\u5883\u5403\u5f97\u6d88\uff1f",
+      "better-sqlite3 vs pg \u2014 SaaS \u6570\u636e\u89c4\u6a21\u4f1a\u6da8\uff0c\u53ef\u80fd\u8981\u5207 PostgreSQL\uff1bMVP \u5148 SQLite \u8d77\u6b65"
     ]
   },
   "allowScripts": {
@@ -111,5 +111,8 @@
     "creative-tools",
     "self-hosted"
   ],
-  "license": "AGPL-3.0-only"
+  "license": "AGPL-3.0-only",
+  "overrides": {
+    "hono": "4.12.34"
+  }
 }
