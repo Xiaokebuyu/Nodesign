@@ -518,15 +518,18 @@ describe('Z.ai 官方直连 · glm-5.3-flash-zai（08-26）', () => {
     expect(w.maxOutput).toBe(131_072);
   });
 
-  it('订阅行记 0 → 走按轮次的免费闸；但先 gate localGen，别拿公开流量试并发 3 的桶', () => {
+  it('订阅行记 0 → 走按轮次的免费闸；08-26 起对所有档开放（限时额度，用完撤掉）', () => {
     expect(modelIsFree('glm-5.3-flash-zai')).toBe(true);
-    expect(SELECTABLE_MODELS.find((m) => m.id === 'glm-5.3-flash-zai')?.gate).toBe('localGen');
-    for (const u of [{ role: 'user', plan: 'basic' }, { role: 'user', plan: 'pro' }]) {
-      expect(allowedModelsFor(u).map((m) => m.id), '带 localGen 闸的行不该对普通号露出').not.toContain('glm-5.3-flash-zai');
+    // 08-26 用户拍板不 gate：这条订阅只剩约一周，压着给 admin 试跑等于浪费额度
+    expect(SELECTABLE_MODELS.find((m) => m.id === 'glm-5.3-flash-zai')?.gate).toBeUndefined();
+    for (const u of [{ role: 'user', plan: 'basic' }, { role: 'user', plan: 'pro' }, { role: 'admin' }]) {
+      expect(allowedModelsFor(u).map((m) => m.id)).toContain('glm-5.3-flash-zai');
     }
-    expect(allowedModelsFor({ role: 'admin' }).map((m) => m.id)).toContain('glm-5.3-flash-zai');
-    // ⚠️ 免费闸只看四价全 0。它花的是站主的包月订阅额度，不是真免费 —— 开闸前先把额度口径查清
+    // ⚠️ 免费闸只看四价全 0。它花的是站主的包月订阅额度，不是真免费 —— 只是那笔钱按月付、不按 token 走
     expect(modelIsFree(defaultModelFor(null)), '默认行仍必须是免费行').toBe(true);
+    // ⛔ 但它**不该是默认行**：只活一周的行当默认，撤掉那天所有钉在它上面的会话一起 403
+    // （Ox 那次 33 个会话就是这么来的）。默认要留给耐久的那条。
+    expect(defaultModelFor(null)).not.toBe('glm-5.3-flash-zai');
   });
 
   it('⚠️ 两行互切：zenGo → zai 被跨通路闸拦（openai-chat → anthropic），反向放行', () => {
