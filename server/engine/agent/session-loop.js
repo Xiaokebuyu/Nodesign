@@ -328,9 +328,7 @@ export async function runSession({
 
   // MCP server 实例落变量：开局契约自检要从**传给 query 的同一个实例**上取预期
   // 工具名（server.toolNames，见 mcp/index.js）——不另立第二份清单。
-  // 常驻角色名册一会话一份，hooks 和 MCP 工具**共用同一个引用**：cast_role 往里记
-  // "这一回合造的角色"，派发闸据此拦掉本回合内注定失败的那次派发（CLI 只在回合边界
-  // 重扫角色目录）。各建各的 = 闸看不见记录，那次失败照旧发生。
+  // 常驻角色名册：一会话一份，hooks 与 MCP 工具共用同一引用（见 cast.js createRoleRoster）
   const roleRoster = createRoleRoster();
   const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx, roleRoster });
 
@@ -601,8 +599,7 @@ export async function runSession({
         ...isolation,
         settings: mergeAgentSettings(isolation.settings, {
           skipWebFetchPreflight: platform.skipWebFetchPreflight, sharedRoot,
-          // 跨会话入向一律不收（理由与实测证据见 memory-config.js 那个键的注释）
-          crossSessionInbound: 'refuse',
+          crossSessionInbound: 'refuse',   // 理由见 memory-config.js 那个键的注释
         }),
       };
     })(),
@@ -1006,7 +1003,7 @@ export async function runSession({
     unregisterIngressSession(sessionId);   // API 会话的 fast 兜底路由配对注销（订阅会话 noop）
     unregisterSessionNotice(sessionId, noticeHandler);   // ingress → 会话的通知通道配对注销（按身份，别删掉新会话的）
     takeUpstreamTruncation(sessionId);     // 半截标记跟会话同生命周期，别留
-    clearRoleInboxes(projectId);           // 角色收件箱：把挂着等用户的 waiter 全放掉，别让它们永远挂着
+    clearRoleInboxes(projectId);           // 角色收件箱：放掉挂着等用户的 waiter（见 agent/inbox.js）
     // 带 token 比对：sid 若已被新 register 占用（closeQuerySession 已同步让位 +
     // 用户重发起新 runSession），unregister 看到 _token 不匹配 → noop 不误删新 entry
     unregisterQuerySession(sessionId, sessionToken);
