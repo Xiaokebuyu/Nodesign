@@ -58,6 +58,8 @@ import { MEMORY_EXTRA_GUIDELINES, mergeAgentSettings } from './memory-config.js'
 import { createNodesignMcpServer } from '../mcp/index.js';
 import { MCP_SERVER_NAME } from '../mcp/server-name.js';
 import { assertInitContract } from './init-contract.js';
+import { clearProject as clearRoleInboxes } from './inbox.js';
+import { createRoleRoster } from './cast.js';
 import { createAgents, resolveDefaultFastModel } from '../agents/index.js';
 import { resolveSdkSpoofModel, pickThinkingConfig, resolveModelRoute, isUncensoredModel } from './model-context.js';
 import { resolveSessionModel } from './session-model.js';
@@ -326,7 +328,11 @@ export async function runSession({
 
   // MCP server 实例落变量：开局契约自检要从**传给 query 的同一个实例**上取预期
   // 工具名（server.toolNames，见 mcp/index.js）——不另立第二份清单。
-  const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx });
+  // 常驻角色名册一会话一份，hooks 和 MCP 工具**共用同一个引用**：cast_role 往里记
+  // "这一回合造的角色"，派发闸据此拦掉本回合内注定失败的那次派发（CLI 只在回合边界
+  // 重扫角色目录）。各建各的 = 闸看不见记录，那次失败照旧发生。
+  const roleRoster = createRoleRoster();
+  const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx, roleRoster });
 
   // npm 缓存 + 沙盒可写 tmp（$TMPDIR / pip 缓存）：细节与教训见 isolation.js
   const agentDirs = await prepareAgentDirs({ dataRoot: PROJECTS_DATA_ROOT, projectId, sessionId });
@@ -592,6 +598,8 @@ export async function runSession({
         ...isolation,
         settings: mergeAgentSettings(isolation.settings, {
           skipWebFetchPreflight: platform.skipWebFetchPreflight, sharedRoot,
+          // 跨会话入向一律不收（理由与实测证据见 memory-config.js 那个键的注释）
+          crossSessionInbound: 'refuse',
         }),
       };
     })(),
@@ -602,7 +610,7 @@ export async function runSession({
 
     // projectId 要传：PostToolUseFailure 记问题库时用它标归属（漏传的话
     // issues 行的 project_id 全是 null，事后追不回是哪个项目踩的）
-    hooks: createHooks({ ctx: sharedCtx, workspaceRoot: wsRoot, sharedRoot, sessionId, projectId }),
+    hooks: createHooks({ ctx: sharedCtx, workspaceRoot: wsRoot, sharedRoot, sessionId, projectId, roleRoster }),
 
     mcpServers: {
       // 键名 = 模型眼里的 `mcp__<名>__<工具>` 前缀，也是 isolation.js 那条
@@ -995,6 +1003,7 @@ export async function runSession({
     unregisterIngressSession(sessionId);   // API 会话的 fast 兜底路由配对注销（订阅会话 noop）
     unregisterSessionNotice(sessionId, noticeHandler);   // ingress → 会话的通知通道配对注销（按身份，别删掉新会话的）
     takeUpstreamTruncation(sessionId);     // 半截标记跟会话同生命周期，别留
+    clearRoleInboxes(projectId);           // 角色收件箱：把挂着等用户的 waiter 全放掉，别让它们永远挂着
     // 带 token 比对：sid 若已被新 register 占用（closeQuerySession 已同步让位 +
     // 用户重发起新 runSession），unregister 看到 _token 不匹配 → noop 不误删新 entry
     unregisterQuerySession(sessionId, sessionToken);

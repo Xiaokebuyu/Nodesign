@@ -513,7 +513,7 @@ export const SIZES = Object.fromEntries(
  *
  * `path` 那行的意思：卡 id 可能带形态前缀（`site:` / `deck:`），标注要的是真路径。
  */
-export function annotTargetOf(o) {
+export function annotTargetOf(o, roleNames = null) {
   // 摘录（2026-08-23 黑板）：用户在 agent 写的字上回应时，agent 得看见那段字写了什么
   // —— 画布原生手写字 agent 读不回来，板书虽是文件但一句摘录省它一次 Read
   const raw = o.type === 'text' ? (o.data?.t || '') : (o.chalk ? (o.text || '') : '');
@@ -525,8 +525,20 @@ export function annotTargetOf(o) {
     title: o.title || o.name || o.id,
     typeLabel: labelOf(o),
     ...(excerpt ? { excerpt } : {}),
-    ...(o.chalk ? { chalk: true, by: o.chalk.by || 'agent' } : (o.native && (o.pos?.by || o.by) === 'agent' ? { by: 'agent' } : {})),
+    // by 三类：'user' / 'agent' / 常驻角色 slug（rp-*）。手写字那支原来只认 'agent'，
+    // 现在角色画的原生 text 也要认出来（否则标注它时会被说成"用户写的"，判正好相反）。
+    ...(o.chalk
+      ? { chalk: true, by: o.chalk.by || 'agent' }
+      : (o.native && byOfNative(o) ? { by: byOfNative(o) } : {})),
+    // 展示名随手带上：组标注消息的那一层（ProjectWorkspace）够不到 roleNames
+    ...(roleNames ? { byName: roleNames[o.chalk?.by || byOfNative(o)] || null } : {}),
   };
+}
+
+/** 画布原生物件（手写字/涂鸦）的作者：agent 或某个常驻角色 */
+function byOfNative(o) {
+  const v = o.pos?.by || o.by;
+  return v === 'agent' || (typeof v === 'string' && v.startsWith('rp-')) ? v : null;
 }
 
 /**

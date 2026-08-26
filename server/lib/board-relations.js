@@ -57,7 +57,10 @@ export function bindingLine(b, board) {
   const t = BINDING_TYPES[b.type];
   const word = b.label || t?.label || b.type;
   const joint = t?.directed ? `─${word}→` : `─${word}─`;
-  const who = b.by === 'user' ? '〔用户画的〕' : b.by === 'agent' ? '〔你画的〕' : '';
+  // 常驻角色画的线要报名字，不能落空串（空串 = 这条摘要里它跟自动线一个待遇）
+  const who = b.by === 'user' ? '〔用户画的〕'
+    : b.by === 'agent' ? '〔你画的〕'
+      : (b.by && b.by !== 'auto') ? `〔${b.by} 画的〕` : '';
   return `${describeEndpoint(b.from, board)} ${joint} ${describeEndpoint(b.to, board)}${who}`;
 }
 
@@ -75,6 +78,7 @@ export async function relationsDigest(pid, { limit = 12 } = {}) {
   const manual = [
     ...all.filter(b => b.by === 'user'),
     ...all.filter(b => b.by === 'agent'),
+    // 角色画的线也算手画的（排在用户/主控之后、自动之前）
     ...all.filter(b => b.by !== 'user' && b.by !== 'agent' && !(b.by === 'auto' && b.type === 'ref')),
   ];
   const autoRefs = all.filter(b => b.by === 'auto' && b.type === 'ref');

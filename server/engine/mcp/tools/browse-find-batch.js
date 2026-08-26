@@ -86,6 +86,21 @@ as an error telling you to find again.`,
  * @param {{name:string, input:object}} [o.finalShot]   结尾补的那张"当前状态"；不传就不补
  */
 export function makeBatchTool({ name, description, tools, batchable, finalShot }) {
+  // ⚠️⚠️ 挂账（2026-08-26 发现，**没修**，不属于当时那条线）：这张表捏的是**包装前**
+  // 的工具引用。index.js 出口那几层（ALWAYS_LOAD_TOOLS 打标、withCapabilityGate、
+  // withParamSanitizer）都是 `{...t}` fork 出新对象，于是从 batch 里调子工具会**绕过
+  // 能力闸和参数消毒**。
+  //
+  // 08-26 实测过相交面（别再凭印象判"反正也没交集"）：
+  //   browser_batch  可批 7 件，**7 件全在能力闸内**（browser_* 全族）
+  //   artifact_batch 可批 9 件在闸内（artifact_* / screenshot_canvas / query_elements
+  //                  / get_computed_styles / explain_style / trace_motion）
+  //   board_batch    四件都不在闸内，不受影响
+  // 也就是说这不是"空转的隐患"，是**真的在绕**：缺 chromium 的盒子上，本该被闸住并
+  // 回一句「装法」的调用会漏成裸错误；参数标签泄漏消毒对 batch 内的调用也不生效。
+  //
+  // 修法：把 byName 建在包装后的表上（或让 batch 接工具**名**而不是工具对象，
+  // 运行时查当前注册表）。要动 index.js 的工具组装顺序，所以单独一刀。
   const byName = new Map(tools.filter(t => batchable.includes(t.name)).map(t => [t.name, t]));
   const names = [...byName.keys()];
   return tool(

@@ -29,6 +29,7 @@ import { boxUnion } from '../../lib/board-camera.js';
 import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as presenceRectFor, MAIN_AGENT_ID, colorFor, hintPresence, expireHint } from '../../lib/board-presence.js';
 import { useStageState, splitStageCards, ChalkLiveInk, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
 import { AmbientSpriteLayer, SpriteAskInput, useSpriteAmbient } from './SpriteSketchLayer.jsx';
+import RoleSprites from './RoleSprites.jsx';
 import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
 import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
@@ -150,7 +151,7 @@ export default function BoardCanvas({
   // 派生（objects/folderView）留在本组件：它跟拖拽、影子区缠在一起。
   const {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
-    layout, setLayout, zones, setZones, bindings, setBindings, boardHero,
+    layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
     guideText, fileCount,
     reload, scheduleSave, patchLayout,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,
@@ -895,7 +896,7 @@ export default function BoardCanvas({
     projectId, onAddToContext, onFocusDeck,
     setLayout, dirtyRef, scheduleSave, reload,
     setAddedPaths, setViewer, setOrchestrate, setDetail,
-    openTextEditor,
+    openTextEditor, roleNames,
   });
   // 两个 ref 留在这儿赋值：挂得更早的 effect（Delete 键、preview_deck 工具）靠它们够到下面才定义的函数
   handleDeleteNoteRef.current = handleDeleteNote;
@@ -1618,7 +1619,7 @@ export default function BoardCanvas({
         onFocus={() => focusDeck(obj)}
         // 标注：浮层从按钮底下长出来（at 是按钮的屏幕坐标），
         // target 的形状跟右键菜单那条**逐字一致** —— 同一张浮层
-        onAnnotate={(at) => setAnnotate({ x: at.x, y: at.y, target: annotTargetOf(obj) })}
+        onAnnotate={(at) => setAnnotate({ x: at.x, y: at.y, target: annotTargetOf(obj, roleNames) })}
         onExport={isFileBacked(obj) ? () => !wasDrag() && exportCard(projectId, obj) : undefined}
         noteCount={noteCounts[obj.id] || 0}
         // 缩略图的第二道限流：镜头拉太远就不挂 iframe（看不清，纯浪费）
@@ -1777,6 +1778,7 @@ export default function BoardCanvas({
           {chalkCards.map(c => <ChalkLiveInk key={c.blockId} card={c} spot={liveChalkSpotFor(c.blockId)} />)}
           <BindingLayer
             bindings={bindings}
+            roleNames={roleNames}
             rectOf={rectOfId}
             epoch={positioned}
             width={stageBounds.w}
@@ -1856,6 +1858,9 @@ export default function BoardCanvas({
               <StageCardBody card={card} onDismiss={() => dismissStageCard(card.blockId)} />
             )}
           />
+
+          {/* 常驻角色的精灵：贴着它正在写的东西，比主精灵小一圈 + 身份标（RoleSprites.jsx） */}
+          <RoleSprites presence={presence} rectOf={rectOfId} obstacles={minimapItems} roleNames={roleNames} />
 
           {/* 精灵对话输入行：点星芒浮出的那道铅笔虚线 */}
           {spriteAsk && (

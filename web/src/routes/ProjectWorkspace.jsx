@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { trySayToRole } from '../lib/role-direct.js';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Download, MoreHorizontal } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
@@ -1789,6 +1790,12 @@ export default function ProjectWorkspace() {
       return;
     }
 
+    // 直达角色：用户在某个常驻角色写的板书上回话，绕开主 agent（见 lib/role-direct.js）
+    if (await trySayToRole({
+      list, projectId: id, text, api: Assets, showToast,
+      onSend: () => boardApiRef.current?.presenceHint?.(list[0].id),
+    })) return;
+
     useGlobalStore.getState().openChatDock();
     // E4：发送瞬间精灵先飘到目标上（本地合成在场，真事件来了自然接管）
     boardApiRef.current?.presenceHint?.(list[0].id);
@@ -1797,9 +1804,15 @@ export default function ProjectWorkspace() {
       const loc = where && where !== t.title ? `（${where}）` : '';
       // 板书/手写字带摘录与作者（2026-08-23）：用户在 agent 的字上回话，agent 得知道那段字
       // 说的是什么、是不是自己写的 —— 是自己的板书就用 write_on_board reply_to 接在下面
-      const who = t.by === 'agent' ? '，agent 写的' : t.chalk ? '，用户写的' : '';
+      // by 三类：'agent'（主控）/ 常驻角色 slug（rp-*）/ 其余按用户写的算。
+      // ⚠️ 角色写的板书原来会落进 `t.chalk ? '用户写的'` 那一支 —— 判正好相反，
+      // 主 agent 会以为那段字是用户写的。
+      const isRole = !!t.by && t.by !== 'agent' && t.by !== 'user';
+      const who = isRole ? `，${t.byName || t.by} 写的`
+        : t.by === 'agent' ? '，agent 写的'
+          : t.chalk ? '，用户写的' : '';
       const ex = t.excerpt ? `，原文「${t.excerpt}」` : '';
-      const hint = t.chalk && t.by === 'agent' ? `；回应请 write_on_board reply_to=${t.path}` : '';
+      const hint = t.chalk && (t.by === 'agent' || isRole) ? `；回应请 write_on_board reply_to=${t.path}` : '';
       return `${t.typeLabel}「${t.title}」${loc}${who}${ex}${hint}`;
     }).join('、');
     await handleSend(`【画布标注】${desc}：${text}`);

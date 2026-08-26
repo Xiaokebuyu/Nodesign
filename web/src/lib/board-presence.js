@@ -53,6 +53,35 @@ export function colorFor(index) {
 export const MAIN_AGENT_ID = 'agent:main';
 
 /**
+ * 常驻角色（RP 叙事者 / NPC）在场表里的 id。
+ *
+ * 2026-08-18 曾把子代理整体从在场表里拆掉（每个子代理一个小徽记 = 噪音）。
+ * 现在回来的**只有常驻角色**这一类：它们不是"跑一下就完事的工具人"，是一直
+ * 在场、在板上写字、跟用户对话的角色 —— 用户需要看见谁在写。
+ * 干活型子代理（vision-checker 那类）照旧不进在场表。
+ */
+export const rolePresenceId = (slug) => `role:${slug}`;
+export const isRolePresence = (id) => typeof id === 'string' && id.startsWith('role:');
+export const slugOfPresence = (id) => (isRolePresence(id) ? id.slice(5) : null);
+
+/** 在场者的身份（名字、色号、种类）。角色的展示名由渲染层按 slug 查，这里先放 slug */
+function identityOf(id) {
+  if (isRolePresence(id)) {
+    const slug = slugOfPresence(id);
+    // 色号按 slug 稳定派生：同一个角色每次都是同一支颜色，换会话也不变
+    const h = [...slug].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 997, 7);
+    return { kind: 'role', name: slug, color: colorFor(1 + (h % 5)), slug };
+  }
+  return { kind: 'main', name: 'Claude', color: colorFor(0) };
+}
+
+/** 事件属于谁：常驻角色的事件带 actor（服务端盖章），其余算主 agent */
+function actorOf(evt) {
+  const a = evt?.actor;
+  return typeof a === 'string' && a.startsWith('rp-') ? rolePresenceId(a) : MAIN_AGENT_ID;
+}
+
+/**
  * 空表。形状固定，调用方不用到处判空。
  * `[id]: { id, name, kind, color, targetId, zoneId, message, active, at }`
  */
@@ -78,11 +107,13 @@ export function emptyPresence() {
  */
 export function reducePresence(table, evt, resolve) {
   if (!evt?.type) return table;
-  // 子代理的事件不进在场表：不能把它动的文件算到主 agent 头上（主精灵会
-  // 在子代理写的文件之间瞬移），也不再为它立条目（徽记 2026-08-18 退役）。
-  if (evt.parentToolUseId) return table;
+  // 子代理的事件：**常驻角色**为自己立条目（它一直在场、在板上写字，用户要看见
+  // 是谁在写）；干活型子代理照旧丢弃（08-18 拆徽记的理由没变 —— 跑一下就完事的
+  // 工具人立条目只是噪音）。丢弃时尤其不能算到主 agent 头上，那会让主精灵在
+  // 子代理写的东西之间瞬移。
+  if (evt.parentToolUseId && !evt.actor) return table;
   const t = evt.type;
-  const who = MAIN_AGENT_ID;
+  const who = actorOf(evt);
 
   /**
    * 主 agent 的"接管显形"（2026-08-14）：主 agent 的活动事件到了但表里没有它
@@ -92,21 +123,20 @@ export function reducePresence(table, evt, resolve) {
    */
   const materializeMain = () => ({
     ...table,
-    [MAIN_AGENT_ID]: {
-      id: MAIN_AGENT_ID, kind: 'main', name: 'Claude', color: colorFor(0),
+    [who]: {
+      id: who, ...identityOf(who),
       active: true, targetId: null, zoneId: null, message: null, at: evt.at || null,
     },
   });
 
   switch (t) {
     case 'run.start': {
-      const cur = table[MAIN_AGENT_ID];
+      const cur = table[who];
       if (cur?.active) return table;
       return {
         ...table,
-        [MAIN_AGENT_ID]: {
-          id: MAIN_AGENT_ID, kind: 'main', name: 'Claude',
-          color: colorFor(0), active: true,
+        [who]: {
+          id: who, ...identityOf(who), active: true,
           // 常驻（2026-08-14）：上一轮的落点不清零 —— 精灵从"住的地方"起飞
           // 滑向新目标，而不是凭空消失再冒出来。
           targetId: cur?.targetId ?? null, zoneId: cur?.zoneId ?? null,
@@ -128,7 +158,7 @@ export function reducePresence(table, evt, resolve) {
       let cur = table[who];
       if (!cur) {
         table = materializeMain();
-        cur = table[MAIN_AGENT_ID];
+        cur = table[who];
       }
       // ⚠️ 字段名是 `filePath`（events.js:fileChanged 的真实形状）。这里曾读
       // `evt.path || evt.file` —— 两个都不存在，resolve(undefined) 恒 null，
@@ -159,7 +189,7 @@ export function reducePresence(table, evt, resolve) {
       let cur = table[who];
       if (!cur) {
         table = materializeMain();
-        cur = table[MAIN_AGENT_ID];
+        cur = table[who];
       }
       const msg = evt.summary || evt.name || null;
       if (!msg || cur.message === msg) return table;
@@ -172,11 +202,20 @@ export function reducePresence(table, evt, resolve) {
     // board.focus 是板书落定的唯一信号，chalk 字段就是画布 id。只在活跃时收编
     //（草图没有单一对象 id，不进来 —— 它有黑板模式的镜头跟随）。
     case 'board.focus': {
-      const cur = table[MAIN_AGENT_ID];
-      if (!cur?.active) return table;
       const tid = evt.chalk || null;
-      if (!tid || cur.targetId === tid) return table;
-      return { ...table, [MAIN_AGENT_ID]: { ...cur, targetId: tid, zoneId: evt.layer || null, at: evt.at || cur.at } };
+      if (!tid) return table;
+      const cur = table[who];
+      // 角色：板书落定就是它「正在写」的证据，没有条目就地立一个 —— 它的在场
+      // 不跟主 run 的 active 走（角色在后台写字时主 run 可能早就收了）。
+      // 主 agent：照旧只在活跃时更新，不然闲着的精灵会被别人的落定拽走。
+      if (isRolePresence(who)) {
+        const base = cur || { id: who, ...identityOf(who), message: null };
+        if (cur && cur.targetId === tid && cur.active) return table;
+        return { ...table, [who]: { ...base, active: true, targetId: tid, zoneId: evt.layer || null, at: evt.at || base.at || null } };
+      }
+      if (!cur?.active) return table;
+      if (cur.targetId === tid) return table;
+      return { ...table, [who]: { ...cur, targetId: tid, zoneId: evt.layer || null, at: evt.at || cur.at } };
     }
 
     case 'run.done':
@@ -188,6 +227,10 @@ export function reducePresence(table, evt, resolve) {
       let touched = false;
       const next = {};
       for (const [id, p] of Object.entries(table)) {
+        // ⚠️ 常驻角色不跟主 run 收场：它在后台自己活着（挂在 await_user 上等用户、
+        // 或正在写下一段），主 agent 这一轮结束跟它没关系。一起收的话，派发那个
+        // 回合一结束角色精灵就灭了，而它其实还在写（2026-08-26 审出）。
+        if (isRolePresence(id)) { next[id] = p; continue; }
         // pendingFile 一起清：挂账的是"这一轮正在写的新文件"，轮都收了账就作废
         if (p.active) { touched = true; next[id] = { ...p, active: false, message: null, pendingFile: null }; }
         else next[id] = p;

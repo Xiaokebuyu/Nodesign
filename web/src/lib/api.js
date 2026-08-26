@@ -259,6 +259,14 @@ export const Assets = {
   putBoard: (pid, board) => jsonRequest('PUT', `/api/projects/${pid}/board`, { board }),
   /** diff 合并写：{ size?, objects?: {id: obj|null}, zones?: {id: zone|null} }，null=删 */
   patchBoard: (pid, patch) => jsonRequest('PATCH', `/api/projects/${pid}/board`, { patch }),
+  /**
+   * 常驻角色（2026-08-26）：名册 + 直接对角色说话。
+   * `say` 的返回带 `delivered`：'waiting' = 角色正挂着等，话当场交到它手里；
+   * 'queued' = 它没在等，话先攒着（服务端叫不醒子代理，得等它下次自己来取）。
+   * **两者必须区分着提示用户** —— 把积压说成送达，用户会对着没人听的板子说话。
+   */
+  listRoles: (pid) => jsonRequest('GET', `/api/projects/${pid}/roles`),
+  sayToRole: (pid, slug, body) => jsonRequest('POST', `/api/projects/${pid}/roles/${encodeURIComponent(slug)}/say`, body),
   /** 黑板（2026-08-23）：用户视点上报 / 草稿落定 / 按标签整组擦 */
   reportViewpoint: (pid, viewpoint) => jsonRequest('POST', `/api/projects/${pid}/viewpoint`, { viewpoint }),
   commitBoard: (pid, tag = null) => jsonRequest('POST', `/api/projects/${pid}/board/commit`, { tag }),

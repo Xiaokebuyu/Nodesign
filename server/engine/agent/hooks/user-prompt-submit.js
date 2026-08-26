@@ -28,6 +28,8 @@ import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
+import { listRoleNames } from '../role-card.js';
+import { roleLabel } from '../../mcp/actor.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf } from '../../../lib/canvas-id.js';
@@ -141,8 +143,11 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
   // 说过的最近几句 —— 对话在板上，得记得板上说了什么
   try {
     const recent = await recentChalk(workspaceRoot, { limit: 8 });
+    const roleNames = await listRoleNames(workspaceRoot);
     if (recent.length) {
-      const lines = recent.map(c => `  ${c.path}（${c.by === 'user' ? '用户' : '你'}${c.anchor ? `，关于 ${c.anchor}` : ''}${c.replyTo ? `，回应 ${c.replyTo.replace(`${CHALK_DIR}/`, '')}` : ''}）「${c.first}」`);
+      // 这段是注给**主 agent** 的，所以「你」= 主 agent；角色写的板书报它的名字，
+      // 否则主 agent 会把角色写的东西当成自己写的（RP 线里那是大部分板书）。
+      const lines = recent.map(c => `  ${c.path}（${c.by === 'user' ? '用户' : c.by && c.by !== 'agent' ? roleLabel(c.by, roleNames.get(c.by)) : '你'}${c.anchor ? `，关于 ${c.anchor}` : ''}${c.replyTo ? `，回应 ${c.replyTo.replace(`${CHALK_DIR}/`, '')}` : ''}）「${c.first}」`);
       sections.push({ key: 'chalk', title: '最近板书', text: `画布上最近的板书（${CHALK_DIR}/，新在前；正文 Read 文件）：\n${lines.join('\n')}`, items: recent.map(c => c.path) });
     }
   } catch { /* 板书读不到就沉默 */ }

@@ -1,0 +1,131 @@
+/**
+ * engine/agent/inbox.js —— 常驻角色的收件箱（2026-08-26，块 4）
+ *
+ * ## 它解决的问题
+ *
+ * 用户在画布上回角色的话，这句话得**直达那个角色**，不惊动主 agent。
+ * 但 SDK 没给这条路：`query()` 的输入流只喂主 agent，`Query` 上没有任何
+ * 「给某个子代理投消息」的方法；子代理唯一的入口是 `SendMessage`，而那是**工具**，
+ * 只有模型能调，服务端调不了（2026-08-26 通盘查过 SDK 接口）。
+ *
+ * 所以这条路得我们自己铺：服务端一个队列 + 一件角色能调的 MCP 工具。
+ * 角色主动来取，而不是我们推给它 —— 方向反过来，就绕开了「服务端没法唤醒子代理」。
+ *
+ * ## 两种取法，对应两种在场状态
+ *
+ * - **挂着等**（`await_user`）：角色写完一段就来等下一句。它的回合一直没结束，
+ *   用户一说话就立刻 resolve —— 这是「像主 agent 一样对话」的真形态，主 agent 零参与。
+ * - **顺手看**（`check_inbox`）：非阻塞。角色被别的方式唤醒时（主 agent 寄信、
+ *   或它自己干完一件事）顺手看一眼有没有积压。
+ *
+ * ## 没人在等的时候
+ *
+ * 消息进队列。这时**服务端叫不醒它**（上面那条限制），得等它下次被唤醒时自己来取。
+ * 这是设计内的降级，不是 bug —— 但用户必须看得见：投递结果会如实回报「已直达」
+ * 还是「进了队列，角色不在等」，前端据此提示。**不要把队列积压伪装成送达。**
+ *
+ * ## 生命周期
+ *
+ * 队列和等待者都在内存里，寿命跟会话一样（角色本来也活不过会话）。
+ * 进程重启 = 角色和它的收件箱一起没了，跟「角色转录也没了」是同一个边界，
+ * 不会出现"角色还在但话丢了"的错位。会话结束时 `clearProject` 收干净，
+ * 免得等待者永远挂着。
+ */
+
+const MAX_QUEUE = 50;
+const boxes = new Map();      // `${projectId}::${slug}` → { queue: [], waiters: [] }
+
+const keyOf = (projectId, slug) => `${projectId}::${slug}`;
+function boxFor(projectId, slug) {
+  const k = keyOf(projectId, slug);
+  if (!boxes.has(k)) boxes.set(k, { queue: [], waiters: [] });
+  return boxes.get(k);
+}
+
+/**
+ * 投一条消息给某个角色。
+ * @returns {{ delivered: 'waiting'|'queued', queueDepth: number }}
+ *   'waiting' = 角色正挂着等，已经当场交到它手里
+ *   'queued'  = 没人在等，进了队列（服务端叫不醒它，得等它下次自己来取）
+ */
+export function deliver(projectId, slug, message) {
+  const box = boxFor(projectId, slug);
+  const item = { ...message, at: message.at || new Date().toISOString() };
+
+  const waiter = box.waiters.shift();
+  if (waiter) {
+    clearTimeout(waiter.timer);
+    waiter.resolve([item]);
+    return { delivered: 'waiting', queueDepth: box.queue.length };
+  }
+
+  box.queue.push(item);
+  // 满了丢**最旧**的：新消息是用户刚说的话，比十分钟前那句更该留
+  if (box.queue.length > MAX_QUEUE) box.queue.splice(0, box.queue.length - MAX_QUEUE);
+  return { delivered: 'queued', queueDepth: box.queue.length };
+}
+
+/** 非阻塞取走全部积压 */
+export function drain(projectId, slug) {
+  const box = boxFor(projectId, slug);
+  const out = box.queue;
+  box.queue = [];
+  return out;
+}
+
+/**
+ * 阻塞等待下一批消息。队列里有就立刻返回，没有就挂着。
+ * @returns {Promise<Array>} 超时返回空数组（**不是抛错**：没人说话是正常情形，
+ *   角色该据此决定是继续等还是收工，不该当异常处理）
+ */
+export function waitFor(projectId, slug, timeoutMs) {
+  const box = boxFor(projectId, slug);
+  if (box.queue.length) return Promise.resolve(drain(projectId, slug));
+
+  return new Promise((resolve) => {
+    const waiter = { resolve, timer: null };
+    waiter.timer = setTimeout(() => {
+      const i = box.waiters.indexOf(waiter);
+      if (i >= 0) box.waiters.splice(i, 1);
+      resolve([]);
+    }, timeoutMs);
+    box.waiters.push(waiter);
+  });
+}
+
+/** 这个角色此刻在不在等（前端提示「墨璃在等你回话」用） */
+export function isWaiting(projectId, slug) {
+  return (boxes.get(keyOf(projectId, slug))?.waiters.length || 0) > 0;
+}
+
+/** 积压深度 */
+export function queueDepth(projectId, slug) {
+  return boxes.get(keyOf(projectId, slug))?.queue.length || 0;
+}
+
+/** 这个项目里有谁在等 / 有积压（给前端一次问清） */
+export function inboxStates(projectId) {
+  const out = {};
+  const prefix = `${projectId}::`;
+  for (const [k, box] of boxes) {
+    if (!k.startsWith(prefix)) continue;
+    const slug = k.slice(prefix.length);
+    if (box.waiters.length || box.queue.length) {
+      out[slug] = { waiting: box.waiters.length > 0, queued: box.queue.length };
+    }
+  }
+  return out;
+}
+
+/** 会话收摊：把这个项目的等待者全放掉，别让它们永远挂着 */
+export function clearProject(projectId) {
+  const prefix = `${projectId}::`;
+  for (const [k, box] of [...boxes]) {
+    if (!k.startsWith(prefix)) continue;
+    for (const w of box.waiters) { clearTimeout(w.timer); w.resolve([]); }
+    boxes.delete(k);
+  }
+}
+
+/** 测试用 */
+export function _resetInboxes() { boxes.clear(); }

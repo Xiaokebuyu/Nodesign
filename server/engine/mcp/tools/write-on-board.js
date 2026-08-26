@@ -20,6 +20,7 @@
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
+import { byOf } from '../actor.js';
 import { z } from 'zod';
 import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -141,7 +142,10 @@ export function makeSketchOnBoardAlias({ projectId, sharedRoot, sessionId, ctx }
 }
 
 function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
-  return async function handler(args) {
+  return async function handler(args, extra) {
+    // 署名：主 agent → 'agent'，常驻角色 → 它的 slug。权威是 harness 在派发时盖的章
+    // （agent/actor-trail.js），不是角色文件里的自称 —— 那份文件模型能改。
+    const by = byOf(extra);
     const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
     if (!projectId || !sharedRoot) return err('No project bound.');
 
@@ -158,10 +162,12 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // 单节点图 = 一句话（统一模型的退化情形）：转文件本体那条路，语义字段全保
     if (!args.text && !args.title && nodesIn.length === 1 && !shapesIn.length && !edgesIn.length) {
       const n = nodesIn[0];
+      // ⚠️ extra 必须往下传：署名是从 extra 里的 toolUseId 查回来的，
+      // 这条自递归漏了它的话，角色用 `nodes:[一件]` 写的板会静默署成 'agent'。
       return handler({
         text: n.text, near: args.near, reply_to: args.reply_to, at: args.at, side: args.side,
         relation: args.relation, chain: args.chain, tag: args.tag, size: n.size, width: n.w,
-      });
+      }, extra);
     }
 
     const board = await readBoard(projectId);
@@ -255,21 +261,21 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       });
 
       const fileName = chalkFileName(body);
-      const content = renderChalk({ body, by: 'agent', anchor: anchorId, replyTo: parentId, tag: args.tag || null, sessionId: sessionId || null });
+      const content = renderChalk({ body, by, anchor: anchorId, replyTo: parentId, tag: args.tag || null, sessionId: sessionId || null });
       const rel = await writeChalkFile(sharedRoot, fileName, content);
 
       const objects = { [rel]: {
         x: Math.round(placed.x), y: Math.round(placed.y), z: 1, w: box.w, h: box.h,
-        zone, by: 'agent', seat: 'agent', ...(args.tag ? { tag: args.tag } : {}),
+        zone, by, seat: 'agent', ...(args.tag ? { tag: args.tag } : {}),
       } };
       const bindings = {};
       if (anchorId) {
         const type = args.relation || 'annotates';
         // flow 是读序（旧 → 新）：锚在前板书在后；其余语义都是"这条说的是它"
         const [from, to] = type === 'flow' ? [anchorId, rel] : [rel, anchorId];
-        bindings[`b:a${stamp()}`] = { type, from, to, by: 'agent', ...(args.tag ? { tag: args.tag } : {}) };
+        bindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}) };
       }
-      if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by: 'agent', material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
+      if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
       await patchBoard(projectId, { objects, bindings });
       // 跟随线：这个 tag 有人跟着（状态板之类）就自动重锚挪组（fail-soft）
       if (args.tag) { try { await applyFollows(projectId, { tag: args.tag, newId: rel }); } catch { /* */ } }
@@ -277,7 +283,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const rect = { x: Math.round(placed.x), y: Math.round(placed.y), w: box.w, h: box.h };
       try {
         ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: parentId ? '回了一条板书' : '写了一条板书' });
-        ctx?.emit?.(Events.boardFocus(rect, { tag: args.tag || null, layer: zone, soft: true, chalk: rel }));
+        ctx?.emit?.(Events.boardFocus(rect, { tag: args.tag || null, layer: zone, soft: true, chalk: rel, actor: by !== 'agent' ? by : null }));
       } catch { /* fail-soft */ }
       const lines = [
         `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describePlacement(placed, { requestedAt: args.at })}.`,
@@ -401,7 +407,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const from = resolveEnd(e.from); const to = resolveEnd(e.to);
       if (!from || !to || from === to) { badEdges.push(`${e.from}→${e.to}`); continue; }
       bindings[`b:a${stamp()}`] = {
-        type: e.type || 'link', from, to, by: 'agent', material: e.material || 'pencil',
+        type: e.type || 'link', from, to, by, material: e.material || 'pencil',
         ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}), ...(e.label ? { label: e.label } : {}),
       };
     }
@@ -441,7 +447,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
     // ── 落盘 ──
     const objects = {};
-    const common = { z: 1, zone, by: 'agent', seat: 'agent', ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}) };
+    const common = { z: 1, zone, by, seat: 'agent', ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}) };
     for (const n of nodes) {
       const p = pos.get(n.key);
       objects[idOf.get(n.key)] = {
@@ -460,7 +466,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const world = { x: Math.round(local.x + ox), y: Math.round(local.y + oy), w: Math.round(local.w), h: Math.round(local.h) };
     try {
       ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: tag ? `画了一张草图 #${tag}` : '画了一个记号' });
-      ctx?.emit?.(Events.boardFocus(world, { tag: tag || null, layer: zone }));
+      ctx?.emit?.(Events.boardFocus(world, { tag: tag || null, layer: zone, actor: by !== 'agent' ? by : null }));
     } catch { /* fail-soft */ }
     const lines = [
       `Sketch${tag ? ` #${tag}` : ''} landed${staging ? ' as STAGING (半透明)' : ''}: ${nodes.length} nodes, ${shapes.length} shapes, ${Object.keys(bindings).length} lines; layout ${tpl}; at world (${world.x},${world.y}) ${world.w}x${world.h} — ${describePlacement(placed, { requestedAt: args.at })}.`,

@@ -23,30 +23,37 @@ import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
 import { promises as fs } from 'node:fs';
+import { byOf, describeBy } from '../actor.js';
+import { listRoleNames } from '../../agent/role-card.js';
 import path from 'node:path';
 
 /** 同一"行"的 y 容差：入座算法一行内顶对齐，40 世界像素内视作同行 */
 const ROW_TOLERANCE = 40;
 
-function describeEntry(board, id, entry, glyph = null, excerpts = null, staleIds = null) {
+function describeEntry(board, id, entry, glyph = null, excerpts = null, staleIds = null, view = null) {
+  // view = { by: 当前读者, names: slug→展示名 }。读 read_board 的可能是主 agent，
+  // 也可能是常驻角色 —— 同一句「你写的」对两个读者含义相反，所以称呼要带视角。
+  const who = (b) => describeBy(b || 'agent', view?.by || 'agent', view?.names);
+  const mine = (b) => (b || 'agent') === (view?.by || 'agent');
   const sz = estimateSizeOn(board, id, entry);
   const at = `@(${Math.round(entry.x)},${Math.round(entry.y)}) ${Math.round(sz.w)}x${Math.round(sz.h)}`;
   const g = glyph ? `[${glyph}] ` : '';
   const flags = `${entry.staging ? ' 〔草稿〕' : ''}${entry.tag ? ` #${entry.tag}` : ''}`;
   const ch = excerpts?.get(id);
-  if (ch) return `- ${g}[板书·${ch.by === 'user' ? '用户' : '你'}写的] 「${ch.first}」 ${at} (path: ${id})${ch.anchor ? ` 关于 ${ch.anchor}` : ''}${ch.replyTo ? ` 回应 ${ch.replyTo}` : ''}${flags}`;
+  if (ch) return `- ${g}[板书·${who(ch.by)}写的] 「${ch.first}」 ${at} (path: ${id})${ch.anchor ? ` 关于 ${ch.anchor}` : ''}${ch.replyTo ? ` 回应 ${ch.replyTo}` : ''}${flags}`;
   if (entry.kind === 'text') {
     const t = String(entry.data?.t || '').replace(/\s+/g, ' ').slice(0, entry.data?.format === 'md' ? 60 : 24);
     const md = entry.data?.format === 'md' ? 'md' : '手写';
-    return `- ${g}[${md}] 「${t}」 ${at} (id: ${id})${entry.by === 'agent' ? ' ·你写的' : ''}${flags}`;
+    return `- ${g}[${md}] 「${t}」 ${at} (id: ${id})${entry.by ? ` ·${who(entry.by)}写的` : ''}${flags}`;
   }
-  if (entry.kind === 'scribble') return `- ${g}[涂鸦] ${at} (id: ${id})${entry.by === 'agent' ? ' ·你画的' : ''}${flags}`;
+  if (entry.kind === 'scribble') return `- ${g}[涂鸦] ${at} (id: ${id})${entry.by ? ` ·${who(entry.by)}画的` : ''}${flags}`;
   // 过期座位要明说（iss_mt38ucyq：旧路径条目被 agent 当"失效卡"差点建议删素材母版）
   const stale = staleIds?.has(id) ? ' 〔⚠️磁盘上已无此路径 —— 多半被移动/改名了，以磁盘为准，别据此判失效或建议删除〕' : '';
-  return `- ${g}${id} ${at}${entry.by === 'agent' ? ' ·你摆的' : ''}${flags}${stale}`;
+  return `- ${g}${id} ${at}${entry.by ? ` ·${who(entry.by)}摆的` : ''}${flags}${stale}`;
+  // eslint-disable-next-line no-unused-vars -- mine 留给后续按视角过滤用
 }
 
-export function makeReadBoardTool({ projectId }) {
+export function makeReadBoardTool({ projectId, sharedRoot = null }) {
   return tool(
     'read_board',
     `Read the workbench canvas: an ASCII minimap, then GROUPS (things linked by lines or
@@ -65,7 +72,10 @@ on the minimap and listed with what is inside it.`,
         .describe('Only list items/lines carrying this #tag (one group, e.g. a sketch you made)'),
       minimap: z.boolean().optional().describe('Also print an ASCII minimap (off by default — the relative-position summary is usually enough)'),
     },
-    async ({ layer, tag, minimap }) => {
+    async ({ layer, tag, minimap }, extra) => {
+      // 视角：谁在读这块板。常驻角色读到自己写的板书才该显示「你写的」，
+      // 读到别人的显示那个人的名字（展示名只是渲染，判断一律用 slug）。
+      const view = { by: byOf(extra), names: await listRoleNames(sharedRoot) };
       if (!projectId) {
         return { content: [{ type: 'text', text: 'No project bound.' }], isError: true };
       }
@@ -143,7 +153,7 @@ on the minimap and listed with what is inside it.`,
           lines.push('', `组 ${i + 1}${tags ? ` ${tags}` : ''}（${g.members.length} 件 ${g.edges.length} 线${staging ? '，草稿' : ''}）：`);
           const sorted = g.members.map(id => ({ id, entry: entryOf.get(id) }))
             .sort((a, b) => (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
-          for (const { id, entry } of sorted) lines.push(describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds));
+          for (const { id, entry } of sorted) lines.push(describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds, view));
           for (const bid of g.edges.slice(0, 12)) lines.push(`    ${bindingLine(board.bindings[bid], board)} (line id: ${bid})`);
           if (g.edges.length > 12) lines.push(`    …还有 ${g.edges.length - 12} 条线`);
         });
@@ -161,7 +171,7 @@ on the minimap and listed with what is inside it.`,
               rowY = entry.y;
               lines.push(`— 行 y≈${Math.round(rowY)} —`);
             }
-            lines.push(describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds));
+            lines.push(describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds, view));
           }
         }
       }

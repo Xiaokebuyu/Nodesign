@@ -33,6 +33,8 @@ const HIT_W = 12;
 
 export default function BindingLayer({
   bindings,           // { [id]: { type, from, to, label?, by? } }
+  // 常驻角色的展示名（slug → 名字），派生态，跟 /board 一起来。查不到就显示 slug。
+  roleNames = {},
   rectOf,             // (id) => {x,y,w,h} | null
   /**
    * 几何纪元 —— **必须传**，随物件位置一起变的任何值都行（传 positioned 即可）。
@@ -98,9 +100,12 @@ export default function BindingLayer({
         const suffix = hot ? '-hot' : '';
         // 草稿态（agent 还在打草稿）：半透明，落定后变实
         const ghost = b.staging ? 0.5 : 1;
-        // 悬停标签补一笔出处：agent 画的线标出来（用户自己画的是默认，不啰嗦）
-        const label = (b.label || style.label)
-          + (b.by === 'agent' ? ' · agent 画的' : b.by === 'auto' ? ' · 自动' : '');
+        // 悬停标签补一笔出处：不是用户自己画的就标出来是谁画的（用户画的是默认，不啰嗦）。
+        // 常驻角色画的线署它的名 —— RP 场里板上大半的线是角色画的，全算 agent 头上就没信息了。
+        const drawnBy = b.by === 'agent' ? 'agent 画的'
+          : b.by === 'auto' ? '自动'
+            : (b.by && b.by !== 'user') ? `${roleNames[b.by] || b.by} 画的` : null;
+        const label = (b.label || style.label) + (drawnBy ? ` · ${drawnBy}` : '');
         // 常显标签（2026-08-14，用户点名线"太不显眼"）：手画的线平时就把词
         // 挂在线上 —— 线型语义只有作者自己记得，词才是给别人看的。两个例外：
         //   - 批注线不常显（那段文字本身就是标签，再标"批注"是废话）

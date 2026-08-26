@@ -296,3 +296,71 @@ describe('板书追踪（08-24 体检 1a：板上工具不走 Write/Edit，file_
     expect(t[MAIN_AGENT_ID].targetId).toBe(before);
   });
 });
+
+describe('常驻角色有自己的在场条目（2026-08-26 RP 线）', () => {
+  // 08-18 曾把子代理整体从在场表拆掉（每个子代理一个徽记 = 噪音）。回来的只有
+  // 常驻角色：它一直在场、在板上写字、跟用户对话，用户需要看见"谁在写"。
+  const evt = (type, extra = {}) => ({ type, at: '2026-08-26T00:00:00Z', ...extra });
+  const resolve = (p) => p;
+
+  // ⚠️ 喂的必须是**生产里对角色真会发生**的事件：板书落定走 board.focus。
+  // 角色没有 Write/Edit，run.file_changed 那条路对它从不触发 —— 拿它当样本
+  // 就是"测试 mock 了一套不存在的形状"（2026-08-26 审出，这条本来就错过一次）。
+  const chalkDone = (slug, path) => evt('board.focus', {
+    actor: slug, chalk: path, layer: '', rect: { x: 0, y: 0, w: 10, h: 10 },
+  });
+
+  it('⭐ 角色的板书落定为角色自己立条目，不算到主 agent 头上', () => {
+    let t = reducePresence(emptyPresence(), evt('run.start'), resolve);
+    t = reducePresence(t, chalkDone('rp-moli', 'notes/板书/a.md'), resolve);
+    expect(Object.keys(t).sort()).toEqual(['agent:main', 'role:rp-moli']);
+    expect(t['role:rp-moli'].kind).toBe('role');
+    expect(t['role:rp-moli'].slug).toBe('rp-moli');
+  });
+
+  it('⭐ 干活型子代理照旧不进在场表（08-18 那条决定没变）', () => {
+    const t = reducePresence(emptyPresence(), evt('run.file_changed', {
+      parentToolUseId: 'toolu_2', path: 'x.html',      // 没有 actor = 不是常驻角色
+    }), resolve);
+    expect(t).toEqual({});
+  });
+
+  it('⭐⭐ 角色的板书落定给得出 targetId —— 没有它精灵永远不出现', () => {
+    const t = reducePresence(emptyPresence(), chalkDone('rp-moli', 'notes/板书/b.md'), resolve);
+    expect(t['role:rp-moli'].targetId).toBe('notes/板书/b.md');
+    expect(t['role:rp-moli'].active).toBe(true);
+  });
+
+  it('⭐⭐ 主 agent 活跃时，角色的板书落定不会把主精灵拽过去（08-18 那个病的入口）', () => {
+    let t = reducePresence(emptyPresence(), evt('run.start'), resolve);
+    t = reducePresence(t, evt('board.focus', { chalk: '主控写的.md', rect: {} }), resolve);
+    expect(t['agent:main'].targetId).toBe('主控写的.md');
+    t = reducePresence(t, chalkDone('rp-moli', 'notes/板书/角色写的.md'), resolve);
+    expect(t['agent:main'].targetId).toBe('主控写的.md');       // 没被拽走
+    expect(t['role:rp-moli'].targetId).toBe('notes/板书/角色写的.md');
+  });
+
+  it('⭐ 主 run 收场不带走角色（它在后台自己活着）', () => {
+    let t = reducePresence(emptyPresence(), evt('run.start'), resolve);
+    t = reducePresence(t, chalkDone('rp-moli', 'notes/板书/c.md'), resolve);
+    t = reducePresence(t, evt('run.done'), resolve);
+    expect(t['agent:main'].active).toBe(false);
+    expect(t['role:rp-moli'].active).toBe(true);
+  });
+
+  it('主 agent 的精灵不会因为角色动了文件而瞬移', () => {
+    let t = reducePresence(emptyPresence(), evt('run.start'), resolve);
+    t = reducePresence(t, evt('run.file_changed', { path: '主控写的.md' }), resolve);
+    const mainTarget = t['agent:main'].targetId;
+    t = reducePresence(t, chalkDone('rp-moli', 'notes/板书/角色写的.md'), resolve);
+    expect(t['agent:main'].targetId).toBe(mainTarget);   // 没被角色的动作带跑
+  });
+
+  it('两个角色各占一支颜色，且同一角色的颜色稳定', () => {
+    let t = reducePresence(emptyPresence(), chalkDone('rp-moli', 'a.md'), resolve);
+    t = reducePresence(t, chalkDone('rp-yan', 'b.md'), resolve);
+    expect(t['role:rp-moli'].color).not.toBe(t['role:rp-yan'].color);
+    const again = reducePresence(emptyPresence(), chalkDone('rp-moli', 'c.md'), resolve);
+    expect(again['role:rp-moli'].color).toBe(t['role:rp-moli'].color);
+  });
+});

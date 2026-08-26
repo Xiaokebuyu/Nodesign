@@ -13,6 +13,7 @@
  */
 
 import { Events } from './events.js';
+import { callerOf } from './actor-trail.js';
 import { handleTaskMessage } from './task-events.js';
 import { listWorkspaceArtifacts } from '../../lib/artifact-target.js';
 import { toWorkspaceRel } from '../../lib/workspace-path.js';
@@ -61,6 +62,11 @@ export const DEFAULT_TOOL_ALLOWLIST = [
   'WebFetch',
   'Task',
   'TaskOutput',
+  // 常驻角色（rp-*，见 cast.js）的唯一叫醒方式。SendMessage 是 **deferred 工具**：
+  // 列在这里只是进了可见集，模型还得先 ToolSearch('select:SendMessage') 取 schema
+  // 才能调（2026-08-26 探针实测，主代理和子代理都会自己去取，不用教）。
+  // 漏挂的后果不是报错而是够不着：主代理派出去的角色再也叫不回来。
+  'SendMessage',
   'Skill',
   // deferred MCP 工具的取 schema 入口（ENABLE_TOOL_SEARCH=true 时生效）。
   // 漏挂 = 延迟加载的工具永远调不到（同 Skill 的可见集陷阱）
@@ -108,7 +114,12 @@ export function handleSDKMessage(ctx, msg) {
     // ctx.emit 会解析回 child 自己 → 无限递归（真机爆过 Maximum call stack）
     const base = ctx;
     const child = Object.create(base);
-    child.emit = (evt) => base.emit({ parentToolUseId: parent, ...evt });
+    // actor：这条事件是谁干的（常驻角色的 slug）。parentToolUseId 是**派发那次
+    // Agent 调用**的 id，而派发闸在那一刻按同一个 id 盖过章 —— 查回来就知道
+    // 是哪个角色。画布的在场表据此给每个角色立自己的精灵（不然全算主 agent
+    // 头上，主精灵会在角色写的东西之间瞬移，那正是 08-18 把子代理精灵拆掉的原因）。
+    const actor = callerOf(parent)?.agentType || null;
+    child.emit = (evt) => base.emit({ parentToolUseId: parent, ...(actor ? { actor } : {}), ...evt });
     ctx = child;
   }
 

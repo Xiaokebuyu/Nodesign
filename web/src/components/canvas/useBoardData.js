@@ -50,6 +50,9 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   const [zones, setZones] = useState({});
   const [bindings, setBindings] = useState({});   // board.json 的关系表
   const [boardHero, setBoardHero] = useState(null);   // 显式主角覆盖（agent feature 立的）
+  // 常驻角色的展示名（slug → 名字）。**派生态**，跟 /board 一起来，不存 board.json：
+  // 板上署名是 slug（权威），展示名住在角色文件里（模型可改）。只用来渲染，不做判断。
+  const [roleNames, setRoleNames] = useState({});
   // 项目区顶带的摘要（指引全文 / 文件数）
   const [guideText, setGuideText] = useState('');
   const [fileCount, setFileCount] = useState(null);
@@ -86,6 +89,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
       setBindings(b.board.bindings || {});
       setZones(b.board.zones || {});
       setBoardHero(b.board.hero || null);
+      if (b.roles && typeof b.roles === 'object') setRoleNames(b.roles);
       // 桌面化：board.json 的 size 不再决定画布大小 —— 桌面宽度固定、高度随内容
       const zs = Object.values(b.board.objects || {}).map(o => o.z || 0);
       zMaxRef.current = Math.max(10, ...zs);
@@ -142,7 +146,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
 
   return {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
-    layout, setLayout, zones, setZones, bindings, setBindings, boardHero,
+    layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
     guideText, fileCount,
     reload, scheduleSave, patchLayout,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,

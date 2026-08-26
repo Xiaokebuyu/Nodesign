@@ -16,6 +16,7 @@
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
+import { byOf } from '../actor.js';
 import { z } from 'zod';
 import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -61,7 +62,9 @@ and not for documents (write a .md instead).
         .describe('Handwriting style (default pen — same as the user\'s default)'),
       size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe('Text size (default md)'),
     },
-    async ({ text, near: rawNear, relation, font, size }) => {
+    async ({ text, near: rawNear, relation, font, size }, extra) => {
+      // 署名按调用者（常驻角色写的东西署它的名）——见 mcp/actor.js
+      const by = byOf(extra);
       if (!projectId) {
         return { content: [{ type: 'text', text: 'No project bound.' }], isError: true };
       }
@@ -118,7 +121,7 @@ and not for documents (write a .md instead).
             x: pos.x, y: pos.y, z: 1, w: box.w, h: box.h,
             kind: 'text',
             data: { t, font: TEXT_FONTS.includes(font) ? font : 'pen', size: sizeKey, color: 'ink' },
-            zone, by: 'agent',
+            zone, by,
           },
         },
       };
@@ -127,7 +130,7 @@ and not for documents (write a .md instead).
         if (to && to !== textId) {
           patch.bindings = {
             [nextBindingId()]: {
-              type: relation.type, from: textId, to, by: 'agent',
+              type: relation.type, from: textId, to, by,
               ...(relation.label ? { label: relation.label } : {}),
             },
           };

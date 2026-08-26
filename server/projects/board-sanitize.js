@@ -11,7 +11,23 @@
  */
 
 import { isBindingType, isBindingMaterial } from '../lib/binding-types.js';
+import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS } from './board-limits.js';
+
+/**
+ * 板上署名的白名单：'user' / 'agent' / 常驻角色 slug（`rp-*`，见 engine/agent/cast.js）。
+ * 认不出的一律丢掉（落回无归属），**不透传** —— 这个值由模型写，而它的读者有一串：
+ * 前端标题与线标签、read_board 的分段、板书注入、将来的收件箱路由。
+ *
+ * ⚠️ **有东西寄生在这个值域上**：`lib/board-hero.js` 与 `web/src/lib/hero.js`（parity 对）
+ * 把「手画的线」判成 `by && by !== 'auto'` —— 那是个黑名单，只在「值域被这里钉死」的
+ * 前提下才与白名单等价。放宽这里的值域前，先去看那两处。
+ */
+function sanitizeBy(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (s === 'user' || s === 'agent') return s;
+  return ROLE_SLUG_RE.test(s) ? s : null;
+}
 
 export function clampNum(v, min, max, fallback) {
   const n = Number(v);
@@ -156,8 +172,11 @@ export function sanitizeObject(o, size) {
     // 显式归属：'' = 明确无归属（覆盖 sid 派生），非空 = 所属工作区 id
     ...(typeof o.zone === 'string' && o.zone.length <= 300 ? { zone: o.zone } : {}),
     // 出处（2026-08-14 agent 摆位/建元素）：谁**造**的这件东西。08-25 起也收
-    // 'user'（原来只认 agent，跟 bindings 三值不对称是口径病）
-    ...(o.by === 'agent' || o.by === 'user' ? { by: o.by } : {}),
+    // 'user'（原来只认 agent，跟 bindings 三值不对称是口径病）；08-26 起再收
+    // 常驻角色的 slug（rp-*）—— RP 场里板上大半东西是角色写的，全落回 'agent'
+    // 就丢了归属。⚠️ 这里是白名单，不是透传：写这个值的是模型，而 by 有一串读者
+    // （前端显示 / read_board 分段 / 板书注入 / 将来的收件箱路由）。
+    ...(sanitizeBy(o.by) ? { by: sanitizeBy(o.by) } : {}),
     // 座位出处（2026-08-25 范式重做）：谁**摆**的这个座。三值：
     //   user  = 用户亲手拖的 —— 服务端排座/跟随/整理永远不许覆盖
     //   auto  = 入座算法排的 —— 可以被重排
@@ -199,7 +218,7 @@ export function sanitizeBinding(b) {
       : {}),
     // 谁画的。用户画的线 agent 不该擅自删，反过来也一样；auto = 机器可证的
     // 引用关系（auto-relations.js 对账层专属，只有它增删自家 b:auto:* 条目）。
-    ...(b.by === 'agent' || b.by === 'user' || b.by === 'auto' ? { by: b.by } : {}),
+    ...(b.by === 'auto' ? { by: 'auto' } : sanitizeBy(b.by) ? { by: sanitizeBy(b.by) } : {}),
     // 材质（2026-08-23 黑板）：语义之外的第二个轴 —— 墨线/手绘/丝线。不落默认值，
     // 渲染侧按语义给缺省材质；存了默认值以后改缺省就改不动存量。
     ...(isBindingMaterial(b.material) && b.material !== 'ink' ? { material: b.material } : {}),

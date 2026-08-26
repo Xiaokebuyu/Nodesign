@@ -20,6 +20,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
+import { byOf } from '../actor.js';
 import { z } from 'zod';
 import { readBoard, patchBoard, commitStaging, removeByTag, chalkAbsPath, TEXT_FONTS } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -112,7 +113,9 @@ async function endpointReal(id, live, zones, sharedRoot) {
 }
 
 function makeHandler({ projectId, sharedRoot, ctx }) {
-  return async ({ tag: defaultTag, ops }) => {
+  return async ({ tag: defaultTag, ops }, extra) => {
+    // 署名按调用者（常驻角色改板时署它的名）——见 mcp/actor.js
+    const by = byOf(extra);
     const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
     if (!projectId) return err('No project bound.');
     const board = await readBoard(projectId);
@@ -213,8 +216,10 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           const id = rid(o.id); const e = id && live[id];
           if (!e) { fail(`${o.id} 不在板上`); continue; }
           if (!e.kind) {
-            // 板书文件卡：agent 自己写的放行（连文件），别人的/普通产物卡拒
-            if (id.startsWith(`${CHALK_DIR}/`) && e.by === 'agent') {
+            // 板书文件卡：**agent 侧写的**放行（连文件），用户写的和普通产物卡拒。
+            // 08-26：agent 侧现在有三类署名（主控 'agent' + 常驻角色 rp-*）。原来死比
+            // 'agent'，于是角色写的板书谁都删不掉（连角色自己），报错还说那是「用户的板书」。
+            if (id.startsWith(`${CHALK_DIR}/`) && e.by && e.by !== 'user') {
               const abs = chalkAbsPath(projectId, id);
               if (abs) chalkUnlinks.push(abs);
               delete live[id]; objects[id] = null; ok += 1; continue;
@@ -234,7 +239,7 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           setObj(id, {
             x: Math.round(p.x), y: Math.round(p.y), z: 1, w: box.w, h: box.h, kind: 'text',
             data: { t: o.text, ...(o.format === 'md' ? { format: 'md' } : {}), font: TEXT_FONTS.includes(o.font) ? o.font : 'pen', size, color: o.color || 'ink', ...(o.id ? { lid: o.id } : {}) },
-            zone, by: 'agent', seat: 'agent', ...(tag ? { tag } : {}),
+            zone, by, seat: 'agent', ...(tag ? { tag } : {}),
           });
           if (o.id) local.set(o.id, id);
           report.push(`+ node ${o.id ? `${o.id}=` : ''}${id}`); ok += 1;
@@ -252,7 +257,7 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           }
           const id = `b:a${stamp()}`;
           const tag = o.tag || defaultTag || live[from]?.tag || live[to]?.tag || null;
-          const binding = { type: o.type || 'link', from, to, by: 'agent', ...(o.material && o.material !== 'ink' ? { material: o.material } : {}), ...(o.label ? { label: o.label } : {}), ...(tag ? { tag } : {}) };
+          const binding = { type: o.type || 'link', from, to, by, ...(o.material && o.material !== 'ink' ? { material: o.material } : {}), ...(o.label ? { label: o.label } : {}), ...(tag ? { tag } : {}) };
           bindings[id] = binding; liveBindings[id] = binding;
           report.push(`+ edge ${id}`); ok += 1;
         } else if (o.op === 'set_edge') {
@@ -305,7 +310,7 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           if (from === to) { fail('组代表和目标是同一件（group_tag/target_tag 传反了？）'); continue; }
           const existing = Object.entries(liveBindings).find(([, b]) => b.follow === o.target_tag && live[b.from]?.tag === o.group_tag);
           const id = existing ? existing[0] : `b:a${stamp()}`;
-          const binding = { type: 'annotates', from, to, by: 'agent', label: o.label || '跟随', follow: o.target_tag, ...(o.side ? { followSide: o.side } : {}) };
+          const binding = { type: 'annotates', from, to, by, label: o.label || '跟随', follow: o.target_tag, ...(o.side ? { followSide: o.side } : {}) };
           bindings[id] = binding; liveBindings[id] = binding; ok += 1;
           // 立规则的同时把组摆到目标旁边：之后的跟随是**平移**（保留相对格局），
           // 基线偏移必须在此刻就有意义 —— 不摆的话组停在原地，平移只是搬运一个
@@ -381,12 +386,14 @@ export function makeArrangeOnBoardAlias({ projectId, sharedRoot, ctx }) {
       subject: z.string().min(1).max(300).optional(),
       anchor: z.string().min(1).max(300).optional(),
     },
-    async ({ action, subject, anchor }) => {
-      if (action === 'unfeature') return handler({ ops: [{ op: 'unfeature' }] });
+    // ⚠️ 别名把入参转成 ops 交给同一个 handler —— **extra 要跟着走**（署名从它查）。
+    // 今天这三个 op 不写 by 所以看不出病，但形状是雷：哪天 move/feature 也要署名就静默错。
+    async ({ action, subject, anchor }, extra) => {
+      if (action === 'unfeature') return handler({ ops: [{ op: 'unfeature' }] }, extra);
       if (!subject) return { content: [{ type: 'text', text: 'subject required.' }], isError: true };
-      if (action === 'feature') return handler({ ops: [{ op: 'feature', id: subject }] });
+      if (action === 'feature') return handler({ ops: [{ op: 'feature', id: subject }] }, extra);
       if (!anchor) return { content: [{ type: 'text', text: 'beside/below 需要 anchor。' }], isError: true };
-      return handler({ ops: [{ op: 'move', id: subject, to: { ref: anchor, side: action === 'beside' ? 'right' : 'below' } }] });
+      return handler({ ops: [{ op: 'move', id: subject, to: { ref: anchor, side: action === 'beside' ? 'right' : 'below' } }] }, extra);
     },
   );
 }
@@ -409,8 +416,9 @@ obvious from where files live. (Alias of edit_board add_edge.)`,
       label: z.string().max(60).optional(),
       material: z.enum(BINDING_MATERIALS).optional(),
     },
-    async ({ type, from, to, label, material }) => {
-      const r = await handler({ ops: [{ op: 'add_edge', from, to, type, ...(label ? { label } : {}), ...(material ? { material } : {}) }] });
+    // ⚠️ relate_on_board 在**角色工具白名单里**：extra 漏了的话，角色画的每条线都署 'agent'
+    async ({ type, from, to, label, material }, extra) => {
+      const r = await handler({ ops: [{ op: 'add_edge', from, to, type, ...(label ? { label } : {}), ...(material ? { material } : {}) }] }, extra);
       if (!r.isError && ctx?.emit) {
         try { ctx.emit({ type: 'board.updated', sessionId: null, summary: `已画一条「${BINDING_TYPES[type].label}」关系` }); } catch { /* */ }
       }

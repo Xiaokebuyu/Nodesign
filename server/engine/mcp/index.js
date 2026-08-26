@@ -73,6 +73,9 @@ import { makeReadDocumentTool } from './tools/read-document.js';
 import { makeReadTavernJsonTool } from './tools/read-tavern-json.js';
 import { makeDeliverFilesTool } from './tools/deliver-files.js';
 import { makeCrystallizeSkillTool } from './tools/crystallize-skill.js';
+import { makeCastRoleTool } from './tools/cast-role.js';
+import { makeAwaitUserTool, makeCheckInboxTool } from './tools/role-inbox.js';
+import { assertRoleToolsRegistered } from '../agent/cast.js';
 import { makePublishSiteTool } from './tools/publish-site.js';
 import { makeReportIssueTool } from './tools/report-issue.js';
 import { makeRollFilmTool } from './tools/roll-film.js';
@@ -128,14 +131,14 @@ const ALWAYS_LOAD_TOOLS = new Set([
   'artifact_open', 'artifact_computer', 'artifact_find', 'artifact_batch', 'artifact_motion',
 ]);
 
-export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, sessionId, ctx } = {}) {
+export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, sessionId, ctx, roleRoster = null } = {}) {
   // 浏览通道里能被 browser_batch 串起来的七件：先建一次，batch 拿**同一批实例**
   // （projectId/ctx 绑在 handler 里，不能再造第二份）。只有 request_help 不进
   // batch（它阻塞等人）；capture 在里面 —— 逐页采 token 正是 batch 要省的那种回合。
   const boardBatchable = [
     makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
     makeEditBoardTool({ projectId, sharedRoot, ctx }),
-    makeReadBoardTool({ projectId }),
+    makeReadBoardTool({ projectId, sharedRoot }),
     makeCreateOnBoardTool({ projectId, ctx }),
   ];
   const browseBatchable = [
@@ -185,6 +188,17 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
 
       // C10 export_handoff — 复用 exports.js 的 buildHandoffZip，写到 workspace/exports/
       makeExportHandoffTool({ workspaceRoot, sharedRoot, projectId, sessionId, ctx }),
+
+      // cast_role — 把一张角色卡变成真的常驻子代理（2026-08-26 RP 线）。
+      // 写 .claude/agents/rp-<id>.md，CLI 的 watcher 几秒后拾取就能派。
+      // 角色是常驻的：派一次，之后靠 SendMessage 唤醒，它记得自己写过的一切。
+      makeCastRoleTool({ workspaceRoot, sessionId, ctx, roster: roleRoster }),
+
+      // await_user / check_inbox — 角色的收件箱（2026-08-26）。用户在画布上回角色的话
+      // 直达它，不惊动主 agent。角色**主动来取**（服务端没法给子代理投消息），
+      // await_user 挂着等 = 「像主 agent 一样对话」的形态。见 agent/inbox.js
+      makeAwaitUserTool({ projectId }),
+      makeCheckInboxTool({ projectId }),
 
       // crystallize_skill — 把探索出来的方法论固化成用户自己的 skill + 作品进橱窗
       // （2026-07-30）。用户明确要求才调；写的是判断依据不是成品 HTML。
@@ -352,6 +366,12 @@ tag); sketch local ids (lid) resolve in edit_board ops.`,
     // 008fe16c 4/4 实锤）。挂在出口包全部工具 —— 哪个工具中招看 recordIssue。
     withParamSanitizer(t, { projectId, sessionId })
   ));
+
+  // 角色工具白名单的启动期对账（2026-08-26）：cast_role 会把白名单里的短名写进
+  // 角色文件的 frontmatter，名字写错**不会报错**，只会让角色少一只手（CLI 当那个
+  // 工具不存在）。所以对着真实注册表核一遍，错了当场炸在启动期。
+  assertRoleToolsRegistered(new Set(tools.map((t) => t.name)));
+
 
   const server = createSdkMcpServer({
     // 名字收在 mcp/server-name.js：它同时是 session-loop 里 mcpServers 的键
