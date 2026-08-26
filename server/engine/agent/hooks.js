@@ -66,7 +66,7 @@ import {
 import { makePreToolUseBoardNeighborhoodInjector } from './hooks/pre-board-neighborhood.js';
 import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.js';
 import { createRoleRoster } from './cast.js';
-import { makePostToolUseFailureRoleRelease } from './hooks/resident-role-lifecycle.js';
+import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice } from './hooks/resident-role-lifecycle.js';
 import { makePreToolUsePerformanceLogGuard } from './hooks/pre-performance-log-guard.js';
 import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-guard.js';
 import { PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
@@ -347,7 +347,9 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       hooks: [makeSubagentStartHandler({ ctx })],
     }],
     SubagentStop: [{
-      hooks: [makeSubagentStopHandler({ ctx })],
+      // 常驻角色退场时补一句「怎么把它叫回来」给主控。放在通用 emit 之后：
+      // 那个只 emit 事件不返输出，两者不抢 systemMessage。见 resident-role-lifecycle.js
+      hooks: [makeSubagentStopHandler({ ctx }), makeSubagentStopRoleNotice()],
     }],
   });
 }

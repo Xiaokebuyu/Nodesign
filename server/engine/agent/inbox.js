@@ -33,12 +33,12 @@
  */
 
 const MAX_QUEUE = 50;
-const boxes = new Map();      // `${projectId}::${slug}` → { queue: [], waiters: [] }
+const boxes = new Map();      // `${projectId}::${slug}` → { queue, waiters, emptyStreak }
 
 const keyOf = (projectId, slug) => `${projectId}::${slug}`;
 function boxFor(projectId, slug) {
   const k = keyOf(projectId, slug);
-  if (!boxes.has(k)) boxes.set(k, { queue: [], waiters: [] });
+  if (!boxes.has(k)) boxes.set(k, { queue: [], waiters: [], emptyStreak: 0 });
   return boxes.get(k);
 }
 
@@ -55,6 +55,7 @@ export function deliver(projectId, slug, message) {
   const waiter = box.waiters.shift();
   if (waiter) {
     clearTimeout(waiter.timer);
+    box.emptyStreak = 0;                 // 有人说话了，散场计数归零
     waiter.resolve([item]);
     return { delivered: 'waiting', queueDepth: box.queue.length };
   }
@@ -70,6 +71,7 @@ export function drain(projectId, slug) {
   const box = boxFor(projectId, slug);
   const out = box.queue;
   box.queue = [];
+  if (out.length) box.emptyStreak = 0;   // 积压里有话 = 有人在跟它说话
   return out;
 }
 
@@ -87,10 +89,25 @@ export function waitFor(projectId, slug, timeoutMs) {
     waiter.timer = setTimeout(() => {
       const i = box.waiters.indexOf(waiter);
       if (i >= 0) box.waiters.splice(i, 1);
+      box.emptyStreak += 1;
       resolve([]);
     }, timeoutMs);
     box.waiters.push(waiter);
   });
+}
+
+/**
+ * 连着几次等空了（没人说话）。`await_user` 据此决定是「接着挂」还是「散场」。
+ *
+ * ⚠️ 为什么需要这个计数：角色循环挂 `await_user` 会**给整个会话续命** ——
+ * `session-loop.js` 里每条 SDK message 都调 markSessionActivity（那是为了修
+ * 「长 turn 被 idle timeout 掐死」加的），而角色每轮循环都要说话。
+ * 于是 15 分钟一次心跳，永远撞不到 30 分钟的 idle 窗口：用户关了标签页走人，
+ * 角色还在空转，会话永不关闭，CLI 进程一直驻着（而它的 RSS 单调不减）。
+ * 所以散场必须由角色自己数着来，不能指望 idle timeout 兜底。
+ */
+export function emptyStreakOf(projectId, slug) {
+  return boxes.get(keyOf(projectId, slug))?.emptyStreak || 0;
 }
 
 /** 这个角色此刻在不在等（前端提示「墨璃在等你回话」用） */

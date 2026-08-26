@@ -23,7 +23,7 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { waitFor, drain, queueDepth } from '../../agent/inbox.js';
+import { waitFor, drain, queueDepth, emptyStreakOf } from '../../agent/inbox.js';
 import { byOf } from '../actor.js';
 import { isResidentRole } from '../../agent/cast.js';
 
@@ -32,12 +32,40 @@ const WAIT_MIN_S = 30;
 const WAIT_MAX_S = 900;      // 15 分钟
 const WAIT_DEFAULT_S = 300;
 
+/**
+ * 连着这么多次没人说话就散场（用户拍板 N=2）。
+ *
+ * ⚠️ 这不是省 token 的优化，是**唯一的散场闸**：角色循环挂 await_user 会给会话续命
+ * （见 inbox.js 的 emptyStreakOf 注释），30 分钟的 idle timeout 永远兜不住它。
+ * 默认 300s × 2 ≈ 10 分钟没人理 → 退场，跟 idle 语义大致对齐。
+ */
+const EMPTY_STREAK_LIMIT = 2;
+
 function renderMessages(items) {
   return items.map((m, i) => {
     const head = items.length > 1 ? `【${i + 1}/${items.length}】` : '';
     const where = m.about ? `（关于 ${m.about}）` : '';
     return `${head}用户说${where}：${m.text}`;
   }).join('\n');
+}
+
+/**
+ * 等空了该跟角色说什么。抽成纯函数是为了**能被断言** —— 这段字是角色唯一会读到的
+ * 行为指令，措辞错一次的症状是「用户关了标签页，进程空转一整夜」，没有任何报错。
+ *
+ * nd:rp-prompt —— 散场话术属于 RP 教义
+ * ⛔ 别再把「结束回合待命」写成平级选项：那是**唯一会让角色失联**的选择
+ *（收了回合服务端就投不进去了，只有模型的 SendMessage 能叫醒它）。
+ */
+export function emptyWaitMessage(slug, seconds, streak) {
+  if (streak < EMPTY_STREAK_LIMIT) {
+    return `（等了 ${seconds} 秒，没人说话。第 ${streak}/${EMPTY_STREAK_LIMIT} 次。）`
+      + `这不是错误。**别结束回合** —— 场还开着，你一收回合用户就够不到你了。\n`
+      + `想推进就在板上写一段（有理由才写，没理由就别硬编），然后**再调一次 await_user 接着等**。`;
+  }
+  return `（等了 ${seconds} 秒，连着 ${streak} 次没人说话。）**散场吧。**\n`
+    + `把这一段收个尾（该落板的落板），然后结束回合。主控会收到通知，`
+    + `知道用 SendMessage 寄给「${slug}」就能把你叫回来，你的记忆不会丢。`;
 }
 
 /** 两件工具共用的守卫：只有常驻角色有收件箱 */
@@ -75,8 +103,7 @@ scene is live.`,
       const items = await waitFor(projectId, me, seconds * 1000);
       if (!items.length) {
         return { content: [{ type: 'text', text:
-          `（等了 ${seconds} 秒，没人说话。）这不是错误 —— 你可以接着等、`
-          + `先在板上写点别的，或者结束回合待命（待命期间用户的话会积压，等你下次被叫醒才看得到）。` }] };
+          emptyWaitMessage(me, seconds, emptyStreakOf(projectId, me)) }] };
       }
       return { content: [{ type: 'text', text: renderMessages(items) }] };
     },

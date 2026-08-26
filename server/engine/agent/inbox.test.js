@@ -4,7 +4,7 @@
 // 没人等 = 进队列，而那时服务端叫不醒它。把后者当成"送达"，用户就会
 // 对着一个没人听的板子说话，而且不知道。
 import { describe, it, expect, beforeEach } from 'vitest';
-import { deliver, waitFor, drain, isWaiting, queueDepth, inboxStates, clearProject, _resetInboxes } from './inbox.js';
+import { deliver, waitFor, drain, isWaiting, queueDepth, inboxStates, clearProject, emptyStreakOf, _resetInboxes } from './inbox.js';
 
 const P = 'proj_x';
 beforeEach(() => _resetInboxes());
@@ -92,5 +92,45 @@ describe('会话收摊', () => {
     clearProject(P);
     await mine;
     expect(drain('proj_y', 'rp-a')).toHaveLength(1);
+  });
+});
+
+describe('散场计数（emptyStreak）', () => {
+  it('等空一次就 +1，有人说话就归零', async () => {
+    expect(emptyStreakOf(P, 'rp-moli')).toBe(0);
+    await waitFor(P, 'rp-moli', 1);
+    expect(emptyStreakOf(P, 'rp-moli')).toBe(1);
+    await waitFor(P, 'rp-moli', 1);
+    expect(emptyStreakOf(P, 'rp-moli')).toBe(2);
+
+    const w = waitFor(P, 'rp-moli', 60_000);
+    await new Promise((r) => { setTimeout(r, 0); });
+    deliver(P, 'rp-moli', { text: '我在' });
+    await w;
+    expect(emptyStreakOf(P, 'rp-moli')).toBe(0);   // 有人回来了 = 场还热着
+  });
+
+  it('⭐ 积压里取到话也算「有人说话」—— 角色被别的方式唤醒后 check_inbox 拿到的那种', async () => {
+    await waitFor(P, 'rp-a', 1);
+    expect(emptyStreakOf(P, 'rp-a')).toBe(1);
+    deliver(P, 'rp-a', { text: '攒着的一句' });     // 没人在等 → 进队列
+    expect(emptyStreakOf(P, 'rp-a')).toBe(1);       // 进队列本身不算
+    expect(drain(P, 'rp-a')).toHaveLength(1);
+    expect(emptyStreakOf(P, 'rp-a')).toBe(0);       // 取到了才算
+  });
+
+  it('空 drain 不动计数（别让轮询把散场判据洗掉）', async () => {
+    await waitFor(P, 'rp-b', 1);
+    expect(emptyStreakOf(P, 'rp-b')).toBe(1);
+    expect(drain(P, 'rp-b')).toEqual([]);
+    expect(emptyStreakOf(P, 'rp-b')).toBe(1);
+  });
+
+  it('按角色各算各的', async () => {
+    await waitFor(P, 'rp-x', 1);
+    await waitFor(P, 'rp-x', 1);
+    await waitFor(P, 'rp-y', 1);
+    expect(emptyStreakOf(P, 'rp-x')).toBe(2);
+    expect(emptyStreakOf(P, 'rp-y')).toBe(1);
   });
 });

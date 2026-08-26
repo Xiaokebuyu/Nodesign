@@ -46,3 +46,31 @@ export function makePostToolUseFailureRoleRelease({ roster = null } = {}) {
     };
   };
 }
+
+/**
+ * SubagentStop：常驻角色退场时告诉主控怎么把它叫回来。
+ *
+ * 为什么挂在 SubagentStop 而不是 await_user 那句散场话术旁边：话术只是**劝**它退场，
+ * 这个 hook 是它**真的退场了**才响。这条线上模型两次谎报「已派」的教训 ——
+ * 关于「它做没做」的事实，只认事件不认自述。
+ *
+ * ⛔ **不 release 名字**：角色退场 ≠ 不存在了。它的转录还在，SendMessage 叫得回来；
+ * 把名字放回去等于允许重派，而重派会新起一个失忆的同名角色顶掉它（cast.js 的 claim 语义）。
+ *
+ * ℹ️ 主控此刻**本来就会被唤醒** —— 后台子代理一结束就发 `task_notification`，
+ * 里面的 `summary` 就是角色最后那句话（2026-08-26 实测）。所以这里只补一条
+ * systemMessage 说清楚怎么叫它回来，不另推消息，免得同一件事把主控叫醒两次。
+ */
+export function makeSubagentStopRoleNotice() {
+  return async (input) => {
+    const type = input?.agent_type;
+    if (!isResidentRole(type)) return {};
+    // nd:rp-prompt
+    return {
+      systemMessage:
+        `常驻角色「${type}」退场了（它等不到人说话，自己收的场）。它没有消失 ——`
+        + `转录还在，用 SendMessage({to: "${type}"}) 就能把它叫回来，之前演过的它都记得。`
+        + `⛔ 不要用 Agent 重新派它：重派会新起一个失忆的同名角色，把它顶掉。`,
+    };
+  };
+}
