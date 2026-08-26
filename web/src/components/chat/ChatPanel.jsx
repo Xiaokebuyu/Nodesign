@@ -26,6 +26,8 @@ const headerBtn = {
 
 export default function ChatPanel({
   messages = [], onSend, isStreaming = false,
+  roleStage = {},             // 台上的常驻角色 slug → { waiting }。**不等于 isStreaming**
+  roleNames = {},             // slug → 展示名
   queueDepth = 0,
   wsStatus = 'open',          // 'connecting' | 'open' | 'reconnecting' | 'closed'
   lastEventAt = 0,            // 最近一次 WS 事件时间戳——header dot 据此判断"在动 vs 静默"
@@ -282,6 +284,8 @@ export default function ChatPanel({
         // disabled 给外部留口（hydrateError 等）；isRunning 单独控 Send/停止 形态
         disabled={false}
         isRunning={isStreaming}
+        roleStage={roleStage}
+        roleNames={roleNames}
         onStop={onStop}
         trayItems={trayItems}
         onRemoveTrayItem={onRemoveTrayItem}

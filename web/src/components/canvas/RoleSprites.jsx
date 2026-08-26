@@ -14,8 +14,12 @@
  * ## 摆位
  *
  * 贴着它正在写的那个东西（presence.targetId），跟主 agent 工作时的落位同一套算法
- * （findWorkSpot 避让）。没有目标就不出现 —— 角色不像主 agent 那样有"闲时漫游"，
- * 它要么在写东西，要么在等用户，等的时候不该占着画面。
+ * （findWorkSpot 避让）。没写过东西（没 targetId）就不出现 —— 角色不像主 agent 那样
+ * 有"闲时漫游"，它得先站到自己写的那段字旁边才有位置。
+ *
+ * ⚠️ 2026-08-26 改：**等用户的时候也留在画布上**（只是切 idle 态）。原来的判断是
+ * "等的时候不该占着画面"，实测反了 —— 角色一挂 await_user 精灵就消失，用户既
+ * 不知道它还在，也不知道该冲谁说话。动静由 run.role.wait 驱动，见 board-presence.js。
  */
 
 import { useMemo } from 'react';
@@ -53,8 +57,11 @@ function RoleBookmark({ name, color }) {
 }
 
 export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {} }) {
+  // ⚠️ 不再要求 active（2026-08-26）：角色挂在 await_user 上等你回话时是 idle 的，
+  // 但它**还在台上**，精灵消失会让用户以为它没了、也就不知道该冲谁说话。
+  // 只要它写过东西（有 targetId）就留在画布上，active 交给 SpriteSketch 表现动静。
   const roles = useMemo(() => Object.values(presence || {})
-    .filter((p) => p && isRolePresence(p.id) && p.active && p.targetId), [presence]);
+    .filter((p) => p && isRolePresence(p.id) && p.targetId), [presence]);
 
   if (!roles.length) return null;
 

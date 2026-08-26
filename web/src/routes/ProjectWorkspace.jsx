@@ -39,12 +39,13 @@ import { scrollToPage, pulseHighlight } from '../lib/canvas-iframe-ops.js';
 import { exportFromMenu } from '../components/canvas/card-export.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
-import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated } from '../lib/chat-stream.js';
+import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult } from '../lib/chat-stream.js';
 import { bumpFileVersion, versionOfFile } from '../lib/file-versions.js';
 
 // 事件分流判据（名单+过期规则）2026-08-14 抽进 lib/event-router.js 配单测 ——
 // 谁进哪条管线是"精灵丢状态"病族的老巢，判据改动要连测试一起动
 import { STAGE_EVENTS, CHAT_STREAM_EVENTS, isStaleEvent } from '../lib/event-router.js';
+import { reduceRoleStage, useRoleNames } from '../lib/role-stage.js';
 import { usePendingEdits } from '../hooks/usePendingEdits.js';
 import { useBrowseWindow } from '../hooks/useBrowseWindow.js';
 
@@ -117,6 +118,9 @@ export default function ProjectWorkspace() {
   const [messages, setMessages] = useState([]);
   const [inputs, setInputs] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  // 台上的常驻角色 slug → { waiting }。⚠️ 跟 isStreaming 是两件事，见 lib/role-stage.js
+  const [roleStage, setRoleStage] = useState({});
+  const roleNames = useRoleNames(id, roleStage);   // slug → 展示名（GET /roles）
   const [queueDepth, setQueueDepth] = useState(0);  // streamInput 模式下 inputQueue 积压数（"已排队 N 条"）
   const [isTweaksExposed, setIsTweaksExposed] = useState(false);  // agent 调过 expose_tweaks 才在 ChatPanel 显示打开按钮
   const [wsStatus, setWsStatus] = useState('connecting');     // 'connecting' | 'open' | 'reconnecting' | 'closed'
@@ -677,6 +681,8 @@ export default function ProjectWorkspace() {
 
     // ── 1. 舞台旁路 ──：工具流 / 文件变更 / 收场信号原样转发给工作台画布
     // （agent 实时动作演出）。BoardCanvas 未挂载时 stageRef.current 为 null，自然丢弃。
+    setRoleStage(prev => reduceRoleStage(prev, evt));   // 台上名单，见 lib/role-stage.js
+
     if (STAGE_EVENTS.has(evt.type) && !isStale) {
       stageRef.current?.onEvent?.(evt);
     }
@@ -1225,24 +1231,8 @@ export default function ProjectWorkspace() {
 
       case 'run.subagent.stop': {
         if (isStale) break;
-        // S3b：子代理收尾的 lastAssistantMessage 挂回对应 Task tool message。
-        // 前端 Message.jsx ToolMessage 在 agentType === 'vision-checker' 时
-        // 渲染 critique 卡（VERDICT/ISSUES/OVERALL），其他 subagent 暂不渲染（可拓展）。
-        if (evt.toolUseId) {
-          setMessages(prev => prev.map(m =>
-            m.role === 'tool' && m.id === evt.toolUseId
-              ? {
-                  ...m,
-                  subagentResult: {
-                    lastAssistantMessage: evt.lastAssistantMessage || null,
-                    transcriptPath: evt.transcriptPath || null,
-                    agentId: evt.agentId,
-                    agentType: evt.agentType,
-                  },
-                }
-              : m,
-          ));
-        }
+        // S3b：子代理收尾结果挂回 Task 卡（纯消息变换，见 lib/chat-stream.js）
+        setMessages(prev => attachSubagentResult(prev, evt));
         if (typeof window !== 'undefined' && import.meta.env.DEV) {
           // eslint-disable-next-line no-console
           console.log(`[event] ${evt.type}`, evt);
@@ -2222,6 +2212,8 @@ export default function ProjectWorkspace() {
             messages={messages}
             onSend={handleSend}
             isStreaming={isStreaming}
+            roleStage={roleStage}
+            roleNames={roleNames}
             queueDepth={queueDepth}
             wsStatus={wsStatus}
             lastEventAt={lastEventAt}

@@ -327,6 +327,11 @@ export const Events = {
     ...(toolUseId ? { toolUseId } : {}),
   }),
 
+  // 角色挂上/离开 await_user（2026-08-26）。这是「角色此刻是在写还是在等」的**唯一**信号：
+  // 它挂着的时候没有任何事件流出（就是在等），画布据此把精灵切 idle 态、
+  // 侧栏据此显示「台上有人但对话没被占用」。waiting=false 表示它拿到话/超时，回去干活了。
+  roleWait: (slug, waiting) => ({ type: 'run.role.wait', slug, waiting: !!waiting }),
+
   // PostToolUseFailure hook：工具失败，hook 已注入了恢复建议给 agent，
   // 上层只需可见"哪个工具失败了"做监控/告警。
   toolFailure: (toolName, error) => ({

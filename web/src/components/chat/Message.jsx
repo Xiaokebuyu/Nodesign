@@ -1511,12 +1511,19 @@ function ToolMessage({
       ? taskSummaryLog
       : (taskSummary ? [taskSummary] : []);
     const resultText = subagentResult?.lastAssistantMessage || null;
+    // ⚠️ 常驻角色（rp-*）跟干活型子代理在这儿的语义**相反**：
+    // 干活型会结束，所以"转圈 = 在跑"成立；常驻角色**按设计永不收回合**
+    //（见 mcp/tools/role-inbox.js 的散场闸），task_notification(completed) 永远不来，
+    // 于是时间轴上留一个永远转的圈，读起来像"卡住了"。
+    // 角色的动静不在这条流水里 —— 在画布精灵和侧栏那行台上提示上。这里只记一次上场。
+    const isRole = typeof agentName === 'string' && agentName.startsWith('rp-');
     const statusLabel = taskStatus === 'completed' ? '完成'
       : taskStatus === 'failed' ? '失败'
       : taskStatus === 'stopped' ? '已停止'
+      : isRole ? '在台上'
       : isRunning ? (taskSummary || taskLastTool || '工作中…') : null;
     return (
-      <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning}>
+      <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning && !isRole}>
         <button
           onClick={() => setOpen(o => !o)}
           style={{
@@ -1527,7 +1534,7 @@ function ToolMessage({
           }}
           title={taskDescription || toolName}
         >
-          <span className={isRunning ? 'nd-shimmer' : undefined} style={{ fontWeight: 500, flexShrink: 0 }}>
+          <span className={isRunning && !isRole ? 'nd-shimmer' : undefined} style={{ fontWeight: 500, flexShrink: 0 }}>
             {agentName}
           </span>
           {taskDescription && (

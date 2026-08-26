@@ -170,3 +170,26 @@ export function mergeHydrated(messages, display) {
   if (orphans.length > 0) return [...display, ...orphans];
   return display;
 }
+
+/**
+ * 子代理收尾：把 lastAssistantMessage / 转录路径挂回对应的 Task tool message
+ *（`run.subagent.stop` 带的 toolUseId 就是当初那次 Agent 调用的 id）。
+ *
+ * 抽出来是因为它是**纯消息变换**，跟事件路由没关系 —— 留在 ProjectWorkspace 的
+ * switch 里只是让那个已经到顶的文件更胖。Message.jsx 的 ToolMessage 据此渲染
+ * critique 卡（当前只有 vision-checker 有专门渲染，其余存着待用）。
+ */
+export function attachSubagentResult(messages, evt) {
+  if (!evt?.toolUseId) return messages;
+  return messages.map((m) => (m.role === 'tool' && m.id === evt.toolUseId
+    ? {
+        ...m,
+        subagentResult: {
+          lastAssistantMessage: evt.lastAssistantMessage || null,
+          transcriptPath: evt.transcriptPath || null,
+          agentId: evt.agentId,
+          agentType: evt.agentType,
+        },
+      }
+    : m));
+}

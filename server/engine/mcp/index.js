@@ -197,7 +197,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // await_user / check_inbox — 角色的收件箱（2026-08-26）。用户在画布上回角色的话
       // 直达它，不惊动主 agent。角色**主动来取**（服务端没法给子代理投消息），
       // await_user 挂着等 = 「像主 agent 一样对话」的形态。见 agent/inbox.js
-      makeAwaitUserTool({ projectId }),
+      makeAwaitUserTool({ projectId, ctx }),
       makeCheckInboxTool({ projectId }),
 
       // crystallize_skill — 把探索出来的方法论固化成用户自己的 skill + 作品进橱窗

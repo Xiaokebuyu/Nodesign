@@ -36,6 +36,9 @@ export const STAGE_EVENTS = new Set([
   // 整条追踪链对它沉默 —— 精灵不知道 agent 在板上写了话。board.focus 带着
   // chalk 路径（= 画布 id），进在场 reducer 收编成目标。
   'board.focus',
+  // 角色挂上/离开 await_user（2026-08-26）：角色挂着等用户时事件流是**静默**的，
+  // 没有这条在场表分不出「在等你回话」和「已经没了」，精灵只能一直显工作态。
+  'run.role.wait',
   // （run.task.* / run.subagent.stop 2026-08-18 移出名单：子代理便利贴与
   //   在场徽记退役，画布不再消费它们 —— 聊天侧栏的 Task 抽屉行走
   //   ProjectWorkspace 自己的 switch，不经这份名单。）

@@ -45,6 +45,7 @@ import TextDraft from './TextDraft.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import LinkPopover from './LinkPopover.jsx';
 import AnnotatePopover from './AnnotatePopover.jsx';
+import { soleRoleTarget } from '../../lib/role-direct.js';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';
@@ -1980,6 +1981,10 @@ export default function BoardCanvas({
       {annotate && (
         <AnnotatePopover
           x={annotate.x} y={annotate.y} target={annotate.target}
+          // 这批标注是不是全指着同一个常驻角色 —— 是的话这句话**直达它**，
+          // 不经过主 agent。判据跟真正发送时走的是同一个函数（lib/role-direct.js），
+          // 不能在这儿另写一份：文案说"说给墨璃"而实际发给了主控，比不显示更糟。
+          roleTarget={soleRoleTarget(annotate.targets?.length ? annotate.targets : [annotate.target])}
           onClose={() => setAnnotate(null)}
           onSubmit={(text) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text })}
           // 攒着：同一条回调，多一个 queue 标记 —— 落点在 ProjectWorkspace

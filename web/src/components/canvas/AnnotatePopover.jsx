@@ -32,7 +32,7 @@ import { isImeEnter } from '../../lib/helpers.js';
 
 const POP_W = 320;
 
-export default function AnnotatePopover({ x, y, target, onSubmit, onKeep, onQueue, onClose }) {
+export default function AnnotatePopover({ x, y, target, roleTarget = null, onSubmit, onKeep, onQueue, onClose }) {
   const ref = useRef(null);
   const [text, setText] = useState('');
   const [flip, setFlip] = useState({ x: false, y: false });
@@ -146,7 +146,9 @@ export default function AnnotatePopover({ x, y, target, onSubmit, onKeep, onQueu
           <button
             onClick={queue}
             disabled={!text.trim()}
-            title="先记下，攒够了从右下角那条浮钮一次发给 agent"
+            title={roleTarget
+              ? `攒着会发给主控，不是${roleTarget.who}——想直接说给它就用右边那颗`
+              : '先记下，攒够了从右下角那条浮钮一次发给 agent'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
               padding: `${GAP.xs}px ${GAP.sm}px`,
@@ -171,7 +173,7 @@ export default function AnnotatePopover({ x, y, target, onSubmit, onKeep, onQueu
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
           }}
         >
-          <Send size={12} /> 发给 agent
+          <Send size={12} /> {roleTarget ? `说给${roleTarget.who}` : '发给 agent'}
         </button>
       </div>
     </div>

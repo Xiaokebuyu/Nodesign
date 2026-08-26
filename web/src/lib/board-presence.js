@@ -218,6 +218,20 @@ export function reducePresence(table, evt, resolve) {
       return { ...table, [who]: { ...cur, targetId: tid, zoneId: evt.layer || null, at: evt.at || cur.at } };
     }
 
+    // 角色挂上/离开 await_user（2026-08-26）。它挂着的时候事件流是**静默**的 ——
+    // 没有这条，画布分不出「在等你回话」和「已经没了」，精灵只能一直显工作态。
+    // ⚠️ 只切 active，**不动 targetId**：它等的时候仍然站在自己刚写的那段板书旁边，
+    // 位置不该跳走（跳走了用户就找不到"是谁在等我"）。
+    case 'run.role.wait': {
+      if (!evt.slug) return table;
+      const id = rolePresenceId(evt.slug);
+      const cur = table[id];
+      if (!cur) return table;                       // 还没写过东西就别凭空立
+      const active = !evt.waiting;
+      if (cur.active === active) return table;
+      return { ...table, [id]: { ...cur, active, ...(active ? {} : { message: null }) } };
+    }
+
     case 'run.done':
     case 'run.error':
     case 'run.cancelled': {

@@ -25,6 +25,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { waitFor, drain, queueDepth, emptyStreakOf } from '../../agent/inbox.js';
 import { byOf } from '../actor.js';
+import { Events } from '../../agent/events.js';
 import { isResidentRole } from '../../agent/cast.js';
 
 /** 等待上限。挂太久没意义（用户早走了），太短又逼角色反复轮询 */
@@ -77,7 +78,7 @@ function guard(extra) {
   return { me, err: null };
 }
 
-export function makeAwaitUserTool({ projectId }) {
+export function makeAwaitUserTool({ projectId, ctx = null }) {
   return tool(
     'await_user',
     `Wait for the user's next message to YOU (this character), then continue.
@@ -100,7 +101,15 @@ scene is live.`,
       if (!projectId) return { content: [{ type: 'text', text: 'No project bound.' }], isError: true };
 
       const seconds = Math.min(WAIT_MAX_S, Math.max(WAIT_MIN_S, args.seconds || WAIT_DEFAULT_S));
-      const items = await waitFor(projectId, me, seconds * 1000);
+      // 挂上/离开都要发：角色挂着的时候事件流是**静默**的，不发这条，画布分不出
+      // 「在等」和「死了」，侧栏也分不出「台上有人」和「对话被占用」。
+      try { ctx?.emit?.(Events.roleWait(me, true)); } catch { /* fail-soft */ }
+      let items;
+      try {
+        items = await waitFor(projectId, me, seconds * 1000);
+      } finally {
+        try { ctx?.emit?.(Events.roleWait(me, false)); } catch { /* fail-soft */ }
+      }
       if (!items.length) {
         return { content: [{ type: 'text', text:
           emptyWaitMessage(me, seconds, emptyStreakOf(projectId, me)) }] };
