@@ -30,6 +30,7 @@ import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as
 import { useStageState, splitStageCards, ChalkLiveInk, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
 import { AmbientSpriteLayer, SpriteAskInput, useSpriteAmbient } from './SpriteSketchLayer.jsx';
 import RoleSprites from './RoleSprites.jsx';
+import RoleTalkPanel from './RoleTalkPanel.jsx';
 import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
 import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
@@ -271,6 +272,8 @@ export default function BoardCanvas({
   const [presence, setPresence] = useState(emptyPresence);
   /** 精灵输入行（对话通道）：{x,y} 世界坐标，null = 收起 */
   const [spriteAsk, setSpriteAsk] = useState(null);
+  // 跟哪个角色对话（点它的精灵打开；侧栏永远是主 agent 的，路由拍板见 RoleTalkPanel）
+  const [roleTalk, setRoleTalk] = useState(null);
   const toolRef = useRef('select');
   toolRef.current = tool;
   const positionedRef = useRef([]);
@@ -1860,8 +1863,19 @@ export default function BoardCanvas({
             )}
           />
 
-          {/* 常驻角色的精灵：贴着它正在写的东西，比主精灵小一圈 + 身份标（RoleSprites.jsx） */}
-          <RoleSprites presence={presence} rectOf={rectOfId} obstacles={minimapItems} roleNames={roleNames} />
+          {/* 常驻角色的精灵：贴着它正在写的东西（没写过的排候场位），点它开对话小窗 */}
+          <RoleSprites
+            presence={presence} rectOf={rectOfId} obstacles={minimapItems} roleNames={roleNames}
+            cam={cam} viewport={camera.viewport}
+            onPick={(slug) => setRoleTalk((cur) => (cur === slug ? null : slug))}
+          />
+          {roleTalk && (
+            <RoleTalkPanel
+              projectId={projectId} slug={roleTalk}
+              name={roleNames[roleTalk] || roleTalk}
+              onClose={() => setRoleTalk(null)}
+            />
+          )}
 
           {/* 精灵对话输入行：点星芒浮出的那道铅笔虚线 */}
           {spriteAsk && (

@@ -23,7 +23,7 @@
  */
 
 import { useMemo } from 'react';
-import { SpriteSketch, findWorkSpot } from './SpriteSketchLayer.jsx';
+import { SpriteSketch, findWorkSpot, findAmbientSlot } from './SpriteSketchLayer.jsx';
 import { PAPER } from '../../lib/paper.js';
 import { TEXT_FONT_CSS } from '../../lib/text-fonts.js';
 import { isRolePresence, slugOfPresence } from '../../lib/board-presence.js';
@@ -56,21 +56,36 @@ function RoleBookmark({ name, color }) {
   );
 }
 
-export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {} }) {
+export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {}, cam = null, viewport = null, onPick = null }) {
   // ⚠️ 不再要求 active（2026-08-26）：角色挂在 await_user 上等你回话时是 idle 的，
   // 但它**还在台上**，精灵消失会让用户以为它没了、也就不知道该冲谁说话。
-  // 只要它写过东西（有 targetId）就留在画布上，active 交给 SpriteSketch 表现动静。
+  // 2026-08-27（编排）：也不再要求 targetId —— 还没写过板书的角色排**候场位**
+  // （findAmbientSlot，主精灵闲逛用的同一套槽位），上台就看得见、点得到。
   const roles = useMemo(() => Object.values(presence || {})
-    .filter((p) => p && isRolePresence(p.id) && p.targetId), [presence]);
+    .filter((p) => p && isRolePresence(p.id)), [presence]);
 
   if (!roles.length) return null;
 
+  // 候场位依次占坑：把已排的算进障碍，几个候场角色不叠在同一个槽上
+  const placedObs = [];
   return (
     <>
       {roles.map((p) => {
-        const anchor = rectOf?.(p.targetId);
-        if (!anchor) return null;
-        const spot = findWorkSpot(anchor, obstacles);
+        let spot = null;
+        const anchor = p.targetId ? rectOf?.(p.targetId) : null;
+        if (anchor) {
+          spot = findWorkSpot(anchor, obstacles);
+        } else if (cam?.z && viewport?.w) {
+          spot = findAmbientSlot(cam, viewport, [...obstacles, ...placedObs]);
+          // 六槽全占也不许消失（跟 findWorkSpot 同一条规矩）：沿视口上沿排开
+          if (!spot) {
+            spot = {
+              x: Math.round((viewport.w * (0.16 + placedObs.length * 0.12)) / cam.z - cam.x),
+              y: Math.round((viewport.h * 0.1) / cam.z - cam.y),
+            };
+          }
+          placedObs.push({ x: spot.x - 20, y: spot.y - 20, w: 160, h: 110 });
+        }
         if (!spot) return null;
         const slug = slugOfPresence(p.id);
         return (
@@ -78,13 +93,18 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
             key={p.id}
             style={{
               position: 'absolute', left: spot.x, top: spot.y,
-              pointerEvents: 'none', textAlign: 'center', zIndex: 44,
+              // 可点（2026-08-27）：点精灵 = 打开跟这个角色的对话（路由拍板：
+              // 侧栏永远是主 agent 的，跟角色说话走这里）
+              pointerEvents: onPick ? 'auto' : 'none', cursor: onPick ? 'pointer' : undefined,
+              textAlign: 'center', zIndex: 44,
             }}
             data-role-sprite={slug}
+            title={onPick ? `跟${roleNames[slug] || slug}说话` : undefined}
+            onClick={onPick ? (e) => { e.stopPropagation(); onPick(slug); } : undefined}
           >
             <SpriteSketch
               brand={{ color: p.color }}
-              drawKey={p.targetId}
+              drawKey={p.targetId || `ambient:${slug}`}
               text={p.message || ''}
               size={ROLE_SPRITE_SIZE}
               maxWidth={260}

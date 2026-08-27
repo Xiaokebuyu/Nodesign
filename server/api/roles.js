@@ -20,6 +20,9 @@ import { deliver, inboxStates } from '../engine/agent/inbox.js';
 import { listRoleNames } from '../engine/agent/role-card.js';
 import { getWorkspaceRoot } from '../projects/workspace.js';
 import { isResidentRole } from '../engine/agent/cast.js';
+import { onUserSay, getScene } from '../engine/agent/scene.js';
+import { getProjectBus } from '../ws/broker.js';
+import { Events } from '../engine/agent/events.js';
 
 const router = express.Router();
 
@@ -32,6 +35,8 @@ router.get('/:pid/roles', async (req, res, next) => {
       roles: [...names].map(([slug, name]) => ({
         slug, name, ...(states[slug] || { waiting: false, queued: 0 }),
       })),
+      // 场声明（可能为 null）：前端初始加载用，之后靠 run.scene 事件增量
+      scene: getScene(req.params.pid),
     });
   } catch (err) { next(err); }
 });
@@ -55,6 +60,11 @@ router.post('/:pid/roles/:slug/say', express.json({ limit: '64kb' }), async (req
 
     const about = req.body?.about ? String(req.body.about).slice(0, 300) : null;
     const r = deliver(req.params.pid, slug, { text, about, from: 'user' });
+    // 轮次机：rounds 模式下对 order 里的人说话 = 从那个人开一轮（scene.js）
+    try {
+      const sc = onUserSay(req.params.pid, slug);
+      if (sc) getProjectBus(req.params.pid).publish({ ...Events.scene(sc), ts: new Date().toISOString() });
+    } catch { /* 机器坏了不拦投递 */ }
     res.json({ ok: true, ...r, name: names.get(slug) });
   } catch (err) { next(err); }
 });

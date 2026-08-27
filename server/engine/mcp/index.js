@@ -76,6 +76,7 @@ import { makeDeliverFilesTool } from './tools/deliver-files.js';
 import { makeCrystallizeSkillTool } from './tools/crystallize-skill.js';
 import { makeCastRoleTool } from './tools/cast-role.js';
 import { makeAwaitUserTool, makeCheckInboxTool } from './tools/role-inbox.js';
+import { makeSetSceneTool, makeReadSceneTool, makePassTurnTool } from './tools/scene-tools.js';
 import { assertRoleToolsRegistered } from '../agent/cast.js';
 import { makePublishSiteTool } from './tools/publish-site.js';
 import { makeReportIssueTool } from './tools/report-issue.js';
@@ -200,6 +201,10 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // await_user 挂着等 = 「像主 agent 一样对话」的形态。见 agent/inbox.js
       makeAwaitUserTool({ projectId, ctx }),
       makeCheckInboxTool({ projectId }),
+      // 场务三件（2026-08-27 编排）：set_scene 只认主控，pass_turn 只认角色
+      makeSetSceneTool({ projectId, ctx }),
+      makeReadSceneTool({ projectId }),
+      makePassTurnTool({ projectId, ctx }),
 
       // crystallize_skill — 把探索出来的方法论固化成用户自己的 skill + 作品进橱窗
       // （2026-07-30）。用户明确要求才调；写的是判断依据不是成品 HTML。

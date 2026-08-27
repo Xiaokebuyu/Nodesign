@@ -196,6 +196,20 @@ export function reducePresence(table, evt, resolve) {
       return { ...table, [who]: { ...cur, message: msg } };
     }
 
+    // 角色上场（2026-08-27 编排）：派发那一刻就立条目 —— 之前条目由 board.focus
+    // 建立，于是「还没写过板书的角色」在画布上不存在，用户看不见谁在候场。
+    // targetId 留空 = 没有落点，渲染层给它排候场位（findAmbientSlot）。
+    case 'run.subagent.start': {
+      const slug = evt.agentType;
+      if (typeof slug !== 'string' || !slug.startsWith('rp-')) return table;
+      const id = rolePresenceId(slug);
+      if (table[id]) return table;
+      return {
+        ...table,
+        [id]: { id, ...identityOf(id), active: true, targetId: null, zoneId: null, message: null, at: evt.at || null },
+      };
+    }
+
     // 板书落定（08-24 精灵体检 1a）：MCP 板上工具不产生 run.delta.tool_input /
     // run.file_changed —— 上面那条链对板书整个沉默，精灵留在旧目标上，服务端
     // 落位又看不见精灵（它不是 board object），于是"板书压精灵、精灵不让"。

@@ -4,7 +4,7 @@
 // 说错一次用户就不敢打字了 —— 上一个把这件事说错的 bug（子代理说话铸出永不收的
 // 主回合，按钮卡在「停止」）直接导致用户中止了自己的会话。
 import { describe, it, expect } from 'vitest';
-import { reduceRoleStage, stageHint } from './role-stage.js';
+import { reduceRoleStage, stageHint, sceneOf } from './role-stage.js';
 
 const run = (evts, init = {}) => evts.reduce(reduceRoleStage, init);
 
@@ -61,7 +61,30 @@ describe('侧栏那行提示', () => {
   });
 
   it('⭐ 有一个在写就算「在写」—— 别把还在动的场面说成安静', () => {
-    expect(stageHint({ a: { waiting: true } }).allWaiting).toBe(true);
+    expect(stageHint({ 'rp-a': { waiting: true } }).allWaiting).toBe(true);
     expect(stageHint({ 'rp-a': { waiting: true }, 'rp-b': { waiting: false } }).allWaiting).toBe(false);
+  });
+});
+
+describe('场声明（run.scene，2026-08-27 编排）', () => {
+  it('__scene 收进同一张表，不算台上人头', () => {
+    const scene = { mode: 'rounds', order: ['rp-a', 'rp-b'], gm: 'referee', turnSlug: 'rp-a' };
+    const s = run([
+      { type: 'run.subagent.start', agentType: 'rp-a' },
+      { type: 'run.scene', scene },
+    ]);
+    expect(s.__scene).toEqual(scene);
+    const hint = stageHint(s, { 'rp-a': '墨璃' });
+    expect(hint.count).toBe(1);                 // __scene 不是人
+    expect(hint.turnLabel).toBe('墨璃');
+  });
+
+  it('轮次收场（turnSlug null）后提示语退回在写/在等', () => {
+    const s = run([
+      { type: 'run.subagent.start', agentType: 'rp-a' },
+      { type: 'run.scene', scene: { mode: 'rounds', order: ['rp-a'], gm: 'referee', turnSlug: null } },
+    ]);
+    expect(stageHint(s, {}).turnLabel).toBeNull();
+    expect(sceneOf(s)?.mode).toBe('rounds');
   });
 });

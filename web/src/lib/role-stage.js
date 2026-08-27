@@ -33,6 +33,11 @@ const isRoleSlug = (s) => typeof s === 'string' && s.startsWith('rp-');
  */
 export function reduceRoleStage(stage, evt) {
   const t = evt?.type;
+  // 场声明（2026-08-27 编排）：模式/顺序/轮到谁。跟角色条目住同一张表（`__scene`
+  // 保留键，isRoleSlug 天然隔开），侧栏提示和面板都从这一份读。
+  if (t === 'run.scene') {
+    return { ...stage, __scene: evt.scene || null };
+  }
   if (t === 'run.role.wait') {
     if (!isRoleSlug(evt.slug)) return stage;
     const waiting = !!evt.waiting;
@@ -58,16 +63,22 @@ export function reduceRoleStage(stage, evt) {
  * @returns {{label: string, allWaiting: boolean, count: number} | null} null = 台上没人
  */
 export function stageHint(stage, roleNames = {}) {
-  const slugs = Object.keys(stage || {});
+  const slugs = Object.keys(stage || {}).filter(isRoleSlug);
   if (!slugs.length) return null;
   const nameOf = (s) => roleNames?.[s] || s;
+  // 轮次进行中：直接说轮到谁 —— 这比「在写/在等」更该被用户看见
+  const turn = stage.__scene?.turnSlug || null;
   return {
     count: slugs.length,
     label: slugs.length === 1 ? nameOf(slugs[0]) : `${nameOf(slugs[0])} 等 ${slugs.length} 人`,
+    turnLabel: turn ? nameOf(turn) : null,
     // 全挂在 await_user 上 = 台上安静地等着；有一个没在等就算「在写」
     allWaiting: slugs.every((s) => stage[s]?.waiting),
   };
 }
+
+/** 当前的场声明（可能为 null）。__scene 由 run.scene 事件写入 */
+export function sceneOf(stage) { return stage?.__scene || null; }
 
 /**
  * 台上角色的展示名（slug → 名字）。台上名单一变补一次。
@@ -78,7 +89,8 @@ export function stageHint(stage, roleNames = {}) {
  */
 export function useRoleNames(projectId, stage) {
   const [names, setNames] = useState({});
-  const key = Object.keys(stage || {}).sort().join(',');
+  // 只看台上名单，__scene 变动不该触发重拉
+  const key = Object.keys(stage || {}).filter(isRoleSlug).sort().join(',');
   useEffect(() => {
     if (!projectId || !key) return undefined;
     let alive = true;

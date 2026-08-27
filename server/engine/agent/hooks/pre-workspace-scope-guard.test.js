@@ -104,3 +104,30 @@ describe('角色文件不许模型手写（2026-08-26 fable 验收 P1）', () =>
     expect(deny('notes/板书/a.md')).toBeNull();
   });
 });
+
+/**
+ * 接续权的文件面（2026-08-27 编排）：角色写的板书文件，主 agent 不许 Edit/Write。
+ * 判据是文件里 harness 盖的 by: 章（角色没有 Write 工具，伪造不了）。
+ * 这组要摸真文件（闸要读 frontmatter），用临时目录当工作区。
+ */
+describe('角色板书文件不许改', () => {
+  it('by: rp-* 的板书 → 写拒；自己的和用户的照改；读不拦', async () => {
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-chalk-guard-'));
+    const dir = path.join(ws, 'notes', '板书');
+    fs.mkdirSync(dir, { recursive: true });
+    const roleNote = path.join(dir, 'a-role.md');
+    const myNote = path.join(dir, 'b-mine.md');
+    fs.writeFileSync(roleNote, '---\nnd: chalk\nby: rp-moli\nat: 2026-08-27T00:00:00Z\n---\n\n「雨还在下。」\n');
+    fs.writeFileSync(myNote, '---\nnd: chalk\nby: agent\nat: 2026-08-27T00:00:00Z\n---\n\n场记。\n');
+    const c = { workspaceRoot: ws, dataRoot: null };
+    expect(checkWorkspaceScope({ file_path: roleNote }, { ...c, toolName: 'Edit' })).toMatch(/rp-moli/);
+    expect(checkWorkspaceScope({ file_path: roleNote }, { ...c, toolName: 'Write' })).toMatch(/不是你的稿子/);
+    expect(checkWorkspaceScope({ file_path: myNote }, { ...c, toolName: 'Edit' })).toBeNull();
+    // 新文件（还不存在）→ fail-open 放行；读角色板书当然也不拦
+    expect(checkWorkspaceScope({ file_path: path.join(dir, 'new.md') }, { ...c, toolName: 'Write' })).toBeNull();
+    expect(checkWorkspaceScope({ file_path: roleNote }, { ...c, toolName: 'Read' })).toBeNull();
+  });
+});

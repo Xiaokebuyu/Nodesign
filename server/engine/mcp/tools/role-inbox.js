@@ -27,6 +27,7 @@ import { waitFor, drain, queueDepth, emptyStreakOf } from '../../agent/inbox.js'
 import { byOf } from '../actor.js';
 import { Events } from '../../agent/events.js';
 import { isResidentRole } from '../../agent/cast.js';
+import { onRoleWait } from '../../agent/scene.js';
 
 /** 等待上限。挂太久没意义（用户早走了），太短又逼角色反复轮询 */
 const WAIT_MIN_S = 30;
@@ -45,6 +46,8 @@ const EMPTY_STREAK_LIMIT = 2;
 function renderMessages(items) {
   return items.map((m, i) => {
     const head = items.length > 1 ? `【${i + 1}/${items.length}】` : '';
+    // from:'scene' 是轮次机的 cue，不是用户的话 —— 冒充用户口吻会让角色对空气回话
+    if (m.from === 'scene') return `${head}${m.text}`;
     const where = m.about ? `（关于 ${m.about}）` : '';
     return `${head}用户说${where}：${m.text}`;
   }).join('\n');
@@ -104,6 +107,11 @@ scene is live.`,
       // 挂上/离开都要发：角色挂着的时候事件流是**静默**的，不发这条，画布分不出
       // 「在等」和「死了」，侧栏也分不出「台上有人」和「对话被占用」。
       try { ctx?.emit?.(Events.roleWait(me, true)); } catch { /* fail-soft */ }
+      // 轮次机：重新挂上（且没积压）= 这一拍说完了 → 机器 cue 下一个（scene.js）
+      try {
+        const sc = onRoleWait(projectId, me, true);
+        if (sc) ctx?.emit?.(Events.scene(sc));
+      } catch { /* 机器坏了不拦角色等人 */ }
       let items;
       try {
         items = await waitFor(projectId, me, seconds * 1000);

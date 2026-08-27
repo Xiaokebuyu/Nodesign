@@ -394,3 +394,23 @@ describe('角色退场要把精灵撤掉（2026-08-26 fable 验收 P2）', () =>
     expect(t[id]).toBeUndefined();
   });
 });
+
+describe('角色候场（2026-08-27 编排）：run.subagent.start 立条目', () => {
+  it('派发即在场（targetId 空 = 候场位），干活型子代理照旧不进', () => {
+    let t = reducePresence(emptyPresence(), { type: 'run.subagent.start', agentType: 'rp-moli' }, null);
+    const id = 'role:rp-moli';
+    expect(t[id]).toMatchObject({ active: true, targetId: null, kind: 'role' });
+    // 幂等：重复 start 不重建（不丢后来写下的落点）
+    const t2 = reducePresence({ ...t, [id]: { ...t[id], targetId: 'notes/板书/x.md' } },
+      { type: 'run.subagent.start', agentType: 'rp-moli' }, null);
+    expect(t2[id].targetId).toBe('notes/板书/x.md');
+    // 干活型不进
+    const t3 = reducePresence(emptyPresence(), { type: 'run.subagent.start', agentType: 'vision-checker' }, null);
+    expect(Object.keys(t3)).toHaveLength(0);
+    // 候场条目也能被 run.role.wait 翻动静、被 stop 删掉
+    const t4 = reducePresence(t, { type: 'run.role.wait', slug: 'rp-moli', waiting: true }, null);
+    expect(t4[id].active).toBe(false);
+    const t5 = reducePresence(t4, { type: 'run.subagent.stop', agentType: 'rp-moli' }, null);
+    expect(t5[id]).toBeUndefined();
+  });
+});

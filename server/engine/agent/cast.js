@@ -126,6 +126,8 @@ export const ROLE_TOOL_WHITELIST = Object.freeze([
   // 收件箱（2026-08-26）：角色跟用户直接对话的唯一通路。后台子代理的内置
   // AskUserQuestion 被 CLI 剥掉了，MCP 工具豁免 —— 所以「问用户话」只能是这两件。
   'await_user', 'check_inbox',
+  // 场（2026-08-27 编排）：看轮到谁 / 这一拍不想说就跳过（rounds 模式的机器认它）
+  'read_scene', 'pass_turn',
   // 内置
   'SendMessage', 'ToolSearch', 'Read', 'Glob', 'Grep',
 ]);
@@ -137,6 +139,7 @@ const BUILTIN = new Set(['SendMessage', 'ToolSearch', 'Read', 'Glob', 'Grep']);
 export const ROLE_DEFAULT_TOOLS = Object.freeze([
   'write_on_board', 'read_board', 'board_batch', 'look_at_board', 'read_user_view',
   'await_user', 'check_inbox',
+  'read_scene', 'pass_turn',
   'SendMessage', 'ToolSearch', 'Read', 'Grep',
 ]);
 

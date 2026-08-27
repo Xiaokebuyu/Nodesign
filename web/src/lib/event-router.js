@@ -39,6 +39,11 @@ export const STAGE_EVENTS = new Set([
   // 角色挂上/离开 await_user（2026-08-26）：角色挂着等用户时事件流是**静默**的，
   // 没有这条在场表分不出「在等你回话」和「已经没了」，精灵只能一直显工作态。
   'run.role.wait',
+  // 角色上场（2026-08-27 编排）：candidacy —— 还没写过板书的角色也要有精灵
+  // （候场位），在场条目从这条立，不再等 board.focus。
+  'run.subagent.start',
+  // 场声明变了（set_scene / 轮次推进 / pass_turn）：画布要知道轮到谁
+  'run.scene',
   // run.subagent.stop **2026-08-26 只为常驻角色重新入列**：角色的在场条目
   // 由 board.focus 建立，而 run.done 分支明确跳过角色（它在后台自己活着）——
   // 于是它**一条删除路径都没有**，退场后精灵永远留在画布上当幽灵，

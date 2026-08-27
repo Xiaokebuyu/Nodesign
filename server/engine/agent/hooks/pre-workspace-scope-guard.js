@@ -18,8 +18,10 @@
  *   - 自己出错就放行（fail-open）—— 闸崩了不该把整个会话堵死。
  */
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { CHALK_DIR } from '../../../lib/chalk.js';
 
 const TARGET_FIELDS = ['file_path', 'path', 'notebook_path'];
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -61,6 +63,19 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolNa
       return '角色文件不能手写 —— 用 cast_role。'
         + '那个目录里的文件同时是「这个角色能用哪些工具」的判据，'
         + '手写等于自己给自己发权限，所以一律拒绝（改已有角色也走 cast_role）。';
+    }
+    // 接续权的文件面（2026-08-27 编排）：角色写的板书文件，主 agent 不许 Edit/Write。
+    // 板上那半（reply_to/chain）在 write-on-board 闸；这里堵的是「直接改文件正文」——
+    // 改别人的台词比接别人的话头更越界。作者看文件自己的 by: 章（harness 盖的，
+    // 角色没有 Write 工具伪造不了）。读不到/没有章 → 放行（fail-open，主 agent 自己的板书本来就能改）。
+    if (isWrite && insideDir(abs, path.join(ws, ...CHALK_DIR.split('/')))) {
+      try {
+        const m = fs.readFileSync(abs, 'utf8').slice(0, 400).match(/^by:\s*(\S+)/m);
+        if (m && m[1].startsWith('rp-')) {
+          return `这份板书是角色「${m[1]}」写的，它的话不是你的稿子 —— 不改、不润色、不代笔。`
+            + '想让它改：把意见寄给它（SendMessage）或让用户直接跟它说。';
+        }
+      } catch { /* 新建/读不到 → 放行 */ }
     }
     if (insideDir(abs, ws)) continue;         // 自己的工作区，放行
     if (isWrite) {

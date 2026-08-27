@@ -296,7 +296,9 @@ export default function ChatComposer({
                   background: stage.allWaiting ? COLOR.text3 : PAPER.ink,
                 }}
               />
-              {stage.label}{stage.allWaiting ? ' 在等' : ' 在写'}
+              {stage.turnLabel
+                ? `轮到 ${stage.turnLabel}`
+                : `${stage.label}${stage.allWaiting ? ' 在等' : ' 在写'}`}
             </span>
           )}
 

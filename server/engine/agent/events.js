@@ -331,6 +331,8 @@ export const Events = {
   // 它挂着的时候没有任何事件流出（就是在等），画布据此把精灵切 idle 态、
   // 侧栏据此显示「台上有人但对话没被占用」。waiting=false 表示它拿到话/超时，回去干活了。
   roleWait: (slug, waiting) => ({ type: 'run.role.wait', slug, waiting: !!waiting }),
+  // 场（编排声明）变了：设场 / 轮次推进 / 跳过。scene = sceneSnapshot（含 turnSlug=轮到谁）
+  scene: (scene) => ({ type: 'run.scene', scene }),
 
   // PostToolUseFailure hook：工具失败，hook 已注入了恢复建议给 agent，
   // 上层只需可见"哪个工具失败了"做监控/告警。

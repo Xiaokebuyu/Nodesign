@@ -126,3 +126,49 @@ describe('别名 / 退化路径也要带着 extra 走（它们的错法是静默
     expect(mine.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * 接续权（2026-08-27 编排）：角色的话头只有它自己（和用户）能接。
+ * 这道闸按板上对象的**作者**判 —— 不读内容、不读场声明（那是模型可写的）。
+ */
+describe('接续权', () => {
+  const writeArgsAs = async (agentType, toolUseId, args) => {
+    _resetActorTrail();
+    if (agentType) await stamp({ agent_id: 'a1', agent_type: agentType }, toolUseId);
+    const t = makeWriteOnBoardTool({ projectId: pid, sharedRoot: ws, sessionId: 's1', ctx: { emit() {} } });
+    return t.handler(args, { _meta: { 'claudecode/toolUseId': toolUseId } });
+  };
+  const lastChalkId = async () => {
+    const es = await chalkEntries();
+    return es[es.length - 1][0];
+  };
+
+  it('⭐ 主控 reply_to 角色的板书 → 拒，指路 SendMessage', async () => {
+    await writeAs('rp-moli', 'toolu_cont1', '「今晚的雨不会停。」');
+    const roleNote = await lastChalkId();
+    const r = await writeArgsAs(null, 'toolu_cont2', { text: '她顿了顿，又说……', reply_to: roleNote });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain('rp-moli');
+    expect(r.content[0].text).toContain('SendMessage');
+  });
+
+  it('角色 reply_to 另一个角色 = 对话，放行', async () => {
+    await writeAs('rp-moli', 'toolu_cont3', '「你听见了吗？」');
+    const moliNote = await lastChalkId();
+    const r = await writeArgsAs('rp-suwan', 'toolu_cont4', { text: '「听见了。」', reply_to: moliNote });
+    expect(r.isError).toBeUndefined();
+  });
+
+  it('⭐ chain 不跨作者：中间插了别人的话，各自的线各自延', async () => {
+    await writeArgsAs('rp-moli', 'toolu_cont5', { text: '第一章。', tag: 'story' });
+    const moliFirst = await lastChalkId();
+    // 主控在同 tag 下写场记（另起一条，合法）
+    await writeArgsAs(null, 'toolu_cont6', { text: '（场记：入夜。）', tag: 'story' });
+    // 角色 chain 续写 —— 该接在自己那条后面，不是主控的场记后面
+    await writeArgsAs('rp-moli', 'toolu_cont7', { text: '第二章。', tag: 'story', chain: true });
+    const board = await readBoard(pid);
+    const secondId = await lastChalkId();
+    const flow = Object.values(board.bindings || {}).find((b) => b.type === 'flow' && b.to === secondId);
+    expect(flow?.from).toBe(moliFirst);
+  });
+});

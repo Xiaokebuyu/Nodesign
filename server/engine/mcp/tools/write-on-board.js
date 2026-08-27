@@ -220,11 +220,14 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     if (args.text) {
       const body = String(args.text).trim();
       if (!body) return err('空话不上板。');
-      // chain：接在同 tag 最新一条板书后面（chapter 线程不再手抄路径）
+      // chain：接在同 tag 最新一条**自己写的**板书后面（chapter 线程不再手抄路径）。
+      // 接续权（2026-08-27 编排）：chain 是「续写我的线程」，永远不跨作者 ——
+      // GM 的章节线和每个角色的叙事线各自延各自的，中间插了别人的话也不串线。
       let replyToRaw = args.reply_to || null;
       if (!replyToRaw && args.chain) {
         const chalks = Object.entries(board.objects)
-          .filter(([id, e]) => id.startsWith(`${CHALK_DIR}/`) && Number.isFinite(e?.x) && (!args.tag || e.tag === args.tag))
+          .filter(([id, e]) => id.startsWith(`${CHALK_DIR}/`) && Number.isFinite(e?.x)
+            && (!args.tag || e.tag === args.tag) && (e.by || 'agent') === by)
           .map(([id]) => id).sort();
         if (chalks.length) replyToRaw = chalks[chalks.length - 1];
       }
@@ -242,6 +245,13 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         const pid2 = normalizeCanvasId(replyToRaw);
         const e = pid2 ? board.objects?.[pid2] : null;
         if (!e || !Number.isFinite(e.x)) return err(`reply_to ${replyToRaw} 不在板上（read_board 里看不到就接不上）。`);
+        // 接续权（2026-08-27 编排）：角色的话头只有它自己和用户能接。主控接上去
+        // 就是代笔/插嘴的物理形态 —— 这条按板上对象的**作者**判，不看内容不看场。
+        // 角色之间可以互接（那就是对话），角色接主控的旁白也行。
+        if (by === 'agent' && typeof e.by === 'string' && e.by.startsWith('rp-')) {
+          return err(`这条是「${e.by}」的话，你不接在它下面。想让它接着说：把 cue 寄给它`
+            + `（SendMessage）或让用户直接跟它说；你自己的旁白/场记另起一条（near 指过去就行）。`);
+        }
         parentId = pid2; zone = layerOf(pid2, e, known);
         replyRect = { x: e.x, y: e.y, ...estimateSizeOn(board, pid2, e) };
       }
