@@ -35,6 +35,8 @@ import { makeAnchorResolver } from '../../../lib/board-anchor.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
+import { getScene } from '../../agent/scene.js';
+import { roundsTableHint } from '../../agent/rounds-table.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
@@ -236,6 +238,16 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           .map(([id]) => id).sort();
         if (chalks.length) replyToRaw = chalks[chalks.length - 1];
       }
+      // rounds 桌（2026-08-27 四模式版式）：轮次模式下角色没给任何落位时，机器按
+      // 桌位排 —— 自己的列往下续、首次开口在前一列右边开新列。角色明确给了
+      // reply_to/near/at（比如回用户落痕那条）时它的手优先，机器不抢。
+      let nearRaw = args.near || null;
+      let tableSide = null;
+      if (args.ink !== 'hand' && !replyToRaw && !nearRaw && !args.at && !args.open_lane) {
+        const t = roundsTableHint(getScene(projectId), board, by);
+        if (t?.stack) replyToRaw = t.stack;
+        else if (t?.newColumnRightOf) { nearRaw = t.newColumnRightOf; tableSide = 'right'; }
+      }
 
       const em = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
       const longest = Math.max(...body.split('\n').map(em));
@@ -276,10 +288,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         parentId = pid2; zone = layerOf(pid2, e, known);
         replyRect = { x: e.x, y: e.y, ...estimateSizeOn(board, pid2, e) };
       }
-      if (args.near) {
-        const a = await resolveAnchor(args.near, board);
+      if (nearRaw) {
+        const a = await resolveAnchor(nearRaw, board);
         if (!a && !parentId && !args.at) {
-          return err(`锚点 ${args.near} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件（read_board 看一眼现在都有谁）。`);
+          return err(`锚点 ${nearRaw} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件（read_board 看一眼现在都有谁）。`);
         }
         if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; if (a.board) b2 = a.board; }
       }
@@ -302,7 +314,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const placed = lanePlan
         ? { x: lanePlan.x, y: lanePlan.y, resolution: lanePlan.fallback ? 'fallback' : 'lane-open', nudged: !!lanePlan.fallback }
         : resolvePlacement({
-          box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
+          box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || tableSide || null,
           replyDir: flowDir, sideHint: flowDir, lineTargets,
           obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
         });
