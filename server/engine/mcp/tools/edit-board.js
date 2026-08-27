@@ -35,12 +35,34 @@ const MAX_OPS = 120;
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 
+/**
+ * 单位方言垫片（08-27 转录对账：edit_board 占全家族 -32602 六成，三族错误两族是
+ * 像素思维 —— agent 全部感知都是像素，gap/dx/dy 却是格）。>上限的值按像素收编：
+ * 没有任何合法意图会写 8 格以上的 gap 或 ±2000 格（48000px）的位移，启发式零反例。
+ * 拒收的代价不止一个回合 —— schema 校验是整单拒，一个 gap:40 陪葬同批全部合法 op。
+ * z.preprocess 在 SDK 生成的 JSON schema 里隐形（pipe 取出侧），模型看到的文档照旧严格。
+ */
+const GAP = z.preprocess(
+  (v) => (typeof v === 'number' && Number.isFinite(v) && v > 8 ? Math.min(8, v / UNIT) : v),
+  z.number().min(0).max(8),
+);
+const GRID_DELTA = z.preprocess(
+  (v) => (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) > 2000
+    ? Math.max(-2000, Math.min(2000, v / UNIT)) : v),
+  z.number().min(-2000).max(2000),
+);
+/** 弱模型方言垫片：免费档模型给字符串字段裹 {$text:"…"} 壳（27/61 条真实错误，
+ *  且读不懂 zod 报文会原样重试到死）。单键 $text 自动剥壳，合法对象碰不到。 */
+const unwrapText = (v) => (v && typeof v === 'object' && !Array.isArray(v)
+  && typeof v.$text === 'string' && Object.keys(v).length === 1) ? v.$text : v;
+const ENDPOINT = z.preprocess(unwrapText, z.string().min(1).max(300));
+
 const REL = z.object({
   ref: z.string().min(1).max(300).describe('canvas id to place relative to'),
   side: z.enum(['right', 'left', 'above', 'below']),
-  gap: z.number().min(0).max(8).optional().describe('grid CELLS, 1 cell = 24px (default 1; max 8 = 192px). NOT pixels — gap:2 means 48px'),
+  gap: GAP.optional().describe('grid CELLS, 1 cell = 24px (default 1; max 8 = 192px). NOT pixels — gap:2 means 48px'),
 });
-const DELTA = z.object({ dx: z.number().min(-2000).max(2000), dy: z.number().min(-2000).max(2000) }).describe('grid units');
+const DELTA = z.object({ dx: GRID_DELTA, dy: GRID_DELTA }).describe('grid units');
 const TO = z.union([REL, DELTA]);
 
 const OP = z.discriminatedUnion('op', [
@@ -51,8 +73,8 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('add_node'), id: z.string().regex(/^[A-Za-z0-9_-]{1,24}$/).optional().describe('local handle for later ops of this call'), text: z.string().min(1).max(8000), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), at: REL, tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('add_shape'), kind: z.enum(['rect', 'ellipse', 'circle', 'underline']), around: z.string().min(1).max(300).describe('canvas id to wrap/underline — the mark HUGS it and follows when it moves'), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), width: z.number().min(1).max(12).optional(), tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('set_shape'), id: z.string().min(1).max(300), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), width: z.number().min(1).max(12).optional() }),
-  z.object({ op: z.literal('add_edge'), from: z.string().min(1).max(300), to: z.string().min(1).max(300), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), label: z.string().max(60).optional(), tag: z.string().max(40).optional() }),
-  z.object({ op: z.literal('set_edge'), id: z.string().min(1).max(300), label: z.string().max(60).optional(), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), from: z.string().min(1).max(300).optional().describe('re-point the line: new source end'), to: z.string().min(1).max(300).optional().describe('re-point the line: new target end') }),
+  z.object({ op: z.literal('add_edge'), from: ENDPOINT, to: ENDPOINT, type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), label: z.string().max(60).optional(), tag: z.string().max(40).optional() }),
+  z.object({ op: z.literal('set_edge'), id: z.string().min(1).max(300), label: z.string().max(60).optional(), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), from: ENDPOINT.optional().describe('re-point the line: new source end'), to: ENDPOINT.optional().describe('re-point the line: new target end') }),
   z.object({ op: z.literal('remove_edge'), id: z.string().min(1).max(300) }),
   z.object({ op: z.literal('reflow'), tag: z.string().min(1).max(40), layout: z.enum(['column', 'row']).optional().describe('default column: restack the group in reading order with real sizes (use after set_text changes heights)') }),
   z.object({ op: z.literal('follow'), group_tag: z.string().min(1).max(40).describe('the group that should follow (e.g. a status panel)'), target_tag: z.string().min(1).max(40).describe('whenever a new item with this tag lands, the group auto-moves beside it and the anchor line re-points'), side: z.enum(['right', 'left', 'above', 'below']).optional(), label: z.string().max(60).optional() }),
@@ -499,8 +521,8 @@ export function makeRelateOnBoardAlias({ projectId, sharedRoot, ctx }) {
 obvious from where files live. (Alias of edit_board add_edge.)`,
     {
       type: z.enum(BINDING_TYPE_IDS),
-      from: z.string().min(1).max(300),
-      to: z.string().min(1).max(300),
+      from: ENDPOINT,
+      to: ENDPOINT,
       label: z.string().max(60).optional(),
       material: z.enum(BINDING_MATERIALS).optional(),
     },

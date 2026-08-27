@@ -164,12 +164,17 @@ describe('edit_board（吞四件 + 新能力）', () => {
 });
 
 describe('08-25 二批：gap 单位收口 + chalk_edit + 挪动如实报', () => {
-  it('gap 上限 8 格（40 格=960px 的灾难案）：9 被 schema 拒、8 放行', async () => {
+  it('gap 灾难防线仍在（40 格=960px 案）：解析后的 gap 永不超 8 格', async () => {
+    // 08-27 语义改：>8 不再整单拒收，按像素收编（见 schema 垫片那组用例）。
+    // 这条测试的真意图 —— 巨大 gap 不可能落到板上 —— 换个断言继续钉着。
     const { z } = await import('zod');
     const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
     const parse = (gap) => z.object(t.inputSchema).safeParse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap } }] });
-    expect(parse(9).success).toBe(false);
-    expect(parse(8).success).toBe(true);
+    for (const g of [8, 9, 40, 960, 99999]) {
+      const p = parse(g);
+      expect(p.success, `gap:${g} 该放行`).toBe(true);
+      expect(p.data.ops[0].to.gap, `gap:${g} 解析后越界`).toBeLessThanOrEqual(8);
+    }
   });
 
   it('move/move_group 结果报落点（Applied 1/1 什么都不说的病）', async () => {
@@ -283,5 +288,71 @@ describe('用户座位不可撼动（08-27 审计修：move/move_group 补上教
     expect(board.objects['assets/g1.png'].x).toBe(1240);   // 10 格 × 24px
     expect(board.objects['assets/g2.png'].x).toBe(1000);   // 用户座原地
     expect(board.objects['assets/g2.png'].seat).toBe('user');
+  });
+});
+
+/**
+ * 单位/方言垫片（08-27 转录对账案）。真会话里 edit_board 占全家族 -32602 六成，
+ * 三族错误：gap 填像素（gap:40）、dx 填像素（dx:-11064）、弱模型给端点裹 {$text} 壳
+ * 且读不懂 zod 报文原样重试到死。垫片都在 **schema 层**（z.preprocess），直接调
+ * handler 测不到 —— 这里按 SDK 的路径走一遍 z.object(inputSchema).parse。
+ */
+describe('schema 垫片：像素收编 + $text 剥壳', () => {
+  let parse; let editT;
+  beforeAll(async () => {
+    const { z } = await import('zod');
+    editT = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
+    parse = (args) => z.object(editT.inputSchema).parse(args);
+  });
+
+  it('⭐ gap:40 是像素思维（真会话头号错误）：换算成格放行，不整单拒收', () => {
+    const p = parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: 40 } }] });
+    expect(p.ops[0].to.gap).toBeCloseTo(40 / 24, 5);
+    // 巨大的像素值钳到上限 8 格；合法格数原样过
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: 300 } }] }).ops[0].to.gap).toBe(8);
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: 3 } }] }).ops[0].to.gap).toBe(3);
+    // 负数照旧拒 —— 方向由 side 表达，负 gap 没有合法意图
+    expect(() => parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: -2 } }] })).toThrow();
+  });
+
+  it('⭐ dx:-11064 是像素位移（真会话案）：换算成格，端到端落点就是意图的像素数', async () => {
+    const p = parse({ ops: [{ op: 'move', id: 'x', to: { dx: -11064, dy: 0 } }] });
+    expect(p.ops[0].to.dx).toBe(-11064 / 24);   // -461 格，×24 还原回 -11064px
+    await patchBoard(pid, { objects: { 'assets/远块.png': { x: 30000, y: 30000, w: 100, h: 80, seat: 'agent' } } });
+    const r = await editT.handler(parse({ ops: [{ op: 'move', id: 'assets/远块.png', to: { dx: -11064, dy: 0 } }] }));
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    expect(board.objects['assets/远块.png'].x).toBe(30000 - 11064);
+    // 合法格数不动；换算后仍超 ±2000 格的钳到边界
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { dx: -5, dy: 1999 } }] }).ops[0].to).toEqual({ dx: -5, dy: 1999 });
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { dx: -99999999, dy: 0 } }] }).ops[0].to.dx).toBe(-2000);
+  });
+
+  it('⭐ add_edge 端点 {$text:"…"} 剥壳（弱模型方言，真会话重试到死案）：线真的画上', async () => {
+    const p = parse({ ops: [{ op: 'add_edge', from: 'a', to: { $text: 'b' }, type: 'link' }] });
+    expect(p.ops[0].to).toBe('b');
+    await patchBoard(pid, { objects: {
+      'assets/端a.png': { x: 40000, y: 40000, w: 100, h: 80 },
+      'assets/端b.png': { x: 40200, y: 40000, w: 100, h: 80 },
+    } });
+    const r = await editT.handler(parse({ ops: [{ op: 'add_edge', from: 'assets/端a.png', to: { $text: 'assets/端b.png' }, type: 'link', label: '剥壳线' }] }));
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    const edge = Object.values(board.bindings).find(b => b.label === '剥壳线');
+    expect(edge.to).toBe('assets/端b.png');
+    // set_edge 的端点同享；非 $text 单键对象照旧拒（剥壳只认这一种方言，不是松类型）
+    expect(parse({ ops: [{ op: 'set_edge', id: 'e', to: { $text: 'c' } }] }).ops[0].to).toBe('c');
+    expect(() => parse({ ops: [{ op: 'add_edge', from: 'a', to: { ref: 'b', side: 'right' } }] })).toThrow();
+    expect(() => parse({ ops: [{ op: 'add_edge', from: 'a', to: { $text: 'b', extra: 1 } }] })).toThrow();
+  });
+
+  it('垫片在给模型看的 JSON schema 里隐形：字段仍是带上下限的 number/string', async () => {
+    const { z } = await import('zod');
+    const js = z.toJSONSchema(z.object(editT.inputSchema), { io: 'input' });
+    const moveBranch = js.properties.ops.items.oneOf.find(b => b.properties?.op?.const === 'move');
+    const rel = moveBranch.properties.to.anyOf.find(b => b.properties?.gap);
+    expect(rel.properties.gap).toMatchObject({ type: 'number', minimum: 0, maximum: 8 });
+    const edgeBranch = js.properties.ops.items.oneOf.find(b => b.properties?.op?.const === 'add_edge');
+    expect(edgeBranch.properties.to).toMatchObject({ type: 'string', minLength: 1, maxLength: 300 });
   });
 });
