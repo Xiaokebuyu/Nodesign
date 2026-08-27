@@ -424,6 +424,21 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const nodeKeys = new Set(nodes.map(n => n.key));
     const innerEdges = edgesIn.filter(e => nodeKeys.has(e.from) && nodeKeys.has(e.to) && e.from !== e.to);
     const tpl = resolveTemplate(nodes.filter(n => n !== titleNode), { template: args.layout || 'auto', edges: innerEdges });
+    // 节点级拉力（08-27 产物锚 v2）：节点 ↔ 板上已有产物的边，给布局一个方向 ——
+    // 连着谁就排向谁那一侧（flow 层内排序 / mindmap 环位都吃它）
+    const pull = new Map();
+    for (const e of edgesIn) {
+      for (const [self, other] of [[e.from, e.to], [e.to, e.from]]) {
+        if (!nodeKeys.has(self) || nodeKeys.has(other)) continue;
+        const cid = normalizeCanvasId(other);
+        const ext = cid ? board.objects?.[cid] : null;
+        if (!ext || !Number.isFinite(ext.x)) continue;
+        const s = estimateSizeOn(board, cid, ext);
+        const c = { x: ext.x + s.w / 2, y: ext.y + s.h / 2 };
+        const cur = pull.get(self);
+        pull.set(self, cur ? { x: (cur.x + c.x) / 2, y: (cur.y + c.y) / 2 } : c);
+      }
+    }
     if (tpl === 'free') {
       // free 的合同：每个节点都要 at。缺 at 静默排成一列是 ldx 那晚两次重画的病根 —— 明拒，报名单。
       const missing = nodes.filter(n => n !== titleNode && !n.at).map(n => n.key);
@@ -432,14 +447,17 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       }
     }
     const layoutInput = titleNode && tpl === 'mindmap' ? nodes.filter(n => n !== titleNode) : nodes;
-    const pos = layoutNodes(layoutInput, { template: tpl, cols: args.cols, edges: innerEdges });
-    if (titleNode && !pos.has('__title')) {
-      const bb = bboxOf([...pos.entries()].map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
-      pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
-    } else if (titleNode && tpl === 'free' && !titleNode.at) {
-      const bb = bboxOf([...pos.entries()].filter(([k]) => k !== '__title').map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
-      pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
-    }
+    let pos = layoutNodes(layoutInput, { template: tpl, cols: args.cols, edges: innerEdges, pull });
+    const seatTitle = () => {
+      if (titleNode && !pos.has('__title')) {
+        const bb = bboxOf([...pos.entries()].map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
+        pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
+      } else if (titleNode && tpl === 'free' && !titleNode.at) {
+        const bb = bboxOf([...pos.entries()].filter(([k]) => k !== '__title').map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
+        pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
+      }
+    };
+    seatTitle();
     const rectOfNode = (key) => { const n = nodes.find(x => x.key === key); const p = pos.get(key); return n && p ? { x: p.x, y: p.y, w: n.w, h: n.h } : null; };
 
     // ── 形状（局部像素） ──
@@ -567,6 +585,12 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       screen: fit.screen ? fit : null,
     });
     const ox = placed.x - local.x + 12; const oy = placed.y - local.y + 12;
+    // mindmap 的方位重排要**真实图心**（落位前算不出，单锚时质心还会退化）——
+    // 环形 bbox 不随槽位变，落位定了再按世界方位二次布局，落位本身不漂
+    if (tpl === 'mindmap' && pull.size) {
+      pos = layoutNodes(layoutInput, { template: 'mindmap', cols: args.cols, edges: innerEdges, pull, pullOrigin: { x: ox, y: oy } });
+      seatTitle();
+    }
 
     // ── 落盘 ──
     const objects = {};

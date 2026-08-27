@@ -270,3 +270,31 @@ describe('产物锚（08-27）：图连着产物就落在产物旁边', () => {
     expect(r.content[0].text).not.toMatch(/自动落在它们旁边/);
   });
 });
+
+describe('节点级拉力·集成向（08-27 v2）：mindmap 环位朝着真实产物', () => {
+  it('⭐ 立绘在图的北边 → 评它的叶子占环的上侧（世界方位，单锚不退化）', async () => {
+    // 先落一张图（产物锚会把 sketch 落在立绘旁），立绘在 (20000, 20000)
+    await patchBoard(pid, { objects: { 'assets/立绘北.png': { x: 20000, y: 20000, w: 200, h: 176 } } });
+    const r = await call({
+      layout: 'mindmap',
+      nodes: [
+        { id: 'hub', text: '角色小传' },
+        { id: 'x1', text: '性格' }, { id: 'x2', text: '经历' }, { id: 'face', text: '外貌（见立绘）' },
+      ],
+      edges: [
+        { from: 'hub', to: 'x1' }, { from: 'hub', to: 'x2' }, { from: 'hub', to: 'face' },
+        { from: 'face', to: 'assets/立绘北.png', type: 'annotates' },
+      ],
+      tag: '小传',
+    });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    const of = (lid) => Object.values(board.objects).find((e) => e.data?.lid === lid);
+    const hub = of('hub'); const face = of('face');
+    const art = board.objects['assets/立绘北.png'];
+    // face 的中心相对 hub 中心的方向，和 立绘相对 hub 的方向同侧（内积为正）
+    const v1 = { x: (face.x + face.w / 2) - (hub.x + hub.w / 2), y: (face.y + face.h / 2) - (hub.y + hub.h / 2) };
+    const v2 = { x: (art.x + art.w / 2) - (hub.x + hub.w / 2), y: (art.y + art.h / 2) - (hub.y + hub.h / 2) };
+    expect(v1.x * v2.x + v1.y * v2.y).toBeGreaterThan(0);
+  });
+});

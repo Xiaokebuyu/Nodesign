@@ -167,7 +167,7 @@ export function resolveTemplate(nodes, { template = 'auto', edges = [] } = {}) {
 
 /** 分层流式（Sugiyama 简版）：层号=最长入路径（模型画的图可能带环，深度截断兜住），
  *  层内按父级平均横位排（减少交叉），每层居中。线因此顺着重力方向读。 */
-function layoutFlow(nodes, edges) {
+function layoutFlow(nodes, edges, pull = new Map()) {
   const pos = new Map();
   const idx = new Map(nodes.map((n, i) => [n.key, i]));
   const level = new Map();
@@ -192,7 +192,18 @@ function layoutFlow(nodes, edges) {
       const ps = edges.filter(e => e.to === k && centerX.has(e.from)).map(e => centerX.get(e.from));
       return ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : idx.get(k) * 10;
     };
-    layer.sort((a, b) => (parentAvg(a.key) - parentAvg(b.key)) || (idx.get(a.key) - idx.get(b.key)));
+    // 节点级拉力（08-27 产物锚 v2）：连着外部产物的节点排向产物那一侧。
+    // 外部锚是世界坐标、parentAvg 是局部坐标，不同尺度 —— 各自归一到 [0,1] 再比。
+    const norm = (vals) => {
+      const lo = Math.min(...vals); const hi = Math.max(...vals);
+      return (v) => (hi > lo ? (v - lo) / (hi - lo) : 0.5);
+    };
+    const pulled = layer.filter((n) => pull.has(n.key));
+    const nExt = pulled.length ? norm(pulled.map((n) => pull.get(n.key).x)) : null;
+    const paVals = layer.filter((n) => !pull.has(n.key)).map((n) => parentAvg(n.key));
+    const nPa = paVals.length ? norm(paVals) : null;
+    const score = (n) => (pull.has(n.key) ? nExt(pull.get(n.key).x) : (nPa ? nPa(parentAvg(n.key)) : 0.5));
+    layer.sort((a, b) => (score(a) - score(b)) || (idx.get(a.key) - idx.get(b.key)));
     const totalW = layer.reduce((s, n) => s + n.w, 0) + (layer.length - 1) * (GAP * 2 + 8);
     let x = Math.round(-totalW / 2);
     let rowH = 0;
@@ -206,13 +217,13 @@ function layoutFlow(nodes, edges) {
   return pos;
 }
 
-export function layoutNodes(nodes, { template = 'auto', cols = null, edges = [] } = {}) {
+export function layoutNodes(nodes, { template = 'auto', cols = null, edges = [], pull = new Map(), pullOrigin = null } = {}) {
   const pos = new Map();
   if (!nodes.length) return pos;
   const keys = new Set(nodes.map(n => n.key));
   const inner = edges.filter(e => keys.has(e.from) && keys.has(e.to) && e.from !== e.to);
   const tpl = resolveTemplate(nodes, { template, edges });
-  if (tpl === 'flow') return layoutFlow(nodes, inner);
+  if (tpl === 'flow') return layoutFlow(nodes, inner, pull);
 
   if (tpl === 'free') {
     let bottom = 0;
@@ -257,7 +268,39 @@ export function layoutNodes(nodes, { template = 'auto', cols = null, edges = [] 
       const byKey = new Map(nodes.map(n => [n.key, n]));
       order = [hub, ...bfs.map(k => byKey.get(k)), ...nodes.filter(n => !seen.has(n.key))];
     }
-    const [center, ...rest] = order;
+    let [center, ...rest] = order;
+    // 节点级拉力（08-27 产物锚 v2）：连着外部产物的叶子占朝着那个产物的环位 ——
+    // 立绘在上方，评它的节点就在环的上侧，线不再绕半圈。质心=全部外部锚的平均
+    // （图会落在它们旁边，质心是图心的够用近似）。
+    // 方位原点：pullOrigin = 图心的世界坐标（落位后由调用方二次布局传入 ——
+    // 环形 bbox 不随槽位变，二次布局不动落位）。没有它就退回锚质心；
+    // 锚全挤在一点时质心=锚本身、方向向量退化 → 放弃重排（bfs 序保底）。
+    let origin = pullOrigin;
+    if (!origin) {
+      const pts = [...pull.values()];
+      const cx0 = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+      const cy0 = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+      const spread = Math.max(...pts.map((p) => Math.hypot(p.x - cx0, p.y - cy0)));
+      origin = spread > 1 ? { x: cx0, y: cy0 } : null;
+    }
+    if (origin && pull.size && rest.some((n) => pull.has(n.key))) {
+      const slotAng = (i) => (i / rest.length) * Math.PI * 2 - Math.PI / 2;
+      const free = new Set(rest.map((_, i) => i));
+      const assigned = new Array(rest.length).fill(null);
+      const angDist = (a, b) => { const d = Math.abs(a - b) % (Math.PI * 2); return Math.min(d, Math.PI * 2 - d); };
+      for (const n of rest) {
+        if (!pull.has(n.key)) continue;
+        const p = pull.get(n.key);
+        const want = Math.atan2(p.y - origin.y, p.x - origin.x);
+        let best = null;
+        for (const i of free) if (best === null || angDist(slotAng(i), want) < angDist(slotAng(best), want)) best = i;
+        assigned[best] = n; free.delete(best);
+      }
+      const others = rest.filter((n) => !pull.has(n.key));
+      let j = 0;
+      for (const i of [...free].sort((a, b) => a - b)) { assigned[i] = others[j++]; }
+      rest = assigned;
+    }
     const cx = 0; const cy = 0;
     pos.set(center.key, { x: cx - center.w / 2, y: cy - center.h / 2 });
     if (!rest.length) return pos;
