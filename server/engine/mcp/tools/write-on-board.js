@@ -386,6 +386,12 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       ];
       if (box.h > SKETCH_FIT.h * 0.6) lines.push('⚠ It is tall — next time split or shorten.');
       if (learnedDir) lines.push(`Layout followed the user's habit: they have been arranging this thread ${learnedDir}-ward, so placement leaned that way.`);
+      // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话
+      {
+        const rolledInto = [args.tag, board.objects?.[parentId]?.tag, board.objects?.[anchorId]?.tag]
+          .find(t => t && b2.rolls?.[t]);
+        if (rolledInto) lines.push(`⚠ #${rolledInto} 这条线收着卷（用户看不见里面）——这条也进了卷。要让用户看见，先 edit_board unroll{tag:"${rolledInto}"}。`);
+      }
       if (lanePlan) {
         lines.push(`Opened lane #${args.tag}${laneFrom !== 'fresh' ? ` branching from ${laneFrom.id}` : ''}`
           + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists all lanes under 版图.`);

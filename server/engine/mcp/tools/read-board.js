@@ -98,6 +98,9 @@ on the minimap and listed with what is inside it.`,
       const excerpts = await chalkExcerpts(getSharedDir(projectId), (byLayer.get(want) || []).map(it => it.id));
       const items = (byLayer.get(want) || [])
         .filter(({ entry }) => !tag || entry.tag === tag)
+        // 收卷（2026-08-27 收纳器）：收着的组不逐件列 —— 版图里压成一行，这是 agent
+        // 上下文的收纳（跟画布收纳同一刀）。显式 tag= 点名看某组时照常展开列。
+        .filter(({ entry }) => tag || !entry.tag || !board.rolls?.[entry.tag])
         // 板书条目但文件已经没了 = 幽灵座位，别列给 agent（删文件那条路会清座位，这是兜底）
         .filter(({ id }) => !id.startsWith(`${CHALK_DIR}/`) || excerpts.has(id))
         .sort((a, b) => (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
@@ -195,6 +198,13 @@ on the minimap and listed with what is inside it.`,
         if (laneList.length) {
           lines.push('', '版图（线 = 同 tag 纵列；{tag,chain:true} 续线，open_lane 开新线）：');
           for (const l of laneList) {
+            // 收着的线一行带过：细节不进上下文（要看就 read_board tag= 点名，或 unroll）
+            const roll = board.rolls?.[l.tag];
+            if (roll) {
+              lines.push(`  #${l.tag}：已收卷${roll.label ? `（「${roll.label}」）` : ''}，${l.count} 件收在卷里`
+                + ` —— 座位和文件都在（Read 照常），edit_board unroll 展开；别往收着的线里接新话`);
+              continue;
+            }
             // 走向（08-27 落位直觉可见化）：用户把这条线的板书亲手掰过方向就报出来
             // —— 事前感知，不然 agent 只能靠视口猜用户想要的版面方向
             const dir = inferFlowDir(board, { tag: l.tag });

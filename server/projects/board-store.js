@@ -28,7 +28,7 @@ export {
 export { TEXT_FONTS } from './board-sanitize.js';
 import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES } from './board-limits.js';
 import {
-  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane,
+  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane, sanitizeRoll,
   isSafeCanvasId,
 } from './board-sanitize.js';
 
@@ -145,6 +145,20 @@ export function patchBoard(pid, patch) {
       }
       if (!Object.keys(board.lanes).length) delete board.lanes;
     }
+    // 卷（2026-08-27 收纳器）：合并语义同 lanes；null = 展开（删条目）。
+    // 只动状态位不动成员座位 —— 展开即归位靠的就是这里什么都不搬。
+    if (patch?.rolls && typeof patch.rolls === 'object') {
+      board.rolls = board.rolls || {};
+      for (const [name, r] of Object.entries(patch.rolls)) {
+        const tag = sanitizeTag(name);
+        if (!tag) continue;
+        if (r === null) { delete board.rolls[tag]; continue; }
+        const s = sanitizeRoll(board.rolls[tag] ? { ...board.rolls[tag], ...r } : r);
+        if (!s) continue;
+        if (board.rolls[tag] || Object.keys(board.rolls).length < MAX_LANES) board.rolls[tag] = s;
+      }
+      if (!Object.keys(board.rolls).length) delete board.rolls;
+    }
     // 主角覆盖：null = 撤销（回到 pickHero 自动推断），字符串 = 显式立主角
     if (patch?.hero !== undefined) {
       if (patch.hero === null) delete board.hero;
@@ -238,6 +252,8 @@ export function removeByTag(pid, tag) {
       if (b.tag === t || gone.has(b.from) || gone.has(b.to)) { delete board.bindings[id]; removed += 1; }
     }
     if (board.hero && gone.has(board.hero)) delete board.hero;
+    // 擦组连卷的状态位一起清（收着的组被 erase_group 后不该留一张空卷卡）
+    if (board.rolls?.[t]) { delete board.rolls[t]; if (!Object.keys(board.rolls).length) delete board.rolls; }
     await writeBoard(pid, board);
     return { board, removed };
   });

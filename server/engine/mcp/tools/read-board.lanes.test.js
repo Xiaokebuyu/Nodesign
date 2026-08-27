@@ -68,3 +68,23 @@ describe('版图走向（08-27 落位直觉可见化）', () => {
     expect(text).not.toMatch(/#主线：.*走向/);
   });
 });
+
+describe('收卷（2026-08-27 收纳器）', () => {
+  it('⭐ 收着的线：版图一行带过，成员不逐件列；显式 tag= 点名仍展开', async () => {
+    await patchBoard(pid, {
+      objects: {
+        'assets/旧章图a.png': { x: 5000, y: 5000, w: 200, h: 160, tag: '旧章' },
+        'assets/旧章图b.png': { x: 5000, y: 5200, w: 200, h: 160, tag: '旧章' },
+      },
+      rolls: { '旧章': { by: 'agent', label: '第一章存档' } },
+    });
+    const r = await call();
+    const text = r.content[0].text;
+    expect(text).toMatch(/#旧章：已收卷（「第一章存档」）/);
+    expect(text).toContain('unroll');
+    expect(text).not.toContain('旧章图a.png');   // 逐件列表被收敛
+    // 点名看这组：照常展开列（agent 主动要看就给看）
+    const r2 = await call({ tag: '旧章' });
+    expect(r2.content[0].text).toContain('旧章图a.png');
+  });
+});

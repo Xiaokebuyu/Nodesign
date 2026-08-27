@@ -273,6 +273,19 @@ export function sanitizeLane(l) {
   };
 }
 
+/**
+ * 卷（2026-08-27 收纳器）：{ at, by, label? }。有条目 = 这个 tag 收着。
+ * 只是视觉收纳的状态位 —— 成员对象的座位原样留在 objects 里（展开即归位），
+ * 落位引擎照旧把它们当障碍。
+ */
+export function sanitizeRoll(r) {
+  if (!r || typeof r !== 'object') return null;
+  const at = typeof r.at === 'string' && r.at.length <= 40 ? r.at : new Date().toISOString();
+  const by = typeof r.by === 'string' && r.by.length <= 40 ? r.by : 'user';
+  const label = typeof r.label === 'string' && r.label.trim() ? r.label.trim().slice(0, 60) : null;
+  return { at, by, ...(label ? { label } : {}) };
+}
+
 export function sanitizeBoard(raw) {
   const size = sanitizeSize(raw?.size);
   const objects = {};
@@ -311,6 +324,15 @@ export function sanitizeBoard(raw) {
     const s = sanitizeLane(l);
     if (s) { lanes[tag] = s; lCount += 1; }
   }
-  return { size, zones, objects, bindings, ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}) };
+  const rolls = {};
+  let rCount = 0;
+  for (const [name, r] of Object.entries(raw?.rolls && typeof raw.rolls === 'object' ? raw.rolls : {})) {
+    if (rCount >= MAX_LANES) break;   // 卷跟线同量级：一线一卷
+    const tag = sanitizeTag(name);
+    if (!tag) continue;
+    const s = sanitizeRoll(r);
+    if (s) { rolls[tag] = s; rCount += 1; }
+  }
+  return { size, zones, objects, bindings, ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}) };
 }
 

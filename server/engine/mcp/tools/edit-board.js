@@ -81,6 +81,8 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('unfollow'), group_tag: z.string().min(1).max(40) }),
   z.object({ op: z.literal('commit'), tag: z.string().max(40).optional().describe('make staging solid; omit tag = everything staging') }),
   z.object({ op: z.literal('erase_group'), tag: z.string().min(1).max(40).describe('delete the whole tagged group (notes/shapes/lines; artifact cards only lose the tag)') }),
+  z.object({ op: z.literal('roll'), tag: z.string().min(1).max(40).describe('STOW a finished group: hides it behind a compact scroll card, everything kept in place (seats reserved, files intact, one click to unroll). For a scene/act/chapter that is DONE — use erase_group only to destroy'), label: z.string().max(60).optional().describe('scroll card title (default: the tag)') }),
+  z.object({ op: z.literal('unroll'), tag: z.string().min(1).max(40).describe('expand a rolled group back — everything returns to its original seat') }),
   z.object({ op: z.literal('feature'), id: z.string().min(1).max(300).describe('make this the hero of the desktop') }),
   z.object({ op: z.literal('unfeature') }),
   z.object({ op: z.literal('chalk_edit'), on: z.boolean().describe('true = turn ON the user-side 改板书 toggle (notes become freely draggable/editable for the user); false = back to guarded mode') }),
@@ -106,7 +108,10 @@ ops (run in order; a failing op is reported, the rest still apply):
  text edits changed heights) · follow{group_tag,target_tag,side?} (standing rule: whenever a
  new item with target_tag lands, the group auto-moves beside it — a status panel that tracks
  the latest chapter needs this ONCE, not per turn) · unfollow{group_tag} ·
- commit{tag?} (staging → solid) · erase_group{tag} · feature{id} / unfeature (hero) ·
+ commit{tag?} (staging → solid) · erase_group{tag} ·
+ roll{tag,label?} (STOW a finished scene/act/chapter behind one compact scroll card —
+ seats/files/lines all kept, user or you can unroll anytime; the tidy way to end an act) ·
+ unroll{tag} · feature{id} / unfeature (hero) ·
  chalk_edit{on} (flip the user's 改板书 toggle — turn it ON when the session leans on
  board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming).
 Moves avoid collisions (nearest free cell, user-dragged seats are never displaced).
@@ -150,6 +155,7 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
     const board = await readBoard(projectId);
     const known = new Set(Object.keys(board.zones || {}));
     const objects = {}; const bindings = {};      // 增量 patch
+    const rolls = {};                              // 卷（收纳器）：tag → {at,by,label}|null
     const live = { ...board.objects };             // 调用内"当前态"
     const liveBindings = { ...board.bindings };
     const local = new Map();                       // add_node 本地句柄 → canvas id
@@ -457,6 +463,23 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           erased += removed; ok += 1;
           for (const id of Object.keys(live)) if (live[id]?.tag === o.tag && live[id]?.kind) delete live[id];
           report.push(`· erase_group #${o.tag}：擦掉 ${removed} 件`);
+        } else if (o.op === 'roll') {
+          // 收卷（2026-08-27 收纳器）：只立状态位，成员座位一件不动 —— 前端把这组
+          // 藏进一张卷卡，展开即归位。视觉/渲染/read_board 三头减负，地皮照旧占着
+          //（落位引擎仍把它们当障碍，所以永远不会有新东西压进卷里）。
+          const members = Object.entries(live).filter(([, e]) => e?.tag === o.tag && Number.isFinite(e?.x));
+          if (!members.length) { fail(`没有 #${o.tag} 的东西，没得收`); continue; }
+          if (board.rolls?.[o.tag] && !rolls[o.tag]) {
+            report.push(`· #${i + 1} roll：#${o.tag} 本来就收着（${members.length} 件）`); ok += 1; continue;
+          }
+          rolls[o.tag] = { at: new Date().toISOString(), by, ...(o.label ? { label: o.label } : {}) };
+          report.push(`· #${i + 1} roll：#${o.tag} 收进卷里（${members.length} 件，座位和文件都在，卷卡单击可展开）`);
+          ok += 1;
+        } else if (o.op === 'unroll') {
+          if (!board.rolls?.[o.tag] && rolls[o.tag] === undefined) { fail(`#${o.tag} 没收着`); continue; }
+          rolls[o.tag] = null;
+          report.push(`· #${i + 1} unroll：#${o.tag} 展开，全部归位`);
+          ok += 1;
         } else if (o.op === 'feature') {
           const id = rid(o.id) || normalizeCanvasId(o.id);
           if (!id) { fail(`${o.id} 不合法`); continue; }
@@ -475,8 +498,12 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
       } catch (e) { fail(String(e?.message || e).slice(0, 120)); }
     }
     if (!ok) return err(`没有一条操作成功：\n${report.join('\n')}`);
-    if (Object.keys(objects).length || Object.keys(bindings).length || heroPatch !== undefined) {
-      await patchBoard(projectId, { objects, bindings, ...(heroPatch !== undefined ? { hero: heroPatch } : {}) });
+    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || heroPatch !== undefined) {
+      await patchBoard(projectId, {
+        objects, bindings,
+        ...(Object.keys(rolls).length ? { rolls } : {}),
+        ...(heroPatch !== undefined ? { hero: heroPatch } : {}),
+      });
     }
     // 软删进 .nd/trash/（08-25：删掉的板书要捞得回来，别裸 unlink）
     for (const abs of chalkUnlinks) await trashChalkFile(sharedRoot, abs);

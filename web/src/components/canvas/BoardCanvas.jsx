@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, ChevronsUpDown, Focus, Group, Check, Download, Eraser, MessageSquarePlus } from 'lucide-react';
+import { LogOut, ChevronsUpDown, Focus, Group, Check, Download, Eraser, MessageSquarePlus, Archive } from 'lucide-react';
+import RollLayer, { useRollActions, ArchiveChip } from './RollLayer.jsx';
 import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
@@ -155,6 +156,7 @@ export default function BoardCanvas({
   const {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
+    rolls, setRolls,
     guideText, fileCount,
     reload, scheduleSave, patchLayout,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,
@@ -332,8 +334,13 @@ export default function BoardCanvas({
   const objects = useMemo(
     () => deriveBoardObjects({ tasks, artifacts, layout, browse })
       .filter(o => passesFilter(o, filter))
-      .filter(o => showArchive || !isArchivePath(o.id)),
-    [tasks, artifacts, layout, browse, filter, showArchive]);
+      .filter(o => showArchive || !isArchivePath(o.id))
+      // 收卷（2026-08-27 收纳器，件在 RollLayer.jsx）：收着的组渲染层不画（卷卡替它
+      // 站着）。座位仍在 layout 里 —— 服务端落位照旧把它们当障碍。
+      .filter(o => { const t = o.tag || o.pos?.tag; return !t || !rolls[t]; }),
+    [tasks, artifacts, layout, browse, filter, showArchive, rolls]);
+
+  const { rollGroup, unrollGroup } = useRollActions(projectId, setRolls);
 
   // 顶带摘要（08-24 记忆体系改版：记忆/风格卡退役 —— 记忆住 记忆/、风格并进
   // 根 CLAUDE.md，都是画布上的普通文件；这里只剩项目档案与文件两张）
@@ -1588,10 +1595,11 @@ export default function BoardCanvas({
       ...(anyStaging ? [{ id: 'grp-commit', icon: Check, label: '落定这组草稿', onClick: () => commitGroup(tag) }] : []),
       { id: 'grp-export', icon: Download, label: '导出这组（SVG）', onClick: () => exportGraph?.('svg', tag) },
       { id: 'grp-export-zip', icon: Download, label: '导出这组 + 产物（zip）', onClick: () => exportGraph?.('zip', tag) },
+      { id: 'grp-roll', icon: Archive, label: `收卷整组 #${tag}`, hint: '收进一张卷卡，单击展开', onClick: () => rollGroup(tag) },
       { id: 'grp-erase', icon: Eraser, label: `擦掉整组 #${tag}`, danger: true, onClick: () => eraseGroup(tag) },
     ];
     setMenu({ x: e.clientX, y: e.clientY, items });
-  }, [selectGroup, commitGroup, eraseGroup, exportGraph]);
+  }, [selectGroup, commitGroup, eraseGroup, exportGraph, rollGroup]);
 
   const boardToolGroups = useMemo(() => buildBoardToolGroups({
     tool, setTool, drawMode, setDrawMode, scale,
@@ -1826,6 +1834,8 @@ export default function BoardCanvas({
 
           {/* 关系线（世界坐标，铺在物件之下）*/}
           <TagHullLayer positioned={positioned} onGrab={onTagGrab} onMenu={openTagMenu} />
+          {/* 卷卡（收纳器）：收着的组在包络左上角留一张卡，单击展开归位 */}
+          <RollLayer rolls={rolls} layout={layout} onUnroll={unrollGroup} />
           {chalkCards.map(c => <ChalkLiveInk key={c.blockId} card={c} spot={liveChalkSpotFor(c.blockId)} />)}
           <BindingLayer
             bindings={bindings}
@@ -2000,30 +2010,8 @@ export default function BoardCanvas({
             选中单件在旁边浮一条板书样按钮条。用户拍板撤掉 —— 单击的语义改成
             **直接开标注**（最常用的动作），其余动作仍在 hover 工具条上。 */}
 
-        {/* 档案钮（屏幕空间，右上角；2026-08-27 用户拍板）：根 CLAUDE.md 和
-            记忆/ 是 agent 的后台档案，默认不上画布 —— 想看的时候点这里显形。
-            板书样文字钮（nd:controls 的视觉语言），不是图标工具钮。 */}
-        {!deckOpen && !winDir && (
-          <button
-            type="button" data-board-action
-            title={showArchive
-              ? '收起项目档案（根 CLAUDE.md 与 记忆/）'
-              : '显示项目档案（根 CLAUDE.md 与 记忆/ —— agent 的项目档案和长期记忆）'}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={toggleArchive}
-            style={{
-              position: 'absolute', top: 12, right: 12, zIndex: 320,
-              fontFamily: TEXT_FONT_CSS.kai, fontSize: 13, lineHeight: 1.4, cursor: 'pointer',
-              padding: '3px 10px', borderRadius: RADIUS.md,
-              border: `1px solid ${alpha(PAPER.ink, showArchive ? 0.55 : 0.28)}`,
-              background: showArchive ? PAPER.paper : 'transparent',
-              color: PAPER.ink, opacity: showArchive ? 1 : 0.72,
-              transform: 'rotate(-0.4deg)',
-              boxShadow: showArchive ? PAPER_SHADOW.near : 'none',
-              whiteSpace: 'nowrap',
-            }}
-          >档案</button>
-        )}
+        {/* 档案钮（屏幕空间，右上角）：件在 RollLayer.jsx（画布收纳同族） */}
+        {!deckOpen && !winDir && <ArchiveChip showArchive={showArchive} onToggle={toggleArchive} />}
 
         {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
             全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。 */}

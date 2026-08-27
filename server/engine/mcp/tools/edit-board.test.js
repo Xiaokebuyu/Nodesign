@@ -356,3 +356,49 @@ describe('schema 垫片：像素收编 + $text 剥壳', () => {
     expect(edgeBranch.properties.to).toMatchObject({ type: 'string', minLength: 1, maxLength: 300 });
   });
 });
+
+/**
+ * 收纳器（2026-08-27）：roll 只立状态位，成员座位一件不动 —— 展开即归位的根据。
+ */
+describe('roll / unroll（收纳器）', () => {
+  it('⭐ 收卷：rolls 立条目、座位原样、展开后条目消失', async () => {
+    await patchBoard(pid, { objects: {
+      'notes/板书/20260827-180000-第一幕a.md': { x: 50000, y: 50000, w: 300, h: 100, by: 'agent', tag: '第一幕' },
+      'notes/板书/20260827-180001-第一幕b.md': { x: 50000, y: 50200, w: 300, h: 100, by: 'agent', tag: '第一幕' },
+    } });
+    const r = await edit({ ops: [{ op: 'roll', tag: '第一幕', label: '开场' }] });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toMatch(/收进卷里（2 件/);
+    let board = await readBoard(pid);
+    expect(board.rolls['第一幕']).toMatchObject({ label: '开场' });
+    // 座位一动不动 —— 这是「展开即归位」和「落位不落错」共同的根据
+    expect(board.objects['notes/板书/20260827-180000-第一幕a.md'].x).toBe(50000);
+    expect(board.objects['notes/板书/20260827-180001-第一幕b.md'].y).toBe(50200);
+    // 再收一遍：幂等，如实报
+    const r2 = await edit({ ops: [{ op: 'roll', tag: '第一幕' }] });
+    expect(r2.content[0].text).toMatch(/本来就收着/);
+    const r3 = await edit({ ops: [{ op: 'unroll', tag: '第一幕' }] });
+    expect(r3.isError).toBeUndefined();
+    board = await readBoard(pid);
+    expect(board.rolls).toBeUndefined();
+    expect(board.objects['notes/板书/20260827-180000-第一幕a.md'].x).toBe(50000);
+  });
+
+  it('空组收不了；没收着的展不开', async () => {
+    const r = await edit({ ops: [{ op: 'roll', tag: '不存在的组' }] });
+    expect(r.isError).toBe(true);
+    const r2 = await edit({ ops: [{ op: 'unroll', tag: '第一幕' }] });
+    expect(r2.isError).toBe(true);
+    expect(r2.content[0].text).toMatch(/没收着/);
+  });
+
+  it('erase_group 连卷的状态位一起清（不留空卷卡）', async () => {
+    await patchBoard(pid, { objects: {
+      'notes/板书/20260827-181000-废幕.md': { x: 60000, y: 60000, w: 300, h: 100, by: 'agent', tag: '废幕' },
+    } });
+    await edit({ ops: [{ op: 'roll', tag: '废幕' }] });
+    expect((await readBoard(pid)).rolls?.['废幕']).toBeTruthy();
+    await edit({ ops: [{ op: 'erase_group', tag: '废幕' }] });
+    expect((await readBoard(pid)).rolls?.['废幕']).toBeUndefined();
+  });
+});
