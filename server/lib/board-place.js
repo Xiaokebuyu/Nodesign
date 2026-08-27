@@ -206,6 +206,32 @@ export function resolvePlacement({
 }
 
 /**
+ * 精灵身位（2026-08-27，清「findSpot 看不见精灵」的挂账）。
+ *
+ * 角色精灵在**客户端**贴着该角色最新一条板书摆（RoleSprites 的 findWorkSpot），
+ * 服务端永远不知道精灵的真实坐标（它跟着用户的相机走）。能知道的是：精灵一定
+ * 贴在「这个 rp- 作者最新写的那条」旁边。所以服务端落位时把每个角色的最新一条
+ * 板书当成一块**带身位的**障碍 —— 四周多让 pad，新东西就不会压在精灵脸上。
+ *
+ * 「最新」按 objects 的插入序（落盘就是写入序），不读时间字段 —— 不是每种
+ * 条目都有可比的时间戳。近似而非精确，代价只是那一圈多留 60px 空。
+ *
+ * @param {Array<{id,x,y,w,h}>} obstacles  已建好的障碍表（含 id）
+ * @param {object} objects   board.objects 原始表（要 by 字段）
+ */
+export function inflateSpriteSeats(obstacles, objects, pad = 60) {
+  const last = new Map();   // rp-author → 它最新一条的 id
+  for (const [id, e] of Object.entries(objects || {})) {
+    if (typeof e?.by === 'string' && e.by.startsWith('rp-')) last.set(e.by, id);
+  }
+  if (!last.size) return obstacles;
+  const ids = new Set(last.values());
+  return obstacles.map((o) => (ids.has(o.id)
+    ? { ...o, x: o.x - pad, y: o.y - pad, w: o.w + pad * 2, h: o.h + pad * 2 }
+    : o));
+}
+
+/**
  * 调用方的返回文案助手：把 resolution 翻译成一句人话（工具返回必须报
  * 请求/实际/resolution —— 08-25 三个静默陷阱之③「工具返回在撒谎」的解法
  * 就是让文案从真实 resolution 生成，不再手拼）。

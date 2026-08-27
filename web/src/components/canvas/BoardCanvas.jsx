@@ -36,6 +36,8 @@ import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
 import { zoneOfObjectId, resolveObjectId } from '../../lib/stage.js';
 import { onChrome, onObject } from '../../lib/board-hit.js';
+import ObjectActionBar from './ObjectActionBar.jsx';
+import { hitsAt, nextPick } from '../../lib/action-bar-place.js';
 import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../lib/text-fonts.js';
 import { splitNoteFaces, faceParts } from '../../lib/note-faces.js';
 import BindingLayer from './BindingLayer.jsx';
@@ -878,6 +880,20 @@ export default function BoardCanvas({
     positioned.filter(o => o.chalk && typeof o.text === 'string' && o.text.includes('```nd:controls')),
   ), [positioned]);
 
+  // 点选 + 叠堆下翻（2026-08-27 操作条重制）：真点击选点到的东西，再点同一处
+  // 循环下翻到底下那件。DOM 命中在指针捕获下会被重定向（08-25 板书武装案），
+  // 所以一律拿世界坐标做几何命中 —— 闲置板书、叠成一摞的产物都在这条路上。
+  const clickSelect = (domId, cx, cy) => {
+    const pt = camera.toWorld(cx, cy);
+    const hits = hitsAt(positionedRef.current, sizeOf, pt);
+    const cur = selectedIdsRef.current.length === 1 ? selectedIdsRef.current[0] : null;
+    const pick = nextPick(hits.length ? hits : (domId ? [domId] : []), cur);
+    if (!pick && !selectedIdsRef.current.length) return;   // 空地点空地，别空转渲染
+    setSelectedIds(pick ? [pick] : []);
+  };
+  // 精灵占位上报（RoleSprites → 操作条避让）：ref 直写，不进渲染循环
+  const spriteRectsRef = useRef([]);
+
   // 拖拽全家（pointerdown/move/up/相机补帧/边缘跟车/整组抓手/板书双按武装）
   // 2026-08-25 抽进 useBoardObjectDrag.js —— 语义与注释原样搬走，改拖拽行为去那看。
   const { onObjectPointerDown, onPointerMove, onPointerUp, onTagGrab } = useBoardObjectDrag({
@@ -885,7 +901,7 @@ export default function BoardCanvas({
     dragRef, dropHintRef, setDropHint, setDragActive,
     recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
     zMaxRef, toolRef, drawModeRef, chalkEditModeRef, selectedIdsRef,
-    setSelectedId, setSelectedIds, noteUserTakeover, camApiRef, scrollRef,
+    setSelectedIds, clickSelect, noteUserTakeover, camApiRef, scrollRef,
     moveEntry, groupInto,
   });
 
@@ -1690,7 +1706,9 @@ export default function BoardCanvas({
           // 都该收掉选框。
           // onObject 而不是裸 selector：未武装的板书算空地 —— 点它也收掉选框
           //（这正是武装态的退出路之一；另一条是 Esc）
-          if (selectedIdsRef.current.length && !onObject(e) && !e.target.closest('[data-transform-handle]')) {
+          // onChrome 豁免（08-27）：操作条自己就是 chrome，按它不能先把选中收了
+          if (selectedIdsRef.current.length && !onObject(e) && !onChrome(e)
+            && !e.target.closest('[data-transform-handle]')) {
             setSelectedIds([]);
           }
           // 顺序即优先级：工具在手就归工具，工具没接才轮到相机平移。
@@ -1732,7 +1750,15 @@ export default function BoardCanvas({
             return;
           }
           if (endMarquee()) return;
-          camera.onPointerUp(e); onPointerUp(e);
+          const panned = camera.onPointerUp(e);
+          onPointerUp(e);
+          // 几何点选（08-27 操作条）：真点击（没平移没拖没框选）落在被 board-hit
+          // 当成空地的东西上 —— 闲置板书就是这类 —— 也要选得中。物件自己的点选
+          // 走拖拽钩子（它有指针捕获），这里只接"空地"那半边。
+          if (!panned && !wasDrag() && toolRef.current === 'select' && !onObject(e)
+            && !onChrome(e) && !e.target.closest('[data-transform-handle]')) {
+            clickSelect(null, e.clientX, e.clientY);
+          }
         }}
         onPointerCancel={(e) => {
           canvasTools.onPointerUp(e); endMarquee(); camera.onPointerUp(e); onPointerUp(e);
@@ -1868,6 +1894,7 @@ export default function BoardCanvas({
             presence={presence} rectOf={rectOfId} obstacles={minimapItems} roleNames={roleNames}
             cam={cam} viewport={camera.viewport}
             onPick={(slug) => setRoleTalk((cur) => (cur === slug ? null : slug))}
+            reportLayout={(rects) => { spriteRectsRef.current = rects; }}
           />
           {roleTalk && (
             <RoleTalkPanel
@@ -1948,6 +1975,34 @@ export default function BoardCanvas({
         {/* ⚠️ 这里曾有第三个 TextDraft：工具栏「标注(C)」的批注输入框。
             标注 2026-08-13 收敛成 AnnotatePopover 的两个出口之后它没有入口了，
             连同 commentDraft 状态一起删。留在画布那条路现在走 keepAnnotation。 */}
+
+        {/* 点选操作条（08-27 重制）：选中单件贴着它出条（屏幕空间，不跟缩放变小）。
+            拖拽/平移/改名/开窗时不出 —— 那些时刻手上另有事。 */}
+        {(() => {
+          if (!selectedId || dragActive || camera.panning || renamingId === selectedId || deckOpen || winDir) return null;
+          const o = positioned.find(it => it.id === selectedId);
+          if (!o) return null;
+          return (
+            <ObjectActionBar
+              o={o} positioned={positioned} folderView={folderView}
+              spriteRects={spriteRectsRef.current}
+              cam={cam} viewport={camera.viewport}
+              title={titleOfId(o.id)}
+              onClose={() => setSelectedIds([])}
+              handlers={{
+                added: addedPaths.has(o.id),
+                onAdd: () => handleAdd(o),
+                onOpenViewer: () => openViewer(o),
+                onOpenFile: () => openFile(o),
+                onOrchestrate: () => openOrchestrate(o),
+                onDetail: () => setDetail(o),
+                onDeleteNote: () => handleDeleteNote(o),
+                onExport: isFileBacked(o) ? () => exportCard(projectId, o) : undefined,
+                onAnnotate: (at) => setAnnotate({ x: at.x, y: at.y, target: annotTargetOf(o, roleNames) }),
+              }}
+            />
+          );
+        })()}
 
         {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
             全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。 */}

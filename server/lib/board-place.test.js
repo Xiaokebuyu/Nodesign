@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePlacement, describePlacement, UNIT } from './board-place.js';
+import { resolvePlacement, describePlacement, inflateSpriteSeats, UNIT } from './board-place.js';
 
 const box = { w: 200, h: 100 };
 const rect = (x, y, w = 200, h = 100) => ({ x, y, w, h });
@@ -109,5 +109,35 @@ describe('resolvePlacement', () => {
     expect(describePlacement(r)).toContain('left of the anchor');
     const far = { resolution: 'viewport', nudged: false, rejected: 'farfield' };
     expect(describePlacement(far, { requestedAt: { x: 50000, y: 0 } })).toContain('outside the working area');
+  });
+});
+
+describe('inflateSpriteSeats：精灵身位（08-27 清「findSpot 看不见精灵」挂账）', () => {
+  const objects = {
+    'a.md': { by: 'agent', x: 0, y: 0 },
+    'chalk/one.md': { by: 'rp-moli', x: 100, y: 100 },
+    'chalk/two.md': { by: 'rp-moli', x: 400, y: 100 },   // 墨璃最新的 —— 精灵贴这条
+    'chalk/npc.md': { by: 'rp-yanqing', x: 100, y: 400 },
+  };
+  const obs = [
+    { id: 'a.md', x: 0, y: 0, w: 100, h: 50 },
+    { id: 'chalk/one.md', x: 100, y: 100, w: 200, h: 60 },
+    { id: 'chalk/two.md', x: 400, y: 100, w: 200, h: 60 },
+    { id: 'chalk/npc.md', x: 100, y: 400, w: 200, h: 60 },
+  ];
+
+  it('⭐ 只给每个角色**最新**一条让身位（精灵贴的是它），旧条和非角色不动', () => {
+    const out = inflateSpriteSeats(obs, objects);
+    const byId = Object.fromEntries(out.map((o) => [o.id, o]));
+    expect(byId['chalk/two.md'].x).toBe(340);            // 400 − 60
+    expect(byId['chalk/two.md'].w).toBe(320);            // 200 + 120
+    expect(byId['chalk/npc.md'].x).toBe(40);             // 砚青只有一条，也是最新
+    expect(byId['chalk/one.md'].x).toBe(100);            // 旧条原样
+    expect(byId['a.md'].x).toBe(0);                      // 主控的不让
+  });
+
+  it('板上没有角色板书 → 原表原样返回（零成本路径）', () => {
+    const plain = [{ id: 'a.md', x: 0, y: 0, w: 100, h: 50 }];
+    expect(inflateSpriteSeats(plain, { 'a.md': { by: 'agent', x: 0 } })).toBe(plain);
   });
 });

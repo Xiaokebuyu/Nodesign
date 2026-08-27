@@ -27,7 +27,7 @@ import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope } from '../../../lib/canvas-id.js';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
-import { resolvePlacement, describePlacement } from '../../../lib/board-place.js';
+import { resolvePlacement, describePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
@@ -173,9 +173,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const board = await readBoard(projectId);
     const known = new Set(Object.keys(board.zones || {}));
     const sizeOf = (b) => (id, e) => estimateSizeOn(b, id, e);
-    const obstaclesOf = (b, zone) => Object.entries(b.objects || {})
+    // 精灵身位：角色最新一条板书旁贴着它的精灵（客户端摆），落位给那圈让空
+    const obstaclesOf = (b, zone) => inflateSpriteSeats(Object.entries(b.objects || {})
       .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
-      .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(b, id, e) }));
+      .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(b, id, e) })), b.objects);
     const contentBottomOf = (obstacles, zone) => {
       let bottom = 0;
       for (const o of obstacles) bottom = Math.max(bottom, o.y + o.h);

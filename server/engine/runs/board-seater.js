@@ -25,7 +25,7 @@ import { readBoard, patchBoard } from '../../projects/board-store.js';
 import { getSharedDir } from '../../projects/workspace.js';
 import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
-import { resolvePlacement } from '../../lib/board-place.js';
+import { resolvePlacement, inflateSpriteSeats } from '../../lib/board-place.js';
 import { textBox } from '../../lib/sketch-layout.js';
 import { getViewpoint } from '../../projects/viewpoint-store.js';
 import { parseChalk, CHALK_DIR } from '../../lib/chalk.js';
@@ -102,9 +102,9 @@ export async function seatArtifacts(projectId, rels) {
     }
 
     const zone = layerOf(id, live[id], known);
-    const obstacles = Object.entries(live)
+    const obstacles = inflateSpriteSeats(Object.entries(live)
       .filter(([oid, e]) => oid !== id && Number.isFinite(e?.x) && layerOf(oid, e, known) === zone)
-      .map(([oid, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, oid, e) }));
+      .map(([oid, e]) => ({ id: oid, x: e.x, y: e.y, ...estimateSizeOn(board, oid, e) })), live);
     const contentBottom = obstacles.reduce((m, o) => Math.max(m, o.y + o.h), 0);
     const vpRect = (vp && (vp.layer || '') === zone && vp.camera) ? vp.camera : null;
     const placed = resolvePlacement({

@@ -22,7 +22,7 @@
  * 不知道它还在，也不知道该冲谁说话。动静由 run.role.wait 驱动，见 board-presence.js。
  */
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { SpriteSketch, findWorkSpot, findAmbientSlot } from './SpriteSketchLayer.jsx';
 import { PAPER } from '../../lib/paper.js';
 import { TEXT_FONT_CSS } from '../../lib/text-fonts.js';
@@ -56,7 +56,7 @@ function RoleBookmark({ name, color }) {
   );
 }
 
-export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {}, cam = null, viewport = null, onPick = null }) {
+export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {}, cam = null, viewport = null, onPick = null, reportLayout = null }) {
   // ⚠️ 不再要求 active（2026-08-26）：角色挂在 await_user 上等你回话时是 idle 的，
   // 但它**还在台上**，精灵消失会让用户以为它没了、也就不知道该冲谁说话。
   // 2026-08-27（编排）：也不再要求 targetId —— 还没写过板书的角色排**候场位**
@@ -64,29 +64,37 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
   const roles = useMemo(() => Object.values(presence || {})
     .filter((p) => p && isRolePresence(p.id)), [presence]);
 
-  if (!roles.length) return null;
+  // 摆位先算成表：渲染和布局上报共用同一份坐标（别让两边各算一次各不一样）
+  const entries = [];
+  const placedObs = [];   // 候场位依次占坑：几个候场角色不叠在同一个槽上
+  for (const p of roles) {
+    let spot = null;
+    const anchor = p.targetId ? rectOf?.(p.targetId) : null;
+    if (anchor) {
+      spot = findWorkSpot(anchor, obstacles);
+    } else if (cam?.z && viewport?.w) {
+      spot = findAmbientSlot(cam, viewport, [...obstacles, ...placedObs]);
+      // 六槽全占也不许消失（跟 findWorkSpot 同一条规矩）：沿视口上沿排开
+      if (!spot) {
+        spot = {
+          x: Math.round((viewport.w * (0.16 + placedObs.length * 0.12)) / cam.z - cam.x),
+          y: Math.round((viewport.h * 0.1) / cam.z - cam.y),
+        };
+      }
+    }
+    if (!spot) continue;
+    placedObs.push({ x: spot.x - 20, y: spot.y - 20, w: 160, h: 110 });
+    entries.push({ p, spot });
+  }
+  // 布局上报（08-27 操作条避让）：精灵占了哪几块世界矩形，包络口径同 placedObs。
+  // ref 直写路径 —— 上报本身不许引发渲染。
+  useEffect(() => { reportLayout?.(placedObs); });
 
-  // 候场位依次占坑：把已排的算进障碍，几个候场角色不叠在同一个槽上
-  const placedObs = [];
+  if (!entries.length) return null;
+
   return (
     <>
-      {roles.map((p) => {
-        let spot = null;
-        const anchor = p.targetId ? rectOf?.(p.targetId) : null;
-        if (anchor) {
-          spot = findWorkSpot(anchor, obstacles);
-        } else if (cam?.z && viewport?.w) {
-          spot = findAmbientSlot(cam, viewport, [...obstacles, ...placedObs]);
-          // 六槽全占也不许消失（跟 findWorkSpot 同一条规矩）：沿视口上沿排开
-          if (!spot) {
-            spot = {
-              x: Math.round((viewport.w * (0.16 + placedObs.length * 0.12)) / cam.z - cam.x),
-              y: Math.round((viewport.h * 0.1) / cam.z - cam.y),
-            };
-          }
-          placedObs.push({ x: spot.x - 20, y: spot.y - 20, w: 160, h: 110 });
-        }
-        if (!spot) return null;
+      {entries.map(({ p, spot }) => {
         const slug = slugOfPresence(p.id);
         return (
           <div

@@ -16,7 +16,7 @@ export function useBoardObjectDrag({
   dragRef, dropHintRef, setDropHint, setDragActive,
   recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
   zMaxRef, toolRef, drawModeRef, chalkEditModeRef, selectedIdsRef,
-  setSelectedId, setSelectedIds, noteUserTakeover, camApiRef, scrollRef,
+  setSelectedIds, clickSelect, noteUserTakeover, camApiRef, scrollRef,
   moveEntry, groupInto,
 }) {
   const onObjectPointerDown = (e, o) => {
@@ -180,11 +180,11 @@ export function useBoardObjectDrag({
     // click/dblclick 在 pointerup 之后才派发，此时 dragRef 已清 —— 拖完的
     // "余韵"记在这个 ref 上，让点击类 handler 能区分"拖完松手"和"真点击"
     recentDragMovedRef.current = !!d?.moved;
-    // 点了一下没拖动 = 选中（墨类进选中态；板书也进 —— 武装态点一下不该掉，
-    // 编辑模式开着时更是"随时可选中"。产物卡的动作是开窗/拖动，不选中）
+    // 点了一下没拖动 = 选中（2026-08-27 操作条重制：**所有**物件点选都进选中态，
+    // 产物卡也选 —— 选中出操作条。下翻/几何命中收在 BoardCanvas 的 clickSelect，
+    // 这里只报「点了这件、点在屏幕哪儿」）
     if (d?.kind === 'object' && !d.moved) {
-      const obj = positioned.find(o => o.id === d.id);
-      setSelectedId((obj?.native || obj?.chalk) ? d.id : null);
+      clickSelect?.(d.id, d.lastClientX, d.lastClientY);
     }
     if (d?.kind === 'object') {
       // 落点判定 → **真的搬文件**（2026-08-08）：

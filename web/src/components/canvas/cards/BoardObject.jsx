@@ -1,12 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import {
-  Image as ImageIcon, FileText, Plus, ExternalLink, BookOpen, Trash2, Film,
-  MessageSquarePlus, Download, SlidersHorizontal,
-} from 'lucide-react';
+import { Image as ImageIcon, FileText, Film } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, alpha } from '../../../lib/theme.js';
 import { PAPER, PAPER_SHADOW } from '../../../lib/paper.js';
 import { EASE, POP_IN } from '../../../lib/board-geometry.js';
-import { SIZES, sizeOf, actionsOf, chromeOf, cardOf, isTextPreview } from '../../../lib/board-kinds.js';
+import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview } from '../../../lib/board-kinds.js';
+import { buildObjectActions } from './object-actions.js';
 import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../../lib/text-fonts.js';
 import MdInk from './MdInk.jsx';
 import { useMeasuredSize } from './useMeasuredSize.js';
@@ -155,35 +153,12 @@ function BoardObject({
     } : null),
   };
 
-  // 按钮清单由形态表给（board-kinds.js 的 actions，顺序即渲染顺序），
-  // 这里只把动作 id 兑换成图标和回调。
-  const ACTION_DEFS = {
-    add: { icon: Plus, title: added ? '已在托盘' : '加入上下文', fn: onAdd },
-    read: { icon: BookOpen, title: '阅读', fn: onOpenViewer },
-    detail: { icon: ExternalLink, title: '详情', fn: onDetail },
-    // .md 两条路都给：「阅读」是渲染过的（双击也走这条），「打开」是原始文件
-    open: { icon: ExternalLink, title: '打开', fn: onOpenFile },
-    // 编排.yaml：图形设置页（双击也走这条），「打开」仍留给原始文件
-    orchestrate: { icon: SlidersHorizontal, title: '编排设置', fn: onOrchestrate },
-    delete: { icon: Trash2, title: '删除', fn: onDeleteNote },
-  };
-  /**
-   * 标注**不在形态表里**，它排在所有形态的按钮之后无条件出现（2026-08-13）。
-   *
-   * 理由是表的意义在于记录**差异**：标注对每一种东西都成立、写法一字不差，
-   * 抄进十条形态就是把同一句话说十遍，下次加形态还得记着补第十一遍。
-   * 右键菜单那边同理 —— 它也是全类型无条件给。
-   *
-   * 位置固定在最右：那是"跟 agent 说话"的位置，deck 这种别的按钮都没有的
-   * 形态也照样有它（用户要的就是**每个**产物右上角都能标注）。
-   */
-  const actions = [
-    ...actionsOf(o).map(id => ACTION_DEFS[id]).filter(Boolean),
-    // 导出跟标注同理：**每一种产物卡都能导出**，所以不进形态表。抄进十条形态
-    // 就是把同一句话说十遍，加第十一种形态还得记着补一遍。
-    ...(onExport ? [{ icon: Download, title: '导出这张卡', fn: onExport }] : []),
-    { icon: MessageSquarePlus, title: '标注（发给 agent / 留在画布）', fn: onAnnotate, anchored: true },
-  ];
+  // 按钮清单和图标兑换 2026-08-27 抽去 object-actions.js —— 点选操作条
+  // （ObjectActionBar）跟这条 hover 工具条共用一份，别再长出第二份表。
+  const actions = buildObjectActions(o, {
+    added, onAdd, onOpenViewer, onOpenFile, onDetail, onOrchestrate, onDeleteNote,
+    onExport, onAnnotate,
+  });
 
   // 工具条挂在卡片上沿之外。这里有两个坑，都踩过：
   //
@@ -196,7 +171,8 @@ function BoardObject({
   //    跟 TransformControls 的手柄同一条规矩。origin 钉在右下角，
   //    缩放围绕"贴卡那一点"进行，桥不会被缩出缝来。
   const invScale = 1 / (scale * (isInk ? (o.data?.scale ?? 1) : 1));
-  const Actions = hover && actions.length > 0 && (
+  // 选中态让位给点选操作条（2026-08-27）：同一份动作两条工具条同时亮是噪音
+  const Actions = hover && !selected && actions.length > 0 && (
     <div data-board-action style={{
       position: 'absolute', bottom: '100%', right: 0, paddingBottom: 4, zIndex: 5,
       transform: invScale !== 1 ? `scale(${invScale})` : undefined,

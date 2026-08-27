@@ -27,7 +27,7 @@ import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, textBox } from '../../../lib/sketch-layout.js';
-import { resolvePlacement } from '../../../lib/board-place.js';
+import { resolvePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
 import { CHALK_DIR, trashChalkFile } from '../../../lib/chalk.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
 
@@ -148,9 +148,9 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
       const r = rectOf(refId);
       if (!r) return null;
       const zone = layerOf(refId, live[refId], known);
-      const obstacles = Object.entries(live)
+      const obstacles = inflateSpriteSeats(Object.entries(live)
         .filter(([id, e]) => id !== subjectId && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
-        .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
+        .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) })), live);
       const placed = resolvePlacement({
         box, anchor: r, side: rel.side, gap: (rel.gap ?? 1) * UNIT,
         obstacles, contentBottom: obstacles.reduce((m, o) => Math.max(m, o.y + o.h), 0),
@@ -201,9 +201,9 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             if (!r) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
             const zone = layerOf(refId, live[refId], known);
             const memberIds = new Set(members.map(([id]) => id));
-            const obstacles = Object.entries(live)
+            const obstacles = inflateSpriteSeats(Object.entries(live)
               .filter(([id, e]) => !memberIds.has(id) && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
-              .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
+              .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) })), live);
             p = resolvePlacement({ box: { w, h }, anchor: r, side: o.to.side, gap: Math.min(8, o.to.gap ?? 1) * UNIT, obstacles, contentBottom: 0 });
           } else {
             p = { x: bb.x + o.to.dx * UNIT, y: bb.y + o.to.dy * UNIT };
@@ -325,9 +325,9 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
               w: Math.max(...rects.map(x => x.x + x.w)) - Math.min(...rects.map(x => x.x)),
               h: Math.max(...rects.map(x => x.y + x.h)) - Math.min(...rects.map(x => x.y)),
             };
-            const obstacles = Object.entries(live)
+            const obstacles = inflateSpriteSeats(Object.entries(live)
               .filter(([oid2, e2]) => !memberIds.has(oid2) && oid2 !== to && Number.isFinite(e2?.x) && layerOf(oid2, e2, known) === zone)
-              .map(([oid2, e2]) => ({ x: e2.x, y: e2.y, ...estimateSizeOn(board, oid2, e2) }));
+              .map(([oid2, e2]) => ({ id: oid2, x: e2.x, y: e2.y, ...estimateSizeOn(board, oid2, e2) })), live);
             const pp = resolvePlacement({ box: { w: bb.w, h: bb.h }, anchor: r, side: o.side || 'right', obstacles, contentBottom: 0 });
             const mdx = Math.round(pp.x - bb.x); const mdy = Math.round(pp.y - bb.y);
             if (mdx || mdy) for (const [mid, me] of members) setObj(mid, { ...me, x: me.x + mdx, y: me.y + mdy, seat: 'agent' });
