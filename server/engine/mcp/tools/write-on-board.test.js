@@ -298,3 +298,44 @@ describe('节点级拉力·集成向（08-27 v2）：mindmap 环位朝着真实�
     expect(v1.x * v2.x + v1.y * v2.y).toBeGreaterThan(0);
   });
 });
+
+describe('落位直觉（08-27）：接楼方向学用户摆放', () => {
+  it('⭐ 用户把线程一路往右拖 → chain 改成同排右接，返回明说学了习惯', async () => {
+    // proj_mtbkhpac 实案的形状：flow 线一路向右，下游都是用户亲手放的
+    await patchBoard(pid, {
+      objects: {
+        'notes/板书/dir-0001-一.md': { x: 9000, y: 9000, w: 400, h: 220, by: 'agent', tag: '向右线', seat: 'agent' },
+        'notes/板书/dir-0002-二.md': { x: 9560, y: 9020, w: 400, h: 220, by: 'agent', tag: '向右线', seat: 'user' },
+        'notes/板书/dir-0003-三.md': { x: 10120, y: 9000, w: 400, h: 220, by: 'agent', tag: '向右线', seat: 'user' },
+      },
+      bindings: {
+        'b:dir1': { type: 'flow', from: 'notes/板书/dir-0001-一.md', to: 'notes/板书/dir-0002-二.md', tag: '向右线' },
+        'b:dir2': { type: 'flow', from: 'notes/板书/dir-0002-二.md', to: 'notes/板书/dir-0003-三.md', tag: '向右线' },
+      },
+    });
+    const r = await call({ text: '第四节', tag: '向右线', chain: true });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/') && board.objects[i].tag === '向右线' && !i.startsWith('notes/板书/dir-')).pop();
+    const e = board.objects[id];
+    // 接在最新一条（三）的右边同排，而不是缺省的正下方
+    expect(e.x).toBeGreaterThanOrEqual(10120 + 400);
+    expect(Math.abs(e.y - 9000)).toBeLessThan(120);
+    expect(r.content[0].text).toContain("user's habit");
+  });
+
+  it('用户没表达过方向偏好 → chain 仍是缺省正下方（拿不准就不押）', async () => {
+    await patchBoard(pid, {
+      objects: {
+        'notes/板书/plain-0001.md': { x: 20000, y: 20000, w: 400, h: 220, by: 'agent', tag: '竖线', seat: 'agent' },
+      },
+    });
+    const r = await call({ text: '第二节', tag: '竖线', chain: true });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/') && board.objects[i].tag === '竖线' && !i.startsWith('notes/板书/plain-')).pop();
+    const e = board.objects[id];
+    expect(e.y).toBeGreaterThanOrEqual(20000 + 220);   // 正下方
+    expect(Math.abs(e.x - 20000)).toBeLessThan(120);   // 同列
+  });
+});

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePlacement, describePlacement, inflateSpriteSeats, UNIT } from './board-place.js';
+import { resolvePlacement, describePlacement, inflateSpriteSeats, inferFlowDir, UNIT } from './board-place.js';
 
 const box = { w: 200, h: 100 };
 const rect = (x, y, w = 200, h = 100) => ({ x, y, w, h });
@@ -73,7 +73,9 @@ describe('resolvePlacement', () => {
     const wall = rect(a.x + a.w, a.y - 2000, 3000, 6000);
     const r = resolvePlacement({ box, anchor: a, obstacles: [a, wall] });
     expect(r.resolution).not.toBe('near-right');
-    expect(r.nudged).toBe(true);
+    // 08-27 落位直觉后：side 没给，自动挑侧直接落在空侧的理想位 —— 这不算挪
+    //（旧语义里这里 nudged=true，因为缺省侧被隐式当成了"请求"）
+    expect(r.nudged).toBe(false);
     // 落点离锚不超过环搜半径（20 格 + 自身）
     const dist = Math.hypot(r.x - a.x, r.y - a.y);
     expect(dist).toBeLessThan((20 + 16) * UNIT);
@@ -138,6 +140,43 @@ describe('resolvePlacement', () => {
     expect(r.x >= wall.x + wall.w + 12 || r.x + b.w + 12 <= wall.x).toBe(true);
   });
 
+  // ── 落位直觉（2026-08-27 用户提）─────────────────────────────────────
+  it('⭐ side 不给 = 自动挑侧：右边被占就直接落下方（不再从右侧理想点硬钻）', () => {
+    const anchor = { x: 0, y: 0, w: 96, h: 96 };
+    const wall = { x: 120, y: -500, w: 120, h: 1000 };   // 右侧整条堵死
+    const r = resolvePlacement({ box: { w: 96, h: 96 }, anchor, obstacles: [anchor, wall] });
+    expect(r.resolution).toBe('near-below');
+    expect(r.nudged).toBe(false);   // 挑中的侧理想位直接可用，不算挪
+    expect(r.y).toBeGreaterThanOrEqual(96);
+  });
+
+  it('side 显式给仍然说一不二（语义指定赢过直觉）', () => {
+    const anchor = { x: 0, y: 0, w: 96, h: 96 };
+    const wall = { x: 120, y: -500, w: 120, h: 1000 };
+    const r = resolvePlacement({ box: { w: 96, h: 96 }, anchor, side: 'right', obstacles: [anchor, wall] });
+    // 从右侧理想点环搜（可能换侧兜底），但绝不悄悄改成 below 起点
+    expect(r.resolution.startsWith('near-')).toBe(true);
+  });
+
+  it('sideHint（用户摆放偏好）排在阅读序前面：四面都空时听它的', () => {
+    const anchor = { x: 500, y: 500, w: 96, h: 96 };
+    const r = resolvePlacement({ box: { w: 96, h: 96 }, anchor, sideHint: 'left', obstacles: [anchor] });
+    expect(r.resolution).toBe('near-left');
+  });
+
+  it('⭐ replyDir:right —— 线程学到用户横着摆，接楼改成同排右接', () => {
+    const replyTo = rect(100, 100);
+    const r = resolvePlacement({ box, replyTo, replyDir: 'right' });
+    expect(r.resolution).toBe('reply-to');
+    expect(r.x).toBeGreaterThanOrEqual(replyTo.x + replyTo.w);
+    expect(Math.abs(r.y - replyTo.y)).toBeLessThan(50);
+  });
+
+  it('replyDir 只认横向：above 没有读序，落回缺省的正下方', () => {
+    const r = resolvePlacement({ box, replyTo: rect(100, 100), replyDir: 'above' });
+    expect(r.y).toBe(212);
+  });
+
   it('describePlacement：文案从真实 resolution 生成', () => {
     const r = { resolution: 'near-left', nudged: false, rejected: null };
     expect(describePlacement(r)).toContain('left of the anchor');
@@ -173,5 +212,56 @@ describe('inflateSpriteSeats：精灵身位（08-27 清「findSpot 看不见精�
   it('板上没有角色板书 → 原表原样返回（零成本路径）', () => {
     const plain = [{ id: 'a.md', x: 0, y: 0, w: 100, h: 50 }];
     expect(inflateSpriteSeats(plain, { 'a.md': { by: 'agent', x: 0 } })).toBe(plain);
+  });
+});
+
+describe('inferFlowDir：从用户摆放学版面方向（08-27 落位直觉）', () => {
+  // 一条向右掰的线：flow a→b→c，下游都是用户亲手放的（proj_mtbkhpac 实案的形状）
+  const rightBoard = {
+    objects: {
+      'a.md': { x: 0, y: 0, w: 400, h: 200, seat: 'agent', tag: 'T' },
+      'b.md': { x: 560, y: 20, w: 400, h: 200, seat: 'user', tag: 'T' },
+      'c.md': { x: 1100, y: 0, w: 400, h: 200, seat: 'user', tag: 'T' },
+    },
+    bindings: {
+      b1: { type: 'flow', from: 'a.md', to: 'b.md', tag: 'T' },
+      b2: { type: 'flow', from: 'b.md', to: 'c.md', tag: 'T' },
+    },
+  };
+
+  it('⭐ 用户把线程一路往右拖 → 学到 right', () => {
+    expect(inferFlowDir(rightBoard, { tag: 'T' })).toBe('right');
+    expect(inferFlowDir(rightBoard)).toBe('right');   // 全板口径同样学到
+  });
+
+  it('下游不是用户亲手放的不算票（agent 自己的缺省不许自我强化）', () => {
+    const agentLaid = JSON.parse(JSON.stringify(rightBoard));
+    agentLaid.objects['b.md'].seat = 'agent';
+    agentLaid.objects['c.md'].seat = 'agent';
+    expect(inferFlowDir(agentLaid)).toBe(null);
+  });
+
+  it('票不够 / 方向打架 → null（拿不准就不押，缺省行为不变）', () => {
+    const one = JSON.parse(JSON.stringify(rightBoard));
+    delete one.bindings.b2;   // 只剩一票
+    expect(inferFlowDir(one)).toBe(null);
+    const split = JSON.parse(JSON.stringify(rightBoard));
+    split.objects['c.md'] = { x: 560, y: 600, w: 400, h: 200, seat: 'user', tag: 'T' };   // 一右一下
+    expect(inferFlowDir(split)).toBe(null);
+  });
+
+  it('一条线一个走向：新 tag 零票 → null，不继承别的线的横排；太近不算方向', () => {
+    const b = JSON.parse(JSON.stringify(rightBoard));
+    // tag=X 一票都没有 → null（用户掰横的是 T 线，X 线从缺省开始）
+    expect(inferFlowDir(b, { tag: 'X' })).toBe(null);
+    const near = { objects: {
+      'a.md': { x: 0, y: 0, w: 100, h: 50, seat: 'agent' },
+      'b.md': { x: 20, y: 10, w: 100, h: 50, seat: 'user' },
+      'c.md': { x: 30, y: 20, w: 100, h: 50, seat: 'user' },
+    }, bindings: {
+      b1: { type: 'flow', from: 'a.md', to: 'b.md' },
+      b2: { type: 'flow', from: 'b.md', to: 'c.md' },
+    } };
+    expect(inferFlowDir(near)).toBe(null);
   });
 });

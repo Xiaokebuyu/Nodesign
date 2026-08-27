@@ -25,12 +25,13 @@ import { z } from 'zod';
 import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store.js';
 import { TAG_RE } from '../../../projects/board-sanitize.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
-import { layerOf, normalizeCanvasId, tagEnvelope } from '../../../lib/canvas-id.js';
+import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, resolveTemplate, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
-import { resolvePlacement, describePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
+import { resolvePlacement, describePlacement, inflateSpriteSeats, inferFlowDir } from '../../../lib/board-place.js';
 import { allocateLaneColumn } from '../../../lib/board-lanes.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
+import { makeAnchorResolver } from '../../../lib/board-anchor.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
@@ -64,7 +65,7 @@ const SCHEMA = {
   reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under`),
   at: WORLD_PT.optional()
     .describe('World-coord suggestion. The server always snaps/nudges to a free cell; far outside the working area it is politely rejected and the note lands near instead — placement never fails'),
-  side: z.enum(['right', 'left', 'above', 'below']).optional().describe('Which side of near to prefer (default right)'),
+  side: z.enum(['right', 'left', 'above', 'below']).optional().describe('Which side of near to prefer. Omit for auto: the server picks the side with free space, clear connector lines, and the direction the user has been arranging things — give side only when the SEMANTICS demand it (e.g. a caption must sit above)'),
   relation: z.enum(BINDING_TYPE_IDS).optional()
     .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
   chain: z.boolean().optional()
@@ -187,7 +188,6 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
     const board = await readBoard(projectId);
     const known = new Set(Object.keys(board.zones || {}));
-    const sizeOf = (b) => (id, e) => estimateSizeOn(b, id, e);
     // 精灵身位：角色最新一条板书旁贴着它的精灵（客户端摆），落位给那圈让空
     const obstaclesOf = (b, zone) => inflateSpriteSeats(Object.entries(b.objects || {})
       .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
@@ -204,33 +204,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const visibleIn = (rect, vpRect) => !!vpRect && !(rect.x + rect.w < vpRect.x || vpRect.x + vpRect.w < rect.x
       || rect.y + rect.h < vpRect.y || vpRect.y + vpRect.h < rect.y);
 
-    /** 锚点解析：真 id > tag 包络 > **救援入座**（文件真在只是还没座位 —— 当场
-     *  给它排一个再锚。入座下沉后防抖 1.5s 内的窗口、以及历史欠座都从这里兜住，
-     *  「还没有座位」这个失败类只剩"确实不存在"一种真情况）。 */
-    const resolveAnchor = async (raw, b) => {
-      const nid = normalizeCanvasId(raw);
-      const e = nid ? b.objects?.[nid] : null;
-      if (e && Number.isFinite(e.x)) {
-        return { anchorId: nid, zone: layerOf(nid, e, known), rect: { x: e.x, y: e.y, ...estimateSizeOn(b, nid, e) }, board: b };
-      }
-      const env = tagEnvelope(b, raw, sizeOf(b));
-      if (env) {
-        return { anchorId: env.anchorId, zone: layerOf(env.anchorId, b.objects[env.anchorId], known), rect: { x: env.x, y: env.y, w: env.w, h: env.h }, board: b };
-      }
-      if (nid) {
-        const bare = nid.replace(/^(deck|site|docx|text|scribble):/, '');
-        const { seated } = await seatArtifacts(projectId, [bare]).catch(() => ({ seated: 0 }));
-        if (seated) {
-          const nb = await readBoard(projectId);
-          const ne = nb.objects?.[nid] || nb.objects?.[bare];
-          const realId = nb.objects?.[nid] ? nid : bare;
-          if (ne && Number.isFinite(ne.x)) {
-            return { anchorId: realId, zone: layerOf(realId, ne, known), rect: { x: ne.x, y: ne.y, ...estimateSizeOn(nb, realId, ne) }, board: nb, rescued: true };
-          }
-        }
-      }
-      return null;
-    };
+    // 锚点解析（真 id > tag 包络 > 救援入座）本体在 lib/board-anchor.js（棘轮拆件）
+    const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
 
     // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
     if (args.text) {
@@ -318,12 +293,20 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           lanes: Object.values(b2.lanes || {}), obstacles, box,
         })
         : null;
+      // 落位直觉（08-27）：接楼方向和自动挑侧都先问用户把这条线往哪边摆过
+      const flowDir = inferFlowDir(b2, { tag: args.tag || null });
+      // 同时有线程和锚点时，落位跟线程走、但到锚点的线也别压第三块
+      const lineTargets = (replyRect && anchorRect)
+        ? [{ x: anchorRect.x + anchorRect.w / 2, y: anchorRect.y + anchorRect.h / 2 }]
+        : [];
       const placed = lanePlan
         ? { x: lanePlan.x, y: lanePlan.y, resolution: lanePlan.fallback ? 'fallback' : 'lane-open', nudged: !!lanePlan.fallback }
         : resolvePlacement({
           box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
+          replyDir: flowDir, sideHint: flowDir, lineTargets,
           obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
         });
+      const learnedDir = !lanePlan && flowDir && !args.side && (replyRect || anchorRect) ? flowDir : null;
 
       // ── 手写字本体（ink:'hand'）：画布原生 text 节点，不落文件 ──
       if (args.ink === 'hand') {
@@ -350,7 +333,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           ctx?.emit?.(Events.boardFocus(hRect, { tag: args.tag || null, layer: zone, soft: true, actor: by !== 'agent' ? by : null }));
         } catch { /* fail-soft */ }
         return { content: [{ type: 'text', text:
-          `Wrote handwritten note ${hid} at (${hRect.x},${hRect.y}) ${hRect.w}x${hRect.h} — ${describePlacement(placed, { requestedAt: args.at })}.` }] };
+          `Wrote handwritten note ${hid} at (${hRect.x},${hRect.y}) ${hRect.w}x${hRect.h} — ${describePlacement(placed, { requestedAt: args.at })}.`
+          + (learnedDir ? ` Layout followed the user's ${learnedDir}-ward arranging habit.` : '') }] };
       }
 
       const fileName = chalkFileName(body);
@@ -389,6 +373,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
       ];
       if (box.h > SKETCH_FIT.h * 0.6) lines.push('⚠ It is tall — next time split or shorten.');
+      if (learnedDir) lines.push(`Layout followed the user's habit: they have been arranging this thread ${learnedDir}-ward, so placement leaned that way.`);
       if (lanePlan) {
         lines.push(`Opened lane #${args.tag}${laneFrom !== 'fresh' ? ` branching from ${laneFrom.id}` : ''}`
           + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists all lanes under 版图.`);
@@ -532,6 +517,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const placed = resolvePlacement({
       box: { w: local.w + 24, h: local.h + 24 },
       at: args.at || null, anchor: anchorRect, side: args.side || null,
+      // 落位直觉：side 不给时自动挑（空侧+线不压块），偏好排用户摆放习惯
+      sideHint: inferFlowDir(sketchBase, { tag: args.tag || null }),
       obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect,
       screen: fit.screen ? fit : null,
     });
