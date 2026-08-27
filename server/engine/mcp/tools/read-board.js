@@ -19,6 +19,7 @@ import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf } from '../../../lib/canvas-id.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
+import { laneSummaries } from '../../../lib/board-lanes.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -185,6 +186,21 @@ on the minimap and listed with what is inside it.`,
         }
       }
       if (board.hero && !tag) lines.push('', `★ 显式主角：${board.hero}（edit_board 的 feature/unfeature 管它）`);
+
+      // 版图（2026-08-27 空间规划）：线 = 同 tag 的纵列。这是 agent 的符号地图 ——
+      // 摆放按关系（续哪条线/岔自哪条）声明，几何机器排，别按坐标猜。
+      if (!tag) {
+        const laneList = laneSummaries(board);
+        if (laneList.length) {
+          lines.push('', '版图（线 = 同 tag 纵列；{tag,chain:true} 续线，open_lane 开新线）：');
+          for (const l of laneList) {
+            lines.push(l.registered
+              ? `  #${l.tag}：${l.count} 节${l.parent ? `，岔自 ${l.parent}` : ''}，列头 (${l.x},${l.y})`
+                + `${l.frontier ? `，接着写会落 (${l.frontier.x},${l.frontier.y}) 附近` : ''}${l.lastId ? `，最新 ${l.lastId}` : ''}`
+              : `  #${l.tag}：${l.count} 件（未登记的野线 —— chain:true 照样能续）`);
+          }
+        }
+      }
 
       // 用户视点（有上报才有）
       if (vp && !tag) {

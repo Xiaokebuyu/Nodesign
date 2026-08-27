@@ -239,6 +239,7 @@ export function inflateSpriteSeats(obstacles, objects, pad = 60) {
 export function describePlacement(r, { requestedAt = null } = {}) {
   const parts = [];
   if (r.resolution === 'reply-to') parts.push('under the note it replies to (thread)');
+  else if (r.resolution === 'lane-open') parts.push('at the head of a new lane column');
   else if (r.resolution === 'at') parts.push(r.nudged ? 'near the requested spot (snapped/nudged to a free cell)' : 'at the requested spot (snapped to grid)');
   else if (r.resolution.startsWith('near-')) parts.push(`${r.resolution.slice(5)} of the anchor${r.nudged ? ' (nudged to the nearest free cell)' : ''}`);
   else if (r.resolution === 'viewport') parts.push("in the user's viewport");

@@ -147,3 +147,60 @@ describe('write_on_board 统一入口（件数判据）', () => {
     expect(r.content[0].text).toMatch(/Sketch #sk-/);
   });
 });
+
+describe('open_lane：开新线（08-27 空间规划）', () => {
+  it('⭐ branch：从节点岔出 —— 新列不压岔出点、注册表落盘、flow 线画上', async () => {
+    await patchBoard(pid, { objects: { 'assets/起点.png': { x: 3000, y: 3000, w: 200, h: 176 } } });
+    const r = await call({ text: '岔出去想', tag: 'lane甲', open_lane: 'assets/起点.png' });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toMatch(/Opened lane #lane甲/);
+    const board = await readBoard(pid);
+    const lane = board.lanes['lane甲'];
+    expect(lane).toBeTruthy();
+    expect(lane.parent).toBe('assets/起点.png');
+    expect(lane.x).toBeGreaterThanOrEqual(3200);          // 岔出点右缘之外
+    const note = Object.entries(board.objects).find(([, e]) => e.tag === 'lane甲');
+    expect(note[1].x).toBe(lane.x);
+    const flow = Object.values(board.bindings).find(b => b.type === 'flow' && b.from === 'assets/起点.png' && b.to === note[0]);
+    expect(flow).toBeTruthy();
+  });
+
+  it('续线走 {tag, chain:true}：落在同列线尾（frontier 语义）', async () => {
+    const board0 = await readBoard(pid);
+    const head = Object.entries(board0.objects).find(([, e]) => e.tag === 'lane甲');
+    const r = await call({ text: '接着想第二节', tag: 'lane甲', chain: true });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    const notes = Object.entries(board.objects).filter(([, e]) => e.tag === 'lane甲')
+      .sort((a, b) => a[1].y - b[1].y);
+    expect(notes.length).toBe(2);
+    expect(notes[0][0]).toBe(head[0]);
+    expect(notes[1][1].x).toBe(notes[0][1].x);            // 同列
+    expect(notes[1][1].y).toBeGreaterThan(notes[0][1].y); // 线尾
+  });
+
+  it('⭐ 重开已有的线被拒并指路 chain；不带 tag 也拒', async () => {
+    const r = await call({ text: 'x', tag: 'lane甲', open_lane: 'fresh' });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/已经开过了/);
+    const r2 = await call({ text: 'x', open_lane: 'fresh' });
+    expect(r2.isError).toBe(true);
+    expect(r2.content[0].text).toMatch(/要配 tag/);
+  });
+
+  it('跟 reply_to/chain/at/near 互斥（岔出点写在 open_lane 里）', async () => {
+    const r = await call({ text: 'x', tag: 'lane乙', open_lane: 'fresh', chain: true });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/互斥/);
+  });
+
+  it('fresh：版图右缘开新列', async () => {
+    const before = await readBoard(pid);
+    const rightEdge = Math.max(...Object.values(before.objects).map(e => e.x + (e.w || 200)));
+    const r = await call({ text: '全新话题', tag: 'lane乙', open_lane: 'fresh' });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    expect(board.lanes['lane乙'].parent).toBeUndefined();
+    expect(board.lanes['lane乙'].x).toBeGreaterThanOrEqual(rightEdge);
+  });
+});

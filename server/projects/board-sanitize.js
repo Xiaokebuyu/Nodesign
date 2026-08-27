@@ -12,7 +12,7 @@
 
 import { isBindingType, isBindingMaterial } from '../lib/binding-types.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
-import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS } from './board-limits.js';
+import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES } from './board-limits.js';
 
 /**
  * 板上署名的白名单：'user' / 'agent' / 常驻角色 slug（`rp-*`，见 engine/agent/cast.js）。
@@ -253,6 +253,22 @@ export function sanitizeZone(z) {
   };
 }
 
+/**
+ * 线（lane）注册表条目（2026-08-27 空间规划）：{x,y,w,parent}。
+ * 键 = tag（线就是 tag，见 lib/board-lanes.js 头注）；frontier 不存 —— 从成员现算。
+ */
+export function sanitizeLane(l) {
+  if (!l || typeof l !== 'object') return null;
+  const x = Number(l.x); const y = Number(l.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const parent = typeof l.parent === 'string' && l.parent.length <= 300 ? l.parent : null;
+  return {
+    x: Math.round(x), y: Math.round(y),
+    w: clampNum(l.w, 96, 2400, 480),
+    ...(parent ? { parent } : {}),
+  };
+}
+
 export function sanitizeBoard(raw) {
   const size = sanitizeSize(raw?.size);
   const objects = {};
@@ -282,6 +298,15 @@ export function sanitizeBoard(raw) {
   // 主角覆盖（2026-08-14 agent 摆位）：显式立的主角压过前端 pickHero 的推断。
   // 存 id 不存理由 —— 理由在会话里，画布只要知道谁站 C 位
   const hero = typeof raw?.hero === 'string' && raw.hero.length <= 300 ? raw.hero : null;
-  return { size, zones, objects, bindings, ...(hero ? { hero } : {}) };
+  const lanes = {};
+  let lCount = 0;
+  for (const [name, l] of Object.entries(raw?.lanes && typeof raw.lanes === 'object' ? raw.lanes : {})) {
+    if (lCount >= MAX_LANES) break;
+    const tag = sanitizeTag(name);
+    if (!tag) continue;
+    const s = sanitizeLane(l);
+    if (s) { lanes[tag] = s; lCount += 1; }
+  }
+  return { size, zones, objects, bindings, ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}) };
 }
 

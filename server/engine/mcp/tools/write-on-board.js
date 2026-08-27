@@ -28,6 +28,7 @@ import { layerOf, normalizeCanvasId, tagEnvelope } from '../../../lib/canvas-id.
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
 import { resolvePlacement, describePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
+import { allocateLaneColumn } from '../../../lib/board-lanes.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
@@ -65,6 +66,8 @@ const SCHEMA = {
     .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
   chain: z.boolean().optional()
     .describe('Single note: auto reply_to the latest board note of the same tag (chapter threads without hand-copying paths)'),
+  open_lane: z.string().max(300).optional()
+    .describe("Open a NEW thread column named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic column at the right edge of the map. Requires tag; continue the lane later with {tag, chain:true}. read_board's 版图 section lists existing lanes."),
   tag: z.string().regex(TAG_RE).optional()
     .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
   size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe('Single note text size (md default, lg headline)'),
@@ -119,6 +122,11 @@ One thought = one call. What you pass decides what lands:
   (1 cell = ${UNIT}px); the server does pixels, hand-drawn shapes, and placement. The
   sketch gets a #tag (read/select/erase as a group) and lands as STAGING (translucent)
   until edit_board commits it or the turn ends.
+Threads are LANES: a tag names a line of thought growing downward. Continue one with
+{tag, chain:true}; fork a new direction off any note with {tag:"新名", open_lane:"<that id>"}
+(the column is allocated for you, a flow line marks the fork); a brand-new topic is
+{tag:"名", open_lane:"fresh"}. read_board's 版图 section is the map — read it, then place
+by RELATION, not by coordinates.
 - at:{x,y} (either mode) is a world-coord suggestion: the server snaps to a free cell
   nearby; placement never fails — if your spot is unusable it lands somewhere sensible
   and the return says exactly where and why.
@@ -221,6 +229,16 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     if (args.text) {
       const body = String(args.text).trim();
       if (!body) return err('空话不上板。');
+      // ── 开新线（open_lane，2026-08-27 空间规划）：模型声明拓扑，机器排列 ──
+      if (args.open_lane) {
+        if (!args.tag) return err('open_lane 要配 tag：tag 就是这条线的名字，后续用 {tag, chain:true} 续。');
+        if (args.reply_to || args.chain || args.at || args.near) {
+          return err('open_lane 是开新线，跟 reply_to/chain/at/near 互斥 —— 岔出点直接写在 open_lane 里。');
+        }
+        if (board.lanes?.[args.tag]) {
+          return err(`线 #${args.tag} 已经开过了（read_board 的版图一节看得到）。接着写用 {tag:"${args.tag}", chain:true}；真要另起炉灶，换个名字。`);
+        }
+      }
       // chain：接在同 tag 最新一条**自己写的**板书后面（chapter 线程不再手抄路径）。
       // 接续权（2026-08-27 编排）：chain 是「续写我的线程」，永远不跨作者 ——
       // GM 的章节线和每个角色的叙事线各自延各自的，中间插了别人的话也不串线。
@@ -242,6 +260,22 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       let anchorId = null; let parentId = null;
       let replyRect = null; let anchorRect = null;
       let b2 = board;   // 救援入座后换新板（新座要进障碍集）
+      // 开新线：岔出点解析（fresh = 无岔出点，从版图右缘开列）
+      let laneFrom = null;   // {id, rect} | 'fresh'
+      if (args.open_lane) {
+        if (args.open_lane === 'fresh') {
+          laneFrom = 'fresh';
+        } else {
+          const a = await resolveAnchor(args.open_lane, board);
+          if (!a) {
+            return err(`open_lane 的岔出点 ${args.open_lane} 不在板上（read_board 看一眼现在都有谁）。全新话题用 open_lane:'fresh'。`);
+          }
+          laneFrom = { id: a.anchorId, rect: a.rect };
+          zone = a.zone; if (a.board) b2 = a.board;
+          // 分支线：岔出点 → 新线头（flow 读序），跟 near 的画线机制共用
+          anchorId = a.anchorId; anchorRect = a.rect;
+        }
+      }
       if (replyToRaw) {
         const pid2 = normalizeCanvasId(replyToRaw);
         const e = pid2 ? board.objects?.[pid2] : null;
@@ -266,10 +300,19 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
       const obstacles = obstaclesOf(b2, zone);
       const vpRect = vpRectFor(zone);
-      const placed = resolvePlacement({
-        box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
-        obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
-      });
+      // 开新线走列分配（撞不上姊妹线；没有失败分支），其余走统一落位
+      const lanePlan = laneFrom
+        ? allocateLaneColumn({
+          parent: laneFrom === 'fresh' ? null : laneFrom.rect,
+          lanes: Object.values(b2.lanes || {}), obstacles, box,
+        })
+        : null;
+      const placed = lanePlan
+        ? { x: lanePlan.x, y: lanePlan.y, resolution: lanePlan.fallback ? 'fallback' : 'lane-open', nudged: !!lanePlan.fallback }
+        : resolvePlacement({
+          box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
+          obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
+        });
 
       const fileName = chalkFileName(body);
       const content = renderChalk({ body, by, anchor: anchorId, replyTo: parentId, tag: args.tag || null, sessionId: sessionId || null });
@@ -281,13 +324,19 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       } };
       const bindings = {};
       if (anchorId) {
-        const type = args.relation || 'annotates';
+        const type = args.relation || (lanePlan ? 'flow' : 'annotates');
         // flow 是读序（旧 → 新）：锚在前板书在后；其余语义都是"这条说的是它"
         const [from, to] = type === 'flow' ? [anchorId, rel] : [rel, anchorId];
         bindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}) };
       }
       if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
-      await patchBoard(projectId, { objects, bindings });
+      await patchBoard(projectId, {
+        objects, bindings,
+        ...(lanePlan ? { lanes: { [args.tag]: {
+          x: Math.round(placed.x), y: Math.round(placed.y), w: lanePlan.w,
+          ...(laneFrom !== 'fresh' && laneFrom?.id ? { parent: laneFrom.id } : {}),
+        } } } : {}),
+      });
       // 跟随线：这个 tag 有人跟着（状态板之类）就自动重锚挪组（fail-soft）
       if (args.tag) { try { await applyFollows(projectId, { tag: args.tag, newId: rel }); } catch { /* */ } }
 
@@ -301,6 +350,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
       ];
       if (box.h > SKETCH_FIT.h * 0.6) lines.push('⚠ It is tall — next time split or shorten.');
+      if (lanePlan) {
+        lines.push(`Opened lane #${args.tag}${laneFrom !== 'fresh' ? ` branching from ${laneFrom.id}` : ''}`
+          + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists all lanes under 版图.`);
+      }
       lines.push('The user can annotate it to reply; answer with reply_to (or chain:true on the same tag).');
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }

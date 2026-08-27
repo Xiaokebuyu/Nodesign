@@ -53,3 +53,31 @@ describe('patchBoard 合并语义（08-25：前端瘦条目回写不再抹字段
     expect(board.objects['text:byuser'].by).toBe('user');
   });
 });
+
+describe('lanes 注册表（08-27 空间规划）：持久在 board.json、合并语义、坏名丢弃', () => {
+  const lp = 'proj_boardstore_lanes';
+  beforeAll(async () => { await ensureProjectWorkspace(lp); });
+
+  it('⭐ patch 落盘 → readBoard 读得回（sanitize 白名单没把它剥掉）', async () => {
+    await patchBoard(lp, { lanes: { 主线: { x: 100, y: 0, w: 480 }, 支线: { x: 700, y: 40, w: 480, parent: 'notes/板书/a.md' } } });
+    const b = await readBoard(lp);
+    expect(b.lanes['主线']).toEqual({ x: 100, y: 0, w: 480 });
+    expect(b.lanes['支线'].parent).toBe('notes/板书/a.md');
+  });
+
+  it('瘦 patch 合并不抹字段；null 删除；删空后整个键消失', async () => {
+    await patchBoard(lp, { lanes: { 支线: { y: 64 } } });
+    let b = await readBoard(lp);
+    expect(b.lanes['支线']).toMatchObject({ x: 700, y: 64, parent: 'notes/板书/a.md' });
+    await patchBoard(lp, { lanes: { 主线: null, 支线: null } });
+    b = await readBoard(lp);
+    expect(b.lanes).toBeUndefined();
+  });
+
+  it('坏名（过不了 tag 白名单）静默丢弃，不炸整个 patch', async () => {
+    await patchBoard(lp, { lanes: { 'bad name!!': { x: 0, y: 0 }, 好名: { x: 10, y: 10 } } });
+    const b = await readBoard(lp);
+    expect(b.lanes['bad name!!']).toBeUndefined();
+    expect(b.lanes['好名']).toEqual({ x: 10, y: 10, w: 480 });
+  });
+});

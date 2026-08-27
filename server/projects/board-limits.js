@@ -10,3 +10,4 @@ export const MAX_ZONES = 200;
 // （agent 循环里连画）的闸门，不是设计目标。超了直接不收，不做淘汰 ——
 // 静默丢最旧的会让"我明明画了"变成玄学。
 export const MAX_BINDINGS = 4000;
+export const MAX_LANES = 60;      // 线（lane 注册表）：几十条线的脑图已是极限读感

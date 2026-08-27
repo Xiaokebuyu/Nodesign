@@ -26,9 +26,10 @@ export {
   DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS,
 } from './board-limits.js';
 export { TEXT_FONTS } from './board-sanitize.js';
-import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS } from './board-limits.js';
+import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES } from './board-limits.js';
 import {
-  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, isSafeCanvasId,
+  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane,
+  isSafeCanvasId,
 } from './board-sanitize.js';
 
 // 分区自动铺位常数 —— 与前端 BoardCanvas 的 ZONE_* 保持一致（数值约定，非共享代码）
@@ -129,6 +130,20 @@ export function patchBoard(pid, patch) {
         const fixed = { ...s, from: fwd(s.from), to: fwd(s.to) };
         if (board.bindings[id] || Object.keys(board.bindings).length < MAX_BINDINGS) board.bindings[id] = fixed;
       }
+    }
+    // 线注册表（08-27 空间规划）：合并语义同 objects；parent 也走改名转发
+    if (patch?.lanes && typeof patch.lanes === 'object') {
+      board.lanes = board.lanes || {};
+      for (const [name, l] of Object.entries(patch.lanes)) {
+        const tag = sanitizeTag(name);
+        if (!tag) continue;
+        if (l === null) { delete board.lanes[tag]; continue; }
+        const s = sanitizeLane(board.lanes[tag] ? { ...board.lanes[tag], ...l } : l);
+        if (!s) continue;
+        const fixed = s.parent ? { ...s, parent: fwd(s.parent) } : s;
+        if (board.lanes[tag] || Object.keys(board.lanes).length < MAX_LANES) board.lanes[tag] = fixed;
+      }
+      if (!Object.keys(board.lanes).length) delete board.lanes;
     }
     // 主角覆盖：null = 撤销（回到 pickHero 自动推断），字符串 = 显式立主角
     if (patch?.hero !== undefined) {
