@@ -58,6 +58,15 @@ export function useBoardObjectDrag({
         if (gid !== o.id && gp && Number.isFinite(gp.x)) group[gid] = { x: gp.x, y: gp.y };
       }
     }
+    // 贴身记号（hug，08-27 shapes 编辑面）：圈着这个节点的涂鸦跟手一起走 ——
+    // 服务端 move/reflow 已同口径，缺这半句用户一拖圈就留在原地
+    for (const it of positioned) {
+      const hug = it.hug || it.pos?.hug;
+      if (hug === o.id && !group[it.id] && it.id !== o.id) {
+        const gp = layoutRef.current[it.id];
+        if (gp && Number.isFinite(gp.x)) group[it.id] = { x: gp.x, y: gp.y };
+      }
+    }
     dragRef.current = {
       kind: 'object', id: o.id, startX: e.clientX, startY: e.clientY,
       // 抓点存**世界坐标**：move 时用「当前相机下光标处的世界点 − 抓点」求

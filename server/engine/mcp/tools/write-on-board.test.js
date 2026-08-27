@@ -204,3 +204,37 @@ describe('open_lane：开新线（08-27 空间规划）', () => {
     expect(board.lanes['lane乙'].x).toBeGreaterThanOrEqual(rightEdge);
   });
 });
+
+describe("ink:'hand'（08-27 收编 create_on_board）+ 草图 hug", () => {
+  it("⭐ hand 落画布原生 text 节点（无文件），near 线照画", async () => {
+    await patchBoard(pid, { objects: { 'assets/hand锚.png': { x: 6000, y: 6000, w: 200, h: 176 } } });
+    const r = await call({ text: '轻轻一句', ink: 'hand', near: 'assets/hand锚.png', font: 'pen', color: 'red' });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toMatch(/handwritten note text:/);
+    const board = await readBoard(pid);
+    const [hid, e] = Object.entries(board.objects).find(([, o]) => o.kind === 'text' && o.data?.t === '轻轻一句');
+    expect(e.data.font).toBe('pen');
+    expect(e.data.color).toBe('red');
+    expect(Object.values(board.bindings).some(b => b.from === hid && b.to === 'assets/hand锚.png')).toBe(true);
+  });
+
+  it('hand 接不进线程：chain/reply_to/open_lane 一律拒且说清换 chalk', async () => {
+    const r = await call({ text: 'x', ink: 'hand', chain: true, tag: 'lane甲' });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toMatch(/chalk/);
+  });
+
+  it('⭐ 草图里 around 包节点的形状落盘带 hug（指向节点的真 id）', async () => {
+    const r = await call({
+      tag: 'hug草图',
+      nodes: [{ id: 'a', text: '被圈的' }, { id: 'b', text: '另一个' }],
+      shapes: [{ id: 's1', kind: 'rect', around: 'a' }],
+    });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    const nid = Object.entries(board.objects).find(([, e]) => e.data?.lid === 'a' && e.tag === 'hug草图')[0];
+    const hugger = Object.values(board.objects).find((e) => e.hug === nid);
+    expect(hugger).toBeTruthy();
+    expect(hugger.kind).toBe('scribble');
+  });
+});

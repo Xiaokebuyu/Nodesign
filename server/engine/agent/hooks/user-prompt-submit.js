@@ -27,6 +27,7 @@ import { readUiConfigFile, withUiDefaults } from '../../../projects/ui-config.js
 import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
+import { resolvePlacement } from '../../../lib/board-place.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
 import { roleLabel } from '../../mcp/actor.js';
@@ -107,7 +108,21 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
         w: vp.camera.w, h: vp.camera.h,
       } } : vp;
       const line = describeViewpoint(q, rects);
-      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；要细节调 read_user_view。` });
+      // 空位建议（08-27 用户提）：替 agent 把"落哪能进用户眼帘"算好 —— 大身位先试，
+      // 不行退小身位，再不行明说视口已满。数字来自 resolvePlacement 的视口扫描，
+      // 跟真实落位同一套判据（建议和落位算法分家=两份真相源）。
+      let spot = null;
+      if (vp.camera) {
+        const big = resolvePlacement({ box: { w: 480, h: 360 }, obstacles: rects, contentBottom: 0, viewport: vp.camera });
+        if (big.resolution === 'viewport') spot = `视口内空位：(${big.x},${big.y}) 起可容 ~480x360（一条板书的身位）`;
+        else {
+          const small = resolvePlacement({ box: { w: 300, h: 160 }, obstacles: rects, contentBottom: 0, viewport: vp.camera });
+          spot = small.resolution === 'viewport'
+            ? `视口内只剩小空位：(${small.x},${small.y}) 可容 ~300x160，大件会落到视口外`
+            : '视口内已满 —— 新东西会落到视口外，要么 near 贴着视口里的东西写，要么落完说清在哪';
+        }
+      }
+      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；落新东西优先进他的视口或贴着视口里的东西（near/at）。要看画面细节才调 read_user_view。` });
     }
   } catch { /* 视点读不到就沉默 */ }
   try {

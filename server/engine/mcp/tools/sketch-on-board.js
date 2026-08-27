@@ -14,9 +14,9 @@ import { commitStaging, removeByTag } from '../../../projects/board-store.js';
 export function makeFinishSketchTool({ projectId, ctx }) {
   return tool(
     'finish_sketch',
-    `Commit a staging sketch (make it solid) — or erase it. Pass the #tag from
-write_on_board; omit tag to commit everything still staging. erase:true deletes the
-whole group (its notes/shapes/lines; real artifact cards only lose the tag).`,
+    `Deprecated alias — use edit_board {op:"commit",tag} / {op:"erase_group",tag}
+(same behavior; batches with other edits). Commit a staging sketch or erase it;
+omit tag to commit everything still staging.`,
     {
       tag: z.string().max(40).optional(),
       erase: z.boolean().optional(),

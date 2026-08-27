@@ -26,9 +26,9 @@ import { readBoard, patchBoard, commitStaging, removeByTag, chalkAbsPath, TEXT_F
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
-import { UNIT, textBox } from '../../../lib/sketch-layout.js';
+import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
 import { resolvePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
-import { CHALK_DIR, trashChalkFile } from '../../../lib/chalk.js';
+import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
 
 const MAX_OPS = 120;
@@ -49,6 +49,8 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('move_group'), tag: z.string().min(1).max(40), to: TO }),
   z.object({ op: z.literal('remove'), id: z.string().min(1).max(300) }),
   z.object({ op: z.literal('add_node'), id: z.string().regex(/^[A-Za-z0-9_-]{1,24}$/).optional().describe('local handle for later ops of this call'), text: z.string().min(1).max(8000), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), at: REL, tag: z.string().max(40).optional() }),
+  z.object({ op: z.literal('add_shape'), kind: z.enum(['rect', 'ellipse', 'circle', 'underline']), around: z.string().min(1).max(300).describe('canvas id to wrap/underline — the mark HUGS it and follows when it moves'), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), width: z.number().min(1).max(12).optional(), tag: z.string().max(40).optional() }),
+  z.object({ op: z.literal('set_shape'), id: z.string().min(1).max(300), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), width: z.number().min(1).max(12).optional() }),
   z.object({ op: z.literal('add_edge'), from: z.string().min(1).max(300), to: z.string().min(1).max(300), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), label: z.string().max(60).optional(), tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('set_edge'), id: z.string().min(1).max(300), label: z.string().max(60).optional(), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), from: z.string().min(1).max(300).optional().describe('re-point the line: new source end'), to: z.string().min(1).max(300).optional().describe('re-point the line: new target end') }),
   z.object({ op: z.literal('remove_edge'), id: z.string().min(1).max(300) }),
@@ -71,8 +73,12 @@ export function makeEditBoardTool({ projectId, sharedRoot, ctx }) {
 you never write absolute coordinates. ids come from read_board (nodes text:…/scribble:…,
 cards deck:…/site:…/paths, lines b:…); local names from the sketch that drew them work too.
 ops (run in order; a failing op is reported, the rest still apply):
- set_text{id,text?,…} · move{id,to} · move_group{tag,to} · remove{id} (agent-written board
+ set_text{id,text?,…} (canvas text nodes AND your own board-note files — a note's body is
+ rewritten in place, threads/lines/annotations survive; never redraw to change words) ·
+ move{id,to} · move_group{tag,to} · remove{id} (agent-written board
  notes included: file + seat + lines go together) · add_node{id?,text,at:{ref,side,gap?},…} ·
+ add_shape{kind,around,…} (circle/box/underline an EXISTING thing after the fact — the mark
+ hugs it and follows when it moves) · set_shape{id,color?,width?} ·
  add_edge{from,to,type?,material?,label?} · set_edge{id,from?,to?,label?,type?,material?}
  (re-point a line in one op) · remove_edge{id} · reflow{tag,layout?} (restack a group after
  text edits changed heights) · follow{group_tag,target_tag,side?} (standing rule: whenever a
@@ -159,6 +165,16 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
     };
     const report = []; let ok = 0;
     const setObj = (id, e) => { live[id] = e; objects[id] = e; };
+    /** 贴身记号跟随（08-27 shapes 编辑面）：挪一件东西时，圈着它的涂鸦一起走。
+     *  except = 这次已经被挪过的 id 集（整组拖时组员别被挪两次）。 */
+    const moveHuggers = (nodeId, dx, dy, except = null) => {
+      if (!dx && !dy) return;
+      for (const [hid, he] of Object.entries(live)) {
+        if (he?.hug !== nodeId || he.kind !== 'scribble') continue;
+        if (except?.has(hid)) continue;
+        setObj(hid, { ...he, x: he.x + dx, y: he.y + dy });
+      }
+    };
 
     for (let i = 0; i < ops.length; i += 1) {
       const o = ops[i];
@@ -166,7 +182,28 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
       try {
         if (o.op === 'set_text') {
           const id = rid(o.id); const e = id && live[id];
-          if (!e || e.kind !== 'text') { fail(`${o.id} 不是文字节点`); continue; }
+          // 板书正门（08-27）：set_text 也认板书**文件** —— 改字不再要求重画/绕道
+          // Edit。笔权按作者判：只有作者本人能改自己的话（接续权闸的同一条纪律，
+          // 角色因此第一次拥有了改自己板书的手）。
+          if (e && !e.kind && id.startsWith(`${CHALK_DIR}/`)) {
+            if ((e.by || 'agent') !== by) { fail(`这条板书是「${e.by || 'agent'}」写的，笔权在它 —— 想让它改，寄 cue（SendMessage）或让用户直接说。`); continue; }
+            if (!o.text) { fail('改板书给 text（字号/字体/颜色是画布原生节点的旋钮，板书没有）'); continue; }
+            const abs = chalkAbsPath(projectId, id);
+            if (!abs) { fail(`${id} 的文件路径解析不了`); continue; }
+            let parsed;
+            try { parsed = parseChalk(await fs.readFile(abs, 'utf8')); } catch { fail(`${id} 文件读不到（磁盘上已无此路径？）`); continue; }
+            const c = parsed.chalk || {};
+            await fs.writeFile(abs, renderChalk({
+              body: o.text, by: c.by || e.by || 'agent',
+              ...(c.at ? { at: c.at } : {}),
+              anchor: c.anchor, replyTo: c.replyTo, tag: c.tag, sessionId: parsed.sessionId,
+            }), 'utf8');
+            const box2 = textBox(o.text, 'md', { md: true, wUnits: Math.max(8, Math.round((e.w || 432) / UNIT)) });
+            setObj(id, { ...e, w: box2.w, h: box2.h }); ok += 1;
+            report.push(`· #${i + 1} set_text 重写了板书 ${id} 的正文（线/标注/座位全保留）`);
+            continue;
+          }
+          if (!e || e.kind !== 'text') { fail(`${o.id} 不是文字节点，也不是你的板书文件`); continue; }
           const data = { ...e.data };
           if (o.text) data.t = o.text;
           if (o.format) { if (o.format === 'md') data.format = 'md'; else delete data.format; }
@@ -181,10 +218,12 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             const p = placeRel(id, box, o.to);
             if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
             setObj(id, { ...e, x: Math.round(p.x), y: Math.round(p.y), seat: 'agent' });
+            moveHuggers(id, Math.round(p.x) - e.x, Math.round(p.y) - e.y);
             report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.nudged ? `（目标位被占，就近落在 ${p.resolution}）` : ''}`);
           } else {
             const nx = Math.round(e.x + o.to.dx * UNIT); const ny = Math.round(e.y + o.to.dy * UNIT);
             setObj(id, { ...e, x: nx, y: ny, seat: 'agent' });
+            moveHuggers(id, nx - e.x, ny - e.y);
             report.push(`· #${i + 1} move → (${nx},${ny})`);
           }
           ok += 1;
@@ -209,7 +248,9 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             p = { x: bb.x + o.to.dx * UNIT, y: bb.y + o.to.dy * UNIT };
           }
           const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
+          const movedSet = new Set(members.map(([id]) => id));
           for (const [id, e] of members) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, seat: 'agent' });
+          for (const [id] of members) moveHuggers(id, dx, dy, movedSet);
           report.push(`· #${i + 1} move_group #${o.tag} → 组左上 (${Math.round(p.x)},${Math.round(p.y)})${'ref' in o.to && p.resolution ? `（${p.resolution}${p.nudged ? '，就近避让过' : ''}）` : ''}`);
           ok += 1;
         } else if (o.op === 'remove') {
@@ -243,6 +284,41 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           });
           if (o.id) local.set(o.id, id);
           report.push(`+ node ${o.id ? `${o.id}=` : ''}${id}`); ok += 1;
+        } else if (o.op === 'add_shape') {
+          // 事后圈重点（08-27 shapes 编辑面）：给**已在板上**的东西补一个手画记号。
+          // hug 让它跟着目标走 —— 之前画完的圈是死的，目标一挪就散架。
+          const refId = rid(o.around); const r = refId && rectOf(refId);
+          if (!r) { fail(`around ${o.around} 不在板上`); continue; }
+          const seed = `${refId}:m${stamp()}`;
+          let sp; let ent;
+          if (o.kind === 'underline') {
+            sp = shapePath('underline', { to: { x: Math.max(8, r.w - 4), y: 0 } }, seed);
+            ent = { x: Math.round(r.x + 2 - 6), y: Math.round(r.y + r.h - 2 - 6) };
+          } else {
+            const padPx = o.kind === 'rect' ? 8 : 14;
+            let bx = { x: r.x - padPx, y: r.y - padPx, w: r.w + padPx * 2, h: r.h + padPx * 2 };
+            if (o.kind === 'circle') { const dmax = Math.max(bx.w, bx.h); bx = { x: bx.x + (bx.w - dmax) / 2, y: bx.y + (bx.h - dmax) / 2, w: dmax, h: dmax }; }
+            sp = shapePath(o.kind, { w: bx.w, h: bx.h }, seed);
+            ent = { x: Math.round(bx.x - 6), y: Math.round(bx.y - 6) };
+          }
+          const sid = `scribble:a${stamp()}`;
+          const tag2 = o.tag || defaultTag || live[refId]?.tag || null;
+          setObj(sid, {
+            ...ent, z: 1, w: Math.round(sp.w), h: Math.round(sp.h), kind: 'scribble',
+            data: { d: sp.d, color: o.color || 'ink', width: o.width || 2 },
+            by, seat: 'agent', hug: refId,
+            ...(tag2 ? { tag: tag2 } : {}),
+            zone: layerOf(refId, live[refId], known) || '',
+          });
+          report.push(`· #${i + 1} add_shape ${o.kind} 圈住 ${refId}（id ${sid}，会跟着它走）`);
+          ok += 1;
+        } else if (o.op === 'set_shape') {
+          const id = rid(o.id); const e = id && live[id];
+          if (!e || e.kind !== 'scribble') { fail(`${o.id} 不是手画记号（scribble）`); continue; }
+          const data = { ...e.data };
+          if (o.color) data.color = o.color;
+          if (o.width) data.width = o.width;
+          setObj(id, { ...e, data }); ok += 1;
         } else if (o.op === 'add_edge') {
           const from = rid(o.from) || normalizeCanvasId(o.from);
           const to = rid(o.to) || normalizeCanvasId(o.to);
@@ -295,7 +371,11 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             if (m.e.seat === 'user') { skipped.push(m.id); cur = horizontal ? Math.max(cur, m.r.x + m.r.w + 16) : Math.max(cur, m.r.y + m.r.h + 16); continue; }
             const nx = horizontal ? cur : left;
             const ny = horizontal ? top : cur;
-            if (nx !== m.e.x || ny !== m.e.y) setObj(m.id, { ...m.e, x: Math.round(nx), y: Math.round(ny) });
+            if (nx !== m.e.x || ny !== m.e.y) {
+              setObj(m.id, { ...m.e, x: Math.round(nx), y: Math.round(ny) });
+              // 圈着这个节点的记号跟着走 —— reflow 之前的病：文字重排、圈留在原地
+              moveHuggers(m.id, Math.round(nx) - m.e.x, Math.round(ny) - m.e.y);
+            }
             cur += (horizontal ? m.r.w : m.r.h) + 16;
           }
           if (skipped.length) report.push(`· #${i + 1} reflow: 跳过用户拖过的 ${skipped.length} 件`);

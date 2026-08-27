@@ -70,6 +70,10 @@ const SCHEMA = {
     .describe("Open a NEW thread column named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic column at the right edge of the map. Requires tag; continue the lane later with {tag, chain:true}. read_board's 版图 section lists existing lanes."),
   tag: z.string().regex(TAG_RE).optional()
     .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
+  ink: z.enum(['chalk', 'hand']).optional()
+    .describe("Single note body: 'chalk' (default) = a real file under notes/板书 (Read/Edit later; chain/reply threads live on these); 'hand' = canvas-native handwritten text — a light remark like the user's own handwriting, no file, no threading"),
+  font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional().describe("Single note font (ink:'hand'; default kai)"),
+  color: z.enum(['ink', 'red', 'pencil', 'brass']).optional().describe("Single note color (ink:'hand')"),
   size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe('Single note text size (md default, lg headline)'),
   width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px); default by content'),
   title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
@@ -229,6 +233,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     if (args.text) {
       const body = String(args.text).trim();
       if (!body) return err('空话不上板。');
+      // 手写字（ink:'hand'，08-27 收编 create_on_board）：线程语义长在板书文件上
+      if (args.ink === 'hand' && (args.chain || args.open_lane || args.reply_to)) {
+        return err("ink:'hand' 是画布手写字（无文件本体），接不进线程 —— 要 chain/open_lane/reply_to 就用默认的 chalk。");
+      }
       // ── 开新线（open_lane，2026-08-27 空间规划）：模型声明拓扑，机器排列 ──
       if (args.open_lane) {
         if (!args.tag) return err('open_lane 要配 tag：tag 就是这条线的名字，后续用 {tag, chain:true} 续。');
@@ -313,6 +321,34 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
           obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
         });
+
+      // ── 手写字本体（ink:'hand'）：画布原生 text 节点，不落文件 ──
+      if (args.ink === 'hand') {
+        const hid = `text:a${stamp()}`;
+        const data = {
+          t: body, ...(looksLikeMd(body) ? { format: 'md' } : {}),
+          font: TEXT_FONTS.includes(args.font) ? args.font : 'kai',
+          size: args.size || 'md', ...(COLORS.includes(args.color) ? { color: args.color } : {}),
+        };
+        const hObjects = { [hid]: {
+          x: Math.round(placed.x), y: Math.round(placed.y), z: 1, w: box.w, h: box.h,
+          kind: 'text', data, zone, by, seat: 'agent', ...(args.tag ? { tag: args.tag } : {}),
+        } };
+        const hBindings = {};
+        if (anchorId) {
+          const type = args.relation || 'annotates';
+          const [from, to] = type === 'flow' ? [anchorId, hid] : [hid, anchorId];
+          hBindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}) };
+        }
+        await patchBoard(projectId, { objects: hObjects, bindings: hBindings });
+        const hRect = { x: Math.round(placed.x), y: Math.round(placed.y), w: box.w, h: box.h };
+        try {
+          ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: '写了一段手写字' });
+          ctx?.emit?.(Events.boardFocus(hRect, { tag: args.tag || null, layer: zone, soft: true, actor: by !== 'agent' ? by : null }));
+        } catch { /* fail-soft */ }
+        return { content: [{ type: 'text', text:
+          `Wrote handwritten note ${hid} at (${hRect.x},${hRect.y}) ${hRect.w}x${hRect.h} — ${describePlacement(placed, { requestedAt: args.at })}.` }] };
+      }
 
       const fileName = chalkFileName(body);
       const content = renderChalk({ body, by, anchor: anchorId, replyTo: parentId, tag: args.tag || null, sessionId: sessionId || null });
@@ -452,7 +488,9 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         rect = { x: box.x - 6, y: box.y - 6, w: sp.w, h: sp.h };
         d = sp.d;
       }
-      shapes.push({ key: sid, rect, d, color: COLORS.includes(color) ? color : 'ink', width });
+      // 包着节点的记号记 hug：落盘后编辑侧挪节点它跟着走（散架病的另一半在 edit-board）
+      const hugKey = (s.around && s.kind !== 'line' && s.kind !== 'arrow' && s.kind !== 'path') ? s.around : null;
+      shapes.push({ key: sid, rect, d, color: COLORS.includes(color) ? color : 'ink', width, hug: hugKey });
     }
     // ── 线：先于落位（连到真实产物的线会改主角判断 → 尺寸） ──
     const idOf = new Map();
@@ -521,7 +559,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       };
     }
     for (const sh of shapes) {
-      objects[idOf.get(sh.key)] = { x: Math.round(sh.rect.x + ox), y: Math.round(sh.rect.y + oy), w: Math.round(sh.rect.w), h: Math.round(sh.rect.h), kind: 'scribble', data: { d: sh.d, color: sh.color, width: sh.width }, ...common };
+      objects[idOf.get(sh.key)] = { x: Math.round(sh.rect.x + ox), y: Math.round(sh.rect.y + oy), w: Math.round(sh.rect.w), h: Math.round(sh.rect.h), kind: 'scribble', data: { d: sh.d, color: sh.color, width: sh.width }, ...(sh.hug && idOf.get(sh.hug) ? { hug: idOf.get(sh.hug) } : {}), ...common };
     }
     const saved = await patchBoard(projectId, { objects, bindings });
     const landed = Object.keys(objects).filter(id => saved.objects?.[id]).length;

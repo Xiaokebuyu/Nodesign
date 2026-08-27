@@ -65,9 +65,13 @@ export function describeViewpoint(v, rects = null) {
     bits.push(`视口 (${Math.round(v.camera.x)},${Math.round(v.camera.y)}) ${Math.round(v.camera.w)}x${Math.round(v.camera.h)}${v.zoom ? ` 缩放 ${Number(v.zoom).toFixed(2)}` : ''}`);
     if (rects) {
       const c = v.camera;
-      const inside = rects.filter(r => !(r.x + r.w < c.x || r.x > c.x + c.w || r.y + r.h < c.y || r.y > c.y + c.h)).map(r => r.id);
-      if (inside.length) bits.push(`视口里有 ${inside.length} 件：${inside.slice(0, 10).join('、')}${inside.length > 10 ? ' 等' : ''}`);
-      else bits.push('视口里是空地');
+      const inside = rects.filter(r => !(r.x + r.w < c.x || r.x > c.x + c.w || r.y + r.h < c.y || r.y > c.y + c.h));
+      // 带坐标和占位（08-27 用户提）：agent 摆放要知道视口里谁占了哪，不该再专门调工具去问
+      if (inside.length) {
+        bits.push(`视口里 ${inside.length} 件（id@(x,y)宽x高）：${inside.slice(0, 12)
+          .map(r => `${r.id}@(${Math.round(r.x)},${Math.round(r.y)})${Math.round(r.w)}x${Math.round(r.h)}`)
+          .join('、')}${inside.length > 12 ? ' 等' : ''}`);
+      } else bits.push('视口里是空地');
     }
   }
   if (v.openWindow) bits.push(`开着窗：${v.openWindow}${v.openPage ? `（${v.openPage}）` : ''}`);

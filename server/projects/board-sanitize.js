@@ -184,6 +184,9 @@ export function sanitizeObject(o, size) {
     // 没有这个字段，「用户拖过的东西 agent 不许动」在数据上根本表达不出来
     // （08-25 体检结论：老数据 by 被前端回写抹掉，用户拖的和自动排的分不清）。
     ...(o.seat === 'user' || o.seat === 'auto' || o.seat === 'agent' ? { seat: o.seat } : {}),
+    // 贴身跟随（2026-08-27 shapes 编辑面）：这个涂鸦是"圈住 hug 那件东西"的记号，
+    // 挪那件东西时它跟着走（edit_board move/move_group/reflow；前端拖拽同口径）
+    ...(typeof o.hug === 'string' && o.hug.length <= 300 ? { hug: o.hug } : {}),
     // 分组标签 + 草稿位（2026-08-23 黑板）。staging = agent 这一轮还在打草稿：
     // 入座不看它、read_board 默认不列它、画面上半透明；落定（commitStaging）清位。
     ...(sanitizeTag(o.tag) ? { tag: sanitizeTag(o.tag) } : {}),

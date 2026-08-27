@@ -40,7 +40,9 @@ export function makeCreateOnBoardTool({ projectId, ctx }) {
   const turnStamp = { turn: -1, count: 0 };
   return tool(
     'create_on_board',
-    `Write a handwritten note directly on the canvas — the same kind the user writes.
+    `Deprecated — use write_on_board {text, ink:'hand'} (same handwritten note, plus
+lane/placement machinery). This name stays for old sessions.
+Write a handwritten note directly on the canvas — the same kind the user writes.
 
 Use it for remarks worth KEEPING on the board: why a version went this way, what
 to compare, a caption for a group. Not for conversation (that goes in your reply)

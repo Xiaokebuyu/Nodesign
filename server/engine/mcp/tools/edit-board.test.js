@@ -190,3 +190,74 @@ describe('08-25 二批：gap 单位收口 + chalk_edit + 挪动如实报', () =>
     expect(events.some(e => e.type === 'ui.chalk_edit' && e.on === true)).toBe(true);
   });
 });
+
+describe('shapes 编辑面（08-27）：事后圈重点 + 贴身跟随', () => {
+  it('⭐ add_shape 圈住已有节点，hug 记在案；move 节点圈跟着走', async () => {
+    await write({ nodes: [{ id: 'k1', text: '要圈的重点' }, { id: 'k2', text: '陪跑' }], tag: 'hug试' });
+    let board = await readBoard(pid);
+    const nid = Object.entries(board.objects).find(([, e]) => e.data?.lid === 'k1')[0];
+    const r = await edit({ ops: [{ op: 'add_shape', kind: 'ellipse', around: nid, color: 'red' }] });
+    expect(r.isError).toBeUndefined();
+    board = await readBoard(pid);
+    const [sid, sh] = Object.entries(board.objects).find(([, e]) => e.hug === nid);
+    expect(sh.kind).toBe('scribble');
+    expect(sh.data.color).toBe('red');
+    const rel = { dx: sh.x - board.objects[nid].x, dy: sh.y - board.objects[nid].y };
+    // 挪节点：圈按同 delta 跟走（相对位置不变）
+    await edit({ ops: [{ op: 'move', id: nid, to: { dx: 10, dy: 5 } }] });
+    board = await readBoard(pid);
+    expect(board.objects[sid].x - board.objects[nid].x).toBe(rel.dx);
+    expect(board.objects[sid].y - board.objects[nid].y).toBe(rel.dy);
+  });
+
+  it('⭐ reflow 不再散架：文字重排时圈着它的记号一起走', async () => {
+    let board = await readBoard(pid);
+    const nid = Object.entries(board.objects).find(([, e]) => e.data?.lid === 'k1')[0];
+    const [sid] = Object.entries(board.objects).find(([, e]) => e.hug === nid);
+    const relBefore = { dx: board.objects[sid].x - board.objects[nid].x, dy: board.objects[sid].y - board.objects[nid].y };
+    const r = await edit({ ops: [{ op: 'reflow', tag: 'hug试', layout: 'row' }] });
+    expect(r.isError).toBeUndefined();
+    board = await readBoard(pid);
+    expect(board.objects[sid].x - board.objects[nid].x).toBe(relBefore.dx);
+    expect(board.objects[sid].y - board.objects[nid].y).toBe(relBefore.dy);
+  });
+
+  it('set_shape 改色改粗；对非涂鸦拒', async () => {
+    const board = await readBoard(pid);
+    const [sid] = Object.entries(board.objects).find(([, e]) => e.kind === 'scribble' && e.hug);
+    const r = await edit({ ops: [{ op: 'set_shape', id: sid, color: 'brass', width: 4 }] });
+    expect(r.isError).toBeUndefined();
+    const after = await readBoard(pid);
+    expect(after.objects[sid].data.color).toBe('brass');
+    expect(after.objects[sid].data.width).toBe(4);
+    const nid = Object.entries(after.objects).find(([, e]) => e.data?.lid === 'k1')[0];
+    const r2 = await edit({ ops: [{ op: 'set_shape', id: nid, color: 'red' }] });
+    expect(r2.content[0].text).toMatch(/不是手画记号/);
+  });
+});
+
+describe('板书正门（08-27）：set_text 认板书文件，笔权按作者判', () => {
+  it('⭐ 改自己的板书 = 重写文件正文，frontmatter 章保留', async () => {
+    await write({ text: '初版正文', tag: '正门试' });
+    let board = await readBoard(pid);
+    const [cid] = Object.entries(board.objects).find(([id, e]) => id.startsWith('notes/板书/') && e.tag === '正门试');
+    const r = await edit({ ops: [{ op: 'set_text', id: cid, text: '改过的正文，比初版长了一些，高度会重估' }] });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toMatch(/重写了板书/);
+    const raw = await fs.readFile(path.join(sharedRoot, cid), 'utf8');
+    expect(raw).toContain('改过的正文');
+    expect(raw).toContain('nd: chalk');
+    expect(raw).not.toContain('初版正文');
+    board = await readBoard(pid);
+    expect(board.objects[cid].tag).toBe('正门试');   // 座位字段没被抹
+  });
+
+  it('⭐ 改别人的板书被拒（笔权），产物卡照旧拒', async () => {
+    const board = await readBoard(pid);
+    const [cid] = Object.entries(board.objects).find(([id, e]) => id.startsWith('notes/板书/') && e.tag === '正门试');
+    await patchBoard(pid, { objects: { [cid]: { by: 'rp-someone' } } });
+    const r = await edit({ ops: [{ op: 'set_text', id: cid, text: '主控想代笔' }] });
+    expect(r.content[0].text).toMatch(/笔权/);
+    await patchBoard(pid, { objects: { [cid]: { by: 'agent' } } });
+  });
+});
