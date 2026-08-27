@@ -42,15 +42,26 @@ describe('trySayToRole', () => {
     expect(api.sayToRole).not.toHaveBeenCalled();
   });
 
-  it('直达时把话和上下文一起发出去，并提示结果', async () => {
-    const api = { sayToRole: vi.fn().mockResolvedValue({ delivered: 'waiting' }) };
+  it('直达时把话和上下文一起发出去，并提示结果（08-27 起带落痕：keep + 板书锚）', async () => {
+    const api = { sayToRole: vi.fn().mockResolvedValue({ delivered: 'waiting', echo: 'notes/板书/e.md' }) };
     const toasts = [];
     const ok = await trySayToRole({
       list: [chalk('rp-moli', '墨璃')], projectId: 'p1', text: '继续',
       api, showToast: (t, k) => toasts.push([t, k]),
     });
     expect(ok).toBe(true);
-    expect(api.sayToRole).toHaveBeenCalledWith('p1', 'rp-moli', { text: '继续', about: '一段' });
+    expect(api.sayToRole).toHaveBeenCalledWith('p1', 'rp-moli',
+      { text: '继续', about: '一段', keep: true, anchor: 'notes/板书/a.md' });
+    expect(toasts[0]).toEqual(['说给墨璃了，这句也落在板上了', 'success']);
+  });
+
+  it('服务端没落成痕（echo 缺席）就别吹牛，话术回到只说送达', async () => {
+    const api = { sayToRole: vi.fn().mockResolvedValue({ delivered: 'waiting' }) };
+    const toasts = [];
+    await trySayToRole({
+      list: [chalk('rp-moli', '墨璃')], projectId: 'p1', text: '继续',
+      api, showToast: (t, k) => toasts.push([t, k]),
+    });
     expect(toasts[0]).toEqual(['说给墨璃了', 'success']);
   });
 

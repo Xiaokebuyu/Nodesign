@@ -21,6 +21,7 @@ import { listRoleNames } from '../engine/agent/role-card.js';
 import { getWorkspaceRoot } from '../projects/workspace.js';
 import { isResidentRole } from '../engine/agent/cast.js';
 import { onUserSay, getScene } from '../engine/agent/scene.js';
+import { echoUserChalk } from '../engine/runs/user-chalk-echo.js';
 import { getProjectBus } from '../ws/broker.js';
 import { Events } from '../engine/agent/events.js';
 
@@ -59,13 +60,29 @@ router.post('/:pid/roles/:slug/say', express.json({ limit: '64kb' }), async (req
     if (!names.has(slug)) return res.status(404).json({ error: 'role not found' });
 
     const about = req.body?.about ? String(req.body.about).slice(0, 300) : null;
-    const r = deliver(req.params.pid, slug, { text, about, from: 'user' });
+
+    // 落痕（2026-08-27 solo 画布对话）：keep=true 时同一句话落成 by:'user' 的板书
+    // 接进线 —— 不落的话这条对话线在板上只有角色那半声道。**先落痕再投递**：
+    // 收件箱消息要带上板书路径，角色回帖 reply_to 它线才接得上。失败不拦投递。
+    let echoRel = null;
+    if (req.body?.keep === true) {
+      try {
+        const anchor = typeof req.body?.anchor === 'string' ? req.body.anchor : null;
+        const e = await echoUserChalk(req.params.pid, { text, anchor });
+        echoRel = e.rel;
+        if (e.seated) {
+          getProjectBus(req.params.pid).publish({ type: 'board.updated', sessionId: null, summary: '你的话落在板上了' });
+        }
+      } catch (err) { console.warn('[roles/say] 落痕失败（投递照走）:', err?.message || err); }
+    }
+
+    const r = deliver(req.params.pid, slug, { text, about, from: 'user', ...(echoRel ? { echo: echoRel } : {}) });
     // 轮次机：rounds 模式下对 order 里的人说话 = 从那个人开一轮（scene.js）
     try {
       const sc = onUserSay(req.params.pid, slug);
       if (sc) getProjectBus(req.params.pid).publish({ ...Events.scene(sc), ts: new Date().toISOString() });
     } catch { /* 机器坏了不拦投递 */ }
-    res.json({ ok: true, ...r, name: names.get(slug) });
+    res.json({ ok: true, ...r, name: names.get(slug), ...(echoRel ? { echo: echoRel } : {}) });
   } catch (err) { next(err); }
 });
 

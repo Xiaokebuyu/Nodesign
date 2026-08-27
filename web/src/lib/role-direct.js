@@ -26,11 +26,12 @@ export function soleRoleTarget(list) {
   return { slug, who: list[0].byName || slug };
 }
 
-/** 直达的提示话术（两种结果分开说） */
-export function deliveryToast(who, delivered) {
+/** 直达的提示话术（两种结果分开说；echoed = 这句也以用户署名落成了板书） */
+export function deliveryToast(who, delivered, echoed = false) {
+  const trace = echoed ? '，这句也落在板上了' : '';
   return delivered === 'waiting'
-    ? { text: `说给${who}了`, kind: 'success' }
-    : { text: `${who}这会儿没在等回话，先攒着（它下次醒来会看到）`, kind: 'info' };
+    ? { text: `说给${who}了${trace}`, kind: 'success' }
+    : { text: `${who}这会儿没在等回话，先攒着（它下次醒来会看到）${trace}`, kind: 'info' };
 }
 
 /**
@@ -44,10 +45,14 @@ export async function trySayToRole({ list, projectId, text, api, showToast, onSe
   if (!direct) return false;
   onSend?.();
   try {
+    // 落痕（2026-08-27）：从画布说的话就该在画布留痕（回复跟着入口走的对偶）。
+    // anchor 优先挑板书目标 —— 服务端会 reply_to 它把线程接上；不是板书就 annotates。
+    const anchor = (list.find((t) => typeof t.id === 'string' && t.id.startsWith('notes/板书/')) || list[0])?.id || null;
     const r = await api.sayToRole(projectId, direct.slug, {
       text, about: list.map((t) => t.title).join('、').slice(0, 300),
+      keep: true, ...(anchor ? { anchor } : {}),
     });
-    const t = deliveryToast(direct.who, r?.delivered);
+    const t = deliveryToast(direct.who, r?.delivered, !!r?.echo);
     showToast(t.text, t.kind);
   } catch (err) {
     showToast(`没送到${direct.who}：${err.message}`, 'error');
