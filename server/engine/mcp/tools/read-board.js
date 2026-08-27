@@ -20,6 +20,7 @@ import { layerOf } from '../../../lib/canvas-id.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
+import { inferFlowDir } from '../../../lib/board-place.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -194,10 +195,14 @@ on the minimap and listed with what is inside it.`,
         if (laneList.length) {
           lines.push('', '版图（线 = 同 tag 纵列；{tag,chain:true} 续线，open_lane 开新线）：');
           for (const l of laneList) {
+            // 走向（08-27 落位直觉可见化）：用户把这条线的板书亲手掰过方向就报出来
+            // —— 事前感知，不然 agent 只能靠视口猜用户想要的版面方向
+            const dir = inferFlowDir(board, { tag: l.tag });
+            const dirTxt = dir ? `，走向 ${{ right: '→右', left: '←左', below: '↓下', above: '↑上' }[dir]}（用户摆的，接楼会跟）` : '';
             lines.push(l.registered
               ? `  #${l.tag}：${l.count} 节${l.parent ? `，岔自 ${l.parent}` : ''}，列头 (${l.x},${l.y})`
-                + `${l.frontier ? `，接着写会落 (${l.frontier.x},${l.frontier.y}) 附近` : ''}${l.lastId ? `，最新 ${l.lastId}` : ''}`
-              : `  #${l.tag}：${l.count} 件（未登记的野线 —— chain:true 照样能续）`);
+                + `${l.frontier ? `，接着写会落 (${l.frontier.x},${l.frontier.y}) 附近` : ''}${l.lastId ? `，最新 ${l.lastId}` : ''}${dirTxt}`
+              : `  #${l.tag}：${l.count} 件（未登记的野线 —— chain:true 照样能续）${dirTxt}`);
           }
         }
       }

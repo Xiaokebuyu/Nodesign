@@ -27,7 +27,7 @@ import { readUiConfigFile, withUiDefaults } from '../../../projects/ui-config.js
 import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
-import { resolvePlacement } from '../../../lib/board-place.js';
+import { resolvePlacement, inferFlowDir } from '../../../lib/board-place.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
 import { roleLabel } from '../../mcp/actor.js';
@@ -122,7 +122,20 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
             : '视口内已满 —— 新东西会落到视口外，要么 near 贴着视口里的东西写，要么落完说清在哪';
         }
       }
-      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；落新东西优先进他的视口或贴着视口里的东西（near/at）。要看画面细节才调 read_user_view。` });
+      // 摆放走向（08-27 落位直觉可见化）：用户亲手掰过方向的线报出来 ——
+      // 不报的话 agent 事前只能靠视口位置猜用户想要的版面方向（用户点名的盲区）
+      let dirs = null;
+      try {
+        const tags = [...new Set(Object.values(board.bindings || {})
+          .filter(e => e?.type === 'flow' && e.tag).map(e => e.tag))];
+        const arrow = { right: '→右', left: '←左', below: '↓下', above: '↑上' };
+        const learned = tags.map(t => ({ t, d: inferFlowDir(board, { tag: t }) })).filter(x => x.d);
+        if (learned.length) {
+          dirs = `他摆过的走向：${learned.slice(0, 4).map(x => `#${x.t} ${arrow[x.d]}`).join('、')}`
+            + `${learned.length > 4 ? ' 等' : ''}（接楼和自动挑侧会跟这个方向，别对着摆）`;
+        }
+      } catch { /* 学不出就不占字 */ }
+      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；落新东西优先进他的视口或贴着视口里的东西（near/at）。要看画面细节才调 read_user_view。` });
     }
   } catch { /* 视点读不到就沉默 */ }
   try {
