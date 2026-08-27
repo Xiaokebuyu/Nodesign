@@ -238,3 +238,35 @@ describe("ink:'hand'（08-27 收编 create_on_board）+ 草图 hug", () => {
     expect(hugger.kind).toBe('scribble');
   });
 });
+
+describe('产物锚（08-27）：图连着产物就落在产物旁边', () => {
+  it('⭐ edges 连到已有产物、没给 near/at → 自动贴着被连的卡落', async () => {
+    await patchBoard(pid, { objects: { 'assets/被评的稿.png': { x: 9000, y: 9000, w: 200, h: 176 } } });
+    const r = await call({
+      nodes: [{ id: 'p1', text: '优点：构图稳' }, { id: 'p2', text: '缺点：主体太小' }, { id: 'v', text: '判语：改第二版' }],
+      edges: [
+        { from: 'p1', to: 'assets/被评的稿.png', type: 'annotates' },
+        { from: 'p1', to: 'v' }, { from: 'p2', to: 'v' },
+      ],
+      tag: '评稿',
+    });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toMatch(/自动落在它们旁边/);
+    const board = await readBoard(pid);
+    const members = Object.entries(board.objects).filter(([, e]) => e.tag === '评稿');
+    const bx = Math.min(...members.map(([, e]) => e.x));
+    // 图落在被连产物一屏之内（不是内容底下的兜底带）
+    expect(Math.abs(bx - 9000)).toBeLessThan(2000);
+    expect(Math.min(...members.map(([, e]) => Math.abs(e.y - 9000)))).toBeLessThan(2000);
+  });
+
+  it('显式 near/at 时产物锚不插手（显式优先）', async () => {
+    const r = await call({
+      nodes: [{ id: 'a', text: '甲' }, { id: 'b', text: '乙' }],
+      edges: [{ from: 'a', to: 'assets/被评的稿.png' }],
+      at: { x: 200, y: 200 }, tag: '显式位',
+    });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).not.toMatch(/自动落在它们旁边/);
+  });
+});

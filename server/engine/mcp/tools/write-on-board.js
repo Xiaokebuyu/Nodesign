@@ -540,6 +540,23 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         if (a.rect.w > anchorRect.w) anchorRect = a.rect;   // tag 包络比单卡大就用包络
       }
     }
+    // 产物锚（08-27 用户问「围绕产物做编排」补上的那半边）：图的线连着板上已有的
+    // 产物、又没给 near/at 时，图**自动落在被连产物旁边** —— 线说"这张图说的是它们"，
+    // 位置就得跟着说；否则线画上了、图却摊在版面尽头，位置和线自相矛盾。
+    let autoAnchorIds = [];
+    if (!anchorRect && !args.at) {
+      const newIds = new Set(idOf.values());
+      autoAnchorIds = [...new Set(Object.values(bindings).flatMap((b) => [b.from, b.to])
+        .filter((id) => !newIds.has(id) && Number.isFinite(sketchBase.objects?.[id]?.x)))];
+      if (autoAnchorIds.length) {
+        const rects = autoAnchorIds.map((id) => {
+          const e = sketchBase.objects[id];
+          return { x: e.x, y: e.y, ...estimateSizeOn(after, id, e) };
+        });
+        anchorRect = bboxOf(rects);
+        zone = layerOf(autoAnchorIds[0], sketchBase.objects[autoAnchorIds[0]], known);
+      }
+    }
     const afterEff = sketchBase === board ? after : { ...sketchBase, bindings: { ...(sketchBase.bindings || {}), ...bindings } };
     const obstacles = obstaclesOf(afterEff, zone);
     const vpRect = vpRectFor(zone);
@@ -589,6 +606,9 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     }
     if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}`);
     if (world.w > fit.w || world.h > fit.h) lines.push(`⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
+    if (autoAnchorIds.length) {
+      lines.push(`（没给 near/at，但这张图的线连着 ${autoAnchorIds.slice(0, 4).join('、')}${autoAnchorIds.length > 4 ? ' 等' : ''} —— 自动落在它们旁边）`);
+    }
     if (vp?.zoom && vp.zoom < 0.8) lines.push(`User's zoom is ${vp.zoom} (<0.8): keep nodes md/lg and say in one line that there is a sketch on the board.`);
     lines.push(staging
       ? `Next: look_at_board {tag:"${tag}"} to check it, then finish_sketch {tag:"${tag}"} (or it commits at turn end).`
