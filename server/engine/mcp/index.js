@@ -137,6 +137,10 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   // 浏览通道里能被 browser_batch 串起来的七件：先建一次，batch 拿**同一批实例**
   // （projectId/ctx 绑在 handler 里，不能再造第二份）。只有 request_help 不进
   // batch（它阻塞等人）；capture 在里面 —— 逐页采 token 正是 batch 要省的那种回合。
+  // batch 的运行时解析表（2026-08-27 重置）：装配管线（能力闸/模式闸/消毒）跑完后
+  // 回填，三个 batch 的子调用一律取**包装后**的实例 —— 08-26「batch 绕闸」挂账在此清账。
+  const wrappedByName = new Map();
+  const resolveTool = (n) => wrappedByName.get(n);
   const boardBatchable = [
     makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
     makeEditBoardTool({ projectId, sharedRoot, ctx }),
@@ -280,12 +284,12 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // 或者第二个常驻名额；1 vCPU 上后者不成立。
       ...browseBatchable,
       // 一次往返跑一串（串行、遇错即停、结尾补截图）—— 省的是模型回合数
-      makeBrowserBatchTool({ tools: browseBatchable }),
+      makeBrowserBatchTool({ tools: browseBatchable, resolve: resolveTool }),
       // ── 产物会话（2026-08-21）：成品检查的交互半边 ──
       // artifact_open 把产物开进常驻会话，artifact_computer/find 对着它点、敲、找；
       // 五个量具 live:true 就量会话里现在这一页；artifact_batch 一趟跑一串。
       ...artifactSessionTools,
-      makeArtifactBatchTool({ tools: [...artifactSessionTools, screenshotCanvas, queryElements, getComputedStyles, explainStyle, traceMotion] }),
+      makeArtifactBatchTool({ tools: [...artifactSessionTools, screenshotCanvas, queryElements, getComputedStyles, explainStyle, traceMotion], resolve: resolveTool }),
       // 撞验证墙时举手叫人（阻塞等，默认 120 秒超时 —— 人可能就走了）
       makeBrowserRequestHelpTool({ projectId, ctx }),
       getComputedStyles,
@@ -328,17 +332,31 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // 记号=create。board_batch 用**同一批实例**串行跑（一章 RP 的板面维护
       // 八次往返收成一次）。旧名薄别名一版防 resume。
       ...boardBatchable,
+      // board_batch（2026-08-27 重置）：覆盖全板面家族 + 运行时解析（resolve）。
+      // 一个思考单位的板面维护 = 一次 batch，这是板面工具的**首选入口**。
       makeBatchTool({
         name: 'board_batch',
-        description: `Run several board actions in ONE round-trip — write a note, update the
-status panel, re-thread lines, all in one call (a chapter's board upkeep is one batch, not
-eight calls). Same contract as artifact_batch: actions run in order, a failure stops the
-rest (already-ran steps are NOT rolled back — continue from the failed step). Batchable:
-write_on_board / edit_board / read_board / create_on_board. Later steps can reference
-things earlier steps made: chain:true threads onto the note a previous step wrote (same
-tag); sketch local ids (lid) resolve in edit_board ops.`,
-        tools: boardBatchable,
-        batchable: boardBatchable.map(t => t.name),
+        description: `Run several board actions in ONE round-trip — the unit of board upkeep.
+One beat of thinking = one batch: read_board first if you have not looked this turn,
+then write/edit/pin/organize in order, and pass screenshotAfter:true when looks matter.
+Actions run in order; a failure stops the rest (already-ran steps are NOT rolled back —
+continue from the failed step). Later steps can use what earlier steps made: chain:true
+threads onto the note a previous step wrote (same tag); sketch local ids resolve in
+edit_board ops.
+Placement and lines are ONE language — put a thing where its relation says (same lane =
+chain below, fork = open_lane column, comment = near+side) AND draw the line that says
+it; a note with no line and no lane is one nobody can trace back.
+Batchable: write_on_board / edit_board / read_board / create_on_board / pin_to_board /
+organize_board / finish_sketch / look_at_board / read_user_view.
+Example: [{"name":"read_board","input":{}},{"name":"write_on_board","input":{"text":"…",
+"tag":"主线","chain":true}},{"name":"edit_board","input":{"ops":[{"op":"add_edge",
+"from":"notes/板书/x.md","to":"assets/图.png","type":"link"}]}}]`,
+        resolve: resolveTool,
+        batchable: [
+          ...boardBatchable.map(t => t.name),
+          'pin_to_board', 'organize_board', 'finish_sketch', 'look_at_board', 'read_user_view',
+        ],
+        finalShot: { name: 'look_at_board', input: {}, default: false },
       }),
       makeArrangeOnBoardAlias({ projectId, sharedRoot, ctx }),
       makeOrganizeBoardTool({ projectId, ctx }),
@@ -383,6 +401,9 @@ tag); sketch local ids (lid) resolve in edit_board ops.`,
     // 008fe16c 4/4 实锤）。挂在出口包全部工具 —— 哪个工具中招看 recordIssue。
     withParamSanitizer(t, { projectId, sessionId })
   ));
+
+  // batch 解析表回填：此刻 tools 里的实例已过完 能力闸/模式闸/alwaysLoad/消毒 全套
+  for (const t of tools) wrappedByName.set(t.name, t);
 
   // 角色工具白名单的启动期对账（2026-08-26）：cast_role 会把白名单里的短名写进
   // 角色文件的 frontmatter，名字写错**不会报错**，只会让角色少一只手（CLI 当那个

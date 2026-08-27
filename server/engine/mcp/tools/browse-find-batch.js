@@ -85,24 +85,16 @@ as an error telling you to find again.`,
  * @param {string[]} o.batchable     允许的名字
  * @param {{name:string, input:object}} [o.finalShot]   结尾补的那张"当前状态"；不传就不补
  */
-export function makeBatchTool({ name, description, tools, batchable, finalShot }) {
-  // ⚠️⚠️ 挂账（2026-08-26 发现，**没修**，不属于当时那条线）：这张表捏的是**包装前**
-  // 的工具引用。index.js 出口那几层（ALWAYS_LOAD_TOOLS 打标、withCapabilityGate、
-  // withParamSanitizer）都是 `{...t}` fork 出新对象，于是从 batch 里调子工具会**绕过
-  // 能力闸和参数消毒**。
-  //
-  // 08-26 实测过相交面（别再凭印象判"反正也没交集"）：
-  //   browser_batch  可批 7 件，**7 件全在能力闸内**（browser_* 全族）
-  //   artifact_batch 可批 9 件在闸内（artifact_* / screenshot_canvas / query_elements
-  //                  / get_computed_styles / explain_style / trace_motion）
-  //   board_batch    四件都不在闸内，不受影响
-  // 也就是说这不是"空转的隐患"，是**真的在绕**：缺 chromium 的盒子上，本该被闸住并
-  // 回一句「装法」的调用会漏成裸错误；参数标签泄漏消毒对 batch 内的调用也不生效。
-  //
-  // 修法：把 byName 建在包装后的表上（或让 batch 接工具**名**而不是工具对象，
-  // 运行时查当前注册表）。要动 index.js 的工具组装顺序，所以单独一刀。
+export function makeBatchTool({ name, description, tools = [], batchable, resolve = null, finalShot }) {
+  // resolve（2026-08-27 重置，清 08-26 那条「batch 绕闸」挂账）：传了它，子工具在
+  // **运行时**从装配完成后的注册表取（index.js 在包装管线跑完后回填 wrappedByName），
+  // 能力闸 / 参数消毒 / 模式过滤对 batch 内的调用照常生效。batchable 仍是**政策名单**
+  // （哪些名字许进 batch）；resolve 查不到 = 这台机器/该模式把它下架了，如实报。
+  // 不传 resolve 走旧的实例表（单测直连用 —— 但生产装配一律传 resolve）。
   const byName = new Map(tools.filter(t => batchable.includes(t.name)).map(t => [t.name, t]));
-  const names = [...byName.keys()];
+  const lookup = (n) => (resolve ? (batchable.includes(n) ? resolve(n) : undefined) : byName.get(n));
+  const names = resolve ? [...batchable] : [...byName.keys()];
+  const shotDefault = finalShot ? finalShot.default !== false : false;
   return tool(
     name,
     description,
@@ -112,8 +104,11 @@ export function makeBatchTool({ name, description, tools, batchable, finalShot }
         input: z.record(z.string(), z.unknown()).optional().describe("That tool's input, same shape as calling it directly."),
       })).min(1).max(MAX_ITEMS)
         .describe(`1-${MAX_ITEMS} items, run in order. Each item: {"name": <tool>, "input": {...}}.`),
-      screenshotAfter: z.boolean().optional()
-        .describe('Append a screenshot of the resulting state at the end (default true). Set false for text-only sequences to save tokens.'),
+      // 没有 finalShot 就不放这个参数 —— 写一个永远无效的旋钮是在骗模型
+      ...(finalShot ? { screenshotAfter: z.boolean().optional()
+        .describe(shotDefault
+          ? 'Append a look at the resulting state at the end (default true). Set false for text-only sequences to save tokens.'
+          : 'Pass true to append a look at the resulting state at the end (default false — most board upkeep is text work; ask for eyes when looks matter).') } : {}),
     },
     async ({ actions, screenshotAfter }, extra) => {
       const out = [];
@@ -125,10 +120,12 @@ export function makeBatchTool({ name, description, tools, batchable, finalShot }
         const { name: toolName, input } = actions[i];
         const label = `[${i + 1}/${n}] ${toolName}${input?.action ? ` ${input.action}` : ''}`;
         if (failedAt >= 0) { out.push({ type: 'text', text: `${label}: ${HALT_TEXT}` }); continue; }
-        const def = byName.get(toolName);
+        const def = lookup(toolName);
         if (!def) {
           failedAt = i;
-          failText = `"${toolName}" is not batchable here (use one of ${names.join(', ')}).`;
+          failText = batchable.includes(toolName)
+            ? `"${toolName}" 在这台机器/该项目模式下没有注册（能力或模式闸下架了它）——这一步换别的路。`
+            : `"${toolName}" is not batchable here (use one of ${names.join(', ')}).`;
           out.push({ type: 'text', text: `${label}: Error: ${failText}` });
           continue;
         }
@@ -169,8 +166,8 @@ export function makeBatchTool({ name, description, tools, batchable, finalShot }
             + `Steps 1-${failedAt} already ran — do NOT re-run the whole batch; continue from the failed step.`,
         });
       }
-      if (finalShot && screenshotAfter !== false && !lastHadImage) {
-        const shotDef = byName.get(finalShot.name);
+      if (finalShot && (screenshotAfter === undefined ? shotDefault : screenshotAfter) && !lastHadImage) {
+        const shotDef = lookup(finalShot.name);
         if (shotDef) {
           try {
             const s = await shotDef.handler(finalShot.input || {}, extra);
@@ -186,11 +183,12 @@ export function makeBatchTool({ name, description, tools, batchable, finalShot }
   );
 }
 
-export function makeBrowserBatchTool({ tools }) {
+export function makeBrowserBatchTool({ tools, resolve = null }) {
   const names = BATCHABLE.filter(n => tools.some(t => t.name === n));
   return makeBatchTool({
     name: 'browser_batch',
     tools,
+    resolve,
     batchable: BATCHABLE,
     finalShot: { name: 'browser_screenshot', input: {} },
     description: `Run a sequence of browser tool calls in ONE round trip. Each item is
