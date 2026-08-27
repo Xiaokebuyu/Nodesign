@@ -138,3 +138,62 @@ describe('renderPrelude —— 界面语言', () => {
     expect(renderPrelude('off', { locale: 'en', uncensored: true })).toContain('## 无任何底线');
   });
 });
+
+/**
+ * 项目模式分区（2026-08-27）—— 跟底线同一个性质：切错不会报错，只会让某个模式的
+ * 会话悄悄多背或少背一族教义。特征串取各分区里最不会被顺手改掉的话。
+ */
+const DESIGN_ONLY = [
+  '产物有三种形态',
+  '新建 deck 先问比例',
+  'preview_deck',
+  '产物会话五件',
+  'crystallize_skill',
+  '做完之前先自己看',
+  '建议他把项目切到演出模式',   // 设计侧的指路段
+];
+const RP_ONLY = [
+  '这个项目是演出模式',
+  '演故事时让别人替你写',
+  '先分流：这场戏你自己执笔',
+  '从酒馆卡 / 预设里搬角色',
+];
+const MODE_ALWAYS = [
+  '## 硬规则',
+  '派干活型子代理时显式写',
+  '画布也是黑板',
+  'report_issue',
+  '## 跟用户说话',
+];
+
+describe('renderPrelude —— 项目模式分区', () => {
+  it('design 渲染：设计道分区都在，演出分区一个不漏进来', () => {
+    for (const out of [renderPrelude('loose'), renderPrelude('loose', { mode: 'design' })]) {
+      for (const s of [...DESIGN_ONLY, ...MODE_ALWAYS]) expect(out, `design 少了「${s}」`).toContain(s);
+      for (const s of RP_ONLY) expect(out, `design 混进了「${s}」`).not.toContain(s);
+      expect(out).not.toContain('nd:mode');
+      expect(out).not.toContain('<!--');
+    }
+  });
+
+  it('rp 渲染：演出分区都在，设计道分区一个不漏进来', () => {
+    const out = renderPrelude('loose', { mode: 'rp' });
+    for (const s of [...RP_ONLY, ...MODE_ALWAYS]) expect(out, `rp 少了「${s}」`).toContain(s);
+    for (const s of DESIGN_ONLY) expect(out, `rp 混进了「${s}」`).not.toContain(s);
+    expect(out).not.toContain('nd:mode');
+    expect(out).not.toContain('<!--');
+  });
+
+  it('认不出的 mode 落 design（存量项目全是 design，多给不少给）', () => {
+    expect(renderPrelude('loose', { mode: 'weird' })).toBe(renderPrelude('loose', { mode: 'design' }));
+    expect(renderPrelude('loose', {})).toBe(renderPrelude('loose', { mode: 'design' }));
+  });
+
+  it('模式分区与底线分区正交：rp × uncensored 同时切也各自干净', () => {
+    const out = renderPrelude('off', { mode: 'rp', uncensored: true });
+    expect(out).toContain('无任何底线');
+    expect(out).toContain('这个项目是演出模式');
+    expect(out).not.toContain('产物有三种形态');
+    expect(out).not.toContain('<!--');
+  });
+});

@@ -30,6 +30,7 @@
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { withParamSanitizer } from './param-sanitizer.js';
 import { withCapabilityGate, shouldRegisterTool } from './capability-gate.js';
+import { shouldRegisterForMode, assertModeProfileNames } from './mode-profile.js';
 import { MCP_SERVER_NAME } from './server-name.js';
 import { makeScreenshotCanvasTool } from './tools/screenshot.js';
 import { makeScreenshotUrlTool } from './tools/screenshot-url.js';
@@ -131,7 +132,7 @@ const ALWAYS_LOAD_TOOLS = new Set([
   'artifact_open', 'artifact_computer', 'artifact_find', 'artifact_batch', 'artifact_motion',
 ]);
 
-export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, sessionId, ctx, roleRoster = null } = {}) {
+export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, sessionId, ctx, roleRoster = null, projectMode = 'design' } = {}) {
   // 浏览通道里能被 browser_batch 串起来的七件：先建一次，batch 拿**同一批实例**
   // （projectId/ctx 绑在 handler 里，不能再造第二份）。只有 request_help 不进
   // batch（它阻塞等人）；capture 在里面 —— 逐页采 token 正是 batch 要省的那种回合。
@@ -167,7 +168,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
     // 自己的产物靠什么在动：跟 browser_capture motion 同一份引擎（engine/motion/inventory.js）
     makeArtifactMotionTool({ projectId, workspaceRoot, sessionId }),
   ];
-  const tools = [
+  const builtTools = [
       // C9 screenshot_canvas — playwright headless 截图 → image content block
       screenshotCanvas,
 
@@ -345,11 +346,22 @@ tag); sketch local ids (lid) resolve in edit_board ops.`,
       // 注：Phase Image-2 的 request_image_approval 工具已废弃（2026-05-06）。
       // generate_image 的 CallToolResult 已返 image content block，前端自动渲染；
       // agent 在 caption / 自然回话邀请反馈，下一轮用户 chat 即天然 gate。
-  ].filter((t) => (
+  ];
+
+  // 模式对照表的启动期对账（2026-08-27）：必须对**过滤前**的全量名单 —— 表校验的
+  // 对象是「注册表里有没有这个名字」，跟本机能力/项目模式无关。工具改名后表没跟上
+  // 时这里当场炸，不让下架条目静默空转（判据本身要先验一遍）。
+  assertModeProfileNames(builtTools.map((t) => t.name));
+
+  const tools = builtTools.filter((t) => (
     // 本机能力缺席且该工具是 unregister 档 → 整件不注册（连名字都不进上下文）。
     // 现在只有本地 GPU 盒子那两件：盒子手动开关，关着时留名字只会让 agent 去撞
     // SSH 拒连。对照表在 capability-gate.js 一份。
     shouldRegisterTool(t)
+  )).filter((t) => (
+    // 项目模式闸（2026-08-27）：rp 项目下架设计产线（deck/站点/交付/产物量具），
+    // 同样是 unregister 语义。对照表在 mode-profile.js 一份，下面还有启动期对账。
+    shouldRegisterForMode(t, projectMode)
   )).map((t) => (
     // SDK 用 _meta['anthropic/alwaysLoad'] 标记常驻（tool() 第 5 参的等价物，
     // 集中在这打标避免改 16 个工具文件）

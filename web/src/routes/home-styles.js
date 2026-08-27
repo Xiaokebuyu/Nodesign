@@ -67,7 +67,21 @@ export const CSS = `
 
 /* ===== 便签本：一句话开工 ===== */
 .ndd-greet { text-align: center; font: 700 25px var(--kai); letter-spacing: 0.05em;
-  margin-bottom: 20px; }
+  margin-bottom: 14px; }
+/* 模式胶囊（2026-08-27）：设计 / 演出。决定接下来建出的项目是哪种模式。
+   形态上是一枚小纸签：楷体、墨色描线、选中格盖一方印章红 —— 跟纸面同族，
+   但站在纸外面（它改的是去向，不是纸上的字）。 */
+.ndd-mode { display: flex; justify-content: center; gap: 0; margin: 0 auto 14px;
+  width: max-content; border: 1px solid rgba(90,78,60,0.45); border-radius: 999px;
+  background: var(--paper); box-shadow: 1px 2px 4px rgba(43,33,23,0.14);
+  transform: rotate(-0.3deg); overflow: hidden; }
+.ndd-mode button { appearance: none; border: 0; background: transparent; cursor: pointer;
+  font: 700 13.5px var(--kai); letter-spacing: 0.22em; text-indent: 0.22em;
+  color: rgba(110,99,80,0.85); padding: 5px 18px 6px; transition: color 0.15s, background 0.15s; }
+.ndd-mode button + button { border-left: 1px solid rgba(90,78,60,0.3); }
+.ndd-mode button:hover { color: rgba(63,54,41,0.95); }
+.ndd-mode button.on { background: rgba(168,54,43,0.86); color: var(--paper); }
+.ndd-mode button:disabled { cursor: default; opacity: 0.55; }
 .ndd-pad { position: relative; max-width: 720px; margin: 0 auto;
   padding: 26px 24px 16px 58px;
   background-color: var(--paper); background-image: var(--grain);

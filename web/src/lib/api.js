@@ -52,9 +52,9 @@ export const Projects = {
   get: (pid) => jsonRequest('GET', `/api/projects/${pid}`),
   /** 每个项目出了几件东西、都是什么形态（首页卡片元信息；读磁盘，跟列表分开拉） */
   stats: () => jsonRequest('GET', '/api/projects/stats'),
-  /** create：name 必填；description / kind 可选（kind 默认 'project'） */
-  create: ({ name, skillId, description, kind, autoNamed }) =>
-    jsonRequest('POST', '/api/projects', { name, skillId, description, kind, autoNamed }),
+  /** create：name 必填；description / kind / mode 可选（kind 默认 'project'，mode 默认 'design'） */
+  create: ({ name, skillId, description, kind, mode, autoNamed }) =>
+    jsonRequest('POST', '/api/projects', { name, skillId, description, kind, mode, autoNamed }),
   update: (pid, patch) => jsonRequest('PATCH', `/api/projects/${pid}`, patch),
   remove: (pid) => jsonRequest('DELETE', `/api/projects/${pid}`),
 };

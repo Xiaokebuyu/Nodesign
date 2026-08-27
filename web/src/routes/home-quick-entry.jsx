@@ -66,8 +66,27 @@ const PLACEHOLDER_EXAMPLES = [
   '把脑子里的画面写下来…',
 ];
 
-function pickPlaceholder() {
-  return t(PLACEHOLDER_EXAMPLES[Math.floor(Math.random() * PLACEHOLDER_EXAMPLES.length)]);
+/** 演出模式的例子池 —— 设计那些例子在这挡里全是错的方向 */
+const PLACEHOLDER_EXAMPLES_RP = [
+  '比如：一座雨夜的侦探事务所，我是委托人',
+  '比如：把这张角色卡演起来',
+  '比如：三人小队的星际商船日常',
+  '想演个什么故事？说说看',
+  '描述一下开场：地点、人物、气氛…',
+];
+
+function pickPlaceholder(mode) {
+  const pool = mode === 'rp' ? PLACEHOLDER_EXAMPLES_RP : PLACEHOLDER_EXAMPLES;
+  return t(pool[Math.floor(Math.random() * pool.length)]);
+}
+
+/** 首页的模式偏好只是个本地便利：读不到就落 design，绝不因此报错 */
+const MODE_LS_KEY = 'nd-home-mode';
+function readModePref() {
+  try {
+    const v = localStorage.getItem(MODE_LS_KEY);
+    return v === 'rp' ? 'rp' : 'design';
+  } catch { return 'design'; }
 }
 
 /** 红光标的高度。跟 home-styles.js 里 `.ndd-pad .caret` 的 height 是同一个数
@@ -81,7 +100,15 @@ export default function QuickEntry({ prefill }) {
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [greeting] = useState(pickGreeting);  // mount 时挑一次，刷新换一个
-  const [placeholder] = useState(pickPlaceholder);
+  // 项目模式（2026-08-27）：design=设计 / rp=演出。这颗开关决定**接下来建出的项目**
+  // 是哪种（服务端 projects.mode），不是页面状态 —— 切换记进 localStorage 当默认。
+  const [mode, setMode] = useState(readModePref);
+  const [placeholder, setPlaceholder] = useState(() => pickPlaceholder(readModePref()));
+  const pickMode = (m) => {
+    setMode(m);
+    setPlaceholder(pickPlaceholder(m));
+    try { localStorage.setItem(MODE_LS_KEY, m); } catch { /* 存不上就每次手选 */ }
+  };
   const coarse = useMedia(COARSE);
   // 暂存附件（QuickEntry 阶段还没 project，只能存 File 对象，submit 时再 createProject + 上传）
   // chip 形态：path/error 都 undefined → ComposerTray 显示 "上传中…"（实际是"待上传"，hover 看 title）
@@ -194,6 +221,7 @@ export default function QuickEntry({ prefill }) {
       const projName = seed.slice(0, 24) + (seed.length > 24 ? '…' : '');
       const proj = await createProject({
         name: projName || t('新项目'),
+        mode,
         autoNamed: true,
       });
       // 2. 上传暂存的附件到新 project（单文件失败不阻塞其他，让用户看到 toast 自决）
@@ -248,6 +276,20 @@ export default function QuickEntry({ prefill }) {
   return (
     <>
       <div className="ndd-greet">{greeting}</div>
+      {/* 模式胶囊（2026-08-27）：建出来的项目是设计工作台还是演出舞台。
+          放在纸的上方而不是纸里 —— 它改的是"这张纸通往哪"，不是纸上的内容 */}
+      <div className="ndd-mode" role="radiogroup" aria-label={t('项目模式')}>
+        <button
+          type="button" role="radio" aria-checked={mode === 'design'}
+          className={mode === 'design' ? 'on' : undefined}
+          onClick={() => pickMode('design')} disabled={submitting}
+        >{t('设计')}</button>
+        <button
+          type="button" role="radio" aria-checked={mode === 'rp'}
+          className={mode === 'rp' ? 'on' : undefined}
+          onClick={() => pickMode('rp')} disabled={submitting}
+        >{t('演出')}</button>
+      </div>
       {/* 点纸上任何空白都算点进输入框 —— 左边那条页边、上下留白、横线下面那片
           都是纸的一部分，点了没反应会让人以为"这纸不能写" */}
       <div

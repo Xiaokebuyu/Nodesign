@@ -19,7 +19,7 @@ import TweaksPanel from '../components/context-panel/TweaksPanel.jsx';
 // 不在此处直接 import — C2 撤销 floating panel 注册
 import ShareModal from '../components/project/ShareModal.jsx';
 import ExportMenu from '../components/project/ExportMenu.jsx';
-import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
+import ProjectActionsMenu, { ProjectModeBadge } from '../components/project/ProjectActionsMenu.jsx';
 import SnapshotModal from '../components/project/SnapshotModal.jsx';
 import UpgradeQuickModal from '../components/project/UpgradeQuickModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
@@ -2003,6 +2003,7 @@ export default function ProjectWorkspace() {
               model + 5 个会话常量 chip + 刷新 + 压缩 + 分享，一行 21 个元素。
               上下文属于「这次对话」不属于项目，整组挪进聊天栏 composer 上沿；
               刷新进 ⋯，分享进导出菜单。留驻判据：每周会主动点的才配占常驻像素。 */}
+          <ProjectModeBadge mode={project.mode} />
           <div style={{ position: 'relative' }}>
             <button
               ref={exportBtnRef}
@@ -2043,6 +2044,14 @@ export default function ProjectWorkspace() {
               onViewCode={handleViewCode}
               isQuickProject={project.kind === 'quick'}
               onUpgrade={() => { setActionsOpen(false); setUpgradeOpen(true); }}
+              projectMode={project.mode || 'design'}
+              onToggleMode={() => {
+                setActionsOpen(false);
+                const next = (project.mode || 'design') === 'rp' ? 'design' : 'rp';
+                updateProject(id, { mode: next })
+                  .then(() => showToast(`已切到${next === 'rp' ? '演出' : '设计'}模式，下个会话生效`))
+                  .catch((err) => showToast(`切换失败：${err.message}`, 'error'));
+              }}
               onOpenProjectPanel={(key) => boardApiRef.current?.openProjectPanel(key)}
               projectBand={boardUi?.projectBand || null}
             />

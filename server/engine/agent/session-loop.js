@@ -326,7 +326,9 @@ export async function runSession({
   // 工具名（server.toolNames，见 mcp/index.js）——不另立第二份清单。
   // 常驻角色名册：一会话一份，hooks 与 MCP 工具共用同一引用（见 cast.js createRoleRoster）
   const roleRoster = createRoleRoster();
-  const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx, roleRoster });
+  // 项目模式（08-27）：启动时读一次（切换下个会话生效），同一读数喂工具面（mode-profile.js）和提示词面（nd:mode 分区），两面不岔开
+  const projectMode = (projectId ? getProject(projectId)?.mode : null) || 'design';
+  const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx, roleRoster, projectMode });
 
   // npm 缓存 + 沙盒可写 tmp（$TMPDIR / pip 缓存）：细节与教训见 isolation.js
   const agentDirs = await prepareAgentDirs({ dataRoot: PROJECTS_DATA_ROOT, projectId, sessionId });
@@ -438,6 +440,8 @@ export async function runSession({
         return renderPrelude(owner ? levelFor(owner, model) : defaultModerationLevel(null), {
           uncensored: isUncensoredModel(model),
           locale: owner?.locale || undefined,
+          // 项目模式分区（nd:mode 标记块）—— 跟工具面用的是同一次读数，两面不会岔开
+          mode: projectMode,
         });
       })(),
     },
