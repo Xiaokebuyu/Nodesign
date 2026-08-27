@@ -153,8 +153,8 @@ function BoardObject({
     } : null),
   };
 
-  // 按钮清单和图标兑换 2026-08-27 抽去 object-actions.js —— 点选操作条
-  // （ObjectActionBar）跟这条 hover 工具条共用一份，别再长出第二份表。
+  // 按钮清单和图标兑换 2026-08-27 抽去 object-actions.js（同一件东西两个实例
+  // 是这个仓库最贵的一课 —— 就算眼下只剩这一条 hover 工具条在消费）。
   const actions = buildObjectActions(o, {
     added, onAdd, onOpenViewer, onOpenFile, onDetail, onOrchestrate, onDeleteNote,
     onExport, onAnnotate,
@@ -171,8 +171,9 @@ function BoardObject({
   //    跟 TransformControls 的手柄同一条规矩。origin 钉在右下角，
   //    缩放围绕"贴卡那一点"进行，桥不会被缩出缝来。
   const invScale = 1 / (scale * (isInk ? (o.data?.scale ?? 1) : 1));
-  // 选中态让位给点选操作条（2026-08-27）：同一份动作两条工具条同时亮是噪音
-  const Actions = hover && !selected && actions.length > 0 && (
+  // （08-27 点选操作条同日撤役后，选中态的让位判据一并撤 —— 单击现在直接开
+  //   标注，其余动作全靠这条 hover 工具条，选中时它也得在）
+  const Actions = hover && actions.length > 0 && (
     <div data-board-action style={{
       position: 'absolute', bottom: '100%', right: 0, paddingBottom: 4, zIndex: 5,
       transform: invScale !== 1 ? `scale(${invScale})` : undefined,

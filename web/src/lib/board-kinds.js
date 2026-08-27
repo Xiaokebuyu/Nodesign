@@ -372,6 +372,16 @@ export function sourceOf(o) {
  * 过滤器：两条轴各自一个"要显示哪些"的集合，**结果取交集**。
  * `null` / 空集 = 这条轴不过滤（不是"全都不要"）—— 默认状态就该是全都看得见。
  */
+/**
+ * 项目档案面（2026-08-27 用户拍板）：根 CLAUDE.md 和 记忆/ 是 agent 的后台
+ * 档案，不是产出 —— 默认不上画布，用户点画布右上角「档案」才显形。
+ * 判据按路径（物件 id 和文件夹 zone id 都是工作区相对路径，同一个函数判两边）。
+ */
+export function isArchivePath(p) {
+  const s = String(p || '');
+  return s === 'CLAUDE.md' || s === '记忆' || s.startsWith('记忆/');
+}
+
 export function passesFilter(o, filter) {
   if (!filter) return true;
   const cats = filter.categories;

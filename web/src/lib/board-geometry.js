@@ -220,6 +220,44 @@ export function resolveZoneAvoidance(members, { xMin, xMax, yMin }) {
   return { moved, bottom };
 }
 
+// ── 几何点选（2026-08-27，随点选操作条撤役从 action-bar-place.js 搬来）────
+//
+// 画布的指针事件在捕获下会被重定向（平移层 setPointerCapture 后 click/dblclick
+// 落到公共祖先 —— 08-25 板书武装案实锤），闲置板书又被 board-hit 归成空地。
+// 所以「点了哪件东西」只能拿世界坐标对矩形算，DOM 的 target 不可信。
+// 几何命中顺带把**叠堆下翻**白送了：一摞卡片点第一下命中最上面的，再点同一处
+// 循环翻到底下那件 —— DOM 永远只给你最上面的那个。
+
+/**
+ * 世界坐标点选：这一点底下压着哪些物件，最上面的排最前。
+ * @param {Array} objects   带 pos{x,y,z} 的物件（positioned 那份）
+ * @param {Function} sizeOfFn  物件 → {w,h}
+ * @param {{x,y}} pt        世界坐标
+ * @returns {string[]}      物件 id，按 z 从高到低（同 z 按渲染序靠后者先）
+ */
+export function hitsAt(objects, sizeOfFn, pt) {
+  const hs = [];
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const o = objects[i];
+    const sz = sizeOfFn(o) || { w: 0, h: 0 };
+    if (pt.x >= o.pos.x && pt.x <= o.pos.x + sz.w && pt.y >= o.pos.y && pt.y <= o.pos.y + sz.h) {
+      hs.push(o);
+    }
+  }
+  hs.sort((a, b) => (b.pos.z || 1) - (a.pos.z || 1));
+  return hs.map((o) => o.id);
+}
+
+/**
+ * 叠堆下翻：当前选中的在命中列表里 → 选它底下那件（到底再绕回顶）；
+ * 不在（或没选）→ 选最上面的。列表为空 → null（点了空地，取消选中）。
+ */
+export function nextPick(hits, currentId) {
+  if (!hits.length) return null;
+  const i = currentId ? hits.indexOf(currentId) : -1;
+  return i < 0 ? hits[0] : hits[(i + 1) % hits.length];
+}
+
 /** 新工作区先在现有栈底占位（用存档矩形估算），堆叠 effect 下一拍精确归位 */
 export function newStackedZoneRect(zones) {
   /**

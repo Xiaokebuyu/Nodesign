@@ -56,7 +56,7 @@ function RoleBookmark({ name, color }) {
   );
 }
 
-export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {}, cam = null, viewport = null, onPick = null, reportLayout = null }) {
+export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {}, cam = null, viewport = null, onPick = null }) {
   // ⚠️ 不再要求 active（2026-08-26）：角色挂在 await_user 上等你回话时是 idle 的，
   // 但它**还在台上**，精灵消失会让用户以为它没了、也就不知道该冲谁说话。
   // 2026-08-27（编排）：也不再要求 targetId —— 还没写过板书的角色排**候场位**
@@ -64,7 +64,7 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
   const roles = useMemo(() => Object.values(presence || {})
     .filter((p) => p && isRolePresence(p.id)), [presence]);
 
-  // 摆位先算成表：渲染和布局上报共用同一份坐标（别让两边各算一次各不一样）
+  // 摆位先算成表再渲染（reportLayout 布局上报随点选操作条 08-27 同日撤役）
   const entries = [];
   const placedObs = [];   // 候场位依次占坑：几个候场角色不叠在同一个槽上
   for (const p of roles) {
@@ -86,10 +86,6 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
     placedObs.push({ x: spot.x - 20, y: spot.y - 20, w: 160, h: 110 });
     entries.push({ p, spot });
   }
-  // 布局上报（08-27 操作条避让）：精灵占了哪几块世界矩形，包络口径同 placedObs。
-  // ref 直写路径 —— 上报本身不许引发渲染。
-  useEffect(() => { reportLayout?.(placedObs); });
-
   if (!entries.length) return null;
 
   return (

@@ -30,3 +30,21 @@ export function bboxOf(rects) {
 
 /** 点在矩形内（含边）。 */
 export const pointIn = (pt, r) => pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h;
+
+/**
+ * 线段 a→b 是否穿过矩形 r（Liang-Barsky 裁剪；端点擦边也算穿）。
+ * 落位引擎用它判「连线走廊」：新块和它锚点之间那条线会不会压在第三块身上。
+ */
+export function segHitsRect(a, b, r) {
+  const dx = b.x - a.x; const dy = b.y - a.y;
+  let t0 = 0; let t1 = 1;
+  const clip = (p, q) => {
+    if (p === 0) return q >= 0;               // 与这条边平行：q<0 = 整段在外
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+    else { if (t < t0) return false; if (t < t1) t1 = t; }
+    return true;
+  };
+  return clip(-dx, a.x - r.x) && clip(dx, r.x + r.w - a.x)
+    && clip(-dy, a.y - r.y) && clip(dy, r.y + r.h - a.y);
+}

@@ -104,6 +104,40 @@ describe('resolvePlacement', () => {
     expect(r.resolution).toBe('fallback');
   });
 
+  // ── 连线走廊（2026-08-27 观感措施）────────────────────────────────────
+  // near 落位几乎总配一条到锚点的线；理想位被占、就近环搜时，选出来的位置
+  // 不该让这条线横穿第三块。断言打在契约上（线段不压块），不钉具体坐标 ——
+  // 环搜的遍历序是实现细节。
+  it('⭐ 连线走廊：理想位被占时，落点到锚点的线不横穿占位的那块', () => {
+    const anchor = { x: 0, y: 0, w: 96, h: 96 };
+    const blocker = { x: 120, y: 0, w: 96, h: 96 };   // 正好压住 near-right 的理想位
+    const b = { w: 96, h: 96 };
+    const r = resolvePlacement({ box: b, anchor, side: 'right', obstacles: [anchor, blocker] });
+    expect(r.resolution.startsWith('near-')).toBe(true);
+    // 锚点中心 → 落点中心 的线段不得穿过 blocker
+    const a = { x: anchor.x + anchor.w / 2, y: anchor.y + anchor.h / 2 };
+    const c = { x: r.x + b.w / 2, y: r.y + b.h / 2 };
+    // 参数化采样足够判定（线段短、块是轴对齐矩形）
+    let crosses = false;
+    for (let t = 0; t <= 1; t += 0.01) {
+      const px = a.x + (c.x - a.x) * t; const py = a.y + (c.y - a.y) * t;
+      if (px >= blocker.x && px <= blocker.x + blocker.w && py >= blocker.y && py <= blocker.y + blocker.h) crosses = true;
+    }
+    expect(crosses).toBe(false);
+  });
+
+  it('连线走廊是偏好不是硬闸：处处压线也照样落位（保底 + 最多多看 3 圈）', () => {
+    // 一堵纵贯的高墙挡在右侧：右半平面任何落点的连线都必穿墙，左侧近圈又全被
+    // 锚点自己占着 —— 只能收下压线的保底位，绝不返回失败
+    const anchor = { x: 0, y: 0, w: 96, h: 96 };
+    const wall = { x: 120, y: -2000, w: 48, h: 4000 };
+    const b = { w: 96, h: 96 };
+    const r = resolvePlacement({ box: b, anchor, side: 'right', obstacles: [anchor, wall] });
+    expect(Number.isFinite(r.x) && Number.isFinite(r.y)).toBe(true);
+    // 落点自己不压墙（落位硬约束仍然成立）
+    expect(r.x >= wall.x + wall.w + 12 || r.x + b.w + 12 <= wall.x).toBe(true);
+  });
+
   it('describePlacement：文案从真实 resolution 生成', () => {
     const r = { resolution: 'near-left', nudged: false, rejected: null };
     expect(describePlacement(r)).toContain('left of the anchor');

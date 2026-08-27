@@ -30,6 +30,7 @@ import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.
 import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, resolveTemplate, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
 import { resolvePlacement, describePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
 import { allocateLaneColumn } from '../../../lib/board-lanes.js';
+import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
@@ -45,7 +46,7 @@ const MAX_EDGES = 400;
 
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
-const COLORS = ['ink', 'red', 'pencil', 'brass'];
+// 墨色表真身在 lib/sketch-shapes.js（棘轮拆件时一起搬 —— 一份表两处读会分叉）
 
 const LOCAL_ID = z.string().regex(/^[A-Za-z0-9_-]{1,48}$/, 'local id: letters/digits/_/-');
 const GRID_PT = z.object({ x: z.number().min(-2000).max(2000), y: z.number().min(-2000).max(2000) });
@@ -460,60 +461,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     seatTitle();
     const rectOfNode = (key) => { const n = nodes.find(x => x.key === key); const p = pos.get(key); return n && p ? { x: p.x, y: p.y, w: n.w, h: n.h } : null; };
 
-    // ── 形状（局部像素） ──
-    const shapes = [];
-    for (let i = 0; i < shapesIn.length; i += 1) {
-      const s = shapesIn[i];
-      const sid = s.id || `s${i + 1}`;
-      if (localIds.has(sid) || shapes.some(x => x.key === sid)) return err(`形状 id「${sid}」跟节点/别的形状重名（形状缺省叫 s1,s2…，节点别用这类名）`);
-      const seed = `${tag || 'solo'}:${sid}`;
-      const color = COLORS.includes(s.color) ? s.color : (s.kind === 'arrow' || s.kind === 'line' ? 'ink2' : 'ink');
-      const width = s.width || 2;
-      let rect; let d;
-      if (s.kind === 'path') {
-        if (!s.d || !/^[\dMLQCZ ,.\-eE]+$/.test(s.d)) return err(`形状 ${sid}：path 只收 M/L/Q/Z 与数字`);
-        const nums = s.d.match(/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g)?.map(Number) || [];
-        const xs = nums.filter((_, k) => k % 2 === 0); const ys = nums.filter((_, k) => k % 2 === 1);
-        const w = Math.max(4, Math.max(...xs) - Math.min(0, Math.min(...xs))); const h = Math.max(4, Math.max(...ys) - Math.min(0, Math.min(...ys)));
-        rect = { x: (s.at?.x || 0) * UNIT, y: (s.at?.y || 0) * UNIT, w: w + 6, h: h + 6 };
-        d = s.d;
-      } else if (s.kind === 'line' || s.kind === 'arrow' || s.kind === 'underline') {
-        let a; let b;
-        if (s.kind === 'underline' && s.around) {
-          const r = rectOfNode(s.around); if (!r) return err(`形状 ${sid}：around 指向不存在的节点 ${s.around}`);
-          a = { x: r.x + 2, y: r.y + r.h - 2 }; b = { x: r.x + r.w - 2, y: r.y + r.h - 2 };
-        } else {
-          if (!s.at) return err(`形状 ${sid}：${s.kind} 要 at 起点`);
-          a = { x: s.at.x * UNIT, y: s.at.y * UNIT };
-          if (s.toNode) {
-            const r = rectOfNode(s.toNode); if (!r) return err(`形状 ${sid}：toNode 指向不存在的节点 ${s.toNode}`);
-            b = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
-          } else if (s.to) b = { x: s.to.x * UNIT, y: s.to.y * UNIT };
-          else if (s.kind === 'underline') b = { x: a.x + (s.w || 4) * UNIT, y: a.y };
-          else return err(`形状 ${sid}：${s.kind} 要 to 或 toNode`);
-        }
-        const sp = shapePath(s.kind, { to: { x: b.x - a.x, y: b.y - a.y } }, seed);
-        rect = { x: Math.min(a.x, b.x) - 6, y: Math.min(a.y, b.y) - 6, w: sp.w, h: sp.h };
-        d = sp.d;
-      } else {
-        let box;
-        if (s.around) {
-          const r = rectOfNode(s.around); if (!r) return err(`形状 ${sid}：around 指向不存在的节点 ${s.around}`);
-          const pad = s.kind === 'rect' ? 8 : 14;
-          box = { x: r.x - pad, y: r.y - pad, w: r.w + pad * 2, h: r.h + pad * 2 };
-          if (s.kind === 'circle') { const dmax = Math.max(box.w, box.h); box = { x: box.x + (box.w - dmax) / 2, y: box.y + (box.h - dmax) / 2, w: dmax, h: dmax }; }
-        } else {
-          if (!s.at || !s.w) return err(`形状 ${sid}：${s.kind} 要 at + w（+h）或 around`);
-          box = { x: s.at.x * UNIT, y: s.at.y * UNIT, w: s.w * UNIT, h: (s.h || s.w) * UNIT };
-        }
-        const sp = shapePath(s.kind, { w: box.w, h: box.h }, seed);
-        rect = { x: box.x - 6, y: box.y - 6, w: sp.w, h: sp.h };
-        d = sp.d;
-      }
-      // 包着节点的记号记 hug：落盘后编辑侧挪节点它跟着走（散架病的另一半在 edit-board）
-      const hugKey = (s.around && s.kind !== 'line' && s.kind !== 'arrow' && s.kind !== 'path') ? s.around : null;
-      shapes.push({ key: sid, rect, d, color: COLORS.includes(color) ? color : 'ink', width, hug: hugKey });
-    }
+    // ── 形状（局部像素）：构建本体在 lib/sketch-shapes.js（08-27 棘轮拆件） ──
+    const built = buildSketchShapes(shapesIn, { rectOfNode, isTaken: (id) => localIds.has(id), tag });
+    if (built.error) return err(built.error);
+    const shapes = built.shapes;
     // ── 线：先于落位（连到真实产物的线会改主角判断 → 尺寸） ──
     const idOf = new Map();
     for (const n of nodes) idOf.set(n.key, `text:a${stamp()}`);

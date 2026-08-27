@@ -189,8 +189,8 @@ export function useBoardObjectDrag({
     // click/dblclick 在 pointerup 之后才派发，此时 dragRef 已清 —— 拖完的
     // "余韵"记在这个 ref 上，让点击类 handler 能区分"拖完松手"和"真点击"
     recentDragMovedRef.current = !!d?.moved;
-    // 点了一下没拖动 = 选中（2026-08-27 操作条重制：**所有**物件点选都进选中态，
-    // 产物卡也选 —— 选中出操作条。下翻/几何命中收在 BoardCanvas 的 clickSelect，
+    // 点了一下没拖动 = 选中 + 直接开标注（2026-08-27 用户拍板：标注是最常用
+    // 的动作）。下翻/几何命中收在 BoardCanvas 的 clickSelect，
     // 这里只报「点了这件、点在屏幕哪儿」）
     if (d?.kind === 'object' && !d.moved) {
       clickSelect?.(d.id, d.lastClientX, d.lastClientY);

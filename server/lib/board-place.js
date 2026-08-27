@@ -21,7 +21,7 @@
  * 纯函数，不碰磁盘。障碍集由调用方给（尺寸走 estimateSizeOn，主角放大要算进去）。
  */
 
-import { UNIT, overlaps, bboxOf } from './rect.js';
+import { UNIT, overlaps, bboxOf, segHitsRect } from './rect.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 
 export { UNIT };                 // 兼容出口：一批调用方从这里拿（真身在 rect.js）
@@ -39,8 +39,14 @@ function collides(x, y, w, h, obstacles) {
  * 环形搜索：从理想点出发，按 24px 网格一圈圈向外找第一个不撞的位置。
  * 同一圈内按到理想点的欧氏距离排序；sidePref 给了就先试同侧半平面的候选
  * （相对 anchor 矩形），同圈同侧的赢过同圈异侧的。
+ *
+ * lineFrom（2026-08-27 观感措施）：新块几乎总会跟锚点连一条线，线横穿第三块
+ * 是版面最难看的一种。给了 lineFrom 就偏好「lineFrom → 候选中心」不压别的块
+ * 的位置 —— best-effort：先收下最近的可用位当保底，再多看最多 3 圈找线干净的；
+ * 找不到还是要保底那个（距离仍是第一语言，线是第二语言）。
+ * 理想点本身空着时不查线：贴身位的连线穿不过第三块（间隙里塞不下能撞 PAD 的东西）。
  */
-function ringSearch(ideal, box, obstacles, { sidePref = null, anchor = null, maxRing = MAX_RING } = {}) {
+function ringSearch(ideal, box, obstacles, { sidePref = null, anchor = null, maxRing = MAX_RING, lineFrom = null } = {}) {
   if (!collides(ideal.x, ideal.y, box.w, box.h, obstacles)) {
     return { x: ideal.x, y: ideal.y, nudged: false };
   }
@@ -51,7 +57,19 @@ function ringSearch(ideal, box, obstacles, { sidePref = null, anchor = null, max
     if (sidePref === 'below') return y >= anchor.y + anchor.h;
     return y + box.h <= anchor.y;   // above
   };
+  const lineClear = (x, y) => {
+    if (!lineFrom) return true;
+    const c = { x: x + box.w / 2, y: y + box.h / 2 };
+    for (const o of obstacles) {
+      // 锚点自己（以及跟它重叠的身位膨胀）不算「第三块」—— 线本来就从它出发
+      if (anchor && overlaps(o, anchor)) continue;
+      if (segHitsRect(lineFrom, c, o)) return false;
+    }
+    return true;
+  };
+  let fallback = null;   // 最近的可用但线被压的位置（含它在第几圈）
   for (let r = 1; r <= maxRing; r += 1) {
+    if (fallback && r > fallback.ring + 3) break;   // 保底之外只多看 3 圈
     const cands = [];
     for (let dx = -r; dx <= r; dx += 1) {
       for (let dy = -r; dy <= r; dy += 1) {
@@ -61,17 +79,20 @@ function ringSearch(ideal, box, obstacles, { sidePref = null, anchor = null, max
       }
     }
     cands.sort((a, b) => a.side - b.side || a.d - b.d);
-    for (const c of cands) {
-      if (c.side === 1 && sidePref) continue;   // 本圈先只试同侧；异侧留给"整体没侧"时
-      if (!collides(c.x, c.y, box.w, box.h, obstacles)) return { x: c.x, y: c.y, nudged: true };
-    }
-    // 同侧全撞：这一圈放开半平面再试一遍（宁可换侧，不要推远）
-    for (const c of cands) {
-      if (c.side === 0) continue;
-      if (!collides(c.x, c.y, box.w, box.h, obstacles)) return { x: c.x, y: c.y, nudged: true };
+    // 两趟：先只试同侧，同侧全撞再放开半平面（宁可换侧，不要推远 —— 原语义）。
+    // ⚠️ 侧位赢过连线：同侧只要有可用位（哪怕压线，已记进保底），就不再看异侧
+    // —— 否则「正下方接楼」会为了一条干净线飘到楼上去（reply-to 测试抓过）。
+    for (const pass of [0, 1]) {
+      if (pass === 1 && fallback) break;
+      for (const c of cands) {
+        if (c.side !== pass) continue;
+        if (collides(c.x, c.y, box.w, box.h, obstacles)) continue;
+        if (lineClear(c.x, c.y)) return { x: c.x, y: c.y, nudged: true };
+        if (!fallback) fallback = { x: c.x, y: c.y, ring: r };
+      }
     }
   }
-  return null;
+  return fallback ? { x: fallback.x, y: fallback.y, nudged: true } : null;
 }
 
 /** 视口扫描（保留 08-23 的阅读顺序纪律：先挑不在已有内容左侧/上方的位置） */
@@ -138,7 +159,10 @@ export function resolvePlacement({
   // 1) 线程：正下方同列。环搜也钉住同列偏好（side below）。
   if (replyTo) {
     const ideal = { x: Math.round(replyTo.x), y: Math.round(replyTo.y + replyTo.h + PAD) };
-    const hit = ringSearch(ideal, b, obstacles, { sidePref: 'below', anchor: replyTo });
+    const hit = ringSearch(ideal, b, obstacles, {
+      sidePref: 'below', anchor: replyTo,
+      lineFrom: { x: replyTo.x + replyTo.w / 2, y: replyTo.y + replyTo.h / 2 },
+    });
     if (hit) return { ...hit, resolution: 'reply-to', rejected };
     const fb = bottomSpot(b, obstacles, contentBottom);
     return { ...fb, resolution: 'fallback', rejected, nudged: true };
@@ -175,7 +199,12 @@ export function resolvePlacement({
       below: { x: anchor.x, y: anchor.y + anchor.h + g },
       above: { x: anchor.x, y: anchor.y - g - h },
     };
-    const hit = ringSearch(ideals[pref], b, obstacles, { sidePref: pref, anchor });
+    // 连线走廊：near 落位几乎总配一条到锚点的线（write_on_board 的 near-line /
+    // relation），环搜时尽量选「锚点中心 → 落点中心」不压第三块的位置
+    const hit = ringSearch(ideals[pref], b, obstacles, {
+      sidePref: pref, anchor,
+      lineFrom: { x: anchor.x + anchor.w / 2, y: anchor.y + anchor.h / 2 },
+    });
     if (hit) {
       const actual = sideOf(hit, b, anchor) || pref;
       return { ...hit, resolution: `near-${actual}`, rejected, nudged: hit.nudged || actual !== pref };

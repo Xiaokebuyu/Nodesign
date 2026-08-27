@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   KINDS, kindOf, traitsOf, sizeOf, actionsOf, primaryOf, readerOf,
   chromeOf, cardOf, isFileBacked, legacyBucketOf, isMarkdown, SIZES,
-  CATEGORIES, SOURCES, categoryOf, sourceOf, passesFilter,
+  CATEGORIES, SOURCES, categoryOf, sourceOf, passesFilter, isArchivePath,
 } from './board-kinds.js';
 
 /**
@@ -371,5 +371,16 @@ describe('内容轴 × 来源轴', () => {
     expect(passesFilter(shot, { sources: ['tool'] })).toBe(true);
     // 内容对、来源不对 → 不显示
     expect(passesFilter(shot, { categories: ['material'], sources: ['user'] })).toBe(false);
+  });
+
+  it('档案面判据（08-27）：根 CLAUDE.md 与 记忆/ 算档案，别的都不算', () => {
+    expect(isArchivePath('CLAUDE.md')).toBe(true);
+    expect(isArchivePath('记忆')).toBe(true);                       // 文件夹 zone id
+    expect(isArchivePath('记忆/求职主线.md')).toBe(true);
+    // 边界：同名前缀不误伤（「记忆碎片」是个正常文件夹）、子目录里的 CLAUDE.md 不是根档案
+    expect(isArchivePath('记忆碎片')).toBe(false);
+    expect(isArchivePath('稿件/CLAUDE.md')).toBe(false);
+    expect(isArchivePath('notes/板书/x.md')).toBe(false);
+    expect(isArchivePath(null)).toBe(false);
   });
 });

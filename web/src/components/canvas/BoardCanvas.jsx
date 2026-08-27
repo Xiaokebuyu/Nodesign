@@ -11,9 +11,10 @@ import { PAPER, PAPER_SHADOW, paperCard } from '../../lib/paper.js';
 import {
   DESKTOP_W, MARGIN_X, FOLDER_CARD,
   EASE, POP_IN, newStackedZoneRect, packRow, ROW_GAP,
+  hitsAt, nextPick,
 } from '../../lib/board-geometry.js';
 import {
-  SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, passesFilter, isDirArtifact,
+  SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, passesFilter, isDirArtifact, isArchivePath,
 } from '../../lib/board-kinds.js';
 import { deriveBoardObjects } from '../../lib/board-objects.js';
 import BoardObject from './cards/BoardObject.jsx';
@@ -36,8 +37,6 @@ import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
 import { zoneOfObjectId, resolveObjectId } from '../../lib/stage.js';
 import { onChrome, onObject } from '../../lib/board-hit.js';
-import ObjectActionBar from './ObjectActionBar.jsx';
-import { hitsAt, nextPick } from '../../lib/action-bar-place.js';
 import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../lib/text-fonts.js';
 import { splitNoteFaces, faceParts } from '../../lib/note-faces.js';
 import BindingLayer from './BindingLayer.jsx';
@@ -317,7 +316,24 @@ export default function BoardCanvas({
   //   - 画布原生（涂鸦）：board.json 就是本体，从 layout 里带 kind 的条目还原
   // 画布物件的派生搬去 lib/board-objects.js（2026-08-17 行数棘轮拆件）：
   // 它是纯数据变换（/artifacts 载荷 → 画布物件），没有 React、可单独测。
-  const objects = useMemo(() => deriveBoardObjects({ tasks, artifacts, layout, browse }).filter(o => passesFilter(o, filter)), [tasks, artifacts, layout, browse, filter]);
+  // 档案面（2026-08-27 用户拍板）：根 CLAUDE.md / 记忆/ 默认不上画布 ——
+  // 那是 agent 的后台档案，不是产出。右上角「档案」钮显形；状态存本地
+  // （跟 board-filter 同一条理由：这是这个人此刻想看什么，不是画布的属性）。
+  const [showArchive, setShowArchive] = useState(() => {
+    try { return window.localStorage.getItem(`nd.showArchive.${projectId}`) === '1'; } catch { return false; }
+  });
+  const toggleArchive = useCallback(() => {
+    setShowArchive((v) => {
+      try { window.localStorage.setItem(`nd.showArchive.${projectId}`, v ? '0' : '1'); } catch { /* 隐私模式 */ }
+      return !v;
+    });
+  }, [projectId]);
+
+  const objects = useMemo(
+    () => deriveBoardObjects({ tasks, artifacts, layout, browse })
+      .filter(o => passesFilter(o, filter))
+      .filter(o => showArchive || !isArchivePath(o.id)),
+    [tasks, artifacts, layout, browse, filter, showArchive]);
 
   // 顶带摘要（08-24 记忆体系改版：记忆/风格卡退役 —— 记忆住 记忆/、风格并进
   // 根 CLAUDE.md，都是画布上的普通文件；这里只剩项目档案与文件两张）
@@ -355,8 +371,11 @@ export default function BoardCanvas({
     for (const [zid, z] of Object.entries(zones)) if (live.has(zid)) out[zid] = z;
     // 影子：agent 刚 mkdir 出来、这一轮扫描还没看到的那个，先占个位
     for (const [zid, g] of Object.entries(ghostZones)) if (!out[zid]) out[zid] = g;
+    // 档案面收起时 记忆/ 文件夹卡不上桌（zones state 原样留着，显形即归位；
+    // 文件夹派生/剪枝都读 zones 原始表，这里滤掉不会引发删除写回）
+    if (!showArchive) for (const zid of Object.keys(out)) if (isArchivePath(zid)) delete out[zid];
     return out;
-  }, [zones, ghostZones, folders]);
+  }, [zones, ghostZones, folders, showArchive]);
   const zonesEffRef = useRef(zonesEff); zonesEffRef.current = zonesEff;
 
   // 刚被用户删掉的 zone 墓碑：删任务后 tasks 列表要等 reload 才更新，这个
@@ -880,9 +899,11 @@ export default function BoardCanvas({
     positioned.filter(o => o.chalk && typeof o.text === 'string' && o.text.includes('```nd:controls')),
   ), [positioned]);
 
-  // 点选 + 叠堆下翻（2026-08-27 操作条重制）：真点击选点到的东西，再点同一处
-  // 循环下翻到底下那件。DOM 命中在指针捕获下会被重定向（08-25 板书武装案），
-  // 所以一律拿世界坐标做几何命中 —— 闲置板书、叠成一摞的产物都在这条路上。
+  // 单击 = 直接开标注（2026-08-27 用户拍板：标注是最常用的动作，点选操作条
+  // 同日撤役）。命中仍走几何 + 叠堆下翻：DOM 命中在指针捕获下会被重定向
+  // （08-25 板书武装案），所以拿世界坐标对矩形算；叠成一摞的产物再点同一处
+  // 循环翻到底下那件，翻到谁标注就落到谁 —— 挤堆场景靠这个解。
+  // 标注纸自己管退场（点外面/Esc 即关），点下一件时上一张已被 pointerdown 收掉。
   const clickSelect = (domId, cx, cy) => {
     const pt = camera.toWorld(cx, cy);
     const hits = hitsAt(positionedRef.current, sizeOf, pt);
@@ -890,9 +911,9 @@ export default function BoardCanvas({
     const pick = nextPick(hits.length ? hits : (domId ? [domId] : []), cur);
     if (!pick && !selectedIdsRef.current.length) return;   // 空地点空地，别空转渲染
     setSelectedIds(pick ? [pick] : []);
+    const o = pick ? positionedRef.current.find(it => it.id === pick) : null;
+    if (o) setAnnotate({ x: cx, y: cy + 12, target: annotTargetOf(o, roleNames) });
   };
-  // 精灵占位上报（RoleSprites → 操作条避让）：ref 直写，不进渲染循环
-  const spriteRectsRef = useRef([]);
 
   // 拖拽全家（pointerdown/move/up/相机补帧/边缘跟车/整组抓手/板书双按武装）
   // 2026-08-25 抽进 useBoardObjectDrag.js —— 语义与注释原样搬走，改拖拽行为去那看。
@@ -1706,7 +1727,7 @@ export default function BoardCanvas({
           // 都该收掉选框。
           // onObject 而不是裸 selector：未武装的板书算空地 —— 点它也收掉选框
           //（这正是武装态的退出路之一；另一条是 Esc）
-          // onChrome 豁免（08-27）：操作条自己就是 chrome，按它不能先把选中收了
+          // onChrome 豁免（08-27）：小地图/档案钮等 chrome，按它不该先把选中收了
           if (selectedIdsRef.current.length && !onObject(e) && !onChrome(e)
             && !e.target.closest('[data-transform-handle]')) {
             setSelectedIds([]);
@@ -1752,7 +1773,7 @@ export default function BoardCanvas({
           if (endMarquee()) return;
           const panned = camera.onPointerUp(e);
           onPointerUp(e);
-          // 几何点选（08-27 操作条）：真点击（没平移没拖没框选）落在被 board-hit
+          // 几何点选（08-27）：真点击（没平移没拖没框选）落在被 board-hit
           // 当成空地的东西上 —— 闲置板书就是这类 —— 也要选得中。物件自己的点选
           // 走拖拽钩子（它有指针捕获），这里只接"空地"那半边。
           if (!panned && !wasDrag() && toolRef.current === 'select' && !onObject(e)
@@ -1894,7 +1915,6 @@ export default function BoardCanvas({
             presence={presence} rectOf={rectOfId} obstacles={minimapItems} roleNames={roleNames}
             cam={cam} viewport={camera.viewport}
             onPick={(slug) => setRoleTalk((cur) => (cur === slug ? null : slug))}
-            reportLayout={(rects) => { spriteRectsRef.current = rects; }}
           />
           {roleTalk && (
             <RoleTalkPanel
@@ -1976,33 +1996,34 @@ export default function BoardCanvas({
             标注 2026-08-13 收敛成 AnnotatePopover 的两个出口之后它没有入口了，
             连同 commentDraft 状态一起删。留在画布那条路现在走 keepAnnotation。 */}
 
-        {/* 点选操作条（08-27 重制）：选中单件贴着它出条（屏幕空间，不跟缩放变小）。
-            拖拽/平移/改名/开窗时不出 —— 那些时刻手上另有事。 */}
-        {(() => {
-          if (!selectedId || dragActive || camera.panning || renamingId === selectedId || deckOpen || winDir) return null;
-          const o = positioned.find(it => it.id === selectedId);
-          if (!o) return null;
-          return (
-            <ObjectActionBar
-              o={o} positioned={positioned} folderView={folderView}
-              spriteRects={spriteRectsRef.current}
-              cam={cam} viewport={camera.viewport}
-              title={titleOfId(o.id)}
-              onClose={() => setSelectedIds([])}
-              handlers={{
-                added: addedPaths.has(o.id),
-                onAdd: () => handleAdd(o),
-                onOpenViewer: () => openViewer(o),
-                onOpenFile: () => openFile(o),
-                onOrchestrate: () => openOrchestrate(o),
-                onDetail: () => setDetail(o),
-                onDeleteNote: () => handleDeleteNote(o),
-                onExport: isFileBacked(o) ? () => exportCard(projectId, o) : undefined,
-                onAnnotate: (at) => setAnnotate({ x: at.x, y: at.y, target: annotTargetOf(o, roleNames) }),
-              }}
-            />
-          );
-        })()}
+        {/* ⚠️ 这里曾有「点选操作条」（ObjectActionBar，08-27 上午建、同日撤）：
+            选中单件在旁边浮一条板书样按钮条。用户拍板撤掉 —— 单击的语义改成
+            **直接开标注**（最常用的动作），其余动作仍在 hover 工具条上。 */}
+
+        {/* 档案钮（屏幕空间，右上角；2026-08-27 用户拍板）：根 CLAUDE.md 和
+            记忆/ 是 agent 的后台档案，默认不上画布 —— 想看的时候点这里显形。
+            板书样文字钮（nd:controls 的视觉语言），不是图标工具钮。 */}
+        {!deckOpen && !winDir && (
+          <button
+            type="button" data-board-action
+            title={showArchive
+              ? '收起项目档案（根 CLAUDE.md 与 记忆/）'
+              : '显示项目档案（根 CLAUDE.md 与 记忆/ —— agent 的项目档案和长期记忆）'}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={toggleArchive}
+            style={{
+              position: 'absolute', top: 12, right: 12, zIndex: 320,
+              fontFamily: TEXT_FONT_CSS.kai, fontSize: 13, lineHeight: 1.4, cursor: 'pointer',
+              padding: '3px 10px', borderRadius: RADIUS.md,
+              border: `1px solid ${alpha(PAPER.ink, showArchive ? 0.55 : 0.28)}`,
+              background: showArchive ? PAPER.paper : 'transparent',
+              color: PAPER.ink, opacity: showArchive ? 1 : 0.72,
+              transform: 'rotate(-0.4deg)',
+              boxShadow: showArchive ? PAPER_SHADOW.near : 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >档案</button>
+        )}
 
         {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
             全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。 */}
