@@ -178,6 +178,41 @@ describe('OpenAIToAnthropicSSE', () => {
   });
 });
 
+describe('思考文本的两种字段名（08-27）', () => {
+  it('非流式：reasoning_content 优先，没有就认 Merge 网关的 thinking', () => {
+    const a = fromOpenAIChatResponse({ choices: [{ message: { role: 'assistant', reasoning_content: '想A', content: '答' }, finish_reason: 'stop' }] }, 'alias');
+    expect(a.content[0]).toMatchObject({ type: 'thinking', thinking: '想A' });
+    const b = fromOpenAIChatResponse({ choices: [{ message: { role: 'assistant', thinking: '想B', thinking_signature: null, content: '答' }, finish_reason: 'stop' }] }, 'alias');
+    expect(b.content[0]).toMatchObject({ type: 'thinking', thinking: '想B' });
+  });
+  it('流式：delta.thinking 也进 thinking 块（Merge 网关的增量字段名）', async () => {
+    const xf = new OpenAIToAnthropicSSE({ model: 'alias', label: 'Merge' });
+    const out = await collect(xf, [
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, delta: { role: 'assistant', thinking: '先想想', thinking_signature: null } }] })}\n\n`,
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, delta: { content: '答案' } }] })}\n\n`,
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, finish_reason: 'stop', delta: {} }], usage: { prompt_tokens: 5, completion_tokens: 3 } })}\n\n`,
+      'data: [DONE]\n\n',
+    ]);
+    const events = ev(out);
+    const thinkDelta = events.find(x => x.e === 'content_block_delta' && x.d.delta?.type === 'thinking_delta');
+    expect(thinkDelta.d.delta.thinking).toBe('先想想');
+    expect(xf.failReason).toBeNull();
+  });
+});
+
+describe('OpenAIToAnthropicSSE · Merge 网关的 cost 在 usage 里（08-27）', () => {
+  it('末块 usage.cost 被接住（这家没有顶层 cost，也没有 [DONE] 之后那条补丁块）', async () => {
+    const xf = new OpenAIToAnthropicSSE({ model: 'alias', label: 'Merge' });
+    await collect(xf, [
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, delta: { role: 'assistant', content: 'OK' } }] })}\n\n`,
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, finish_reason: 'stop', delta: { content: '' } }], usage: { prompt_tokens: 146, completion_tokens: 27, cost: 0.00000354 } })}\n\n`,
+      'data: [DONE]\n\n',
+    ]);
+    expect(xf.cost).toBe(0.00000354);
+    expect(xf.usage?.prompt_tokens).toBe(146);
+  });
+});
+
 describe('OpenAIToAnthropicSSE · /zen/go 的 cost（08-21 晚）', () => {
   it('[DONE] 之后补的 {"choices":[],"cost":"0.0042"} 被接住；收尾仍是 message_delta + message_stop；label 进错误文案', async () => {
     const xf = new OpenAIToAnthropicSSE({ model: 'alias', label: 'Zen Go' });

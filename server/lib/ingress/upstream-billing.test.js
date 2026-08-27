@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { UpstreamBilling } from './upstream-billing.js';
+import { UpstreamBilling, upstreamCostOf } from './upstream-billing.js';
 
 describe('UpstreamBilling', () => {
   it('按会话×模型累加 cost 与 usage；take 取走清零；没报 cost 且没 usage 不记', () => {
@@ -16,5 +16,16 @@ describe('UpstreamBilling', () => {
     expect(b.take('s1')).toBeNull();
     expect(b.peek('s2')['glm-5.3-flash'].costUsd).toBeNull();
     expect(b.take('nope')).toBeNull();
+  });
+});
+
+describe('upstreamCostOf', () => {
+  it('顶层 cost（Zen）与 usage.cost（Merge 网关）都认，顶层优先；缺席/非数 → null', () => {
+    expect(upstreamCostOf({ cost: '0.0042' })).toBe(0.0042);                       // Zen：字符串也收
+    expect(upstreamCostOf({ usage: { prompt_tokens: 9, cost: 1.006e-5 } })).toBe(1.006e-5);   // Merge：钱在 usage 里
+    expect(upstreamCostOf({ cost: 0.5, usage: { cost: 0.9 } })).toBe(0.5);         // 两处都有 → 顶层赢
+    expect(upstreamCostOf({ usage: { prompt_tokens: 9 } })).toBeNull();            // 只有 usage 没 cost
+    expect(upstreamCostOf({ cost: 'free' })).toBeNull();                           // 非数不许当 0：假数据比没有更坏
+    expect(upstreamCostOf(null)).toBeNull();
   });
 });

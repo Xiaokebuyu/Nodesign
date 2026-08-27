@@ -36,6 +36,7 @@
  *   会话直接判死 —— 现有的 content_filter→end_turn 在 Claude Code 语境下才是对的
  */
 import { Transform } from 'node:stream';
+import { upstreamCostOf } from './upstream-billing.js';
 
 const STOP_MAP = { tool_calls: 'tool_use', stop: 'end_turn', length: 'max_tokens', content_filter: 'end_turn', function_call: 'tool_use' };
 
@@ -202,7 +203,10 @@ export function fromOpenAIChatResponse(json) {
   const choice = json.choices[0] || {};
   const m = choice.message || {};
   const content = [];
-  if (m.reasoning_content) content.push({ type: 'thinking', thinking: String(m.reasoning_content), signature: '' });
+  // 思考文本的字段名各家不一样：zen 系是 reasoning_content（models.dev 的 interleaved.field），
+  // Merge 网关是 `thinking`（另带 thinking_signature，我们不回传签名所以不取）。先认前者，回退后者。
+  const reasoning = m.reasoning_content || m.thinking;
+  if (reasoning) content.push({ type: 'thinking', thinking: String(reasoning), signature: '' });
   if (m.content) content.push({ type: 'text', text: String(m.content) });
   if (m.refusal) content.push({ type: 'text', text: String(m.refusal) });
   for (const c of m.tool_calls || []) {
@@ -272,7 +276,7 @@ export class OpenAIToAnthropicSSE extends Transform {
     this.sawText = false;      // 有过可见正文（区分"只想没说"的早断流）
     this.failReason = null;    // 本次以 error 事件收场的原因（forward 层据此记会话失败计数；null = 正常收尾）
     this.truncated = null;     // 本次「半截」收场的原因（见 truncationReason；forward 层据此报给 session-loop 续接）
-    this.cost = null;          // 上游报的本次费用（美元，/zen/go 在 [DONE] 后补的 cost 字段；null = 上游没报）
+    this.cost = null;          // 上游报的本次费用（美元，/zen/go 在 [DONE] 后补顶层 cost、Merge 网关放 usage.cost；null = 上游没报）
     this.doneSeen = false;     // 见过 [DONE]：之后只收 cost，收尾等 _flush
     this.attempts = 1;         // 这条 SSE 一共打了几发上游（就地重发会 ++）
     this.attemptUsage = null;  // 这一发的 usage
@@ -307,13 +311,15 @@ export class OpenAIToAnthropicSSE extends Transform {
   _handleChunk(chunk) {
     this._ensureStart(chunk);
     if (chunk.usage) this.attemptUsage = chunk.usage;
-    if (chunk.cost != null) this.attemptCost = Number(chunk.cost);
+    const chunkCost = upstreamCostOf(chunk);   // 顶层 cost（Zen）或 usage.cost（Merge 网关）
+    if (chunkCost != null) this.attemptCost = chunkCost;
     const choice = chunk.choices?.[0];
     if (!choice) return;
     const d = choice.delta || {};
-    if (d.reasoning_content) {
+    const reasoningDelta = d.reasoning_content || d.thinking;   // 同上：Merge 网关的增量字段叫 thinking
+    if (reasoningDelta) {
       if (this.open?.kind !== 'thinking') this._openBlock('thinking', { type: 'thinking', thinking: '', signature: '' });
-      this._emit('content_block_delta', { type: 'content_block_delta', index: this.open.index, delta: { type: 'thinking_delta', thinking: String(d.reasoning_content) } });
+      this._emit('content_block_delta', { type: 'content_block_delta', index: this.open.index, delta: { type: 'thinking_delta', thinking: String(reasoningDelta) } });
     }
     // content 与 refusal 都是"可见正文"，进同一个 text 块（拒答也是模型说的话，原样吐给用户）
     for (const piece of [d.content, d.refusal]) {
@@ -473,7 +479,7 @@ export class OpenAIToAnthropicSSE extends Transform {
       if (payload === '[DONE]') { this.doneSeen = true; continue; }
       let j;
       try { j = JSON.parse(payload); } catch { continue; }
-      if (this.doneSeen || this.done) { if (j && j.cost != null) this.attemptCost = Number(j.cost); continue; }
+      if (this.doneSeen || this.done) { const c = upstreamCostOf(j); if (c != null) this.attemptCost = c; continue; }
       if (j?.error) {   // 流中途的错误体：转成 Anthropic error 事件
         this._ensureStart(j);
         this._closeOpen();          // 先把开着的块闭合再发 error（顺序反了会出现 error 后面还跟 content_block_stop）

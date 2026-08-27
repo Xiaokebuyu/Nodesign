@@ -127,6 +127,36 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     authStyle: 'x-api-key',
     countTokens: false,   // ⛔ 见上：不是 404，是恒 0 的桩
   }),
+  // Merge Gateway（08-27）：**多厂商聚合网关**（api-gateway.merge.dev）。一个模型名后面挂着好几家部署
+  // （GLM-5.3-Flash = particle + zai），网关自己挑，响应头 `x-merge-vendor` 说这一发是谁服务的。
+  // ⚠️ **挑哪家决定不了**：body 的 provider/vendor/routing.vendor、头 x-merge-vendor/x-vendor、
+  // query ?vendor=、模型名后缀 @zai/:zai 全试过（未知字段静默忽略、后缀 404）；真旋钮在它的管理 API
+  // （`/v1/keys` 回「Management API key required」），我们只有普通钥匙 → **这条上游天生带厂商轮盘**。
+  // 钥匙 `~/apikey/merge.md`（`mg_` 46 字符），bearer 与 x-api-key 都通，取 bearer。账只在响应头上：
+  // `x-credit-balance-usd: 20.00` / `x-budget-limit-usd: 10.00`，**没有余额端点**（/v1/usage 等全 404）。
+  //
+  // ⛔⛔ **必须走 openai-chat 转换层，尽管它的 /v1/messages 是通的**。08-27 两条入口对打，判据是
+  // 「图里的编号答不答得出」加 prompt token 账（不是问模型有没有视觉）：
+  //   · Anthropic 原生：裸协议 6/9（文本 / 流式 tool_use 分片 / max_tokens 128k / prompt cache 命中 9024 /
+  //     count_tokens 都好），**图这一路两种摆法都不成立** —— ① 图留在 tool_result 里被当**文本**塞进去
+  //     （10KB base64 → prompt 8300 token，模型瞎编「写着 0713」「画面一片白」）3 发全错；② 换成本站
+  //     liftImages 形状 → **zai 那家 400**「ZaiException - Invalid API parameter」，6 发里 3 发。
+  //   · OpenAI chat：**转换层自己生成的同一形状**（assistant tool_calls → tool 消息 → 带 image_url 的
+  //     user 消息）27 发里 25 发答对编号，prompt 账里图也在（有图 404 / 图被丢 211）。
+  // ⚠️ 剩下 2/27 是**厂商轮盘的漏气**（实测约 7~10%）：网关丢掉图并给模型塞一句"你没有多模态能力"
+  // （模型 thinking 里原话 "I'm told I don't have multi-modal input ability"），它于是老实说看不见。
+  // ⭐ 跟 08-25 撤掉的 minimax-m2.7 不是一回事：那家**每发必丢**还假装看见，这家偶发且**会说出来**。
+  //
+  // count_tokens 这家**有**（回真数不是桩），仍写 false：走 openai-chat 的行不该从 Anthropic 端口取数，
+  // 且实测对中文超收 1.67 倍（同段中文 count 1487 / 真实 892），跟本站本地估算一样偏高，取来不会更准。
+  merge: Object.freeze({
+    label: 'Merge Gateway api-gateway.merge.dev',
+    baseUrl: process.env.NODESIGN_UPSTREAM_MERGE_URL || 'https://api-gateway.merge.dev/v1',
+    keyEnv: 'NODESIGN_UPSTREAM_MERGE_KEY',
+    authStyle: 'bearer',
+    protocol: 'openai-chat',
+    countTokens: false,   // 见上：不是没有，是不该从这条腿取
+  }),
 });
 
 /**
@@ -411,6 +441,50 @@ export const MODELS_BUILTIN = Object.freeze([
       // ⚠️ 这不代表它"免费"：它花的是订阅额度，只是那笔钱按月付、不按 token 走。
       // 真要把它开给公开号之前，先把订阅额度口径查清楚（今天查不出来，见上面）。
       prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    },
+  },
+  // ── Merge 网关 · GLM-5.3-Flash（08-27）── 同一个模型的**第三条线**。照 08-26 那次的判断做成独立行、
+  // 不做动态路由：三家各有各的 prompt cache，一个会话在几条线之间跳，跳一次几边都是冷的。
+  // 三条线的实测差别（都是真跑出来的，不是抄文档；接第四条时照这个格式对账）：
+  //                zenGo                    zai 官方直连              merge 网关（本行）
+  //   协议         OpenAI chat 过转换层      Anthropic 原生透传        **只能** OpenAI chat（见上游注释）
+  //   prompt cache 真命中 3968/4017         **没有**                  真命中（9038 → 第二发 cache_read 9024）
+  //   花钱         表价 $0.15/$0.50         包月订阅，记 0            **$0.015/$0.05**，全表最便宜的一档
+  //   并发         没撞到上限                **上限 3**                6 并发全 200（15.8s，没撞到上限）
+  //   视觉         稳                        稳                        **约 7% 的请求会瞎**（厂商轮盘，见上游注释）
+  //   count_tokens 404 → 本地估算            恒 0 的桩 → 关掉          有且回真数，但仍关掉（理由见上游注释）
+  // 便宜是这条线唯一的、但也是很大的长处：输入价是 zenGo 那条的 1/10，满窗一轮的缓存读约 $0.008 → $0.0008。
+  {
+    // 真窗口 1M（网关目录里写的 1000000，max_output 131072），这里仍按 272k 收口：跟另外两条 glm 行
+    // 取同一个数，一是每轮重传全量上下文、这台机器出网超 200GiB/月要真付钱，二是三条线同窗口的话
+    // 用户在它们之间换行时 auto-compact 的分母不变，上下文条不会"换条线突然缩水"。
+    id: 'glm-5.3-flash-merge', window: 272_000, brand: 'glm',
+    // 08-27 用户拍板**直接对全员开**（含 basic）：跟 deepseek 视觉行、zenGo 那条 glm 同一套管法 ——
+    // 它**不是免费行**（四价非 0），走的是每日美元额度，basic 的 $5/天 + 表价记账管着它，
+    // 而这行的单价是全表最低的一档，同样的钱能跑十倍的量。
+    // ⚠️ 已知且接受的一条：**厂商轮盘会偶发瞎图**（约 7~10%，判据与机理见上游注释）。选它的时候
+    // desc 里写明了"偶尔会漏看图"，而且模型自己会说"我看不见这张图"而不是假装看见 —— 这是它跟
+    // 08-25 撤掉的 minimax-m2.7（每发必丢还瞎编）的分界线。要收回就在 select 里加回
+    // `gate: 'localGen'` 一处：清单 / PUT /model / turn.js 三个消费方都走 selectableModelsFor。
+    select: { label: 'GLM-5.3-Flash · Merge 网关', desc: '快 · 有视觉（偶尔会漏看图）· 272k 上下文 · 思考档 high · 极便宜（$0.015/$0.05 缓存 $0.003）' },
+    api: {
+      upstream: 'merge', wireModel: 'zai/glm-5.3-flash',
+      // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由，08-25 起的默认写法
+      fastModel: 'deepseek-v4-flash-helper',   // helper 挑最耐久的线不是最便宜的线：这家的厂商轮盘不该让标题/压缩也跟着掷骰子
+      thinking: 'strip',              // 出口删 thinking 字段；转换层按 reasoningEffort 发 reasoning_effort
+      // 08-27 实测这家 low|medium|high|max **四档都收**（thinking 字数 922/981/1753/1843），
+      // 比 zen 系宽（那边没有 medium）。取 high 跟另外两条 glm 行一致。
+      reasoningEffort: 'high',
+      maxOutput: 131_072,             // 131072 实测直接吃下
+      // ⚠️ 这家的思考文本字段叫 **thinking / thinking_signature**，不是 zen 系的 reasoning_content
+      // （08-27 第一趟真 SDK 循环"看到 thinking 块：false"就是这么来的）。转换层两处已改成
+      // 「reasoning_content 优先、回退 thinking」，所以这行不用配任何东西 —— 记在这儿是给下一家看的：
+      // **接新行时先看一眼它的思考字段叫什么**，掉了不报错、只是用户看不见思考。
+      // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息（同 zenGo 那行）
+      // 网关目录价（$0.015/$0.05，缓存读 $0.003）。⚠️ 它的响应把真金额放在 **usage.cost** 里而不是
+      // 顶层 cost（Zen 是顶层），lib/ingress/upstream-billing.js 的 upstreamCostOf 两处都认，
+      // 所以额度口径以上游自报为准，这里的表价是兜底
+      prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
     },
   },
   // ── GMI Cloud · MiniMax（08-25）── 两行都是 GMI 标 `is_free` 的免费部署；账户无余额，付费行 402，

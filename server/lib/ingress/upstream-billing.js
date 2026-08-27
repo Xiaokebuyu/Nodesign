@@ -12,6 +12,21 @@
  * 上游没报 cost（cost 为 null）就不动任何东西 —— 假数据比没有更坏。
  */
 
+/**
+ * 上游把「这一发花了多少钱」放在哪儿，各家不一样：Zen（/zen/go）放在**顶层** `cost`
+ * （流式在 [DONE] 之后补一条 {"choices":[],"cost":"0.00123"}），Merge 网关放在 **usage.cost** 里
+ * （非流式在响应体的 usage 上，流式在 include_usage 那个末块的 usage 上）。两处都认，顶层优先。
+ * ⚠️ 缺席或不是数一律 null —— 记账那侧看见 null 就不动任何东西（假数据比没有更坏）。
+ */
+export function upstreamCostOf(obj) {
+  for (const v of [obj?.cost, obj?.usage?.cost]) {
+    if (v == null) continue;
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
 export class UpstreamBilling {
   constructor() { this.map = new Map(); }   // sid → Map<appModel, acc>
   /**
