@@ -3,7 +3,7 @@
  * 验：工具循环转得动、tool_result 回图能看见、流式事件 SDK 吃得下、usage/cost 记账形状。
  *   node --env-file=.env server/_probe-sdk-loop.mjs [appModel]
  *
- * 08-26 从 _probe-ox-sdk.mjs 改名并把默认行换成 glm-5.3-flash：Ox 整族下架了，而这支探针查的
+ * 08-26 从 _probe-ox-sdk.mjs 改名；08-27 默认行换成 glm-5.3-flash-merge（zenGo 那条 glm 撤了）。这支探针查的
  * 从来不是某个模型，是**接一条新行之后 SDK 那一圈还转不转得动**。接下一条 openai-chat 行时直接拿它跑。
  */
 import sharp from 'sharp';
@@ -11,7 +11,7 @@ import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import { getOrStartIngress, registerIngressSession, stopIngress } from './lib/model-ingress.js';
 import { resolveModelRoute, pickThinkingConfig } from './engine/agent/model-context.js';
 
-const APP = process.argv[2] || 'glm-5.3-flash';
+const APP = process.argv[2] || 'glm-5.3-flash-merge';
 const route = resolveModelRoute(APP);
 const { baseUrl } = await getOrStartIngress();
 const SID = `sdkprobe-${Date.now()}`;

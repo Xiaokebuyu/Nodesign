@@ -237,14 +237,14 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
     // 08-26：这条原先钉在 Ox 三行上，那族随模型下架删了，换成接替它的 glm 行 —— 要点没变：
     // **主行和 fast 行不同名**，入口才分得出 role，helper 才不会跟着主行 high 想
     const S2 = 'ingress-test-glm';
-    registerIngressSession(S2, 'glm-5.3-flash');
+    registerIngressSession(S2, 'glm-5.3-flash-merge');
     try {
-      expect(resolveSessionWire('glm-5.3-flash', S2)).toMatchObject({ reason: 'table', role: 'main', wire: { appModel: 'glm-5.3-flash', reasoningEffort: 'high', helperReasoningEffort: 'low' } });
+      expect(resolveSessionWire('glm-5.3-flash-merge', S2)).toMatchObject({ reason: 'table', role: 'main', wire: { appModel: 'glm-5.3-flash-merge', reasoningEffort: 'high', helperReasoningEffort: 'low' } });
       expect(resolveSessionWire('deepseek-v4-flash-helper', S2)).toMatchObject({ reason: 'table', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper', reasoningEffort: 'low' } });
       expect(resolveSessionWire('claude-sonnet-5', S2)).toMatchObject({ reason: 'fallback', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper' } });
       // 别行的**独占** alias 在这个会话里是撞名雷（那是别家的钥匙）→ 改道本会话 fast
       expect(resolveSessionWire('claude-opus-4-7[1m]', S2)).toMatchObject({ reason: 'collision', role: 'helper', collidesWith: 'deepseek-v4-flash-vision', wire: { appModel: 'deepseek-v4-flash-helper' } });
-      expect(resolveSessionWire('glm-5.3-flash', null)).toMatchObject({ role: 'main' });
+      expect(resolveSessionWire('glm-5.3-flash-merge', null)).toMatchObject({ role: 'main' });
     } finally { unregisterIngressSession(S2); }
   });
   it('⭐共用别名（MiniMax 三行 + 外部插槽同名）：主行优先 —— alias 解成会话主行，helper 按 app id 认', () => {

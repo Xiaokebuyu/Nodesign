@@ -350,57 +350,30 @@ export const MODELS_BUILTIN = Object.freeze([
       prices: { input: 0.44, output: 1.32, cacheRead: 0.014, cacheWrite: 0 },
     },
   },
-  // ── OpenCode Go · GLM-5.3-Flash（08-26，接替整族下架的 Ox Alpha）──
-  // ⛔ Ox 三行（ox-alpha / -max / -helper）08-26 一起删掉：上游把 `ox-alpha-free` 和主入口名
-  // `x-preview-f-free` **两个都下了**，四种组合全回 401「Model ... is not supported」，
-  // models.dev 上也标了 deprecated。08-21 那条注释里写的「一周后要么变付费 GLM 要么下架」
-  // 两头都应验了 —— 下架的同时，它猜中的那个 GLM 身份也在同一个目录里露面了。
+  // ⛔ `glm-5.3-flash`（/zen/go 上那条，08-26 接替下架的 Ox Alpha）**08-27 撤掉**：用户拍板。
+  // 同一个模型现在还有两条线（下面的 zai 官方直连、再下面的 merge 网关），而这条是三条里最贵的
+  // （$0.15/$0.50 缓存 $0.03，是 merge 那条的十倍），留着只会让人在 picker 里挑错。
+  // 撤之前查过的两处（下次删行照这个查）：① 全表没有别的行的 fastModel 指着它（Ox 那次就是栽在这里，
+  // 失效还不出声）；② 生产累计只跑过 9 个 run（$0.26），session-config 里钉着它的会话只有 2 个 ——
+  // 那两个会拿到 403 MODEL_NOT_ALLOWED（「这个会话指向的模型现在不可用，请换一个」），fail-loud，
+  // 表里没有"退役 → 继任"的映射，也**不会**静默落到订阅通路。
+  // ⚠️ 上游 `zenGo` 本身留着：deepseek 视觉行和全站唯一的 helper 行都挂在它上面。
+  // 复牌就是照下面两条 glm 行的形状写一份：upstream 'zenGo'、wireModel 'glm-5.3-flash'、
+  // 272k、thinking strip、reasoningEffort high、maxOutput 131072、prices 0.15/0.50/0.03/0。
+  // ── Z.ai 官方直连 · GLM-5.3-Flash（08-26）·**全员默认行**（08-27 起）── 跟下面那条 merge 网关的
+  // glm 行**是同一个模型的两条独立线路**，故意做成两行而不是一行加动态路由（用户 08-26 拍板，跟表里
+  // "别造 provider 抽象层"同一条判断）：⭐ **动态路由会伤缓存** —— 各家各有各的 prompt cache，
+  // 同一个会话在几家之间跳，每跳一次都是冷的。两行 = 一个会话钉死在一条线上。
   //
-  // glm-5.3-flash 是 Z.ai 08-26 当天发的原生多模态款，能力位跟 Ox 几乎一一对上：
-  // 1M ctx / 131k out / 图+视频+**pdf** / 工具 / 结构化输出 / reasoning effort low|high|max。
-  // 08-26 真跑体检（/zen/go，OpenAI chat）：文本 2.2s ✓ / 工具 ✓ / 图 png+webp **答出图里真值** ✓ /
-  // 三档 effort 都收（reasoning_tokens 0 / 7 / 40）✓ / 流式首字 1.99s、reasoning_content 增量、
-  // 末块带 usage ✓ / prompt cache 真命中 3968/4017 ✓。
-  // ⭐ 没有 Ox 那个「max 想 28,930 字 / 4 分 20 秒才出首字」的病，所以**不再单开深想行**，
-  // 也不带 Ox 那套放宽的 emptyRetries（那是针对它吐字前想太久的体质配的，见 resolveWireModel）。
-  {
-    // 真窗口 1M；这里按 272k 收口，跟 deepseek / minimax / kimi 三行同一个理由 —— 每轮都要重传
-    // 全量上下文，这台机器出网超 200GiB/月要真付钱。而且这行**不再是免费行**：缓存读 $0.03/M 是
-    // deepseek 那行（$0.014）的两倍多，满窗一轮光缓存读就 $0.03，而 Go 池给这个模型的月额度只有
-    // $15（全站共用）。272k 档下约 $0.008/轮。想放大就改这一个数（CLAUDE_CODE_AUTO_COMPACT_WINDOW 跟着它走）。
-    id: 'glm-5.3-flash', window: 272_000, brand: 'glm',
-    // 开闸给所有档（含 basic）：跟 deepseek 视觉行同一套管法 —— basic 的 $5/天日限 + 表价记账管着它。
-    // ⚠️ 它**不是免费行**（modelIsFree 看四价全 0），所以全员默认那把交椅 08-26 让给了 minimax-m3
-    select: { label: 'GLM-5.3-Flash', desc: '快 · 有视觉 · 272k 上下文 · 思考档 high · 按用量计入每日额度（$0.15/$0.50 缓存 $0.03）' },
-    api: {
-      upstream: 'zenGo', wireModel: 'glm-5.3-flash',
-      // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由，08-25 起的默认写法。
-      // ⚠️ 代价：没注册会话的请求用那个 alias 发过来一律 502，探针要带会话前缀 `/__nd/<sid>/v1/messages`
-      fastModel: 'deepseek-v4-flash-helper',   // 08-25 拍板的通用 helper 行：helper 挑最耐久的线，不挑最便宜的
-      thinking: 'strip',              // 出口不带 Anthropic thinking 字段；转换层按 reasoningEffort 发 reasoning_effort
-      reasoningEffort: 'high',
-      maxOutput: 131_072,
-      // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息
-      // （OpenAI 的 tool 角色消息装不下图，上游放了会挂死 120s）。同一件事只留一条路。
-      // Go 文档表价，GLM 不分高峰/平峰（deepseek 那行才分）。额度内上游 cost 报 0，
-      // 真金额以上游为准（context.applyUpstreamBilling）；这里的表价管配额口径
-      prices: { input: 0.15, output: 0.50, cacheRead: 0.03, cacheWrite: 0 },
-    },
-  },
-  // ── Z.ai 官方直连 · GLM-5.3-Flash（08-26）── 跟上面那行**是同一个模型的两条独立线路**，
-  // 故意做成两行而不是一行加动态路由（用户 08-26 拍板，跟表里"别造 provider 抽象层"同一条判断）：
-  // ⭐ **动态路由会伤缓存** —— 两家各有各的 prompt cache，同一个会话在两家之间跳，
-  // 每跳一次两边都是冷的。两行 = 一个会话钉死在一条线上，zenGo 那条的缓存才热得起来。
-  //
-  // 两条线的真实差别（都是 08-26 实测，不是文档抄的）：
-  //   协议      zenGo = OpenAI chat 过转换层   ／  zai = **Anthropic 原生透传**
-  //   prompt cache  zenGo 真命中（3968/4017） ／  zai **没有**（同一段打两遍 cache_read 都是 0）
-  //   花钱      zenGo 记表价、进每日美元额度   ／  zai 站主包月订阅，边际成本 0 → 记 0
-  //   并发      zenGo 没撞到上限               ／  zai **上限 3**（第 4 发当场 429）
-  //   count_tokens  zenGo 404 → 本地估算      ／  zai 恒回 0 的桩（见上游注释，同样关掉）
-  // 缓存那条是这行最大的短板：agent 每轮重传全量上下文，没缓存 = 每轮都全价重算 prefill。
-  // 包月下这不花钱，但**慢**，而且订阅额度按什么口径扣目前查不出来（/usage、/account/quota
-  // 全 404，响应头里也没有任何 quota/limit/remaining 字段）。
+  // 两条线的真实差别（实测，不是文档抄的）：
+  //   协议          zai = **Anthropic 原生透传**   ／  merge = 只能走 OpenAI chat 转换层
+  //   prompt cache  **没有**（同段打两遍都是 0）   ／  真命中（9038 → 第二发 cache_read 9024）
+  //   花钱          站主包月订阅，边际成本 0 → 记 0 ／  $0.015/$0.05，真金白银但极便宜
+  //   并发          **上限 3**（第 4 发当场 429）   ／  6 并发全 200
+  //   视觉          稳                             ／  **约 7~10% 会瞎**（厂商轮盘）
+  // 没有缓存是这行最大的短板：agent 每轮重传全量上下文，没缓存 = 每轮都全价重算 prefill。
+  // 包月下这不花钱，但**慢**，而且订阅额度按什么口径扣查不出来（/usage、/account/quota 全 404，
+  // 响应头里也没有任何 quota/limit/remaining 字段）。
   {
     // 窗口跟 zenGo 那行取同一个数：理由与它一致（每轮重传全量上下文，这台机器出网超 200GiB/月要钱）。
     // 两行同窗口还有一个好处 —— 用户在两条线之间换行时 auto-compact 的分母不变，不会"换个线路
@@ -423,7 +396,16 @@ export const MODELS_BUILTIN = Object.freeze([
     // （turn.js 的白名单，话是「这个会话指向的模型现在不可用，请在模型选择器里换一个」），用户点一下
     // 换行即可 —— fail-loud，不会静默落到订阅通路。⚠️ 别指望它自动改道到上面那条 zenGo 的 glm 行：
     // 表里没有"退役 → 继任"的映射，而且那两行协议不同（见文末跨通路闸那条）。
-    select: { label: 'GLM-5.3-Flash · 官方直连（限时免费）', desc: '限时免费 · 有视觉 · 272k 上下文 · 走智谱官方线路 · 并发有限，人多时会自动重试等待' },
+    //
+    // ⭐⭐ **08-27 用户拍板让它接过全员默认那把交椅**（`default: true`，从 minimax-m3 手里接过来）。
+    // 讲得通的地方：四价全 0 → modelIsFree → 公开注册号仍走 turn.js 的按轮次免费闸而不是金额闸
+    // （"默认行必须是免费行"那条经营态的规矩没破）；而 minimax-m3 那条上游 08-26 实测串行 4/8 大面积
+    // 限流（当天生产日志 106 次 429），当默认不够好。
+    // ⛔⛔ **代价写在这儿，别到时候现想**：这条订阅 08-26 记的是「只剩约一周」。它撤掉的那一天，
+    // **必须同一个动作把 `default: true` 挪走**（候补：minimax-m3 或别的四价全 0 的行）——
+    // 否则新会话的第一轮就落在一个不存在的行上。model-context.test.js 里那条"默认行必须免费"的断言
+    // 拦不住这一种：它只看价，不看这行还在不在。
+    select: { label: 'GLM-5.3-Flash · 官方直连（限时免费）', desc: '限时免费 · 有视觉 · 272k 上下文 · 走智谱官方线路 · 并发有限，人多时会自动重试等待', default: true },
     api: {
       upstream: 'zai', wireModel: 'glm-5.3-flash',
       // 不写 sdkAlias = 共用别名走会话级路由（08-25 起的默认写法）
@@ -446,20 +428,22 @@ export const MODELS_BUILTIN = Object.freeze([
   // ── Merge 网关 · GLM-5.3-Flash（08-27）── 同一个模型的**第三条线**。照 08-26 那次的判断做成独立行、
   // 不做动态路由：三家各有各的 prompt cache，一个会话在几条线之间跳，跳一次几边都是冷的。
   // 三条线的实测差别（都是真跑出来的，不是抄文档；接第四条时照这个格式对账）：
-  //                zenGo                    zai 官方直连              merge 网关（本行）
-  //   协议         OpenAI chat 过转换层      Anthropic 原生透传        **只能** OpenAI chat（见上游注释）
-  //   prompt cache 真命中 3968/4017         **没有**                  真命中（9038 → 第二发 cache_read 9024）
-  //   花钱         表价 $0.15/$0.50         包月订阅，记 0            **$0.015/$0.05**，全表最便宜的一档
-  //   并发         没撞到上限                **上限 3**                6 并发全 200（15.8s，没撞到上限）
-  //   视觉         稳                        稳                        **约 7% 的请求会瞎**（厂商轮盘，见上游注释）
-  //   count_tokens 404 → 本地估算            恒 0 的桩 → 关掉          有且回真数，但仍关掉（理由见上游注释）
-  // 便宜是这条线唯一的、但也是很大的长处：输入价是 zenGo 那条的 1/10，满窗一轮的缓存读约 $0.008 → $0.0008。
+  //                zai 官方直连（默认行）      merge 网关（本行）
+  //   协议         Anthropic 原生透传          **只能** OpenAI chat（见上游注释）
+  //   prompt cache **没有**                    真命中（9038 → 第二发 cache_read 9024）
+  //   花钱         包月订阅，记 0（限时）       **$0.015/$0.05**，真金白银但全表最便宜的一档
+  //   并发         **上限 3**                  6 并发全 200（15.8s，没撞到上限）
+  //   视觉         稳                          **约 7~10% 的请求会瞎**（厂商轮盘，见上游注释）
+  //   count_tokens 恒 0 的桩 → 关掉             有且回真数，但仍关掉（理由见上游注释）
+  // 08-27 撤掉的 zenGo 那条（$0.15/$0.50）是三条里最贵的，本行的输入价是它的 1/10：
+  // 满窗一轮的缓存读从 $0.03 掉到 $0.003。**zai 那条订阅用完之后，这条是接得住量的那一条**
+  // （有缓存、并发不紧），只是接默认之前得先解决瞎图那 7~10%（或者接受它）。
   {
     // 真窗口 1M（网关目录里写的 1000000，max_output 131072），这里仍按 272k 收口：跟另外两条 glm 行
     // 取同一个数，一是每轮重传全量上下文、这台机器出网超 200GiB/月要真付钱，二是三条线同窗口的话
     // 用户在它们之间换行时 auto-compact 的分母不变，上下文条不会"换条线突然缩水"。
     id: 'glm-5.3-flash-merge', window: 272_000, brand: 'glm',
-    // 08-27 用户拍板**直接对全员开**（含 basic）：跟 deepseek 视觉行、zenGo 那条 glm 同一套管法 ——
+    // 08-27 用户拍板**直接对全员开**（含 basic）：跟 deepseek 视觉行同一套管法 ——
     // 它**不是免费行**（四价非 0），走的是每日美元额度，basic 的 $5/天 + 表价记账管着它，
     // 而这行的单价是全表最低的一档，同样的钱能跑十倍的量。
     // ⚠️ 已知且接受的一条：**厂商轮盘会偶发瞎图**（约 7~10%，判据与机理见上游注释）。选它的时候
@@ -494,11 +478,13 @@ export const MODELS_BUILTIN = Object.freeze([
     // 真窗口 1048576。272k 是用户 08-25 拍板的档（跟 deepseek 行同一个理由：每轮都要重传全量上下文，
     // 这台机器的出网流量超 200GiB/月要真付钱；且正好落在 GMI「512k 以上翻倍」那道价格坎下面）。
     id: 'minimax-m3', window: 272_000, brand: 'minimax',
-    // 08-26 接过全员默认那把交椅（default: true）：Ox 下架后它是表里**唯一**的免费行，而
-    // `default: true` 这一位管的不只是"选谁"—— 公开注册号的经营态靠的是免费行走 turn.js 的
-    // 按轮次闸（modelIsFree = 四价全 0）而不是金额闸。默认落在付费行等于公开注册就直接烧 Go 池。
-    // ⚠️ 这行的免费是 GMI「限时免费部署」，免费期一结束就得再挪一次 —— 挪之前先确认接手的行四价也是 0
-    select: { label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久', default: true },
+    // 08-26 到 08-27 当过全员默认，08-27 把 `default: true` 交给 zai 那条官方直连（用户拍板）：
+    // 这条上游 08-26 实测串行 4/8 大面积限流（当天生产日志 106 次 429），当默认不够好。
+    // ⭐ 它仍是**候补默认**：四价全 0 = modelIsFree，公开注册号的经营态靠的是免费行走 turn.js 的
+    // 按轮次闸而不是金额闸 —— zai 那条订阅用完撤掉的那天，`default: true` 要么回到这里，
+    // 要么去别的四价全 0 的行（⛔ 不许落在付费行：那等于公开注册就直接烧钱）。
+    // ⚠️ 这行的免费是 GMI「限时免费部署」，免费期一结束这条候补也不成立了
+    select: { label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久' },
     api: {
       upstream: 'gmi', wireModel: 'MiniMaxAI/MiniMax-M3',
       // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由：会话认得出，

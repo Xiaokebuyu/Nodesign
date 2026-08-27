@@ -59,8 +59,8 @@ describe('truncationOfChatResponse —— 非流式与流式同一张判据', ()
 describe('UpstreamTruncation —— 只记最近一次，取走即清', () => {
   it('记了能取到，取走就没了', () => {
     const t = new UpstreamTruncation();
-    t.note('sid1', 'no finish_reason', { appModel: 'glm-5.3-flash' });
-    expect(t.take('sid1')).toMatchObject({ reason: 'no finish_reason', appModel: 'glm-5.3-flash' });
+    t.note('sid1', 'no finish_reason', { appModel: 'glm-5.3-flash-merge' });
+    expect(t.take('sid1')).toMatchObject({ reason: 'no finish_reason', appModel: 'glm-5.3-flash-merge' });
     expect(t.take('sid1')).toBeNull();
   });
   it('后面一次收得完整就把标记清掉（一个回合里多次往返，只有收尾那次算数）', () => {
@@ -159,7 +159,7 @@ describe('就地重发额度按行配（08-21 深夜：这是模型体质问题�
   // 这三条断言因此换了钉法 —— 钉的不再是"那两行的数对不对"，而是这个旋钮**没有腐烂成死代码**：
   // 字段仍从表通到 wire、读它的人还在读、任何人将来配上都不会撑破 CLI 的总超时。
   it('今天内置行一条都没放宽（走全局默认），字段仍**经 resolveWireModel 通到 forward**', () => {
-    for (const id of ['glm-5.3-flash', 'deepseek-v4-flash-vision', 'deepseek-v4-flash-helper', 'minimax-m3']) {
+    for (const id of ['glm-5.3-flash-merge', 'deepseek-v4-flash-vision', 'deepseek-v4-flash-helper', 'minimax-m3']) {
       const wire = resolveWireModel(id);
       expect(wire, `${id} 该在表里`).toBeTruthy();
       // null 而不是 undefined：resolveWireModel 显式产出这两个键，forward 才 Number.isFinite 得下去

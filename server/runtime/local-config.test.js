@@ -37,7 +37,7 @@ describe('validateLocalConfig', () => {
     const v = validateLocalConfig({
       upstreams: { ...GOOD.upstreams, zenGo: { baseUrl: 'https://x.example.com', key: 'k' }, nokey: { baseUrl: 'https://y.example.com' } },
       models: [...GOOD.models,
-        { id: 'glm-5.3-flash', label: '撞内置名', window: 100000, upstream: 'relay', wireModel: 'x' },
+        { id: 'glm-5.3-flash-merge', label: '撞内置名', window: 100000, upstream: 'relay', wireModel: 'x' },
         { id: 'orphan', label: '指向不存在的上游', window: 100000, upstream: 'ghost', wireModel: 'x' },
         { id: 'badfast', label: 'fast 指错', window: 100000, upstream: 'relay', wireModel: 'x', fastModel: 'nope' },
         { id: 'toolong', label: '预算超线', window: 100000, upstream: 'relay', wireModel: 'x', emptyRetries: 3, retryBudgetMs: MAX_RETRY_BUDGET_MS + 1 },
@@ -121,7 +121,7 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     const without = run({});
     expect(without).toContain('kimi-k2');        // key 内联
     expect(without).not.toContain('glm-5');      // keyEnv MY_RELAY_KEY 没设
-    expect(without).not.toContain('glm-5.3-flash');   // 内置行钥匙没配
+    expect(without).not.toContain('glm-5.3-flash-merge');   // 内置行钥匙没配
     expect(run({ MY_RELAY_KEY: 'x' })).toContain('glm-5');
   });
 

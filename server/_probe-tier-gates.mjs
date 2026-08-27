@@ -27,7 +27,7 @@ const opts = me.j?.options || [];
 check('默认模型=minimax-m3（08-26 从下架的 ox-alpha 挪过来）', me.j?.default === 'minimax-m3', JSON.stringify(me.j?.default));
 check('Sonnet/Opus 在清单里且 locked', opts.filter(o => /claude-/.test(o.id)).length === 2 && opts.filter(o => /claude-/.test(o.id)).every(o => o.locked), JSON.stringify(opts.map(o => [o.id, !!o.locked])));
 check('minimax-m3 在清单里且不 locked', opts.some(o => o.id === 'minimax-m3' && !o.locked), '');
-check('glm-5.3-flash 在清单里且不 locked（付费行也对公开号开，靠 $5/天日限管）', opts.some(o => o.id === 'glm-5.3-flash' && !o.locked), '');
+check('glm-5.3-flash-merge 在清单里且不 locked（付费行也对公开号开，靠 $5/天日限管）', opts.some(o => o.id === 'glm-5.3-flash-merge' && !o.locked), '');
 const proj = await call('POST', '/api/projects', { name: `gateprobe ${tag}` }, cookie);
 const pid = proj.j?.project?.id || proj.j?.id;
 check('建项目', proj.status < 300 && !!pid, `${proj.status} ${pid}`);
