@@ -27,7 +27,7 @@ import { TAG_RE } from '../../../projects/board-sanitize.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope } from '../../../lib/canvas-id.js';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
-import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
+import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, resolveTemplate, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
 import { resolvePlacement, describePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
 import { allocateLaneColumn } from '../../../lib/board-lanes.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
@@ -79,8 +79,8 @@ const SCHEMA = {
   size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe("Single note text size. Real for ink:'hand'; for chalk notes it only sizes the placement box (chalk renders at a fixed size)"),
   width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px); default by content'),
   title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
-  layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap']).optional()
-    .describe('Sketch layout. free needs at on EVERY node (missing ones are an error, not a silent column)'),
+  layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap', 'flow']).optional()
+    .describe('Sketch layout. auto FOLLOWS YOUR EDGES: with edges it lays out in flow layers (roots on top, children below — give edges and placement is structure); mindmap picks the hub by degree. free needs at on EVERY node'),
   cols: z.number().int().min(1).max(8).optional().describe('grid columns'),
   staging: z.boolean().optional().describe('Sketch only: default true (translucent until commit/turn end). Ignored for single notes — they always land solid'),
   nodes: z.array(z.object({
@@ -420,8 +420,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       n.w = box.w; n.h = box.h;
     }
     const titleNode = nodes.find(n => n.key === '__title');
-    let tpl = args.layout || 'auto';
-    if (tpl === 'auto') tpl = nodes.some(n => n.at) ? 'free' : (nodes.length - (titleNode ? 1 : 0) <= 4 ? 'column' : 'grid');
+    // 图内边（两端都是本图节点）：布局的结构输入 + 零线大图的提醒判据
+    const nodeKeys = new Set(nodes.map(n => n.key));
+    const innerEdges = edgesIn.filter(e => nodeKeys.has(e.from) && nodeKeys.has(e.to) && e.from !== e.to);
+    const tpl = resolveTemplate(nodes.filter(n => n !== titleNode), { template: args.layout || 'auto', edges: innerEdges });
     if (tpl === 'free') {
       // free 的合同：每个节点都要 at。缺 at 静默排成一列是 ldx 那晚两次重画的病根 —— 明拒，报名单。
       const missing = nodes.filter(n => n !== titleNode && !n.at).map(n => n.key);
@@ -430,7 +432,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       }
     }
     const layoutInput = titleNode && tpl === 'mindmap' ? nodes.filter(n => n !== titleNode) : nodes;
-    const pos = layoutNodes(layoutInput, { template: tpl, cols: args.cols });
+    const pos = layoutNodes(layoutInput, { template: tpl, cols: args.cols, edges: innerEdges });
     if (titleNode && !pos.has('__title')) {
       const bb = bboxOf([...pos.entries()].map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
       pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
@@ -578,6 +580,13 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
     if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一屏（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。下次拆成几张 tag 图用线连。`);
+    // 零线大图提醒（08-27 用户报「草草一堆文字摊在那儿」）：软提醒不硬拒 ——
+    // 但要说清楚这不是风格问题，是版面语言缺了一半
+    if (nodesIn.length >= 3 && !innerEdges.length) {
+      lines.push(`⚠ ${nodesIn.length} 件 0 线 —— 这是摊了一堆字，不是一张图。线是版面的语言：`
+        + `补 edges（谁连谁、什么关系，布局会按结构分层摆）；这些如果本是一条思路，`
+        + `改走 {tag, chain:true} 让它长成线。`);
+    }
     if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}`);
     if (world.w > fit.w || world.h > fit.h) lines.push(`⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
     if (vp?.zoom && vp.zoom < 0.8) lines.push(`User's zoom is ${vp.zoom} (<0.8): keep nodes md/lg and say in one line that there is a sketch on the board.`);

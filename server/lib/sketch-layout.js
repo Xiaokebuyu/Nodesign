@@ -151,11 +151,68 @@ export function shapePath(kind, { w = 0, h = 0, to = null, d = null } = {}, seed
  * - free：有 at 的按网格落，没 at 的排在 free 区域下面一列
  * - column / row / grid(cols) / mindmap（第一个是中心，其余环绕）
  */
-export function layoutNodes(nodes, { template = 'auto', cols = null } = {}) {
+/**
+ * 模板解析（08-27 抽出，write-on-board 与 layoutNodes 共用一份 auto 规则）。
+ * ⭐ auto 现在**认线**：图内边 ≥1 且节点 ≥3 → flow（按结构分层）。在这之前
+ * 布局引擎对 edges 全盲 —— 给了线也按 column/grid 堆，「摊一堆字」的机器根源。
+ */
+export function resolveTemplate(nodes, { template = 'auto', edges = [] } = {}) {
+  if (template !== 'auto') return template;
+  if (nodes.some(n => n.at)) return 'free';
+  const keys = new Set(nodes.map(n => n.key));
+  const inner = edges.filter(e => keys.has(e.from) && keys.has(e.to) && e.from !== e.to);
+  if (inner.length && nodes.length >= 3) return 'flow';
+  return nodes.length <= 4 ? 'column' : 'grid';
+}
+
+/** 分层流式（Sugiyama 简版）：层号=最长入路径（模型画的图可能带环，深度截断兜住），
+ *  层内按父级平均横位排（减少交叉），每层居中。线因此顺着重力方向读。 */
+function layoutFlow(nodes, edges) {
+  const pos = new Map();
+  const idx = new Map(nodes.map((n, i) => [n.key, i]));
+  const level = new Map();
+  const depth = (k, seen) => {
+    if (level.has(k)) return level.get(k);
+    if (seen.has(k)) return 0;                       // 环：断在回边上
+    seen.add(k);
+    let best = 0;
+    for (const e of edges) if (e.to === k) best = Math.max(best, depth(e.from, seen) + 1);
+    seen.delete(k);
+    level.set(k, best);
+    return best;
+  };
+  for (const n of nodes) depth(n.key, new Set());
+  const layers = [];
+  for (const n of nodes) { const l = level.get(n.key) || 0; (layers[l] ||= []).push(n); }
+  const centerX = new Map();
+  let y = 0;
+  for (const layer of layers) {
+    if (!layer) continue;
+    const parentAvg = (k) => {
+      const ps = edges.filter(e => e.to === k && centerX.has(e.from)).map(e => centerX.get(e.from));
+      return ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : idx.get(k) * 10;
+    };
+    layer.sort((a, b) => (parentAvg(a.key) - parentAvg(b.key)) || (idx.get(a.key) - idx.get(b.key)));
+    const totalW = layer.reduce((s, n) => s + n.w, 0) + (layer.length - 1) * (GAP * 2 + 8);
+    let x = Math.round(-totalW / 2);
+    let rowH = 0;
+    for (const n of layer) {
+      pos.set(n.key, { x, y });
+      centerX.set(n.key, x + n.w / 2);
+      x += n.w + GAP * 2 + 8; rowH = Math.max(rowH, n.h);
+    }
+    y += rowH + GAP * 3;                              // 层间留出画箭头的呼吸
+  }
+  return pos;
+}
+
+export function layoutNodes(nodes, { template = 'auto', cols = null, edges = [] } = {}) {
   const pos = new Map();
   if (!nodes.length) return pos;
-  let tpl = template;
-  if (tpl === 'auto') tpl = nodes.some(n => n.at) ? 'free' : (nodes.length <= 4 ? 'column' : 'grid');
+  const keys = new Set(nodes.map(n => n.key));
+  const inner = edges.filter(e => keys.has(e.from) && keys.has(e.to) && e.from !== e.to);
+  const tpl = resolveTemplate(nodes, { template, edges });
+  if (tpl === 'flow') return layoutFlow(nodes, inner);
 
   if (tpl === 'free') {
     let bottom = 0;
@@ -181,7 +238,26 @@ export function layoutNodes(nodes, { template = 'auto', cols = null } = {}) {
     return pos;
   }
   if (tpl === 'mindmap') {
-    const [center, ...rest] = nodes;
+    // 枢纽按度数选、环序按 BFS 排（08-27）：在这之前中心=第一个节点、环上按入参
+    // 顺序 —— 结构全被扔掉，同父的孩子散在环两端，线横穿整张图
+    let order = nodes;
+    if (inner.length) {
+      const deg = new Map(nodes.map(n => [n.key, 0]));
+      const adj = new Map(nodes.map(n => [n.key, []]));
+      for (const e of inner) {
+        deg.set(e.from, deg.get(e.from) + 1); deg.set(e.to, deg.get(e.to) + 1);
+        adj.get(e.from).push(e.to); adj.get(e.to).push(e.from);
+      }
+      const hub = [...nodes].sort((a, b) => deg.get(b.key) - deg.get(a.key))[0];
+      const seen = new Set([hub.key]); const q = [hub.key]; const bfs = [];
+      while (q.length) {
+        const k = q.shift();
+        for (const nk of adj.get(k) || []) if (!seen.has(nk)) { seen.add(nk); bfs.push(nk); q.push(nk); }
+      }
+      const byKey = new Map(nodes.map(n => [n.key, n]));
+      order = [hub, ...bfs.map(k => byKey.get(k)), ...nodes.filter(n => !seen.has(n.key))];
+    }
+    const [center, ...rest] = order;
     const cx = 0; const cy = 0;
     pos.set(center.key, { x: cx - center.w / 2, y: cy - center.h / 2 });
     if (!rest.length) return pos;
