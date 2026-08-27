@@ -23,6 +23,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { byOf } from '../actor.js';
 import { z } from 'zod';
 import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store.js';
+import { TAG_RE } from '../../../projects/board-sanitize.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope } from '../../../lib/canvas-id.js';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
@@ -31,6 +32,7 @@ import { resolvePlacement, describePlacement, inflateSpriteSeats } from '../../.
 import { allocateLaneColumn } from '../../../lib/board-lanes.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
+import { ROLE_SLUG_RE } from '../../agent/cast.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
@@ -48,7 +50,7 @@ const COLORS = ['ink', 'red', 'pencil', 'brass'];
 const LOCAL_ID = z.string().regex(/^[A-Za-z0-9_-]{1,48}$/, 'local id: letters/digits/_/-');
 const GRID_PT = z.object({ x: z.number().min(-2000).max(2000), y: z.number().min(-2000).max(2000) });
 const WORLD_PT = z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6) });
-const TAG_RE = /^[\w一-鿿぀-ヿ-]{1,40}$/;
+// TAG_RE 08-27 收敛：真身在 board-sanitize（落盘闸），zod 入参用同一份 —— 两处等价异写的病根拔掉
 
 /** md 侦测：正文带 markdown 记号却标 plain 会把 **加粗** 原样吐出来（ldx 案） */
 const looksLikeMd = (t) => /(\*\*|__|^#{1,4}\s|^\s*[-*]\s|\|.+\||```|\$[^$]+\$|\[.+\]\(.+\))/m.test(t);
@@ -291,7 +293,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         // 接续权（2026-08-27 编排）：角色的话头只有它自己和用户能接。主控接上去
         // 就是代笔/插嘴的物理形态 —— 这条按板上对象的**作者**判，不看内容不看场。
         // 角色之间可以互接（那就是对话），角色接主控的旁白也行。
-        if (by === 'agent' && typeof e.by === 'string' && e.by.startsWith('rp-')) {
+        if (by === 'agent' && typeof e.by === 'string' && ROLE_SLUG_RE.test(e.by)) {
           return err(`这条是「${e.by}」的话，你不接在它下面。想让它接着说：把 cue 寄给它`
             + `（SendMessage）或让用户直接跟它说；你自己的旁白/场记另起一条（near 指过去就行）。`);
         }

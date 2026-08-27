@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Image as ImageIcon, FileText, Film } from 'lucide-react';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, alpha } from '../../../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, FONT_READ, CANVAS, alpha } from '../../../lib/theme.js';
 import { PAPER, PAPER_SHADOW } from '../../../lib/paper.js';
 import { EASE, POP_IN } from '../../../lib/board-geometry.js';
 import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview } from '../../../lib/board-kinds.js';
@@ -288,7 +288,7 @@ function BoardObject({
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
           <MdInk
             text={o.data?.t || ''}
-            fontFamily={TEXT_FONT_CSS[o.data?.font] || TEXT_FONT_CSS.kai}
+            fontFamily={TEXT_FONT_CSS[o.data?.font] || FONT_READ}
             fontSize={TEXT_SIZE_PX[o.data?.size] || TEXT_SIZE_PX.md}
             color={SCRIBBLE_INK[o.data?.color] || PAPER.ink}
           />
@@ -332,7 +332,7 @@ function BoardObject({
            MdInk 里自己开 auto（点选项不该要求先武装板书）。 */
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
           <MdInk
-            text={o.text || ''} fontFamily={TEXT_FONT_CSS.kai} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
+            text={o.text || ''} fontFamily={FONT_READ} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
             origin={chalkOrigin}
           />
         </div>

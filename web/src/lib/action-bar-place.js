@@ -16,8 +16,7 @@
  *   同一条规矩：屏幕边缘永远有地方）。
  */
 
-const overlaps = (a, b) =>
-  a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+import { rectsHit as overlaps } from './board-geometry.js';   // 前端矩形相交唯一真身（08-27 收敛）
 
 /**
  * 给操作条找落点。全部屏幕（视口）坐标。

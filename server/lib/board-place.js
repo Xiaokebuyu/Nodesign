@@ -21,30 +21,18 @@
  * 纯函数，不碰磁盘。障碍集由调用方给（尺寸走 estimateSizeOn，主角放大要算进去）。
  */
 
-export const UNIT = 24;          // 网格步长，与 sketch-layout 同一常数
+import { UNIT, overlaps, bboxOf } from './rect.js';
+import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
+
+export { UNIT };                 // 兼容出口：一批调用方从这里拿（真身在 rect.js）
 const PAD = 12;                  // 落位时物件四周留白（碰撞判定带上它）
 const MAX_RING = 20;             // 环形搜索半径（格）：站主定的 20 格，之外走兜底
 const ONE_SCREEN = { w: 1750, h: 1125 };   // 远场判据的「一屏」缺省（0.8 倍 1400×900）
-
-const overlaps = (a, b, pad = 0) => !(
-  a.x + a.w + pad <= b.x || b.x + b.w <= a.x - pad
-  || a.y + a.h + pad <= b.y || b.y + b.h <= a.y - pad
-);
 
 function collides(x, y, w, h, obstacles) {
   const r = { x, y, w, h };
   for (const o of obstacles) if (overlaps(r, o, PAD)) return true;
   return false;
-}
-
-/** 一组矩形的包围盒（空集返回 null） */
-function bbox(rects) {
-  let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
-  for (const r of rects) {
-    x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y);
-    x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h);
-  }
-  return Number.isFinite(x0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
 }
 
 /**
@@ -159,7 +147,7 @@ export function resolvePlacement({
   // 2) 世界坐标意向：远场拒（不报错，落回下一条路），近场 snap + 环搜。
   if (at && Number.isFinite(at.x) && Number.isFinite(at.y)) {
     const scr = screen || ONE_SCREEN;
-    const zone = bbox([...obstacles, ...(viewport ? [viewport] : [])]);
+    const zone = bboxOf([...obstacles, ...(viewport ? [viewport] : [])]);
     const far = zone
       ? (at.x < zone.x - scr.w || at.x > zone.x + zone.w + scr.w
         || at.y < zone.y - scr.h || at.y > zone.y + zone.h + scr.h)
@@ -222,7 +210,7 @@ export function resolvePlacement({
 export function inflateSpriteSeats(obstacles, objects, pad = 60) {
   const last = new Map();   // rp-author → 它最新一条的 id
   for (const [id, e] of Object.entries(objects || {})) {
-    if (typeof e?.by === 'string' && e.by.startsWith('rp-')) last.set(e.by, id);
+    if (typeof e?.by === 'string' && ROLE_SLUG_RE.test(e.by)) last.set(e.by, id);
   }
   if (!last.size) return obstacles;
   const ids = new Set(last.values());

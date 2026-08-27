@@ -6,6 +6,7 @@
  */
 import { useRef, useState } from 'react';
 import { onChrome, onObject } from '../../lib/board-hit.js';
+import { rectsHit } from '../../lib/board-geometry.js';
 import { sizeOf } from '../../lib/board-kinds.js';
 
 /**
@@ -97,8 +98,9 @@ export function useMarquee({
     const x0 = Math.min(m.a.wx, m.b.wx); const x1 = Math.max(m.a.wx, m.b.wx);
     const y0 = Math.min(m.a.wy, m.b.wy); const y1 = Math.max(m.a.wy, m.b.wy);
     // 判据是**相交**不是包含：拉框的人不会去精确包住每一件，框到一半就算
-    // （访达、Figma 都是相交）
-    const hit = (x, y, w, h) => x < x1 && x + w > x0 && y < y1 && y + h > y0;
+    // （访达、Figma 都是相交）。相交真身在 board-geometry（08-27 收敛）
+    const sel = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    const hit = (x, y, w, h) => rectsHit({ x, y, w, h }, sel);
     const ids = [];
     for (const o of positionedRef.current) {
       const sz = sizeOf(o);

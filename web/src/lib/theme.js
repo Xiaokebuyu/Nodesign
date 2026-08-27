@@ -110,6 +110,9 @@ export const FONT_SIZE = {
 // emoji 字体的话 🎲✅⏳ 全渲成豆腐块 —— 挂在 serif 之前，只接管 emoji 码位。
 export const FONT_EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'";
 export const FONT_KAI = `'LXGW WenKai ND', 'LXGW WenKai', '霞鹜文楷', ${FONT_EMOJI}, serif`;
+// 阅读体（08-27）：屏幕优化版文楷，**全量字库**按需分片加载 —— 板书/长文正文用它；
+// 门面字（标题/UI）仍走 FONT_KAI（52KB 子集秒显）。
+export const FONT_READ = `'LXGW WenKai Screen', 'LXGW WenKai ND', '霞鹜文楷', ${FONT_EMOJI}, serif`;
 // 等宽：**机器写的东西**才用（文件名、id、token 数、终端输出、时间码）
 export const FONT_MONO = "'SF Mono', 'Cascadia Code', 'Menlo', monospace";
 // FONT_SANS 指向楷体：269 处正文因此一次性归位。名字保留是为了不动那 269 个调用点，

@@ -4,6 +4,10 @@ import App from './App.jsx';
 import AuthGate from './components/AuthGate.jsx';
 import { useGlobalStore } from './stores/globalStore.js';
 import './styles/globals.css';
+// 阅读体（08-27 用户提「画布上大量内容不适合阅读」）：霞鹜文楷屏幕版全量分片，
+// unicode-range 按需加载 —— 此前打的 52KB 文楷子集只够门面字，板书正文大半
+// 落在回退链的系统宋体上，难读的根源是混排不是文楷本身
+import 'lxgw-wenkai-screen-webfont/lxgwwenkaiscreen.css';
 import { lockZoom } from './lib/lock-zoom.js';
 
 /**

@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { CHALK_DIR } from '../../../lib/chalk.js';
+import { ROLE_SLUG_RE } from '../cast.js';
 
 const TARGET_FIELDS = ['file_path', 'path', 'notebook_path'];
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
@@ -71,7 +72,8 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolNa
     if (isWrite && insideDir(abs, path.join(ws, ...CHALK_DIR.split('/')))) {
       try {
         const m = fs.readFileSync(abs, 'utf8').slice(0, 400).match(/^by:\s*(\S+)/m);
-        if (m && m[1].startsWith('rp-')) {
+        // 判据统一走 ROLE_SLUG_RE（08-27 审计）：真角色名必过它
+        if (m && ROLE_SLUG_RE.test(m[1])) {
           return `这份板书是角色「${m[1]}」写的，它的话不是你的稿子 —— 不改、不润色、不代笔。`
             + '想让它改：把意见寄给它（SendMessage）或让用户直接跟它说。';
         }

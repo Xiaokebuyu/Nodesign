@@ -23,21 +23,22 @@ import { actionsOf } from '../../../lib/board-kinds.js';
  * @returns {Array<{icon, title, fn, anchored?}>}
  */
 export function buildObjectActions(o, h = {}) {
+  // label 给点选操作条（板书样文字钮），icon/title 给 hover 工具条 —— 同一份表两种皮
   const DEFS = {
-    add: { icon: Plus, title: h.added ? '已在托盘' : '加入上下文', fn: h.onAdd },
-    read: { icon: BookOpen, title: '阅读', fn: h.onOpenViewer },
-    detail: { icon: ExternalLink, title: '详情', fn: h.onDetail },
+    add: { icon: Plus, label: h.added ? '已在托盘' : '加入', title: h.added ? '已在托盘' : '加入上下文', fn: h.onAdd },
+    read: { icon: BookOpen, label: '阅读', title: '阅读', fn: h.onOpenViewer },
+    detail: { icon: ExternalLink, label: '详情', title: '详情', fn: h.onDetail },
     // .md 两条路都给：「阅读」是渲染过的（双击也走这条），「打开」是原始文件
-    open: { icon: ExternalLink, title: '打开', fn: h.onOpenFile },
+    open: { icon: ExternalLink, label: '打开', title: '打开', fn: h.onOpenFile },
     // 编排.yaml：图形设置页（双击也走这条），「打开」仍留给原始文件
-    orchestrate: { icon: SlidersHorizontal, title: '编排设置', fn: h.onOrchestrate },
-    delete: { icon: Trash2, title: '删除', fn: h.onDeleteNote },
+    orchestrate: { icon: SlidersHorizontal, label: '编排', title: '编排设置', fn: h.onOrchestrate },
+    delete: { icon: Trash2, label: '删除', title: '删除', fn: h.onDeleteNote, danger: true },
   };
   return [
     ...actionsOf(o).map((id) => DEFS[id]).filter(Boolean),
-    ...(h.onExport ? [{ icon: Download, title: '导出这张卡', fn: h.onExport }] : []),
+    ...(h.onExport ? [{ icon: Download, label: '导出', title: '导出这张卡', fn: h.onExport }] : []),
     ...(h.onAnnotate
-      ? [{ icon: MessageSquarePlus, title: '标注（发给 agent / 留在画布）', fn: h.onAnnotate, anchored: true }]
+      ? [{ icon: MessageSquarePlus, label: '标注', title: '标注（发给 agent / 留在画布）', fn: h.onAnnotate, anchored: true }]
       : []),
   ];
 }

@@ -14,7 +14,8 @@
  * 全是纯函数；尺寸估算与 create-on-board 同一套公式。
  */
 
-export const UNIT = 24;            // 1 网格 = 24 世界像素
+import { UNIT, overlaps, bboxOf as rectBbox } from './rect.js';
+export { UNIT };                   // 兼容出口（真身在 rect.js）
 /**
  * 可读性规范（2026-08-23，用户定）：黑板上的字要在 80%~100% 缩放下清晰可读。
  * 手写/md 正文 16px 世界像素在 0.8 倍下是 12.8 屏幕像素 —— 这是底线，所以节点
@@ -212,13 +213,10 @@ export function layoutNodes(nodes, { template = 'auto', cols = null } = {}) {
   return pos;
 }
 
-/** 一组矩形的包围盒 */
+/** 一组矩形的包围盒。⚠️ 这里的空集契约是**零框**不是 null（写方直接解构 .x/.w），
+ *  真身在 rect.js（那边空集 null），这层壳只兜语义差。 */
 export function bboxOf(rects) {
-  let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
-  for (const r of rects) {
-    x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h);
-  }
-  return Number.isFinite(x0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : { x: 0, y: 0, w: 0, h: 0 };
+  return rectBbox(rects) || { x: 0, y: 0, w: 0, h: 0 };
 }
 
 /**
@@ -227,7 +225,7 @@ export function bboxOf(rects) {
  * - 否则：内容最低边下面（与入座"新东西排底下"同一条起排线精神）
  */
 export function findSpot({ w, h, near = null, obstacles = [], contentBottom = 0, viewport = null }) {
-  const hits = (x, y) => obstacles.some(o => !(x + w <= o.x || o.x + o.w <= x || y + h <= o.y || o.y + o.h <= y));
+  const hits = (x, y) => obstacles.some(o => overlaps({ x, y, w, h }, o));
   // 用户视口里有空地就落在视口里（黑板是主窗口时，画在他眼前而不是让他去找）。
   // 阅读顺序纪律（08-23 真踩：第二张图落到第一张的**左边**）：先挑不在已有内容左侧/
   // 上方的位置（顺着先左后右、先上后下长），实在没有才退而求其次。

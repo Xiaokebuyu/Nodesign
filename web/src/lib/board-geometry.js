@@ -170,7 +170,7 @@ export const AVOID_GAP = 12;
 const AVOID_MAX_ITER = 60;
 const AVOID_SIDE_ITER = 8;
 
-const rectsHit = (a, b) =>
+export const rectsHit = (a, b) =>
   !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
 
 /**

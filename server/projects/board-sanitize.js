@@ -99,6 +99,7 @@ export function isSafeCanvasId(id) {
   return !p.split('/').some(seg => seg === '..');
 }
 
+export { TAG_RE };
 export function sanitizeTag(v) {
   return typeof v === 'string' && TAG_RE.test(v) ? v : null;
 }

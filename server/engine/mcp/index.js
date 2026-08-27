@@ -141,11 +141,13 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   // 回填，三个 batch 的子调用一律取**包装后**的实例 —— 08-26「batch 绕闸」挂账在此清账。
   const wrappedByName = new Map();
   const resolveTool = (n) => wrappedByName.get(n);
+  const writeOnBoard = makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx });
   const boardBatchable = [
-    makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
+    writeOnBoard,
     makeEditBoardTool({ projectId, sharedRoot, ctx }),
     makeReadBoardTool({ projectId, sharedRoot }),
-    makeCreateOnBoardTool({ projectId, ctx }),
+    // create_on_board 08-27 铲成真转发别名（第三份 textBox + 第七套避让之死）
+    makeCreateOnBoardTool({ write: writeOnBoard.handler }),
   ];
   const browseBatchable = [
     makeBrowserNavigateTool({ projectId, ctx }),

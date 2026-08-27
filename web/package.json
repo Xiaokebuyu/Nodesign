@@ -16,6 +16,7 @@
     "diff": "^9.0.0",
     "katex": "^0.16.47",
     "lucide-react": "^0.468.0",
+    "lxgw-wenkai-screen-webfont": "^1.7.0",
     "mermaid": "^11.17.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

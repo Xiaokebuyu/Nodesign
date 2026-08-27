@@ -1,28 +1,28 @@
 /**
- * 点选操作条（2026-08-27 桌面交互重制 —— 用户报「板书上的评论按钮特别不好按」）
+ * 点选操作条（2026-08-27 桌面交互重制；同日按用户拍板重画皮）
  *
- * 选中一件东西 → 贴着它出一条纸片操作条。hover 工具条仍在（选中态下让位），
- * 动作表共用 cards/object-actions.js 一份 —— 这条是**点选**的家：触屏没有
- * hover，闲置板书对手势是空地，都够不着 hover 条；点一下永远够得着这条。
+ * ⚠️ 皮的规矩：**这是一条板书样的控件，不是图标工具条的复制品**（用户原话）。
+ * 视觉语言抄 nd:controls 的按钮（MdInk 里那种）：楷体文字标签、暖墨细边、
+ * 纸面上的一排手作小钮，微微一点旋转 —— 看上去像 agent 落在板上的控件，
+ * 而不是浮出来的一块 UI。图标条仍在（hover 工具条），两条共用 object-actions
+ * 一份动作表，这里消费 label，那里消费 icon。
  *
  * 落位走 action-bar-place.js 的降级链：四周三圈找空位（远了画引线示归属）
  * → 全满贴视口下缘变 HUD（对象名 + 动作，永不消失）。障碍 = 其他物件 +
- * 文件夹卡 + 角色精灵（世界坐标进来，这里换算成屏幕）。
- *
- * 坐标约定：屏幕 = (世界 + cam) * z，跟 board-camera.js 逐字对应。
- * 渲染在世界层**外面**（pane 坐标）—— 世界层的 transform 自成堆叠上下文，
- * 后置兄弟天然盖在所有物件之上，不用跟 zMax 赛跑。
+ * 文件夹卡 + 角色精灵。坐标换算走 board-camera 的 worldToScreen（唯一真身）。
  */
-import { X } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, CANVAS, alpha } from '../../lib/theme.js';
 import { PAPER, PAPER_SHADOW } from '../../lib/paper.js';
 import { TEXT_FONT_CSS } from '../../lib/text-fonts.js';
 import { sizeOf } from '../../lib/board-kinds.js';
+import { worldToScreen } from '../../lib/board-camera.js';
 import { placeBar } from '../../lib/action-bar-place.js';
 import { buildObjectActions } from './cards/object-actions.js';
 
-/** 按钮 23px（5 padding + 13 图标）+ 4 间距；条身 padding 4 */
-const BTN = 23;
+const INK = '#2b2117';
+
+/** 一枚钮的估宽：CJK 14px/字 + 左右 padding 20 + 边 2 */
+const btnW = (label) => [...label].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 14 : 8), 0) + 22;
 
 export default function ObjectActionBar({
   o, positioned = [], folderView = [], spriteRects = [], cam, viewport,
@@ -32,7 +32,7 @@ export default function ObjectActionBar({
   if (!actions.length || !cam || !viewport?.w) return null;
 
   const z = cam.z || 1;
-  const toScreen = (r) => ({ x: (r.x + cam.x) * z, y: (r.y + cam.y) * z, w: r.w * z, h: r.h * z });
+  const toScreen = (r) => ({ ...worldToScreen(r, cam), w: r.w * z, h: r.h * z });
   const szo = sizeOf(o);
   const target = toScreen({ x: o.pos.x, y: o.pos.y, w: szo.w, h: szo.h });
   const obstacles = [];
@@ -47,41 +47,47 @@ export default function ObjectActionBar({
   for (const zn of folderView) pushIfVisible(toScreen(zn));
   for (const r of spriteRects) pushIfVisible(toScreen(r));
 
-  const bar = { w: 8 + actions.length * BTN + (actions.length - 1) * 4, h: 31 };
+  const bar = { w: 12 + actions.reduce((n, a) => n + btnW(a.label) + 6, -6), h: 34 };
   const p = placeBar({ target, bar, viewport, obstacles });
   const hud = p.mode === 'hud';
 
-  const buttons = actions.map((a, i) => {
-    const Icon = a.icon;
-    return (
-      <button
-        key={i} title={a.title} data-board-action
-        onClick={(e) => {
-          e.stopPropagation();
-          if (a.anchored) {
-            const r = e.currentTarget.getBoundingClientRect();
-            a.fn?.({ x: r.left, y: r.bottom + 6 });
-          } else a.fn?.();
-        }}
-        style={{ border: 0, background: 'transparent', cursor: 'pointer', color: COLOR.text, display: 'flex', padding: 5 }}
-      >
-        <Icon size={13} />
-      </button>
-    );
-  });
+  const buttons = actions.map((a, i) => (
+    <button
+      key={i} type="button" title={a.title} data-board-action
+      onClick={(e) => {
+        e.stopPropagation();
+        if (a.anchored) {
+          const r = e.currentTarget.getBoundingClientRect();
+          a.fn?.({ x: r.left, y: r.bottom + 6 });
+        } else a.fn?.();
+      }}
+      style={{
+        fontFamily: TEXT_FONT_CSS.kai, fontSize: 13.5, lineHeight: 1.4, cursor: 'pointer',
+        padding: '3px 10px', borderRadius: RADIUS.md,
+        border: `1px solid ${alpha(a.danger ? '#a8362b' : INK, 0.28)}`,
+        background: 'transparent',
+        color: a.danger ? PAPER.red : PAPER.ink,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {a.label}
+    </button>
+  ));
 
-  const paperChip = {
-    display: 'flex', alignItems: 'center', gap: 4,
-    background: PAPER.paper, borderRadius: RADIUS.md, padding: GAP.xxs,
-    boxShadow: PAPER_SHADOW.far,
+  // 一小片纸，微微一点旋转 —— 手作感来自这一度，别加成海报
+  const paperStrip = {
+    display: 'flex', alignItems: 'center', gap: 6,
+    background: PAPER.paper, borderRadius: RADIUS.md,
+    padding: '4px 6px', boxShadow: PAPER_SHADOW.far,
+    transform: 'rotate(-0.4deg)',
   };
 
   if (hud) {
     // 降级末档：四周全满 → 贴视口下缘的屏幕锚定条（对象名示归属，永不消失）
     return (
       <div data-board-action style={{
-        position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%)',
-        zIndex: 60, ...paperChip, paddingLeft: GAP.sm,
+        position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%) rotate(-0.4deg)',
+        zIndex: 60, ...paperStrip, paddingLeft: GAP.sm,
       }}>
         <span style={{
           fontFamily: TEXT_FONT_CSS.kai, fontSize: FONT_SIZE.sm, color: COLOR.text2,
@@ -89,10 +95,11 @@ export default function ObjectActionBar({
         }}>{title}</span>
         {buttons}
         {onClose && (
-          <button data-board-action title="收起" onClick={(e) => { e.stopPropagation(); onClose(); }}
-            style={{ border: 0, background: 'transparent', cursor: 'pointer', color: COLOR.sub, display: 'flex', padding: 5 }}>
-            <X size={13} />
-          </button>
+          <button type="button" data-board-action title="收起" onClick={(e) => { e.stopPropagation(); onClose(); }}
+            style={{
+              fontFamily: TEXT_FONT_CSS.kai, fontSize: 13.5, cursor: 'pointer', padding: '3px 8px',
+              border: 0, background: 'transparent', color: COLOR.sub,
+            }}>收</button>
         )}
       </div>
     );
@@ -109,7 +116,7 @@ export default function ObjectActionBar({
             stroke={alpha(CANVAS.brass, 0.55)} strokeWidth={1.5} strokeDasharray="4 4" />
         </svg>
       )}
-      <div data-board-action style={{ position: 'absolute', left: p.x, top: p.y, zIndex: 60, ...paperChip }}>
+      <div data-board-action style={{ position: 'absolute', left: p.x, top: p.y, zIndex: 60, ...paperStrip }}>
         {buttons}
       </div>
     </>

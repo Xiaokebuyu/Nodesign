@@ -21,26 +21,12 @@
  * RP 场景位、跑团拍行是同一注册表的后续消费方（先不建，地基兼容）。
  */
 
-import { UNIT } from './board-place.js';
+import { UNIT, overlaps, bboxOf } from './rect.js';
 
 export const LANE_W = 20 * UNIT;       // 480：一列的占道宽（≈默认板书宽 + 呼吸）
 export const LANE_GUTTER = 4 * UNIT;   // 96：列间沟
 
 const PAD = 12;
-const overlapsRect = (a, b, pad = 0) => !(
-  a.x + a.w + pad <= b.x || b.x + b.w <= a.x - pad
-  || a.y + a.h + pad <= b.y || b.y + b.h <= a.y - pad
-);
-
-/** 一组矩形的包围盒（空集 null） */
-function bboxOf(rects) {
-  let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
-  for (const r of rects) {
-    x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y);
-    x1 = Math.max(x1, r.x + (r.w || 0)); y1 = Math.max(y1, r.y + (r.h || 0));
-  }
-  return Number.isFinite(x0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
-}
 
 /**
  * 给新线找一条空列。契约与 resolvePlacement 同款：**没有失败分支** ——
@@ -65,7 +51,7 @@ export function allocateLaneColumn({ parent = null, lanes = [], obstacles = [], 
     // 姊妹线的占道是**半无限竖条带**：只比 x 区间，不比 y —— v1 宁可铺得开，
     // 不做"上下错开挤同一列"的聪明（那会让两条线的生长迎头相撞）
     if (lanes.some((l) => x < l.x + (l.w || width) && x + width > l.x)) continue;
-    if (obstacles.some((o) => overlapsRect({ x, y: win.y, w: width, h: win.h }, o, PAD))) continue;
+    if (obstacles.some((o) => overlaps({ x, y: win.y, w: width, h: win.h }, o, PAD))) continue;
     return { x, y, w: width, fallback: false };
   }
   // 兜底：内容底下另起一行（跟 bottomSpot 同一精神）
