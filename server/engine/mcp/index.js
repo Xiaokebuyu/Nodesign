@@ -131,7 +131,27 @@ const ALWAYS_LOAD_TOOLS = new Set([
   // 08-21 产物会话五件：成品检查的交互半边（状态跨调用留着）。artifact_batch 的卖点
   // "一趟跑完 + 结尾截图"和 live:true 的存在都只在描述里说，常驻。
   'artifact_open', 'artifact_computer', 'artifact_find', 'artifact_batch', 'artifact_motion',
+  // ⭐ 板面核心五件（2026-08-27 用户拍板「板书是基础交互方式」）：合计约 3.4k token
+  // 的描述量进缓存前缀，每轮增量趋零；换来的是 write 的件数判据/lane/ink、edit 的
+  // 18 个 op、batch 的按拍打包这些**只活在描述里的卖点**每回合都在场 —— 此前它们
+  // 全在 deferred 区，agent 只看得到名字，教义在 prelude 里教、schema 却要现搜。
+  // 膨胀由模式闸控：rp 模式 unregister 掉 artifact/量具族后常驻集自动收缩。
+  // read_user_view 不进：视口已经每回合自动进状态块，它降级成"看画面细节"的按需件。
+  'write_on_board', 'edit_board', 'read_board', 'board_batch', 'look_at_board',
 ]);
+
+/**
+ * 常驻表的启动期对账（08-27 审计补）：跟 mode-profile 同病同药 —— 工具改名后
+ * 这张表的旧名字不会报错，只会让那件工具静默退回 deferred（agent 又只看得到名字）。
+ * 对照的是**过滤前**的全量名单：能力/模式闸下架某件时它照常在 builtTools 里。
+ */
+function assertAlwaysLoadNames(registeredNames) {
+  const have = new Set(registeredNames);
+  const ghosts = [...ALWAYS_LOAD_TOOLS].filter((n) => !have.has(n));
+  if (ghosts.length) {
+    throw new Error(`[always-load] 常驻表里有注册表不存在的名字: ${ghosts.join(', ')} —— 改名后表没跟上，这些条目在静默空转`);
+  }
+}
 
 export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, sessionId, ctx, roleRoster = null, projectMode = 'design' } = {}) {
   // 浏览通道里能被 browser_batch 串起来的七件：先建一次，batch 拿**同一批实例**
@@ -377,6 +397,7 @@ Example: [{"name":"read_board","input":{}},{"name":"write_on_board","input":{"te
   // 对象是「注册表里有没有这个名字」，跟本机能力/项目模式无关。工具改名后表没跟上
   // 时这里当场炸，不让下架条目静默空转（判据本身要先验一遍）。
   assertModeProfileNames(builtTools.map((t) => t.name));
+  assertAlwaysLoadNames(builtTools.map((t) => t.name));
 
   const tools = builtTools.filter((t) => (
     // 本机能力缺席且该工具是 unregister 档 → 整件不注册（连名字都不进上下文）。

@@ -542,8 +542,7 @@ batch**，一页一个回合太慢；逛到不确定的地方（要不要进、�
 按需先 `ToolSearch("select:mcp__nodesign__<tool>")` 拉 schema：`generate_image` ·
 `remove_background` · `web_search` · `export_handoff` ·
 `pin_to_board` ·
-`read_board` · `organize_board` · `deliver_files` ·
-`write_on_board` · `edit_board` · `board_batch` · `look_at_board` · `read_user_view` ·
+`organize_board` · `deliver_files` · `read_user_view` ·
 `read_document` ·
 `crystallize_skill` ·
 `report_issue` · `roll_film` · `paint_still` · `lookup_tags` · `trace_motion` · `explain_style` · `profile_scroll`
@@ -551,8 +550,7 @@ batch**，一页一个回合太慢；逛到不确定的地方（要不要进、�
 <!-- nd:mode:rp:start -->
 按需先 `ToolSearch("select:mcp__nodesign__<tool>")` 拉 schema：`generate_image` ·
 `remove_background` · `web_search` · `pin_to_board` ·
-`read_board` · `organize_board` · `deliver_files` ·
-`write_on_board` · `edit_board` · `board_batch` · `look_at_board` · `read_user_view` ·
+`organize_board` · `deliver_files` · `read_user_view` ·
 `read_document` · `read_tavern_json` · `cast_role` · `set_scene` · `read_scene` ·
 `report_issue` · `roll_film` · `paint_still` · `lookup_tags`
 <!-- nd:mode:rp:end -->
