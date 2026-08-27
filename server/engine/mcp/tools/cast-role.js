@@ -70,7 +70,34 @@ function yamlQuote(v) {
   return `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-function composeRoleCard({ slug, displayName, duty, tools, model, persona }) {
+/**
+ * 笔权台规（2026-08-27）：harness 钉在每张角色卡尾部，**不指望 GM 抄进 persona**。
+ * 病根：角色很容易自顾自写出「第三人称环境描写 + 第一人称台词」的混合体 ——
+ * 环境是旁白的笔，替别人写反应是代笔。接续权闸管得住板上的接续，管不住一块板书
+ * 内部的混笔，所以这条只能长在角色自己的系统提示词里。跟日记体例同范式：机制锁、体例放。
+ * 两支笔：character（演一个人）/ narrator（写场面的旁白角色 —— 硬禁环境会禁死它）。
+ */
+const PEN_FOOTERS = Object.freeze({
+  character: [
+    '## 笔权（台规，不是人设）',
+    '',
+    '你的笔只写你自己：你说的话、你做的动作、你心里想的，一律**第一人称**。以下不归你的笔：',
+    '- 环境与场面（天色、房间、路人、气氛）—— 那是旁白的笔。动作做出去就停，世界怎么响应等别人接。',
+    '- 其他角色的话和反应 —— 一个字不替写。想要谁回应，就在戏里对他说。',
+    '- 全知视角的推进（「与此同时」「谁也没注意到」）—— 你只知道你的角色知道的。',
+    '',
+    '一块板书 = 你的一拍：这一拍说完就停笔，别一个人把整场写完。',
+  ].join('\n'),
+  narrator: [
+    '## 笔权（台规，不是人设）',
+    '',
+    '你是旁白的笔：环境、场面、时间流逝、群众与世界的响应归你写。',
+    '台上有名字的角色的话和决定**不归你写** —— 他们自己有笔。把场面铺到他们面前就停笔。',
+    '一块板书 = 一拍：铺完这一拍就停，别替角色接戏。',
+  ].join('\n'),
+});
+
+function composeRoleCard({ slug, displayName, duty, tools, model, persona, pen }) {
   const desc = `${ROLE_DESC_PREFIX}「${oneLine(displayName, 40)}」。${oneLine(duty, 400)}`;
   const lines = [
     '---',
@@ -81,6 +108,8 @@ function composeRoleCard({ slug, displayName, duty, tools, model, persona }) {
     '---',
     '',
     String(persona).trim(),
+    '',
+    PEN_FOOTERS[pen] || PEN_FOOTERS.character,
     '',
   ];
   return lines.join('\n');
@@ -162,6 +191,7 @@ it for work tasks — subagents for research/review are a different thing (Agent
       duty: z.string().min(1).max(400).describe('One line: who this is and when you would talk to them. Shown to you in the agent list.'),
       persona: z.string().min(1).describe('The role card itself. Becomes the agent\'s entire system prompt: who they are, how they speak, what they must never do, how they should use the board.'),
       tools: z.array(z.string()).optional().describe('Optional tool subset (short names like write_on_board). Omit for the default board-writing set.'),
+      pen: z.enum(['character', 'narrator']).optional().describe("Which pen this role holds. 'character' (default): plays ONE person — writes only their own words/actions/thoughts, first person, never scene description. 'narrator': writes scene prose — never speaks for named roles. The matching house rules are pinned to the card tail automatically; do NOT restate them in persona."),
       model: z.string().optional().describe("Model for this role. Omit or 'inherit' to use the same model as you."),
     },
     async (args) => {
@@ -205,10 +235,13 @@ it for work tasks — subagents for research/review are a different thing (Agent
       let existed = false;
       try { await fs.access(file); existed = true; } catch { /* 新角色 */ }
 
+      // pen 收成两值：enum 之外的值（含漏传）一律折回 character，角色不能没有笔权台规
+      const pen = args.pen === 'narrator' ? 'narrator' : 'character';
+
       await fs.mkdir(dir, { recursive: true });
       // model 也来自模型，别让它往 frontmatter 里塞第二行
       await fs.writeFile(file, composeRoleCard({
-        slug, displayName: args.name, duty: args.duty, tools, model, persona,
+        slug, displayName: args.name, duty: args.duty, tools, model, persona, pen,
       }), 'utf8');
 
 
@@ -243,6 +276,7 @@ it for work tasks — subagents for research/review are a different thing (Agent
         `**派上场**：Agent(subagent_type: "${slug}")，prompt 写这一场要它做什么。`,
         `**之后跟它说话**：SendMessage({to: "${slug}"}) —— 它记得自己写过的一切，不要重新派。`,
         `它拿到的工具：${tools.join('、')}`,
+        `笔权：${pen === 'narrator' ? '旁白笔（写场面，不替角色说话）' : '角色笔（只写自己，第一人称）'} —— 台规已钉在卡尾，persona 里不用抄。`,
       ];
       if (rejected.length) {
         lines.push('', `⚠️ 这些工具不给角色：${rejected.join('、')}。`

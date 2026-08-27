@@ -165,6 +165,36 @@ describe('frontmatter 注入：拼进去的每个值都是模型给的', () => {
   });
 });
 
+describe('笔权台规：harness 钉在卡尾，不指望 GM 抄进 persona', () => {
+  // 病根（2026-08-27 用户观察）：角色自顾自写出「第三人称环境描写 + 第一人称台词」的
+  // 混合体。接续权闸管板上的接续，管不住一块板书内部的混笔 —— 只能钉进系统提示词。
+  it('⭐ 默认角色笔：第一人称、环境不归它，钉在 persona 之后', async () => {
+    await call(ok);
+    const md = cardOf('rp-moli');
+    expect(md).toContain('## 笔权');
+    expect(md).toContain('第一人称');
+    expect(md.indexOf('MAGIC-PERSONA')).toBeLessThan(md.indexOf('## 笔权'));
+  });
+
+  it('narrator 笔：写场面、不替有名字的角色说话（硬禁环境会禁死叙事者）', async () => {
+    await call({ ...ok, pen: 'narrator' });
+    const md = cardOf('rp-moli');
+    expect(md).toContain('旁白的笔');
+    expect(md).not.toContain('第一人称');
+  });
+
+  it('enum 之外的 pen 折回 character（角色不能没有台规）', async () => {
+    await call({ ...ok, pen: 'director' });
+    expect(cardOf('rp-moli')).toContain('第一人称');
+  });
+
+  it('工具返回说清用的哪支笔、persona 不用重抄', async () => {
+    const r = await call(ok);
+    expect(r.content[0].text).toMatch(/角色笔/);
+    expect((await call({ ...ok, pen: 'narrator' })).content[0].text).toMatch(/旁白笔/);
+  });
+});
+
 describe('改一个已经在场的角色', () => {
   it('第二次写同名角色要说清楚「改文件不会改变在场的它」', async () => {
     await call(ok);
