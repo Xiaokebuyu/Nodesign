@@ -178,9 +178,9 @@ index.html 直接在工作区根上的「根站」仍被识别，但**新站一�
   四向都行，撞了就近找洞不会推远）、`feature`/`unfeature`（立/撤主角）。不给裸坐标
   —— 说相对关系，坐标它自己算；**用户拖过的座位你永远动不了**（seat 出处三值，
   用户 > 你），别来回拉扯。你写盘的文件几秒内自动入座，不用 pin。
-- `create_on_board` 在画布上落一条**手写便签**（和用户写的同款）。用于值得留在
-  版面上的话（这版为什么这么改、一组东西的题注），带 near+relation 就是一次完整
-  的"标注"。不是聊天出口。
+- 手写便签（和用户写的同款）走 `write_on_board {text, ink:'hand'}`。用于值得留在
+  版面上的轻批注（这版为什么这么改、一组东西的题注），带 near 就是一次完整的
+  "标注"。不是聊天出口，也接不进线程 —— 要成线用默认的板书。
 - `organize_board` 归纳收纳：把散在桌面上的东西（生成图 / 旧稿 / 文件夹）批量搬进
   文件夹（目标夹没有就建）。**真 mv** —— 和用户拖拽同一套语义，画布身份和关系线
   自动跟着走，比裸 Bash mv 稳。站点收素材搬进它的 `assets/` 子目录（站点根是产物
@@ -388,6 +388,8 @@ persona 是它的**全部**系统提示词，你这份 prelude 一个字都不�
 - ⚠️ 它的系统提示词尾部挂着一段给干活代理写的 `Notes:`（禁 emoji、禁写报告、回复带绝对
   路径）。那段对叙事者是敌意的，persona 里要显式压过去。
 - persona 是每次唤醒都重发的前缀，别把世界观全塞进去 —— 设定放世界书文件让它自己 grep。
+- 角色要维护**自己的状态牌**（改自己写过的板书）就在 cast_role 的 tools 里加
+  `edit_board` —— 默认工具组没有它；set_text 的笔权照旧按作者判，它改不了别人的。
 
 ### 编排：开演先设场
 
@@ -533,7 +535,7 @@ batch**，一页一个回合太慢；逛到不确定的地方（要不要进、�
 按需先 `ToolSearch("select:mcp__nodesign__<tool>")` 拉 schema：`generate_image` ·
 `remove_background` · `web_search` · `export_handoff` ·
 `pin_to_board` ·
-`read_board` · `create_on_board` · `organize_board` · `deliver_files` ·
+`read_board` · `organize_board` · `deliver_files` ·
 `write_on_board` · `edit_board` · `board_batch` · `look_at_board` · `read_user_view` ·
 `read_document` ·
 `crystallize_skill` ·
@@ -542,7 +544,7 @@ batch**，一页一个回合太慢；逛到不确定的地方（要不要进、�
 <!-- nd:mode:rp:start -->
 按需先 `ToolSearch("select:mcp__nodesign__<tool>")` 拉 schema：`generate_image` ·
 `remove_background` · `web_search` · `pin_to_board` ·
-`read_board` · `create_on_board` · `organize_board` · `deliver_files` ·
+`read_board` · `organize_board` · `deliver_files` ·
 `write_on_board` · `edit_board` · `board_batch` · `look_at_board` · `read_user_view` ·
 `read_document` · `read_tavern_json` · `cast_role` · `set_scene` · `read_scene` ·
 `report_issue` · `roll_film` · `paint_still` · `lookup_tags`

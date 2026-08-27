@@ -111,7 +111,8 @@ export function makeEditSketchAlias({ projectId, sharedRoot, ctx }) {
 async function endpointReal(id, live, zones, sharedRoot) {
   if (live[id]) return true;
   if (zones && zones[id] !== undefined) return true;
-  if (/^doc:/.test(id)) return true;
+  // （doc: 无条件放行分支 08-27 审计拆除：doc:brand/_root 已于 08-24 退役，全仓
+  //   无写方；留着它,手滑把 docx: 打成 doc: 就能绕过存在性闸产出悬空线）
   if (!sharedRoot) return false;
   const bare = id.replace(/^(deck|site|docx|text|scribble):/, '');
   if (!bare || bare.includes('..')) return false;
@@ -213,6 +214,9 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
         } else if (o.op === 'move') {
           const id = rid(o.id); const e = id && live[id];
           if (!e) { fail(`${o.id} 不在板上`); continue; }
+          // 08-27 审计修：教义和本工具描述都承诺「用户拖过的座位永不被挪」，
+          // reflow 一直守着，move 却没查 —— 一次调用就能覆盖用户手摆的位置
+          if (e.seat === 'user') { fail(`${o.id} 是用户亲手摆的（seat:user），你动不了 —— 要挪请用户自己拖`); continue; }
           const box = rectOf(id);
           if ('ref' in o.to) {
             const p = placeRel(id, box, o.to);
@@ -248,9 +252,13 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             p = { x: bb.x + o.to.dx * UNIT, y: bb.y + o.to.dy * UNIT };
           }
           const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
-          const movedSet = new Set(members.map(([id]) => id));
-          for (const [id, e] of members) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, seat: 'agent' });
-          for (const [id] of members) moveHuggers(id, dx, dy, movedSet);
+          // 用户座跳过（同 reflow）：组被撕开也比覆盖用户的手强，跳了谁如实报
+          const userSeated = members.filter(([, e]) => e.seat === 'user').map(([id]) => id);
+          const movable = members.filter(([, e]) => e.seat !== 'user');
+          const movedSet = new Set(movable.map(([id]) => id));
+          for (const [id, e] of movable) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, seat: 'agent' });
+          for (const [id] of movable) moveHuggers(id, dx, dy, movedSet);
+          if (userSeated.length) report.push(`· #${i + 1} move_group: 跳过用户亲手摆的 ${userSeated.length} 件（${userSeated.slice(0, 3).join('、')}${userSeated.length > 3 ? ' 等' : ''}）`);
           report.push(`· #${i + 1} move_group #${o.tag} → 组左上 (${Math.round(p.x)},${Math.round(p.y)})${'ref' in o.to && p.resolution ? `（${p.resolution}${p.nudged ? '，就近避让过' : ''}）` : ''}`);
           ok += 1;
         } else if (o.op === 'remove') {

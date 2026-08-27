@@ -107,6 +107,11 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
               textAlign: 'center', zIndex: 44,
             }}
             data-role-sprite={slug}
+            // ⛔ 08-27 审计修：没有这两条，按下被相机当空地 setPointerCapture，
+            // click 被重定向到 pane —— onPick 一次都到不了（board-hit 表连栽三次的
+            // 同族坑；主精灵 sprite-figures 的 press 早有同款防护，这里当时没抄）
+            data-no-pan
+            onPointerDown={onPick ? (e) => { e.stopPropagation(); } : undefined}
             title={onPick ? `跟${roleNames[slug] || slug}说话` : undefined}
             onClick={onPick ? (e) => { e.stopPropagation(); onPick(slug); } : undefined}
           >

@@ -261,3 +261,27 @@ describe('板书正门（08-27）：set_text 认板书文件，笔权按作者�
     await patchBoard(pid, { objects: { [cid]: { by: 'agent' } } });
   });
 });
+
+describe('用户座位不可撼动（08-27 审计修：move/move_group 补上教义早已承诺的闸）', () => {
+  it('⭐ move 用户拖过的东西被拒，位置和 seat 纹丝不动', async () => {
+    await patchBoard(pid, { objects: { 'assets/用户摆的.png': { x: 50, y: 50, w: 100, h: 80, seat: 'user' } } });
+    const r = await edit({ ops: [{ op: 'move', id: 'assets/用户摆的.png', to: { dx: 5, dy: 5 } }] });
+    expect(r.content[0].text).toMatch(/用户亲手摆/);
+    const board = await readBoard(pid);
+    expect(board.objects['assets/用户摆的.png'].x).toBe(50);
+    expect(board.objects['assets/用户摆的.png'].seat).toBe('user');
+  });
+
+  it('move_group 跳过用户座、其余照走并如实报（同 reflow 的纪律）', async () => {
+    await patchBoard(pid, { objects: {
+      'assets/g1.png': { x: 1000, y: 1000, w: 100, h: 80, tag: '守座', seat: 'agent' },
+      'assets/g2.png': { x: 1000, y: 1200, w: 100, h: 80, tag: '守座', seat: 'user' },
+    } });
+    const r = await edit({ ops: [{ op: 'move_group', tag: '守座', to: { dx: 10, dy: 0 } }] });
+    expect(r.content[0].text).toMatch(/跳过用户亲手摆/);
+    const board = await readBoard(pid);
+    expect(board.objects['assets/g1.png'].x).toBe(1240);   // 10 格 × 24px
+    expect(board.objects['assets/g2.png'].x).toBe(1000);   // 用户座原地
+    expect(board.objects['assets/g2.png'].seat).toBe('user');
+  });
+});

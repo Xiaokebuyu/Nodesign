@@ -65,7 +65,7 @@ const SCHEMA = {
   relation: z.enum(BINDING_TYPE_IDS).optional()
     .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
   chain: z.boolean().optional()
-    .describe('Single note: auto reply_to the latest board note of the same tag (chapter threads without hand-copying paths)'),
+    .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights)'),
   open_lane: z.string().max(300).optional()
     .describe("Open a NEW thread column named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic column at the right edge of the map. Requires tag; continue the lane later with {tag, chain:true}. read_board's 版图 section lists existing lanes."),
   tag: z.string().regex(TAG_RE).optional()
@@ -74,13 +74,13 @@ const SCHEMA = {
     .describe("Single note body: 'chalk' (default) = a real file under notes/板书 (Read/Edit later; chain/reply threads live on these); 'hand' = canvas-native handwritten text — a light remark like the user's own handwriting, no file, no threading"),
   font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional().describe("Single note font (ink:'hand'; default kai)"),
   color: z.enum(['ink', 'red', 'pencil', 'brass']).optional().describe("Single note color (ink:'hand')"),
-  size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe('Single note text size (md default, lg headline)'),
+  size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe("Single note text size. Real for ink:'hand'; for chalk notes it only sizes the placement box (chalk renders at a fixed size)"),
   width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px); default by content'),
   title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
   layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap']).optional()
     .describe('Sketch layout. free needs at on EVERY node (missing ones are an error, not a silent column)'),
   cols: z.number().int().min(1).max(8).optional().describe('grid columns'),
-  staging: z.boolean().optional().describe('Sketch default true (translucent until finish/turn end); single note default false'),
+  staging: z.boolean().optional().describe('Sketch only: default true (translucent until commit/turn end). Ignored for single notes — they always land solid'),
   nodes: z.array(z.object({
     id: LOCAL_ID.describe('Local id to reference from edges/shapes'),
     text: z.string().min(1).max(8000),

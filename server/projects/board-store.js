@@ -475,6 +475,8 @@ export async function reconcileBoardRenames(pid) {
  *    文件夹没坐标（还没被摆过）时就摆到桌面上，前端下一轮会给它安排位置。
  */
 export function pinToZone(pid, { objectId, zoneId = '' }) {
+  // 08-27 审计修：这里是 patchBoard 之外唯一的 objects 写入口，原先没有数量闸 ——
+  // 反复 pin 新 id 可把 board.objects 撑过 MAX_OBJECTS（只剩 2MB 字节兜底）。
   return withBoardLock(pid, async () => {
     const board = await readBoard(pid);
     const now = Date.now();
@@ -518,6 +520,9 @@ export function pinToZone(pid, { objectId, zoneId = '' }) {
     }
     if (!slot) slot = { x: PAD, y: PAD };
 
+    if (!board.objects[oid] && Object.keys(board.objects).length >= MAX_OBJECTS) {
+      throw new Error(`board 已有 ${MAX_OBJECTS} 件，pin 不进新条目（失控兜底，正常用不该撞到）`);
+    }
     const zMax = Math.max(10, ...Object.values(board.objects).map(o => o.z || 0));
     board.objects[oid] = {
       ...(board.objects[oid] || {}),
