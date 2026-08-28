@@ -364,9 +364,11 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
       ];
       // 台上广播（08-28 转发机）：话落板 = 在场角色自动收到，GM 不用转发；rounds 下旁白开轮。
-      // facts 填了就投场况干货不投散文（文风节食 —— 角色的嗓子别染上旁白腔）
+      // facts 填了就投场况干货不投散文（文风节食 —— 角色的嗓子别染上旁白腔）。
+      // tag = 房间域：显式 tag 或从接续的线程继承 —— 带房的话只吵同房的人
       try {
-        const st = broadcastStageNote(projectId, { rel, by, text: body, facts: args.facts || null });
+        const roomTag = args.tag || board.objects?.[parentId]?.tag || board.objects?.[anchorId]?.tag || null;
+        const st = broadcastStageNote(projectId, { rel, by, text: body, facts: args.facts || null, tag: roomTag });
         if (st?.scene) { try { ctx?.emit?.(Events.scene(st.scene)); } catch { /* fail-soft */ } }
         if (st?.line) lines.push(st.line);
       } catch { /* 广播坏了不拦落板 */ }

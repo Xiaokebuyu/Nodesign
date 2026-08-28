@@ -242,14 +242,11 @@ export async function ensureProjectWorkspace(projectId) {
   // .gitignore 每次比对而不是"不存在才写"：扁平化新增了 .claude/projects/ 和
   // .nd/ 两条，老项目的文件里没有，不补的话 SDK 转录会被 commit 进项目历史。
   await ensureGitignore(path.join(root, '.gitignore'));
-  // 记忆体系改版迁移（2026-08-24，幂等：源不在了就什么都不做）——
-  // CLAUDE.md 从 .claude/ 挪到工作区根（画布可见，SDK 两处都读、根优先级同级），
-  // 老的偏好/风格档案并进去，SDK auto-memory 的存量从 .claude/agent-memory/auto
-  // 搬到画布可见的 记忆/。三步全是"搬走后源删除"，跑几遍结果一样。
+  // 记忆体系改版迁移（2026-08-24，幂等：源不在了就什么都不做；三步全是"搬走后源删除"）
+  // —— CLAUDE.md 挪工作区根、旧偏好/风格档案并入、auto-memory 存量搬 记忆/。细节见函数文档。
   await migrateMemoryLayout(root, { fileExists });
   if (!(await fileExists(path.join(root, 'CLAUDE.md')))) {
-    // rp 项目的档案按"戏"设栏（这份文件每个角色子代理也强制吃，见 templates 注释）。
-    // 只管新项目：已有 CLAUDE.md 的一字不动 —— 用户内容优先于模板换代。
+    // rp 项目的档案按"戏"设栏（templates 注释）；已有 CLAUDE.md 的一字不动，用户内容优先于模板换代
     const isRp = (getProject(projectId)?.mode || 'design') === 'rp';
     await fs.writeFile(path.join(root, 'CLAUDE.md'), isRp ? DEFAULT_CLAUDE_MD_RP : DEFAULT_CLAUDE_MD, 'utf8');
   }

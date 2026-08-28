@@ -202,11 +202,13 @@ export function makePreToolUseGrepContentDefaultHandler() {
  * 板上归属的唯一可信来源。**不要改成从角色文件读**：那份文件模型能改，自称不是实证。
  * 见 actor-trail.js 的头注释。
  *
- * 挂在板上写入类工具上就够（署名只有它们用得着），不挂通配 —— 通配等于每次工具调用
- * 都进一次 Map。
+ * 挂通配（mcp__nodesign__.*，见 hooks.js）：这里曾按「板上写入类才需要」挂手写名单，
+ * 漏过两次（08-26 收件箱三件、08-28 场务四件），每次症状都是 byOf 静默落回 'agent'、
+ * 依赖它的守卫整条失效。一次 Map.set 的代价换「凡用 byOf 的工具永远在闸内」，值。
  */
 export function makePreToolUseActorStamp() {
-  return async (input, toolUseId) => {
+  // 具名函数：装配测试（hooks-assembly.test.js）按 fn.name 认出这道闸挂没挂对
+  return async function actorStamp(input, toolUseId) {
     noteToolCaller(toolUseId || input?.tool_use_id, {
       agentId: input?.agent_id || null,
       agentType: input?.agent_type || null,

@@ -12,7 +12,7 @@ export default {
   // 服务商预设名：英文名的（DeepSeek / OpenAI / Ollama）本来就通用，不进词表；
   // 只翻中文名的那几家，英文用户看「智谱」「硅基流动」是认不出的。
   'DeepSeek 官方': 'DeepSeek (official)',
-  '智谱': 'Zhipu AI',
+  '智谱（Z.ai）': 'Zhipu (Z.ai)',
   '阿里百炼（通义）': 'Alibaba Bailian (Qwen)',
   '硅基流动': 'SiliconFlow',
   'OpenCode Zen Go（Go 订阅）': 'OpenCode Zen Go (Go plan)',

@@ -96,7 +96,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
         fontFamily: FONT_KAI, fontSize: FONT_SIZE.sm, color: COLOR.sub,
         marginBottom: GAP.sm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
-        标注 · {target.typeLabel}「{target.title}」
+        {roleTarget ? `说给${roleTarget.who} · 回应「${target.title}」` : `标注 · ${target.typeLabel}「${target.title}」`}
       </div>
       <textarea
         autoFocus
@@ -112,7 +112,9 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             submit();
           }
         }}
-        placeholder="想怎么改 / 想让它变成什么…"
+        placeholder={roleTarget
+          ? `跟${roleTarget.who}搭话——一句台词、一个动作、一个眼神都行…`
+          : '想怎么改 / 想让它变成什么…'}
         style={{
           width: '100%', resize: 'none', boxSizing: 'border-box',
           border: `1px solid ${COLOR.borderLt}`, borderRadius: RADIUS.sm,

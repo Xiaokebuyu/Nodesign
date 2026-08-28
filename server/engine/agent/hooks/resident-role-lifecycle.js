@@ -21,7 +21,7 @@
  */
 
 import { isResidentRole } from '../cast.js';
-import { clearStreak } from '../inbox.js';
+import { clearStreak, markAsleep } from '../inbox.js';
 
 export function makePostToolUseFailureRoleRelease({ roster = null } = {}) {
   return async (input) => {
@@ -66,8 +66,9 @@ export function makeSubagentStopRoleNotice({ projectId = null } = {}) {
   return async (input) => {
     const type = input?.agent_type;
     if (!isResidentRole(type)) return {};
-    // 这一趟在场结束 → 散场计数归零，不然召回的角色只等一次就又被劝退（见 inbox.js）
-    if (projectId) clearStreak(projectId, type);
+    // 这一趟在场结束 → 散场计数归零，不然召回的角色只等一次就又被劝退（见 inbox.js）；
+    // 顺手标散场状态位 —— say 端点据此告诉前端「这话进了没人取的队列」，前端托 GM 召回
+    if (projectId) { clearStreak(projectId, type); markAsleep(projectId, type); }
     // nd:rp-prompt
     return {
       systemMessage:

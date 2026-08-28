@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Assets } from '../../lib/api.js';
+import { nudgeGmRecall } from '../../lib/role-direct.js';
 import { isImeEnter } from '../../lib/helpers.js';
 import { PAPER } from '../../lib/paper.js';
 import { TEXT_FONT_CSS } from '../../lib/text-fonts.js';
@@ -68,7 +69,10 @@ export default function RoleTalkPanel({ projectId, slug, name, onClose }) {
     setSending(true);
     try {
       const r = await Assets.sayToRole(projectId, slug, { text: v });
-      setLog((l) => [...l, { text: v, delivered: r?.delivered || 'queued' }]);
+      // 自动召回（08-28）：它真散场了（不是忙着写）——话留在收件箱，托主持人 SendMessage 去叫
+      // （nudge 自带 5 分钟去抖，冷却期内不重复叫，但状态照实显示）
+      if (r?.asleep) nudgeGmRecall(slug, name || slug);
+      setLog((l) => [...l, { text: v, delivered: r?.asleep ? 'asleep' : (r?.delivered || 'queued') }]);
       setText('');
       setSt((s) => (r?.delivered === 'waiting' ? { waiting: false, queued: 0 } : { waiting: false, queued: r?.queueDepth ?? (s?.queued || 0) }));
     } catch (err) {
@@ -81,6 +85,7 @@ export default function RoleTalkPanel({ projectId, slug, name, onClose }) {
 
   const deliveredNote = (m) => {
     if (m.delivered === 'waiting') return t('已直达');
+    if (m.delivered === 'asleep') return t('它已散场——话留在收件箱，已托主持人去召回');
     if (m.delivered === 'error') return t('没送出去：{err}', { err: m.err || '' });
     return t('进了队列（它现在不在等）');
   };

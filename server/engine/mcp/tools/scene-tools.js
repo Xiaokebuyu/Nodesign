@@ -16,6 +16,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { byOf } from '../actor.js';
 import { isResidentRole } from '../../agent/cast.js';
+import { isRpProject } from '../../agent/rp-mode.js';
 import { setScene, getScene, passTurn } from '../../agent/scene.js';
 import { deliver, knownRoles } from '../../agent/inbox.js';
 import { Events } from '../../agent/events.js';
@@ -57,6 +58,13 @@ Change scene at scene boundaries, not mid-beat.`,
         return text('只有主控能设场。你是台上的角色 —— 对场有意见就在戏里说，或 SendMessage 跟主控提。', true);
       }
       if (!projectId) return text('No project bound.', true);
+      // 编排机械 rp-only（08-28 归一）：design 项目里设了场也没有机器替你转 ——
+      // 广播不转、轮次不推，声明会静默烂掉。与其半条腿，不如把话说清。
+      if (!isRpProject(projectId)) {
+        return text('这个项目是设计模式：场机械（台上广播/轮次机）不转，设了场也只是一纸空文。'
+          + '轻度 RP 直接让角色自由接话（cue_role / 用户点它的板书说话都通）；'
+          + '想要完整编排，建议用户把项目切到演出模式。', true);
+      }
       try {
         const { scene, warn } = setScene(projectId, args);
         try { ctx?.emit?.(Events.scene(scene)); } catch { /* fail-soft */ }

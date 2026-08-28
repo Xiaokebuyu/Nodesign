@@ -35,6 +35,28 @@ export function deliveryToast(who, delivered, echoed = false) {
 }
 
 /**
+ * 托主持人召回一个散场的角色（2026-08-28 自动召回）。
+ *
+ * 服务端叫不醒散场的子代理（进程里已经没有它在跑的回合），唯一的召回通道是
+ * 主 agent 的 SendMessage —— 所以这里替玩家给主对话发一句场务请托，GM 收到就召。
+ * 走 window 事件是为了不做三层 prop 钻孔（RoleTalkPanel 住在画布世界层深处）；
+ * ProjectWorkspace 挂着唯一的监听，转成一次 handleSend。
+ *
+ * 去抖：同一个角色 5 分钟内只托一次 —— 玩家连发三句话不该把 GM 叫醒三回。
+ */
+const nudgedAt = new Map();   // slug → ts
+const NUDGE_COOLDOWN_MS = 5 * 60 * 1000;
+export function nudgeGmRecall(slug, who) {
+  const last = nudgedAt.get(slug) || 0;
+  if (Date.now() - last < NUDGE_COOLDOWN_MS) return false;
+  nudgedAt.set(slug, Date.now());
+  window.dispatchEvent(new CustomEvent('nd:gm-nudge', {
+    detail: { slug, text: `【场务】「${who || slug}」已散场，我有话给TA（已进TA的收件箱）——用 SendMessage({to: "${slug}"}) 把TA召回。` },
+  }));
+  return true;
+}
+
+/**
  * 试着把这句话直达角色。返回 true = 已处理（调用方就此收手），false = 不该直达。
  *
  * 整个动作收在这里而不是留在调用点：调用点是那个 2400 行的工作台组件，
@@ -52,8 +74,18 @@ export async function trySayToRole({ list, projectId, text, api, showToast, onSe
       text, about: list.map((t) => t.title).join('、').slice(0, 300),
       keep: true, ...(anchor ? { anchor } : {}),
     });
+    // GM 中介路由（08-28）：rounds/directed 里公开发言不直达 —— 服务端只落痕，
+    // 这里返回 false 让调用方走主对话那条现成的路，把话递给主持人去编排。
+    if (r?.routed === 'gm') {
+      showToast(`这一场由主持人调度——话转给主持人了`, 'info');
+      return false;
+    }
     const t = deliveryToast(direct.who, r?.delivered, !!r?.echo);
     showToast(t.text, t.kind);
+    // 自动召回（08-28）：角色真散场了（不是忙着写），托主持人用 SendMessage 去叫
+    if (r?.asleep && nudgeGmRecall(direct.slug, direct.who)) {
+      showToast(`${direct.who}已散场——已托主持人去召回`, 'info');
+    }
   } catch (err) {
     showToast(`没送到${direct.who}：${err.message}`, 'error');
   }

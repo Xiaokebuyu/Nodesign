@@ -34,6 +34,7 @@
 
 const MAX_QUEUE = 50;
 const boxes = new Map();      // `${projectId}::${slug}` → { queue, waiters, emptyStreak }
+const asleep = new Set();     // `${projectId}::${slug}`：真散过场（SubagentStop）且还没醒回来
 
 const keyOf = (projectId, slug) => `${projectId}::${slug}`;
 function boxFor(projectId, slug) {
@@ -83,6 +84,7 @@ export function drain(projectId, slug) {
  *   角色该据此决定是继续等还是收工，不该当异常处理）
  */
 export function waitFor(projectId, slug, timeoutMs) {
+  asleep.delete(keyOf(projectId, slug));   // 能来等 = 醒着（召回成功的唯一可靠信号）
   const box = boxFor(projectId, slug);
   if (box.queue.length) return Promise.resolve(drain(projectId, slug));
 
@@ -167,6 +169,14 @@ export function clearStreak(projectId, slug) {
   if (box) box.emptyStreak = 0;
 }
 
+/**
+ * 散场状态位（2026-08-28 自动召回）：SubagentStop 时标上，角色下次挂 waitFor 时摘掉。
+ * say 端点用它区分「没在等（正在写）」和「真散场了（进队列也没人来取）」——
+ * 后者前端才会托 GM 用 SendMessage 去召回，前者别瞎叫（它马上自己回来等）。
+ */
+export function markAsleep(projectId, slug) { asleep.add(keyOf(projectId, slug)); }
+export function isAsleep(projectId, slug) { return asleep.has(keyOf(projectId, slug)); }
+
 /** 会话收摊：把这个项目的等待者全放掉，别让它们永远挂着 */
 export function clearProject(projectId) {
   const prefix = `${projectId}::`;
@@ -175,7 +185,8 @@ export function clearProject(projectId) {
     for (const w of box.waiters) { clearTimeout(w.timer); w.resolve([]); }
     boxes.delete(k);
   }
+  for (const k of [...asleep]) { if (k.startsWith(prefix)) asleep.delete(k); }
 }
 
 /** 测试用 */
-export function _resetInboxes() { boxes.clear(); }
+export function _resetInboxes() { boxes.clear(); asleep.clear(); }

@@ -192,7 +192,8 @@ ENTIRE system prompt — it does not inherit yours.
 
 A cast role is RESIDENT: spawn it once, then talk to it with SendMessage({to: "${ROLE_PREFIX}<id>"}).
 It keeps its full memory of everything it has written. Never spawn the same role twice —
-that silently replaces it with an amnesiac copy (the harness will refuse).
+that silently replaces it with an amnesiac copy (the harness refuses re-dispatch within
+this session; after a server restart the roster is empty, so the discipline is yours).
 
 Use it when a story needs a voice that is not yours: a narrator that writes the prose while
 you direct, an NPC that answers in character, a second writer working a subplot. Do NOT use

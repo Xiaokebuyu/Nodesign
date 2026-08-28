@@ -54,6 +54,17 @@ export default function ChatComposer({
   const coarse = useMedia(COARSE);
   const ref = useRef(null);
   const fileInputRef = useRef(null);
+
+  // 自动召回（08-28）：玩家对**散场**角色说话时 role-direct 发 nd:gm-nudge（自带 5 分钟
+  // 去抖），这里替玩家给主对话递一句场务请托，GM 用 SendMessage 把角色召回。
+  // 挂在这而不是 ProjectWorkspace：这里天然握着 onSend，且 ChatDock 收起 ≠ 卸载，监听常在。
+  const onSendRef = useRef(onSend);
+  onSendRef.current = onSend;
+  useEffect(() => {
+    const onNudge = (e) => { if (e.detail?.text) onSendRef.current?.(e.detail.text); };
+    window.addEventListener('nd:gm-nudge', onNudge);
+    return () => window.removeEventListener('nd:gm-nudge', onNudge);
+  }, []);
   const chatDraft = useGlobalStore(s => s.chatDraft);
   const composerFocusTick = useGlobalStore(s => s.composerFocusTick);
   const setChatDraft = useGlobalStore(s => s.setChatDraft);

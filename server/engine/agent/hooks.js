@@ -164,13 +164,15 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // 板上写入的署名：工具执行前把「这次是谁调的」记下来（MCP handler 自己拿不到
       // agent 身份，hook 拿得到）。常驻角色写的板书要署它的名，不能全算主 agent 头上。
       // 见 agent/actor-trail.js —— 权威是 harness 盖的章，不是角色文件里的自称。
-      // ⚠️ await_user / check_inbox 也必须在这里：它们靠 byOf 判「谁在调」来决定这个
-      // 收件箱是谁的。漏了它们的后果不是少个署名，是**整条收件箱回路在生产里是死的**
-      // —— byOf 落回 'agent'，守卫回一句「你是主控」，角色永远挂不上等待、
-      // 用户永远收到「先攒着」（2026-08-26 审出，探针没发现是因为探针接的是通配 matcher）。
-      // ⚠️ read_board 也必须在这里：它用同一个章判「谁在读」（同一句「你写的」对主控和
-      // 角色含义相反）。漏了它的症状是角色读板时**永远**被告知主控写的板书是自己写的。
-      matcher: 'mcp__nodesign__(write_on_board|create_on_board|edit_board|board_batch|sketch_on_board|relate_on_board|arrange_on_board|edit_sketch|finish_sketch|organize_board|pin_to_board|read_board|await_user|check_inbox)',
+      //
+      // ⛔ 这里曾是手写工具名单，漏过两次，两次症状都是「闸装着、判据永远落 'agent'」：
+      //   - 08-26 漏 await_user/check_inbox/read_board → 整条收件箱回路在生产里是死的
+      //   - 08-28 审出漏场务四件（set_scene/read_scene/cue_role/pass_turn）→ pass_turn
+      //     对真角色恒拒（它永远被当成主控），set_scene/cue_role 的 GM-only 闸反向漏开
+      // 手写名单和「写死表家族」同病：加新工具必漏。改成全量盖章 —— 盖章本身只是往
+      // 500 容量的 LRU Map 记一条，多盖无副作用，凡是可能用 byOf 的工具永远在闸内。
+      // 装配层有测试钉着（hooks-assembly.test.js）：别再收窄回名单。
+      matcher: 'mcp__nodesign__.*',
       hooks: [makePreToolUseActorStamp()],
     }, {
       // ⚠️ Grep 的输入改写只许有这一个 handler——两个各返回 updatedInput 会互相抹掉

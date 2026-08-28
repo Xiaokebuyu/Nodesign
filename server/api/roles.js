@@ -16,15 +16,15 @@
 
 import express from 'express';
 import { guardProject } from './_guard.js';
-import { deliver, inboxStates } from '../engine/agent/inbox.js';
+import { deliver, inboxStates, isAsleep } from '../engine/agent/inbox.js';
 import { listRoleNames } from '../engine/agent/role-card.js';
 import { getWorkspaceRoot } from '../projects/workspace.js';
 import { isResidentRole } from '../engine/agent/cast.js';
-import { onUserSay, getScene } from '../engine/agent/scene.js';
-import { broadcastStageNote } from '../engine/agent/stage-broadcast.js';
+import { getScene } from '../engine/agent/scene.js';
+import { isRpProject } from '../engine/agent/rp-mode.js';
+import { broadcastStageNote, roomOf } from '../engine/agent/stage-broadcast.js';
 import { echoUserChalk } from '../engine/runs/user-chalk-echo.js';
 import { getProjectBus } from '../ws/broker.js';
-import { Events } from '../engine/agent/events.js';
 
 const router = express.Router();
 
@@ -77,19 +77,31 @@ router.post('/:pid/roles/:slug/say', express.json({ limit: '64kb' }), async (req
       } catch (err) { console.warn('[roles/say] 落痕失败（投递照走）:', err?.message || err); }
     }
 
+    // GM 中介路由（08-28 用户拍板）：rounds/directed 里**公开发言不直达** —— GM 收集、
+    // 编排、把事件和走向转交给角色（引用用户原话，不改写）。这里只落痕不投递，前端
+    // 拿到 routed:'gm' 会把这句话转投主对话（画布标注那条现成的路）把 GM 叫醒。
+    // 私语（keep≠true）不受此限：悄悄话直达是它的语义，任何模式都通。
+    // 顺带：旧的 onUserSay 开轮触发随中介路由退役 —— rounds 开轮只剩旁白落板一条路
+    // （scene.onStageNote），私语不该开公开的轮。
+    const scMode = getScene(req.params.pid)?.mode;
+    if (isRpProject(req.params.pid) && req.body?.keep === true && (scMode === 'rounds' || scMode === 'directed')) {
+      return res.json({ ok: true, routed: 'gm', name: names.get(slug), ...(echoRel ? { echo: echoRel } : {}) });
+    }
+
     const r = deliver(req.params.pid, slug, { text, about, from: 'user', ...(echoRel ? { echo: echoRel } : {}) });
     // 台上广播（08-28 转发机）：**落了板的话是公开台词**，free 场里其他在场角色也听得见
     // （目标角色刚直投过，排除）。keep=false 的私语不落板也就不广播 —— 判据就是"在不在板上"。
+    // tag 定域：对着某个角色说话 = 说进它所在的房间（roomOf），别的房不吵。
     if (echoRel) {
-      try { broadcastStageNote(req.params.pid, { rel: echoRel, by: 'user', text, exclude: [slug] }); }
+      try { broadcastStageNote(req.params.pid, { rel: echoRel, by: 'user', text, exclude: [slug], tag: roomOf(req.params.pid, slug) }); }
       catch { /* 广播坏了不拦投递 */ }
     }
-    // 轮次机：rounds 模式下对 order 里的人说话 = 从那个人开一轮（scene.js）
-    try {
-      const sc = onUserSay(req.params.pid, slug);
-      if (sc) getProjectBus(req.params.pid).publish({ ...Events.scene(sc), ts: new Date().toISOString() });
-    } catch { /* 机器坏了不拦投递 */ }
-    res.json({ ok: true, ...r, name: names.get(slug), ...(echoRel ? { echo: echoRel } : {}) });
+    res.json({
+      ok: true, ...r, name: names.get(slug),
+      // 散场角色收不到直投（进队列它也不会来取）—— 如实报给前端，前端据此托 GM 召回
+      ...(r.delivered === 'queued' && isAsleep(req.params.pid, slug) ? { asleep: true } : {}),
+      ...(echoRel ? { echo: echoRel } : {}),
+    });
   } catch (err) { next(err); }
 });
 
