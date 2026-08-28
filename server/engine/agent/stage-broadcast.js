@@ -76,10 +76,11 @@ export function stageNoteMessage({ rel, by, excerpt, facts = null }) {
   if (Array.isArray(facts) && facts.length) {
     return `（台上动了 —— ${who}这一拍的场况：\n${facts.map((f) => `  · ${f}`).join('\n')}\n`
       + `原文在 ${rel}，要引用原句才去读 —— 那是另一支笔的文风，句式和腔调别学。`
-      + `这不是点名：你的角色此刻有话就接（write_on_board 用 reply_to 指它），没话就接着 await_user 等。）`;
+      + `这不是点名：你的角色此刻有话就接（write_on_board 用 reply_to 指它，短拍，三五行到十来行），`
+      + `没话就接着 await_user 等。）`;
   }
   return `（台上动了：${who}写了「${excerpt}」→ ${rel}。这不是点名 —— 你的角色此刻有话就接`
-    + `（write_on_board 用 reply_to 指它），没话就别硬编，接着 await_user 等。）`;
+    + `（write_on_board 用 reply_to 指它，短拍，三五行到十来行），没话就别硬编，接着 await_user 等。）`;
 }
 
 const excerptOf = (text) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, 60);

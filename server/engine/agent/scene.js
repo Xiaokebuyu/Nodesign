@@ -97,8 +97,8 @@ export function cueMessage(prevSlug, noteRel = null, facts = null) {
     ? `。这一拍的场况：\n${facts.map((f) => `  · ${f}`).join('\n')}\n原文在 ${noteRel}，要引用原句才去读（那是另一支笔的文风，句式别学）`
     : (noteRel ? `。台上刚落了一条：${noteRel}，先读它` : '');
   return `（轮到你了${prevSlug ? `，上一个说话的是「${prevSlug}」` : ''}`
-    + `${beat}。看看板上刚发生的，接一段——`
-    + `写完记得再挂 await_user。这一拍不想说就调 pass_turn，轮次会跳过你。）`;
+    + `${beat}。看看板上刚发生的，接一拍——**三五行到十来行，一拍只说一件事**，`
+    + `写完记得再挂 await_user。这一拍角色真没话就调 pass_turn，沉默也是表演，轮次会跳过你。）`;
 }
 
 /**
