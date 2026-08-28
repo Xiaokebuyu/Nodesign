@@ -18,6 +18,38 @@ export const CSS = `
   font-family: var(--kai);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  /* ⛔ 台面这十四层**不画在这儿**（2026-08-28 性能案）。理由见下面 .ndd::before。 */
+  background: var(--wall);
+}
+/*
+ * 台面本体：桌布（渐变打光 + 颗粒 + 方格）+ 织纹 + 旧钉眼，一共十四层。
+ *
+ * ⭐ **必须是 「position: fixed」（视口大小），不能是 absolute（inset:0 铺满 .ndd）**。
+ *
+ * 这十四层原来分两处画在 「.ndd」 自己身上，而 「.ndd」 的高度**随项目数线性增长**
+ * （32 张卡就 2825px）。浏览器按 tile 栅格，于是每滚出一块新 tile 就要把十四层
+ * 重新合成一遍 —— 用户报的「项目数一超过某个量首页就奇卡无比」就是这个：
+ * 卡片少到不出现滚动条时一次都不用重画，一旦要滚，每块 tile 都是全价。
+ *
+ * 2026-08-28 真机实测（生产 32 张卡 / dsf2 / 滚到底再滚回顶，trace 量 RasterTask）：
+ *
+ *   卡 16 → 135ms(12 块) ｜ 卡 32 → 558ms(42 块)，**每块 tile 恒定 ~13ms**
+ *   （正常一块 tile 远低于 1ms）
+ *
+ *   掐 5 个径向渐变 −39% ｜ 掐两条网格线 −27% ｜ 掐整个 ::before −32%
+ *   → 不是哪一层特别贵，**是十四层被反复画进一张越长越高的画布**
+ *   改成视口固定层：**558ms → 128ms（−77%），且 tile 数从 42 降到 36**
+ *
+ * ⛔ 试过但更糟的两条：
+ *   「background-attachment: fixed」 —— 6644ms / 1604 块 tile，**比原样差 12 倍**
+ *      （固定附着背景在滚动容器里会逼着每帧重栅格）。一行省事的改法反把问题放大一个量级。
+ *   只把最贵的 5 个径向渐变挪走 —— 460ms，且 tile 数翻倍到 78，不划算。
+ *
+ * 代价（明写在这，别当 bug 报）：台面纹理和光晕**不再跟着内容滚**，桌子本身固定不动，
+ * 纸在桌上滑。桌面隐喻里这更对，但它确实是个视觉改动。
+ */
+.ndd::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
     radial-gradient(ellipse 80% 40% at 50% -6%, rgba(255,247,225,0.55), transparent 62%),
     radial-gradient(ellipse 44% 22% at 10% 16%, rgba(122,96,56,0.05), transparent 72%),
@@ -27,18 +59,17 @@ export const CSS = `
     var(--grain),
     repeating-linear-gradient(0deg, rgba(43,33,23,0.02) 0 1px, transparent 1px 28px),
     repeating-linear-gradient(90deg, rgba(43,33,23,0.02) 0 1px, transparent 1px 28px),
-    var(--wall);
-}
-/* 织纹 + 旧钉眼：三种周期错开，滚多远都看不出重复 */
-.ndd::before {
-  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background:
     radial-gradient(circle at 37px 51px, rgba(72,55,32,0.15) 0 1.1px, transparent 1.7px),
     radial-gradient(circle at 119px 23px, rgba(72,55,32,0.12) 0 1px, transparent 1.6px),
     radial-gradient(circle at 61px 137px, rgba(72,55,32,0.1) 0 1.2px, transparent 1.8px),
     repeating-linear-gradient(90deg, rgba(43,33,23,0.017) 0 1px, transparent 1px 3px),
-    repeating-linear-gradient(0deg, rgba(43,33,23,0.013) 0 1px, transparent 1px 3px);
-  background-size: 163px 211px, 271px 149px, 197px 313px, auto, auto;
+    repeating-linear-gradient(0deg, rgba(43,33,23,0.013) 0 1px, transparent 1px 3px),
+    var(--wall);
+  background-size:
+    auto, auto, auto, auto, auto,
+    auto, auto, auto,
+    163px 211px, 271px 149px, 197px 313px, auto, auto,
+    auto;
 }
 .ndd *, .ndd *::before, .ndd *::after { box-sizing: border-box; }
 .ndd-in { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; }
