@@ -173,8 +173,13 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
     // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
     if (args.text) {
-      const body = String(args.text).trim();
+      let body = String(args.text).trim();
       if (!body) return err('空话不上板。');
+      // 控件围栏自愈（08-28 泉此方案）：角色把 nd:controls 写成裸文本开头 —— 语义无歧义
+      // （正文以 nd:controls 起头且全文无围栏），替它补上，渲染层只认 ```nd:controls
+      if (/^nd:controls\s*\n/.test(body) && !body.includes('```')) {
+        body = '```nd:controls\n' + body.replace(/^nd:controls\s*\n/, '') + '\n```';
+      }
       // 手写字（ink:'hand'，08-27 收编 create_on_board）：线程语义长在板书文件上
       if (args.ink === 'hand' && (args.chain || args.open_lane || args.reply_to)) {
         return err("ink:'hand' 是画布手写字（无文件本体），接不进线程 —— 要 chain/open_lane/reply_to 就用默认的 chalk。");

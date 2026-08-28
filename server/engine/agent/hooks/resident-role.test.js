@@ -194,6 +194,19 @@ describe('agentId 别名：同型多实例的身份桥（2026-08-28）', () => {
     expect(agentNameOf('a4f15eccfdcb4337f')).toBe('rp-bob');
   });
 
+  it('⭐⭐ 推断名派发（无 name 参数）也学得到别名：PostToolUse 从派发闸的盖章里拿名字（泉此方案）', async () => {
+    // 前置：name 闸 describe 已把 rp-izumi 写进 WS 的登记表
+    const roster = createRoleRoster();
+    const cast = makePreToolUseAgentForceForegroundHandler({ roster, workspaceRoot: WS });
+    const ti = { subagent_type: 'rp-narrator', run_in_background: true,
+      prompt: '你的角色卡：角色/泉此方/角色卡.md\n【卡全文】……' };
+    const out = await cast({ tool_input: ti }, 'toolu_alias_inf');
+    expect(out.hookSpecificOutput.updatedInput.name).toBe('rp-izumi');
+    // ⛔ PostToolUse 拿到的是模型原始入参（没有 name）—— 泉此方场就是这里断的
+    await alias({ tool_input: ti, tool_response: [{ type: 'text', text: 'Async agent launched successfully.\nagentId: 99aabbccddeeff001' }] }, 'toolu_alias_inf');
+    expect(agentNameOf('99aabbccddeeff001')).toBe('rp-izumi');
+  });
+
   it('普通子代理与非 rp 收件人不进别名表', async () => {
     await alias({ tool_input: { subagent_type: 'worker', name: 'rp-x9' }, tool_response: [{ type: 'text', text: 'agentId: 1234567890abcdef1' }] });
     await alias({ tool_input: { to: 'main' }, tool_response: [{ type: 'text', text: '{"resumedAgentId":"fedcba0987654321f"}' }] });

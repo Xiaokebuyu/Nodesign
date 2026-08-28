@@ -173,3 +173,27 @@ describe('角色专线（08-28 预制摆位：GM open_lane 开线，角色只管
     expect(parseChalk(await fs.readFile(path.join(getWorkspaceRoot(pid5), rel), 'utf8')).chalk.replyTo).toBeNull();
   });
 });
+
+describe('控件围栏自愈（08-28 泉此方案：裸 nd:controls 开头补围栏）', () => {
+  it('裸文本控件被包上 ```nd:controls；已有围栏/普通正文不动', async () => {
+    const pid6 = 'proj_ctlfence_t1';
+    await ensureProjectWorkspace(pid6);
+    const ws6 = getWorkspaceRoot(pid6);
+    _resetScenes();
+    const t = makeWriteOnBoardTool({ projectId: pid6, sharedRoot: ws6, sessionId: 's1', ctx: { emit() {} } });
+    const r = await t.handler({ text: 'nd:controls\nsupersede: 章节选项\n- [A] 跟上去 -> 选A' }, {});
+    expect(r.isError, r.content?.[0]?.text).toBeUndefined();
+    const board = await readBoard(pid6);
+    const [rel] = Object.entries(board.objects).find(([id]) => id.startsWith('notes/板书/'));
+    const bodyTxt = await fs.readFile(path.join(ws6, rel), 'utf8');
+    expect(bodyTxt).toContain('```nd:controls');
+    expect(bodyTxt.match(/```/g).length).toBe(2);
+
+    const r2 = await t.handler({ text: '正文里提到 nd:controls 这个词不该被包。' }, {});
+    expect(r2.isError).toBeUndefined();
+    const board2 = await readBoard(pid6);
+    const other = Object.keys(board2.objects).filter((id) => id.startsWith('notes/板书/') && id !== rel);
+    const body2 = await fs.readFile(path.join(ws6, other[0]), 'utf8');
+    expect(body2).not.toContain('```');
+  });
+});
