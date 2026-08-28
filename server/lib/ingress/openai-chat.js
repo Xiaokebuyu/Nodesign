@@ -100,7 +100,7 @@ function splitToolResult(block) {
 
 /**
  * @param {object} parsed Anthropic Messages body（已过 transformForUpstream：model 已是 wireModel）
- * @param {{ reasoningEffort?: string, maxOutput?: number }} opts
+ * @param {{ reasoningEffort?: string, maxOutput?: number, bodyExtra?: object|null }} opts
  * @returns {object} OpenAI chat.completions body
  */
 export function toOpenAIChatRequest(parsed, opts = {}) {
@@ -172,6 +172,9 @@ export function toOpenAIChatRequest(parsed, opts = {}) {
   // 档位只看行内 reasoningEffort：Anthropic 的 thinking 字段在进到这里之前已被 transformForUpstream
   // 按行内 thinking:'strip' 删掉（fable 评审抓的：以前以它存在为前提，档位从没发出去过）
   if (opts.reasoningEffort && parsed.thinking?.type !== 'disabled') out.reasoning_effort = opts.reasoningEffort;
+  // 上游要的额外顶层字段（merge 的 `vendor` 点名）。最后合、且允许盖上面任何一个键：
+  // 它是行里明写的上游特配，比这里推导出来的默认值更该赢
+  if (opts.bodyExtra) Object.assign(out, opts.bodyExtra);
   return out;
 }
 

@@ -68,6 +68,21 @@ describe('transformForUpstream（Gemini 路：rename + strip thinking + lift）'
   });
 });
 
+describe('bodyExtra：上游要的额外顶层字段（08-28 merge 的 vendor 点名）', () => {
+  // 这份配置有两个读者，这是 **Anthropic 透传腿** 那个（它直接 JSON.stringify(parsed)）；
+  // openai-chat 腿那个读者在 lib/ingress/openai-chat.test.js
+  it('落到 parsed 顶层；没配就不动 body', async () => {
+    const wire = { wireModel: 'zai/glm-5.3-flash', thinking: 'strip', bodyExtra: { vendor: 'zai' } };
+    const parsed = { model: 'zai/glm-5.3-flash', messages: [{ role: 'user', content: 'hi' }] };
+    expect(await transformForUpstream(parsed, wire)).toBe(true);
+    expect(parsed.vendor).toBe('zai');
+
+    const plain = { model: 'zai/glm-5.3-flash', messages: [{ role: 'user', content: 'hi' }] };
+    await transformForUpstream(plain, { wireModel: 'zai/glm-5.3-flash', thinking: 'strip' });
+    expect('vendor' in plain).toBe(false);
+  });
+});
+
 describe("thinking 'adaptive' 档（08-25 MiniMax M3）", () => {
   const wire = (t) => ({ appModel: 'minimax-m3', wireModel: 'MiniMaxAI/MiniMax-M3', upstreamId: 'gmi', upstream: UPSTREAMS.gmi, thinking: t, liftImages: false });
 

@@ -129,23 +129,22 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
   }),
   // Merge Gateway（08-27）：**多厂商聚合网关**（api-gateway.merge.dev）。一个模型名后面挂着好几家部署
   // （GLM-5.3-Flash = particle + zai），网关自己挑，响应头 `x-merge-vendor` 说这一发是谁服务的。
-  // ⚠️ **挑哪家决定不了**：body 的 provider/vendor/routing.vendor、头 x-merge-vendor/x-vendor、
-  // query ?vendor=、模型名后缀 @zai/:zai 全试过（未知字段静默忽略、后缀 404）；真旋钮在它的管理 API
-  // （`/v1/keys` 回「Management API key required」），我们只有普通钥匙 → **这条上游天生带厂商轮盘**。
+  // ⭐⭐ 08-28 更正前一句「挑哪家决定不了」：**body 里写 `vendor: '<家名>'` 就能点名**，是硬闸而不是
+  // 建议（写不存在的家回 400「Vendor 'nope' does not serve model」）。头 x-merge-vendor / x-vendor、
+  // routing.vendor、模型名后缀 @zai/:zai 确实都不管用，上一趟试到这里就收工了 —— ⛔ 真正的失误是
+  // **没读 `x-merge-vendor` 响应头**：判「点名成没成」的唯一判据就是它，而当时拿"答得对不对"当判据，
+  // 那个量在轮盘下本来就时对时错。谁在服务这个模型：GET /v1/models?provider=zai 的 `vendors` 映射
+  // （particle / zai / baseten），三家的能力位和单价分开声明（baseten 同模型贵 10 倍）。
   // 钥匙 `~/apikey/merge.md`（`mg_` 46 字符），bearer 与 x-api-key 都通，取 bearer。账只在响应头上：
   // `x-credit-balance-usd: 20.00` / `x-budget-limit-usd: 10.00`，**没有余额端点**（/v1/usage 等全 404）。
   //
-  // ⛔⛔ **必须走 openai-chat 转换层，尽管它的 /v1/messages 是通的**。08-27 两条入口对打，判据是
-  // 「图里的编号答不答得出」加 prompt token 账（不是问模型有没有视觉）：
-  //   · Anthropic 原生：裸协议 6/9（文本 / 流式 tool_use 分片 / max_tokens 128k / prompt cache 命中 9024 /
-  //     count_tokens 都好），**图这一路两种摆法都不成立** —— ① 图留在 tool_result 里被当**文本**塞进去
-  //     （10KB base64 → prompt 8300 token，模型瞎编「写着 0713」「画面一片白」）3 发全错；② 换成本站
-  //     liftImages 形状 → **zai 那家 400**「ZaiException - Invalid API parameter」，6 发里 3 发。
-  //   · OpenAI chat：**转换层自己生成的同一形状**（assistant tool_calls → tool 消息 → 带 image_url 的
-  //     user 消息）27 发里 25 发答对编号，prompt 账里图也在（有图 404 / 图被丢 211）。
-  // ⚠️ 剩下 2/27 是**厂商轮盘的漏气**（实测约 7~10%）：网关丢掉图并给模型塞一句"你没有多模态能力"
-  // （模型 thinking 里原话 "I'm told I don't have multi-modal input ability"），它于是老实说看不见。
-  // ⭐ 跟 08-25 撤掉的 minimax-m2.7 不是一回事：那家**每发必丢**还假装看见，这家偶发且**会说出来**。
+  // ⛔⛔ **这条上游的行必须点名 vendor**（见行内 bodyExtra）。08-28 一次实验把三件事一起解释了：
+  // 裸请求 8/8 全落 particle，而「GLM image requests accept at most one inline PNG...」那条 400
+  // **只有 particle 报**（多图同条 0/24 全挂、跨消息 8/12 挂）；点名 zai 后同样的形状 6/6 通、认字也对。
+  // → 08-27 记的「约 7~10% 瞎图」和「Anthropic 腿的图路死」，多半是同一家的账，不是协议的账。
+  // 仍走 openai-chat：08-27 那趟它 27 发 25 对（Anthropic 腿当时 tool_result 里的图被当**文本**塞进去，
+  // 10KB base64 → prompt 8300 token；那次没点名，归因存疑）。08-28 两条腿点名后复测表现相同 ——
+  // 换腿不再被图挡着，但也没有换的理由，不动。
   //
   // count_tokens 这家**有**（回真数不是桩），仍写 false：走 openai-chat 的行不该从 Anthropic 端口取数，
   // 且实测对中文超收 1.67 倍（同段中文 count 1487 / 真实 892），跟本站本地估算一样偏高，取来不会更准。
@@ -446,11 +445,10 @@ export const MODELS_BUILTIN = Object.freeze([
     // 08-27 用户拍板**直接对全员开**（含 basic）：跟 deepseek 视觉行同一套管法 ——
     // 它**不是免费行**（四价非 0），走的是每日美元额度，basic 的 $5/天 + 表价记账管着它，
     // 而这行的单价是全表最低的一档，同样的钱能跑十倍的量。
-    // ⚠️ 已知且接受的一条：**厂商轮盘会偶发瞎图**（约 7~10%，判据与机理见上游注释）。选它的时候
-    // desc 里写明了"偶尔会漏看图"，而且模型自己会说"我看不见这张图"而不是假装看见 —— 这是它跟
-    // 08-25 撤掉的 minimax-m2.7（每发必丢还瞎编）的分界线。要收回就在 select 里加回
+    // 08-28 之前这里写着"偶发瞎图约 7~10%、已知且接受"—— 那是没点名 vendor 时的账；现在 bodyExtra
+    // 把它钉死在 zai 一家，desc 里的"偶尔会漏看图"随之撤掉。要收回这行就在 select 里加回
     // `gate: 'localGen'` 一处：清单 / PUT /model / turn.js 三个消费方都走 selectableModelsFor。
-    select: { label: 'GLM-5.3-Flash · Merge 网关', desc: '快 · 有视觉（偶尔会漏看图）· 272k 上下文 · 思考档 high · 极便宜（$0.015/$0.05 缓存 $0.003）' },
+    select: { label: 'GLM-5.3-Flash · Merge 网关', desc: '快 · 有视觉 · 272k 上下文 · 思考档 high · 极便宜（$0.015/$0.05 缓存 $0.003）' },
     api: {
       upstream: 'merge', wireModel: 'zai/glm-5.3-flash',
       // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由，08-25 起的默认写法
@@ -465,6 +463,13 @@ export const MODELS_BUILTIN = Object.freeze([
       // 「reasoning_content 优先、回退 thinking」，所以这行不用配任何东西 —— 记在这儿是给下一家看的：
       // **接新行时先看一眼它的思考字段叫什么**，掉了不报错、只是用户看不见思考。
       // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息（同 zenGo 那行）
+      // ⛔ **点名厂商，别让网关掷骰子**（08-28）：这个模型名后面挂着 particle / zai / baseten 三家，
+      // 不写这一句就几乎全落 particle，而 particle 一次只收一张图 —— 用户会撞上「400 ... accept at
+      // most one inline PNG ...」，agent 循环里第二张截图一进历史就必挂（跨消息实测 8/12 挂）。
+      // ⚠️ 代价是**这行没有故障转移了**：zai 那家挂了这行就挂，不再自动落到别家。这是故意的 ——
+      // 另外两家一个是病根、一个（baseten）同模型贵 10 倍，静默转过去等于表价说谎。真要转移是
+      // `vendors: ['zai','baseten']`（网关认这个键），但先想清楚贵 10 倍那件事。
+      bodyExtra: { vendor: 'zai' },
       // 网关目录价（$0.015/$0.05，缓存读 $0.003）。⚠️ 它的响应把真金额放在 **usage.cost** 里而不是
       // 顶层 cost（Zen 是顶层），lib/ingress/upstream-billing.js 的 upstreamCostOf 两处都认，
       // 所以额度口径以上游自报为准，这里的表价是兜底

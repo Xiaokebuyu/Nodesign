@@ -4,6 +4,16 @@ import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAITo
 const img = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
 
 describe('toOpenAIChatRequest', () => {
+  // bodyExtra 有两个读者（另一个是 transformForUpstream 给 Anthropic 透传腿用的），这是 openai-chat 腿那个
+  it('bodyExtra 合进顶层，且盖得过推导出来的键', () => {
+    const base = { model: 'x', max_tokens: 100, messages: [{ role: 'user', content: 'hi' }] };
+    expect(toOpenAIChatRequest(base, {}).vendor).toBeUndefined();
+    const out = toOpenAIChatRequest(base, { bodyExtra: { vendor: 'zai' } });
+    expect(out.vendor).toBe('zai');
+    // 行里明写的上游特配比这里推导的默认值更该赢
+    expect(toOpenAIChatRequest(base, { maxOutput: 500, bodyExtra: { max_tokens: 7 } }).max_tokens).toBe(7);
+  });
+
   it('system 块 / 字符串 content / tools / tool_choice / thinking→reasoning_effort / stream_options', () => {
     const out = toOpenAIChatRequest({
       model: 'x', stream: true, max_tokens: 32000,

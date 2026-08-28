@@ -99,6 +99,10 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
     expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
+    // ⛔ Merge 网关必须点名厂商：不点名几乎全落 particle，而 particle 一次只收一张图
+    //（08-28 实测「400 ... accept at most one inline PNG」只有它报）。删掉这句 = 用户的
+    // agent 循环里第二张截图一进历史就必挂，而且只在真会话里才看得见，所以钉一条断言在这里
+    expect(resolveWireModel('glm-5.3-flash-merge')?.bodyExtra).toEqual({ vendor: 'zai' });
     expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
   });
 
