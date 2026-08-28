@@ -36,7 +36,8 @@ describe('首页便签纸的横线与光标', () => {
   const ta = rule('.ndd-pad textarea ');
 
   it('横线画在 textarea 自己身上，且 background-attachment 是 local', () => {
-    expect(ta, '横线的渐变不在 textarea 上 —— 画在外层就不会跟着内容滚').toMatch(/background-image:\s*linear-gradient/);
+    // 渐变本体 08-28 收进了配方变量 --rules（两种纸各一份，揭页动画的复制品也读它）
+    expect(ta, '横线的渐变不在 textarea 上 —— 画在外层就不会跟着内容滚').toMatch(/background-image:\s*var\(--rules\)/);
     expect(ta, 'background-attachment 必须是 local，否则滚动时横线会横穿字面').toMatch(/background-attachment:\s*local/);
   });
 
@@ -45,13 +46,26 @@ describe('首页便签纸的横线与光标', () => {
     expect(ta).not.toMatch(/(?:^|[;\s])background:\s/);
   });
 
-  it('格高 = 行高 = background-size 的高，三个数必须是同一个', () => {
+  it('格高 = 行高 = background-size 的高 = **每一条** --rules 的循环', () => {
     const lineHeight = num(ta, 'line-height');
-    const cell = Number(ta.match(/background-size:\s*100%\s*([\d.]+)px/)?.[1]);
-    const grad = Number(ta.match(/linear-gradient\(180deg,[^;]*?[\d.]+px ([\d.]+)px\)/)?.[1]);
     expect(lineHeight).toBe(29);
+    const cell = Number(ta.match(/background-size:\s*100%\s*([\d.]+)px/)?.[1]);
     expect(cell, `background-size 的格高 ${cell} 跟行高 ${lineHeight} 对不上`).toBe(lineHeight);
-    expect(grad, `渐变一个循环 ${grad} 跟行高 ${lineHeight} 对不上`).toBe(lineHeight);
+    // 配方里每一条格线渐变（两种纸 × 平时/聚焦 = 四条）都得是同一个循环。
+    // 08-28 把渐变收进变量之后，"改一处忘了另一处"从两处变成四处 —— 一起对。
+    const grads = [...CSS.matchAll(/(--rules(?:-on)?):\s*linear-gradient\(180deg,[^;]*?[\d.]+px ([\d.]+)px\)/g)]
+      .map((m) => ({ name: m[1], v: Number(m[2]) }));
+    expect(grads.length, '找不到 --rules 的渐变？配方写法变了，这条 lint 要跟着改')
+      .toBeGreaterThanOrEqual(4);
+    const bad = grads.filter((g) => g.v !== lineHeight);
+    expect(bad, `这几条格线的循环跟行高 ${lineHeight} 对不上：${JSON.stringify(bad)}`).toEqual([]);
+    // 揭页复制品自己画一份格线（它没有 textarea），格高也得是同一个
+    const peel = rule('.ndd-peel .lines ');
+    const peelCell = Number(peel.match(/background-size:\s*100%\s*([\d.]+)px/)?.[1]);
+    expect(peelCell, `被揭掉那张纸的格高 ${peelCell} 跟真输入框 ${lineHeight} 对不上 —— `
+      + '切换那一瞬横线会跳一下').toBe(lineHeight);
+    expect(num(peel, 'line-height'), '复制品的行高也得一样，不然带走的那份正文会错行')
+      .toBe(lineHeight);
   });
 
   it('max-height 是格高的整数倍，且跟 JS 里那个自动撑高的上限是同一个数', () => {
@@ -96,30 +110,42 @@ describe('首页便签纸的横线与光标', () => {
  */
 describe('首页页签跟纸的接缝', () => {
   const strip = rule('.ndd-pad .tabs ');
-  const off = rule('.ndd-pad .tabs button ');
-  const on = rule('.ndd-pad .tabs button.on ');
+  const off = rule('.ndd-pad .tabs > * ');
+  const on = rule('.ndd-pad .tabs > *.on ');
 
   /**
-   * **每一种纸**都得有配套的页签颜色，不是只有默认那张。
-   *
-   * 08-28 演出那张纸换成稿纸（.ndd-pad.rp 换底色）时就差点漏掉：纸转成米黄、
-   * 页签还是白的，选中那片会在纸上露出一道白边。以后再加第三种模式同理 ——
-   * 所以这条按**模式类**枚举，加一种纸就自动多一条要求，而不是手写两个断言。
+   * 底色 08-28 收成一个变量：纸和它的签都写 var(--sheet)，配方类换的是变量的值。
+   * 于是"两边颜色对不上"这条债从**每加一种纸就多一条**变成**结构上不可能**——
+   * 这条 lint 现在守的是这个结构本身别被人改回去写死颜色。
    */
-  it('每一种纸的底色都有配套的页签颜色（选中那片必须跟它脚下的纸同色）', () => {
+  it('纸和它的签读的是同一个变量（写死颜色就等于把接缝的债又请回来）', () => {
     const bgOf = (body) => body.match(/background-color:\s*([^;]+)/)?.[1].trim() || null;
-    // CSS 里所有形如 `.ndd-pad` / `.ndd-pad.rp` 且设了底色的规则 = 有几种纸
-    const papers = [...CSS.matchAll(/(^|\n)(\.ndd-pad((?:\.[a-z][\w-]*)*))\s*\{([^}]*)\}/g)]
-      .map((m) => ({ sel: m[2], mod: m[3], bg: bgOf(m[4].replace(/\/\*[\s\S]*?\*\//g, ' ')) }))
-      .filter((r) => r.bg);
-    expect(papers.length, '一种纸都没找到？.ndd-pad 的底色写法变了，这条 lint 要跟着改')
+    expect(bgOf(rule('.ndd-pad ')), '.ndd-pad 的底色得读配方变量 --sheet').toBe('var(--sheet)');
+    expect(bgOf(on), '选中那片签的底色也得读 --sheet —— 跟纸是同一张纸').toBe('var(--sheet)');
+  });
+
+  /** 配方缺一个变量 = var() 落空 = 那张纸整块没底色/没格线，而且一声不吭 */
+  it('每种纸的配方四个变量齐全（--sheet / --sheet-under / --rules / --rules-on）', () => {
+    const recipes = [...CSS.matchAll(/\.nd-sheet-([a-z][\w-]*)\s*\{([^}]*)\}/g)]
+      .filter((m) => m[2].includes('--sheet:'));
+    expect(recipes.length, '一份配方都没找到？.nd-sheet-* 改名了，这条 lint 要跟着改')
       .toBeGreaterThanOrEqual(2);
-    expect(papers[0].bg, '.ndd-pad 得用 background-color 长写法（简写会顺手重置别的）')
-      .toBe('var(--paper)');
-    for (const pap of papers) {
-      const tabBg = bgOf(rule(`.ndd-pad${pap.mod} .tabs button.on `));
-      expect(tabBg, `${pap.sel} 的纸是 ${pap.bg}，它的选中页签是 ${tabBg} —— `
-        + '两者必须一模一样，否则页签跟纸的交界处露一道边').toBe(pap.bg);
+    for (const [, name, body] of recipes) {
+      for (const v of ['--sheet:', '--sheet-under:', '--rules:', '--rules-on:']) {
+        expect(body.includes(v), `.nd-sheet-${name} 缺 ${v} —— var() 落空是静默的，`
+          + '那张纸会整块没底色或者没格线').toBe(true);
+      }
+    }
+  });
+
+  /** JSX 挑配方类靠一张表，表里写错一个字就是"那种纸压根没有配方" */
+  it('SHEET_CLS 里的每个类名在 CSS 里都真有配方', () => {
+    const tbl = ENTRY.match(/const SHEET_CLS = \{([^}]*)\}/)?.[1];
+    expect(tbl, 'home-quick-entry.jsx 里找不到 SHEET_CLS').toBeTruthy();
+    const cls = [...tbl.matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
+    expect(cls.length, 'SHEET_CLS 是空的？').toBeGreaterThanOrEqual(2);
+    for (const c of cls) {
+      expect(CSS.includes(`.${c} {`), `SHEET_CLS 指到 .${c}，但 CSS 里没有这份配方`).toBe(true);
     }
   });
 

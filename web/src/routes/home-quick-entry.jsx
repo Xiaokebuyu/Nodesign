@@ -80,6 +80,14 @@ function pickPlaceholder(mode) {
   return t(pool[Math.floor(Math.random() * pool.length)]);
 }
 
+/**
+ * 两种纸：类名 = home-styles.js 里那组配方（底色/格线/版心/底下压着什么纸）。
+ * 真输入框和"正在被揭掉的那张"挂同一个类，所以纸长什么样只有一份定义。
+ */
+const SHEET_CLS = { design: 'nd-sheet-design', rp: 'nd-sheet-rp' };
+/** 页签上的字。⚠️ 别在这儿包 t()：模块级 const 只求值一次，会把语言烤死 */
+const MODE_LABEL = { design: '设计', rp: '演出' };
+
 /** 首页的模式偏好只是个本地便利：读不到就落 design，绝不因此报错 */
 const MODE_LS_KEY = 'nd-home-mode';
 function readModePref() {
@@ -104,7 +112,21 @@ export default function QuickEntry({ prefill }) {
   // 是哪种（服务端 projects.mode），不是页面状态 —— 切换记进 localStorage 当默认。
   const [mode, setMode] = useState(readModePref);
   const [placeholder, setPlaceholder] = useState(() => pickPlaceholder(readModePref()));
+  /**
+   * 正在被揭掉的那张纸（2026-08-28）。输入栏是一叠纸，切换 = 从最外层揭掉一张：
+   * 把当前这张的样子原地复制一份浮上去翻飞出去，底下露出来的已经是新的那张。
+   * 连正文一起复制 —— 不带的话切换那一刻正文先消失、动画完了新 placeholder 才
+   * 出现，比不做动画还糟。h 是切换那一刻量到的 textarea 真高（纸的高度是内容
+   * 撑的，复制品没有 textarea，量不出来就只能猜）。
+   */
+  const [peel, setPeel] = useState(null);   // { id, from, h, text, ph }
+  const peelSeq = useRef(0);
   const pickMode = (m) => {
+    if (m === mode) return;
+    setPeel({
+      id: ++peelSeq.current, from: mode,
+      h: ref.current?.offsetHeight || 116, text, ph: placeholder,
+    });
     setMode(m);
     setPlaceholder(pickPlaceholder(m));
     try { localStorage.setItem(MODE_LS_KEY, m); } catch { /* 存不上就每次手选 */ }
@@ -279,7 +301,7 @@ export default function QuickEntry({ prefill }) {
       {/* 点纸上任何空白都算点进输入框 —— 左边那条页边、上下留白、横线下面那片
           都是纸的一部分，点了没反应会让人以为"这纸不能写" */}
       <div
-        className={mode === 'rp' ? 'ndd-pad rp' : 'ndd-pad'}
+        className={`ndd-pad ${SHEET_CLS[mode]}`}
         onMouseDown={(e) => {
           if (e.target.closest('button, textarea, input, a')) return;
           e.preventDefault();
@@ -305,14 +327,33 @@ export default function QuickEntry({ prefill }) {
             className={mode === 'design' ? 'on' : undefined}
             onClick={() => pickMode('design')} disabled={submitting}
             title={t('设计：做网页、海报、文档这一类东西')}
-          >{t('设计')}</button>
+          >{t(MODE_LABEL.design)}</button>
           <button
             type="button" role="radio" aria-checked={mode === 'rp'}
             className={mode === 'rp' ? 'on' : undefined}
             onClick={() => pickMode('rp')} disabled={submitting}
             title={t('演出：常驻角色在画布上演故事')}
-          >{t('演出')}</button>
+          >{t(MODE_LABEL.rp)}</button>
         </div>
+        {/* 被揭掉的那张：整张纸的复制品（同一套配方类，所以不用重写任何皮），
+            翻飞出去后 animationend 自己收掉。它盖住底下的正文和签，但盖不住
+            回形针 —— 针别的是整叠，纸是从针底下抽走的（.clip 的 z 比它高）。 */}
+        {peel && (
+          <div
+            key={peel.id}
+            className={`ndd-pad ${SHEET_CLS[peel.from]} ndd-peel`}
+            aria-hidden="true"
+            onAnimationEnd={() => setPeel((cur) => (cur && cur.id === peel.id ? null : cur))}
+          >
+            <div className="tabs">
+              <span className={peel.from === 'design' ? 'on' : undefined}>{t(MODE_LABEL.design)}</span>
+              <span className={peel.from === 'rp' ? 'on' : undefined}>{t(MODE_LABEL.rp)}</span>
+            </div>
+            <div className="lines" style={{ height: peel.h }}>
+              {peel.text || <span className="ph">{`\u2002${peel.ph}`}</span>}
+            </div>
+          </div>
+        )}
         <Clip cx="14%" />
         {/* 横线跟 textarea 严丝合缝地同高，见 .ndd-pad .lines 的注释 */}
         <div className="lines">

@@ -118,25 +118,76 @@ export const CSS = `
 .ndd-pad .tabs { position: absolute; right: 30px; bottom: 100%; margin-bottom: -6px;
   display: flex; align-items: flex-end; gap: 5px; z-index: 3; }
 /* 没选的那片：牛皮色、矮一档、无影（无影才读得出"它在纸后面"） */
-.ndd-pad .tabs button { appearance: none; border: none; cursor: pointer;
+.ndd-pad .tabs > * { appearance: none; border: none; cursor: pointer;
   font: 700 13px var(--kai); letter-spacing: 0.2em; text-indent: 0.2em;
   padding: 4px 15px 10px; margin-bottom: 6px; border-radius: 2px 2px 0 0;
   background: var(--kraft); color: rgba(96,84,64,0.85);
   /* 下缘压一道很浅的接触阴影：这一片在前面那张纸的**后面**，交界处该暗一点。
      没有它的时候，牛皮色那片比纸色那片还显眼，"哪个是选中的"会读反。 */
   box-shadow: inset 0 -4px 5px -4px rgba(93,74,44,0.55);
-  transition: margin-bottom 0.15s, color 0.15s; }
-/* 选中那片 = 这张纸的一部分：同色同颗粒（背景色必须跟 .ndd-pad 是同一个 token，
-   差一点就露出接缝）、高一档、下缘伸进纸里 */
-.ndd-pad .tabs button.on { padding-top: 7px; margin-bottom: 0; color: var(--red);
-  background-color: var(--paper); background-image: var(--grain); box-shadow: none; }
+  /* 底色/字色跟着揭页的节奏渐变（0.26s vs 动画 0.48s）：飞走的那张带走自己那片签，
+     底下两片签在这段时间里换班 —— 硬切的话切换那一瞬两片签会同时看着像选中的。
+     margin 那一档照旧快，它管的是"摸上去抬一下"，慢了就黏手。 */
+  transition: margin-bottom 0.15s, color 0.26s, background-color 0.26s; }
+/* 选中那片 = 这张纸的一部分：高一档、下缘伸进纸里、**跟纸读同一个 --sheet**。
+   底色不再各写各的 —— 纸和它的签是同一张纸，写成两处早晚分叉（08-28 换稿纸
+   底色那次就差点漏掉这里，选中那片会在米黄纸上露出一道白边）。 */
+.ndd-pad .tabs > *.on { padding-top: 7px; margin-bottom: 0; color: var(--red);
+  background-color: var(--sheet); background-image: var(--grain); box-shadow: none; }
 /* 摸上去抬一下：纸签是能捏起来的东西 */
-.ndd-pad .tabs button:not(.on):hover { margin-bottom: 9px; color: var(--ink); }
-.ndd-pad .tabs button:disabled { cursor: default; opacity: 0.55; }
+.ndd-pad .tabs > *:not(.on):hover { margin-bottom: 9px; color: var(--ink); }
+.ndd-pad .tabs > *:disabled { cursor: default; opacity: 0.55; }
+
+/* ===== 两种纸的配方（2026-08-28）=====
+
+   一张纸 = 底色 + 格线 + 页边/版心 + 它下面压着的那张是什么纸。四样打包成一组
+   自定义属性，**真输入框和"正在被揭掉的那张"共用同一份** —— 揭页动画要在飞出去
+   的那张纸上原样重现旧纸，两处各写一遍必然分叉：改了纸色忘了改另一处，平时看不出
+   来，一按切换当场露馅。
+
+   ⭐ 顺带治好了一个真踩过的坑：原来两种纸抢同一个 ::before（笔记本拿它画页边线、
+   稿纸拿它画版心框），而基础规则的 :focus-within 会把它整个填成红色 —— 稿纸那版
+   漏写一句 background:transparent，一点进输入框整个版心糊成一块红砖。现在**每种纸
+   的 ::before 各自从零声明**，不存在"同一个伪元素被两条规则当两种东西用"。 */
+.nd-sheet-design {
+  --sheet: var(--paper);
+  --sheet-under: var(--aged);
+  --rules:    linear-gradient(180deg, transparent 0 28px, rgba(43,33,23,0.17) 28px 29px);
+  --rules-on: linear-gradient(180deg, transparent 0 28px, rgba(43,33,23,0.24) 28px 29px);
+}
+.nd-sheet-rp {
+  --sheet: var(--aged);
+  --sheet-under: var(--paper);
+  --rules:    linear-gradient(180deg, transparent 0 28px, rgba(168,54,43,0.16) 28px 29px);
+  --rules-on: linear-gradient(180deg, transparent 0 28px, rgba(168,54,43,0.26) 28px 29px);
+}
+/* 笔记本：左边一条红页边线，字写在线右边 */
+.nd-sheet-design::before { content: ''; position: absolute; left: 40px; top: 0; bottom: 0;
+  width: 1px; background: rgba(168,54,43,0.34); }
+.ndd-pad.nd-sheet-design:focus-within::before { background: rgba(168,54,43,0.6); }
+/* 稿纸：书写区整个框进版心，左边那条粗一档 —— 装订侧，跟页边线是同一个位置的东西 */
+.nd-sheet-rp::before { content: ''; position: absolute; left: 34px; right: 16px;
+  top: 13px; bottom: 11px;
+  border: 1px solid rgba(168,54,43,0.32); border-left-width: 2px; }
+.ndd-pad.nd-sheet-rp:focus-within::before { border-color: rgba(168,54,43,0.52); }
 .ndd-pad { position: relative; max-width: 720px; margin: 0 auto;
   padding: 26px 24px 16px 58px;
-  background-color: var(--paper); background-image: var(--grain);
-  box-shadow: ${PAPER_SHADOW.mid};
+  background-color: var(--sheet); background-image: var(--grain);
+  /* 纸堆（2026-08-28）：这不是一张纸，是一叠 —— 底下两张的边从左下角露出来。
+     叠里**两种纸交替**，所以第二张是 --sheet-under、第三张又回到 --sheet：
+     露出来那一线米黄就是在预告"底下压着另一种纸"，也是切换动画的落点。
+     用 box-shadow 画而不是加两个 div：纸的高度是内容撑的，影子自动跟着长。
+     顺序 = 从前到后：顶上这张的接触影 → 第二张的纸边 → 它的影 → 第三张 → 它的影，
+     最后一层（整叠落在桌上的环境影）写在 box-shadow 里，聚焦时只换那一层。 */
+  --stack:
+    -1px 2px 3px rgba(93,74,44,0.15),
+    -3px 4px 0 -1px var(--sheet-under),
+    -3px 4px 2px -1px rgba(93,74,44,0.17),
+    -6px 8px 0 -2px var(--sheet),
+    -6px 8px 3px -2px rgba(93,74,44,0.15),
+    -9px 12px 0 -3px var(--sheet-under),
+    -9px 12px 4px -3px rgba(93,74,44,0.13);
+  box-shadow: var(--stack), -3px 6px 12px rgba(93,74,44,0.15);
   transform: rotate(-0.35deg);
   /* 2026-08-20：模型下拉被下面的项目卡盖住。transform 让这张纸自成一个层叠上下文，
      ModelPicker 菜单的 zIndex:60 只在纸内部有效；而项目卡的图钉/菜单（.pin/.last/
@@ -144,40 +195,7 @@ export const CSS = `
      给纸一个高于 9 的层级 —— 纸和卡片在空间上不重叠，只有菜单弹出来时才见分晓。 */
   z-index: 10;
   transition: box-shadow 0.2s; }
-/* 笔记本红边线：字写在线右边，跟随便贴一张白纸区分开 */
-.ndd-pad::before { content: ''; position: absolute; left: 40px; top: 0; bottom: 0; width: 1px;
-  background: rgba(168,54,43,0.34); }
-/* ===== 演出那张纸：稿纸（2026-08-28 第二版）=====
-
-   第一版只把红边线加粗成双线，用户当场判"输入框纸张本体一点没变" —— 是对的：
-   4px 的一条淡线在 720px 的纸上等于没有。**换页签必须真换一张纸**，不然
-   "你正写在哪张纸上"这句话是空的。
-
-   设计那张是笔记本：白纸、一条页边线、灰蓝横格。
-   演出这张是稿纸：纸转旧、书写区框进版心、格线换成印刷的红棕。三样一起动，
-   隔着一屏也认得出是两张不同的纸；而**几何一个数都没动**（还是 29px 一格、
-   还是同一根红光标），所以横线那族的债一条都没多。
-
-   ⚠️ 底色换了，页签的接缝也得跟着换（.tabs button.on 必须跟纸同色），
-   否则选中那片会在纸上露出一道白边 —— 由 home-pad.lint.test.js 逐档对。 */
-.ndd-pad.rp { background-color: var(--aged); }
-.ndd-pad.rp .tabs button.on { background-color: var(--aged); }
-/* 版心框：笔记本只有左边一条页边线，稿纸是把书写区整个框起来。
-   左边那条粗一档 —— 装订侧，跟原来那条页边线是同一个位置的东西。 */
-.ndd-pad.rp::before { left: 34px; right: 16px; top: 13px; bottom: 11px; width: auto;
-  background: transparent; border: 1px solid rgba(168,54,43,0.32); border-left-width: 2px; }
-/* ⛔ background 这里必须再写一遍：基础规则的 「.ndd-pad:focus-within::before」 会把
-   ::before 整个填成红色（笔记本那条页边线聚焦时加深，靠的就是它）。第一版漏了这句，
-   一点进输入框整个版心就糊成一块红砖 —— 同一个伪元素被两条规则当两种东西用，
-   改一处必查另一处。 */
-.ndd-pad.rp:focus-within::before { background: transparent; border-color: rgba(168,54,43,0.52); }
-/* 格线换成红棕：稿纸的格子是印上去的红线，不是笔记本的灰蓝铅印。
-   ⚠️ 29 / 28 两个数跟基础规则一字不差 —— 只换颜色，不碰几何。 */
-.ndd-pad.rp textarea {
-  background-image: linear-gradient(180deg, transparent 0 28px, rgba(168,54,43,0.16) 28px 29px); }
-.ndd-pad.rp:focus-within textarea {
-  background-image: linear-gradient(180deg, transparent 0 28px, rgba(168,54,43,0.26) 28px 29px); }
-.ndd-pad .clip { position: absolute; top: -14px; left: var(--cx, 18%); width: 18px; z-index: 4;
+.ndd-pad .clip { position: absolute; top: -14px; left: var(--cx, 18%); width: 18px; z-index: 8;
   filter: drop-shadow(-1px 2px 2px rgba(43,33,23,0.3)); }
 /* 这一层只剩一个用处：给红光标当定位参照（它的高度恒等于 textarea 的高度）。
    横线本身 2026-08-21 挪到 textarea 自己身上去了，理由见下面那条注释。 */
@@ -212,17 +230,55 @@ export const CSS = `
      ⚠️ 上面必须写 background-color 而不是 background 简写：简写会把 attachment 重置回
      scroll，横线又不跟着滚了，而且这种回退不报错、只在滚起来之后才看得见。
      ⚠️ 29px 这个格高跟 line-height 是同一个数，改一个必须改另一个。 */
-  background-image: linear-gradient(180deg, transparent 0 28px, rgba(43,33,23,0.17) 28px 29px);
+  background-image: var(--rules);
   background-size: 100% 29px; background-position: 0 0; background-attachment: local; }
 .ndd-pad textarea.composing { caret-color: var(--red); }
 .ndd-pad textarea::placeholder { color: var(--pencil); }
 /* 光标之外还得有个状态信号：整张纸没有边框，光靠一根闪的竖线判断"进没进输入态"
    太吃力。聚焦时纸抬起来一档、横线加深、红边线变实 —— 三样一起动，看不错。 */
-.ndd-pad:focus-within { box-shadow: ${PAPER_SHADOW.near}; }
-.ndd-pad:focus-within::before { background: rgba(168,54,43,0.6); }
-.ndd-pad:focus-within textarea {
-  background-image: linear-gradient(180deg, transparent 0 28px, rgba(43,33,23,0.24) 28px 29px); }
-.ndd-pad .bar { display: flex; align-items: center; gap: 10px; padding-top: 14px; }
+/* 聚焦只换整叠落在桌上那一层影，纸堆本身（--stack）原样 —— 抬起来的是整叠，
+   不是最上面那张自己飘起来 */
+.ndd-pad:focus-within { box-shadow: var(--stack), -6px 13px 26px rgba(93,74,44,0.22); }
+.ndd-pad:focus-within textarea { background-image: var(--rules-on); }
+/* ===== 揭掉最外层那一张（2026-08-28）=====
+
+   用户要的场景：输入栏是一叠无限堆叠的纸，每切一次模式就从最外层揭掉一张。
+
+   做法：切换的那一刻，把**当前这张纸的样子**原地复制一份浮在上面（.ndd-peel），
+   让它绕上边缘翻上去飞走；底下露出来的已经是新的那张。复制品直接挂 .ndd-pad +
+   配方类，纸色/格线/版心/页签几何**一行都不用重写**，全靠上面那组自定义属性。
+
+   ⚠️ 正文也得跟着走。不带的话切换那一刻正文先消失、480ms 后新 placeholder 才
+   出现，比不做动画还糟。所以复制品里画一份静态的字（.lines，高度是切换那一刻
+   量到的 textarea 真高）。
+   ⚠️ 它不参与交互也不进无障碍树（pointer-events:none + aria-hidden）。
+   ⚠️ 每张纸自带一枚签：飞走的那张把自己的签一起带走，底下那张的签当场露出来 ——
+   所以复制品里另一片签是 visibility:hidden（占位不显形，让真的那片透上来）。 */
+.ndd-peel { position: absolute; inset: 0; margin: 0; z-index: 6; pointer-events: none;
+  box-shadow: ${PAPER_SHADOW.near};
+  transform-origin: 50% 0;
+  animation: nddPeelOff 480ms cubic-bezier(0.42, 0, 0.22, 1) forwards; }
+.ndd-peel .tabs > *:not(.on) { visibility: hidden; }
+.ndd-peel .lines { background-image: var(--rules); background-size: 100% 29px;
+  background-position: 0 0; overflow: hidden;
+  font: 16.5px var(--kai); line-height: 29px; color: var(--ink);
+  white-space: pre-wrap; overflow-wrap: break-word; }
+.ndd-peel .lines .ph { color: var(--pencil); }
+/* 绕上边缘往上翻（origin 在顶边）：底边先抬起来一点脱开纸叠，再整张翻上去。
+   rotateX 是负的 —— 顶边不动、底边往上并且往里退，就是从本子上撕下一页的动作。 */
+@keyframes nddPeelOff {
+  0%   { transform: perspective(1600px) rotateX(0deg); opacity: 1; }
+  16%  { transform: perspective(1600px) rotateX(-5deg) translateY(-3px); opacity: 1; }
+  100% { transform: perspective(1600px) rotateX(-88deg) translateY(-12px); opacity: 0; }
+}
+/* 关掉动效的人：不演，但还得让 animationend 发出来把复制品收掉 */
+@media (prefers-reduced-motion: reduce) {
+  .ndd-peel { animation-duration: 1ms; }
+}
+/* z 比揭走那张纸高（跟回形针同理）：+ / 模型 / 开工 这排是**这一叠**的家什，
+   不是写在被揭掉那张纸上的东西。不抬的话切换那一瞬整排工具会先消失半秒。 */
+.ndd-pad .bar { display: flex; align-items: center; gap: 10px; padding-top: 14px;
+  position: relative; z-index: 7; }
 .ndd-pad .tip { font: 11px var(--kai); color: var(--pencil); letter-spacing: 0.02em; }
 .ndd-pad .att { width: 27px; height: 27px; border-radius: 50%; flex-shrink: 0;
   background: transparent; border: 1px solid rgba(43,33,23,0.2); color: var(--ink-2);
@@ -373,7 +429,7 @@ export const CSS = `
   /* 页签跟着往里收（右边留白从 30 收到 14），字距也收 —— 窄屏上两片签
      加起来要占掉纸宽的一半就太抢了 */
   .ndd-pad .tabs { right: 14px; }
-  .ndd-pad .tabs button { padding: 4px 11px 10px; letter-spacing: 0.12em;
+  .ndd-pad .tabs > * { padding: 4px 11px 10px; letter-spacing: 0.12em;
     text-indent: 0.12em; }
   /* 工具栏一行排不下就折行；「开工」始终自己占右边 */
   .ndd-pad .bar { flex-wrap: wrap; gap: 8px; padding-top: 12px; }
