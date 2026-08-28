@@ -298,30 +298,12 @@ export default function QuickEntry({ prefill }) {
   return (
     <>
       <div className="ndd-greet">{greeting}</div>
-      {/* 点纸上任何空白都算点进输入框 —— 左边那条页边、上下留白、横线下面那片
-          都是纸的一部分，点了没反应会让人以为"这纸不能写" */}
-      <div
-        className={`ndd-pad ${SHEET_CLS[mode]}`}
-        onMouseDown={(e) => {
-          if (e.target.closest('button, textarea, input, a')) return;
-          e.preventDefault();
-          const ta = ref.current;
-          if (!ta) return;
-          ta.focus();
-          // 从纸面进来时把插入点滚回视野（2026-08-21）。focus() 本身不管滚动，而长文里
-          // 插入点很可能停在看不见的地方 —— 那就是"点了纸却没有光标"，用户会以为这纸点不动。
-          const h = ta.clientHeight;
-          if (!h) return;
-          const { y } = measureCaret(ta);
-          if (y < 0) ta.scrollTop += y;
-          else if (y + CARET_H > h) ta.scrollTop += y + CARET_H - h;
-        }}
-      >
-        {/* 页签（2026-08-28 换掉纸外面那枚胶囊）：模式不是一颗开关，是"这句话
-            写在哪张纸上"。两片索引签贴在纸的上边缘 —— 选中的那片跟纸同色同颗粒、
-            下缘压进纸里连成一体，没选的那片矮一档、停在纸的边线上，像压在后面的
-            另一张。皮全在 home-styles.js 的 .ndd-pad .tabs 那一段。 */}
-        <div className="tabs" role="radiogroup" aria-label={t('项目模式')}>
+      {/* 一叠纸（2026-08-28）。页签是**这一叠**的东西，不是最上面那张纸的东西 ——
+          所以它跟纸是兄弟、DOM 上排在纸前面 = 层叠上被纸压住，露在纸上沿外面的
+          那一截才是能看见的部分。选中那张的签跟纸同色，接口处自然连成一体；没选的
+          那张是牛皮色，实实在在被纸压着。两片签因此**从头到尾不动一个像素**。 */}
+      <div className={`ndd-stack ${SHEET_CLS[mode]}`}>
+        <div className="nd-tabs" role="radiogroup" aria-label={t('项目模式')}>
           <button
             type="button" role="radio" aria-checked={mode === 'design'}
             className={mode === 'design' ? 'on' : undefined}
@@ -335,94 +317,112 @@ export default function QuickEntry({ prefill }) {
             title={t('演出：常驻角色在画布上演故事')}
           >{t(MODE_LABEL.rp)}</button>
         </div>
-        {/* 被揭掉的那张：整张纸的复制品（同一套配方类，所以不用重写任何皮），
-            翻飞出去后 animationend 自己收掉。它盖住底下的正文和签，但盖不住
-            回形针 —— 针别的是整叠，纸是从针底下抽走的（.clip 的 z 比它高）。 */}
-        {peel && (
-          <div
-            key={peel.id}
-            className={`ndd-pad ${SHEET_CLS[peel.from]} ndd-peel`}
-            aria-hidden="true"
-            onAnimationEnd={() => setPeel((cur) => (cur && cur.id === peel.id ? null : cur))}
-          >
-            <div className="tabs">
-              <span className={peel.from === 'design' ? 'on' : undefined}>{t(MODE_LABEL.design)}</span>
-              <span className={peel.from === 'rp' ? 'on' : undefined}>{t(MODE_LABEL.rp)}</span>
+        {/* 点纸上任何空白都算点进输入框 —— 左边那条页边、上下留白、横线下面那片
+            都是纸的一部分，点了没反应会让人以为"这纸不能写" */}
+        <div
+          className="ndd-pad"
+          onMouseDown={(e) => {
+            if (e.target.closest('button, textarea, input, a')) return;
+            e.preventDefault();
+            const ta = ref.current;
+            if (!ta) return;
+            ta.focus();
+            // 从纸面进来时把插入点滚回视野（2026-08-21）。focus() 本身不管滚动，而长文里
+            // 插入点很可能停在看不见的地方 —— 那就是"点了纸却没有光标"，用户会以为这纸点不动。
+            const h = ta.clientHeight;
+            if (!h) return;
+            const { y } = measureCaret(ta);
+            if (y < 0) ta.scrollTop += y;
+            else if (y + CARET_H > h) ta.scrollTop += y + CARET_H - h;
+          }}
+        >
+          {/* 被揭掉的那张：整张纸的复制品（自带一份旧配方，所以不用重写任何皮），
+              翻飞出去后 animationend 自己收掉。
+              ⚠️ 它**不带页签** —— 签是整叠的东西，钉在纸叠上不动；只有纸被抽走。
+              也盖不住回形针和工具栏（两者 z 都比它高）：针别的是整叠，
+              +/模型/开工 是这一叠的家什，纸是从它们底下抽走的。 */}
+          {peel && (
+            <div
+              key={peel.id}
+              className={`ndd-pad ${SHEET_CLS[peel.from]} ndd-peel`}
+              aria-hidden="true"
+              onAnimationEnd={() => setPeel((cur) => (cur && cur.id === peel.id ? null : cur))}
+            >
+              <div className="lines" style={{ height: peel.h }}>
+                {peel.text || <span className="ph">{`\u2002${peel.ph}`}</span>}
+              </div>
             </div>
-            <div className="lines" style={{ height: peel.h }}>
-              {peel.text || <span className="ph">{`\u2002${peel.ph}`}</span>}
-            </div>
-          </div>
-        )}
-        <Clip cx="14%" />
-        {/* 横线跟 textarea 严丝合缝地同高，见 .ndd-pad .lines 的注释 */}
-        <div className="lines">
-          {/* 那根红竖线：空框时蹲在起笔位当邀请，打字时跟着插入点走。
-              原生 caret 全程让位（见 .ndd-pad textarea 的 caret-color），只有
-              输入法组字那几百毫秒交还回去。
-              placeholder 前面的 en space 是给它腾的位，第一个字落下来不横跳。
-              不聚焦又有字时不画 —— 那时候没人在编辑，一根闪的线是噪音。
-              插入点滚出视野时也不画（caretAt.off），否则红线会飘到框外面去。 */}
-          {!composing && (!text || focused) && !caretAt.off && (
-            <span className="caret" aria-hidden="true"
-              style={{ transform: `translate(${caretAt.x}px, ${caretAt.y}px)` }} />
           )}
-          <textarea
-            ref={ref}
-            className={composing ? 'composing' : undefined}
-            value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={handleKey}
-            // 光标移动（方向键 / 点到中间 / 拖选）走 onSelect，它比 keyup 全
-            onSelect={syncCaret}
-            onScroll={syncCaret}
-            onFocus={() => { setFocused(true); syncCaret(); }}
-            onBlur={() => setFocused(false)}
-            onCompositionStart={() => setComposing(true)}
-            onCompositionEnd={() => { setComposing(false); syncCaret(); }}
-            placeholder={`\u2002${placeholder}`}
-            rows={1}
-            disabled={submitting}
-            style={{ opacity: submitting ? 0.5 : 1 }}
-          />
-        </div>
-        <ComposerTray items={attachments} onRemove={handleRemoveAtt} />
-        <div className="bar">
-          <button
-            className="att"
-            title={t('上传附件（图片 / PDF / HTML / 等）')}
-            onClick={() => fileInputRef.current?.click()}
-            disabled={submitting}
-          >
-            <Plus size={14} />
-          </button>
-          {/* 模型选择（2026-08-17，issue #1 第 7 条）：以前只长在会话里的 composer 上，
-              首页这一步反而没有 —— 而首页恰恰是**唯一**能决定新会话用哪个模型的地方
-              （进了会话之后模型的真相在服务端，这颗按钮改的是本地偏好）。
-              往下开：这张纸贴着页顶，往上开会顶出视口。 */}
-          <ModelPicker className="model" menuPlacement="down" disabled={submitting} />
-          {/* 手指设备上这句是错的（没有 Shift+Enter，回车也不发送），不如不说 */}
-          {!coarse && <span className="tip">{t('Enter 发送 · Shift + Enter 换行')}</span>}
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept=".pdf,.pptx,.docx,.html,.htm,.png,.jpg,.jpeg,.svg,.webp,.md,.txt,.json"
-            onChange={(e) => {
-              Array.from(e.target.files || []).forEach(handlePickFile);
-              e.target.value = '';
-            }}
-            style={{ display: 'none' }}
-          />
-          <span style={{ flex: 1 }} />
-          <button
-            className="go"
-            onClick={submit}
-            disabled={empty || submitting}
-            title={submitting ? t('创建中…') : t('发送（Enter）')}
-          >
-            {submitting ? t('开 工 中') : t('开 工')}
-          </button>
+          <Clip cx="14%" />
+          {/* 横线跟 textarea 严丝合缝地同高，见 .ndd-pad .lines 的注释 */}
+          <div className="lines">
+            {/* 那根红竖线：空框时蹲在起笔位当邀请，打字时跟着插入点走。
+                原生 caret 全程让位（见 .ndd-pad textarea 的 caret-color），只有
+                输入法组字那几百毫秒交还回去。
+                placeholder 前面的 en space 是给它腾的位，第一个字落下来不横跳。
+                不聚焦又有字时不画 —— 那时候没人在编辑，一根闪的线是噪音。
+                插入点滚出视野时也不画（caretAt.off），否则红线会飘到框外面去。 */}
+            {!composing && (!text || focused) && !caretAt.off && (
+              <span className="caret" aria-hidden="true"
+                style={{ transform: `translate(${caretAt.x}px, ${caretAt.y}px)` }} />
+            )}
+            <textarea
+              ref={ref}
+              className={composing ? 'composing' : undefined}
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={handleKey}
+              // 光标移动（方向键 / 点到中间 / 拖选）走 onSelect，它比 keyup 全
+              onSelect={syncCaret}
+              onScroll={syncCaret}
+              onFocus={() => { setFocused(true); syncCaret(); }}
+              onBlur={() => setFocused(false)}
+              onCompositionStart={() => setComposing(true)}
+              onCompositionEnd={() => { setComposing(false); syncCaret(); }}
+              placeholder={`\u2002${placeholder}`}
+              rows={1}
+              disabled={submitting}
+              style={{ opacity: submitting ? 0.5 : 1 }}
+            />
+          </div>
+          <ComposerTray items={attachments} onRemove={handleRemoveAtt} />
+          <div className="bar">
+            <button
+              className="att"
+              title={t('上传附件（图片 / PDF / HTML / 等）')}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={submitting}
+            >
+              <Plus size={14} />
+            </button>
+            {/* 模型选择（2026-08-17，issue #1 第 7 条）：以前只长在会话里的 composer 上，
+                首页这一步反而没有 —— 而首页恰恰是**唯一**能决定新会话用哪个模型的地方
+                （进了会话之后模型的真相在服务端，这颗按钮改的是本地偏好）。
+                往下开：这张纸贴着页顶，往上开会顶出视口。 */}
+            <ModelPicker className="model" menuPlacement="down" disabled={submitting} />
+            {/* 手指设备上这句是错的（没有 Shift+Enter，回车也不发送），不如不说 */}
+            {!coarse && <span className="tip">{t('Enter 发送 · Shift + Enter 换行')}</span>}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.pptx,.docx,.html,.htm,.png,.jpg,.jpeg,.svg,.webp,.md,.txt,.json"
+              onChange={(e) => {
+                Array.from(e.target.files || []).forEach(handlePickFile);
+                e.target.value = '';
+              }}
+              style={{ display: 'none' }}
+            />
+            <span style={{ flex: 1 }} />
+            <button
+              className="go"
+              onClick={submit}
+              disabled={empty || submitting}
+              title={submitting ? t('创建中…') : t('发送（Enter）')}
+            >
+              {submitting ? t('开 工 中') : t('开 工')}
+            </button>
+          </div>
         </div>
       </div>
     </>

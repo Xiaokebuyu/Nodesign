@@ -109,9 +109,9 @@ describe('首页便签纸的横线与光标', () => {
  * 跟上面横线那族是同一类债，所以钉在同一个文件里。
  */
 describe('首页页签跟纸的接缝', () => {
-  const strip = rule('.ndd-pad .tabs ');
-  const off = rule('.ndd-pad .tabs > * ');
-  const on = rule('.ndd-pad .tabs > *.on ');
+  const strip = rule('.nd-tabs ');
+  const off = rule('.nd-tabs > * ');
+  const on = rule('.nd-tabs > *.on ');
 
   /**
    * 底色 08-28 收成一个变量：纸和它的签都写 var(--sheet)，配方类换的是变量的值。
@@ -149,16 +149,63 @@ describe('首页页签跟纸的接缝', () => {
     }
   });
 
-  it('条往下沉多少，没选的那片就往上抬回多少（下缘正落在纸的边线上）', () => {
-    const sink = num(strip, 'margin-bottom');
-    const back = num(off, 'margin-bottom');
-    expect(sink, '.ndd-pad .tabs 得往下沉一段（负 margin-bottom），签才伸得进纸里').toBeLessThan(0);
-    expect(back, `条沉了 ${sink}、没选的那片抬回 ${back} —— 抬不回去它就压在纸上了`).toBe(-sink);
+  /**
+   * ⭐ 用户 2026-08-28 的原话：「两个便签条在翻页的时候不要做出上下跳动」。
+   *
+   * 上一版靠"选中的高一档、没选的矮一档"假装谁在后面，于是每次切换两片签都上下跳。
+   * 现在签**真的**在纸后面（.nd-tabs 是纸的兄弟且排在纸前面 = 被纸压住），
+   * 深浅只由颜色表达 —— 所以选中/悬停那两条规则里**一个会挪动它的属性都不许有**。
+   * 这条比"某个数等于某个数"值钱：它拦的是"下次谁又想加个 2px 抬升"。
+   */
+  const MOVERS = /(?:^|[;{\s])(padding|margin|top|bottom|left|right|width|height|transform|inset|font|line-height|letter-spacing|text-indent|border-radius|gap)[\w-]*\s*:/;
+
+  it('选中那片只换颜色 —— 任何会挪动/改大小的属性都不许写进 .on', () => {
+    const bad = on.match(MOVERS);
+    expect(bad, `.nd-tabs > *.on 里写了 ${bad && bad[1]} —— 换模式时这片签会跳一下。`
+      + '深浅只许用颜色/阴影表达').toBe(null);
   });
 
-  it('选中那片一路沉到底（margin-bottom: 0），跟纸连成一体', () => {
-    // 0 可以写成 `0` 也可以写成 `0px`，两种都认（num 只认带单位的）
-    expect(on, '选中的签必须 margin-bottom:0，才跟纸没有分界线').toMatch(/margin-bottom:\s*0(px)?\s*[;}]/);
+  it('悬停也只换颜色（签是被纸压着的，抬不起来）', () => {
+    const bad = rule('.nd-tabs > *:not(.on):hover ').match(MOVERS);
+    expect(bad, `悬停那条里写了 ${bad && bad[1]} —— 签在纸后面，动它就穿帮`).toBe(null);
+  });
+
+  it('签的下缘真的埋进纸里，且埋掉的那截不许吃到字', () => {
+    const sink = -num(strip, 'margin-bottom');
+    expect(sink, '.nd-tabs 得往下沉一段（负 margin-bottom），下缘才埋得进纸里').toBeGreaterThan(0);
+    const padBottom = Number(off.match(/padding:\s*[\d.]+px\s+[\d.]+px\s+([\d.]+)px/)?.[1]);
+    expect(padBottom, `签埋进纸里 ${sink}px，但下内边距只有 ${padBottom}px —— `
+      + '埋掉的那截会啃到字').toBeGreaterThanOrEqual(sink);
+  });
+
+  /**
+   * 页签要从纸的上沿探出来一截，问候语得让开这么多。
+   * ⚠️ 窄屏那段媒体查询里**又写了一份** .ndd-greet 的 margin-bottom —— 08-28 就
+   * 是漏了它：宽屏好好的，390 上页签直接压在问候语上（而且窄屏问候语会折行，
+   * 顶得更明显）。同一个数散在两处、只有一处会被人改，是这个文件的常客。
+   */
+  it('**每一处** .ndd-greet 都给页签留够了地方（含媒体查询里那份）', () => {
+    const NEED = 28;   // 签探出纸上沿约 26px，再留一点空气
+    const found = [...CSS.matchAll(/\.ndd-greet\s*\{([^}]*)\}/g)]
+      .map((m) => num(m[1].replace(/\/\*[\s\S]*?\*\//g, ' '), 'margin-bottom'))
+      .filter((v) => v !== null);
+    expect(found.length, '一处都没找到？.ndd-greet 改名了，这条 lint 要跟着改')
+      .toBeGreaterThanOrEqual(2);
+    const bad = found.filter((v) => v < NEED);
+    expect(bad, `这几处问候语底部留白不足 ${NEED}px，页签会顶到字上：${JSON.stringify(bad)}`)
+      .toEqual([]);
+  });
+
+  it('签在 DOM 上排在纸前面（不然它就压在纸上，"被压着"就成了假的）', () => {
+    const iTabs = ENTRY.indexOf('className="nd-tabs" role="radiogroup"');
+    const iPad = ENTRY.indexOf("className=\"ndd-pad\"");
+    expect(iTabs, 'home-quick-entry.jsx 里找不到那条页签').toBeGreaterThan(0);
+    expect(iPad, '找不到那张纸').toBeGreaterThan(0);
+    expect(iTabs < iPad, '页签的 DOM 位置跑到纸后面去了 —— 它会盖在纸上面').toBe(true);
+    // z-index 没有单位，num（只认带 px 的）读不出来
+    const z = (body) => Number(body.match(/z-index:\s*(-?\d+)/)?.[1]);
+    expect(z(rule('.ndd-stack > .nd-tabs ')), '签的 z 得比纸低')
+      .toBeLessThan(z(rule('.ndd-pad ')));
   });
 
   it('那枚胶囊已经拆干净（.ndd-mode 一处都不许剩）', () => {
