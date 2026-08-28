@@ -118,6 +118,35 @@ describe('演员位派发：name 闸（2026-08-28 重构）', () => {
     expect(await decision(cast, { subagent_type: 'rp-narrator', name: 'rp-teller' })).toBe('allow');
   });
 
+  it('⭐⭐ 漏传 name 但 prompt 第一行有登记过的卡路径 → 闸自己认出名字（glm 撞闸案）', async () => {
+    fs.mkdirSync(path.join(WS, '.nd'), { recursive: true });
+    fs.writeFileSync(path.join(WS, '.nd', 'cast.json'), JSON.stringify({
+      version: 1,
+      roles: { 'rp-izumi': { name: '泉此方', pen: 'narrator', card: '角色/泉此方/角色卡.md' } },
+    }), 'utf8');
+    const { roster, cast } = mk();
+    const out = await cast({ tool_input: { subagent_type: 'rp-narrator', run_in_background: true,
+      prompt: '你的角色卡：角色/泉此方/角色卡.md，你的记忆：角色/泉此方/记忆.md\n\n【卡全文】你是泉此方……' } });
+    expect(out.hookSpecificOutput.permissionDecision).toBe('allow');
+    expect(out.hookSpecificOutput.updatedInput.name).toBe('rp-izumi');   // 推断名必须回写进 input
+    expect(roster.has('rp-izumi')).toBe(true);
+  });
+
+  it('prompt 正文里写了 name: rp-xxx（模型把参数写错了地方）也认', async () => {
+    const { cast } = mk();
+    const out = await cast({ tool_input: { subagent_type: 'rp-actor',
+      prompt: 'name: rp-hand-written\n\n你的角色卡：（现编的人设）……' } });
+    expect(out.hookSpecificOutput.permissionDecision).toBe('allow');
+    expect(out.hookSpecificOutput.updatedInput.name).toBe('rp-hand-written');
+  });
+
+  it('推不出名字（没参数、没卡路径、没 slug）→ 仍然 deny，出路说了两条', async () => {
+    const { cast } = mk();
+    const out = await cast({ tool_input: { subagent_type: 'rp-actor', prompt: '你是一个神秘人。' } });
+    expect(out.hookSpecificOutput.permissionDecision).toBe('deny');
+    expect(out.hookSpecificOutput.permissionDecisionReason).toMatch(/角色卡/);
+  });
+
   it('⭐ 演员位文件被改装（tools 行加了外发工具）→ 派发时照样被拦', async () => {
     const ws2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-resident-evil-'));
     fs.mkdirSync(path.join(ws2, '.claude', 'agents'), { recursive: true });

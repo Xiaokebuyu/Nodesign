@@ -111,6 +111,37 @@ export async function readRoleCard(workspaceRoot, slug) {
 }
 
 /**
+ * 从派发 prompt 里推断实例名（2026-08-28 晚，glm 撞闸案）。
+ *
+ * name 闸的原设计假设「deny 一次模型就会补参数」—— 对 sonnet 成立（探针实证），
+ * 对免费行 glm 不成立：proj_mtd7d4et 里它连撞九次，第六次把 `name: rp-izumi`
+ * 写进了 prompt 正文 —— 它想给，但参数就是发不出来。弱模型够不着的参数不能当
+ * 硬前置，所以闸学会自己认，按可靠度分层：
+ *
+ *   1. prompt 头部的 `name: rp-xxx` 行（模型明说的）
+ *   2. 登记表匹配：prompt 里出现某个已登记角色的卡路径（cast_role 的配方就是
+ *      「第一行写卡路径」，正常照做的派发天然命中）
+ *   3. prompt 里出现的、登记过的 rp- slug
+ *
+ * 推出来的名字跟模型传参同一信任级（名字本来就是模型起的），不碰任何安全判据
+ * （工具白名单在演员位文件上，收件人闸认的是名册登记）。taken 是已在场名册 ——
+ * 在场的不再当候选（那是"续演该用 SendMessage"的情形，不是新派）。
+ */
+export async function inferRoleNameFromPrompt(workspaceRoot, prompt, { taken = new Set(), isSlot = () => false } = {}) {
+  const head = String(prompt || '').slice(0, 1200);
+  const ok = (s) => s && /^rp-[A-Za-z0-9][A-Za-z0-9_-]{0,60}$/.test(s) && !isSlot(s) && !taken.has(s);
+  const explicit = /name[:：]\s*["'「]?(rp-[A-Za-z0-9][A-Za-z0-9_-]*)/.exec(head);
+  if (explicit && ok(explicit[1])) return explicit[1];
+  const reg = await readCastRegistry(workspaceRoot);
+  const byCard = Object.entries(reg.roles)
+    .filter(([slug, r]) => ok(slug) && typeof r?.card === 'string' && r.card && head.includes(r.card));
+  if (byCard.length === 1) return byCard[0][0];
+  const mentioned = Object.keys(reg.roles).filter((slug) => ok(slug) && head.includes(slug));
+  if (mentioned.length === 1) return mentioned[0];
+  return null;
+}
+
+/**
  * 列出这个工作区里所有角色的展示名（slug → 展示名）。
  *
  * 只当**展示层**用：展示名取自角色文件，而那份文件模型能写 —— 一个角色可以自称

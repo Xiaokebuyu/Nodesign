@@ -4,7 +4,7 @@
  */
 
 import { isResidentRole, isSlotType, ROLE_SLUG_RE, resolveRoleTools } from '../cast.js';
-import { readRoleCard } from '../role-card.js';
+import { readRoleCard, inferRoleNameFromPrompt } from '../role-card.js';
 import { noteToolCaller, agentNameOf } from '../actor-trail.js';
 import { MCP_SERVER_NAME } from '../../mcp/server-name.js';
 
@@ -81,17 +81,25 @@ export function makePreToolUseAgentForceForegroundHandler({ roster = null, works
     //    实例身份由 name 决定。name 闸写成硬 deny：探针实测模型漏传 name 被拒一次
     //    就会补上（写成话术它不听，写成闸它就听 —— castedInRun 时代同款教训）。
     if (isSlotType(t.subagent_type)) {
-      const name = typeof t.name === 'string' ? t.name : '';
+      let name = typeof t.name === 'string' ? t.name.trim() : '';
+      let inferred = false;
       if (!ROLE_SLUG_RE.test(name) || isSlotType(name)) {
+        // 参数没给/给坏了 → 从 prompt 推（glm 撞闸案：弱模型够不着的参数不当硬前置）
+        const taken = new Set(roster?.list?.() || []);
+        name = await inferRoleNameFromPrompt(workspaceRoot, t.prompt, { taken, isSlot: isSlotType });
+        inferred = !!name;
+      }
+      if (!name) {
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
             permissionDecision: 'deny',
-            // nd:rp-prompt
+            // nd:rp-prompt —— 给两条出路：参数，或（弱模型也走得通的）prompt 配方
             permissionDecisionReason:
-              `派演员位必须带 name 参数：一个独一无二的角色名（rp- 开头的小写 slug，`
-              + `如 rp-cheng-wan，cast_role 登记过就用登记的那个）。它就是这个角色之后的`
-              + `收件地址（SendMessage 寄给它用的名字）。补上 name 再派一次。`,
+              `派演员位要一个独一无二的角色名（rp- 开头的小写 slug）。两种给法任选：`
+              + `① name 参数写上它；② prompt 第一行照 cast_role 的配方写`
+              + `「你的角色卡：角色/<名>/角色卡.md」（登记过的卡，闸会自己认出名字）。`
+              + `它就是这个角色之后的收件地址（SendMessage 寄给它用）。`,
           },
         };
       }
@@ -123,15 +131,17 @@ export function makePreToolUseAgentForceForegroundHandler({ roster = null, works
       // 盖章按**实例名**：byOf / 收件箱 / 板书署名全按名字走，不认演员位（rp-actor
       // 是位置不是人）。agentId→名字的别名在 PostToolUse 学（hooks/slot-alias.js）。
       noteToolCaller(toolUseId || input?.tool_use_id, { agentType: name });
-      if (t.run_in_background === true) return {};
+      if (!inferred && t.run_in_background === true) return {};
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
           permissionDecision: 'allow',
-          updatedInput: { ...t, run_in_background: true },
+          // 推断出的名字必须回写进 input —— CLI 按它建实例，SendMessage 按它寻址
+          updatedInput: { ...t, name, run_in_background: true },
           // nd:rp-prompt
           additionalContext:
-            `「${name}」已按后台派出。以后要它说话/接着演，用 SendMessage 寄给 ${name}`
+            `「${name}」已按后台派出${inferred ? '（名字是从你 prompt 里的角色卡认出来的）' : ''}。`
+            + `以后要它说话/接着演，用 SendMessage 寄给 ${name}`
             + `（它记得之前所有事），不要重新派 —— 重派会新起一个失忆的同名角色顶掉旧的。`,
         },
       };
