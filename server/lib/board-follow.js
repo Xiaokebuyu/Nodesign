@@ -9,7 +9,8 @@
  * 设计取舍：
  * - 约束的家安在**线上**（不另立 rules 区）：线本来就是「A 关于 B」的真相，
  *   follow 只是把 B 从一件东西升级成「一族东西的最新一件」。
- * - 挪组时跳过 seat:'user' 的成员（用户拖过的座永远不覆盖，与 reflow 同一条纪律）。
+ * - 挪组连 seat:'user' 一起（08-28 全放开）：平移保相对格局本来就是这条线先证明的；
+ *   首跟也不再把用户件留在原地（撕组比挪用户件更丑）。
  * - fail-soft：跟随失败绝不连累落板本身。
  */
 
@@ -66,8 +67,8 @@ export async function applyFollows(projectId, { tag, newId }) {
       continue;
     }
 
-    // 首跟（旧目标没座位可参照）：解一个位置放过去，只挪非 user 座
-    const movable = members.filter(([, e]) => e.seat !== 'user');
+    // 首跟（旧目标没座位可参照）：解一个位置整组放过去（08-28 起含 user 座 —— 撕组更丑）
+    const movable = members;
     if (!movable.length) continue;
     const rects = members.map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
     const bb = {

@@ -67,16 +67,20 @@ describe('edit_board（吞四件 + 新能力）', () => {
     expect(dice.y).toBeGreaterThanOrEqual(scene.y + scene.h);
   });
 
-  it('reflow 跳过用户拖过的（seat:user 永不被重排）', async () => {
+  it('reflow 含用户拖过的（08-28 放开：求结构就整组排，顺序按他摆的保留）', async () => {
     let board = await readBoard(pid);
     const idOf = (lid) => Object.entries(board.objects).find(([, e]) => e.data?.lid === lid)?.[0];
     const diceId = idOf('dice');
     await patchBoard(pid, { objects: { [diceId]: { x: 5000, y: 5000, seat: 'user' } } });
     const r = await edit({ ops: [{ op: 'reflow', tag: 'panel' }] });
     expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toContain('跳过用户拖过的');
+    expect(r.content[0].text).toContain('含用户拖过的');
     board = await readBoard(pid);
-    expect(board.objects[diceId].x).toBe(5000);
+    // 拖到最远处（排序垫底）的用户件被收回列里：不再留在 5000 孤岛上
+    expect(board.objects[diceId].x).toBeLessThan(5000);
+    // 他摆的顺序保留：位置排序垫底 → 重排后仍在列尾（y 最大）
+    const ys = ['scene', 'dice'].map((l) => board.objects[idOf(l)].y);
+    expect(ys[1]).toBeGreaterThan(ys[0]);
   });
 
   it('remove：agent 自己的板书放行，文件+座位一起清', async () => {
@@ -267,27 +271,27 @@ describe('板书正门（08-27）：set_text 认板书文件，笔权按作者�
   });
 });
 
-describe('用户座位不可撼动（08-27 审计修：move/move_group 补上教义早已承诺的闸）', () => {
-  it('⭐ move 用户拖过的东西被拒，位置和 seat 纹丝不动', async () => {
+describe('用户座位放开（08-28 用户拍板"全部放开试试"：冻结 → 挪得动但如实报）', () => {
+  it('⭐ move 用户拖过的东西挪得动，返回注明"原是用户亲手摆的"，seat 转 agent', async () => {
     await patchBoard(pid, { objects: { 'assets/用户摆的.png': { x: 50, y: 50, w: 100, h: 80, seat: 'user' } } });
     const r = await edit({ ops: [{ op: 'move', id: 'assets/用户摆的.png', to: { dx: 5, dy: 5 } }] });
-    expect(r.content[0].text).toMatch(/用户亲手摆/);
+    expect(r.content[0].text).toMatch(/原是用户亲手摆的/);
     const board = await readBoard(pid);
-    expect(board.objects['assets/用户摆的.png'].x).toBe(50);
-    expect(board.objects['assets/用户摆的.png'].seat).toBe('user');
+    expect(board.objects['assets/用户摆的.png'].x).toBe(170);   // 50 + 5 格 × 24px
+    expect(board.objects['assets/用户摆的.png'].seat).toBe('agent');
   });
 
-  it('move_group 跳过用户座、其余照走并如实报（同 reflow 的纪律）', async () => {
+  it('move_group 连用户座一起平移（相对格局保留、seat 不变），如实报件数', async () => {
     await patchBoard(pid, { objects: {
       'assets/g1.png': { x: 1000, y: 1000, w: 100, h: 80, tag: '守座', seat: 'agent' },
       'assets/g2.png': { x: 1000, y: 1200, w: 100, h: 80, tag: '守座', seat: 'user' },
     } });
     const r = await edit({ ops: [{ op: 'move_group', tag: '守座', to: { dx: 10, dy: 0 } }] });
-    expect(r.content[0].text).toMatch(/跳过用户亲手摆/);
+    expect(r.content[0].text).toMatch(/含用户亲手摆的 1 件/);
     const board = await readBoard(pid);
     expect(board.objects['assets/g1.png'].x).toBe(1240);   // 10 格 × 24px
-    expect(board.objects['assets/g2.png'].x).toBe(1000);   // 用户座原地
-    expect(board.objects['assets/g2.png'].seat).toBe('user');
+    expect(board.objects['assets/g2.png'].x).toBe(1240);   // 用户件随组走，格局保留
+    expect(board.objects['assets/g2.png'].seat).toBe('user');   // 出处记号不动（学习票源）
   });
 });
 

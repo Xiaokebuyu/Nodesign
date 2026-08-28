@@ -115,7 +115,9 @@ ops (run in order; a failing op is reported, the rest still apply):
  unroll{tag} · feature{id} / unfeature (hero) ·
  chalk_edit{on} (flip the user's 改板书 toggle — turn it ON when the session leans on
  board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming).
-Moves avoid collisions (nearest free cell, user-dragged seats are never displaced).
+Moves avoid collisions (nearest free cell). User-dragged items CAN be moved (the result
+says so when you do) — move them for a reason, and never tug-of-war: if the user drags
+it back, that placement is final.
 For brand-new content use write_on_board.`,
     {
       tag: z.string().max(40).optional().describe('Default tag for add_node/add_edge (the group you are editing)'),
@@ -234,21 +236,23 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
         } else if (o.op === 'move') {
           const id = rid(o.id); const e = id && live[id];
           if (!e) { fail(`${o.id} 不在板上`); continue; }
-          // 08-27 审计修：教义和本工具描述都承诺「用户拖过的座位永不被挪」，
-          // reflow 一直守着，move 却没查 —— 一次调用就能覆盖用户手摆的位置
-          if (e.seat === 'user') { fail(`${o.id} 是用户亲手摆的（seat:user），你动不了 —— 要挪请用户自己拖`); continue; }
+          // seat:'user' 08-28 从「冻结」放开（用户拍板"全部放开试试"）：排位引擎
+          // 已经能按用户手感排（inferFlowDir 学票、自动挑侧），硬拒的最大受害者
+          // 是用户自己（"帮我挪一下"被 agent 顶回"你自己拖"）。放开但**如实报**：
+          // 挪的是他亲手摆的东西，agent 得心里有数、他不认可拖回去就是。
+          const wasUser = e.seat === 'user' ? '（原是用户亲手摆的，已挪 —— 他不认可会拖回去）' : '';
           const box = rectOf(id);
           if ('ref' in o.to) {
             const p = placeRel(id, box, o.to);
             if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
             setObj(id, { ...e, x: Math.round(p.x), y: Math.round(p.y), seat: 'agent' });
             moveHuggers(id, Math.round(p.x) - e.x, Math.round(p.y) - e.y);
-            report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.nudged ? `（目标位被占，就近落在 ${p.resolution}）` : ''}`);
+            report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.nudged ? `（目标位被占，就近落在 ${p.resolution}）` : ''}${wasUser}`);
           } else {
             const nx = Math.round(e.x + o.to.dx * UNIT); const ny = Math.round(e.y + o.to.dy * UNIT);
             setObj(id, { ...e, x: nx, y: ny, seat: 'agent' });
             moveHuggers(id, nx - e.x, ny - e.y);
-            report.push(`· #${i + 1} move → (${nx},${ny})`);
+            report.push(`· #${i + 1} move → (${nx},${ny})${wasUser}`);
           }
           ok += 1;
         } else if (o.op === 'move_group') {
@@ -272,13 +276,13 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             p = { x: bb.x + o.to.dx * UNIT, y: bb.y + o.to.dy * UNIT };
           }
           const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
-          // 用户座跳过（同 reflow）：组被撕开也比覆盖用户的手强，跳了谁如实报
+          // 08-28 放开：user 座随组平移（相对格局原样保留，学 follow 平移跟随的先例）
+          // —— 旧行为跳过用户件会把组撕开留一半在原地，那才是最丑的结果。如实报件数。
           const userSeated = members.filter(([, e]) => e.seat === 'user').map(([id]) => id);
-          const movable = members.filter(([, e]) => e.seat !== 'user');
-          const movedSet = new Set(movable.map(([id]) => id));
-          for (const [id, e] of movable) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, seat: 'agent' });
-          for (const [id] of movable) moveHuggers(id, dx, dy, movedSet);
-          if (userSeated.length) report.push(`· #${i + 1} move_group: 跳过用户亲手摆的 ${userSeated.length} 件（${userSeated.slice(0, 3).join('、')}${userSeated.length > 3 ? ' 等' : ''}）`);
+          const movedSet = new Set(members.map(([id]) => id));
+          for (const [id, e] of members) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, ...(e.seat === 'user' ? {} : { seat: 'agent' }) });
+          for (const [id] of members) moveHuggers(id, dx, dy, movedSet);
+          if (userSeated.length) report.push(`· #${i + 1} move_group: 含用户亲手摆的 ${userSeated.length} 件（随组平移，相对格局保留）`);
           report.push(`· #${i + 1} move_group #${o.tag} → 组左上 (${Math.round(p.x)},${Math.round(p.y)})${'ref' in o.to && p.resolution ? `（${p.resolution}${p.nudged ? '，就近避让过' : ''}）` : ''}`);
           ok += 1;
         } else if (o.op === 'remove') {
@@ -391,12 +395,13 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           const horizontal = o.layout === 'row';
           const sorted = members.map(([id, e]) => ({ id, e, r: rectOf(id) }))
             .sort((a, b) => (horizontal ? a.r.x - b.r.x || a.r.y - b.r.y : a.r.y - b.r.y || a.r.x - b.r.x));
-          const skipped = [];
+          // 08-28 放开：user 座也进重排 —— 调 reflow 本来就是明确的"求结构"，
+          // 排序按现位置来，用户挑的**顺序**天然保留（他拖到中间的还在中间）。如实报件数。
+          const userSeated = sorted.filter(m => m.e.seat === 'user').map(m => m.id);
           const left = Math.min(...sorted.map(m => m.r.x));
           const top = Math.min(...sorted.map(m => m.r.y));
           let cur = horizontal ? left : top;
           for (const m of sorted) {
-            if (m.e.seat === 'user') { skipped.push(m.id); cur = horizontal ? Math.max(cur, m.r.x + m.r.w + 16) : Math.max(cur, m.r.y + m.r.h + 16); continue; }
             const nx = horizontal ? cur : left;
             const ny = horizontal ? top : cur;
             if (nx !== m.e.x || ny !== m.e.y) {
@@ -406,7 +411,7 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             }
             cur += (horizontal ? m.r.w : m.r.h) + 16;
           }
-          if (skipped.length) report.push(`· #${i + 1} reflow: 跳过用户拖过的 ${skipped.length} 件`);
+          if (userSeated.length) report.push(`· #${i + 1} reflow: 含用户拖过的 ${userSeated.length} 件（顺序按他摆的保留）`);
           ok += 1;
         } else if (o.op === 'follow') {
           const members = Object.entries(live).filter(([, e]) => e.tag === o.group_tag && Number.isFinite(e?.x));
