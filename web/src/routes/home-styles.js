@@ -169,6 +169,14 @@ export const CSS = `
    浮在墙上）。正在飞走的那张（.ndd-peel）自己再挂一份**旧**配方，就近覆盖。
    所以下面每种纸的 ::before 都写两条选择器：整叠里当前这张 / 正在飞走的那张。 */
 
+/* ⛔ 纸上印好的东西（页边线、版心框）是**印上去的，不是盖上去的一块玻璃**。
+   08-28 真踩到：稿纸那版的版心框 left:34px right:16px top:13px bottom:11px 差不多罩住
+   整张纸，而它是伪元素、默认吃指针 —— 于是演出模式下工具栏的「加附件」和「开工」
+   全点不着（模型选择器和正文没事，因为那两处自己 position:relative，画在版心框之上）。
+   ⚠️ 这条**不按纸分别写**：一种纸一条就等于"以后每加一种纸都要记得补一句"，
+   而漏了不报错、只是那张纸上的按钮悄悄失灵。写成对任何配方都成立的一条。 */
+.ndd-pad::before, .ndd-peel::before { pointer-events: none; }
+
 /* 笔记本：左边一条红页边线，字写在线右边 */
 .nd-sheet-design > .ndd-pad::before,
 .ndd-peel.nd-sheet-design::before { content: ''; position: absolute; left: 40px;

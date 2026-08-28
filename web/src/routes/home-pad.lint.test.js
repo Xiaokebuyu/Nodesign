@@ -141,6 +141,27 @@ describe('首页页签跟纸的接缝', () => {
   });
 
   /** JSX 挑配方类靠一张表，表里写错一个字就是"那种纸压根没有配方" */
+  /**
+   * 纸上印好的东西不许吃指针（2026-08-28 真 bug）。
+   *
+   * 稿纸的版心框是个 inset 几乎铺满整张纸的 ::before，默认吃指针 —— 于是演出模式下
+   * 工具栏的「加附件」和「开工」全点不着（只有自己 position:relative 的模型选择器和
+   * 正文幸免，它们画在框之上）。修法是一条**跟配方无关**的规则；这条 lint 守的是
+   * 它别退化成"一种纸一句"，那种写法漏了不报错，只是那张纸上的按钮悄悄失灵。
+   */
+  it('纸上印的页边线/版心框不吃指针，且这条规矩不按纸分别写', () => {
+    const bare = [...CSS.matchAll(/(^|\n)([^{}\n]*::before[^{}\n]*)\{([^}]*)\}/g)]
+      .map((m) => ({ sel: m[2].trim(), body: m[3].replace(/\/\*[\s\S]*?\*\//g, ' ') }))
+      .find((r) => /pointer-events:\s*none/.test(r.body)
+        && /(^|,)\s*\.ndd-pad::before/.test(r.sel) && /\.ndd-peel::before/.test(r.sel));
+    expect(bare, '找不到给 .ndd-pad::before / .ndd-peel::before 关掉指针的那条规则').toBeTruthy();
+    expect(bare.sel, '这条不许被限定到某一种纸上 —— 新加一种纸就会漏').not.toMatch(/\.nd-sheet-/);
+    // 反向：别处再把它开回来（伪元素默认就是吃指针的，写 auto 等于原地复活这个 bug）
+    for (const m of CSS.matchAll(/([^{}\n]*::before[^{}\n]*)\{([^}]*)\}/g)) {
+      expect(m[2], `${m[1].trim()} 里把 pointer-events 开回来了`).not.toMatch(/pointer-events:\s*(auto|all)/);
+    }
+  });
+
   it('SHEET_CLS 里的每个类名在 CSS 里都真有配方', () => {
     const tbl = SHEETS.match(/const SHEET_CLS = \{([^}]*)\}/)?.[1];
     expect(tbl, 'home-sheets.js 里找不到 SHEET_CLS').toBeTruthy();
