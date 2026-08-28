@@ -35,6 +35,17 @@ const POP_W = 320;
 export default function AnnotatePopover({ x, y, target, roleTarget = null, onSubmit, onKeep, onQueue, onClose }) {
   const ref = useRef(null);
   const [text, setText] = useState('');
+  /**
+   * 这句发给谁（2026-08-28 用户拍板「把去向变成看得见的」）。
+   *
+   * 去向本来就显示着（标题和发送键都写「说给泉此方」），缺的是**改**：
+   * 在角色写的板书上回话默认直达它，但有时你想说的是场外的话（"这段能不能重写"），
+   * 那是主控的事。没有开关时只能用「攒着」绕，而那是另一个动作。
+   *
+   * 默认跟着作者走 —— 回复谁写的东西就说给谁，这是最不用想的一档。
+   */
+  const [toMain, setToMain] = useState(false);
+  const sayTo = roleTarget && !toMain ? roleTarget : null;
   const [flip, setFlip] = useState({ x: false, y: false });
 
   useEffect(() => {
@@ -57,7 +68,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
     const t = text.trim();
     if (!t) return;
     onClose();
-    onSubmit(t);
+    onSubmit(t, { toMain: !!(roleTarget && toMain) });
   };
 
   const keep = () => {
@@ -96,8 +107,31 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
         fontFamily: FONT_KAI, fontSize: FONT_SIZE.sm, color: COLOR.sub,
         marginBottom: GAP.sm, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
-        {roleTarget ? `说给${roleTarget.who} · 回应「${target.title}」` : `标注 · ${target.typeLabel}「${target.title}」`}
+        {sayTo ? `说给${sayTo.who} · 回应「${target.title}」` : `标注 · ${target.typeLabel}「${target.title}」`}
       </div>
+      {/* 去向开关：只有"这段是某个角色写的"时才出现 —— 别的情况没有第二个去处 */}
+      {roleTarget && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: GAP.sm }}>
+          {[
+            { on: !toMain, label: roleTarget.who, hint: `直达${roleTarget.who}，接在这段下面`, pick: false },
+            { on: toMain, label: '主控', hint: '发给主控（场务/改稿这类场外的话）', pick: true },
+          ].map((o) => (
+            <button
+              key={o.label}
+              onClick={() => setToMain(o.pick)}
+              title={o.hint}
+              style={{
+                padding: `1px ${GAP.md}px 2px`,
+                fontFamily: FONT_KAI, fontSize: FONT_SIZE.xs || 11,
+                color: o.on ? COLOR.btnText : COLOR.sub,
+                background: o.on ? COLOR.btn : 'transparent',
+                border: `1px solid ${o.on ? COLOR.btn : COLOR.border}`,
+                borderRadius: RADIUS.pill, cursor: 'pointer',
+              }}
+            >{o.label}</button>
+          ))}
+        </div>
+      )}
       <textarea
         autoFocus
         rows={3}
@@ -112,8 +146,8 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             submit();
           }
         }}
-        placeholder={roleTarget
-          ? `跟${roleTarget.who}搭话——一句台词、一个动作、一个眼神都行…`
+        placeholder={sayTo
+          ? `跟${sayTo.who}搭话——一句台词、一个动作、一个眼神都行…`
           : '想怎么改 / 想让它变成什么…'}
         style={{
           width: '100%', resize: 'none', boxSizing: 'border-box',
@@ -148,8 +182,8 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
           <button
             onClick={queue}
             disabled={!text.trim()}
-            title={roleTarget
-              ? `攒着会发给主控，不是${roleTarget.who}——想直接说给它就用右边那颗`
+            title={sayTo
+              ? `攒着会发给主控，不是${sayTo.who}——想直接说给它就用右边那颗`
               : '先记下，攒够了从右下角那条浮钮一次发给 agent'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
@@ -175,7 +209,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
           }}
         >
-          <Send size={12} /> {roleTarget ? `说给${roleTarget.who}` : '发给 agent'}
+          <Send size={12} /> {sayTo ? `说给${sayTo.who}` : '发给 agent'}
         </button>
       </div>
     </div>

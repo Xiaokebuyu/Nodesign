@@ -1728,7 +1728,7 @@ export default function ProjectWorkspace() {
    * `targets`（框选之后批量标注）走同一条路：一条消息把这几件都点名，而不是
    * 发 N 条 —— 用户说的是"这几张一起改"，拆成 N 条 agent 就得猜它们之间的关系。
    */
-  const handleAnnotate = async ({ target, targets, text, queue }) => {
+  const handleAnnotate = async ({ target, targets, text, queue, toMain = false }) => {
     const list = targets?.length ? targets : [target];
     // 报**路径**不是 id：`deck:主稿.html` 这种带形态前缀的东西 agent 读不出来
     const whereOf = (t) => t.path || t.id;
@@ -1770,8 +1770,9 @@ export default function ProjectWorkspace() {
       return;
     }
 
-    // 直达角色：用户在某个常驻角色写的板书上回话，绕开主 agent（见 lib/role-direct.js）
-    if (await trySayToRole({
+    // 直达角色：用户在某个常驻角色写的板书上回话，绕开主 agent（见 lib/role-direct.js）。
+    // toMain = 他在浮层上把去向切成了「主控」—— 那就照他说的走，别拿作者猜他的意思。
+    if (!toMain && await trySayToRole({
       list, projectId: id, text, api: Assets, showToast,
       onSend: () => boardApiRef.current?.presenceHint?.(list[0].id),
     })) return;

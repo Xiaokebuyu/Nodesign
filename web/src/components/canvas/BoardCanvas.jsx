@@ -2072,7 +2072,7 @@ export default function BoardCanvas({
           // 不能在这儿另写一份：文案说"说给墨璃"而实际发给了主控，比不显示更糟。
           roleTarget={soleRoleTarget(annotate.targets?.length ? annotate.targets : [annotate.target])}
           onClose={() => setAnnotate(null)}
-          onSubmit={(text) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text })}
+          onSubmit={(text, opts) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text, toMain: !!opts?.toMain })}
           // 攒着：同一条回调，多一个 queue 标记 —— 落点在 ProjectWorkspace
           // （pending-changes buffer 和那条浮钮都住在那儿）
           onQueue={(text) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text, queue: true })}

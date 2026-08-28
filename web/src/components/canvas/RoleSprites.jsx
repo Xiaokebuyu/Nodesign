@@ -56,6 +56,15 @@ import { useCurrentModelBrand } from '../../lib/model-brand.js';
 /** 跟主精灵同一层（AmbientSpriteLayer 用的就是 305）—— 差一层就"看着不在一个平面上" */
 const SPRITE_Z = 305;
 
+/**
+ * 候场时那句常驻提示（2026-08-28 用户拍板）。
+ *
+ * 主 agent 的精灵一直有台词，角色闲着时却只剩一枚标 + 名牌 —— 新用户不知道能点它。
+ * 挂 await_user 候场正是"该跟它说话"的时刻，所以那一刻把话口写出来。
+ * 在写的时候不显示：它马上就有自己的话了，提示会跟正文打架。
+ */
+const IDLE_HINT = '点我说话';
+
 /** 角色精灵比主精灵小一圈（主的是 44） */
 const ROLE_SPRITE_SIZE = 32;
 
@@ -180,7 +189,7 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
             <SpriteSketch
               brand={brand}
               drawKey={p.targetId || `ambient:${slug}`}
-              text={p.message || ''}
+              text={p.message || (p.active ? '' : IDLE_HINT)}
               size={ROLE_SPRITE_SIZE}
               maxWidth={260}
               active={p.active}
