@@ -86,3 +86,31 @@ describe('跟随线（状态板跟着最新章走，RP 案的正面解）', () =
     expect(board.bindings['b:ftest'].followSide).toBe('left');
   });
 });
+
+describe('follow 只认主控的新件（08-28：面板挂 GM 不挂角色/用户）', () => {
+  it('角色/用户往目标 tag 落件不重锚；GM 落件照常', async () => {
+    const { applyFollows } = await import('./board-follow.js');
+    await write({ staging: false, tag: '面板2', layout: 'column', nodes: [{ id: 'hp', text: 'HP 卡' }] });
+    await write({ text: '剧情第一拍', tag: '剧情' });
+    await edit({ ops: [{ op: 'follow', group_tag: '面板2', target_tag: '剧情', side: 'right' }] });
+    let board = await readBoard(pid);
+    const [bid, line] = Object.entries(board.bindings).find(([, b]) => b.follow === '剧情');
+    const anchoredTo = line.to;
+
+    // 角色的台词落进同一个 tag（08-27 真会话：GM 让角色打了 章节，面板跟着台词跑）
+    await patchBoard(pid, { objects: { 'notes/板书/fake-role-line.md': { x: 4000, y: 4000, w: 300, h: 100, by: 'rp-jiangli', tag: '剧情', seat: 'agent' } } });
+    let r = await applyFollows(pid, { tag: '剧情', newId: 'notes/板书/fake-role-line.md' });
+    expect(r.followed).toBe(0);
+    // 用户落痕同理
+    await patchBoard(pid, { objects: { 'notes/板书/fake-user-echo.md': { x: 4400, y: 4000, w: 300, h: 100, by: 'user', tag: '剧情', seat: 'agent' } } });
+    r = await applyFollows(pid, { tag: '剧情', newId: 'notes/板书/fake-user-echo.md' });
+    expect(r.followed).toBe(0);
+    board = await readBoard(pid);
+    expect(board.bindings[bid].to).toBe(anchoredTo);   // 线一步没挪
+
+    // GM 的下一拍照常重锚
+    await write({ text: '剧情第二拍', tag: '剧情', chain: true });
+    board = await readBoard(pid);
+    expect(board.bindings[bid].to).not.toBe(anchoredTo);
+  });
+});

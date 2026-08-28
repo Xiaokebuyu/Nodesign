@@ -30,6 +30,10 @@ export async function applyFollows(projectId, { tag, newId }) {
   if (!followers.length) return { followed: 0 };
   const target = board.objects?.[newId];
   if (!target || !Number.isFinite(target.x)) return { followed: 0 };
+  // 只认主控的新件（08-28 用户拍板）：状态板这类跟随组挂在 GM 的叙事链上，
+  // 角色台词/用户落痕就算落进同一个 tag 也不把面板拽走。判据按板上作者，
+  // 不靠"角色自觉别打 tag"（08-27 真会话：GM 亲手让角色打 章节，面板跟着台词跑了）。
+  if ((target.by || 'agent') !== 'agent') return { followed: 0 };
   const known = new Set(Object.keys(board.zones || {}));
   const targetRect = { x: target.x, y: target.y, ...estimateSizeOn(board, newId, target) };
   const targetZone = layerOf(newId, target, known);

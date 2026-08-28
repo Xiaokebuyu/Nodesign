@@ -28,7 +28,7 @@ import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, resolveTemplate, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
-import { resolvePlacement, describePlacement, inflateSpriteSeats, inferFlowDir } from '../../../lib/board-place.js';
+import { resolvePlacement, describePlacement, inflateSpriteSeats, inferFlowDir, pickFreeSide } from '../../../lib/board-place.js';
 import { allocateLaneColumn } from '../../../lib/board-lanes.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
 import { makeAnchorResolver } from '../../../lib/board-anchor.js';
@@ -273,6 +273,17 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         : null;
       // 落位直觉（08-27）：接楼方向和自动挑侧都先问用户把这条线往哪边摆过
       const flowDir = inferFlowDir(b2, { tag: args.tag || null });
+      // 台词侧挂（08-28 用户拍板）：角色回旁白，桌面横屏时挂到旁白两侧的空位 ——
+      // 叙事主列留给 GM 的章节链，台词读作"这一拍的和声"。竖屏/无视点保持下行
+      // （手机竖排=环境→台词往下摞，免费正确）；rounds 不动（桌位机器排）；
+      // 用户掰过的走向（flowDir）仍然最大。
+      let replyDir = flowDir;
+      if (!replyDir && replyRect && ROLE_SLUG_RE.test(by)
+        && (board.objects?.[parentId]?.by || 'agent') === 'agent'
+        && vpRect && vpRect.w > vpRect.h
+        && getScene(projectId)?.mode !== 'rounds') {
+        replyDir = pickFreeSide(replyRect, box, obstacles);
+      }
       // 同时有线程和锚点时，落位跟线程走、但到锚点的线也别压第三块
       const lineTargets = (replyRect && anchorRect)
         ? [{ x: anchorRect.x + anchorRect.w / 2, y: anchorRect.y + anchorRect.h / 2 }]
@@ -281,7 +292,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         ? { x: lanePlan.x, y: lanePlan.y, resolution: lanePlan.fallback ? 'fallback' : 'lane-open', nudged: !!lanePlan.fallback }
         : resolvePlacement({
           box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || tableSide || null,
-          replyDir: flowDir, sideHint: flowDir, lineTargets,
+          replyDir, sideHint: flowDir, lineTargets,
           obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
         });
       const learnedDir = !lanePlan && flowDir && !args.side && (replyRect || anchorRect) ? flowDir : null;

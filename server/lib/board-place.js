@@ -288,6 +288,18 @@ export function resolvePlacement({
  * @param {Array<{id,x,y,w,h}>} obstacles  已建好的障碍表（含 id）
  * @param {object} objects   board.objects 原始表（要 by 字段）
  */
+/**
+ * 挑锚点旁的空侧（08-28 台词侧挂）：右侧贴身位空着就右，不然左侧空就左，
+ * 两边都挤仍回右（ringSearch 会就近挪）。判据跟真实落位同一套碰撞（PAD 含内）。
+ */
+export function pickFreeSide(anchor, box, obstacles) {
+  const w = Math.max(1, Math.round(box?.w || 0));
+  const h = Math.max(1, Math.round(box?.h || 0));
+  if (!collides(anchor.x + anchor.w + PAD, anchor.y, w, h, obstacles)) return 'right';
+  if (!collides(anchor.x - PAD - w, anchor.y, w, h, obstacles)) return 'left';
+  return 'right';
+}
+
 export function inflateSpriteSeats(obstacles, objects, pad = 60) {
   const last = new Map();   // rp-author → 它最新一条的 id
   for (const [id, e] of Object.entries(objects || {})) {

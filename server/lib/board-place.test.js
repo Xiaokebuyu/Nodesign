@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePlacement, describePlacement, inflateSpriteSeats, inferFlowDir, UNIT } from './board-place.js';
+import { resolvePlacement, describePlacement, inflateSpriteSeats, inferFlowDir, pickFreeSide, UNIT } from './board-place.js';
 
 const box = { w: 200, h: 100 };
 const rect = (x, y, w = 200, h = 100) => ({ x, y, w, h });
@@ -263,5 +263,17 @@ describe('inferFlowDir：从用户摆放学版面方向（08-27 落位直觉）'
       b2: { type: 'flow', from: 'b.md', to: 'c.md' },
     } };
     expect(inferFlowDir(near)).toBe(null);
+  });
+});
+
+describe('pickFreeSide：台词侧挂挑空侧（08-28）', () => {
+  const anchor = { x: 1000, y: 0, w: 400, h: 600 };
+  const box = { w: 400, h: 300 };
+  it('右侧空 → right；右侧压着 → left；两侧都压 → right 兜底（环搜就近挪）', () => {
+    expect(pickFreeSide(anchor, box, [])).toBe('right');
+    const rightBlock = { x: anchor.x + anchor.w + 4, y: 0, w: 400, h: 600 };
+    expect(pickFreeSide(anchor, box, [rightBlock])).toBe('left');
+    const leftBlock = { x: anchor.x - 420, y: 0, w: 400, h: 600 };
+    expect(pickFreeSide(anchor, box, [rightBlock, leftBlock])).toBe('right');
   });
 });

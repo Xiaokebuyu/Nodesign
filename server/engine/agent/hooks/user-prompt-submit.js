@@ -170,8 +170,17 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
   // 最近板书（2026-08-23；08-24 记忆改版时被误删，同日修回）：你/用户在画布上
   // 说过的最近几句 —— 对话在板上，得记得板上说了什么
   try {
-    const recent = await recentChalk(workspaceRoot, { limit: 8 });
+    const all = await recentChalk(workspaceRoot, { limit: 24 });
     const roleNames = await listRoleNames(workspaceRoot);
+    // 前 8 条 + 保底：每个角色最新那条就算被 GM 自己的章节/状态板挤出前 8 也要在 ——
+    // GM 需要知道台上角色说了什么（08-28 用户拍板），漏了它就会旁白转述/代笔补戏。
+    const recent = all.slice(0, 8);
+    const seenRole = new Set(recent.map(c => c.by));
+    for (const c of all.slice(8)) {
+      if (c.by && c.by !== 'agent' && c.by !== 'user' && !seenRole.has(c.by)) {
+        recent.push(c); seenRole.add(c.by);
+      }
+    }
     if (recent.length) {
       // 这段是注给**主 agent** 的，所以「你」= 主 agent；角色写的板书报它的名字，
       // 否则主 agent 会把角色写的东西当成自己写的（RP 线里那是大部分板书）。
