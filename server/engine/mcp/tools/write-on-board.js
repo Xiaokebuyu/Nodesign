@@ -40,7 +40,6 @@ import { ROLE_SLUG_RE } from '../../agent/cast.js';
 import { WORLD_PT, NODES, SHAPES, EDGES } from './write-on-board-schema.js';
 import { getScene } from '../../agent/scene.js';
 import { broadcastStageNote } from '../../agent/stage-broadcast.js';
-import { roundsTableHint } from '../../agent/rounds-table.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
@@ -200,15 +199,18 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           .map(([id]) => id).sort();
         if (chalks.length) replyToRaw = chalks[chalks.length - 1];
       }
-      // rounds 桌（2026-08-27 四模式版式）：轮次模式下角色没给任何落位时，机器按
-      // 桌位排 —— 自己的列往下续、首次开口在前一列右边开新列。角色明确给了
-      // reply_to/near/at（比如回用户落痕那条）时它的手优先，机器不抢。
+      // rounds 本拍锚定（08-28 摆位直觉版，退役 rounds-table 按人分列）：轮次场里
+      // 角色没给任何落位线索 = 它在回应**本拍** —— 缺省 reply_to 最新一条旁白板书，
+      // 台词经侧挂直觉落到旁白身侧。「章节竖列、每拍横排」从回应语义里自己长出来，
+      // 不再是写死的桌位表（用户拍板：版面从机械摆位直觉下手，不硬编格式）。
+      // 角色明确给了 reply_to/near/at（比如回用户落痕那条）时它的手优先。
       let nearRaw = args.near || null;
-      let tableSide = null;
-      if (args.ink !== 'hand' && !replyToRaw && !nearRaw && !args.at && !args.open_lane) {
-        const t = roundsTableHint(getScene(projectId), board, by);
-        if (t?.stack) replyToRaw = t.stack;
-        else if (t?.newColumnRightOf) { nearRaw = t.newColumnRightOf; tableSide = 'right'; }
+      if (args.ink !== 'hand' && !replyToRaw && !nearRaw && !args.at && !args.open_lane
+        && ROLE_SLUG_RE.test(by) && getScene(projectId)?.mode === 'rounds') {
+        const beats = Object.entries(board.objects)
+          .filter(([id, e]) => id.startsWith(`${CHALK_DIR}/`) && Number.isFinite(e?.x) && (e.by || 'agent') === 'agent')
+          .map(([id]) => id).sort();   // 板书文件名以时间戳开头，路径序即时间序
+        if (beats.length) replyToRaw = beats[beats.length - 1];
       }
 
       const em = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
@@ -269,16 +271,16 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         : null;
       // 落位直觉（08-27）：接楼方向和自动挑侧都先问用户把这条线往哪边摆过
       const flowDir = inferFlowDir(b2, { tag: args.tag || null });
-      // 台词侧挂（08-28 用户拍板）：角色回旁白，桌面横屏时挂到旁白两侧的空位 ——
-      // 叙事主列留给 GM 的章节链，台词读作"这一拍的和声"。竖屏/无视点保持下行
-      // （手机竖排=环境→台词往下摞，免费正确）；rounds 不动（桌位机器排）；
+      // 台词侧挂（08-28 用户拍板；08-28 晚 rounds 也放行）：角色回旁白，桌面横屏时
+      // 挂到旁白身侧 —— 叙事主列留给 GM 的章节链，台词读作"这一拍的和声"。
+      // rounds 恒偏右（半平面环搜把同拍的几条挤成一排，正是用户要的"每拍横排"）；
+      // free 用 pickFreeSide（右满换左无妨）。竖屏/无视点保持下行（手机竖排免费正确）；
       // 用户掰过的走向（flowDir）仍然最大。
       let replyDir = flowDir;
       if (!replyDir && replyRect && ROLE_SLUG_RE.test(by)
         && (board.objects?.[parentId]?.by || 'agent') === 'agent'
-        && vpRect && vpRect.w > vpRect.h
-        && getScene(projectId)?.mode !== 'rounds') {
-        replyDir = pickFreeSide(replyRect, box, obstacles);
+        && vpRect && vpRect.w > vpRect.h) {
+        replyDir = getScene(projectId)?.mode === 'rounds' ? 'right' : pickFreeSide(replyRect, box, obstacles);
       }
       // 同时有线程和锚点时，落位跟线程走、但到锚点的线也别压第三块
       const lineTargets = (replyRect && anchorRect)
@@ -287,7 +289,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const placed = lanePlan
         ? { x: lanePlan.x, y: lanePlan.y, resolution: lanePlan.fallback ? 'fallback' : 'lane-open', nudged: !!lanePlan.fallback }
         : resolvePlacement({
-          box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || tableSide || null,
+          box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
           replyDir, sideHint: flowDir, lineTargets,
           obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
         });

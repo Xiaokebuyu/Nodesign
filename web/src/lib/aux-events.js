@@ -36,6 +36,14 @@ export function handleAuxEvent(evt, { isStale, showToast }) {
     case 'run.auth_error':
       showToast(`模型鉴权失败：${evt.message || '未知错误'}`, 'error');
       return true;
+    // 明骰直达（08-28 roll_dice）：服务端真随机的骰面第一时间给用户看 ——
+    // 不经 GM 的笔，这条是"骰子可信"的另一半（工具返回那半给 GM 写正文用）
+    case 'run.dice': {
+      const mod = evt.modifier ? (evt.modifier > 0 ? `+${evt.modifier}` : `${evt.modifier}`) : '';
+      const vs = evt.dc != null ? ` vs DC${evt.dc} ${evt.outcome === 'success' ? '成功' : '失败'}` : '';
+      showToast(`🎲 ${evt.label}：${evt.n}d${evt.sides}${mod} → [${(evt.rolls || []).join(', ')}] = ${evt.total}${vs}`, 'info');
+      return true;
+    }
     default:
       return false;
   }

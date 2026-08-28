@@ -90,12 +90,12 @@ describe('台词侧挂', () => {
     expect(role.entry.y).toBeGreaterThanOrEqual(gm.y + gm.h);
   });
 
-  it('rounds 场：横屏也不侧挂（桌位机器排,轮次列往下长）', async () => {
+  it('rounds 场：横屏侧挂且恒偏右（08-28 摆位直觉版 —— 同拍台词挤成一排，桌位表退役）', async () => {
     const gm = await gmRect();
     landscape(gm.x - 200, gm.y - 100);
     setScene(pid, { mode: 'rounds', order: ['rp-jiangli', 'rp-bu'] });
     const role = await writeAs('rp-jiangli', { text: '台词一句。', reply_to: gm.id });
-    expect(role.entry.y).toBeGreaterThanOrEqual(gm.y + gm.h);
+    expect(role.entry.x).toBeGreaterThanOrEqual(gm.x + gm.w);   // 右半平面
   });
 
   it('主控自己 reply_to 自己照旧下行（侧挂只归角色的台词）', async () => {
