@@ -4,6 +4,16 @@ import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAITo
 const img = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
 
 describe('toOpenAIChatRequest', () => {
+  // bodyExtra 有两个读者（另一个是 transformForUpstream 给 Anthropic 透传腿用的），这是 openai-chat 腿那个
+  it('bodyExtra 合进顶层，且盖得过推导出来的键', () => {
+    const base = { model: 'x', max_tokens: 100, messages: [{ role: 'user', content: 'hi' }] };
+    expect(toOpenAIChatRequest(base, {}).vendor).toBeUndefined();
+    const out = toOpenAIChatRequest(base, { bodyExtra: { vendor: 'zai' } });
+    expect(out.vendor).toBe('zai');
+    // 行里明写的上游特配比这里推导的默认值更该赢
+    expect(toOpenAIChatRequest(base, { maxOutput: 500, bodyExtra: { max_tokens: 7 } }).max_tokens).toBe(7);
+  });
+
   it('system 块 / 字符串 content / tools / tool_choice / thinking→reasoning_effort / stream_options', () => {
     const out = toOpenAIChatRequest({
       model: 'x', stream: true, max_tokens: 32000,
@@ -175,6 +185,41 @@ describe('OpenAIToAnthropicSSE', () => {
     expect(events[1].d.content_block).toEqual({ type: 'text', text: '' });
     expect(events[2].d.delta).toEqual({ type: 'text_delta', text: '这个我没法帮你' });
     expect(events.at(-2).d.delta.stop_reason).toBe('end_turn');
+  });
+});
+
+describe('思考文本的两种字段名（08-27）', () => {
+  it('非流式：reasoning_content 优先，没有就认 Merge 网关的 thinking', () => {
+    const a = fromOpenAIChatResponse({ choices: [{ message: { role: 'assistant', reasoning_content: '想A', content: '答' }, finish_reason: 'stop' }] }, 'alias');
+    expect(a.content[0]).toMatchObject({ type: 'thinking', thinking: '想A' });
+    const b = fromOpenAIChatResponse({ choices: [{ message: { role: 'assistant', thinking: '想B', thinking_signature: null, content: '答' }, finish_reason: 'stop' }] }, 'alias');
+    expect(b.content[0]).toMatchObject({ type: 'thinking', thinking: '想B' });
+  });
+  it('流式：delta.thinking 也进 thinking 块（Merge 网关的增量字段名）', async () => {
+    const xf = new OpenAIToAnthropicSSE({ model: 'alias', label: 'Merge' });
+    const out = await collect(xf, [
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, delta: { role: 'assistant', thinking: '先想想', thinking_signature: null } }] })}\n\n`,
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, delta: { content: '答案' } }] })}\n\n`,
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, finish_reason: 'stop', delta: {} }], usage: { prompt_tokens: 5, completion_tokens: 3 } })}\n\n`,
+      'data: [DONE]\n\n',
+    ]);
+    const events = ev(out);
+    const thinkDelta = events.find(x => x.e === 'content_block_delta' && x.d.delta?.type === 'thinking_delta');
+    expect(thinkDelta.d.delta.thinking).toBe('先想想');
+    expect(xf.failReason).toBeNull();
+  });
+});
+
+describe('OpenAIToAnthropicSSE · Merge 网关的 cost 在 usage 里（08-27）', () => {
+  it('末块 usage.cost 被接住（这家没有顶层 cost，也没有 [DONE] 之后那条补丁块）', async () => {
+    const xf = new OpenAIToAnthropicSSE({ model: 'alias', label: 'Merge' });
+    await collect(xf, [
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, delta: { role: 'assistant', content: 'OK' } }] })}\n\n`,
+      `data: ${JSON.stringify({ id: 'm', choices: [{ index: 0, finish_reason: 'stop', delta: { content: '' } }], usage: { prompt_tokens: 146, completion_tokens: 27, cost: 0.00000354 } })}\n\n`,
+      'data: [DONE]\n\n',
+    ]);
+    expect(xf.cost).toBe(0.00000354);
+    expect(xf.usage?.prompt_tokens).toBe(146);
   });
 });
 

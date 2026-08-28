@@ -47,7 +47,7 @@ describe('takeCarry / addCarry —— 半截续接的账结转', () => {
     ctx.counters.totalCostUsd = n / 100;
     ctx.counters.durationMs = n * 10;
     ctx.counters.durationApiMs = n * 5;
-    ctx.counters.modelUsage = { 'ox-alpha': { inputTokens: n, outputTokens: n * 2, cacheReadTokens: n * 3, cacheCreateTokens: n * 4, costUsd: n / 100 } };
+    ctx.counters.modelUsage = { 'glm-5.3-flash-merge': { inputTokens: n, outputTokens: n * 2, cacheReadTokens: n * 3, cacheCreateTokens: n * 4, costUsd: n / 100 } };
   };
 
   it('结转后是两轮之和（token / cost / 时长）', () => {
@@ -71,18 +71,18 @@ describe('takeCarry / addCarry —— 半截续接的账结转', () => {
     const carry = ctx.takeCarry();
     fill(ctx, 50);
     ctx.addCarry(carry);
-    expect(ctx.counters.modelUsage['ox-alpha']).toMatchObject({ inputTokens: 150, outputTokens: 300, costUsd: expect.closeTo(1.5, 5) });
+    expect(ctx.counters.modelUsage['glm-5.3-flash-merge']).toMatchObject({ inputTokens: 150, outputTokens: 300, costUsd: expect.closeTo(1.5, 5) });
   });
 
   it('第一轮折进去的按件工具费（generate_image $0.20）不会被第二轮覆盖掉', () => {
     const ctx = mkCtx();
-    ctx.counters.modelUsage = { 'ox-alpha': { inputTokens: 10, outputTokens: 10, cacheReadTokens: 0, cacheCreateTokens: 0, costUsd: 0 } };
+    ctx.counters.modelUsage = { 'glm-5.3-flash-merge': { inputTokens: 10, outputTokens: 10, cacheReadTokens: 0, cacheCreateTokens: 0, costUsd: 0 } };
     ctx.addToolCharge('generate_image', 0.2);
     ctx._foldToolCharges();
     expect(ctx.counters.modelUsage.generate_image.costUsd).toBeCloseTo(0.2);
     const carry = ctx.takeCarry();
     // 第二轮：SDK 只报了模型账，charges 表已经在第一轮被清空
-    ctx.counters.modelUsage = { 'ox-alpha': { inputTokens: 5, outputTokens: 5, cacheReadTokens: 0, cacheCreateTokens: 0, costUsd: 0.01 } };
+    ctx.counters.modelUsage = { 'glm-5.3-flash-merge': { inputTokens: 5, outputTokens: 5, cacheReadTokens: 0, cacheCreateTokens: 0, costUsd: 0.01 } };
     ctx.counters.totalCostUsd = 0.01;
     ctx.addCarry(carry);
     expect(ctx.counters.modelUsage.generate_image.costUsd).toBeCloseTo(0.2);
@@ -92,8 +92,8 @@ describe('takeCarry / addCarry —— 半截续接的账结转', () => {
     const ctx = mkCtx();
     fill(ctx, 100);
     const carry = ctx.takeCarry();
-    ctx.counters.modelUsage['ox-alpha'].inputTokens = 999;
-    expect(carry.modelUsage['ox-alpha'].inputTokens).toBe(100);
+    ctx.counters.modelUsage['glm-5.3-flash-merge'].inputTokens = 999;
+    expect(carry.modelUsage['glm-5.3-flash-merge'].inputTokens).toBe(100);
   });
 
   it('多次续接一路滚下去（carry 存的是「已经含前面所有轮」的当前值）', () => {

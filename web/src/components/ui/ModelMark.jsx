@@ -33,6 +33,11 @@ export const QWEN_BRAND = '#6950EF';
 export const MINIMAX_BRAND = '#E73562';   // simple-icons 登记色（图标也是从那儿取的，同 DeepSeek/Claude 一个来源）
 /** Kimi 官方登记色是纯黑（simple-icons hex 000000）。⚠️ 不照搬：纯黑搬到纸上是一块砖（OpenCode 那枚已经踩过），改用站内墨色 */
 export const KIMI_BRAND = PAPER.ink;
+/**
+ * GLM（Z.ai）—— 官方 app icon 是 #2D2D2D 的深色圆角方 + 白色 Z（z-cdn.chatglm.cn/z-ai/static/logo.svg）。
+ * 跟 Kimi 同一种情况：登记色近纯黑，搬到纸上是一块砖。所以**丢掉方底、只取 Z 字形**，上站内墨色。
+ */
+export const GLM_BRAND = PAPER.ink;
 /** 'custom'：本地分发版用户自己配的插槽（没填 brand 时的默认牌子）。没有厂商可认，用中性灰的通用标 */
 export const CUSTOM_BRAND = '#8A8A8A';
 
@@ -54,6 +59,12 @@ const MINIMAX_PATH = 'M11.43 3.92a.86.86 0 1 0-1.718 0v14.236a1.999 1.999 0 0 1-
  */
 const OPENCODE_FRAME = 'M18 19.5H6V4.5H18V19.5ZM15 7.5H9V16.5H15V7.5Z';
 const OPENCODE_BLOCK = 'M15 10.5V16.5H9V10.5H15Z';
+/**
+ * Z.ai 的 Z（官方 logo.svg 里那三块：上横 + 斜杠 + 下横），按 24/30 换算进本文件统一的 24 单位画幅，
+ * 顺手把 Illustrator 留下的那段退化贝塞尔（起点终点重合）收成闭合线。原图 bbox x 5.7~24.3 / y 7.09~22.91，
+ * 换算后外框 [4.56, 5.68, 14.88, 12.65] —— 是**横向**的（宽高比 1.18），所以跟鲸那枚一样按高度对齐。
+ */
+const GLM_PATH = 'M12.376 5.68l-1.04 1.48c-.16.232-.432.376-.72.376h-5.68V5.68zM19.44 5.68 10.512 18.328H4.56L13.488 5.68zM11.624 18.328l1.048-1.488c.16-.232.432-.376.72-.376h5.672v1.864z';
 
 /** brand → 怎么画。vb = 裁到实际外框的 viewBox [x, y, w, h] */
 export const MARKS = Object.freeze({
@@ -61,6 +72,8 @@ export const MARKS = Object.freeze({
   deepseek: { paths: [{ d: DEEPSEEK_PATH }], vb: [0, 3.17, 24, 17.66], color: DEEPSEEK_BRAND },
   // onDark：这枚标的暖灰在深色底（舞台卡那种终端面）上会糊掉，那儿改用纸色单色画
   opencode: { paths: [{ d: OPENCODE_FRAME }, { d: OPENCODE_BLOCK, tint: PAPER.pencil }], vb: [6, 4.5, 12, 15], color: PAPER.ink2, onDark: PAPER.paper, evenodd: true },
+  // onDark 同 kimi/opencode：墨色在深色底上糊掉，改纸色
+  glm:      { paths: [{ d: GLM_PATH }], vb: [4.56, 5.68, 14.88, 12.65], color: GLM_BRAND, onDark: PAPER.paper },
   gemini:   { paths: [{ d: GEMINI_PATH }], vb: [0, 0, 24, 24], color: GEMINI_BRAND },
   qwen:     { paths: [{ d: QWEN_PATH }], vb: [0, 0, 24, 24], color: QWEN_BRAND },
   minimax:  { paths: [{ d: MINIMAX_PATH }], vb: [0, 1.92, 24, 20.16], color: MINIMAX_BRAND },

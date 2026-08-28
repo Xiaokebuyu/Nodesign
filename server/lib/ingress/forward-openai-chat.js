@@ -21,6 +21,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAIToAnthropicSSE, truncationOfChatResponse } from './openai-chat.js';
+import { upstreamCostOf } from './upstream-billing.js';
 
 export const DEFAULT_EMPTY_RETRIES = 2;
 export const DEFAULT_RETRY_BUDGET_MS = 120_000;
@@ -53,7 +54,7 @@ export function retryBudgetMs(env = process.env) {
 export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, target, path, agent, onOutcome = () => {}, onBilling = () => {}, onTruncated = () => {}, onNotice = () => {} }) {
   const wantStream = !!parsed.stream;
   const label = wire.upstream?.label || wire.upstreamId;
-  const body = toOpenAIChatRequest(parsed, { reasoningEffort: wire.reasoningEffort, maxOutput: wire.maxOutput });
+  const body = toOpenAIChatRequest(parsed, { reasoningEffort: wire.reasoningEffort, maxOutput: wire.maxOutput, bodyExtra: wire.bodyExtra });
   const outBody = Buffer.from(JSON.stringify(body), 'utf8');
   const useHttps = target.protocol === 'https:';
   const headers = {
@@ -292,7 +293,8 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, target, pa
       }
       onOutcome(true);
       onTruncated(truncationOfChatResponse(upstreamJson));
-      if (upstreamJson.cost != null || upstreamJson.usage) onBilling({ costUsd: upstreamJson.cost ?? null, usage: upstreamJson.usage || null });
+      const costUsd = upstreamCostOf(upstreamJson);   // Zen 放顶层、Merge 网关放 usage.cost
+      if (costUsd != null || upstreamJson.usage) onBilling({ costUsd, usage: upstreamJson.usage || null });
       const respBody = JSON.stringify(out);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(respBody)) });
       res.end(respBody);

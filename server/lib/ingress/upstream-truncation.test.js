@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveWireModel } from '../../engine/agent/model-context.js';
+import { MAX_RETRY_BUDGET_MS } from '../../runtime/local-config.js';
 
 describe('truncationReason —— 什么算「说到一半被掐」', () => {
   it('有正文 + 没有 finish_reason = 半截', () => {
@@ -58,8 +59,8 @@ describe('truncationOfChatResponse —— 非流式与流式同一张判据', ()
 describe('UpstreamTruncation —— 只记最近一次，取走即清', () => {
   it('记了能取到，取走就没了', () => {
     const t = new UpstreamTruncation();
-    t.note('sid1', 'no finish_reason', { appModel: 'ox-alpha' });
-    expect(t.take('sid1')).toMatchObject({ reason: 'no finish_reason', appModel: 'ox-alpha' });
+    t.note('sid1', 'no finish_reason', { appModel: 'glm-5.3-flash-merge' });
+    expect(t.take('sid1')).toMatchObject({ reason: 'no finish_reason', appModel: 'glm-5.3-flash-merge' });
     expect(t.take('sid1')).toBeNull();
   });
   it('后面一次收得完整就把标记清掉（一个回合里多次往返，只有收尾那次算数）', () => {
@@ -154,26 +155,35 @@ describe('OpenAIToAnthropicSSE.verdict —— 哪一发该原地重发', () => {
 });
 
 describe('就地重发额度按行配（08-21 深夜：这是模型体质问题，不是协议问题）', () => {
-  it('Ox 两个主行放宽到 6 次 / 360 秒 —— 而且是**经 resolveWireModel 到 forward** 的那条路（不是写了没人读）', () => {
-    for (const id of ['ox-alpha', 'ox-alpha-max']) {
+  // 08-26：唯一放宽过的两行（Ox 主行 / 深想行）随模型整族下架一起删了，今天**内置表里一条都没配**。
+  // 这三条断言因此换了钉法 —— 钉的不再是"那两行的数对不对"，而是这个旋钮**没有腐烂成死代码**：
+  // 字段仍从表通到 wire、读它的人还在读、任何人将来配上都不会撑破 CLI 的总超时。
+  it('今天内置行一条都没放宽（走全局默认），字段仍**经 resolveWireModel 通到 forward**', () => {
+    for (const id of ['glm-5.3-flash-merge', 'deepseek-v4-flash-vision', 'deepseek-v4-flash-helper', 'minimax-m3']) {
       const wire = resolveWireModel(id);
-      expect(wire.emptyRetries, `${id} 该放宽`).toBe(6);
-      expect(wire.retryBudgetMs, `${id} 该放宽`).toBe(360_000);
+      expect(wire, `${id} 该在表里`).toBeTruthy();
+      // null 而不是 undefined：resolveWireModel 显式产出这两个键，forward 才 Number.isFinite 得下去
+      expect(wire.emptyRetries, `${id}`).toBeNull();
+      expect(wire.retryBudgetMs, `${id}`).toBeNull();
+      expect('emptyRetries' in wire && 'retryBudgetMs' in wire, `${id} 的键该在`).toBe(true);
     }
   });
 
-  it('helper 不放宽（一句话的活，重发只是白占上游）；没配的行走全局默认', () => {
-    expect(resolveWireModel('ox-alpha-helper').emptyRetries).toBeNull();
-    expect(resolveWireModel('deepseek-v4-flash-vision').emptyRetries).toBeNull();
-    expect(resolveWireModel('deepseek-v4-flash-vision').retryBudgetMs).toBeNull();
+  it('⛔ 旋钮不许烂成死代码：forward 仍按行取额度，行内没写才落全局默认', () => {
+    const fwd = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'forward-openai-chat.js'), 'utf8');
+    expect(fwd).toMatch(/Number\.isFinite\(wire\.emptyRetries\)\s*\?\s*wire\.emptyRetries\s*:\s*emptyRetryLimit\(\)/);
+    expect(fwd).toMatch(/Number\.isFinite\(wire\.retryBudgetMs\)\s*\?\s*wire\.retryBudgetMs\s*:\s*retryBudgetMs\(\)/);
   });
 
-  it('⛔ 任何行的预算 + 单发最长挂起都必须留在 CLI 流式请求的 600 秒总超时之内（实测单发最长挂 185 秒）', () => {
+  it('⛔ 任何预算 + 单发最长挂起都必须留在 CLI 流式请求的 600 秒总超时之内（实测单发最长挂 185 秒）', () => {
     const WORST_ATTEMPT_MS = 185_000;
     const CLI_REQUEST_TIMEOUT_MS = 600_000;   // SDK 客户端 timeout 默认值（binary 实查）
     const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../engine/agent/model-table.js'), 'utf8');
-    const budgets = [...src.matchAll(/retryBudgetMs:\s*([0-9_]+)/g)].map((m) => Number(m[1].replace(/_/g, '')));
-    expect(budgets.length, '表里该有配过预算的行').toBeGreaterThan(0);
-    for (const b of budgets) expect(b + WORST_ATTEMPT_MS).toBeLessThan(CLI_REQUEST_TIMEOUT_MS);
+    // 内置行：今天是空的（08-26 起），将来谁配上就得过这道尺
+    for (const m of src.matchAll(/retryBudgetMs:\s*([0-9_]+)/g)) {
+      expect(Number(m[1].replace(/_/g, '')) + WORST_ATTEMPT_MS).toBeLessThan(CLI_REQUEST_TIMEOUT_MS);
+    }
+    // 外部插槽（本地分发版用户自己填）：内置行空了之后，**这道天花板才是今天真正在生效的那道**
+    expect(MAX_RETRY_BUDGET_MS + WORST_ATTEMPT_MS).toBeLessThan(CLI_REQUEST_TIMEOUT_MS);
   });
 });

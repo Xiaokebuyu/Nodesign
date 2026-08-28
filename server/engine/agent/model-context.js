@@ -186,7 +186,7 @@ export function isModelLockedFor(user, appModel) {
 }
 
 /**
- * 这个用户没选过时用哪个：表里标 `default: true` 的行（08-21 = ox-alpha），它对该用户
+ * 这个用户没选过时用哪个：表里标 `default: true` 的行（08-26 起 = minimax-m3），它对该用户
  * 不可选时退到第一个可选的。前端 picker 与新会话的兜底都问这条，不再各自硬编码。
  */
 export function defaultModelFor(user) {
@@ -382,6 +382,11 @@ export function resolveWireModel(bodyModel) {
     // 预算 + 单发最长挂起（实测 185 秒）必须 < 600 秒（配了断言，见 upstream-truncation.test.js）。
     emptyRetries: Number.isFinite(row.api.emptyRetries) ? row.api.emptyRetries : null,
     retryBudgetMs: Number.isFinite(row.api.retryBudgetMs) ? row.api.retryBudgetMs : null,
+    // 上游要的额外顶层 body 字段（今天只有 merge 的 `vendor` 点名，见表里那行）。
+    // ⚠️ **这一份配置有两个读者**，因为两条腿各自序列化 body：Anthropic 透传在 transformForUpstream
+    // 里 Object.assign 到 parsed，openai-chat 在 toOpenAIChatRequest 里合进 out。加第三条腿要记得
+    // 带上它 —— 漏了不会报错，只是点名静默失效（model-ingress.test.js 两条腿各有一条断言）
+    bodyExtra: row.api.bodyExtra || null,
   };
 }
 

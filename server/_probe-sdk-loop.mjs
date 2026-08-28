@@ -1,17 +1,20 @@
 /**
- * server/_probe-ox-sdk.mjs — 真 claude-agent-sdk 循环 → 本进程 ingress（openai-chat 转换层）→ Zen Ox Alpha。
+ * server/_probe-sdk-loop.mjs — 真 claude-agent-sdk 循环 → 本进程 ingress（openai-chat 转换层）→ 上游。
  * 验：工具循环转得动、tool_result 回图能看见、流式事件 SDK 吃得下、usage/cost 记账形状。
- *   node --env-file=.env server/_probe-ox-sdk.mjs
+ *   node --env-file=.env server/_probe-sdk-loop.mjs [appModel]
+ *
+ * 08-26 从 _probe-ox-sdk.mjs 改名；08-27 默认行换成 glm-5.3-flash-merge（zenGo 那条 glm 撤了）。这支探针查的
+ * 从来不是某个模型，是**接一条新行之后 SDK 那一圈还转不转得动**。接下一条 openai-chat 行时直接拿它跑。
  */
 import sharp from 'sharp';
 import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { getOrStartIngress, registerIngressSession, stopIngress } from './lib/model-ingress.js';
 import { resolveModelRoute, pickThinkingConfig } from './engine/agent/model-context.js';
 
-const APP = process.argv[2] || 'ox-alpha';
+const APP = process.argv[2] || 'glm-5.3-flash-merge';
 const route = resolveModelRoute(APP);
 const { baseUrl } = await getOrStartIngress();
-const SID = `oxprobe-${Date.now()}`;
+const SID = `sdkprobe-${Date.now()}`;
 registerIngressSession(SID, APP);
 
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320"><rect width="480" height="320" fill="#102040"/><polygon points="240,40 120,220 360,220" fill="#ffd21e"/><text x="240" y="285" font-size="44" font-family="monospace" fill="#ffffff" text-anchor="middle">ND-7342</text></svg>`;

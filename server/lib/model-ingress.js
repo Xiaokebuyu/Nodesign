@@ -360,6 +360,10 @@ export async function transformForUpstream(parsed, wire) {
     if (await normalizeImages(parsed.messages, VISION_MAX_DIM, allowed)) mutated = true;
   }
 
+  // 上游要的额外顶层字段（merge 的 vendor 点名）。放在这里是 **Anthropic 透传腿的读者** ——
+  // 那条腿直接 JSON.stringify(parsed)。openai-chat 腿另有一个读者，见 toOpenAIChatRequest
+  if (wire.bodyExtra) { Object.assign(parsed, wire.bodyExtra); mutated = true; }
+
   return mutated;
 }
 

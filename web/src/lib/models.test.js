@@ -17,7 +17,7 @@ describe('isModelPrefStale', () => {
     expect(isModelPrefStale('gemini-3.7-flash', SERVER)).toBe(false);
   });
   it('偏好指向 locked 的订阅行（公开注册号）→ 过期，自净成默认', () => {
-    expect(isModelPrefStale('claude-sonnet-5[1m]', [{ id: 'ox-alpha' }, { id: 'claude-sonnet-5[1m]', locked: true }])).toBe(true);
+    expect(isModelPrefStale('claude-sonnet-5[1m]', [{ id: 'minimax-m3' }, { id: 'claude-sonnet-5[1m]', locked: true }])).toBe(true);
   });
   it('⚠️ 拿不到服务端清单时一律当"没过期" —— 拿兜底清单判会把带闸门的模型误伤', () => {
     for (const opts of [null, undefined, []]) {
