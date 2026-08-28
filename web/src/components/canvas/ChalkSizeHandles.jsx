@@ -29,6 +29,31 @@ import { CANVAS, alpha } from '../../lib/theme.js';
 
 /** 最小宽（网格 8 格 = write_on_board schema 的下限，两边一把尺） */
 const MIN_W = 8 * 24;
+/** 最小高：正文再短也留一行的地方 */
+const MIN_H = 24;
+
+/**
+ * 正文的**自然**高度（世界单位）—— 高度手柄的下限。
+ *
+ * ⛔⛔ **必须先把 minHeight 摘掉再量**（2026-08-28 用户实报「拉高之后缩不回去」）。
+ * 留白是用 minHeight 实现的，minHeight 一生效，量到的高**就是留白本身**：
+ *
+ *   拖到 200 → 存 h=200 → minHeight:200 → 下次量还是 200 → 下限=200 → 再也下不去
+ *
+ * 每拖高一次地板就跟着抬一次，这是个自反馈的棘轮。摘掉再量拿到的才是「字占多高」，
+ * 于是往回缩能一路缩到贴着正文为止。量完立刻还原，同步块内完成，不会闪。
+ *
+ * 抽成独立函数是为了可测：happy-dom 没有真布局引擎，量不出这个 bug，
+ * 但一个「高度受 minHeight 影响」的假元素能把棘轮原样复现（见同名测试）。
+ */
+export function naturalHeightOf(el, camScale = 1) {
+  if (!el) return 0;
+  const saved = el.style.minHeight;
+  el.style.minHeight = '0px';
+  const h = el.getBoundingClientRect().height / Math.max(0.05, camScale);
+  el.style.minHeight = saved;
+  return h;
+}
 
 export default function ChalkSizeHandles({ o, sz, camScale = 1, toWorld, onResize }) {
   const gestureRef = useRef(null);
@@ -36,13 +61,10 @@ export default function ChalkSizeHandles({ o, sz, camScale = 1, toWorld, onResiz
   const grip = 11 * k;
 
   /** 正文此刻实际多高（世界单位）—— 高度手柄的下限，拖不到比字还矮 */
-  const contentH = () => {
-    const el = document.querySelector(`[data-board-object="${CSS.escape(String(o.id))}"]`);
-    const h = el ? el.getBoundingClientRect().height / Math.max(0.05, camScale) : 0;
-    // 减掉已经生效的 minHeight 影响：量到的高只在没留白时等于内容高，
-    // 留了白就以当前 h 为准往下让一档，够用且不会越拖越大
-    return Math.max(24, Math.round(o.pos?.sized === 'user' ? Math.min(h, sz.h) : h));
-  };
+  const contentH = () => Math.max(
+    MIN_H,
+    Math.round(naturalHeightOf(document.querySelector(`[data-board-object="${CSS.escape(String(o.id))}"]`), camScale)),
+  );
 
   const start = (e, axis) => {
     e.stopPropagation();
