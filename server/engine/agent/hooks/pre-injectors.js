@@ -43,22 +43,26 @@ export function makePreToolUseGetPendingChangesProtocolInjector() {
  * 常驻在 prelude 里是 1.2k tokens，但一次会话里可能一次都用不上。
  */
 export function makePreToolUseAskUserQuestionProtocolInjector() {
-  // 08-27 用户拍板「提问上板」：问题不再走侧栏卡片，一律落成板书 + nd:controls
-  // 选项钮 —— 问题连着它问的东西（near 主题板书/产物），选项可点，supersede 让
-  // 新问题顶掉旧问题。改造成 deny 闸而不是话术：写成话术模型不听（块 6 老课）。
-  return async (_input, _toolUseId, _options) => ({
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      permissionDecision: 'deny',
-      permissionDecisionReason:
-        '这个平台的提问上板，不走侧栏卡片。把问题写成一条板书：'
-        + 'write_on_board { text: "…问题正文 + nd:controls 围栏（每个选项一枚钮，'
-        + '末尾一枚 [其他/自由回答] 提示他可以直接在板书上标注）", '
-        + 'near: <它问的那件东西的 id>, tag: "提问" }，围栏里写 supersede: 提问 '
-        + '（新问题落地旧问题自动变灰）。写完侧栏一句话收尾、结束回合 —— '
-        + '用户点钮的选择会进你下一轮。多个问题就多条板书，各自 near 各自的主题。',
-    },
-  });
+  // 08-28 用户拍板还原：撤掉 08-27 的「提问上板」deny 闸，AskUserQuestion 走回
+  // 侧栏卡片本职。上板问选择仍然可以（nd:controls 是现役件），但那是 agent 的
+  // 版面选择，不再由闸强制。
+  let alreadyInjected = false;
+  return async (_input, _toolUseId, _options) => {
+    if (alreadyInjected) return {};
+    alreadyInjected = true;
+    const protocol = loadToolPrompt('ask-user-question-protocol');
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        additionalContext:
+          '<system-reminder>\n[AskUserQuestion 协议 — 首次注入]\n\n'
+        + protocol
+        + '\n\n本协议每 session 只注入一次，后续问用户直接按它写。\n'
+        + '</system-reminder>',
+      },
+    };
+  };
 }
 
 /**
