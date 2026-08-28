@@ -198,7 +198,14 @@ export function resolve(pathname, method, body) {
   if (p === '/notices') return { json: { notices: [] } };
   if (p === '/plugins') return { json: { plugins: [] } };
 
-  if (p === '/projects') return { json: { projects: [{ id: PROJECT_ID, name: 'Demo 项目', kind: 'project' }] } };
+  // 两种纸各来一张：首页的项目卡按 mode 换纸（演出=稿纸、设计=横格本），
+  // 只有一条 fixture 的时候另一种永远看不见 —— 检查台看不见的差别等于没做
+  if (p === '/projects') {
+    return { json: { projects: [
+      { id: PROJECT_ID, name: 'Demo 项目', kind: 'project', mode: 'design' },
+      { id: 'p_demo_rp', name: '雨夜事务所', kind: 'project', mode: 'rp' },
+    ] } };
+  }
   if (p === `/projects/${PROJECT_ID}`) {
     return { json: { project: { id: PROJECT_ID, name: 'Demo 项目', kind: 'project', candidates: [], skillId: 'nodesign' } } };
   }

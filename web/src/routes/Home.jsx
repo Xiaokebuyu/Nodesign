@@ -15,6 +15,7 @@ import { useMedia, NARROW } from '../lib/use-media.js';
 import dTangle from '../assets/login-wall/doodles/tangle.webp';
 import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
 import { t, getLocale } from '../lib/i18n.js';
+import { sheetClassOf } from './home-sheets.js';
 
 /**
  * Home 页 —— 进门之后的那面板子（2026-08-03 改版）
@@ -400,7 +401,9 @@ function ProjectCard({ project, stat, newest }) {
 
   return (
     <div
-      className={`ndd-card${newest ? ' top' : ''}`}
+      // 卡片就是那个项目的那张纸：演出项目是稿纸（米黄 + 红格线），设计是横格本。
+      // 跟输入栏读同一份配方，所以桌上摆的和手里写的是同一个世界的纸。
+      className={`ndd-card ${sheetClassOf(project.mode)}${newest ? ' top' : ''}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => { setHover(false); setMenuOpen(false); }}
     >

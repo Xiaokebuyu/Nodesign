@@ -16,6 +16,8 @@ import { CSS } from './home-styles.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ENTRY = fs.readFileSync(path.join(HERE, 'home-quick-entry.jsx'), 'utf8');
+const SHEETS = fs.readFileSync(path.join(HERE, 'home-sheets.js'), 'utf8');
+const HOME = fs.readFileSync(path.join(HERE, 'Home.jsx'), 'utf8');
 
 /**
  * 取一条 CSS 规则的声明块（这几条规则体里没有嵌套花括号）。
@@ -140,8 +142,8 @@ describe('首页页签跟纸的接缝', () => {
 
   /** JSX 挑配方类靠一张表，表里写错一个字就是"那种纸压根没有配方" */
   it('SHEET_CLS 里的每个类名在 CSS 里都真有配方', () => {
-    const tbl = ENTRY.match(/const SHEET_CLS = \{([^}]*)\}/)?.[1];
-    expect(tbl, 'home-quick-entry.jsx 里找不到 SHEET_CLS').toBeTruthy();
+    const tbl = SHEETS.match(/const SHEET_CLS = \{([^}]*)\}/)?.[1];
+    expect(tbl, 'home-sheets.js 里找不到 SHEET_CLS').toBeTruthy();
     const cls = [...tbl.matchAll(/'([\w-]+)'/g)].map((m) => m[1]);
     expect(cls.length, 'SHEET_CLS 是空的？').toBeGreaterThanOrEqual(2);
     for (const c of cls) {
@@ -247,6 +249,22 @@ describe('首页页签跟纸的接缝', () => {
     const z = (body) => Number(body.match(/z-index:\s*(-?\d+)/)?.[1]);
     expect(z(rule('.ndd-stack > .nd-tabs ')), '签的 z 得比纸低')
       .toBeLessThan(z(rule('.ndd-pad ')));
+  });
+
+  /**
+   * 桌上的项目卡和手里的输入栏得是**同一个世界的纸**：都读 .nd-sheet-* 那份配方。
+   * 卡片这边最容易退化成"挂一枚徽记说这个是演出的" —— 那就又回到描边+填充那套
+   * 语言里去了，而且徽记跟纸色是两处定义、迟早不一致。
+   */
+  it('项目卡跟输入栏读同一份配方（演出的卡就是稿纸，不是挂了牌的白纸）', () => {
+    expect(HOME, 'Home.jsx 没给卡片挑配方类 —— 桌上就看不出哪些是演出项目')
+      .toMatch(/sheetClassOf\(project\.mode\)/);
+    const card = rule('.ndd-card > a ');
+    expect(card.match(/background-color:\s*([^;]+)/)?.[1].trim(),
+      '卡片的底色得读 --sheet，写死就跟输入栏那两种纸分家了').toBe('var(--sheet)');
+    // 演出那张空白缩略图得真换过（红格线），不是跟设计共用一份
+    expect(CSS, '演出项目的空白缩略图没换成稿纸 —— 有封面的卡靠纸色区分，没封面的靠格线')
+      .toMatch(/\.nd-sheet-rp \.ndd-shot\.empty\s*\{/);
   });
 
   it('那枚胶囊已经拆干净（.ndd-mode 一处都不许剩）', () => {

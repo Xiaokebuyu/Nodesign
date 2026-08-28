@@ -339,8 +339,11 @@ export const CSS = `
   background: radial-gradient(circle at 35% 30%, #8a7a62, #453a2c 65%);
   box-shadow: -1px 2px 3px rgba(43,33,23,0.45); }
 .ndd-card .pin.r { background: radial-gradient(circle at 35% 30%, #b4544a, #7d241c 65%); }
+/* 卡片的底色跟着这个项目是哪种纸走（.nd-sheet-* 挂在 .ndd-card 上，
+   跟输入栏那一叠读的是同一份配方）—— 桌上于是真的混着两种纸，
+   而不是靠一枚徽记去说"这个是演出的" */
 .ndd-card > a { display: block; position: relative; padding: 15px 14px 12px;
-  background-color: var(--paper); background-image: var(--grain);
+  background-color: var(--sheet); background-image: var(--grain);
   box-shadow: ${PAPER_SHADOW.mid};
   text-decoration: none; color: inherit;
   transform: rotate(var(--rot, 0deg)); transform-origin: 50% 7px;
@@ -364,6 +367,13 @@ export const CSS = `
   background-color: #FBF7EC;
   background-image: repeating-linear-gradient(180deg, transparent 0 21px, rgba(43,33,23,0.05) 21px 22px);
   box-shadow: inset 0 0 0 1px rgba(43,33,23,0.06); }
+/* 演出项目那张空白纸是**稿纸**：转旧、红格线、四周一道很淡的版心。
+   ⚠️ 这儿不能直接用配方里的 --rules：卡片上的格子是 22px 一行（缩略图的比例），
+   输入框是 29px（真行高）。同一种纸、两个尺度，所以颜色抄过来、格高各算各的。 */
+.nd-sheet-rp .ndd-shot.empty {
+  background-color: #FBF4E2;
+  background-image: repeating-linear-gradient(180deg, transparent 0 21px, rgba(168,54,43,0.11) 21px 22px);
+  box-shadow: inset 0 0 0 1px rgba(168,54,43,0.16); }
 
 .ndd-card .t { margin-top: 12px; font: 700 15.5px var(--kai); letter-spacing: 0.02em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

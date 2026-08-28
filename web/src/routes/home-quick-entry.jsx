@@ -21,6 +21,7 @@ import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { Assets } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
+import { SHEET_CLS, MODE_LABEL } from './home-sheets.js';
 
 
 /**
@@ -79,14 +80,6 @@ function pickPlaceholder(mode) {
   const pool = mode === 'rp' ? PLACEHOLDER_EXAMPLES_RP : PLACEHOLDER_EXAMPLES;
   return t(pool[Math.floor(Math.random() * pool.length)]);
 }
-
-/**
- * 两种纸：类名 = home-styles.js 里那组配方（底色/格线/版心/底下压着什么纸）。
- * 真输入框和"正在被揭掉的那张"挂同一个类，所以纸长什么样只有一份定义。
- */
-const SHEET_CLS = { design: 'nd-sheet-design', rp: 'nd-sheet-rp' };
-/** 页签上的字。⚠️ 别在这儿包 t()：模块级 const 只求值一次，会把语言烤死 */
-const MODE_LABEL = { design: '设计', rp: '演出' };
 
 /** 首页的模式偏好只是个本地便利：读不到就落 design，绝不因此报错 */
 const MODE_LS_KEY = 'nd-home-mode';
