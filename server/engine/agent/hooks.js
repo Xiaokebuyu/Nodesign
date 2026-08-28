@@ -354,12 +354,12 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // SubagentStart / SubagentStop —— 主动捕子代理生命周期。当前只 emit 事件
     // 给上层观察；不阻塞流程。stage 2 真接通子代理时这里加调度逻辑。
     SubagentStart: [{
-      hooks: [makeSubagentStartHandler({ ctx })],
+      hooks: [makeSubagentStartHandler({ ctx, sessionId })],
     }],
     SubagentStop: [{
       // 常驻角色退场时补一句「怎么把它叫回来」给主控。放在通用 emit 之后：
       // 那个只 emit 事件不返输出，两者不抢 systemMessage。见 resident-role-lifecycle.js
-      hooks: [makeSubagentStopHandler({ ctx }), makeSubagentStopRoleNotice({ projectId })],
+      hooks: [makeSubagentStopHandler({ ctx, sessionId }), makeSubagentStopRoleNotice({ projectId })],
     }],
   });
 }
