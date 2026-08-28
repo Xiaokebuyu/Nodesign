@@ -196,6 +196,24 @@ describe('首页页签跟纸的接缝', () => {
       .toEqual([]);
   });
 
+  /**
+   * 签和纸是一体的：纸被扯下去，它那片签得跟着走。
+   *
+   * ⛔ 这条是踩出来的，而且踩得很典型：把选择器从 .tabs 改名成 .nd-tabs 时漏了
+   * 隐藏另一片的那行，于是复制品把**整对**签都显出来了 —— 屏幕上一对歪着飞的
+   * 标签，看起来完全像"设计上就不该带签"，我据此把整个功能删了。
+   * **改名漏掉一条规则，长得跟设计错误一模一样。** 所以两头都钉住：复制品里得有
+   * 那条签，CSS 里得有那条隐藏规则。
+   */
+  it('被扯下去的那张纸带着自己那片签一起走', () => {
+    const i = ENTRY.indexOf('ndd-peel');
+    expect(i, 'home-quick-entry.jsx 里找不到那张复制品').toBeGreaterThan(0);
+    expect(ENTRY.slice(i, i + 1200), '复制品里没有页签 —— 签和纸是一体的，纸被扯走签得跟着走')
+      .toMatch(/className="nd-tabs"/);
+    expect(CSS, '复制品只该显自己那一片签，另一片占位不显形 —— 少了这条会飞出去一整对')
+      .toMatch(/\.ndd-peel \.nd-tabs > \*:not\(\.on\)\s*\{[^}]*visibility:\s*hidden/);
+  });
+
   it('签在 DOM 上排在纸前面（不然它就压在纸上，"被压着"就成了假的）', () => {
     const iTabs = ENTRY.indexOf('className="nd-tabs" role="radiogroup"');
     const iPad = ENTRY.indexOf("className=\"ndd-pad\"");

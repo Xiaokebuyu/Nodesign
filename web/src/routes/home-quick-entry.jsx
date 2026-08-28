@@ -338,8 +338,10 @@ export default function QuickEntry({ prefill }) {
         >
           {/* 被揭掉的那张：整张纸的复制品（自带一份旧配方，所以不用重写任何皮），
               翻飞出去后 animationend 自己收掉。
-              ⚠️ 它**不带页签** —— 签是整叠的东西，钉在纸叠上不动；只有纸被抽走。
-              也盖不住回形针和工具栏（两者 z 都比它高）：针别的是整叠，
+              签跟纸是一体的，所以复制品里带**自己那一片**签，跟着纸一起被扯下去；
+              另一片占位但不显形（visibility:hidden），让底下真的那片透上来 ——
+              槽位不变、露出来的是下一张同类纸的签。
+              盖不住回形针和工具栏（两者 z 都比它高）：针别的是整叠，
               +/模型/开工 是这一叠的家什，纸是从它们底下抽走的。 */}
           {peel && (
             <div
@@ -348,6 +350,10 @@ export default function QuickEntry({ prefill }) {
               aria-hidden="true"
               onAnimationEnd={() => setPeel((cur) => (cur && cur.id === peel.id ? null : cur))}
             >
+              <div className="nd-tabs">
+                <span className={peel.from === 'design' ? 'on' : undefined}>{t(MODE_LABEL.design)}</span>
+                <span className={peel.from === 'rp' ? 'on' : undefined}>{t(MODE_LABEL.rp)}</span>
+              </div>
               <div className="lines" style={{ height: peel.h }}>
                 {peel.text || <span className="ph">{`\u2002${peel.ph}`}</span>}
               </div>
