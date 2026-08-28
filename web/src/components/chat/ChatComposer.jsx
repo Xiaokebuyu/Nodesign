@@ -5,7 +5,6 @@ import { PAPER, GRAIN, PAPER_SHADOW } from '../../lib/paper.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { useDropzone } from '../../lib/useDropzone.js';
 import { isImeEnter } from '../../lib/helpers.js';
-import { stageHint } from '../../lib/role-stage.js';
 import { useMedia, COARSE } from '../../lib/use-media.js';
 import ComposerTray from './ComposerTray.jsx';
 import SuggestionChip from './SuggestionChip.jsx';
@@ -37,10 +36,10 @@ export default function ChatComposer({
   // V2：Send 按钮承担运行状态显示责任。isRunning=true 时按钮变"停止"红，点击 onStop。
   // disabled 仍兼容（外部可强制禁用，如 hydrateError）但 isRunning 优先决定按钮形态。
   isRunning = false,
-  // 三态，不是两态（2026-08-26）：主对话在跑 / 只有角色在台上 / 全空闲。
-  // 中间那态原来没有表达，用户看见「停止」会以为对话被占用而不敢发消息。
-  roleStage = {},
-  roleNames = {},
+  // ⛔ 台上提示（「泉此方 在写／在等」那行）2026-08-28 撤役：同一件事画布上的
+  // 角色精灵已经在说了（矢量标自己动 + 名牌上的状态点），输入框上再写一遍是重复，
+  // 而画布那处才是它真正发生的地方。roleStage/roleNames 两个 prop 一并从这里摘掉 ——
+  // 拆剩的空壳 prop 不留（这仓库为「空壳钩子」付过学费）。
   onStop,
   // [+] 菜单里的上下文分区（ChatPanel 透传）
   contextUsage = null,
@@ -139,8 +138,6 @@ export default function ChatComposer({
 
   const empty = !text.trim() && !hasAttachment;
 
-  // 台上有谁（第三态）。判据收在 lib/role-stage.js（有单测），别在这儿另写一份。
-  const stage = stageHint(roleStage, roleNames);
 
   // V3：拖文件入复合器 → 走和 Paperclip 同条路（onPickFile）。
   // isRunning 不拦：streamInput 模式下附件在 POST /turn 时就拼进 blocks 随消息
@@ -288,31 +285,6 @@ export default function ChatComposer({
               以前这里什么都不显示，而按钮因为一个 bug 卡在「停止」，用户以为对话被占了
               不敢发消息（病根见 runs/turn-relay.js isBackgroundTurnOpener）。
               现在按钮照常是「发送」，只在旁边说清楚台上是谁、在写还是在等。 */}
-          {!isRunning && stage && (
-            <span
-              title={stage.allWaiting
-                ? '台上的角色挂着等你回话——在它写的板书上标注就能直接说给它听'
-                : '台上的角色正在写——你照常可以给主控发消息'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-                marginRight: GAP.sm,
-                fontFamily: FONT_KAI, fontSize: FONT_SIZE.sm,
-                color: COLOR.text2, whiteSpace: 'nowrap',
-              }}
-            >
-              <span
-                className={stage.allWaiting ? undefined : 'nd-shimmer'}
-                style={{
-                  width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                  background: stage.allWaiting ? COLOR.text3 : PAPER.ink,
-                }}
-              />
-              {stage.turnLabel
-                ? `轮到 ${stage.turnLabel}`
-                : `${stage.label}${stage.allWaiting ? ' 在等' : ' 在写'}`}
-            </span>
-          )}
-
           {/* streamInput 重构：恢复一体切换按钮（原设计）—— isRunning 时显 stop（中断
               当前 turn，query 不死），idle 时显 send。Enter 始终触发 submit（追加排队）—
               用户想在 agent 跑时追加消息直接 Enter，按钮形态不影响 */}

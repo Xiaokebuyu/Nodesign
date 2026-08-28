@@ -45,7 +45,6 @@ import { bumpFileVersion, versionOfFile } from '../lib/file-versions.js';
 // 事件分流判据（名单+过期规则）2026-08-14 抽进 lib/event-router.js 配单测 ——
 // 谁进哪条管线是"精灵丢状态"病族的老巢，判据改动要连测试一起动
 import { STAGE_EVENTS, CHAT_STREAM_EVENTS, isStaleEvent } from '../lib/event-router.js';
-import { reduceRoleStage, useRoleNames } from '../lib/role-stage.js';
 import { usePendingEdits } from '../hooks/usePendingEdits.js';
 import { useBrowseWindow } from '../hooks/useBrowseWindow.js';
 
@@ -118,9 +117,6 @@ export default function ProjectWorkspace() {
   const [messages, setMessages] = useState([]);
   const [inputs, setInputs] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  // 台上的常驻角色 slug → { waiting }。⚠️ 跟 isStreaming 是两件事，见 lib/role-stage.js
-  const [roleStage, setRoleStage] = useState({});
-  const roleNames = useRoleNames(id, roleStage);   // slug → 展示名（GET /roles）
   const [queueDepth, setQueueDepth] = useState(0);  // streamInput 模式下 inputQueue 积压数（"已排队 N 条"）
   const [isTweaksExposed, setIsTweaksExposed] = useState(false);  // agent 调过 expose_tweaks 才在 ChatPanel 显示打开按钮
   const [wsStatus, setWsStatus] = useState('connecting');     // 'connecting' | 'open' | 'reconnecting' | 'closed'
@@ -681,8 +677,6 @@ export default function ProjectWorkspace() {
 
     // ── 1. 舞台旁路 ──：工具流 / 文件变更 / 收场信号原样转发给工作台画布
     // （agent 实时动作演出）。BoardCanvas 未挂载时 stageRef.current 为 null，自然丢弃。
-    setRoleStage(prev => reduceRoleStage(prev, evt));   // 台上名单，见 lib/role-stage.js
-
     if (STAGE_EVENTS.has(evt.type) && !isStale) {
       stageRef.current?.onEvent?.(evt);
     }
@@ -2217,8 +2211,6 @@ export default function ProjectWorkspace() {
             messages={messages}
             onSend={handleSend}
             isStreaming={isStreaming}
-            roleStage={roleStage}
-            roleNames={roleNames}
             queueDepth={queueDepth}
             wsStatus={wsStatus}
             lastEventAt={lastEventAt}

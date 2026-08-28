@@ -47,7 +47,9 @@ export const STAGE_EVENTS = new Set([
   // run.subagent.stop **2026-08-26 只为常驻角色重新入列**：角色的在场条目
   // 由 board.focus 建立，而 run.done 分支明确跳过角色（它在后台自己活着）——
   // 于是它**一条删除路径都没有**，退场后精灵永远留在画布上当幽灵，
-  // 而侧栏的 roleStage 会正确摘掉它 → 两个状态源背离。见 board-presence reducer。
+  // 而它是唯一能摘掉幽灵的信号。见 board-presence reducer。
+  // （2026-08-28：侧栏那份 roleStage 表随「台上提示」一起撤役，在场状态从此
+  //   只剩 presence 一个真相源 —— 两个状态源背离的老账也就此结清。）
   'run.subagent.stop',
   // （run.task.* 2026-08-18 移出名单：子代理便利贴与
   //   在场徽记退役，画布不再消费它们 —— 聊天侧栏的 Task 抽屉行走
