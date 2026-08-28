@@ -11,6 +11,18 @@
  * 都没渲染过，画布上只剩一枚孤零零的名牌。用户报「一直没有被实现」说的就是它。
  * 现在跟主精灵拿同一个 brand（useCurrentModelBrand），只是小一圈。
  *
+ * ## 跟主精灵同一套待遇（2026-08-28 用户拍板「主代理支持什么，子代理就相应支持」）
+ *
+ * 逐条对齐 AmbientSpriteLayer：
+ *   z-index 305（原来 44 —— 用户报「看起来和主代理的图标不在一层」，就是这个）
+ *   落点 300ms 缓动「走过去」，不再瞬移；拖动时关过渡（不然像橡皮筋追手）
+ *   点标说话（onMarkClick，跟主精灵同一个入口）；名牌也可点 —— 它就是这个角色的身份
+ *   闲时可拖走；贴着目标干活时不给拖（跟着 targetId，拖了也会被拽回去）
+ *   quiet：用户在输入行打字时，角色的手写行一起让位
+ *
+ * ⛔ 没做的一条：主精灵的输出框（frameCards / 代码直播）。那是主 agent 的工具流
+ *   在画布上的落地，角色没有对应的东西可显示 —— 不是漏了。
+ *
  * ## 活跃状态就画在这枚标上（2026-08-28）
  *
  * 角色在写 = 标自己动（active 走 SpriteFigure 的呼吸/描线）；挂 await_user 候场 =
@@ -34,12 +46,15 @@
  * 不知道它还在，也不知道该冲谁说话。动静由 run.role.wait 驱动，见 board-presence.js。
  */
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState, useRef } from 'react';
 import { SpriteSketch, findWorkSpot, findAmbientSlot } from './SpriteSketchLayer.jsx';
 import { PAPER } from '../../lib/paper.js';
 import { TEXT_FONT_CSS } from '../../lib/text-fonts.js';
 import { isRolePresence, slugOfPresence } from '../../lib/board-presence.js';
 import { useCurrentModelBrand } from '../../lib/model-brand.js';
+
+/** 跟主精灵同一层（AmbientSpriteLayer 用的就是 305）—— 差一层就"看着不在一个平面上" */
+const SPRITE_Z = 305;
 
 /** 角色精灵比主精灵小一圈（主的是 44） */
 const ROLE_SPRITE_SIZE = 32;
@@ -53,9 +68,15 @@ const ROLE_SPRITE_SIZE = 32;
  * 贴纸感靠三件：微微歪一点（真贴纸贴不正）、纸色底压一道淡影、左端一枚状态点。
  * 状态点是**这个角色此刻在写还是在等**的唯一文字外表达：实心 = 在写，空心 = 候场。
  */
-function RoleNameTag({ name, color, waiting, myTurn }) {
+function RoleNameTag({ name, color, waiting, myTurn, onClick }) {
   return (
-    <div style={{
+    <div
+      onPointerDown={onClick ? (e) => { e.stopPropagation(); e.preventDefault(); onClick(); } : undefined}
+      title={onClick ? `跟${name}说话` : undefined}
+      style={{
+      // 名牌就是这个角色的身份，点它说话跟点标一个意思
+      pointerEvents: onClick ? 'auto' : 'none',
+      cursor: onClick ? 'pointer' : undefined,
       display: 'inline-flex', alignItems: 'center', gap: 4,
       marginBottom: 3,
       padding: '1px 7px 2px',
@@ -82,7 +103,7 @@ function RoleNameTag({ name, color, waiting, myTurn }) {
   );
 }
 
-export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {}, cam = null, viewport = null, onPick = null }) {
+export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {}, cam = null, viewport = null, quiet = false, onPick = null }) {
   // ⚠️ 不再要求 active（2026-08-26）：角色挂在 await_user 上等你回话时是 idle 的，
   // 但它**还在台上**，精灵消失会让用户以为它没了、也就不知道该冲谁说话。
   // 2026-08-27（编排）：也不再要求 targetId —— 还没写过板书的角色排**候场位**
@@ -90,6 +111,15 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
   // 跟主精灵同一个牌子（会话模型决定），只是小一圈 —— 角色不自带厂商身份
   const brand = useCurrentModelBrand();
   const turn = presence?.__turn || null;   // rounds 模式轮到谁（见 board-presence 的 run.scene 分支）
+  /**
+   * 用户拖过的角色钉在原地。**连着当时的 targetId 一起记** —— 角色换了在写的东西
+   * 就该走过去，钉子自然失效；不这么记就得另写一套清理，而清理漏了就是"角色永远
+   * 卡在旧位置"。同主精灵的 userPinnedRef，只是这里一个角色一个。
+   */
+  const [pinned, setPinned] = useState({});    // slug -> { x, y, forTarget }
+  const [dragSlug, setDragSlug] = useState(null);
+  const dragBase = useRef(null);
+  const camRef = useRef(cam); camRef.current = cam;
   const roles = useMemo(() => Object.values(presence || {})
     .filter((p) => p && isRolePresence(p.id)), [presence]);
 
@@ -111,6 +141,10 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
         };
       }
     }
+    const slug0 = slugOfPresence(p.id);
+    const pin = pinned[slug0];
+    // 钉子只在"还在写同一个东西"时算数（换目标=该走过去了）
+    if (pin && pin.forTarget === (p.targetId || null)) spot = { x: pin.x, y: pin.y };
     if (!spot) continue;
     placedObs.push({ x: spot.x - 20, y: spot.y - 20, w: 160, h: 110 });
     entries.push({ p, spot });
@@ -126,22 +160,22 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
             key={p.id}
             style={{
               position: 'absolute', left: spot.x, top: spot.y,
-              // 可点（2026-08-27）：点精灵 = 打开跟这个角色的对话（路由拍板：
-              // 侧栏永远是主 agent 的，跟角色说话走这里）
-              pointerEvents: onPick ? 'auto' : 'none', cursor: onPick ? 'pointer' : undefined,
-              textAlign: 'left', zIndex: 44,
+              // ⛔ 外壳不吃指针，由**标自己**开（跟主精灵一样）：手写行和名牌之间
+              // 那片空白不该拦住画布的平移/框选
+              pointerEvents: 'none',
+              // zIndex 跟主精灵同一层（原来 44 —— 用户报「和主代理的图标不在一层」）
+              textAlign: 'left', zIndex: SPRITE_Z,
               // 候场（挂 await_user）整体淡一档：在写的那个才该抢眼
               opacity: (p.active || turn === slug) ? 1 : 0.78,
-              transition: 'opacity 240ms ease',
+              // 换目标时"走过去"而不是瞬移（同主精灵的缓动曲线）；自己被拖着时关掉
+              transition: dragSlug === slug
+                ? 'opacity 240ms ease'
+                : 'opacity 240ms ease, left 300ms cubic-bezier(0.32,0.72,0,1), top 300ms cubic-bezier(0.32,0.72,0,1)',
             }}
             data-role-sprite={slug}
-            // ⛔ 08-27 审计修：没有这两条，按下被相机当空地 setPointerCapture，
-            // click 被重定向到 pane —— onPick 一次都到不了（board-hit 表连栽三次的
-            // 同族坑；主精灵 sprite-figures 的 press 早有同款防护，这里当时没抄）
+            // ⛔ 08-27 审计修：没有这条，按下被相机当空地 setPointerCapture，
+            // click 被重定向到 pane（board-hit 表连栽三次的同族坑）
             data-no-pan
-            onPointerDown={onPick ? (e) => { e.stopPropagation(); } : undefined}
-            title={onPick ? `跟${roleNames[slug] || slug}说话` : undefined}
-            onClick={onPick ? (e) => { e.stopPropagation(); onPick(slug); } : undefined}
           >
             <SpriteSketch
               brand={brand}
@@ -150,7 +184,27 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
               size={ROLE_SPRITE_SIZE}
               maxWidth={260}
               active={p.active}
-              nameTag={<RoleNameTag name={roleNames[slug] || slug} color={p.color} waiting={!p.active} myTurn={turn === slug} />}
+              quiet={quiet}
+              nameTag={(
+                <RoleNameTag
+                  name={roleNames[slug] || slug} color={p.color}
+                  waiting={!p.active} myTurn={turn === slug}
+                  onClick={onPick ? () => onPick(slug) : null}
+                />
+              )}
+              // 点标说话 —— 跟主精灵同一个入口
+              onMarkClick={onPick ? () => onPick(slug) : undefined}
+              // 闲时可拖走；贴着目标干活时不给拖（跟着 targetId，拖了会被拽回去）
+              onMarkDragMove={p.targetId ? undefined : (dx, dy) => {
+                const base = dragBase.current || (dragBase.current = { ...spot });
+                setDragSlug(slug);
+                const z = camRef.current?.z || 1;
+                setPinned((m) => ({
+                  ...m,
+                  [slug]: { x: Math.round(base.x + dx / z), y: Math.round(base.y + dy / z), forTarget: p.targetId || null },
+                }));
+              }}
+              onMarkDragEnd={p.targetId ? undefined : () => { dragBase.current = null; setDragSlug(null); }}
             />
           </div>
         );

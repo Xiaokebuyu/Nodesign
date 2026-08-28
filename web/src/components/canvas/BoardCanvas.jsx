@@ -1929,6 +1929,7 @@ export default function BoardCanvas({
           <RoleSprites
             presence={presence} rectOf={rectOfId} obstacles={minimapItems} roleNames={roleNames}
             cam={cam} viewport={camera.viewport}
+            quiet={!!spriteAsk}
             onPick={(slug) => setRoleTalk((cur) => (cur === slug ? null : slug))}
           />
           {roleTalk && (
