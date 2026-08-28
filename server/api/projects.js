@@ -17,6 +17,7 @@ import {
   listRunsForProject,
 } from '../projects/store.js';
 import { guardProject } from './_guard.js';
+import { chalkPreview } from '../lib/board-excerpt.js';
 import { taskManifest } from '../lib/artifact-target.js';
 import { countPublishedByUser } from '../lib/publish-store.js';
 import { checkQuota } from '../lib/quota.js';
@@ -87,7 +88,10 @@ router.get('/stats', async (req, res, next) => {
       } catch { /* 目录没了：算 0 件 */ }
       const kinds = {};
       for (const a of artifacts) if (a.kind) kinds[a.kind] = (kinds[a.kind] || 0) + 1;
-      stats[p.id] = { tasks: artifacts.length, kinds };
+      // 板书不进 artifacts（它不是产物），所以卡上"这里躺着什么"必须单独问一句 ——
+      // 不问的话整个演出项目会一直写着"还没出东西"，而里面躺着一整个故事
+      const chalk = await chalkPreview(getSharedDir(p.id)).catch(() => null);
+      stats[p.id] = { tasks: artifacts.length, kinds, ...(chalk ? { chalk } : {}) };
     }));
     // dev 模式（不要求登录）没有 req.user，这两笔账就没有主语，整块不下发
     const summary = req.user

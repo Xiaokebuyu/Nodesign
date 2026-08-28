@@ -367,6 +367,14 @@ export const CSS = `
   background-color: #FBF7EC;
   background-image: repeating-linear-gradient(180deg, transparent 0 21px, rgba(43,33,23,0.05) 21px 22px);
   box-shadow: inset 0 0 0 1px rgba(43,33,23,0.06); }
+/* 板书项目的预览：不贴印样，**直接把字写在这张卡的纸上**（板书不是产物，
+   进不了封面截图管线）。行高 22px 跟上面那套格线是同一个数 —— 字得坐在格子里，
+   差一点就成了"浮在横线上方"（首页那张便签纸 08-21 栽过同一个坑）。
+   顶上空一格再落笔：贴着上沿写不像人写的。 */
+.ndd-shot.empty.chalk { padding: 22px 13px 0; }
+.ndd-shot.empty.chalk p { margin: 0; font: 12.5px var(--kai); line-height: 22px;
+  color: rgba(95,81,66,0.85); white-space: pre-line; overflow: hidden;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; }
 /* 演出项目那张空白纸是**稿纸**：转旧、红格线、四周一道很淡的版心。
    ⚠️ 这儿不能直接用配方里的 --rules：卡片上的格子是 22px 一行（缩略图的比例），
    输入框是 29px（真行高）。同一种纸、两个尺度，所以颜色抄过来、格高各算各的。 */

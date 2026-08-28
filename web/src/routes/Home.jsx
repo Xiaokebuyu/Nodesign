@@ -65,6 +65,14 @@ function inventory(st) {
       const [unit, word] = KIND_WORD[k] || ['个', k];
       return `${n} ${unit}${word}`;
     });
+  // 板书也算"这里躺着什么"：演出项目常常一件产物都没有，整个故事都在板书里，
+  // 那种卡以前一律写着"还没出东西"
+  if (st.chalk?.count) {
+    const n = st.chalk.count;
+    parts.push(getLocale() !== 'zh-CN'
+      ? `${n} ${n === 1 ? 'note' : 'notes'}`
+      : t('板书 {n} 条', { n, count: n }));
+  }
   if (parts.length) return parts.join(' · ');
   return st.tasks ? t('{n} 件开了头', { n: st.tasks, count: st.tasks }) : t('还没出东西');
 }
@@ -408,7 +416,7 @@ function ProjectCard({ project, stat, newest }) {
       onMouseLeave={() => { setHover(false); setMenuOpen(false); }}
     >
       <Link to={`/projects/${project.id}/work`} style={{ '--rot': tilt(project.id) }}>
-        <ThumbnailBox project={project} />
+        <ThumbnailBox project={project} stat={stat} />
         <div className="t">{project.name}</div>
         <div className="m">
           <span>{inv || ''}</span>
@@ -455,14 +463,23 @@ function ProjectCard({ project, stat, newest }) {
  */
 const DEFAULT_RATIO = 16 / 10;
 
-function ThumbnailBox({ project }) {
+function ThumbnailBox({ project, stat }) {
   const [ratio, setRatio] = useState(DEFAULT_RATIO);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => { setFailed(false); }, [project.id]);
 
   if (failed) {
-    return <div className="ndd-shot empty" style={{ aspectRatio: String(DEFAULT_RATIO) }} />;
+    // 没封面**不等于**这张纸上没东西：板书不是产物，进不了截图管线（见 lib/cover.js
+    // 的输入是 artifacts）。演出项目往往一件产物都没有，整个故事都写在板书上 ——
+    // 那就别贴印样了，直接把最近一条板书的开头写在这张卡的空白纸上。
+    const chalk = stat?.chalk?.text;
+    return (
+      <div className={`ndd-shot empty${chalk ? ' chalk' : ''}`}
+        style={{ aspectRatio: String(DEFAULT_RATIO) }}>
+        {chalk ? <p>{chalk}</p> : null}
+      </div>
+    );
   }
 
   return (
