@@ -110,6 +110,11 @@ copying it in verbatim over rewriting it.`,
       let existed = false;
       try { await fs.access(file); existed = true; } catch { /* 新角色 */ }
       await fs.mkdir(dir, { recursive: true });
+      // 记忆件骨架（只在不存在时铺）：角色 jot_memory 追加，用户/GM 可整理
+      const memFile = path.join(dir, '记忆.md');
+      try { await fs.access(memFile); } catch {
+        await fs.writeFile(memFile, `# 记忆\n\n<!-- ${slug} 的记忆：角色自己 jot_memory 追加，用户和 GM 可整理改写。还是空的。 -->\n`, 'utf8');
+      }
       await fs.writeFile(file, [
         `# ${displayName}`,
         '',
@@ -137,8 +142,8 @@ copying it in verbatim over rewriting it.`,
         '',
         `**现在就可以派它上场**（不用等）：`,
         `Agent(subagent_type: "${slot}", name: "${slug}", run_in_background: true,`,
-        `  prompt: 第一行写「你的角色卡：${cardRel}」，然后贴卡的全文 + 这一场的开场指令`,
-        `  （从哪一拍接、跟谁对戏、演完这拍是候场 await_user 还是收场））`,
+        `  prompt: 第一行写「你的角色卡：${cardRel}，你的记忆：${path.join(ROLES_DIR, folder, '记忆.md')}」，`,
+        `  然后贴卡的全文 + 这一场的开场指令（从哪一拍接、跟谁对戏、演完这拍是候场 await_user 还是收场））`,
         `**之后跟它说话**：SendMessage({to: "${slug}"}) —— 它记得自己演过的一切，不要重新派。`,
       ];
       if (existed) {

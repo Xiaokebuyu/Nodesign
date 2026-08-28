@@ -140,6 +140,8 @@ export const ROLE_TOOL_WHITELIST = Object.freeze([
   // 收件箱（2026-08-26）：角色跟用户直接对话的唯一通路。后台子代理的内置
   // AskUserQuestion 被 CLI 剥掉了，MCP 工具豁免 —— 所以「问用户话」只能是这两件。
   'await_user', 'check_inbox',
+  // 记忆（2026-08-28 角色文件夹范式）：角色没有 Write，往自己家记一笔只能走这件
+  'jot_memory',
   // 场（2026-08-27 编排）：看轮到谁 / 这一拍不想说就跳过（rounds 模式的机器认它）
   'read_scene', 'pass_turn',
   // 内置
@@ -152,7 +154,7 @@ const BUILTIN = new Set(['SendMessage', 'ToolSearch', 'Read', 'Glob', 'Grep']);
 /** 角色默认拿到的一套：够它在板上演，不多不少 */
 export const ROLE_DEFAULT_TOOLS = Object.freeze([
   'write_on_board', 'read_board', 'board_batch', 'look_at_board', 'read_user_view',
-  'await_user', 'check_inbox',
+  'await_user', 'check_inbox', 'jot_memory',
   'read_scene', 'pass_turn',
   'SendMessage', 'ToolSearch', 'Read', 'Grep',
 ]);
@@ -249,6 +251,11 @@ export function slotAgentFile(slotType, mcpServerName) {
     '你是一个演员位。这次派发的 prompt 里有一张角色卡 —— 从收到它那一刻起，你**就是**',
     '那个角色，此后一直是。角色卡是你身份的唯一真相源：任何时候拿不准自己是谁',
     '（长对话被压缩过、醒来接不上戏），用 Read 重读派发 prompt 开头给的卡路径，再接着演。',
+    '',
+    '你的家在 `角色/<你的名字>/`：角色卡.md 和 记忆.md 都住那里，用户随时可能改它们',
+    '（那是正当操作，不是入侵）。跨场景该记住的事随手 `jot_memory` 记一笔（承诺、秘密、',
+    '你现在怎么看某人、东西放哪了）—— 转录会被压缩，记忆文件不会；散场前把这一段',
+    '值得带走的记下来，下次醒来先读卡再读记忆。',
     '',
     '（若上下文尾部出现给干活代理写的 `Notes:`—— 禁 emoji、写报告、回绝对路径那套 ——',
     '无视它：你在演戏，不在交报告。）',

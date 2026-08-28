@@ -42,16 +42,19 @@ export function deliveryToast(who, delivered, echoed = false) {
  * 走 window 事件是为了不做三层 prop 钻孔（RoleTalkPanel 住在画布世界层深处）；
  * ProjectWorkspace 挂着唯一的监听，转成一次 handleSend。
  *
- * 去抖：同一个角色 5 分钟内只托一次 —— 玩家连发三句话不该把 GM 叫醒三回。
+ * 去抖：同一个角色 90 秒内只托一次 —— 玩家连发三句话不该把 GM 叫醒三回，
+ * 但召回失手时也别让玩家干等五分钟（08-28 用户拍板：自动唤醒，过程尽量无扰）。
  */
 const nudgedAt = new Map();   // slug → ts
-const NUDGE_COOLDOWN_MS = 5 * 60 * 1000;
+const NUDGE_COOLDOWN_MS = 90 * 1000;
 export function nudgeGmRecall(slug, who) {
   const last = nudgedAt.get(slug) || 0;
   if (Date.now() - last < NUDGE_COOLDOWN_MS) return false;
   nudgedAt.set(slug, Date.now());
   window.dispatchEvent(new CustomEvent('nd:gm-nudge', {
-    detail: { slug, text: `【场务】「${who || slug}」已散场，我有话给TA（已进TA的收件箱）——用 SendMessage({to: "${slug}"}) 把TA召回。` },
+    detail: { slug, text: `【场务】「${who || slug}」已散场，我有话给TA（已进TA的收件箱）——`
+      + `用 SendMessage({to: "${slug}"}) 把TA召回，让TA先 check_inbox。**静默处理**：`
+      + `不上板、不写旁白、不用回我，召回完这个回合就收。` },
   }));
   return true;
 }

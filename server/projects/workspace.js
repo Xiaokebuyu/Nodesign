@@ -44,8 +44,7 @@ import { fileURLToPath } from 'url';
 import { mutex } from 'async-mutex-lite';
 import { validateProjectId, getProject } from './store.js';
 import { resolveModelContextWindow } from '../engine/agent/model-context.js';
-import { SLOT_TYPES, slotAgentFile } from '../engine/agent/cast.js';
-import { MCP_SERVER_NAME } from '../engine/mcp/server-name.js';
+import { ensureActorSlots } from './workspace-slots.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -221,16 +220,11 @@ export function getSessionMetaDir(projectId, sessionId) {
 // ── ensure ──
 
 /**
- * 创建项目工作区（幂等）。完成后保证：
- *   - .claude/{CLAUDE.md, settings.json} 模板写入（仅不存在时）
- *   - .claude/{skills, agents, agent-memory} 目录存在
- *   - assets/ 存在、.gitignore 写入
- *   - 旧的三层结构（tasks/ + per-session 沙盒）已扁平化
- *   - .git 存在（项目级历史；扁平化前是 per-session 的）
- *
- * 扁平化跟着 ensure 走而不是单独一次性脚本：跟 removeRootLegacyArtifacts 同一个
- * 范式 —— 幂等、按项目惰性触发、跑过一次之后是 no-op。这样线上不需要停机窗口，
- * 也不存在"迁移脚本漏了哪个项目"。
+ * 创建项目工作区（幂等）。完成后保证：.claude/{CLAUDE.md, settings.json} 模板
+ * （仅不存在时）、.claude/{skills, agents, agent-memory} 与 assets/ 目录、演员位
+ * 定义、.gitignore、旧三层结构已扁平化、.git 存在（项目级历史）。
+ * 扁平化跟着 ensure 走而不是一次性脚本：幂等、按项目惰性触发、跑过即 no-op ——
+ * 线上不需要停机窗口，也不存在"迁移脚本漏了哪个项目"。
  */
 export async function ensureProjectWorkspace(projectId) {
   await removeRootLegacyArtifacts(projectId);
@@ -241,17 +235,8 @@ export async function ensureProjectWorkspace(projectId) {
   await fs.mkdir(path.join(root, '.claude', 'agent-memory'), { recursive: true });
   await fs.mkdir(path.join(root, 'assets'), { recursive: true });
 
-  // 演员位（2026-08-28 重构）：预注册的 RP 子代理定义，**必须在会话启动前就在盘上**
-  // —— 会话中途写入的 agent 定义只有当时活着的 CLI 进程认得，resume 后永久 not found
-  // （08-28 三场真会话勘定，机制见 engine/agent/cast.js）。内容以代码为准：教义升级
-  // 后重启即生效，也顺手把模型对定义体的手改抹平（判据不建在模型可写的东西上）。
-  for (const slot of Object.keys(SLOT_TYPES)) {
-    const file = path.join(root, '.claude', 'agents', `${slot}.md`);
-    const want = slotAgentFile(slot, MCP_SERVER_NAME);
-    let have = null;
-    try { have = await fs.readFile(file, 'utf8'); } catch { /* 还没有 */ }
-    if (have !== want) await fs.writeFile(file, want, 'utf8');
-  }
+  // 演员位（2026-08-28 重构）：预注册 RP 子代理定义，必须先于任何会话在盘上（拆件见文件）
+  await ensureActorSlots(root);
 
   // .gitignore 每次比对而不是"不存在才写"：扁平化新增了 .claude/projects/ 和
   // .nd/ 两条，老项目的文件里没有，不补的话 SDK 转录会被 commit 进项目历史。

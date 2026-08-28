@@ -36,7 +36,7 @@ describe('到了散场次数：劝退，并交代怎么被叫回来', () => {
     expect(txt).toContain('结束回合');
     expect(txt).toContain('SendMessage');
     expect(txt).toContain('rp-moli');           // 收件人名要出现在话术里
-    expect(txt).toContain('记忆不会丢');
+    expect(txt).toContain('jot_memory');   // 散场前记一笔（08-28 角色文件夹范式）
   });
 
   it('超过限额也还是劝退（不是只在等于 2 的那一次）', () => {

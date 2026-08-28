@@ -74,6 +74,7 @@ import { makeDeliverFilesTool } from './tools/deliver-files.js';
 import { makeCrystallizeSkillTool } from './tools/crystallize-skill.js';
 import { makeCastRoleTool } from './tools/cast-role.js';
 import { makeAwaitUserTool, makeCheckInboxTool } from './tools/role-inbox.js';
+import { makeJotMemoryTool } from './tools/role-memory.js';
 import { makeSetSceneTool, makeReadSceneTool, makePassTurnTool, makeCueRoleTool } from './tools/scene-tools.js';
 import { makeRollDiceTool } from './tools/roll-dice.js';
 import { assertRoleToolsRegistered } from '../agent/cast.js';
@@ -224,6 +225,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // await_user 挂着等 = 「像主 agent 一样对话」的形态。见 agent/inbox.js
       makeAwaitUserTool({ projectId, ctx }),
       makeCheckInboxTool({ projectId }),
+      makeJotMemoryTool({ workspaceRoot }),
       // 场务三件（2026-08-27 编排）：set_scene 只认主控，pass_turn 只认角色
       makeSetSceneTool({ projectId, ctx }),
       makeReadSceneTool({ projectId }),

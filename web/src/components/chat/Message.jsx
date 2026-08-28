@@ -165,6 +165,17 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
   const [hover, setHover] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // 场务托词（08-28 自动召回无扰化）：nd:gm-nudge 替玩家发的召回请托是机器话，
+  // 不占一整个用户气泡 —— 渲染成一行淡色场记，指令尾巴（SendMessage 那段）不给人看。
+  const plainText = typeof message.content === 'string' ? message.content : '';
+  if (plainText.startsWith('【场务】')) {
+    return (
+      <div style={{ fontSize: 12, opacity: 0.55, padding: '2px 8px', fontStyle: 'italic' }}>
+        {plainText.split('——')[0]}
+      </div>
+    );
+  }
+
   const canUndo = !!(projectId && sessionId && message.id && UUID_RE.test(message.id));
 
   async function handleUndo() {
