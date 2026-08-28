@@ -9,8 +9,8 @@
  * 自己写的文本。展示名由读侧按 slug 查出来（role-card.js），查不到就显示 slug 本身。
  */
 
-import { callerOf } from '../agent/actor-trail.js';
-import { isResidentRole, safeRoleLabel } from '../agent/cast.js';
+import { callerOf, agentNameOf } from '../agent/actor-trail.js';
+import { isResidentRole, isSlotType, safeRoleLabel } from '../agent/cast.js';
 
 /** MCP handler 的 extra 里取本次 tool_use id（2026-08-26 实测就在这个键上） */
 export function toolUseIdOf(extra) {
@@ -24,6 +24,14 @@ export function toolUseIdOf(extra) {
 export function byOf(extra) {
   const caller = callerOf(toolUseIdOf(extra));
   const type = caller?.agentType;
+  // 落到**演员位**（rp-actor/rp-narrator）说明盖章那一刻别名还没学到实例名。
+  // 这里**当场再解一次** —— 别名可能在盖章之后才学到（08-28 真会话实录：
+  // 19:59 派发、20:10 角色调 jot_memory 被拒、20:10 GM 一发 SendMessage 别名补上、
+  // 20:21 同一个工具就成了。差的就是"用盖章那一刻的快照"还是"用此刻的表"）。
+  if (isSlotType(type)) {
+    const nm = agentNameOf(caller?.agentId);
+    if (isResidentRole(nm) && !isSlotType(nm)) return nm;
+  }
   return isResidentRole(type) ? type : 'agent';
 }
 

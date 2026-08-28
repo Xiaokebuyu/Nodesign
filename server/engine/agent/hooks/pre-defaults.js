@@ -135,7 +135,11 @@ export function makePreToolUseAgentForceForegroundHandler({ roster = null, works
       // model 参数剥掉（proj_mtd7d4et：glm 会话的 GM 给角色点 sonnet）：角色跟会话
       // 模型走 —— 免费行的角色拿别名去要订阅模型，打到该会话的 ingress 上游轻则
       // 400 重则记账错位。演员位定义 model: inherit 是教义，这里是闸。
-      const { model: _dropModel, ...rest } = t;
+      // isolation 一起剥（2026-08-28 真会话：GM 给角色传了 isolation:"worktree"，
+      // meta 里 worktreeCleanlyRemoved:true —— 角色被派进一个**用完就删**的 git 副本。
+      // 常驻角色要在真工作区里活着：它的卡、记忆、板书都在那儿，而 worktree 会被回收。
+      // 跟 model 同一类：模型够得着但不该由它决定的入参，闸上剥掉而不是写进话术。
+      const { model: _dropModel, isolation: _dropIsolation, ...rest } = t;
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
