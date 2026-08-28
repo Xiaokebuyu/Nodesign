@@ -3,9 +3,9 @@
  * （2026-08-14 可维护性行动：从 hooks.js 原样迁出，语义零改动）
  */
 
-import { isResidentRole, resolveRoleTools } from '../cast.js';
+import { isResidentRole, isSlotType, ROLE_SLUG_RE, resolveRoleTools } from '../cast.js';
 import { readRoleCard } from '../role-card.js';
-import { noteToolCaller } from '../actor-trail.js';
+import { noteToolCaller, agentNameOf } from '../actor-trail.js';
 import { MCP_SERVER_NAME } from '../../mcp/server-name.js';
 
 /**
@@ -77,27 +77,72 @@ export function makePreToolUseAgentForceForegroundHandler({ roster = null, works
     // 没名字就只能用 agentId 寻址，而 agentId 只在那一条 tool_result 里出现过 ——
     // 主代理换个话题就再也叫不回这个角色了。钉成 subagent_type 本身：
     // 一个角色一个常驻实例，寻址名 = 角色名，两边不用对表。
-    if (isResidentRole(t.subagent_type)) {
-      // 重派同名角色 = 静默失忆：CLI 的 latest wins 让新角色顶掉这个名字，
-      // 旧角色连同它演过的全部剧情一起失联，而且不报错。只靠提示词劝拦不住
-      // （模型连 name 参数都不肯传），所以这里硬拦，并给出两条真出路。
-      // nd:rp-prompt
-      // 本回合刚造出来的角色：CLI 要到回合边界才重扫角色目录，这一派必然 not found。
-      // 与其让它撞一次错误再谎报"已派"，不如在这里拦住并说清楚怎么办。
-      if (roster?.castedInRun?.(t.subagent_type, ctx?.runId)) {
+    // ── 演员位（2026-08-28 重构）：subagent_type 是预注册的 rp-actor / rp-narrator，
+    //    实例身份由 name 决定。name 闸写成硬 deny：探针实测模型漏传 name 被拒一次
+    //    就会补上（写成话术它不听，写成闸它就听 —— castedInRun 时代同款教训）。
+    if (isSlotType(t.subagent_type)) {
+      const name = typeof t.name === 'string' ? t.name : '';
+      if (!ROLE_SLUG_RE.test(name) || isSlotType(name)) {
         return {
           hookSpecificOutput: {
             hookEventName: 'PreToolUse',
             permissionDecision: 'deny',
             // nd:rp-prompt
             permissionDecisionReason:
-              `「${t.subagent_type}」是这一回合刚造出来的，**现在还派不动** —— `
-              + `CLI 要到下一条消息才认得新角色。先把手头的话说完、结束这一回合，`
-              + `你会收到一条「可以派了」的系统消息，那时再派。不要在这一回合重试，也不要说它已经上场了。`,
+              `派演员位必须带 name 参数：一个独一无二的角色名（rp- 开头的小写 slug，`
+              + `如 rp-cheng-wan，cast_role 登记过就用登记的那个）。它就是这个角色之后的`
+              + `收件地址（SendMessage 寄给它用的名字）。补上 name 再派一次。`,
           },
         };
       }
+      if (roster && roster.has(name)) {
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'deny',
+            permissionDecisionReason:
+              `「${name}」已经在场了，不用重新派。要它接着演就用 SendMessage 寄给这个名字`
+              + `（它记得之前所有事）。重新派会新起一个失忆的同名角色并顶掉现在这个。`
+              + `真要另起一个角色，换个名字。`,
+          },
+        };
+      }
+      // 白名单仍在派发时收口 —— 演员位文件也在工作区里、模型也能改，判据不因换了
+      // 载体而松：谁改装了演员位的 tools 行，派发时照样被拦。
+      const illegal = await illegalRoleTools(workspaceRoot, t.subagent_type);
+      if (illegal) {
+        return {
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'deny',
+            permissionDecisionReason: illegal,
+          },
+        };
+      }
+      if (roster) roster.claim(name);
+      // 盖章按**实例名**：byOf / 收件箱 / 板书署名全按名字走，不认演员位（rp-actor
+      // 是位置不是人）。agentId→名字的别名在 PostToolUse 学（hooks/slot-alias.js）。
+      noteToolCaller(toolUseId || input?.tool_use_id, { agentType: name });
+      if (t.run_in_background === true) return {};
+      return {
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'allow',
+          updatedInput: { ...t, run_in_background: true },
+          // nd:rp-prompt
+          additionalContext:
+            `「${name}」已按后台派出。以后要它说话/接着演，用 SendMessage 寄给 ${name}`
+            + `（它记得之前所有事），不要重新派 —— 重派会新起一个失忆的同名角色顶掉旧的。`,
+        },
+      };
+    }
 
+    if (isResidentRole(t.subagent_type)) {
+      // 旧式一角一定义（会话启动前就躺在 .claude/agents/ 里的角色文件）仍然放行 ——
+      // 它们在初始快照里，派得动。会话中途造新定义的路已随 cast_role 重写关闭
+      //（中途写入的文件只有当时活着的进程认得，resume 后永久 not found —— 08-28 勘定）。
+      // 重派同名角色 = 静默失忆：CLI 的 latest wins 让新角色顶掉这个名字，
+      // 旧角色连同它演过的全部剧情一起失联，而且不报错。只靠提示词劝拦不住，所以硬拦。
       // ⭐ 工具白名单收口在**派发时**，不是写入时。cast_role 是造角色的正门，但主 agent
       // 手里有 Write/Edit/Bash，`.claude/agents/` 就在工作区内 —— 手写一份 md 就能
       // 给自己造一个拿着 publish_site 的"角色"。拦写入拦不干净（Write 拦了还有 Bash，
@@ -211,7 +256,10 @@ export function makePreToolUseActorStamp() {
   return async function actorStamp(input, toolUseId) {
     noteToolCaller(toolUseId || input?.tool_use_id, {
       agentId: input?.agent_id || null,
-      agentType: input?.agent_type || null,
+      // 演员位实例：agent_type 是位置（rp-actor），实例名走别名表解析（08-28 探针
+      // 实证 hook input 没有名字字段）。别名还没学到时落回 agent_type —— 署名难看
+      // 但不失真；下一次 SendMessage/派发的 PostToolUse 会把名字补上。
+      agentType: agentNameOf(input?.agent_id) || input?.agent_type || null,
     });
     return {};
   };

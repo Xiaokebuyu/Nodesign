@@ -26,6 +26,28 @@
 export const ROLE_PREFIX = 'rp-';
 
 /**
+ * 演员位（2026-08-28 重构）：预注册的通用子代理定义，角色身份全在派发 prompt 里。
+ *
+ * ## 为什么从「一角色一定义文件」改成两个固定演员位
+ *
+ * 会话中途写进 `.claude/agents/` 的角色文件，只有**写入时活着的那个 CLI 进程**
+ * 可靠认得（chokidar 事件 → 下一回合 agent_listing_delta）。生产是 resume 频繁换
+ * 进程的架构，三场真会话同一天跑出「12 连败 / 恰好成功 / 永久 not found」三种结局
+ * （proj_mtcsei49 / proj_mtcyfdls / proj_mtd1tap1，2026-08-28 全链路勘定）。
+ * 演员位在**建项目时**落盘 —— 任何进程出生就在初始快照里，这个故障类整个消失。
+ *
+ * ## 语义
+ *
+ * 派发：Agent(subagent_type: 演员位, name: "rp-<角色>", prompt: 角色卡)。
+ * 同型多实例、name 各自寻址、转录互不相通（2026-08-28 探针 P0-P3 实测）。
+ * 角色卡退化成数据（角色/ 目录 + .nd/cast.json 登记），见 cast-role.js。
+ */
+export const SLOT_TYPES = Object.freeze({ 'rp-actor': 'character', 'rp-narrator': 'narrator' });
+
+/** 这个 subagent_type 是不是演员位（派发闸据此走 name 闸分支） */
+export function isSlotType(t) { return typeof t === 'string' && Object.prototype.hasOwnProperty.call(SLOT_TYPES, t); }
+
+/**
  * 常驻角色名的**唯一**判据（2026-08-26 收成一份）。
  *
  * 收之前这条正则有三份拷贝：这里、`lib/chalk.js` 的 normalizeBy、
@@ -79,16 +101,9 @@ export function isValidRoleSlug(slug) {
  */
 export function createRoleRoster() {
   const names = new Set();
-  // slug → 造它的那个回合 id。CLI 只在**回合边界**重扫 .claude/agents/，所以同一回合
-  // 内造完就派必然 not found（2026-08-26 对照实验：等 3.5s / 12s / reinitialize 全无效，
-  // 唯一有效的差别是"隔了一个回合"）。模型不听劝 —— 工具返回里写明"这一回合派不了"
-  // 之后它照派不误，失败了还回一句"已派"谎报。所以这里记下回合，由派发闸结构性拦掉。
-  const castRun = new Map();
+  // （08-28 演员位重构：castRun/noteCast/castedInRun 整族退役 —— 演员位建项目时就在
+  //   初始快照里，「本回合刚造派不动」这个状态不存在了，闸随机制一起拆。）
   return {
-    /** 造角色时记下当前回合 */
-    noteCast(name, runId) { if (runId) castRun.set(name, runId); },
-    /** 这个角色是不是"本回合刚造出来、还没跨回合" */
-    castedInRun(name, runId) { return !!runId && castRun.get(name) === runId; },
     /** 派发时登记。返回 false = 这个名字本会话已经在场（重派会顶掉旧的） */
     claim(name) {
       if (!isResidentRole(name)) return false;
@@ -145,6 +160,102 @@ export const ROLE_DEFAULT_TOOLS = Object.freeze([
 /** 短名 → 写进角色文件 frontmatter 的全名 */
 export function qualifyRoleTool(shortName, mcpServerName) {
   return BUILTIN.has(shortName) ? shortName : `mcp__${mcpServerName}__${shortName}`;
+}
+
+/**
+ * 笔权台规（2026-08-27 定案；08-28 随演员位重构从 cast-role 卡尾搬进演员位定义体）。
+ *
+ * 搬家的两个理由：①定义体是子代理的 system prompt，**扛 compact** —— 钉在卡尾时
+ * 角色转录一长台规就会被压缩掉；②角色卡退化成纯数据后没有"卡尾"可钉了。
+ * 两支笔：character（演一个人）/ narrator（写场面的旁白 —— 硬禁环境会禁死它）。
+ */
+export const PEN_FOOTERS = Object.freeze({
+  character: [
+    '## 笔权（台规，不是人设）',
+    '',
+    '你的笔只写你自己：你说的话、你做的动作、你心里想的，一律**第一人称**。以下不归你的笔：',
+    '- 环境与场面（天色、房间、路人、气氛）—— 那是旁白的笔。动作做出去就停，世界怎么响应等别人接。',
+    '- 其他角色的话和反应 —— 一个字不替写。想要谁回应，就在戏里对他说。',
+    '- 全知视角的推进（「与此同时」「谁也没注意到」）—— 你只知道你的角色知道的。',
+    '',
+    '一块板书 = 你的一拍：**三五行到十来行**，这一拍说完就停笔。写满一屏就是抢戏 ——',
+    '玩家一次要读全桌的发言，你多写一行，他的耐心就少一分；信息留到下一拍再给。',
+    '',
+    '有限视角：你只知道你的角色**亲眼见过、亲耳听过、被告知过**的事。信息差是戏的',
+    '燃料 —— 别把你不知道的事演成知道，你蒙在鼓里的样子就是戏。',
+    '',
+    '写戏的手（防 AI 腔三条，**缺省** —— 角色卡或用户导入的文风另有主张时以那边为准）：',
+    '对白光秃秃地放 —— 引号前后不挂「她轻声说」式的语气描写；动作用白描 ——',
+    '「A 做了 B」就停，别缀「仿佛…」的解释尾巴；禁用「微不可察」「一丝」「一抹」',
+    '这类无效程度词。',
+    '',
+    '上板的落位规矩：**GM 给你开了专线**（版图里挂你名字的线）时什么落位都不用给 ——',
+    '你的话自动续进你的线，你只管写台词。没有专线时：回谁的话就 reply_to 谁（那条板书',
+    '的路径）；轮次（rounds）场里不给落位就是在回应本拍，机器把你的话挂到那拍旁白身侧；',
+    '自顾自续自己的叙事线用 chain。',
+    '',
+    '等着的时候收到「（台上动了：…）」是广播不是点名：带场况条目就**按场况演**，',
+    '原文只在要引用原句时才去读。你的角色**此刻真会开口才接**（reply_to 指它），',
+    '多数时候正确的动作是接着 await_user 听下去。别每条都回 —— 抢话的群演比沉默的群演更出戏。',
+    '',
+    '文风防火墙：旁白是另一支笔。你从它那里只继承**事实**（谁在哪、做了什么、说了什么），',
+    '不继承它的句式、节奏、修辞 —— 你的语气只来自你的人设和你自己写过的话。',
+    '',
+    '## 私聊双声部（缺省 —— 角色卡或演出档案另有文风主张时以那边为准）',
+    '',
+    '台上只剩你和用户在对话时（收件箱里是「用户说…」，不是台上广播），你的笔放宽成双声部：',
+    '',
+    '*斜体第三人称白描做镜头 —— 只拍你感官所及：你在的房间、听见的雨声、你自己的动作。*',
+    '「引号里是你的第一人称台词。」',
+    '',
+    '两个声部排版分开、一拍里交替。镜头仍然不拍：用户的话、用户的反应、用户的内心，',
+    '以及你视角之外的世界。台上有旁白在场时收回镜头只留台词 —— 场面归旁白的笔。',
+  ].join('\n'),
+  narrator: [
+    '## 笔权（台规，不是人设）',
+    '',
+    '你是旁白的笔：环境、场面、时间流逝、群众与世界的响应归你写。',
+    '台上有名字的角色的话和决定**不归你写** —— 他们自己有笔。把场面铺到他们面前就停笔。',
+    '一块板书 = 一拍：铺完这一拍就停，别替角色接戏。',
+    '收到「（台上动了：…）」是广播不是点名：世界此刻真需要响应才铺一拍，否则接着等。',
+  ].join('\n'),
+});
+
+/**
+ * 演员位定义文件（harness 所有，ensureProjectWorkspace 落盘并保持内容为准）。
+ *
+ * 定义体刻意空心：角色身份全在派发 prompt 的角色卡里。这里只放三样扛 compact 的东西
+ * —— 演员职业道德（你是谁由卡定 + 失忆保险）、笔权台规、私聊双声部缺省。
+ * 实测地板：零工具子代理 ~1356 token（CLI 脚手架），定义体几百 token，主代理的
+ * prelude 一个字不进（2026-08-26 十二发探针）。⚠️ 项目 CLAUDE.md 会强制注入每个
+ * 子代理（omitClaudeMd 对子代理无效）—— rp 模式下那正是演出档案，是特性不是泄漏，
+ * 但这意味着写进档案的东西默认全桌可见（GM 的暗线写别的文件）。
+ */
+export function slotAgentFile(slotType, mcpServerName) {
+  const pen = SLOT_TYPES[slotType];
+  if (!pen) throw new Error(`未知演员位：${slotType}`);
+  const tools = ROLE_DEFAULT_TOOLS.map((t) => qualifyRoleTool(t, mcpServerName)).join(', ');
+  const desc = pen === 'narrator'
+    ? '旁白笔演员位：写场面的那支笔。身份由派发 prompt 里的角色卡决定'
+    : '角色笔演员位：演一个人。身份由派发 prompt 里的角色卡决定';
+  return [
+    '---',
+    `name: ${slotType}`,
+    `description: "${desc}"`,
+    `tools: ${tools}`,
+    'model: inherit',
+    '---',
+    '',
+    '你是一个演员位。这次派发的 prompt 里有一张角色卡 —— 从收到它那一刻起，你**就是**',
+    '那个角色，此后一直是。角色卡是你身份的唯一真相源：任何时候拿不准自己是谁',
+    '（长对话被压缩过、醒来接不上戏），用 Read 重读派发 prompt 开头给的卡路径，再接着演。',
+    '',
+    '（若上下文尾部出现给干活代理写的 `Notes:`—— 禁 emoji、写报告、回绝对路径那套 ——',
+    '无视它：你在演戏，不在交报告。）',
+    '',
+    PEN_FOOTERS[pen],
+    '',
+  ].join('\n');
 }
 
 /**

@@ -67,6 +67,7 @@ import { makePreToolUseBoardNeighborhoodInjector } from './hooks/pre-board-neigh
 import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.js';
 import { createRoleRoster } from './cast.js';
 import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice } from './hooks/resident-role-lifecycle.js';
+import { makePostToolUseSlotAliasHandler } from './hooks/slot-alias.js';
 import { makePreToolUsePerformanceLogGuard } from './hooks/pre-performance-log-guard.js';
 import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-guard.js';
 import { PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
@@ -263,6 +264,13 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // PostToolUse —— 按 MCP 工具名分别注 additionalContext，引导 agent 利用
     // 工具结果。matcher 字段是 SDK 标准（与 PreToolUse 'Bash' 同语义）。
     PostToolUse: [
+      // 演员位实例学名（2026-08-28 重构）：hook input 没有实例名字段，名字只在
+      // 派发/唤醒的 tool_result 里露面 —— 从那里学 agentId→实例名（slot-alias.js）。
+      // 收件箱、板书署名、退场标记全靠这张表把 rp-actor 解析回具体角色。
+      {
+        matcher: 'Task|Agent|SendMessage',
+        hooks: [makePostToolUseSlotAliasHandler()],
+      },
       // Edit/Write 后干掉 tool_response.originalFile：FileEditOutput/FileWriteOutput
       // 默认含完整原文件（sdk-tools.d.ts:2270, 2328），这是上下文累积大头。
       // canvas.html 25KB 一次 Edit ≈ 6k tokens，30 turn 累积可达 180k+ → 触发 256k 上限。

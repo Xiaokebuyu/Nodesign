@@ -44,6 +44,8 @@ import { fileURLToPath } from 'url';
 import { mutex } from 'async-mutex-lite';
 import { validateProjectId, getProject } from './store.js';
 import { resolveModelContextWindow } from '../engine/agent/model-context.js';
+import { SLOT_TYPES, slotAgentFile } from '../engine/agent/cast.js';
+import { MCP_SERVER_NAME } from '../engine/mcp/server-name.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -238,6 +240,18 @@ export async function ensureProjectWorkspace(projectId) {
   await fs.mkdir(path.join(root, '.claude', 'agents'), { recursive: true });
   await fs.mkdir(path.join(root, '.claude', 'agent-memory'), { recursive: true });
   await fs.mkdir(path.join(root, 'assets'), { recursive: true });
+
+  // 演员位（2026-08-28 重构）：预注册的 RP 子代理定义，**必须在会话启动前就在盘上**
+  // —— 会话中途写入的 agent 定义只有当时活着的 CLI 进程认得，resume 后永久 not found
+  // （08-28 三场真会话勘定，机制见 engine/agent/cast.js）。内容以代码为准：教义升级
+  // 后重启即生效，也顺手把模型对定义体的手改抹平（判据不建在模型可写的东西上）。
+  for (const slot of Object.keys(SLOT_TYPES)) {
+    const file = path.join(root, '.claude', 'agents', `${slot}.md`);
+    const want = slotAgentFile(slot, MCP_SERVER_NAME);
+    let have = null;
+    try { have = await fs.readFile(file, 'utf8'); } catch { /* 还没有 */ }
+    if (have !== want) await fs.writeFile(file, want, 'utf8');
+  }
 
   // .gitignore 每次比对而不是"不存在才写"：扁平化新增了 .claude/projects/ 和
   // .nd/ 两条，老项目的文件里没有，不补的话 SDK 转录会被 commit 进项目历史。

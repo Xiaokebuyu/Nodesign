@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 vi.mock('../../projects/store.js', () => ({ getProject: vi.fn() }));
 import { getProject } from '../../projects/store.js';
 
-import { broadcastStageNote, stageNoteMessage, roomOf, MAX_HOP, _resetStage } from './stage-broadcast.js';
+import { broadcastStageNote, stageNoteMessage, MAX_HOP, _resetStage } from './stage-broadcast.js';
 import { deliver, waitFor, drain, queueDepth, isWaiting, touchInbox, _resetInboxes } from './inbox.js';
 import { setScene, getScene, _resetScenes } from './scene.js';
 
@@ -130,46 +130,6 @@ describe('stageNoteMessage', () => {
     expect(m).toContain('notes/板书/z.md');
     expect(m).toContain('摘一句');
     expect(m).toContain('不是点名');
-  });
-});
-
-describe('tag = 房间域（08-28 用户拍板：同 tag 内广播）', () => {
-  it('角色在哪条 tag 线开口就进哪个房；带房的旁白只吵同房+大堂，别的房安静', async () => {
-    touchInbox(P, A); touchInbox(P, B); touchInbox(P, C);
-    // A 在酒馆开过口，B 在地牢开过口，C 从没进过房（大堂）
-    broadcastStageNote(P, { rel: 'na', by: A, text: 'A 的话', tag: '酒馆' });
-    broadcastStageNote(P, { rel: 'nb', by: B, text: 'B 的话', tag: '地牢' });
-    expect(roomOf(P, A)).toBe('酒馆');
-    expect(roomOf(P, B)).toBe('地牢');
-    expect(roomOf(P, C)).toBeNull();
-    drain(P, A); drain(P, B); drain(P, C);
-    // 旁白落在酒馆：A（同房）和 C（大堂）收到，B（地牢）一个字听不见
-    const st = broadcastStageNote(P, { rel: 'n1', by: 'agent', text: '酒馆旁白', tag: '酒馆' });
-    expect(st.line).toMatch(/rp-a/);
-    expect(st.line).toMatch(/rp-c/);
-    expect(st.line).not.toMatch(/rp-b/);
-    expect(queueDepth(P, B)).toBe(0);
-  });
-
-  it('不带 tag 的话照旧全场都收（向后兼容）；角色不带 tag 开口不换房', () => {
-    touchInbox(P, A); touchInbox(P, B);
-    broadcastStageNote(P, { rel: 'na', by: A, text: 'x', tag: '酒馆' });
-    broadcastStageNote(P, { rel: 'na2', by: A, text: '无tag发言' });
-    expect(roomOf(P, A)).toBe('酒馆');          // 房间保持，不被无 tag 发言清掉
-    drain(P, A); drain(P, B);
-    const st = broadcastStageNote(P, { rel: 'n1', by: 'agent', text: '全场旁白' });
-    expect(st.line).toMatch(/rp-a/);
-    expect(st.line).toMatch(/rp-b/);
-  });
-
-  it('角色带 tag 开口 = 换房（上一场的房不再收它那间的动静）', () => {
-    touchInbox(P, A); touchInbox(P, B);
-    broadcastStageNote(P, { rel: 'na', by: A, text: 'x', tag: '酒馆' });
-    broadcastStageNote(P, { rel: 'na2', by: A, text: 'y', tag: '地牢' });
-    expect(roomOf(P, A)).toBe('地牢');
-    drain(P, A); drain(P, B);
-    const st = broadcastStageNote(P, { rel: 'n1', by: 'agent', text: '酒馆旁白', tag: '酒馆' });
-    expect(st.line).not.toMatch(/rp-a/);        // A 已经去地牢了
   });
 });
 

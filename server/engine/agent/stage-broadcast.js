@@ -32,13 +32,8 @@
  *
  * 用 inbox 的 knownRoles（碰过收件箱的角色）。角色一开口这里就顺手 touchInbox
  * 登记，窗口只剩「刚上场、一句没说也没等过」—— 那时它正忙着演开场词，漏一条无害。
- *
- * ## tag = 房间（2026-08-28，用户拍板的场景域）
- *
- * 板书带 tag 就是带房间：带 tag 的广播只进**同房**的角色；角色在哪条 tag 线里
- * 开口，就算进了那个房。没进过任何房的角色算在大堂（什么都听得见 —— 刚上场的
- * 人不该被隔音）；不带 tag 的广播照旧全场都收。切场景换 tag，老场景的角色就
- * 不会被新场吵醒；两人私聊开一个小 tag，天然就是包间。
+ * 谁在场由 GM 按剧情派发/召回/散场直接管（08-28 用户拍板撤掉了 tag=房间那层自动
+ * 隔离：一天没上过真会话就被判定为多余的机械，域的粒度交还给 GM 的调度）。
  *
  * 状态全在内存、跟会话走（同 inbox/scene 的寿命边界），clearStage 随会话收摊。
  */
@@ -56,17 +51,6 @@ const hopsFor = (pid) => {
   if (!hopsByProject.has(pid)) hopsByProject.set(pid, new Map());
   return hopsByProject.get(pid);
 };
-
-const roomsByProject = new Map();  // projectId → Map<slug, tag>（角色最后开口的房间）
-const roomsFor = (pid) => {
-  if (!roomsByProject.has(pid)) roomsByProject.set(pid, new Map());
-  return roomsByProject.get(pid);
-};
-
-/** 这个角色此刻在哪个房（null = 大堂/没进过房）。roles.js 的 say 广播用它定域。 */
-export function roomOf(projectId, slug) {
-  return roomsByProject.get(projectId)?.get(slug) ?? null;
-}
 
 /** 广播话术（纯函数，可断言）。nd:rp-prompt */
 export function stageNoteMessage({ rel, by, excerpt, facts = null }) {
@@ -88,22 +72,17 @@ const excerptOf = (text) => String(text || '').replace(/\s+/g, ' ').trim().slice
 /**
  * 一条话落板了，按场分发。fail-soft 由调用方包（广播坏了不拦落板）。
  * @param {string} projectId
- * @param {{rel: string, by: string, text: string, exclude?: string[], facts?: string[]|null, tag?: string|null}} note
+ * @param {{rel: string, by: string, text: string, exclude?: string[], facts?: string[]|null}} note
  *   by：板书作者（'agent' | 'user' | 角色 slug）。exclude：已经直投过的收件人。
  *   facts：GM 随旁白填的场况条目（只认 by='agent'）—— 投给角色的换成这份干货，
  *   角色不用每拍吞旁白散文（文风节食，08-28 用户拍板：工具参数不走 helper 蒸馏）。
- *   tag：这条话落在哪个房（板书的有效 tag，含从 reply 线程继承的）—— 带房的话
- *   只进同房和大堂的角色；角色带房开口顺手换房。
  * @returns {{mode: string, line: string|null, scene: object|null}|null}
  *   line 是给工具返回值的一句话（GM 据此知道机器在转、不用自己转发）；
  *   scene 非空 = rounds 开了一轮，调用方拿去 emit。design 项目返回 null。
  */
-export function broadcastStageNote(projectId, { rel, by, text, exclude = [], facts = null, tag = null }) {
+export function broadcastStageNote(projectId, { rel, by, text, exclude = [], facts = null }) {
   if (!isRpProject(projectId)) return null;
-  if (isResidentRole(by)) {
-    touchInbox(projectId, by);                          // 能开口 = 在场，进名册
-    if (tag) roomsFor(projectId).set(by, tag);          // 在哪条线开口 = 进了那个房
-  }
+  if (isResidentRole(by)) touchInbox(projectId, by);    // 能开口 = 在场，进名册
   const beatFacts = by === 'agent' && Array.isArray(facts) && facts.length ? facts : null;
 
   const scene = getScene(projectId);
@@ -125,11 +104,6 @@ export function broadcastStageNote(projectId, { rel, by, text, exclude = [], fac
   const skip = new Set([by, ...exclude]);
   let targets = knownRoles(projectId).filter((s) => !skip.has(s));
   if (mode === 'solo' && scene?.order?.length) targets = targets.filter((s) => scene.order.includes(s));
-  // 房间域：带 tag 的话只进同房的角色；没进过房的算大堂，什么都听得见
-  if (tag) {
-    const rooms = roomsFor(projectId);
-    targets = targets.filter((s) => { const r = rooms.get(s); return !r || r === tag; });
-  }
   if (!targets.length) return { mode, line: null, scene: null };
 
   const wake = hop <= MAX_HOP;
@@ -146,7 +120,7 @@ export function broadcastStageNote(projectId, { rel, by, text, exclude = [], fac
 }
 
 /** 会话收摊（跟 inbox.clearProject / scene.clearScene 一起调） */
-export function clearStage(projectId) { hopsByProject.delete(projectId); roomsByProject.delete(projectId); }
+export function clearStage(projectId) { hopsByProject.delete(projectId); }
 
 /** 测试用 */
-export function _resetStage() { hopsByProject.clear(); roomsByProject.clear(); }
+export function _resetStage() { hopsByProject.clear(); }

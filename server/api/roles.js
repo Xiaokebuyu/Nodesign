@@ -22,7 +22,7 @@ import { getWorkspaceRoot } from '../projects/workspace.js';
 import { isResidentRole } from '../engine/agent/cast.js';
 import { getScene } from '../engine/agent/scene.js';
 import { isRpProject } from '../engine/agent/rp-mode.js';
-import { broadcastStageNote, roomOf } from '../engine/agent/stage-broadcast.js';
+import { broadcastStageNote } from '../engine/agent/stage-broadcast.js';
 import { echoUserChalk } from '../engine/runs/user-chalk-echo.js';
 import { getProjectBus } from '../ws/broker.js';
 
@@ -91,9 +91,8 @@ router.post('/:pid/roles/:slug/say', express.json({ limit: '64kb' }), async (req
     const r = deliver(req.params.pid, slug, { text, about, from: 'user', ...(echoRel ? { echo: echoRel } : {}) });
     // 台上广播（08-28 转发机）：**落了板的话是公开台词**，free 场里其他在场角色也听得见
     // （目标角色刚直投过，排除）。keep=false 的私语不落板也就不广播 —— 判据就是"在不在板上"。
-    // tag 定域：对着某个角色说话 = 说进它所在的房间（roomOf），别的房不吵。
     if (echoRel) {
-      try { broadcastStageNote(req.params.pid, { rel: echoRel, by: 'user', text, exclude: [slug], tag: roomOf(req.params.pid, slug) }); }
+      try { broadcastStageNote(req.params.pid, { rel: echoRel, by: 'user', text, exclude: [slug] }); }
       catch { /* 广播坏了不拦投递 */ }
     }
     res.json({

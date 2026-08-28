@@ -102,3 +102,74 @@ describe('rounds 本拍锚定', () => {
     expect(await replyToOf(r.latest[0])).toBeNull();
   });
 });
+
+describe('角色专线（08-28 预制摆位：GM open_lane 开线，角色只管补台词）', () => {
+  it('⭐ GM 以角色 slug 开线后，角色无线索发言自动续进自己的线（tag 也着线）', async () => {
+    const pid3 = 'proj_rolelane_t1';
+    await ensureProjectWorkspace(pid3);
+    const ws3 = getWorkspaceRoot(pid3);
+    _resetScenes();
+    const t = makeWriteOnBoardTool({ projectId: pid3, sharedRoot: ws3, sessionId: 's1', ctx: { emit() {} } });
+    const head = await t.handler({ text: '# 程晚的线\n\n她的故事从这里开始。', tag: 'rp-wan', open_lane: 'fresh' }, {});
+    expect(head.isError, head.content?.[0]?.text).toBeUndefined();
+    const headId = Object.keys((await readBoard(pid3)).objects).find((id) => id.startsWith('notes/板书/'));
+
+    _resetActorTrail();
+    await stamp({ agent_id: 'a9', agent_type: 'rp-wan' }, 'toolu_lane_1');
+    const r = await t.handler({ text: '「我到了。」' }, { _meta: { 'claudecode/toolUseId': 'toolu_lane_1' } });
+    expect(r.isError, r.content?.[0]?.text).toBeUndefined();
+    const board = await readBoard(pid3);
+    const [rel, e] = Object.entries(board.objects).find(([id, v]) => id.startsWith('notes/板书/') && v.by === 'rp-wan');
+    expect(parseChalk(await fs.readFile(path.join(ws3, rel), 'utf8')).chalk.replyTo).toBe(headId);
+    expect(e.tag).toBe('rp-wan');
+
+    // 第二条继续续线。锚在线内成员上（同秒写入时文件名时间戳同前缀、路径序分不出
+    // 先后 —— 真会话拍与拍隔秒级以上，"线内最新"即自己上一条；这里只钉"不出线"）
+    _resetActorTrail();
+    await stamp({ agent_id: 'a9', agent_type: 'rp-wan' }, 'toolu_lane_2');
+    const r2 = await t.handler({ text: '「门没锁。」' }, { _meta: { 'claudecode/toolUseId': 'toolu_lane_2' } });
+    expect(r2.isError).toBeUndefined();
+    const board2 = await readBoard(pid3);
+    const mine = Object.entries(board2.objects)
+      .filter(([id, v]) => id.startsWith('notes/板书/') && v.by === 'rp-wan')
+      .map(([id]) => id).sort();
+    const anchor2 = parseChalk(await fs.readFile(path.join(ws3, mine[1]), 'utf8')).chalk.replyTo;
+    expect([headId, mine[0]]).toContain(anchor2);
+  });
+
+  it('⭐ 登记表里的展示名开的线也认（listRoleNames 桥）', async () => {
+    const pid4 = 'proj_rolelane_t2';
+    await ensureProjectWorkspace(pid4);
+    const ws4 = getWorkspaceRoot(pid4);
+    await fs.mkdir(path.join(ws4, '.nd'), { recursive: true });
+    await fs.writeFile(path.join(ws4, '.nd', 'cast.json'),
+      JSON.stringify({ version: 1, roles: { 'rp-wan2': { name: '晚晚', pen: 'character', card: '角色/晚晚/角色卡.md' } } }), 'utf8');
+    _resetScenes();
+    const t = makeWriteOnBoardTool({ projectId: pid4, sharedRoot: ws4, sessionId: 's1', ctx: { emit() {} } });
+    const head = await t.handler({ text: '# 晚晚的线', tag: '晚晚', open_lane: 'fresh' }, {});
+    expect(head.isError, head.content?.[0]?.text).toBeUndefined();
+    const headId = Object.keys((await readBoard(pid4)).objects).find((id) => id.startsWith('notes/板书/'));
+    _resetActorTrail();
+    await stamp({ agent_id: 'a8', agent_type: 'rp-wan2' }, 'toolu_lane_3');
+    const r = await t.handler({ text: '「来了来了。」' }, { _meta: { 'claudecode/toolUseId': 'toolu_lane_3' } });
+    expect(r.isError, r.content?.[0]?.text).toBeUndefined();
+    const board = await readBoard(pid4);
+    const [rel, e] = Object.entries(board.objects).find(([id, v]) => id.startsWith('notes/板书/') && v.by === 'rp-wan2');
+    expect(parseChalk(await fs.readFile(path.join(ws4, rel), 'utf8')).chalk.replyTo).toBe(headId);
+    expect(e.tag).toBe('晚晚');
+  });
+
+  it('没开线的角色不受影响（free 场无锚照旧）', async () => {
+    const pid5 = 'proj_rolelane_t3';
+    await ensureProjectWorkspace(pid5);
+    _resetScenes();
+    const t = makeWriteOnBoardTool({ projectId: pid5, sharedRoot: getWorkspaceRoot(pid5), sessionId: 's1', ctx: { emit() {} } });
+    _resetActorTrail();
+    await stamp({ agent_id: 'a7', agent_type: 'rp-solo' }, 'toolu_lane_4');
+    const r = await t.handler({ text: '「独角戏。」' }, { _meta: { 'claudecode/toolUseId': 'toolu_lane_4' } });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid5);
+    const [rel] = Object.entries(board.objects).find(([id, v]) => id.startsWith('notes/板书/') && v.by === 'rp-solo');
+    expect(parseChalk(await fs.readFile(path.join(getWorkspaceRoot(pid5), rel), 'utf8')).chalk.replyTo).toBeNull();
+  });
+});

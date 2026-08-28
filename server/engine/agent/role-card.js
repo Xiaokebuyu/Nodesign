@@ -27,9 +27,22 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { isResidentRole, safeRoleLabel } from './cast.js';
+import { isResidentRole, isSlotType, safeRoleLabel } from './cast.js';
 
 const AGENTS_DIR = '.claude/agents';
+const REGISTRY_REL = '.nd/cast.json';
+
+/**
+ * 演员位登记表（2026-08-28 重构）：cast_role 写的 slug → {name, duty, pen, card}。
+ * 没有/坏了 = 空表 —— 登记是展示层，fail-soft，坏了角色照样上场（署名退回 slug）。
+ */
+export async function readCastRegistry(workspaceRoot) {
+  try {
+    const raw = await fs.readFile(path.join(workspaceRoot, REGISTRY_REL), 'utf8');
+    const data = JSON.parse(raw);
+    return data && typeof data.roles === 'object' && data.roles ? data : { version: 1, roles: {} };
+  } catch { return { version: 1, roles: {} }; }
+}
 const FM_RE = /^---\r?\n([\s\S]{0,4000}?)\r?\n---/;
 
 /** 从 frontmatter 文本里取一个键的原始值（只认顶层、单行键） */
@@ -107,15 +120,25 @@ export async function readRoleCard(workspaceRoot, slug) {
 export async function listRoleNames(workspaceRoot) {
   const out = new Map();
   if (!workspaceRoot) return out;
+  // 旧式一角一定义（会话启动前就存在的 .claude/agents/rp-*.md）：仍然认，
+  // 但演员位本身（rp-actor / rp-narrator）是位置不是人，不进名册。
   let names;
-  try { names = await fs.readdir(path.join(workspaceRoot, AGENTS_DIR)); } catch { return out; }
+  try { names = await fs.readdir(path.join(workspaceRoot, AGENTS_DIR)); } catch { names = []; }
   for (const n of names) {
     if (!n.endsWith('.md')) continue;
     const slug = n.slice(0, -3);
-    if (!isResidentRole(slug)) continue;
+    if (!isResidentRole(slug) || isSlotType(slug)) continue;
     const card = await readRoleCard(workspaceRoot, slug);
     // 保留字闸已下沉到 readRoleCard 出口（08-28）—— 这里拿到的已是洗过的名字。
     if (card?.displayName) out.set(slug, card.displayName);
+  }
+  // 登记表（08-28 演员位重构的主源）：同 slug 时登记表赢 —— cast_role 是正门。
+  // 登记表也是模型可写的（.nd 在工作区里），展示名同样只当展示层、过保留字闸。
+  const reg = await readCastRegistry(workspaceRoot);
+  for (const [slug, r] of Object.entries(reg.roles)) {
+    if (!isResidentRole(slug) || isSlotType(slug)) continue;
+    const label = safeRoleLabel(slug, r?.name);
+    if (label) out.set(slug, label);
   }
   return out;
 }

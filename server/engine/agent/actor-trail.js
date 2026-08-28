@@ -43,5 +43,36 @@ export function callerOf(toolUseId) {
   return (toolUseId && trail.get(toolUseId)) || null;
 }
 
+/**
+ * 演员位实例别名（2026-08-28 重构）：agentId → 实例名（rp-cheng-wan）。
+ *
+ * ## 为什么需要这张表
+ *
+ * 同型多实例之后，hook input 里的 `agent_type` 是演员位（rp-actor），**没有实例名
+ * 字段**（2026-08-28 探针：SubagentStart/PreToolUse/SubagentStop 三处 keys 全录，
+ * 只有 agent_id / agent_type）。而收件箱、名册、板书署名全按实例名走 —— 不桥接的话
+ * 所有角色的 byOf 塌成 'rp-actor'，收件箱共用一个坑。
+ *
+ * ## 学名字的两条路（都在 PostToolUse，见 hooks/slot-alias.js）
+ *
+ *   派发：Agent 的 tool_result 里有 `agentId: <id>`，tool_input.name 是实例名
+ *   唤醒：SendMessage 按名寄的 tool_result 里有 `resumedAgentId` + pin.name
+ *
+ * 表是会话内存态：服务器重启后角色本来就要重新派（名册同界），别名随新派发重新学。
+ * 上限防跑量同 trail —— 淘汰最旧的最坏后果是署名落回 'rp-actor'，不影响正确性。
+ */
+const agentNames = new Map();   // agentId -> 实例名
+export function noteAgentName(agentId, name) {
+  if (!agentId || !name) return;
+  agentNames.set(String(agentId), String(name));
+  if (agentNames.size > MAX) {
+    const oldest = agentNames.keys().next().value;
+    agentNames.delete(oldest);
+  }
+}
+export function agentNameOf(agentId) {
+  return (agentId && agentNames.get(String(agentId))) || null;
+}
+
 /** 测试用 */
-export function _resetActorTrail() { trail.clear(); }
+export function _resetActorTrail() { trail.clear(); agentNames.clear(); }

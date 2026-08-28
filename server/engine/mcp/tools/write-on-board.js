@@ -37,6 +37,7 @@ import { makeAnchorResolver } from '../../../lib/board-anchor.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
+import { listRoleNames } from '../../agent/role-card.js';
 import { WORLD_PT, NODES, SHAPES, EDGES } from './write-on-board-schema.js';
 import { getScene } from '../../agent/scene.js';
 import { broadcastStageNote } from '../../agent/stage-broadcast.js';
@@ -199,12 +200,34 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           .map(([id]) => id).sort();
         if (chalks.length) replyToRaw = chalks[chalks.length - 1];
       }
+      // 角色专线（08-28 晚，预制摆位）：GM 用 open_lane 以角色名（slug 或展示名）开线
+      // 之后，角色不带任何落位线索的板书自动续进自己的线 —— 摆位是 GM 预制的，角色的
+      // 工作退化成「补台词」（用户拍板：子代理只管消息补全，位置和延伸方向 GM 说了算）。
+      let nearRaw = args.near || null;
+      if (args.ink !== 'hand' && !replyToRaw && !nearRaw && !args.at && !args.open_lane
+        && ROLE_SLUG_RE.test(by) && board.lanes) {
+        let laneTag = board.lanes[by] ? by : null;
+        if (!laneTag) {
+          try {
+            const nm = (await listRoleNames(sharedRoot)).get(by);
+            if (nm && board.lanes[nm]) laneTag = nm;
+          } catch { /* 展示名查不到就只认 slug 线 */ }
+        }
+        if (laneTag) {
+          const inLane = Object.entries(board.objects)
+            .filter(([id, e]) => id.startsWith(`${CHALK_DIR}/`) && Number.isFinite(e?.x) && e.tag === laneTag)
+            .map(([id]) => id).sort();
+          if (inLane.length) {
+            replyToRaw = inLane[inLane.length - 1];
+            if (!args.tag) args.tag = laneTag;   // 进线就着线的 tag，下一条才续得上
+          }
+        }
+      }
       // rounds 本拍锚定（08-28 摆位直觉版，退役 rounds-table 按人分列）：轮次场里
       // 角色没给任何落位线索 = 它在回应**本拍** —— 缺省 reply_to 最新一条旁白板书，
       // 台词经侧挂直觉落到旁白身侧。「章节竖列、每拍横排」从回应语义里自己长出来，
       // 不再是写死的桌位表（用户拍板：版面从机械摆位直觉下手，不硬编格式）。
-      // 角色明确给了 reply_to/near/at（比如回用户落痕那条）时它的手优先。
-      let nearRaw = args.near || null;
+      // 角色明确给了 reply_to/near/at（比如回用户落痕那条）或有专线时，那个优先。
       if (args.ink !== 'hand' && !replyToRaw && !nearRaw && !args.at && !args.open_lane
         && ROLE_SLUG_RE.test(by) && getScene(projectId)?.mode === 'rounds') {
         const beats = Object.entries(board.objects)
@@ -361,10 +384,9 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       ];
       // 台上广播（08-28 转发机）：话落板 = 在场角色自动收到，GM 不用转发；rounds 下旁白开轮。
       // facts 填了就投场况干货不投散文（文风节食 —— 角色的嗓子别染上旁白腔）。
-      // tag = 房间域：显式 tag 或从接续的线程继承 —— 带房的话只吵同房的人
+      // （08-28 晚撤掉 tag=房间那层隔离：在场即听见，域的粒度由 GM 派发/散场直接管）
       try {
-        const roomTag = args.tag || board.objects?.[parentId]?.tag || board.objects?.[anchorId]?.tag || null;
-        const st = broadcastStageNote(projectId, { rel, by, text: body, facts: args.facts || null, tag: roomTag });
+        const st = broadcastStageNote(projectId, { rel, by, text: body, facts: args.facts || null });
         if (st?.scene) { try { ctx?.emit?.(Events.scene(st.scene)); } catch { /* fail-soft */ } }
         if (st?.line) lines.push(st.line);
       } catch { /* 广播坏了不拦落板 */ }

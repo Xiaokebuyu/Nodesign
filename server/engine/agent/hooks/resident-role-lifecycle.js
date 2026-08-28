@@ -20,13 +20,17 @@
  * PostToolUse 更值），失败时在这里补一次 release —— 进场乐观、退场兜底。
  */
 
-import { isResidentRole } from '../cast.js';
+import { isResidentRole, isSlotType } from '../cast.js';
+import { agentNameOf } from '../actor-trail.js';
 import { clearStreak, markAsleep } from '../inbox.js';
 
 export function makePostToolUseFailureRoleRelease({ roster = null } = {}) {
   return async (input) => {
     if (!roster) return {};
-    const type = input?.tool_input?.subagent_type;
+    // 演员位派发失败：登记的是实例名（tool_input.name），撤的也是它
+    const type = isSlotType(input?.tool_input?.subagent_type)
+      ? input?.tool_input?.name
+      : input?.tool_input?.subagent_type;
     if (!isResidentRole(type)) return {};
     if (!roster.release(type)) return {};
 
@@ -64,8 +68,12 @@ export function makePostToolUseFailureRoleRelease({ roster = null } = {}) {
  */
 export function makeSubagentStopRoleNotice({ projectId = null } = {}) {
   return async (input) => {
-    const type = input?.agent_type;
-    if (!isResidentRole(type)) return {};
+    // 演员位实例：agent_type 是位置（rp-actor），实例名走别名表。别名没学到的
+    // 演员位退场只能跳过（不知道是谁散的场 —— 别把 'rp-actor' 当角色标进收件箱）。
+    const type = isSlotType(input?.agent_type)
+      ? agentNameOf(input?.agent_id)
+      : input?.agent_type;
+    if (!type || !isResidentRole(type) || isSlotType(type)) return {};
     // 这一趟在场结束 → 散场计数归零，不然召回的角色只等一次就又被劝退（见 inbox.js）；
     // 顺手标散场状态位 —— say 端点据此告诉前端「这话进了没人取的队列」，前端托 GM 召回
     if (projectId) { clearStreak(projectId, type); markAsleep(projectId, type); }
