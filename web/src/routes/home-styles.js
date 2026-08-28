@@ -98,21 +98,41 @@ export const CSS = `
 
 /* ===== 便签本：一句话开工 ===== */
 .ndd-greet { text-align: center; font: 700 25px var(--kai); letter-spacing: 0.05em;
-  margin-bottom: 14px; }
-/* 模式胶囊（2026-08-27）：设计 / 演出。决定接下来建出的项目是哪种模式。
-   形态上是一枚小纸签：楷体、墨色描线、选中格盖一方印章红 —— 跟纸面同族，
-   但站在纸外面（它改的是去向，不是纸上的字）。 */
-.ndd-mode { display: flex; justify-content: center; gap: 0; margin: 0 auto 14px;
-  width: max-content; border: 1px solid rgba(90,78,60,0.45); border-radius: 999px;
-  background: var(--paper); box-shadow: 1px 2px 4px rgba(43,33,23,0.14);
-  transform: rotate(-0.3deg); overflow: hidden; }
-.ndd-mode button { appearance: none; border: 0; background: transparent; cursor: pointer;
-  font: 700 13.5px var(--kai); letter-spacing: 0.22em; text-indent: 0.22em;
-  color: rgba(110,99,80,0.85); padding: 5px 18px 6px; transition: color 0.15s, background 0.15s; }
-.ndd-mode button + button { border-left: 1px solid rgba(90,78,60,0.3); }
-.ndd-mode button:hover { color: rgba(63,54,41,0.95); }
-.ndd-mode button.on { background: rgba(168,54,43,0.86); color: var(--paper); }
-.ndd-mode button:disabled { cursor: default; opacity: 0.55; }
+  /* 纸上沿探出来的那两片页签要占掉约 28px，别贴到问候语上 */
+  margin-bottom: 30px; }
+/* ===== 页签：设计 / 演出（2026-08-28 换掉纸外面那枚胶囊）=====
+
+   08-27 的第一版是一枚 999px 圆角、选中格实心红的胶囊，浮在纸的正上方 ——
+   整张首页只有它一个长得像"控件"。这套语言里所有东西都是纸，靠影子跟底面
+   分开、不靠描边和填充，所以它怎么调都突兀。
+
+   现在它是**纸自己的索引签**：两片贴在上边缘，选中的那片跟纸同色同颗粒、
+   下缘伸进纸里 6px 连成一体（没有分界线 = 它就是这张纸）；没选的那片是
+   牛皮色、矮一档、下缘正停在纸的边线上，像压在后面那张纸的签露出来一角。
+   于是模式不再是"一个开关的状态"，而是"你正写在哪张纸上"。
+
+   ⛔ 为什么是贴上去、不是插到纸背面：.ndd-pad 自带 transform + z-index，
+   本身就是个层叠上下文，子元素 z-index 再负也钻不到父亲的背景底下。
+   ⛔ 三个 margin 是同一个数的三种写法（-6 / +6 / 0），差一个像素签就浮起来
+   或者陷进去 —— 由 home-pad.lint.test.js 拦。 */
+.ndd-pad .tabs { position: absolute; right: 30px; bottom: 100%; margin-bottom: -6px;
+  display: flex; align-items: flex-end; gap: 5px; z-index: 3; }
+/* 没选的那片：牛皮色、矮一档、无影（无影才读得出"它在纸后面"） */
+.ndd-pad .tabs button { appearance: none; border: none; cursor: pointer;
+  font: 700 13px var(--kai); letter-spacing: 0.2em; text-indent: 0.2em;
+  padding: 4px 15px 10px; margin-bottom: 6px; border-radius: 2px 2px 0 0;
+  background: var(--kraft); color: rgba(96,84,64,0.85);
+  /* 下缘压一道很浅的接触阴影：这一片在前面那张纸的**后面**，交界处该暗一点。
+     没有它的时候，牛皮色那片比纸色那片还显眼，"哪个是选中的"会读反。 */
+  box-shadow: inset 0 -4px 5px -4px rgba(93,74,44,0.55);
+  transition: margin-bottom 0.15s, color 0.15s; }
+/* 选中那片 = 这张纸的一部分：同色同颗粒（背景色必须跟 .ndd-pad 是同一个 token，
+   差一点就露出接缝）、高一档、下缘伸进纸里 */
+.ndd-pad .tabs button.on { padding-top: 7px; margin-bottom: 0; color: var(--red);
+  background-color: var(--paper); background-image: var(--grain); box-shadow: none; }
+/* 摸上去抬一下：纸签是能捏起来的东西 */
+.ndd-pad .tabs button:not(.on):hover { margin-bottom: 9px; color: var(--ink); }
+.ndd-pad .tabs button:disabled { cursor: default; opacity: 0.55; }
 .ndd-pad { position: relative; max-width: 720px; margin: 0 auto;
   padding: 26px 24px 16px 58px;
   background-color: var(--paper); background-image: var(--grain);
@@ -127,6 +147,11 @@ export const CSS = `
 /* 笔记本红边线：字写在线右边，跟随便贴一张白纸区分开 */
 .ndd-pad::before { content: ''; position: absolute; left: 40px; top: 0; bottom: 0; width: 1px;
   background: rgba(168,54,43,0.34); }
+/* 演出那张纸多一条边线（稿纸/剧本纸的双边）—— 换页签不能只是换一处高亮，
+   纸本身也得是另一张，不然"你在哪张纸上写"这句话是空的。
+   只此一处差别：两种模式不是两套皮，是同一本子上的两页。 */
+.ndd-pad.rp::before { box-shadow: 4px 0 0 rgba(168,54,43,0.24); }
+.ndd-pad.rp:focus-within::before { box-shadow: 4px 0 0 rgba(168,54,43,0.42); }
 .ndd-pad .clip { position: absolute; top: -14px; left: var(--cx, 18%); width: 18px; z-index: 4;
   filter: drop-shadow(-1px 2px 2px rgba(43,33,23,0.3)); }
 /* 这一层只剩一个用处：给红光标当定位参照（它的高度恒等于 textarea 的高度）。
@@ -320,6 +345,11 @@ export const CSS = `
   /* 纸：左边那条页边留白按比例收，红线跟着挪，不然线压在字上 */
   .ndd-pad { padding: 20px 14px 12px 40px; }
   .ndd-pad::before { left: 26px; }
+  /* 页签跟着往里收（右边留白从 30 收到 14），字距也收 —— 窄屏上两片签
+     加起来要占掉纸宽的一半就太抢了 */
+  .ndd-pad .tabs { right: 14px; }
+  .ndd-pad .tabs button { padding: 4px 11px 10px; letter-spacing: 0.12em;
+    text-indent: 0.12em; }
   /* 工具栏一行排不下就折行；「开工」始终自己占右边 */
   .ndd-pad .bar { flex-wrap: wrap; gap: 8px; padding-top: 12px; }
   .ndd-pad .go { padding: 8px 18px; letter-spacing: 0.22em; text-indent: 0.22em; }

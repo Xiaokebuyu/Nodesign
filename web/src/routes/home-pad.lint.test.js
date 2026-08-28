@@ -85,3 +85,41 @@ describe('首页便签纸的横线与光标', () => {
     expect(rule('.ndd-pad .lines ')).not.toMatch(/background/);
   });
 });
+
+/**
+ * 页签跟纸的接缝（2026-08-28）。
+ *
+ * 「选中的那片签就是这张纸」这个假象靠两件事：**同一个背景色**、
+ * **三个 margin 是同一个数的三种写法**（条 -6 / 没选 +6 / 选中 0）。
+ * 任何一处飘了都不报错，只是签浮起来一道缝、或者陷进纸里半格 ——
+ * 跟上面横线那族是同一类债，所以钉在同一个文件里。
+ */
+describe('首页页签跟纸的接缝', () => {
+  const strip = rule('.ndd-pad .tabs ');
+  const off = rule('.ndd-pad .tabs button ');
+  const on = rule('.ndd-pad .tabs button.on ');
+
+  it('选中那片的背景色跟纸是同一个 token（差一点就露出接缝）', () => {
+    const pad = rule('.ndd-pad ').match(/background-color:\s*([^;]+)/)?.[1].trim();
+    const tab = on.match(/background-color:\s*([^;]+)/)?.[1].trim();
+    expect(pad, '.ndd-pad 得用 background-color 长写法（简写会顺手重置别的）').toBe('var(--paper)');
+    expect(tab, `选中的签是 ${tab}、纸是 ${pad} —— 两者必须一模一样，否则接缝处露一道边`).toBe(pad);
+  });
+
+  it('条往下沉多少，没选的那片就往上抬回多少（下缘正落在纸的边线上）', () => {
+    const sink = num(strip, 'margin-bottom');
+    const back = num(off, 'margin-bottom');
+    expect(sink, '.ndd-pad .tabs 得往下沉一段（负 margin-bottom），签才伸得进纸里').toBeLessThan(0);
+    expect(back, `条沉了 ${sink}、没选的那片抬回 ${back} —— 抬不回去它就压在纸上了`).toBe(-sink);
+  });
+
+  it('选中那片一路沉到底（margin-bottom: 0），跟纸连成一体', () => {
+    // 0 可以写成 `0` 也可以写成 `0px`，两种都认（num 只认带单位的）
+    expect(on, '选中的签必须 margin-bottom:0，才跟纸没有分界线').toMatch(/margin-bottom:\s*0(px)?\s*[;}]/);
+  });
+
+  it('那枚胶囊已经拆干净（.ndd-mode 一处都不许剩）', () => {
+    expect(CSS, '.ndd-mode 的样式还在 —— 它已经被页签替掉了').not.toMatch(/\.ndd-mode/);
+    expect(ENTRY, 'home-quick-entry.jsx 里还挂着 ndd-mode').not.toMatch(/ndd-mode/);
+  });
+});

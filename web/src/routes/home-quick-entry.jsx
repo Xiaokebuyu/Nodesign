@@ -276,24 +276,10 @@ export default function QuickEntry({ prefill }) {
   return (
     <>
       <div className="ndd-greet">{greeting}</div>
-      {/* 模式胶囊（2026-08-27）：建出来的项目是设计工作台还是演出舞台。
-          放在纸的上方而不是纸里 —— 它改的是"这张纸通往哪"，不是纸上的内容 */}
-      <div className="ndd-mode" role="radiogroup" aria-label={t('项目模式')}>
-        <button
-          type="button" role="radio" aria-checked={mode === 'design'}
-          className={mode === 'design' ? 'on' : undefined}
-          onClick={() => pickMode('design')} disabled={submitting}
-        >{t('设计')}</button>
-        <button
-          type="button" role="radio" aria-checked={mode === 'rp'}
-          className={mode === 'rp' ? 'on' : undefined}
-          onClick={() => pickMode('rp')} disabled={submitting}
-        >{t('演出')}</button>
-      </div>
       {/* 点纸上任何空白都算点进输入框 —— 左边那条页边、上下留白、横线下面那片
           都是纸的一部分，点了没反应会让人以为"这纸不能写" */}
       <div
-        className="ndd-pad"
+        className={mode === 'rp' ? 'ndd-pad rp' : 'ndd-pad'}
         onMouseDown={(e) => {
           if (e.target.closest('button, textarea, input, a')) return;
           e.preventDefault();
@@ -309,6 +295,24 @@ export default function QuickEntry({ prefill }) {
           else if (y + CARET_H > h) ta.scrollTop += y + CARET_H - h;
         }}
       >
+        {/* 页签（2026-08-28 换掉纸外面那枚胶囊）：模式不是一颗开关，是"这句话
+            写在哪张纸上"。两片索引签贴在纸的上边缘 —— 选中的那片跟纸同色同颗粒、
+            下缘压进纸里连成一体，没选的那片矮一档、停在纸的边线上，像压在后面的
+            另一张。皮全在 home-styles.js 的 .ndd-pad .tabs 那一段。 */}
+        <div className="tabs" role="radiogroup" aria-label={t('项目模式')}>
+          <button
+            type="button" role="radio" aria-checked={mode === 'design'}
+            className={mode === 'design' ? 'on' : undefined}
+            onClick={() => pickMode('design')} disabled={submitting}
+            title={t('设计：做网页、海报、文档这一类东西')}
+          >{t('设计')}</button>
+          <button
+            type="button" role="radio" aria-checked={mode === 'rp'}
+            className={mode === 'rp' ? 'on' : undefined}
+            onClick={() => pickMode('rp')} disabled={submitting}
+            title={t('演出：常驻角色在画布上演故事')}
+          >{t('演出')}</button>
+        </div>
         <Clip cx="14%" />
         {/* 横线跟 textarea 严丝合缝地同高，见 .ndd-pad .lines 的注释 */}
         <div className="lines">
