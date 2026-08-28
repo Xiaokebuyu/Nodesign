@@ -74,7 +74,10 @@ describe('墙的轮播时序', () => {
   it('一轮 ≈ 10 秒（钉上去 + 站一拍 + 摘下来）', () => {
     const round = enterMs(PAPERS) + MOTION.still + leaveMs(PAPERS);
     expect(round).toBeGreaterThan(9000);
-    expect(round).toBeLessThan(11000);
+    // 08-28 上限从 11000 放到 11600：用户拍板把**卡与卡之间的间隔**拉大
+    // （定格感放在这儿，而不是让每张卡自己抖），二十张纸一轮就多出 0.3 秒。
+    // 这条守的是"别跑成二十秒"，不是守某个精确值。
+    expect(round).toBeLessThan(11600);
   });
 
   it('只有一套场景就不转（定时器都不装）', () => {
