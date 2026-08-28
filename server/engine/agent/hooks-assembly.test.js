@@ -30,10 +30,9 @@ describe('createHooks —— actor-stamp 的真实覆盖面', () => {
     // 名单，改成通配后退役）：这些是**行为依赖 byOf** 的工具，哪个跌出闸外就是
     // 生产静默失效 —— 将来有人把通配收窄回名单时，这里就是对账表。
     for (const short of [
-      // 署名：写下去的东西要记是谁写的
-      'write_on_board', 'create_on_board', 'edit_board', 'board_batch',
-      'sketch_on_board', 'relate_on_board', 'arrange_on_board', 'edit_sketch',
-      'finish_sketch', 'organize_board', 'pin_to_board',
+      // 署名：写下去的东西要记是谁写的（旧别名 create/sketch/relate/arrange/
+      // edit_sketch/finish 08-28 随注册表收摊，名单同步剪掉）
+      'write_on_board', 'edit_board', 'board_batch', 'organize_board', 'pin_to_board',
       // 视角：同一句「你写的」对主控和角色含义相反
       'read_board',
       // 身份：这个收件箱是谁的（漏了 = 整条回路死掉，08-26 真踩）

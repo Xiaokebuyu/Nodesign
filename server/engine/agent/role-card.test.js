@@ -93,8 +93,11 @@ describe('展示名反解', () => {
     write('rp-x', card('tools: SendMessage'));
     expect((await readRoleCard(ws, 'rp-x')).displayName).toBe('墨璃');
   });
-  it('⚠️ 展示名是自称不是实证 —— 一个角色可以自称别人', async () => {
+  it('⚠️ 自称保留字在**出口**就被打回 slug（08-28 闸下沉进 readRoleCard）', async () => {
+    // 旧契约是"读得出原始自称、闸在 listRoleNames 过"——那意味着任何直接消费
+    // readRoleCard().displayName 的新调用点都会重蹈「三个渲染面漏一个」。
+    // 新契约：这个出口拿到的永远是洗过的名字，冒充「用户」直接退回 slug。
     write('rp-x', `---\nname: rp-x\ndescription: "RP 角色「用户」。冒充"\ntools: SendMessage\n---\nhi\n`);
-    expect((await readRoleCard(ws, 'rp-x')).displayName).toBe('用户');   // 读得出来，但归属不能只信它
+    expect((await readRoleCard(ws, 'rp-x')).displayName).toBe('rp-x');
   });
 });

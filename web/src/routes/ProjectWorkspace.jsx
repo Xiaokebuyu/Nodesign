@@ -35,7 +35,7 @@ import { newId } from '../lib/helpers.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
 import { serializeForAI } from '../lib/element-semantics.js';
 import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges } from '../lib/api.js';
-import { scrollToPage, pulseHighlight } from '../lib/canvas-iframe-ops.js';
+import { handleAuxEvent } from '../lib/aux-events.js';
 import { exportFromMenu } from '../components/canvas/card-export.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
@@ -696,7 +696,10 @@ export default function ProjectWorkspace() {
       return;
     }
 
-    // ── 3. 其余：协议帧 / run 生命周期 / UI 副作用 ──
+    // ── 3. 旁路副作用族（跳页/高亮/toast，lib/aux-events.js）──
+    if (handleAuxEvent(evt, { isStale, showToast })) return;
+
+    // ── 4. 其余：协议帧 / run 生命周期 ──
     switch (evt.type) {
       // ── Phase A.4：WS hydrate 协议（server 推完整 messages 让前端不依赖 HTTP Sessions.read）──
       case 'ws.hydrate.start':
@@ -1149,15 +1152,8 @@ export default function ProjectWorkspace() {
         break;
       }
 
-      // C6: agent 的 navigate_to_page / highlight。实现在 lib/canvas-iframe-ops.js
-      // （DOM 操作不该住在路由组件里）
-      case 'run.canvas_navigate':
-        if (!isStale) scrollToPage(evt.page);
-        break;
-
-      case 'run.canvas_highlight':
-        if (!isStale) pulseHighlight(evt.selector, evt.durationMs);
-        break;
+      // 旁路副作用族（跳页/高亮/toast）整体在 lib/aux-events.js —— 08-28 死事件
+      // 清账时拆出去的（canvas_navigate/highlight/focus_page/merged/auth_error）
 
       // 浏览器（2026-08-18）：agent 开始浏览 / 举手求助 —— 低频信号走这条 WS，
       // 像素和输入走专用通道 /ws/projects/:pid/browser

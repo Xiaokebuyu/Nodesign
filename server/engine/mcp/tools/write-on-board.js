@@ -16,7 +16,8 @@
  * 视口 > 内容底下；没有失败分支）；返回文案由 describePlacement 从真实 resolution
  * 生成 —— 08-25 体检陷阱之③「工具返回在撒谎」在这里断根。
  *
- * 旧名 sketch_on_board 注册成薄别名（同参数同 handler），防老会话 resume 断粮。
+ * 旧名别名（sketch_on_board/create_on_board 等）2026-08-28 全部收摊 —— exp 不为
+ * 过去的会话背兼容（用户拍板），入口只此一个。
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
@@ -26,8 +27,9 @@ import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store
 import { TAG_RE } from '../../../projects/board-sanitize.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
+import { endpointReal } from './edit-board.js';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
-import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, resolveTemplate, bboxOf, fitFor } from '../../../lib/sketch-layout.js';
+import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, resolveTemplate, bboxOrZero, fitFor } from '../../../lib/sketch-layout.js';
 import { resolvePlacement, describePlacement, inflateSpriteSeats, inferFlowDir, pickFreeSide } from '../../../lib/board-place.js';
 import { allocateLaneColumn } from '../../../lib/board-lanes.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
@@ -117,14 +119,6 @@ Keep the chat reply to one line pointing here.`;
 export function makeWriteOnBoardTool({ projectId, sharedRoot, sessionId, ctx }) {
   const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
   return tool('write_on_board', DESCRIPTION, SCHEMA, handler);
-}
-
-/** 旧名薄别名（一版）：老会话 resume 时还找得到 sketch_on_board */
-export function makeSketchOnBoardAlias({ projectId, sharedRoot, sessionId, ctx }) {
-  const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
-  return tool('sketch_on_board',
-    'Deprecated alias of write_on_board (same arguments). Use write_on_board.',
-    SCHEMA, handler);
 }
 
 function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
@@ -442,10 +436,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     let pos = layoutNodes(layoutInput, { template: tpl, cols: args.cols, edges: innerEdges, pull });
     const seatTitle = () => {
       if (titleNode && !pos.has('__title')) {
-        const bb = bboxOf([...pos.entries()].map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
+        const bb = bboxOrZero([...pos.entries()].map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
         pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
       } else if (titleNode && tpl === 'free' && !titleNode.at) {
-        const bb = bboxOf([...pos.entries()].filter(([k]) => k !== '__title').map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
+        const bb = bboxOrZero([...pos.entries()].filter(([k]) => k !== '__title').map(([k, p]) => ({ x: p.x, y: p.y, ...nodes.find(n => n.key === k) })));
         pos.set('__title', { x: bb.x, y: bb.y - titleNode.h - 12 });
       }
     };
@@ -460,17 +454,19 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const idOf = new Map();
     for (const n of nodes) idOf.set(n.key, `text:a${stamp()}`);
     for (const sh of shapes) idOf.set(sh.key, `scribble:a${stamp()}`);
-    const resolveEnd = (raw) => {
+    // 端点校验跟 edit_board add_edge 同一道闸（endpointReal）：板上有座 / zones /
+    // 磁盘真身。08-28 对齐 —— 此前这里不做磁盘兜底，连到"真实存在但还没上墙"的
+    // 产物会被拒，而 add_edge 收（领养/入座稍后把线接实）。
+    const resolveEnd = async (raw) => {
       if (idOf.has(raw)) return idOf.get(raw);
       const cid = normalizeCanvasId(raw);
-      if (cid && board.objects?.[cid]) return cid;
-      if (cid && board.zones?.[cid] !== undefined) return cid;
-      return null;
+      if (!cid) return null;
+      return (await endpointReal(cid, board.objects || {}, board.zones, sharedRoot)) ? cid : null;
     };
     const bindings = {};
     const badEdges = [];
     for (const e of edgesIn) {
-      const from = resolveEnd(e.from); const to = resolveEnd(e.to);
+      const from = await resolveEnd(e.from); const to = await resolveEnd(e.to);
       if (!from || !to || from === to) { badEdges.push(`${e.from}→${e.to}`); continue; }
       bindings[`b:a${stamp()}`] = {
         type: e.type || 'link', from, to, by, material: e.material || 'pencil',
@@ -480,7 +476,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const after = { ...board, bindings: { ...(board.bindings || {}), ...bindings } };
 
     // ── 宏观落位（resolvePlacement 统一走） ──
-    const local = bboxOf([
+    const local = bboxOrZero([
       ...nodes.map(n => ({ ...pos.get(n.key), w: n.w, h: n.h })),
       ...shapes.map(sh => sh.rect),
     ]);
@@ -513,7 +509,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           const e = sketchBase.objects[id];
           return { x: e.x, y: e.y, ...estimateSizeOn(after, id, e) };
         });
-        anchorRect = bboxOf(rects);
+        anchorRect = bboxOrZero(rects);
         zone = layerOf(autoAnchorIds[0], sketchBase.objects[autoAnchorIds[0]], known);
       }
     }
@@ -579,7 +575,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     }
     if (vp?.zoom && vp.zoom < 0.8) lines.push(`User's zoom is ${vp.zoom} (<0.8): keep nodes md/lg and say in one line that there is a sketch on the board.`);
     lines.push(staging
-      ? `Next: look_at_board {tag:"${tag}"} to check it, then finish_sketch {tag:"${tag}"} (or it commits at turn end).`
+      ? `Next: look_at_board {tag:"${tag}"} to check it, then edit_board {ops:[{op:"commit",tag:"${tag}"}]} (or it commits at turn end).`
       : `Next: look_at_board ${tag ? `{tag:"${tag}"}` : '{around: one of the ids}'} to check it.`);
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   };

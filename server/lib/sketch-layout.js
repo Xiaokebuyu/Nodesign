@@ -22,7 +22,7 @@ export { UNIT };                   // 兼容出口（真身在 rect.js）
  * 字号不低于 md；一张图的尺寸要能在 0.8 倍下整张进一个普通视口（1400×900 屏
  * ≈ 1750×1125 世界像素）。超过 SKETCH_MAX 直接拒：一张图说一件事，大了就拆。
  */
-export const SKETCH_FIT = { w: 1700, h: 1100 };   // 推荐上限（0.8 倍一屏）
+export const SKETCH_FIT = { w: 1700, h: 1100 };   // 推荐上限（0.8 倍一屏；⚠️ 同基准近邻值见 board-place.js ONE_SCREEN，改缩放基准两处一起看）
 export const SKETCH_MAX = { w: 2600, h: 1700 };   // 硬上限（再大就拆成两张）
 export const GAP = 16;             // 模板排布的节点间距
 const SIZE_PX = { sm: 13, md: 16, lg: 22, xl: 30 };
@@ -332,53 +332,11 @@ export function layoutNodes(nodes, { template = 'auto', cols = null, edges = [],
   return pos;
 }
 
-/** 一组矩形的包围盒。⚠️ 这里的空集契约是**零框**不是 null（写方直接解构 .x/.w），
- *  真身在 rect.js（那边空集 null），这层壳只兜语义差。 */
-export function bboxOf(rects) {
+/** 一组矩形的包围盒，空集回**零框**（写方直接解构 .x/.w）。真身在 rect.js（那边
+ *  空集 null）。08-28 从 bboxOf 改名 —— 同名两种空集语义在同一个调用文件里混用，
+ *  读代码必看错；名字把契约说出来，谁也不用再翻两处注释对齐。 */
+export function bboxOrZero(rects) {
   return rectBbox(rects) || { x: 0, y: 0, w: 0, h: 0 };
-}
-
-/**
- * 宏观落位：在 obstacles（同层已摆的矩形）中给一块 w×h 找地方。
- * - near：锚右侧（撞了往下让），让不开就锚下方
- * - 否则：内容最低边下面（与入座"新东西排底下"同一条起排线精神）
- */
-export function findSpot({ w, h, near = null, obstacles = [], contentBottom = 0, viewport = null }) {
-  const hits = (x, y) => obstacles.some(o => overlaps({ x, y, w, h }, o));
-  // 用户视口里有空地就落在视口里（黑板是主窗口时，画在他眼前而不是让他去找）。
-  // 阅读顺序纪律（08-23 真踩：第二张图落到第一张的**左边**）：先挑不在已有内容左侧/
-  // 上方的位置（顺着先左后右、先上后下长），实在没有才退而求其次。
-  if (!near && viewport && viewport.w >= w + 24 && viewport.h >= h + 24) {
-    const content = obstacles.length ? {
-      x: Math.min(...obstacles.map(o => o.x)), y: Math.min(...obstacles.map(o => o.y)),
-    } : null;
-    const sx = Math.max(24, Math.round(viewport.w / 8)); const sy = Math.max(24, Math.round(viewport.h / 8));
-    for (const strict of [true, false]) {
-      for (let y = viewport.y + 12; y + h <= viewport.y + viewport.h - 12; y += sy) {
-        for (let x = viewport.x + 12; x + w <= viewport.x + viewport.w - 12; x += sx) {
-          if (strict && content && (x < content.x - 24 || y < content.y - 24)) continue;
-          if (!hits(x, y)) return { x: Math.round(x), y: Math.round(y), side: 'viewport' };
-        }
-      }
-    }
-  }
-  if (near) {
-    let x = near.x + near.w + 32; let y = near.y;
-    for (let g = 0; g < 30; g += 1) {
-      if (!hits(x, y)) return { x: Math.round(x), y: Math.round(y), side: 'right' };
-      const blocker = obstacles.find(o => !(x + w <= o.x || o.x + o.w <= x || y + h <= o.y || o.y + o.h <= y));
-      y = blocker.y + blocker.h + GAP;
-    }
-    x = near.x; y = near.y + near.h + 32;
-    for (let g = 0; g < 30; g += 1) {
-      if (!hits(x, y)) return { x: Math.round(x), y: Math.round(y), side: 'below' };
-      const blocker = obstacles.find(o => !(x + w <= o.x || o.x + o.w <= x || y + h <= o.y || o.y + o.h <= y));
-      y = blocker.y + blocker.h + GAP;
-    }
-  }
-  // 排在内容底下：左边缘对齐已有内容（不是写死的 10），读起来像续在同一栏
-  const left = obstacles.length ? Math.min(...obstacles.map(o => o.x)) : 10;
-  return { x: Math.round(left), y: Math.round(contentBottom) + 40, side: 'bottom' };
 }
 
 /**

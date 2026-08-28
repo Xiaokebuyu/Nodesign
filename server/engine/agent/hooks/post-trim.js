@@ -36,6 +36,7 @@ export function makePostToolUseEditWriteTrimHandler({ ctx }) {
       const trimmed = { ...resp, originalFile: null };
 
       try {
+        // ℹ️ 遥测事件：前端刻意不消费（截断是常态，弹提示只会变成噪音）——审计/排查用
         ctx.emit({
           type: 'run.tool_response_trimmed',
           tool: input?.tool_name || 'Edit/Write',

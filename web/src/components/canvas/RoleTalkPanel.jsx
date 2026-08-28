@@ -37,7 +37,7 @@ function statusLine(st, turn) {
   return t('在写（话会进它的队列）');
 }
 
-export default function RoleTalkPanel({ projectId, slug, name, onClose }) {
+export default function RoleTalkPanel({ projectId, slug, name, live = null, onClose }) {
   const [text, setText] = useState('');
   const [log, setLog] = useState([]);            // [{ text, delivered }]
   const [st, setSt] = useState(null);            // { waiting, queued }
@@ -104,7 +104,11 @@ export default function RoleTalkPanel({ projectId, slug, name, onClose }) {
     >
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '8px 10px 4px' }}>
         <span style={{ fontFamily: TEXT_FONT_CSS.kai, fontWeight: 700, fontSize: 15 }}>{name || slug}</span>
-        <span style={{ fontSize: 12, color: PAPER.ink2, flex: 1 }}>{statusLine(st, turn)}</span>
+        {/* 在场态优先吃事件流（live 来自画布 presence，run.role.wait 驱动、近实时）；
+            12s 轮询只兜 queued 数 —— 同一份状态两种新鲜度的病 08-28 收口 */}
+        <span style={{ fontSize: 12, color: PAPER.ink2, flex: 1 }}>
+          {statusLine(live ? { ...(st || { queued: 0 }), waiting: !live.active } : st, turn)}
+        </span>
         <button
           onClick={onClose}
           title={t('收起')}

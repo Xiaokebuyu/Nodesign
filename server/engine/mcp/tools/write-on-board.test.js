@@ -8,7 +8,7 @@ const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-writeboard-'));
 process.env.PROJECTS_DATA_DIR = path.join(tmp, 'projects-data');
 process.env.DB_PATH = path.join(tmp, 'test.db');
 
-const { makeWriteOnBoardTool, makeSketchOnBoardAlias } = await import('./write-on-board.js');
+const { makeWriteOnBoardTool } = await import('./write-on-board.js');
 const { readBoard, patchBoard } = await import('../../../projects/board-store.js');
 const { getSharedDir, ensureProjectWorkspace } = await import('../../../projects/workspace.js');
 
@@ -140,12 +140,6 @@ describe('write_on_board 统一入口（件数判据）', () => {
     expect(r.isError).toBe(true);
   });
 
-  it('sketch_on_board 别名与本尊同 handler', async () => {
-    const alias = makeSketchOnBoardAlias({ projectId: pid, sharedRoot, sessionId: 's1', ctx: { emit: () => {} } });
-    const r = await alias.handler({ nodes: [{ id: 'p', text: 'P' }, { id: 'q', text: 'Q' }] });
-    expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toMatch(/Sketch #sk-/);
-  });
 });
 
 describe('open_lane：开新线（08-27 空间规划）', () => {

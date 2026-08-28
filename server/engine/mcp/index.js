@@ -62,11 +62,9 @@ import { makeClearPendingChangesTool } from './tools/clear-pending-changes.js';
 import { makeGenerateImageTool } from './tools/generate-image.js';
 import { makeRemoveBackgroundTool } from './tools/remove-background.js';
 import { makePinToBoardTool } from './tools/pin-to-board.js';
-import { makeEditBoardTool, makeEditSketchAlias, makeArrangeOnBoardAlias, makeRelateOnBoardAlias } from './tools/edit-board.js';
+import { makeEditBoardTool } from './tools/edit-board.js';
 import { makeReadBoardTool } from './tools/read-board.js';
-import { makeCreateOnBoardTool } from './tools/create-on-board.js';
-import { makeFinishSketchTool } from './tools/sketch-on-board.js';
-import { makeWriteOnBoardTool, makeSketchOnBoardAlias } from './tools/write-on-board.js';
+import { makeWriteOnBoardTool } from './tools/write-on-board.js';
 import { makeLookAtBoardTool } from './tools/look-at-board.js';
 import { makeReadUserViewTool } from './tools/read-user-view.js';
 import { makeOrganizeBoardTool } from './tools/organize-board.js';
@@ -166,8 +164,6 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
     writeOnBoard,
     makeEditBoardTool({ projectId, sharedRoot, ctx }),
     makeReadBoardTool({ projectId, sharedRoot }),
-    // create_on_board 08-27 铲成真转发别名（第三份 textBox + 第七套避让之死）
-    makeCreateOnBoardTool({ write: writeOnBoard.handler }),
   ];
   const browseBatchable = [
     makeBrowserNavigateTool({ projectId, ctx }),
@@ -351,11 +347,10 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // 关系线（2026-08-07）：agent 把「这版改自那版」「这两个是对照」这类
       // **只有它知道**的关系画到画布上。画布知道每个产物是什么，但不知道它们
       // 之间是什么关系 —— 那是北极星（排出有版面感的布局）真正缺的那一块。
-      makeRelateOnBoardAlias({ sharedRoot, projectId, ctx }),
-      // 黑板核心四件（08-25 范式重做）：写=write_on_board（件数判据分流一句话/
-      // 一张图），改=edit_board（吞 arrange/finish/relate/edit_sketch），看=read，
-      // 记号=create。board_batch 用**同一批实例**串行跑（一章 RP 的板面维护
-      // 八次往返收成一次）。旧名薄别名一版防 resume。
+      // 黑板核心三件（08-25 范式重做，08-28 别名收摊）：写=write_on_board（件数
+      // 判据分流一句话/一张图，ink:'hand' 收编旧 create），改=edit_board（吞
+      // arrange/finish/relate/edit_sketch），看=read_board。board_batch 用
+      // **同一批实例**串行跑（一章 RP 的板面维护八次往返收成一次）。
       ...boardBatchable,
       // board_batch（2026-08-27 重置）：覆盖全板面家族 + 运行时解析（resolve）。
       // 一个思考单位的板面维护 = 一次 batch，这是板面工具的**首选入口**。
@@ -371,23 +366,19 @@ edit_board ops.
 Placement and lines are ONE language — put a thing where its relation says (same lane =
 chain below, fork = open_lane column, comment = near+side) AND draw the line that says
 it; a note with no line and no lane is one nobody can trace back.
-Batchable: write_on_board / edit_board / read_board / create_on_board / pin_to_board /
-organize_board / finish_sketch / look_at_board / read_user_view.
+Batchable: write_on_board / edit_board / read_board / pin_to_board /
+organize_board / look_at_board / read_user_view.
 Example: [{"name":"read_board","input":{}},{"name":"write_on_board","input":{"text":"…",
 "tag":"主线","chain":true}},{"name":"edit_board","input":{"ops":[{"op":"add_edge",
 "from":"notes/板书/x.md","to":"assets/图.png","type":"link"}]}}]`,
         resolve: resolveTool,
         batchable: [
           ...boardBatchable.map(t => t.name),
-          'pin_to_board', 'organize_board', 'finish_sketch', 'look_at_board', 'read_user_view',
+          'pin_to_board', 'organize_board', 'look_at_board', 'read_user_view',
         ],
         finalShot: { name: 'look_at_board', input: {}, default: false },
       }),
-      makeArrangeOnBoardAlias({ projectId, sharedRoot, ctx }),
       makeOrganizeBoardTool({ projectId, ctx }),
-      makeSketchOnBoardAlias({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
-      makeFinishSketchTool({ projectId, ctx }),
-      makeEditSketchAlias({ projectId, sharedRoot, ctx }),
       makeLookAtBoardTool({ projectId, ctx }),
       makeReadUserViewTool({ projectId }),
 

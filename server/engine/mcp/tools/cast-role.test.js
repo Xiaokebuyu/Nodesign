@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { makeCastRoleTool, parseRoleDisplayName } from './cast-role.js';
+import { makeCastRoleTool, parseRoleDisplayName, ID_RE } from './cast-role.js';
 import { resolveRoleTools, ROLE_DEFAULT_TOOLS, ROLE_SLUG_RE } from '../../agent/cast.js';
 
 let ws;
@@ -214,5 +214,19 @@ describe('正门的 id 校验 ⊂ 全局判据（分层不能裂成缝）', () =
       expect(/^[a-z0-9][a-z0-9_-]{1,40}$/.test(id), `样本 ${id} 该被正门接受`).toBe(true);
       expect(ROLE_SLUG_RE.test(`rp-${id}`), `rp-${id} 该过全局判据`).toBe(true);
     }
+  });
+});
+
+describe('ID_RE 与 ROLE_SLUG_RE 的蕴含关系（08-28 钉死：两处判据不许各改各的）', () => {
+  it('ID_RE 过的 id 拼上 rp- 前缀必被 ROLE_SLUG_RE 认账（含长度边界）', () => {
+    for (const id of ['a0', 'mo-li', 'yan_qing', 'x'.repeat(41), 'a-'.padEnd(41, '9')]) {
+      expect(ID_RE.test(id), `样本 ${id} 应过 ID_RE`).toBe(true);
+      expect(ROLE_SLUG_RE.test(`rp-${id}`), `rp-${id} 被全局判据拒了 —— 蕴含关系破了`).toBe(true);
+    }
+  });
+  it('ID_RE 确实比全局判据严（大写/单字符被它拒，全局却认）——收紧方向别悄悄反转', () => {
+    expect(ID_RE.test('Moli')).toBe(false);
+    expect(ROLE_SLUG_RE.test('rp-Moli')).toBe(true);
+    expect(ID_RE.test('a')).toBe(false);
   });
 });

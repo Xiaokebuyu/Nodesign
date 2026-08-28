@@ -29,7 +29,9 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
     const sid = s.id || `s${i + 1}`;
     if (isTaken(sid) || shapes.some(x => x.key === sid)) return { error: `形状 id「${sid}」跟节点/别的形状重名（形状缺省叫 s1,s2…，节点别用这类名）` };
     const seed = `${tag || 'solo'}:${sid}`;
-    const color = SKETCH_COLORS.includes(s.color) ? s.color : (s.kind === 'arrow' || s.kind === 'line' ? 'ink2' : 'ink');
+    // 缺省一律 ink。曾有个 'ink2'（箭头用更深墨色）的死分支：色板里没这个色，
+    // 落盘前的白名单每次都把它打回 'ink'，意图从未生效 —— 08-28 勘查后铲平。
+    const color = SKETCH_COLORS.includes(s.color) ? s.color : 'ink';
     const width = s.width || 2;
     let rect; let d;
     if (s.kind === 'path') {
@@ -74,7 +76,7 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
     }
     // 包着节点的记号记 hug：落盘后编辑侧挪节点它跟着走（散架病的另一半在 edit-board）
     const hugKey = (s.around && s.kind !== 'line' && s.kind !== 'arrow' && s.kind !== 'path') ? s.around : null;
-    shapes.push({ key: sid, rect, d, color: SKETCH_COLORS.includes(color) ? color : 'ink', width, hug: hugKey });
+    shapes.push({ key: sid, rect, d, color, width, hug: hugKey });
   }
   return { shapes };
 }

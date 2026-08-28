@@ -20,7 +20,7 @@ const { makePreToolUseActorStamp } = await import('../../agent/hooks/pre-default
 const { _resetActorTrail } = await import('../../agent/actor-trail.js');
 const { parseChalk } = await import('../../../lib/chalk.js');
 const { makeBatchTool } = await import('./browse-find-batch.js');
-const { makeRelateOnBoardAlias } = await import('./edit-board.js');
+const { makeEditBoardTool } = await import('./edit-board.js');
 
 const pid = 'proj_attrib_test';
 let ws;
@@ -112,14 +112,14 @@ describe('别名 / 退化路径也要带着 extra 走（它们的错法是静默
     expect(after[after.length - 1][1].by).toBe('rp-moli');
   });
 
-  it('⭐ relate_on_board（别名转 ops）画的线署角色的名 —— 这个工具在角色白名单里', async () => {
+  it('⭐ edit_board add_edge 画的线署角色的名 —— 这个工具在角色白名单里', async () => {
     const entries = await chalkEntries();
     const [a] = entries[0];
     const [b] = entries[entries.length - 1];
     _resetActorTrail();
     await makePreToolUseActorStamp()({ agent_id: 'a1', agent_type: 'rp-moli' }, 'toolu_rel');
-    const relate = makeRelateOnBoardAlias({ projectId: pid, sharedRoot: ws, ctx: { emit() {} } });
-    await relate.handler({ type: 'ref', from: a, to: b },
+    const edit = makeEditBoardTool({ projectId: pid, sharedRoot: ws, ctx: { emit() {} } });
+    await edit.handler({ ops: [{ op: 'add_edge', type: 'ref', from: a, to: b }] },
       { _meta: { 'claudecode/toolUseId': 'toolu_rel' } });
     const board = await readBoard(pid);
     const mine = Object.values(board.bindings || {}).filter(x => x.by === 'rp-moli' && x.type === 'ref');

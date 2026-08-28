@@ -193,8 +193,8 @@ export function getQueueDepth(sessionId) {
  * 回显到了一条排队消息、而 turn 正在跑 = CLI 把它并进了当前轮。它的 run 行不能
  * 停在 pending（那就是老病：runs 表里"排队 N 分钟"的假象），也不能等一个永远不来
  * 的 result。就地 running→succeeded，metadata 记它并进了谁；token/费用全记在承载它
- * 的那一轮（SDK 的 result 本来就只给一份）。run.merged 事件给前端/审计看，前端
- * 现在不消费（追加那条从没被认领过 runId，不需要清状态）。
+ * 的那一轮（SDK 的 result 本来就只给一份）。run.merged 事件给前端/审计看 ——
+ * 前端 08-28 起消费（aux-events.js 弹一条「并进了正在跑的回合」）。
  */
 export function closeMergedRun({ runId, intoRunId, sessionId, sdkSessionId, eventBus }) {
   try { markRunStarted(runId); } catch { /* 不该已 running；兜底继续关 */ }

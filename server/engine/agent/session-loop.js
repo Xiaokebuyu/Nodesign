@@ -750,8 +750,8 @@ export async function runSession({
     await commitWorkspace(projectId, sessionId, `turn ${status}: ${new Date().toISOString()}`, { author: 'agent' })
       .catch((err) => console.warn('[git] turn commit failed:', err.message));
 
-    // 黑板草稿兜底落定（2026-08-23）：agent 这一轮 sketch_on_board 留下的 staging
-    // 物件，没调 finish_sketch 也在回合结束时变实 —— 草稿态是"正在画"的信号，
+    // 黑板草稿兜底落定（2026-08-23）：agent 这一轮 write_on_board 画图留下的 staging
+    // 物件，没调 edit_board commit 也在回合结束时变实 —— 草稿态是"正在画"的信号，
     // 回合都结束了还半透明就是幽灵。取消/出错同样落定：画了就是画了。
     if (projectId) {
       try {

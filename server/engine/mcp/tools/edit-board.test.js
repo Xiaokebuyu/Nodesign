@@ -8,7 +8,7 @@ const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-editboard-'));
 process.env.PROJECTS_DATA_DIR = path.join(tmp, 'projects-data');
 process.env.DB_PATH = path.join(tmp, 'test.db');
 
-const { makeEditBoardTool, makeArrangeOnBoardAlias, makeRelateOnBoardAlias } = await import('./edit-board.js');
+const { makeEditBoardTool } = await import('./edit-board.js');
 const { makeWriteOnBoardTool } = await import('./write-on-board.js');
 const { readBoard, patchBoard } = await import('../../../projects/board-store.js');
 const { getSharedDir, ensureProjectWorkspace } = await import('../../../projects/workspace.js');
@@ -146,19 +146,19 @@ describe('edit_board（吞四件 + 新能力）', () => {
     expect(Object.values(board.objects).some(o => o.tag === 'wipe')).toBe(false);
   });
 
-  it('arrange_on_board 别名：beside 转发 move', async () => {
-    const alias = makeArrangeOnBoardAlias({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
-    const r = await alias.handler({ action: 'beside', subject: 'assets/photo.png', anchor: 'assets/a.png' });
+  it('move to:{ref,side:right}：真挪到锚点右侧（原 arrange beside 语义）', async () => {
+    const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
+    const r = await t.handler({ ops: [{ op: 'move', id: 'assets/photo.png', to: { ref: 'assets/a.png', side: 'right' } }] }, {});
     expect(r.isError).toBeUndefined();
     const board = await readBoard(pid);
     expect(board.objects['assets/photo.png'].x).toBeGreaterThan(9000);
   });
 
-  it('relate_on_board 别名：悬空端点照拒（口径病收口）', async () => {
-    const alias = makeRelateOnBoardAlias({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
-    const bad = await alias.handler({ type: 'ref', from: 'assets/photo.png', to: 'relations' });
-    expect(bad.isError).toBe(true);
-    const good = await alias.handler({ type: 'contrast', from: 'assets/a.png', to: 'assets/b.png' });
+  it('add_edge：悬空端点照拒（口径病收口，原 relate 语义）', async () => {
+    const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
+    const bad = await t.handler({ ops: [{ op: 'add_edge', type: 'ref', from: 'assets/photo.png', to: 'relations' }] }, {});
+    expect(bad.content[0].text).toMatch(/端点|不存在|✗|failed|0\/1/);
+    const good = await t.handler({ ops: [{ op: 'add_edge', type: 'contrast', from: 'assets/a.png', to: 'assets/b.png' }] }, {});
     expect(good.isError).toBeUndefined();
   });
 });

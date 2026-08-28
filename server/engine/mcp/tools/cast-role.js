@@ -31,8 +31,11 @@ import { ROLE_PREFIX, isValidRoleSlug, resolveRoleTools } from '../../agent/cast
 import { MCP_SERVER_NAME } from '../server-name.js';
 import { pushUnclaimedMessage } from '../../runs/turn-relay.js';
 
-/** 角色 id（不含 rp- 前缀）：ASCII、能当文件名、能当 SendMessage 收件人名 */
-const ID_RE = /^[a-z0-9][a-z0-9_-]{1,40}$/;
+/** 角色 id（不含 rp- 前缀）：ASCII、能当文件名、能当 SendMessage 收件人名。
+ *  ⚠️ 这是 cast.js `ROLE_SLUG_RE` 的**收紧子集**（这边只许小写、≥2 字符）——
+ *  两个判据的蕴含关系（ID_RE 过的 id 拼上前缀必被 ROLE_SLUG_RE 认）由
+ *  cast-role.test.js 钉着；改任何一边先看那条测试。导出仅供测试。 */
+export const ID_RE = /^[a-z0-9][a-z0-9_-]{1,40}$/;
 
 const AGENTS_DIR = '.claude/agents';
 const PERSONA_MAX = 20000;

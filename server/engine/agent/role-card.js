@@ -89,7 +89,9 @@ export async function readRoleCard(workspaceRoot, slug) {
     slug,
     // ⚠️ 展示名是文件里的**自称**，不是实证 —— 角色文件模型可写，一个角色能自称
     // 「用户」或顶替别的角色。只拿它当展示层，归属的锚在名册（harness 亲眼所见的派发）。
-    displayName: nameMatch ? nameMatch[1] : null,
+    // 保留字闸（safeRoleLabel）在**这个出口**过（08-28 下沉）：此前只在 listRoleNames
+    // 过，直接消费 readRoleCard().displayName 的新调用点会重蹈「三个渲染面漏一个」。
+    displayName: nameMatch ? safeRoleLabel(slug, nameMatch[1]) : null,
     description: descPlain,
     toolsDecl: parseToolsDeclaration(fm),
   };
@@ -112,9 +114,8 @@ export async function listRoleNames(workspaceRoot) {
     const slug = n.slice(0, -3);
     if (!isResidentRole(slug)) continue;
     const card = await readRoleCard(workspaceRoot, slug);
-    // ⭐ 保留字闸在**这里**过，不在各个渲染面各过一次：08-26 复审实证三个面里漏了一个，
-    // 而漏的那个正是携带用户原话的标注回路。下沉之后漏传 roleNames 只会降级成显示 slug。
-    if (card?.displayName) out.set(slug, safeRoleLabel(slug, card.displayName));
+    // 保留字闸已下沉到 readRoleCard 出口（08-28）—— 这里拿到的已是洗过的名字。
+    if (card?.displayName) out.set(slug, card.displayName);
   }
   return out;
 }

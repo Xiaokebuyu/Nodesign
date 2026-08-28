@@ -46,7 +46,7 @@ export function makeLookAtBoardTool({ projectId }) {
   return tool(
     'look_at_board',
     `LOOK at the canvas (a real screenshot of the board as the user sees it). Use it after
-write_on_board / edit_board / create_on_board to check what you drew, or when the
+write_on_board / edit_board to check what you drew, or when the
 user talks about how things look on the board. Pick a region — the whole board shrunk
 into one image is unreadable:
 - tag: frame the group carrying this #tag (a sketch you made)

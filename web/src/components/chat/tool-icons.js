@@ -11,11 +11,11 @@ import {
   FileCode2, FileOutput, FilePlus, FileSearch2, FileText, Focus,
   FolderInput, FolderOpen, FolderTree, Gauge, Globe, Hammer,
   Hand, HelpCircle, Highlighter, ImagePlus, Inbox, LayoutDashboard,
-  LayoutList, LifeBuoy, Link2, ListChecks, ListOrdered, Microscope,
+  LayoutList, LifeBuoy, ListChecks, ListOrdered, Microscope,
   MousePointerClick, Move, Navigation, Paintbrush, Palette, Pencil,
   Pin, Pointer, Presentation, Rocket, Route, Ruler,
   ScanEye, ScanSearch, Scissors, Search, Sliders, Sparkles,
-  SquareMousePointer, StickyNote, Tags, Terminal, TextSearch, Trash2,
+  SquareMousePointer, Tags, Terminal, TextSearch, Trash2,
   Waves, Wrench,
 } from 'lucide-react';
 
@@ -65,18 +65,12 @@ export const TOOL_ICONS = {
   'mcp__nodesign__highlight': Highlighter,
   'mcp__nodesign__preview_deck': Presentation,
   'mcp__nodesign__pin_to_board': Pin,
-  'mcp__nodesign__relate_on_board': Link2,
   'mcp__nodesign__read_board': LayoutDashboard,
-  'mcp__nodesign__arrange_on_board': Move,
-  'mcp__nodesign__create_on_board': StickyNote,
   'mcp__nodesign__organize_board': FolderOpen,
-  // ── 黑板（08-25 范式重做：写=write_on_board，改=edit_board，旧名是别名同图标）──
+  // ── 黑板（08-25 范式重做：写=write_on_board，改=edit_board；旧名别名 08-28 收摊）──
   'mcp__nodesign__write_on_board': Pencil,
-  'mcp__nodesign__sketch_on_board': Pencil,
   'mcp__nodesign__edit_board': Move,
   'mcp__nodesign__board_batch': ListOrdered,
-  'mcp__nodesign__edit_sketch': Move,
-  'mcp__nodesign__finish_sketch': ListChecks,
   'mcp__nodesign__look_at_board': ScanEye,
   'mcp__nodesign__read_user_view': Binoculars,
   // ── 反馈 / 决策 ──

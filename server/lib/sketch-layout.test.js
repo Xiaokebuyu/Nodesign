@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { shapePath, layoutNodes, resolveTemplate, findSpot, textBox, UNIT } from './sketch-layout.js';
+import { shapePath, layoutNodes, resolveTemplate, textBox, UNIT } from './sketch-layout.js';
 
 const PATH_RE = /^[\dMLQCZ ,.\-eE]+$/;   // = board-sanitize 的涂鸦字符白名单
 
@@ -30,15 +30,6 @@ describe('sketch-layout', () => {
     const free = layoutNodes([{ key: 'a', w: 50, h: 20, at: { x: 2, y: 3 } }, { key: 'b', w: 50, h: 20 }], { template: 'free' });
     expect(free.get('a')).toEqual({ x: 2 * UNIT, y: 3 * UNIT });
     expect(free.get('b').y).toBeGreaterThan(3 * UNIT + 20);
-  });
-  it('findSpot：锚右侧优先、撞了往下让、没锚排内容底下', () => {
-    const near = { x: 0, y: 0, w: 200, h: 100 };
-    const s1 = findSpot({ w: 100, h: 50, near, obstacles: [near] });
-    expect(s1.side).toBe('right');
-    const s2 = findSpot({ w: 100, h: 50, near, obstacles: [near, { x: 232, y: 0, w: 100, h: 300 }] });
-    expect(s2.y).toBeGreaterThan(0);
-    const s3 = findSpot({ w: 100, h: 50, contentBottom: 500 });
-    expect(s3.y).toBeGreaterThan(500);
   });
   it('textBox：md 比 plain 宽、按行估高', () => {
     const p = textBox('短句', 'md');

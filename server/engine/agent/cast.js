@@ -119,9 +119,8 @@ export function createRoleRoster() {
  * 让"角色能干什么"在一处读得全，而不是散在 CLI 的过滤逻辑里。
  */
 export const ROLE_TOOL_WHITELIST = Object.freeze([
-  // 板上（MCP 短名）
-  'write_on_board', 'read_board', 'edit_board', 'create_on_board', 'relate_on_board',
-  'arrange_on_board', 'sketch_on_board', 'edit_sketch', 'finish_sketch',
+  // 板上（MCP 短名；旧别名 create/relate/arrange/sketch/edit_sketch/finish 08-28 随注册表一起收摊）
+  'write_on_board', 'read_board', 'edit_board',
   'look_at_board', 'read_user_view', 'organize_board', 'pin_to_board', 'board_batch',
   // 收件箱（2026-08-26）：角色跟用户直接对话的唯一通路。后台子代理的内置
   // AskUserQuestion 被 CLI 剥掉了，MCP 工具豁免 —— 所以「问用户话」只能是这两件。

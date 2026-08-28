@@ -28,7 +28,7 @@ import { useBoardGroups } from './useBoardGroups.js';
 import { useBlackboardWiring } from './useBlackboardMode.js';
 import { eyeParams } from './eye-mode.js';
 import { boxUnion } from '../../lib/board-camera.js';
-import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as presenceRectFor, MAIN_AGENT_ID, colorFor, hintPresence, expireHint } from '../../lib/board-presence.js';
+import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as presenceRectFor, MAIN_AGENT_ID, colorFor, hintPresence, expireHint, slugOfPresence } from '../../lib/board-presence.js';
 import { useStageState, splitStageCards, ChalkLiveInk, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
 import { AmbientSpriteLayer, SpriteAskInput, useSpriteAmbient } from './SpriteSketchLayer.jsx';
 import RoleSprites from './RoleSprites.jsx';
@@ -1930,6 +1930,8 @@ export default function BoardCanvas({
             <RoleTalkPanel
               projectId={projectId} slug={roleTalk}
               name={roleNames[roleTalk] || roleTalk}
+              // 事件驱动的在场态（08-28 新鲜度对齐：精灵是实时的，小窗别慢 12 秒）
+              live={Object.values(presence || {}).find((p) => p && slugOfPresence(p.id) === roleTalk) || null}
               onClose={() => setRoleTalk(null)}
             />
           )}

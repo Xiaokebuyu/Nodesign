@@ -1,7 +1,8 @@
 /**
  * mcp/tools/edit-board.js —— edit_board（2026-08-25 范式重做③）
  *
- * 改板的唯一入口。前身 edit_sketch，这一刀吞进四件（旧名全留薄别名一版防 resume）：
+ * 改板的唯一入口。前身 edit_sketch，08-25 这一刀吞进四件；旧名薄别名 08-28 全部
+ * 收摊（exp 不为过去的会话背兼容，用户拍板）：
  *   arrange_on_board  → feature / unfeature（beside/below = move 的 to:{ref,side}）
  *   finish_sketch     → commit / erase_group
  *   relate_on_board   → add_edge（它独有的"端点必须真实存在"校验下沉进共享 add_edge
@@ -124,18 +125,9 @@ For brand-new content use write_on_board.`,
   );
 }
 
-/** 旧名薄别名（一版）：edit_sketch 同参数同 handler */
-export function makeEditSketchAlias({ projectId, sharedRoot, ctx }) {
-  const handler = makeHandler({ projectId, sharedRoot, ctx });
-  return tool('edit_sketch', 'Deprecated alias of edit_board (same arguments). Use edit_board.', {
-    tag: z.string().max(40).optional(),
-    ops: z.array(OP).min(1).max(MAX_OPS),
-  }, handler);
-}
-
-/** 端点存在性（relate_on_board 下沉来的那道闸，add_edge/set_edge 共用）：
- *  板上有座位 / doc: 固定名额 / 磁盘上真有这个路径。 */
-async function endpointReal(id, live, zones, sharedRoot) {
+/** 端点存在性（add_edge/set_edge 共用；08-28 起 write_on_board 的图内边也用它 ——
+ *  两个入口对「悬空边」的容忍度曾不对称）：板上有座位 / zones 命中 / 磁盘上真有这个路径。 */
+export async function endpointReal(id, live, zones, sharedRoot) {
   if (live[id]) return true;
   if (zones && zones[id] !== undefined) return true;
   // （doc: 无条件放行分支 08-27 审计拆除：doc:brand/_root 已于 08-24 退役，全仓
@@ -510,56 +502,4 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
     try { ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `改了黑板（${ok} 处）` }); } catch { /* */ }
     return { content: [{ type: 'text', text: `Applied ${ok}/${ops.length} op(s).${report.length ? `\n${report.join('\n')}` : ''}` }] };
   };
-}
-
-/** arrange_on_board 薄别名（原 schema 原语义，转发进共享实现） */
-export function makeArrangeOnBoardAlias({ projectId, sharedRoot, ctx }) {
-  const handler = makeHandler({ projectId, sharedRoot, ctx });
-  return tool(
-    'arrange_on_board',
-    'Deprecated alias — use edit_board: move{id,to:{ref,side}} / feature / unfeature.',
-    {
-      action: z.enum(['beside', 'below', 'feature', 'unfeature']),
-      subject: z.string().min(1).max(300).optional(),
-      anchor: z.string().min(1).max(300).optional(),
-    },
-    // ⚠️ 别名把入参转成 ops 交给同一个 handler —— **extra 要跟着走**（署名从它查）。
-    // 今天这三个 op 不写 by 所以看不出病，但形状是雷：哪天 move/feature 也要署名就静默错。
-    async ({ action, subject, anchor }, extra) => {
-      if (action === 'unfeature') return handler({ ops: [{ op: 'unfeature' }] }, extra);
-      if (!subject) return { content: [{ type: 'text', text: 'subject required.' }], isError: true };
-      if (action === 'feature') return handler({ ops: [{ op: 'feature', id: subject }] }, extra);
-      if (!anchor) return { content: [{ type: 'text', text: 'beside/below 需要 anchor。' }], isError: true };
-      return handler({ ops: [{ op: 'move', id: subject, to: { ref: anchor, side: action === 'beside' ? 'right' : 'below' } }] }, extra);
-    },
-  );
-}
-
-/** relate_on_board 薄别名（原 schema，转发 add_edge；端点校验在共享实现里） */
-export function makeRelateOnBoardAlias({ projectId, sharedRoot, ctx }) {
-  const handler = makeHandler({ projectId, sharedRoot, ctx });
-  const VOCAB = BINDING_TYPE_IDS
-    .map(id => `- ${id} (${BINDING_TYPES[id].label})${BINDING_TYPES[id].directed ? '' : ' — undirected'}`)
-    .join('\n');
-  return tool(
-    'relate_on_board',
-    `Draw a relationship line between two things on the canvas. Endpoints are canvas ids
-(kind prefix + workspace-relative path). Types:\n${VOCAB}\nOnly record relationships not
-obvious from where files live. (Alias of edit_board add_edge.)`,
-    {
-      type: z.enum(BINDING_TYPE_IDS),
-      from: ENDPOINT,
-      to: ENDPOINT,
-      label: z.string().max(60).optional(),
-      material: z.enum(BINDING_MATERIALS).optional(),
-    },
-    // ⚠️ relate_on_board 在**角色工具白名单里**：extra 漏了的话，角色画的每条线都署 'agent'
-    async ({ type, from, to, label, material }, extra) => {
-      const r = await handler({ ops: [{ op: 'add_edge', from, to, type, ...(label ? { label } : {}), ...(material ? { material } : {}) }] }, extra);
-      if (!r.isError && ctx?.emit) {
-        try { ctx.emit({ type: 'board.updated', sessionId: null, summary: `已画一条「${BINDING_TYPES[type].label}」关系` }); } catch { /* */ }
-      }
-      return r;
-    },
-  );
 }

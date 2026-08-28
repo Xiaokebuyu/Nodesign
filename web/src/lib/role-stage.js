@@ -54,6 +54,11 @@ export function reduceRoleStage(stage, evt) {
     delete next[evt.agentType];
     return next;
   }
+  // 角色卡写成/改稿（08-28 接上：此前前端零消费，re-cast 改名要等下一次上下场才刷新）
+  // —— 记一个 tick，useRoleNames 据此重拉展示名
+  if (t === 'run.role_cast') {
+    return { ...stage, __castTick: (stage.__castTick || 0) + 1 };
+  }
   return stage;
 }
 
@@ -89,8 +94,9 @@ export function sceneOf(stage) { return stage?.__scene || null; }
  */
 export function useRoleNames(projectId, stage) {
   const [names, setNames] = useState({});
-  // 只看台上名单，__scene 变动不该触发重拉
-  const key = Object.keys(stage || {}).filter(isRoleSlug).sort().join(',');
+  // 只看台上名单 + 角色卡改稿 tick（run.role_cast），__scene 变动不该触发重拉
+  const key = Object.keys(stage || {}).filter(isRoleSlug).sort().join(',')
+    + (stage?.__castTick ? `|c${stage.__castTick}` : '');
   useEffect(() => {
     if (!projectId || !key) return undefined;
     let alive = true;
