@@ -211,10 +211,12 @@ export default {
   '小范围内测中': 'Private beta',
   '创作者的 agent 工作间': "A creator's agent workshop",
   // h1 分三段是因为中间那段带手绘下划线，中英都是"动词短语 ×3"的结构，逐段对得上
-  '想到，': 'Think it, ',
-  '做出来': 'make it',
-  '，验一遍': ', check it',
-  '不用会画图，也不用学工具。': 'No design skills required. No tools to learn.',
+  // ⚠️ 标题是**一行一个整句**，别再拆成 '想到，' + '做出来' + '，验一遍' 那样拼 ——
+  // 中文下碰巧成立，换到别的语言就是词序赌博。英文按英文重写，不直译。
+  '说一句话，它做出来': 'Say it in a sentence.',
+  '哪里不对，圈哪里': "Circle what's wrong.",
+  '网页、海报、文档、演示稿、能演的角色，都在一块画布上。':
+    'Pages, posters, docs, decks, characters. All on one canvas.',
 
   '登录': 'Sign in',
   '注册': 'Register',

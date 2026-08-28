@@ -37,12 +37,48 @@ import { DESIGN_W, DESIGN_H } from './geometry.js';
  * 里只有 1.4 秒完整站着，读不完一遍是必然的。觉得该给读的时间，把 `still` 调大
  * 即可，别去改 step —— 那会连带把"一张张摆上去"的手感改掉。
  */
+/**
+ * 一格胶片 = 80ms（12.5fps，接近定格动画经典的"拍两格"）。
+ *
+ * ⭐ 2026-08-28 用户报「帧率太低、观感不好」。量下来问题**不是慢**：录屏逐帧哈希
+ * 显示静止时画面每 33ms 就变一次（那是 sway 的亚像素抖动，每帧转 0.017deg ≈
+ * 0.09px，肉眼根本看不见），而进出场时画面一停就是 100-500ms。也就是说整面墙上
+ * 同时跑着两种节拍，被看见的只有粗的那一种，于是它读起来像"坏了"而不像"手做的"。
+ *
+ * 定格动画之所以成立，是**整个画面按同一个快门走**。所以这里立一个帧钟：
+ * 下面每一个时长和每一处延迟都必须是 FRAME 的整数倍，连常驻的风吹纸摆也钉在
+ * 同一格上（由 wall-motion.lint.test.js 逐个数对）。
+ *
+ * ⚠️ 别用"把 steps 调大"来解决观感 —— 调到看不出格子就不是定格了。真正让它好看
+ * 的是**每格挪得少**（跳幅）和**大家一起跳**（对齐），不是格子多。
+ */
+export const FRAME = 80;
+
+/**
+ * 一段关键帧区间要写几格。
+ *
+ * ⛔⛔ **`steps()` 是按「每两个关键帧之间」算的，不是按整条动画算的。**
+ * 08-28 我给 ndw-pin-in 加了中间帧做"过一点再回来"，格数就被悄悄乘了 3 ——
+ * CSS 没报错、格数字面上还写着 6，实测画面每 26ms 就变一次（≈38fps，比改之前
+ * 还平滑，正好跟"要更像定格"反着来）。是 getAnimations() + 两张 33ms 截图逐字节
+ * 比才逮住的。
+ *
+ * 而且 `jump-none` 下一段区间取 n 个值（含首尾），所以**变化次数是 n-1**。
+ * 于是：一段区间 d 毫秒要每 FRAME 跳一格 → n = d / FRAME + 1。
+ * 关键帧必须等距，不然每段的格子长短不一，还是脱拍。
+ * 由 wall-motion.lint.test.js 按「关键帧条数 × steps 数 × 时长」三者对账。
+ */
+export const stepsFor = (intervalMs) => intervalMs / FRAME + 1;
+
 export const MOTION = {
-  enter: 460, stepIn: 240,     // 单张钉上去的时长 / 张与张之间错开
-  leave: 380, stepOut: 130,    // 单张摘下来的时长 / 错开
-  threadIn: 700,               // 红线画出来（等所有纸钉完才开始）
-  inkOut: 320, boardOut: 420,  // 收起时：线先擦、板上的墨最后淡
-  still: 1400,                 // 钉完之后站着不动的那一拍
+  enter: 480, stepIn: 240,     // 单张钉上去 6 格（3 段 × 2 格）/ 张与张之间错开 3 格
+  leave: 480, stepOut: 160,    // 单张摘下来 6 格（3 段 × 2 格）/ 错开 2 格
+  threadIn: 720,               // 红线画出来（等所有纸钉完才开始）9 格
+  inkOut: 320, boardOut: 400,  // 收起时：线先擦、板上的墨最后淡
+  still: 1440,                 // 钉完之后站着不动的那一拍
+  inkIn: 400, inkStep: 80,     // 板上的墨：单个 5 格 / 彼此错开 1 格
+  handStep: 160,               // 手写标签彼此错开 2 格
+  sway: 6400, swayStep: 560,   // 风吹纸摆一个来回 80 格（两段各 40）/ 每张纸错开 7 格
 };
 
 /**
@@ -135,11 +171,25 @@ export const WALL_CSS = `
 .ndw .bow { position: absolute; left: 0; right: 0; bottom: 0; height: 32%; z-index: 3;
   pointer-events: none;
   background: radial-gradient(130% 100% at 50% 112%, rgba(43,33,23,0.07), transparent 62%); }
+/* 风吹纸摆也走帧钟（2026-08-28）。
+   原来每张纸自带一个 5.3-8.2s 不等的周期、平滑 ease-in-out —— 那是墙上唯一一个
+   不按快门走的东西。它本身看不见（每格转 0.017deg），但它让"整面墙同一个快门"
+   这件事不成立，而且每秒白白重合成几十次。
+   现在周期统一，相位按第几张纸错开（--i 由 Scene.jsx 在运行时按 DOM 顺序发），
+   于是 40 个手写的 --dur/--delay 一起退休。 */
+/* ⛔ 别用 「alternate」 把来回省成半程（⚠️ 这段 CSS 是 JS 模板字符串，注释里
+   一个反引号就把整个文件炸成 SyntaxError —— 08-28 我踩了三次）。实测（rAF 采样每张纸的 transform）：反向那
+   半程的 jump-none 台阶是**镜像**的，跟正向差半格 —— 于是十五张纸分裂成两套错开
+   的格子，"整面墙同一个快门"当场不成立（量到全墙每 17ms 就有人在跳）。
+   老老实实写三帧三角波：两段各 40 格，一个来回 80 格，所有纸共用一套格子。 */
 @keyframes ndw-sway {
   0%, 100% { transform: rotate(calc(var(--rot, 0deg) - 0.32deg)); }
   50%      { transform: rotate(calc(var(--rot, 0deg) + 0.32deg)); }
 }
-.ndw .sway { animation: ndw-sway var(--dur, 6s) ease-in-out var(--delay, 0s) infinite; }
+.ndw .sway {
+  animation: ndw-sway ${MOTION.sway}ms steps(${stepsFor(MOTION.sway / 2)}, jump-none) infinite;
+  animation-delay: calc(var(--i, 0) * -${MOTION.swayStep}ms);
+}
 @media (prefers-reduced-motion: reduce) { .ndw .sway { animation: none; } }
 
 /* 固定件：一张纸一种，别都用钉 */
@@ -195,14 +245,29 @@ export const WALL_CSS = `
   color: var(--pencil); }
 
 /* 标题 */
-.ndw-head { position: absolute; left: 3.5%; top: 5.5%; z-index: 3; max-width: 34%; }
+/* ⚠️ max-width 用**设计稿的 px**不用百分比：整台戏是 1500x800 的稿按 --s 缩放的，
+   这块地的右边界必须挡在场景第一张纸之前（约 520px）。百分比看着一样，但它是
+   跟着舞台走的，改舞台宽度就会悄悄让标题伸进画里 —— 英文标题比中文长一半，
+   08-28 之前就是这么压进右边那张照片的。 */
+/* ⚠️ 这块地是**壳跟场景之间的约定**：三套场景在左上角都得给它让路。标题从一行
+   变两行之后这块地长高了 ~50px，所以整体上提、行距收紧，把长出来的还回去一部分。
+   改这里之前先跑一遍 wall-collide 探针（scratchpad），三套场景逐个对撞，别只看一张图。 */
+.ndw-head { position: absolute; left: 3.5%; top: 3.4%; z-index: 3; max-width: 434px; }
 .ndw-head .row { display: flex; align-items: baseline; gap: 13px; }
 .ndw-logo { font: 700 24px var(--kai); letter-spacing: 0.06em; }
 .ndw-anno { font: 11.5px var(--kai); color: var(--pencil); letter-spacing: 0.16em; }
-.ndw-head h1 { margin-top: 18px; font-size: 33px; font-weight: 700; letter-spacing: 0.04em; }
-.ndw-head h1 .u { position: relative; white-space: nowrap; }
+.ndw-head h1 { margin-top: 13px; font-size: 30px; font-weight: 700; letter-spacing: 0.04em;
+  line-height: 1.34; }
+/* 一行一句，断行由文案自己决定，不交给宽度去猜。
+   width:max-content 让手绘下划线只画到字尾；max-width:100% 是给长语言留的退路
+   （宁可折行，也不许伸出这块地）。⛔ 别再写 white-space: nowrap —— 那正是英文
+   标题压进场景照片的原因。 */
+.ndw-head h1 .l { display: block; position: relative; width: max-content; max-width: 100%; }
 .ndw-head h1 .u svg { position: absolute; left: -2%; width: 104%; height: 9px; bottom: -6px; }
-.ndw-sub { margin-top: 12px; font-size: 14.5px; line-height: 1.85; color: var(--ink-2); }
+.ndw-sub { margin-top: 11px; font-size: 14px; line-height: 1.7; color: var(--ink-2);
+  /* ⚠️ 这一行必须**排得下一行**：标题占两行之后，副标再折行就会压到场景里
+     那句手写标签上（三套场景在左上角都留了地，但留的是旧版那个高度）。 */
+  white-space: nowrap; }
 
 .ndw-card { position: absolute; right: 4%; top: 19%; width: 25%; padding: 34px 36px 26px;
   background-color: var(--paper); background-image: var(--grain);
@@ -247,13 +312,21 @@ export const WALL_CSS = `
    每张纸自带 「--i」（第几张），延迟 = i × 一格的时间 —— 手不可能同时钉八张。
    摘的时候顺序反过来（后钉的先摘），像倒放。 */
 .ndw-scene { position: absolute; inset: 0; }
+/* 钉上去有**过一点再回来**那一下（60% 那帧越过终点）：手一松纸会晃回位。
+   6 格里第 4 格落在越冲的位置，最后一格坐回去 —— 这一下比"多给几格"有用得多，
+   它是手做感的来源。opacity 在第 2 格就到位，不然第一格看着像闪。 */
 @keyframes ndw-pin-in {
-  0%   { opacity: 0; transform: rotate(calc(var(--rot, 0deg) + 3deg)) translate(6px, -14px); }
-  100% { opacity: 1; transform: rotate(var(--rot, 0deg)) translate(0, 0); }
+  0%       { opacity: 0; transform: rotate(calc(var(--rot, 0deg) + 3deg)) translate(6px, -14px); }
+  33.3333% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) + 1.6deg)) translate(3px, -6px); }
+  66.6667% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) - 0.9deg)) translate(-2px, 3px); }
+  100%     { opacity: 1; transform: rotate(var(--rot, 0deg)) translate(0, 0); }
 }
+/* 摘下来先"揭"一下再掉：20% 那帧往回抬一点，像手先把纸从钉子上挑起来 */
 @keyframes ndw-pin-out {
-  0%   { opacity: 1; transform: rotate(var(--rot, 0deg)) translate(0, 0); }
-  100% { opacity: 0; transform: rotate(calc(var(--rot, 0deg) - 4deg)) translate(-9px, 16px); }
+  0%       { opacity: 1; transform: rotate(var(--rot, 0deg)) translate(0, 0); }
+  33.3333% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) + 1.2deg)) translate(2px, -4px); }
+  66.6667% { opacity: 0.6; transform: rotate(calc(var(--rot, 0deg) - 1.7deg)) translate(-4px, 6px); }
+  100%     { opacity: 0; transform: rotate(calc(var(--rot, 0deg) - 4deg)) translate(-9px, 16px); }
 }
 /* 板上的字、涂鸦、线索线没有 --rot，单独一套（只跳明暗，不跳位置） */
 @keyframes ndw-ink-in  { from { opacity: 0 } to { opacity: 1 } }
@@ -264,12 +337,12 @@ export const WALL_CSS = `
    (0,2,0)。别把它改成 「.ndw-scene .paper.enter」 那种写法 —— 一旦打平，两条
    动画抢同一个 transform，纸会在切换那一瞬瞬移。 */
 .ndw-scene.enter .paper {
-  animation: ndw-pin-in ${MOTION.enter}ms steps(4, jump-none) both;
+  animation: ndw-pin-in ${MOTION.enter}ms steps(${stepsFor(MOTION.enter / 3)}, jump-none) both;
   animation-delay: calc(var(--i, 0) * ${MOTION.stepIn}ms);
 }
 /* 收起时纸让线先走一步（inkOut），不然线还挂着纸就没了，红线一瞬间凌空 */
 .ndw-scene.leave .paper {
-  animation: ndw-pin-out ${MOTION.leave}ms steps(3, jump-none) both;
+  animation: ndw-pin-out ${MOTION.leave}ms steps(${stepsFor(MOTION.leave / 3)}, jump-none) both;
   animation-delay: calc(${MOTION.inkOut}ms + var(--out, 0) * ${MOTION.stepOut}ms);
 }
 /* 墨迹分两拨上，**顺序是有意义的**：
@@ -284,18 +357,18 @@ export const WALL_CSS = `
    淡（它们画在板面上，纸一直压着它们）。顺序反了的话，会看见涂鸦先消失、纸却
    还挂在空板上。 */
 .ndw-scene.enter .doodle, .ndw-scene.enter .wall {
-  animation: ndw-ink-in 420ms steps(5, jump-none) both;
-  animation-delay: calc(var(--i, 0) * 90ms);
+  animation: ndw-ink-in ${MOTION.inkIn}ms steps(${stepsFor(MOTION.inkIn)}, jump-none) both;
+  animation-delay: calc(var(--i, 0) * ${MOTION.inkStep}ms);
 }
 .ndw-scene.enter .hand, .ndw-scene.enter .ndw-thread {
-  animation: ndw-ink-in ${MOTION.threadIn}ms steps(6, jump-none) both;
-  animation-delay: calc(var(--pins, 20) * ${MOTION.stepIn}ms + var(--i, 0) * 110ms);
+  animation: ndw-ink-in ${MOTION.threadIn}ms steps(${stepsFor(MOTION.threadIn)}, jump-none) both;
+  animation-delay: calc(var(--pins, 20) * ${MOTION.stepIn}ms + var(--i, 0) * ${MOTION.handStep}ms);
 }
 .ndw-scene.leave .hand, .ndw-scene.leave .ndw-thread {
-  animation: ndw-ink-out ${MOTION.inkOut}ms steps(3, jump-none) both;
+  animation: ndw-ink-out ${MOTION.inkOut}ms steps(${stepsFor(MOTION.inkOut)}, jump-none) both;
 }
 .ndw-scene.leave .doodle, .ndw-scene.leave .wall {
-  animation: ndw-ink-out ${MOTION.boardOut}ms steps(4, jump-none) both;
+  animation: ndw-ink-out ${MOTION.boardOut}ms steps(${stepsFor(MOTION.boardOut)}, jump-none) both;
   animation-delay: calc(var(--pins, 20) * ${MOTION.stepOut}ms);
 }
 @media (prefers-reduced-motion: reduce) {

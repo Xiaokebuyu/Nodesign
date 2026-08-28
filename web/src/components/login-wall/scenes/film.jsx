@@ -175,7 +175,7 @@ export default {
       ))}
 
       {/* ① 一句话 */}
-      <div className="paper m1 z2 sway" style={{ '--rot': '2.1deg', '--dur': '5.4s' }}>
+      <div className="paper m1 z2 sway" style={{ '--rot': '2.1deg' }}>
         <span className="no"><Ring />①</span>
         <span className="pin r" />
         <span className="who">我说</span>做一支外卖员的夜班短片，丧一点，不要台词
@@ -185,7 +185,7 @@ export default {
       {/* ② 分镜表：后面垫着上一版 */}
       <div className="paper pstack" aria-hidden="true"
         style={{ left: '18%', top: '28.2%', width: '16.7%', height: 150, '--rot': '-2.4deg' }} />
-      <div className="paper m2 z0 crease sway" style={{ '--rot': '-0.9deg', '--dur': '6.8s', '--delay': '-2.4s' }}>
+      <div className="paper m2 z0 crease sway" style={{ '--rot': '-0.9deg' }}>
         <span className="no"><Ring />②</span>
         <Clip cx="24%" />
         <div className="grid">
@@ -208,7 +208,7 @@ export default {
       </div>
 
       {/* ③ 资产库 */}
-      <div className="paper m3 z2 dog sway" style={{ '--rot': '1.7deg', '--dur': '6.1s', '--delay': '-1.5s' }}>
+      <div className="paper m3 z2 dog sway" style={{ '--rot': '1.7deg' }}>
         <span className="no"><Ring />③</span>
         <Clip cx="22%" />
         <img src={artSheet} alt="站内做出来的主角三视图设定" />
@@ -217,7 +217,7 @@ export default {
       </div>
 
       {/* ④ 它自己动手 */}
-      <div className="paper m4 sway" style={{ '--rot': '-1.2deg', '--dur': '7.6s', '--delay': '-3.9s' }}>
+      <div className="paper m4 sway" style={{ '--rot': '-1.2deg' }}>
         <span className="no"><Ring />④</span>
         <span className="pin" />
         <div className="t">它自己动手</div>
@@ -229,7 +229,7 @@ export default {
       </div>
 
       {/* ⑤ 成片 */}
-      <div className="paper m5 z2 dog sway" style={{ '--rot': '1.3deg', '--dur': '6.2s', '--delay': '-1.1s' }}>
+      <div className="paper m5 z2 dog sway" style={{ '--rot': '1.3deg' }}>
         <span className="no"><Ring />⑤</span>
         <span className="pin" />
         <img src={artStill} alt="站内做出来的《夜班者》成片一帧" />
@@ -240,7 +240,7 @@ export default {
       {/* ⑥ 上映 */}
       <div className="paper pstack" aria-hidden="true"
         style={{ left: '31.9%', top: '62.7%', width: '14.7%', height: 104, '--rot': '2.1deg' }} />
-      <div className="paper m6 wrinkle sway" style={{ '--rot': '-1.1deg', '--dur': '8.2s', '--delay': '-5.5s' }}>
+      <div className="paper m6 wrinkle sway" style={{ '--rot': '-1.1deg' }}>
         <span className="no"><Ring />⑥</span>
         <span className="tab">项目 · 卷宗</span>
         <span className="holes" />
@@ -252,7 +252,7 @@ export default {
       </div>
 
       {/* 侧料 */}
-      <div className="paper t-cut z0 sway" style={{ '--rot': '-2.3deg', '--dur': '5.6s', '--delay': '-2.7s' }}>
+      <div className="paper t-cut z0 sway" style={{ '--rot': '-2.3deg' }}>
         <span className="pin r" />
         <img src={artCut} alt="" />
         <svg className="x" viewBox="0 0 100 70" preserveAspectRatio="none" aria-hidden="true">
@@ -261,20 +261,20 @@ export default {
         <div className="cap">这条慢一拍</div>
       </div>
 
-      <div className="paper t-receipt sway" style={{ '--rot': '2.4deg', '--dur': '5.3s', '--delay': '-3.4s' }}>
+      <div className="paper t-receipt sway" style={{ '--rot': '2.4deg' }}>
         <span className="pin" />
         <div className="h">用量小票</div>
         RUN 0809-24<br />39镜×50步<br />¥19.60<br />* * *
       </div>
 
-      <div className="paper t-beat z2 sway" style={{ '--rot': '1.8deg', '--dur': '6.4s', '--delay': '-4.6s' }}>
+      <div className="paper t-beat z2 sway" style={{ '--rot': '1.8deg' }}>
         <Clip cx="34%" />
         第 12 和 13 之间<br />少半拍，补一格
       </div>
 
       <div className="paper pstack" aria-hidden="true"
         style={{ left: '55.9%', top: '5.2%', width: '12.2%', height: 148, '--rot': '2.2deg' }} />
-      <div className="paper t-legal z0 sway" style={{ '--rot': '-1.3deg', '--dur': '7.1s', '--delay': '-4.1s' }}>
+      <div className="paper t-legal z0 sway" style={{ '--rot': '-1.3deg' }}>
         <span className="staple" style={{ '--cx': '18px' }} />
         <span className="staple" style={{ '--cx': 'calc(100% - 32px)' }} />
         <div className="h">这周做完的</div>
@@ -285,13 +285,13 @@ export default {
         <span className="bow" />
       </div>
 
-      <div className="paper t-next z0 dog sway" style={{ '--rot': '0.9deg', '--dur': '7.3s', '--delay': '-2.2s' }}>
+      <div className="paper t-next z0 dog sway" style={{ '--rot': '0.9deg' }}>
         <span className="pin" />
         <div className="h">下一支</div>
         <div className="b">同一个人，白天那一版。看看两条剪在一起会怎么样。</div>
       </div>
 
-      <div className="paper t-desk z0 crease-h sway" style={{ '--rot': '-1.6deg', '--dur': '7.9s', '--delay': '-6.2s' }}>
+      <div className="paper t-desk z0 crease-h sway" style={{ '--rot': '-1.6deg' }}>
         <Clip cx="62%" />
         <img src={artDesk} alt="" />
         <div className="cap"><span>工作台 · 竖屏试排</span><b>DESK-002</b></div>
