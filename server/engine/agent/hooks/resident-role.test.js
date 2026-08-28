@@ -94,12 +94,13 @@ describe('演员位派发：name 闸（2026-08-28 重构）', () => {
     expect(await decision(cast, { subagent_type: 'rp-actor', name: 'rp-actor' })).toBe('deny');
   });
 
-  it('合法 name → 强制后台、名字进名册、名字保持是实例名', async () => {
+  it('合法 name → 强制后台、名字进名册、名字保持是实例名；model 参数被剥掉', async () => {
     const { roster, cast } = mk();
-    const out = await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan' } });
+    const out = await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan', model: 'sonnet' } });
     expect(out.hookSpecificOutput.permissionDecision).toBe('allow');
     expect(out.hookSpecificOutput.updatedInput.run_in_background).toBe(true);
     expect(out.hookSpecificOutput.updatedInput.name).toBe('rp-cheng-wan');
+    expect(out.hookSpecificOutput.updatedInput.model).toBeUndefined();   // 角色跟会话模型走（glm 点 sonnet 案）
     expect(roster.has('rp-cheng-wan')).toBe(true);
     expect(roster.has('rp-actor')).toBe(false);        // 位置不进名册
   });

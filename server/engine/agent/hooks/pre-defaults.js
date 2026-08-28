@@ -131,13 +131,17 @@ export function makePreToolUseAgentForceForegroundHandler({ roster = null, works
       // 盖章按**实例名**：byOf / 收件箱 / 板书署名全按名字走，不认演员位（rp-actor
       // 是位置不是人）。agentId→名字的别名在 PostToolUse 学（hooks/slot-alias.js）。
       noteToolCaller(toolUseId || input?.tool_use_id, { agentType: name });
-      if (!inferred && t.run_in_background === true) return {};
+      if (!inferred && t.run_in_background === true && !t.model) return {};
+      // model 参数剥掉（proj_mtd7d4et：glm 会话的 GM 给角色点 sonnet）：角色跟会话
+      // 模型走 —— 免费行的角色拿别名去要订阅模型，打到该会话的 ingress 上游轻则
+      // 400 重则记账错位。演员位定义 model: inherit 是教义，这里是闸。
+      const { model: _dropModel, ...rest } = t;
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
           permissionDecision: 'allow',
           // 推断出的名字必须回写进 input —— CLI 按它建实例，SendMessage 按它寻址
-          updatedInput: { ...t, name, run_in_background: true },
+          updatedInput: { ...rest, name, run_in_background: true },
           // nd:rp-prompt
           additionalContext:
             `「${name}」已按后台派出${inferred ? '（名字是从你 prompt 里的角色卡认出来的）' : ''}。`
