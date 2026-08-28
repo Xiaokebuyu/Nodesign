@@ -214,6 +214,29 @@ describe('首页页签跟纸的接缝', () => {
       .toMatch(/\.ndd-peel \.nd-tabs > \*:not\(\.on\)\s*\{[^}]*visibility:\s*hidden/);
   });
 
+  /**
+   * 模型选择器 / 开工按钮这些也是**写在这张纸上**的，纸被扯走它们得一起掉。
+   *
+   * 08-28 一度把这排抬到复制品之上（z-index:7），理由是"不抬的话切换那一瞬工具会
+   * 先消失半秒" —— 那是在治症状。真解法是复制品自带一份克隆。这条 lint 守两头：
+   * 别再把真的那排抬出去，克隆那条路也别断。
+   */
+  it('工具栏跟着纸一起掉（既不许抬出去，克隆那条路也不许断）', () => {
+    expect(rule('.ndd-pad .bar '), '.bar 又被抬到复制品之上了 —— 那会变成"纸走了工具还钉在原地"')
+      .not.toMatch(/z-index/);
+    expect(ENTRY, '找不到 cloneFoot —— 复制品没有工具栏，切换那一瞬整排会消失')
+      .toMatch(/const cloneFoot = \(\)/);
+    expect(ENTRY, '真工具栏得挂 footRef 才克隆得到').toMatch(/className="foot" ref=\{footRef\}/);
+    expect(ENTRY, '克隆得真塞进复制品里').toMatch(/replaceChildren\(peel\.foot\)/);
+    expect(ENTRY, '克隆里的 id 要摘掉，不然跟原件抢 SVG 的 url(#…) 引用')
+      .toMatch(/removeAttribute\('id'\)/);
+    expect(ENTRY, '克隆里的按钮要退出 Tab 顺序 —— aria-hidden 挡不住键盘焦点')
+      .toMatch(/'tabindex', '-1'/);
+    // 复制品在 DOM 上排在真工具栏**后面**：克隆的 id 虽然摘了，位置在后总归更稳
+    expect(ENTRY.indexOf('ref={footRef}'), '复制品得排在真工具栏后面')
+      .toBeLessThan(ENTRY.indexOf('ndd-peel'));
+  });
+
   it('签在 DOM 上排在纸前面（不然它就压在纸上，"被压着"就成了假的）', () => {
     const iTabs = ENTRY.indexOf('className="nd-tabs" role="radiogroup"');
     const iPad = ENTRY.indexOf("className=\"ndd-pad\"");

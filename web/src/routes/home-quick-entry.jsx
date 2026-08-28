@@ -119,18 +119,47 @@ export default function QuickEntry({ prefill }) {
    * 出现，比不做动画还糟。h 是切换那一刻量到的 textarea 真高（纸的高度是内容
    * 撑的，复制品没有 textarea，量不出来就只能猜）。
    */
-  const [peel, setPeel] = useState(null);   // { id, from, h, text, ph }
+  const [peel, setPeel] = useState(null);   // { id, from, h, text, ph, foot }
   const peelSeq = useRef(0);
+  const footRef = useRef(null);        // 真的那排家什（托盘 + + / 模型 / 提示 / 开工）
+  const peelFootRef = useRef(null);    // 复制品里放克隆的坑
+  /**
+   * 把工具栏整块克隆一份给复制品（2026-08-28）。
+   *
+   * 模型选择器、开工按钮这些跟正文一样是**写在这张纸上**的，纸被扯走它们得一起掉。
+   * 克隆而不是照抄一份 JSX：照抄的那份迟早跟真的分叉（改了工具栏忘了改复制品，
+   * 平时看不出来，一按切换才露馅），而且 ModelPicker 是个有状态的组件，
+   * 再挂一个实例等于多一份订阅。
+   *
+   * ⛔ id 一律去掉：克隆里带同名 id 会跟原件抢 SVG 的 url(#…) 引用（渐变/遮罩），
+   * 谁赢看文档顺序，那是一种改一下 DOM 位置就会变的错。克隆纯装饰，不需要 id。
+   * ⛔ 焦点也要摘干净：aria-hidden 挡得住读屏，挡不住 Tab —— 克隆里那几个按钮
+   * 在这半秒里是能被 Tab 焦点走进去的。
+   */
+  const cloneFoot = () => {
+    const el = footRef.current;
+    if (!el) return null;
+    const c = el.cloneNode(true);
+    c.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+    c.querySelectorAll('button, input, a, select, textarea, [tabindex]')
+      .forEach((n) => { n.setAttribute('tabindex', '-1'); n.setAttribute('aria-hidden', 'true'); });
+    return c;
+  };
   const pickMode = (m) => {
     if (m === mode) return;
     setPeel({
       id: ++peelSeq.current, from: mode,
-      h: ref.current?.offsetHeight || 116, text, ph: placeholder,
+      h: ref.current?.offsetHeight || 116, text, ph: placeholder, foot: cloneFoot(),
     });
     setMode(m);
     setPlaceholder(pickPlaceholder(m));
     try { localStorage.setItem(MODE_LS_KEY, m); } catch { /* 存不上就每次手选 */ }
   };
+  // 克隆是真 DOM 节点，React 渲染不出来 —— 渲染完手工塞进复制品里那个坑
+  useLayoutEffect(() => {
+    const host = peelFootRef.current;
+    if (host && peel?.foot) host.replaceChildren(peel.foot);
+  }, [peel]);
   const coarse = useMedia(COARSE);
   // 暂存附件（QuickEntry 阶段还没 project，只能存 File 对象，submit 时再 createProject + 上传）
   // chip 形态：path/error 都 undefined → ComposerTray 显示 "上传中…"（实际是"待上传"，hover 看 title）
@@ -336,29 +365,6 @@ export default function QuickEntry({ prefill }) {
             else if (y + CARET_H > h) ta.scrollTop += y + CARET_H - h;
           }}
         >
-          {/* 被揭掉的那张：整张纸的复制品（自带一份旧配方，所以不用重写任何皮），
-              翻飞出去后 animationend 自己收掉。
-              签跟纸是一体的，所以复制品里带**自己那一片**签，跟着纸一起被扯下去；
-              另一片占位但不显形（visibility:hidden），让底下真的那片透上来 ——
-              槽位不变、露出来的是下一张同类纸的签。
-              盖不住回形针和工具栏（两者 z 都比它高）：针别的是整叠，
-              +/模型/开工 是这一叠的家什，纸是从它们底下抽走的。 */}
-          {peel && (
-            <div
-              key={peel.id}
-              className={`ndd-pad ${SHEET_CLS[peel.from]} ndd-peel`}
-              aria-hidden="true"
-              onAnimationEnd={() => setPeel((cur) => (cur && cur.id === peel.id ? null : cur))}
-            >
-              <div className="nd-tabs">
-                <span className={peel.from === 'design' ? 'on' : undefined}>{t(MODE_LABEL.design)}</span>
-                <span className={peel.from === 'rp' ? 'on' : undefined}>{t(MODE_LABEL.rp)}</span>
-              </div>
-              <div className="lines" style={{ height: peel.h }}>
-                {peel.text || <span className="ph">{`\u2002${peel.ph}`}</span>}
-              </div>
-            </div>
-          )}
           <Clip cx="14%" />
           {/* 横线跟 textarea 严丝合缝地同高，见 .ndd-pad .lines 的注释 */}
           <div className="lines">
@@ -391,6 +397,10 @@ export default function QuickEntry({ prefill }) {
               style={{ opacity: submitting ? 0.5 : 1 }}
             />
           </div>
+          {/* 托盘 + 工具栏收进一个盒子：它们跟正文一样是**写在这张纸上**的东西，
+              纸被扯走时要一起掉下去。复制品直接克隆这个节点（见 cloneFoot），
+              不照抄一份 JSX —— 照抄的那份迟早跟真的分叉。 */}
+          <div className="foot" ref={footRef}>
           <ComposerTray items={attachments} onRemove={handleRemoveAtt} />
           <div className="bar">
             <button
@@ -429,6 +439,32 @@ export default function QuickEntry({ prefill }) {
               {submitting ? t('开 工 中') : t('开 工')}
             </button>
           </div>
+          </div>
+          {/* 被揭掉的那张：整张纸的复制品（自带一份旧配方，所以不用重写任何皮），
+              翻飞出去后 animationend 自己收掉。
+              签跟纸是一体的，所以复制品里带**自己那一片**签，跟着纸一起被扯下去；
+              另一片占位但不显形（visibility:hidden），让底下真的那片透上来 ——
+              槽位不变、露出来的是下一张同类纸的签。
+              盖不住回形针和工具栏（两者 z 都比它高）：针别的是整叠，
+              +/模型/开工 是这一叠的家什，纸是从它们底下抽走的。 */}
+          {peel && (
+            <div
+              key={peel.id}
+              className={`ndd-pad ${SHEET_CLS[peel.from]} ndd-peel`}
+              aria-hidden="true"
+              onAnimationEnd={() => setPeel((cur) => (cur && cur.id === peel.id ? null : cur))}
+            >
+              <div className="nd-tabs">
+                <span className={peel.from === 'design' ? 'on' : undefined}>{t(MODE_LABEL.design)}</span>
+                <span className={peel.from === 'rp' ? 'on' : undefined}>{t(MODE_LABEL.rp)}</span>
+              </div>
+              <div className="lines" style={{ height: peel.h }}>
+                {peel.text || <span className="ph">{`\u2002${peel.ph}`}</span>}
+              </div>
+              {/* 工具栏的克隆落这儿（useLayoutEffect 里 replaceChildren 塞进来） */}
+              <div ref={peelFootRef} />
+            </div>
+          )}
         </div>
       </div>
     </>

@@ -293,10 +293,12 @@ export const CSS = `
 @media (prefers-reduced-motion: reduce) {
   .ndd-peel { animation-duration: 1ms; }
 }
-/* z 比揭走那张纸高（跟回形针同理）：+ / 模型 / 开工 这排是**这一叠**的家什，
-   不是写在被揭掉那张纸上的东西。不抬的话切换那一瞬整排工具会先消失半秒。 */
-.ndd-pad .bar { display: flex; align-items: center; gap: 10px; padding-top: 14px;
-  position: relative; z-index: 7; }
+/* 08-28 一度把这排抬到复制品之上（怕切换那一瞬工具消失半秒），用户判"这些也该
+   附着在纸上一起掉下去" —— 对的：它们是写在这张纸上的，不是桌上的家什。
+   现在复制品自带一份克隆（见 home-quick-entry.jsx 的 cloneFoot），所以这排照旧
+   老老实实待在纸里、被复制品盖住，跟着一起被扯走。
+   ⚠️ 别再给它加 z-index 把自己抬出去 —— 抬了就又变成"纸走了工具还钉在原地"。 */
+.ndd-pad .bar { display: flex; align-items: center; gap: 10px; padding-top: 14px; }
 .ndd-pad .tip { font: 11px var(--kai); color: var(--pencil); letter-spacing: 0.02em; }
 .ndd-pad .att { width: 27px; height: 27px; border-radius: 50%; flex-shrink: 0;
   background: transparent; border: 1px solid rgba(43,33,23,0.2); color: var(--ink-2);
