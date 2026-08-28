@@ -35,25 +35,18 @@ import { makeAnchorResolver } from '../../../lib/board-anchor.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
+import { WORLD_PT, NODES, SHAPES, EDGES } from './write-on-board-schema.js';
 import { getScene } from '../../agent/scene.js';
+import { broadcastStageNote } from '../../agent/stage-broadcast.js';
 import { roundsTableHint } from '../../agent/rounds-table.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
 
-// 08-25 用户拍板「移除画板上限」：容量类上限全放大成失控兜底，可读性走软提醒。
-// zod 硬拒（-32602 整调用作废）是最贵的失败模式 —— 别再用它管风格。
-const MAX_NODES = 200;
-const MAX_SHAPES = 120;
-const MAX_EDGES = 400;
-
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 // 墨色表真身在 lib/sketch-shapes.js（棘轮拆件时一起搬 —— 一份表两处读会分叉）
-
-const LOCAL_ID = z.string().regex(/^[A-Za-z0-9_-]{1,48}$/, 'local id: letters/digits/_/-');
-const GRID_PT = z.object({ x: z.number().min(-2000).max(2000), y: z.number().min(-2000).max(2000) });
-const WORLD_PT = z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6) });
+// 图形入参 schema（nodes/shapes/edges/WORLD_PT 与上限）08-28 拆去 write-on-board-schema.js
 // TAG_RE 08-27 收敛：真身在 board-sanitize（落盘闸），zod 入参用同一份 —— 两处等价异写的病根拔掉
 
 /** md 侦测：正文带 markdown 记号却标 plain 会把 **加粗** 原样吐出来（ldx 案） */
@@ -87,36 +80,9 @@ const SCHEMA = {
     .describe('Sketch layout. auto FOLLOWS YOUR EDGES: with edges it lays out in flow layers (roots on top, children below — give edges and placement is structure); mindmap picks the hub by degree. free needs at on EVERY node'),
   cols: z.number().int().min(1).max(8).optional().describe('grid columns'),
   staging: z.boolean().optional().describe('Sketch only: default true (translucent until commit/turn end). Ignored for single notes — they always land solid'),
-  nodes: z.array(z.object({
-    id: LOCAL_ID.describe('Local id to reference from edges/shapes'),
-    text: z.string().min(1).max(8000),
-    format: z.enum(['plain', 'md']).optional().describe('Default: md when the text carries markdown marks, else plain'),
-    size: z.enum(['sm', 'md', 'lg', 'xl']).optional(),
-    font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(),
-    color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
-    at: GRID_PT.optional().describe('Grid position (layout free); top-left of the node'),
-    w: z.number().min(3).max(120).optional().describe('Width in grid units (prefer ≤22 = 528px: paragraphs read better growing down than wide)'),
-  })).max(MAX_NODES).optional(),
-  shapes: z.array(z.object({
-    id: LOCAL_ID.optional(),
-    kind: z.enum(['rect', 'ellipse', 'circle', 'line', 'arrow', 'underline', 'path']),
-    at: GRID_PT.optional(),
-    around: LOCAL_ID.optional().describe('rect/ellipse/circle/underline: wrap this node instead of at/w/h'),
-    w: z.number().min(0).max(200).optional(),
-    h: z.number().min(0).max(200).optional(),
-    to: GRID_PT.optional(),
-    toNode: LOCAL_ID.optional(),
-    d: z.string().max(8000).optional().describe('path kind: SVG M/L/Q/Z in local px'),
-    color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
-    width: z.number().min(1).max(12).optional(),
-  })).max(MAX_SHAPES).optional(),
-  edges: z.array(z.object({
-    from: z.string().min(1).max(300).describe('local node id or canvas id'),
-    to: z.string().min(1).max(300).describe('local node id or canvas id'),
-    type: z.enum(BINDING_TYPE_IDS).optional().describe('default link'),
-    material: z.enum(BINDING_MATERIALS).optional().describe('default pencil'),
-    label: z.string().max(60).optional(),
-  })).max(MAX_EDGES).optional(),
+  nodes: NODES.optional(),
+  shapes: SHAPES.optional(),
+  edges: EDGES.optional(),
 };
 
 const DESCRIPTION = `Write on the board — the ONE way to put words and pictures on the canvas.
@@ -384,6 +350,12 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describePlacement(placed, { requestedAt: args.at })}.`,
         `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
       ];
+      // 台上广播（08-28 转发机）：话落板 = 在场角色自动收到，GM 不用转发；rounds 下旁白开轮
+      try {
+        const st = broadcastStageNote(projectId, { rel, by, text: body });
+        if (st?.scene) { try { ctx?.emit?.(Events.scene(st.scene)); } catch { /* fail-soft */ } }
+        if (st?.line) lines.push(st.line);
+      } catch { /* 广播坏了不拦落板 */ }
       if (box.h > SKETCH_FIT.h * 0.6) lines.push('⚠ It is tall — next time split or shorten.');
       if (learnedDir) lines.push(`Layout followed the user's habit: they have been arranging this thread ${learnedDir}-ward, so placement leaned that way.`);
       // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话

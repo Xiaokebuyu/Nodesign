@@ -44,15 +44,17 @@ function boxFor(projectId, slug) {
 
 /**
  * 投一条消息给某个角色。
+ * @param {{wake?: boolean}} opts wake:false = 只进队列不唤醒（台上广播的级联阻尼档：
+ *   链太深的动静让角色下次自己醒来时批量看，别一层层把全场炸醒）
  * @returns {{ delivered: 'waiting'|'queued', queueDepth: number }}
  *   'waiting' = 角色正挂着等，已经当场交到它手里
- *   'queued'  = 没人在等，进了队列（服务端叫不醒它，得等它下次自己来取）
+ *   'queued'  = 没人在等（或 wake:false），进了队列，等它下次自己来取
  */
-export function deliver(projectId, slug, message) {
+export function deliver(projectId, slug, message, { wake = true } = {}) {
   const box = boxFor(projectId, slug);
   const item = { ...message, at: message.at || new Date().toISOString() };
 
-  const waiter = box.waiters.shift();
+  const waiter = wake ? box.waiters.shift() : null;
   if (waiter) {
     clearTimeout(waiter.timer);
     box.emptyStreak = 0;                 // 有人说话了，散场计数归零
@@ -119,6 +121,21 @@ export function isWaiting(projectId, slug) {
 export function queueDepth(projectId, slug) {
   return boxes.get(keyOf(projectId, slug))?.queue.length || 0;
 }
+
+/**
+ * 这个项目里收件箱认识的角色（台上广播的名册）。
+ * 「认识」= 它碰过自己的收件箱（await_user/check_inbox/被投递过）或被 touchInbox 登记过。
+ * 角色刚被派、还没等过第一次的窗口期会漏 —— 所以 stage-broadcast 在角色**开口**时
+ * 顺手登记（能写板 = 在场），窗口收窄到「上场后一句话没说也没等过」，那时它正忙着
+ * 演 GM 派它时给的开场词，漏一条广播无害。
+ */
+export function knownRoles(projectId) {
+  const prefix = `${projectId}::`;
+  return [...boxes.keys()].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length));
+}
+
+/** 显式登记（只建箱不投递）。 */
+export function touchInbox(projectId, slug) { boxFor(projectId, slug); }
 
 /** 这个项目里有谁在等 / 有积压（给前端一次问清） */
 export function inboxStates(projectId) {

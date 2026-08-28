@@ -91,8 +91,9 @@ export function getScene(projectId) {
 }
 
 /** cue 话术（纯函数，可断言）。nd:rp-prompt */
-export function cueMessage(prevSlug) {
-  return `（轮到你了${prevSlug ? `，上一个说话的是「${prevSlug}」` : ''}。看看板上刚发生的，接一段——`
+export function cueMessage(prevSlug, noteRel = null) {
+  return `（轮到你了${prevSlug ? `，上一个说话的是「${prevSlug}」` : ''}`
+    + `${noteRel ? `。台上刚落了一条：${noteRel}，先读它` : ''}。看看板上刚发生的，接一段——`
     + `写完记得再挂 await_user。这一拍不想说就调 pass_turn，轮次会跳过你。）`;
 }
 
@@ -123,6 +124,21 @@ export function onUserSay(projectId, slug) {
   const idx = s.order.indexOf(slug);
   if (idx < 0) return null;               // 不在轮次表里的角色不归机器管
   s.round = { idx, active: true };
+  return sceneSnapshot(projectId);
+}
+
+/**
+ * GM 的旁白落板了（stage-broadcast 调，2026-08-28 转发机）。
+ * rounds 模式下，旁白写完一拍 = 从 order[0] 开一轮 —— 补上「用户只跟 GM 说话，
+ * GM 叙完事没人 cue 角色」的洞（08-28 真会话事故的直接病根之一）。
+ * 已有进行中的轮次不重开（GM 轮中插旁白是场记，不是新一拍）。
+ * @returns {object|null} 场快照（开了轮才返回，调用方拿去广播）
+ */
+export function onStageNote(projectId, noteRel = null) {
+  const s = scenes.get(projectId);
+  if (!s || s.mode !== 'rounds' || s.round?.active || !s.order.length) return null;
+  s.round = { idx: 0, active: true };
+  deliver(projectId, s.order[0], { text: cueMessage(null, noteRel), from: 'scene' });
   return sceneSnapshot(projectId);
 }
 

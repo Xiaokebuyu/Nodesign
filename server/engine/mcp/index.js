@@ -76,7 +76,7 @@ import { makeDeliverFilesTool } from './tools/deliver-files.js';
 import { makeCrystallizeSkillTool } from './tools/crystallize-skill.js';
 import { makeCastRoleTool } from './tools/cast-role.js';
 import { makeAwaitUserTool, makeCheckInboxTool } from './tools/role-inbox.js';
-import { makeSetSceneTool, makeReadSceneTool, makePassTurnTool } from './tools/scene-tools.js';
+import { makeSetSceneTool, makeReadSceneTool, makePassTurnTool, makeCueRoleTool } from './tools/scene-tools.js';
 import { assertRoleToolsRegistered } from '../agent/cast.js';
 import { makePublishSiteTool } from './tools/publish-site.js';
 import { makeReportIssueTool } from './tools/report-issue.js';
@@ -231,6 +231,9 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       makeSetSceneTool({ projectId, ctx }),
       makeReadSceneTool({ projectId }),
       makePassTurnTool({ projectId, ctx }),
+      // cue_role — GM 点名走收件箱即刻唤醒（08-28 转发机；SendMessage 对挂着的角色
+      // 迟到 300s，见 stage-broadcast.js 顶注）。台面本身的转发不用它，机器管。
+      makeCueRoleTool({ projectId }),
 
       // crystallize_skill — 把探索出来的方法论固化成用户自己的 skill + 作品进橱窗
       // （2026-07-30）。用户明确要求才调；写的是判断依据不是成品 HTML。

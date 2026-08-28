@@ -42,7 +42,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mutex } from 'async-mutex-lite';
-import { validateProjectId } from './store.js';
+import { validateProjectId, getProject } from './store.js';
 import { resolveModelContextWindow } from '../engine/agent/model-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -87,7 +87,7 @@ export function validateSessionId(sid) {
 }
 
 import {
-  DEFAULT_GITIGNORE, DEFAULT_CLAUDE_MD,
+  DEFAULT_GITIGNORE, DEFAULT_CLAUDE_MD, DEFAULT_CLAUDE_MD_RP,
 } from './workspace-templates.js';
 import { migrateMemoryLayout } from './memory-migration.js';
 
@@ -248,7 +248,10 @@ export async function ensureProjectWorkspace(projectId) {
   // 搬到画布可见的 记忆/。三步全是"搬走后源删除"，跑几遍结果一样。
   await migrateMemoryLayout(root, { fileExists });
   if (!(await fileExists(path.join(root, 'CLAUDE.md')))) {
-    await fs.writeFile(path.join(root, 'CLAUDE.md'), DEFAULT_CLAUDE_MD, 'utf8');
+    // rp 项目的档案按"戏"设栏（这份文件每个角色子代理也强制吃，见 templates 注释）。
+    // 只管新项目：已有 CLAUDE.md 的一字不动 —— 用户内容优先于模板换代。
+    const isRp = (getProject(projectId)?.mode || 'design') === 'rp';
+    await fs.writeFile(path.join(root, 'CLAUDE.md'), isRp ? DEFAULT_CLAUDE_MD_RP : DEFAULT_CLAUDE_MD, 'utf8');
   }
   // settings.json：每次 merge defaults 让代码层 default 升级时现存 project 自动跟上
   // （用户字段优先，缺失的 NoDesign default 字段补进去）

@@ -73,3 +73,20 @@ describe('守卫没变松', () => {
     expect(r.isError).toBe(true);
   });
 });
+
+describe('renderMessages —— 机器来信不冒充人（08-28 转发机）', () => {
+  it("from:'stage' 原样给（话术源头已是旁观视角），from:'gm' 标明主控", async () => {
+    const { renderMessages } = await import('./role-inbox.js');
+    const out = renderMessages([
+      { from: 'stage', text: '（台上动了：旁白写了「x」→ p.md。…）' },
+      { from: 'gm', text: '收着点演' },
+      { from: 'user', text: '你好' },
+    ]);
+    expect(out).toContain('（台上动了：');
+    expect(out).toContain('主控（GM）：收着点演');
+    expect(out).toContain('用户说：你好');
+    // 机器来信绝不能长成用户口吻 —— 角色会对空气回话
+    expect(out).not.toContain('用户说：收着点演');
+    expect(out).not.toMatch(/用户说：（台上动了/);
+  });
+});

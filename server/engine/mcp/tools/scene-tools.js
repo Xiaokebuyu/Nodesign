@@ -1,9 +1,12 @@
 /**
- * mcp/tools/scene-tools.js —— 场务三件（2026-08-27，编排）
+ * mcp/tools/scene-tools.js —— 场务四件（2026-08-27 编排；08-28 加 cue_role）
  *
  *   set_scene   GM 声明这出戏怎么调度（模式 / 发言顺序 / 自己的戏份）
  *   read_scene  谁都能看当前的场（角色想知道轮到谁）
  *   pass_turn   角色这一拍不想说，轮次跳过它（用户拍板要的「跳过对话的工具」）
+ *   cue_role    GM 点名：走收件箱（deliver）**即刻**唤醒挂着等的角色。
+ *               08-28 事故的教训：SendMessage 要等对方阻塞工具返回的间隙，
+ *               对挂在 await_user 里的角色实测迟到 300 秒 —— 点名必须走这条。
  *
  * 状态和机器都在 engine/agent/scene.js；这里只是工具皮 + 权限守卫 + 广播。
  * nd:rp-prompt —— 描述与话术属于 RP 教义。
@@ -14,6 +17,7 @@ import { z } from 'zod';
 import { byOf } from '../actor.js';
 import { isResidentRole } from '../../agent/cast.js';
 import { setScene, getScene, passTurn } from '../../agent/scene.js';
+import { deliver, knownRoles } from '../../agent/inbox.js';
 import { Events } from '../../agent/events.js';
 
 const text = (t, isError = false) => ({ content: [{ type: 'text', text: t }], ...(isError ? { isError: true } : {}) });
@@ -72,6 +76,38 @@ export function makeReadSceneTool({ projectId }) {
     async () => {
       if (!projectId) return text('No project bound.', true);
       return text(renderScene(getScene(projectId)));
+    },
+  );
+}
+
+export function makeCueRoleTool({ projectId }) {
+  return tool(
+    'cue_role',
+    `Nudge one or more on-stage roles RIGHT NOW, through their inbox (GM only).
+This wakes a role hanging in await_user instantly — unlike SendMessage, which only lands
+when their current blocking call returns (up to minutes late). Use this for directing:
+"your line", "react to this", "tone it down". Do NOT use it to relay the stage — narration
+on the board reaches roles automatically. SendMessage is only for recalling a role that
+has left the stage (you got its wrap-up notice).`,
+    {
+      to: z.array(z.string().max(80)).min(1).max(8)
+        .describe('Role slugs (rp-<id>), one or many — one call cues the whole group'),
+      text: z.string().min(1).max(2000).describe('The cue. It is labeled as coming from the GM'),
+    },
+    async (args, extra) => {
+      if (byOf(extra) !== 'agent') {
+        return text('cue_role 是主控的场务工具。你是台上的角色 —— 想让谁接话，就在戏里对他说。', true);
+      }
+      if (!projectId) return text('No project bound.', true);
+      const known = new Set(knownRoles(projectId));
+      const lines = args.to.map((slug) => {
+        if (!isResidentRole(slug)) return `✗ ${slug}：不是角色 slug（rp-<id> 那种），没投。`;
+        const r = deliver(projectId, slug, { text: args.text, from: 'gm' });
+        if (r.delivered === 'waiting') return `✓ ${slug}：正挂着等，已当场送到。`;
+        return `→ ${slug}：进了队列（此刻没挂着等）—— 它下次醒来会看到。`
+          + `${known.has(slug) ? '若它已散场（你收到过收场通知），用 SendMessage 召回。' : '⚠ 这个名字还没进过场，确认没写错。'}`;
+      });
+      return text(lines.join('\n'));
     },
   );
 }

@@ -21,6 +21,7 @@ import { listRoleNames } from '../engine/agent/role-card.js';
 import { getWorkspaceRoot } from '../projects/workspace.js';
 import { isResidentRole } from '../engine/agent/cast.js';
 import { onUserSay, getScene } from '../engine/agent/scene.js';
+import { broadcastStageNote } from '../engine/agent/stage-broadcast.js';
 import { echoUserChalk } from '../engine/runs/user-chalk-echo.js';
 import { getProjectBus } from '../ws/broker.js';
 import { Events } from '../engine/agent/events.js';
@@ -77,6 +78,12 @@ router.post('/:pid/roles/:slug/say', express.json({ limit: '64kb' }), async (req
     }
 
     const r = deliver(req.params.pid, slug, { text, about, from: 'user', ...(echoRel ? { echo: echoRel } : {}) });
+    // 台上广播（08-28 转发机）：**落了板的话是公开台词**，free 场里其他在场角色也听得见
+    // （目标角色刚直投过，排除）。keep=false 的私语不落板也就不广播 —— 判据就是"在不在板上"。
+    if (echoRel) {
+      try { broadcastStageNote(req.params.pid, { rel: echoRel, by: 'user', text, exclude: [slug] }); }
+      catch { /* 广播坏了不拦投递 */ }
+    }
     // 轮次机：rounds 模式下对 order 里的人说话 = 从那个人开一轮（scene.js）
     try {
       const sc = onUserSay(req.params.pid, slug);

@@ -46,8 +46,11 @@ const EMPTY_STREAK_LIMIT = 2;
 export function renderMessages(items) {
   return items.map((m, i) => {
     const head = items.length > 1 ? `【${i + 1}/${items.length}】` : '';
-    // from:'scene' 是轮次机的 cue，不是用户的话 —— 冒充用户口吻会让角色对空气回话
-    if (m.from === 'scene') return `${head}${m.text}`;
+    // from:'scene'/'stage' 是机器（轮次机 cue / 台上广播），不是用户的话 ——
+    // 冒充用户口吻会让角色对空气回话，话术已在源头写成旁观视角，原样给
+    if (m.from === 'scene' || m.from === 'stage') return `${head}${m.text}`;
+    // from:'gm' 是主控点名（cue_role）—— 标清来源，别让角色当成用户在说话
+    if (m.from === 'gm') return `${head}主控（GM）：${m.text}`;
     const where = m.about ? `（关于 ${m.about}）` : '';
     // 落痕指针（2026-08-27 solo 画布对话）：用户这句已经以他的署名落在板上了，
     // 回帖 reply_to 它，对话在板上才是一条双声道的线
