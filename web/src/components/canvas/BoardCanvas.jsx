@@ -21,6 +21,7 @@ import { deriveBoardObjects } from '../../lib/board-objects.js';
 import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
 import TransformControls from './TransformControls.jsx';
+import ChalkSizeHandles from './ChalkSizeHandles.jsx';
 import Minimap from './Minimap.jsx';
 import { useBoardCamera } from './useBoardCamera.js';
 import { submitLinkPop, deleteLinkPop } from './link-pop-actions.js';
@@ -1872,16 +1873,20 @@ export default function BoardCanvas({
 
           {/* 选中态变换控制器（世界层，跟着被选物件的 transform 走）。
               被选物件可能这一帧刚被删/被搬走 —— find 不到就整层不画。 */}
+          {/* 选中态的两种控制器，共用一次查找：板书给宽高手柄（它是文件类物件，
+              走不到 native 那条判据 —— 在此之前用户根本调不了板书的宽高；宽真折行、
+              高是留白下限，见 ChalkSizeHandles 文件头），墨类原生物件给旋转+缩放。 */}
           {(() => {
-            if (!selectedId) return null;
-            const o = positioned.find(it => it.id === selectedId);
-            if (!o?.native) return null;
+            const o = selectedId ? positioned.find(it => it.id === selectedId) : null;
+            if (!o) return null;
+            const common = { o, sz: sizeOf(o), camScale: scale, toWorld: camera.toWorld };
+            if (o.chalk) {
+              return <ChalkSizeHandles {...common} onResize={(patch) => patchLayout(o.id, { ...patch, sized: 'user' })} />;
+            }
+            if (!o.native) return null;
             return (
               <TransformControls
-                o={o}
-                sz={sizeOf(o)}
-                camScale={scale}
-                toWorld={camera.toWorld}
+                {...common}
                 onChange={(patch) => {
                   const cur = layoutRef.current[o.id];
                   if (!cur) return;

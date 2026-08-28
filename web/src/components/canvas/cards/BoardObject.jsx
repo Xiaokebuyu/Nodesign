@@ -93,6 +93,11 @@ function BoardObject({
     ...(plainText
       ? { width: 'max-content', maxWidth: 26 * (TEXT_SIZE_PX[o.data?.size] || TEXT_SIZE_PX.md) + 12 }
       : { width: sz.w }),
+    // 用户亲手调过高度的板书：留白留得住（2026-08-28）。**只对盖过章的生效** ——
+    // 无差别上 minHeight 会拿写入时的估算高给存量板书凭空垫出一截空白。
+    // 是 minHeight 不是 height：正文永远撑得开，绝不裁字（板要能导出，
+    // 看不见的字等于丢了字）。
+    ...(o.chalk && o.pos?.sized === 'user' && sz.h > 0 ? { minHeight: sz.h } : null),
     zIndex: o.pos.z || 1,
     borderRadius: isInk ? 4 : RADIUS.xl,
     background: isInk ? (hover ? alpha(CANVAS.brass, 0.10) : 'transparent') : COLOR.bgCard,

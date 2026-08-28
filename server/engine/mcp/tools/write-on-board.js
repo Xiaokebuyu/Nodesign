@@ -44,6 +44,7 @@ import { broadcastStageNote } from '../../agent/stage-broadcast.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
+import { learnedChalkWidth } from '../../../lib/chalk-size-pref.js';
 
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
@@ -78,7 +79,7 @@ const SCHEMA = {
   font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional().describe("Single note font (ink:'hand'; default kai)"),
   color: z.enum(['ink', 'red', 'pencil', 'brass']).optional().describe("Single note color (ink:'hand')"),
   size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe("Single note text size. Real for ink:'hand'; for chalk notes it only sizes the placement box (chalk renders at a fixed size)"),
-  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px); default by content'),
+  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px). Default: the width the user last dragged chalk blocks to, else by content. Omit it unless this one block needs a different measure - the default already follows the user.'),
   title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
   layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap', 'flow']).optional()
     .describe('Sketch layout. auto FOLLOWS YOUR EDGES: with edges it lays out in flow layers (roots on top, children below — give edges and placement is structure); mindmap picks the hub by degree. free needs at on EVERY node'),
@@ -218,7 +219,11 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
       const em = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
       const longest = Math.max(...body.split('\n').map(em));
-      const wUnits = args.width || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1)));
+      // 宽度三档回落（2026-08-28）：模型点名 > 用户调出来的偏好 > 按正文估。
+      // 中间那档是「模仿用户」：他拖宽过板书就说明这个版心读着舒服，下一拍照做，
+      // 别让他反复调同一件事。判据是前端拖手柄盖的 sized:'user' 章，模型盖不出。
+      const wUnits = args.width || learnedChalkWidth(board)
+        || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1)));
       const box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
 
       let zone = '';

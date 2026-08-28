@@ -187,6 +187,11 @@ export function sanitizeObject(o, size) {
     // 没有这个字段，用户拖的和自动排的在数据上分不清
     // （08-25 体检结论：老数据 by 被前端回写抹掉）。
     ...(o.seat === 'user' || o.seat === 'auto' || o.seat === 'agent' ? { seat: o.seat } : {}),
+    // 尺寸出处（2026-08-28）：'user' = 这块板书的宽高是用户亲手拖出来的。
+    // 两个用途：① 重排/估算别拿内容宽度盖掉他调过的宽 ② 写入端拿它当**学习票源**
+    // 推断"他喜欢多宽的板书"（lib/chalk-size-pref.js）。跟 seat 是两件事 ——
+    // seat 说"谁摆的位置"，sized 说"谁定的大小"，用户可以只调一个。
+    ...(o.sized === 'user' ? { sized: 'user' } : {}),
     // 贴身跟随（2026-08-27 shapes 编辑面）：这个涂鸦是"圈住 hug 那件东西"的记号，
     // 挪那件东西时它跟着走（edit_board move/move_group/reflow；前端拖拽同口径）
     ...(typeof o.hug === 'string' && o.hug.length <= 300 ? { hug: o.hug } : {}),

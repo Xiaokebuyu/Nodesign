@@ -222,7 +222,11 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
               anchor: c.anchor, replyTo: c.replyTo, tag: c.tag, sessionId: parsed.sessionId,
             }), 'utf8');
             const box2 = textBox(o.text, 'md', { md: true, wUnits: Math.max(8, Math.round((e.w || 432) / UNIT)) });
-            setObj(id, { ...e, w: box2.w, h: box2.h }); ok += 1;
+            // 宽照旧沿用现有的（改正文不该改版心）；高按新正文重算，但**用户亲手
+            // 拖出来的留白留得住**（sized:'user' 时取两者较大的）—— 他调的是
+            // 「这一块留多少空」，重写一次正文就把它抹掉是把他的排版意图当缓存。
+            const h2 = e.sized === 'user' ? Math.max(box2.h, Number(e.h) || 0) : box2.h;
+            setObj(id, { ...e, w: box2.w, h: h2 }); ok += 1;
             report.push(`· #${i + 1} set_text 重写了板书 ${id} 的正文（线/标注/座位全保留）`);
             continue;
           }
