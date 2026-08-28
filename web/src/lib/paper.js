@@ -27,6 +27,9 @@ export const PAPER = {
   legal:  '#FAF0C6',
   kraft:  '#E2D3B4',
   sticky: '#FBF3CF',
+  /** 旧稿纸：演出那张纸的底色。比 paper 黄一档、比 legal 收敛得多 ——
+   *  它得一眼看出"不是刚才那张"，又不能变成一本便签簿。 */
+  aged:   '#FAF2DC',
   ink:    '#2B2117',
   ink2:   '#5F5142',
   pencil: '#A39882',
@@ -42,6 +45,7 @@ export const PAPER_VARS = `
   --legal: ${PAPER.legal};
   --kraft: ${PAPER.kraft};
   --sticky: ${PAPER.sticky};
+  --aged: ${PAPER.aged};
   --ink: ${PAPER.ink};
   --ink-2: ${PAPER.ink2};
   --pencil: ${PAPER.pencil};

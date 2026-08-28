@@ -147,11 +147,36 @@ export const CSS = `
 /* 笔记本红边线：字写在线右边，跟随便贴一张白纸区分开 */
 .ndd-pad::before { content: ''; position: absolute; left: 40px; top: 0; bottom: 0; width: 1px;
   background: rgba(168,54,43,0.34); }
-/* 演出那张纸多一条边线（稿纸/剧本纸的双边）—— 换页签不能只是换一处高亮，
-   纸本身也得是另一张，不然"你在哪张纸上写"这句话是空的。
-   只此一处差别：两种模式不是两套皮，是同一本子上的两页。 */
-.ndd-pad.rp::before { box-shadow: 4px 0 0 rgba(168,54,43,0.24); }
-.ndd-pad.rp:focus-within::before { box-shadow: 4px 0 0 rgba(168,54,43,0.42); }
+/* ===== 演出那张纸：稿纸（2026-08-28 第二版）=====
+
+   第一版只把红边线加粗成双线，用户当场判"输入框纸张本体一点没变" —— 是对的：
+   4px 的一条淡线在 720px 的纸上等于没有。**换页签必须真换一张纸**，不然
+   "你正写在哪张纸上"这句话是空的。
+
+   设计那张是笔记本：白纸、一条页边线、灰蓝横格。
+   演出这张是稿纸：纸转旧、书写区框进版心、格线换成印刷的红棕。三样一起动，
+   隔着一屏也认得出是两张不同的纸；而**几何一个数都没动**（还是 29px 一格、
+   还是同一根红光标），所以横线那族的债一条都没多。
+
+   ⚠️ 底色换了，页签的接缝也得跟着换（.tabs button.on 必须跟纸同色），
+   否则选中那片会在纸上露出一道白边 —— 由 home-pad.lint.test.js 逐档对。 */
+.ndd-pad.rp { background-color: var(--aged); }
+.ndd-pad.rp .tabs button.on { background-color: var(--aged); }
+/* 版心框：笔记本只有左边一条页边线，稿纸是把书写区整个框起来。
+   左边那条粗一档 —— 装订侧，跟原来那条页边线是同一个位置的东西。 */
+.ndd-pad.rp::before { left: 34px; right: 16px; top: 13px; bottom: 11px; width: auto;
+  background: transparent; border: 1px solid rgba(168,54,43,0.32); border-left-width: 2px; }
+/* ⛔ background 这里必须再写一遍：基础规则的 「.ndd-pad:focus-within::before」 会把
+   ::before 整个填成红色（笔记本那条页边线聚焦时加深，靠的就是它）。第一版漏了这句，
+   一点进输入框整个版心就糊成一块红砖 —— 同一个伪元素被两条规则当两种东西用，
+   改一处必查另一处。 */
+.ndd-pad.rp:focus-within::before { background: transparent; border-color: rgba(168,54,43,0.52); }
+/* 格线换成红棕：稿纸的格子是印上去的红线，不是笔记本的灰蓝铅印。
+   ⚠️ 29 / 28 两个数跟基础规则一字不差 —— 只换颜色，不碰几何。 */
+.ndd-pad.rp textarea {
+  background-image: linear-gradient(180deg, transparent 0 28px, rgba(168,54,43,0.16) 28px 29px); }
+.ndd-pad.rp:focus-within textarea {
+  background-image: linear-gradient(180deg, transparent 0 28px, rgba(168,54,43,0.26) 28px 29px); }
 .ndd-pad .clip { position: absolute; top: -14px; left: var(--cx, 18%); width: 18px; z-index: 4;
   filter: drop-shadow(-1px 2px 2px rgba(43,33,23,0.3)); }
 /* 这一层只剩一个用处：给红光标当定位参照（它的高度恒等于 textarea 的高度）。

@@ -99,11 +99,28 @@ describe('首页页签跟纸的接缝', () => {
   const off = rule('.ndd-pad .tabs button ');
   const on = rule('.ndd-pad .tabs button.on ');
 
-  it('选中那片的背景色跟纸是同一个 token（差一点就露出接缝）', () => {
-    const pad = rule('.ndd-pad ').match(/background-color:\s*([^;]+)/)?.[1].trim();
-    const tab = on.match(/background-color:\s*([^;]+)/)?.[1].trim();
-    expect(pad, '.ndd-pad 得用 background-color 长写法（简写会顺手重置别的）').toBe('var(--paper)');
-    expect(tab, `选中的签是 ${tab}、纸是 ${pad} —— 两者必须一模一样，否则接缝处露一道边`).toBe(pad);
+  /**
+   * **每一种纸**都得有配套的页签颜色，不是只有默认那张。
+   *
+   * 08-28 演出那张纸换成稿纸（.ndd-pad.rp 换底色）时就差点漏掉：纸转成米黄、
+   * 页签还是白的，选中那片会在纸上露出一道白边。以后再加第三种模式同理 ——
+   * 所以这条按**模式类**枚举，加一种纸就自动多一条要求，而不是手写两个断言。
+   */
+  it('每一种纸的底色都有配套的页签颜色（选中那片必须跟它脚下的纸同色）', () => {
+    const bgOf = (body) => body.match(/background-color:\s*([^;]+)/)?.[1].trim() || null;
+    // CSS 里所有形如 `.ndd-pad` / `.ndd-pad.rp` 且设了底色的规则 = 有几种纸
+    const papers = [...CSS.matchAll(/(^|\n)(\.ndd-pad((?:\.[a-z][\w-]*)*))\s*\{([^}]*)\}/g)]
+      .map((m) => ({ sel: m[2], mod: m[3], bg: bgOf(m[4].replace(/\/\*[\s\S]*?\*\//g, ' ')) }))
+      .filter((r) => r.bg);
+    expect(papers.length, '一种纸都没找到？.ndd-pad 的底色写法变了，这条 lint 要跟着改')
+      .toBeGreaterThanOrEqual(2);
+    expect(papers[0].bg, '.ndd-pad 得用 background-color 长写法（简写会顺手重置别的）')
+      .toBe('var(--paper)');
+    for (const pap of papers) {
+      const tabBg = bgOf(rule(`.ndd-pad${pap.mod} .tabs button.on `));
+      expect(tabBg, `${pap.sel} 的纸是 ${pap.bg}，它的选中页签是 ${tabBg} —— `
+        + '两者必须一模一样，否则页签跟纸的交界处露一道边').toBe(pap.bg);
+    }
   });
 
   it('条往下沉多少，没选的那片就往上抬回多少（下缘正落在纸的边线上）', () => {
