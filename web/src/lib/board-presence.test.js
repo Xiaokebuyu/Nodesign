@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   emptyPresence, reducePresence, resolvePending, activePresences, followTarget,
-  colorFor, PRESENCE_COLORS, MAIN_AGENT_ID,
+  colorFor, PRESENCE_COLORS, MAIN_AGENT_ID, isRolePresence,
 } from './board-presence.js';
 
 /** 把文件路径解析成物件的假 resolver（真的住在 stage.js） */
@@ -412,5 +412,34 @@ describe('角色候场（2026-08-27 编排）：run.subagent.start 立条目', (
     expect(t4[id].active).toBe(false);
     const t5 = reducePresence(t4, { type: 'run.subagent.stop', agentType: 'rp-moli' }, null);
     expect(t5[id]).toBeUndefined();
+  });
+});
+
+// 轮到谁（2026-08-28）：run.scene 一直在画布的事件白名单里、注释也写着「画布要知道
+// 轮到谁」，可这份表从来没消费过它 —— 真正在显示的是侧栏那行台上提示，而它同日撤役了。
+// 接上之后这里钉住三件：存得对、不误伤角色条目、清得掉。
+describe('run.scene → 轮到谁', () => {
+  it('rounds 模式记下 turnSlug', () => {
+    const t = reducePresence(emptyPresence(), { type: 'run.scene', scene: { mode: 'rounds', turnSlug: 'rp-moli' } }, null);
+    expect(t.__turn).toBe('rp-moli');
+  });
+
+  it('轮次结束/换模式 → 清掉，不留幽灵', () => {
+    let t = reducePresence(emptyPresence(), { type: 'run.scene', scene: { turnSlug: 'rp-moli' } }, null);
+    t = reducePresence(t, { type: 'run.scene', scene: { mode: 'free', turnSlug: null } }, null);
+    expect(t.__turn).toBeUndefined();
+  });
+
+  it('没变就返回同一个引用（别让每条 scene 事件都触发重渲染）', () => {
+    const t = reducePresence(emptyPresence(), { type: 'run.scene', scene: { turnSlug: 'rp-moli' } }, null);
+    expect(reducePresence(t, { type: 'run.scene', scene: { turnSlug: 'rp-moli' } }, null)).toBe(t);
+  });
+
+  it('⛔ __turn 不能被当成一个在场者：它没有 id，角色渲染层的过滤要挡住它', () => {
+    let t = reducePresence(emptyPresence(), { type: 'run.subagent.start', agentType: 'rp-moli' }, null);
+    t = reducePresence(t, { type: 'run.scene', scene: { turnSlug: 'rp-moli' } }, null);
+    const roles = Object.values(t).filter((p) => p && isRolePresence(p.id));
+    expect(roles).toHaveLength(1);
+    expect(roles[0].id).toBe('role:rp-moli');
   });
 });

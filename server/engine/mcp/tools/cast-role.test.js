@@ -61,16 +61,45 @@ describe('返回话术：立即可派 + 正确的演员位', () => {
     expect(b).toContain('subagent_type: "rp-narrator"');
   });
   it('enum 之外的 pen 折回 character', async () => {
-    expect(text(await call({ ...ok, id: 'moli2', pen: 'weird' }))).toContain('rp-actor');
+    // ⚠️ 展示名跟别的用例错开：家按展示名取，共用工作区里同名会撞「一个家一个角色」那道闸
+    expect(text(await call({ ...ok, id: 'moli2', name: '墨璃二', pen: 'weird' }))).toContain('rp-actor');
     const reg = await readCastRegistry(ws);
     expect(reg.roles['rp-moli2'].pen).toBe('character');
   });
   it('改写已有的卡要说清「改卡不改在场的它」', async () => {
-    await call({ ...ok, id: 'twice' });
-    const r2 = text(await call({ ...ok, id: 'twice', persona: '第二版人设' }));
+    await call({ ...ok, id: 'twice', name: '重写君' });
+    const r2 = text(await call({ ...ok, id: 'twice', name: '重写君', persona: '第二版人设' }));
     expect(r2).toMatch(/改写/);
     expect(r2).toMatch(/不会改变|SendMessage/);
-    expect(fs.readFileSync(path.join(ws, '角色', '墨璃', '角色卡.md'), 'utf8')).toContain('第二版人设');
+    expect(fs.readFileSync(path.join(ws, '角色', '重写君', '角色卡.md'), 'utf8')).toContain('第二版人设');
+  });
+});
+
+// 家是按**展示名**取的，slug 另算 —— 两个 slug 用同一个展示名就会共用
+// 角色/<名>/：卡被后来者覆盖，记忆.md 也共用，A 的 jot_memory 落进 B 的记忆里。
+// 2026-08-28 对账发现，闸堵在写口。
+describe('一个家只住一个角色', () => {
+  it('⭐ 别的 slug 已经占了这个展示名 → 拒绝，并指出占用者', async () => {
+    await call({ ...ok, id: 'hometaken', name: '同名君' });
+    const r = await call({ ...ok, id: 'hometaken2', name: '同名君' });
+    expect(r.isError).toBe(true);
+    expect(text(r)).toContain('rp-hometaken');
+    expect(text(r)).toContain('同名君');
+  });
+
+  it('同一个 slug 重登不受影响 —— 那本来就是同一个人在改卡', async () => {
+    await call({ ...ok, id: 'samehome', name: '改卡君' });
+    const r = await call({ ...ok, id: 'samehome', name: '改卡君', persona: '改过的人设' });
+    expect(r.isError).toBeUndefined();
+    expect(fs.readFileSync(path.join(ws, '角色', '改卡君', '角色卡.md'), 'utf8')).toContain('改过的人设');
+  });
+
+  it('⛔ 占用者的卡和记忆没被动过', async () => {
+    await call({ ...ok, id: 'keeper', name: '守家君', persona: '原版人设 KEEP-ME' });
+    fs.writeFileSync(path.join(ws, '角色', '守家君', '记忆.md'), '# 记忆\n\n守家君记得的事\n');
+    await call({ ...ok, id: 'intruder', name: '守家君', persona: '入侵者人设' });
+    expect(fs.readFileSync(path.join(ws, '角色', '守家君', '角色卡.md'), 'utf8')).toContain('KEEP-ME');
+    expect(fs.readFileSync(path.join(ws, '角色', '守家君', '记忆.md'), 'utf8')).toContain('守家君记得的事');
   });
 });
 

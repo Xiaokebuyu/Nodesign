@@ -246,6 +246,20 @@ export function reducePresence(table, evt, resolve) {
       return { ...table, [id]: { ...cur, active, ...(active ? {} : { message: null }) } };
     }
 
+    // 轮到谁（2026-08-28）：run.scene 一直在画布的事件白名单里，注释也写着
+    // 「画布要知道轮到谁」——**可这份表从来没消费过它**，真正在显示的是侧栏那行
+    // 台上提示（stageHint 的 turnLabel）。那行 08-28 撤役后「轮到谁」一处都不剩，
+    // 所以在这儿真接上：rounds 模式下服务端已经把内部指针换算成 turnSlug 了。
+    // 存成 __turn 而不是塞进某个角色条目：轮次是**场**的属性，不是某个人的属性，
+    // 而且轮到的人可能还没在场（没写过东西就没有条目）。
+    case 'run.scene': {
+      const turn = evt.scene?.turnSlug || null;
+      if ((table.__turn || null) === turn) return table;
+      const next = { ...table };
+      if (turn) next.__turn = turn; else delete next.__turn;
+      return next;
+    }
+
     // 角色退场（2026-08-26）：**唯一**的删除路径。
     // 角色不跟主 run 收场（下面那个分支明确跳过它），所以没有这条它就永远留在画布上。
     // ⚠️ 只认常驻角色：干活型子代理压根没进过这张表（上面那条 parentToolUseId 守卫挡掉了）。

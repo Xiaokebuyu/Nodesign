@@ -53,7 +53,7 @@ const ROLE_SPRITE_SIZE = 32;
  * 贴纸感靠三件：微微歪一点（真贴纸贴不正）、纸色底压一道淡影、左端一枚状态点。
  * 状态点是**这个角色此刻在写还是在等**的唯一文字外表达：实心 = 在写，空心 = 候场。
  */
-function RoleNameTag({ name, color, waiting }) {
+function RoleNameTag({ name, color, waiting, myTurn }) {
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -64,7 +64,8 @@ function RoleNameTag({ name, color, waiting }) {
       lineHeight: 1.3,
       color: PAPER.ink2,
       background: PAPER.bg,
-      border: `1px solid ${color}`,
+      // 轮到它：名牌加重一档（rounds 模式下「轮到谁」的唯一表达）
+      border: `${myTurn ? 2 : 1}px solid ${color}`,
       borderRadius: 3,
       transform: 'rotate(-1.2deg)',
       boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
@@ -88,6 +89,7 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
   // （findAmbientSlot，主精灵闲逛用的同一套槽位），上台就看得见、点得到。
   // 跟主精灵同一个牌子（会话模型决定），只是小一圈 —— 角色不自带厂商身份
   const brand = useCurrentModelBrand();
+  const turn = presence?.__turn || null;   // rounds 模式轮到谁（见 board-presence 的 run.scene 分支）
   const roles = useMemo(() => Object.values(presence || {})
     .filter((p) => p && isRolePresence(p.id)), [presence]);
 
@@ -129,7 +131,7 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
               pointerEvents: onPick ? 'auto' : 'none', cursor: onPick ? 'pointer' : undefined,
               textAlign: 'left', zIndex: 44,
               // 候场（挂 await_user）整体淡一档：在写的那个才该抢眼
-              opacity: p.active ? 1 : 0.78,
+              opacity: (p.active || turn === slug) ? 1 : 0.78,
               transition: 'opacity 240ms ease',
             }}
             data-role-sprite={slug}
@@ -148,7 +150,7 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
               size={ROLE_SPRITE_SIZE}
               maxWidth={260}
               active={p.active}
-              nameTag={<RoleNameTag name={roleNames[slug] || slug} color={p.color} waiting={!p.active} />}
+              nameTag={<RoleNameTag name={roleNames[slug] || slug} color={p.color} waiting={!p.active} myTurn={turn === slug} />}
             />
           </div>
         );

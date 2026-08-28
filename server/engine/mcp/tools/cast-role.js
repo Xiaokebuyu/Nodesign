@@ -107,6 +107,19 @@ copying it in verbatim over rewriting it.`,
       if (!path.resolve(file).startsWith(path.resolve(workspaceRoot, ROLES_DIR) + path.sep)) {
         return fail('角色卡路径异常，拒绝写入。');
       }
+      // 一个家只住一个角色（2026-08-28 对账发现）：文件夹按展示名取，两个不同的
+      // slug 用同一个展示名就会共用 角色/<名>/ —— 卡被后来者覆盖，**记忆.md 也共用**，
+      // 于是 A 的 jot_memory 写进 B 的记忆里，谁都不会发现。堵在写口，不是在
+      // roleHomeDir 那头兜（判据别建在模型可写的登记表上）。
+      // 同一个 slug 重登（改卡）不受影响 —— 那本来就是同一个人。
+      const claimedBy = Object.entries((await readCastRegistry(workspaceRoot)).roles || {})
+        .find(([s2, e2]) => s2 !== slug && typeof e2?.card === 'string'
+          && e2.card.split('/').slice(0, 2).join('/') === `${ROLES_DIR}/${folder}`);
+      if (claimedBy) {
+        return fail(`「${displayName}」这个家已经是 ${claimedBy[0]} 的了（角色/${folder}/）。`
+          + `同名两个角色会共用角色卡和记忆件 —— 换个展示名，`
+          + `或者你要的其实是同一个人的话，用 ${claimedBy[0]} 这个名字重登（改卡就是重登同一个 slug）。`);
+      }
       let existed = false;
       try { await fs.access(file); existed = true; } catch { /* 新角色 */ }
       await fs.mkdir(dir, { recursive: true });
