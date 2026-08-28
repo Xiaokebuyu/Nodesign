@@ -29,9 +29,18 @@ const HEAD_BYTES = 4096;
  * 不做完整 markdown 渲染 —— 卡上那几行是"笔迹"，不是排版好的正文。
  */
 export function excerptOf(raw, max) {
-  const body = String(raw || '').replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+  const body = String(raw || '')
+    .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '')
+    // ⛔ 围栏块整段扔掉。板书里最常见的围栏是 ```nd:controls（画布上那排控件的
+    // 声明）—— 它在卡上会变成一坨源码，而它根本不是这段故事的字。
+    // 后半个 |``` 收尾未闭合的围栏：宁可少几行，也不能把源码倒到卡上。
+    .replace(/^[ \t]*```[\s\S]*?^[ \t]*```[ \t]*$|^[ \t]*```[\s\S]*$/gm, '');
   const lines = body.split(/\r?\n/)
-    .map((l) => l.replace(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)/, '').trim())
+    // 行首：标题 / 引用 / 列表点 / 任务框，都是排版记号不是字
+    .map((l) => l.replace(/^\s*(?:#{1,6}\s+|>\s+|[-*+]\s+)/, '').replace(/^\s*\[[ xX]\]\s*/, ''))
+    // 行内：强调和行内码只留字。卡上那几行是笔迹，星号和反引号原样显示就是噪音
+    .map((l) => l.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '$1')
+      .replace(/`([^`\n]+)`/g, '$1').trim())
     .filter(Boolean);
   if (!lines.length) return '';
   let out = '';

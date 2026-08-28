@@ -32,6 +32,25 @@ describe('excerptOf', () => {
     expect(excerptOf('## 第一章\n> 引用\n- 一条', 150)).toBe('第一章\n引用\n一条');
   });
 
+  /** 下面三条全是 08-28 上线后在**真卡片上**看见的噪音，不是想出来的 */
+  it('围栏块整段扔掉 —— nd:controls 会把一坨源码倒到卡上', () => {
+    const out = excerptOf('塔楼就在前面了，怎么接？\n```nd:controls\n[靠近] 走到塔楼门前 ->\n```\n他停下脚步。', 150);
+    expect(out).not.toMatch(/nd:controls|\[靠近\]/);
+    expect(out).toBe('塔楼就在前面了，怎么接？\n他停下脚步。');
+  });
+
+  it('没闭合的围栏也得扔（宁可少几行，不能把源码倒上去）', () => {
+    expect(excerptOf('前面一句\n```nd:controls\n[甲] 没写完', 150)).toBe('前面一句');
+  });
+
+  it('行内的强调/行内码只留字', () => {
+    expect(excerptOf('**塔楼**就在*前面*了 `x`', 150)).toBe('塔楼就在前面了 x');
+  });
+
+  it('任务框记号去掉', () => {
+    expect(excerptOf('[x] 拆预设\n[ ] 写第二拍', 150)).toBe('拆预设\n写第二拍');
+  });
+
   it('空行不占行数（卡上只有六行的位置）', () => {
     expect(excerptOf('a\n\n\n\nb', 150)).toBe('a\nb');
   });
