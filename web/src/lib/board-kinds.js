@@ -361,6 +361,7 @@ export function sourceOf(o) {
   if (p.startsWith('assets/references/')) return 'tool';    // 浏览器采集 / 搜索下载
   if (p.startsWith('assets/generated/')) return 'tool';     // 生图产线
   if (o?.kind === 'generated') return 'tool';
+  if (p.startsWith('用户内容/')) return 'user';           // 上传落点（2026-08-28），路径是最硬的证据
   if (o?.kind === 'upload') return 'user';
   // ⚠️ 老形状：上传的东西路径长 `../../shared/assets/x`（扁平化前的写法）。
   // 不认它的话用户上传的素材会被标成"agent 做的"。

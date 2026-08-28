@@ -26,6 +26,7 @@ import { RESERVED_DIRS, HARD_IGNORE_DIRS, DRAFTS_DIR, isReservedFile, loadIgnore
 import { OUTPUT_DIRS } from '../lib/kinds/site.js';
 import { listReferences } from '../lib/reference-assets.js';
 import { resolveArtifactFile, isServablePath } from '../lib/artifact-file-path.js';
+import { USER_UPLOAD_DIR, ensureUploadDir, uploadRefPath, listUploadedAssets, deleteUploadedAsset } from '../lib/user-uploads.js';
 import { getProjectCover } from '../lib/cover.js';
 import { makeDocxPageHandler, makeDocxPdfHandler } from './assets/docx-page.js';
 import { mountNotesRoutes } from './assets/notes.js';
@@ -96,7 +97,7 @@ router.post('/:pid/assets', upload.single('file'), async (req, res, next) => {
     if (!req.file) return res.status(400).json({ error: 'no file (field name: file)' });
 
     await ensureProjectWorkspace(req.params.pid);
-    const assetsDir = path.join(getSharedDir(req.params.pid), 'assets');
+    const assetsDir = await ensureUploadDir(getSharedDir(req.params.pid));
 
     const originalName = decodeUploadName(req.file.originalname);
     let filename = sanitizeFilename(originalName);
@@ -113,7 +114,7 @@ router.post('/:pid/assets', upload.single('file'), async (req, res, next) => {
       asset: {
         // path 给 agent Read 用 — 相对 cwd（sessions/<sid>/）走 ../shared/assets/
         // 或者用 SDK additionalDirectories 拿到的绝对路径前缀；前端展示用 name 即可。
-        path: `../../shared/assets/${filename}`,
+        path: uploadRefPath(USER_UPLOAD_DIR, filename),
         name: filename,
         originalName,
         size: req.file.size,
@@ -128,24 +129,7 @@ router.get('/:pid/assets', async (req, res, next) => {
     if (!guardProject(req, res)) return;
 
     const assetsDir = path.join(getSharedDir(req.params.pid), 'assets');
-    let entries;
-    try {
-      entries = await fs.readdir(assetsDir, { withFileTypes: true });
-    } catch (err) {
-      if (err.code === 'ENOENT') return res.json({ assets: [] });
-      throw err;
-    }
-    const assets = [];
-    for (const e of entries) {
-      if (!e.isFile()) continue;
-      let stat;
-      try { stat = await fs.stat(path.join(assetsDir, e.name)); } catch { continue; }
-      assets.push({
-        path: `../../shared/assets/${e.name}`, name: e.name,
-        size: stat.size, mtime: stat.mtime.toISOString(),
-      });
-    }
-    assets.sort((a, b) => (a.mtime < b.mtime ? 1 : -1));
+    const assets = await listUploadedAssets(getSharedDir(req.params.pid));
 
     // 参考素材单独一组，走抽屉不上画布。为什么它们此前完全看不见（以及为什么
     // 修法是加扫描口不是改形态注册表）见 lib/reference-assets.js 文件头。
@@ -167,17 +151,9 @@ router.delete('/:pid/assets/:filename', async (req, res, next) => {
       return res.status(400).json({ error: 'invalid filename' });
     }
 
-    const assetsDir = path.join(getSharedDir(req.params.pid), 'assets');
-    const filePath = path.resolve(assetsDir, filename);
-    if (!filePath.startsWith(assetsDir + path.sep)) {
-      return res.status(400).json({ error: 'invalid filename' });
-    }
-    try {
-      await fs.unlink(filePath);
-    } catch (err) {
-      if (err.code === 'ENOENT') return res.status(404).json({ error: 'asset not found' });
-      throw err;
-    }
+    const outcome = await deleteUploadedAsset(getSharedDir(req.params.pid), filename);
+    if (outcome === 'invalid') return res.status(400).json({ error: 'invalid filename' });
+    if (outcome === 'not_found') return res.status(404).json({ error: 'asset not found' });
     res.status(204).end();
   } catch (err) { next(err); }
 });
@@ -498,7 +474,11 @@ router.get('/:pid/artifacts', async (req, res, next) => {
       // 板书住 notes/板书/（不进 notes/ 顶层：便利贴注入只列顶层，板书另有自己的注入）
       await scanDir(path.join(workspaceRoot, CHALK_DIR), 'note', CHALK_DIR);
       for (const rel of folders) {
-        await scanDir(path.join(workspaceRoot, rel), 'task-file', rel, 0);
+        // 用户上传的落点扫成 upload 而不是 task-file：来源轴（board-kinds.sourceOf）
+        // 按 kind 分「我放的 / agent 做的」，落回 task-file 的话用户自己拖进来的图
+        // 会被标成「agent 做的」。子目录仍按普通文件夹走。
+        const kind = rel === USER_UPLOAD_DIR ? 'upload' : 'task-file';
+        await scanDir(path.join(workspaceRoot, rel), kind, rel, 0);
       }
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
