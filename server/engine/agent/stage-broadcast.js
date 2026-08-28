@@ -51,8 +51,15 @@ const hopsFor = (pid) => {
 };
 
 /** 广播话术（纯函数，可断言）。nd:rp-prompt */
-export function stageNoteMessage({ rel, by, excerpt }) {
+export function stageNoteMessage({ rel, by, excerpt, facts = null }) {
   const who = by === 'agent' ? '旁白' : by === 'user' ? '用户' : `「${by}」`;
+  // 场况档（08-28 文风节食）：GM 填了 facts 就投干货不投散文 —— 角色按事实演，
+  // 原文只在要引用原句时才读。防的是「每拍读旁白散文 → 嗓子染上旁白腔」。
+  if (Array.isArray(facts) && facts.length) {
+    return `（台上动了 —— ${who}这一拍的场况：\n${facts.map((f) => `  · ${f}`).join('\n')}\n`
+      + `原文在 ${rel}，要引用原句才去读 —— 那是另一支笔的文风，句式和腔调别学。`
+      + `这不是点名：你的角色此刻有话就接（write_on_board 用 reply_to 指它），没话就接着 await_user 等。）`;
+  }
   return `（台上动了：${who}写了「${excerpt}」→ ${rel}。这不是点名 —— 你的角色此刻有话就接`
     + `（write_on_board 用 reply_to 指它），没话就别硬编，接着 await_user 等。）`;
 }
@@ -62,15 +69,18 @@ const excerptOf = (text) => String(text || '').replace(/\s+/g, ' ').trim().slice
 /**
  * 一条话落板了，按场分发。fail-soft 由调用方包（广播坏了不拦落板）。
  * @param {string} projectId
- * @param {{rel: string, by: string, text: string, exclude?: string[]}} note
+ * @param {{rel: string, by: string, text: string, exclude?: string[], facts?: string[]|null}} note
  *   by：板书作者（'agent' | 'user' | 角色 slug）。exclude：已经直投过的收件人。
+ *   facts：GM 随旁白填的场况条目（只认 by='agent'）—— 投给角色的换成这份干货，
+ *   角色不用每拍吞旁白散文（文风节食，08-28 用户拍板：工具参数不走 helper 蒸馏）。
  * @returns {{mode: string, line: string|null, scene: object|null}|null}
  *   line 是给工具返回值的一句话（GM 据此知道机器在转、不用自己转发）；
  *   scene 非空 = rounds 开了一轮，调用方拿去 emit。design 项目返回 null。
  */
-export function broadcastStageNote(projectId, { rel, by, text, exclude = [] }) {
+export function broadcastStageNote(projectId, { rel, by, text, exclude = [], facts = null }) {
   if (!projectId || (getProject(projectId)?.mode || 'design') !== 'rp') return null;
   if (isResidentRole(by)) touchInbox(projectId, by);   // 能开口 = 在场，进名册
+  const beatFacts = by === 'agent' && Array.isArray(facts) && facts.length ? facts : null;
 
   const scene = getScene(projectId);
   const mode = scene?.mode || 'free';
@@ -78,7 +88,7 @@ export function broadcastStageNote(projectId, { rel, by, text, exclude = [] }) {
   if (mode === 'rounds') {
     // 角色发言的推进走 onRoleWait，用户开轮走 onUserSay —— 这里只管旁白开轮
     if (by !== 'agent') return { mode, line: null, scene: null };
-    const sc = onStageNote(projectId, rel);
+    const sc = onStageNote(projectId, rel, beatFacts);
     return { mode, scene: sc, line: sc ? `轮次机：这条开了新一轮，已 cue「${sc.turnSlug}」。` : null };
   }
   if (mode === 'directed') return { mode, line: null, scene: null };
@@ -94,7 +104,7 @@ export function broadcastStageNote(projectId, { rel, by, text, exclude = [] }) {
   if (!targets.length) return { mode, line: null, scene: null };
 
   const wake = hop <= MAX_HOP;
-  const msg = { from: 'stage', text: stageNoteMessage({ rel, by, excerpt: excerptOf(text) }), note: rel };
+  const msg = { from: 'stage', text: stageNoteMessage({ rel, by, excerpt: excerptOf(text), facts: beatFacts }), note: rel };
   const parts = targets.map((slug) => {
     const r = deliver(projectId, slug, msg, { wake });
     hops.set(slug, hop);

@@ -143,3 +143,44 @@ describe('deliver wake:false（阻尼档的底座）', () => {
     expect(drain(P, A)).toHaveLength(1);
   });
 });
+
+describe('场况档（08-28 文风节食：facts 投干货不投散文）', () => {
+  it('GM 填了 facts：广播正文是场况条目 + 防染提示，原文只留指针', async () => {
+    touchInbox(P, A);
+    const pa = hang(A);
+    broadcastStageNote(P, { rel: 'notes/板书/n1.md', by: 'agent', text: '她端着垃圾袋迎面走来，厚底鞋哒哒响……（三百字散文）', facts: ['江篱端着垃圾袋出门，在走廊撞见不语', '她主动打了招呼，说"好巧"'] });
+    const got = await pa;
+    expect(got[0].text).toContain('· 江篱端着垃圾袋出门');
+    expect(got[0].text).toContain('· 她主动打了招呼');
+    expect(got[0].text).toContain('另一支笔的文风');
+    expect(got[0].text).toContain('notes/板书/n1.md');
+    expect(got[0].text).not.toContain('厚底鞋');          // 散文一字不进收件箱
+  });
+
+  it('角色带 facts 不认（场况是旁白的档），照走散文摘要', async () => {
+    touchInbox(P, A); touchInbox(P, B);
+    const pb = hang(B);
+    broadcastStageNote(P, { rel: 'n1', by: A, text: '我的台词', facts: ['伪装成场况'] });
+    const got = await pb;
+    expect(got[0].text).toContain('「我的台词」');
+    expect(got[0].text).not.toContain('伪装成场况');
+  });
+
+  it('rounds：旁白开轮的 cue 也带场况', async () => {
+    setScene(P, { mode: 'rounds', order: [A, B] });
+    const pa = hang(A);
+    broadcastStageNote(P, { rel: 'notes/板书/n1.md', by: 'agent', text: '散文', facts: ['门开了', '没人拿垃圾袋'] });
+    const got = await pa;
+    expect(got[0].from).toBe('scene');
+    expect(got[0].text).toContain('轮到你了');
+    expect(got[0].text).toContain('· 门开了');
+    expect(got[0].text).toContain('要引用原句才去读');
+  });
+
+  it('不填 facts：回落到散文摘要 + 读它（昨天的行为一字不变）', async () => {
+    touchInbox(P, A);
+    const pa = hang(A);
+    broadcastStageNote(P, { rel: 'n1', by: 'agent', text: '旁白散文' });
+    expect((await pa)[0].text).toContain('写了「旁白散文」');
+  });
+});

@@ -91,9 +91,13 @@ export function getScene(projectId) {
 }
 
 /** cue 话术（纯函数，可断言）。nd:rp-prompt */
-export function cueMessage(prevSlug, noteRel = null) {
+export function cueMessage(prevSlug, noteRel = null, facts = null) {
+  // 场况档（08-28 文风节食）：GM 填了 facts 就给干货，原文只在要引用原句时才读
+  const beat = Array.isArray(facts) && facts.length
+    ? `。这一拍的场况：\n${facts.map((f) => `  · ${f}`).join('\n')}\n原文在 ${noteRel}，要引用原句才去读（那是另一支笔的文风，句式别学）`
+    : (noteRel ? `。台上刚落了一条：${noteRel}，先读它` : '');
   return `（轮到你了${prevSlug ? `，上一个说话的是「${prevSlug}」` : ''}`
-    + `${noteRel ? `。台上刚落了一条：${noteRel}，先读它` : ''}。看看板上刚发生的，接一段——`
+    + `${beat}。看看板上刚发生的，接一段——`
     + `写完记得再挂 await_user。这一拍不想说就调 pass_turn，轮次会跳过你。）`;
 }
 
@@ -134,11 +138,11 @@ export function onUserSay(projectId, slug) {
  * 已有进行中的轮次不重开（GM 轮中插旁白是场记，不是新一拍）。
  * @returns {object|null} 场快照（开了轮才返回，调用方拿去广播）
  */
-export function onStageNote(projectId, noteRel = null) {
+export function onStageNote(projectId, noteRel = null, facts = null) {
   const s = scenes.get(projectId);
   if (!s || s.mode !== 'rounds' || s.round?.active || !s.order.length) return null;
   s.round = { idx: 0, active: true };
-  deliver(projectId, s.order[0], { text: cueMessage(null, noteRel), from: 'scene' });
+  deliver(projectId, s.order[0], { text: cueMessage(null, noteRel, facts), from: 'scene' });
   return sceneSnapshot(projectId);
 }
 
