@@ -12,7 +12,7 @@
  * 反向也钉：英文用户查不到词条时**落回中文**而不是露出裸键或 undefined。
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { t, setLocale, getLocale, normalizeLocale, isLocale, LOCALES, DEFAULT_LOCALE } from './i18n.js';
+import { t, setLocale, getLocale, normalizeLocale, localeFromTags, isLocale, LOCALES, DEFAULT_LOCALE } from './i18n.js';
 
 beforeEach(() => {
   try { localStorage.removeItem('nd:locale'); } catch { /* */ }
@@ -81,5 +81,31 @@ describe('语言归一', () => {
   });
   it('LOCALES 里每个 id 都过 isLocale', () => {
     for (const l of LOCALES) expect(isLocale(l.id)).toBe(true);
+  });
+});
+
+describe('开机语言：报了语言但不是中英的访客（2026-08-29）', () => {
+  it('中文浏览器 → zh-CN，英文浏览器 → en（老规矩不变）', () => {
+    expect(localeFromTags(['zh-CN', 'en-US'])).toBe('zh-CN');
+    expect(localeFromTags(['en-GB'])).toBe('en');
+    expect(localeFromTags(['zh-TW'])).toBe('zh-CN');   // 繁体先给中文
+  });
+
+  it('⭐ 日/韩/德语浏览器 → en，不是 zh-CN', () => {
+    // 递给一个日本访客一页中文，比递英文差得多 —— 他两种都不是母语，
+    // 但英文是他能读的那个。
+    for (const tag of ['ja-JP', 'ko-KR', 'de-DE', 'fr', 'ru-RU', 'es-ES']) {
+      expect(localeFromTags([tag]), tag).toBe('en');
+    }
+  });
+
+  it('列表里排在后面的中英仍然赢过"都不认识"', () => {
+    expect(localeFromTags(['ja-JP', 'zh-CN'])).toBe('zh-CN');
+    expect(localeFromTags(['ko-KR', 'en'])).toBe('en');
+  });
+
+  it('压根没有语言信息 → 回中文（中文优先只对这种情况成立）', () => {
+    expect(localeFromTags([])).toBe(DEFAULT_LOCALE);
+    expect(localeFromTags(null)).toBe(DEFAULT_LOCALE);
   });
 });

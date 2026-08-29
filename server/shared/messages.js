@@ -17,7 +17,7 @@
  * req.user**（那正是最需要说对语言的时刻），所以 header 兜底不是可选项。
  */
 
-import { DEFAULT_LOCALE, isLocale, localeFromAcceptLanguage } from './locales.js';
+import { DEFAULT_LOCALE, isLocale, localeFromAcceptLanguage, statesAnyLanguage } from './locales.js';
 import en from './messages-en.js';
 
 const CATALOGS = { 'zh-CN': null, en };
@@ -29,8 +29,13 @@ const CATALOGS = { 'zh-CN': null, en };
 export function localeOf(req) {
   const fromUser = req?.user?.locale;
   if (isLocale(fromUser)) return fromUser;
-  const fromHeader = localeFromAcceptLanguage(req?.headers?.['accept-language']);
-  return fromHeader || DEFAULT_LOCALE;
+  const header = req?.headers?.['accept-language'];
+  const fromHeader = localeFromAcceptLanguage(header);
+  if (fromHeader) return fromHeader;
+  // 报了 Accept-Language 但一门都不是中英（日/韩/德…）：读英文的可能远大于读中文。
+  // 中文优先只对"没说自己读什么"的情况成立（2026-08-29，跟前端 localeFromTags 同一条规矩）。
+  // 畸形头 / `*` 不算"说了" —— 那是没证据，不是别的语言。
+  return statesAnyLanguage(header) ? 'en' : DEFAULT_LOCALE;
 }
 
 /** `{name}` 占位符。参数缺了留占位符，别把 undefined 印给用户 */

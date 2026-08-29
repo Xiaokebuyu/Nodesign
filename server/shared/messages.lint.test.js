@@ -114,9 +114,17 @@ describe('localeOf 判定', () => {
     expect(localeOf(req({ id: 1, locale: null }, 'en-GB'))).toBe('en');
   });
 
-  it('Accept-Language 认不出、缺失、畸形，一律落中文', () => {
-    for (const h of [undefined, '', 'ja,ko;q=0.9', '???', ';;;', 'q=0.9']) {
+  it('Accept-Language 缺失、畸形、`*`，落中文（没证据就别猜）', () => {
+    for (const h of [undefined, '', '???', ';;;', 'q=0.9', '*']) {
       expect(localeOf(req(undefined, h)), `header=${JSON.stringify(h)}`).toBe('zh-CN');
+    }
+  });
+
+  it('⭐ 认不出但**确实报了别的语言**（ja/ko/de…）落英文（2026-08-29 改）', () => {
+    // 「中文优先」只对"没说自己读什么"成立。日语访客两种都不是母语，
+    // 但英文是他能读的那个 —— 递中文等于递一页看不懂的字。
+    for (const h of ['ja,ko;q=0.9', 'ko-KR', 'de-DE,de;q=0.9', 'fr-FR', 'ru', 'es-ES,es;q=0.9']) {
+      expect(localeOf(req(undefined, h)), `header=${JSON.stringify(h)}`).toBe('en');
     }
   });
 
@@ -136,5 +144,31 @@ describe('localeOf 判定', () => {
       .toBe('Too many attempts. Try again in 3 minutes.');
     expect(msg(zhReq, '尝试次数过多，{waitMin} 分钟后再试', { waitMin: 3 }))
       .toBe('尝试次数过多，3 分钟后再试');
+  });
+});
+
+describe('localeOf：报了 Accept-Language 但不是中英的请求（2026-08-29）', () => {
+  const req = (header, user) => ({ headers: header ? { 'accept-language': header } : {}, user });
+
+  it('账号上记的语言最硬，压过一切', () => {
+    expect(localeOf(req('ja-JP', { locale: 'zh-CN' }))).toBe('zh-CN');
+    expect(localeOf(req('zh-CN', { locale: 'en' }))).toBe('en');
+  });
+
+  it('认得出的按 q 值挑（老规矩不变）', () => {
+    expect(localeOf(req('en-US,en;q=0.9,zh-CN;q=0.8'))).toBe('en');
+    expect(localeOf(req('zh-CN,zh;q=0.9,en;q=0.8'))).toBe('zh-CN');
+  });
+
+  it('⭐ ja/ko/de 这种一门都不认识的 → en，不是 zh-CN', () => {
+    // 跟前端 i18n.js 的 localeFromTags 同一条规矩：报错信息也得给他能读的那种。
+    for (const h of ['ja-JP,ja;q=0.9', 'ko-KR', 'de-DE,de;q=0.9', 'fr-FR', 'ru']) {
+      expect(localeOf(req(h)), h).toBe('en');
+    }
+  });
+
+  it('压根没有 Accept-Language → 回中文（中文优先只对这种情况成立）', () => {
+    expect(localeOf(req(null))).toBe('zh-CN');
+    expect(localeOf({})).toBe('zh-CN');
   });
 });

@@ -31,7 +31,7 @@ export default {
   '本机服务不用钥匙': 'Local service, no key needed',
   '高级': 'Advanced',
   '协议 / 鉴权方式 / 内部名': 'Protocol / auth style / internal name',
-  '接口格式': 'Wire format',
+  '接口格式': 'API format',
   'OpenAI 格式': 'OpenAI format',
   'Anthropic 格式': 'Anthropic format',
   '鉴权头': 'Auth header',
@@ -68,7 +68,7 @@ export default {
   '自动': 'Auto',
   '数字': 'Number',
   '窗口填服务商标称的上下文长度（填大了撑满时对方 400，填小了白扔容量）。价目 / 重试 / liftImages / fastModel 这些少用字段在 JSON 模式里填，字段名同内置表。':
-    'Set the window to the length the provider advertises: too large and they 400 when it fills, too small and you throw capacity away. Rarer fields (pricing, retry, liftImages, fastModel) go in JSON mode, with the same field names as the built-in table.',
+    'Set the context window to the length the provider advertises: too large and the provider returns a 400 once it fills, too small and you throw capacity away. Rarer fields (pricing, retry, liftImages, fastModel) go in JSON mode, with the same field names as the built-in table.',
   '（参考）': '(reference)',
 
   '保存插槽': 'Save slots',
@@ -101,11 +101,11 @@ export default {
   '这一页只在本地分发版（NODESIGN_PROFILE=local）可用；线上多用户站没有 /api/local。':
     'This page is only available in the local build (NODESIGN_PROFILE=local). The hosted multi-user site has no /api/local.',
   '两种接入方式并列，配好任一种，模型选择器里就有可选项':
-    'Two ways in, side by side. Set up either one and the model picker fills up.',
-  'Claude 官方': 'Claude, first-party',
+    'Two ways to connect, side by side. Set up either one and the model picker will have options.',
+  'Claude 官方': 'Claude (official)',
   'Anthropic 的 Sonnet / Opus。填 API Key，或在终端 claude login 用订阅':
     "Anthropic's Sonnet / Opus. Add an API key, or run claude login in a terminal to use your subscription.",
-  '自定义接入': 'Bring your own',
+  '自定义接入': 'Bring your own provider',
   '任何服务商：DeepSeek、OpenAI、智谱、通义、OpenRouter、中转站、本机 Ollama…（OpenAI 格式或 Anthropic 格式都行）':
     'Any provider: DeepSeek, OpenAI, Zhipu, Qwen, OpenRouter, a relay, a local Ollama… (OpenAI or Anthropic wire format, either works)',
   '已配（API Key）': 'Configured (API key)',
@@ -113,7 +113,7 @@ export default {
   '未配': 'Not set up',
   '已配 {n} 个模型': { one: '{n} model configured', other: '{n} models configured' },
   '本机能力': 'What this machine can do',
-  '启动时探的；装好东西后「重启」重探': 'Probed at startup. Install something, then hit Restart to re-probe.',
+  '启动时探的；装好东西后「重启」重探': 'Detected at startup. Install something, then hit Restart to check again.',
   '其他钥匙与开关': 'Other keys and switches',
   '写进 {path}/.env，钥匙类保存即生效': 'Written to {path}/.env. Key changes take effect on save.',
   // ── 首页（routes/Home.jsx）──
@@ -136,7 +136,7 @@ export default {
   '不用先想清楚，': "You don't have to figure it out first, ",
   '它会问你缺的那部分。': 'it will ask you for the missing pieces.',
 
-  '接着做': 'Pick up',
+  '接着做': 'Resume',
   '重命名': 'Rename',
   '复制': 'Duplicate',
   '删除': 'Delete',
@@ -162,7 +162,7 @@ export default {
   '后端可能没启动。检查 server 是否在 :4001 上跑。': 'The backend may not be running. Check that the server is up on :4001.',
   '再 试': 'Retry',
   '还没有作品': 'Nothing here yet',
-  '在上面写一句话就能开工。': 'Write a line above and you are off.',
+  '在上面写一句话就能开工。': 'Write a line above to get started.',
   '没想好的话，点一个试试：': 'Not sure yet? Try one of these:',
   '或者从「+ 新建项目」开始一件长期的事': 'Or start something long-running from "+ New project"',
   // ── 首页快速开工（routes/home-quick-entry.jsx）──

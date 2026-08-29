@@ -50,6 +50,33 @@ export function normalizeLocale(tag) {
 }
 
 /**
+ * 一串浏览器语言 tag → 用哪种界面语言。
+ *
+ * 前两条是老规矩（按 navigator.languages 的顺序取第一个认识的）。第三条是
+ * 2026-08-29 补的：**报了语言但一门都不是中英**（日语、韩语、德语…）时给英文。
+ * 那种访客读英文的可能远大于读中文，落回 zh-CN 等于递给他一页看不懂的字。
+ * 「中文优先」只对「没说自己读什么」的情况成立。
+ *
+ * ⚠️ 不按 IP 猜国家：IP 回答的是「这条网络在哪」，浏览器语言回答的是「这个人读
+ * 什么」—— 两者恰恰在最要紧的场合背离（人在国外的中文用户、住在国内的英文用户、
+ * 挂着代理的所有人）。而且这一条不用等任何网络往返就能定，IP 那条要么多一跳
+ * 要么得让 index.html 变成动态的。
+ */
+export function localeFromTags(tags) {
+  const list = Array.isArray(tags) ? tags : [];
+  for (const tag of list) {
+    const hit = normalizeLocale(tag);
+    if (hit) return hit;
+  }
+  // `*` 和垃圾值不算"说了某种语言"（跟服务端 statesAnyLanguage 同一条形状判据）
+  const stated = list.some((tag) => {
+    const s = String(tag || '').trim();
+    return s !== '*' && /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(s);
+  });
+  return stated ? 'en' : DEFAULT_LOCALE;
+}
+
+/**
  * 开机取语言。优先级：
  *   1. 用户在本机显式选过的（localStorage）—— 表态最硬，跨账号沿用
  *   2. 浏览器语言
@@ -65,10 +92,8 @@ function detect() {
     if (isLocale(saved)) return saved;
   } catch { /* 隐私模式 */ }
   try {
-    for (const tag of navigator.languages || [navigator.language]) {
-      const hit = normalizeLocale(tag);
-      if (hit) return hit;
-    }
+    const tags = navigator.languages || (navigator.language ? [navigator.language] : []);
+    return localeFromTags(tags);
   } catch { /* 非浏览器环境（测试 / SSR 探针） */ }
   return DEFAULT_LOCALE;
 }

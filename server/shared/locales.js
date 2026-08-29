@@ -52,3 +52,19 @@ export function localeFromAcceptLanguage(header) {
   }
   return null;
 }
+
+/**
+ * Accept-Language 里有没有**至少一个像语言 tag 的东西**（2026-08-29）。
+ *
+ * 用来区分两种"认不出"：
+ *   `ja,ko;q=0.9` —— 人家明确说了自己读日语韩语，只是我们没有这两门 → 给英文
+ *   `???` / `;;;` / `*` / 空 —— 什么都没说清 → 中文优先照旧
+ * 前一种落回中文等于递给他一页看不懂的字；后一种没有任何证据，不该乱猜。
+ */
+export function statesAnyLanguage(header) {
+  if (!header) return false;
+  return String(header).split(',').some((part) => {
+    const tag = part.trim().split(';')[0].trim();
+    return tag !== '*' && /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i.test(tag);
+  });
+}
