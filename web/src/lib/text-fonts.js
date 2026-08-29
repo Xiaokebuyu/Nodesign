@@ -41,5 +41,6 @@ export function estimateTextBox(t, sizeKey) {
   const rows = String(t || '').split('\n');
   const longest = Math.min(26, Math.max(4, ...rows.map(em)));
   const lines = rows.reduce((n, l) => n + Math.max(1, Math.ceil(em(l) / longest)), 0);
-  return { w: Math.round(longest * px * 1.06) + 12, h: Math.round(lines * px * 1.6) + 10 };
+  // 系数 1.05 与服务端 sketch-layout.js textBox 同款（2026-08-29 刀 3 统一；parity 测试钉着）
+  return { w: Math.round(longest * px * 1.05) + 12, h: Math.round(lines * px * 1.6) + 10 };
 }

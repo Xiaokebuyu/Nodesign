@@ -21,6 +21,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { getSharedDir, ensureProjectWorkspace, gitRenamesSince } from './workspace.js';
 import { CHALK_DIR, trashChalkFile } from '../lib/chalk.js';
+import { estimateSizeOn } from '../lib/board-kind-sizes.js';
 
 export {
   DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS,
@@ -554,11 +555,15 @@ export function pinToZone(pid, { objectId, zoneId = '' }) {
       throw new Error(`board 已有 ${MAX_OBJECTS} 件，pin 不进新条目（失控兜底，正常用不该撞到）`);
     }
     const zMax = Math.max(10, ...Object.values(board.objects).map(o => o.z || 0));
+    // 落座即写估算 w/h（2026-08-29 纸范式刀 3）：此前 pin 出来的条目只有坐标，
+    // read_board 只能报形态表猜值。估算先落盘、前端渲染后按真值回写（useMeasuredSize）。
+    const sz = estimateSizeOn(board, oid, board.objects[oid] || null);
     board.objects[oid] = {
       ...(board.objects[oid] || {}),
       x: clampNum(slot.x, 0, board.size.w, PAD),
       y: clampNum(slot.y, 0, board.size.h, PAD),
       z: zMax + 1,
+      ...(Number.isFinite(board.objects[oid]?.w) ? {} : { w: Math.round(sz.w), h: Math.round(sz.h) }),
     };
     await writeBoard(pid, board);
     return { board, zone: zid ? { id: zid } : null, placed: board.objects[oid] };

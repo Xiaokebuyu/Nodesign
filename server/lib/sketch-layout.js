@@ -28,7 +28,10 @@ export const SKETCH_MAX = { w: 2600, h: 1700 };   // 硬上限（再大就拆成
 export const GAP = 16;             // 模板排布的节点间距
 const SIZE_PX = { sm: 13, md: 16, lg: 22, xl: 30 };
 
-/** 手写字身位估算（抄 create-on-board / 前端 handleCreateText 同款） */
+/** 字宽 em 估（CJK/全角 1em，其余 0.62em）—— plain/md 两分支共用 */
+const em2 = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
+
+/** 手写字身位估算（与前端 text-fonts.js estimateTextBox 同公式，parity 测试钉着） */
 export function textBox(t, sizeKey, { md = false, wUnits = null } = {}) {
   const px = SIZE_PX[sizeKey] || 16;
   if (md) {
@@ -54,8 +57,12 @@ export function textBox(t, sizeKey, { md = false, wUnits = null } = {}) {
     }
     return { w, h: Math.round(n * px * 1.6) + 8 + paras * 8 };
   }
-  const cols = wUnits ? Math.max(4, Math.floor((wUnits * UNIT) / (px * 1.05))) : Math.min(26, Math.max(6, t.length));
-  const lines = Math.ceil(t.length / cols) + (t.match(/\n/g)?.length || 0);
+  // plain 也按 em 估（2026-08-29 刀 3：原来按 t.length，CJK 全错 —— 与前端
+  // text-fonts.js estimateTextBox 同公式，parity 测试钉着，改一边看另一边）
+  const rows = String(t).split('\n');
+  const longest0 = Math.min(26, Math.max(4, ...rows.map(em2)));
+  const cols = wUnits ? Math.max(4, (wUnits * UNIT) / (px * 1.05)) : longest0;
+  const lines = rows.reduce((n, l) => n + Math.max(1, Math.ceil(em2(l) / cols)), 0);
   return { w: wUnits ? wUnits * UNIT : Math.round(cols * px * 1.05) + 12, h: Math.round(lines * px * 1.6) + 10 };
 }
 

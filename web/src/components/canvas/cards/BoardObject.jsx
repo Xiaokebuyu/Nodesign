@@ -61,8 +61,12 @@ function BoardObject({
   // 用户的原话是"鼠标一离开产物本身视图点击按钮，按钮就会消失"。
   const hoverTimer = useRef(null);
   const rootRef = useRef(null);
-  const textual = o.type === 'text' || !!o.chalk;
-  useMeasuredSize(rootRef, o, textual ? onMeasured : null, [o.data?.t, o.text, o.data?.size, o.data?.format]);
+  // 测量回写扩到全部物件卡（2026-08-29 纸范式刀 3，用户点名「所有桌面组件都要有
+  // 面积供 agent 判断」）：此前只有 text/chalk 回写真值，file/image/note 这类卡
+  // board.json 里压根没有 w/h，read_board 报的是形态表猜值。涂鸦不量 —— 它的
+  // w/h 就是路径包围盒，本来就是真值。
+  const measured = o.type !== 'scribble';
+  useMeasuredSize(rootRef, o, measured ? onMeasured : null, [o.data?.t, o.text, o.data?.size, o.data?.format]);
   // 板书 MdInk 的 origin 要引用稳定（MdInk 已 memo：相机平移时 200 张板书别再
   // 每帧重跑 markdown 解析 —— 08-25 性能探针 17fps 案）
   const chalkOrigin = useMemo(() => ({

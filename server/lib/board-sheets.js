@@ -278,4 +278,22 @@ export function inflateSpriteSeats(obstacles, objects, pad = 60) {
     : o));
 }
 
+/**
+ * 卷卡（RollLayer）占位估算（2026-08-29 刀 3）：卷卡是前端合成物不进 objects，
+ * 但它真占桌面一角 —— agent 要知道那儿有张卡。位置 = 成员左上角（前端同款），
+ * 尺寸按标签字数估（chip：padding + 文字）。成员座位本来就保留当障碍，这只是
+ * 让 read_board 能把「那张卷卡」点出来。
+ */
+export function rollCardRect(board, tag) {
+  const roll = board?.rolls?.[tag];
+  if (!roll) return null;
+  const members = Object.entries(board?.objects || {}).filter(([, e]) => e?.tag === tag && Number.isFinite(e?.x));
+  if (!members.length) return null;
+  const x = Math.min(...members.map(([, e]) => e.x));
+  const y = Math.min(...members.map(([, e]) => e.y));
+  const label = String(roll.label || tag);
+  const em = [...label].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(48 + em * 15), h: 40 };
+}
+
 export { ZOOM_BASIS };

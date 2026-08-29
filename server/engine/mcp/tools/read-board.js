@@ -20,7 +20,7 @@ import { layerOf } from '../../../lib/canvas-id.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
-import { sheetSummaries } from '../../../lib/board-sheets.js';
+import { sheetSummaries, rollCardRect } from '../../../lib/board-sheets.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -215,7 +215,9 @@ on the minimap and listed with what is inside it.`,
             // 收着的线一行带过：细节不进上下文（要看就 read_board tag= 点名，或 unroll）
             const roll = board.rolls?.[l.tag];
             if (roll) {
+              const rc = rollCardRect(board, l.tag);
               lines.push(`  #${l.tag}：已收卷${roll.label ? `（「${roll.label}」）` : ''}，${l.count} 件收在卷里`
+                + `${rc ? `，卷卡占位约 @(${rc.x},${rc.y}) ${rc.w}x${rc.h}` : ''}`
                 + ` —— 座位和文件都在（Read 照常），edit_board unroll 展开；别往收着的线里接新话`);
               continue;
             }
@@ -249,7 +251,8 @@ on the minimap and listed with what is inside it.`,
         } catch { /* 关系读不到不挡座次 */ }
       }
 
-      lines.push('', '（口径：稀疏表只列摆过的；层归属为服务端近似；尺寸为形态估算；带⚠️的条目=座位与磁盘对不上账）');
+      lines.push('', '（口径：稀疏表只列摆过的；层归属为服务端近似；尺寸=存档真值优先、缺了按形态估；'
+        + '角色精灵贴着该角色最新一条板书（那条四周留了 60px 身位）；带⚠️的条目=座位与磁盘对不上账）');
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     },
   );
