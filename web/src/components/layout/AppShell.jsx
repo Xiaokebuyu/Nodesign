@@ -2,7 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { COLOR } from '../../lib/theme.js';
 import EdgeTab, { TAB_LEN } from '../ui/EdgeTab.jsx';
 import { useMedia, COARSE } from '../../lib/use-media.js';
+import { useDeviceClass, isTouchLane } from '../../lib/device-class.js';
 import TopBar from './TopBar.jsx';
+import { MobileTopBar } from './MobileShell.jsx';
 
 /**
  * AppShell — 整站外壳：顶栏 + 主内容
@@ -55,6 +57,18 @@ export default function AppShell({
   /** 右上角有别人的关闭钮：感应带在那一段让路（顶栏本身照旧可用） */
   topRightSafe = false,
 }) {
+  /**
+   * 触屏档走另一条（2026-08-29 外壳第一刀）：**常驻窄条，没有 hover 这回事**。
+   *
+   * 下面那整套（10px 感应带 / 600ms 自动收 / 顶缘小舌头）都是为鼠标写的。
+   * 08-21 给手指补了枚小舌头当权宜，但「要先找到并点开一个 26px 的贴纸，才能
+   * 看见自己在哪」不是设计。手机上不该有要唤出的东西 —— 它只有 44px 高，
+   * 比桌面那条还省 12px，本来就没必要藏。
+   *
+   * ⚠️ 提前 return 在所有 hook 之后 —— 这条 return 上面不许再加 hook。
+   */
+  const deviceClass = useDeviceClass();
+  const touch = isTouchLane(deviceClass);
   const [revealed, setRevealed] = useState(true);
   /**
    * 小舌头钉住的（2026-08-21）。
@@ -71,7 +85,7 @@ export default function AppShell({
   const timerRef = useRef(null);
 
   useEffect(() => {
-    if (!overlayTop) return undefined;
+    if (!overlayTop || touch) return undefined;   // 触屏档没有 hover 可听
     if (topSuppressed) { clearTimeout(timerRef.current); setRevealed(false); return undefined; }
     const schedule = () => {
       clearTimeout(timerRef.current);
@@ -113,13 +127,41 @@ export default function AppShell({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('focusin', onFocusIn);
     };
-  }, [overlayTop, topSuppressed, topRightSafe]);
+  }, [overlayTop, topSuppressed, topRightSafe, touch]);
 
   if (!overlayTop) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: COLOR.bg }}>
         <TopBar breadcrumb={breadcrumb} actions={actions} />
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{children}</div>
+      </div>
+    );
+  }
+
+  /**
+   * 触屏档：窄条参与布局（不浮起）。
+   *
+   * ⚠️ 桌面那条必须浮起来是因为「顶栏一参与布局，收展就改画布容器高度 → 相机
+   * 可视区变 → 画面跳」。这儿不犯那个病的前提是**它永不收展** —— 所以触屏档
+   * 里 `topSuppressed` 一律不认：
+   *
+   *   ① 认了它，产物窗一开条就没了、画布长高 44、相机当场跳，正是桌面那版
+   *      费劲绕开的病；
+   *   ② 手机上这条**就是退路**。桌面收掉顶栏无所谓（窗自己右上角有叉，鼠标够
+   *      得到），手机上把唯一的返回入口跟着窗一起收掉，用户就困在那扇窗里了。
+   *
+   * 不冲突：窗渲染在下面那个 flex 子里，跟条是上下关系不是叠压关系，条压不着
+   * 它的关闭钮 —— 桌面那条让路的理由（CORNER_SAFE_W / topRightSafe）在这儿
+   * 整个不成立。
+   *
+   * 高度用 100dvh 不是 100vh：移动浏览器的地址栏收展会改可视高度，vh 是「最大
+   * 那个」，用它会让底部 60-90px 长期落在屏幕外（工具栏和抽屉都在那儿）。
+   */
+  if (touch && overlayTop) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: COLOR.bg, overflow: 'hidden' }}>
+        <MobileTopBar breadcrumb={breadcrumb} actions={actions} />
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>{children}</div>
       </div>
     );
   }
