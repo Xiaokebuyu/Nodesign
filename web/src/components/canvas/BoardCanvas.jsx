@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, ChevronsUpDown, Focus, Group, Check, Download, Eraser, MessageSquarePlus, Archive } from 'lucide-react';
 import RollLayer, { useRollActions, ArchiveChip } from './RollLayer.jsx';
+import SheetLayer from './SheetLayer.jsx';
 import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
@@ -160,11 +161,12 @@ export default function BoardCanvas({
   const {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
-    rolls, setRolls,
+    rolls, setRolls, sheets,
     guideText, fileCount,
     reload, scheduleSave, patchLayout,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,
   } = useBoardData({ projectId, listVersion, boardVersion, readOnly: !!eyeParams() });
+  const eyeMode = !!eyeParams();   // 眼睛模式（look_at_board 截图）：只渲染板面内容
   // 影子工作区（2026-07-28）：agent 正在往一个还不存在的任务目录里写，产物列表
   // 要等这次写完才知道它存在。先在桌面上把这块区长出来（只在内存里，不落盘），
   // 舞台卡当场就有地方贴；真任务出现后 zone 派生 effect 接管、影子退场。
@@ -880,7 +882,7 @@ export default function BoardCanvas({
   }, [folderView]);
 
   // 手机 / 平板的阅读导航（开局取景 + 翻件），整块在 useReadingNav.js
-  const { readGroup, deviceEnv, touchLane } = useReadingNav({ camApiRef, camera, cam, visibleObjects, layout });
+  const { readGroup, deviceEnv, touchLane } = useReadingNav({ camApiRef, camera, cam, visibleObjects, layout, sheets });
 
   // ⚠️ 这里曾有「切 session 就切视图」：有会话进工作模式聚焦它的区、回 /work
   // 回项目区。会话与产物 08-08 解绑、双视图 08-13 退役之后，切对话不该动你
@@ -1818,14 +1820,12 @@ export default function BoardCanvas({
             transformOrigin: '0 0',
           }}
         >
-          {/* 工作区（物件下层）：展开态 = 实体区域（标题栏拖整区），收纳态 = 文件夹卡 */}
-          {/* 文件夹：一张方卡（2026-08-13）。
-              在这之前它有两态 —— 收起是一条整宽窄条、展开是一块带标题栏的
-              实体区域、成员摆在框里。那套是"分区"时代的形状：文件夹是版面上
-              摊开的一块地。现在它是**桌面上的一个东西**，双击进去换一层。 */}
+          {/* 纸（2026-08-29 纸范式）：agent 的工作区矩形，垫在一切之下 */}
+          <SheetLayer sheets={sheets} />
+          {/* 文件夹：一张方卡（2026-08-13，"分区"时代两态退役）——
+              桌面上的一个东西，双击进去换一层。 */}
           {visibleZones.map((z) => renderFolderCard(z))}
 
-          {/* 吸附预览：松手后物件将落到的格位（虚线 ghost）*/}
           {visibleObjects.map((o) => renderObjectCard(o))}
 
           {/* 生图幻影：占位卡在纸面层等图，真图落地座位过户；拖它 = 指定这张图落在哪 */}
@@ -1837,7 +1837,7 @@ export default function BoardCanvas({
           <TagHullLayer positioned={positioned} onGrab={onTagGrab} onMenu={openTagMenu} />
           {/* 卷卡（收纳器）：收着的组在包络左上角留一张卡，单击展开归位 */}
           <RollLayer rolls={rolls} layout={layout} onUnroll={unrollGroup} />
-          {chalkCards.map(c => <ChalkLiveInk key={c.blockId} card={c} spot={liveChalkSpotFor(c.blockId)} />)}
+          {!eyeMode && chalkCards.map(c => <ChalkLiveInk key={c.blockId} card={c} spot={liveChalkSpotFor(c.blockId)} />)}
           <BindingLayer
             bindings={bindings}
             roleNames={roleNames}
@@ -1903,7 +1903,7 @@ export default function BoardCanvas({
               槽位（闲时/纯思考/无文件工具都在槽位上活着 —— 活跃真空修复）。
               活跃换转轮图标+工作台词；quiet=输入行开着时精灵闭嘴让位。
               obstacles 直接用小地图那份矩形 —— 同一个"桌面上有什么"。 */}
-          <AmbientSpriteLayer
+          {!eyeMode && <AmbientSpriteLayer
             agentActive={mainActive}
             workAnchor={(() => {
               const main = presence[MAIN_AGENT_ID];
@@ -1923,15 +1923,15 @@ export default function BoardCanvas({
             renderFrameCard={(card) => (
               <StageCardBody card={card} onDismiss={() => dismissStageCard(card.blockId)} />
             )}
-          />
+          />}
 
           {/* 常驻角色的精灵：贴着它正在写的东西（没写过的排候场位），点它开对话小窗 */}
-          <RoleSprites
+          {!eyeMode && <RoleSprites
             presence={presence} rectOf={rectOfId} obstacles={minimapItems} roleNames={roleNames}
             cam={cam} viewport={camera.viewport}
             quiet={!!spriteAsk}
             onPick={(slug) => setRoleTalk((cur) => (cur === slug ? null : slug))}
-          />
+          />}
           {roleTalk && (
             <RoleTalkPanel
               projectId={projectId} slug={roleTalk}
@@ -1955,7 +1955,7 @@ export default function BoardCanvas({
               单独一层浮在所有物件之上 —— 物件的 z 是会长的（pin_to_board 每次
               置顶都 zMax+1），跟舞台卡比大小早晚会盖住 agent 正在写的那个框。
               这层自己不吃事件，卡片各自开 pointerEvents。 */}
-          <div style={{ position: 'absolute', left: 0, top: 0, zIndex: 300, pointerEvents: 'none' }}>
+          {!eyeMode && <div style={{ position: 'absolute', left: 0, top: 0, zIndex: 300, pointerEvents: 'none' }}>
             <StageBoardLayer
               stageBadges={stageBadges}
               anchoredCards={anchoredCards}
@@ -1965,7 +1965,7 @@ export default function BoardCanvas({
               scale={scale}
               onDismiss={dismissStageCard}
             />
-          </div>
+          </div>}
         </div>
 
         {/* 文字输入框：屏幕空间定位，但锚在世界坐标上。
@@ -2019,7 +2019,7 @@ export default function BoardCanvas({
             **直接开标注**（最常用的动作），其余动作仍在 hover 工具条上。 */}
 
         {/* 档案钮（屏幕空间，右上角）：件在 RollLayer.jsx（画布收纳同族） */}
-        {!deckOpen && !winDir && <ArchiveChip showArchive={showArchive} onToggle={toggleArchive} />}
+        {!eyeMode && !deckOpen && !winDir && <ArchiveChip showArchive={showArchive} onToggle={toggleArchive} />}
 
         {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
             全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。
@@ -2029,7 +2029,7 @@ export default function BoardCanvas({
             ⭐ 判据是**容器宽不是设备档**：平板本来放得下，但聊天卡一开画布区收到
             422，小地图又开始压工具栏 —— 决定放不放得下的从来是容器，不是屏幕。
             桌面这一轮不动（同样窄的桌面窗口仍然留着它）。 */}
-        {!deckOpen && !winDir && !(touchLane && camera.viewport.w < 560) && (
+        {!eyeMode && !deckOpen && !winDir && !(touchLane && camera.viewport.w < 560) && (
           <Minimap
             bounds={camera.bounds}
             cam={cam}
@@ -2042,7 +2042,7 @@ export default function BoardCanvas({
       </div>
 
       {/* 舞台 dock（屏幕坐标系，StageLayer.jsx）*/}
-      <StageDock dockPanels={dockPanels} dockChips={dockChips} onDismiss={dismissStageCard} />
+      {!eyeMode && <StageDock dockPanels={dockPanels} dockChips={dockChips} onDismiss={dismissStageCard} />}
 
       {menu && (
         <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => setMenu(null)} />

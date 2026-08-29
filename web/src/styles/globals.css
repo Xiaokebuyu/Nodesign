@@ -154,3 +154,12 @@ iframe { border: 0; }
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* ── 眼睛模式（look_at_board 截图，2026-08-29 纸范式刀 5）──
+ * agent 的截图只该有板面内容：顶栏/工具栏/聊天卡这些是给人用的把手，对 agent
+ * 是杂音还会盖住内容。eye-mode.js 在 <html> 上打 data-eye="1"，界面件按属性离场。
+ * 画布内的覆盖层（精灵/舞台卡/小地图）在 BoardCanvas 里按 eyeMode 直接不渲染。 */
+html[data-eye="1"] [data-top-bar],
+html[data-eye="1"] [data-floating-toolbar],
+html[data-eye="1"] [data-chat-card],
+html[data-eye="1"] [data-eye-hide] { display: none !important; }

@@ -53,6 +53,9 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   // 卷（2026-08-27 收纳器）：tag → {at,by,label}。有条目 = 这组收着（渲染层不画，
   // 座位原样在 layout 里 —— 展开即归位）。用户收/展开走 patchBoard 的 rolls 键。
   const [rolls, setRolls] = useState({});
+  // 纸（2026-08-29 纸范式）：sheet 名 → {x,y,w,h,by,at,title}。agent 的工作区矩形，
+  // 渲染层画成垫在物件下面的一张纸（SheetLayer）；用户不直接改它（撕纸走 agent）。
+  const [sheets, setSheets] = useState({});
   // 常驻角色的展示名（slug → 名字）。**派生态**，跟 /board 一起来，不存 board.json：
   // 板上署名是 slug（权威），展示名住在角色文件里（模型可改）。只用来渲染，不做判断。
   const [roleNames, setRoleNames] = useState({});
@@ -93,6 +96,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
       setZones(b.board.zones || {});
       setBoardHero(b.board.hero || null);
       setRolls(b.board.rolls || {});
+      setSheets(b.board.sheets || {});
       if (b.roles && typeof b.roles === 'object') setRoleNames(b.roles);
       // 桌面化：board.json 的 size 不再决定画布大小 —— 桌面宽度固定、高度随内容
       const zs = Object.values(b.board.objects || {}).map(o => o.z || 0);
@@ -151,7 +155,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   return {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
-    rolls, setRolls,
+    rolls, setRolls, sheets,
     guideText, fileCount,
     reload, scheduleSave, patchLayout,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,

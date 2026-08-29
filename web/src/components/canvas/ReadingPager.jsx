@@ -56,14 +56,19 @@ const OPENING_SETTLE_MS = 2500;
 
 const HIT = 40;
 
-export function useReadingNav({ camApiRef, camera, cam, visibleObjects, layout }) {
+export function useReadingNav({ camApiRef, camera, cam, visibleObjects, layout, sheets = null }) {
   const deviceEnv = useDeviceEnv();
   const touchLane = isTouchLane(deviceEnv.class);
 
-  /** 阅读序：开局取景和翻件共用一份（桌面不算，省一次遍历） */
-  const readOrder = useMemo(
-    () => (touchLane ? readingOrder(objectRects(visibleObjects)) : []),
-    [touchLane, visibleObjects]);
+  /** 阅读序：开局取景和翻件共用一份（桌面不算，省一次遍历）。
+   *  纸范式（2026-08-29）：板上有纸就**翻纸**（一张纸 = 一页，纸≈一屏正是页的
+   *  定义），没有纸才逐件翻（旧板/散件兜底）。 */
+  const readOrder = useMemo(() => {
+    if (!touchLane) return [];
+    const sheetRects = Object.entries(sheets || {})
+      .map(([id, s]) => ({ id: `sheet:${id}`, x: s.x, y: s.y, w: s.w, h: s.h, at: s.at || '' }));
+    return readingOrder(sheetRects.length ? sheetRects : objectRects(visibleObjects));
+  }, [touchLane, visibleObjects, sheets]);
 
   // readStep 要是个稳定引用（工具栏那族 memo 靠它别每帧换身份），所以走 ref 转手
   const readOrderRef = useRef(readOrder);
@@ -76,7 +81,12 @@ export function useReadingNav({ camApiRef, camera, cam, visibleObjects, layout }
     if (!touchLane || !camera.viewport.w) return;
     const st = openingRef.current;
     if (st.done) return;
-    const target = latestItem(Object.keys(layout), readOrder);
+    // 有纸对准最新铺的那张（登记时间），没纸对准最新写出的那件
+    const sheetIds = Object.keys(sheets || {});
+    const target = sheetIds.length
+      ? readOrder.filter(r => String(r.id).startsWith('sheet:'))
+        .sort((a, b) => String(a.at).localeCompare(String(b.at))).pop() || null
+      : latestItem(Object.keys(layout), readOrder);
     if (!target) return;                        // 内容还没到，继续等（不设死线）
     if (target.id === st.aimed) return;
     if (st.firstAt && Date.now() - st.firstAt > OPENING_SETTLE_MS) { st.done = true; return; }
