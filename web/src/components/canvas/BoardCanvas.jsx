@@ -29,10 +29,12 @@ import { useBoardGroups } from './useBoardGroups.js';
 import { useBlackboardWiring } from './useBlackboardMode.js';
 import { eyeParams } from './eye-mode.js';
 import { boxUnion } from '../../lib/board-camera.js';
+import { objectRects, zoneRects } from '../../lib/board-rects.js';
 import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as presenceRectFor, MAIN_AGENT_ID, colorFor, hintPresence, expireHint, slugOfPresence } from '../../lib/board-presence.js';
 import { useStageState, splitStageCards, ChalkLiveInk, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
 import { AmbientSpriteLayer, SpriteAskInput, useSpriteAmbient } from './SpriteSketchLayer.jsx';
 import RoleSprites from './RoleSprites.jsx';
+import { useReadingNav } from './ReadingPager.jsx';
 import RoleTalkPanel from './RoleTalkPanel.jsx';
 import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
 import { useBoardMoves } from './useBoardMoves.js';
@@ -104,6 +106,7 @@ const FOLDER_LABEL = {
 
 // SCRIBBLE_INK 随卡体搬去 cards/BoardObject.jsx（只有那边用；
 // 它跟服务端 sanitizeCanvasData 的白名单是一对，断言在 board-kinds.test.js）
+
 
 export default function BoardCanvas({
   projectId, currentSessionId, listVersion, fileVersions, boardVersion, onAddToContext, onFocusDeck,
@@ -619,10 +622,7 @@ export default function BoardCanvas({
   positionedRef.current = positioned;
   folderViewRef.current = folderView;
   // 幻影找座的障碍表与起排线（跟这一趟入座同一份现实）
-  phantomObstaclesRef.current = [
-    ...folderView.map(f => ({ x: f.x, y: f.y, w: f.w, h: f.h })),
-    ...positioned.map(o => { const sz = sizeOf(o); return { x: o.pos.x, y: o.pos.y, w: sz.w, h: sz.h }; }),
-  ];
+  phantomObstaclesRef.current = [...zoneRects(folderView), ...objectRects(positioned)];
   phantomBottomRef.current = contentBottom;
   // 全目录树的物件（不止桌面这一层）—— 文件夹窗里的右键要按 id 找得到它们
   objectsRef.current = objects;
@@ -878,6 +878,9 @@ export default function BoardCanvas({
     fittedKeyRef.current = 'desktop';
     camApiRef.current?.zoomToFit({ force: true });
   }, [folderView]);
+
+  // 手机 / 平板的阅读导航（开局取景 + 翻件），整块在 useReadingNav.js
+  const { readGroup, deviceEnv } = useReadingNav({ camApiRef, camera, cam, visibleObjects, layout });
 
   // ⚠️ 这里曾有「切 session 就切视图」：有会话进工作模式聚焦它的区、回 /work
   // 回项目区。会话与产物 08-08 解绑、双视图 08-13 退役之后，切对话不该动你
@@ -1459,14 +1462,10 @@ export default function BoardCanvas({
    * 当前看不到的东西只会让人对不上号。
    */
   const minimapItems = useMemo(() => {
-    const out = visibleZones.map(z => ({
-      id: `z:${z.id}`, x: z.x, y: z.y,
-      w: z.w, h: z.h, folder: true,
-    }));
-    for (const o of visibleObjects) {
-      const sz = sizeOf(o);
-      out.push({ id: o.id, x: o.pos.x, y: o.pos.y, w: sz.w, h: sz.h, folder: false });
-    }
+    const out = [
+      ...zoneRects(visibleZones).map(r => ({ ...r, id: `z:${r.id}`, folder: true })),
+      ...objectRects(visibleObjects).map(r => ({ ...r, folder: false })),
+    ];
     // 生图幻影也是"桌面上有的东西"（08-24 精灵体检）：这份表同时喂精灵避让，
     // 漏了它精灵会一屁股坐在正在生成的图上。dep 用 phantoms（表本体在 ref 上，
     // phantoms state 是它的重渲染扳机）。
@@ -1607,8 +1606,8 @@ export default function BoardCanvas({
     tidyBoard, zoomFit: zoomFitStable, zoomBy: zoomByStable, zoomTo: zoomToStable, filterGroup,
     blackboardMode, toggleBlackboard,
     chalkEditMode, toggleChalkEdit,
-    openCanvasNote,
-  }), [tool, drawMode, scale, tidyBoard, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit, openCanvasNote]);
+    openCanvasNote, deviceClass: deviceEnv.class, readGroup,
+  }), [tool, drawMode, scale, tidyBoard, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, readGroup]);
 
   useEffect(() => { onToolbarGroups?.(boardToolGroups); }, [boardToolGroups, onToolbarGroups]);
 
@@ -2022,8 +2021,11 @@ export default function BoardCanvas({
         {!deckOpen && !winDir && <ArchiveChip showArchive={showArchive} onToggle={toggleArchive} />}
 
         {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
-            全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。 */}
-        {!deckOpen && !winDir && (
+            全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。
+            ⚠️ 手机上撤掉（08-28）：它在 390 宽的屏上占掉左下角一大块、还压着
+            工具栏，而它回答的那个问题（"我在哪"）翻页器用一句「17/17」答得更好。
+            平板留着 —— 那儿放得下，而且宽屏上一眼看全貌仍然是它最快。 */}
+        {!deckOpen && !winDir && deviceEnv.class !== 'phone' && (
           <Minimap
             bounds={camera.bounds}
             cam={cam}

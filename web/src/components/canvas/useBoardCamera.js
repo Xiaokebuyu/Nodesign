@@ -285,11 +285,21 @@ export function useBoardCamera({ paneRef, contentBox, enabled = true }) {
 
   useEffect(() => () => { if (flyRef.current) cancelAnimationFrame(flyRef.current.raf); }, []);
 
-  /** 把一块世界矩形框进视口 */
+  /**
+   * 把一块世界矩形框进视口。
+   *
+   * 取景参数（axis / alignY / padding / maxZoom）**原样透传给 fitBox** ——
+   * 手机上「一件占满一屏」要的是按宽取景 + 顶对齐（见 lib/board-reading.js 的
+   * readFocusOpts），而不是两轴都装得下。⚠️ 08-28 之前这里只转了 maxZoom 一个，
+   * 别的悄悄被吃掉：调用方写了 axis 也不生效，而且不报错。
+   */
   const flyToBox = useCallback((box, opts = {}) => {
     const vp = viewportRef.current;
     if (!box || !vp.w) return;
-    flyTo(fitBox(box, vp, { maxZoom: opts.maxZoom ?? 1 }), opts);
+    flyTo(fitBox(box, vp, {
+      maxZoom: opts.maxZoom ?? 1,
+      axis: opts.axis, alignY: opts.alignY, padding: opts.padding,
+    }), opts);
   }, [flyTo]);
 
   /**

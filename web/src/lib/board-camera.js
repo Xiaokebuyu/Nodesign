@@ -239,6 +239,19 @@ export function fitBox(box, viewport, opts = {}) {
     padding = CAMERA_PADDING,
     zoomMin = ZOOM_MIN, zoomMax = ZOOM_MAX,
     maxZoom = 1,   // 别把一张小卡片放到 3 倍去，最多原大
+    /**
+     * 定缩放看哪几根轴（2026-08-28 移动端第二轮）。
+     *   'both' 两轴都装得下（桌面「全部内容入镜」要的）
+     *   'x'    **只按宽度取景**，高度溢出就溢出
+     *
+     * ⭐ 差别随内容变高而张开（390x664 的手机屏，一块 450 宽的板书）：
+     * 高 150 时两者 0.76 / 0.82 几乎一样，高 1800 时是 0.34 / 0.82 —— 16px 正文
+     * 5.5px vs 13px。手机上读长内容的天然姿势就是**竖着滚**，不是把整块缩到
+     * 能一眼看全，后者看着"完整"，实际什么都读不了。配 alignY:'top' 用。
+     */
+    axis = 'both',
+    /** 纵向落位：'center' 居中 / 'top' 顶对齐（按宽取景时要从这块的开头读起） */
+    alignY = 'center',
   } = opts;
   if (!box || !viewport || viewport.w <= 0 || viewport.h <= 0) return { ...IDENTITY_CAMERA };
   if (!(box.w > 0) && !(box.h > 0)) return { ...IDENTITY_CAMERA };
@@ -248,12 +261,12 @@ export function fitBox(box, viewport, opts = {}) {
   // 那一轴不参与定缩放（取 Infinity 让 Math.min 忽略它），另一轴照常 fit。
   const zFitX = box.w > 0 ? (viewport.w - px * 2) / box.w : Infinity;
   const zFitY = box.h > 0 ? (viewport.h - py * 2) / box.h : Infinity;
-  const z = clamp(Math.min(zFitX, zFitY, maxZoom), zoomMin, zoomMax);
-  // 居中：世界中心落到视口中心
+  const z = clamp(Math.min(zFitX, axis === 'x' ? Infinity : zFitY, maxZoom), zoomMin, zoomMax);
+  // 居中：世界中心落到视口中心；顶对齐：这块的上沿落到视口上沿 + 内边距
   return {
     z,
     x: viewport.w / 2 / z - (box.x + box.w / 2),
-    y: viewport.h / 2 / z - (box.y + box.h / 2),
+    y: alignY === 'top' ? py / z - box.y : viewport.h / 2 / z - (box.y + box.h / 2),
   };
 }
 
