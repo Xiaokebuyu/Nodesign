@@ -13,6 +13,7 @@
  */
 
 import { FONT_KAI, alpha } from './theme.js';
+import { currentSkin, seasonOf } from './season.js';
 
 /** 纸面颗粒：140px 一格的 fractalNoise，压得很淡，只是让纯色不那么塑料 */
 export const GRAIN = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.13 0 0 0 0 0.06 0 0 0 0.1 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")`;
@@ -20,8 +21,11 @@ export const GRAIN = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/20
 /**
  * 纸物料的实色。写 inline style 的组件（弹窗那一族）从这里取；
  * 写 CSS 字符串的页面用下面 PAPER_VARS 里的同名变量 —— 两边同一份值。
+ *
+ * 下面这份是**基线**，也是所有还没做皮肤的季节落回来的地方（见 season.js）。
+ * 真正导出的 PAPER 是「基线 + 当季覆盖」，在模块加载时合成一次。
  */
-export const PAPER = {
+const BASE = {
   wall:   '#F0EADB',
   paper:  '#FFFEF6',
   legal:  '#FAF0C6',
@@ -115,6 +119,19 @@ export const PAPER = {
   /** 长尾夹 */
   clipA:  '#b9b2a4', clipB: '#6f6759',
 };
+
+/** 今天是哪一季（给要显示它的地方用，比如设置页/调试） */
+export const SEASON = seasonOf();
+
+/**
+ * 基线 + 当季覆盖。**这一步是整个季节化的全部机制** ——
+ * 因为全站所有颜色最终都读这个对象（前四批收编就是为了这一刻），
+ * 所以这里一合并，纸、板面的光、缩略图底、页签……全跟着换了，
+ * 组件一行代码都不用动。
+ *
+ * 当季没做皮肤时 currentSkin() 返回空对象，PAPER 就等于 BASE，站点不变。
+ */
+export const PAPER = { ...BASE, ...currentSkin() };
 
 /**
  * 板面/纸物料的半透明变体：`P('lit', 0.55)` → `rgba(255,247,225,0.55)`。

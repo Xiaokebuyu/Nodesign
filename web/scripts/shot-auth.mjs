@@ -57,6 +57,13 @@ for (const s of SHOTS) {
     reducedMotion: 'reduce',
     locale: LOCALE === 'en' ? 'en-US' : 'zh-CN',
   });
+  // ⭐ 把日期钉死（2026-08-29 季节皮肤上线后加的）。
+  //
+  // 站点的纸和板面现在跟着季节走（lib/season.js），基线要是按"跑测试那天"截，
+  // **每换一季这条守门线就自己废一次** —— 报出来 80% 像素不同，而实际上什么都没坏。
+  // 钉在冬天：那一季还没做皮肤，落回基线值，是最稳的参照。
+  // ⚠️ 哪天冬季皮肤做出来了，这里要改成每季各存一张基线，否则又会漂。
+  await ctx.clock.setFixedTime(new Date('2026-12-15T10:00:00'));
   const page = await ctx.newPage();
   await page.addInitScript((loc) => {
     try { localStorage.setItem('nd:locale', loc); } catch { /* 隐私模式 */ }
