@@ -265,8 +265,8 @@ export const Assets = {
    * 'queued' = 它没在等，话先攒着（服务端叫不醒子代理，得等它下次自己来取）。
    * **两者必须区分着提示用户** —— 把积压说成送达，用户会对着没人听的板子说话。
    */
-  listRoles: (pid) => jsonRequest('GET', `/api/projects/${pid}/roles`),
-  sayToRole: (pid, slug, body) => jsonRequest('POST', `/api/projects/${pid}/roles/${encodeURIComponent(slug)}/say`, body),
+  // 用户从画布对角色说的话：先落在画布上（去向仍是主持人，见 lib/role-target.js）
+  stageEcho: (pid, body) => jsonRequest('POST', `/api/projects/${pid}/stage/echo`, body),
   /** 黑板（2026-08-23）：用户视点上报 / 草稿落定 / 按标签整组擦 */
   reportViewpoint: (pid, viewpoint) => jsonRequest('POST', `/api/projects/${pid}/viewpoint`, { viewpoint }),
   commitBoard: (pid, tag = null) => jsonRequest('POST', `/api/projects/${pid}/board/commit`, { tag }),

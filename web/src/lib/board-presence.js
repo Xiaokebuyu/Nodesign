@@ -232,33 +232,9 @@ export function reducePresence(table, evt, resolve) {
       return { ...table, [who]: { ...cur, targetId: tid, zoneId: evt.layer || null, at: evt.at || cur.at } };
     }
 
-    // 角色挂上/离开 await_user（2026-08-26）。它挂着的时候事件流是**静默**的 ——
-    // 没有这条，画布分不出「在等你回话」和「已经没了」，精灵只能一直显工作态。
-    // ⚠️ 只切 active，**不动 targetId**：它等的时候仍然站在自己刚写的那段板书旁边，
-    // 位置不该跳走（跳走了用户就找不到"是谁在等我"）。
-    case 'run.role.wait': {
-      if (!evt.slug) return table;
-      const id = rolePresenceId(evt.slug);
-      const cur = table[id];
-      if (!cur) return table;                       // 还没写过东西就别凭空立
-      const active = !evt.waiting;
-      if (cur.active === active) return table;
-      return { ...table, [id]: { ...cur, active, ...(active ? {} : { message: null }) } };
-    }
-
-    // 轮到谁（2026-08-28）：run.scene 一直在画布的事件白名单里，注释也写着
-    // 「画布要知道轮到谁」——**可这份表从来没消费过它**，真正在显示的是侧栏那行
-    // 台上提示（stageHint 的 turnLabel）。那行 08-28 撤役后「轮到谁」一处都不剩，
-    // 所以在这儿真接上：rounds 模式下服务端已经把内部指针换算成 turnSlug 了。
-    // 存成 __turn 而不是塞进某个角色条目：轮次是**场**的属性，不是某个人的属性，
-    // 而且轮到的人可能还没在场（没写过东西就没有条目）。
-    case 'run.scene': {
-      const turn = evt.scene?.turnSlug || null;
-      if ((table.__turn || null) === turn) return table;
-      const next = { ...table };
-      if (turn) next.__turn = turn; else delete next.__turn;
-      return next;
-    }
+    // （run.role.wait / run.scene 两个分支 2026-08-29 随收件箱与场声明一起退役。
+    //  小人的「在写 / 写完了」现在只看子代理起飞落地：run.subagent.start 立条目、
+    //  run.subagent.stop 收场，中间它就是在写。）
 
     // 角色退场（2026-08-26）：**唯一**的删除路径。
     // 角色不跟主 run 收场（下面那个分支明确跳过它），所以没有这条它就永远留在画布上。

@@ -36,13 +36,11 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
   const ref = useRef(null);
   const [text, setText] = useState('');
   /**
-   * 这句发给谁（2026-08-28 用户拍板「把去向变成看得见的」）。
+   * 这句话是说给谁的（2026-08-28 用户拍板「把去向变成看得见的」）。
    *
-   * 去向本来就显示着（标题和发送键都写「说给泉此方」），缺的是**改**：
-   * 在角色写的板书上回话默认直达它，但有时你想说的是场外的话（"这段能不能重写"），
-   * 那是主控的事。没有开关时只能用「攒着」绕，而那是另一个动作。
-   *
-   * 默认跟着作者走 —— 回复谁写的东西就说给谁，这是最不用想的一档。
+   * ⚠️ 08-29 起两档**都经主持人**（角色不再有独立收件箱）——差别是它怎么处理这句话：
+   * 「说给角色」= 戏里的话，主持人原话转交给它；「跟主持人说」= 场外的话
+   * （"这段能不能重写"），不进戏。默认跟着作者走：回谁写的东西就说给谁。
    */
   const [toMain, setToMain] = useState(false);
   const sayTo = roleTarget && !toMain ? roleTarget : null;
@@ -113,8 +111,8 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
       {roleTarget && (
         <div style={{ display: 'flex', gap: 4, marginBottom: GAP.sm }}>
           {[
-            { on: !toMain, label: roleTarget.who, hint: `直达${roleTarget.who}，接在这段下面`, pick: false },
-            { on: toMain, label: '主控', hint: '发给主控（场务/改稿这类场外的话）', pick: true },
+            { on: !toMain, label: roleTarget.who, hint: `戏里的话：主持人原话转交给${roleTarget.who}，这句也会落在画布上`, pick: false },
+            { on: toMain, label: '主持人', hint: '场外的话（改稿、问规则这类），不进戏', pick: true },
           ].map((o) => (
             <button
               key={o.label}
@@ -183,7 +181,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             onClick={queue}
             disabled={!text.trim()}
             title={sayTo
-              ? `攒着会发给主控，不是${sayTo.who}——想直接说给它就用右边那颗`
+              ? `攒着的会当成场外的话发给主持人，不转给${sayTo.who}——要说给它就用右边那颗`
               : '先记下，攒够了从右下角那条浮钮一次发给 agent'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs,

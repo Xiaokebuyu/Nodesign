@@ -41,10 +41,10 @@ describe('去向开关', () => {
     expect(render({ roleTarget }).textContent).toContain('说给泉此方');
   });
 
-  it('⭐ 拨到「主控」→ 标签跟着改，载荷也跟着改（说的=做的）', () => {
+  it('⭐ 拨到「主持人」→ 标签跟着改，载荷也跟着改（说的=做的）', () => {
     const onSubmit = vi.fn();
     const el = render({ roleTarget, onSubmit });
-    click(chip(el, '主控'));
+    click(chip(el, '主持人'));
     expect(el.textContent).toContain('发给 agent');
     expect(el.textContent).not.toContain('说给泉此方');
     type(el, '这段能不能重写');
@@ -52,10 +52,10 @@ describe('去向开关', () => {
     expect(onSubmit).toHaveBeenCalledWith('这段能不能重写', { toMain: true });
   });
 
-  it('拨回角色 → 载荷回到直达', () => {
+  it('拨回角色 → 载荷回到「说给它」', () => {
     const onSubmit = vi.fn();
     const el = render({ roleTarget, onSubmit });
-    click(chip(el, '主控'));
+    click(chip(el, '主持人'));
     click(chip(el, '泉此方'));
     type(el, '你还好吗');
     click([...el.querySelectorAll('button')].find((b) => /说给泉此方/.test(b.textContent)));
@@ -64,7 +64,7 @@ describe('去向开关', () => {
 
   it('不是角色写的东西：没有第二个去处，不出开关', () => {
     const el = render({});
-    expect(chip(el, '主控')).toBeUndefined();
+    expect(chip(el, '主持人')).toBeUndefined();
     expect(el.textContent).toContain('标注 · 板书「第一章」');
   });
 });

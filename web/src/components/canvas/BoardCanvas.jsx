@@ -51,7 +51,7 @@ import TextDraft from './TextDraft.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import LinkPopover from './LinkPopover.jsx';
 import AnnotatePopover from './AnnotatePopover.jsx';
-import { soleRoleTarget } from '../../lib/role-direct.js';
+import { soleRoleTarget } from '../../lib/role-target.js';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';

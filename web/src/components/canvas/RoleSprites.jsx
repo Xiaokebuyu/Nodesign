@@ -43,7 +43,7 @@
  *
  * ⚠️ 2026-08-26 改：**等用户的时候也留在画布上**（只是切 idle 态）。原来的判断是
  * "等的时候不该占着画面"，实测反了 —— 角色一挂 await_user 精灵就消失，用户既
- * 不知道它还在，也不知道该冲谁说话。动静由 run.role.wait 驱动，见 board-presence.js。
+ * 不知道它还在，也不知道该冲谁说话。动静由子代理起飞/落地驱动，见 board-presence.js。
  */
 
 import { useMemo, useEffect, useState, useRef } from 'react';
@@ -60,7 +60,7 @@ const SPRITE_Z = 305;
  * 候场时那句常驻提示（2026-08-28 用户拍板）。
  *
  * 主 agent 的精灵一直有台词，角色闲着时却只剩一枚标 + 名牌 —— 新用户不知道能点它。
- * 挂 await_user 候场正是"该跟它说话"的时刻，所以那一刻把话口写出来。
+ * 它写完这一段停下来，正是"可以跟它说话"的时刻，所以那一刻把话口写出来。
  * 在写的时候不显示：它马上就有自己的话了，提示会跟正文打架。
  */
 const IDLE_HINT = '点我说话';
@@ -77,7 +77,7 @@ const ROLE_SPRITE_SIZE = 32;
  * 贴纸感靠三件：微微歪一点（真贴纸贴不正）、纸色底压一道淡影、左端一枚状态点。
  * 状态点是**这个角色此刻在写还是在等**的唯一文字外表达：实心 = 在写，空心 = 候场。
  */
-function RoleNameTag({ name, color, waiting, myTurn, onClick }) {
+function RoleNameTag({ name, color, waiting, myTurn = false, onClick }) {
   return (
     <div
       onPointerDown={onClick ? (e) => { e.stopPropagation(); e.preventDefault(); onClick(); } : undefined}
@@ -94,7 +94,7 @@ function RoleNameTag({ name, color, waiting, myTurn, onClick }) {
       lineHeight: 1.3,
       color: PAPER.ink2,
       background: PAPER.bg,
-      // 轮到它：名牌加重一档（rounds 模式下「轮到谁」的唯一表达）
+      // 在写的那个名牌加重一档（此刻谁在动的唯一文字外表达）
       border: `${myTurn ? 2 : 1}px solid ${color}`,
       borderRadius: 3,
       transform: 'rotate(-1.2deg)',
@@ -113,13 +113,12 @@ function RoleNameTag({ name, color, waiting, myTurn, onClick }) {
 }
 
 export default function RoleSprites({ presence, rectOf, obstacles = [], roleNames = {}, cam = null, viewport = null, quiet = false, onPick = null }) {
-  // ⚠️ 不再要求 active（2026-08-26）：角色挂在 await_user 上等你回话时是 idle 的，
-  // 但它**还在台上**，精灵消失会让用户以为它没了、也就不知道该冲谁说话。
-  // 2026-08-27（编排）：也不再要求 targetId —— 还没写过板书的角色排**候场位**
+  // ⚠️ 不再要求 active（2026-08-26）：角色写完这一段就不在写了，但它**还在台上**，
+  // 小人消失会让用户以为它没了、也就不知道该冲谁说话。
+  // 2026-08-27：也不再要求 targetId —— 还没写过东西的角色排一个空位
   // （findAmbientSlot，主精灵闲逛用的同一套槽位），上台就看得见、点得到。
   // 跟主精灵同一个牌子（会话模型决定），只是小一圈 —— 角色不自带厂商身份
   const brand = useCurrentModelBrand();
-  const turn = presence?.__turn || null;   // rounds 模式轮到谁（见 board-presence 的 run.scene 分支）
   /**
    * 用户拖过的角色钉在原地。**连着当时的 targetId 一起记** —— 角色换了在写的东西
    * 就该走过去，钉子自然失效；不这么记就得另写一套清理，而清理漏了就是"角色永远
@@ -175,7 +174,7 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
               // zIndex 跟主精灵同一层（原来 44 —— 用户报「和主代理的图标不在一层」）
               textAlign: 'left', zIndex: SPRITE_Z,
               // 候场（挂 await_user）整体淡一档：在写的那个才该抢眼
-              opacity: (p.active || turn === slug) ? 1 : 0.78,
+              opacity: p.active ? 1 : 0.78,
               // 换目标时"走过去"而不是瞬移（同主精灵的缓动曲线）；自己被拖着时关掉
               transition: dragSlug === slug
                 ? 'opacity 240ms ease'
@@ -197,7 +196,7 @@ export default function RoleSprites({ presence, rectOf, obstacles = [], roleName
               nameTag={(
                 <RoleNameTag
                   name={roleNames[slug] || slug} color={p.color}
-                  waiting={!p.active} myTurn={turn === slug}
+                  waiting={!p.active} myTurn={!!p.active}
                   onClick={onPick ? () => onPick(slug) : null}
                 />
               )}

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { trySayToRole } from '../lib/role-direct.js';
+import { soleRoleTarget, sayToRoleText } from '../lib/role-target.js';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Download, MoreHorizontal } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
@@ -1770,12 +1770,22 @@ export default function ProjectWorkspace() {
       return;
     }
 
-    // 直达角色：用户在某个常驻角色写的板书上回话，绕开主 agent（见 lib/role-direct.js）。
-    // toMain = 他在浮层上把去向切成了「主控」—— 那就照他说的走，别拿作者猜他的意思。
-    if (!toMain && await trySayToRole({
-      list, projectId: id, text, api: Assets, showToast,
-      onSend: () => boardApiRef.current?.presenceHint?.(list[0].id),
-    })) return;
+    // 对角色说话（2026-08-29）：去向仍是主持人 —— 它这一拍要把场上的变化补齐再转交 ——
+    // 但消息里写清收件人，并且**先把这句话落在画布上**，角色回帖才接得上这条线。
+    // toMain = 他在浮层上把去向切成了「主持人」（场外的话），那就不当成戏里的发言。
+    const roleTarget = toMain ? null : soleRoleTarget(list);
+    if (roleTarget) {
+      boardApiRef.current?.presenceHint?.(list[0].id);
+      let echo = null;
+      try {
+        const anchor = (list.find((t) => typeof t.id === 'string' && t.id.startsWith('notes/板书/')) || list[0])?.id || null;
+        const r = await Assets.stageEcho(id, { text, ...(anchor ? { anchor } : {}) });
+        echo = r?.echo || null;
+      } catch (err) { console.warn('[stage] 落痕失败（话照样递出去）:', err.message); }
+      useGlobalStore.getState().openChatDock();
+      await handleSend(sayToRoleText({ ...roleTarget, text, echo }));
+      return;
+    }
 
     useGlobalStore.getState().openChatDock();
     // E4：发送瞬间精灵先飘到目标上（本地合成在场，真事件来了自然接管）
