@@ -75,6 +75,15 @@ export function useBoardCamera({ paneRef, contentBox, enabled = true }) {
    * 所以这一个开关就够，不用各改各的。
    */
   const touchRef = useRef(false);
+  /**
+   * 手指把一张卡「拿起来」了（长按武装成功，2026-08-29）。
+   *
+   * ⭐ 仲裁只能有一个主人。触屏上「这一串事件到底是推画面、拿卡、还是捏合」
+   * 三方都想管，08-21 那次翻车就是三方各拽各的。所以规矩定死：**相机是主人** ——
+   * 手指一落下先归它（touchRef），长按到点了才由拖卡来**跟它要**（beginCardGrab），
+   * 第二根手指落下它再**收回去**（并回调撤销）。别处一律只读 isHandMode()。
+   */
+  const cardGrabRef = useRef(null);   // { abort } —— 拿着卡时非空
   // 键盘 effect 挂在最上面、动作定义在下面，用 ref 转一手：
   // 直接依赖那几个 useCallback 会让监听每次重挂，按键在重挂的缝里会丢。
   const zoomToFitRef = useRef(null);
@@ -374,7 +383,20 @@ export function useBoardCamera({ paneRef, contentBox, enabled = true }) {
   return {
     cam, camRef, viewport, panning, bounds,
     // 按住空格中，或者手指正按在屏幕上（抓手工具 08-17 已退役）
-    isHandMode: () => spaceRef.current || touchRef.current,
+    // 拿着卡的时候不是抓手态：这一串事件已经判给拖卡了，相机和别的手势都让开
+    isHandMode: () => !cardGrabRef.current && (spaceRef.current || touchRef.current),
+    /**
+     * 拖卡跟相机要走这一串事件。相机当场停掉在飞的平移（否则画面会跟着手指
+     * 一起走，卡和背景双份位移）。abort 存着：第二根手指落下时相机负责调它。
+     */
+    beginCardGrab: (abort) => { panRef.current = null; setPanning(false); cardGrabRef.current = { abort }; },
+    endCardGrab: () => { cardGrabRef.current = null; },
+    /** 第二根手指来了：把卡放回去，这一串交给捏合 */
+    abortCardGrab: () => {
+      const g = cardGrabRef.current;
+      cardGrabRef.current = null;
+      g?.abort?.();
+    },
     noteTakeover,
     onPointerDown, onPointerMove, onPointerUp,
     flyTo, flyToBox, flyToPoint, jumpToPoint, zoomToFit, zoomBy, zoomTo, toWorld,

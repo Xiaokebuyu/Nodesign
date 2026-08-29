@@ -928,7 +928,7 @@ export default function BoardCanvas({
 
   // 拖拽全家（pointerdown/move/up/相机补帧/边缘跟车/整组抓手/板书双按武装）
   // 2026-08-25 抽进 useBoardObjectDrag.js —— 语义与注释原样搬走，改拖拽行为去那看。
-  const { onObjectPointerDown, onPointerMove, onPointerUp, onTagGrab } = useBoardObjectDrag({
+  const { onObjectPointerDown, onPointerMove, onPointerUp, onTagGrab, abortDrag } = useBoardObjectDrag({
     camera, cam, positioned, folderView, dragActive,
     dragRef, dropHintRef, setDropHint, setDragActive,
     recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
@@ -1790,7 +1790,8 @@ export default function BoardCanvas({
           }
         }}
         onPointerCancel={(e) => {
-          canvasTools.onPointerUp(e); endMarquee(); camera.onPointerUp(e); onPointerUp(e);
+          canvasTools.onPointerUp(e); endMarquee(); camera.onPointerUp(e);
+          if (e.isTrusted) onPointerUp(e); else abortDrag();   // 合成 cancel = 第二根手指 → 撤销不落盘
         }}
         style={{
           position: 'absolute', inset: 0, overflow: 'hidden',
