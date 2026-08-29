@@ -45,10 +45,32 @@ export const MEMORY_EXTRA_GUIDELINES = [
  * SDK 手里（agent 照 SDK 默认路径写记忆被沙盒拒、~/.claude 下堆了 187 个空目录）。
  * 「两处同名键静默互吞」没有任何报错，出口断言在这里兜。
  */
-export function mergeAgentSettings(isolationSettings, { skipWebFetchPreflight, sharedRoot }) {
+export function mergeAgentSettings(isolationSettings, extra = {}) {
+  // ⚠️ 这个第二参是**显式白名单**（它存在的理由就是防 settings 互吞）。所以它有一个
+  // 结构性陷阱：往调用点里塞一个这里没解构的新键 = 那个键被静默丢弃，零症状。
+  // 2026-08-26 真踩：`crossSessionInbound: 'refuse'`（跨会话入向闸）在调用点写得好好的，
+  // 到了 SDK 手里根本不存在 —— 修互吞案的函数自己吞了新键。
+  // 所以未知键**当场炸**：白名单的代价必须由加键的人当场付，不能由线上静默付。
+  const { skipWebFetchPreflight, sharedRoot, crossSessionInbound, ...unknown } = extra;
+  const unknownKeys = Object.keys(unknown);
+  if (unknownKeys.length) {
+    throw new Error(
+      `[memory-config] mergeAgentSettings 收到不认识的键：${unknownKeys.join(', ')} —— `
+      + '这个第二参是显式白名单，加新键要同时改这里的解构和下面的出口断言，别指望它透传',
+    );
+  }
+
   const settings = {
     ...isolationSettings,
     skipWebFetchPreflight,
+    // 跨会话入向（2026-08-26）：实测——不是推断——Nodesign 的每个会话都会以 cwd
+    // 派生的名字注册进**本机 peer 名册**（生产上正在跑的用户会话当时显示为
+    // `shared-6d`），同机任何一个 Claude 会话 ListAgents 都看得见、都能按名字寄信。
+    // SDK 默认「权限模式相同就自动投递」（bypass↔bypass），而我们正是
+    // bypassPermissions → 本机任何 bypass 会话都能把文本注进用户会话的上下文。
+    // 出向那侧我们自己拦（hooks/pre-peer-guard.js），入向只有这一个旋钮。
+    // ⛔ 别写 'hold'：那是「存起来等人批准」，而服务端没有人在批。
+    ...(crossSessionInbound ? { crossSessionInbound } : {}),
     ...(sharedRoot ? {
       autoMemoryEnabled: true,
       autoMemoryDirectory: memoryDirFor(sharedRoot),
@@ -56,6 +78,10 @@ export function mergeAgentSettings(isolationSettings, { skipWebFetchPreflight, s
   };
   if (sharedRoot && !settings.autoMemoryDirectory) {
     throw new Error('[memory-config] settings.autoMemoryDirectory 被吞了 —— 检查 settings 合并处');
+  }
+  // 出口断言按「传进来的每个键都要在出口活着」逐条对，不是只看一个样本键
+  if (crossSessionInbound && settings.crossSessionInbound !== crossSessionInbound) {
+    throw new Error('[memory-config] settings.crossSessionInbound 被吞了 —— 跨会话入向闸会静默失效');
   }
   return settings;
 }

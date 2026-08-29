@@ -198,7 +198,22 @@ export function resolve(pathname, method, body) {
   if (p === '/notices') return { json: { notices: [] } };
   if (p === '/plugins') return { json: { plugins: [] } };
 
-  if (p === '/projects') return { json: { projects: [{ id: PROJECT_ID, name: 'Demo 项目', kind: 'project' }] } };
+  // 首页卡片那行元信息 + 板书预览。以前这条没喂，落到兜底的空对象上 ——
+  // 于是"卡上写着什么"和"板书预览"在检查台里永远看不见
+  if (p === '/projects/stats') {
+    return { json: { stats: {
+      [PROJECT_ID]: { tasks: 2, kinds: { deck: 1, site: 1 } },
+      p_demo_rp: { tasks: 0, kinds: {}, chalk: { count: 12, text: '「……」\n我把桌上的口水渍用袖口蹭了蹭，装作没有这回事。\n「就眯了一会儿。」我拿起练习册晃了晃，遮住半张脸。' } },
+    }, summary: { published: 2, usedToday: 0.02 } } };
+  }
+  // 两种纸各来一张：首页的项目卡按 mode 换纸（演出=稿纸、设计=横格本），
+  // 只有一条 fixture 的时候另一种永远看不见 —— 检查台看不见的差别等于没做
+  if (p === '/projects') {
+    return { json: { projects: [
+      { id: PROJECT_ID, name: 'Demo 项目', kind: 'project', mode: 'design' },
+      { id: 'p_demo_rp', name: '雨夜事务所', kind: 'project', mode: 'rp' },
+    ] } };
+  }
   if (p === `/projects/${PROJECT_ID}`) {
     return { json: { project: { id: PROJECT_ID, name: 'Demo 项目', kind: 'project', candidates: [], skillId: 'nodesign' } } };
   }

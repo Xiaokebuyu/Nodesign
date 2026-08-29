@@ -4,6 +4,7 @@ import { ensureSessionWorkspace, getSessionMetaDir } from '../projects/workspace
 import { applySessionModel, resolveSessionModel, defaultModel } from '../engine/agent/session-model.js';
 import { registerIngressSession } from '../lib/model-ingress.js';
 import { allowedModelsFor, isModelLockedFor, resolveSdkSpoofModel, modelSwitchRejection, resolveModelRoute } from '../engine/agent/model-context.js';
+import { msg } from '../shared/messages.js';
 
 /**
  * server/api/turn-model-switch.js — 运行中热切模型（08-25 从 turn.js 拆出，那边顶在 600 行棘轮上）。
@@ -51,7 +52,7 @@ export async function hotSwitchModelHandler(req, res, next) {
     if (wanted) {
       const modelUser = modelUserFor(req, project);   // 资格按项目 owner 算（_guard.js）
       if (isModelLockedFor(modelUser, wanted)) {
-        return res.status(403).json({ error: '这个模型仅限 Pro 档，暂未对外开放', code: 'MODEL_LOCKED', model: wanted });
+        return res.status(403).json({ error: msg(req, '这个模型仅限 Pro 档，暂未对外开放'), code: 'MODEL_LOCKED', model: wanted });
       }
       if (!allowedModelsFor(modelUser).some((m) => m.id === wanted)) {
         return res.status(400).json({ error: `unknown model: ${model}`, code: 'UNKNOWN_MODEL' });

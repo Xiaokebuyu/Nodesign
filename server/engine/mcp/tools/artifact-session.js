@@ -257,11 +257,12 @@ export const ARTIFACT_BATCHABLE = [
   'screenshot_canvas', 'trace_motion', 'get_computed_styles', 'explain_style', 'query_elements',
 ];
 
-export function makeArtifactBatchTool({ tools }) {
+export function makeArtifactBatchTool({ tools, resolve = null }) {
   const names = ARTIFACT_BATCHABLE.filter(n => tools.some(t => t.name === n));
   return makeBatchTool({
     name: 'artifact_batch',
     tools,
+    resolve,
     batchable: ARTIFACT_BATCHABLE,
     finalShot: { name: 'artifact_computer', input: { action: 'screenshot' } },
     description: `Run several artifact-session steps in ONE round trip: open → click → type →

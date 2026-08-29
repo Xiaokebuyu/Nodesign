@@ -1,0 +1,97 @@
+/**
+ * 触屏拖卡的三条闸（2026-08-29 用户拍板恢复拖卡）。
+ *
+ * 08-21 的病是「双指捏合把卡带跑并落盘」，当时的修法是把触屏拖卡整条撤掉。
+ * 这次换了个形状：**不阻止它起手，而是让它可撤销、撤销就不落盘**。
+ *
+ * ⚠️ 这个文件守的是**形状**，不是行为。真正的行为判据是
+ * `web/scripts/touch-drag-probe.mjs` —— 那条路上有两处只认 isTrusted 事件，
+ * 页面里 dispatchEvent 一路绿灯却什么都没测到，只能用 CDP 发真触摸去攻。
+ * 这里拦的是「有人把撤销路径改成会写盘」这类静态退化，跑得快、进得了 vitest。
+ */
+import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const read = (p) => fs.readFileSync(path.join(HERE, p), 'utf8');
+const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
+
+const DRAG = strip(read('useBoardObjectDrag.js'));
+const CAM = strip(read('useBoardCamera.js'));
+const BOARD = strip(read('BoardCanvas.jsx'));
+
+/** 取一个函数体（这几个都是 `const 名 = (…) => {` 起头、到同缩进的 `};` 结束） */
+function body(src, name) {
+  const i = src.indexOf(`const ${name} = `);
+  if (i < 0) throw new Error(`找不到 ${name} —— 它改名了？这条 lint 要跟着改`);
+  const open = src.indexOf('{', i);
+  let depth = 0;
+  for (let j = open; j < src.length; j += 1) {
+    if (src[j] === '{') depth += 1;
+    else if (src[j] === '}') { depth -= 1; if (depth === 0) return src.slice(open, j + 1); }
+  }
+  throw new Error(`${name} 的函数体没闭合`);
+}
+
+describe('闸一：撤销路径一个字都不写盘', () => {
+  const abort = body(DRAG, 'abortDrag');
+
+  it('⛔ abortDrag 不许碰 dirtyRef / scheduleSave / patchLayout', () => {
+    // 落盘只发生在 onPointerUp 那一条路上，所以"不写盘"是免费的 —— 前提是
+    // 谁也别在这儿顺手补一句"保险起见存一下"
+    expect(abort, 'abortDrag 里出现了 dirtyRef —— 撤销就不该留下痕迹').not.toMatch(/dirtyRef/);
+    expect(abort, 'abortDrag 里出现了 scheduleSave').not.toMatch(/scheduleSave/);
+    expect(abort, 'abortDrag 里出现了 patchLayout（它会排写入）').not.toMatch(/patchLayout/);
+  });
+
+  it('撤销要把卡弹回原位（光清 dragRef 会把卡留在半路上）', () => {
+    expect(abort).toMatch(/setLayout/);
+    expect(abort, '弹回用的是起手时记下的 origX/origY').toMatch(/origX/);
+    expect(abort).toMatch(/origY/);
+  });
+
+  it('落盘那一条路仍然在 onPointerUp 上（判据的前提别被搬走）', () => {
+    const up = body(DRAG, 'onPointerUp');
+    expect(up).toMatch(/dirtyRef\.current\.objects\.add/);
+    expect(up).toMatch(/scheduleSave/);
+  });
+});
+
+describe('闸二：第二根手指落下就撤销', () => {
+  it('合成的 pointercancel 走 abortDrag，真事件才走提交', () => {
+    // useTouchGestures 在第二根手指落下时补一条 pointercancel（isTrusted=false）
+    expect(BOARD).toMatch(/e\.isTrusted\s*\?\s*onPointerUp\(e\)\s*:\s*abortDrag\(\)|if\s*\(e\.isTrusted\)\s*onPointerUp\(e\);\s*else\s*abortDrag\(\)/);
+  });
+
+  it('还没武装的长按，第二根手指一落下也取消（pointerdown 监听在捕获阶段）', () => {
+    const arm = body(DRAG, 'armLongPress');
+    expect(arm).toMatch(/addEventListener\('pointerdown'[^)]*true\)/);
+  });
+});
+
+describe('闸三：仲裁只有一个主人', () => {
+  it('拿着卡的时候不是抓手态 —— 否则相机和拖卡各拽各的', () => {
+    expect(CAM).toMatch(/isHandMode:\s*\(\)\s*=>\s*!cardGrabRef\.current\s*&&/);
+  });
+
+  it('要走这一串时相机当场停掉在飞的平移（不然卡和背景双份位移）', () => {
+    expect(CAM).toMatch(/beginCardGrab:[^\n]*panRef\.current\s*=\s*null/);
+  });
+
+  it('长按到点了才跟相机要，并且把撤销回调交出去', () => {
+    expect(body(DRAG, 'armLongPress')).toMatch(/beginCardGrab\?\.\(abortDrag\)/);
+  });
+
+  it('松手和撤销都要把 grab 还回去（不还的话相机从此不平移）', () => {
+    expect(body(DRAG, 'onPointerUp')).toMatch(/endCardGrab/);
+    expect(body(DRAG, 'abortDrag')).toMatch(/endCardGrab/);
+  });
+});
+
+describe('板书不给拖（手机上防误触最不能松的那类）', () => {
+  it('armLongPress 第一件事就是把板书挡掉', () => {
+    expect(body(DRAG, 'armLongPress')).toMatch(/if\s*\(o\.chalk\)\s*return/);
+  });
+});

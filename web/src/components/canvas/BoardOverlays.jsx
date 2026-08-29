@@ -29,7 +29,18 @@ import FilesCard from '../project/FilesCard.jsx';
  * 进阅读器。走哪条路由由形态表的 `reader` 决定（board-kinds.js），
  * 这里只实现三种阅读器本身。返回 openViewer 给调用方挂双击 / 按钮。
  */
-export function makeBoardReaders({ projectId, setViewer }) {
+/**
+ * 板书标题里的署名。`by` 有三类：'user'（用户自己）、'agent'（主控）、
+ * 常驻角色的 slug（`rp-*`）。roleNames 是派生的展示名表（跟 /board 一起来的），
+ * 查不到就退回 slug —— 宁可显示 rp-moli，也不要把角色写的字说成 agent 写的。
+ */
+function chalkAuthor(by, roleNames) {
+  if (by === 'user') return '你写的';
+  if (!by || by === 'agent') return 'agent 写的';
+  return `${roleNames?.[by] || by} 写的`;
+}
+
+export function makeBoardReaders({ projectId, setViewer, roleNames = {} }) {
   const READERS = {
     // 普通 .md 产物（世界.md / 正文章节 / agent 写的任何 markdown）。
     // 2026-08-03 之前这类文件只有「打开」= window.open 原始 URL，浏览器给一坨
@@ -61,7 +72,7 @@ export function makeBoardReaders({ projectId, setViewer }) {
     },
 
     async note(o) {
-      const title = o.chalk ? `板书 · ${o.chalk.by === 'user' ? '你写的' : 'agent 写的'}` : (o.noteTask ? o.name.replace(/\.md$/i, '') : '便签');
+      const title = o.chalk ? `板书 · ${chalkAuthor(o.chalk.by, roleNames)}` : (o.noteTask ? o.name.replace(/\.md$/i, '') : '便签');
       try {
         const res = await fetch(Assets.artifactFileUrl(projectId, o.path));
         const raw = await res.text();

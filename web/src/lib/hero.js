@@ -35,7 +35,9 @@ export function pickHero(items, bindings) {
   for (const b of Object.values(bindings || {})) {
     if (b.type === 'derives-from') { bump(b.from, 2); bump(b.to, -3); }
     if (b.type === 'ref' && b.by === 'auto') bump(b.to, -3);
-    if (b.by === 'user' || b.by === 'agent') {
+    // 「手画的线」= 用户 / 主控 / 常驻角色画的（08-26：RP 场里大半线是角色画的，
+    // 只认 user|agent 的话主角推断的信号会大量流失）。auto 那支在上面已单独处理。
+    if (b.by && b.by !== 'auto') {
       for (const end of [b.from, b.to]) {
         if (!score.has(end)) continue;
         const used = focus.get(end) || 0;

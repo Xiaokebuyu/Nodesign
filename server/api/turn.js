@@ -183,12 +183,12 @@ router.post('/:pid/turn', async (req, res, next) => {
     // 解析出来的模型一律过白名单（不只 body.model）：旧覆盖/资格收回/无 select 裸名都在此拦（fable P0）
     if (isModelLockedFor(modelUser, turnModel)) {
       return res.status(403).json({
-        error: `这个模型（${turnModel}）仅限 Pro 档，暂未对外开放。换成免费模型继续`,
+        error: msg(req, '这个模型（{model}）仅限 Pro 档，暂未对外开放。换成免费模型继续', { model: turnModel }),
         code: 'MODEL_LOCKED', model: turnModel,
       });
     }
     if (!allowedModelsFor(modelUser).some((m) => m.id === turnModel)) {   // 清单整个为空（本地版没 key/没登录/没插槽）→ 指路设置页，别让人去选择器里找
-      return res.status(403).json(allowedModelsFor(modelUser).length ? { error: `这个会话指向的模型（${turnModel}）现在不可用，请在模型选择器里换一个`, code: 'MODEL_NOT_ALLOWED', model: turnModel } : { error: '还没有可用的模型：到「设置」填 API Key（或本机 claude login），或者配一个模型插槽', code: 'NO_MODEL_CONFIGURED', model: turnModel });
+      return res.status(403).json(allowedModelsFor(modelUser).length ? { error: msg(req, '这个会话指向的模型（{model}）现在不可用，请在模型选择器里换一个', { model: turnModel }), code: 'MODEL_NOT_ALLOWED', model: turnModel } : { error: msg(req, '还没有可用的模型：到「设置」填 API Key（或本机 claude login），或者配一个模型插槽'), code: 'NO_MODEL_CONFIGURED', model: turnModel });
     }
     // ⛔ 08-25 修：原来这条带着 `sessionModelEarly.override &&`，于是**跑在全局默认上的会话（override=null）
     // 整个逃过检查** —— 而站上默认恰恰是免费的 Ox（openai-chat），正是这条闸要防的那一头。
@@ -203,7 +203,7 @@ router.post('/:pid/turn', async (req, res, next) => {
     if (modelIsFree(turnModel)) {
       const fq = checkFreeQuota(req.user);
       if (!fq.ok) {
-        return res.status(429).json({ error: `今天的免费轮次用完了（${fq.used} / ${fq.limit}），明天零点刷新`, code: 'QUOTA_EXCEEDED', kind: fq.kind, used: fq.used, limit: fq.limit });
+        return res.status(429).json({ error: msg(req, '今天的免费轮次用完了（{used} / {limit}），明天零点刷新', { used: fq.used, limit: fq.limit }), code: 'QUOTA_EXCEEDED', kind: fq.kind, used: fq.used, limit: fq.limit });
       }
     }
     const quota = modelIsFree(turnModel) ? { ok: true } : checkQuota(req.user);
@@ -595,6 +595,7 @@ router.post('/:pid/runs/:runId/rewind', async (req, res, next) => {
 });
 
 import { hotSwitchModelHandler } from './turn-model-switch.js';
+import { msg } from '../shared/messages.js';
 
 /** 运行中热切模型（实现连同它那三道闸搬去了 turn-model-switch.js） */
 router.post('/:pid/runs/:runId/model', hotSwitchModelHandler);

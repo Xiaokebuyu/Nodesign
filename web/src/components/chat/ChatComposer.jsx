@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Square, Upload } from 'lucide-react';
 import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_KAI } from '../../lib/theme.js';
 import { PAPER, GRAIN, PAPER_SHADOW } from '../../lib/paper.js';
+import { useDeviceClass, isTouchLane } from '../../lib/device-class.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { useDropzone } from '../../lib/useDropzone.js';
 import { isImeEnter } from '../../lib/helpers.js';
@@ -36,6 +37,10 @@ export default function ChatComposer({
   // V2：Send 按钮承担运行状态显示责任。isRunning=true 时按钮变"停止"红，点击 onStop。
   // disabled 仍兼容（外部可强制禁用，如 hydrateError）但 isRunning 优先决定按钮形态。
   isRunning = false,
+  // ⛔ 台上提示（「泉此方 在写／在等」那行）2026-08-28 撤役：同一件事画布上的
+  // 角色精灵已经在说了（矢量标自己动 + 名牌上的状态点），输入框上再写一遍是重复，
+  // 而画布那处才是它真正发生的地方。roleStage/roleNames 两个 prop 一并从这里摘掉 ——
+  // 拆剩的空壳 prop 不留（这仓库为「空壳钩子」付过学费）。
   onStop,
   // [+] 菜单里的上下文分区（ChatPanel 透传）
   contextUsage = null,
@@ -45,10 +50,22 @@ export default function ChatComposer({
   projectId = null,
   sessionId = null,
 }) {
+  const touchLane = isTouchLane(useDeviceClass());
   const [text, setText] = useState('');
   const coarse = useMedia(COARSE);
   const ref = useRef(null);
   const fileInputRef = useRef(null);
+
+  // 画布 → 主对话的唯一转发口（08-28 建，08-29 改成通用）：点角色小人说的话走这条
+  // （lib/role-target.js 的 sendViaMainChat）。挂在这而不是 ProjectWorkspace：
+  // 这里天然握着 onSend，且 ChatDock 收起 ≠ 卸载，监听常在。
+  const onSendRef = useRef(onSend);
+  onSendRef.current = onSend;
+  useEffect(() => {
+    const onNudge = (e) => { if (e.detail?.text) onSendRef.current?.(e.detail.text); };
+    window.addEventListener('nd:to-main-chat', onNudge);
+    return () => window.removeEventListener('nd:to-main-chat', onNudge);
+  }, []);
   const chatDraft = useGlobalStore(s => s.chatDraft);
   const composerFocusTick = useGlobalStore(s => s.composerFocusTick);
   const setChatDraft = useGlobalStore(s => s.setChatDraft);
@@ -122,6 +139,7 @@ export default function ChatComposer({
   };
 
   const empty = !text.trim() && !hasAttachment;
+
 
   // V3：拖文件入复合器 → 走和 Paperclip 同条路（onPickFile）。
   // isRunning 不拦：streamInput 模式下附件在 POST /turn 时就拼进 blocks 随消息
@@ -256,15 +274,26 @@ export default function ChatComposer({
           />
           {/* 模型 picker：切换从下一条消息生效（服务端空闲时重启 query），
               正在跑时禁用 —— 不给"点了立刻切"的错觉 */}
-          <ModelPicker
-            disabled={disabled || isRunning}
-            projectId={projectId}
-            sessionId={sessionId}
-            contextTokens={contextUsage?.totalTokens || 0}
-          />
+          {/* 窄屏上让位的是它：minWidth:0 才让得动（flex 子项默认 min-width:auto，
+              不写这句它宁可把整行撑折也不缩） */}
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <ModelPicker
+              disabled={disabled || isRunning}
+              projectId={projectId}
+              sessionId={sessionId}
+              contextTokens={contextUsage?.totalTokens || 0}
+              // 触屏两档都窄：手机是 390 的抽屉，平板是 380 的卡（视口 810 但容器 380
+              // —— 所以判的是设备档不是视口，跟工具栏折行那条同一个道理）
+              compact={touchLane}
+            />
+          </div>
 
-          <div style={{ flex: 1 }} />
+          <div style={{ flex: 1, minWidth: 0 }} />
 
+          {/* 第三态：台上有角色，但主对话**没被占用**（2026-08-26）。
+              以前这里什么都不显示，而按钮因为一个 bug 卡在「停止」，用户以为对话被占了
+              不敢发消息（病根见 runs/turn-relay.js isBackgroundTurnOpener）。
+              现在按钮照常是「发送」，只在旁边说清楚台上是谁、在写还是在等。 */}
           {/* streamInput 重构：恢复一体切换按钮（原设计）—— isRunning 时显 stop（中断
               当前 turn，query 不死），idle 时显 send。Enter 始终触发 submit（追加排队）—
               用户想在 agent 跑时追加消息直接 Enter，按钮形态不影响 */}
@@ -276,6 +305,7 @@ export default function ChatComposer({
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
                 padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
                 fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, fontWeight: 700,
+                whiteSpace: 'nowrap', flexShrink: 0,   // 同发送：这一行的主角不折行
                 color: '#F5F0E4',
                 background: PAPER.red,
                 border: `1px solid ${PAPER.red}`,
@@ -298,6 +328,10 @@ export default function ChatComposer({
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
                 padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
                 fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, fontWeight: 700,
+                // 390 宽的抽屉里这一行放不下，谁都不声明就一起折 —— 「发送」被压成
+                // 竖着两个字（08-29 手机抽屉上量到的）。发送是这一行的主角，
+                // 它不缩不折，要让位的是旁边那颗模型钮。
+                whiteSpace: 'nowrap', flexShrink: 0,
                 color: disabled || empty ? PAPER.pencil : '#F5F0E4',
                 background: disabled || empty ? 'transparent' : PAPER.ink,
                 border: `1px solid ${disabled || empty ? PAPER.hair : PAPER.ink}`,

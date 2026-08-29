@@ -47,6 +47,7 @@ import {
 } from '../runs/active-runs.js';
 import {
   promoteNextPendingRunId, claimRunByUuid, releaseCurrentTurnRunId, getPendingRunCount,
+  isBackgroundTurnOpener,
   closeMergedRun, publishQueueDepth, pushUnclaimedMessage,
 } from '../runs/turn-relay.js';
 // skill 起手文件拷贝已挪 hooks.js PreToolUse(Skill/Bash)（2026-07-27），
@@ -58,6 +59,8 @@ import { MEMORY_EXTRA_GUIDELINES, mergeAgentSettings } from './memory-config.js'
 import { createNodesignMcpServer } from '../mcp/index.js';
 import { MCP_SERVER_NAME } from '../mcp/server-name.js';
 import { assertInitContract } from './init-contract.js';
+import { clearSessionFlights } from './subagent-flight.js'; import { clearStageStatus } from './stage-status.js'; import { clearBeatState } from './beat-state.js';
+import { createRoleRoster } from './cast.js';
 import { createAgents, resolveDefaultFastModel } from '../agents/index.js';
 import { resolveSdkSpoofModel, pickThinkingConfig, resolveModelRoute, isUncensoredModel } from './model-context.js';
 import { resolveSessionModel } from './session-model.js';
@@ -120,11 +123,6 @@ import { levelFor } from '../../lib/moderation.js';
  * 旁路事件**不算** —— 通知之后 SDK 不一定真的唤起模型，铸了 run 却等不来
  * result 收尾就是僵尸 run。
  */
-function isBackgroundTurnOpener(message) {
-  return message?.type === 'assistant'
-    || message?.type === 'stream_event'
-    || message?.type === 'user';
-}
 
 export async function runSession({
   sessionId,
@@ -326,7 +324,11 @@ export async function runSession({
 
   // MCP server 实例落变量：开局契约自检要从**传给 query 的同一个实例**上取预期
   // 工具名（server.toolNames，见 mcp/index.js）——不另立第二份清单。
-  const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx });
+  // 常驻角色名册：一会话一份，hooks 与 MCP 工具共用同一引用（见 cast.js createRoleRoster）
+  const roleRoster = createRoleRoster();
+  // 项目模式（08-27）：启动时读一次（切换下个会话生效），同一读数喂工具面（mode-profile.js）和提示词面（nd:mode 分区），两面不岔开
+  const projectMode = (projectId ? getProject(projectId)?.mode : null) || 'design';
+  const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx, roleRoster, projectMode });
 
   // npm 缓存 + 沙盒可写 tmp（$TMPDIR / pip 缓存）：细节与教训见 isolation.js
   const agentDirs = await prepareAgentDirs({ dataRoot: PROJECTS_DATA_ROOT, projectId, sessionId });
@@ -433,8 +435,13 @@ export async function runSession({
         const owner = projectId ? getUserById(getProject(projectId)?.ownerId) : null;
         // 档位按模型通路取旋钮（08-20 两旋钮：订阅 / 本地与中转），model 是上面已解析的会话模型
         // 无主项目 fail-closed 到 tier.js 的默认（strict），别落 loose（生产 08-21 实查 0 个无主项目）
+        // locale：项目 owner 在账号上记的界面语言。null（没表过态）时 renderPrelude
+        // 落中文默认 —— 服务端拿不到浏览器语言，这里不猜，猜错比给中文更糟。
         return renderPrelude(owner ? levelFor(owner, model) : defaultModerationLevel(null), {
           uncensored: isUncensoredModel(model),
+          locale: owner?.locale || undefined,
+          // 项目模式分区（nd:mode 标记块）—— 跟工具面用的是同一次读数，两面不会岔开
+          mode: projectMode,
         });
       })(),
     },
@@ -592,6 +599,7 @@ export async function runSession({
         ...isolation,
         settings: mergeAgentSettings(isolation.settings, {
           skipWebFetchPreflight: platform.skipWebFetchPreflight, sharedRoot,
+          crossSessionInbound: 'refuse',   // 理由见 memory-config.js 那个键的注释
         }),
       };
     })(),
@@ -602,7 +610,7 @@ export async function runSession({
 
     // projectId 要传：PostToolUseFailure 记问题库时用它标归属（漏传的话
     // issues 行的 project_id 全是 null，事后追不回是哪个项目踩的）
-    hooks: createHooks({ ctx: sharedCtx, workspaceRoot: wsRoot, sharedRoot, sessionId, projectId }),
+    hooks: createHooks({ ctx: sharedCtx, workspaceRoot: wsRoot, sharedRoot, sessionId, projectId, roleRoster }),
 
     mcpServers: {
       // 键名 = 模型眼里的 `mcp__<名>__<工具>` 前缀，也是 isolation.js 那条
@@ -742,8 +750,8 @@ export async function runSession({
     await commitWorkspace(projectId, sessionId, `turn ${status}: ${new Date().toISOString()}`, { author: 'agent' })
       .catch((err) => console.warn('[git] turn commit failed:', err.message));
 
-    // 黑板草稿兜底落定（2026-08-23）：agent 这一轮 sketch_on_board 留下的 staging
-    // 物件，没调 finish_sketch 也在回合结束时变实 —— 草稿态是"正在画"的信号，
+    // 黑板草稿兜底落定（2026-08-23）：agent 这一轮 write_on_board 画图留下的 staging
+    // 物件，没调 edit_board commit 也在回合结束时变实 —— 草稿态是"正在画"的信号，
     // 回合都结束了还半透明就是幽灵。取消/出错同样落定：画了就是画了。
     if (projectId) {
       try {
@@ -995,6 +1003,7 @@ export async function runSession({
     unregisterIngressSession(sessionId);   // API 会话的 fast 兜底路由配对注销（订阅会话 noop）
     unregisterSessionNotice(sessionId, noticeHandler);   // ingress → 会话的通知通道配对注销（按身份，别删掉新会话的）
     takeUpstreamTruncation(sessionId);     // 半截标记跟会话同生命周期，别留
+    clearSessionFlights(sessionId); clearStageStatus(projectId); clearBeatState(sessionId);   // 在飞台账 + 台上一览 + 收尾闸记账，都跟会话同寿命
     // 带 token 比对：sid 若已被新 register 占用（closeQuerySession 已同步让位 +
     // 用户重发起新 runSession），unregister 看到 _token 不匹配 → noop 不误删新 entry
     unregisterQuerySession(sessionId, sessionToken);

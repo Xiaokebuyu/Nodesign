@@ -13,9 +13,37 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { detectKind, digest, fetchEntries } from '../../../lib/tavern-json.js';
+import { detectKind, digest, fetchEntries, extractCardFromPng, listBookEntries } from '../../../lib/tavern-json.js';
 
 const MAX_FETCH_CHARS = 24_000;
+
+/**
+ * 世界书条目表。四方世界卡这种 570 条的怪物逐条带引子会刷出上千行 ——
+ * 超过 80 条就转紧凑档：常驻的全列（那是要人工挑进 CLAUDE.md 的），
+ * 触发的只报名字+触发词不带引子，并指路 export_book 一步落盘。
+ */
+function 渲染世界书(条目, 标题) {
+  const L = [标题 + '：'];
+  const compact = 条目.length > 80;
+  const 常驻 = 条目.filter(e => e.常驻 && !e.停用);
+  const 触发 = 条目.filter(e => !e.常驻 && !e.停用);
+  const 停用数 = 条目.filter(e => e.停用).length;
+  if (compact) {
+    L.push(`启用 ${常驻.length + 触发.length}（常驻 ${常驻.length} / 触发 ${触发.length}）· 停用 ${停用数}`);
+    L.push('');
+    L.push(`常驻条目（每轮在场的候选 —— 逐条人工过：内容进 CLAUDE.md，引擎件不搬）：`);
+    for (const e of 常驻) L.push(`- ${e.名字}  ${e.字数}字`);
+    L.push('');
+    L.push(`触发条目 ${触发.length} 条（名字｜触发词）——别逐条 fetch，用 mode="export_book" 一步落成 世界书/ 文件：`);
+    for (const e of 触发) L.push(`- ${e.名字} ｜ ${e.触发.slice(0, 4).join(' ')}`);
+  } else {
+    for (const e of 条目) {
+      L.push(`- ${e.名字}  ${e.常驻 ? '常驻' : `触发[${e.触发.join(' ')}]`} ${e.字数}字${e.停用 ? ' (停用)' : ''}`);
+      if (e.引子) L.push(`    ${e.引子}…`);
+    }
+  }
+  return L.join('\n');
+}
 
 function 渲染摘要(d, 文件名) {
   const L = [];
@@ -46,17 +74,11 @@ function 渲染摘要(d, 文件名) {
     if (d.开场白备选) L.push(`- alternate_greetings  ${d.开场白备选} 条备选开场白`);
     if (d.世界书.length) {
       L.push('');
-      L.push(`内嵌世界书 ${d.世界书.length} 条：`);
-      for (const e of d.世界书) {
-        L.push(`- ${e.名字}  ${e.常驻 ? '常驻' : `触发[${e.触发.join(' ')}]`} ${e.字数}字${e.停用 ? ' (停用)' : ''}`);
-      }
+      L.push(渲染世界书(d.世界书, `内嵌世界书 ${d.世界书.length} 条`));
     }
   } else {
-    L.push(`酒馆世界书：${文件名}，${d.条目.length} 条`);
-    for (const e of d.条目) {
-      L.push(`- ${e.名字}  ${e.常驻 ? '常驻' : `触发[${e.触发.join(' ')}]`} ${e.字数}字${e.停用 ? ' (停用)' : ''}`);
-      if (e.引子) L.push(`    ${e.引子}…`);
-    }
+    L.push(`酒馆世界书：${文件名}`);
+    L.push(渲染世界书(d.条目, `${d.条目.length} 条`));
   }
   L.push('');
   L.push('要正文就再调一次本工具：mode="fetch"，entries=["名字或名字的一部分", …]。');
@@ -80,10 +102,18 @@ Two steps:
 2. mode "fetch" with entries[] — full text of just the ones you picked (name,
    partial name, or id). Capped at ${MAX_FETCH_CHARS} chars per call.
 
-This tool only reads. Turning a preset into 编排.yaml + 设定 files is your job —
-you decide the grouping, and you drop what does not belong (markers are filled by
-酒馆 at runtime and have no place here; platform-specific jailbreak sections are
-pointless on this platform).`,
+Also reads **PNG character cards** directly (V2 chara / V3 ccv3 embedded data) —
+point path at the .png, no conversion needed.
+
+mode "export_book" is the one writing mode: dumps every enabled lorebook entry to
+workspace files in one call (triggered entries one file each with trigger keys in
+frontmatter → grep them before writing a chapter; constant entries under 常驻/ for
+you to curate into CLAUDE.md). Use it for big world cards — hundreds of entries
+must not flow through your context. Judgment stays yours: what goes to CLAUDE.md,
+and dropping 酒馆 engine machinery (MVU variables / HTML status bars / CoT
+frameworks / regex_scripts — this platform has its own 状态板/明骰/记忆). Markers
+are filled by 酒馆 at runtime and have no place here; jailbreak sections are
+pointless on this platform.`,
     {
       path: z.string().describe(
         'Path to the .json. Relative paths resolve against the session workspace, '
@@ -91,12 +121,14 @@ pointless on this platform).`,
       ),
       // ⚠️ 参数名和枚举值一律 ASCII —— 工具 schema 是模型要照着填的东西，
       // 中文键名在这条路上不可靠（全仓其他工具也都是 ASCII，别开这个头）
-      mode: z.enum(['digest', 'fetch']).optional()
-        .describe('digest = structure only (default); fetch = full text of the picked entries'),
+      mode: z.enum(['digest', 'fetch', 'export_book']).optional()
+        .describe('digest = structure only (default); fetch = full text of picked entries; export_book = write every enabled lorebook entry to workspace files (triggered ones one file each with keys in frontmatter, constant ones under 常驻/) — the mechanical half of an import, judgment stays yours'),
       entries: z.array(z.string()).optional()
         .describe('For mode="fetch": entry names (partial match ok) or ids'),
+      out: z.string().max(120).optional()
+        .describe('For mode="export_book": target folder, workspace-relative (default 世界书)'),
     },
-    async ({ path: rel, mode = 'digest', entries = [] }) => {
+    async ({ path: rel, mode = 'digest', entries = [], out }) => {
       const fail = (text) => ({ content: [{ type: 'text', text }], isError: true });
       try {
         const raw = String(rel || '').trim();
@@ -112,8 +144,15 @@ pointless on this platform).`,
         if (!abs) return fail(`File not found: ${raw}\nLooked in:\n${candidates.map(c => `  ${c}`).join('\n')}`);
 
         let doc;
-        try { doc = JSON.parse(await fs.readFile(abs, 'utf8')); } catch (e) {
-          return fail(`这个文件不是合法 JSON：${e.message}`);
+        const buf = await fs.readFile(abs);
+        if (buf.length > 3 && buf.readUInt32BE(0) === 0x89504e47) {
+          // 酒馆的卡就是一张 PNG（V3 ccv3 / V2 chara 藏在 tEXt 块里）
+          doc = extractCardFromPng(buf);
+          if (!doc) return fail('这张 PNG 里没有角色卡数据（tEXt 块无 ccv3/chara）——它可能只是普通图片。');
+        } else {
+          try { doc = JSON.parse(buf.toString('utf8')); } catch (e) {
+            return fail(`这个文件不是合法 JSON：${e.message}`);
+          }
         }
         const kind = detectKind(doc);
         if (!kind) {
@@ -132,6 +171,35 @@ pointless on this platform).`,
             块.push(`### ${e.名字}${e.角色 ? `  [${e.角色}]` : ''}\n${文}`);
           }
           return { content: [{ type: 'text', text: 块.join('\n\n') }] };
+        }
+
+        if (mode === 'export_book') {
+          const all = listBookEntries(doc);
+          const live = all.filter(e => !e.停用 && e.正文.trim());
+          if (!live.length) return fail('这份文件里没有启用且有正文的世界书条目。');
+          const root = sharedRoot || workspaceRoot;
+          const dirRel = String(out || '世界书').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+          if (!dirRel || dirRel.split('/').some(s2 => s2 === '..' || s2.startsWith('.'))) return fail('out 目录不合法。');
+          const slug = (t) => String(t).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'entry';
+          const used = new Set();
+          let 触发数 = 0; let 常驻数 = 0;
+          for (const e of live) {
+            const sub = e.常驻 ? `${dirRel}/常驻` : dirRel;
+            await fs.mkdir(path.join(root, sub), { recursive: true });
+            let name = slug(e.名字);
+            for (let i = 2; used.has(`${sub}/${name}`); i += 1) name = `${slug(e.名字)}-${i}`;
+            used.add(`${sub}/${name}`);
+            const fm = ['---', 'nd: lore',
+              `keys: ${JSON.stringify(e.触发)}`,
+              `constant: ${e.常驻}`, `source: ${path.basename(abs)}`, '---', '', e.正文.trim(), ''];
+            await fs.writeFile(path.join(root, sub, `${name}.md`), fm.join('\n'), 'utf8');
+            if (e.常驻) 常驻数 += 1; else 触发数 += 1;
+          }
+          return { content: [{ type: 'text', text:
+            `Exported ${live.length} entries → ${dirRel}/：触发 ${触发数} 条（一条一文件，frontmatter 带 keys —— `
+            + `每章动笔前拿本章的人名/地名/物件 grep 这个目录，命中就 Read）；常驻 ${常驻数} 条在 ${dirRel}/常驻/`
+            + `（逐条人工过：世界观内容挑十条以内进 CLAUDE.md，MVU/状态栏/CoT/回复格式这类酒馆引擎件不搬 —— `
+            + `平台有自己的状态板/明骰/记忆）。停用条目已跳过。` }] };
         }
 
         return { content: [{ type: 'text', text: 渲染摘要(digest(doc), path.basename(abs)) }] };

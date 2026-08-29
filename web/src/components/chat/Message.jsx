@@ -11,6 +11,8 @@ import { useGlobalStore } from '../../stores/globalStore.js';
 import { Turn, Sessions } from '../../lib/api.js';
 import TimelineNode from './TimelineNode.jsx';
 import { getToolIcon, isSubagentTool } from './tool-icons.js';
+import { parseAnnotationMessage, annotationTargets } from '../../lib/annotation-message.js';
+import AnnotationNote from './AnnotationNote.jsx';
 import { useTimelinePosition } from './TimelineGroupContext.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
 
@@ -164,6 +166,29 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
   const confirm = useGlobalStore(s => s.confirm);
   const [hover, setHover] = useState(false);
   const [busy, setBusy] = useState(false);
+  // 画布标注那条：机械描述默认折起来，见下面 anno
+  const [annoOpen, setAnnoOpen] = useState(false);
+
+  // 场务托词（08-28 自动召回无扰化）：nd:gm-nudge 替玩家发的召回请托是机器话，
+  // 不占一整个用户气泡 —— 渲染成一行淡色场记，指令尾巴（SendMessage 那段）不给人看。
+  const plainText = typeof message.content === 'string' ? message.content : '';
+  if (plainText.startsWith('【场务】')) {
+    return (
+      <div style={{ fontSize: 12, opacity: 0.55, padding: '2px 8px', fontStyle: 'italic' }}>
+        {plainText.split('——')[0]}
+      </div>
+    );
+  }
+
+  /**
+   * 画布标注（2026-08-28 用户报「完整的附加内容都被显示在侧边栏」）：
+   * 用户在板上圈一段字回话，前端拼的那条里有路径、作者、原文摘录、reply_to 指令 ——
+   * 那些是**给 agent 的**（它要靠它们接线程），发出去的内容一个字不动；
+   * 但侧边栏原样显示，用户自己那句话淹在机械里。这里只管显示：机械折起来，
+   * 留一行小字说标了什么，点开能看全。拆分判据在 lib/annotation-message.js（有单测）。
+   */
+  const anno = parseAnnotationMessage(plainText);
+  const annoWhat = anno ? annotationTargets(anno.desc) : [];
 
   const canUndo = !!(projectId && sessionId && message.id && UUID_RE.test(message.id));
 
@@ -235,16 +260,20 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
           {busy ? '回滚中...' : '回到此处'}
         </button>
       )}
-      <div style={{
-        maxWidth: '85%',
-        background: COLOR.btn, color: COLOR.btnText,
-        padding: `${GAP.md}px ${GAP.lg}px`,
-        borderRadius: 14,
-        fontFamily: FONT_SANS, fontSize: FONT_SIZE.base,
-        lineHeight: 1.5,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-      }}>{message.content}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', maxWidth: '85%', minWidth: 0 }}>
+        {anno && (
+          <AnnotationNote desc={anno.desc} what={annoWhat} open={annoOpen} onToggle={() => setAnnoOpen((v) => !v)} />
+        )}
+        <div style={{
+          background: COLOR.btn, color: COLOR.btnText,
+          padding: `${GAP.md}px ${GAP.lg}px`,
+          borderRadius: 14,
+          fontFamily: FONT_SANS, fontSize: FONT_SIZE.base,
+          lineHeight: 1.5,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}>{anno ? anno.text : message.content}</div>
+      </div>
     </div>
   );
 }
@@ -1511,12 +1540,19 @@ function ToolMessage({
       ? taskSummaryLog
       : (taskSummary ? [taskSummary] : []);
     const resultText = subagentResult?.lastAssistantMessage || null;
+    // ⚠️ 常驻角色（rp-*）跟干活型子代理在这儿的语义**相反**：
+    // 干活型会结束，所以"转圈 = 在跑"成立；常驻角色**按设计永不收回合**
+    //（见 mcp/tools/role-inbox.js 的散场闸），task_notification(completed) 永远不来，
+    // 于是时间轴上留一个永远转的圈，读起来像"卡住了"。
+    // 角色的动静不在这条流水里 —— 在画布精灵和侧栏那行台上提示上。这里只记一次上场。
+    const isRole = typeof agentName === 'string' && agentName.startsWith('rp-');
     const statusLabel = taskStatus === 'completed' ? '完成'
       : taskStatus === 'failed' ? '失败'
       : taskStatus === 'stopped' ? '已停止'
+      : isRole ? '在台上'
       : isRunning ? (taskSummary || taskLastTool || '工作中…') : null;
     return (
-      <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning}>
+      <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning && !isRole}>
         <button
           onClick={() => setOpen(o => !o)}
           style={{
@@ -1527,7 +1563,7 @@ function ToolMessage({
           }}
           title={taskDescription || toolName}
         >
-          <span className={isRunning ? 'nd-shimmer' : undefined} style={{ fontWeight: 500, flexShrink: 0 }}>
+          <span className={isRunning && !isRole ? 'nd-shimmer' : undefined} style={{ fontWeight: 500, flexShrink: 0 }}>
             {agentName}
           </span>
           {taskDescription && (

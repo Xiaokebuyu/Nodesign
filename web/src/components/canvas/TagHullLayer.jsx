@@ -13,7 +13,7 @@ import { PAPER } from '../../lib/paper.js';
 
 const PAD = 18;
 
-export default function TagHullLayer({ positioned }) {
+export default function TagHullLayer({ positioned, onGrab, onMenu }) {
   const hulls = useMemo(() => {
     const byTag = new Map();
     for (const o of positioned || []) {
@@ -44,13 +44,25 @@ export default function TagHullLayer({ positioned }) {
           border: `1px dashed ${alpha(CANVAS.brass, h.staging ? 0.22 : 0.38)}`,
           background: alpha(CANVAS.brass, h.staging ? 0.018 : 0.035),
           zIndex: 0,
-        }}>
-          <span style={{
-            position: 'absolute', left: 10, top: -9, padding: '0 6px',
+        }} />
+      ))}
+      {hulls.map(h => (
+        <span
+          key={`chip:${h.tag}`}
+          // 小标是整组的抓手（08-25 用户提「整 tag 一起移动」）：按住拖 = 选中
+          // 整组并整体挪。⚠️ chip 必须单独渲染在卡片层之上 —— 塞在 zIndex 0 的
+          // 包络 div 里会被上层吃指针的东西盖住，按不到（08-25 探针实锤）
+          // 所有键都截停冒泡（右键不截的话平移层 setPointerCapture 会把 contextmenu
+          // 重定向走 —— 跟板书双击武装同一个 capture 家族）；只有左键起整组拖
+          onPointerDown={onGrab ? (e) => { e.stopPropagation(); if (e.button === 0) onGrab(h.tag, e); } : undefined}
+          onContextMenu={onMenu ? (e) => { e.stopPropagation(); onMenu(h.tag, e); } : undefined}
+          style={{
+            position: 'absolute', left: h.x + 10, top: h.y - 9, padding: '0 6px',
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.xxs, color: alpha(PAPER.ink2, 0.75),
-            background: PAPER.wall, borderRadius: 6, lineHeight: '16px',
+            background: PAPER.wall, borderRadius: 6, lineHeight: '16px', zIndex: 58,
+            border: `1px dashed ${alpha(CANVAS.brass, 0.3)}`,
+            ...(onGrab ? { pointerEvents: 'auto', cursor: 'grab', touchAction: 'none' } : { pointerEvents: 'none' }),
           }}>#{h.tag}</span>
-        </div>
       ))}
     </>
   );

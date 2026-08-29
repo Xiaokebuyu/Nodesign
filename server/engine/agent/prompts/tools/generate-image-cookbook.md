@@ -43,7 +43,7 @@
 
 | 主体 | 来源 | 触发动作 |
 |---|---|---|
-| 用户上传素材（`assets/*.png\|jpg`）| 直接用 | 把路径喂 `referenceImages[]` |
+| 用户上传素材（`用户内容/*.png\|jpg`，老项目在 `assets/`）| 直接用 | 把路径喂 `referenceImages[]` |
 | 模型脑里有的著名实体（Apple Park / Wong Kar-wai 风 / 艺术流派）| 不必 reference | prompt 直接点名 |
 | **真实存在但模型不熟**（最新发布产品 / 小众品牌 / 用户自有 IP / 特定型号设备）| **`web_search { include_images:true }`** | 工具自动翻英文 + 下载到 `assets/references/`；选 1-2 张最切题的 `local_path` 喂 `referenceImages[]` |
 | 抽象概念 / 装饰 / 隐喻 | 不需要 reference | 直接 prompt |
@@ -241,7 +241,7 @@ Avoid: <底线级禁令>
 |---|---|
 | **风格一致（跨页锚）** | 第 1 张 cover 当种子，后续 hero / section-divider 都引它 → 整篇像同一部片子 |
 | **角色一致（多页叙事）** | portrait 跨页引 + 给角色起名（"Maya, the woman in Reference 1"）|
-| **logo / brand 嵌入** | 用户上传 logo 进 `assets/`，prompt 写 "Place the logo from Reference 1 etched into the bottle in Reference 2" |
+| **logo / brand 嵌入** | 用户上传 logo 进 `用户内容/`，prompt 写 "Place the logo from Reference 1 etched into the bottle in Reference 2" |
 | **精修而非重画** | `screenshot_canvas` 截当前页当 reference，配 § G 的模板 |
 | **真实主体锚定** | `web_search { include_images: true }` 拿真图 → 喂进来 + "Use the product in Reference 1 as the subject; render it in [场景]" |
 

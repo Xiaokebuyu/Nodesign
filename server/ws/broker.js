@@ -11,6 +11,7 @@
 import { EventBus } from '../engine/agent/events.js';
 import { attachLiveTurnTracker } from '../engine/runs/live-turn.js';
 import { attachBoardTasklist } from '../engine/runs/board-tasklist.js';
+import { attachBoardSeater } from '../engine/runs/board-seater.js';
 
 /** @type {Map<string, EventBus>} */
 const projectBuses = new Map();
@@ -25,6 +26,8 @@ export function getProjectBus(projectId) {
     attachLiveTurnTracker(bus);
     // 步骤清单镜像成板书 + 每步产物连线（2026-08-23 黑板文化，harness 做不靠 agent 记得）
     attachBoardTasklist(bus, projectId);
+    // 服务端入座（2026-08-25 范式重做④）：本轮新产物 run 收尾一批排座
+    attachBoardSeater(bus, projectId);
     projectBuses.set(projectId, bus);
   }
   return bus;

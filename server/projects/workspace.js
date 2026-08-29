@@ -42,8 +42,9 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mutex } from 'async-mutex-lite';
-import { validateProjectId } from './store.js';
+import { validateProjectId, getProject } from './store.js';
 import { resolveModelContextWindow } from '../engine/agent/model-context.js';
+import { ensureActorSlots } from './workspace-slots.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -87,7 +88,7 @@ export function validateSessionId(sid) {
 }
 
 import {
-  DEFAULT_GITIGNORE, DEFAULT_CLAUDE_MD,
+  DEFAULT_GITIGNORE, DEFAULT_CLAUDE_MD, DEFAULT_CLAUDE_MD_RP,
 } from './workspace-templates.js';
 import { migrateMemoryLayout } from './memory-migration.js';
 
@@ -219,16 +220,11 @@ export function getSessionMetaDir(projectId, sessionId) {
 // ── ensure ──
 
 /**
- * 创建项目工作区（幂等）。完成后保证：
- *   - .claude/{CLAUDE.md, settings.json} 模板写入（仅不存在时）
- *   - .claude/{skills, agents, agent-memory} 目录存在
- *   - assets/ 存在、.gitignore 写入
- *   - 旧的三层结构（tasks/ + per-session 沙盒）已扁平化
- *   - .git 存在（项目级历史；扁平化前是 per-session 的）
- *
- * 扁平化跟着 ensure 走而不是单独一次性脚本：跟 removeRootLegacyArtifacts 同一个
- * 范式 —— 幂等、按项目惰性触发、跑过一次之后是 no-op。这样线上不需要停机窗口，
- * 也不存在"迁移脚本漏了哪个项目"。
+ * 创建项目工作区（幂等）。完成后保证：.claude/{CLAUDE.md, settings.json} 模板
+ * （仅不存在时）、.claude/{skills, agents, agent-memory} 与 assets/ 目录、演员位
+ * 定义、.gitignore、旧三层结构已扁平化、.git 存在（项目级历史）。
+ * 扁平化跟着 ensure 走而不是一次性脚本：幂等、按项目惰性触发、跑过即 no-op ——
+ * 线上不需要停机窗口，也不存在"迁移脚本漏了哪个项目"。
  */
 export async function ensureProjectWorkspace(projectId) {
   await removeRootLegacyArtifacts(projectId);
@@ -239,16 +235,19 @@ export async function ensureProjectWorkspace(projectId) {
   await fs.mkdir(path.join(root, '.claude', 'agent-memory'), { recursive: true });
   await fs.mkdir(path.join(root, 'assets'), { recursive: true });
 
+  // 演员位（2026-08-28 重构）：预注册 RP 子代理定义，必须先于任何会话在盘上（拆件见文件）
+  await ensureActorSlots(root);
+
   // .gitignore 每次比对而不是"不存在才写"：扁平化新增了 .claude/projects/ 和
   // .nd/ 两条，老项目的文件里没有，不补的话 SDK 转录会被 commit 进项目历史。
   await ensureGitignore(path.join(root, '.gitignore'));
-  // 记忆体系改版迁移（2026-08-24，幂等：源不在了就什么都不做）——
-  // CLAUDE.md 从 .claude/ 挪到工作区根（画布可见，SDK 两处都读、根优先级同级），
-  // 老的偏好/风格档案并进去，SDK auto-memory 的存量从 .claude/agent-memory/auto
-  // 搬到画布可见的 记忆/。三步全是"搬走后源删除"，跑几遍结果一样。
+  // 记忆体系改版迁移（2026-08-24，幂等：源不在了就什么都不做；三步全是"搬走后源删除"）
+  // —— CLAUDE.md 挪工作区根、旧偏好/风格档案并入、auto-memory 存量搬 记忆/。细节见函数文档。
   await migrateMemoryLayout(root, { fileExists });
   if (!(await fileExists(path.join(root, 'CLAUDE.md')))) {
-    await fs.writeFile(path.join(root, 'CLAUDE.md'), DEFAULT_CLAUDE_MD, 'utf8');
+    // rp 项目的档案按"戏"设栏（templates 注释）；已有 CLAUDE.md 的一字不动，用户内容优先于模板换代
+    const isRp = (getProject(projectId)?.mode || 'design') === 'rp';
+    await fs.writeFile(path.join(root, 'CLAUDE.md'), isRp ? DEFAULT_CLAUDE_MD_RP : DEFAULT_CLAUDE_MD, 'utf8');
   }
   // settings.json：每次 merge defaults 让代码层 default 升级时现存 project 自动跟上
   // （用户字段优先，缺失的 NoDesign default 字段补进去）

@@ -106,7 +106,19 @@ export const FONT_SIZE = {
 // ─── Font Families ────────────────────────────────
 
 // 楷体：全站正文。@font-face 在 styles/globals.css，全局只声明一次
-export const FONT_KAI = "'LXGW WenKai ND', 'LXGW WenKai', '霞鹜文楷', serif";
+// emoji 回落（2026-08-25 板书豆腐块案）：楷体/龙藏都没有 emoji 字形，栈里不列
+// emoji 字体的话 🎲✅⏳ 全渲成豆腐块 —— 挂在 serif 之前，只接管 emoji 码位。
+export const FONT_EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji'";
+// 'LXGW WenKai Screen' 排在本地装的那两个名字后面、serif 前面（2026-08-29）：
+// ND 是我们自己切的两级字集（首屏 52KB + 全站 220KB，覆盖 web/src 里所有会上屏的
+// 汉字），用户自己打的字（项目名、文件名）超出去的由 Screen 兜住 —— 它是 npm 包
+// 按需分片的全量字库，**不兜的话就直接掉到系统宋体**，一行里楷体宋体混排。
+// ⚠️ Screen 是另一刀：实测墨量比 Regular 重 20%（跟 Bold 一个量级），所以只当最后
+// 一道网，不当主力；界面文案要留在 ND 里（font-subset.lint.test.js 钉着覆盖率）。
+export const FONT_KAI = `'LXGW WenKai ND', 'LXGW WenKai', '霞鹜文楷', 'LXGW WenKai Screen', ${FONT_EMOJI}, serif`;
+// 阅读体（08-27）：屏幕优化版文楷，**全量字库**按需分片加载 —— 板书/长文正文用它；
+// 门面字（标题/UI）仍走 FONT_KAI（52KB 子集秒显）。
+export const FONT_READ = `'LXGW WenKai Screen', 'LXGW WenKai ND', '霞鹜文楷', ${FONT_EMOJI}, serif`;
 // 等宽：**机器写的东西**才用（文件名、id、token 数、终端输出、时间码）
 export const FONT_MONO = "'SF Mono', 'Cascadia Code', 'Menlo', monospace";
 // FONT_SANS 指向楷体：269 处正文因此一次性归位。名字保留是为了不动那 269 个调用点，

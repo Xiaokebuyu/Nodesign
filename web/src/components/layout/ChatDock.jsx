@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { PAPER, PAPER_SHADOW, GRAIN } from '../../lib/paper.js';
 import EdgeTab, { TAB_LEN } from '../ui/EdgeTab.jsx';
 import { useViewportWidth, useMedia, COARSE } from '../../lib/use-media.js';
+import { useDeviceClass } from '../../lib/device-class.js';
+import { MobileSheet, TalkFab } from './MobileShell.jsx';
 import { useGlobalStore } from '../../stores/globalStore.js';
 
 /**
@@ -127,7 +129,21 @@ export default function ChatDock({
     try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch { /* 隐私模式 */ }
   }, [cfg]);
 
-  useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
+  /**
+   * 真正落地的宽度：窄屏上按视口铺满，但**永远给贴纸留出 TAB_LANE 那一条**。
+   * 用户拖出来的 cfg.width 原样存着（换回宽屏还是他调的那个数），这里只钳显示值。
+   * ⚠️ 算在这么靠上是因为下面那条 onOpenChange 要报它，而报的那条不能挪到
+   * 手机档那个提前 return 之后（hook 不许有条件地跑）。
+   */
+  const width = Math.min(cfg.width, Math.max(240, vw - (coarse ? TAB_LANE : EDGE_GAP * 2)));
+
+  /**
+   * 报「开没开」的同时报「占了多宽」（2026-08-29 外壳第四刀）。
+   * 平板上调用方要靠这个数把画布区让出来 —— 810 宽的屏上卡一开就压住工具栏
+   * 右半边（真机量到：卡从 x=422 起，工具栏占 113-697）。桌面屏够宽不犯，
+   * 所以让不让位由调用方按设备档决定，这儿只负责把数报准。
+   */
+  useEffect(() => { onOpenChange?.(open, open ? width : 0); }, [open, width, onOpenChange]);
 
   // ── 程序化唤出：就地标注/圈选发送（openChatDock）、要把光标放进输入框
   //   （focusComposer —— 对着收起的卡聚焦是空操作，所以它隐含"先出来"）。
@@ -246,11 +262,34 @@ export default function ChatDock({
 
   const { side, pinned } = cfg;
   const togglePin = () => setCfg(c => ({ ...c, pinned: !c.pinned }));
+
   /**
-   * 真正落地的宽度：窄屏上按视口铺满，但**永远给贴纸留出 TAB_LANE 那一条**。
-   * 用户拖出来的 cfg.width 原样存着（换回宽屏还是他调的那个数），这里只钳显示值。
+   * ── 手机档：换一层皮，内容一行不动（2026-08-29 外壳第二刀）──
+   *
+   * 上面那整套（贴屏缘 10px 停 150ms 召唤 / 300ms 离开自动收 / 宽度把手 /
+   * 图钉）都是为鼠标和宽屏写的。手机上它们各自的坏法：
+   *   召唤   没有 hover，只能靠 08-21 补的那枚边缘贴纸
+   *   位置   贴右缘 = 离拇指最远，而窄屏上它已经被钳成几乎满宽，「卡」名存实亡
+   *   图钉   "不自动收"在没有 hover 的地方本来就没有对立面
+   *
+   * 换成：底部抽屉（从拇指的方向来）+ 一颗「跟它说话」的钮。
+   * ⭐ children 是 render prop，内容（ChatPanel 那 20 个入参）全在调用方手里 ——
+   * 这一刀只换容器，**一份逻辑照旧只有一份**。pinned 传 true / onTogglePin 传
+   * null：手机上没有"自动收"这回事，那颗图钉没有对立面，ChatPanel 见 null 自然不画。
    */
-  const width = Math.min(cfg.width, Math.max(240, vw - (coarse ? TAB_LANE : EDGE_GAP * 2)));
+  const phone = useDeviceClass() === 'phone';
+  if (phone) {
+    return (
+      <>
+        <TalkFab onClick={() => setOpen(true)} hidden={open} />
+        <MobileSheet open={open} onClose={() => setOpen(false)} label={title || '对话'}>
+          {typeof children === 'function'
+            ? children({ collapse: () => setOpen(false), pinned: true, onTogglePin: null })
+            : children}
+        </MobileSheet>
+      </>
+    );
+  }
 
   // 收起 ≠ 卸载：草稿在 ChatComposer 的本地 state 里（滚动位置、子代理 tab
   // 同理），卸载 = 用户没发出去的话被吹掉。所以关着的时候是**平移出屏**：
@@ -283,6 +322,7 @@ export default function ChatDock({
       />}
       <div
         ref={rootRef}
+        data-chat-card
         onPointerEnter={clearHide}
         // 只认鼠标：触屏的 pointerleave 在**手指抬起**时也会发，一视同仁的话
         // 在卡里划一下消息就把卡收了

@@ -3,6 +3,7 @@
  * （2026-08-14 可维护性行动：从 hooks.js 原样迁出，语义零改动）
  */
 import { Events } from '../events.js';
+import { noteSubagentStart, noteSubagentStop } from '../subagent-flight.js';
 import { getQuery } from '../../runs/active-runs.js';
 import { listWorkspaceArtifacts } from '../../../lib/artifact-target.js';
 import { resetTurnMemory } from './turn-state-memory.js';
@@ -161,9 +162,11 @@ export function makePostCompactHandler({ ctx: _ctx, workspaceRoot: _ws, sessionI
  *
  * Phase 2 仅 emit；不注入 additionalContext（子代理刚启动还没产出，注啥都早）。
  */
-export function makeSubagentStartHandler({ ctx }) {
+export function makeSubagentStartHandler({ ctx, sessionId = null }) {
   return async (input, _toolUseId, _options) => {
     try {
+      // 在飞台账：ws 的 grace 闸靠它认「后台角色还在写」，别把人腰斩（subagent-flight.js）
+      noteSubagentStart(sessionId, input.agent_id, input.agent_type);
       ctx.emit(Events.subagentStart(input.agent_id, input.agent_type));
     } catch (err) {
       console.warn(`[hooks/SubagentStart] handler threw:`, err.message);
@@ -186,9 +189,10 @@ export function makeSubagentStartHandler({ ctx }) {
  * 只能返回通用 SyncHookJSONOutput（continue/decision/systemMessage）。
  * 这里只 emit 不返 specific 输出，符合规范。
  */
-export function makeSubagentStopHandler({ ctx }) {
+export function makeSubagentStopHandler({ ctx, sessionId = null }) {
   return async (input, toolUseId, _options) => {
     try {
+      noteSubagentStop(sessionId, input.agent_id);
       ctx.emit(Events.subagentStop(
         input.agent_id,
         input.agent_type,

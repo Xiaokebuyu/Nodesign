@@ -2,7 +2,12 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import AuthGate from './components/AuthGate.jsx';
+import { useGlobalStore } from './stores/globalStore.js';
 import './styles/globals.css';
+// 阅读体（08-27 用户提「画布上大量内容不适合阅读」）：霞鹜文楷屏幕版全量分片，
+// unicode-range 按需加载 —— 此前打的 52KB 文楷子集只够门面字，板书正文大半
+// 落在回退链的系统宋体上，难读的根源是混排不是文楷本身
+import 'lxgw-wenkai-screen-webfont/lxgwwenkaiscreen.css';
 import { lockZoom } from './lib/lock-zoom.js';
 
 /**
@@ -47,10 +52,27 @@ window.addEventListener('unhandledrejection', (e) => {
 // 手机上关掉整页缩放（桌面无效果，见 lib/lock-zoom.js）
 lockZoom();
 
-createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <AuthGate>
+/**
+ * 换语言 = 整棵树重挂（2026-08-26 i18n）
+ *
+ * `t()` 是模块级函数不是 hook（纯数据模块 canvas-menus / board-kinds 在 React 之外
+ * 也要用它），所以 React 不知道它的返回值变了。靠"每个组件自己订阅 locale"是不行的
+ * —— 126 个文件的纪律必然漏，而且漏了的表现是**半棵树还是旧语言**，很难发现。
+ *
+ * 用 key 强制重挂：一行覆盖全站，不需要任何组件配合。代价是切语言时丢组件内 state
+ * （展开的面板、没提交的输入框）—— 换语言本来就是个罕见的、明确的动作，可以接受。
+ */
+function Root() {
+  const locale = useGlobalStore((s) => s.locale);
+  return (
+    <AuthGate key={locale}>
       <App />
     </AuthGate>
+  );
+}
+
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <Root />
   </StrictMode>,
 );

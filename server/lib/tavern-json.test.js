@@ -96,3 +96,84 @@ describe('按需取正文', () => {
     expect(fetchEntries(预设, [])).toEqual([]);
   });
 });
+
+/** PNG 卡（08-25 四方世界卡案）：tEXt 块里的 ccv3/chara base64 */
+describe('extractCardFromPng', () => {
+  const pngWith = (key, obj) => {
+    const payload = Buffer.from(`${key}\0${Buffer.from(JSON.stringify(obj)).toString('base64')}`, 'latin1');
+    const chunk = (type, data) => {
+      const b = Buffer.alloc(12 + data.length);
+      b.writeUInt32BE(data.length, 0); b.write(type, 4, 'latin1');
+      data.copy(b, 8); b.writeUInt32BE(0, 8 + data.length);   // CRC 不校验
+      return b;
+    };
+    return Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk('tEXt', payload), chunk('IEND', Buffer.alloc(0)),
+    ]);
+  };
+
+  it('ccv3 解出 V3 卡；chara 解出 V2；普通 PNG 返回 null', async () => {
+    const { extractCardFromPng } = await import('./tavern-json.js');
+    const v3 = { spec: 'chara_card_v3', data: { name: '试', first_mes: '嗨' } };
+    expect(extractCardFromPng(pngWith('ccv3', v3))?.spec).toBe('chara_card_v3');
+    const v2 = { spec: 'chara_card_v2', data: { name: '旧', first_mes: '好' } };
+    expect(extractCardFromPng(pngWith('chara', v2))?.spec).toBe('chara_card_v2');
+    const plain = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])]);
+    expect(extractCardFromPng(plain)).toBeNull();
+    expect(extractCardFromPng(Buffer.from('not a png'))).toBeNull();
+  });
+
+  it('listBookEntries：带正文、常驻/停用/触发词齐', async () => {
+    const { listBookEntries } = await import('./tavern-json.js');
+    const doc = { spec: 'chara_card_v3', data: { first_mes: 'x', character_book: { entries: [
+      { comment: '夏季', keys: ['夏季', '夏至祭'], constant: false, enabled: true, content: '夏天的事' },
+      { comment: '主规则', keys: [], constant: true, enabled: true, content: '规则' },
+      { comment: '停用的', keys: ['x'], enabled: false, content: '别搬' },
+    ] } } };
+    const list = listBookEntries(doc);
+    expect(list.length).toBe(3);
+    expect(list[0]).toMatchObject({ 名字: '夏季', 触发: ['夏季', '夏至祭'], 常驻: false, 停用: false, 正文: '夏天的事' });
+    expect(list[1].常驻).toBe(true);
+    expect(list[2].停用).toBe(true);
+  });
+});
+
+/** export_book：机械搬运档（判断归 agent，搬运归机器） */
+describe('read_tavern_json export_book', () => {
+  it('触发条目一条一文件带 keys，常驻进 常驻/，停用跳过', async () => {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const os = await import('node:os');
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-exportbook-'));
+    await fs.writeFile(path.join(tmp, 'book.json'), JSON.stringify({ entries: [
+      { comment: '夏季', keys: ['夏季', '夏至祭'], constant: false, enabled: true, content: '夏天的事' },
+      { comment: '世界总纲', keys: [], constant: true, enabled: true, content: '总纲正文' },
+      { comment: '停用的', keys: ['x'], enabled: false, content: '别搬' },
+    ] }), 'utf8');
+    const { makeReadTavernJsonTool } = await import('../engine/mcp/tools/read-tavern-json.js');
+    const t = makeReadTavernJsonTool({ workspaceRoot: tmp, sharedRoot: tmp });
+    const r = await t.handler({ path: 'book.json', mode: 'export_book' });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toContain('触发 1 条');
+    const trig = await fs.readFile(path.join(tmp, '世界书/夏季.md'), 'utf8');
+    expect(trig).toContain('keys: ["夏季","夏至祭"]');
+    expect(trig).toContain('夏天的事');
+    const cst = await fs.readFile(path.join(tmp, '世界书/常驻/世界总纲.md'), 'utf8');
+    expect(cst).toContain('constant: true');
+    const all = await fs.readdir(path.join(tmp, '世界书'));
+    expect(all.some(n => n.includes('停用'))).toBe(false);
+  });
+
+  it('out 目录不许越界', async () => {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const os = await import('node:os');
+    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-exportbook2-'));
+    await fs.writeFile(path.join(tmp, 'b.json'), JSON.stringify({ entries: [{ comment: 'a', keys: ['a'], enabled: true, content: 'x' }] }), 'utf8');
+    const { makeReadTavernJsonTool } = await import('../engine/mcp/tools/read-tavern-json.js');
+    const t = makeReadTavernJsonTool({ workspaceRoot: tmp, sharedRoot: tmp });
+    const r = await t.handler({ path: 'b.json', mode: 'export_book', out: '../逃逸' });
+    expect(r.isError).toBe(true);
+  });
+});

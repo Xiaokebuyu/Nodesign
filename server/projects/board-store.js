@@ -20,15 +20,16 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { getSharedDir, ensureProjectWorkspace, gitRenamesSince } from './workspace.js';
-import { CHALK_DIR } from '../lib/chalk.js';
+import { CHALK_DIR, trashChalkFile } from '../lib/chalk.js';
 
 export {
   DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS,
 } from './board-limits.js';
 export { TEXT_FONTS } from './board-sanitize.js';
-import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS } from './board-limits.js';
+import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES } from './board-limits.js';
 import {
-  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, isSafeCanvasId,
+  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane, sanitizeRoll,
+  isSafeCanvasId,
 } from './board-sanitize.js';
 
 // 分区自动铺位常数 —— 与前端 BoardCanvas 的 ZONE_* 保持一致（数值约定，非共享代码）
@@ -107,7 +108,14 @@ export function patchBoard(pid, patch) {
         if (!isSafeCanvasId(rawId)) continue;
         const id = fwd(rawId);
         if (o === null) { delete board.objects[id]; removed.add(id); continue; }
-        const s = sanitizeObject(o, board.size);
+        // **合并语义**（2026-08-25）：patch 条目盖在已有条目上，缺席字段保留。
+        // 病根：前端本地 layout 会落后于服务端（board.json 一次性加载闸门），
+        // 入座把 agent 刚写的条目当新客回写一条 {x,y,z} —— 整条替换语义下
+        // by/seat/w/h/tag/staging 全被抹掉且零报错（08-25 体检三陷阱之②）。
+        // 合并后瘦条目只更新它带来的字段。要删整条传 null；单字段清除走
+        // 各自的专用路（commitStaging 清 staging、removeByTag 摘 tag）。
+        const merged = board.objects[id] ? { ...board.objects[id], ...o } : o;
+        const s = sanitizeObject(merged, board.size);
         if (s && (board.objects[id] || Object.keys(board.objects).length < MAX_OBJECTS)) board.objects[id] = s;
       }
     }
@@ -115,12 +123,41 @@ export function patchBoard(pid, patch) {
       for (const [id, b] of Object.entries(patch.bindings)) {
         if (typeof id !== 'string' || id.length > 300) continue;
         if (b === null) { delete board.bindings[id]; continue; }
-        const s = sanitizeBinding(b);
+        // 合并语义同 objects（08-25）：改材质/label 的瘦 patch 别抹掉 follow 等字段
+        const s = sanitizeBinding(board.bindings[id] ? { ...board.bindings[id], ...b } : b);
         if (!s) continue;
         // 端点也要转发：agent 本轮拿旧路径连的线，落下来必须连到新名字上
         const fixed = { ...s, from: fwd(s.from), to: fwd(s.to) };
         if (board.bindings[id] || Object.keys(board.bindings).length < MAX_BINDINGS) board.bindings[id] = fixed;
       }
+    }
+    // 线注册表（08-27 空间规划）：合并语义同 objects；parent 也走改名转发
+    if (patch?.lanes && typeof patch.lanes === 'object') {
+      board.lanes = board.lanes || {};
+      for (const [name, l] of Object.entries(patch.lanes)) {
+        const tag = sanitizeTag(name);
+        if (!tag) continue;
+        if (l === null) { delete board.lanes[tag]; continue; }
+        const s = sanitizeLane(board.lanes[tag] ? { ...board.lanes[tag], ...l } : l);
+        if (!s) continue;
+        const fixed = s.parent ? { ...s, parent: fwd(s.parent) } : s;
+        if (board.lanes[tag] || Object.keys(board.lanes).length < MAX_LANES) board.lanes[tag] = fixed;
+      }
+      if (!Object.keys(board.lanes).length) delete board.lanes;
+    }
+    // 卷（2026-08-27 收纳器）：合并语义同 lanes；null = 展开（删条目）。
+    // 只动状态位不动成员座位 —— 展开即归位靠的就是这里什么都不搬。
+    if (patch?.rolls && typeof patch.rolls === 'object') {
+      board.rolls = board.rolls || {};
+      for (const [name, r] of Object.entries(patch.rolls)) {
+        const tag = sanitizeTag(name);
+        if (!tag) continue;
+        if (r === null) { delete board.rolls[tag]; continue; }
+        const s = sanitizeRoll(board.rolls[tag] ? { ...board.rolls[tag], ...r } : r);
+        if (!s) continue;
+        if (board.rolls[tag] || Object.keys(board.rolls).length < MAX_LANES) board.rolls[tag] = s;
+      }
+      if (!Object.keys(board.rolls).length) delete board.rolls;
     }
     // 主角覆盖：null = 撤销（回到 pickHero 自动推断），字符串 = 显式立主角
     if (patch?.hero !== undefined) {
@@ -205,7 +242,8 @@ export function removeByTag(pid, tag) {
       // 以进程身份删任意文件；sanitize 现在也拒 `..`，这里是第二道闸）
       if (id.startsWith(`${CHALK_DIR}/`)) {
         const abs = chalkAbsPath(pid, id);
-        if (abs) { try { await fs.unlink(abs); } catch { /* 已经没了 */ } }
+        // 软删进 .nd/trash/（08-25：擦掉的板书要捞得回来）
+        if (abs) await trashChalkFile(getSharedDir(pid), abs);
         delete board.objects[id]; gone.add(id); removed += 1; continue;
       }
       delete o.tag;
@@ -214,6 +252,8 @@ export function removeByTag(pid, tag) {
       if (b.tag === t || gone.has(b.from) || gone.has(b.to)) { delete board.bindings[id]; removed += 1; }
     }
     if (board.hero && gone.has(board.hero)) delete board.hero;
+    // 擦组连卷的状态位一起清（收着的组被 erase_group 后不该留一张空卷卡）
+    if (board.rolls?.[t]) { delete board.rolls[t]; if (!Object.keys(board.rolls).length) delete board.rolls; }
     await writeBoard(pid, board);
     return { board, removed };
   });
@@ -451,6 +491,8 @@ export async function reconcileBoardRenames(pid) {
  *    文件夹没坐标（还没被摆过）时就摆到桌面上，前端下一轮会给它安排位置。
  */
 export function pinToZone(pid, { objectId, zoneId = '' }) {
+  // 08-27 审计修：这里是 patchBoard 之外唯一的 objects 写入口，原先没有数量闸 ——
+  // 反复 pin 新 id 可把 board.objects 撑过 MAX_OBJECTS（只剩 2MB 字节兜底）。
   return withBoardLock(pid, async () => {
     const board = await readBoard(pid);
     const now = Date.now();
@@ -494,6 +536,9 @@ export function pinToZone(pid, { objectId, zoneId = '' }) {
     }
     if (!slot) slot = { x: PAD, y: PAD };
 
+    if (!board.objects[oid] && Object.keys(board.objects).length >= MAX_OBJECTS) {
+      throw new Error(`board 已有 ${MAX_OBJECTS} 件，pin 不进新条目（失控兜底，正常用不该撞到）`);
+    }
     const zMax = Math.max(10, ...Object.values(board.objects).map(o => o.z || 0));
     board.objects[oid] = {
       ...(board.objects[oid] || {}),

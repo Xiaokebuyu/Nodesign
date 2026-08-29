@@ -13,6 +13,7 @@
  */
 
 import { Events } from './events.js';
+import { callerOf } from './actor-trail.js';
 import { handleTaskMessage } from './task-events.js';
 import { listWorkspaceArtifacts } from '../../lib/artifact-target.js';
 import { toWorkspaceRel } from '../../lib/workspace-path.js';
@@ -61,6 +62,11 @@ export const DEFAULT_TOOL_ALLOWLIST = [
   'WebFetch',
   'Task',
   'TaskOutput',
+  // 常驻角色（rp-*，见 cast.js）的唯一叫醒方式。SendMessage 是 **deferred 工具**：
+  // 列在这里只是进了可见集，模型还得先 ToolSearch('select:SendMessage') 取 schema
+  // 才能调（2026-08-26 探针实测，主代理和子代理都会自己去取，不用教）。
+  // 漏挂的后果不是报错而是够不着：主代理派出去的角色再也叫不回来。
+  'SendMessage',
   'Skill',
   // deferred MCP 工具的取 schema 入口（ENABLE_TOOL_SEARCH=true 时生效）。
   // 漏挂 = 延迟加载的工具永远调不到（同 Skill 的可见集陷阱）
@@ -108,7 +114,12 @@ export function handleSDKMessage(ctx, msg) {
     // ctx.emit 会解析回 child 自己 → 无限递归（真机爆过 Maximum call stack）
     const base = ctx;
     const child = Object.create(base);
-    child.emit = (evt) => base.emit({ parentToolUseId: parent, ...evt });
+    // actor：这条事件是谁干的（常驻角色的 slug）。parentToolUseId 是**派发那次
+    // Agent 调用**的 id，而派发闸在那一刻按同一个 id 盖过章 —— 查回来就知道
+    // 是哪个角色。画布的在场表据此给每个角色立自己的精灵（不然全算主 agent
+    // 头上，主精灵会在角色写的东西之间瞬移，那正是 08-18 把子代理精灵拆掉的原因）。
+    const actor = callerOf(parent)?.agentType || null;
+    child.emit = (evt) => base.emit({ parentToolUseId: parent, ...(actor ? { actor } : {}), ...evt });
     ctx = child;
   }
 
@@ -364,6 +375,14 @@ function handleAssistantBlocks(ctx, content, skipTextThinking = false) {
 const TOOL_INPUT_STREAM_FIELDS = {
   Edit: 'new_string',
   Write: 'content',
+  // 板书直播（2026-08-25 流式路 A）：write_on_board 的 text 逐 token 流到画布上
+  // 的舞台粉笔卡（StageLayer chalk 档）—— 粉笔字在用户眼前一行行长出来。
+  mcp__nodesign__write_on_board: 'text',
+  // board_batch 批内嵌套（08-25 用户报「流式名存实亡」：skill 教的是一章一次
+  // batch，正文藏在 actions[].input.text 里，顶层字段抽取器抓不到 —— 等于亲手
+  // 教了大家绕开流式）。batch 档抽**最新一条** write_on_board 动作的 text，
+  // 换动作时发 reset 让前端另起一张。
+  mcp__nodesign__board_batch: { batch: 'write_on_board', field: 'text' },
 };
 const TOOL_INPUT_THROTTLE_MS = 120;
 
@@ -373,13 +392,36 @@ function toolInputStreams(ctx) {
 }
 
 
+/** 批内嵌套抽取（纯函数好钉测试）：最新一条 <tool> 动作的 <field> 字符串与它的序号 */
+export function latestBatchField(obj, toolName, field) {
+  const actions = Array.isArray(obj?.actions) ? obj.actions : [];
+  for (let i = actions.length - 1; i >= 0; i -= 1) {
+    const a = actions[i];
+    const name = String(a?.name || '');
+    if ((name === toolName || name.endsWith(`__${toolName}`)) && typeof a?.input?.[field] === 'string') {
+      return { idx: i, text: a.input[field] };
+    }
+  }
+  return null;
+}
+
 function pumpToolInputStream(ctx, st, flush) {
   const now = Date.now();
   if (!flush && now - st.lastEmit < TOOL_INPUT_THROTTLE_MS) return;
   let obj;
   try { obj = parsePartialJson(st.buf, PartialAllow.ALL); } catch { return; }
   if (!obj || typeof obj !== 'object') return;
-  const text = typeof obj[st.field] === 'string' ? obj[st.field] : '';
+  let text = '';
+  let reset = false;
+  if (st.batch) {
+    const hit = latestBatchField(obj, st.batch, st.field);
+    if (hit) {
+      if (st.actionIdx !== hit.idx) { st.actionIdx = hit.idx; st.sent = 0; reset = true; }
+      text = hit.text;
+    }
+  } else {
+    text = typeof obj[st.field] === 'string' ? obj[st.field] : '';
+  }
   // file_path 只在确定流完后才取：容错解析会把半截字符串也带出来，第一拍常
   // 截在路径中间（e2e 撞过：抽到项目目录名 → 前端物件寻址指错）。目标字段的
   // key 出现（键序在 file_path 之后）或对象已有第二个键 = 路径已闭合。
@@ -390,13 +432,14 @@ function pumpToolInputStream(ctx, st, flush) {
   const rawFilePath = !st.filePathSent && pathComplete && typeof obj.file_path === 'string' ? obj.file_path : null;
   const filePath = rawFilePath ? toWorkspaceRel(rawFilePath, ctx.workspace?.root?.()) : null;
   const append = text.length > st.sent ? text.slice(st.sent) : '';
-  if (!append && !filePath && !flush) return;
+  if (!append && !filePath && !flush && !reset) return;
   st.lastEmit = now;
   if (append) st.sent = text.length;
   if (filePath) st.filePathSent = true;
   ctx.emit(Events.deltaToolInput(ctx.counters.turns, st.id, st.name, {
     ...(filePath ? { filePath } : {}),
     ...(append ? { append } : {}),
+    ...(reset ? { reset: true } : {}),
     ...(flush ? { done: true } : {}),
   }));
 }
@@ -425,11 +468,12 @@ function handleStreamEvent(ctx, msg) {
     const cb = evt.content_block;
     if (cb && cb.type === 'tool_use' && cb.id && cb.name) {
       ctx.emit(Events.toolUseStarted(ctx.counters.turns, cb.id, cb.name));
-      const field = TOOL_INPUT_STREAM_FIELDS[cb.name];
-      if (field && Number.isInteger(evt.index)) {
+      const spec = TOOL_INPUT_STREAM_FIELDS[cb.name];
+      if (spec && Number.isInteger(evt.index)) {
+        const conf = typeof spec === 'string' ? { field: spec } : spec;
         toolInputStreams(ctx).set(streamKey, {
-          id: cb.id, name: cb.name, field,
-          buf: '', sent: 0, lastEmit: 0, filePathSent: false,
+          id: cb.id, name: cb.name, field: conf.field, batch: conf.batch || null,
+          actionIdx: -1, buf: '', sent: 0, lastEmit: 0, filePathSent: false,
         });
       }
     }

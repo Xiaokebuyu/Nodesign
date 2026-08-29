@@ -11,7 +11,7 @@
  *
  * frontmatter（只认这几个键，其余原样当正文）：
  *   nd: chalk            标记（没有它就是普通便利贴）
- *   by: agent|user
+ *   by: agent | user | rp-<slug>（常驻角色，2026-08-26）
  *   at: ISO 时间
  *   anchor: <canvas id>  这段话关于谁（落盘时顺手画 annotates 线）
  *   reply_to: <path>     回应哪一条板书（线程）
@@ -19,10 +19,25 @@
  *   session: <sid>       （沿用便利贴的归属字段）
  */
 import path from 'node:path';
+import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 import { promises as fs } from 'node:fs';
 
 export const CHALK_DIR = 'notes/板书';
 const FM_RE = /^---\n([\s\S]{0,800}?)\n---\n?/;
+
+/**
+ * 板书的署名收成三类：`user` / `agent` / 常驻角色的 slug（`rp-*`）。
+ *
+ * 为什么不原样全收：`by` 会被前端拿去显示、被 read_board 拿去分段、将来还要被
+ * 收件箱拿去路由。收任意字符串等于给这几个读者一起开口子（而写这个值的是模型）。
+ * 认不出的一律落回 'agent' —— 老板书没有这个字段，落回去正好是它本来的语义。
+ */
+export function normalizeBy(raw) {
+  const v = String(raw || '').trim();
+  if (v === 'user') return 'user';
+  if (ROLE_SLUG_RE.test(v)) return v;
+  return 'agent';
+}
 
 export function parseChalk(raw) {
   const m = FM_RE.exec(raw);
@@ -35,7 +50,7 @@ export function parseChalk(raw) {
     body,
     sessionId: get('session'),
     chalk: {
-      by: get('by') === 'user' ? 'user' : 'agent',
+      by: normalizeBy(get('by')),
       at: get('at'),
       anchor: get('anchor'),
       replyTo: get('reply_to'),
@@ -77,6 +92,28 @@ export async function writeChalkFile(sharedRoot, fileName, content, { overwrite 
   const abs = path.join(dir, name);
   await fs.writeFile(abs, content, 'utf8');
   return `${CHALK_DIR}/${name}`;
+}
+
+/**
+ * 软删（2026-08-25，信箱 iss_mt8cvn16：板书 rm 后无法恢复）：删除入口一律把文件
+ * 挪进 `.nd/trash/<YYYYMMDD>/` 而不是 unlink —— `.nd/` 不上画布不进 git，用户体感
+ * 就是删了，但捞得回来。挪不动（跨盘等）才退回真删。
+ */
+export async function trashChalkFile(sharedRoot, absPath) {
+  try {
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const dir = path.join(sharedRoot, '.nd', 'trash', day);
+    await fs.mkdir(dir, { recursive: true });
+    let dest = path.join(dir, path.basename(absPath));
+    for (let i = 2; i < 100; i += 1) {
+      try { await fs.access(dest); dest = path.join(dir, path.basename(absPath).replace(/\.md$/, `-${i}.md`)); } catch { break; }
+    }
+    await fs.rename(absPath, dest);
+    return dest;
+  } catch {
+    try { await fs.unlink(absPath); } catch { /* 已经没了 */ }
+    return null;
+  }
 }
 
 /** 最近的板书（给注入用）：按文件名（=时间戳）倒序，读前几条的首行 */

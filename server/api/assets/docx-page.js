@@ -18,6 +18,7 @@ import { promises as fs } from 'node:fs';
 import { pageImage, docPdf } from '../../lib/docx-pages.js';
 import { safeResolveRead } from '../../lib/safe-path.js';
 
+import { msg } from '../../shared/messages.js';
 /** 缩略图宽度上限：再大就不是缩略图了，纯粹是让服务端白干 */
 const MAX_WIDTH = 2000;
 
@@ -37,7 +38,7 @@ export function makeDocxPageHandler({ getSharedDir, guardProject }) {
       if (!abs) return res.status(403).json({ error: 'path escapes workspace' });
 
       let stat;
-      try { stat = await fs.stat(abs); } catch { return res.status(404).json({ error: '找不到这份文档' }); }
+      try { stat = await fs.stat(abs); } catch { return res.status(404).json({ error: msg(req, '找不到这份文档') }); }
 
       // ETag 带 mtime + size：agent 一 rebuild 就换 key，浏览器自然重取
       const w = Math.min(Math.max(0, Number(req.query.w) || 0), MAX_WIDTH);
@@ -51,7 +52,7 @@ export function makeDocxPageHandler({ getSharedDir, guardProject }) {
       } catch (err) {
         console.warn('[docx-page] render failed:', err.message);
         return res.status(err.status || 500).json({
-          error: '渲染失败',
+          error: msg(req, '渲染失败'),
           details: String(err.message || err).slice(0, 300),
         });
       }
@@ -80,7 +81,7 @@ export function makeDocxPdfHandler({ getSharedDir, guardProject }) {
       const abs = await safeResolveRead(root, rel);
       if (!abs) return res.status(403).json({ error: 'path escapes workspace' });
       let stat;
-      try { stat = await fs.stat(abs); } catch { return res.status(404).json({ error: '找不到这份文档' }); }
+      try { stat = await fs.stat(abs); } catch { return res.status(404).json({ error: msg(req, '找不到这份文档') }); }
       const etag = `"${stat.mtimeMs}-${stat.size}-pdf"`;
       if (req.headers['if-none-match'] === etag) return res.status(304).end();
       let out;
@@ -89,7 +90,7 @@ export function makeDocxPdfHandler({ getSharedDir, guardProject }) {
       } catch (err) {
         console.warn('[docx-pdf] render failed:', err.message);
         return res.status(err.status || 500).json({
-          error: '渲染失败',
+          error: msg(req, '渲染失败'),
           details: String(err.message || err).slice(0, 300),
         });
       }

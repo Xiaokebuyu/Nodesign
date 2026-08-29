@@ -46,6 +46,7 @@
 import {
   makePreToolUseAgentForceForegroundHandler,
   makePreToolUseGrepContentDefaultHandler,
+  makePreToolUseActorStamp,
 } from './hooks/pre-defaults.js';
 import {
   makePreToolUseGetPendingChangesProtocolInjector,
@@ -63,6 +64,11 @@ import {
   makePreToolUseBashStarterFilesFallback,
 } from './hooks/pre-starter-files.js';
 import { makePreToolUseBoardNeighborhoodInjector } from './hooks/pre-board-neighborhood.js';
+import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.js';
+import { createRoleRoster } from './cast.js';
+import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './hooks/resident-role-lifecycle.js';
+import { makePostToolUseBeatWrite, makePostToolUseBeatHandoff, makeStopBeatGate } from './hooks/beat-gate.js';
+import { makePostToolUseSlotAliasHandler } from './hooks/slot-alias.js';
 import { makePreToolUsePerformanceLogGuard } from './hooks/pre-performance-log-guard.js';
 import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-guard.js';
 import { PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
@@ -99,7 +105,14 @@ import { makePostToolUseSubagentReportRecovery } from './hooks/post-subagent-rep
  * @param {string} [deps.projectId]
  * @returns {Partial<Record<string, Array<{ matcher?: string, hooks: Function[], timeout?: number }>>>}
  */
-export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, projectId } = {}) {
+export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, projectId, roleRoster: injected = null } = {}) {
+  // 常驻角色名册：**一个会话一份**（闭包级，不是全局表）。派发时登记、收件人闸按它放行。
+  // 两个 handler 必须拿同一个引用 —— 各建各的等于闸永远看到空名册，症状是所有角色
+  // 都寄不出信（fail-closed，至少不静默漏）。见 cast.js createRoleRoster 的头注释。
+  // 名册由 session-loop 建好传进来（cast_role 也要用同一份 —— 它记"这一回合造的角色"，
+  // 派发闸据此拦掉本回合内注定失败的派发）。没传就自建，单测/脚本直接调时仍成立。
+  const roleRoster = injected || createRoleRoster();
+
   return assertHooksWellFormed({
     // ── P0+ stage 1（不动）──
 
@@ -138,10 +151,31 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     }, {
       matcher: 'Task|Agent',
       hooks: [
-        makePreToolUseAgentForceForegroundHandler(),
+        makePreToolUseAgentForceForegroundHandler({ roster: roleRoster, workspaceRoot, ctx }),
         // vision-checker 派遣 prompt 模板首次注入（仅当 subagent_type='vision-checker'）
         makePreToolUseTaskVisionCheckerDispatchInjector(),
       ],
+    }, {
+      // SendMessage 收件人闸：只放行 main / 本项目常驻角色 / 本会话 agentId。
+      // 这个工具的另一半寻址空间是**同机其他 Claude 会话**（探针实测 ListAgents
+      // 列得出来），跨会话寄信 = 一个用户的 agent 给另一个人的 agent 递指令。
+      // SDK 的 crossSessionInbound 只管收不管发，发这侧得自己拦。见 pre-peer-guard.js
+      matcher: 'SendMessage',
+      hooks: [makePreToolUseSendMessageRecipientGuard({ roster: roleRoster })],
+    }, {
+      // 板上写入的署名：工具执行前把「这次是谁调的」记下来（MCP handler 自己拿不到
+      // agent 身份，hook 拿得到）。常驻角色写的板书要署它的名，不能全算主 agent 头上。
+      // 见 agent/actor-trail.js —— 权威是 harness 盖的章，不是角色文件里的自称。
+      //
+      // ⛔ 这里曾是手写工具名单，漏过两次，两次症状都是「闸装着、判据永远落 'agent'」：
+      //   - 08-26 漏 await_user/check_inbox/read_board → 整条收件箱回路在生产里是死的
+      //   - 08-28 审出漏场务四件 → 对真角色恒拒（它们永远被当成主控）
+      //   （两族工具 08-29 随编排收敛一起退役，教训留着：通配挂法就是从这两次来的）
+      // 手写名单和「写死表家族」同病：加新工具必漏。改成全量盖章 —— 盖章本身只是往
+      // 500 容量的 LRU Map 记一条，多盖无副作用，凡是可能用 byOf 的工具永远在闸内。
+      // 装配层有测试钉着（hooks-assembly.test.js）：别再收窄回名单。
+      matcher: 'mcp__nodesign__.*',
+      hooks: [makePreToolUseActorStamp()],
     }, {
       // ⚠️ Grep 的输入改写只许有这一个 handler——两个各返回 updatedInput 会互相抹掉
       matcher: 'Grep',
@@ -204,9 +238,11 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       ],
     }],
 
-    // Stop —— agent 准备结束 query 时触发，发自检事件给前端
+    // Stop —— agent 准备结束 query 时触发，发自检事件给前端。
+    // 第二个是演出模式的收尾闸：这一拍既没给按钮也没交给角色就不许收工
+    // （08-28 真会话的头号病：写完两千字正文玩家没有任何把手）。
     Stop: [{
-      hooks: [makeStopReflectionHandler({ ctx, workspaceRoot })],
+      hooks: [makeStopReflectionHandler({ ctx, workspaceRoot }), makeStopBeatGate({ sessionId, projectId })],
     }],
 
     // PostCompact —— compact 后把摘要写入 spec.json 长期记忆
@@ -231,6 +267,18 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // PostToolUse —— 按 MCP 工具名分别注 additionalContext，引导 agent 利用
     // 工具结果。matcher 字段是 SDK 标准（与 PreToolUse 'Bash' 同语义）。
     PostToolUse: [
+      // 演员位实例学名（2026-08-28 重构）：hook input 没有实例名字段，名字只在
+      // 派发/唤醒的 tool_result 里露面 —— 从那里学 agentId→实例名（slot-alias.js）。
+      // 收件箱、板书署名、退场标记全靠这张表把 rp-actor 解析回具体角色。
+      {
+        matcher: 'Task|Agent|SendMessage',
+        hooks: [makePostToolUseSlotAliasHandler(), makePostToolUseBeatHandoff({ sessionId, projectId })],
+      },
+      // 收尾闸的另一半：主持人往画布上写了什么、带没带按钮（见 hooks/beat-gate.js）
+      {
+        matcher: 'mcp__nodesign__write_on_board|mcp__nodesign__board_batch',
+        hooks: [makePostToolUseBeatWrite({ sessionId, projectId })],
+      },
       // Edit/Write 后干掉 tool_response.originalFile：FileEditOutput/FileWriteOutput
       // 默认含完整原文件（sdk-tools.d.ts:2270, 2328），这是上下文累积大头。
       // canvas.html 25KB 一次 Edit ≈ 6k tokens，30 turn 累积可达 180k+ → 触发 256k 上限。
@@ -303,15 +351,25 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // 注入恢复建议（避免重试同样的错）。
     PostToolUseFailure: [{
       hooks: [makePostToolUseFailureHandler({ ctx, projectId, sessionId })],
+    }, {
+      // 常驻角色派发失败 → 把名字从名册里撤回。claim 在 PreToolUse（派发**之前**），
+      // 不撤的话这个名字整个会话被 brick，而且收件人闸会对一个并不存在的 agent 放行
+      // （裸名回落全机解析 = H1 那个洞在窄窗口里重开）。见 resident-role-lifecycle.js
+      matcher: 'Task|Agent',
+      hooks: [makePostToolUseFailureRoleRelease({ roster: roleRoster })],
     }],
 
     // SubagentStart / SubagentStop —— 主动捕子代理生命周期。当前只 emit 事件
     // 给上层观察；不阻塞流程。stage 2 真接通子代理时这里加调度逻辑。
     SubagentStart: [{
-      hooks: [makeSubagentStartHandler({ ctx })],
+      // 第二个 handler 是署名的正门：agent_id ↔ 角色名在起飞这一刻绑定
+      // （见 resident-role-lifecycle.js；旧的"从 tool_result 抠 id"已退役）
+      hooks: [makeSubagentStartHandler({ ctx, sessionId }), makeSubagentStartRoleAlias({ projectId })],
     }],
     SubagentStop: [{
-      hooks: [makeSubagentStopHandler({ ctx })],
+      // 常驻角色退场时补一句「怎么把它叫回来」给主控。放在通用 emit 之后：
+      // 那个只 emit 事件不返输出，两者不抢 systemMessage。见 resident-role-lifecycle.js
+      hooks: [makeSubagentStopHandler({ ctx, sessionId }), makeSubagentStopRoleNotice({ projectId })],
     }],
   });
 }

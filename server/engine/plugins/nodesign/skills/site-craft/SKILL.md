@@ -211,7 +211,8 @@ CDN 库随便拉（gsap / lenis / three / alpine / htmx），但动效是调味�
 
 ## 中文排版基线
 
-- 标点用**全角**（，。：；？！……），半角逗号冒号在中文里很扎眼
+- 标点跟**正文主体语言**走：中文正文用全角（，。：；？！……），半角逗号冒号在中文里很扎眼；
+  英文正文用半角加一个空格，全角标点混进英文句子里同样扎眼。混排按主体那一种算
 - 字体链每段 latin family 后面必须跟 CJK family：
   `'Inter', 'PingFang SC', 'Noto Sans SC', system-ui, sans-serif`
   少了 CJK 那段，换台机器中文就掉到系统默认字体
@@ -325,6 +326,6 @@ Read `patterns/page-transitions.md` —— **动手写第一个转场之前先�
 ## 板书（交稿纪律）
 做完这一轮的东西，在它旁边写一条板书（`write_on_board near=那张卡`）：这版是什么 / 为什么这么做 /
 看哪里。改了几处就写几条要点，一条说一件事。同一件东西出了新版本，画一条「改自」线
-（`relate_on_board` derives-from）；有参考来源画「取材」。用户在你的板书上标注了，用
+（`edit_board` add_edge derives-from）；有参考来源画「取材」。用户在你的板书上标注了，用
 `write_on_board reply_to=` 接在那条下面回。多步任务先 TodoWrite 列步骤 —— 步骤清单会自动上板、
 每步的产物自动连过去。

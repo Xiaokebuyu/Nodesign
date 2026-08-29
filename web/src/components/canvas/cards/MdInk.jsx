@@ -13,10 +13,10 @@
  * 状态机这种密而规整的才装进 mermaid 盒子。这条纪律写在 agent 的 prelude 里，
  * 不在这儿强制。
  */
-import { lazy, Suspense, Children } from 'react';
+import { lazy, Suspense, Children, useMemo, useState, memo } from 'react';
 import remarkBreaks from 'remark-breaks';
 import MarkdownMath from '../../ui/MarkdownMath.jsx';
-import { COLOR, FONT_MONO, FONT_SIZE, GAP, RADIUS } from '../../../lib/theme.js';
+import { COLOR, FONT_MONO, FONT_SIZE, GAP, RADIUS, alpha } from '../../../lib/theme.js';
 
 const MermaidBlock = lazy(() => import('./MermaidBlock.jsx'));
 /**
@@ -26,33 +26,130 @@ const MermaidBlock = lazy(() => import('./MermaidBlock.jsx'));
  */
 const EXTRA_REMARK = [remarkBreaks];
 
-function mermaidSourceOf(preChildren) {
+function fenceSourceOf(preChildren, langRe) {
   const kid = Children.toArray(preChildren)[0];
   const cls = kid?.props?.className || '';
-  if (!/language-mermaid\b/.test(cls)) return null;
+  if (!langRe.test(cls)) return null;
   const raw = kid.props.children;
   return Array.isArray(raw) ? raw.join('') : String(raw ?? '');
 }
+const MERMAID_RE = /language-mermaid\b/;
+const CONTROLS_RE = /language-nd:controls\b/;
 
-const COMPONENTS = {
-  pre: ({ node, children, ...props }) => {
-    const src = mermaidSourceOf(children);
-    if (src !== null) {
-      return (
-        <Suspense fallback={<div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>图在画…</div>}>
-          <MermaidBlock source={src} />
-        </Suspense>
-      );
-    }
-    return <pre {...props}>{children}</pre>;
-  },
-};
+/**
+ * 板书控件围栏（2026-08-25，站主定的形状：控件 = 一系列待发提示词）：
+ *   ```nd:controls
+ *   - [A] 跟上去 -> 选A：跟上去，但保持距离
+ *   - [B] 留在原地
+ *   - [继续] send
+ *   ```
+ * 每行一枚按钮：`[标签] 文案 -> 待发提示词`（无 -> 则提示词=标签+文案）；
+ * 文案是 send/trigger/发送 的那枚是**触发件**。点非触发件 = 攒进 pending
+ * （同标注「攒着」），点触发件 = 起轮（攒的一起被拉走）。控件是板书正文的
+ * 一部分 —— 用户就地编辑就能改，agent 用写字的工具就能造，没有第二种存储。
+ */
+export function parseControls(src) {
+  const out = [];
+  let until = null;
+  for (const line of String(src).split('\n')) {
+    // 有效期指令行（08-25 用户提）：`until: 2026-08-26T12:00` 或 `until: +30m`
+    //（相对板书创建时间；m/h/d）。过期后按钮失效，防止陈年选项还往待发队列里进。
+    const u = /^\s*until:\s*(.+?)\s*$/i.exec(line);
+    if (u) { until = u[1]; continue; }
+    if (/^\s*supersede:\s*/i.test(line)) continue;   // 生命周期声明（lib/board-controls.js 消费）
+    const m = /^\s*[-*]\s*\[([^\]]{1,24})\]\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const [, label, rest] = m;
+    const trigger = /^(send|trigger|发送)\s*$/i.test(rest.trim());
+    const arrow = rest.split(/\s*(?:->|→)\s*/);
+    const caption = trigger ? '' : (arrow[0] || '').trim();
+    const prompt = trigger ? '' : (arrow[1] || `${label} ${caption}`.trim());
+    out.push({ label, caption, prompt, trigger });
+  }
+  return { items: out, until };
+}
 
-export default function MdInk({ text, fontFamily, fontSize, color }) {
+/** 过期判据（纯函数好钉测试）：until 是 ISO 时刻，或 +30m/+2h/+1d（相对 createdAt） */
+export function controlsExpired({ until, createdAt, now = Date.now() }) {
+  if (!until) return false;
+  const rel = /^\+(\d+)\s*([mhd])$/i.exec(String(until).trim());
+  if (rel) {
+    const base = createdAt ? Date.parse(createdAt) : NaN;
+    if (!Number.isFinite(base)) return false;   // 没有创建时间就不敢判死，宁可多活
+    const ms = Number(rel[1]) * { m: 60_000, h: 3_600_000, d: 86_400_000 }[rel[2].toLowerCase()];
+    return now > base + ms;
+  }
+  const abs = Date.parse(until);
+  return Number.isFinite(abs) ? now > abs : false;
+}
+
+function ControlsBlock({ source, origin }) {
+  const [picked, setPicked] = useState({});
+  const { items, until } = useMemo(() => parseControls(source), [source]);
+  if (!items.length) return null;
+  // 失效两条路（08-25 用户提「陈年选项还能进待发队列」）：
+  //   1. until 指令行到期（agent 设的钟）
+  //   2. 同 tag 落了更新的选项板（origin.stale，BoardCanvas 算）—— RP 里章节推进
+  //      本身就是旧选项的死期，agent 一个字不用多写
+  const dead = controlsExpired({ until, createdAt: origin?.at }) || !!origin?.stale;
+  const fire = (e, item, i) => {
+    e.stopPropagation(); e.preventDefault();
+    if (dead) return;
+    // 二击取消 = 真撤回（08-25 用户报：原来第二击只是视觉取消，队列里又压一条）
+    const next = item.trigger ? false : !picked[i];
+    window.dispatchEvent(new CustomEvent('nd:board-control', {
+      detail: {
+        ...item, cancel: !item.trigger && !next,
+        chalkId: origin?.id || null, path: origin?.path || origin?.id || null, title: origin?.title || null,
+      },
+    }));
+    if (!item.trigger) setPicked(p => ({ ...p, [i]: next }));
+  };
+  return (
+    // ⚠️ 容器不截停 pointerdown —— 截停整行会把按钮间缝隙和空白一起吃掉，选项板
+    // 大半张脸是按钮行，整张卡就此拖不动（08-25 用户报）。截停只归按钮本体：
+    // 按在按钮上=点击不拖拽，按在缝里=拖卡照常。
+    <div data-nd-controls style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: GAP.sm, margin: `${GAP.sm}px 0`, pointerEvents: 'auto' }}>
+      {items.map((it, i) => (
+        <button key={i} type="button" disabled={dead}
+          onPointerDown={dead ? undefined : (e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onClick={(e) => fire(e, it, i)} title={dead ? '已过期' : it.trigger ? '发出（连同攒着的一起）' : it.prompt} style={{
+            font: 'inherit', fontSize: '0.92em', lineHeight: 1.4, cursor: dead ? 'default' : 'pointer',
+            padding: `3px 10px`, borderRadius: RADIUS.md,
+            border: `1px ${dead ? 'dashed' : 'solid'} ${alpha('#2b2117', dead ? 0.16 : it.trigger ? 0.45 : 0.25)}`,
+            background: picked[i] ? alpha('#2b2117', 0.12) : (!dead && it.trigger) ? alpha('#2b2117', 0.06) : 'transparent',
+            color: 'inherit', fontWeight: it.trigger ? 600 : 400, opacity: dead ? 0.45 : 1,
+            ...(dead ? { pointerEvents: 'none' } : {}),
+          }}>
+          {picked[i] ? '✓ ' : ''}{it.label}{it.caption ? ` ${it.caption}` : ''}
+        </button>
+      ))}
+      {dead && <span style={{ fontSize: '0.8em', opacity: 0.5 }}>（已过期）</span>}
+    </div>
+  );
+}
+
+function MdInk({ text, fontFamily, fontSize, color, origin }) {
+  const components = useMemo(() => ({
+    pre: ({ node, children, ...props }) => {
+      const mermaid = fenceSourceOf(children, MERMAID_RE);
+      if (mermaid !== null) {
+        return (
+          <Suspense fallback={<div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>图在画…</div>}>
+            <MermaidBlock source={mermaid} />
+          </Suspense>
+        );
+      }
+      const controls = fenceSourceOf(children, CONTROLS_RE);
+      if (controls !== null) return <ControlsBlock source={controls} origin={origin} />;
+      return <pre {...props}>{children}</pre>;
+    },
+  }), [origin]);
   return (
     <>
       <div className="nd-mdink" style={{ fontFamily, fontSize, color, lineHeight: 1.6 }}>
-        <MarkdownMath components={COMPONENTS} remarkPlugins={EXTRA_REMARK}>{text || ''}</MarkdownMath>
+        <MarkdownMath components={components} remarkPlugins={EXTRA_REMARK}>{text || ''}</MarkdownMath>
       </div>
       <style>{`
         .nd-mdink p { margin: 0 0 ${GAP.sm}px 0; }
@@ -73,3 +170,11 @@ export default function MdInk({ text, fontFamily, fontSize, color }) {
     </>
   );
 }
+
+/**
+ * memo（2026-08-25 性能探针实证）：200 张板书时滚轮平移掉到 17fps —— 相机一动
+ * BoardCanvas 整棵重渲，每帧 200 次 remark/KaTeX 全量解析。markdown 解析是这棵
+ * 子树里最贵的活，props（text/字体/origin）在纯相机移动时全部不变，memo 直接
+ * 把这份钱省掉。origin 由调用方保证引用稳定（BoardObject useMemo）。
+ */
+export default memo(MdInk);

@@ -127,3 +127,19 @@ describe('GFM', () => {
     expect(html).not.toContain('katex');
   });
 });
+
+/**
+ * CJK flanking（2026-08-25 板书案）：CommonMark 判定闭合 ** 前是标点、后是汉字时
+ * 不算右翼定界符 —— 中文里「加粗套引号再接正文」是家常写法，remark-cjk-friendly
+ * 按 CJK 语境放宽。这组是钉子：插件掉了这里立刻红。
+ */
+describe('CJK 加粗', () => {
+  it('**「中文引号」** 紧跟汉字也解析成 strong', () => {
+    const html = render('他说**「你好」**然后走了');
+    expect(html).toContain('<strong>');
+    expect(html).not.toContain('**');
+  });
+  it('全角标点收尾的加粗照样认', () => {
+    expect(render('**要点：**内容在后')).toContain('<strong>');
+  });
+});

@@ -14,14 +14,15 @@
  * 全是纯函数；尺寸估算与 create-on-board 同一套公式。
  */
 
-export const UNIT = 24;            // 1 网格 = 24 世界像素
+import { UNIT, overlaps, bboxOf as rectBbox } from './rect.js';
+export { UNIT };                   // 兼容出口（真身在 rect.js）
 /**
  * 可读性规范（2026-08-23，用户定）：黑板上的字要在 80%~100% 缩放下清晰可读。
  * 手写/md 正文 16px 世界像素在 0.8 倍下是 12.8 屏幕像素 —— 这是底线，所以节点
  * 字号不低于 md；一张图的尺寸要能在 0.8 倍下整张进一个普通视口（1400×900 屏
  * ≈ 1750×1125 世界像素）。超过 SKETCH_MAX 直接拒：一张图说一件事，大了就拆。
  */
-export const SKETCH_FIT = { w: 1700, h: 1100 };   // 推荐上限（0.8 倍一屏）
+export const SKETCH_FIT = { w: 1700, h: 1100 };   // 推荐上限（0.8 倍一屏；⚠️ 同基准近邻值见 board-place.js ONE_SCREEN，改缩放基准两处一起看）
 export const SKETCH_MAX = { w: 2600, h: 1700 };   // 硬上限（再大就拆成两张）
 export const GAP = 16;             // 模板排布的节点间距
 const SIZE_PX = { sm: 13, md: 16, lg: 22, xl: 30 };
@@ -150,11 +151,93 @@ export function shapePath(kind, { w = 0, h = 0, to = null, d = null } = {}, seed
  * - free：有 at 的按网格落，没 at 的排在 free 区域下面一列
  * - column / row / grid(cols) / mindmap（第一个是中心，其余环绕）
  */
-export function layoutNodes(nodes, { template = 'auto', cols = null } = {}) {
+/**
+ * 模板解析（08-27 抽出，write-on-board 与 layoutNodes 共用一份 auto 规则）。
+ * ⭐ auto 现在**认线**：图内边 ≥1 且节点 ≥3 → flow（按结构分层）。在这之前
+ * 布局引擎对 edges 全盲 —— 给了线也按 column/grid 堆，「摊一堆字」的机器根源。
+ */
+export function resolveTemplate(nodes, { template = 'auto', edges = [], column = false } = {}) {
+  /**
+   * 车道约束（2026-08-28 移动端第二轮）：手机/平板一律竖排一列，**连模型点名的
+   * 模板也盖掉**。
+   *
+   * ⭐ 这条是真会话逼出来的。模型收到「一件 ≤342 宽」之后**试了三次**：第一版
+   * flow 排成 549 宽被警告 → 它改传 `w:14` 想收窄节点，结果整体变成 **576，更宽**
+   * （节点是窄了，但 flow 把它们横着摊成一排）→ 只好 erase_group 重来、再手工
+   * 一件件 move 成一列。擦两次、多花七八个工具调用，才得到本该一次给它的东西。
+   *
+   * ⛔ 病根不是「模型不配合」，是**它够着的那根杠杆是坏的**：唯一能改宽度的入参
+   * 改的是单节点，而决定整体宽度的是布局模板，那个它没法按屏幕挑。所以约束下沉
+   * 到这儿 —— 布局引擎知道屏幕多宽，模型不需要知道。
+   */
+  if (column) return 'column';
+  if (template !== 'auto') return template;
+  if (nodes.some(n => n.at)) return 'free';
+  const keys = new Set(nodes.map(n => n.key));
+  const inner = edges.filter(e => keys.has(e.from) && keys.has(e.to) && e.from !== e.to);
+  if (inner.length && nodes.length >= 3) return 'flow';
+  return nodes.length <= 4 ? 'column' : 'grid';
+}
+
+/** 分层流式（Sugiyama 简版）：层号=最长入路径（模型画的图可能带环，深度截断兜住），
+ *  层内按父级平均横位排（减少交叉），每层居中。线因此顺着重力方向读。 */
+function layoutFlow(nodes, edges, pull = new Map()) {
+  const pos = new Map();
+  const idx = new Map(nodes.map((n, i) => [n.key, i]));
+  const level = new Map();
+  const depth = (k, seen) => {
+    if (level.has(k)) return level.get(k);
+    if (seen.has(k)) return 0;                       // 环：断在回边上
+    seen.add(k);
+    let best = 0;
+    for (const e of edges) if (e.to === k) best = Math.max(best, depth(e.from, seen) + 1);
+    seen.delete(k);
+    level.set(k, best);
+    return best;
+  };
+  for (const n of nodes) depth(n.key, new Set());
+  const layers = [];
+  for (const n of nodes) { const l = level.get(n.key) || 0; (layers[l] ||= []).push(n); }
+  const centerX = new Map();
+  let y = 0;
+  for (const layer of layers) {
+    if (!layer) continue;
+    const parentAvg = (k) => {
+      const ps = edges.filter(e => e.to === k && centerX.has(e.from)).map(e => centerX.get(e.from));
+      return ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : idx.get(k) * 10;
+    };
+    // 节点级拉力（08-27 产物锚 v2）：连着外部产物的节点排向产物那一侧。
+    // 外部锚是世界坐标、parentAvg 是局部坐标，不同尺度 —— 各自归一到 [0,1] 再比。
+    const norm = (vals) => {
+      const lo = Math.min(...vals); const hi = Math.max(...vals);
+      return (v) => (hi > lo ? (v - lo) / (hi - lo) : 0.5);
+    };
+    const pulled = layer.filter((n) => pull.has(n.key));
+    const nExt = pulled.length ? norm(pulled.map((n) => pull.get(n.key).x)) : null;
+    const paVals = layer.filter((n) => !pull.has(n.key)).map((n) => parentAvg(n.key));
+    const nPa = paVals.length ? norm(paVals) : null;
+    const score = (n) => (pull.has(n.key) ? nExt(pull.get(n.key).x) : (nPa ? nPa(parentAvg(n.key)) : 0.5));
+    layer.sort((a, b) => (score(a) - score(b)) || (idx.get(a.key) - idx.get(b.key)));
+    const totalW = layer.reduce((s, n) => s + n.w, 0) + (layer.length - 1) * (GAP * 2 + 8);
+    let x = Math.round(-totalW / 2);
+    let rowH = 0;
+    for (const n of layer) {
+      pos.set(n.key, { x, y });
+      centerX.set(n.key, x + n.w / 2);
+      x += n.w + GAP * 2 + 8; rowH = Math.max(rowH, n.h);
+    }
+    y += rowH + GAP * 3;                              // 层间留出画箭头的呼吸
+  }
+  return pos;
+}
+
+export function layoutNodes(nodes, { template = 'auto', cols = null, edges = [], pull = new Map(), pullOrigin = null } = {}) {
   const pos = new Map();
   if (!nodes.length) return pos;
-  let tpl = template;
-  if (tpl === 'auto') tpl = nodes.some(n => n.at) ? 'free' : (nodes.length <= 4 ? 'column' : 'grid');
+  const keys = new Set(nodes.map(n => n.key));
+  const inner = edges.filter(e => keys.has(e.from) && keys.has(e.to) && e.from !== e.to);
+  const tpl = resolveTemplate(nodes, { template, edges });
+  if (tpl === 'flow') return layoutFlow(nodes, inner, pull);
 
   if (tpl === 'free') {
     let bottom = 0;
@@ -180,7 +263,58 @@ export function layoutNodes(nodes, { template = 'auto', cols = null } = {}) {
     return pos;
   }
   if (tpl === 'mindmap') {
-    const [center, ...rest] = nodes;
+    // 枢纽按度数选、环序按 BFS 排（08-27）：在这之前中心=第一个节点、环上按入参
+    // 顺序 —— 结构全被扔掉，同父的孩子散在环两端，线横穿整张图
+    let order = nodes;
+    if (inner.length) {
+      const deg = new Map(nodes.map(n => [n.key, 0]));
+      const adj = new Map(nodes.map(n => [n.key, []]));
+      for (const e of inner) {
+        deg.set(e.from, deg.get(e.from) + 1); deg.set(e.to, deg.get(e.to) + 1);
+        adj.get(e.from).push(e.to); adj.get(e.to).push(e.from);
+      }
+      const hub = [...nodes].sort((a, b) => deg.get(b.key) - deg.get(a.key))[0];
+      const seen = new Set([hub.key]); const q = [hub.key]; const bfs = [];
+      while (q.length) {
+        const k = q.shift();
+        for (const nk of adj.get(k) || []) if (!seen.has(nk)) { seen.add(nk); bfs.push(nk); q.push(nk); }
+      }
+      const byKey = new Map(nodes.map(n => [n.key, n]));
+      order = [hub, ...bfs.map(k => byKey.get(k)), ...nodes.filter(n => !seen.has(n.key))];
+    }
+    let [center, ...rest] = order;
+    // 节点级拉力（08-27 产物锚 v2）：连着外部产物的叶子占朝着那个产物的环位 ——
+    // 立绘在上方，评它的节点就在环的上侧，线不再绕半圈。质心=全部外部锚的平均
+    // （图会落在它们旁边，质心是图心的够用近似）。
+    // 方位原点：pullOrigin = 图心的世界坐标（落位后由调用方二次布局传入 ——
+    // 环形 bbox 不随槽位变，二次布局不动落位）。没有它就退回锚质心；
+    // 锚全挤在一点时质心=锚本身、方向向量退化 → 放弃重排（bfs 序保底）。
+    let origin = pullOrigin;
+    if (!origin) {
+      const pts = [...pull.values()];
+      const cx0 = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+      const cy0 = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+      const spread = Math.max(...pts.map((p) => Math.hypot(p.x - cx0, p.y - cy0)));
+      origin = spread > 1 ? { x: cx0, y: cy0 } : null;
+    }
+    if (origin && pull.size && rest.some((n) => pull.has(n.key))) {
+      const slotAng = (i) => (i / rest.length) * Math.PI * 2 - Math.PI / 2;
+      const free = new Set(rest.map((_, i) => i));
+      const assigned = new Array(rest.length).fill(null);
+      const angDist = (a, b) => { const d = Math.abs(a - b) % (Math.PI * 2); return Math.min(d, Math.PI * 2 - d); };
+      for (const n of rest) {
+        if (!pull.has(n.key)) continue;
+        const p = pull.get(n.key);
+        const want = Math.atan2(p.y - origin.y, p.x - origin.x);
+        let best = null;
+        for (const i of free) if (best === null || angDist(slotAng(i), want) < angDist(slotAng(best), want)) best = i;
+        assigned[best] = n; free.delete(best);
+      }
+      const others = rest.filter((n) => !pull.has(n.key));
+      let j = 0;
+      for (const i of [...free].sort((a, b) => a - b)) { assigned[i] = others[j++]; }
+      rest = assigned;
+    }
     const cx = 0; const cy = 0;
     pos.set(center.key, { x: cx - center.w / 2, y: cy - center.h / 2 });
     if (!rest.length) return pos;
@@ -212,66 +346,48 @@ export function layoutNodes(nodes, { template = 'auto', cols = null } = {}) {
   return pos;
 }
 
-/** 一组矩形的包围盒 */
-export function bboxOf(rects) {
-  let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
-  for (const r of rects) {
-    x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h);
-  }
-  return Number.isFinite(x0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : { x: 0, y: 0, w: 0, h: 0 };
+/** 一组矩形的包围盒，空集回**零框**（写方直接解构 .x/.w）。真身在 rect.js（那边
+ *  空集 null）。08-28 从 bboxOf 改名 —— 同名两种空集语义在同一个调用文件里混用，
+ *  读代码必看错；名字把契约说出来，谁也不用再翻两处注释对齐。 */
+export function bboxOrZero(rects) {
+  return rectBbox(rects) || { x: 0, y: 0, w: 0, h: 0 };
 }
 
 /**
- * 宏观落位：在 obstacles（同层已摆的矩形）中给一块 w×h 找地方。
- * - near：锚右侧（撞了往下让），让不开就锚下方
- * - 否则：内容最低边下面（与入座"新东西排底下"同一条起排线精神）
- */
-export function findSpot({ w, h, near = null, obstacles = [], contentBottom = 0, viewport = null }) {
-  const hits = (x, y) => obstacles.some(o => !(x + w <= o.x || o.x + o.w <= x || y + h <= o.y || o.y + o.h <= y));
-  // 用户视口里有空地就落在视口里（黑板是主窗口时，画在他眼前而不是让他去找）。
-  // 阅读顺序纪律（08-23 真踩：第二张图落到第一张的**左边**）：先挑不在已有内容左侧/
-  // 上方的位置（顺着先左后右、先上后下长），实在没有才退而求其次。
-  if (!near && viewport && viewport.w >= w + 24 && viewport.h >= h + 24) {
-    const content = obstacles.length ? {
-      x: Math.min(...obstacles.map(o => o.x)), y: Math.min(...obstacles.map(o => o.y)),
-    } : null;
-    const sx = Math.max(24, Math.round(viewport.w / 8)); const sy = Math.max(24, Math.round(viewport.h / 8));
-    for (const strict of [true, false]) {
-      for (let y = viewport.y + 12; y + h <= viewport.y + viewport.h - 12; y += sy) {
-        for (let x = viewport.x + 12; x + w <= viewport.x + viewport.w - 12; x += sx) {
-          if (strict && content && (x < content.x - 24 || y < content.y - 24)) continue;
-          if (!hits(x, y)) return { x: Math.round(x), y: Math.round(y), side: 'viewport' };
-        }
-      }
-    }
-  }
-  if (near) {
-    let x = near.x + near.w + 32; let y = near.y;
-    for (let g = 0; g < 30; g += 1) {
-      if (!hits(x, y)) return { x: Math.round(x), y: Math.round(y), side: 'right' };
-      const blocker = obstacles.find(o => !(x + w <= o.x || o.x + o.w <= x || y + h <= o.y || o.y + o.h <= y));
-      y = blocker.y + blocker.h + GAP;
-    }
-    x = near.x; y = near.y + near.h + 32;
-    for (let g = 0; g < 30; g += 1) {
-      if (!hits(x, y)) return { x: Math.round(x), y: Math.round(y), side: 'below' };
-      const blocker = obstacles.find(o => !(x + w <= o.x || o.x + o.w <= x || y + h <= o.y || o.y + o.h <= y));
-      y = blocker.y + blocker.h + GAP;
-    }
-  }
-  // 排在内容底下：左边缘对齐已有内容（不是写死的 10），读起来像续在同一栏
-  const left = obstacles.length ? Math.min(...obstacles.map(o => o.x)) : 10;
-  return { x: Math.round(left), y: Math.round(contentBottom) + 40, side: 'bottom' };
-}
-
-/**
- * 按用户屏幕算「一屏」：视点里有相机矩形和缩放 → 屏幕像素 = 世界 × 缩放；
- * 0.8 倍可读 → 一屏世界像素 = 屏幕 / 0.8。没视点就用 SKETCH_FIT 的缺省。
+ * 按用户屏幕算「一屏」，并说清这台机器该拿哪一套版式（2026-08-28 移动端第二轮）。
+ *
+ * 屏幕像素：优先读上报的 `device.w/h`（浏览器直接量的），没有就退回
+ * 「相机矩形 × 缩放」（08-23 起就在这么算，缩放怎么变都得同一个数）。
+ *
+ * ## 两套版式
+ *
+ *   桌面   一屏世界像素 = 屏幕 / 0.8（用户在 0.8 倍上读得动，所以内容可以比屏幕大一点）
+ *   触屏   **一件 = 一屏**：宽 = 屏宽 − 48（两边各留 24 呼吸），纵向单列
+ *
+ * ⭐ 触屏这条不是"把桌面的数按比例缩小"。桌面那 1.25 倍富余的前提是**用户会缩小
+ * 了看全貌再放大读细节**，而手机上缩小到 0.19 倍就什么都读不了（真板量的：1766x2018
+ * 的内容在 390 宽的屏上全内容 fit = 19%）。手机上唯一可用的姿势是一件占满一屏、
+ * 竖着翻，所以内容必须**按屏幕生产**，而不是生产完再想办法塞进去。
+ *
+ * ⚠️ 高度给到 1.6 屏而不是 1 屏：竖着滚是手机上读长内容的天然姿势，硬压到一屏
+ * 会逼出一堆"为了短而短"的碎块。宽度才是硬约束（横向滑动没人受得了）。
  */
 export function fitFor(vp) {
-  if (vp?.camera?.w && vp?.zoom) {
-    const sw = vp.camera.w * vp.zoom; const sh = vp.camera.h * vp.zoom;
-    return { w: Math.round(sw / 0.8), h: Math.round(sh / 0.8), screen: { w: Math.round(sw), h: Math.round(sh) } };
+  const cls = vp?.device?.class;
+  const lane = (cls === 'phone' || cls === 'tablet') ? cls : 'desktop';
+  let sw = Number(vp?.device?.w) || 0;
+  let sh = Number(vp?.device?.h) || 0;
+  if (!(sw > 0) && vp?.camera?.w && vp?.zoom) {
+    sw = vp.camera.w * vp.zoom; sh = vp.camera.h * vp.zoom;
   }
-  return { ...SKETCH_FIT, screen: null };
+  if (!(sw > 0)) return { ...SKETCH_FIT, screen: null, lane, column: lane !== 'desktop' };
+  const screen = { w: Math.round(sw), h: Math.round(sh) };
+  if (lane === 'desktop') {
+    return { w: Math.round(sw / 0.8), h: Math.round(sh / 0.8), screen, lane, column: false };
+  }
+  return {
+    w: Math.max(240, Math.round(sw - 48)),
+    h: Math.max(320, Math.round(sh * 1.6)),
+    screen, lane, column: true,
+  };
 }

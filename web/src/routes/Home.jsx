@@ -13,6 +13,9 @@ import { Sessions, Assets, Projects } from '../lib/api.js';
 import { timeAgo } from '../lib/helpers.js';
 import { useMedia, NARROW } from '../lib/use-media.js';
 import dTangle from '../assets/login-wall/doodles/tangle.webp';
+import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
+import { t, getLocale } from '../lib/i18n.js';
+import { sheetClassOf } from './home-sheets.js';
 
 /**
  * Home 页 —— 进门之后的那面板子（2026-08-03 改版）
@@ -43,6 +46,8 @@ function tilt(id) {
 
 /** 形态的中文说法沿用产品里已有的叫法：deck 保持英文（用户自己就这么说） */
 const KIND_WORD = { deck: ['份', 'deck'], site: ['个', '站点'] };
+/** 英文侧：[单数, 复数]。中文的量词在这边没有对应物，对应物是复数变化 */
+const KIND_WORD_EN = { deck: ['deck', 'decks'], site: ['site', 'sites'] };
 
 /** 「这个项目里躺着什么」。stats 还没回来时返回 null —— 宁可空着也不填假话 */
 function inventory(st) {
@@ -50,11 +55,26 @@ function inventory(st) {
   const parts = Object.entries(st.kinds || {})
     .sort((a, b) => b[1] - a[1])
     .map(([k, n]) => {
+      // 中文靠量词（3 份 deck / 2 个站点），英文靠复数（3 decks / 2 sites）——
+      // 这是两套语法不是两个词，所以各走各的表，不进词表（词表的 key 必须是
+      // 字面量，这里的短语是拼出来的，lint 验不了）。
+      if (getLocale() !== 'zh-CN') {
+        const [one, many] = KIND_WORD_EN[k] || [k, `${k}s`];
+        return `${n} ${n === 1 ? one : many}`;
+      }
       const [unit, word] = KIND_WORD[k] || ['个', k];
       return `${n} ${unit}${word}`;
     });
+  // 板书也算"这里躺着什么"：演出项目常常一件产物都没有，整个故事都在板书里，
+  // 那种卡以前一律写着"还没出东西"
+  if (st.chalk?.count) {
+    const n = st.chalk.count;
+    parts.push(getLocale() !== 'zh-CN'
+      ? `${n} ${n === 1 ? 'note' : 'notes'}`
+      : t('板书 {n} 条', { n, count: n }));
+  }
   if (parts.length) return parts.join(' · ');
-  return st.tasks ? `${st.tasks} 件开了头` : '还没出东西';
+  return st.tasks ? t('{n} 件开了头', { n: st.tasks, count: st.tasks }) : t('还没出东西');
 }
 
 
@@ -99,14 +119,17 @@ export default function Home() {
         <>
           {/* 窄屏只留图标（2026-08-21）：三个动作 + 头像 + 字标在 393 的屏上排不下，
               带字的话「新建项目」会被挤成两行。次要的两个退成图标，主动作留一个短词。 */}
-          <Link to="/gallery" title="橱窗" style={iconBtnStyle}>
-            <LayoutTemplate size={14} />{narrow ? null : ' 橱窗'}
+          <Link to="/gallery" title={t('橱窗')} style={iconBtnStyle}>
+            <LayoutTemplate size={14} />{narrow ? null : ` ${t('橱窗')}`}
           </Link>
           <Link to="/skills" title="Skill" style={iconBtnStyle}>
             <Wrench size={14} />{narrow ? null : ' Skill'}
           </Link>
-          <button style={primaryBtnStyle} onClick={openCreate} title="新建项目">
-            <Plus size={14} /> {narrow ? '新建' : '新建项目'}
+          {/* 窄屏不挂：上面那条注释已经说了 393 的屏排不下，语言不是高频动作，
+              让位给三个主动作。窄屏用户要换语言走登录墙那个（门外那枚常在）。 */}
+          {!narrow && <LanguageSwitcher />}
+          <button style={primaryBtnStyle} onClick={openCreate} title={t('新建项目')}>
+            <Plus size={14} /> {narrow ? t('新建') : t('新建项目')}
           </button>
         </>
       }
@@ -124,19 +147,19 @@ export default function Home() {
             </div>
             <div className="ndd-side r">
               <img className="doodle" src={dTangle} alt="" />
-              <p className="aside">想到什么先写下来。<br />不用先想清楚，<br />它会问你缺的那部分。</p>
+              <p className="aside">{t('想到什么先写下来。')}<br />{t('不用先想清楚，')}<br />{t('它会问你缺的那部分。')}</p>
             </div>
           </div>
 
           <RecentQuickSection />
 
           <div className="ndd-head">
-            <h2>我的项目<Underline w={1.6} /></h2>
+            <h2>{t('我的项目')}<Underline w={1.6} /></h2>
             <span className="n">{projects.length} 个项目</span>
           </div>
 
           {!hydrated && hydrating ? (
-            <div className="ndd-quiet">正在打开…</div>
+            <div className="ndd-quiet">{t('正在打开…')}</div>
           ) : error ? (
             <ErrorState message={error} onRetry={() => hydrate({ kind: 'project' }).catch(() => {})} />
           ) : projects.length === 0 ? (
@@ -179,6 +202,18 @@ function cnNum(n) {
   return `${CN[Math.floor(n / 10)]}十${n % 10 ? CN[n % 10] : ''}`;
 }
 
+/**
+ * 「手上 3 件」这类账目行。数字要带样式（`.n`），而中英**词序不同**
+ * （「手上 3 件」↔「3 projects in hand」），所以不能拆成"前缀 + 数字 + 后缀"三段写死。
+ * 办法是让整句话进词表、留一个 `{n}` 占位符，渲染时按占位符切开，数字塞回中间。
+ *
+ * 复数走 params.count：英文的 project / projects 靠它选，中文不受影响。
+ */
+function Counted({ pattern, n }) {
+  const [before = '', after = ''] = t(pattern, { count: typeof n === 'number' ? n : undefined }).split('{n}');
+  return <span className="l">{before}<span className="n">{n}</span>{after}</span>;
+}
+
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 /**
@@ -192,19 +227,25 @@ function BoardNote({ projects, summary }) {
     return Number.isFinite(t) && now.getTime() - t < WEEK_MS;
   }).length;
 
+  // 日期：中文用汉字数字（楷体里比阿拉伯数字顺眼，跟登录墙一致），
+  // 英文没有这个传统，走 Intl 的月名 + 日。这是**数字格式**不是字符串，翻不了。
+  const dateLabel = getLocale() === 'zh-CN'
+    ? `${cnNum(now.getMonth() + 1)}月${cnNum(now.getDate())}日`
+    : now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
   return (
     <div className="ndd-note">
-      <span className="t">{cnNum(now.getMonth() + 1)}月{cnNum(now.getDate())}日</span>
+      <span className="t">{dateLabel}</span>
       <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
         <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
           stroke="rgba(122,111,92,0.55)" strokeWidth="1.4" strokeLinecap="round" />
       </svg>
-      <span className="l">手上 <span className="n">{projects.length}</span> 件</span>
-      <span className="l">这周动过 <span className="n">{touched}</span> 件</span>
+      <Counted pattern="手上 {n} 件" n={projects.length} />
+      <Counted pattern="这周动过 {n} 件" n={touched} />
       {summary && (
         <>
-          <span className="l">已上线 <span className="n">{summary.published}</span> 件</span>
-          <span className="l">今天花了 <span className="n">${(summary.usedToday || 0).toFixed(2)}</span></span>
+          <Counted pattern="已上线 {n} 件" n={summary.published} />
+          <Counted pattern="今天花了 {n}" n={`$${(summary.usedToday || 0).toFixed(2)}`} />
         </>
       )}
     </div>
@@ -235,19 +276,19 @@ function RecentQuickSection() {
   const confirm = useGlobalStore(s => s.confirm);
 
   const handleDelete = async (s) => {
-    const title = s.customTitle || s.summary || s.firstPrompt || s.projectName || '未命名对话';
+    const title = s.customTitle || s.summary || s.firstPrompt || s.projectName || t('未命名对话');
     if (!(await confirm({
-      title: '删除对话',
-      message: `删除对话「${title}」？此操作不可撤销。`,
+      title: t('删除对话'),
+      message: t('删除对话「{title}」？此操作不可撤销。', { title }),
       confirmLabel: '删除',
       danger: true,
     }))) return;
     try {
       await Sessions.remove(s.projectId, s.sessionId);
       setSessions(prev => prev.filter(x => x.sessionId !== s.sessionId));
-      showToast('已删除', 'info');
+      showToast(t('已删除'), 'info');
     } catch (err) {
-      showToast(`删除失败：${err.message}`, 'error');
+      showToast(t('删除失败：{err}', { err: err.message }), 'error');
     }
   };
 
@@ -256,7 +297,7 @@ function RecentQuickSection() {
   return (
     <>
       <div className="ndd-head">
-        <h2>最近对话<Underline w={1.6} /></h2>
+        <h2>{t('最近对话')}<Underline w={1.6} /></h2>
       </div>
       <div className="ndd-rows">
         {sessions.map((s, i) => (
@@ -290,7 +331,7 @@ function RecentQuickRow({ session: s, isFirst, onDelete }) {
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="t">
-            {s.customTitle || s.summary || s.firstPrompt || s.projectName || '未命名对话'}
+            {s.customTitle || s.summary || s.firstPrompt || s.projectName || t('未命名对话')}
           </div>
           <div className="w">
             最后消息 {s.lastModified ? timeAgo(new Date(s.lastModified).toISOString()) : ''}
@@ -300,7 +341,7 @@ function RecentQuickRow({ session: s, isFirst, onDelete }) {
           opacity: hover ? 0 : 1, transition: 'opacity 0.15s' }}>›</span>
       </Link>
       {hover && (
-        <button className="del" onClick={handleDeleteClick} title="删除对话">
+        <button className="del" onClick={handleDeleteClick} title={t('删除对话')}>
           <Trash2 size={12} />
         </button>
       )}
@@ -324,17 +365,17 @@ function ProjectCard({ project, stat, newest }) {
     e.preventDefault(); e.stopPropagation();
     setMenuOpen(false);
     const next = await prompt({
-      title: '重命名项目',
+      title: t('重命名项目'),
       initialValue: project.name,
-      placeholder: '项目名',
-      validate: (v) => v.trim() ? null : '不能为空',
+      placeholder: t('项目名'),
+      validate: (v) => v.trim() ? null : t('不能为空'),
     });
     if (!next || !next.trim() || next === project.name) return;
     try {
       await updateProject(project.id, { name: next.trim() });
-      showToast(`已重命名为「${next.trim()}」`, 'success');
+      showToast(t('已重命名为「{name}」', { name: next.trim() }), 'success');
     } catch (err) {
-      showToast(`重命名失败：${err.message}`, 'error');
+      showToast(t('重命名失败：{err}', { err: err.message }), 'error');
     }
   };
   const handleDuplicate = async (e) => {
@@ -342,25 +383,25 @@ function ProjectCard({ project, stat, newest }) {
     setMenuOpen(false);
     try {
       const copy = await duplicateProject(project.id);
-      if (copy) showToast(`已复制为「${copy.name}」`, 'success');
+      if (copy) showToast(t('已复制为「{name}」', { name: copy.name }), 'success');
     } catch (err) {
-      showToast(`复制失败：${err.message}`, 'error');
+      showToast(t('复制失败：{err}', { err: err.message }), 'error');
     }
   };
   const handleDelete = async (e) => {
     e.preventDefault(); e.stopPropagation();
     setMenuOpen(false);
     if (!(await confirm({
-      title: '删除项目',
-      message: `删除「${project.name}」？此操作不可撤销。`,
+      title: t('删除项目'),
+      message: t('删除「{name}」？此操作不可撤销。', { name: project.name }),
       confirmLabel: '删除',
       danger: true,
     }))) return;
     try {
       await deleteProject(project.id);
-      showToast('项目已删除', 'info');
+      showToast(t('项目已删除'), 'info');
     } catch (err) {
-      showToast(`删除失败：${err.message}`, 'error');
+      showToast(t('删除失败：{err}', { err: err.message }), 'error');
     }
   };
 
@@ -368,12 +409,14 @@ function ProjectCard({ project, stat, newest }) {
 
   return (
     <div
-      className={`ndd-card${newest ? ' top' : ''}`}
+      // 卡片就是那个项目的那张纸：演出项目是稿纸（米黄 + 红格线），设计是横格本。
+      // 跟输入栏读同一份配方，所以桌上摆的和手里写的是同一个世界的纸。
+      className={`ndd-card ${sheetClassOf(project.mode)}${newest ? ' top' : ''}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => { setHover(false); setMenuOpen(false); }}
     >
       <Link to={`/projects/${project.id}/work`} style={{ '--rot': tilt(project.id) }}>
-        <ThumbnailBox project={project} />
+        <ThumbnailBox project={project} stat={stat} />
         <div className="t">{project.name}</div>
         <div className="m">
           <span>{inv || ''}</span>
@@ -381,7 +424,7 @@ function ProjectCard({ project, stat, newest }) {
         </div>
       </Link>
       <span className={`pin${newest ? ' r' : ''}`} />
-      {newest && <span className="last">接着做</span>}
+      {newest && <span className="last">{t('接着做')}</span>}
 
       {hover && (
         <button
@@ -395,9 +438,9 @@ function ProjectCard({ project, stat, newest }) {
 
       {menuOpen && (
         <div className="ndd-menu" onMouseDown={e => e.stopPropagation()}>
-          <button onClick={handleRename}><Edit2 size={12} /> 重命名</button>
-          <button onClick={handleDuplicate}><Copy size={12} /> 复制</button>
-          <button className="danger" onClick={handleDelete}><Trash2 size={12} /> 删除</button>
+          <button onClick={handleRename}><Edit2 size={12} /> {t('重命名')}</button>
+          <button onClick={handleDuplicate}><Copy size={12} /> {t('复制')}</button>
+          <button className="danger" onClick={handleDelete}><Trash2 size={12} /> {t('删除')}</button>
         </div>
       )}
     </div>
@@ -420,21 +463,30 @@ function ProjectCard({ project, stat, newest }) {
  */
 const DEFAULT_RATIO = 16 / 10;
 
-function ThumbnailBox({ project }) {
+function ThumbnailBox({ project, stat }) {
   const [ratio, setRatio] = useState(DEFAULT_RATIO);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => { setFailed(false); }, [project.id]);
 
   if (failed) {
-    return <div className="ndd-shot empty" style={{ aspectRatio: String(DEFAULT_RATIO) }} />;
+    // 没封面**不等于**这张纸上没东西：板书不是产物，进不了截图管线（见 lib/cover.js
+    // 的输入是 artifacts）。演出项目往往一件产物都没有，整个故事都写在板书上 ——
+    // 那就别贴印样了，直接把最近一条板书的开头写在这张卡的空白纸上。
+    const chalk = stat?.chalk?.text;
+    return (
+      <div className={`ndd-shot empty${chalk ? ' chalk' : ''}`}
+        style={{ aspectRatio: String(DEFAULT_RATIO) }}>
+        {chalk ? <p>{chalk}</p> : null}
+      </div>
+    );
   }
 
   return (
     <div className="ndd-shot" style={{ aspectRatio: String(ratio) }}>
       <img
         src={Assets.coverUrl(project.id)}
-        alt={`${project.name} 预览`}
+        alt={t('{name} 预览', { name: project.name })}
         loading="lazy"
         onLoad={(e) => {
           const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
@@ -460,9 +512,9 @@ function ErrorState({ message, onRetry }) {
   return (
     <div className="ndd-sheet">
       <span className="pin" />
-      <div className="h" style={{ color: 'var(--red)' }}>项目没加载出来</div>
-      <div className="d">{message || '后端可能没启动。检查 server 是否在 :4001 上跑。'}</div>
-      <button className="retry" onClick={onRetry}>再 试</button>
+      <div className="h" style={{ color: 'var(--red)' }}>{t('项目没加载出来')}</div>
+      <div className="d">{message || t('后端可能没启动。检查 server 是否在 :4001 上跑。')}</div>
+      <button className="retry" onClick={onRetry}>{t('再 试')}</button>
     </div>
   );
 }
@@ -482,14 +534,14 @@ function EmptyState({ onCreate, onPick }) {
   return (
     <div className="ndd-sheet">
       <span className="pin" />
-      <div className="h">还没有作品</div>
-      <div className="d">在上面写一句话就能开工。<br />没想好的话，点一个试试：</div>
+      <div className="h">{t('还没有作品')}</div>
+      <div className="d">{t('在上面写一句话就能开工。')}<br />{t('没想好的话，点一个试试：')}</div>
       <div className="chips">
         {EMPTY_EXAMPLES.map((text) => (
           <button key={text} onClick={() => onPick?.(text)}>{text}</button>
         ))}
       </div>
-      <button className="foot" onClick={onCreate}>或者从「+ 新建项目」开始一件长期的事</button>
+      <button className="foot" onClick={onCreate}>{t('或者从「+ 新建项目」开始一件长期的事')}</button>
     </div>
   );
 }

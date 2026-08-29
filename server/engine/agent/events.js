@@ -277,8 +277,12 @@ export const Events = {
    * 认 chalk 字段），形状收进构造器钉住（前端 parity 测试对着这里逐字校）。
    * chalk = 板书文件的工作区相对路径（就是它的画布 id）；草图不传。
    */
-  boardFocus: (rect, { tag = null, layer = '', soft = false, chalk = null } = {}) => (
-    { type: 'board.focus', sessionId: null, rect, tag, layer, soft, chalk }
+  // actor：这次落定是谁干的（常驻角色的 slug）。**必须带**：board.focus 是板书落定的
+  // 唯一信号，画布的在场表靠它给精灵定位。不带的话角色的板书会被记到主 agent 头上
+  // —— 主精灵瞬移到角色写的东西上（08-18 拆子代理精灵的病根），而角色自己的精灵
+  // 因为永远拿不到 targetId 而从不出现（2026-08-26 审出）。
+  boardFocus: (rect, { tag = null, layer = '', soft = false, chalk = null, actor = null } = {}) => (
+    { type: 'board.focus', sessionId: null, rect, tag, layer, soft, chalk, ...(actor ? { actor } : {}) }
   ),
 
   // ── Phase 1 翻译补全 ──
@@ -322,6 +326,9 @@ export const Events = {
     transcriptPath,          // 可选；子代理转录文件路径，前端展开"完整对话"用
     ...(toolUseId ? { toolUseId } : {}),
   }),
+
+  // （run.role.wait / run.scene 2026-08-29 随收件箱与场声明一起退役：角色写完一段
+  //  就结束这一轮，「在写 / 写完了」直接由 subagentStart / subagentStop 表达。）
 
   // PostToolUseFailure hook：工具失败，hook 已注入了恢复建议给 agent，
   // 上层只需可见"哪个工具失败了"做监控/告警。

@@ -168,7 +168,7 @@ export default {
       ))}
 
       {/* ① 一句话 */}
-      <div className="paper r1 z2 sway" style={{ '--rot': '-2.2deg', '--dur': '5.1s' }}>
+      <div className="paper r1 z2 sway" style={{ '--rot': '-2.2deg' }}>
         <span className="no"><Ring />①</span>
         <span className="pin r" />
         <span className="who">我说</span>我想跟一个住在停住了的城市里的人说话
@@ -178,7 +178,7 @@ export default {
       {/* ② 人设卡 */}
       <div className="paper pstack" aria-hidden="true"
         style={{ left: '4%', top: '46%', width: '12.7%', height: 232, '--rot': '2.6deg' }} />
-      <div className="paper r2 z2 dog sway" style={{ '--rot': '1.4deg', '--dur': '6.5s', '--delay': '-1.9s' }}>
+      <div className="paper r2 z2 dog sway" style={{ '--rot': '1.4deg' }}>
         <span className="no"><Ring />②</span>
         <Clip cx="26%" />
         <img src={artFigure} alt="站内做出来的角色立绘" />
@@ -188,7 +188,7 @@ export default {
       </div>
 
       {/* ③ 编排 */}
-      <div className="paper r3 z0 crease sway" style={{ '--rot': '-1.1deg', '--dur': '7s', '--delay': '-3.2s' }}>
+      <div className="paper r3 z0 crease sway" style={{ '--rot': '-1.1deg' }}>
         <span className="no"><Ring />③</span>
         <span className="pin" />
         <div className="band"><span>世界与她是谁</span><b>常驻</b></div>
@@ -199,7 +199,7 @@ export default {
       </div>
 
       {/* ④ 它自己动手 */}
-      <div className="paper r4 sway" style={{ '--rot': '0.9deg', '--dur': '7.8s', '--delay': '-4.4s' }}>
+      <div className="paper r4 sway" style={{ '--rot': '0.9deg' }}>
         <span className="no"><Ring />④</span>
         <span className="pin" />
         <div className="t">它自己动手</div>
@@ -211,7 +211,7 @@ export default {
       </div>
 
       {/* ⑤ 演出页第一次开口 */}
-      <div className="paper r5 z2 sway" style={{ '--rot': '1.8deg', '--dur': '5.8s', '--delay': '-2.3s' }}>
+      <div className="paper r5 z2 sway" style={{ '--rot': '1.8deg' }}>
         <span className="no"><Ring />⑤</span>
         <span className="pin" />
         <div className="bar"><i /><span>演出页</span></div>
@@ -225,7 +225,7 @@ export default {
       {/* ⑥ 开演 */}
       <div className="paper pstack" aria-hidden="true"
         style={{ left: '54.4%', top: '62.7%', width: '13.7%', height: 100, '--rot': '-2deg' }} />
-      <div className="paper r6 wrinkle sway" style={{ '--rot': '1.2deg', '--dur': '8.4s', '--delay': '-5.8s' }}>
+      <div className="paper r6 wrinkle sway" style={{ '--rot': '1.2deg' }}>
         <span className="no"><Ring />⑥</span>
         <span className="tab">项目 · 卷宗</span>
         <span className="holes" />
@@ -237,7 +237,7 @@ export default {
       </div>
 
       {/* 侧料 */}
-      <div className="paper p-street z0 dog sway" style={{ '--rot': '-1.7deg', '--dur': '6.7s', '--delay': '-2.8s' }}>
+      <div className="paper p-street z0 dog sway" style={{ '--rot': '-1.7deg' }}>
         <span className="pin" />
         <img src={artStreet} alt="站内做出来的世界样张" />
         <div className="cap">城里什么都停着</div>
@@ -245,7 +245,7 @@ export default {
 
       <div className="paper pstack" aria-hidden="true"
         style={{ left: '56.4%', top: '4.7%', width: '12.2%', height: 146, '--rot': '-1.8deg' }} />
-      <div className="paper p-legal z0 sway" style={{ '--rot': '1.1deg', '--dur': '7.4s', '--delay': '-4.9s' }}>
+      <div className="paper p-legal z0 sway" style={{ '--rot': '1.1deg' }}>
         <span className="staple" style={{ '--cx': '18px' }} />
         <span className="staple" style={{ '--cx': 'calc(100% - 32px)' }} />
         <div className="h">这周做完的</div>
@@ -256,18 +256,18 @@ export default {
         <span className="bow" />
       </div>
 
-      <div className="paper p-line z2 sway" style={{ '--rot': '2.3deg', '--dur': '6.1s', '--delay': '-3.7s' }}>
+      <div className="paper p-line z2 sway" style={{ '--rot': '2.3deg' }}>
         <Clip cx="32%" />
         「你也停下来了」<br />这句留着，第二幕用
       </div>
 
-      <div className="paper p-receipt sway" style={{ '--rot': '-2.4deg', '--dur': '5.4s', '--delay': '-1.6s' }}>
+      <div className="paper p-receipt sway" style={{ '--rot': '-2.4deg' }}>
         <span className="pin" />
         <div className="h">用量小票</div>
         RUN 0817-06<br />19 轮台词<br />$0.31<br />* * *
       </div>
 
-      <div className="paper p-next z0 dog sway" style={{ '--rot': '-0.8deg', '--dur': '7.2s', '--delay': '-2.1s' }}>
+      <div className="paper p-next z0 dog sway" style={{ '--rot': '-0.8deg' }}>
         <span className="pin" />
         <div className="h">下一场</div>
         <div className="b">让修表铺那扇门通到别的城。同一个人，走出去会变成谁。</div>

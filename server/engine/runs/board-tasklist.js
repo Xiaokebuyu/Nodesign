@@ -17,7 +17,8 @@ import { readBoard, patchBoard } from '../../projects/board-store.js';
 import { getSharedDir } from '../../projects/workspace.js';
 import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
-import { textBox, findSpot } from '../../lib/sketch-layout.js';
+import { textBox } from '../../lib/sketch-layout.js';
+import { resolvePlacement } from '../../lib/board-place.js';
 import { getViewpoint } from '../../projects/viewpoint-store.js';
 import { renderChalk, writeChalkFile, CHALK_DIR } from '../../lib/chalk.js';
 
@@ -78,8 +79,10 @@ async function upsert(st, items) {
   for (const zz of Object.values(board.zones || {})) if (Number.isFinite(zz?.y)) bottom = Math.max(bottom, zz.y + 240);
   const vp = getViewpoint(st.projectId);
   const vpRect = (vp && !vp.layer && vp.camera) ? vp.camera : null;
-  const spot = findSpot({ w: box.w + 24, h: box.h + 24, obstacles, contentBottom: bottom, viewport: vpRect });
-  await patchBoard(st.projectId, { objects: { [st.rel]: { x: spot.x + 12, y: spot.y + 12, z: 1, w: box.w, h: box.h, by: 'agent', tag: st.tag } } });
+  // 统一落位（08-28 清账）：此前这里是 sketch-layout.findSpot 的最后一个调用点 ——
+  // 08-25 落位统一的漏网之鱼，步骤清单的避让判据跟其余落位系统性不一致。
+  const spot = resolvePlacement({ box: { w: box.w, h: box.h }, obstacles, contentBottom: bottom, viewport: vpRect });
+  await patchBoard(st.projectId, { objects: { [st.rel]: { x: spot.x, y: spot.y, z: 1, w: box.w, h: box.h, by: 'agent', seat: 'auto', tag: st.tag } } });
 }
 
 export function attachBoardTasklist(bus, projectId) {

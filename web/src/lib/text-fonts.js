@@ -8,7 +8,7 @@
  * 默认楷体：整套语言里正文就是楷体，手写在白板上的一句话跟它同源。
  * 等宽只留给机器写的东西（这条规矩全站一致，见 lib/theme.js 的 FONT_MONO）。
  */
-import { FONT_KAI, FONT_MONO } from './theme.js';
+import { FONT_KAI, FONT_MONO, FONT_EMOJI } from './theme.js';
 
 export const TEXT_FONT_CSS = {
   // 手写（默认）：拉丁字符走 Caveat（龙藏的英文字形糙），中文落龙藏体硬笔字
@@ -18,9 +18,9 @@ export const TEXT_FONT_CSS = {
   kai: FONT_KAI,
   // 黑体给的是**真黑体栈**，不是 FONT_SANS —— 那个常量全站指向楷体
   // （theme.js:114），用它的话设置面板里"楷体/黑体"是同一张脸（2026-08-13 修）
-  sans: "'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif",
+  sans: `'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', ${FONT_EMOJI}, system-ui, sans-serif`,
   // 衬线：给标题式的一句话用，跟正文拉开层次
-  serif: 'Songti SC, SimSun, Georgia, "Times New Roman", serif',
+  serif: `Songti SC, SimSun, Georgia, "Times New Roman", ${FONT_EMOJI}, serif`,
   mono: FONT_MONO,
 };
 

@@ -52,9 +52,9 @@ export const Projects = {
   get: (pid) => jsonRequest('GET', `/api/projects/${pid}`),
   /** 每个项目出了几件东西、都是什么形态（首页卡片元信息；读磁盘，跟列表分开拉） */
   stats: () => jsonRequest('GET', '/api/projects/stats'),
-  /** create：name 必填；description / kind 可选（kind 默认 'project'） */
-  create: ({ name, skillId, description, kind, autoNamed }) =>
-    jsonRequest('POST', '/api/projects', { name, skillId, description, kind, autoNamed }),
+  /** create：name 必填；description / kind / mode 可选（kind 默认 'project'，mode 默认 'design'） */
+  create: ({ name, skillId, description, kind, mode, autoNamed }) =>
+    jsonRequest('POST', '/api/projects', { name, skillId, description, kind, mode, autoNamed }),
   update: (pid, patch) => jsonRequest('PATCH', `/api/projects/${pid}`, patch),
   remove: (pid) => jsonRequest('DELETE', `/api/projects/${pid}`),
 };
@@ -259,6 +259,14 @@ export const Assets = {
   putBoard: (pid, board) => jsonRequest('PUT', `/api/projects/${pid}/board`, { board }),
   /** diff 合并写：{ size?, objects?: {id: obj|null}, zones?: {id: zone|null} }，null=删 */
   patchBoard: (pid, patch) => jsonRequest('PATCH', `/api/projects/${pid}/board`, { patch }),
+  /**
+   * 常驻角色（2026-08-26）：名册 + 直接对角色说话。
+   * `say` 的返回带 `delivered`：'waiting' = 角色正挂着等，话当场交到它手里；
+   * 'queued' = 它没在等，话先攒着（服务端叫不醒子代理，得等它下次自己来取）。
+   * **两者必须区分着提示用户** —— 把积压说成送达，用户会对着没人听的板子说话。
+   */
+  // 用户从画布对角色说的话：先落在画布上（去向仍是主持人，见 lib/role-target.js）
+  stageEcho: (pid, body) => jsonRequest('POST', `/api/projects/${pid}/stage/echo`, body),
   /** 黑板（2026-08-23）：用户视点上报 / 草稿落定 / 按标签整组擦 */
   reportViewpoint: (pid, viewpoint) => jsonRequest('POST', `/api/projects/${pid}/viewpoint`, { viewpoint }),
   commitBoard: (pid, tag = null) => jsonRequest('POST', `/api/projects/${pid}/board/commit`, { tag }),

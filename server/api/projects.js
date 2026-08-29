@@ -17,6 +17,7 @@ import {
   listRunsForProject,
 } from '../projects/store.js';
 import { guardProject } from './_guard.js';
+import { chalkPreview } from '../lib/board-excerpt.js';
 import { taskManifest } from '../lib/artifact-target.js';
 import { countPublishedByUser } from '../lib/publish-store.js';
 import { checkQuota } from '../lib/quota.js';
@@ -39,6 +40,9 @@ const ownerScope = (req) => req.user?.id ?? null;
 
 const KIND_VALUES = new Set(['project', 'quick']);
 const KIND_QUERY_VALUES = new Set(['project', 'quick', 'all']);
+// 项目模式（2026-08-27）：design=设计工作台（现状默认）/ rp=演出（常驻角色演故事）。
+// 切换下个会话生效（会话启动时读一次），真相源与工具对照表见 engine/mcp/mode-profile.js。
+const MODE_VALUES = new Set(['design', 'rp']);
 
 // GET /api/projects 默认行为（2026-05-07）：不带 ?kind= 时 **只返 kind='project'**，
 // 把闪聊（kind='quick'）从主项目列表里挡掉 —— 避免老 client / 任何漏传 kind 的调用
@@ -84,7 +88,10 @@ router.get('/stats', async (req, res, next) => {
       } catch { /* 目录没了：算 0 件 */ }
       const kinds = {};
       for (const a of artifacts) if (a.kind) kinds[a.kind] = (kinds[a.kind] || 0) + 1;
-      stats[p.id] = { tasks: artifacts.length, kinds };
+      // 板书不进 artifacts（它不是产物），所以卡上"这里躺着什么"必须单独问一句 ——
+      // 不问的话整个演出项目会一直写着"还没出东西"，而里面躺着一整个故事
+      const chalk = await chalkPreview(getSharedDir(p.id)).catch(() => null);
+      stats[p.id] = { tasks: artifacts.length, kinds, ...(chalk ? { chalk } : {}) };
     }));
     // dev 模式（不要求登录）没有 req.user，这两笔账就没有主语，整块不下发
     const summary = req.user
@@ -101,7 +108,7 @@ const DESCRIPTION_MAX = 2000;
 
 router.post('/', async (req, res, next) => {
   try {
-    const { name, skillId, description, kind, autoNamed } = req.body || {};
+    const { name, skillId, description, kind, mode, autoNamed } = req.body || {};
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'name required' });
     }
@@ -114,8 +121,11 @@ router.post('/', async (req, res, next) => {
     if (kind != null && !KIND_VALUES.has(kind)) {
       return res.status(400).json({ error: `kind must be project|quick (got ${kind})` });
     }
+    if (mode != null && !MODE_VALUES.has(mode)) {
+      return res.status(400).json({ error: `mode must be design|rp (got ${mode})` });
+    }
     const project = createProject({
-      name, skillId, description, kind, autoNamed: !!autoNamed,
+      name, skillId, description, kind, mode: mode ?? undefined, autoNamed: !!autoNamed,
       ownerId: req.user?.id ?? null,
     });
     await ensureProjectWorkspace(project.id);
@@ -153,6 +163,12 @@ router.patch('/:pid', (req, res, next) => {
         return res.status(400).json({ error: `kind must be project|quick (got ${req.body.kind})` });
       }
       patch.kind = req.body.kind;
+    }
+    if ('mode' in (req.body || {})) {
+      if (!MODE_VALUES.has(req.body.mode)) {
+        return res.status(400).json({ error: `mode must be design|rp (got ${req.body.mode})` });
+      }
+      patch.mode = req.body.mode;
     }
     // E1a（2026-08-13）：会话真相源收敛到 projects.active_session_id 之后，
     // 前端切会话得能直接写这个指针（此前唯一的写入方是 turn.js —— 不发消息、

@@ -10,6 +10,8 @@
  */
 
 import express from 'express';
+import { listRoleNames } from '../engine/agent/role-card.js';
+import { getWorkspaceRoot } from '../projects/workspace.js';
 import { validateProjectId, getProject } from '../projects/store.js';
 import { guardProject } from './_guard.js';
 import { readBoard, replaceBoard, patchBoard, commitStaging, removeByTag } from '../projects/board-store.js';
@@ -27,7 +29,12 @@ function guard(req, res) {
 router.get('/:pid/board', async (req, res, next) => {
   try {
     if (!guard(req, res)) return;
-    res.json({ board: await readBoard(req.params.pid) });
+    // roles 是**派生态**：每次从 .claude/agents/ 现读，不落 board.json ——
+    // 板上存的署名是 slug（权威），展示名住在角色文件里（模型可改），两者不能混成一份数据。
+    // 前端只拿它把 slug 渲染得好看，任何判断仍按 slug 走。
+    let roles = {};
+    try { roles = Object.fromEntries(await listRoleNames(getWorkspaceRoot(req.params.pid))); } catch { /* 没有角色就是空表 */ }
+    res.json({ board: await readBoard(req.params.pid), roles });
   } catch (err) { next(err); }
 });
 

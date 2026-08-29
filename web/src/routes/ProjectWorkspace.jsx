@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { soleRoleTarget, sayToRoleText } from '../lib/role-target.js';
 import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Download, MoreHorizontal } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
@@ -11,6 +12,8 @@ import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
 import { Sliders, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
+import { buildBreadcrumb } from './workspace-chrome.js';
+import { useDeviceClass } from '../lib/device-class.js';
 // InspectTab 由 InspectFloatingCard 间接使用（不在此处直接 import）
 // CommentsTab 已删 — comments 嵌入到 InspectFloatingCard
 import TweaksPanel from '../components/context-panel/TweaksPanel.jsx';
@@ -18,7 +21,7 @@ import TweaksPanel from '../components/context-panel/TweaksPanel.jsx';
 // 不在此处直接 import — C2 撤销 floating panel 注册
 import ShareModal from '../components/project/ShareModal.jsx';
 import ExportMenu from '../components/project/ExportMenu.jsx';
-import ProjectActionsMenu from '../components/project/ProjectActionsMenu.jsx';
+import ProjectActionsMenu, { ProjectModeBadge } from '../components/project/ProjectActionsMenu.jsx';
 import SnapshotModal from '../components/project/SnapshotModal.jsx';
 import UpgradeQuickModal from '../components/project/UpgradeQuickModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
@@ -34,11 +37,11 @@ import { newId } from '../lib/helpers.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
 import { serializeForAI } from '../lib/element-semantics.js';
 import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges } from '../lib/api.js';
-import { scrollToPage, pulseHighlight } from '../lib/canvas-iframe-ops.js';
+import { handleAuxEvent } from '../lib/aux-events.js';
 import { exportFromMenu } from '../components/canvas/card-export.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
-import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated } from '../lib/chat-stream.js';
+import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult } from '../lib/chat-stream.js';
 import { bumpFileVersion, versionOfFile } from '../lib/file-versions.js';
 
 // 事件分流判据（名单+过期规则）2026-08-14 抽进 lib/event-router.js 配单测 ——
@@ -228,8 +231,19 @@ export default function ProjectWorkspace() {
   // 有产物窗铺满屏幕时收掉顶栏的浮现（它的关闭钮在右上角，鼠标够它的路上
   // 必然扫过顶部感应带）
   const [artifactWindowOpen, setArtifactWindowOpen] = useState(false);
+  // 关当前这扇窗的把手（CanvasFrame 报上来）。ref 不是 state：只在按返回那一刻读
+  const closeWindowRef = useRef(null);
   // 聊天卡开着 = 右缘那一整条被它占着，顶栏不浮现（issue #1 第 1、4 条）
   const [chatDockOpen, setChatDockOpen] = useState(false);
+  /**
+   * 聊天卡占了多宽（平板上画布区要让出这么多，2026-08-29 外壳第四刀）。
+   * ⭐ 让位不是挪工具栏，是**收窄画布容器** —— 工具栏/翻页器/小地图都往这个
+   * 容器里 dock，容器一收它们自己重排，以后加的东西也自动跟着。
+   * 只平板让：手机是抽屉（本来就盖着），桌面屏够宽压根不撞（工具栏 501-1099、
+   * 卡 1212 起）；810 的平板是唯一撞车那一档（真机量到卡 422 起、工具栏 113-697）。
+   */
+  const deviceClass = useDeviceClass();
+  const [chatDockW, setChatDockW] = useState(0);
   const [exportsListOpen, setExportsListOpen] = useState(false);
   const [pickExportOpen, setPickExportOpen] = useState(false);
   const [pickType, setPickType] = useState(null);   // 从菜单点进来的产物类型
@@ -417,6 +431,50 @@ export default function ProjectWorkspace() {
     window.addEventListener('nd-conversation-rewound', onRewound);
     return () => window.removeEventListener('nd-conversation-rewound', onRewound);
   }, [id, currentSessionId]);
+
+  // 板书控件（08-25 nd:controls 围栏）：MdInk 里的按钮点了发这个事件 —— 非触发件
+  // 攒进 pending（同标注「攒着」一条路），触发件直接起轮（攒的那批靠每轮注入的
+  // pending 提示一起被拉走）。handleAnnotate 定义在 early-return 之后，走 ref。
+  const handleAnnotateRef = useRef(null);
+  const controlQueueRef = useRef(new Map());   // `${chalkId}|${label}|${prompt}` → 待发项 cid（二击取消要撤回）
+  useEffect(() => {
+    const onControl = (e) => {
+      const d = e.detail || {};
+      if (!d.chalkId) return;
+      const key = `${d.chalkId}|${d.label}|${d.prompt || ''}`;
+      if (d.cancel) {
+        // 取消勾选 = 从待发队列真撤回，不是再排一条（08-25 用户报）
+        const cid = controlQueueRef.current.get(key);
+        if (!cid) return;
+        controlQueueRef.current.delete(key);
+        setComments(arr => arr.filter(c => c.id !== cid));
+        PendingChanges.clear(id, [cid]).catch(() => {});
+        return;
+      }
+      const text = d.prompt || d.label || '';
+      if (d.trigger) {
+        const target = {
+          id: d.chalkId, path: d.path || d.chalkId, title: d.title || '板书',
+          typeLabel: '板书', chalk: true, by: 'agent',
+        };
+        handleAnnotateRef.current?.({ target, text: text || '按板上勾选的继续', queue: false });
+        return;
+      }
+      if (!text) return;
+      // 排队走标注「攒着」同一条路，但 cid 记在本层 —— 取消要认领得到
+      const cid = newId('cmt');
+      const item = {
+        id: cid, kind: 'comment',
+        anchor: { board: d.chalkId, label: `板书「${d.title || '选项'}」` },
+        path: d.path || d.chalkId, text,
+      };
+      controlQueueRef.current.set(key, cid);
+      setComments(arr => [...arr, { ...item, board: d.chalkId, status: 'open', createdAt: new Date().toISOString() }]);
+      PendingChanges.push(id, item).catch((err) => console.warn('[controls] queue failed:', err.message));
+    };
+    window.addEventListener('nd:board-control', onControl);
+    return () => window.removeEventListener('nd:board-control', onControl);
+  }, [id]);
   useEffect(() => {
     if (!currentSessionId) {
       // /work 路径 = 新会话 → 空 chat 让用户从头开始
@@ -645,7 +703,10 @@ export default function ProjectWorkspace() {
       return;
     }
 
-    // ── 3. 其余：协议帧 / run 生命周期 / UI 副作用 ──
+    // ── 3. 旁路副作用族（跳页/高亮/toast，lib/aux-events.js）──
+    if (handleAuxEvent(evt, { isStale, showToast })) return;
+
+    // ── 4. 其余：协议帧 / run 生命周期 ──
     switch (evt.type) {
       // ── Phase A.4：WS hydrate 协议（server 推完整 messages 让前端不依赖 HTTP Sessions.read）──
       case 'ws.hydrate.start':
@@ -1098,15 +1159,8 @@ export default function ProjectWorkspace() {
         break;
       }
 
-      // C6: agent 的 navigate_to_page / highlight。实现在 lib/canvas-iframe-ops.js
-      // （DOM 操作不该住在路由组件里）
-      case 'run.canvas_navigate':
-        if (!isStale) scrollToPage(evt.page);
-        break;
-
-      case 'run.canvas_highlight':
-        if (!isStale) pulseHighlight(evt.selector, evt.durationMs);
-        break;
+      // 旁路副作用族（跳页/高亮/toast）整体在 lib/aux-events.js —— 08-28 死事件
+      // 清账时拆出去的（canvas_navigate/highlight/focus_page/merged/auth_error）
 
       // 浏览器（2026-08-18）：agent 开始浏览 / 举手求助 —— 低频信号走这条 WS，
       // 像素和输入走专用通道 /ws/projects/:pid/browser
@@ -1180,24 +1234,8 @@ export default function ProjectWorkspace() {
 
       case 'run.subagent.stop': {
         if (isStale) break;
-        // S3b：子代理收尾的 lastAssistantMessage 挂回对应 Task tool message。
-        // 前端 Message.jsx ToolMessage 在 agentType === 'vision-checker' 时
-        // 渲染 critique 卡（VERDICT/ISSUES/OVERALL），其他 subagent 暂不渲染（可拓展）。
-        if (evt.toolUseId) {
-          setMessages(prev => prev.map(m =>
-            m.role === 'tool' && m.id === evt.toolUseId
-              ? {
-                  ...m,
-                  subagentResult: {
-                    lastAssistantMessage: evt.lastAssistantMessage || null,
-                    transcriptPath: evt.transcriptPath || null,
-                    agentId: evt.agentId,
-                    agentType: evt.agentType,
-                  },
-                }
-              : m,
-          ));
-        }
+        // S3b：子代理收尾结果挂回 Task 卡（纯消息变换，见 lib/chat-stream.js）
+        setMessages(prev => attachSubagentResult(prev, evt));
         if (typeof window !== 'undefined' && import.meta.env.DEV) {
           // eslint-disable-next-line no-console
           console.log(`[event] ${evt.type}`, evt);
@@ -1236,6 +1274,12 @@ export default function ProjectWorkspace() {
       }
       case 'board.focus': {
         if (evt.rect) setBoardFocus({ rect: evt.rect, tag: evt.tag || null, layer: evt.layer || '', soft: !!evt.soft, chalk: evt.chalk || null, at: Date.now() });
+        break;
+      }
+      // agent 拨「改板书」开关（08-25）：BoardCanvas 挂窗口事件接（免 prop 钻五层）
+      case 'ui.chalk_edit': {
+        window.dispatchEvent(new CustomEvent('nd:chalk-edit', { detail: { on: !!evt.on } }));
+        showToast(evt.on ? 'agent 打开了「改板书」：板书现在可以直接拖动/编辑' : 'agent 关上了「改板书」', 'info');
         break;
       }
 
@@ -1697,7 +1741,7 @@ export default function ProjectWorkspace() {
    * `targets`（框选之后批量标注）走同一条路：一条消息把这几件都点名，而不是
    * 发 N 条 —— 用户说的是"这几张一起改"，拆成 N 条 agent 就得猜它们之间的关系。
    */
-  const handleAnnotate = async ({ target, targets, text, queue }) => {
+  const handleAnnotate = async ({ target, targets, text, queue, toMain = false }) => {
     const list = targets?.length ? targets : [target];
     // 报**路径**不是 id：`deck:主稿.html` 这种带形态前缀的东西 agent 读不出来
     const whereOf = (t) => t.path || t.id;
@@ -1739,6 +1783,23 @@ export default function ProjectWorkspace() {
       return;
     }
 
+    // 对角色说话（2026-08-29）：去向仍是主持人 —— 它这一拍要把场上的变化补齐再转交 ——
+    // 但消息里写清收件人，并且**先把这句话落在画布上**，角色回帖才接得上这条线。
+    // toMain = 他在浮层上把去向切成了「主持人」（场外的话），那就不当成戏里的发言。
+    const roleTarget = toMain ? null : soleRoleTarget(list);
+    if (roleTarget) {
+      boardApiRef.current?.presenceHint?.(list[0].id);
+      let echo = null;
+      try {
+        const anchor = (list.find((t) => typeof t.id === 'string' && t.id.startsWith('notes/板书/')) || list[0])?.id || null;
+        const r = await Assets.stageEcho(id, { text, ...(anchor ? { anchor } : {}) });
+        echo = r?.echo || null;
+      } catch (err) { console.warn('[stage] 落痕失败（话照样递出去）:', err.message); }
+      useGlobalStore.getState().openChatDock();
+      await handleSend(sayToRoleText({ ...roleTarget, text, echo }));
+      return;
+    }
+
     useGlobalStore.getState().openChatDock();
     // E4：发送瞬间精灵先飘到目标上（本地合成在场，真事件来了自然接管）
     boardApiRef.current?.presenceHint?.(list[0].id);
@@ -1747,13 +1808,21 @@ export default function ProjectWorkspace() {
       const loc = where && where !== t.title ? `（${where}）` : '';
       // 板书/手写字带摘录与作者（2026-08-23）：用户在 agent 的字上回话，agent 得知道那段字
       // 说的是什么、是不是自己写的 —— 是自己的板书就用 write_on_board reply_to 接在下面
-      const who = t.by === 'agent' ? '，agent 写的' : t.chalk ? '，用户写的' : '';
+      // by 三类：'agent'（主控）/ 常驻角色 slug（rp-*）/ 其余按用户写的算。
+      // ⚠️ 角色写的板书原来会落进 `t.chalk ? '用户写的'` 那一支 —— 判正好相反，
+      // 主 agent 会以为那段字是用户写的。
+      const isRole = !!t.by && t.by !== 'agent' && t.by !== 'user';
+      const who = isRole ? `，${t.byName || t.by} 写的`
+        : t.by === 'agent' ? '，agent 写的'
+          : t.chalk ? '，用户写的' : '';
       const ex = t.excerpt ? `，原文「${t.excerpt}」` : '';
-      const hint = t.chalk && t.by === 'agent' ? `；回应请 write_on_board reply_to=${t.path}` : '';
+      const hint = t.chalk && (t.by === 'agent' || isRole) ? `；回应请 write_on_board reply_to=${t.path}` : '';
       return `${t.typeLabel}「${t.title}」${loc}${who}${ex}${hint}`;
     }).join('、');
     await handleSend(`【画布标注】${desc}：${text}`);
   };
+  // 板书控件监听（early-return 之前那个 effect）要够到最新的 handleAnnotate
+  handleAnnotateRef.current = handleAnnotate;
 
   /**
    * 「发给 agent（N 条标注）」浮钮（E3）：元素评论攒批后的空间确认按钮。
@@ -1914,6 +1983,8 @@ export default function ProjectWorkspace() {
       // 两层界面轮流占屏不叠着抢 —— 08-17 拍板，配套把卡的出厂默认从「固定
       // 展开」翻成「不固定」，否则顶栏等于没了。
       topSuppressed={artifactWindowOpen || chatDockOpen}
+      // ‹ 先退最里面那一层：有窗开着就关窗，否则交给面包屑上一级（MobileTopBar 兜）
+      onBack={artifactWindowOpen ? () => closeWindowRef.current?.() : null}
       /**
        * 文件夹窗开着 = 右上角有它的关闭叉。产物窗那条路是整条顶栏不浮现
        * （topSuppressed），文件夹窗不能照办 —— 下面那串面包屑**只有文件夹窗
@@ -1921,33 +1992,14 @@ export default function ProjectWorkspace() {
        * 那一段感应带。issue #1 第 4 条。
        */
       topRightSafe={!!boardUi?.cwd}
-      /**
-       * 面包屑 = **当前目录一路拆到根**（2026-08-13）。
-       *
-       * 以前这里最多两级（项目名 / 任务名），因为那时只有"在项目区"和"聚焦
-       * 某一块区"两种状态。现在文件夹可以套文件夹，进到第三层就得能一眼看出
-       * 自己在哪、还能点回去任意一级。
-       *
-       * 项目名那一级 = 根目录。点它回根，跟点 logo 回首页不是一回事。
-       */
-      breadcrumb={[
-        {
-          label: project.name,
-          title: '回到桌面根',
-          ...(boardUi?.cwd ? { onClick: () => boardApiRef.current?.goTo?.('') } : {}),
-        },
-        ...((boardUi?.crumbs || []).map((c, i, all) => ({
-          label: c.title,
-          // 最后一级是"你现在在这儿"，不可点
-          ...(i < all.length - 1 ? { onClick: () => boardApiRef.current?.goTo?.(c.id) } : {}),
-        }))),
-      ]}
+      breadcrumb={buildBreadcrumb(project.name, boardUi, (d) => boardApiRef.current?.goTo?.(d))}
       actions={
         <>
           {/* 顶栏只留导航和动作两类（2026-07-30 重构）。原来这里还挂着上下文进度条 +
               model + 5 个会话常量 chip + 刷新 + 压缩 + 分享，一行 21 个元素。
               上下文属于「这次对话」不属于项目，整组挪进聊天栏 composer 上沿；
               刷新进 ⋯，分享进导出菜单。留驻判据：每周会主动点的才配占常驻像素。 */}
+          <ProjectModeBadge mode={project.mode} />
           <div style={{ position: 'relative' }}>
             <button
               ref={exportBtnRef}
@@ -1988,6 +2040,14 @@ export default function ProjectWorkspace() {
               onViewCode={handleViewCode}
               isQuickProject={project.kind === 'quick'}
               onUpgrade={() => { setActionsOpen(false); setUpgradeOpen(true); }}
+              projectMode={project.mode || 'design'}
+              onToggleMode={() => {
+                setActionsOpen(false);
+                const next = (project.mode || 'design') === 'rp' ? 'design' : 'rp';
+                updateProject(id, { mode: next })
+                  .then(() => showToast(`已切到${next === 'rp' ? '演出' : '设计'}模式，下个会话生效`))
+                  .catch((err) => showToast(`切换失败：${err.message}`, 'error'));
+              }}
               onOpenProjectPanel={(key) => boardApiRef.current?.openProjectPanel(key)}
               projectBand={boardUi?.projectBand || null}
             />
@@ -2024,9 +2084,11 @@ export default function ProjectWorkspace() {
          * 同一个上下文里比大小，把聊天盖死。 */}
         <section style={{
           position: 'absolute', inset: 0,
+          right: deviceClass === 'tablet' && chatDockOpen ? chatDockW + 8 : 0,
           display: 'flex', flexDirection: 'column',
           background: COLOR.bgWhite,
           isolation: 'isolate',
+          transition: 'right 220ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}>
           <CanvasFrame
             htmlSrc={currentSessionId ? Canvas.artifactUrl(id, versionOfFile(fileVersions, 'canvas.html')) : null}
@@ -2081,7 +2143,10 @@ export default function ProjectWorkspace() {
             boardUi={boardUi}
             boardApiRef={boardApiRef}
             onBoardUiState={setBoardUi}
-            onWindowOpenChange={setArtifactWindowOpen}
+            onWindowOpenChange={(open, close) => {
+              setArtifactWindowOpen(open);
+              closeWindowRef.current = close || null;
+            }}
             onExport={handleExport}
             stageRef={stageRef}
             onAddToContext={(item) => {
@@ -2148,7 +2213,7 @@ export default function ProjectWorkspace() {
         {/* 对话 —— 悬浮 AI 卡（2026-08-13）：关着零遮挡，鼠标贴屏缘唤出，
             图钉固定。放在 canvas section **之外**、视口容器之内：它跟画布
             内容不共用坐标系，画布怎么滚它都待在屏幕原处（这就是「跟随镜头」）。 */}
-        <ChatDock title={currentSessionTitle || '对话'} onOpenChange={setChatDockOpen}>
+        <ChatDock title={currentSessionTitle || '对话'} onOpenChange={(o, w) => { setChatDockOpen(o); setChatDockW(w || 0); }}>
           {({ collapse, pinned, onTogglePin }) => (
           <ChatPanel
             onCollapse={collapse}

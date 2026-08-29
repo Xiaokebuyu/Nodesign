@@ -43,6 +43,9 @@ export function makePreToolUseGetPendingChangesProtocolInjector() {
  * 常驻在 prelude 里是 1.2k tokens，但一次会话里可能一次都用不上。
  */
 export function makePreToolUseAskUserQuestionProtocolInjector() {
+  // 08-28 用户拍板还原：撤掉 08-27 的「提问上板」deny 闸，AskUserQuestion 走回
+  // 侧栏卡片本职。上板问选择仍然可以（nd:controls 是现役件），但那是 agent 的
+  // 版面选择，不再由闸强制。
   let alreadyInjected = false;
   return async (_input, _toolUseId, _options) => {
     if (alreadyInjected) return {};

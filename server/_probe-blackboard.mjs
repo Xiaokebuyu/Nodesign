@@ -1,16 +1,16 @@
 /**
  * _probe-blackboard.mjs —— 黑板工具真数据冒烟（2026-08-23）
  *   node --env-file=.env server/_probe-blackboard.mjs <projectId> [--keep]
- * 直接调 MCP 工具 handler：read_board → sketch_on_board → read_board{tag} → look_at_board{tag}
- * → finish_sketch → look_at_board。截图落 ~/claude-report-file/blackboard/。
- * 不带 --keep 时最后把草图擦掉（finish_sketch erase），board.json 回原样。
+ * 直接调 MCP 工具 handler：read_board → write_on_board(图) → read_board{tag} → look_at_board{tag}
+ * → edit_board commit → look_at_board。截图落 ~/claude-report-file/blackboard/。
+ * 不带 --keep 时最后把草图擦掉（edit_board erase_group），board.json 回原样。
+ * （08-28 别名收摊：sketch_on_board/finish_sketch 已下线，探针改走现役入口。）
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { makeReadBoardTool } from './engine/mcp/tools/read-board.js';
-import { makeSketchOnBoardTool, makeFinishSketchTool } from './engine/mcp/tools/sketch-on-board.js';
-import { makeEditSketchTool } from './engine/mcp/tools/edit-sketch.js';
+import { makeEditBoardTool as makeEditSketchTool } from './engine/mcp/tools/edit-board.js';
 import { makeWriteOnBoardTool } from './engine/mcp/tools/write-on-board.js';
 import { getSharedDir } from './projects/workspace.js';
 import { makeLookAtBoardTool } from './engine/mcp/tools/look-at-board.js';
@@ -33,8 +33,6 @@ const img = (r, name) => {
 };
 
 const read = makeReadBoardTool({ projectId });
-const sketch = makeSketchOnBoardTool({ projectId, ctx });
-const finish = makeFinishSketchTool({ projectId, ctx });
 const edit = makeEditSketchTool({ projectId, ctx });
 const write = makeWriteOnBoardTool({ projectId, sharedRoot: getSharedDir(projectId), sessionId: null, ctx });
 const look = makeLookAtBoardTool({ projectId, ctx });
@@ -49,7 +47,7 @@ const anchor = Object.entries(before.objects).find(([id, e]) => !e.kind && Numbe
 console.log('\nanchor =', anchor);
 
 const tag = `probe-${Date.now().toString(36)}`;
-const r1 = await sketch.handler({
+const r1 = await write.handler({
   title: '黑板冒烟：三个方向',
   tag,
   near: anchor || undefined,
@@ -74,7 +72,7 @@ const r1 = await sketch.handler({
     ...(anchor ? [{ from: 'a', to: anchor, type: 'ref', material: 'yarn', label: '证物' }] : []),
   ],
 }, {});
-console.log('\n== sketch_on_board ==\n' + txt(r1), r1.isError ? '(ERROR)' : '');
+console.log('\n== write_on_board(图) ==\n' + txt(r1), r1.isError ? '(ERROR)' : '');
 
 console.log('\n== read_board {tag} ==\n' + txt(await read.handler({ tag }, {})));
 
@@ -93,11 +91,11 @@ const r2 = await edit.handler({ tag, ops: [
   { op: 'remove', id: ids.s2 },
   { op: 'move', id: 'no-such-id', to: { dx: 1, dy: 1 } },
 ] }, {});
-console.log('\n== edit_sketch ==\n' + txt(r2), r2.isError ? '(ERROR)' : '');
+console.log('\n== edit_board ==\n' + txt(r2), r2.isError ? '(ERROR)' : '');
 const l1b = await look.handler({ tag }, {});
 console.log('look (edited):', img(l1b, `${tag}-edited.png`) || txt(l1b));
 
-console.log('\n== finish_sketch ==\n' + txt(await finish.handler({ tag }, {})));
+console.log('\n== edit_board commit ==\n' + txt(await edit.handler({ ops: [{ op: 'commit', tag }] }, {})));
 const l2 = await look.handler({ tag }, {});
 console.log('look (committed):', txt(l2).slice(0, 80), img(l2, `${tag}-committed.png`) || '(no image)');
 const l3 = await look.handler({}, {});
@@ -115,7 +113,7 @@ console.log('look (chalk):', img(l4, `${tag}-chalk.png`) || txt(l4));
 
 if (!keep) {
   // 擦组连板书文件一起删（removeByTag 管），下面对账 objects 数该回原样
-  console.log('\n== erase ==\n' + txt(await finish.handler({ tag, erase: true }, {})));
+  console.log('\n== erase ==\n' + txt(await edit.handler({ ops: [{ op: 'erase_group', tag }] }, {})));
   const after = await readBoard(projectId);
   console.log('objects before/after:', Object.keys(before.objects).length, Object.keys(after.objects).length,
     'bindings:', Object.keys(before.bindings).length, Object.keys(after.bindings).length);

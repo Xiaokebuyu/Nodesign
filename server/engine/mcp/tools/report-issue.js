@@ -101,6 +101,7 @@ every time; a viewportOnly flag would remove the whole detour" is actionable.`,
           };
         }
         try {
+          // ℹ️ 遥测事件：前端刻意不消费 —— 摩擦上报的读者是站主（信箱/审计），不是当场的用户
           ctx?.emit?.({ type: 'run.friction_reported', kind, summary, toolName: toolName || null, count: rec.count });
         } catch { /* emit fail-safe */ }
         return {

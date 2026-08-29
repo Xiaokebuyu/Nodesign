@@ -207,7 +207,7 @@ const nextPid = () => `proj_check_${Date.now().toString(36)}_${n++}`;
 // ── 9. relate_on_board 工具走完整路径 ────────────────────────────────────
 {
   const pid = nextPid();
-  const { makeRelateOnBoardTool } = await import('../engine/mcp/tools/relate-on-board.js');
+  const { makeRelateOnBoardAlias: makeRelateOnBoardTool } = await import('../engine/mcp/tools/edit-board.js');
   const emitted = [];
   const t = makeRelateOnBoardTool({ projectId: pid, ctx: { emit: (e) => emitted.push(e) } });
 

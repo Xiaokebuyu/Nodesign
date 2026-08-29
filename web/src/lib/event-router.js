@@ -25,7 +25,7 @@ export const STAGE_EVENTS = new Set([
   // ⚠️ 名单与 board-presence reducer 消费的类型有 parity 钉子
   //（board-presence.test.js："消费的类型必须在转发名单里"）——两头都在事件才活。
   'run.start', 'run.tool_use_summary',
-  'run.tool_use.started', 'run.delta.tool_use', 'run.delta.tool_input',
+  'run.tool_use.started', 'run.delta.tool_use', 'run.delta.tool_input', 'ui.chalk_edit',
   'run.delta.tool_result', 'run.file_changed', 'run.deck_preview',
   'run.done', 'run.error', 'run.cancelled',
   // 铅笔精灵：服务端压好的手写短句
@@ -36,7 +36,20 @@ export const STAGE_EVENTS = new Set([
   // 整条追踪链对它沉默 —— 精灵不知道 agent 在板上写了话。board.focus 带着
   // chalk 路径（= 画布 id），进在场 reducer 收编成目标。
   'board.focus',
-  // （run.task.* / run.subagent.stop 2026-08-18 移出名单：子代理便利贴与
+  // 角色挂上/离开 await_user（2026-08-26）：角色挂着等用户时事件流是**静默**的，
+  // 没有这条在场表分不出「在等你回话」和「已经没了」，精灵只能一直显工作态。
+  // 角色上场（2026-08-27 编排）：candidacy —— 还没写过板书的角色也要有精灵
+  // （候场位），在场条目从这条立，不再等 board.focus。
+  'run.subagent.start',
+  // 场声明变了（set_scene / 轮次推进 / pass_turn）：画布要知道轮到谁
+  // run.subagent.stop **2026-08-26 只为常驻角色重新入列**：角色的在场条目
+  // 由 board.focus 建立，而 run.done 分支明确跳过角色（它在后台自己活着）——
+  // 于是它**一条删除路径都没有**，退场后精灵永远留在画布上当幽灵，
+  // 而它是唯一能摘掉幽灵的信号。见 board-presence reducer。
+  // （2026-08-28：侧栏那份 roleStage 表随「台上提示」一起撤役，在场状态从此
+  //   只剩 presence 一个真相源 —— 两个状态源背离的老账也就此结清。）
+  'run.subagent.stop',
+  // （run.task.* 2026-08-18 移出名单：子代理便利贴与
   //   在场徽记退役，画布不再消费它们 —— 聊天侧栏的 Task 抽屉行走
   //   ProjectWorkspace 自己的 switch，不经这份名单。）
 ]);

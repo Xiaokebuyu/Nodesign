@@ -5,6 +5,7 @@
  *   node web/scripts/shot-live.mjs /projects/<pid>/work [选项]
  *
  *   --base=https://nodesign.xiaobuyu.trade:8443   入口（默认 exp 8443）
+ *   --device=phone|phone-small|tablet|tablet-land|android   真设备模拟（触屏/dpr/UA）
  *   --out=/tmp/shot.png --wait=3000 --viewport=1600x950
  *   --probe="document.querySelectorAll('[data-board-object]').length"
  *
@@ -22,7 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const { chromium } = createRequire(import.meta.url)(path.join(ROOT, 'node_modules/playwright/index.js'));
+const { chromium, devices } = createRequire(import.meta.url)(path.join(ROOT, 'node_modules/playwright/index.js'));
 
 const args = process.argv.slice(2);
 const route = args.find((a) => a.startsWith('/')) || '/';
@@ -35,6 +36,48 @@ const OUT = opt('out', '/tmp/shot-live.png');
 const WAIT = Number(opt('wait', 3000));
 const PROBE = opt('probe', null);
 const [VW, VH] = opt('viewport', '1600x950').split('x').map(Number);
+
+/**
+ * 设备模拟（2026-08-28 移动端第二轮，先修量具）。
+ *
+ * ⛔ 在这之前这个探针只会改窗口宽度 —— 而全站有一整半的代码问的是
+ * `(pointer: coarse)`（EdgeTab 干脆只在粗指针下渲染）。拿窄窗口去看手机，
+ * 看到的是「窄窗口的桌面版」，那份截图比没有更坏：它干净得像已经适配好了。
+ * 所以要真的带上 hasTouch / isMobile / dpr / 移动 UA。
+ *
+ *   --device=phone            iPhone 13（390×664 dpr3）
+ *   --device=phone-small      iPhone SE（320×568）—— 版面下限
+ *   --device=tablet           iPad (gen 7) 竖（810×1080）
+ *   --device=tablet-land      iPad (gen 7) 横（1080×810）—— 宽+粗指针，判据最容易判错的那档
+ *   --device=android          Pixel 7（412×839）
+ *   --device="iPad Pro 11"    playwright 设备名直给
+ *
+ * ⚠️ --viewport 仍然管用：给了 --device 再给 --viewport 就是「这台设备，但屏幕这么大」
+ * （转屏、或者试某个断点）。
+ */
+const DEVICE_ALIAS = {
+  phone: 'iPhone 13',
+  'phone-small': 'iPhone SE',
+  android: 'Pixel 7',
+  tablet: 'iPad (gen 7)',
+  'tablet-land': 'iPad (gen 7) landscape',
+  desktop: null,
+};
+const DEV = opt('device', null);
+let ctxOpts = { viewport: { width: VW, height: VH }, deviceScaleFactor: 1 };
+if (DEV) {
+  const name = DEVICE_ALIAS[DEV] !== undefined ? DEVICE_ALIAS[DEV] : DEV;
+  if (name) {
+    const d = devices[name];
+    if (!d) {
+      console.error(`没有这台设备：${name}\n别名：${Object.keys(DEVICE_ALIAS).join(' / ')}\n或用 playwright 的设备名（node -e "console.log(Object.keys(require('playwright').devices))"）`);
+      process.exit(1);
+    }
+    ctxOpts = { ...d };
+    // --viewport 显式给了就覆盖设备自带的（转屏 / 试断点）
+    if (args.some((a) => a.startsWith('--viewport='))) ctxOpts.viewport = { width: VW, height: VH };
+  }
+}
 
 let token = process.env.ND_TOKEN || null;
 if (!token) {
@@ -52,7 +95,7 @@ if (!token) {
 }
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
-const ctx = await browser.newContext({ viewport: { width: VW, height: VH }, deviceScaleFactor: 1 });
+const ctx = await browser.newContext(ctxOpts);
 await ctx.addCookies([{ name: 'nd_auth', value: token, url: BASE }]);
 const page = await ctx.newPage();
 const errors = [];
@@ -65,5 +108,13 @@ await page.waitForTimeout(WAIT);
 let probe = null;
 if (PROBE) { try { probe = await page.evaluate(PROBE); } catch (e) { probe = `PROBE ERR: ${e.message}`; } }
 await page.screenshot({ path: OUT, fullPage: false });
-console.log(JSON.stringify({ out: OUT, errors, probe }, null, 2));
+// 把「这一跑到底模拟了什么」打进输出：判据自己得先能自证，不然又是在看窄窗口
+const emul = await page.evaluate(() => ({
+  inner: `${window.innerWidth}x${window.innerHeight}`,
+  dpr: window.devicePixelRatio,
+  coarse: window.matchMedia('(pointer: coarse)').matches,
+  hover: window.matchMedia('(hover: hover)').matches,
+  touchPoints: navigator.maxTouchPoints,
+})).catch(() => null);
+console.log(JSON.stringify({ out: OUT, device: DEV || 'desktop', emul, errors, probe }, null, 2));
 await browser.close();

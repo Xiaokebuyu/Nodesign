@@ -31,6 +31,7 @@ import {
   closeQuerySession,
   markSessionActivity,
 } from '../engine/runs/active-runs.js';
+import { workingSubagents } from '../engine/agent/subagent-flight.js';
 import { getLiveTurnSnapshot } from '../engine/runs/live-turn.js';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -47,6 +48,18 @@ const GLOBAL_CLAUDE_CONFIG_DIR = platform.claudeConfigDir;
 const WS_GRACE_MS = Number(process.env.NODESIGN_WS_GRACE_MS) || 60_000;
 
 /**
+ * 后台角色在飞时最多续多少个 grace 周期（默认 10 × 60s = 10 分钟）。
+ *
+ * 封顶不是性能优化，是**这道闸自己的保险**：SubagentStop 漏一次（hook 抛异常、
+ * SDK 换版本改字段名、进程被 kill -9），在飞台账里就永远躺着一个不落地的条目，
+ * 会话再也关不掉 —— 一个 SDK 进程 ~250MB 且 RSS 单调不减，这台盒子 swap=0。
+ * 封到期照常关，日志喊一声，最坏后果回到「腰斩」这个原状，不会更差。
+ *
+ * 上限按实测选：turn 中位 57s，角色写一拍 700 字实测 ~2.5min，10 分钟够宽。
+ */
+const MAX_SUBAGENT_DEFERS = Number(process.env.NODESIGN_WS_SUBAGENT_DEFER_MAX) || 10;
+
+/**
  * sid → { count: 当前活跃 WS 连接数, graceTimer: 0 引用时启动的关闭定时器 }
  *
  * 每条带 sid 的 WS 连接 ref++，close 时 ref--；归零启 grace timer，N ms 内有新 WS
@@ -56,13 +69,15 @@ const WS_GRACE_MS = Number(process.env.NODESIGN_WS_GRACE_MS) || 60_000;
  */
 const sessionRefs = new Map();
 
-function refSession(sid) {
+function refSession(sid, projectId = null) {
   if (!sid) return;
   let entry = sessionRefs.get(sid);
   if (!entry) {
-    entry = { count: 0, graceTimer: null };
+    entry = { count: 0, graceTimer: null, projectId, subagentDefers: 0 };
     sessionRefs.set(sid, entry);
   }
+  if (projectId) entry.projectId = projectId;   // 事件与状态按项目分桶
+  entry.subagentDefers = 0;                     // 人回来了，续命额度重新计
   entry.count += 1;
   if (entry.graceTimer) {
     clearTimeout(entry.graceTimer);
@@ -92,6 +107,31 @@ function unrefSession(sid) {
       cur.graceTimer = setTimeout(onGraceExpired, WS_GRACE_MS);
       cur.graceTimer.unref?.();
       return;
+    }
+    // 后台角色在写也不杀（2026-08-28）：主持人的一拍几秒钟就结束，角色还要写好几分钟
+    // —— 上面那道闸只认 turn，认不出这种在飞工作。08-28 实录：角色派出 110s 后 grace
+    // 到期，人被腰斩在第三个 Read 上，板上永远没有第二段。
+    // （08-29：判据从「在飞 − 候场」简化成「在飞」—— 角色写完就结束这一轮，
+    //  没有挂着不收回合的形态了。见 subagent-flight.js 头注。）
+    const working = workingSubagents(sid, cur.projectId);
+    if (working.length > 0) {
+      if (cur.subagentDefers < MAX_SUBAGENT_DEFERS) {
+        cur.subagentDefers += 1;
+        const who = working.map((w) => w.name || w.agentType || w.agentId.slice(0, 8)).join(', ');
+        console.info(
+          `[ws] grace expired for sid=${sid.slice(0, 8)} but ${working.length} subagent(s) still working `
+          + `[${who}] — deferring close (${cur.subagentDefers}/${MAX_SUBAGENT_DEFERS})`,
+        );
+        cur.graceTimer = setTimeout(onGraceExpired, WS_GRACE_MS);
+        cur.graceTimer.unref?.();
+        return;
+      }
+      // 封顶：台账没落地不代表人还活着，不能拿它无限抵押一个 250MB 的进程
+      console.warn(
+        `[ws] sid=${sid.slice(0, 8)} 续命已封顶（${MAX_SUBAGENT_DEFERS} × ${WS_GRACE_MS}ms），`
+        + `台账里仍有 ${working.length} 个子代理在飞 —— 照常关闭回收，它们没写完的活会丢。`
+        + `若这条常出现，先查 SubagentStop 是不是漏了盖章（在飞台账只进不出）。`,
+      );
     }
     sessionRefs.delete(sid);
     if (hasActiveQuerySession(sid)) {
@@ -277,7 +317,7 @@ async function handleProjectWS(ws, pid, since = 0, sid = null) {
 
   // sid lifecycle ref：带 sid 的 WS 连上即 ref++，close/error 时 unref。0 ref 触发
   // grace timer N ms 后 closeQuerySession 让 SDK subprocess 自然退出。
-  refSession(sid);
+  refSession(sid, pid);
 
   // ── 连接协议（2026-07-27 重构：快照 + 尾随，每次连接都全量重建）──
   //

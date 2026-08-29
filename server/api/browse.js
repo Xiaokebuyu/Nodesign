@@ -46,6 +46,7 @@ import { pendingHelp } from '../engine/browse/handover.js';
 import { readVisit, readFrame, saveFrame, recordVisit, forgetVisit } from '../engine/browse/state.js';
 import { browseCard } from '../engine/browse/card.js';
 import { checkUrl } from '../lib/ssrf-guard.js';
+import { msg } from '../shared/messages.js';
 
 const router = express.Router();
 
@@ -96,11 +97,11 @@ router.post('/:pid/browse/open', async (req, res, next) => {
     const visit = await readVisit(pid);
     const want = String(req.body?.url || visit?.url || '');
     if (!/^https?:\/\//i.test(want)) {
-      return res.status(400).json({ error: '没有可打开的地址（这个项目还没逛过任何站）' });
+      return res.status(400).json({ error: msg(req, '没有可打开的地址（这个项目还没逛过任何站）') });
     }
     // 用户点的也过闸 —— 闸是硬边界，不因为"是人点的"就放行
     const pre = await checkUrl(want);
-    if (!pre.ok) return res.status(403).json({ error: `网络闸拒了这个地址：${pre.reason}` });
+    if (!pre.ok) return res.status(403).json({ error: msg(req, '网络闸拒了这个地址：{reason}', { reason: pre.reason }) });
 
     const out = await withBrowser(pid, async ({ page }) => {
       if (page.url() !== want) {

@@ -130,7 +130,15 @@ export function buildIsolationOptions({ cwdRoot, sharedRoot, npmCacheDir, agentT
           // 没有它 Bash 的 tmp 只读：venv 静默失败、pip --user EROFS、npm 装不上
           ...(agentTmpDir ? [agentTmpDir] : []),
         ],
-        denyWrite: ['/etc', '/usr', '/bin', '/sbin', '/private/etc'],
+        // ⛔ 角色文件不许模型写（2026-08-26）：它是派发闸的判据本身，模型能改就等于
+        // 自己给自己发工具权限（TOCTOU + 解析器分歧两条绕法，详见
+        // hooks/pre-workspace-scope-guard.js 那段注释）。
+        // 这半只管 Bash —— Write/Edit 是进程内工具**不进 bwrap**，那半在上面那道闸。
+        // 正门 cast_role 走服务端 fs，不经沙盒，照写不误。
+        denyWrite: [
+          '/etc', '/usr', '/bin', '/sbin', '/private/etc',
+          ...(cwdRoot ? [path.join(cwdRoot, '.claude', 'agents')] : []),
+        ],
         // 数据根整个盖住、再用 allowRead 给自己的工作区开天窗。
         // ⚠️ 口径要准（08-18 上生产时实测纠正）：`ls 数据根` **看得见别的项目的
         // 目录名**（沙盒里实测列出了另一个 pid），拦住的是**进去读**——

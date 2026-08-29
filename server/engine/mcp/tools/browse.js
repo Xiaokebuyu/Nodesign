@@ -458,7 +458,7 @@ about why they were taken is landfill.`,
             normalize: normalizeShot,
           });
           for (const f of r.files) {
-            try { ctx?.emit?.({ type: 'run.file_changed', path: f.rel, change: 'add' }); } catch { /* */ }
+            try { ctx?.emit?.({ type: 'run.file_changed', filePath: f.rel, event: 'add' }); } catch { /* */ }
           }
           const lines = [`从 ${r.data.title || r.data.url} 采下来了：`];
           for (const f of r.files) lines.push(`  ${f.rel}（${(f.bytes / 1024).toFixed(0)} KB，${f.kind}）`);

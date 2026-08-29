@@ -11,7 +11,23 @@
  */
 
 import { isBindingType, isBindingMaterial } from '../lib/binding-types.js';
-import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS } from './board-limits.js';
+import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
+import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES } from './board-limits.js';
+
+/**
+ * 板上署名的白名单：'user' / 'agent' / 常驻角色 slug（`rp-*`，见 engine/agent/cast.js）。
+ * 认不出的一律丢掉（落回无归属），**不透传** —— 这个值由模型写，而它的读者有一串：
+ * 前端标题与线标签、read_board 的分段、板书注入、将来的收件箱路由。
+ *
+ * ⚠️ **有东西寄生在这个值域上**：`lib/board-hero.js` 与 `web/src/lib/hero.js`（parity 对）
+ * 把「手画的线」判成 `by && by !== 'auto'` —— 那是个黑名单，只在「值域被这里钉死」的
+ * 前提下才与白名单等价。放宽这里的值域前，先去看那两处。
+ */
+function sanitizeBy(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (s === 'user' || s === 'agent') return s;
+  return ROLE_SLUG_RE.test(s) ? s : null;
+}
 
 export function clampNum(v, min, max, fallback) {
   const n = Number(v);
@@ -48,19 +64,19 @@ const CANVAS_NATIVE_KINDS = new Set(['scribble', 'text']);
 const COORD_LIMIT = 1e6;
 
 /** 涂鸦路径串上限。一条随手画的线约 300~800 字符，8000 够长且撑不爆 board.json */
-const MAX_SCRIBBLE_PATH = 8000;
+const MAX_SCRIBBLE_PATH = 24000;
 /**
  * 画布文字的字数上限。
  *
  * 它是"写在白板上的一句话"，不是文档 —— 长东西该写成 .md（那是便利贴，
  * agent 读得到）。2000 字够写一段说明，也撑不爆 board.json。
  */
-const MAX_TEXT_LEN = 2000;
+const MAX_TEXT_LEN = 8000;
 /**
  * md 档文字的上限（2026-08-23 黑板）。画布上的 markdown/KaTeX/mermaid 节点比手写
  * 一句话长，但它仍是"黑板上的一块"不是文档 —— 想写长的走 .md。
  */
-const MAX_MD_TEXT_LEN = 4000;
+const MAX_MD_TEXT_LEN = 8000;
 /** 文字的排版格式：plain = 原样手写；md = Markdown（含 KaTeX 与 mermaid 围栏） */
 const TEXT_FORMATS = ['plain', 'md'];
 /**
@@ -83,6 +99,7 @@ export function isSafeCanvasId(id) {
   return !p.split('/').some(seg => seg === '..');
 }
 
+export { TAG_RE };
 export function sanitizeTag(v) {
   return typeof v === 'string' && TAG_RE.test(v) ? v : null;
 }
@@ -155,9 +172,29 @@ export function sanitizeObject(o, size) {
     ...(o.expanded ? { expanded: true } : {}),
     // 显式归属：'' = 明确无归属（覆盖 sid 派生），非空 = 所属工作区 id
     ...(typeof o.zone === 'string' && o.zone.length <= 300 ? { zone: o.zone } : {}),
-    // 出处（2026-08-14 agent 摆位/建元素）：agent 落的座/写的字标出来，
-    // 用户的是默认不标 —— 跟关系线的 by 同一条纪律
-    ...(o.by === 'agent' ? { by: 'agent' } : {}),
+    // 出处（2026-08-14 agent 摆位/建元素）：谁**造**的这件东西。08-25 起也收
+    // 'user'（原来只认 agent，跟 bindings 三值不对称是口径病）；08-26 起再收
+    // 常驻角色的 slug（rp-*）—— RP 场里板上大半东西是角色写的，全落回 'agent'
+    // 就丢了归属。⚠️ 这里是白名单，不是透传：写这个值的是模型，而 by 有一串读者
+    // （前端显示 / read_board 分段 / 板书注入 / 将来的收件箱路由）。
+    ...(sanitizeBy(o.by) ? { by: sanitizeBy(o.by) } : {}),
+    // 座位出处（2026-08-25 范式重做）：谁**摆**的这个座。三值：
+    //   user  = 用户亲手拖的 —— 出处记号+学习票源（inferFlowDir 认它学摆放方向）。
+    //           08-28 起**不再是禁令**（用户拍板全放开）：move/reflow/组操作都挪得动，
+    //           但工具返回必须注明"原是用户亲手摆的"，且他拖回去就是定案。
+    //   auto  = 入座算法排的 —— 可以被重排
+    //   agent = agent 显式摆的 —— 用户可拖走（拖走后变 user）
+    // 没有这个字段，用户拖的和自动排的在数据上分不清
+    // （08-25 体检结论：老数据 by 被前端回写抹掉）。
+    ...(o.seat === 'user' || o.seat === 'auto' || o.seat === 'agent' ? { seat: o.seat } : {}),
+    // 尺寸出处（2026-08-28）：'user' = 这块板书的宽高是用户亲手拖出来的。
+    // 两个用途：① 重排/估算别拿内容宽度盖掉他调过的宽 ② 写入端拿它当**学习票源**
+    // 推断"他喜欢多宽的板书"（lib/chalk-size-pref.js）。跟 seat 是两件事 ——
+    // seat 说"谁摆的位置"，sized 说"谁定的大小"，用户可以只调一个。
+    ...(o.sized === 'user' ? { sized: 'user' } : {}),
+    // 贴身跟随（2026-08-27 shapes 编辑面）：这个涂鸦是"圈住 hug 那件东西"的记号，
+    // 挪那件东西时它跟着走（edit_board move/move_group/reflow；前端拖拽同口径）
+    ...(typeof o.hug === 'string' && o.hug.length <= 300 ? { hug: o.hug } : {}),
     // 分组标签 + 草稿位（2026-08-23 黑板）。staging = agent 这一轮还在打草稿：
     // 入座不看它、read_board 默认不列它、画面上半透明；落定（commitStaging）清位。
     ...(sanitizeTag(o.tag) ? { tag: sanitizeTag(o.tag) } : {}),
@@ -192,12 +229,17 @@ export function sanitizeBinding(b) {
       : {}),
     // 谁画的。用户画的线 agent 不该擅自删，反过来也一样；auto = 机器可证的
     // 引用关系（auto-relations.js 对账层专属，只有它增删自家 b:auto:* 条目）。
-    ...(b.by === 'agent' || b.by === 'user' || b.by === 'auto' ? { by: b.by } : {}),
+    ...(b.by === 'auto' ? { by: 'auto' } : sanitizeBy(b.by) ? { by: sanitizeBy(b.by) } : {}),
     // 材质（2026-08-23 黑板）：语义之外的第二个轴 —— 墨线/手绘/丝线。不落默认值，
     // 渲染侧按语义给缺省材质；存了默认值以后改缺省就改不动存量。
     ...(isBindingMaterial(b.material) && b.material !== 'ink' ? { material: b.material } : {}),
     ...(sanitizeTag(b.tag) ? { tag: sanitizeTag(b.tag) } : {}),
     ...(b.staging === true ? { staging: true } : {}),
+    // 跟随线（2026-08-25 范式重做，RP「状态板重锚」案）：follow = 目标 tag ——
+    // 这条线的 to 端永远指向该 tag 最新落板的那件，服务端在新件落板时自动重指
+    // 并把 from 端所在的组挪过去（board-follow.js）。followSide = 挪到哪一侧。
+    ...(sanitizeTag(b.follow) ? { follow: sanitizeTag(b.follow) } : {}),
+    ...(['right', 'left', 'above', 'below'].includes(b.followSide) ? { followSide: b.followSide } : {}),
   };
 }
 
@@ -220,6 +262,35 @@ export function sanitizeZone(z) {
     x: clampNum(z.x, -COORD_LIMIT, COORD_LIMIT, 0),
     y: clampNum(z.y, -COORD_LIMIT, COORD_LIMIT, 0),
   };
+}
+
+/**
+ * 线（lane）注册表条目（2026-08-27 空间规划）：{x,y,w,parent}。
+ * 键 = tag（线就是 tag，见 lib/board-lanes.js 头注）；frontier 不存 —— 从成员现算。
+ */
+export function sanitizeLane(l) {
+  if (!l || typeof l !== 'object') return null;
+  const x = Number(l.x); const y = Number(l.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const parent = typeof l.parent === 'string' && l.parent.length <= 300 ? l.parent : null;
+  return {
+    x: Math.round(x), y: Math.round(y),
+    w: clampNum(l.w, 96, 2400, 480),
+    ...(parent ? { parent } : {}),
+  };
+}
+
+/**
+ * 卷（2026-08-27 收纳器）：{ at, by, label? }。有条目 = 这个 tag 收着。
+ * 只是视觉收纳的状态位 —— 成员对象的座位原样留在 objects 里（展开即归位），
+ * 落位引擎照旧把它们当障碍。
+ */
+export function sanitizeRoll(r) {
+  if (!r || typeof r !== 'object') return null;
+  const at = typeof r.at === 'string' && r.at.length <= 40 ? r.at : new Date().toISOString();
+  const by = typeof r.by === 'string' && r.by.length <= 40 ? r.by : 'user';
+  const label = typeof r.label === 'string' && r.label.trim() ? r.label.trim().slice(0, 60) : null;
+  return { at, by, ...(label ? { label } : {}) };
 }
 
 export function sanitizeBoard(raw) {
@@ -251,6 +322,24 @@ export function sanitizeBoard(raw) {
   // 主角覆盖（2026-08-14 agent 摆位）：显式立的主角压过前端 pickHero 的推断。
   // 存 id 不存理由 —— 理由在会话里，画布只要知道谁站 C 位
   const hero = typeof raw?.hero === 'string' && raw.hero.length <= 300 ? raw.hero : null;
-  return { size, zones, objects, bindings, ...(hero ? { hero } : {}) };
+  const lanes = {};
+  let lCount = 0;
+  for (const [name, l] of Object.entries(raw?.lanes && typeof raw.lanes === 'object' ? raw.lanes : {})) {
+    if (lCount >= MAX_LANES) break;
+    const tag = sanitizeTag(name);
+    if (!tag) continue;
+    const s = sanitizeLane(l);
+    if (s) { lanes[tag] = s; lCount += 1; }
+  }
+  const rolls = {};
+  let rCount = 0;
+  for (const [name, r] of Object.entries(raw?.rolls && typeof raw.rolls === 'object' ? raw.rolls : {})) {
+    if (rCount >= MAX_LANES) break;   // 卷跟线同量级：一线一卷
+    const tag = sanitizeTag(name);
+    if (!tag) continue;
+    const s = sanitizeRoll(r);
+    if (s) { rolls[tag] = s; rCount += 1; }
+  }
+  return { size, zones, objects, bindings, ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}) };
 }
 

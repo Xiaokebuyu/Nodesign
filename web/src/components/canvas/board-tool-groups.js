@@ -8,7 +8,7 @@
  * 调用方仍然要用 useMemo 包住它，而且**镜头动作必须先经 ref 转一手**：理由
  * 记在 BoardCanvas 那个 memo 的头上（每帧换身份 → 死循环，build 和单测都照不出来）。
  */
-import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, LayoutGrid, Presentation, NotebookPen } from 'lucide-react';
+import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, LayoutGrid, Presentation, NotebookPen, MessageSquarePlus } from 'lucide-react';
 
 /**
  * @param {object} p
@@ -19,27 +19,49 @@ import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, Layou
  * @param {Function} p.zoomFit / p.zoomBy / p.zoomTo   **要传 ref 转过手的稳定引用**
  * @param {object} [p.filterGroup]  按类别过滤那颗漏斗（`{id, node}`，自己带 JSX ——
  *   本文件是 .js 且"只造数据不渲染"，所以节点在 board-filter.jsx 里造好了递进来）
+ * @param {'phone'|'tablet'|'desktop'} [p.deviceClass]  见 lib/device-class.js
+ *
+ * ## 触屏上少哪几颗（2026-08-28 移动端第二轮）
+ *
+ * ⛔ **指针 / 文字 / 涂鸦这一组在触屏上是死的，不是被我们藏了**：useBoardCamera
+ * 的 shouldPan 里写着「空格抓手 / 手指：任何位置都平移」，所以手指一落下就是推
+ * 画面，落不了笔、选不中、也起不了文字框。这是 08-21 修「双指捏合把卡带跑并落盘」
+ * 时的有意取舍（用现成的 isHandMode 而不是新写一套手势仲裁），取舍还算数，但那
+ * 之后这三颗按钮就一直摆在手机屏幕最底下**按了没有任何反应** —— 比没有更坏。
+ * 顺手的 drawMode 子组同理（它只在 tool==='draw' 时出现，而那个态在触屏上到不了）。
+ *
+ * ⭐ 手机再少两颗：整理 / 改板书。它们**能**工作，撤掉是因为用户拍板「手机上只读
+ * + 对话，编辑留给桌面」。平板留着 —— 屏幕放得下，而且平板上真有人会顺手改一下。
+ * 缩放的 −/+ 也在手机上撤掉：捏合是更自然的那条路，百分比那颗（点一下回 100%）留着。
  */
 export function buildBoardToolGroups({
   tool, setTool, drawMode, setDrawMode, scale,
   tidyBoard, zoomFit, zoomBy, zoomTo, filterGroup,
   blackboardMode = false, toggleBlackboard = null,
   chalkEditMode = false, toggleChalkEdit = null,
+  openCanvasNote = null,
+  deviceClass = 'desktop',
+  readGroup = null,
 }) {
-  return ([
+  const touch = deviceClass === 'phone' || deviceClass === 'tablet';
+  const phone = deviceClass === 'phone';
+  return dropLabelsOnPhone(phone, ([
     ...(filterGroup ? [filterGroup] : []),
+    // 翻件（触屏才有；件在 ReadingPager.jsx）。排在最前 —— 手机上「我读到哪」
+    // 比「缩放多少」更常看，而拇指够得最舒服的是这条的左半边
+    ...(readGroup ? [readGroup] : []),
     {
       id: 'view',
       items: [
-        {
+        ...(phone ? [] : [{
           id: 'tidy', icon: LayoutGrid, label: '整理',
           title: '重排这块画布上的产物（自动排版只在新产物到货时跑一次，别的时候不动你摆的位置）',
           onClick: tidyBoard,
-        },
+        }]),
         { id: 'fit', icon: Maximize2, label: '全部', title: '全部内容入镜（Shift+1）', onClick: zoomFit },
-        { id: 'zoomOut', icon: Minus, title: '缩小（Ctrl -）', onClick: () => zoomBy(-1) },
+        ...(phone ? [] : [{ id: 'zoomOut', icon: Minus, title: '缩小（Ctrl -）', onClick: () => zoomBy(-1) }]),
         { id: 'zoomLevel', icon: null, label: `${Math.round(scale * 100)}%`, title: '回到 100%（Ctrl 0）', onClick: () => zoomTo(1) },
-        { id: 'zoomIn', icon: Plus, title: '放大（Ctrl +）', onClick: () => zoomBy(1) },
+        ...(phone ? [] : [{ id: 'zoomIn', icon: Plus, title: '放大（Ctrl +）', onClick: () => zoomBy(1) }]),
         // 黑板模式（2026-08-23）：画布取代侧栏成为主窗口 —— agent 每轮主体内容落画布、
         // 聊天只留一两句，草图落下时镜头跟过去。开关是项目级偏好（ui-config.json）。
         ...(toggleBlackboard ? [{
@@ -51,16 +73,23 @@ export function buildBoardToolGroups({
         }] : []),
         // 板书编辑开关（2026-08-24 用户提，防误触）：关着（默认）时板书对单击/
         // 拖拽是空地，双击才武装成可拖可编辑；开着时板书随时可选中、双击进编辑
-        ...(toggleChalkEdit ? [{
+        ...(toggleChalkEdit && !phone ? [{
           id: 'chalkEdit', icon: NotebookPen, label: '改板书', active: chalkEditMode,
           title: chalkEditMode
-            ? '板书编辑：开 —— 板书随时可选中拖动，双击进编辑。点一下关（关着时要双击先武装，防误触）'
-            : '板书编辑：关 —— 板书防误触：单击/拖它不动（挪镜头照常），双击武装后才能拖和编辑。要频繁整理板书就点开',
+            ? '板书编辑：开 —— 板书随时可拖动，双击进编辑。点一下关'
+            : '板书编辑：关 —— 板书防误触：对手势是空地（框选仍可整批选中拖动）。要动板书就点开，agent 也会替你开',
           onClick: toggleChalkEdit,
+        }] : []),
+        // 常驻评论钮（2026-08-25 用户提）：画布态也要有开口说话的地方 —— 选中了
+        // 东西就标注选中集，没选就对整块画布说一句（发给 agent / 攒着两条路照旧）
+        ...(openCanvasNote ? [{
+          id: 'canvasNote', icon: MessageSquarePlus, label: '评论',
+          title: '对选中的东西（没选就对整块画布）说一句：发给 agent 立刻处理，或先攒着一起发',
+          onClick: openCanvasNote,
         }] : []),
       ],
     },
-    {
+    ...(touch ? [] : [{
       id: 'tools',
       type: 'mode',
       value: tool,
@@ -83,9 +112,9 @@ export function buildBoardToolGroups({
         // 住任何键"。而它换来的是模式工具的通病 —— 选了忘了切回来，画布就变得
         // 什么都点不动。空格态（isHandMode）留着，它才是"没空地时"的正解。
       ],
-    },
+    }]),
     // 拿着笔时多出的子模式组：落笔 / 摆放（见 drawMode 的说明）
-    ...(tool === 'draw' ? [{
+    ...(tool === 'draw' && !touch ? [{
       id: 'drawMode',
       type: 'mode',
       value: drawMode,
@@ -95,5 +124,23 @@ export function buildBoardToolGroups({
         { id: 'arrange', icon: Move, label: '摆放', title: '挪动/缩放已有墨迹 —— 不会落笔' },
       ],
     }] : []),
-  ]);
+  ]));
+}
+
+/**
+ * 手机上按钮只留图标（2026-08-28）。
+ *
+ * 390 宽的屏上，「整理 全部 − 84% + 黑板 改板书 评论」这一条量到 **80px 两行**，
+ * 常驻压着内容。折行的主因是那几个中文标签 —— 一个「黑板」比它的图标宽出一倍多。
+ * 撤掉标签之后同样这些功能一行放得下。
+ *
+ * ⚠️ **没有图标的那颗不许动**（缩放百分比 icon:null label:'84%'）—— 撤了它的标签
+ * 就是一颗空按钮。所以判据是「有图标才撤标签」，不是「一律撤」。
+ * title 一律留着：那是它剩下的唯一自我说明，长按/读屏都靠它。
+ */
+function dropLabelsOnPhone(phone, groups) {
+  if (!phone) return groups;
+  return groups.map((g) => (g.items
+    ? { ...g, items: g.items.map((it) => (it.icon ? { ...it, label: undefined } : it)) }
+    : g));
 }

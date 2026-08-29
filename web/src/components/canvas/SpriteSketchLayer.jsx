@@ -69,7 +69,7 @@ function Handwriting({ text, delay = MARK_DRAW_MS, size = 26, maxWidth = 340 }) 
  * 精灵本体：图标 + 手写行。`drawKey` 变化 = 整体重画（换了地方/重新出场）；
  * 只有 `text` 变 = 图标原地不动、那行字重写 —— 像在同一页上划掉重写。
  */
-export function SpriteSketch({ brand, drawKey = 0, text, size = 44, maxWidth = 340, active = false, quiet = false, onMarkClick, onMarkDragMove, onMarkDragEnd }) {
+export function SpriteSketch({ brand, drawKey = 0, text, size = 44, maxWidth = 340, active = false, quiet = false, nameTag = null, onMarkClick, onMarkDragMove, onMarkDragEnd }) {
   return (
     // ⚠️ width 必须显式给：世界容器是零宽的变换锚点（大家都显式传宽，BindingLayer
     // 的 width/height、舞台卡的 STAGE_CARD_W 同理），绝对定位 + auto 宽在里面会
@@ -82,9 +82,13 @@ export function SpriteSketch({ brand, drawKey = 0, text, size = 44, maxWidth = 3
       {/* quiet = 用户正往输入行里写字：精灵的话让位（病例是当年 recap 长文
           盖住输入行；recap 已退役，但闲时问候一样会挡，而且"它闭嘴听你说"
           本来就是对的礼节） */}
-      {!quiet && (
-        <div style={{ paddingTop: Math.round(size * 0.04) }}>
-          <Handwriting key={text} text={text} maxWidth={maxWidth} />
+      {/* nameTag（2026-08-28，常驻角色用）：名牌贴在标**旁边**，手写行落到名牌下面。
+          一块板上同时有叙事者 / NPC / 主控在写字，光看笔迹分不出谁是谁；名牌跟标
+          同一行，视线不用二次搜寻。主 agent 不传这个 prop，版面一如既往。 */}
+      {(nameTag || !quiet) && (
+        <div style={{ paddingTop: Math.round(size * 0.04), minWidth: 0 }}>
+          {nameTag}
+          {!quiet && <Handwriting key={text} text={text} maxWidth={maxWidth} />}
         </div>
       )}
     </div>

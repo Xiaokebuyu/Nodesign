@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, ChevronsUpDown, Focus } from 'lucide-react';
-import { Assets, Canvas } from '../../lib/api.js';
+import { LogOut, ChevronsUpDown, Focus, Group, Check, Download, Eraser, MessageSquarePlus, Archive } from 'lucide-react';
+import RollLayer, { useRollActions, ArchiveChip } from './RollLayer.jsx';
+import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
 import { orderWithGroups } from '../../lib/relation-order.js';
@@ -11,14 +12,16 @@ import { PAPER, PAPER_SHADOW, paperCard } from '../../lib/paper.js';
 import {
   DESKTOP_W, MARGIN_X, FOLDER_CARD,
   EASE, POP_IN, newStackedZoneRect, packRow, ROW_GAP,
+  hitsAt, nextPick,
 } from '../../lib/board-geometry.js';
 import {
-  SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, passesFilter, isDirArtifact,
+  SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, passesFilter, isDirArtifact, isArchivePath,
 } from '../../lib/board-kinds.js';
 import { deriveBoardObjects } from '../../lib/board-objects.js';
 import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
 import TransformControls from './TransformControls.jsx';
+import ChalkSizeHandles from './ChalkSizeHandles.jsx';
 import Minimap from './Minimap.jsx';
 import { useBoardCamera } from './useBoardCamera.js';
 import { submitLinkPop, deleteLinkPop } from './link-pop-actions.js';
@@ -26,9 +29,13 @@ import { useBoardGroups } from './useBoardGroups.js';
 import { useBlackboardWiring } from './useBlackboardMode.js';
 import { eyeParams } from './eye-mode.js';
 import { boxUnion } from '../../lib/board-camera.js';
-import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as presenceRectFor, MAIN_AGENT_ID, colorFor, hintPresence, expireHint } from '../../lib/board-presence.js';
-import { useStageState, splitStageCards, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
+import { objectRects, zoneRects } from '../../lib/board-rects.js';
+import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as presenceRectFor, MAIN_AGENT_ID, colorFor, hintPresence, expireHint, slugOfPresence } from '../../lib/board-presence.js';
+import { useStageState, splitStageCards, ChalkLiveInk, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
 import { AmbientSpriteLayer, SpriteAskInput, useSpriteAmbient } from './SpriteSketchLayer.jsx';
+import RoleSprites from './RoleSprites.jsx';
+import { useReadingNav } from './ReadingPager.jsx';
+import RoleTalkPanel from './RoleTalkPanel.jsx';
 import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
 import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
@@ -38,13 +45,15 @@ import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../lib/text-fonts.js';
 import { splitNoteFaces, faceParts } from '../../lib/note-faces.js';
 import BindingLayer from './BindingLayer.jsx';
 import TagHullLayer from './TagHullLayer.jsx';
+import { useBoardObjectDrag } from './useBoardObjectDrag.js';
+import { staleControlIds } from '../../lib/board-controls.js';
 import TextDraft from './TextDraft.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import LinkPopover from './LinkPopover.jsx';
 import AnnotatePopover from './AnnotatePopover.jsx';
+import { soleRoleTarget } from '../../lib/role-target.js';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
-import { useDragEdgePan } from './useDragEdgePan.js';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';
 import { useBoardAuthoring } from './useBoardAuthoring.js';
 import { useBoardOpen } from './useBoardOpen.js';
@@ -98,6 +107,7 @@ const FOLDER_LABEL = {
 // SCRIBBLE_INK 随卡体搬去 cards/BoardObject.jsx（只有那边用；
 // 它跟服务端 sanitizeCanvasData 的白名单是一对，断言在 board-kinds.test.js）
 
+
 export default function BoardCanvas({
   projectId, currentSessionId, listVersion, fileVersions, boardVersion, onAddToContext, onFocusDeck,
   // 工具栏合并（2026-07-27）：画布自己不再渲工具条 —— 通过 apiRef 暴露操作、
@@ -149,7 +159,8 @@ export default function BoardCanvas({
   // 派生（objects/folderView）留在本组件：它跟拖拽、影子区缠在一起。
   const {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
-    layout, setLayout, zones, setZones, bindings, setBindings, boardHero,
+    layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
+    rolls, setRolls,
     guideText, fileCount,
     reload, scheduleSave, patchLayout,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,
@@ -242,7 +253,23 @@ export default function BoardCanvas({
   const [chalkEditMode, setChalkEditMode] = useState(false);
   const chalkEditModeRef = useRef(false);
   chalkEditModeRef.current = chalkEditMode;
-  const toggleChalkEdit = useCallback(() => setChalkEditMode(v => !v), []);
+  // 持久化 + agent 可拨（08-25）：存 ui-config.chalk_edit；agent 的 edit_board
+  // chalk_edit op 经 WS → ProjectWorkspace → 窗口事件 nd:chalk-edit 当场生效
+  useEffect(() => {
+    let alive = true;
+    if (projectId) SessionConfig.read(projectId).then((r) => {
+      if (alive && typeof r?.config?.chalk_edit === 'boolean') setChalkEditMode(r.config.chalk_edit);
+    }).catch(() => {});
+    const onAgent = (e) => setChalkEditMode(!!e.detail?.on);
+    window.addEventListener('nd:chalk-edit', onAgent);
+    return () => { alive = false; window.removeEventListener('nd:chalk-edit', onAgent); };
+  }, [projectId]);
+  const toggleChalkEdit = useCallback(() => {
+    setChalkEditMode((v) => {
+      SessionConfig.patch(projectId, { chalk_edit: !v }).catch(() => {});
+      return !v;
+    });
+  }, [projectId]);
   /** 框选：{ a:{sx,sy,wx,wy}, b:{…} }（sx/sy 是画布视口内像素，wx/wy 是世界坐标）*/
   const handleDeleteNoteRef = useRef(null);   // Delete 键 effect 挂得早，函数定义在下面
   const [hoveredBinding, setHoveredBinding] = useState(null);
@@ -252,6 +279,8 @@ export default function BoardCanvas({
   const [presence, setPresence] = useState(emptyPresence);
   /** 精灵输入行（对话通道）：{x,y} 世界坐标，null = 收起 */
   const [spriteAsk, setSpriteAsk] = useState(null);
+  // 跟哪个角色对话（点它的精灵打开；侧栏永远是主 agent 的，路由拍板见 RoleTalkPanel）
+  const [roleTalk, setRoleTalk] = useState(null);
   const toolRef = useRef('select');
   toolRef.current = tool;
   const positionedRef = useRef([]);
@@ -293,7 +322,29 @@ export default function BoardCanvas({
   //   - 画布原生（涂鸦）：board.json 就是本体，从 layout 里带 kind 的条目还原
   // 画布物件的派生搬去 lib/board-objects.js（2026-08-17 行数棘轮拆件）：
   // 它是纯数据变换（/artifacts 载荷 → 画布物件），没有 React、可单独测。
-  const objects = useMemo(() => deriveBoardObjects({ tasks, artifacts, layout, browse }).filter(o => passesFilter(o, filter)), [tasks, artifacts, layout, browse, filter]);
+  // 档案面（2026-08-27 用户拍板）：根 CLAUDE.md / 记忆/ 默认不上画布 ——
+  // 那是 agent 的后台档案，不是产出。右上角「档案」钮显形；状态存本地
+  // （跟 board-filter 同一条理由：这是这个人此刻想看什么，不是画布的属性）。
+  const [showArchive, setShowArchive] = useState(() => {
+    try { return window.localStorage.getItem(`nd.showArchive.${projectId}`) === '1'; } catch { return false; }
+  });
+  const toggleArchive = useCallback(() => {
+    setShowArchive((v) => {
+      try { window.localStorage.setItem(`nd.showArchive.${projectId}`, v ? '0' : '1'); } catch { /* 隐私模式 */ }
+      return !v;
+    });
+  }, [projectId]);
+
+  const objects = useMemo(
+    () => deriveBoardObjects({ tasks, artifacts, layout, browse })
+      .filter(o => passesFilter(o, filter))
+      .filter(o => showArchive || !isArchivePath(o.id))
+      // 收卷（2026-08-27 收纳器，件在 RollLayer.jsx）：收着的组渲染层不画（卷卡替它
+      // 站着）。座位仍在 layout 里 —— 服务端落位照旧把它们当障碍。
+      .filter(o => { const t = o.tag || o.pos?.tag; return !t || !rolls[t]; }),
+    [tasks, artifacts, layout, browse, filter, showArchive, rolls]);
+
+  const { rollGroup, unrollGroup } = useRollActions(projectId, setRolls);
 
   // 顶带摘要（08-24 记忆体系改版：记忆/风格卡退役 —— 记忆住 记忆/、风格并进
   // 根 CLAUDE.md，都是画布上的普通文件；这里只剩项目档案与文件两张）
@@ -331,8 +382,11 @@ export default function BoardCanvas({
     for (const [zid, z] of Object.entries(zones)) if (live.has(zid)) out[zid] = z;
     // 影子：agent 刚 mkdir 出来、这一轮扫描还没看到的那个，先占个位
     for (const [zid, g] of Object.entries(ghostZones)) if (!out[zid]) out[zid] = g;
+    // 档案面收起时 记忆/ 文件夹卡不上桌（zones state 原样留着，显形即归位；
+    // 文件夹派生/剪枝都读 zones 原始表，这里滤掉不会引发删除写回）
+    if (!showArchive) for (const zid of Object.keys(out)) if (isArchivePath(zid)) delete out[zid];
     return out;
-  }, [zones, ghostZones, folders]);
+  }, [zones, ghostZones, folders, showArchive]);
   const zonesEffRef = useRef(zonesEff); zonesEffRef.current = zonesEff;
 
   // 刚被用户删掉的 zone 墓碑：删任务后 tasks 列表要等 reload 才更新，这个
@@ -568,10 +622,7 @@ export default function BoardCanvas({
   positionedRef.current = positioned;
   folderViewRef.current = folderView;
   // 幻影找座的障碍表与起排线（跟这一趟入座同一份现实）
-  phantomObstaclesRef.current = [
-    ...folderView.map(f => ({ x: f.x, y: f.y, w: f.w, h: f.h })),
-    ...positioned.map(o => { const sz = sizeOf(o); return { x: o.pos.x, y: o.pos.y, w: sz.w, h: sz.h }; }),
-  ];
+  phantomObstaclesRef.current = [...zoneRects(folderView), ...objectRects(positioned)];
   phantomBottomRef.current = contentBottom;
   // 全目录树的物件（不止桌面这一层）—— 文件夹窗里的右键要按 id 找得到它们
   objectsRef.current = objects;
@@ -604,7 +655,8 @@ export default function BoardCanvas({
       const next = { ...prev };
       for (const id of ids) {
         if (prev[id] && Number.isFinite(prev[id].x)) continue;   // 已经有坐标了
-        next[id] = { ...(prev[id] || {}), ...seatFixes[id], z: prev[id]?.z ?? 1 };
+        // seat:'auto' = 排出来的座（出处三值 auto/user/agent，user 的永不被重排）
+        next[id] = { ...(prev[id] || {}), ...seatFixes[id], seat: 'auto', z: prev[id]?.z ?? 1 };
         dirtyRef.current.objects.add(id);
         touched = true;
       }
@@ -827,196 +879,14 @@ export default function BoardCanvas({
     camApiRef.current?.zoomToFit({ force: true });
   }, [folderView]);
 
+  // 手机 / 平板的阅读导航（开局取景 + 翻件），整块在 useReadingNav.js
+  const { readGroup, deviceEnv, touchLane } = useReadingNav({ camApiRef, camera, cam, visibleObjects, layout });
+
   // ⚠️ 这里曾有「切 session 就切视图」：有会话进工作模式聚焦它的区、回 /work
   // 回项目区。会话与产物 08-08 解绑、双视图 08-13 退役之后，切对话不该动你
   // 站在哪一层 —— 那是两件事。
 
   // ── 拖拽（物件 / 工作区 / 背景平移共用 pointer 流）──
-  const onObjectPointerDown = (e, o) => {
-    if (e.button !== 0) return;
-    if (e.target.closest('[data-board-action]')) return;   // 按钮不触发拖拽
-    // 按着空格 = 挪镜头：这一下归相机。卡片的 handler 挂在卡片上、画布的
-    // 挂在外层，事件是**先卡片后画布**冒泡上去的 —— 卡片不主动让路的话，
-    // 按在卡片上会同时起一个物件拖拽和一次平移，两边各拽各的。
-    if (camApiRef.current?.isHandMode?.()) return;
-    // 板书防误触：编辑模式关着且这条板书没被双击武装 → 这一下不归卡
-    //（事件照常冒泡到画布层，board-hit 把它当空地 —— 平移/框选都照旧）
-    if (o.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(o.id)) return;
-    // 工具在手（画笔/批注）时这一下归工具：按在卡上是要在卡上画、标，不是要
-    // 拖卡。少了这条，笔画起点落在卡上会同时武装一次物件拖拽 —— 抬 z、写盘，
-    // 而笔画提交又吞掉抬手，dragRef 残骸让那张卡黏住光标
-    // （2026-08-13 查实的真 bug，三个症状同一根）。
-    //
-    // 两条豁免：
-    //   - 涂鸦的**摆放模式**对墨类放行 —— 那个模式存在的意义就是挪墨迹。
-    //   - **文字工具**整个放行 —— 它 2026-08-13 起只认双击（见 useCanvasTools），
-    //     单击这一下本来就该按指针工具那套走："单击不触发，当作操作文字本身"。
-    if (toolRef.current !== 'select' && toolRef.current !== 'text') {
-      const arrange = toolRef.current === 'draw' && drawModeRef.current === 'arrange';
-      if (!(arrange && o.native)) return;
-    }
-    recentDragMovedRef.current = false;
-    noteUserTakeover();
-    setDragActive(true);
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const z = ++zMaxRef.current;
-    patchLayout(o.id, { x: o.pos.x, y: o.pos.y, z });
-    dragRef.current = {
-      kind: 'object', id: o.id, startX: e.clientX, startY: e.clientY,
-      // 抓点存**世界坐标**：move 时用「当前相机下光标处的世界点 − 抓点」求
-      // 位移。相机在拖拽中怎么动（滚轮平移、Ctrl+滚轮缩放），卡都钉在光标下。
-      grabWorld: camera.toWorld(e.clientX, e.clientY),
-      lastClientX: e.clientX, lastClientY: e.clientY,
-      origX: o.pos.x, origY: o.pos.y, moved: false,
-    };
-  };
-
-  const onPointerMove = (e) => {
-    const d = dragRef.current;
-    if (!d) return;
-    const dx = e.clientX - d.startX; const dy = e.clientY - d.startY;
-    if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
-    d.lastClientX = e.clientX; d.lastClientY = e.clientY;
-    {
-      // 位移在**世界坐标系**里算：当前相机下光标处的世界点 − 按下时的抓点。
-      //
-      // 老算法是 `origX + 屏幕位移/scale`，公式里没有相机项 —— 拖着卡滚一格
-      // 滚轮，相机平移了，卡却按屏幕位移原地不动，光标底下的目标就这么丢了
-      // （2026-08-13 用户报）。Ctrl+滚轮缩放还会叠一个瞬间跳变（历史总位移
-      // 除以新 scale）。两次 screenToWorld 相减把相机自然消掉，怎么动都跟手。
-      //
-      // 落点不再夹范围（原来 x∈[-800,2160]、y≥-800）：画布已全向无限，
-      // "拖丢了找不回来"由小地图和 Shift+1 兜底，不由夹子兜底。
-      const w = camera.toWorld(e.clientX, e.clientY);
-      const nx = d.origX + (w.x - d.grabWorld.x);
-      const ny = d.origY + (w.y - d.grabWorld.y);
-      setLayout(prev => ({ ...prev, [d.id]: { ...prev[d.id], x: nx, y: ny } }));
-      // 实时落点提示：这个物件松手会归到哪（工作区高亮 / 文件夹卡高亮）。
-      //
-      // **只提示归属，不预告坐标**：2026-08-07 前这里还会算一个 244×210 的
-      // 吸附格并画成虚线 ghost，松手时把卡吸过去。那就是「拖动往鼠标反方向
-      // 跑」的全部原因 —— 拖拽过程逐帧是像素级跟手的，是松手那一下被吸到
-      // 格点上，向左拖 30px 能落到 −34px。落点由用户的手决定，不由格子决定。
-      const obj = positioned.find(o => o.id === d.id);
-      if (obj) {
-        const sz = sizeOf({ ...obj, pos: layoutRef.current[d.id] || obj.pos });
-        const cx = nx + sz.w / 2; const cy = ny + sz.h / 2;
-        // 板书拖拽不引发文件搬家（08-24 案）：它是画布上的**话**，位置自由、
-        // 归属钉死 notes/板书/。误触会丢 chalk 身份（判据住 board-kinds）
-        const canMoveFile = dragMovesFile(obj);
-        // 一层里只有文件夹方卡，判据从两条（收起态窄条 / 展开态框）收成一条
-        const folder = !canMoveFile ? null : folderView.find(z =>
-          cx >= z.x && cx < z.x + z.w && cy >= z.y && cy < z.y + z.h);
-        /**
-         * 没落在文件夹上 → 看是不是**摞在另一件东西上**：桌面语言里这就是
-         * "把这两件归到一起"，系统当场建个文件夹把两个都收进去（2026-08-13）。
-         *
-         * 判据用**被拖那张的中心**落在对方矩形里，跟落进文件夹同一套 ——
-         * 用矩形相交会太灵敏，挨着摆一下就成夹。
-         */
-        const over = (folder || !canMoveFile) ? null : positioned.find(it => {
-          if (it.id === d.id || it.native) return null;     // 涂鸦/文字不成夹
-          if (!dragMovesFile(it)) return null;              // 板书等：有磁盘位置但归属钉死
-          const s2 = sizeOf(it);
-          return cx >= it.pos.x && cx < it.pos.x + s2.w && cy >= it.pos.y && cy < it.pos.y + s2.h;
-        });
-        const hint = folder ? { kind: 'folder', id: folder.id }
-          : over ? { kind: 'group', id: over.id } : null;
-        if (JSON.stringify(dropHintRef.current) !== JSON.stringify(hint)) {
-          dropHintRef.current = hint;
-          setDropHint(hint);
-        }
-      }
-    }
-  };
-
-  // 拖拽中相机动了：滚轮不产生 pointermove，光标停着纯滚轮时上面那条换算
-  // 没机会跑，卡会在原世界坐标上"漂走"，直到鼠标动一像素才猛地追上。
-  // 这里在相机每次变化时用最后一次已知的光标位置补一帧。
-  useEffect(() => {
-    const d = dragRef.current;
-    if (!d || d.kind !== 'object' || !d.grabWorld) return;
-    const w = camera.toWorld(d.lastClientX, d.lastClientY);
-    setLayout(prev => ({
-      ...prev,
-      [d.id]: { ...prev[d.id], x: d.origX + (w.x - d.grabWorld.x), y: d.origY + (w.y - d.grabWorld.y) },
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cam]);
-
-  // 拖到视口边缘 → 画布自动跟着走。只推相机，卡由上面那条 [cam] effect 补帧（道理在 useDragEdgePan.js）
-  useDragEdgePan({ active: dragActive, dragRef, paneRef: scrollRef, camApiRef });
-
-  /**
-   * ⚠️ 这里曾有「拖到空白处 = 搬出当前文件夹」（DRAG_OUT_DETACHES / DETACH_MARGIN）。
-   * **2026-08-13 删掉，因为它在当前目录模型下必然误触** —— 用户报「我总是拖一下
-   * 就把文件移出文件夹了」，查出来是判据本身错了：
-   *
-   *   判定拿的是「物件在**这一层**的坐标」跟「`zones[当前文件夹]` 的矩形」比，
-   *   可后者是**那张文件夹卡在它父层里的位置**（288×352 的一张卡）。两个数字
-   *   活在不同的坐标空间里，比较毫无意义 —— 进了文件夹随便拖一下，中心大概率
-   *   就落在那张卡的 48px 之外，于是"明确拖出去了"，文件真的被搬回根目录。
-   *
-   * 修法不是给它换个正确的矩形（一层桌面是无限的，压根没有"这一层的边界"这种
-   * 东西），而是换成**显式动作**：右键「移动到…」挑目标（用户 2026-08-13 定）。
-   * 拖拽只剩两条语义，都要求落点上真有个东西：落在文件夹卡上=搬进去、
-   * 摞在另一件东西上=归成一夹。落在空地上就只是挪了个位置。
-   */
-
-  const onPointerUp = () => {
-    const d = dragRef.current;
-    dragRef.current = null;
-    setDragActive(false);
-    // click/dblclick 在 pointerup 之后才派发，此时 dragRef 已清 —— 拖完的
-    // "余韵"记在这个 ref 上，让点击类 handler 能区分"拖完松手"和"真点击"
-    recentDragMovedRef.current = !!d?.moved;
-    // 点了一下没拖动 = 选中（墨类进选中态；板书也进 —— 武装态点一下不该掉，
-    // 编辑模式开着时更是"随时可选中"。产物卡的动作是开窗/拖动，不选中）
-    if (d?.kind === 'object' && !d.moved) {
-      const obj = positioned.find(o => o.id === d.id);
-      setSelectedId((obj?.native || obj?.chalk) ? d.id : null);
-    }
-    if (d?.kind === 'object') {
-      // 落点判定 → **真的搬文件**（2026-08-08）：
-      //   落在文件夹卡上 = 搬进那个目录
-      //   摞在另一件东西上 = 两件归成一个新文件夹
-      //   落在空地 = 只是挪了个位置，什么也不搬（搬出去走右键「移动到…」）
-      if (d.moved) {
-        const obj = positioned.find(o => o.id === d.id);
-        const pos = layoutRef.current[d.id];
-        const hint = dropHintRef.current;
-        if (obj && pos) {
-          const prevZone = obj.zoneId || null;
-          let target = null;                       // null = 不搬；字符串 = 搬到这个目录（'' = 根）
-          if (hint?.kind === 'group') {
-            const other = positioned.find(it => it.id === hint.id);
-            if (other) groupInto(obj, other);
-            dropHintRef.current = null;
-            setDropHint(null);
-            // ⛔ 不再给旧 id 排写入：搬家发起后旧键的迟到 flush 会经 board-store
-            // 转发表把**新条目**删掉（null 删除也走 fwd，08-24 案）。位置与清账
-            // 由 moveEntry/groupInto 拿服务端回包处理。
-            return;
-          }
-          if (hint?.kind === 'folder' || hint?.kind === 'zone') {
-            if (hint.id !== prevZone) target = hint.id;
-          }
-          if (target !== null) {
-            moveEntry(obj, target, { x: pos.x, y: pos.y });
-            dropHintRef.current = null;
-            setDropHint(null);
-            return;   // 同上：搬家路上不给旧 id 排写入
-          }
-        }
-      }
-      dropHintRef.current = null;
-      setDropHint(null);
-      dirtyRef.current.objects.add(d.id);
-      scheduleSave();
-    }
-  };
-
-  // 「刚拖完」的余韵，点击类 handler 靠它区分"拖完松手"和"真点击"。
   // 必须声明在 useMarquee 之前 —— 那个 hook 在 render 期就把它读走了。
   const recentDragMovedRef = useRef(false);
   // 长按框选 → useMarquee.js（框的状态和三个手势口都在那儿）
@@ -1034,6 +904,39 @@ export default function BoardCanvas({
     positionedRef, objectsRef, zonesEffRef, folderViewRef,
   });
 
+  // 控件失效判据②（08-25 两版：先按 tag 判、当天改显式 supersede —— 多个面板要能
+  // 同时活着，背包和章节选项同 tag 会互相误杀）。判据①（until 定时）在 MdInk。
+  const staleControls = useMemo(() => staleControlIds(
+    positioned.filter(o => o.chalk && typeof o.text === 'string' && o.text.includes('```nd:controls')),
+  ), [positioned]);
+
+  // 单击 = 直接开标注（2026-08-27 用户拍板：标注是最常用的动作，点选操作条
+  // 同日撤役）。命中仍走几何 + 叠堆下翻：DOM 命中在指针捕获下会被重定向
+  // （08-25 板书武装案），所以拿世界坐标对矩形算；叠成一摞的产物再点同一处
+  // 循环翻到底下那件，翻到谁标注就落到谁 —— 挤堆场景靠这个解。
+  // 标注纸自己管退场（点外面/Esc 即关），点下一件时上一张已被 pointerdown 收掉。
+  const clickSelect = (domId, cx, cy) => {
+    const pt = camera.toWorld(cx, cy);
+    const hits = hitsAt(positionedRef.current, sizeOf, pt);
+    const cur = selectedIdsRef.current.length === 1 ? selectedIdsRef.current[0] : null;
+    const pick = nextPick(hits.length ? hits : (domId ? [domId] : []), cur);
+    if (!pick && !selectedIdsRef.current.length) return;   // 空地点空地，别空转渲染
+    setSelectedIds(pick ? [pick] : []);
+    const o = pick ? positionedRef.current.find(it => it.id === pick) : null;
+    if (o) setAnnotate({ x: cx, y: cy + 12, target: annotTargetOf(o, roleNames) });
+  };
+
+  // 拖拽全家（pointerdown/move/up/相机补帧/边缘跟车/整组抓手/板书双按武装）
+  // 2026-08-25 抽进 useBoardObjectDrag.js —— 语义与注释原样搬走，改拖拽行为去那看。
+  const { onObjectPointerDown, onPointerMove, onPointerUp, onTagGrab, abortDrag } = useBoardObjectDrag({
+    camera, cam, positioned, folderView, dragActive,
+    dragRef, dropHintRef, setDropHint, setDragActive,
+    recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
+    zMaxRef, toolRef, drawModeRef, chalkEditModeRef, selectedIdsRef,
+    setSelectedIds, clickSelect, noteUserTakeover, camApiRef, scrollRef,
+    moveEntry, groupInto,
+  });
+
   const wasDrag = () => !!(dragRef.current?.moved || recentDragMovedRef.current);
   // 黑板组三动作（整组选 / 落定 / 擦）→ useBoardGroups.js
   const { selectGroup, commitGroup, eraseGroup, exportGraph } = useBoardGroups({ projectId, positionedRef, setSelectedIds, reload });
@@ -1045,7 +948,7 @@ export default function BoardCanvas({
     projectId, onAddToContext, onFocusDeck,
     setLayout, dirtyRef, scheduleSave, reload,
     setAddedPaths, setViewer, setOrchestrate, setDetail,
-    openTextEditor,
+    openTextEditor, roleNames,
   });
   // 两个 ref 留在这儿赋值：挂得更早的 effect（Delete 键、preview_deck 工具）靠它们够到下面才定义的函数
   handleDeleteNoteRef.current = handleDeleteNote;
@@ -1518,7 +1421,22 @@ export default function BoardCanvas({
   // （image 卡 2026-08-14 迁出 —— 幻影入座见 PhantomLayer.jsx，occupancy 参数
   //   连同它的唯一消费方 placeImageCard 一起拆除）
   const visibleIdSet = new Set(visibleObjects.map(o => o.id));
-  const { anchoredCards, dockPanels, dockChips, spriteCards } = splitStageCards({
+  // 板书直播的落点（08-25：直接写在画布上）：首见钉在视口内偏左上，进行中不追手；
+  // 卡收场后条目顺手清（防 Map 无限长）
+  const liveChalkSpotsRef = useRef(new Map());
+  const liveChalkSpotFor = (blockId) => {
+    const m = liveChalkSpotsRef.current;
+    if (!m.has(blockId)) {
+      const r = scrollRef.current?.getBoundingClientRect();
+      if (!r) return null;
+      const w = camera.toWorld(r.left + r.width * 0.3, r.top + r.height * 0.24);
+      m.set(blockId, { x: Math.round(w.x), y: Math.round(w.y) + m.size % 3 * 40 });
+      if (m.size > 12) { const k = m.keys().next().value; m.delete(k); }
+    }
+    return m.get(blockId);
+  };
+
+  const { anchoredCards, dockPanels, dockChips, spriteCards, chalkCards } = splitStageCards({
     stageCards, positioned, visibleIdSet, visibleZones, focusZone: '',
   });
 
@@ -1544,14 +1462,10 @@ export default function BoardCanvas({
    * 当前看不到的东西只会让人对不上号。
    */
   const minimapItems = useMemo(() => {
-    const out = visibleZones.map(z => ({
-      id: `z:${z.id}`, x: z.x, y: z.y,
-      w: z.w, h: z.h, folder: true,
-    }));
-    for (const o of visibleObjects) {
-      const sz = sizeOf(o);
-      out.push({ id: o.id, x: o.pos.x, y: o.pos.y, w: sz.w, h: sz.h, folder: false });
-    }
+    const out = [
+      ...zoneRects(visibleZones).map(r => ({ ...r, id: `z:${r.id}`, folder: true })),
+      ...objectRects(visibleObjects).map(r => ({ ...r, folder: false })),
+    ];
     // 生图幻影也是"桌面上有的东西"（08-24 精灵体检）：这份表同时喂精灵避让，
     // 漏了它精灵会一屁股坐在正在生成的图上。dep 用 phantoms（表本体在 ref 上，
     // phantoms state 是它的重渲染扳机）。
@@ -1651,12 +1565,49 @@ export default function BoardCanvas({
   const zoomByStable = useCallback((d) => cameraRef.current.zoomBy(d), []);
   const zoomToStable = useCallback((z) => cameraRef.current.zoomTo(z), []);
 
+  // 工具栏常驻评论钮（08-25 用户提）：选中集优先，否则对整块画布说一句
+  const openCanvasNote = useCallback(() => {
+    const sel = selectedIdsRef.current;
+    const targets = sel.length
+      ? sel.map(id => positionedRef.current.find(o => o.id === id)).filter(Boolean).map(o => annotTargetOf(o))
+      : [];
+    setAnnotate({
+      x: Math.round(window.innerWidth / 2 - 160), y: Math.round(window.innerHeight - 320),
+      ...(targets.length
+        ? { target: targets[0], targets }
+        : { target: { kind: 'canvas', id: '', path: '', title: '整块画布', typeLabel: '画布' } }),
+    });
+  }, []);
+
+  // #tag 小标右键 = 整组菜单（08-25 用户报「tag 级评论按钮丢了」的正门：chip 浮在
+  // 卡片层之上，右键落在它身上 closest 找不到 data-board-object，只能弹空白菜单 ——
+  // 索性让 chip 自己出组菜单：选中/落定/导出/擦/标注这组）
+  const openTagMenu = useCallback((tag, e) => {
+    e.preventDefault();
+    const members = positionedRef.current.filter(o => (o.tag || o.pos?.tag) === tag);
+    if (!members.length) return;
+    const anyStaging = members.some(o => o.staging || o.pos?.staging);
+    const items = [
+      { id: 'grp-sel', icon: Group, label: `选中整组 #${tag}`, onClick: () => selectGroup(tag) },
+      { id: 'grp-note', icon: MessageSquarePlus, label: '标注这组给 agent', hint: '发送即处理', onClick: () => setAnnotate({
+        x: e.clientX, y: e.clientY, target: annotTargetOf(members[0]), targets: members.map(o => annotTargetOf(o)),
+      }) },
+      ...(anyStaging ? [{ id: 'grp-commit', icon: Check, label: '落定这组草稿', onClick: () => commitGroup(tag) }] : []),
+      { id: 'grp-export', icon: Download, label: '导出这组（SVG）', onClick: () => exportGraph?.('svg', tag) },
+      { id: 'grp-export-zip', icon: Download, label: '导出这组 + 产物（zip）', onClick: () => exportGraph?.('zip', tag) },
+      { id: 'grp-roll', icon: Archive, label: `收卷整组 #${tag}`, hint: '收进一张卷卡，单击展开', onClick: () => rollGroup(tag) },
+      { id: 'grp-erase', icon: Eraser, label: `擦掉整组 #${tag}`, danger: true, onClick: () => eraseGroup(tag) },
+    ];
+    setMenu({ x: e.clientX, y: e.clientY, items });
+  }, [selectGroup, commitGroup, eraseGroup, exportGraph, rollGroup]);
+
   const boardToolGroups = useMemo(() => buildBoardToolGroups({
     tool, setTool, drawMode, setDrawMode, scale,
     tidyBoard, zoomFit: zoomFitStable, zoomBy: zoomByStable, zoomTo: zoomToStable, filterGroup,
     blackboardMode, toggleBlackboard,
     chalkEditMode, toggleChalkEdit,
-  }), [tool, drawMode, scale, tidyBoard, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit]);
+    openCanvasNote, deviceClass: deviceEnv.class, readGroup,
+  }), [tool, drawMode, scale, tidyBoard, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, readGroup]);
 
   useEffect(() => { onToolbarGroups?.(boardToolGroups); }, [boardToolGroups, onToolbarGroups]);
 
@@ -1698,14 +1649,14 @@ export default function BoardCanvas({
         // 板书防误触：闲置板书（编辑模式关 + 未武装）双击先武装（选中），
         // 武装态再双击才进编辑 —— 单击已经在 board-hit 里被当成空地了
         chalkIdle={!win && !!obj.chalk && !chalkEditMode && !selectedIds.includes(obj.id)}
+        controlsStale={staleControls.has(obj.id)}
         // 产物窗开着 = 桌面被盖住：底下的活预览立刻定格（IO 不认遮挡，
         // 不冻的话窗里窗外是同一个站点的双实例全速跑 —— 08-24 性能案）
         previewPaused={deckOpen}
         onPrimary={() => {
-          if (!win && obj.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(obj.id)) {
-            setSelectedId(obj.id);
-            return;
-          }
+          // 板书只认「改板书」开关（08-25 拍板）：关着时双击不开编辑器（这条
+          // dblclick 理论上到不了这儿 —— 空地按下被平移层捕获重定向；留闸兜底）
+          if (!win && obj.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(obj.id)) return;
           primaryOpen(obj);
         }}
         onAdd={() => handleAdd(obj)}
@@ -1717,7 +1668,7 @@ export default function BoardCanvas({
         onFocus={() => focusDeck(obj)}
         // 标注：浮层从按钮底下长出来（at 是按钮的屏幕坐标），
         // target 的形状跟右键菜单那条**逐字一致** —— 同一张浮层
-        onAnnotate={(at) => setAnnotate({ x: at.x, y: at.y, target: annotTargetOf(obj) })}
+        onAnnotate={(at) => setAnnotate({ x: at.x, y: at.y, target: annotTargetOf(obj, roleNames) })}
         onExport={isFileBacked(obj) ? () => !wasDrag() && exportCard(projectId, obj) : undefined}
         noteCount={noteCounts[obj.id] || 0}
         // 缩略图的第二道限流：镜头拉太远就不挂 iframe（看不清，纯浪费）
@@ -1784,7 +1735,9 @@ export default function BoardCanvas({
           // 都该收掉选框。
           // onObject 而不是裸 selector：未武装的板书算空地 —— 点它也收掉选框
           //（这正是武装态的退出路之一；另一条是 Esc）
-          if (selectedIdsRef.current.length && !onObject(e) && !e.target.closest('[data-transform-handle]')) {
+          // onChrome 豁免（08-27）：小地图/档案钮等 chrome，按它不该先把选中收了
+          if (selectedIdsRef.current.length && !onObject(e) && !onChrome(e)
+            && !e.target.closest('[data-transform-handle]')) {
             setSelectedIds([]);
           }
           // 顺序即优先级：工具在手就归工具，工具没接才轮到相机平移。
@@ -1826,10 +1779,19 @@ export default function BoardCanvas({
             return;
           }
           if (endMarquee()) return;
-          camera.onPointerUp(e); onPointerUp(e);
+          const panned = camera.onPointerUp(e);
+          onPointerUp(e);
+          // 几何点选（08-27）：真点击（没平移没拖没框选）落在被 board-hit
+          // 当成空地的东西上 —— 闲置板书就是这类 —— 也要选得中。物件自己的点选
+          // 走拖拽钩子（它有指针捕获），这里只接"空地"那半边。
+          if (!panned && !wasDrag() && toolRef.current === 'select' && !onObject(e)
+            && !onChrome(e) && !e.target.closest('[data-transform-handle]')) {
+            clickSelect(null, e.clientX, e.clientY);
+          }
         }}
         onPointerCancel={(e) => {
-          canvasTools.onPointerUp(e); endMarquee(); camera.onPointerUp(e); onPointerUp(e);
+          canvasTools.onPointerUp(e); endMarquee(); camera.onPointerUp(e);
+          if (e.isTrusted) onPointerUp(e); else abortDrag();   // 合成 cancel = 第二根手指 → 撤销不落盘
         }}
         style={{
           position: 'absolute', inset: 0, overflow: 'hidden',
@@ -1872,9 +1834,13 @@ export default function BoardCanvas({
 
 
           {/* 关系线（世界坐标，铺在物件之下）*/}
-          <TagHullLayer positioned={positioned} />
+          <TagHullLayer positioned={positioned} onGrab={onTagGrab} onMenu={openTagMenu} />
+          {/* 卷卡（收纳器）：收着的组在包络左上角留一张卡，单击展开归位 */}
+          <RollLayer rolls={rolls} layout={layout} onUnroll={unrollGroup} />
+          {chalkCards.map(c => <ChalkLiveInk key={c.blockId} card={c} spot={liveChalkSpotFor(c.blockId)} />)}
           <BindingLayer
             bindings={bindings}
+            roleNames={roleNames}
             rectOf={rectOfId}
             epoch={positioned}
             width={stageBounds.w}
@@ -1907,16 +1873,20 @@ export default function BoardCanvas({
 
           {/* 选中态变换控制器（世界层，跟着被选物件的 transform 走）。
               被选物件可能这一帧刚被删/被搬走 —— find 不到就整层不画。 */}
+          {/* 选中态的两种控制器，共用一次查找：板书给宽高手柄（它是文件类物件，
+              走不到 native 那条判据 —— 在此之前用户根本调不了板书的宽高；宽真折行、
+              高是留白下限，见 ChalkSizeHandles 文件头），墨类原生物件给旋转+缩放。 */}
           {(() => {
-            if (!selectedId) return null;
-            const o = positioned.find(it => it.id === selectedId);
-            if (!o?.native) return null;
+            const o = selectedId ? positioned.find(it => it.id === selectedId) : null;
+            if (!o) return null;
+            const common = { o, sz: sizeOf(o), camScale: scale, toWorld: camera.toWorld };
+            if (o.chalk) {
+              return <ChalkSizeHandles {...common} onResize={(patch) => patchLayout(o.id, { ...patch, sized: 'user' })} />;
+            }
+            if (!o.native) return null;
             return (
               <TransformControls
-                o={o}
-                sz={sizeOf(o)}
-                camScale={scale}
-                toWorld={camera.toWorld}
+                {...common}
                 onChange={(patch) => {
                   const cur = layoutRef.current[o.id];
                   if (!cur) return;
@@ -1954,6 +1924,23 @@ export default function BoardCanvas({
               <StageCardBody card={card} onDismiss={() => dismissStageCard(card.blockId)} />
             )}
           />
+
+          {/* 常驻角色的精灵：贴着它正在写的东西（没写过的排候场位），点它开对话小窗 */}
+          <RoleSprites
+            presence={presence} rectOf={rectOfId} obstacles={minimapItems} roleNames={roleNames}
+            cam={cam} viewport={camera.viewport}
+            quiet={!!spriteAsk}
+            onPick={(slug) => setRoleTalk((cur) => (cur === slug ? null : slug))}
+          />
+          {roleTalk && (
+            <RoleTalkPanel
+              projectId={projectId} slug={roleTalk}
+              name={roleNames[roleTalk] || roleTalk}
+              // 事件驱动的在场态（08-28 新鲜度对齐：精灵是实时的，小窗别慢 12 秒）
+              live={Object.values(presence || {}).find((p) => p && slugOfPresence(p.id) === roleTalk) || null}
+              onClose={() => setRoleTalk(null)}
+            />
+          )}
 
           {/* 精灵对话输入行：点星芒浮出的那道铅笔虚线 */}
           {spriteAsk && (
@@ -2027,9 +2014,22 @@ export default function BoardCanvas({
             标注 2026-08-13 收敛成 AnnotatePopover 的两个出口之后它没有入口了，
             连同 commentDraft 状态一起删。留在画布那条路现在走 keepAnnotation。 */}
 
+        {/* ⚠️ 这里曾有「点选操作条」（ObjectActionBar，08-27 上午建、同日撤）：
+            选中单件在旁边浮一条板书样按钮条。用户拍板撤掉 —— 单击的语义改成
+            **直接开标注**（最常用的动作），其余动作仍在 hover 工具条上。 */}
+
+        {/* 档案钮（屏幕空间，右上角）：件在 RollLayer.jsx（画布收纳同族） */}
+        {!deckOpen && !winDir && <ArchiveChip showArchive={showArchive} onToggle={toggleArchive} />}
+
         {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
-            全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。 */}
-        {!deckOpen && !winDir && (
+            全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。
+            ⚠️ 触屏档上**按容器宽**撤掉（08-28 起，08-29 改判据）：它在窄容器里
+            占掉左下角一大块、还压着工具栏，而它回答的那个问题（"我在哪"）翻页器
+            用一句「17/17」答得更好。
+            ⭐ 判据是**容器宽不是设备档**：平板本来放得下，但聊天卡一开画布区收到
+            422，小地图又开始压工具栏 —— 决定放不放得下的从来是容器，不是屏幕。
+            桌面这一轮不动（同样窄的桌面窗口仍然留着它）。 */}
+        {!deckOpen && !winDir && !(touchLane && camera.viewport.w < 560) && (
           <Minimap
             bounds={camera.bounds}
             cam={cam}
@@ -2073,8 +2073,12 @@ export default function BoardCanvas({
       {annotate && (
         <AnnotatePopover
           x={annotate.x} y={annotate.y} target={annotate.target}
+          // 这批标注是不是全指着同一个常驻角色 —— 是的话这句话**直达它**，
+          // 不经过主 agent。判据跟真正发送时走的是同一个函数（lib/role-direct.js），
+          // 不能在这儿另写一份：文案说"说给墨璃"而实际发给了主控，比不显示更糟。
+          roleTarget={soleRoleTarget(annotate.targets?.length ? annotate.targets : [annotate.target])}
           onClose={() => setAnnotate(null)}
-          onSubmit={(text) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text })}
+          onSubmit={(text, opts) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text, toMain: !!opts?.toMain })}
           // 攒着：同一条回调，多一个 queue 标记 —— 落点在 ProjectWorkspace
           // （pending-changes buffer 和那条浮钮都住在那儿）
           onQueue={(text) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text, queue: true })}

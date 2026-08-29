@@ -32,6 +32,8 @@ import { DESIGN_W, SAFE_H, NARROW_W } from './login-wall/geometry.js';
 import { SCENES } from './login-wall/scenes/index.js';
 import { useSceneCarousel } from './login-wall/useSceneCarousel.js';
 import Scene from './login-wall/Scene.jsx';
+import { hasExplicitLocale, t } from '../lib/i18n.js';
+import LanguageSwitcher from './ui/LanguageSwitcher.jsx';
 
 export default function AuthGate({ children }) {
   // checking | login | ok
@@ -49,6 +51,12 @@ export default function AuthGate({ children }) {
   const applyStatus = (s) => {
     setOpenReg(!!s.openRegistration);
     useGlobalStore.getState().setAuthProfile?.(s.profile);
+    // 账号上记的界面语言回填（2026-08-26 i18n）。explicit:false —— 这不是用户
+    // 此刻的表态，只是把账号偏好搬过来，**不能盖掉本机已有的显式选择**：
+    // 一个人在这台机器上切成英文，就该是英文，哪怕账号上记的是中文。
+    if (s.user?.locale && !hasExplicitLocale()) {
+      useGlobalStore.getState().setLocale?.(s.user.locale, { explicit: false });
+    }
     if (!s.required || s.authed) {
       useGlobalStore.getState().setAuthUser?.(s.user || null);
       setPhase('ok');
@@ -113,10 +121,14 @@ export default function AuthGate({ children }) {
         useGlobalStore.getState().setAuthUser?.(data.user || null);
         setPhase('ok');
       } else {
-        setError(data.error || `${mode === 'register' ? '注册' : '登录'}失败 (${res.status})`);
+        // t() 的 key 必须是字面量，lint 才看得见（见 i18n-catalog.lint.test.js）
+        const fail = mode === 'register'
+          ? t('注册失败 ({status})', { status: res.status })
+          : t('登录失败 ({status})', { status: res.status });
+        setError(data.error || fail);
       }
     } catch {
-      setError('网络错误，请重试');
+      setError(t('网络错误，请重试'));
     } finally {
       setBusy(false);
     }
@@ -129,48 +141,55 @@ export default function AuthGate({ children }) {
 
   const form = (
     <>
-      <h2>来访登记</h2>
-      <div className="m">{openReg ? '免费开放中 · 邀请码可解锁 Claude' : '小范围内测中'}</div>
+      <h2>{t('来访登记')}</h2>
+      <div className="m">{openReg ? t('免费开放中 · 邀请码可解锁 Claude') : t('小范围内测中')}</div>
       <div className="ndw-tabs">
         <button type="button" className={isRegister ? '' : 'on'}
           onClick={() => { setMode('login'); setError(''); }}>
-          登录{!isRegister && <Underline />}
+          {t('登录')}{!isRegister && <Underline />}
         </button>
         <button type="button" className={isRegister ? 'on' : ''}
           onClick={() => { setMode('register'); setError(''); }}>
-          {openReg ? '注册' : '邀请码注册'}{isRegister && <Underline />}
+          {openReg ? t('注册') : t('邀请码注册')}{isRegister && <Underline />}
         </button>
       </div>
       <div className="ndw-field">
-        <label htmlFor="ndw-u">用户名 · USERNAME</label>
-        <input id="ndw-u" value={username} placeholder="写下用户名" autoFocus
+        <label htmlFor="ndw-u">{t('用户名 · USERNAME')}</label>
+        <input id="ndw-u" value={username} placeholder={t('写下用户名')} autoFocus
           autoComplete="username" onChange={(e) => setUsername(e.target.value)} />
       </div>
       <div className="ndw-field">
-        <label htmlFor="ndw-p">密码 · PASSWORD</label>
+        <label htmlFor="ndw-p">{t('密码 · PASSWORD')}</label>
         <input id="ndw-p" type="password" value={password}
-          placeholder={isRegister ? '设置密码，至少 8 位' : '写下密码'}
+          placeholder={isRegister ? t('设置密码，至少 8 位') : t('写下密码')}
           autoComplete={isRegister ? 'new-password' : 'current-password'}
           onChange={(e) => setPassword(e.target.value)} />
       </div>
       {isRegister && (
         <div className="ndw-field">
-          <label htmlFor="ndw-i">邀请码 · INVITE{openReg ? '（可选）' : ''}</label>
-          <input id="ndw-i" value={inviteCode} placeholder={openReg ? '有就填，解锁 Claude 订阅模型' : 'nd-xxxxxxxx'}
+          <label htmlFor="ndw-i">{t('邀请码 · INVITE')}{openReg ? t('（可选）') : ''}</label>
+          <input id="ndw-i" value={inviteCode} placeholder={openReg ? t('有就填，解锁 Claude 订阅模型') : 'nd-xxxxxxxx'}
             onChange={(e) => setInviteCode(e.target.value)} />
         </div>
       )}
       <p className="ndw-err">{error}</p>
       <button className="go" type="submit" disabled={busy}>
-        {busy ? '核 对 中' : isRegister ? '开 号' : '进 门'}
+        {busy ? t('核 对 中') : isRegister ? t('开 号') : t('进 门')}
       </button>
-      <p className="foot">{openReg ? '直接开号即可，免费模型人人可用；有邀请码的填进去解锁对应档位。' : '目前仅限受邀开号。'}</p>
+      <p className="foot">{openReg ? t('直接开号即可，免费模型人人可用；有邀请码的填进去解锁对应档位。') : t('目前仅限受邀开号。')}</p>
     </>
   );
 
   return (
     <div className={`ndw${narrow ? ' narrow' : ''}`} ref={rootRef}>
       <style>{WALL_CSS}</style>
+
+      {/* 语言切换器浮在视口角上，**不进 1500x800 那张设计稿** —— 稿里的东西按 --s
+          缩放，塞进去会被一起缩小，而且会挤到既有构图。门外必须能换语言：
+          英文用户读不懂登录表单的话，站内做得再好也没机会被看到。 */}
+      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 50 }}>
+        <LanguageSwitcher variant="wall" />
+      </div>
 
       {!narrow && (
         <>
@@ -191,10 +210,16 @@ export default function AuthGate({ children }) {
           <div className="ndw-head">
             <div className="row">
               <span className="ndw-logo">Nodesign</span>
-              <span className="ndw-anno">创作者的 agent 工作间</span>
+              <span className="ndw-anno">{t('创作者的 agent 工作间')}</span>
             </div>
-            <h1>想到，<span className="u">做出来<Underline w={1.8} /></span>，验一遍</h1>
-            <p className="ndw-sub">不用会画图，也不用学工具。</p>
+            {/* 标题**一行一个整句**，不再拿三段 t() 拼一句（2026-08-28）。
+                拼句在中文下碰巧成立，换到英文就是词序赌博；而且旧版给中间那段
+                加了 nowrap，英文一长直接压进右边场景的照片里。 */}
+            <h1>
+              <span className="l">{t('说一句话，它做出来')}</span>
+              <span className="l u">{t('哪里不对，圈哪里')}<Underline w={1.8} /></span>
+            </h1>
+            <p className="ndw-sub">{t('网页、海报、文档、演示稿、能演的角色，都在一块画布上。')}</p>
           </div>
 
           {/* 会换的那一半：一套构图 = 一个场景文件 */}
@@ -203,7 +228,7 @@ export default function AuthGate({ children }) {
           {/* 跨场景不变的锚（二）：线索的终点，门 */}
           <form className="ndw-card" onSubmit={submit}>
             <span className="pin" />
-            <div className="ndw-stamp">凭邀请</div>
+            <div className="ndw-stamp">{t('凭邀请')}</div>
             {form}
           </form>
         </div>

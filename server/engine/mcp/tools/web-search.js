@@ -494,7 +494,7 @@ Suggested flow for image-led pages:
           // 落盘了就发 file_changed —— generate_image 一直在发，这里漏了，
           // 于是参考图落进工作区之后前端毫无感知（素材抽屉要刷新才看得见）
           for (const img of downloadedImages) {
-            try { ctx?.emit?.({ type: 'run.file_changed', path: img.relPath, change: 'add' }); } catch { /* */ }
+            try { ctx?.emit?.({ type: 'run.file_changed', filePath: img.relPath, event: 'add' }); } catch { /* */ }
           }
         }
 

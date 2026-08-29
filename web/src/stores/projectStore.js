@@ -115,8 +115,8 @@ export const useProjectStore = create((set, get) => ({
 
   getProject: (id) => get().projects.find((p) => p.id === id) || null,
 
-  createProject: async ({ name, skillId, description, kind, autoNamed }) => {
-    const { project } = await Projects.create({ name, skillId, description, kind, autoNamed });
+  createProject: async ({ name, skillId, description, kind, mode, autoNamed }) => {
+    const { project } = await Projects.create({ name, skillId, description, kind, mode, autoNamed });
     const e = enrich(project);
     // 闪聊（kind=quick）也写入 store，方便首跑后 Workspace 能从 store 读到 project；
     // Home 网格用 hydrate({ kind:'project' }) 过滤，不会显示 quick。
@@ -135,6 +135,8 @@ export const useProjectStore = create((set, get) => ({
     if (typeof patch.skillId === 'string') apiPatch.skillId = patch.skillId;
     if ('description' in patch) apiPatch.description = patch.description;
     if (typeof patch.kind === 'string') apiPatch.kind = patch.kind;
+    // 项目模式（design/rp，2026-08-27）。切换下个会话生效 —— 调用方负责把这句话说给用户
+    if (typeof patch.mode === 'string') apiPatch.mode = patch.mode;
     // 会话指针（2026-08-13 收敛后它就是会话真相源；null = 清空回"新会话"）
     if ('activeSessionId' in patch) apiPatch.activeSessionId = patch.activeSessionId;
     if (Object.keys(apiPatch).length === 0) return get().getProject(id);

@@ -121,11 +121,7 @@ export function asciiMinimap(rects, { cols = 48, rows = 16, viewport = null } = 
  * 列（x 聚类）给出阅读顺序提示。
  * ──────────────────────────────────────────────────────────────────────── */
 
-export function bboxOfRects(rects) {
-  let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
-  for (const r of rects) { x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h); }
-  return Number.isFinite(x0) ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
-}
+export { bboxOf as bboxOfRects } from './rect.js';
 
 /** b 相对 a 在哪（以 a 为参照）：左/右/上/下 + 距离；重叠则说重叠 */
 export function relationOf(a, b) {

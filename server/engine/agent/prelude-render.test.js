@@ -90,3 +90,146 @@ describe('renderPrelude —— 标记块只留一份', () => {
     expect(renderPrelude('typo')).not.toContain('成人内容明确允许');
   });
 });
+
+/**
+ * 界面语言指令（2026-08-26 i18n）。
+ *
+ * 钉两件事：① 语言真的注进去了；② **认不出的值一律落中文** —— 这个产品中文优先，
+ * locale 拼错时给英文比给中文糟得多（中文用户突然被英文招呼），所以 fail-closed 的
+ * 方向是中文，跟成人档「拼错落 loose 不落 off」同一个道理。
+ */
+describe('renderPrelude —— 界面语言', () => {
+  it('locale 注进提示词，中英各自成句', () => {
+    expect(renderPrelude('loose', { locale: 'zh-CN' })).toContain('用户的界面语言是 **中文（zh-CN）**');
+    expect(renderPrelude('loose', { locale: 'en' })).toContain('用户的界面语言是 **English（en）**');
+  });
+
+  it('没给 locale / 给了认不出的值，都落中文', () => {
+    const zh = renderPrelude('loose', { locale: 'zh-CN' });
+    for (const opts of [undefined, {}, { locale: null }, { locale: 'ja' }, { locale: 'EN' }, { locale: 123 }]) {
+      expect(renderPrelude('loose', opts), `opts=${JSON.stringify(opts)}`).toBe(zh);
+    }
+  });
+
+  it('渲染完不许残留任何 {{占位符}}', () => {
+    for (const level of LEVELS) {
+      for (const opts of [{ locale: 'en' }, { locale: 'zh-CN' }, { locale: 'en', uncensored: true }]) {
+        const out = renderPrelude(level, opts);
+        expect(out, `${level}/${JSON.stringify(opts)} 残留占位符`).not.toMatch(/\{\{\w+\}\}/);
+      }
+    }
+  });
+
+  it('三种语言分开那条讲清楚了，且排版军规钉在产物语言上', () => {
+    const out = renderPrelude('loose', { locale: 'en' });
+    expect(out).toContain('**产物语言**跟着用户要的内容走');
+    expect(out).toContain('**排版规矩跟产物语言走**');
+    // 这句是 docx-craft / site-craft 那两条 skill 的条件化前提，改措辞要一起改
+    expect(out).toContain('只在产物正文主体是中文时生效');
+  });
+
+  it('换语言不影响成人档和 uncensored 那两个旋钮', () => {
+    for (const level of LEVELS) {
+      const zh = renderPrelude(level, { locale: 'zh-CN' });
+      const en = renderPrelude(level, { locale: 'en' });
+      // 两份只差语言名那一处
+      expect(en.replace('English（en）', '中文（zh-CN）')).toBe(zh);
+    }
+    expect(renderPrelude('off', { locale: 'en', uncensored: true })).toContain('## 无任何底线');
+  });
+});
+
+/**
+ * 项目模式分区（2026-08-27）—— 跟底线同一个性质：切错不会报错，只会让某个模式的
+ * 会话悄悄多背或少背一族教义。特征串取各分区里最不会被顺手改掉的话。
+ */
+const DESIGN_ONLY = [
+  '产物有三种形态',
+  '新建 deck 先问比例',
+  'preview_deck',
+  '产物会话五件',
+  'crystallize_skill',
+  '做完之前先自己看',
+  '建议他把项目切到演出模式',   // 设计侧的指路段
+];
+const RP_ONLY = [
+  '这个项目是演出模式',
+  // 08-29 编排收成一条回路（用户拍板）：场/广播/收件箱整族退役，四种玩法不再是
+  // 服务端状态而是「主持人每拍点谁」的结果。旧断言里凡是钉那套机械的都随之删除
+  // （台上广播 / 没设场=free / 召回散场 / facts / 回声阻尼 / 笔权 / 每种玩法有自己的版面）。
+  '你写世界，角色写人',                 // 分工：环境归主持人，角色只写自己
+  '一句话的过场，你自己带过',           // 龙套口子：背景板不专门起角色
+  '「谁接这一拍」永远是你当场的判断',   // ⭐ 模式退役后的核心：点名是判断不是配置
+  '他的第一句话归他自己',               // 主持人替说第一句，角色整场学它的腔
+  '它写一段就结束这一轮',               // 新回路第 3 段：写完即结束，主持人被自动叫醒
+  '别用 `Agent` 重新派同一个名字',      // 重派 = 起一个失忆的同名角色顶掉它
+  'subagent_type: "rp-role"',           // 唯一的角色位（08-29 从两个合成一个）
+  '自动接进自己那条线',                 // 预制摆位：open_lane 以角色名开线
+  '开场先问清楚三件事',                 // 想跟谁演 / 难度 / 代笔档
+  // 08-29：交给角色的那条消息 = 它这一拍的全部输入（先只写教义；机器补事实块留着挂账）
+  '它这一拍的全部输入',                 // 四段骨架：发生了什么 / 原话 / 落点 / 接哪一句
+  '情境可以给，情绪不要给',             // 导演与代笔的分界
+  '写进去的东西默认全桌可见',           // CLAUDE.md 全文进每个角色 → 暗线别写那儿
+  '世界不迎合玩家',                     // 难度三档，写实起路人不给面子
+  '重要抉择和转折点必须停笔等他',       // 代笔档：扩写只在大纲档且抉择必停
+  '戏外的话',                           // 戏里/戏外分层：指令提问不改写成台词
+  '一个字别改写',                       // 用户原话透传给角色
+  '把下一步做成可按的',                 // 控件教义（分支/常设面板/点人/骰）
+  '每一拍收尾都给一个决定点',           // 把手 + 选项三味配方 + 禁正文括号舞台指令
+  '选项就是下一幕的门',                 // 用户没按之前戏停在这一拍
+  '状态是场务的正事',                   // 状态板 set_text 每拍更新 + board_batch 一车
+  '谈话戏连着两拍没有判定',             // 节奏上钟 + 无聊过场跳时间 + 一拍别超一屏
+  '从酒馆卡 / 预设里搬角色',
+  '尽量原地照搬，别转写',               // 用户挑的对象卡整段 cp，不洗掉那个声音
+  '处理物落盘，别用完就丢',             // 预设消化产物进 预设/<名>/
+  '板的眼睛是 `look_at_board`',         // rp 工具清单切换段的特征串
+];
+const MODE_ALWAYS = [
+  '版面按线组织',   // 08-27 空间规划：线的教义在共享的黑板节，两种模式都要有
+  '翻篇的线折起来',   // 08-27 收纳器：roll 教义（擦是毁掉，折起是收着）
+  '正文在板上，侧栏收一句',   // 08-27：防双倍输出
+  '回复跟着入口走',           // 08-27 用户二拍：侧栏问侧栏答、板上问板上答，大篇幅例外上板
+  '画布思维',                 // 08-27 用户点名"很重要"：结构和线替代重复文字
+  '档案默认不上画布',         // 08-27：CLAUDE.md/记忆 收起 + 右上角「档案」钮要教给用户
+  '连线不横穿第三块',         // 08-27：落位引擎的走廊偏好 + agent 手摆同守
+  '学你和用户的习惯',         // 08-27：side 自动挑侧 + 往下接的方向跟用户的手
+  '位置和线是同一门语言',   // 08-27 用户拍板：摆放和连线相辅相成，不是两件事
+  '一件事的板上动作打一个包',       // 08-27 batch 重置的配套教义
+  '## 硬规则',
+  '派干活型子代理时显式写',
+  '画布也是黑板',
+  'report_issue',
+  '## 跟用户说话',
+];
+
+describe('renderPrelude —— 项目模式分区', () => {
+  it('design 渲染：设计道分区都在，演出分区一个不漏进来', () => {
+    for (const out of [renderPrelude('loose'), renderPrelude('loose', { mode: 'design' })]) {
+      for (const s of [...DESIGN_ONLY, ...MODE_ALWAYS]) expect(out, `design 少了「${s}」`).toContain(s);
+      for (const s of RP_ONLY) expect(out, `design 混进了「${s}」`).not.toContain(s);
+      expect(out).not.toContain('nd:mode');
+      expect(out).not.toContain('<!--');
+    }
+  });
+
+  it('rp 渲染：演出分区都在，设计道分区一个不漏进来', () => {
+    const out = renderPrelude('loose', { mode: 'rp' });
+    for (const s of [...RP_ONLY, ...MODE_ALWAYS]) expect(out, `rp 少了「${s}」`).toContain(s);
+    for (const s of DESIGN_ONLY) expect(out, `rp 混进了「${s}」`).not.toContain(s);
+    expect(out).not.toContain('nd:mode');
+    expect(out).not.toContain('<!--');
+  });
+
+  it('认不出的 mode 落 design（存量项目全是 design，多给不少给）', () => {
+    expect(renderPrelude('loose', { mode: 'weird' })).toBe(renderPrelude('loose', { mode: 'design' }));
+    expect(renderPrelude('loose', {})).toBe(renderPrelude('loose', { mode: 'design' }));
+  });
+
+  it('模式分区与底线分区正交：rp × uncensored 同时切也各自干净', () => {
+    const out = renderPrelude('off', { mode: 'rp', uncensored: true });
+    expect(out).toContain('无任何底线');
+    expect(out).toContain('这个项目是演出模式');
+    expect(out).not.toContain('产物有三种形态');
+    expect(out).not.toContain('<!--');
+  });
+});

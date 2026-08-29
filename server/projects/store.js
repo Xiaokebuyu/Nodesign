@@ -82,6 +82,15 @@ if (!projectsColNames.has('auto_named')) {
   console.log('[projects/store] projects.auto_named column added');
 }
 
+// 模式分离（2026-08-27）：design（设计工作台，现状）vs rp（演出：常驻角色演故事）。
+// 两种模式共用全部基础设施（画布/黑板/会话/精灵），差异只在提示词分区与工具面
+// （对照表在 engine/mcp/mode-profile.js 一份）。默认 'design' 让全部存量项目零行为变化。
+// 会话启动时读一次 —— 切模式**下个会话生效**，跟"改人设下次上场生效"同一节奏。
+if (!projectsColNames.has('mode')) {
+  db.exec("ALTER TABLE projects ADD COLUMN mode TEXT NOT NULL DEFAULT 'design'");
+  console.log('[projects/store] projects.mode column added (default design)');
+}
+
 // 多用户内测（2026-07-30）：项目归属。NULL 的存量行由 bootstrapAuth() 回填 admin
 if (!projectsColNames.has('owner_id')) {
   db.exec('ALTER TABLE projects ADD COLUMN owner_id TEXT');
@@ -151,6 +160,7 @@ function rowToProject(row) {
     skillId: row.skill_id,
     description: row.description || null,
     kind: row.kind || 'project',
+    mode: row.mode || 'design',
     autoNamed: !!row.auto_named,
     ownerId: row.owner_id || null,
     activeSessionId: row.active_session_id,
@@ -204,6 +214,7 @@ export function createProject({
   skillId = 'deskskill-engine-mini',
   description = null,
   kind = 'project',
+  mode = 'design',
   autoNamed = false,
   ownerId = null,
 }) {
@@ -211,15 +222,18 @@ export function createProject({
   if (kind !== 'project' && kind !== 'quick') {
     throw new Error(`createProject: kind 非法 (${kind})`);
   }
+  if (mode !== 'design' && mode !== 'rp') {
+    throw new Error(`createProject: mode 非法 (${mode})`);
+  }
   const id = newProjectId();
   const desc = (typeof description === 'string' && description.trim()) ? description.trim() : null;
   db.prepare(
-    `INSERT INTO projects (id, name, skill_id, description, kind, auto_named, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, name.trim(), skillId, desc, kind, autoNamed ? 1 : 0, ownerId);
+    `INSERT INTO projects (id, name, skill_id, description, kind, mode, auto_named, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, name.trim(), skillId, desc, kind, mode, autoNamed ? 1 : 0, ownerId);
   return getProject(id);
 }
 
-/** 更新（仅允许 name / skill_id / description / active_session_id / kind / autoNamed） */
+/** 更新（仅允许 name / skill_id / description / active_session_id / kind / mode / autoNamed） */
 export function updateProject(id, patch) {
   validateProjectId(id);
   // 用户显式改名 = 这名字他自己定了，系统不再拿摘要覆盖
@@ -228,12 +242,16 @@ export function updateProject(id, patch) {
   if ('kind' in patch && patch.kind !== 'project' && patch.kind !== 'quick') {
     throw new Error(`updateProject: kind 非法 (${patch.kind})`);
   }
+  if ('mode' in patch && patch.mode !== 'design' && patch.mode !== 'rp') {
+    throw new Error(`updateProject: mode 非法 (${patch.mode})`);
+  }
   const map = {
     name: 'name',
     skillId: 'skill_id',
     description: 'description',
     activeSessionId: 'active_session_id',
     kind: 'kind',
+    mode: 'mode',
     autoNamed: 'auto_named',
   };
   const sets = [];

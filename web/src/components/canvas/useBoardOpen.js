@@ -48,7 +48,7 @@ export function useBoardOpen({
   projectId, onAddToContext, onFocusDeck,
   setLayout, dirtyRef, scheduleSave, reload,
   setAddedPaths, setViewer, setOrchestrate, setDetail,
-  openTextEditor,
+  openTextEditor, roleNames,
 }) {
   // ── 动作 ──
   const handleAdd = (o) => {
@@ -69,7 +69,7 @@ export function useBoardOpen({
   };
 
   // 进阅读器：路由与三种阅读器本体在 BoardOverlays.jsx（B5 抽出）
-  const openViewer = makeBoardReaders({ projectId, setViewer });
+  const openViewer = makeBoardReaders({ projectId, setViewer, roleNames });
 
   const openFile = (o) => {
     window.open(Assets.artifactFileUrl(projectId, o.path), '_blank', 'noopener');

@@ -14,6 +14,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_LOCALE } from '../../shared/locales.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,6 +41,13 @@ const ADULT_POLICY = {
   strict: '露骨的成人内容在这个账号档位下不写——涉及时收敛处理、用留白带过。',
 };
 
+// 界面语言的人话名（2026-08-26 i18n）。注给模型看的是「中文（zh-CN）」这种带 id 的写法：
+// 光写「中文」模型不知道对应哪个 tag，光写 tag 又不如人话直白。
+const UI_LOCALE_NAME = {
+  'zh-CN': '中文（zh-CN）',
+  en: 'English（en）',
+};
+
 /**
  * 「底线」那一节在 prelude 里有**两份并排写着**的版本，标记块框起来：
  * `nd:policy:full`（对外开放平台的完整产物政策）和 `nd:policy:min`。渲染时留一份、
@@ -51,6 +59,14 @@ const ADULT_POLICY = {
  */
 const POLICY_BLOCK = /<!-- nd:policy:(full|min):start -->\n([\s\S]*?)<!-- nd:policy:\1:end -->\n/g;
 
+/**
+ * 项目模式分区（2026-08-27）：prelude 里设计道专属的节框在 `nd:mode:design` 块里，
+ * 演出（常驻角色）专属的节框在 `nd:mode:rp` 块里，渲染时按项目模式留一族、删一族。
+ * 没框的部分是共用骨架。同一个文件里可以有**多个**同名标记块（设计道的节不连续）。
+ * 为什么是标记块不是两份 md：见 POLICY_BLOCK 注释 —— 单一真相源 + 切错当场炸。
+ */
+const MODE_BLOCK = /<!-- nd:mode:(design|rp):start -->\n([\s\S]*?)<!-- nd:mode:\1:end -->\n/g;
+
 // 加载期断言：两份都必须在。少一份说明有人编辑 prelude 时把标记删了，那时候
 // 正则会静默退化成"一份都不删"（uncensored 路径拿到完整底线）或"整节消失"。
 {
@@ -58,6 +74,23 @@ const POLICY_BLOCK = /<!-- nd:policy:(full|min):start -->\n([\s\S]*?)<!-- nd:pol
   for (const want of ['full', 'min']) {
     if (NODESIGN_PRELUDE && !found.includes(want)) {
       throw new Error(`[system-prompts] nodesign-prelude.md 缺少 nd:policy:${want} 标记块 —— 提示词渲染会静默走错版本`);
+    }
+  }
+  const modes = [...NODESIGN_PRELUDE.matchAll(MODE_BLOCK)].map((m) => m[1]);
+  for (const want of ['design', 'rp']) {
+    if (NODESIGN_PRELUDE && !modes.includes(want)) {
+      throw new Error(`[system-prompts] nodesign-prelude.md 缺少 nd:mode:${want} 标记块 —— 模式分区渲染会静默失效`);
+    }
+  }
+}
+
+// 占位符也要断言：`.replace('{{X}}', v)` 在占位符不存在时**静默什么都不做**，
+// 于是线上会悄悄发出一份没有成人档、或者没有语言指令的提示词，不报错。
+// 标记块那套已经这么防了，占位符这两个之前漏了（08-26 补）。
+{
+  for (const ph of ['{{ADULT_POLICY}}', '{{UI_LOCALE}}']) {
+    if (NODESIGN_PRELUDE && !NODESIGN_PRELUDE.includes(ph)) {
+      throw new Error(`[system-prompts] nodesign-prelude.md 缺少 ${ph} 占位符 —— 渲染会静默少一段`);
     }
   }
 }
@@ -76,11 +109,19 @@ const POLICY_BLOCK = /<!-- nd:policy:(full|min):start -->\n([\s\S]*?)<!-- nd:pol
  *   前提不成立。留下的一条不随档位变，也不随谁在用变。
  *
  *   ⚠️ 默认 false。调用方拿不到模型名时落**完整**那份，绝不落 min。
+ *
+ *   `mode`：项目模式（projects.mode）。'design'（默认）留设计道分区，'rp' 留
+ *   演出分区。认不出的值落 design —— 存量项目全是 design，猜错方向宁可多给不少给。
  */
 export function renderPrelude(level = 'loose', opts = {}) {
   const keep = opts.uncensored === true ? 'min' : 'full';
+  const keepMode = opts.mode === 'rp' ? 'rp' : 'design';
+  // 认不出的 locale 落中文：这个产品是中文优先的，拿不准时给中文不给英文。
+  const localeName = UI_LOCALE_NAME[opts.locale] || UI_LOCALE_NAME[DEFAULT_LOCALE];
   return NODESIGN_PRELUDE
     .replace(POLICY_BLOCK, (_all, which, body) => (which === keep ? body : ''))
+    .replace(MODE_BLOCK, (_all, which, body) => (which === keepMode ? body : ''))
     .replace('{{ADULT_POLICY}}', ADULT_POLICY[level] || ADULT_POLICY.loose)
+    .replace('{{UI_LOCALE}}', localeName)
     .trim();
 }

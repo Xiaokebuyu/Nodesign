@@ -1,12 +1,10 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import {
-  Image as ImageIcon, FileText, Plus, ExternalLink, BookOpen, Trash2, Film,
-  MessageSquarePlus, Download, SlidersHorizontal,
-} from 'lucide-react';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, alpha } from '../../../lib/theme.js';
+import { Image as ImageIcon, FileText, Film } from 'lucide-react';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, FONT_READ, CANVAS, alpha } from '../../../lib/theme.js';
 import { PAPER, PAPER_SHADOW } from '../../../lib/paper.js';
 import { EASE, POP_IN } from '../../../lib/board-geometry.js';
-import { SIZES, sizeOf, actionsOf, chromeOf, cardOf, isTextPreview } from '../../../lib/board-kinds.js';
+import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview } from '../../../lib/board-kinds.js';
+import { buildObjectActions } from './object-actions.js';
 import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../../lib/text-fonts.js';
 import MdInk from './MdInk.jsx';
 import { useMeasuredSize } from './useMeasuredSize.js';
@@ -44,6 +42,8 @@ function BoardObject({
   onMeasured = null,
   /** 板书防误触（2026-08-24）：闲置板书 —— 手势层把它当空地，双击才武装 */
   chalkIdle = false,
+  /** 选项板被更新的同 tag 选项板顶掉（08-25）：nd:controls 按钮失效 */
+  controlsStale = false,
   /** 产物窗开着（08-24）：卡片活预览立刻定格，别跟窗里的实例抢核 */
   previewPaused = false,
   onPointerDown, wasDrag, onPrimary, onAdd, onOpenViewer, onOpenFile, onDetail, onDeleteNote, onFocus, onOrchestrate,
@@ -63,6 +63,12 @@ function BoardObject({
   const rootRef = useRef(null);
   const textual = o.type === 'text' || !!o.chalk;
   useMeasuredSize(rootRef, o, textual ? onMeasured : null, [o.data?.t, o.text, o.data?.size, o.data?.format]);
+  // 板书 MdInk 的 origin 要引用稳定（MdInk 已 memo：相机平移时 200 张板书别再
+  // 每帧重跑 markdown 解析 —— 08-25 性能探针 17fps 案）
+  const chalkOrigin = useMemo(() => ({
+    id: o.id, path: o.path || o.id, title: o.title || '',
+    at: o.chalk?.at || null, stale: controlsStale,
+  }), [o.id, o.path, o.title, o.chalk?.at, controlsStale]);
   const armHover = () => { clearTimeout(hoverTimer.current); setHover(true); onHoverCard?.(o.id); };
   const disarmHover = () => {
     clearTimeout(hoverTimer.current);
@@ -87,6 +93,11 @@ function BoardObject({
     ...(plainText
       ? { width: 'max-content', maxWidth: 26 * (TEXT_SIZE_PX[o.data?.size] || TEXT_SIZE_PX.md) + 12 }
       : { width: sz.w }),
+    // 用户亲手调过高度的板书：留白留得住（2026-08-28）。**只对盖过章的生效** ——
+    // 无差别上 minHeight 会拿写入时的估算高给存量板书凭空垫出一截空白。
+    // 是 minHeight 不是 height：正文永远撑得开，绝不裁字（板要能导出，
+    // 看不见的字等于丢了字）。
+    ...(o.chalk && o.pos?.sized === 'user' && sz.h > 0 ? { minHeight: sz.h } : null),
     zIndex: o.pos.z || 1,
     borderRadius: isInk ? 4 : RADIUS.xl,
     background: isInk ? (hover ? alpha(CANVAS.brass, 0.10) : 'transparent') : COLOR.bgCard,
@@ -147,35 +158,12 @@ function BoardObject({
     } : null),
   };
 
-  // 按钮清单由形态表给（board-kinds.js 的 actions，顺序即渲染顺序），
-  // 这里只把动作 id 兑换成图标和回调。
-  const ACTION_DEFS = {
-    add: { icon: Plus, title: added ? '已在托盘' : '加入上下文', fn: onAdd },
-    read: { icon: BookOpen, title: '阅读', fn: onOpenViewer },
-    detail: { icon: ExternalLink, title: '详情', fn: onDetail },
-    // .md 两条路都给：「阅读」是渲染过的（双击也走这条），「打开」是原始文件
-    open: { icon: ExternalLink, title: '打开', fn: onOpenFile },
-    // 编排.yaml：图形设置页（双击也走这条），「打开」仍留给原始文件
-    orchestrate: { icon: SlidersHorizontal, title: '编排设置', fn: onOrchestrate },
-    delete: { icon: Trash2, title: '删除', fn: onDeleteNote },
-  };
-  /**
-   * 标注**不在形态表里**，它排在所有形态的按钮之后无条件出现（2026-08-13）。
-   *
-   * 理由是表的意义在于记录**差异**：标注对每一种东西都成立、写法一字不差，
-   * 抄进十条形态就是把同一句话说十遍，下次加形态还得记着补第十一遍。
-   * 右键菜单那边同理 —— 它也是全类型无条件给。
-   *
-   * 位置固定在最右：那是"跟 agent 说话"的位置，deck 这种别的按钮都没有的
-   * 形态也照样有它（用户要的就是**每个**产物右上角都能标注）。
-   */
-  const actions = [
-    ...actionsOf(o).map(id => ACTION_DEFS[id]).filter(Boolean),
-    // 导出跟标注同理：**每一种产物卡都能导出**，所以不进形态表。抄进十条形态
-    // 就是把同一句话说十遍，加第十一种形态还得记着补一遍。
-    ...(onExport ? [{ icon: Download, title: '导出这张卡', fn: onExport }] : []),
-    { icon: MessageSquarePlus, title: '标注（发给 agent / 留在画布）', fn: onAnnotate, anchored: true },
-  ];
+  // 按钮清单和图标兑换 2026-08-27 抽去 object-actions.js（同一件东西两个实例
+  // 是这个仓库最贵的一课 —— 就算眼下只剩这一条 hover 工具条在消费）。
+  const actions = buildObjectActions(o, {
+    added, onAdd, onOpenViewer, onOpenFile, onDetail, onOrchestrate, onDeleteNote,
+    onExport, onAnnotate,
+  });
 
   // 工具条挂在卡片上沿之外。这里有两个坑，都踩过：
   //
@@ -188,6 +176,8 @@ function BoardObject({
   //    跟 TransformControls 的手柄同一条规矩。origin 钉在右下角，
   //    缩放围绕"贴卡那一点"进行，桥不会被缩出缝来。
   const invScale = 1 / (scale * (isInk ? (o.data?.scale ?? 1) : 1));
+  // （08-27 点选操作条同日撤役后，选中态的让位判据一并撤 —— 单击现在直接开
+  //   标注，其余动作全靠这条 hover 工具条，选中时它也得在）
   const Actions = hover && actions.length > 0 && (
     <div data-board-action style={{
       position: 'absolute', bottom: '100%', right: 0, paddingBottom: 4, zIndex: 5,
@@ -304,7 +294,7 @@ function BoardObject({
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
           <MdInk
             text={o.data?.t || ''}
-            fontFamily={TEXT_FONT_CSS[o.data?.font] || TEXT_FONT_CSS.kai}
+            fontFamily={TEXT_FONT_CSS[o.data?.font] || FONT_READ}
             fontSize={TEXT_SIZE_PX[o.data?.size] || TEXT_SIZE_PX.md}
             color={SCRIBBLE_INK[o.data?.color] || PAPER.ink}
           />
@@ -343,9 +333,14 @@ function BoardObject({
 
       {o.type === 'note' && !o.chalk && <NoteFaces o={o} />}
       {o.type === 'note' && o.chalk && (
-        /* 板书：agent/用户写在画布上的话 —— 裸 md 文字浮在纸上（同手写字的 md 档） */
+        /* 板书：agent/用户写在画布上的话 —— 裸 md 文字浮在纸上（同手写字的 md 档）。
+           pointerEvents none 让闲置板书对手势是空地；nd:controls 围栏的按钮在
+           MdInk 里自己开 auto（点选项不该要求先武装板书）。 */
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
-          <MdInk text={o.text || ''} fontFamily={TEXT_FONT_CSS.kai} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink} />
+          <MdInk
+            text={o.text || ''} fontFamily={FONT_READ} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
+            origin={chalkOrigin}
+          />
         </div>
       )}
 

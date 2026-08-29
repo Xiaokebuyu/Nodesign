@@ -361,6 +361,7 @@ export function sourceOf(o) {
   if (p.startsWith('assets/references/')) return 'tool';    // 浏览器采集 / 搜索下载
   if (p.startsWith('assets/generated/')) return 'tool';     // 生图产线
   if (o?.kind === 'generated') return 'tool';
+  if (p.startsWith('用户内容/')) return 'user';           // 上传落点（2026-08-28），路径是最硬的证据
   if (o?.kind === 'upload') return 'user';
   // ⚠️ 老形状：上传的东西路径长 `../../shared/assets/x`（扁平化前的写法）。
   // 不认它的话用户上传的素材会被标成"agent 做的"。
@@ -372,6 +373,16 @@ export function sourceOf(o) {
  * 过滤器：两条轴各自一个"要显示哪些"的集合，**结果取交集**。
  * `null` / 空集 = 这条轴不过滤（不是"全都不要"）—— 默认状态就该是全都看得见。
  */
+/**
+ * 项目档案面（2026-08-27 用户拍板）：根 CLAUDE.md 和 记忆/ 是 agent 的后台
+ * 档案，不是产出 —— 默认不上画布，用户点画布右上角「档案」才显形。
+ * 判据按路径（物件 id 和文件夹 zone id 都是工作区相对路径，同一个函数判两边）。
+ */
+export function isArchivePath(p) {
+  const s = String(p || '');
+  return s === 'CLAUDE.md' || s === '记忆' || s.startsWith('记忆/');
+}
+
 export function passesFilter(o, filter) {
   if (!filter) return true;
   const cats = filter.categories;
@@ -513,7 +524,7 @@ export const SIZES = Object.fromEntries(
  *
  * `path` 那行的意思：卡 id 可能带形态前缀（`site:` / `deck:`），标注要的是真路径。
  */
-export function annotTargetOf(o) {
+export function annotTargetOf(o, roleNames = null) {
   // 摘录（2026-08-23 黑板）：用户在 agent 写的字上回应时，agent 得看见那段字写了什么
   // —— 画布原生手写字 agent 读不回来，板书虽是文件但一句摘录省它一次 Read
   const raw = o.type === 'text' ? (o.data?.t || '') : (o.chalk ? (o.text || '') : '');
@@ -525,8 +536,20 @@ export function annotTargetOf(o) {
     title: o.title || o.name || o.id,
     typeLabel: labelOf(o),
     ...(excerpt ? { excerpt } : {}),
-    ...(o.chalk ? { chalk: true, by: o.chalk.by || 'agent' } : (o.native && (o.pos?.by || o.by) === 'agent' ? { by: 'agent' } : {})),
+    // by 三类：'user' / 'agent' / 常驻角色 slug（rp-*）。手写字那支原来只认 'agent'，
+    // 现在角色画的原生 text 也要认出来（否则标注它时会被说成"用户写的"，判正好相反）。
+    ...(o.chalk
+      ? { chalk: true, by: o.chalk.by || 'agent' }
+      : (o.native && byOfNative(o) ? { by: byOfNative(o) } : {})),
+    // 展示名随手带上：组标注消息的那一层（ProjectWorkspace）够不到 roleNames
+    ...(roleNames ? { byName: roleNames[o.chalk?.by || byOfNative(o)] || null } : {}),
   };
+}
+
+/** 画布原生物件（手写字/涂鸦）的作者：agent 或某个常驻角色 */
+function byOfNative(o) {
+  const v = o.pos?.by || o.by;
+  return v === 'agent' || (typeof v === 'string' && v.startsWith('rp-')) ? v : null;
 }
 
 /**
