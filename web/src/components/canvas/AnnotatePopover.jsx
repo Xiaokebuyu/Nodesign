@@ -4,6 +4,7 @@ import { Send, PenLine, Layers } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SANS, FONT_KAI, FONT_SIZE } from '../../lib/theme.js';
 import { PAPER, PAPER_SHADOW, GRAIN } from '../../lib/paper.js';
 import { isImeEnter } from '../../lib/helpers.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * AnnotatePopover —— 就地标注（2026-08-13，E3；同日二改收成唯一入口）。
@@ -112,7 +113,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
         <div style={{ display: 'flex', gap: 4, marginBottom: GAP.sm }}>
           {[
             { on: !toMain, label: roleTarget.who, hint: `戏里的话：主持人原话转交给${roleTarget.who}，这句也会落在画布上`, pick: false },
-            { on: toMain, label: '主持人', hint: '场外的话（改稿、问规则这类），不进戏', pick: true },
+            { on: toMain, label: t('主持人'), hint: t('场外的话（改稿、问规则这类），不进戏'), pick: true },
           ].map((o) => (
             <button
               key={o.label}
@@ -146,7 +147,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
         }}
         placeholder={sayTo
           ? `跟${sayTo.who}搭话——一句台词、一个动作、一个眼神都行…`
-          : '想怎么改 / 想让它变成什么…'}
+          : t('想怎么改 / 想让它变成什么…')}
         style={{
           width: '100%', resize: 'none', boxSizing: 'border-box',
           border: `1px solid ${COLOR.borderLt}`, borderRadius: RADIUS.sm,
@@ -163,7 +164,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
           <button
             onClick={keep}
             disabled={!text.trim()}
-            title="不发消息，只在画布上留一条连到它的标注"
+            title={t('不发消息，只在画布上留一条连到它的标注')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
               padding: `${GAP.xs}px ${GAP.sm}px`,
@@ -182,7 +183,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             disabled={!text.trim()}
             title={sayTo
               ? `攒着的会当成场外的话发给主持人，不转给${sayTo.who}——要说给它就用右边那颗`
-              : '先记下，攒够了从右下角那条浮钮一次发给 agent'}
+              : t('先记下，攒够了从右下角那条浮钮一次发给 agent')}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
               padding: `${GAP.xs}px ${GAP.sm}px`,
@@ -207,7 +208,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
           }}
         >
-          <Send size={12} /> {sayTo ? `说给${sayTo.who}` : '发给 agent'}
+          <Send size={12} /> {sayTo ? `说给${sayTo.who}` : t('发给 agent')}
         </button>
       </div>
     </div>

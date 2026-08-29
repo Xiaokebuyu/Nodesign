@@ -5,6 +5,7 @@ import { useGlobalStore } from '../../stores/globalStore.js';
 import { Sessions, Me } from '../../lib/api.js';
 import { FALLBACK_MODELS, isModelPrefStale } from '../../lib/models.js';
 import ModelMark from '../ui/ModelMark.jsx';
+import { t } from '../../lib/i18n.js';
 
 /**
  * 模型选择 —— Composer 工具栏里的小 picker。
@@ -172,9 +173,9 @@ export default function ModelPicker({
     const lockedOpt = options.find(o => o.id === id && o.locked);
     if (lockedOpt) {
       await confirmDialog({
-        title: '这个模型仅限 Pro 档',
+        title: t('这个模型仅限 Pro 档'),
         message: `${lockedOpt.label} 跑在站主的 Claude 订阅上，属于 Pro 档，暂未对外开放。当前档位可用的模型都在列表里，不带锁的随便选。`,
-        confirmLabel: '知道了', cancelLabel: '关闭',
+        confirmLabel: t('知道了'), cancelLabel: t('关闭'),
       });
       return;
     }
@@ -211,7 +212,7 @@ export default function ModelPicker({
     }
   }, [hasSession, effective, remote, projectId, sessionId, setModelPref, showToast, contextTokens, options, confirmDialog]);
 
-  const full = none ? '未配置模型' : shortLabel(effective, options);
+  const full = none ? t('未配置模型') : shortLabel(effective, options);
   // compact = 调用方说"这儿地方窄"。⭐ 由调用方判而不是这儿读视口：真正约束它的是
   // **它待的那个容器**（平板上视口 810 但聊天卡只有 380），今晚刚在工具栏折行上栽过同一条
   const label = compact && !none ? compactLabel(full, options) : full;
@@ -236,8 +237,8 @@ export default function ModelPicker({
         onClick={() => !busy && setOpen(v => !v)}
         disabled={busy}
         title={
-          disabled ? '这一轮跑完再切（切换从下一条消息生效）'
-            : none ? '还没有可用的模型'
+          disabled ? t('这一轮跑完再切（切换从下一条消息生效）')
+            : none ? t('还没有可用的模型')
             : hasSession
               ? `这个会话跑在 ${effective}。切换从下一条消息生效，对话不丢`
               : `新会话将用 ${label}`
@@ -279,10 +280,10 @@ export default function ModelPicker({
         }}>
           {none && (
             <div style={{ padding: `${GAP.sm}px ${GAP.md}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text3, lineHeight: 1.6 }}>
-              还没有可用的模型。
+              {t('还没有可用的模型。')}
               {isLocalProfile
-                ? <>到 <a href="/settings" style={{ color: COLOR.text, textDecoration: 'underline' }}>设置</a> 填 API Key（或在终端 <span style={{ fontFamily: FONT_MONO }}>claude login</span>），要接别家接口就配一个模型插槽。</>
-                : '请联系站主。'}
+                ? <>到 <a href="/settings" style={{ color: COLOR.text, textDecoration: 'underline' }}>{t('设置')}</a> 填 API Key（或在终端 <span style={{ fontFamily: FONT_MONO }}>claude login</span>），要接别家接口就配一个模型插槽。</>
+                : t('请联系站主。')}
             </div>
           )}
           {options.map((o) => (
@@ -290,7 +291,7 @@ export default function ModelPicker({
               key={o.id}
               active={effective === o.id}
               label={o.label}
-              desc={o.locked ? `${o.lockReason || '仅限 Pro 档'} · ${o.desc}` : o.desc}
+              desc={o.locked ? `${o.lockReason || t('仅限 Pro 档')} · ${o.desc}` : o.desc}
               locked={!!o.locked}
               onClick={() => select(o.id)}
             />
@@ -302,8 +303,8 @@ export default function ModelPicker({
             {hasSession
               ? (contextTokens >= WARN_FROM_TOKENS
                 ? `从下一条消息生效，对话与画布不丢。当前上下文 ${(contextTokens / 1000).toFixed(0)}k，换模型要重读一遍缓存，额外花约 $${(contextTokens * COLD_START_USD_PER_TOKEN).toFixed(2)}`
-                : '从下一条消息生效，对话与画布不丢')
-              : '这条只影响接下来新建的会话'}
+                : t('从下一条消息生效，对话与画布不丢'))
+              : t('这条只影响接下来新建的会话')}
           </div>
         </div>
       )}

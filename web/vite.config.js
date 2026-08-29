@@ -11,6 +11,11 @@ const API_PORT = process.env.NODESIGN_API_PORT || '4001';
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    // 界面语言钉 zh-CN —— 理由见 src/test-setup.js（jsdom 报 en-US，会让断言
+    // 中文文案的老测试在包 t() 之后集体变红）
+    setupFiles: ['./src/test-setup.js'],
+  },
   server: {
     port: 5174,
     host: true,

@@ -240,4 +240,106 @@ export default {
   '登录失败 ({status})': 'Sign-in failed ({status})',
   '注册失败 ({status})': 'Registration failed ({status})',
   '网络错误，请重试': 'Network error. Try again.',
+
+  // ── 项目 ⋯ 菜单（components/project/ProjectActionsMenu.jsx）──
+  '升级为项目': 'Upgrade to a project',
+  '对话': 'Chat',
+  '刷新产物墙': 'Refresh the wall',
+  '切回设计模式': 'Back to design mode',
+  '切到演出模式': 'Switch to performance mode',
+  '回到设计工作台（deck/站点/文档产线）': 'Back to the design workbench (decks, sites, documents)',
+  '常驻角色演故事的舞台；设计产线在该模式下收起':
+    'A stage where resident characters play out a story. The design pipeline is put away in this mode.',
+  '下个会话生效': 'Takes effect next session',
+  '复制项目': 'Duplicate project',
+  '保存快照': 'Save a snapshot',
+  '快照与历史': 'Snapshots and history',
+  '查看 spec JSON': 'View spec JSON',
+  '演出模式：常驻角色演故事的舞台（切换在 ⋯ 菜单，下个会话生效）':
+    'Performance mode: a stage where resident characters play out a story (switch it in the ⋯ menu; takes effect next session)',
+  '演出': 'Performance',
+
+  // ── 模型选择器（components/chat/ModelPicker.jsx）──
+  '这个模型仅限 Pro 档': 'This model is Pro tier only',
+  '知道了': 'Got it',
+  '关闭': 'Close',
+  '未配置模型': 'No model configured',
+  '这一轮跑完再切（切换从下一条消息生效）':
+    'Wait for this turn to finish. A switch takes effect from the next message.',
+  '还没有可用的模型': 'No models available yet',
+  '还没有可用的模型。': 'No models available yet.',
+  '请联系站主。': 'Ask the site owner.',
+  '仅限 Pro 档': 'Pro tier only',
+  '从下一条消息生效，对话与画布不丢': 'Takes effect from the next message. Your chat and canvas stay put.',
+  '这条只影响接下来新建的会话': 'This only affects sessions you start from now on',
+
+  // ── 对话消息（components/chat/Message.jsx）──
+  // 回滚那一批的口径：中文说「回到此处」，英文用 rewind（back/revert 都容易被读成
+  // 「撤销一步」，这里撤的是这条之后的**全部**文件改动）。
+  '回到此处': 'Rewind to here',
+  '回到此处？这会丢弃后续所有文件改动。\n\n历史会话首次回滚需 3-5 秒（重启临时会话）；后续回滚瞬间完成。':
+    'Rewind to here? Every file change after this point will be discarded.\n\nThe first rewind in an old session takes 3-5 seconds (a temporary session has to start up). Later ones are instant.',
+  '回滚': 'Rewind',
+  '此处不支持回滚': 'Cannot rewind to this point',
+  '上一个回滚还在进行，稍候重试': 'The previous rewind is still running. Try again shortly.',
+  '会话历史已删，无法回滚': 'The session history is gone, so there is nothing to rewind to',
+  '回滚超时，请重试（临时会话启动较慢时偶发）':
+    'The rewind timed out. Try again (this happens when the temporary session is slow to start).',
+  '回滚到此处之前的状态（撤销后续所有文件改动）':
+    'Rewind to the state before this point (undoes every file change after it)',
+  '回滚中...': 'Rewinding…',
+
+  'Agent 调用了 AskUserQuestion 但 input.questions 为空（SDK schema 违规）':
+    'The agent called AskUserQuestion with an empty input.questions (SDK schema violation)',
+  'AGENT 问': 'AGENT ASKS',
+  '{n} 题': { one: '{n} question', other: '{n} questions' },
+  '已取消': 'Cancelled',
+  '已回答': 'Answered',
+  '面板在画布上': 'The panel is on the canvas',
+  '在这里答': 'Answer here',
+  '请先选一个选项 / 自由输入回复，或点"跳过本题"':
+    'Pick an option or write your own answer, or hit Skip.',
+  '当前无活跃 run，无法回答历史问题': 'No run is active, so an old question cannot be answered',
+  '卡片缺 toolUseId（不应发生）': 'This card has no toolUseId (should not happen)',
+  '问题已不在等待中（可能已被回答 / cancel / run 结束）':
+    'This question is no longer waiting (already answered or cancelled, or the run ended)',
+  '或自由输入（覆盖上方选项）': 'Or write your own (this overrides the options above)',
+  '想用自己的话回复就在这里写…': 'Write it in your own words here…',
+  '上一题': 'Previous',
+  '跳过': 'Skip',
+  '下一题': 'Next',
+  '已发送给 agent，等它继续…': 'Sent to the agent. Waiting for it to carry on…',
+
+  '已完成': 'Done',
+  '思考中… 已 {n} 字（先收起防刷屏，思考完毕后可展开）':
+    'Thinking… {n} characters so far (collapsed to keep it out of the way; expand it when it finishes)',
+  '评审原文（解析未命中 schema）': 'Raw review (it did not match the schema)',
+  '{n} 条建议': { one: '{n} suggestion', other: '{n} suggestions' },
+  '失败': 'Failed',
+  '完成': 'Done',
+  '已停止': 'Stopped',
+  '在台上': 'On stage',
+  '工作中…': 'Working…',
+  '结果': 'Result',
+
+  // ── 画布标注浮层（components/canvas/AnnotatePopover.jsx）──
+  '主持人': 'Host',
+  '场外的话（改稿、问规则这类），不进戏':
+    'Out-of-character talk (edits, rules questions). It stays out of the story.',
+  '想怎么改 / 想让它变成什么…': 'What to change, or what it should become…',
+  '不发消息，只在画布上留一条连到它的标注':
+    'Do not send a message. Just leave a note on the canvas linked to it.',
+  '先记下，攒够了从右下角那条浮钮一次发给 agent':
+    'Note it down now. Send them to the agent together later, from the button at the bottom right.',
+  '发给 agent': 'Send to the agent',
+
+  // ── 画布窗口（components/canvas/CanvasFrame.jsx）──
+  '幻灯': 'Deck',
+  '站点': 'Site',
+  '文稿': 'Document',
+  '浏览器画面': 'Browser view',
+  '浏览器': 'Browser',
+  '评论': 'Comment',
+  '对这扇窗里的东西说一句：发给 agent 立刻处理，或先攒着从右下角一起发':
+    'Say something about what is in this window: send it to the agent now, or save it and send them together from the bottom right.',
 };

@@ -131,6 +131,28 @@ describe('resolvePlacement', () => {
     expect(r.x).toBe(12);                                       // 跟正文列对齐，不是 -595
   });
 
+  it('⭐ 偶数件时取**下**中位（靠左那个）——两件的板子不许对齐到右边那件', () => {
+    // 第一版写的是上中位 xs[floor(len/2)]，n=2 时取的是右边那件，比原来的 min
+    // 还更容易歪；而设计模式的板子开局恰恰就是两三件。
+    const r = resolvePlacement({
+      box, obstacles: [rect(12, 0), rect(396, 0)], contentBottom: 200,
+    });
+    expect(r.x).toBe(12);
+    // 四件时同理：取左边那个中位，不取右边那个
+    const r4 = resolvePlacement({
+      box, obstacles: [rect(12, 0), rect(40, 0), rect(400, 0), rect(800, 0)], contentBottom: 200,
+    });
+    expect(r4.x).toBe(40);
+  });
+
+  it('抗离群仍然成立：一个跑偏值不该拉走中位', () => {
+    const r = resolvePlacement({
+      box, obstacles: [rect(-595, 0), rect(12, 0), rect(12, 200), rect(12, 400), rect(12, 600)],
+      contentBottom: 800,
+    });
+    expect(r.x).toBe(12);
+  });
+
   it('落位没有失败分支：全板糊死也返回坐标', () => {
     // 一堵覆盖环搜半径的巨墙 + 无视口
     const a = rect(0, 0, 100, 100);

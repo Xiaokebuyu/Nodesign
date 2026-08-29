@@ -72,3 +72,6 @@ core
 
 # 误提交过的缓存（cwd=server 时 process.cwd()/server/.cache 的产物；cacheRoot 08-22 起走 runtime/profile.js 不再生成）
 server/server/
+
+# 登录墙像素守门的基线图（会话内 A/B 用，几 MB，不入仓）
+web/scripts/__baseline__/

@@ -15,6 +15,7 @@ import { parseAnnotationMessage, annotationTargets } from '../../lib/annotation-
 import AnnotationNote from './AnnotationNote.jsx';
 import { useTimelinePosition } from './TimelineGroupContext.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * 单条消息渲染。4 种 role：
@@ -194,12 +195,12 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
 
   async function handleUndo() {
     if (!canUndo || busy) return;
-    if (!(await confirm({ title: '回到此处', message: '回到此处？这会丢弃后续所有文件改动。\n\n历史会话首次回滚需 3-5 秒（重启临时会话）；后续回滚瞬间完成。', confirmLabel: '回滚', danger: true }))) return;
+    if (!(await confirm({ title: t('回到此处'), message: t("回到此处？这会丢弃后续所有文件改动。\n\n历史会话首次回滚需 3-5 秒（重启临时会话）；后续回滚瞬间完成。"), confirmLabel: t('回滚'), danger: true }))) return;
     setBusy(true);
     try {
       const result = await Sessions.rewind(projectId, sessionId, message.id);
       if (result?.canRewind === false) {
-        showToast(result.error || '此处不支持回滚', 'warn');
+        showToast(result.error || t('此处不支持回滚'), 'warn');
       } else {
         const n = result?.filesChanged?.length || 0;
         // iframe reload 由后端 emit 的 run.file_changed event 自动触发（ProjectWorkspace 已 case），
@@ -215,11 +216,11 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
     } catch (err) {
       const msg = err?.message || String(err);
       if (msg.includes('REWIND_BUSY') || msg.includes('409')) {
-        showToast('上一个回滚还在进行，稍候重试', 'warn');
+        showToast(t('上一个回滚还在进行，稍候重试'), 'warn');
       } else if (msg.includes('JSONL_MISSING') || msg.includes('404')) {
-        showToast('会话历史已删，无法回滚', 'warn');
+        showToast(t('会话历史已删，无法回滚'), 'warn');
       } else if (msg.includes('REWIND_FAILED') || msg.includes('timeout')) {
-        showToast('回滚超时，请重试（临时会话启动较慢时偶发）', 'error');
+        showToast(t('回滚超时，请重试（临时会话启动较慢时偶发）'), 'error');
       } else {
         showToast(`回滚失败：${msg}`, 'error');
       }
@@ -238,7 +239,7 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
         <button
           onClick={handleUndo}
           disabled={busy}
-          title="回滚到此处之前的状态（撤销后续所有文件改动）"
+          title={t('回滚到此处之前的状态（撤销后续所有文件改动）')}
           style={{
             position: 'absolute',
             top: 4,
@@ -257,7 +258,7 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
           }}
         >
           <Undo2 size={11} />
-          {busy ? '回滚中...' : '回到此处'}
+          {busy ? t('回滚中...') : t('回到此处')}
         </button>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', maxWidth: '85%', minWidth: 0 }}>
@@ -466,7 +467,7 @@ function AskUserQuestionBrief({ toolInput, toolOutput, status, toolUseId }) {
     );
   }
   if (questions.length === 0) {
-    return <SystemMessage variant="error" content="Agent 调用了 AskUserQuestion 但 input.questions 为空（SDK schema 违规）" />;
+    return <SystemMessage variant="error" content={t('Agent 调用了 AskUserQuestion 但 input.questions 为空（SDK schema 违规）')} />;
   }
 
   const TlIcon = status === 'success' ? CheckCircle2 : status === 'error' ? AlertCircle : HelpCircle;
@@ -486,11 +487,11 @@ function AskUserQuestionBrief({ toolInput, toolOutput, status, toolUseId }) {
           display: 'flex', alignItems: 'center', gap: GAP.sm,
           fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub, letterSpacing: '0.04em',
         }}>
-          <span style={{ color: COLOR.text2 }}>AGENT 问</span>
+          <span style={{ color: COLOR.text2 }}>{t('AGENT 问')}</span>
           <span>·</span>
-          <span>{questions.length} 题</span>
+          <span>{t('{n} 题', { n: questions.length, count: questions.length })}</span>
           <span style={{ marginLeft: 'auto' }}>
-            {status === 'error' ? '已取消' : answered ? '已回答' : '面板在画布上'}
+            {status === 'error' ? t('已取消') : answered ? t('已回答') : t('面板在画布上')}
           </span>
         </div>
 
@@ -530,7 +531,7 @@ function AskUserQuestionBrief({ toolInput, toolOutput, status, toolUseId }) {
               boxShadow: PAPER_SHADOW.far,
               padding: `3px ${GAP.sm}px`, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
             }}
-          >在这里答</button>
+          >{t('在这里答')}</button>
         )}
       </div>
     </TimelineNode>
@@ -564,7 +565,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
     return (
       <SystemMessage
         variant="error"
-        content="Agent 调用了 AskUserQuestion 但 input.questions 为空（SDK schema 违规）"
+        content={t('Agent 调用了 AskUserQuestion 但 input.questions 为空（SDK schema 违规）')}
       />
     );
   }
@@ -623,7 +624,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
   const handleNext = () => {
     if (disabled) return;
     if (!currentEffective) {
-      showToast('请先选一个选项 / 自由输入回复，或点"跳过本题"', 'info');
+      showToast(t('请先选一个选项 / 自由输入回复，或点"跳过本题"'), 'info');
       return;
     }
     setStepIdx(stepIdx + 1);
@@ -632,7 +633,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
   const handleSubmit = () => {
     if (disabled) return;
     if (!currentEffective) {
-      showToast('请先选一个选项 / 自由输入回复，或点"跳过本题"', 'info');
+      showToast(t('请先选一个选项 / 自由输入回复，或点"跳过本题"'), 'info');
       return;
     }
     submitAll(collected, customReplies);
@@ -642,11 +643,11 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
   // customMap：textarea 自由输入；非空时优先于 collected[q] 用作 answer
   const submitAll = async (allCollected, customMap = {}) => {
     if (!activeRun?.pid || !activeRun?.runId) {
-      showToast('当前无活跃 run，无法回答历史问题', 'info');
+      showToast(t('当前无活跃 run，无法回答历史问题'), 'info');
       return;
     }
     if (!toolUseId) {
-      showToast('卡片缺 toolUseId（不应发生）', 'error');
+      showToast(t('卡片缺 toolUseId（不应发生）'), 'error');
       return;
     }
 
@@ -674,7 +675,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
     } catch (err) {
       setSubmitting(false);
       const msg = err.code === 'NO_PENDING_QUESTION'
-        ? '问题已不在等待中（可能已被回答 / cancel / run 结束）'
+        ? t('问题已不在等待中（可能已被回答 / cancel / run 结束）')
         : `回答失败：${err.message}`;
       showToast(msg, 'error');
     }
@@ -754,7 +755,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
             color: COLOR.text2,
             letterSpacing: '0.04em',
           }}>
-            {currentQ.header || 'AGENT 问'}
+            {currentQ.header || t('AGENT 问')}
           </div>
           {progress}
         </div>
@@ -866,7 +867,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
               letterSpacing: '0.04em',
               textTransform: 'uppercase',
             }}>
-              或自由输入（覆盖上方选项）
+              {t('或自由输入（覆盖上方选项）')}
             </div>
             <textarea
               value={currentCustom}
@@ -883,7 +884,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
               disabled={disabled}
               placeholder={currentAnswer
                 ? `已选「${currentAnswer.length > 30 ? currentAnswer.slice(0, 30) + '…' : currentAnswer}」；填这里会替换它`
-                : '想用自己的话回复就在这里写…'}
+                : t('想用自己的话回复就在这里写…')}
               rows={2}
               style={{
                 width: '100%',
@@ -920,13 +921,13 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
               onClick={handleBack}
               disabled={disabled || !canBack}
               icon={ChevronLeft}
-              label="上一题"
+              label={t('上一题')}
             />
             <NavBtn
               onClick={handleSkip}
               disabled={disabled}
               icon={SkipForward}
-              label="跳过"
+              label={t('跳过')}
               variant="ghost"
             />
             <span style={{ flex: 1 }} />
@@ -947,7 +948,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
                 onClick={handleNext}
                 disabled={disabled || !currentEffective}
                 icon={ChevronRight}
-                label="下一题"
+                label={t('下一题')}
                 variant="primary"
                 iconRight
               />
@@ -962,7 +963,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
             color: COLOR.sub,
             fontStyle: 'italic',
           }}>
-            已发送给 agent，等它继续…
+            {t('已发送给 agent，等它继续…')}
           </div>
         )}
 
@@ -974,7 +975,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
             fontSize: FONT_SIZE.xs,
             color: COLOR.sub,
           }}>
-            已完成
+            {t('已完成')}
           </div>
         )}
       </div>
@@ -1123,7 +1124,7 @@ function ThinkingMessage({ content, isStreaming }) {
             color: COLOR.dim,
             fontStyle: 'italic',
           }}>
-            思考中… 已 {text.length} 字（先收起防刷屏，思考完毕后可展开）
+            {t('思考中… 已 {n} 字（先收起防刷屏，思考完毕后可展开）', { n: text.length })}
           </div>
         )}
         {longEnough && (
@@ -1322,7 +1323,7 @@ function VisionCheckerCard({ text }) {
         maxHeight: 280, overflow: 'auto',
       }}>
         <div style={{ fontSize: FONT_SIZE.xxs, color: COLOR.sub, marginBottom: GAP.xs, letterSpacing: '0.04em' }}>
-          评审原文（解析未命中 schema）
+          {t('评审原文（解析未命中 schema）')}
         </div>
         {raw}
       </div>
@@ -1357,7 +1358,7 @@ function VisionCheckerCard({ text }) {
         </span>
         {issues && issues.length > 0 && (
           <span style={{ color: COLOR.sub, fontSize: FONT_SIZE.xs }}>
-            {issues.length} 条建议
+            {t('{n} 条建议', { n: issues.length, count: issues.length })}
           </span>
         )}
         <ChevronRight
@@ -1503,7 +1504,7 @@ function ToolMessage({
             <span style={{ color: COLOR.warn, fontSize: FONT_SIZE.xs }}>· {formatElapsed(elapsed)}</span>
           )}
           {isError && (
-            <span style={{ color: COLOR.error, fontSize: FONT_SIZE.sm }}>失败</span>
+            <span style={{ color: COLOR.error, fontSize: FONT_SIZE.sm }}>{t('失败')}</span>
           )}
           {canExpand && (
             <ChevronRight
@@ -1546,11 +1547,11 @@ function ToolMessage({
     // 于是时间轴上留一个永远转的圈，读起来像"卡住了"。
     // 角色的动静不在这条流水里 —— 在画布精灵和侧栏那行台上提示上。这里只记一次上场。
     const isRole = typeof agentName === 'string' && agentName.startsWith('rp-');
-    const statusLabel = taskStatus === 'completed' ? '完成'
-      : taskStatus === 'failed' ? '失败'
-      : taskStatus === 'stopped' ? '已停止'
-      : isRole ? '在台上'
-      : isRunning ? (taskSummary || taskLastTool || '工作中…') : null;
+    const statusLabel = taskStatus === 'completed' ? t('完成')
+      : taskStatus === 'failed' ? t('失败')
+      : taskStatus === 'stopped' ? t('已停止')
+      : isRole ? t('在台上')
+      : isRunning ? (taskSummary || taskLastTool || t('工作中…')) : null;
     return (
       <TimelineNode icon={NodeIcon} iconColor={iconColor} isSpinning={isRunning && !isRole}>
         <button
@@ -1633,7 +1634,7 @@ function ToolMessage({
                 fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text2,
                 lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto',
               }}>
-                <div style={{ fontSize: FONT_SIZE.xxs, color: COLOR.sub, marginBottom: GAP.xs, letterSpacing: '0.04em', fontFamily: FONT_MONO }}>结果</div>
+                <div style={{ fontSize: FONT_SIZE.xxs, color: COLOR.sub, marginBottom: GAP.xs, letterSpacing: '0.04em', fontFamily: FONT_MONO }}>{t('结果')}</div>
                 {resultText}
               </div>
             ) : null}

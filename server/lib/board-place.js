@@ -178,8 +178,12 @@ function bottomSpot(box, obstacles, contentBottom) {
   // 左缘取**中位数**不取最小值（2026-08-29 真会话案）：一件东西被拖到 x=-595，
   // 之后每一件走兜底的板书都跟着对齐到 -595 去，正文列整条歪出去。中位数是同一个
   // 意图（跟已有内容左对齐）的抗离群版本 —— 一件跑偏的带不动一整列。
+  //
+  // ⚠️ 取**下中位**（偶数个时取靠左那个）。第一版写的 `xs[floor(len/2)]` 是上中位：
+  // 板上只有两件时它取的是**右**边那件，比原来的 min 还更容易歪 —— 而设计模式的
+  // 板子开局恰恰就是两三件。取下中位在 n=2 时退回旧行为，n 大时照样抗离群。
   const xs = obstacles.map(o => o.x).sort((a, b) => a - b);
-  const left = xs.length ? xs[Math.floor(xs.length / 2)] : 10;
+  const left = xs.length ? xs[Math.ceil(xs.length / 2) - 1] : 10;
   return { x: Math.round(left), y: Math.round(contentBottom) + 40 };
 }
 

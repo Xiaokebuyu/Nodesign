@@ -49,14 +49,30 @@ function files(dir, out = []) {
 const STRING_LITERAL = /"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g;
 const CJK = /[\u4e00-\u9fff]/;
 
+/**
+ * 源码里的字面量是**转义过的**（`\\n` 是两个字符），而词表的 key 是运行时的字符串
+ * （真换行）。不还原就永远对不上 —— 2026-08-29 第一条带 \\n 的文案进词表时撞到。
+ */
+const unescape = (v) => v
+  .replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
+  .replace(/\\(['"`\\])/g, '$1');
+
 const inSource = (() => {
   const seen = new Set();
+  const eat = (text) => {
+    for (const m of text.matchAll(STRING_LITERAL)) {
+      const v = m[1] ?? m[2] ?? m[3] ?? '';
+      if (!CJK.test(v)) continue;
+      seen.add(v);
+      seen.add(unescape(v));
+      // ⚠️ 模板串会把里头的 '中文' 整个吞掉（`${a || t('仅限 Pro 档')} · ${b}` 只算一条），
+      // 所以反引号那支要再往里扫一层。
+      if (m[3] !== undefined) eat(m[3]);
+    }
+  };
   for (const f of files(SRC)) {
     if (f.includes(`${path.sep}locales${path.sep}`)) continue;   // 词表自己不算数据源
-    for (const m of fs.readFileSync(f, 'utf8').matchAll(STRING_LITERAL)) {
-      const v = m[1] ?? m[2] ?? m[3] ?? '';
-      if (CJK.test(v)) seen.add(v);
-    }
+    eat(fs.readFileSync(f, 'utf8'));
   }
   return seen;
 })();

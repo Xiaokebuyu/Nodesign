@@ -6,6 +6,7 @@ import { COLOR } from '../../lib/theme.js';
 import BoardCanvas from './BoardCanvas.jsx';
 import FloatingToolbar from '../ui/FloatingToolbar.jsx';
 import AnnotatePopover from './AnnotatePopover.jsx';
+import { t } from '../../lib/i18n.js';
 
 // 懒加载（2026-07-28 重构 4）：DeckWindow 拖着 Monaco 全家，是首屏包的大头，
 // 但只在用户 ✏️ 开编辑窗时才需要 —— 动态 import 让它单独分 chunk
@@ -243,13 +244,13 @@ export default function CanvasFrame({
     let target = null;
     if (deckOpen && (sessionId || deckTaskSrc)) {
       const rel = deckRelPath || 'canvas.html';
-      target = { kind: 'object', id: `deck:${rel}`, path: rel, title: deckTaskSrc?.title || project?.name || '幻灯', typeLabel: '幻灯' };
+      target = { kind: 'object', id: `deck:${rel}`, path: rel, title: deckTaskSrc?.title || project?.name || t('幻灯'), typeLabel: t('幻灯') };
     } else if (siteSrc) {
-      target = { kind: 'object', id: `site:${siteSrc.base || siteSrc.task || ''}`, path: siteSrc.entry || siteSrc.base || siteSrc.task, title: siteSrc.title || '站点', typeLabel: '站点' };
+      target = { kind: 'object', id: `site:${siteSrc.base || siteSrc.task || ''}`, path: siteSrc.entry || siteSrc.base || siteSrc.task, title: siteSrc.title || t('站点'), typeLabel: t('站点') };
     } else if (docxSrc) {
-      target = { kind: 'object', id: docxSrc.cardId || `docx:${docxSrc.file || ''}`, path: docxSrc.file, title: docxSrc.title || '文稿', typeLabel: '文稿' };
+      target = { kind: 'object', id: docxSrc.cardId || `docx:${docxSrc.file || ''}`, path: docxSrc.file, title: docxSrc.title || t('文稿'), typeLabel: t('文稿') };
     } else if (browseWin) {
-      target = { kind: 'object', id: 'browse', path: browseWin.url || null, title: '浏览器画面', typeLabel: '浏览器' };
+      target = { kind: 'object', id: 'browse', path: browseWin.url || null, title: t('浏览器画面'), typeLabel: t('浏览器') };
     }
     if (!target) return;
     const r = toolbarHostRef.current?.getBoundingClientRect();
@@ -265,8 +266,8 @@ export default function CanvasFrame({
     return [...winGroups, {
       id: 'wincomment',
       items: [{
-        id: 'comment', icon: MessageSquarePlus, label: '评论',
-        title: '对这扇窗里的东西说一句：发给 agent 立刻处理，或先攒着从右下角一起发',
+        id: 'comment', icon: MessageSquarePlus, label: t('评论'),
+        title: t('对这扇窗里的东西说一句：发给 agent 立刻处理，或先攒着从右下角一起发'),
         onClick: openWinNote,
       }],
     }];
@@ -319,7 +320,7 @@ export default function CanvasFrame({
             onTabChange={setDeckTab}
             onClose={() => setDeckOpen(false)}
             onToolbarGroups={reportWinGroups}
-            title={deckTaskSrc?.title || project?.name || '幻灯'}
+            title={deckTaskSrc?.title || project?.name || t('幻灯')}
             artifactExports={deckTaskSrc?.exports}
             onExport={onExport}
             htmlSrc={deckHtmlSrc}

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Edit2, Copy, Trash2, History, Code2, Camera, ArrowUpRight, RotateCcw,
   ScrollText, Files, Clapperboard } from 'lucide-react';
 import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * 顶栏 ⋯ 菜单（项目操作）
@@ -66,9 +67,9 @@ export default function ProjectActionsMenu({
         <>
           <Item
             icon={<ArrowUpRight size={12} />}
-            label="升级为项目"
+            label={t('升级为项目')}
             onClick={onUpgrade}
-            subtle="对话"
+            subtle={t('对话')}
           />
           <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />
         </>
@@ -76,34 +77,34 @@ export default function ProjectActionsMenu({
       {/* 刷新产物墙：同步失灵时的逃生舱，不是日常动作，2026-07-30 从顶栏收进来 */}
       {onReload && (
         <>
-          <Item icon={<RotateCcw size={12} />} label="刷新产物墙" onClick={onReload} />
+          <Item icon={<RotateCcw size={12} />} label={t('刷新产物墙')} onClick={onReload} />
           <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />
         </>
       )}
       {onToggleMode && (
         <Item
           icon={<Clapperboard size={12} />}
-          label={projectMode === 'rp' ? '切回设计模式' : '切到演出模式'}
+          label={projectMode === 'rp' ? t('切回设计模式') : t('切到演出模式')}
           title={projectMode === 'rp'
-            ? '回到设计工作台（deck/站点/文档产线）'
-            : '常驻角色演故事的舞台；设计产线在该模式下收起'}
+            ? t('回到设计工作台（deck/站点/文档产线）')
+            : t('常驻角色演故事的舞台；设计产线在该模式下收起')}
           onClick={onToggleMode}
-          subtle="下个会话生效"
+          subtle={t('下个会话生效')}
         />
       )}
-      <Item icon={<Edit2 size={12} />} label="重命名" onClick={onRename} />
-      <Item icon={<Copy size={12} />} label="复制项目" onClick={onDuplicate} />
+      <Item icon={<Edit2 size={12} />} label={t('重命名')} onClick={onRename} />
+      <Item icon={<Copy size={12} />} label={t('复制项目')} onClick={onDuplicate} />
       <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />
-      <Item icon={<Camera size={12} />} label="保存快照" onClick={onSaveSnapshot} />
+      <Item icon={<Camera size={12} />} label={t('保存快照')} onClick={onSaveSnapshot} />
       <Item
         icon={<History size={12} />}
-        label="快照与历史"
+        label={t('快照与历史')}
         onClick={onOpenSnapshots}
         subtle={snapshotCount > 0 ? String(snapshotCount) : null}
       />
-      <Item icon={<Code2 size={12} />} label="查看 spec JSON" onClick={onViewCode} subtle="debug" />
+      <Item icon={<Code2 size={12} />} label={t('查看 spec JSON')} onClick={onViewCode} subtle="debug" />
       <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />
-      <Item icon={<Trash2 size={12} />} label="删除项目" onClick={onDelete} danger />
+      <Item icon={<Trash2 size={12} />} label={t('删除项目')} onClick={onDelete} danger />
     </div>
   );
 }
@@ -116,14 +117,14 @@ export function ProjectModeBadge({ mode }) {
   if (mode !== 'rp') return null;
   return (
     <span
-      title="演出模式：常驻角色演故事的舞台（切换在 ⋯ 菜单，下个会话生效）"
+      title={t('演出模式：常驻角色演故事的舞台（切换在 ⋯ 菜单，下个会话生效）')}
       style={{
         font: '700 11px var(--kai, inherit)', letterSpacing: '0.2em', textIndent: '0.2em',
         color: 'rgba(168,54,43,0.9)', border: '1px solid rgba(168,54,43,0.55)',
         borderRadius: 999, padding: '2px 9px 3px', alignSelf: 'center',
         transform: 'rotate(-1deg)', userSelect: 'none',
       }}
-    >演出</span>
+    >{t('演出')}</span>
   );
 }
 

@@ -42,6 +42,15 @@ function isTranslated(p) {
   return name === 't';
 }
 
+/**
+ * 这条字符串根本不是界面文案。
+ * ⚠️ 第一版漏了 CSS-in-JS：登录墙三个场景的整块样式是模板串，里头的中文全是
+ * `/* ① 一句话 *\/` 这种注释，被算成了"界面上没翻译的中文"，把 146 这个数字撑大。
+ */
+function looksLikeCode(v) {
+  return /[{};]/.test(v) && /[:;]\s|\n/.test(v);
+}
+
 /** console.* / 抛错文案不算界面文案 */
 function isNonUi(p) {
   const call = p.findParent((x) => x.isCallExpression());
@@ -66,7 +75,7 @@ for (const rel of files()) {
     'StringLiteral|JSXText'(p) {
       const v = p.node.value;
       if (!v || !CJK.test(v) || !v.trim()) return;
-      if (isNonUi(p)) return;
+      if (isNonUi(p) || looksLikeCode(v)) return;
       const key = v.trim();
       seen.set(key, (seen.get(key) || false) || (p.node.type === 'StringLiteral' && isTranslated(p)));
     },
@@ -74,7 +83,7 @@ for (const rel of files()) {
       if (p.node.expressions.length) return;
       const v = p.node.quasis[0]?.value?.cooked || '';
       if (!v || !CJK.test(v) || !v.trim()) return;
-      if (isNonUi(p)) return;
+      if (isNonUi(p) || looksLikeCode(v)) return;
       seen.set(v.trim(), seen.get(v.trim()) || false);
     },
   });
