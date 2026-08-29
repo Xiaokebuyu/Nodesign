@@ -156,7 +156,21 @@ export function shapePath(kind, { w = 0, h = 0, to = null, d = null } = {}, seed
  * ⭐ auto 现在**认线**：图内边 ≥1 且节点 ≥3 → flow（按结构分层）。在这之前
  * 布局引擎对 edges 全盲 —— 给了线也按 column/grid 堆，「摊一堆字」的机器根源。
  */
-export function resolveTemplate(nodes, { template = 'auto', edges = [] } = {}) {
+export function resolveTemplate(nodes, { template = 'auto', edges = [], column = false } = {}) {
+  /**
+   * 车道约束（2026-08-28 移动端第二轮）：手机/平板一律竖排一列，**连模型点名的
+   * 模板也盖掉**。
+   *
+   * ⭐ 这条是真会话逼出来的。模型收到「一件 ≤342 宽」之后**试了三次**：第一版
+   * flow 排成 549 宽被警告 → 它改传 `w:14` 想收窄节点，结果整体变成 **576，更宽**
+   * （节点是窄了，但 flow 把它们横着摊成一排）→ 只好 erase_group 重来、再手工
+   * 一件件 move 成一列。擦两次、多花七八个工具调用，才得到本该一次给它的东西。
+   *
+   * ⛔ 病根不是「模型不配合」，是**它够着的那根杠杆是坏的**：唯一能改宽度的入参
+   * 改的是单节点，而决定整体宽度的是布局模板，那个它没法按屏幕挑。所以约束下沉
+   * 到这儿 —— 布局引擎知道屏幕多宽，模型不需要知道。
+   */
+  if (column) return 'column';
   if (template !== 'auto') return template;
   if (nodes.some(n => n.at)) return 'free';
   const keys = new Set(nodes.map(n => n.key));

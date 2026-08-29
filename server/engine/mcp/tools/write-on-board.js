@@ -165,6 +165,11 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     };
     const vp = getViewpoint(projectId);
     const fit = fitFor(vp);
+    // 车道封顶（08-28）：触屏档一件不许超过一屏宽。**板书和草图两条路都要过它** ——
+    // 只封一条的下场是真会话里量到的：草图乖乖 336，板书照旧 432（判据在 device-lane）。
+    // ⛔ 要传 wUnits 不能事后夹 w：textBox 按宽度回推行数算高度，只夹宽＝文字溢出框外且不报错。
+    const capUnits = fit.column ? Math.max(4, Math.floor(fit.w / UNIT)) : null;
+    const capW = (u) => (capUnits ? Math.min(u || capUnits, capUnits) : u);
     const vpRectFor = (zone) => (vp && (vp.layer || '') === (zone || '') && vp.camera) ? vp.camera : null;
     const visibleIn = (rect, vpRect) => !!vpRect && !(rect.x + rect.w < vpRect.x || vpRect.x + vpRect.w < rect.x
       || rect.y + rect.h < vpRect.y || vpRect.y + vpRect.h < rect.y);
@@ -222,8 +227,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       // 宽度三档回落（2026-08-28）：模型点名 > 用户调出来的偏好 > 按正文估。
       // 中间那档是「模仿用户」：他拖宽过板书就说明这个版心读着舒服，下一拍照做，
       // 别让他反复调同一件事。判据是前端拖手柄盖的 sized:'user' 章，模型盖不出。
-      const wUnits = args.width || learnedChalkWidth(board)
-        || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1)));
+      const wUnits = capW(args.width || learnedChalkWidth(board)
+        || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
       const box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
 
       let zone = '';
@@ -412,14 +417,14 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       nodes.push({ key: n.id, text: n.text, format, size, font: n.font || 'pen', color: n.color || 'ink', at: n.at || null, w: n.w || null });
     }
     for (const n of nodes) {
-      const box = textBox(n.text, n.size, { md: n.format === 'md', wUnits: n.w });
+      const box = textBox(n.text, n.size, { md: n.format === 'md', wUnits: capW(n.w) });
       n.w = box.w; n.h = box.h;
     }
     const titleNode = nodes.find(n => n.key === '__title');
     // 图内边（两端都是本图节点）：布局的结构输入 + 零线大图的提醒判据
     const nodeKeys = new Set(nodes.map(n => n.key));
     const innerEdges = edgesIn.filter(e => nodeKeys.has(e.from) && nodeKeys.has(e.to) && e.from !== e.to);
-    const tpl = resolveTemplate(nodes.filter(n => n !== titleNode), { template: args.layout || 'auto', edges: innerEdges });
+    const tpl = resolveTemplate(nodes.filter(n => n !== titleNode), { template: args.layout || 'auto', edges: innerEdges, column: fit.column });
     // 节点级拉力（08-27 产物锚 v2）：节点 ↔ 板上已有产物的边，给布局一个方向 ——
     // 连着谁就排向谁那一侧（flow 层内排序 / mindmap 环位都吃它）
     const pull = new Map();
@@ -579,12 +584,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         + `改走 {tag, chain:true} 让它长成线。`);
     }
     if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}`);
-    if (world.w > fit.w || world.h > fit.h) {
-      lines.push(fit.column
-        // 手机/平板：宽是硬约束（横向滑动没人受得了），所以话要说在宽上
-        ? `⚠ Too big for a ${fit.lane} screen (${fit.screen.w}x${fit.screen.h}px). Keep each sketch ≤${fit.w} wide — anything wider means sideways scrolling. Stack the next one below, don't put it to the side.`
-        : `⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
-    }
+    // 触屏档宽是硬约束（横向滑动没人受得了），所以话要说在宽上
+    if (world.w > fit.w || world.h > fit.h) lines.push(fit.column
+      ? `⚠ Too big for a ${fit.lane} screen (${fit.screen.w}x${fit.screen.h}px). Keep each sketch ≤${fit.w} wide — anything wider means sideways scrolling. Stack the next one below, don't put it to the side.`
+      : `⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
     if (autoAnchorIds.length) {
       lines.push(`（没给 near/at，但这张图的线连着 ${autoAnchorIds.slice(0, 4).join('、')}${autoAnchorIds.length > 4 ? ' 等' : ''} —— 自动落在它们旁边）`);
     }
