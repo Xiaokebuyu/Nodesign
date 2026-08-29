@@ -81,8 +81,8 @@ describe('fitFor 出的版式', () => {
     const f = fitFor(vpOf(DESKTOP));
     expect(f.lane).toBe('desktop');
     expect(f.column).toBe(false);
-    expect(f.w).toBe(2000);      // 1600 / 0.8
-    expect(f.h).toBe(1188);      // 950 / 0.8（四舍五入）
+    expect(f.w).toBe(2133);      // 1600 / 0.75（纸范式 08-29 基准，见 lib/screen.js）
+    expect(f.h).toBe(1267);      // 950 / 0.75（四舍五入）
   });
 
   it('⭐ 屏幕像素跟缩放无关 —— 用户缩到 0.3 倍，版式建议不该跟着变', () => {
@@ -91,7 +91,7 @@ describe('fitFor 出的版式', () => {
   });
 
   it('没有 device 时退回相机×缩放那条老路（08-23 起就在这么算）', () => {
-    expect(fitFor({ camera: { x: 0, y: 0, w: 2000, h: 1187 }, zoom: 0.8 }).w).toBe(2000);
+    expect(fitFor({ camera: { x: 0, y: 0, w: 2000, h: 1187 }, zoom: 0.8 }).w).toBe(2133);   // 屏 1600 / 0.75
     // 什么都没有 → SKETCH_FIT 缺省
     expect(fitFor(null).w).toBe(SKETCH_FIT.w);
     expect(fitFor(null).lane).toBe('desktop');

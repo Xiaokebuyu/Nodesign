@@ -81,3 +81,30 @@ describe('lanes 注册表（08-27 空间规划）：持久在 board.json、合�
     expect(b.lanes['好名']).toEqual({ x: 10, y: 10, w: 480 });
   });
 });
+
+describe('sheets 注册表（2026-08-29 纸范式）：合并语义同 lanes', () => {
+  const sp = 'proj_boardstore_sheets';
+  beforeAll(async () => { const { ensureProjectWorkspace } = await import('./workspace.js'); await ensureProjectWorkspace(sp); });
+
+  it('落盘读得回（含 by/at/title）', async () => {
+    await patchBoard(sp, { sheets: { p1: { x: 0, y: 0, w: 1867, h: 1200, by: 'agent', at: '2026-08-29T01:00:00Z', title: '开工' } } });
+    const b = await readBoard(sp);
+    expect(b.sheets.p1).toMatchObject({ x: 0, y: 0, w: 1867, h: 1200, by: 'agent', title: '开工' });
+  });
+
+  it('瘦 patch 合并不抹字段；null 删除；删空后整个键消失', async () => {
+    await patchBoard(sp, { sheets: { p1: { title: '第一章' } } });
+    let b = await readBoard(sp);
+    expect(b.sheets.p1).toMatchObject({ x: 0, y: 0, w: 1867, h: 1200, by: 'agent', title: '第一章' });
+    await patchBoard(sp, { sheets: { p1: null } });
+    b = await readBoard(sp);
+    expect(b.sheets).toBeUndefined();
+  });
+
+  it('坏名静默丢弃，不炸整个 patch', async () => {
+    await patchBoard(sp, { sheets: { 'bad name!!': { x: 0, y: 0 }, p9: { x: 10, y: 10 } } });
+    const b = await readBoard(sp);
+    expect(b.sheets['bad name!!']).toBeUndefined();
+    expect(b.sheets.p9).toMatchObject({ x: 10, y: 10 });
+  });
+});

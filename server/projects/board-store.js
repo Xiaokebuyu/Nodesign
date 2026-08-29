@@ -26,9 +26,9 @@ export {
   DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS,
 } from './board-limits.js';
 export { TEXT_FONTS } from './board-sanitize.js';
-import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES } from './board-limits.js';
+import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES, MAX_SHEETS } from './board-limits.js';
 import {
-  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane, sanitizeRoll,
+  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane, sanitizeRoll, sanitizeSheet,
   isSafeCanvasId,
 } from './board-sanitize.js';
 
@@ -158,6 +158,20 @@ export function patchBoard(pid, patch) {
         if (board.rolls[tag] || Object.keys(board.rolls).length < MAX_LANES) board.rolls[tag] = s;
       }
       if (!Object.keys(board.rolls).length) delete board.rolls;
+    }
+    // 纸（2026-08-29 纸范式）：合并语义同 lanes；null = 撕掉登记（成员座位不动）。
+    // 纸名不是路径，不走改名转发。
+    if (patch?.sheets && typeof patch.sheets === 'object') {
+      board.sheets = board.sheets || {};
+      for (const [name, s0] of Object.entries(patch.sheets)) {
+        const nm = sanitizeTag(name);
+        if (!nm) continue;
+        if (s0 === null) { delete board.sheets[nm]; continue; }
+        const s = sanitizeSheet(board.sheets[nm] ? { ...board.sheets[nm], ...s0 } : s0);
+        if (!s) continue;
+        if (board.sheets[nm] || Object.keys(board.sheets).length < MAX_SHEETS) board.sheets[nm] = s;
+      }
+      if (!Object.keys(board.sheets).length) delete board.sheets;
     }
     // 主角覆盖：null = 撤销（回到 pickHero 自动推断），字符串 = 显式立主角
     if (patch?.hero !== undefined) {

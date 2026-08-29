@@ -22,15 +22,13 @@
  */
 
 import { UNIT, overlaps, bboxOf, segHitsRect, pointIn } from './rect.js';
+import { ONE_SCREEN } from './screen.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 
 export { UNIT };                 // 兼容出口：一批调用方从这里拿（真身在 rect.js）
 const PAD = 12;                  // 落位时物件四周留白（碰撞判定带上它）
 const MAX_RING = 20;             // 环形搜索半径（格）：站主定的 20 格，之外走兜底
-// 远场判据的「一屏」缺省（1400×900 屏 ÷ 0.8 倍缩放）。⚠️ 跟 sketch-layout.js 的
-// SKETCH_FIT（1700×1100，可读性上限）是同一个「0.8 倍一屏」基准的两个近邻值 ——
-// 语义不同（远场容忍 vs 推荐尺寸）所以不共享常量，但改缩放基准要两处一起看。
-const ONE_SCREEN = { w: 1750, h: 1125 };
+// 远场判据的「一屏」缺省：唯一基准在 lib/screen.js（2026-08-29 纸范式收敛）。
 
 function collides(x, y, w, h, obstacles) {
   const r = { x, y, w, h };

@@ -12,7 +12,8 @@
 
 import { isBindingType, isBindingMaterial } from '../lib/binding-types.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
-import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES } from './board-limits.js';
+import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES, MAX_SHEETS } from './board-limits.js';
+import { ONE_SCREEN } from '../lib/screen.js';
 
 /**
  * 板上署名的白名单：'user' / 'agent' / 常驻角色 slug（`rp-*`，见 engine/agent/cast.js）。
@@ -293,6 +294,27 @@ export function sanitizeRoll(r) {
   return { at, by, ...(label ? { label } : {}) };
 }
 
+/**
+ * 纸（sheet 注册表，2026-08-29 纸范式）：{ x, y, w, h, by?, at?, title? }。
+ * 键 = 纸名（TAG_RE 字符集）。纸是**分配纪律不是本体容器**：成员按几何派生
+ * （中心点落在纸内），这里只登记「这块地是谁在什么时候铺的、多大」。
+ * w/h 显式存 —— 纸尺寸取决于铺纸那一刻的设备档（手机纸小、桌面纸大），
+ * 不能全局常量化。
+ */
+export function sanitizeSheet(s) {
+  if (!s || typeof s !== 'object') return null;
+  const x = Number(s.x); const y = Number(s.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return {
+    x: Math.round(x), y: Math.round(y),
+    w: clampNum(s.w, 240, 8000, ONE_SCREEN.w),
+    h: clampNum(s.h, 240, 12000, ONE_SCREEN.h),
+    ...(sanitizeBy(s.by) ? { by: sanitizeBy(s.by) } : {}),
+    ...(typeof s.at === 'string' && s.at.length <= 40 ? { at: s.at } : {}),
+    ...(typeof s.title === 'string' && s.title.trim() ? { title: s.title.trim().slice(0, 60) } : {}),
+  };
+}
+
 export function sanitizeBoard(raw) {
   const size = sanitizeSize(raw?.size);
   const objects = {};
@@ -340,6 +362,19 @@ export function sanitizeBoard(raw) {
     const s = sanitizeRoll(r);
     if (s) { rolls[tag] = s; rCount += 1; }
   }
-  return { size, zones, objects, bindings, ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}) };
+  const sheets = {};
+  let sCount = 0;
+  for (const [name, s0] of Object.entries(raw?.sheets && typeof raw.sheets === 'object' ? raw.sheets : {})) {
+    if (sCount >= MAX_SHEETS) break;
+    const nm = sanitizeTag(name);
+    if (!nm) continue;
+    const s = sanitizeSheet(s0);
+    if (s) { sheets[nm] = s; sCount += 1; }
+  }
+  return {
+    size, zones, objects, bindings,
+    ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}),
+    ...(sCount ? { sheets } : {}),
+  };
 }
 

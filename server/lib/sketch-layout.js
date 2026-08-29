@@ -15,14 +15,15 @@
  */
 
 import { UNIT, overlaps, bboxOf as rectBbox } from './rect.js';
+import { ZOOM_BASIS, ONE_SCREEN } from './screen.js';
 export { UNIT };                   // 兼容出口（真身在 rect.js）
 /**
- * 可读性规范（2026-08-23，用户定）：黑板上的字要在 80%~100% 缩放下清晰可读。
- * 手写/md 正文 16px 世界像素在 0.8 倍下是 12.8 屏幕像素 —— 这是底线，所以节点
- * 字号不低于 md；一张图的尺寸要能在 0.8 倍下整张进一个普通视口（1400×900 屏
- * ≈ 1750×1125 世界像素）。超过 SKETCH_MAX 直接拒：一张图说一件事，大了就拆。
+ * 可读性规范（2026-08-23，用户定；2026-08-29 纸范式改 0.75 基准）：黑板上的字要在
+ * 75%~100% 缩放下清晰可读。手写/md 正文 16px 世界像素在 0.75 倍下是 12 屏幕像素 ——
+ * 这是底线，所以节点字号不低于 md；一张图的尺寸要能在 0.75 倍下整张进一个普通视口。
+ * 超过 SKETCH_MAX 直接拒：一张图说一件事，大了就拆。
  */
-export const SKETCH_FIT = { w: 1700, h: 1100 };   // 推荐上限（0.8 倍一屏；⚠️ 同基准近邻值见 board-place.js ONE_SCREEN，改缩放基准两处一起看）
+export const SKETCH_FIT = ONE_SCREEN;   // 推荐上限 = 一屏（唯一基准在 lib/screen.js）
 export const SKETCH_MAX = { w: 2600, h: 1700 };   // 硬上限（再大就拆成两张）
 export const GAP = 16;             // 模板排布的节点间距
 const SIZE_PX = { sm: 13, md: 16, lg: 22, xl: 30 };
@@ -361,7 +362,8 @@ export function bboxOrZero(rects) {
  *
  * ## 两套版式
  *
- *   桌面   一屏世界像素 = 屏幕 / 0.8（用户在 0.8 倍上读得动，所以内容可以比屏幕大一点）
+ *   桌面   一屏世界像素 = 屏幕 / 0.75（纸范式基准，见 lib/screen.js —— 用户在
+ *          0.75 倍上读得动，所以内容可以比屏幕大一点）
  *   触屏   **一件 = 一屏**：宽 = 屏宽 − 48（两边各留 24 呼吸），纵向单列
  *
  * ⭐ 触屏这条不是"把桌面的数按比例缩小"。桌面那 1.25 倍富余的前提是**用户会缩小
@@ -383,7 +385,7 @@ export function fitFor(vp) {
   if (!(sw > 0)) return { ...SKETCH_FIT, screen: null, lane, column: lane !== 'desktop' };
   const screen = { w: Math.round(sw), h: Math.round(sh) };
   if (lane === 'desktop') {
-    return { w: Math.round(sw / 0.8), h: Math.round(sh / 0.8), screen, lane, column: false };
+    return { w: Math.round(sw / ZOOM_BASIS), h: Math.round(sh / ZOOM_BASIS), screen, lane, column: false };
   }
   return {
     w: Math.max(240, Math.round(sw - 48)),

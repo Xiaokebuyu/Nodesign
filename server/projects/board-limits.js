@@ -11,3 +11,4 @@ export const MAX_ZONES = 200;
 // 静默丢最旧的会让"我明明画了"变成玄学。
 export const MAX_BINDINGS = 4000;
 export const MAX_LANES = 60;      // 线（lane 注册表）：几十条线的脑图已是极限读感
+export const MAX_SHEETS = 200;    // 纸（sheet 注册表，2026-08-29 纸范式）：一纸一屏，200 张已是长篇连载量级

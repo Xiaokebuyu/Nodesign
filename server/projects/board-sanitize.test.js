@@ -92,3 +92,30 @@ describe('text.data.lid 存活（局部节点名）', () => {
     expect(twice.objects['text:a'].data.lid).toBe('su-wan');
   });
 });
+
+/** 纸（sheet 注册表，2026-08-29 纸范式）：白名单收与拒 + 双程不掉 */
+describe('board-sanitize 纸字段', () => {
+  it('sheets 合法条目收下：矩形必给，w/h 夹持有兜底，by/at/title 可选', () => {
+    const b = sanitizeBoard({ sheets: {
+      p1: { x: 0, y: 0, w: 1867, h: 1200, by: 'agent', at: '2026-08-29T01:00:00Z', title: '第一章' },
+      p2: { x: 100.4, y: 200.6 },                      // 缺 w/h → 一屏兜底
+      p3: { x: 'nan', y: 0 },                          // 坐标非数 → 整条丢
+      'bad name!!': { x: 0, y: 0 },                    // 名字过不了 tag 白名单 → 丢
+    } });
+    expect(b.sheets.p1).toMatchObject({ x: 0, y: 0, w: 1867, h: 1200, by: 'agent', title: '第一章' });
+    expect(b.sheets.p2).toMatchObject({ x: 100, y: 201, w: 1867, h: 1200 });
+    expect(b.sheets.p3).toBeUndefined();
+    expect(b.sheets['bad name!!']).toBeUndefined();
+  });
+
+  it('过一遍 sanitize 再过一遍，sheets 一个字段都不掉（白名单重建的老陷阱）', () => {
+    const once = sanitizeBoard({ sheets: { p1: { x: 24, y: 48, w: 1000, h: 800, by: 'rp-su-wan', at: '2026-08-29T02:00:00Z', title: '状态板' } } });
+    const twice = sanitizeBoard(once);
+    expect(twice.sheets.p1).toEqual(once.sheets.p1);
+    expect(twice.sheets.p1).toMatchObject({ by: 'rp-su-wan', at: '2026-08-29T02:00:00Z', title: '状态板' });
+  });
+
+  it('空 sheets 不落顶层键（diff 里别凭空多一行）', () => {
+    expect(sanitizeBoard({ objects: {} }).sheets).toBeUndefined();
+  });
+});
