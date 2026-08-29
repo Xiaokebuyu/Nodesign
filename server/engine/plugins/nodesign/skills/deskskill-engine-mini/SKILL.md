@@ -191,7 +191,7 @@ IP、角色、真人、某个具体产品型号、小众品牌 —— 那种情�
 > layout 骨架参考按需 Read `<plugin>/patterns/<role>.md`。
 
 ## 板书（交稿纪律）
-做完这一轮的东西，在它旁边写一条板书（`write_on_board near=那张卡`）：这版是什么 / 为什么这么做 /
+做完这一轮的东西，写一条板书连上它（`write_on_board near=那张卡` —— near 画「说的是它」那条线，字落在当前纸上）：这版是什么 / 为什么这么做 /
 看哪里。改了几处就写几条要点，一条说一件事。同一件东西出了新版本，画一条「改自」线
 （`edit_board` add_edge derives-from）；有参考来源画「取材」。用户在你的板书上标注了，用
 `write_on_board reply_to=` 接在那条下面回。多步任务先 TodoWrite 列步骤 —— 步骤清单会自动上板、

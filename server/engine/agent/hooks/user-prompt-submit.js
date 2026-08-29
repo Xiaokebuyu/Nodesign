@@ -236,10 +236,11 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
     const cfg = withUiDefaults(await readUiConfigFile(workspaceRoot));
     if (cfg.blackboard_mode === true) {
       sections.push({ key: 'blackboard', title: '黑板模式', text:
-        '【黑板模式：开】用户此刻在画布上专注思考。这一轮默认这么做：想事情就画成图（write_on_board 给 nodes/edges，'
-        + '小改动用 edit_board 原地改别重画）；做完一件东西在它旁边写一条板书（write_on_board near=）；'
+        '【黑板模式：开】用户此刻在画布上专注思考。这一轮默认这么做：先有纸再动笔（新话题 open_sheet）；'
+        + '想事情就画成图（write_on_board 给 nodes/edges，小改动用 edit_board 原地改别重画）；'
+        + '做完一件东西在它旁边写一条板书（near= 连线说明它说的是谁）；'
         + '用户标注了板上的东西就接在那条下面回（reply_to=）。侧栏照常回复，但板上已经写的别大段重复。'
-        + '尺寸守规范（0.8 倍一屏可读、正文 md 起、一条板书说一件事）；画完 look_at_board 看一眼再收。' });
+        + '尺寸守规范（一张纸 = 一屏、正文 md 起、一条板书说一件事）；画完 look_at_board 看一眼再收。' });
     }
   } catch { /* 读失败：不注入 */ }
 
