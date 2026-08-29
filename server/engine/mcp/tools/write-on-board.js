@@ -1,5 +1,6 @@
 /**
- * mcp/tools/write-on-board.js —— write_on_board 统一入口（2026-08-25 范式重做②）
+ * mcp/tools/write-on-board.js —— write_on_board 统一入口（2026-08-25 范式重做②；
+ * 2026-08-29 纸范式刀 2：落位从启发式引擎换成纸）
  *
  * 总纲（站主拍板）：**一条板书 = 单节点图，是统一模型的退化情形。** 写字入口只有
  * 这一个；本体选什么不由 agent 选、不由入口分，由一条服务端判据自动定 ——
@@ -9,15 +10,18 @@
  *   本体   notes/板书/*.md 真文件   画布原生 text:/scribble: + data.lid
  *   tag    不打（可显式传并组）      必有，缺省自动 sk-<stamp>
  *   staging false                  true（finish 或回合末落定）
- *   near 线 annotates/flow（relation） 不自动画（要线就写 edges）
  *
- * 验收判据：写一条板书过去填 {text, near} 两个字段，统一后还是两个。
- * 落位全走 lib/board-place.js 的 resolvePlacement（reply_to > at > near+side >
- * 视口 > 内容底下；没有失败分支）；返回文案由 describePlacement 从真实 resolution
- * 生成 —— 08-25 体检陷阱之③「工具返回在撒谎」在这里断根。
+ * ## 落位 = 纸（2026-08-29）
  *
- * 旧名别名（sketch_on_board/create_on_board 等）2026-08-28 全部收摊 —— exp 不为
- * 过去的会话背兼容（用户拍板），入口只此一个。
+ * 旧回路「模糊锚点 + 机器启发式找洞」退役（环搜/挑侧/走廊/学走向全删 —— ㉚ 五刀
+ * 证明那一层的坑修不完）。新回路：
+ *   - at:{x,y} = **当前纸的版心局部像素**（agent 精确摆放，钳进版心、钳了如实报）
+ *   - reply_to/chain = 接楼：正下方（压住跳过），纸写满自动翻下一张
+ *   - 什么都不给 = 纸内按阅读序往下排，写满自动翻纸
+ *   - near = 画线的语义（annotates/flow），不再驱动落位；near+side 显式给时按
+ *     精确贴放（题注在上方这类语义要求）
+ * 没铺过纸时第一笔自动铺一张（对准用户视口）。文件夹层没有纸：reply/near 照常，
+ * at 礼貌拒收。
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
@@ -28,16 +32,17 @@ import { TAG_RE } from '../../../projects/board-sanitize.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { endpointReal } from './edit-board.js';
-import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
-import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, shapePath, layoutNodes, resolveTemplate, bboxOrZero, fitFor } from '../../../lib/sketch-layout.js';
-import { resolvePlacement, describePlacement, inflateSpriteSeats, inferFlowDir, pickFreeSide } from '../../../lib/board-place.js';
-import { allocateLaneColumn } from '../../../lib/board-lanes.js';
+import { BINDING_TYPE_IDS } from '../../../lib/binding-types.js';
+import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fitFor } from '../../../lib/sketch-layout.js';
+import { innerRect, inflateSpriteSeats } from '../../../lib/board-sheets.js';
+import { makeSheetPlacer } from './write-on-board-place.js';
+import { openSheetFor } from './open-sheet.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
 import { makeAnchorResolver } from '../../../lib/board-anchor.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
-import { WORLD_PT, NODES, SHAPES, EDGES } from './write-on-board-schema.js';
+import { SHEET_PT, NODES, SHAPES, EDGES } from './write-on-board-schema.js';
 import { roleDefaultAnchor } from './write-on-board-role-anchor.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
@@ -46,9 +51,6 @@ import { learnedChalkWidth } from '../../../lib/chalk-size-pref.js';
 
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
-// 墨色表真身在 lib/sketch-shapes.js（棘轮拆件时一起搬 —— 一份表两处读会分叉）
-// 图形入参 schema（nodes/shapes/edges/WORLD_PT 与上限）08-28 拆去 write-on-board-schema.js
-// TAG_RE 08-27 收敛：真身在 board-sanitize（落盘闸），zod 入参用同一份 —— 两处等价异写的病根拔掉
 
 /** md 侦测：正文带 markdown 记号却标 plain 会把 **加粗** 原样吐出来（ldx 案） */
 const looksLikeMd = (t) => /(\*\*|__|^#{1,4}\s|^\s*[-*]\s|\|.+\||```|\$[^$]+\$|\[.+\]\(.+\))/m.test(t);
@@ -57,17 +59,20 @@ const SCHEMA = {
   text: z.string().min(1).max(8000).optional()
     .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
   near: z.string().max(300).optional()
-    .describe('Canvas id or #tag this lands beside (annotates line for a single note)'),
-  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under`),
-  at: WORLD_PT.optional()
-    .describe('World-coord suggestion. The server always snaps/nudges to a free cell; far outside the working area it is politely rejected and the note lands near instead — placement never fails'),
-  side: z.enum(['right', 'left', 'above', 'below']).optional().describe('Which side of near to prefer. Omit for auto: the server picks the side with free space, clear connector lines, and the direction the user has been arranging things — give side only when the SEMANTICS demand it (e.g. a caption must sit above)'),
+    .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it. Placement itself is by sheet (at / flow), not by near'),
+  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; a full sheet turns the page)`),
+  at: SHEET_PT.optional()
+    .describe("Where on the CURRENT SHEET, in pixels from its top-left writable corner (x→right, y→down). Clamped into the sheet — the return says if it was. Omit it to flow top-to-bottom"),
+  sheet: z.string().regex(TAG_RE).optional()
+    .describe('Write on this sheet instead of the current one (names from open_sheet / read_board)'),
+  side: z.enum(['right', 'left', 'above', 'below']).optional()
+    .describe('ONLY with near, when the SEMANTICS demand a side (e.g. a caption must sit above): exact placement beside the anchor. Normally omit — sheets flow downward'),
   relation: z.enum(BINDING_TYPE_IDS).optional()
     .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
   chain: z.boolean().optional()
     .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights)'),
   open_lane: z.string().max(300).optional()
-    .describe("Open a NEW thread column named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic column at the right edge of the map. Requires tag; continue the lane later with {tag, chain:true}. read_board 的「线的清单」一节 lists existing lanes."),
+    .describe("Open a NEW thread line named by tag: lays a fresh sheet for it and lands this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic. Requires tag; continue with {tag, chain:true}."),
   tag: z.string().regex(TAG_RE).optional()
     .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
   ink: z.enum(['chalk', 'hand']).optional()
@@ -89,27 +94,25 @@ const SCHEMA = {
 const DESCRIPTION = `Write on the board — the ONE way to put words and pictures on the canvas.
 The board is the conversation; the sidebar is the log.
 
-One thought = one call. What you pass decides what lands:
-- {text, near} → a single Markdown note beside the thing it is about, with an
-  annotates line. It is a real file (${CHALK_DIR}/…md) you can Read/Grep/Edit later.
-  reply_to = thread under another note (flow line); chain:true = auto-thread onto the
-  latest note of the same tag. relation/side pick the line type and the side.
+Work happens on SHEETS (open_sheet lays one — a screenful of paper). One thought =
+one call. What you pass decides what lands:
+- {text} → a single Markdown note. It is a real file (${CHALK_DIR}/…md) you can
+  Read/Grep/Edit later. near = what it is about (annotates line). reply_to = thread
+  under another note; chain:true = auto-thread onto your latest note of the same tag.
 - {nodes, shapes, edges, …} → a whole sketch in one call (comparison table, flow,
   mind map, detective board linking real artifacts). You describe STRUCTURE on a grid
-  (1 cell = ${UNIT}px); the server does pixels, hand-drawn shapes, and placement. The
-  sketch gets a #tag (read/select/erase as a group) and lands as STAGING (translucent)
-  until edit_board commits it or the turn ends.
-Threads are LANES: a tag names a line of thought growing downward. Continue one with
-{tag, chain:true}; fork a new direction off any note with {tag:"新名", open_lane:"<that id>"}
-(the column is allocated for you, a flow line marks the fork); a brand-new topic is
-{tag:"名", open_lane:"fresh"}. read_board 的「线的清单」一节 is the map — read it, then place
-by RELATION, not by coordinates.
-- at:{x,y} (either mode) is a world-coord suggestion: the server snaps to a free cell
-  nearby; placement never fails — if your spot is unusable it lands somewhere sensible
-  and the return says exactly where and why.
+  (1 cell = ${UNIT}px); the server does pixels and hand-drawn shapes. The sketch gets a
+  #tag (read/select/erase as a group) and lands as STAGING until commit or turn end.
+Placement — sheet coordinates, no guessing:
+- at:{x,y} = pixels from the current sheet's top-left writable corner. You OWN the
+  layout inside a sheet — place precisely, side by side, wherever reads best.
+- no at = flows top-to-bottom on the current sheet; a full sheet turns the page
+  automatically. reply_to lands right below the note it answers.
+- New topic/chapter → open_sheet first, so each sheet reads as one page.
+Threads are tags: {tag, chain:true} continues a line of thought; fork with
+{tag:"新名", open_lane:"<id>"} (a fresh sheet is laid for it).
 Node text carrying markdown marks defaults to format md (KaTeX $…$ and \`\`\`mermaid fences work).
-Readability: user reads at 80–100% zoom — body text md/lg; one sketch ≤ ${SKETCH_FIT.w}x${SKETCH_FIT.h}
-world px (bigger lands with a warning — split big ones, link with an edge).
+Readability: user reads at 75–100% zoom — body text md/lg; one sketch fits one sheet.
 To change what is already on the board use edit_board — do not redraw.
 Keep the chat reply to one line pointing here.`;
 
@@ -142,23 +145,17 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       // ⚠️ extra 必须往下传：署名是从 extra 里的 toolUseId 查回来的，
       // 这条自递归漏了它的话，角色用 `nodes:[一件]` 写的板会静默署成 'agent'。
       return handler({
-        text: n.text, near: args.near, reply_to: args.reply_to, at: args.at, side: args.side,
-        relation: args.relation, chain: args.chain, tag: args.tag, size: n.size, width: n.w,
+        text: n.text, near: args.near, reply_to: args.reply_to, at: args.at, sheet: args.sheet,
+        side: args.side, relation: args.relation, chain: args.chain, tag: args.tag, size: n.size, width: n.w,
       }, extra);
     }
 
-    const board = await readBoard(projectId);
+    let board = await readBoard(projectId);
     const known = new Set(Object.keys(board.zones || {}));
-    // 精灵身位：角色最新一条板书旁贴着它的精灵（客户端摆），落位给那圈让空
+    // 精灵身位：角色最新一条板书旁贴着它的精灵（客户端摆），压上判定给那圈让空
     const obstaclesOf = (b, zone) => inflateSpriteSeats(Object.entries(b.objects || {})
       .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
       .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(b, id, e) })), b.objects);
-    const contentBottomOf = (obstacles, zone) => {
-      let bottom = 0;
-      for (const o of obstacles) bottom = Math.max(bottom, o.y + o.h);
-      if (!zone) for (const zz of Object.values(board.zones || {})) if (Number.isFinite(zz?.y)) bottom = Math.max(bottom, zz.y + 240);
-      return bottom;
-    };
     const vp = getViewpoint(projectId);
     const fit = fitFor(vp);
     // 车道封顶（08-28）：触屏档一件不许超过一屏宽。**板书和草图两条路都要过它** ——
@@ -172,6 +169,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
     // 锚点解析（真 id > tag 包络 > 救援入座）本体在 lib/board-anchor.js（棘轮拆件）
     const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
+    // 纸上落位三分支（棘轮拆件，见 write-on-board-place.js）
+    const { placeOnSheets, placeInZone, describeSpot } = makeSheetPlacer({ projectId, sessionId, by });
 
     // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
     if (args.text) {
@@ -186,7 +185,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       if (args.ink === 'hand' && (args.chain || args.open_lane || args.reply_to)) {
         return err("ink:'hand' 是画布手写字（无文件本体），接不进线程 —— 要 chain/open_lane/reply_to 就用默认的 chalk。");
       }
-      // ── 开新线（open_lane，2026-08-27 空间规划）：模型声明拓扑，机器排列 ──
+      // ── 开新线（open_lane）：模型声明拓扑，机器给这条线铺自己的纸 ──
       if (args.open_lane) {
         if (!args.tag) return err('open_lane 要配 tag：tag 就是这条线的名字，后续用 {tag, chain:true} 续。');
         if (args.reply_to || args.chain || args.at || args.near) {
@@ -207,7 +206,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           .map(([id]) => id).sort();
         if (chalks.length) replyToRaw = chalks[chalks.length - 1];
       }
-      // 角色缺省锚（08-28；专线优先、rounds 本拍其次，拆件见 write-on-board-role-anchor.js）
+      // 角色缺省锚（08-28；专线优先、「这一拍」其次，拆件见 write-on-board-role-anchor.js）
       let nearRaw = args.near || null;
       if (args.ink !== 'hand' && !replyToRaw && !nearRaw && !args.at && !args.open_lane
         && ROLE_SLUG_RE.test(by)) {
@@ -230,8 +229,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       let zone = '';
       let anchorId = null; let parentId = null;
       let replyRect = null; let anchorRect = null;
-      let b2 = board;   // 救援入座后换新板（新座要进障碍集）
-      // 开新线：岔出点解析（fresh = 无岔出点，从版图右缘开列）
+      let b2 = board;   // 救援入座后换新板（新座要进压上判定）
+      // 开新线：岔出点解析（fresh = 无岔出点）
       let laneFrom = null;   // {id, rect} | 'fresh'
       if (args.open_lane) {
         if (args.open_lane === 'fresh') {
@@ -271,39 +270,26 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
       const obstacles = obstaclesOf(b2, zone);
       const vpRect = vpRectFor(zone);
-      // 开新线走列分配（撞不上姊妹线；没有失败分支），其余走统一落位
-      const lanePlan = laneFrom
-        ? allocateLaneColumn({
-          parent: laneFrom === 'fresh' ? null : laneFrom.rect,
-          lanes: Object.values(b2.lanes || {}), obstacles, box,
-        })
-        : null;
-      // 落位直觉（08-27）：接楼方向和自动挑侧都先问用户把这条线往哪边摆过
-      const flowDir = inferFlowDir(b2, { tag: args.tag || null });
-      // 台词侧挂（08-28 用户拍板）：角色回主持人的那一段时，横屏就挂到它**右**侧 ——
-      // 叙事主列留给主持人的章节链，角色的话读作「这一段的和声」，同一拍的几个人
-      // 自然挤成一排。竖屏/没有视点时保持下行（手机竖排免费正确）；用户自己掰过的
-      // 走向（flowDir）仍然最大。右边挤不下就接楼，**不挂左边**（08-29：挂左侧读起来
-      // 是上一拍的事，真会话里用户第一句就是「位置摆放的是不是不太对」）。
-      let replyDir = flowDir;
-      if (!replyDir && replyRect && ROLE_SLUG_RE.test(by)
-        && (board.objects?.[parentId]?.by || 'agent') === 'agent'
-        && vpRect && vpRect.w > vpRect.h) {
-        replyDir = pickFreeSide(replyRect, box, obstacles);
-      }
-      // 同时有线程和锚点时，落位跟线程走、但到锚点的线也别压第三块
-      const lineTargets = (replyRect && anchorRect)
-        ? [{ x: anchorRect.x + anchorRect.w / 2, y: anchorRect.y + anchorRect.h / 2 }]
-        : [];
-      const placed = lanePlan
-        ? { x: lanePlan.x, y: lanePlan.y, resolution: lanePlan.fallback ? 'fallback' : 'lane-open', nudged: !!lanePlan.fallback }
-        : resolvePlacement({
-          box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
-          replyDir, sideHint: flowDir, lineTargets,
-          obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
-          column: fit.column,
+      let placed;
+      if (zone) {
+        if (args.at) return err('at 是纸内坐标，文件夹层没有纸 —— 在文件夹里用 reply_to/near 落位。');
+        placed = placeInZone({ box, replyRect, anchorRect, side: args.side || null, obstacles });
+      } else if (laneFrom) {
+        // 一条线 = 它自己的一叠纸：铺一张以 tag 命名的纸，这条落在纸头
+        const opened = await openSheetFor(projectId, {
+          sessionId, by, title: args.tag,
+          name: TAG_RE.test(args.tag) && !board.sheets?.[args.tag] ? args.tag : null,
         });
-      const learnedDir = !lanePlan && flowDir && !args.side && (replyRect || anchorRect) ? flowDir : null;
+        const inner = innerRect(opened);
+        placed = { x: inner.x, y: inner.y, resolution: 'lane-open', sheetId: opened.id, opened, pressed: [] };
+        b2 = { ...b2, sheets: { ...(b2.sheets || {}), [opened.id]: { x: opened.x, y: opened.y, w: opened.w, h: opened.h, at: opened.at, by } } };
+      } else {
+        placed = await placeOnSheets(b2, {
+          box, at: args.at || null, sheetName: args.sheet || null,
+          replyRect, anchorRect, side: args.side || null, obstacles,
+        });
+        if (placed.opened) b2 = { ...b2, sheets: { ...(b2.sheets || {}), [placed.opened.id]: { x: placed.opened.x, y: placed.opened.y, w: placed.opened.w, h: placed.opened.h, at: placed.opened.at, by } } };
+      }
 
       // ── 手写字本体（ink:'hand'）：画布原生 text 节点，不落文件 ──
       if (args.ink === 'hand') {
@@ -330,8 +316,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           ctx?.emit?.(Events.boardFocus(hRect, { tag: args.tag || null, layer: zone, soft: true, actor: by !== 'agent' ? by : null }));
         } catch { /* fail-soft */ }
         return { content: [{ type: 'text', text:
-          `Wrote handwritten note ${hid} at (${hRect.x},${hRect.y}) ${hRect.w}x${hRect.h} — ${describePlacement(placed, { requestedAt: args.at })}.`
-          + (learnedDir ? ` Layout followed the user's ${learnedDir}-ward arranging habit.` : '') }] };
+          `Wrote handwritten note ${hid} at (${hRect.x},${hRect.y}) ${hRect.w}x${hRect.h} — ${describeSpot(b2, placed)}.` }] };
       }
 
       const fileName = chalkFileName(body);
@@ -344,7 +329,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       } };
       const bindings = {};
       if (anchorId) {
-        const type = args.relation || (lanePlan ? 'flow' : 'annotates');
+        const type = args.relation || (laneFrom ? 'flow' : 'annotates');
         // flow 是读序（旧 → 新）：锚在前板书在后；其余语义都是"这条说的是它"
         const [from, to] = type === 'flow' ? [anchorId, rel] : [rel, anchorId];
         bindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}) };
@@ -352,8 +337,9 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
       await patchBoard(projectId, {
         objects, bindings,
-        ...(lanePlan ? { lanes: { [args.tag]: {
-          x: Math.round(placed.x), y: Math.round(placed.y), w: lanePlan.w,
+        // 线注册表照旧登记（read_board 的线清单/角色专线都靠它）：登记点 = 这条线的纸
+        ...(laneFrom ? { lanes: { [args.tag]: {
+          x: Math.round(placed.x), y: Math.round(placed.y), w: box.w,
           ...(laneFrom !== 'fresh' && laneFrom?.id ? { parent: laneFrom.id } : {}),
         } } } : {}),
       });
@@ -366,20 +352,19 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         ctx?.emit?.(Events.boardFocus(rect, { tag: args.tag || null, layer: zone, soft: true, chalk: rel, actor: by !== 'agent' ? by : null }));
       } catch { /* fail-soft */ }
       const lines = [
-        `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describePlacement(placed, { requestedAt: args.at })}.`,
+        `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describeSpot(b2, placed)}.`,
         `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
       ];
       if (box.h > SKETCH_FIT.h * 0.6) lines.push('⚠ It is tall — next time split or shorten.');
-      if (learnedDir) lines.push(`Layout followed the user's habit: they have been arranging this thread ${learnedDir}-ward, so placement leaned that way.`);
       // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话
       {
         const rolledInto = [args.tag, board.objects?.[parentId]?.tag, board.objects?.[anchorId]?.tag]
           .find(t => t && b2.rolls?.[t]);
         if (rolledInto) lines.push(`⚠ #${rolledInto} 这条线收着卷（用户看不见里面）——这条也进了卷。要让用户看见，先 edit_board unroll{tag:"${rolledInto}"}。`);
       }
-      if (lanePlan) {
-        lines.push(`Opened lane #${args.tag}${laneFrom !== 'fresh' ? ` branching from ${laneFrom.id}` : ''}`
-          + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists all lanes under 「线的清单」.`);
+      if (laneFrom) {
+        lines.push(`Opened lane #${args.tag}${laneFrom !== 'fresh' ? ` branching from ${laneFrom.id}` : ''} on its own sheet`
+          + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists lanes and sheets.`);
       }
       lines.push('The user can annotate it to reply; answer with reply_to (or chain:true on the same tag).');
       return { content: [{ type: 'text', text: lines.join('\n') }] };
@@ -453,13 +438,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const built = buildSketchShapes(shapesIn, { rectOfNode, isTaken: (id) => localIds.has(id), tag });
     if (built.error) return err(built.error);
     const shapes = built.shapes;
-    // ── 线：先于落位（连到真实产物的线会改主角判断 → 尺寸） ──
+    // ── 线：端点校验跟 edit_board add_edge 同一道闸（endpointReal） ──
     const idOf = new Map();
     for (const n of nodes) idOf.set(n.key, `text:a${stamp()}`);
     for (const sh of shapes) idOf.set(sh.key, `scribble:a${stamp()}`);
-    // 端点校验跟 edit_board add_edge 同一道闸（endpointReal）：板上有座 / zones /
-    // 磁盘真身。08-28 对齐 —— 此前这里不做磁盘兜底，连到"真实存在但还没上墙"的
-    // 产物会被拒，而 add_edge 收（领养/入座稍后把线接实）。
     const resolveEnd = async (raw) => {
       if (idOf.has(raw)) return idOf.get(raw);
       const cid = normalizeCanvasId(raw);
@@ -476,9 +458,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}), ...(e.label ? { label: e.label } : {}),
       };
     }
-    const after = { ...board, bindings: { ...(board.bindings || {}), ...bindings } };
 
-    // ── 宏观落位（resolvePlacement 统一走） ──
+    // ── 宏观落位：纸（sheet 局部 at / 顺排 / near+side 贴放） ──
     const local = bboxOrZero([
       ...nodes.map(n => ({ ...pos.get(n.key), w: n.w, h: n.h })),
       ...shapes.map(sh => sh.rect),
@@ -495,38 +476,24 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         zone = a.zone;
         if (a.board) sketchBase = a.board;
         const e = sketchBase.objects[a.anchorId];
-        anchorRect = { x: a.rect.x, y: a.rect.y, ...estimateSizeOn(after, a.anchorId, e) };
+        anchorRect = { x: a.rect.x, y: a.rect.y, ...estimateSizeOn(sketchBase, a.anchorId, e) };
         if (a.rect.w > anchorRect.w) anchorRect = a.rect;   // tag 包络比单卡大就用包络
       }
     }
-    // 产物锚（08-27 用户问「围绕产物做编排」补上的那半边）：图的线连着板上已有的
-    // 产物、又没给 near/at 时，图**自动落在被连产物旁边** —— 线说"这张图说的是它们"，
-    // 位置就得跟着说；否则线画上了、图却摊在版面尽头，位置和线自相矛盾。
-    let autoAnchorIds = [];
-    if (!anchorRect && !args.at) {
-      const newIds = new Set(idOf.values());
-      autoAnchorIds = [...new Set(Object.values(bindings).flatMap((b) => [b.from, b.to])
-        .filter((id) => !newIds.has(id) && Number.isFinite(sketchBase.objects?.[id]?.x)))];
-      if (autoAnchorIds.length) {
-        const rects = autoAnchorIds.map((id) => {
-          const e = sketchBase.objects[id];
-          return { x: e.x, y: e.y, ...estimateSizeOn(after, id, e) };
-        });
-        anchorRect = bboxOrZero(rects);
-        zone = layerOf(autoAnchorIds[0], sketchBase.objects[autoAnchorIds[0]], known);
-      }
-    }
-    const afterEff = sketchBase === board ? after : { ...sketchBase, bindings: { ...(sketchBase.bindings || {}), ...bindings } };
-    const obstacles = obstaclesOf(afterEff, zone);
+    const obstacles = obstaclesOf(sketchBase, zone);
     const vpRect = vpRectFor(zone);
-    const placed = resolvePlacement({
-      box: { w: local.w + 24, h: local.h + 24 },
-      at: args.at || null, anchor: anchorRect, side: args.side || null,
-      // 落位直觉：side 不给时自动挑（空侧+线不压块），偏好排用户摆放习惯
-      sideHint: inferFlowDir(sketchBase, { tag: args.tag || null }),
-      obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect,
-      screen: fit.screen ? fit : null, column: fit.column,
-    });
+    const sketchBox = { w: local.w + 24, h: local.h + 24 };
+    let placed;
+    if (zone) {
+      if (args.at) return err('at 是纸内坐标，文件夹层没有纸 —— 在文件夹里用 near 落位。');
+      placed = placeInZone({ box: sketchBox, replyRect: null, anchorRect, side: args.side || null, obstacles });
+    } else {
+      placed = await placeOnSheets(sketchBase, {
+        box: sketchBox, at: args.at || null, sheetName: args.sheet || null,
+        replyRect: null, anchorRect, side: args.side || null, obstacles,
+      });
+      if (placed.opened) sketchBase = { ...sketchBase, sheets: { ...(sketchBase.sheets || {}), [placed.opened.id]: { x: placed.opened.x, y: placed.opened.y, w: placed.opened.w, h: placed.opened.h, at: placed.opened.at, by } } };
+    }
     const ox = placed.x - local.x + 12; const oy = placed.y - local.y + 12;
     // mindmap 的方位重排要**真实图心**（落位前算不出，单锚时质心还会退化）——
     // 环形 bbox 不随槽位变，落位定了再按世界方位二次布局，落位本身不漂
@@ -559,11 +526,11 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       ctx?.emit?.(Events.boardFocus(world, { tag: tag || null, layer: zone, actor: by !== 'agent' ? by : null }));
     } catch { /* fail-soft */ }
     const lines = [
-      `Sketch${tag ? ` #${tag}` : ''} landed${staging ? ' as STAGING (半透明)' : ''}: ${nodes.length} nodes, ${shapes.length} shapes, ${Object.keys(bindings).length} lines; layout ${tpl}; at world (${world.x},${world.y}) ${world.w}x${world.h} — ${describePlacement(placed, { requestedAt: args.at })}.`,
+      `Sketch${tag ? ` #${tag}` : ''} landed${staging ? ' as STAGING (半透明)' : ''}: ${nodes.length} nodes, ${shapes.length} shapes, ${Object.keys(bindings).length} lines; layout ${tpl}; at world (${world.x},${world.y}) ${world.w}x${world.h} — ${describeSpot(sketchBase, placed)}.`,
       `ids: ${[...idOf].map(([k, v]) => `${k}=${v}`).join(', ')}`,
       `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
-    if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一屏（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。下次拆成几张 tag 图用线连。`);
+    if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一张纸（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。下次拆成几张 tag 图用线连。`);
     // 零线大图提醒（08-27 用户报「草草一堆文字摊在那儿」）：软提醒不硬拒 ——
     // 但要说清楚这不是风格问题，是版面语言缺了一半
     if (nodesIn.length >= 3 && !innerEdges.length) {
@@ -575,11 +542,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // 触屏档宽是硬约束（横向滑动没人受得了），所以话要说在宽上
     if (world.w > fit.w || world.h > fit.h) lines.push(fit.column
       ? `⚠ Too big for a ${fit.lane} screen (${fit.screen.w}x${fit.screen.h}px). Keep each sketch ≤${fit.w} wide — anything wider means sideways scrolling. Stack the next one below, don't put it to the side.`
-      : `⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
-    if (autoAnchorIds.length) {
-      lines.push(`（没给 near/at，但这张图的线连着 ${autoAnchorIds.slice(0, 4).join('、')}${autoAnchorIds.length > 4 ? ' 等' : ''} —— 自动落在它们旁边）`);
-    }
-    if (vp?.zoom && vp.zoom < 0.8) lines.push(`User's zoom is ${vp.zoom} (<0.8): keep nodes md/lg and say in one line that there is a sketch on the board.`);
+      : `⚠ Bigger than one sheet${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
+    if (vp?.zoom && vp.zoom < 0.75) lines.push(`User's zoom is ${vp.zoom} (<0.75): keep nodes md/lg and say in one line that there is a sketch on the board.`);
     lines.push(staging
       ? `Next: look_at_board {tag:"${tag}"} to check it, then edit_board {ops:[{op:"commit",tag:"${tag}"}]} (or it commits at turn end).`
       : `Next: look_at_board ${tag ? `{tag:"${tag}"}` : '{around: one of the ids}'} to check it.`);

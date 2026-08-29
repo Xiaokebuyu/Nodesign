@@ -18,8 +18,7 @@ import { getSharedDir } from '../../projects/workspace.js';
 import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
 import { textBox } from '../../lib/sketch-layout.js';
-import { resolvePlacement } from '../../lib/board-place.js';
-import { getViewpoint } from '../../projects/viewpoint-store.js';
+import { currentSheet, nextSpotInSheet } from '../../lib/board-sheets.js';
 import { renderChalk, writeChalkFile, CHALK_DIR } from '../../lib/chalk.js';
 
 const byRun = new Map();   // runId → { projectId, rel, fileName, items, linked:Set, session }
@@ -70,18 +69,17 @@ async function upsert(st, items) {
     await patchBoard(st.projectId, { objects: { [st.rel]: { ...prev, h: box.h } } });
     return;
   }
-  // 首次落位：用户视口的空地 > 内容底下（跟 write_on_board 同口径）
+  // 首次落位（2026-08-29 纸范式）：当前纸内顺排；纸满/没铺过纸就排在内容底下
+  //（步骤清单是 harness 的手，别替 agent 铺纸 —— 铺纸是 agent 的开工动作）。
   const known = new Set(Object.keys(board.zones || {}));
   const obstacles = Object.entries(board.objects || {})
     .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === '')
     .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
   let bottom = 0; for (const o of obstacles) bottom = Math.max(bottom, o.y + o.h);
   for (const zz of Object.values(board.zones || {})) if (Number.isFinite(zz?.y)) bottom = Math.max(bottom, zz.y + 240);
-  const vp = getViewpoint(st.projectId);
-  const vpRect = (vp && !vp.layer && vp.camera) ? vp.camera : null;
-  // 统一落位（08-28 清账）：此前这里是 sketch-layout.findSpot 的最后一个调用点 ——
-  // 08-25 落位统一的漏网之鱼，步骤清单的避让判据跟其余落位系统性不一致。
-  const spot = resolvePlacement({ box: { w: box.w, h: box.h }, obstacles, contentBottom: bottom, viewport: vpRect });
+  const cur = currentSheet(board, null);
+  const spot = (cur && nextSpotInSheet(board, cur.id, box))
+    || { x: obstacles.length ? Math.round(Math.min(...obstacles.map(o => o.x))) : 10, y: Math.round(bottom) + 40 };
   await patchBoard(st.projectId, { objects: { [st.rel]: { x: spot.x, y: spot.y, z: 1, w: box.w, h: box.h, by: 'agent', seat: 'auto', tag: st.tag } } });
 }
 

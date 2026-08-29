@@ -14,6 +14,16 @@ const MAX_EDGES = 400;
 const LOCAL_ID = z.string().regex(/^[A-Za-z0-9_-]{1,48}$/, 'local id: letters/digits/_/-');
 const GRID_PT = z.object({ x: z.number().min(-2000).max(2000), y: z.number().min(-2000).max(2000) });
 export const WORLD_PT = z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6) });
+/**
+ * 纸内坐标（2026-08-29 纸范式）：以当前纸版心左上角为原点的像素。越界**钳住不拒收**
+ * （schema 整单拒是最贵的失败模式；钳过在返回里如实报）。preprocess 在给模型看的
+ * JSON schema 里隐形 —— 文档照旧严格，垫片只当安全网。
+ */
+const clampN = (lo, hi) => (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : v);
+export const SHEET_PT = z.object({
+  x: z.preprocess(clampN(0, 12000), z.number().min(0).max(12000)),
+  y: z.preprocess(clampN(0, 12000), z.number().min(0).max(12000)),
+});
 
 export const NODES = z.array(z.object({
   id: LOCAL_ID.describe('Local id to reference from edges/shapes'),

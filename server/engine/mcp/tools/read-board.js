@@ -20,7 +20,7 @@ import { layerOf } from '../../../lib/canvas-id.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
-import { inferFlowDir } from '../../../lib/board-place.js';
+import { sheetSummaries } from '../../../lib/board-sheets.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -191,6 +191,20 @@ on the minimap and listed with what is inside it.`,
       }
       if (board.hero && !tag) lines.push('', `★ 显式主角：${board.hero}（edit_board 的 feature/unfeature 管它）`);
 
+      // 纸的清单（2026-08-29 纸范式）：agent 的空间账本 —— 每张纸的名字/位置/件数/
+      // 剩余空地。at 坐标以当前纸版心左上为原点，这一节就是坐标系的地图。
+      if (!want && !tag) {
+        try {
+          const ss = sheetSummaries(board);
+          if (ss.length) {
+            lines.push('', '纸（sheet）：at:{x,y} 写的是纸内像素（版心左上为原点）；写满自动翻纸，新话题 open_sheet：');
+            for (const s of ss) {
+              lines.push(`  ${s.id}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高${s.lastId ? `，最新 ${s.lastId}` : ''}`);
+            }
+          }
+        } catch { /* 纸读不出不挡座次 */ }
+      }
+
       // 版图（2026-08-27 空间规划）：线 = 同 tag 的纵列。这是 agent 的符号地图 ——
       // 摆放按关系（续哪条线/岔自哪条）声明，几何机器排，别按坐标猜。
       if (!tag) {
@@ -205,10 +219,7 @@ on the minimap and listed with what is inside it.`,
                 + ` —— 座位和文件都在（Read 照常），edit_board unroll 展开；别往收着的线里接新话`);
               continue;
             }
-            // 走向（08-27 落位直觉可见化）：用户把这条线的板书亲手掰过方向就报出来
-            // —— 事前感知，不然 agent 只能靠视口猜用户想要的版面方向
-            const dir = inferFlowDir(board, { tag: l.tag });
-            const dirTxt = dir ? `，走向 ${{ right: '→右', left: '←左', below: '↓下', above: '↑上' }[dir]}（用户摆的，接楼会跟）` : '';
+            const dirTxt = '';
             lines.push(l.registered
               ? `  #${l.tag}：${l.count} 节${l.parent ? `，岔自 ${l.parent}` : ''}，列头 (${l.x},${l.y})`
                 + `${l.frontier ? `，接着写会落 (${l.frontier.x},${l.frontier.y}) 附近` : ''}${l.lastId ? `，最新 ${l.lastId}` : ''}${dirTxt}`

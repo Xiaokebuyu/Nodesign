@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 import { setViewpoint, getViewpoint, describeDevice, _resetViewpoints } from '../projects/viewpoint-store.js';
 import { fitFor, SKETCH_FIT, resolveTemplate, layoutNodes, textBox, UNIT } from './sketch-layout.js';
-import { resolvePlacement } from './board-place.js';
+import { placeThread, nextSpotInSheet } from './board-sheets.js';
 
 const vpOf = (device) => ({
   camera: { x: 0, y: 0, w: 1600, h: 950 }, zoom: 1, ...(device ? { device } : {}),
@@ -98,38 +98,29 @@ describe('fitFor 出的版式', () => {
   });
 });
 
-describe('单列落位', () => {
-  const anchor = { x: 0, y: 0, w: 342, h: 200 };
+describe('单列落位（2026-08-29 纸范式：竖排是结构保证不是启发式）', () => {
   const box = { w: 342, h: 200 };
 
-  it('near 不挑侧，一律正下方', () => {
-    const r = resolvePlacement({ box, anchor, obstacles: [anchor], column: true });
-    expect(r.resolution).toBe('near-below');
-    expect(r.y).toBeGreaterThanOrEqual(anchor.y + anchor.h);
-  });
-
-  it('⭐ 模型点名要 side:right 也降级成正下方 —— 并排的第二件在他屏幕外', () => {
-    const r = resolvePlacement({ box, anchor, side: 'right', obstacles: [anchor], column: true });
-    expect(r.resolution).toBe('near-below');
-    // 对照：桌面档照旧听它的
-    const desk = resolvePlacement({ box, anchor, side: 'right', obstacles: [anchor] });
-    expect(desk.resolution).toBe('near-right');
-  });
-
-  it('线程接楼也不横接（replyDir 从用户摆放学来的横向偏好在单列档不算数）', () => {
+  it('线程接楼永远正下方（没有横接档 —— replyDir/挑侧启发式已随落位引擎退役）', () => {
     const replyTo = { x: 0, y: 0, w: 342, h: 200 };
-    const r = resolvePlacement({ box, replyTo, replyDir: 'right', obstacles: [replyTo], column: true });
+    const r = placeThread({ sheets: {} }, replyTo, box, { obstacles: [{ ...replyTo }] });
     expect(r.y).toBeGreaterThanOrEqual(replyTo.y + replyTo.h);
     expect(r.x).toBe(replyTo.x);
-    // 对照：桌面档照旧横接
-    const desk = resolvePlacement({ box, replyTo, replyDir: 'right', obstacles: [replyTo] });
-    expect(desk.x).toBeGreaterThan(replyTo.x);
   });
 
-  it('落位仍然没有失败分支（挤满了也给个位置，不抛不回 null）', () => {
-    const wall = Array.from({ length: 40 }, (_, i) => ({ x: 0, y: i * 210, w: 342, h: 200 }));
-    const r = resolvePlacement({ box, anchor, obstacles: wall, column: true, contentBottom: 40 * 210 });
-    expect(Number.isFinite(r.x) && Number.isFinite(r.y)).toBe(true);
+  it('接楼压住别人就跳到那件底下接着排（只往下，不换侧）', () => {
+    const replyTo = { x: 0, y: 0, w: 342, h: 200 };
+    const blocker = { x: 0, y: 224, w: 342, h: 300 };
+    const r = placeThread({ sheets: {} }, replyTo, box, { obstacles: [replyTo, blocker] });
+    expect(r.x).toBe(0);
+    expect(r.y).toBeGreaterThanOrEqual(blocker.y + blocker.h);
+  });
+
+  it('纸内顺排只往下（手机纸窄 = 天然单列，比纸宽的进不了纸）', () => {
+    const b = { sheets: { p1: { x: 0, y: 0, w: 342 + 48, h: 1062 } }, objects: {} };
+    const first = nextSpotInSheet(b, 'p1', box);
+    expect(first).toBeTruthy();
+    expect(nextSpotInSheet(b, 'p1', { w: 600, h: 100 })).toBeNull();   // 比手机纸宽 → 拒
   });
 });
 

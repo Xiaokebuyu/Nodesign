@@ -48,27 +48,6 @@ describe('read_board 线的清单', () => {
   });
 });
 
-describe('版图走向（08-27 落位直觉可见化）', () => {
-  it('⭐ 用户把一条线掰横 → 版图行报「走向 →右（用户摆的）」', async () => {
-    await patchBoard(pid, {
-      objects: {
-        'notes/板书/h1.md': { x: 2000, y: 0, w: 400, h: 200, by: 'agent', tag: '横线', seat: 'agent' },
-        'notes/板书/h2.md': { x: 2560, y: 20, w: 400, h: 200, by: 'agent', tag: '横线', seat: 'user' },
-        'notes/板书/h3.md': { x: 3120, y: 0, w: 400, h: 200, by: 'agent', tag: '横线', seat: 'user' },
-      },
-      bindings: {
-        'b:h1': { type: 'flow', from: 'notes/板书/h1.md', to: 'notes/板书/h2.md', tag: '横线' },
-        'b:h2': { type: 'flow', from: 'notes/板书/h2.md', to: 'notes/板书/h3.md', tag: '横线' },
-      },
-    });
-    const r = await call();
-    const text = r.content[0].text;
-    expect(text).toMatch(/#横线：.*走向 →右（用户摆的，接楼会跟）/);
-    // 没被掰过的线不带走向段（拿不准就不占字）
-    expect(text).not.toMatch(/#主线：.*走向/);
-  });
-});
-
 describe('收卷（2026-08-27 收纳器）', () => {
   it('⭐ 收着的线：版图一行带过，成员不逐件列；显式 tag= 点名仍展开', async () => {
     await patchBoard(pid, {

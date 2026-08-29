@@ -29,7 +29,8 @@ import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
-import { resolvePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
+import { placeBeside, placeAtOnSheet, overlapIds, inflateSpriteSeats, currentSheet } from '../../../lib/board-sheets.js';
+import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
 
@@ -65,7 +66,13 @@ const REL = z.object({
   gap: GAP.optional().describe('PIXELS of breathing room between the two (default 24, max 400) — same unit as every position you read back'),
 });
 const DELTA = z.object({ dx: PX_DELTA, dy: PX_DELTA }).describe('PIXELS to shift by (+x right, +y down) — the same pixels read_board reports');
-const TO = z.union([REL, DELTA]);
+// 纸内绝对坐标（2026-08-29 纸范式）：以某张纸版心左上为原点的像素。sheet 缺省 = 当前纸
+const ABS = z.object({
+  x: z.preprocess((v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(12000, v)) : v), z.number().min(0).max(12000)),
+  y: z.preprocess((v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(12000, v)) : v), z.number().min(0).max(12000)),
+  sheet: z.string().max(40).optional().describe('which sheet these pixels are on (default the current one)'),
+}).describe("PIXELS from a sheet's top-left writable corner — exact placement, you own the layout");
+const TO = z.union([REL, ABS, DELTA]);
 
 const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('set_text'), id: z.string().min(1).max(300), text: z.string().min(1).max(8000).optional(), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional() }),
@@ -90,15 +97,17 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('chalk_edit'), on: z.boolean().describe('true = turn ON the user-side 改板书 toggle (notes become freely draggable/editable for the user); false = back to guarded mode') }),
 ]);
 
-export function makeEditBoardTool({ projectId, sharedRoot, ctx }) {
-  const handler = makeHandler({ projectId, sharedRoot, ctx });
+export function makeEditBoardTool({ projectId, sharedRoot, sessionId = null, ctx }) {
+  const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
   return tool(
     'edit_board',
-    `Edit what is already on the board — by id, without redrawing. Positions are RELATIVE
-(beside another canvas id with {ref, side, gap}, or a shift {dx,dy}); you never write
-absolute coordinates. Every distance here is in PIXELS — the same pixels read_board and
-look_at_board report back, no grid conversion. ids come from read_board (nodes text:…/scribble:…,
-cards deck:…/site:…/paths, lines b:…); local names from the sketch that drew them work too.
+    `Edit what is already on the board — by id, without redrawing. Positions: sheet-absolute
+{x,y,sheet?} (pixels from a sheet's top-left writable corner — you own the layout),
+relative {ref, side, gap}, or a shift {dx,dy}. Every distance is in PIXELS — the same
+pixels read_board and look_at_board report back, no grid conversion. Placement is EXACT
+(no auto-nudging); if you cover something the return says so. ids come from read_board
+(nodes text:…/scribble:…, cards deck:…/site:…/paths, lines b:…); local names from the
+sketch that drew them work too.
 ops (run in order; a failing op is reported, the rest still apply):
  set_text{id,text?,…} (canvas text nodes AND your own board-note files — a note's body is
  rewritten in place, threads/lines/annotations survive; never redraw to change words) ·
@@ -144,7 +153,7 @@ export async function endpointReal(id, live, zones, sharedRoot) {
   try { await fs.access(path.join(sharedRoot, bare)); return true; } catch { return false; }
 }
 
-function makeHandler({ projectId, sharedRoot, ctx }) {
+function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
   return async ({ tag: defaultTag, ops }, extra) => {
     // 署名按调用者（常驻角色改板时署它的名）——见 mcp/actor.js
     const by = byOf(extra);
@@ -175,20 +184,28 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
       return byLid(raw);
     };
     const rectOf = (id) => { const e = live[id]; return e ? { x: e.x, y: e.y, ...estimateSizeOn(board, id, e) } : null; };
-    /** 相对落位 + 避让（同层障碍，subject 自己除外；user 座是障碍永不被压） */
+    /** 压上判定的障碍集（同层，subject/组员除外；含精灵身位外扩） */
+    const obstaclesNear = (zone, exclude = new Set()) => inflateSpriteSeats(Object.entries(live)
+      .filter(([id, e]) => !exclude.has(id) && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
+      .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) })), live);
+    /** 相对落位 = 精确贴放（2026-08-29：环搜退役 —— 压上如实报，不代找洞） */
     const placeRel = (subjectId, box, rel) => {
       const refId = rid(rel.ref);
       const r = rectOf(refId);
       if (!r) return null;
       const zone = layerOf(refId, live[refId], known);
-      const obstacles = inflateSpriteSeats(Object.entries(live)
-        .filter(([id, e]) => id !== subjectId && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
-        .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) })), live);
-      const placed = resolvePlacement({
-        box, anchor: r, side: rel.side, gap: rel.gap ?? UNIT,
-        obstacles, contentBottom: obstacles.reduce((m, o) => Math.max(m, o.y + o.h), 0),
-      });
-      return placed;
+      const p = placeBeside(r, box, rel.side, rel.gap ?? UNIT);
+      const pressed = overlapIds({ x: p.x, y: p.y, w: box.w, h: box.h }, obstaclesNear(zone, new Set([subjectId])));
+      return { ...p, pressed };
+    };
+    /** 纸内绝对坐标 → 世界（sheet 缺省当前纸；钳进版心，钳了如实报） */
+    const placeAbs = (to, box) => {
+      const s = to.sheet && board.sheets?.[to.sheet]
+        ? { id: to.sheet, ...board.sheets[to.sheet] }
+        : currentSheet(board, currentSheetIdOf(sessionId));
+      if (!s) return null;
+      const p = placeAtOnSheet(s, { x: to.x, y: to.y }, box);
+      return { ...p, sheetId: s.id };
     };
     const report = []; let ok = 0;
     const setObj = (id, e) => { live[id] = e; objects[id] = e; };
@@ -255,7 +272,13 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
             setObj(id, { ...e, x: Math.round(p.x), y: Math.round(p.y), seat: 'agent' });
             moveHuggers(id, Math.round(p.x) - e.x, Math.round(p.y) - e.y);
-            report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.nudged ? `（目标位被占，就近落在 ${p.resolution}）` : ''}${wasUser}`);
+            report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : ''}${wasUser}`);
+          } else if ('x' in o.to) {
+            const p = placeAbs(o.to, box);
+            if (!p) { fail(o.to.sheet ? `纸 ${o.to.sheet} 不存在（read_board 看纸的清单）` : '还没有铺过纸 —— 先 open_sheet，或用 {dx,dy}/{ref,side}'); continue; }
+            setObj(id, { ...e, x: p.x, y: p.y, seat: 'agent' });
+            moveHuggers(id, p.x - e.x, p.y - e.y);
+            report.push(`· #${i + 1} move → 纸 ${p.sheetId} (${p.x},${p.y})${p.clamped ? '（越界，钳进了版心）' : ''}${wasUser}`);
           } else {
             const nx = Math.round(e.x + o.to.dx); const ny = Math.round(e.y + o.to.dy);
             setObj(id, { ...e, x: nx, y: ny, seat: 'agent' });
@@ -269,17 +292,19 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           const bb = { x: Math.min(...members.map(([, e]) => e.x)), y: Math.min(...members.map(([, e]) => e.y)) };
           const rects = members.map(([id]) => rectOf(id));
           const w = Math.max(...rects.map(r => r.x + r.w)) - bb.x; const h = Math.max(...rects.map(r => r.y + r.h)) - bb.y;
-          let p;
+          let p; let pressed = [];
           if ('ref' in o.to) {
             const refId = rid(o.to.ref);
             const r = rectOf(refId);
             if (!r) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
             const zone = layerOf(refId, live[refId], known);
             const memberIds = new Set(members.map(([id]) => id));
-            const obstacles = inflateSpriteSeats(Object.entries(live)
-              .filter(([id, e]) => !memberIds.has(id) && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
-              .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) })), live);
-            p = resolvePlacement({ box: { w, h }, anchor: r, side: o.to.side, gap: o.to.gap ?? UNIT, obstacles, contentBottom: 0 });
+            p = placeBeside(r, { w, h }, o.to.side, o.to.gap ?? UNIT);
+            pressed = overlapIds({ x: p.x, y: p.y, w, h }, obstaclesNear(zone, memberIds));
+          } else if ('x' in o.to) {
+            const pa = placeAbs(o.to, { w, h });
+            if (!pa) { fail(o.to.sheet ? `纸 ${o.to.sheet} 不存在` : '还没有铺过纸 —— 先 open_sheet，或用 {dx,dy}/{ref,side}'); continue; }
+            p = pa;
           } else {
             p = { x: bb.x + o.to.dx, y: bb.y + o.to.dy };
           }
@@ -291,7 +316,7 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
           for (const [id, e] of members) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, ...(e.seat === 'user' ? {} : { seat: 'agent' }) });
           for (const [id] of members) moveHuggers(id, dx, dy, movedSet);
           if (userSeated.length) report.push(`· #${i + 1} move_group: 含用户亲手摆的 ${userSeated.length} 件（随组平移，相对格局保留）`);
-          report.push(`· #${i + 1} move_group #${o.tag} → 组左上 (${Math.round(p.x)},${Math.round(p.y)})${'ref' in o.to && p.resolution ? `（${p.resolution}${p.nudged ? '，就近避让过' : ''}）` : ''}`);
+          report.push(`· #${i + 1} move_group #${o.tag} → 组左上 (${Math.round(p.x)},${Math.round(p.y)})${pressed.length ? `（⚠ 压住了 ${pressed.slice(0, 3).join('、')}）` : ''}${p.clamped ? '（越界，钳进了版心）' : ''}`);
           ok += 1;
         } else if (o.op === 'remove') {
           const id = rid(o.id); const e = id && live[id];
@@ -446,10 +471,8 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
               w: Math.max(...rects.map(x => x.x + x.w)) - Math.min(...rects.map(x => x.x)),
               h: Math.max(...rects.map(x => x.y + x.h)) - Math.min(...rects.map(x => x.y)),
             };
-            const obstacles = inflateSpriteSeats(Object.entries(live)
-              .filter(([oid2, e2]) => !memberIds.has(oid2) && oid2 !== to && Number.isFinite(e2?.x) && layerOf(oid2, e2, known) === zone)
-              .map(([oid2, e2]) => ({ id: oid2, x: e2.x, y: e2.y, ...estimateSizeOn(board, oid2, e2) })), live);
-            const pp = resolvePlacement({ box: { w: bb.w, h: bb.h }, anchor: r, side: o.side || 'right', obstacles, contentBottom: 0 });
+            void zone;
+            const pp = placeBeside(r, { w: bb.w, h: bb.h }, o.side || 'right', UNIT);
             const mdx = Math.round(pp.x - bb.x); const mdy = Math.round(pp.y - bb.y);
             if (mdx || mdy) for (const [mid, me] of members) setObj(mid, { ...me, x: me.x + mdx, y: me.y + mdy, seat: 'agent' });
           }

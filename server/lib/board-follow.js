@@ -17,7 +17,8 @@
 import { readBoard, patchBoard } from '../projects/board-store.js';
 import { estimateSizeOn } from './board-kind-sizes.js';
 import { layerOf } from './canvas-id.js';
-import { resolvePlacement } from './board-place.js';
+import { placeBeside } from './board-sheets.js';
+import { UNIT } from './rect.js';
 
 /**
  * 某 tag 有新件落板：把所有 follow 这个 tag 的线重指到 newId，并挪各自的组。
@@ -76,14 +77,10 @@ export async function applyFollows(projectId, { tag, newId }) {
       w: Math.max(...rects.map(r => r.x + r.w)) - Math.min(...rects.map(r => r.x)),
       h: Math.max(...rects.map(r => r.y + r.h)) - Math.min(...rects.map(r => r.y)),
     };
-    const memberIds = new Set(members.map(([id]) => id));
-    const obstacles = Object.entries(board.objects)
-      .filter(([id, e]) => !memberIds.has(id) && id !== newId && Number.isFinite(e?.x) && layerOf(id, e, known) === targetZone)
-      .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
-    const p = resolvePlacement({
-      box: { w: bb.w, h: bb.h }, anchor: targetRect, side: b.followSide || 'right',
-      obstacles, contentBottom: 0,
-    });
+    // 首跟 = 精确贴放（2026-08-29 纸范式：环搜退役）。跟随组的位置本来就该
+    // 紧贴目标的固定一侧 —— 压上什么由之后的平移跟随自然化解，不代找洞。
+    void targetZone; void known;
+    const p = placeBeside(targetRect, { w: bb.w, h: bb.h }, b.followSide || 'right', UNIT);
     const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
     if (!dx && !dy) continue;
     for (const [id, e] of movable) objects[id] = { ...e, x: e.x + dx, y: e.y + dy };

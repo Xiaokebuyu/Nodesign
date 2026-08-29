@@ -27,7 +27,7 @@ import { readUiConfigFile, withUiDefaults } from '../../../projects/ui-config.js
 import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
-import { resolvePlacement, inferFlowDir } from '../../../lib/board-place.js';
+import { sheetSummaries } from '../../../lib/board-sheets.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
@@ -111,33 +111,19 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
         w: vp.camera.w, h: vp.camera.h,
       } } : vp;
       const line = describeViewpoint(q, rects);
-      // 空位建议（08-27 用户提）：替 agent 把"落哪能进用户眼帘"算好 —— 大身位先试，
-      // 不行退小身位，再不行明说视口已满。数字来自 resolvePlacement 的视口扫描，
-      // 跟真实落位同一套判据（建议和落位算法分家=两份真相源）。
+      // 纸（2026-08-29 纸范式）：报当前有哪些纸、剩多少地 —— 空位建议/走向学习
+      // 那套启发式随落位引擎一起退役，agent 的空间账本现在是纸的清单。
       let spot = null;
-      if (vp.camera) {
-        const big = resolvePlacement({ box: { w: 480, h: 360 }, obstacles: rects, contentBottom: 0, viewport: vp.camera });
-        if (big.resolution === 'viewport') spot = `视口内空位：(${big.x},${big.y}) 起可容 ~480x360（一条板书的身位）`;
-        else {
-          const small = resolvePlacement({ box: { w: 300, h: 160 }, obstacles: rects, contentBottom: 0, viewport: vp.camera });
-          spot = small.resolution === 'viewport'
-            ? `视口内只剩小空位：(${small.x},${small.y}) 可容 ~300x160，大件会落到视口外`
-            : '视口内已满 —— 新东西会落到视口外，要么 near 贴着视口里的东西写，要么落完说清在哪';
-        }
-      }
-      // 摆放走向（08-27 落位直觉可见化）：用户亲手掰过方向的线报出来 ——
-      // 不报的话 agent 事前只能靠视口位置猜用户想要的版面方向（用户点名的盲区）
-      let dirs = null;
       try {
-        const tags = [...new Set(Object.values(board.bindings || {})
-          .filter(e => e?.type === 'flow' && e.tag).map(e => e.tag))];
-        const arrow = { right: '→右', left: '←左', below: '↓下', above: '↑上' };
-        const learned = tags.map(t => ({ t, d: inferFlowDir(board, { tag: t }) })).filter(x => x.d);
-        if (learned.length) {
-          dirs = `他摆过的走向：${learned.slice(0, 4).map(x => `#${x.t} ${arrow[x.d]}`).join('、')}`
-            + `${learned.length > 4 ? ' 等' : ''}（接楼和自动挑侧会跟这个方向，别对着摆）`;
+        const ss = sheetSummaries(board);
+        if (ss.length) {
+          const last = ss[ss.length - 1];
+          spot = `板上 ${ss.length} 张纸；最新 ${last.id}${last.title ? `（${last.title}）` : ''} 还剩 ~${last.freeH}px 高的空地（写满自动翻纸；新话题 open_sheet）`;
+        } else {
+          spot = '板上还没铺过纸 —— 第一笔 write_on_board 会自动铺一张在他视口下，或先 open_sheet';
         }
-      } catch { /* 学不出就不占字 */ }
+      } catch { /* 纸读不出就不占字 */ }
+      const dirs = null;
       /**
        * 手机 / 平板档的版式（2026-08-28 移动端第二轮，用户拍板「一件 = 一屏，纵向单列」）。
        *
@@ -156,7 +142,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
           + `接着写就往**正下方**接，别用 side:'right'/'left' 并排 —— 并排的第二件在他屏幕外。`
           + `宁可多拆几件竖着排，也别把一件写宽。`
         : '';
-      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；落新东西优先进他的视口或贴着视口里的东西（near/at）。要看画面细节才调 read_user_view。` });
+      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；写板走纸（at = 纸内坐标，写满自动翻纸）。要看画面细节才调 read_user_view。` });
     }
   } catch { /* 视点读不到就沉默 */ }
   try {

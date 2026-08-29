@@ -116,7 +116,7 @@ describe('edit_board（吞四件 + 新能力）', () => {
     expect(good.isError).toBeUndefined();
   });
 
-  it('move 有避让：目标位被占就近落，返回说清楚', async () => {
+  it('move {ref,side} 是精确贴放：压上如实报，不代找洞（2026-08-29 纸范式）', async () => {
     await patchBoard(pid, { objects: {
       'assets/a.png': { x: 9000, y: 9000, w: 200, h: 176 },
       'assets/b.png': { x: 9224, y: 9000, w: 200, h: 176 },   // 正占着 a 的右侧
@@ -126,9 +126,9 @@ describe('edit_board（吞四件 + 新能力）', () => {
     expect(r.isError).toBeUndefined();
     const board = await readBoard(pid);
     const c = board.objects['assets/c.png'];
-    const b = board.objects['assets/b.png'];
-    // 不压在 b 上
-    expect(c.x + 200 <= b.x || b.x + 200 <= c.x || c.y + 176 <= b.y || b.y + 176 <= c.y).toBe(true);
+    expect(c.x).toBe(9000 + 200 + 24);                   // 精确落在右侧一格 gap 处
+    expect(c.y).toBe(9000);
+    expect(r.content[0].text).toContain('压住了');        // b 正占着那儿 —— 如实报
     expect(c.seat).toBe('agent');
   });
 

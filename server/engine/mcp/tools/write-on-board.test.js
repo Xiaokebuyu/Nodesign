@@ -111,10 +111,15 @@ describe('write_on_board 统一入口（件数判据）', () => {
     expect(r.content[0].text).toContain('y');
   });
 
-  it('at 远场：拒收但不失败，返回说清楚（落位没有失败分支）', async () => {
-    const r = await call({ text: '远方的话', at: { x: 900000, y: 900000 } });
+  it('at = 纸内坐标（2026-08-29 纸范式）：自动铺纸；越界钳进版心并如实报', async () => {
+    const r = await call({ text: '纸上定点', at: { x: 48, y: 48 } });
     expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toContain('outside the working area');
+    expect(r.content[0].text).toMatch(/on sheet /);
+    const board = await readBoard(pid);
+    expect(Object.keys(board.sheets || {}).length).toBeGreaterThanOrEqual(1);
+    const r2 = await call({ text: '越界的话', at: { x: 11999, y: 11999 } });
+    expect(r2.isError).toBeUndefined();
+    expect(r2.content[0].text).toContain('CLAMPED');
   });
 
   it('near 指向没座位但真实存在的文件：救援入座后照锚（「还没有座位」失败类收口）', async () => {
@@ -143,18 +148,18 @@ describe('write_on_board 统一入口（件数判据）', () => {
 });
 
 describe('open_lane：开新线（08-27 空间规划）', () => {
-  it('⭐ branch：从节点岔出 —— 新列不压岔出点、注册表落盘、flow 线画上', async () => {
+  it('⭐ branch：从节点岔出 —— 给这条线铺自己的纸、注册表落盘、flow 线画上', async () => {
     await patchBoard(pid, { objects: { 'assets/起点.png': { x: 3000, y: 3000, w: 200, h: 176 } } });
     const r = await call({ text: '岔出去想', tag: 'lane甲', open_lane: 'assets/起点.png' });
     expect(r.isError).toBeUndefined();
     expect(r.content[0].text).toMatch(/Opened lane #lane甲/);
     const board = await readBoard(pid);
+    expect(board.sheets['lane甲']).toBeTruthy();          // 一条线 = 它自己的一叠纸
     const lane = board.lanes['lane甲'];
     expect(lane).toBeTruthy();
     expect(lane.parent).toBe('assets/起点.png');
-    expect(lane.x).toBeGreaterThanOrEqual(3200);          // 岔出点右缘之外
     const note = Object.entries(board.objects).find(([, e]) => e.tag === 'lane甲');
-    expect(note[1].x).toBe(lane.x);
+    expect(note[1].x).toBe(lane.x);                       // 注册点 = 线头
     const flow = Object.values(board.bindings).find(b => b.type === 'flow' && b.from === 'assets/起点.png' && b.to === note[0]);
     expect(flow).toBeTruthy();
   });
@@ -188,14 +193,12 @@ describe('open_lane：开新线（08-27 空间规划）', () => {
     expect(r.content[0].text).toMatch(/互斥/);
   });
 
-  it('fresh：版图右缘开新列', async () => {
-    const before = await readBoard(pid);
-    const rightEdge = Math.max(...Object.values(before.objects).map(e => e.x + (e.w || 200)));
+  it('fresh：全新话题另铺一张纸', async () => {
     const r = await call({ text: '全新话题', tag: 'lane乙', open_lane: 'fresh' });
     expect(r.isError).toBeUndefined();
     const board = await readBoard(pid);
     expect(board.lanes['lane乙'].parent).toBeUndefined();
-    expect(board.lanes['lane乙'].x).toBeGreaterThanOrEqual(rightEdge);
+    expect(board.sheets['lane乙']).toBeTruthy();
   });
 });
 
@@ -233,8 +236,8 @@ describe("ink:'hand'（08-27 收编 create_on_board）+ 草图 hug", () => {
   });
 });
 
-describe('产物锚（08-27）：图连着产物就落在产物旁边', () => {
-  it('⭐ edges 连到已有产物、没给 near/at → 自动贴着被连的卡落', async () => {
+describe('图的落位走纸（2026-08-29：产物锚自动落位退役，线照画）', () => {
+  it('edges 连到已有产物：线照画，图落在纸上（位置不再追着产物跑）', async () => {
     await patchBoard(pid, { objects: { 'assets/被评的稿.png': { x: 9000, y: 9000, w: 200, h: 176 } } });
     const r = await call({
       nodes: [{ id: 'p1', text: '优点：构图稳' }, { id: 'p2', text: '缺点：主体太小' }, { id: 'v', text: '判语：改第二版' }],
@@ -245,13 +248,11 @@ describe('产物锚（08-27）：图连着产物就落在产物旁边', () => {
       tag: '评稿',
     });
     expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toMatch(/自动落在它们旁边/);
     const board = await readBoard(pid);
+    const line = Object.values(board.bindings).find(b => b.type === 'annotates' && b.to === 'assets/被评的稿.png');
+    expect(line).toBeTruthy();
     const members = Object.entries(board.objects).filter(([, e]) => e.tag === '评稿');
-    const bx = Math.min(...members.map(([, e]) => e.x));
-    // 图落在被连产物一屏之内（不是内容底下的兜底带）
-    expect(Math.abs(bx - 9000)).toBeLessThan(2000);
-    expect(Math.min(...members.map(([, e]) => Math.abs(e.y - 9000)))).toBeLessThan(2000);
+    expect(members.length).toBe(3);
   });
 
   it('显式 near/at 时产物锚不插手（显式优先）', async () => {
@@ -293,8 +294,8 @@ describe('节点级拉力·集成向（08-27 v2）：mindmap 环位朝着真实�
   });
 });
 
-describe('落位直觉（08-27）：接楼方向学用户摆放', () => {
-  it('⭐ 用户把线程一路往右拖 → chain 改成同排右接，返回明说学了习惯', async () => {
+describe('接楼（2026-08-29 纸范式：方向学习退役，读序只有向下）', () => {
+  it('用户把线程往右拖过 → chain 仍接在最新一条正下方（inferFlowDir 已退役）', async () => {
     // proj_mtbkhpac 实案的形状：flow 线一路向右，下游都是用户亲手放的
     await patchBoard(pid, {
       objects: {
@@ -312,10 +313,10 @@ describe('落位直觉（08-27）：接楼方向学用户摆放', () => {
     const board = await readBoard(pid);
     const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/') && board.objects[i].tag === '向右线' && !i.startsWith('notes/板书/dir-')).pop();
     const e = board.objects[id];
-    // 接在最新一条（三）的右边同排，而不是缺省的正下方
-    expect(e.x).toBeGreaterThanOrEqual(10120 + 400);
-    expect(Math.abs(e.y - 9000)).toBeLessThan(120);
-    expect(r.content[0].text).toContain("user's habit");
+    // 正下方同列（接楼只有一个方向 —— 读序）
+    expect(e.x).toBe(10120);
+    expect(e.y).toBeGreaterThanOrEqual(9000 + 220);
+    void r;
   });
 
   it('用户没表达过方向偏好 → chain 仍是缺省正下方（拿不准就不押）', async () => {

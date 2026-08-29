@@ -1,8 +1,8 @@
 /**
  * 「这一拍」锚定（2026-08-28 摆位直觉版；08-29 从 rounds 泛化到所有角色）：
  * 角色不给任何落位线索 = 它在回应主持人最新写的那一条 —— 缺省 reply_to 它，
- * 再经侧挂直觉落到它身侧。「章节竖着走、同一拍横着排」从回应语义里长出来，
- * 不是写死的版式。08-29 模式概念退役后这一级对所有角色一律成立。
+ * 接楼落在它正下方（2026-08-29 纸范式：侧挂直觉退役，读序只有向下）。
+ * 08-29 模式概念退役后这一级对所有角色一律成立。
  * 走真 handler + actor 盖章（署名链与 attribution 测试同款）。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -46,7 +46,7 @@ const writeAs = async (agentType, args) => {
 const replyToOf = async (rel) => parseChalk(await fs.readFile(path.join(ws, rel), 'utf8')).chalk.replyTo;
 
 describe('「这一拍」锚定', () => {
-  it('⭐ 主持人落板后，角色无线索发言自动 reply_to 这一拍；横屏时侧挂到旁边', async () => {
+  it('⭐ 主持人落板后，角色无线索发言自动 reply_to 这一拍，接楼在正下方', async () => {
     const gm = await writeAs(null, { text: '# 第一拍\n\n城门在暮色里合拢。', tag: '章节' });
     const [gmId, gmE] = gm.latest;
     // 横屏视点（侧挂直觉的前提）
@@ -54,12 +54,13 @@ describe('「这一拍」锚定', () => {
 
     const a = await writeAs('rp-jian', { text: '「今夜风紧。」' });
     expect(await replyToOf(a.latest[0])).toBe(gmId);              // 缺省锚 = 本拍旁白
-    expect(a.latest[1].y).toBeLessThan(gmE.y + gmE.h);            // 侧挂：不在正下方
+    expect(a.latest[1].y).toBeGreaterThanOrEqual(gmE.y + gmE.h);  // 接楼：正下方
+    expect(a.latest[1].x).toBe(gmE.x);                            // 同列
 
-    // 第二个角色同拍发言：同样锚到本拍，也在右半平面（同拍挤成一排）
+    // 第二个角色同拍发言：同样锚到本拍，接在更下面（这一拍竖着长）
     const b = await writeAs('rp-yue', { text: '「我去看看。」' });
     expect(await replyToOf(b.latest[0])).toBe(gmId);
-    expect(b.latest[1].y).toBeLessThan(gmE.y + gmE.h);
+    expect(b.latest[1].y).toBeGreaterThan(a.latest[1].y);
   });
 
   it('主持人写了新的一拍之后，角色的缺省锚跟着换成最新那条', async () => {

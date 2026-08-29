@@ -20,6 +20,7 @@
 import { UNIT, overlaps, bboxOf, pointIn } from './rect.js';
 import { ONE_SCREEN, ZOOM_BASIS } from './screen.js';
 import { estimateSizeOn } from './board-kind-sizes.js';
+import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 
 /** 纸与纸之间的沟（格子感放在纸与纸之间 —— 登录墙定格动画同一条经验） */
 export const SHEET_GAP = 2 * UNIT;   // 48
@@ -199,6 +200,82 @@ export function sheetSummaries(board) {
       innerW: inner.w,
     };
   });
+}
+
+/* ── 落位三动词（2026-08-29 刀 2：启发式引擎退役后仅存的三条几何规则）──
+ *
+ * 旧引擎（环搜/挑侧/半平面/走廊/兜底左缘）整层退役 —— ㉚ 五刀证明那一层的坑
+ * 修不完，且 agent 对「纸内绝对坐标」的适应性远好于「模糊锚点」。留下的规则
+ * 每条都短到不需要启发式：
+ *   placeAtOnSheet  agent 说了算（钳进版心，钳了如实报）
+ *   placeThread     接楼只有一个方向：正下方，压住就跳到那件底下
+ *   placeBeside     贴放是精确几何不是搜索（压上如实报，不代找洞）
+ */
+
+/** 纸内定点：局部坐标 → 世界坐标，钳进版心。钳过要如实报（越界钳住但要说）。 */
+export function placeAtOnSheet(s, at, box) {
+  const inner = innerRect(s);
+  const ideal = toWorld(s, { x: Math.round(at.x), y: Math.round(at.y) });
+  const x = Math.min(Math.max(ideal.x, inner.x), Math.max(inner.x, inner.x + inner.w - box.w));
+  const y = Math.min(Math.max(ideal.y, inner.y), Math.max(inner.y, inner.y + inner.h - box.h));
+  return { x: Math.round(x), y: Math.round(y), clamped: x !== ideal.x || y !== ideal.y };
+}
+
+/**
+ * 接楼（线程）：被回应那条的正下方；位置被占就跳到占位者底下接着试。
+ * 只往下 —— 读序即方向。落点出了所在纸的版心底 → 报 sheetFull（调用方翻纸）。
+ * 纸外（文件夹层/散地）没有纸界，滑到空为止。
+ */
+export function placeThread(board, replyRect, box, { obstacles = [], gap = UNIT } = {}) {
+  const sheet = sheetOfPoint(board, { x: replyRect.x + replyRect.w / 2, y: replyRect.y + replyRect.h / 2 });
+  const floor = sheet ? innerRect(sheet).y + innerRect(sheet).h : Infinity;
+  const x = Math.round(replyRect.x);
+  let y = replyRect.y + replyRect.h + gap;
+  for (let i = 0; i < 500; i += 1) {
+    if (y + box.h > floor) return { sheetFull: sheet.id };
+    const r = { x, y, w: box.w, h: box.h };
+    const hit = obstacles.find((o) => overlaps(r, o));
+    if (!hit) return { x, y: Math.round(y), sheetId: sheet?.id || null };
+    y = hit.y + hit.h + gap;
+  }
+  return { x, y: Math.round(y), sheetId: sheet?.id || null };
+}
+
+/** 贴放：锚点某一侧的精确位置（gap 像素）。不搜索 —— 压上由调用方如实报。 */
+export function placeBeside(anchor, box, side = 'right', gap = UNIT) {
+  const p = side === 'right' ? { x: anchor.x + anchor.w + gap, y: anchor.y }
+    : side === 'left' ? { x: anchor.x - gap - box.w, y: anchor.y }
+      : side === 'below' ? { x: anchor.x, y: anchor.y + anchor.h + gap }
+        : { x: anchor.x, y: anchor.y - gap - box.h };
+  return { x: Math.round(p.x), y: Math.round(p.y) };
+}
+
+/** 压上了谁（如实报的判据；调用方拿去写返回文案，不据此挪位置） */
+export function overlapIds(rect, obstacles, { pad = 0, limit = 6 } = {}) {
+  const out = [];
+  for (const o of obstacles) {
+    if (!overlaps(rect, o, pad)) continue;
+    if (o.id) out.push(o.id);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * 精灵身位（从 board-place.js 搬来，2026-08-27 建）。角色精灵在客户端贴着该角色
+ * 最新一条板书摆，服务端只能把那条当带身位的障碍 —— 四周外扩 pad，新东西的
+ * 压上判定就不会压在精灵脸上。「最新」按 objects 插入序。
+ */
+export function inflateSpriteSeats(obstacles, objects, pad = 60) {
+  const last = new Map();
+  for (const [id, e] of Object.entries(objects || {})) {
+    if (typeof e?.by === 'string' && ROLE_SLUG_RE.test(e.by)) last.set(e.by, id);
+  }
+  if (!last.size) return obstacles;
+  const ids = new Set(last.values());
+  return obstacles.map((o) => (ids.has(o.id)
+    ? { ...o, x: o.x - pad, y: o.y - pad, w: o.w + pad * 2, h: o.h + pad * 2 }
+    : o));
 }
 
 export { ZOOM_BASIS };

@@ -65,6 +65,7 @@ import { makePinToBoardTool } from './tools/pin-to-board.js';
 import { makeEditBoardTool } from './tools/edit-board.js';
 import { makeReadBoardTool } from './tools/read-board.js';
 import { makeWriteOnBoardTool } from './tools/write-on-board.js';
+import { makeOpenSheetTool } from './tools/open-sheet.js';
 import { makeLookAtBoardTool } from './tools/look-at-board.js';
 import { makeReadUserViewTool } from './tools/read-user-view.js';
 import { makeOrganizeBoardTool } from './tools/organize-board.js';
@@ -136,6 +137,9 @@ const ALWAYS_LOAD_TOOLS = new Set([
   // 膨胀由模式闸控：rp 模式 unregister 掉 artifact/量具族后常驻集自动收缩。
   // read_user_view 不进：视口已经每回合自动进状态块，它降级成"看画面细节"的按需件。
   'write_on_board', 'edit_board', 'read_board', 'board_batch', 'look_at_board',
+  // 纸范式（2026-08-29）：铺纸是板面工作的起手式，卖点全在描述里（当前纸/坐标原点/
+  // 自动翻纸），必须常驻。
+  'open_sheet',
 ]);
 
 /**
@@ -161,8 +165,9 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   const resolveTool = (n) => wrappedByName.get(n);
   const writeOnBoard = makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx });
   const boardBatchable = [
+    makeOpenSheetTool({ projectId, sessionId, ctx }),
     writeOnBoard,
-    makeEditBoardTool({ projectId, sharedRoot, ctx }),
+    makeEditBoardTool({ projectId, sharedRoot, sessionId, ctx }),
     makeReadBoardTool({ projectId, sharedRoot }),
   ];
   const browseBatchable = [
@@ -348,15 +353,16 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
         name: 'board_batch',
         description: `Run several board actions in ONE round-trip — the unit of board upkeep.
 One beat of thinking = one batch: read_board first if you have not looked this turn,
-then write/edit/pin/organize in order, and pass screenshotAfter:true when looks matter.
+then open_sheet/write/edit/pin/organize in order, and pass screenshotAfter:true when
+looks matter.
 Actions run in order; a failure stops the rest (already-ran steps are NOT rolled back —
 continue from the failed step). Later steps can use what earlier steps made: chain:true
-threads onto the note a previous step wrote (same tag); sketch local ids resolve in
-edit_board ops.
-Placement and lines are ONE language — put a thing where its relation says (same lane =
-chain below, fork = open_lane column, comment = near+side) AND draw the line that says
-it; a note with no line and no lane is one nobody can trace back.
-Batchable: write_on_board / edit_board / read_board / pin_to_board /
+threads onto the note a previous step wrote (same tag); a sheet opened by an earlier
+step is the current sheet for later at:{x,y}; sketch local ids resolve in edit_board ops.
+Placement is SHEETS — open_sheet for a new topic, at:{x,y} places precisely on the
+current sheet, no at flows downward. Lines still say WHY (chain below = same thread,
+near = annotates) — a note with no line is one nobody can trace back.
+Batchable: open_sheet / write_on_board / edit_board / read_board / pin_to_board /
 organize_board / look_at_board / read_user_view.
 Example: [{"name":"read_board","input":{}},{"name":"write_on_board","input":{"text":"…",
 "tag":"主线","chain":true}},{"name":"edit_board","input":{"ops":[{"op":"add_edge",

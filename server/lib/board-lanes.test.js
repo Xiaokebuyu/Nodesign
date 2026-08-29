@@ -2,55 +2,9 @@
 //
 // 为什么钉：这一层的承诺是「模型声明拓扑，机器做几何」—— 开列撞了姊妹线、
 // frontier 算错一格，版面就从"线"退化回"散点"，而模型对坐标是瞎的，它自己
-// 发现不了。fallback 契约与 resolvePlacement 同款：没有失败分支。
+// 发现不了。开列 2026-08-29 起归纸（board-sheets.js）。
 import { describe, it, expect } from 'vitest';
-import { allocateLaneColumn, laneSummaries, LANE_W, LANE_GUTTER } from './board-lanes.js';
-
-describe('allocateLaneColumn', () => {
-  const parent = { x: 0, y: 0, w: 200, h: 100 };
-
-  it('branch：空板上紧贴岔出点右侧一沟开列，y 对齐岔出点', () => {
-    const r = allocateLaneColumn({ parent, box: { w: 432, h: 200 } });
-    expect(r).toEqual({ x: 200 + LANE_GUTTER, y: 0, w: LANE_W, fallback: false });
-  });
-
-  it('⭐ 姊妹线占道让开：两条 branch 不迎头相撞', () => {
-    const first = allocateLaneColumn({ parent, box: { w: 432, h: 200 } });
-    const second = allocateLaneColumn({
-      parent, box: { w: 432, h: 200 },
-      lanes: [{ x: first.x, w: first.w }],
-    });
-    expect(second.x).toBeGreaterThanOrEqual(first.x + first.w);
-    expect(second.fallback).toBe(false);
-  });
-
-  it('开窗撞障碍就往右挪（列起点那一段必须是空的）', () => {
-    const r = allocateLaneColumn({
-      parent, box: { w: 432, h: 200 },
-      obstacles: [{ x: 296, y: 0, w: 100, h: 100 }],
-    });
-    expect(r.x).toBeGreaterThanOrEqual(396);   // 障碍右缘 + 身位之外
-    expect(r.fallback).toBe(false);
-  });
-
-  it('fresh：从版图右缘开新列，y 对齐内容顶', () => {
-    const r = allocateLaneColumn({
-      parent: null, box: { w: 432, h: 200 },
-      obstacles: [{ x: -50, y: 30, w: 1000, h: 500 }],
-    });
-    expect(r).toEqual({ x: 950 + LANE_GUTTER, y: 30, w: LANE_W, fallback: false });
-  });
-
-  it('⭐ 扫不到空列也不失败：退到内容底下并标 fallback', () => {
-    const r = allocateLaneColumn({
-      parent, box: { w: 432, h: 200 },
-      obstacles: [{ x: 0, y: 0, w: 6000, h: 5000 }],
-    });
-    expect(r.fallback).toBe(true);
-    expect(r.y).toBeGreaterThan(5000);
-    expect(Number.isFinite(r.x)).toBe(true);
-  });
-});
+import { laneSummaries } from './board-lanes.js';
 
 describe('laneSummaries：符号地图', () => {
   const board = {

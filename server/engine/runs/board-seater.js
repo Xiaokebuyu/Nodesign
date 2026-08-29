@@ -25,8 +25,11 @@ import { readBoard, patchBoard } from '../../projects/board-store.js';
 import { getSharedDir } from '../../projects/workspace.js';
 import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
-import { resolvePlacement, inflateSpriteSeats } from '../../lib/board-place.js';
-import { textBox } from '../../lib/sketch-layout.js';
+import {
+  currentSheet, nextSpotInSheet, allocateSheetRect, sheetSizeFor, nextSheetName,
+  placeThread, placeBeside, innerRect, inflateSpriteSeats,
+} from '../../lib/board-sheets.js';
+import { textBox, fitFor } from '../../lib/sketch-layout.js';
 import { getViewpoint } from '../../projects/viewpoint-store.js';
 import { parseChalk, CHALK_DIR } from '../../lib/chalk.js';
 import { isReservedFile, HARD_IGNORE_DIRS, DRAFTS_DIR } from '../../lib/task-scan.js';
@@ -64,6 +67,10 @@ export async function seatArtifacts(projectId, rels) {
   const objects = {}; const bindings = {};
   // 本批内后来者要避开先来者：live 副本随排随更新
   const live = { ...board.objects };
+  // 纸（2026-08-29）：根层产物入座 = 落进当前纸往下排，纸满自动翻一张。
+  // liveSheets 随翻随更新（本批内后来者排进新纸）；新纸随 patch 一起落盘。
+  const liveSheets = { ...(board.sheets || {}) };
+  const newSheets = {};
   let seated = 0; let lines = 0;
 
   for (const rel of uniq) {
@@ -105,12 +112,37 @@ export async function seatArtifacts(projectId, rels) {
     const obstacles = inflateSpriteSeats(Object.entries(live)
       .filter(([oid, e]) => oid !== id && Number.isFinite(e?.x) && layerOf(oid, e, known) === zone)
       .map(([oid, e]) => ({ id: oid, x: e.x, y: e.y, ...estimateSizeOn(board, oid, e) })), live);
-    const contentBottom = obstacles.reduce((m, o) => Math.max(m, o.y + o.h), 0);
-    const vpRect = (vp && (vp.layer || '') === zone && vp.camera) ? vp.camera : null;
-    const placed = resolvePlacement({
-      box, anchor: anchorRect, replyTo: replyRect,
-      obstacles, contentBottom, viewport: vpRect,
-    });
+    // 落位（2026-08-29 纸范式）：线程接楼 > 锚点贴放 > 纸内顺排（根层）/内容底下（文件夹层）
+    const liveBoard = { ...board, objects: live, sheets: liveSheets };
+    let placed = null;
+    if (replyRect) {
+      const p = placeThread(liveBoard, replyRect, box, { obstacles });
+      placed = p.sheetFull ? null : p;   // 线程纸满：退回顺排（翻纸逻辑统一走下面那条）
+    }
+    if (!placed && anchorRect) placed = placeBeside(anchorRect, box, 'below');
+    if (!placed && !zone) {
+      const cur = currentSheet(liveBoard, null);
+      if (cur) placed = nextSpotInSheet(liveBoard, cur.id, box);
+      if (!placed) {
+        // 纸满（或还没有纸）：翻一张（缺省尺寸按最近视点的设备档）
+        const rect = allocateSheetRect({
+          board: liveBoard, size: sheetSizeFor(fitFor(vp)),
+          viewport: (!cur && vp?.camera && !vp.layer) ? vp.camera : null,
+          nearSheet: cur ? cur.id : null, obstacles,
+        });
+        const name = nextSheetName(liveBoard);
+        const entry = { x: rect.x, y: rect.y, w: rect.w, h: rect.h, by: 'agent', at: new Date().toISOString() };
+        liveSheets[name] = entry; newSheets[name] = entry;
+        const inner = innerRect(entry);
+        placed = { x: inner.x, y: inner.y };
+      }
+    }
+    if (!placed) {
+      // 文件夹层：这一层内容底下接着排（没有纸也没有启发式 —— 单条规则）
+      const left = obstacles.length ? Math.min(...obstacles.map(o => o.x)) : 10;
+      const bottom = obstacles.reduce((m, o) => Math.max(m, o.y + o.h), 0);
+      placed = { x: Math.round(left), y: Math.round(bottom) + 40 };
+    }
     const entry = {
       x: Math.round(placed.x), y: Math.round(placed.y), z: 1,
       w: Math.round(box.w), h: Math.round(box.h),
@@ -123,7 +155,7 @@ export async function seatArtifacts(projectId, rels) {
     if (parentId) { bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: id, by: by || 'agent', material: 'pencil', ...(tag ? { tag } : {}) }; lines += 1; }
   }
 
-  if (seated) await patchBoard(projectId, { objects, bindings });
+  if (seated) await patchBoard(projectId, { objects, bindings, ...(Object.keys(newSheets).length ? { sheets: newSheets } : {}) });
   // 领养的板书带 tag：有人跟着这个 tag（状态板）就自动重锚（fail-soft）
   for (const [id, e] of Object.entries(objects)) {
     if (e?.tag) { try { await applyFollows(projectId, { tag: e.tag, newId: id }); } catch { /* */ } }
