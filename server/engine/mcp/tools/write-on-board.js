@@ -280,10 +280,11 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         : null;
       // 落位直觉（08-27）：接楼方向和自动挑侧都先问用户把这条线往哪边摆过
       const flowDir = inferFlowDir(b2, { tag: args.tag || null });
-      // 台词侧挂（08-28 用户拍板）：角色回主持人的那一段时，横屏就挂到它身侧 ——
+      // 台词侧挂（08-28 用户拍板）：角色回主持人的那一段时，横屏就挂到它**右**侧 ——
       // 叙事主列留给主持人的章节链，角色的话读作「这一段的和声」，同一拍的几个人
       // 自然挤成一排。竖屏/没有视点时保持下行（手机竖排免费正确）；用户自己掰过的
-      // 走向（flowDir）仍然最大。
+      // 走向（flowDir）仍然最大。右边挤不下就接楼，**不挂左边**（08-29：挂左侧读起来
+      // 是上一拍的事，真会话里用户第一句就是「位置摆放的是不是不太对」）。
       let replyDir = flowDir;
       if (!replyDir && replyRect && ROLE_SLUG_RE.test(by)
         && (board.objects?.[parentId]?.by || 'agent') === 'agent'

@@ -99,9 +99,15 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
     name,
     description,
     {
-      actions: z.array(z.object({
+      // looseObject（2026-08-29）：**放错层的参数不许静默消失**。模型很自然会写
+      // {name, chain:true, input:{…}} —— chain 是 write_on_board 的参数，写在了
+      // action 这一层。z.object 默认剥掉未知键，于是那一步照跑、只是丢了半个意图
+      // （真会话 proj_mtdr2xpa：两章的 chain:true 都这么没的，章节不接线程、
+      // 落到兜底位，正文列当场散架，用户看到的是"摆位乱了"）。收下它们，在
+      // handler 里按子工具的 schema 归位，并如实报一句。
+      actions: z.array(z.looseObject({
         name: z.string().describe(`Tool name: one of ${names.join(' | ')}.`),
-        input: z.record(z.string(), z.unknown()).optional().describe("That tool's input, same shape as calling it directly."),
+        input: z.record(z.string(), z.unknown()).optional().describe("That tool's input, same shape as calling it directly. Put the tool's OWN parameters in here — a parameter written beside `name` instead of inside `input` is folded in for you and reported."),
       })).min(1).max(MAX_ITEMS)
         .describe(`1-${MAX_ITEMS} items, run in order. Each item: {"name": <tool>, "input": {...}}.`),
       // 没有 finalShot 就不放这个参数 —— 写一个永远无效的旋钮是在骗模型
@@ -116,8 +122,9 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
       let failedAt = -1;
       let failText = '';
       let lastHadImage = false;
+      let shotLifted = false;
       for (let i = 0; i < n; i += 1) {
-        const { name: toolName, input } = actions[i];
+        const { name: toolName, input, ...stray } = actions[i];
         const label = `[${i + 1}/${n}] ${toolName}${input?.action ? ` ${input.action}` : ''}`;
         if (failedAt >= 0) { out.push({ type: 'text', text: `${label}: ${HALT_TEXT}` }); continue; }
         const def = lookup(toolName);
@@ -129,7 +136,26 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
           out.push({ type: 'text', text: `${label}: Error: ${failText}` });
           continue;
         }
-        const parsed = z.object(def.inputSchema).safeParse(input || {});
+        // 归位（08-29）：action 这一层的多余键按子工具的 schema 收进 input；
+        // screenshotAfter 是 batch 自己的旋钮，抬到 batch 层。都如实报 —— 静默
+        // 修正会让下一次还写错，静默丢弃会让这一次就出错。
+        let folded = input || {};
+        const notes = [];
+        const strayKeys = Object.keys(stray);
+        if (strayKeys.length) {
+          const own = new Set(Object.keys(def.inputSchema || {}));
+          const patch = {};
+          for (const k of strayKeys) {
+            if (k === 'screenshotAfter') { shotLifted = shotLifted || stray[k] === true; notes.push('screenshotAfter 是整批的旋钮，已抬到 batch 层'); continue; }
+            if (own.has(k) && !(k in folded)) { patch[k] = stray[k]; continue; }
+            notes.push(`${k} 不是 ${toolName} 的参数，忽略了`);
+          }
+          if (Object.keys(patch).length) {
+            folded = { ...folded, ...patch };
+            notes.push(`${Object.keys(patch).join('/')} 本该写在 input 里（已收进去，下次直接写 input 内）`);
+          }
+        }
+        const parsed = z.object(def.inputSchema).safeParse(folded);
         if (!parsed.success) {
           failedAt = i;
           const why = parsed.error.issues.map(is => `${is.path.join('.') || '(root)'}: ${is.message}`).join('; ');
@@ -146,10 +172,12 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
         // 第一块文本前面挂上 [i/n] 标签；没有文本块（纯图）就补一行标签再放图
         if (!blocks.some(b => b.type === 'text')) out.push({ type: 'text', text: `${label}: done` });
         let prefixed = false;
+        const tail = notes.length ? `\n⚠ ${notes.join('；')}` : '';
         for (const b of blocks) {
-          if (b.type === 'text' && !prefixed) { out.push({ type: 'text', text: `${label}: ${b.text}` }); prefixed = true; }
+          if (b.type === 'text' && !prefixed) { out.push({ type: 'text', text: `${label}: ${b.text}${tail}` }); prefixed = true; }
           else out.push(b);
         }
+        if (!prefixed && tail) out.push({ type: 'text', text: `${label}:${tail}` });
         if (r?.isError) {
           failedAt = i;
           failText = blocks.find(b => b.type === 'text')?.text || '(no error text)';
@@ -166,7 +194,8 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
             + `Steps 1-${failedAt} already ran — do NOT re-run the whole batch; continue from the failed step.`,
         });
       }
-      if (finalShot && (screenshotAfter === undefined ? shotDefault : screenshotAfter) && !lastHadImage) {
+      const wantShot = screenshotAfter === undefined ? (shotLifted || shotDefault) : screenshotAfter;
+      if (finalShot && wantShot && !lastHadImage) {
         const shotDef = lookup(finalShot.name);
         if (shotDef) {
           try {

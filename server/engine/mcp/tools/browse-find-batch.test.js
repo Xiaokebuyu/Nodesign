@@ -30,6 +30,35 @@ describe('browser_batch', () => {
     expect(BATCHABLE).not.toContain('browser_batch');
   });
 
+  // ── 放错层的参数（2026-08-29 真会话案 proj_mtdr2xpa）────────────────────
+  it('⭐ 写在 action 层的工具参数被收进 input，并如实报一句', async () => {
+    const { log, batch } = rig();
+    const r = await batch.handler({ actions: [
+      { name: 'browser_computer', action: 'left_click' },              // 整个 input 都写在外面
+      { name: 'browser_computer', input: { action: 'type' }, text: 'hi' },   // 半个写在外面
+    ] }, {});
+    expect(log).toEqual(['computer:left_click', 'computer:type', 'shot']);
+    const all = r.content.map(c => c.text || '').join('\n');
+    expect(all).toMatch(/action 本该写在 input 里/);
+    expect(all).toMatch(/text 本该写在 input 里/);
+  });
+
+  it('action 层的 screenshotAfter 抬到整批（不是当垃圾丢掉）', async () => {
+    const tools = [fake('browser_find', { query: z.string() }, async () => text('found'))];
+    const b = makeBatchTool({
+      name: 'b', description: 'd', tools, batchable: ['browser_find', 'browser_screenshot'],
+      finalShot: { name: 'browser_screenshot', input: {}, default: false },
+    });
+    const r = await b.handler({ actions: [{ name: 'browser_find', input: { query: 'q' }, screenshotAfter: true }] }, {});
+    expect(r.content.map(c => c.text || '').join('\n')).toMatch(/screenshotAfter 是整批的旋钮/);
+  });
+
+  it('不认识的键忽略掉但要说出来（别让模型以为它生效了）', async () => {
+    const { batch } = rig();
+    const r = await batch.handler({ actions: [{ name: 'browser_find', input: { query: 'q' }, 火星参数: 1 }] }, {});
+    expect(r.content.map(c => c.text || '').join('\n')).toMatch(/火星参数 不是 browser_find 的参数/);
+  });
+
   it('串行按序跑，结尾补一张截图', async () => {
     const { log, batch } = rig();
     const r = await batch.handler({ actions: [

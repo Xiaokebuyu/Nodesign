@@ -66,13 +66,16 @@ describe('台词侧挂', () => {
     expect(Math.abs(role.entry.y - gm.y)).toBeLessThan(gm.h);   // 同一拍的高度带
   });
 
-  it('横屏但右侧被占：挂到左侧', async () => {
+  // 08-29 改口径：右侧贴身位被占**不再挂左边** —— 从左往右读的版面里，挂在左侧的
+  // 那一段读起来是"上一拍的事"（真会话 proj_mtdr2xpa，用户第一句就是"位置摆放的
+  // 是不是不太对"）。改成越过占位块继续往右排；右边整条塞满了才接楼。
+  it('⭐ 横屏但右侧贴身位被占：越过它继续往右，绝不挂到左边', async () => {
     const gm = await gmRect();
     // 右侧贴身放一块障碍（agent 写的状态卡）
     await writeAs(null, { text: '### 状态占位', at: { x: gm.x + gm.w + 12, y: gm.y }, width: 18 });
     landscape(gm.x - 200, gm.y - 100);
     const role = await writeAs('rp-jiangli', { text: '台词一句。', reply_to: gm.id });
-    expect(role.entry.x + role.entry.w).toBeLessThanOrEqual(gm.x + 4);   // 在旁白左边
+    expect(role.entry.x).toBeGreaterThanOrEqual(gm.x + gm.w);   // 还在旁白右边
   });
 
   it('竖屏：保持正下方（手机竖排读序）', async () => {

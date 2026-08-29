@@ -49,9 +49,22 @@ function collides(x, y, w, h, obstacles) {
  * 找不到还是要保底那个（距离仍是第一语言，线是第二语言）。
  * 理想点本身空着时不查线：贴身位的连线穿不过第三块（间隙里塞不下能撞 PAD 的东西）。
  */
-function ringSearch(ideal, box, obstacles, { sidePref = null, anchor = null, maxRing = MAX_RING, lineFrom = null } = {}) {
+function ringSearch(ideal, box, obstacles, { sidePref = null, anchor = null, maxRing = MAX_RING, lineFrom = null, axisFirst = false, halfOnly = false } = {}) {
   if (!collides(ideal.x, ideal.y, box.w, box.h, obstacles)) {
     return { x: ideal.x, y: ideal.y, nudged: false };
+  }
+  // axisFirst：**先沿轴滑**（2026-08-29 真会话案 proj_mtdr2xpa）。接楼、单列档、
+  // 显式说了上/下 —— 这三种说的都是「同一列的下一件」，列本身就是读序。理想位
+  // 被压住时环搜按距离找洞，于是"左边 216px"赢过"正下方 400px"，第三章落到第二章
+  // 左侧、状态板越堆越歪，用户看到的就是"摆位乱了"，agent 要花几分钟一件件挪回来。
+  // 滑的时候不看连线走廊（08-27 那条是第二语言）：线横穿一块，远不如整段跑到隔壁列难读。
+  const SLIDE = { below: [0, 1], above: [0, -1], right: [1, 0], left: [-1, 0] };
+  if (axisFirst && SLIDE[sidePref]) {
+    const [sx, sy] = SLIDE[sidePref];
+    for (let r = 1; r <= maxRing; r += 1) {
+      const x = ideal.x + sx * r * UNIT; const y = ideal.y + sy * r * UNIT;
+      if (!collides(x, y, box.w, box.h, obstacles)) return { x, y, nudged: true };
+    }
   }
   // lineFrom 收单点或点数组（08-27 落位直觉：一条新板书可能同时连着锚点和
   // 线程前一条 —— 哪条线都不该压在第三块身上）
@@ -92,7 +105,7 @@ function ringSearch(ideal, box, obstacles, { sidePref = null, anchor = null, max
     // ⚠️ 侧位赢过连线：同侧只要有可用位（哪怕压线，已记进保底），就不再看异侧
     // —— 否则「正下方接楼」会为了一条干净线飘到楼上去（reply-to 测试抓过）。
     for (const pass of [0, 1]) {
-      if (pass === 1 && fallback) break;
+      if (pass === 1 && (fallback || halfOnly)) break;
       for (const c of cands) {
         if (c.side !== pass) continue;
         if (collides(c.x, c.y, box.w, box.h, obstacles)) continue;
@@ -162,7 +175,11 @@ function viewportScan(box, obstacles, viewport) {
 
 /** 内容底下的兜底起排线：左缘对齐已有内容，纵向排在最低边之下 */
 function bottomSpot(box, obstacles, contentBottom) {
-  const left = obstacles.length ? Math.min(...obstacles.map(o => o.x)) : 10;
+  // 左缘取**中位数**不取最小值（2026-08-29 真会话案）：一件东西被拖到 x=-595，
+  // 之后每一件走兜底的板书都跟着对齐到 -595 去，正文列整条歪出去。中位数是同一个
+  // 意图（跟已有内容左对齐）的抗离群版本 —— 一件跑偏的带不动一整列。
+  const xs = obstacles.map(o => o.x).sort((a, b) => a - b);
+  const left = xs.length ? xs[Math.floor(xs.length / 2)] : 10;
   return { x: Math.round(left), y: Math.round(contentBottom) + 40 };
 }
 
@@ -228,10 +245,15 @@ export function resolvePlacement({
       : dir === 'right'
         ? { x: Math.round(replyTo.x + replyTo.w + PAD), y: Math.round(replyTo.y) }
         : { x: Math.round(replyTo.x - PAD - w), y: Math.round(replyTo.y) };
-    const hit = ringSearch(ideal, b, obstacles, {
-      sidePref: dir, anchor: replyTo,
+    const opts = {
+      sidePref: dir, anchor: replyTo, axisFirst: true,
       lineFrom: [{ x: replyTo.x + replyTo.w / 2, y: replyTo.y + replyTo.h / 2 }, ...lineTargets],
-    });
+    };
+    // 接楼的方向是**语义**不是偏好：宁可往下推远，也不能落到被回应那条的上方
+    // （08-29；旧的「同侧全撞就换侧」在这里会让第二段读起来排在第一段前面）。
+    // 整个半平面都没洞了才退回原来的换侧语义。
+    const hit = ringSearch(ideal, b, obstacles, { ...opts, halfOnly: true })
+      || ringSearch(ideal, b, obstacles, opts);
     if (hit) return { ...hit, resolution: 'reply-to', rejected };
     const fb = bottomSpot(b, obstacles, contentBottom);
     return { ...fb, resolution: 'fallback', rejected, nudged: true };
@@ -274,7 +296,15 @@ export function resolvePlacement({
       below: { x: anchor.x, y: anchor.y + anchor.h + g },
       above: { x: anchor.x, y: anchor.y - g - h },
     };
-    const hit = ringSearch(ideals[pref], b, obstacles, { sidePref: pref, anchor, lineFrom: linesFrom });
+    // 竖着摆 = 读序（08-29）：显式说了 above/below，就是"这一列的上/下一件"，
+    // 横飘 456px 落到隔壁列读起来是另一段。左右不开 —— 那里连线走廊（08-27）
+    // 仍是第二语言，横向邻居没有那么强的读序含义。
+    const axisFirst = column || side === 'below' || side === 'above';
+    // 显式给了 side = 语义要求（题注必须在上方、状态板必须在这一列下面），先只在
+    // 那一侧找；自动挑的 side 只是起点，照旧允许换侧。两边都没洞才放开。
+    const opts = { sidePref: pref, anchor, lineFrom: linesFrom, axisFirst };
+    const hit = (side ? ringSearch(ideals[pref], b, obstacles, { ...opts, halfOnly: true }) : null)
+      || ringSearch(ideals[pref], b, obstacles, opts);
     if (hit) {
       const actual = sideOf(hit, b, anchor) || pref;
       return { ...hit, resolution: `near-${actual}`, rejected, nudged: hit.nudged || actual !== pref };
@@ -307,15 +337,23 @@ export function resolvePlacement({
  * @param {object} objects   board.objects 原始表（要 by 字段）
  */
 /**
- * 挑锚点旁的空侧（08-28 台词侧挂）：右侧贴身位空着就右，不然左侧空就左，
- * 两边都挤仍回右（ringSearch 会就近挪）。判据跟真实落位同一套碰撞（PAD 含内）。
+ * 挑锚点旁的空侧（08-28 台词侧挂）：右边这一排还排得下就挂右边，整条塞满才回
+ * 'below' 排队。
+ *
+ * **不挂左边**（2026-08-29 改）：从左往右读的版面里，挂在左侧的那一段读起来是
+ * 「发生在前面的事」。真会话 proj_mtdr2xpa：角色的回应被挂到当前章节左侧，用户
+ * 第一句话就是「位置摆放的是不是不太对」—— 侧挂本来是为了「同一拍的几个人挤成
+ * 一排」，挂错边就把这一拍读成了上一拍。右边挤不下就老实接楼。
  */
 export function pickFreeSide(anchor, box, obstacles) {
   const w = Math.max(1, Math.round(box?.w || 0));
   const h = Math.max(1, Math.round(box?.h || 0));
-  if (!collides(anchor.x + anchor.w + PAD, anchor.y, w, h, obstacles)) return 'right';
-  if (!collides(anchor.x - PAD - w, anchor.y, w, h, obstacles)) return 'left';
-  return 'right';
+  // 右边一路看到滑动预算的尽头：同一拍的第二个角色，右侧贴身位被第一个占着，
+  // 但再往右还排得下 —— 那才是「挤成一排」。整条都塞满了才接楼。
+  for (let r = 0; r <= MAX_RING; r += 1) {
+    if (!collides(anchor.x + anchor.w + PAD + r * UNIT, anchor.y, w, h, obstacles)) return 'right';
+  }
+  return 'below';
 }
 
 export function inflateSpriteSeats(obstacles, objects, pad = 60) {

@@ -15,7 +15,8 @@
  *   remove            对 agent 自己写的板书放行（连文件带座位带线一起清）
  *   move              有避让了（原 placeRel 裸落点，是六套引擎里唯一不避让的）
  *
- * 位置永远是相对表达（{ref,side,gap} 或网格位移），像素由服务端解析。
+ * 位置永远是相对表达（{ref,side,gap} 或位移 {dx,dy}），落到哪一格由服务端解析。
+ * 距离单位一律像素（08-29；此前是格，见下面 GAP/PX_DELTA 那段的账）。
  */
 
 import path from 'node:path';
@@ -37,21 +38,21 @@ let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 
 /**
- * 单位方言垫片（08-27 转录对账：edit_board 占全家族 -32602 六成，三族错误两族是
- * 像素思维 —— agent 全部感知都是像素，gap/dx/dy 却是格）。>上限的值按像素收编：
- * 没有任何合法意图会写 8 格以上的 gap 或 ±2000 格（48000px）的位移，启发式零反例。
- * 拒收的代价不止一个回合 —— schema 校验是整单拒，一个 gap:40 陪葬同批全部合法 op。
- * z.preprocess 在 SDK 生成的 JSON schema 里隐形（pipe 取出侧），模型看到的文档照旧严格。
+ * 距离一律**像素**（2026-08-29 改口径）。原来 gap/dx/dy 是格（1 格 24px），配了一层
+ * 「大于上限的按像素收编」的垫片 —— 于是同一个字段小数当格、大数当像素，中间那段
+ * 静默错 24 倍：真会话里 agent 想左移 120px 写了 dx:-120，实际挪了 2880px，再写
+ * dx:7000（这次按像素算）往回捞，四发才收敛（proj_mtdr2xpa 03:09）。
+ *
+ * agent 读到的每一个位置都是像素（read_board / look_at_board / 落位回执全是），
+ * 让它写位移时换算成格，是给一件没有收益的事发一张必错的许可证。格只留在起草图
+ * （write_on_board 的 nodes[].at）那种「从零排版面」的场合。
+ *
+ * 超范围的值**钳住不拒收**（08-27 那条教训留着）：schema 校验是整单拒，一个越界的
+ * gap 会陪葬同批全部合法 op —— 代价远大于把它按到上限。
  */
-const GAP = z.preprocess(
-  (v) => (typeof v === 'number' && Number.isFinite(v) && v > 8 ? Math.min(8, v / UNIT) : v),
-  z.number().min(0).max(8),
-);
-const GRID_DELTA = z.preprocess(
-  (v) => (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) > 2000
-    ? Math.max(-2000, Math.min(2000, v / UNIT)) : v),
-  z.number().min(-2000).max(2000),
-);
+const clampTo = (lo, hi) => (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : v);
+const GAP = z.preprocess(clampTo(0, 400), z.number().min(0).max(400));
+const PX_DELTA = z.preprocess(clampTo(-20000, 20000), z.number().min(-20000).max(20000));
 /** 弱模型方言垫片：免费档模型给字符串字段裹 {$text:"…"} 壳（27/61 条真实错误，
  *  且读不懂 zod 报文会原样重试到死）。单键 $text 自动剥壳，合法对象碰不到。 */
 const unwrapText = (v) => (v && typeof v === 'object' && !Array.isArray(v)
@@ -61,9 +62,9 @@ const ENDPOINT = z.preprocess(unwrapText, z.string().min(1).max(300));
 const REL = z.object({
   ref: z.string().min(1).max(300).describe('canvas id to place relative to'),
   side: z.enum(['right', 'left', 'above', 'below']),
-  gap: GAP.optional().describe('grid CELLS, 1 cell = 24px (default 1; max 8 = 192px). NOT pixels — gap:2 means 48px'),
+  gap: GAP.optional().describe('PIXELS of breathing room between the two (default 24, max 400) — same unit as every position you read back'),
 });
-const DELTA = z.object({ dx: GRID_DELTA, dy: GRID_DELTA }).describe('grid units');
+const DELTA = z.object({ dx: PX_DELTA, dy: PX_DELTA }).describe('PIXELS to shift by (+x right, +y down) — the same pixels read_board reports');
 const TO = z.union([REL, DELTA]);
 
 const OP = z.discriminatedUnion('op', [
@@ -94,13 +95,16 @@ export function makeEditBoardTool({ projectId, sharedRoot, ctx }) {
   return tool(
     'edit_board',
     `Edit what is already on the board — by id, without redrawing. Positions are RELATIVE
-(to {ref, side, gap} beside another canvas id, or grid deltas {dx,dy}, 1 cell = ${UNIT}px);
-you never write absolute coordinates. ids come from read_board (nodes text:…/scribble:…,
+(beside another canvas id with {ref, side, gap}, or a shift {dx,dy}); you never write
+absolute coordinates. Every distance here is in PIXELS — the same pixels read_board and
+look_at_board report back, no grid conversion. ids come from read_board (nodes text:…/scribble:…,
 cards deck:…/site:…/paths, lines b:…); local names from the sketch that drew them work too.
 ops (run in order; a failing op is reported, the rest still apply):
  set_text{id,text?,…} (canvas text nodes AND your own board-note files — a note's body is
  rewritten in place, threads/lines/annotations survive; never redraw to change words) ·
- move{id,to} · move_group{tag,to} · remove{id} (agent-written board
+ move{id,to} · move_group{tag,to} (a tagged panel is ONE thing — move the whole status
+ board with its tag, never its members one by one; pair with reflow to re-stack it) ·
+ remove{id} (agent-written board
  notes included: file + seat + lines go together) · add_node{id?,text,at:{ref,side,gap?},…} ·
  add_shape{kind,around,…} (circle/box/underline an EXISTING thing after the fact — the mark
  hugs it and follows when it moves) · set_shape{id,color?,width?} ·
@@ -181,7 +185,7 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
         .filter(([id, e]) => id !== subjectId && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
         .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) })), live);
       const placed = resolvePlacement({
-        box, anchor: r, side: rel.side, gap: (rel.gap ?? 1) * UNIT,
+        box, anchor: r, side: rel.side, gap: rel.gap ?? UNIT,
         obstacles, contentBottom: obstacles.reduce((m, o) => Math.max(m, o.y + o.h), 0),
       });
       return placed;
@@ -253,7 +257,7 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             moveHuggers(id, Math.round(p.x) - e.x, Math.round(p.y) - e.y);
             report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.nudged ? `（目标位被占，就近落在 ${p.resolution}）` : ''}${wasUser}`);
           } else {
-            const nx = Math.round(e.x + o.to.dx * UNIT); const ny = Math.round(e.y + o.to.dy * UNIT);
+            const nx = Math.round(e.x + o.to.dx); const ny = Math.round(e.y + o.to.dy);
             setObj(id, { ...e, x: nx, y: ny, seat: 'agent' });
             moveHuggers(id, nx - e.x, ny - e.y);
             report.push(`· #${i + 1} move → (${nx},${ny})${wasUser}`);
@@ -275,9 +279,9 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             const obstacles = inflateSpriteSeats(Object.entries(live)
               .filter(([id, e]) => !memberIds.has(id) && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
               .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) })), live);
-            p = resolvePlacement({ box: { w, h }, anchor: r, side: o.to.side, gap: Math.min(8, o.to.gap ?? 1) * UNIT, obstacles, contentBottom: 0 });
+            p = resolvePlacement({ box: { w, h }, anchor: r, side: o.to.side, gap: o.to.gap ?? UNIT, obstacles, contentBottom: 0 });
           } else {
-            p = { x: bb.x + o.to.dx * UNIT, y: bb.y + o.to.dy * UNIT };
+            p = { x: bb.x + o.to.dx, y: bb.y + o.to.dy };
           }
           const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
           // 08-28 放开：user 座随组平移（相对格局原样保留，学 follow 平移跟随的先例）

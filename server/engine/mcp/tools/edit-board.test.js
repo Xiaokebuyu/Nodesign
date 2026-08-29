@@ -168,8 +168,8 @@ describe('edit_board（吞四件 + 新能力）', () => {
 });
 
 describe('08-25 二批：gap 单位收口 + chalk_edit + 挪动如实报', () => {
-  it('gap 灾难防线仍在（40 格=960px 案）：解析后的 gap 永不超 8 格', async () => {
-    // 08-27 语义改：>8 不再整单拒收，按像素收编（见 schema 垫片那组用例）。
+  it('gap 灾难防线仍在（960px 案）：放行但钳在 400px 内', async () => {
+    // 08-29 语义改：gap 就是像素（不再是格），越界钳住而不是整单拒收。
     // 这条测试的真意图 —— 巨大 gap 不可能落到板上 —— 换个断言继续钉着。
     const { z } = await import('zod');
     const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
@@ -177,7 +177,7 @@ describe('08-25 二批：gap 单位收口 + chalk_edit + 挪动如实报', () =>
     for (const g of [8, 9, 40, 960, 99999]) {
       const p = parse(g);
       expect(p.success, `gap:${g} 该放行`).toBe(true);
-      expect(p.data.ops[0].to.gap, `gap:${g} 解析后越界`).toBeLessThanOrEqual(8);
+      expect(p.data.ops[0].to.gap, `gap:${g} 解析后越界`).toBeLessThanOrEqual(400);
     }
   });
 
@@ -274,10 +274,10 @@ describe('板书正门（08-27）：set_text 认板书文件，笔权按作者�
 describe('用户座位放开（08-28 用户拍板"全部放开试试"：冻结 → 挪得动但如实报）', () => {
   it('⭐ move 用户拖过的东西挪得动，返回注明"原是用户亲手摆的"，seat 转 agent', async () => {
     await patchBoard(pid, { objects: { 'assets/用户摆的.png': { x: 50, y: 50, w: 100, h: 80, seat: 'user' } } });
-    const r = await edit({ ops: [{ op: 'move', id: 'assets/用户摆的.png', to: { dx: 5, dy: 5 } }] });
+    const r = await edit({ ops: [{ op: 'move', id: 'assets/用户摆的.png', to: { dx: 120, dy: 120 } }] });
     expect(r.content[0].text).toMatch(/原是用户亲手摆的/);
     const board = await readBoard(pid);
-    expect(board.objects['assets/用户摆的.png'].x).toBe(170);   // 50 + 5 格 × 24px
+    expect(board.objects['assets/用户摆的.png'].x).toBe(170);   // 50 + 120px（08-29：位移就是像素）
     expect(board.objects['assets/用户摆的.png'].seat).toBe('agent');
   });
 
@@ -286,10 +286,10 @@ describe('用户座位放开（08-28 用户拍板"全部放开试试"：冻结 �
       'assets/g1.png': { x: 1000, y: 1000, w: 100, h: 80, tag: '守座', seat: 'agent' },
       'assets/g2.png': { x: 1000, y: 1200, w: 100, h: 80, tag: '守座', seat: 'user' },
     } });
-    const r = await edit({ ops: [{ op: 'move_group', tag: '守座', to: { dx: 10, dy: 0 } }] });
+    const r = await edit({ ops: [{ op: 'move_group', tag: '守座', to: { dx: 240, dy: 0 } }] });
     expect(r.content[0].text).toMatch(/含用户亲手摆的 1 件/);
     const board = await readBoard(pid);
-    expect(board.objects['assets/g1.png'].x).toBe(1240);   // 10 格 × 24px
+    expect(board.objects['assets/g1.png'].x).toBe(1240);   // 240px
     expect(board.objects['assets/g2.png'].x).toBe(1240);   // 用户件随组走，格局保留
     expect(board.objects['assets/g2.png'].seat).toBe('user');   // 出处记号不动（学习票源）
   });
@@ -301,7 +301,7 @@ describe('用户座位放开（08-28 用户拍板"全部放开试试"：冻结 �
  * 且读不懂 zod 报文原样重试到死。垫片都在 **schema 层**（z.preprocess），直接调
  * handler 测不到 —— 这里按 SDK 的路径走一遍 z.object(inputSchema).parse。
  */
-describe('schema 垫片：像素收编 + $text 剥壳', () => {
+describe('schema 垫片：距离钳位 + $text 剥壳', () => {
   let parse; let editT;
   beforeAll(async () => {
     const { z } = await import('zod');
@@ -309,27 +309,29 @@ describe('schema 垫片：像素收编 + $text 剥壳', () => {
     parse = (args) => z.object(editT.inputSchema).parse(args);
   });
 
-  it('⭐ gap:40 是像素思维（真会话头号错误）：换算成格放行，不整单拒收', () => {
+  it('⭐ gap:40 就是 40 像素（08-29 单位收口）：不换算、不拒收、越界只钳住', () => {
     const p = parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: 40 } }] });
-    expect(p.ops[0].to.gap).toBeCloseTo(40 / 24, 5);
-    // 巨大的像素值钳到上限 8 格；合法格数原样过
-    expect(parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: 300 } }] }).ops[0].to.gap).toBe(8);
+    expect(p.ops[0].to.gap).toBe(40);
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: 3000 } }] }).ops[0].to.gap).toBe(400);
     expect(parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: 3 } }] }).ops[0].to.gap).toBe(3);
-    // 负数照旧拒 —— 方向由 side 表达，负 gap 没有合法意图
-    expect(() => parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: -2 } }] })).toThrow();
+    // 负 gap 没有合法意图（方向由 side 表达），但也钳到 0 而不是整单拒 ——
+    // 一个手滑的负数不该把同批合法的 op 一起作废
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { ref: 'y', side: 'right', gap: -2 } }] }).ops[0].to.gap).toBe(0);
   });
 
-  it('⭐ dx:-11064 是像素位移（真会话案）：换算成格，端到端落点就是意图的像素数', async () => {
-    const p = parse({ ops: [{ op: 'move', id: 'x', to: { dx: -11064, dy: 0 } }] });
-    expect(p.ops[0].to.dx).toBe(-11064 / 24);   // -461 格，×24 还原回 -11064px
+  it('⭐ 位移就是像素，小数值不再被当成格（dx:-120 挪 120px 不是 2880px）', async () => {
+    // 08-29 真会话案 proj_mtdr2xpa 03:09：旧口径下 |v|≤2000 当格、>2000 当像素，
+    // 于是 dx:-120 静默挪了 24 倍，agent 用 dx:7000 往回捞，四发才收敛。
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { dx: -120, dy: 0 } }] }).ops[0].to.dx).toBe(-120);
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { dx: -11064, dy: 0 } }] }).ops[0].to.dx).toBe(-11064);
     await patchBoard(pid, { objects: { 'assets/远块.png': { x: 30000, y: 30000, w: 100, h: 80, seat: 'agent' } } });
     const r = await editT.handler(parse({ ops: [{ op: 'move', id: 'assets/远块.png', to: { dx: -11064, dy: 0 } }] }));
     expect(r.isError).toBeUndefined();
     const board = await readBoard(pid);
     expect(board.objects['assets/远块.png'].x).toBe(30000 - 11064);
-    // 合法格数不动；换算后仍超 ±2000 格的钳到边界
+    // 越界钳到边界，不整单拒收
     expect(parse({ ops: [{ op: 'move', id: 'x', to: { dx: -5, dy: 1999 } }] }).ops[0].to).toEqual({ dx: -5, dy: 1999 });
-    expect(parse({ ops: [{ op: 'move', id: 'x', to: { dx: -99999999, dy: 0 } }] }).ops[0].to.dx).toBe(-2000);
+    expect(parse({ ops: [{ op: 'move', id: 'x', to: { dx: -99999999, dy: 0 } }] }).ops[0].to.dx).toBe(-20000);
   });
 
   it('⭐ add_edge 端点 {$text:"…"} 剥壳（弱模型方言，真会话重试到死案）：线真的画上', async () => {
@@ -355,7 +357,7 @@ describe('schema 垫片：像素收编 + $text 剥壳', () => {
     const js = z.toJSONSchema(z.object(editT.inputSchema), { io: 'input' });
     const moveBranch = js.properties.ops.items.oneOf.find(b => b.properties?.op?.const === 'move');
     const rel = moveBranch.properties.to.anyOf.find(b => b.properties?.gap);
-    expect(rel.properties.gap).toMatchObject({ type: 'number', minimum: 0, maximum: 8 });
+    expect(rel.properties.gap).toMatchObject({ type: 'number', minimum: 0, maximum: 400 });
     const edgeBranch = js.properties.ops.items.oneOf.find(b => b.properties?.op?.const === 'add_edge');
     expect(edgeBranch.properties.to).toMatchObject({ type: 'string', minLength: 1, maxLength: 300 });
   });

@@ -96,6 +96,41 @@ describe('resolvePlacement', () => {
     expect(r.y).toBe(140);
   });
 
+  // ── 守住轴线 / 抗离群左缘（2026-08-29 真会话案 proj_mtdr2xpa）──────────
+  it('⭐ 接楼被跟随面板压住时，往下滑而不是飘到上一条左边', () => {
+    const prev = { x: 12, y: 2191, w: 432, h: 1110 };          // 上一章
+    const panel = { x: 12, y: 3320, w: 440, h: 420 };           // 跟着它的状态板，正压理想位
+    const chapter = { w: 432, h: 1100 };
+    const r = resolvePlacement({ box: chapter, replyTo: prev, obstacles: [prev, panel] });
+    expect(r.resolution).toBe('reply-to');
+    expect(r.x).toBe(prev.x);                                   // 同一列，一格没歪
+    expect(r.y).toBeGreaterThanOrEqual(panel.y + panel.h);      // 滑到面板下面
+  });
+
+  it('⭐ 单列档（手机）的 near 也守轴：不换列，只往下滑', () => {
+    const a = { x: 0, y: 0, w: 400, h: 200 };
+    const blocker = { x: 0, y: 212, w: 400, h: 300 };
+    const r = resolvePlacement({ box: { w: 400, h: 200 }, anchor: a, obstacles: [a, blocker], column: true });
+    expect(r.x).toBe(a.x);
+    expect(r.y).toBeGreaterThanOrEqual(blocker.y + blocker.h);
+  });
+
+  it('⭐ 显式 side:below 也守列：状态板四件堆一摞不会越堆越歪', () => {
+    const anchor = { x: 400, y: 0, w: 200, h: 40 };
+    const wall = { x: 400, y: 60, w: 300, h: 400 };            // 正压在下一件的位置上
+    const r = resolvePlacement({ box: { w: 200, h: 100 }, anchor, side: 'below', obstacles: [anchor, wall] });
+    expect(r.x).toBe(anchor.x);
+    expect(r.y).toBeGreaterThanOrEqual(wall.y + wall.h);
+  });
+
+  it('⭐ 兜底左缘取中位数：一件被拖到远处带不动整列', () => {
+    const stray = rect(-595, 2000);                             // 用户拖到左边的一件
+    const column = [rect(12, 0), rect(12, 200), rect(12, 400)];
+    const r = resolvePlacement({ box, obstacles: [stray, ...column], contentBottom: 500 });
+    expect(r.resolution).toBe('bottom');
+    expect(r.x).toBe(12);                                       // 跟正文列对齐，不是 -595
+  });
+
   it('落位没有失败分支：全板糊死也返回坐标', () => {
     // 一堵覆盖环搜半径的巨墙 + 无视口
     const a = rect(0, 0, 100, 100);
@@ -266,14 +301,18 @@ describe('inferFlowDir：从用户摆放学版面方向（08-27 落位直觉）'
   });
 });
 
-describe('pickFreeSide：台词侧挂挑空侧（08-28）', () => {
+describe('pickFreeSide：台词侧挂挑空侧（08-28；08-29 不再挂左）', () => {
   const anchor = { x: 1000, y: 0, w: 400, h: 600 };
   const box = { w: 400, h: 300 };
-  it('右侧空 → right；右侧压着 → left；两侧都压 → right 兜底（环搜就近挪）', () => {
+  it('⭐ 右侧空 → right；贴身位被占但再往右排得下 → 仍 right（同一拍挤成一排）', () => {
     expect(pickFreeSide(anchor, box, [])).toBe('right');
     const rightBlock = { x: anchor.x + anchor.w + 4, y: 0, w: 400, h: 600 };
-    expect(pickFreeSide(anchor, box, [rightBlock])).toBe('left');
-    const leftBlock = { x: anchor.x - 420, y: 0, w: 400, h: 600 };
-    expect(pickFreeSide(anchor, box, [rightBlock, leftBlock])).toBe('right');
+    expect(pickFreeSide(anchor, box, [rightBlock])).toBe('right');
+  });
+
+  it('⭐ 右边整条塞满 → below，左边空着也不挂（挂左边读成上一拍）', () => {
+    const wall = { x: anchor.x + anchor.w, y: -300, w: 2000, h: 1200 };
+    const leftFree = [];   // 左边什么都没有
+    expect(pickFreeSide(anchor, box, [wall, ...leftFree])).toBe('below');
   });
 });
