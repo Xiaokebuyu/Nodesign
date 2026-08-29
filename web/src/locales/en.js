@@ -384,6 +384,8 @@ export default {
   '先去做一件': 'Go make something first',
   '让 agent 回头读一遍「{name}」，把方法整理成 skill':
     'Have the agent read back through "{name}" and gather the method into a skill',
+  '上一页': 'Previous page',
+  '下一页': 'Next page',
   '设计': 'Design',
 
   // ── 橱窗 · 回头提炼的第一句话（routes/showcase-distill-prompt.js）──

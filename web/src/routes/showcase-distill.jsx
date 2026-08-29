@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS, alpha } from '../lib/theme.js';
+import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
 import { useProjectStore } from '../stores/projectStore.js';
+import { useMedia, NARROW } from '../lib/use-media.js';
 import { timeAgo } from '../lib/helpers.js';
 import { t } from '../lib/i18n.js';
 import { MODE_LABEL } from './home-sheets.js';
@@ -25,7 +26,21 @@ import { distillPrompt } from './showcase-distill-prompt.js';
  * initialMessage，ProjectWorkspace 那个 useEffect 单点负责发首条 turn。没有新链路。
  * 落 /work（不带 sid）= 起新会话，这正是要的：提炼不该污染原来那场，而且
  * crystallize_skill 写出来的 skill 本来也只在新会话里生效。
+ *
+ * ## 版面：一页 3 行 × N 列，左右翻
+ *
+ * 第一版是一行横滚，右边缘挂渐隐提示「还有」。真机上不成立：33 个项目一屏
+ * 只露 5 个，剩下 28 个要一路推着走，而且推到哪儿了没有任何刻度。换成分页
+ * 网格 —— 一屏就把一页看完，翻页是**离散**动作，知道自己在第几页。
+ *
+ * 翻页用 scroll-snap 而不是 transform 动画：触屏滑动、键盘、滚轮横推全都免费
+ * 跟着走，桌面再补一对箭头。自己写 transform 就得把这些一个个重新实现一遍。
  */
+
+/** 3 行是定的（用户拍的板），列数按版面宽度让：手机 2 列，平板 3 列，桌面 5 列 */
+const ROWS = 3;
+const MID = '(max-width: 1024px)';
+
 export default function DistillPanel() {
   const navigate = useNavigate();
   const projects = useProjectStore(s => s.projects);
@@ -34,6 +49,11 @@ export default function DistillPanel() {
   const hydrate = useProjectStore(s => s.hydrate);
   const [hoverId, setHoverId] = useState(null);
 
+  const narrow = useMedia(NARROW);
+  const mid = useMedia(MID);
+  const cols = narrow ? 2 : mid ? 3 : 5;
+  const perPage = cols * ROWS;
+
   // 直开 /gallery 时 store 是空的（Home 没跑过）；hydrate 自己幂等，重复调无害
   useEffect(() => {
     if (!hydrated && !hydrating) {
@@ -41,21 +61,41 @@ export default function DistillPanel() {
     }
   }, [hydrated, hydrating, hydrate]);
 
-  // 右边缘那道渐隐 = 「右边还有」。项目最多的那位有 33 个，一屏只露得出 5 个，
-  // 不给这个信号的话另外 28 个等于不存在（截断成的干净直边看着就像列表到头了）。
-  // 只在真的还能往右滚时挂：项目少到不需要滚的时候挂一道渐变，看着像渲染坏了。
+  const pages = [];
+  for (let i = 0; i < projects.length; i += perPage) pages.push(projects.slice(i, i + perPage));
+
   const railRef = useRef(null);
-  const [more, setMore] = useState(false);
-  const measure = useCallback(() => {
+  const [page, setPage] = useState(0);
+
+  // 当前第几页从 scrollLeft 反算，不自己记账 —— 触屏滑动、滚轮横推、键盘都能
+  // 改变滚动位置，记账的那份状态迟早跟真实位置对不上。
+  const onScroll = useCallback(() => {
+    const el = railRef.current;
+    if (!el || !el.clientWidth) return;
+    setPage(Math.round(el.scrollLeft / el.clientWidth));
+  }, []);
+
+  // 列数变了（转屏 / 拖窗）页数跟着变，停在越界的那页就是一片空白
+  useEffect(() => {
     const el = railRef.current;
     if (!el) return;
-    setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }, []);
-  useEffect(() => {
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [measure, projects]);
+    const last = Math.max(0, pages.length - 1);
+    if (page > last) {
+      el.scrollLeft = last * el.clientWidth;
+      setPage(last);
+    } else {
+      // 列数变化后同一页的像素位置也变了，重新对齐到页边界
+      el.scrollLeft = page * el.clientWidth;
+    }
+  }, [cols, pages.length]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const go = (dir) => {
+    const el = railRef.current;
+    if (!el) return;
+    const next = Math.min(Math.max(page + dir, 0), pages.length - 1);
+    el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' });
+    setPage(next);
+  };
 
   const start = (project) => {
     navigate(`/projects/${project.id}/work`, {
@@ -71,10 +111,22 @@ export default function DistillPanel() {
       border: `1px solid ${COLOR.border}`,
       borderRadius: RADIUS.xxl,
     }}>
-      <h2 style={{
-        fontFamily: FONT_KAI, fontSize: FONT_SIZE.h2, fontWeight: 700,
-        color: COLOR.text, margin: `0 0 ${GAP.sm}px`,
-      }}>{t('把做过的东西留成方法')}</h2>
+      {/* 翻页控件在宽屏跟标题同行（不占额外高度）；窄屏挪到网格下面 ——
+          393 上它会把标题挤成「把做过的东西留成方 / 法」两行，而且手机翻页
+          主要靠滑，箭头是补充，放下面反而是拇指够得着的位置。 */}
+      <div style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: GAP.lg, marginBottom: GAP.sm,
+      }}>
+        <h2 style={{
+          fontFamily: FONT_KAI, fontSize: FONT_SIZE.h2, fontWeight: 700,
+          color: COLOR.text, margin: 0,
+        }}>{t('把做过的东西留成方法')}</h2>
+
+        {!narrow && pages.length > 1 && (
+          <Pager page={page} total={pages.length} onGo={go} />
+        )}
+      </div>
 
       <p style={{
         fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2,
@@ -95,64 +147,108 @@ export default function DistillPanel() {
           </Link>
         </div>
       ) : (
-        // 横滚而不是截断成「最近 8 个」：项目最多的那位有 33 个，截断了他就得
-        // 先回首页找、再回来 —— 而这一区的全部意义就是省掉那一趟。
-        <div style={{ position: 'relative' }}>
         <div
           ref={railRef}
-          onScroll={measure}
+          onScroll={onScroll}
           style={{
-            display: 'flex', gap: GAP.md,
+            display: 'flex',
             overflowX: 'auto', overflowY: 'hidden',
-            paddingBottom: GAP.md,
-            scrollbarWidth: 'thin',
+            scrollSnapType: 'x mandatory',
+            // 滚动条藏掉：这里的刻度是右上角那个「2 / 3」，再来一条横条是两套刻度
+            scrollbarWidth: 'none',
           }}
         >
-          {projects.map(p => (
-            <button
-              key={p.id}
-              onClick={() => start(p)}
-              onMouseEnter={() => setHoverId(p.id)}
-              onMouseLeave={() => setHoverId(null)}
-              title={t('让 agent 回头读一遍「{name}」，把方法整理成 skill', { name: p.name })}
+          {pages.map((items, i) => (
+            <div
+              key={i}
               style={{
-                flexShrink: 0, maxWidth: 240,
-                display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: GAP.xs,
-                padding: `${GAP.md}px ${GAP.lg}px`,
-                background: COLOR.bgWhite,
-                border: `1px solid ${hoverId === p.id ? COLOR.borderHv : COLOR.border}`,
-                borderRadius: RADIUS.lg,
-                cursor: 'pointer', textAlign: 'left',
-                transition: 'border-color 0.15s',
+                flex: '0 0 100%',
+                scrollSnapAlign: 'start',
+                display: 'grid',
+                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                // 显式 3 行：最后一页不满时行位仍在，翻过去容器高度不会往上跳
+                gridTemplateRows: `repeat(${ROWS}, minmax(52px, auto))`,
+                gap: GAP.md,
+                alignContent: 'start',
               }}
             >
-              <span style={{
-                fontFamily: FONT_MONO, fontSize: FONT_SIZE.base, color: COLOR.text,
-                maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{p.name}</span>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: GAP.sm,
-                fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub,
-              }}>
-                {t(MODE_LABEL[p.mode] || MODE_LABEL.design)}
-                <span>{timeAgo(p.updatedAt)}</span>
-                <ArrowRight size={11} style={{ opacity: hoverId === p.id ? 1 : 0, transition: 'opacity 0.15s' }} />
-              </span>
-            </button>
+              {items.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => start(p)}
+                  onMouseEnter={() => setHoverId(p.id)}
+                  onMouseLeave={() => setHoverId(null)}
+                  title={t('让 agent 回头读一遍「{name}」，把方法整理成 skill', { name: p.name })}
+                  style={{
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'flex-start', justifyContent: 'center', gap: GAP.xs,
+                    minWidth: 0,
+                    padding: `${GAP.md}px ${GAP.lg}px`,
+                    background: COLOR.bgWhite,
+                    border: `1px solid ${hoverId === p.id ? COLOR.borderHv : COLOR.border}`,
+                    borderRadius: RADIUS.lg,
+                    cursor: 'pointer', textAlign: 'left',
+                    transition: 'border-color 0.15s',
+                  }}
+                >
+                  <span style={{
+                    fontFamily: FONT_MONO, fontSize: FONT_SIZE.base, color: COLOR.text,
+                    maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{p.name}</span>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: GAP.sm,
+                    fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub,
+                  }}>
+                    {t(MODE_LABEL[p.mode] || MODE_LABEL.design)}
+                    <span>{timeAgo(p.updatedAt)}</span>
+                    <ArrowRight size={11} style={{ opacity: hoverId === p.id ? 1 : 0, transition: 'opacity 0.15s' }} />
+                  </span>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
-        {/* ⚠️ pointerEvents:none 不是可选项：铺在滚动区上面的东西默认吃指针，
-            少这一行右边那几十像素就点不动了（08-29 稿纸的版心框刚栽过一次）。 */}
-        {more && (
-          <div style={{
-            position: 'absolute', right: 0, top: 0, bottom: GAP.md, width: 48,
-            background: `linear-gradient(90deg, ${alpha(COLOR.bgCard, 0)} 0%, ${COLOR.bgCard} 85%)`,
-            pointerEvents: 'none',
-          }} />
-        )}
+      )}
+
+      {narrow && pages.length > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: GAP.md }}>
+          <Pager page={page} total={pages.length} onGo={go} />
         </div>
       )}
     </section>
+  );
+}
+
+function Pager({ page, total, onGo }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, flexShrink: 0 }}>
+      <PageBtn dir={-1} disabled={page === 0} onClick={() => onGo(-1)} />
+      <span style={{
+        fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
+        minWidth: 34, textAlign: 'center',
+      }}>{page + 1} / {total}</span>
+      <PageBtn dir={1} disabled={page >= total - 1} onClick={() => onGo(1)} />
+    </div>
+  );
+}
+
+function PageBtn({ dir, disabled, onClick }) {
+  const Icon = dir < 0 ? ChevronLeft : ChevronRight;
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={dir < 0 ? t('上一页') : t('下一页')}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 26, height: 26,
+        background: 'transparent',
+        border: `1px solid ${disabled ? COLOR.borderLt : COLOR.border}`,
+        borderRadius: RADIUS.lg,
+        color: disabled ? COLOR.dim : COLOR.text4,
+        cursor: disabled ? 'default' : 'pointer',
+      }}
+    ><Icon size={14} /></button>
   );
 }
 
