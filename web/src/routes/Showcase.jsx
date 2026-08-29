@@ -7,6 +7,8 @@ import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS }
 import { Me } from '../lib/api.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { timeAgo } from '../lib/helpers.js';
+import { t } from '../lib/i18n.js';
+import DistillPanel from './showcase-distill.jsx';
 
 /**
  * Showcase — 个人作品橱窗（/gallery，替掉原来的假模板市场）
@@ -18,6 +20,11 @@ import { timeAgo } from '../lib/helpers.js';
  * 这一页反过来：卡片是**你自己做出来的东西**，每张背后绑着从那次探索里固化出来的
  * skill（agent 调 crystallize_skill 产生）。第一次仍然从问题长出骨架，第二次开始
  * 你有资格复用自己的结论。
+ *
+ * 2026-08-29 加 DistillPanel：这一页 15 天开了 62 次而全站只有 2 条数据，差的
+ * 不是入口显眼程度，是产生数据的动作在会话里、讲这件事的字在这一页上。面板把
+ * 动作搬到了字的旁边 —— 说明常驻（不再只在空状态里露一次），并且给一条现在就
+ * 能走的路：挑一个做过的项目让它回头读一遍。
  *
  * 市场（下别人发布的 skill）先留入口不开：SKILL.md 会整段进 agent 上下文，等于
  * 让陌生人往你的会话里写指令，得先有发布审核和可见范围才能开。
@@ -37,26 +44,26 @@ export default function Showcase() {
 
   const handleRemove = async (entry) => {
     if (!(await confirm({
-      title: '移出橱窗',
-      message: `把「${entry.title}」从橱窗里拿掉？作品本身和 skill 都还在，只是不在这里展示。`,
-      confirmLabel: '移出',
+      title: t('移出橱窗'),
+      message: t('把「{title}」从橱窗里拿掉？作品本身和 skill 都还在，只是不在这里展示。', { title: entry.title }),
+      confirmLabel: t('移出'),
       danger: true,
     }))) return;
     try {
       await Me.removeShowcase(entry.id);
       setEntries(list => list.filter(e => e.id !== entry.id));
-      showToast('已移出橱窗', 'info');
+      showToast(t('已移出橱窗'), 'info');
     } catch (err) {
-      showToast(`移出失败：${err.message}`, 'error');
+      showToast(t('移出失败：{err}', { err: err.message }), 'error');
     }
   };
 
   return (
     <AppShell
-      breadcrumb={[{ label: '我的橱窗' }]}
+      breadcrumb={[{ label: t('我的橱窗') }]}
       actions={
         <Link to="/skills" style={iconBtnStyle}>
-          <Upload size={14} /> Skill 管理
+          <Upload size={14} /> {t('Skill 管理')}
         </Link>
       }
     >
@@ -67,19 +74,20 @@ export default function Showcase() {
             <h1 style={{
               fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700,
               color: COLOR.text, letterSpacing: '-0.01em', margin: 0,
-            }}>我的橱窗</h1>
+            }}>{t('我的橱窗')}</h1>
           </div>
           <p style={{
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: COLOR.text2,
             lineHeight: 1.6, margin: 0, maxWidth: 680,
           }}>
-            做完并且你想留下的东西放在这里，每件背后绑着那次探索固化出来的 skill。
-            下次开新会话点名这个 skill，agent 会带着当初的判断依据起手，而不是从零猜。
+            {t('做完并且你想留下的东西放在这里，每件背后绑着那次探索固化出来的 skill。下次开新会话点名这个 skill，agent 会带着当初的判断依据起手，而不是从零猜。')}
           </p>
         </header>
 
+        <DistillPanel />
+
         {entries === null ? (
-          <div style={loadingStyle}>加载中…</div>
+          <div style={loadingStyle}>{t('加载中…')}</div>
         ) : entries.length === 0 ? (
           <EmptyState />
         ) : (
@@ -100,6 +108,10 @@ export default function Showcase() {
   );
 }
 
+/**
+ * 空状态。「怎么产生」那段话 2026-08-29 搬进了 DistillPanel（常驻在上面），
+ * 这里不再教一遍 —— 只留一句它会长成什么样，和那条最值钱的判据。
+ */
 function EmptyState() {
   return (
     <div style={{
@@ -110,12 +122,10 @@ function EmptyState() {
       fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2,
       lineHeight: 1.75, maxWidth: 680,
     }}>
-      <div style={{ fontWeight: 500, color: COLOR.text, marginBottom: GAP.sm }}>橱窗还是空的</div>
-      做完一件你满意的东西之后，跟 agent 说一句「把这套风格留下来」——
-      它会把这次探索的判断依据（为什么这个字号阶梯、你否掉了什么、这套气质在什么场合会失效）
-      写成一个你自己的 skill，作品连同这个 skill 一起进橱窗。
+      <div style={{ fontWeight: 500, color: COLOR.text, marginBottom: GAP.sm }}>{t('橱窗还是空的')}</div>
+      {t('上面挑一个项目就能开始。作品连同它沉淀出来的 skill 一起进这里。')}
       <div style={{ marginTop: GAP.md, color: COLOR.sub, fontSize: FONT_SIZE.xs }}>
-        注意它收的是方法论不是成品：存成品是模板，换个主题就崩；存判断依据才谈得上复用。
+        {t('它收的是方法论不是成品：存成品是模板，换个主题就崩；存判断依据才谈得上复用。')}
       </div>
     </div>
   );
@@ -136,7 +146,7 @@ function ShowcaseCard({ entry, onRemove }) {
     }}>
       {noCover ? (
         <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.dim }}>
-          {entry.projectAlive ? '封面生成中' : '原项目已删除'}
+          {entry.projectAlive ? t('封面生成中') : t('原项目已删除')}
         </span>
       ) : (
         <img
@@ -183,7 +193,7 @@ function ShowcaseCard({ entry, onRemove }) {
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: GAP.sm, marginTop: GAP.sm }}>
           {entry.skillName ? (
-            <span title="这件作品沉淀出来的 skill" style={{
+            <span title={t('这件作品沉淀出来的 skill')} style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
               fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.brown,
               padding: `${GAP.xxs}px 7px`, background: 'rgba(43,33,23,0.03)', borderRadius: RADIUS.pill,
@@ -202,7 +212,7 @@ function ShowcaseCard({ entry, onRemove }) {
       {hover && (
         <button
           onClick={onRemove}
-          title="移出橱窗"
+          title={t('移出橱窗')}
           style={{
             position: 'absolute', top: GAP.sm, right: GAP.sm,
             width: 26, height: 26, borderRadius: 13,
@@ -235,16 +245,21 @@ function MarketPlaceholder() {
           color: COLOR.text2, marginBottom: GAP.xs,
           display: 'flex', alignItems: 'center', gap: GAP.sm,
         }}>
-          Skill 市场
+          {t('Skill 市场')}
           <span style={{
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, fontWeight: 400, color: COLOR.sub,
             padding: '1px 7px', background: 'rgba(43,33,23,0.04)', borderRadius: RADIUS.pill,
-          }}>还没开</span>
+          }}>{t('还没开')}</span>
         </div>
         <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub, lineHeight: 1.65 }}>
-          发布自己的 skill、下别人的来用。开之前要先解决一件事：SKILL.md 会整段进 agent 的
-          上下文，等于让陌生人往你的会话里写指令——得有发布审核和可见范围才敢开。
-          现在要给朋友，先用 <Link to="/skills" style={{ color: COLOR.text2, textDecoration: 'underline' }}>Skill 管理</Link> 页导出/上传文件互传。
+          {/* ⚠️ 链接不进 t() 的参数：interpolate 走的是 String(params[k])，塞 React
+              元素进去会在页面上印出 [object Object]。整句留在词表里、链接单独成短语，
+              这样英文侧的词序也不受链接位置绑架。 */}
+          {t('发布自己的 skill、下别人的来用。开之前要先解决一件事：SKILL.md 会整段进 agent 的上下文，等于让陌生人往你的会话里写指令，得有发布审核和可见范围才敢开。')}
+          {' '}
+          {t('现在要给朋友，先导出文件互传：')}
+          {' '}
+          <Link to="/skills" style={{ color: COLOR.text2, textDecoration: 'underline' }}>{t('Skill 管理')}</Link>
         </div>
       </div>
       <ArrowRight size={14} color={COLOR.dim} style={{ flexShrink: 0, marginTop: GAP.xs }} />

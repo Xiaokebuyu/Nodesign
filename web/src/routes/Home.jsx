@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
-import CreateProjectModal from '../components/project/CreateProjectModal.jsx';
 import QuickEntry from './home-quick-entry.jsx';
-import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE } from '../lib/theme.js';
+import { CHROME, GAP, RADIUS, FONT_SIZE } from '../lib/theme.js';
 import { CSS } from './home-styles.js';
 import { Underline } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
@@ -79,13 +78,11 @@ function inventory(st) {
 
 
 export default function Home() {
-  const navigate = useNavigate();
   const projects = useProjectStore(s => s.projects);
   const hydrated = useProjectStore(s => s.hydrated);
   const hydrating = useProjectStore(s => s.hydrating);
   const error = useProjectStore(s => s.error);
   const hydrate = useProjectStore(s => s.hydrate);
-  const [createOpen, setCreateOpen] = useState(false);
   // 空状态示例 chip → 预填顶部输入框（不直接发 turn：让用户看到内容、可改可删）
   const [prefill, setPrefill] = useState(null);   // { text, ts }
   // 产物清单：读磁盘，跟列表分开拉；拿不到就是 null，卡片那行留空不编
@@ -110,27 +107,25 @@ export default function Home() {
     return () => { dead = true; };
   }, []);
 
-  const openCreate = () => setCreateOpen(true);
   const narrow = useMedia(NARROW);
 
   return (
     <AppShell
       actions={
         <>
-          {/* 窄屏只留图标（2026-08-21）：三个动作 + 头像 + 字标在 393 的屏上排不下，
-              带字的话「新建项目」会被挤成两行。次要的两个退成图标，主动作留一个短词。 */}
+          {/* 窄屏只留图标（2026-08-21）：动作 + 头像 + 字标在 393 的屏上排不下，
+              带字的话会被挤成两行。
+              2026-08-29 「新建项目」从这里撤走 —— 开工的入口是下面那本便签，
+              不是顶栏的按钮。留在这的两个都是"去别处看"，不是"在这开工"。 */}
           <Link to="/gallery" title={t('橱窗')} style={iconBtnStyle}>
             <LayoutTemplate size={14} />{narrow ? null : ` ${t('橱窗')}`}
           </Link>
           <Link to="/skills" title="Skill" style={iconBtnStyle}>
             <Wrench size={14} />{narrow ? null : ' Skill'}
           </Link>
-          {/* 窄屏不挂：上面那条注释已经说了 393 的屏排不下，语言不是高频动作，
-              让位给三个主动作。窄屏用户要换语言走登录墙那个（门外那枚常在）。 */}
+          {/* 窄屏不挂：上面那条注释已经说了 393 的屏排不下，语言不是高频动作。
+              窄屏用户要换语言走登录墙那个（门外那枚常在）。 */}
           {!narrow && <LanguageSwitcher />}
-          <button style={primaryBtnStyle} onClick={openCreate} title={t('新建项目')}>
-            <Plus size={14} /> {narrow ? t('新建') : t('新建项目')}
-          </button>
         </>
       }
     >
@@ -164,7 +159,6 @@ export default function Home() {
             <ErrorState message={error} onRetry={() => hydrate({ kind: 'project' }).catch(() => {})} />
           ) : projects.length === 0 ? (
             <EmptyState
-              onCreate={openCreate}
               onPick={(text) => {
                 setPrefill({ text, ts: Date.now() });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -179,15 +173,6 @@ export default function Home() {
           )}
         </div>
       </div>
-
-      <CreateProjectModal
-        show={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={(proj) => {
-          // 2026-07-27 起工作台是项目主页 —— 新建项目直接进画布
-          navigate(`/projects/${proj.id}/work`);
-        }}
-      />
     </AppShell>
   );
 }
@@ -530,7 +515,7 @@ const EMPTY_EXAMPLES = [
   '把这半年做的东西整理成一份介绍 deck',
 ];
 
-function EmptyState({ onCreate, onPick }) {
+function EmptyState({ onPick }) {
   return (
     <div className="ndd-sheet">
       <span className="pin" />
@@ -541,7 +526,6 @@ function EmptyState({ onCreate, onPick }) {
           <button key={text} onClick={() => onPick?.(text)}>{text}</button>
         ))}
       </div>
-      <button className="foot" onClick={onCreate}>{t('或者从「+ 新建项目」开始一件长期的事')}</button>
     </div>
   );
 }
@@ -553,13 +537,4 @@ const iconBtnStyle = {
   padding: `${GAP.sm}px ${GAP.lg}px`,
   borderRadius: RADIUS.lg,
   background: 'transparent',
-};
-
-const primaryBtnStyle = {
-  display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-  fontSize: FONT_SIZE.lg, fontWeight: 700,
-  color: COLOR.btnText, background: COLOR.btn,
-  padding: `${GAP.sm + 1}px ${GAP.xl}px`,
-  border: `1px solid ${COLOR.btn}`,
-  borderRadius: RADIUS.lg,
 };

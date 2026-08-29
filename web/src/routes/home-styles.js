@@ -453,9 +453,6 @@ export const CSS = `
   background: transparent; border: 1px solid rgba(43,33,23,0.2); border-radius: 999px;
   cursor: pointer; transition: border-color 0.15s, color 0.15s; }
 .ndd-sheet .chips button:hover { border-color: var(--ink); color: var(--ink); }
-.ndd-sheet .foot { margin-top: 22px; font: 12.5px var(--kai); color: var(--pencil);
-  background: transparent; border: none; text-decoration: underline;
-  text-underline-offset: 3px; cursor: pointer; }
 .ndd-sheet .retry { margin-top: 20px; padding: 9px 26px; font: 700 14px var(--kai);
   letter-spacing: 0.24em; text-indent: 0.24em;
   background: var(--ink); color: #F5F0E4; border: none; border-radius: 2px; cursor: pointer; }

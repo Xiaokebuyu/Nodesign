@@ -127,8 +127,6 @@ export default {
   '还没出东西': 'Nothing made yet',
 
   '橱窗': 'Gallery',
-  '新建': 'New',
-  '新建项目': 'New project',
   '我的项目': 'My projects',
   '最近对话': 'Recent chats',
   '正在打开…': 'Opening…',
@@ -164,7 +162,6 @@ export default {
   '还没有作品': 'Nothing here yet',
   '在上面写一句话就能开工。': 'Write a line above to get started.',
   '没想好的话，点一个试试：': 'Not sure yet? Try one of these:',
-  '或者从「+ 新建项目」开始一件长期的事': 'Or start something long-running from "+ New project"',
   // ── 首页快速开工（routes/home-quick-entry.jsx）──
   // 问候语和示例是「随手写的一句话」的语气，英文别改成 "How may I assist you today?"
   // 那种客服腔。⚠️ 这两批是模块级 const，t() 包在取用处不在定义处（见该文件注释）。
@@ -342,4 +339,80 @@ export default {
   '评论': 'Comment',
   '对这扇窗里的东西说一句：发给 agent 立刻处理，或先攒着从右下角一起发':
     'Say something about what is in this window: send it to the agent now, or save it and send them together from the bottom right.',
+
+  // ── 相对时间（lib/helpers.js 的 timeAgo）──
+  // 全站 8 个文件在印它：首页每张卡、橱窗、会话列表、控制台。英文要单复数，
+  // 所以走 { one, other } + count。
+  '刚刚': 'just now',
+  '{n} 分钟前': { one: '{n} minute ago', other: '{n} minutes ago' },
+  '{n} 小时前': { one: '{n} hour ago', other: '{n} hours ago' },
+  '{n} 天前': { one: '{n} day ago', other: '{n} days ago' },
+
+  // ── 橱窗（routes/Showcase.jsx）──
+  '我的橱窗': 'My gallery',
+  'Skill 管理': 'Manage skills',
+  '做完并且你想留下的东西放在这里，每件背后绑着那次探索固化出来的 skill。下次开新会话点名这个 skill，agent 会带着当初的判断依据起手，而不是从零猜。':
+    'Work you finished and wanted to keep lives here, each piece tied to the skill distilled from making it. Name that skill in a new session and the agent starts from the judgements you made back then instead of guessing.',
+  '加载中…': 'Loading…',
+  '橱窗还是空的': 'Nothing in the gallery yet',
+  '上面挑一个项目就能开始。作品连同它沉淀出来的 skill 一起进这里。':
+    'Pick a project above to start. The work lands here together with the skill it distilled.',
+  '它收的是方法论不是成品：存成品是模板，换个主题就崩；存判断依据才谈得上复用。':
+    'What it keeps is the method, not the artifact. Keep the artifact and you have a template that breaks on the next subject; keep the reasoning and it is worth reusing.',
+  '移出橱窗': 'Remove from gallery',
+  '把「{title}」从橱窗里拿掉？作品本身和 skill 都还在，只是不在这里展示。':
+    'Take "{title}" out of the gallery? The work and its skill both stay, they just stop showing here.',
+  '移出': 'Remove',
+  '已移出橱窗': 'Removed from gallery',
+  '移出失败：{err}': 'Could not remove: {err}',
+  '封面生成中': 'cover rendering',
+  '原项目已删除': 'source project deleted',
+  '这件作品沉淀出来的 skill': 'the skill distilled from this piece',
+  'Skill 市场': 'Skill market',
+  '还没开': 'not open yet',
+  '发布自己的 skill、下别人的来用。开之前要先解决一件事：SKILL.md 会整段进 agent 的上下文，等于让陌生人往你的会话里写指令，得有发布审核和可见范围才敢开。':
+    "Publish your own skills, install other people's. One thing has to be settled first: a SKILL.md goes into the agent's context whole, which means letting a stranger write instructions into your session. That needs review and visibility scoping before it can open.",
+  '现在要给朋友，先导出文件互传：': 'To share with a friend today, export the file and send it over:',
+
+  // ── 橱窗 · 回头提炼（routes/showcase-distill.jsx）──
+  '把做过的东西留成方法': 'Turn what you made into a method',
+  '做完一件满意的东西，随时可以在那个项目里说一句「把这套风格留下来」。':
+    'Whenever a piece turns out well, you can say "keep this style" right there in the project.',
+  '也可以现在就挑一个做过的项目，让它回头读一遍，把里面的取值和判断整理成一个 skill：':
+    'Or pick a finished project now and have the agent read back through it, gathering the values and judgements into a skill:',
+  '还没有做过的项目。': 'No projects yet.',
+  '先去做一件': 'Go make something first',
+  '让 agent 回头读一遍「{name}」，把方法整理成 skill':
+    'Have the agent read back through "{name}" and gather the method into a skill',
+  '设计': 'Design',
+
+  // ── 橱窗 · 回头提炼的第一句话（routes/showcase-distill-prompt.js）──
+  // ⚠️ 这几条是**用户消息**，会以气泡出现在会话里，也是 agent 收到的指令。
+  // 翻译要保住祈使语气和四个要点的具体度：写虚了 agent 就交回一篇作文。
+  '把这个项目回头看一遍，帮我把这套做法固化成一个我自己的 skill。':
+    'Read back through this project and turn the approach in it into a skill of my own.',
+  '先读项目里已经留下的东西：产物文件、板书、记忆。然后整理这几样：':
+    'Start from what the project left behind: the artifact files, the blackboard, the memory. Then gather these:',
+  '具体取值：字号阶梯、配色、间距节奏、圆角和描边怎么用的，以及为什么是这些数':
+    'The actual values: type scale, palette, spacing rhythm, how corners and strokes were used, and why those numbers',
+  '判断依据：这个气质为什么合这个场合，哪里是刻意压住的':
+    'The reasoning: why this character suits this occasion, and where things were deliberately held back',
+  '走过的弯路：哪些做法被换掉了，为什么':
+    'The wrong turns: what got replaced along the way, and why',
+  '边界：这套东西放到什么场合会失效':
+    'The boundary: what occasions this breaks down in',
+  '把这个项目回头看一遍，帮我把这套演法固化成一个我自己的 skill。':
+    'Read back through this project and turn the way it was played into a skill of my own.',
+  '先读项目里已经留下的东西：板书、角色卡、记忆。然后整理这几样：':
+    'Start from what the project left behind: the blackboard, the character cards, the memory. Then gather these:',
+  '调子怎么定的：节奏、视角、留白的分寸':
+    'How the tone was set: pacing, point of view, how much was left unsaid',
+  '角色怎么立起来的，哪些设定是关键的':
+    'How the characters were built, and which details carry them',
+  '走过的弯路：哪些写法被换掉了，为什么':
+    'The wrong turns: which ways of writing it got replaced, and why',
+  '边界：这套演法放到什么故事上会失效':
+    'The boundary: what kinds of story this way of playing breaks down in',
+  '整理完先讲要点给我听，然后用 crystallize_skill 存下来。存完说清楚你写了什么边界，写歪了我当场改。':
+    'Walk me through the main points first, then save it with crystallize_skill. Once saved, tell me plainly what boundary you wrote, so I can correct it on the spot if it is off.',
 };
