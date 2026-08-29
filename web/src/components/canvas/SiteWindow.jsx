@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Monitor, Tablet, Smartphone, RotateCw, ExternalLink, FileCode, Eye, ArrowLeft, Pencil, Move, SquareDashedMousePointer, SlidersHorizontal } from 'lucide-react';
 import { Assets } from '../../lib/api.js';
 import { joinRel } from '../../lib/paths.js';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, EDITOR } from '../../lib/theme.js';
 import { SITE_VIEWPORTS } from '../../lib/board-geometry.js';
 import ArtifactWindow, { exportToolGroup } from './ArtifactWindow.jsx';
 import { SiteModeBanner } from './site-window-banner.jsx';
@@ -689,7 +689,7 @@ export default function SiteWindow({
                 boxShadow: tab === 'edit'
                   ? `0 0 0 2px ${COLOR.btn}, 0 2px 18px rgba(43,33,23,0.08)`
                   : tab === 'drag'
-                    ? '0 0 0 2px #3a7afe, 0 2px 18px rgba(43,33,23,0.08)'
+                    ? `0 0 0 2px ${EDITOR.blue}, 0 2px 18px rgba(43,33,23,0.08)`
                     : '0 2px 18px rgba(43,33,23,0.08)',
                 display: 'block',
                 transform: scale < 1 ? `scale(${scale})` : 'none',

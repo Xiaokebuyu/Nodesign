@@ -25,6 +25,7 @@
  */
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { PAPER } from '../lib/paper.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { Underline } from './PaperBits.jsx';
 import { WALL_CSS } from './login-wall/wall-css.js';
@@ -135,7 +136,7 @@ export default function AuthGate({ children }) {
   }
 
   if (phase === 'ok') return children;
-  if (phase === 'checking') return <div style={{ minHeight: '100vh', background: '#F0EADB' }} />;
+  if (phase === 'checking') return <div style={{ minHeight: '100vh', background: PAPER.wall }} />;
 
   const isRegister = mode === 'register';
 

@@ -12,6 +12,7 @@
  * 跑法见 scripts/shoot-harness.mjs。
  */
 import { useEffect, useState, useRef } from 'react';
+import { PAPER } from './lib/paper.js';
 import { createRoot } from 'react-dom/client';
 import { PanelManagerProvider } from './components/layout/PanelManager.jsx';
 import SiteWindow from './components/canvas/SiteWindow.jsx';
@@ -75,7 +76,7 @@ function Host({ children: render }) {
   const [winGroups, setWinGroups] = useState(null);
   const hostRef = useRef(null);
   return (
-    <div ref={hostRef} style={{ position: 'relative', height: '100%', isolation: 'isolate', background: '#F0EADB' }}>
+    <div ref={hostRef} style={{ position: 'relative', height: '100%', isolation: 'isolate', background: PAPER.wall }}>
       {render(setWinGroups)}
       <FloatingToolbar id="tools" boundsRef={hostRef} dock="bottom-center" stack="row" zIndex={510} groups={winGroups || []} />
     </div>

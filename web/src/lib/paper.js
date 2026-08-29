@@ -125,6 +125,15 @@ export const PAPER = {
  */
 export const P = (name, a) => alpha(PAPER[name], a);
 
+/**
+ * 一枚图钉的画法。原来 home-styles、wall-css、ArtifactWindow、Modal、ChatDock
+ * **五个文件各画了一遍同一枚钉子**（同样的 circle at 35% 30%、同样两个色号）。
+ * 钉子是这套语言里出现频率最高的物件，画法却没有一份主本。
+ * @param {boolean} [red] 红头钉（钉最近动过的那张纸）
+ */
+export const pinFill = (red = false) =>
+  `radial-gradient(circle at 35% 30%, ${red ? PAPER.pinRedA : PAPER.pinA}, ${red ? PAPER.pinRedB : PAPER.pinB} 65%)`;
+
 export const PAPER_VARS = `
   --wall: ${PAPER.wall};
   --paper: ${PAPER.paper};

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { TERM } from '../../lib/theme.js';
 import { Image as ImageIcon } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_MONO, FONT_SIZE, CANVAS, alpha } from '../../lib/theme.js';
 import { sizeOf } from '../../lib/board-kinds.js';
@@ -252,7 +253,7 @@ export function PhantomImageCard({ p, draggable = false, toWorld, onSeatChange }
         position: 'absolute', left: p.seat.x, top: p.seat.y,
         width: IMG_SIZE.w, height: IMG_SIZE.h,
         borderRadius: RADIUS.xl, overflow: 'hidden',
-        border: `1px solid ${p.status === 'fail' ? '#b0554f' : alpha(CANVAS.brass, 0.5)}`,
+        border: `1px solid ${p.status === 'fail' ? TERM.edgeErr : alpha(CANVAS.brass, 0.5)}`,
         background: COLOR.bgCard, boxShadow: '0 6px 18px rgba(60,48,20,0.14)',
         pointerEvents: draggable ? 'auto' : 'none',
         cursor: draggable ? 'grab' : 'default',

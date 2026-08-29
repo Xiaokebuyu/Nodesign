@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { COLOR } from '../../lib/theme.js';
 import { CANVAS, alpha } from '../../lib/theme.js';
 
 /**
@@ -64,7 +65,7 @@ export default function TransformControls({ o, sz, camScale = 1, toWorld, onChan
 
   const handleShared = {
     position: 'absolute', pointerEvents: 'auto', touchAction: 'none',
-    background: '#FFFEF6', border: `${1.5 * k}px solid ${CANVAS.brass}`,
+    background: COLOR.bgModal, border: `${1.5 * k}px solid ${CANVAS.brass}`,
     boxSizing: 'border-box',
   };
 

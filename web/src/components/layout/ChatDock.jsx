@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { PAPER, PAPER_SHADOW, GRAIN } from '../../lib/paper.js';
+import { PAPER, PAPER_SHADOW, GRAIN, pinFill } from '../../lib/paper.js';
 import EdgeTab, { TAB_LEN } from '../ui/EdgeTab.jsx';
 import { useViewportWidth, useMedia, COARSE } from '../../lib/use-media.js';
 import { useDeviceClass } from '../../lib/device-class.js';
@@ -353,7 +353,7 @@ export default function ChatDock({
           <span aria-hidden style={{
             position: 'absolute', left: '50%', top: 6, marginLeft: -4.5,
             width: 9, height: 9, borderRadius: '50%', pointerEvents: 'none', zIndex: 3,
-            background: 'radial-gradient(circle at 35% 30%, #8a7a62, #453a2c 65%)',
+            background: pinFill(),
             boxShadow: '-1px 2px 3px rgba(43,33,23,0.45)',
           }} />
         )}

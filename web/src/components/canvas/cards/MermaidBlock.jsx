@@ -6,6 +6,7 @@
  * 主题走纸面：底色透明、字体跟容器、线用墨阶，不让它把默认的紫蓝调带进来。
  */
 import { useEffect, useRef, useState } from 'react';
+import { CANVAS } from '../../../lib/theme.js';
 import mermaid from 'mermaid';
 import { PAPER } from '../../../lib/paper.js';
 import { FONT_MONO, FONT_SIZE, COLOR } from '../../../lib/theme.js';
@@ -21,12 +22,12 @@ function ensureInit() {
     fontFamily: 'inherit',
     themeVariables: {
       background: 'transparent',
-      primaryColor: '#FBF3CF',
+      primaryColor: CANVAS.note,
       primaryTextColor: PAPER.ink,
       primaryBorderColor: PAPER.ink2,
       lineColor: PAPER.ink2,
-      secondaryColor: '#F0EADB',
-      tertiaryColor: '#FFFEF6',
+      secondaryColor: PAPER.wall,
+      tertiaryColor: COLOR.bgModal,
       fontSize: '14px',
     },
   });

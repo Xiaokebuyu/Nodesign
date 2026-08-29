@@ -306,7 +306,7 @@ export default function ChatComposer({
                 padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
                 fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, fontWeight: 700,
                 whiteSpace: 'nowrap', flexShrink: 0,   // 同发送：这一行的主角不折行
-                color: '#F5F0E4',
+                color: COLOR.btnText,
                 background: PAPER.red,
                 border: `1px solid ${PAPER.red}`,
                 borderRadius: 2,
@@ -316,7 +316,7 @@ export default function ChatComposer({
               onMouseEnter={e => { e.currentTarget.style.opacity = 0.85; }}
               onMouseLeave={e => { e.currentTarget.style.opacity = 1; }}
             >
-              <Square size={11} fill="#FFFEF6" />
+              <Square size={11} fill={COLOR.bgModal} />
               停止
             </button>
           ) : (
@@ -332,7 +332,7 @@ export default function ChatComposer({
                 // 竖着两个字（08-29 手机抽屉上量到的）。发送是这一行的主角，
                 // 它不缩不折，要让位的是旁边那颗模型钮。
                 whiteSpace: 'nowrap', flexShrink: 0,
-                color: disabled || empty ? PAPER.pencil : '#F5F0E4',
+                color: disabled || empty ? PAPER.pencil : COLOR.btnText,
                 background: disabled || empty ? 'transparent' : PAPER.ink,
                 border: `1px solid ${disabled || empty ? PAPER.hair : PAPER.ink}`,
                 borderRadius: 2,

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { COLOR } from '../../lib/theme.js';
 import { X } from 'lucide-react';
 import { GAP, FONT_SIZE, FONT_KAI } from '../../lib/theme.js';
-import { PAPER, GRAIN, PAPER_SHADOW } from '../../lib/paper.js';
+import { PAPER, GRAIN, PAPER_SHADOW, pinFill } from '../../lib/paper.js';
 
 /**
  * 通用 Modal 容器 —— 全站 13 个弹窗都套这一层（2026-08-03 换纸）
@@ -76,7 +77,7 @@ export default function Modal({ show, onClose, title, width = 480, children, clo
         <span style={{
           position: 'absolute', top: 9, left: '50%', marginLeft: -4.5,
           width: 9, height: 9, borderRadius: '50%', zIndex: 2, pointerEvents: 'none',
-          background: 'radial-gradient(circle at 35% 30%, #8a7a62, #453a2c 65%)',
+          background: pinFill(),
           boxShadow: '-1px 2px 3px rgba(43,33,23,0.45)',
         }} />
 
@@ -196,7 +197,7 @@ export function ModalFooter({ onCancel, onConfirm, confirmLabel = '确认', canc
           padding: `${GAP.md - 1}px ${GAP.xxl}px`,
           fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, fontWeight: 700,
           letterSpacing: '0.22em', textIndent: '0.22em',
-          color: confirmDisabled ? PAPER.pencil : '#F5F0E4',
+          color: confirmDisabled ? PAPER.pencil : COLOR.btnText,
           background: confirmDisabled ? 'transparent' : accent,
           border: `1px solid ${confirmDisabled ? PAPER.hair : accent}`,
           borderRadius: 2,

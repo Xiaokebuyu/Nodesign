@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
-import { PAPER, PAPER_SHADOW, GRAIN, INK_SURFACE } from '../../lib/paper.js';
+import { PAPER, PAPER_SHADOW, GRAIN, INK_SURFACE, pinFill } from '../../lib/paper.js';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE, RADIUS } from '../../lib/theme.js';
 import { POP_IN } from '../../lib/board-geometry.js';
 import { exportItemsFor } from '../../lib/export-formats.js';
@@ -166,7 +166,7 @@ export default function ArtifactWindow({
           <span aria-hidden style={{
             position: 'absolute', left: '50%', top: 6, marginLeft: -4.5,
             width: 9, height: 9, borderRadius: '50%', pointerEvents: 'none',
-            background: 'radial-gradient(circle at 35% 30%, #8a7a62, #453a2c 65%)',
+            background: pinFill(),
             boxShadow: '-1px 2px 3px rgba(43,33,23,0.45)',
           }} />
 
