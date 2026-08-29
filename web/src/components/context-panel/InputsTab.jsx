@@ -68,7 +68,7 @@ export default function InputsTab({ inputs = [], onAdd, onRemove }) {
     <div style={{ padding: GAP.lg }}>
       {/* Drop zone */}
       <div
-        onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = COLOR.btn; e.currentTarget.style.background = 'rgba(45,36,24,0.04)'; }}
+        onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = COLOR.btn; e.currentTarget.style.background = 'rgba(43,33,23,0.04)'; }}
         onDragLeave={e => { e.currentTarget.style.borderColor = COLOR.border; e.currentTarget.style.background = COLOR.bgCard; }}
         onDrop={e => {
           e.preventDefault();

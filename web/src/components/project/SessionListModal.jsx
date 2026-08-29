@@ -257,7 +257,7 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
           padding: `${GAP.md}px ${GAP.lg}px`,
           fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
           color: COLOR.text2,
-          background: isCurrent ? 'rgba(45,36,24,0.04)' : 'transparent',
+          background: isCurrent ? 'rgba(43,33,23,0.04)' : 'transparent',
           border: 'none',
           cursor: 'pointer',
           textAlign: 'left',
@@ -288,7 +288,7 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
             {session.tag && (
               <span style={{
                 padding: `1px ${GAP.sm}px`,
-                background: 'rgba(45,36,24,0.06)',
+                background: 'rgba(43,33,23,0.06)',
                 borderRadius: RADIUS.xs,
                 color: COLOR.text2,
               }}>

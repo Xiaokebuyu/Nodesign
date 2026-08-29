@@ -93,14 +93,14 @@ export default function FilesCard({ projectId }) {
         ...cardStyle,
         position: 'relative',
         border: dragging ? `1.5px dashed ${COLOR.btn}` : cardStyle.border,
-        background: dragging ? 'rgba(45,36,24,0.04)' : cardStyle.background,
+        background: dragging ? 'rgba(43,33,23,0.04)' : cardStyle.background,
         transition: 'border-color 0.15s, background 0.15s',
       }}
     >
       {dragging && (
         <div style={{
           position: 'absolute', inset: 0,
-          background: 'rgba(45,36,24,0.06)',
+          background: 'rgba(43,33,23,0.06)',
           borderRadius: RADIUS.xxl,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           gap: GAP.sm,
@@ -136,7 +136,7 @@ export default function FilesCard({ projectId }) {
       {!loading && files.length === 0 && (
         <div style={{
           padding: `${GAP.md}px 0`,
-          background: 'rgba(45,36,24,0.025)',
+          background: 'rgba(43,33,23,0.025)',
           borderRadius: RADIUS.lg,
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: GAP.sm,
         }}>

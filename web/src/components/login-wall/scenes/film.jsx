@@ -13,6 +13,7 @@
  * ⚠️ 两块地不能占：左上角标题区（x 52~560, y 44~180）和右侧登记卡
  * （x 1065~1440, y 152~560）—— 它们是跨场景不变的锚，住在 AuthGate 的壳里。
  */
+import { PAPER, P } from '../../../lib/paper.js';
 import { Ring, Clip } from '../../PaperBits.jsx';
 import artStill from '../../../assets/login-wall/film-still.webp';
 import artSheet from '../../../assets/login-wall/film-sheet.webp';
@@ -49,8 +50,8 @@ export default {
 /* ② 分镜表：方格纸上六个小格，这套的「骨架」比第一套那张大一号 */
 .ndw .m2 { left: 17.5%; top: 27%; width: 17%; padding: 12px 12px 10px;
   background-image: var(--grain),
-    repeating-linear-gradient(0deg, rgba(74,107,143,0.11) 0 1px, transparent 1px 13px),
-    repeating-linear-gradient(90deg, rgba(74,107,143,0.11) 0 1px, transparent 1px 13px); }
+    repeating-linear-gradient(0deg, ${P('gridLine',0.11)} 0 1px, transparent 1px 13px),
+    repeating-linear-gradient(90deg, ${P('gridLine',0.11)} 0 1px, transparent 1px 13px); }
 .ndw .m2 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .ndw .m2 .sh { position: relative; height: 40px; border: 1.4px solid var(--ink-2); opacity: 0.8; }
 /* 每格里两三笔：地平线 + 一个人 + 一盏灯，够读出"这是六个不同的镜头"就行 */
@@ -73,15 +74,15 @@ export default {
 
 /* ④ 渲染日志 */
 .ndw .m4 { left: 50.5%; top: 30%; width: 15.5%; padding: 11px 13px 12px; border-radius: 3px;
-  background: linear-gradient(180deg, #2b2318, #241d14);
+  background: linear-gradient(180deg, ${PAPER.termA}, ${PAPER.termB});
   box-shadow: 0 4px 11px rgba(43,33,23,0.34), 0 1px 2px rgba(43,33,23,0.2);
-  font: 10px var(--code); color: #E4DCC8; line-height: 2.05; }
-.ndw .m4 .t { font: 600 9px var(--code); letter-spacing: 0.16em; color: #9b917c;
-  border-bottom: 1px solid rgba(228,220,200,0.16); padding-bottom: 6px; margin-bottom: 7px; }
-.ndw .m4 .ok { color: #9DBF9A; }
-.ndw .m4 .dim { color: #8A8069; }
-.ndw .m4 .tail { margin-top: 7px; font-size: 9px; color: #8A8069; }
-.ndw .m4 .cur { display: inline-block; width: 6px; height: 11px; background: #E4DCC8;
+  font: 10px var(--code); color: ${PAPER.termInk}; line-height: 2.05; }
+.ndw .m4 .t { font: 600 9px var(--code); letter-spacing: 0.16em; color: ${PAPER.termLabel};
+  border-bottom: 1px solid ${P('termHair',0.16)}; padding-bottom: 6px; margin-bottom: 7px; }
+.ndw .m4 .ok { color: ${PAPER.termOk}; }
+.ndw .m4 .dim { color: ${PAPER.termDim}; }
+.ndw .m4 .tail { margin-top: 7px; font-size: 9px; color: ${PAPER.termDim}; }
+.ndw .m4 .cur { display: inline-block; width: 6px; height: 11px; background: ${PAPER.termInk};
   vertical-align: -1px; opacity: 0.75; }
 
 /* ⑤ 成片：这套最大最亮的一张，压在左下 */
@@ -98,8 +99,8 @@ export default {
   font: 11.5px var(--kai); color: var(--ink-2); border-radius: 4px 4px 0 0; }
 .ndw .m6 .t { font: 700 14.5px var(--kai); padding-right: 74px; }
 .ndw .m6 .d { margin-top: 3px; font: 11.5px var(--kai); line-height: 1.65; color: var(--ink-2); }
-.ndw .m6 .r { margin-top: 9px; padding-top: 7px; border-top: 1px solid rgba(95,81,66,0.3);
-  font: 9.5px var(--kai); letter-spacing: 0.06em; color: rgba(95,81,66,0.8);
+.ndw .m6 .r { margin-top: 9px; padding-top: 7px; border-top: 1px solid ${P('ink2',0.3)};
+  font: 9.5px var(--kai); letter-spacing: 0.06em; color: ${P('ink2',0.8)};
   display: flex; justify-content: space-between; }
 .ndw .m6 .live { position: absolute; right: 13px; top: 14px; padding: 3px 9px; border: 1.5px solid var(--red);
   border-radius: 2px; font: 11px var(--kai); color: var(--red); letter-spacing: 0.16em;
@@ -123,14 +124,14 @@ export default {
 
 /* 时间轴：描图纸压在分镜上，量哪一拍不对 */
 .ndw .t-beat { left: 65.5%; top: 74%; width: 10.5%; padding: 12px 12px 14px;
-  background-color: rgba(243,241,230,0.72); background-image: var(--grain);
+  background-color: ${P('trace',0.72)}; background-image: var(--grain);
   box-shadow: 0 2px 6px rgba(93,74,44,0.14);
-  font: 11.5px var(--kai); line-height: 1.68; color: rgba(60,50,38,0.78); }
+  font: 11.5px var(--kai); line-height: 1.68; color: ${P('traceInk',0.78)}; }
 
 /* 这周做完的：同一个人的墙，这张清单跨场景都在，只是内容跟着走 */
 .ndw .t-legal { left: 55.5%; top: 4.5%; width: 12.5%; padding: 15px 14px 16px;
   background-color: var(--legal);
-  background-image: var(--grain), repeating-linear-gradient(0deg, transparent 0 25px, rgba(168,54,43,0.15) 25px 26px);
+  background-image: var(--grain), repeating-linear-gradient(0deg, transparent 0 25px, ${P('red',0.15)} 25px 26px);
   clip-path: polygon(0 5px, 4% 0, 8% 5px, 12% 0, 16% 5px, 20% 0, 24% 5px, 28% 0, 32% 5px, 36% 0, 40% 5px, 44% 0, 48% 5px, 52% 0, 56% 5px, 60% 0, 64% 5px, 68% 0, 72% 5px, 76% 0, 80% 5px, 84% 0, 88% 5px, 92% 0, 96% 5px, 100% 0, 100% 100%, 0 100%); }
 .ndw .t-legal .h { font: 700 14px var(--kai); margin-bottom: 6px; }
 .ndw .t-legal li { list-style: none; font: 13px var(--kai); line-height: 25px; color: var(--ink-2); }
@@ -139,8 +140,8 @@ export default {
 /* 下一支 */
 .ndw .t-next { right: 4.5%; top: 2.4%; width: 19.5%; padding: 13px 14px 14px;
   background-image: var(--grain),
-    repeating-linear-gradient(180deg, transparent 0 25px, rgba(74,107,143,0.13) 25px 26px); }
-.ndw .t-next .h { font: 700 13px var(--kai); border-bottom: 1.5px solid rgba(168,54,43,0.35); padding-bottom: 5px; }
+    repeating-linear-gradient(180deg, transparent 0 25px, ${P('gridLine',0.13)} 25px 26px); }
+.ndw .t-next .h { font: 700 13px var(--kai); border-bottom: 1.5px solid ${P('red',0.35)}; padding-bottom: 5px; }
 .ndw .t-next .b { margin-top: 7px; font: 12.5px var(--kai); line-height: 1.8; color: var(--ink-2); }
 
 /* 工作台草稿：老位置那张，换成竖屏试排 */
@@ -157,7 +158,7 @@ export default {
         <span className="t">八月第二周</span>
         <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
           <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
-            stroke="rgba(122,111,92,0.55)" strokeWidth="1.4" strokeLinecap="round" />
+            stroke={P('sketch', 0.55)} strokeWidth="1.4" strokeLinecap="round" />
         </svg>
         刚做完 <span className="n">夜班者</span><br />
         39 个镜头<br />

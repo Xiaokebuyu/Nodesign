@@ -34,7 +34,7 @@ import { isInsideReactMount } from './DirectEditBridge.js';
 import { overlayBase, toOverlayXY } from '../../lib/overlay-rect.js';
 import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, EDITOR } from '../../lib/theme.js';
 
-const GHOST_COLOR = 'rgba(45, 36, 24, 0.85)';        // 跟 EditOverlay 一致的深棕
+const GHOST_COLOR = 'rgba(43,33,23, 0.85)';        // 跟 EditOverlay 一致的深棕
 const CARET_COLOR = EDITOR.blue;                      // 亮蓝（区别于评论橙）
 const ALIGN_COLOR = EDITOR.magenta;                   // Figma 风格洋红 guide
 const DISTANCE_BG  = EDITOR.blue;
@@ -509,8 +509,8 @@ export default function DragOverlay({
           width: s.width + 8, height: s.height + 8,
           border: `3px solid ${CARET_COLOR}`,
           borderRadius: RADIUS.sm,
-          background: 'rgba(58, 122, 254, 0.12)',
-          boxShadow: '0 0 16px rgba(58, 122, 254, 0.5)',
+          background: 'rgba(58,122,254, 0.12)',
+          boxShadow: '0 0 16px rgba(58,122,254, 0.5)',
           zIndex: 25,
           animation: 'nd-drag-landing-flash 350ms ease-out forwards',
         }} />
@@ -577,7 +577,7 @@ export default function DragOverlay({
         left: sourcePlaceholderStyle.left,
         width: sourcePlaceholderStyle.width,
         height: sourcePlaceholderStyle.height,
-        border: `2px dashed rgba(45, 36, 24, ${sameContainer ? 0.18 : 0.3})`,
+        border: `2px dashed rgba(43,33,23, ${sameContainer ? 0.18 : 0.3})`,
         borderRadius: RADIUS.sm,
         zIndex: 20,
         opacity: sameContainer ? 0.5 : 1,
@@ -591,7 +591,7 @@ export default function DragOverlay({
         left: ghostStyle.left,
         width: ghostStyle.width,
         height: ghostStyle.height,
-        background: drag.freeMode ? 'rgba(20, 184, 166, 0.10)' : 'rgba(58, 122, 254, 0.08)',
+        background: drag.freeMode ? 'rgba(20, 184, 166, 0.10)' : 'rgba(58,122,254, 0.08)',
         border: `2px solid ${drag.freeMode ? EDITOR.teal : GHOST_COLOR}`,
         borderRadius: RADIUS.sm,
         boxShadow: drag.freeMode
@@ -655,7 +655,7 @@ export default function DragOverlay({
             fontSize: FONT_SIZE.xxs, lineHeight: '14px',
             fontFamily: FONT_MONO,
             color: 'rgba(255,254,246,0.75)',
-            background: 'rgba(45,36,24,0.7)',
+            background: 'rgba(43,33,23,0.7)',
             borderRadius: RADIUS.xs,
             whiteSpace: 'nowrap',
           }}>
@@ -677,7 +677,7 @@ export default function DragOverlay({
             width: s.width + 4, height: s.height + 4,
             border: sameContainer ? `1px dashed ${CARET_COLOR}` : `${strong ? 3 : 2}px solid ${CARET_COLOR}`,
             borderRadius: RADIUS.sm,
-            background: sameContainer ? 'transparent' : `rgba(58, 122, 254, ${strong ? 0.10 : 0.04})`,
+            background: sameContainer ? 'transparent' : `rgba(58,122,254, ${strong ? 0.10 : 0.04})`,
             zIndex: 18,
             opacity: sameContainer ? 0.45 : 1,
           }} />
@@ -694,7 +694,7 @@ export default function DragOverlay({
           width: childOfZoneStyle.width + 6,
           height: childOfZoneStyle.height + 6,
           border: `3px solid ${CARET_COLOR}`,
-          background: 'rgba(58, 122, 254, 0.14)',
+          background: 'rgba(58,122,254, 0.14)',
           borderRadius: 5,
           zIndex: 33,
         }}>
@@ -708,7 +708,7 @@ export default function DragOverlay({
             color: COLOR.bgWhite, background: CARET_COLOR,
             borderRadius: RADIUS.sm,
             whiteSpace: 'nowrap',
-            boxShadow: '0 2px 6px rgba(58, 122, 254, 0.4)',
+            boxShadow: '0 2px 6px rgba(58,122,254, 0.4)',
           }}>
             进入 &lt;{childOfLabel}&gt; 内
           </div>
@@ -725,7 +725,7 @@ export default function DragOverlay({
           width: slotPreviewStyle.width,
           height: slotPreviewStyle.height,
           border: `2px dashed ${CARET_COLOR}`,
-          background: 'rgba(58, 122, 254, 0.10)',
+          background: 'rgba(58,122,254, 0.10)',
           borderRadius: RADIUS.xs,
           zIndex: 32,
         }}>
@@ -759,7 +759,7 @@ export default function DragOverlay({
             top: s.top, left: s.left,
             width: Math.max(s.width, 2), height: Math.max(s.height, 2),
             background: CARET_COLOR,
-            boxShadow: `0 0 0 2px rgba(58, 122, 254, 0.25)`,
+            boxShadow: `0 0 0 2px rgba(58,122,254, 0.25)`,
             borderRadius: 1,
             zIndex: 35,
           }} />

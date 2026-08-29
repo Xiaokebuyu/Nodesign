@@ -161,7 +161,7 @@ export default function InspectTab({ selectedAnchor, iframeDoc, onAddComment, on
               padding: `${GAP.xs}px ${GAP.sm}px`,
               borderRadius: RADIUS.sm,
               cursor: 'pointer',
-              background: scope === opt.id ? 'rgba(45,36,24,0.05)' : 'transparent',
+              background: scope === opt.id ? 'rgba(43,33,23,0.05)' : 'transparent',
             }}>
               <input
                 type="radio"

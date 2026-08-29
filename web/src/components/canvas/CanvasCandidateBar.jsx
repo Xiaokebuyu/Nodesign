@@ -109,7 +109,7 @@ function CandidateTab({ candidate, active, onSelect, onRemove, onRename }) {
         flexShrink: 0,
         position: 'relative',
         display: 'inline-flex', alignItems: 'center',
-        background: active ? 'rgba(45,36,24,0.06)' : 'transparent',
+        background: active ? 'rgba(43,33,23,0.06)' : 'transparent',
         borderRadius: RADIUS.sm,
         transition: 'background 0.15s',
       }}

@@ -31,7 +31,7 @@ export default function PendingEditsBar({
       bottom: 16,
       left: '50%',
       transform: 'translateX(-50%)',
-      background: 'rgba(45, 36, 24, 0.94)',
+      background: 'rgba(43,33,23, 0.94)',
       color: COLOR.btnText,
       borderRadius: RADIUS.lg,
       padding: `${GAP.sm}px ${GAP.lg}px`,

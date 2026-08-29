@@ -13,6 +13,7 @@
  * ⚠️ 选择器不加场景前缀（理由见 deck.jsx 顶上）；左上角标题区和右侧登记卡是
  * 跨场景不变的锚，不能占。
  */
+import { PAPER, P } from '../../../lib/paper.js';
 import { Ring, Clip } from '../../PaperBits.jsx';
 import artFigure from '../../../assets/login-wall/rp-portrait.webp';
 import artStreet from '../../../assets/login-wall/rp-street.webp';
@@ -45,14 +46,14 @@ export default {
 .ndw .r2 img { width: 100%; display: block; }
 .ndw .r2 .n { padding-top: 7px; font: 700 13px var(--kai); }
 .ndw .r2 .f { margin-top: 3px; font: 10.5px var(--kai); line-height: 1.75; color: var(--ink-2);
-  border-top: 1px solid rgba(74,107,143,0.28); padding-top: 4px; }
+  border-top: 1px solid ${P('gridLine',0.28)}; padding-top: 4px; }
 .ndw .r2 .f span { color: var(--pencil); margin-right: 5px; }
 
 /* ③ 编排：方格纸上的三区。**触发住在最下面**，这是结构性的，不是排版偏好 */
 .ndw .r3 { left: 20%; top: 60%; width: 15%; padding: 12px 12px 11px;
   background-image: var(--grain),
-    repeating-linear-gradient(0deg, rgba(74,107,143,0.11) 0 1px, transparent 1px 13px),
-    repeating-linear-gradient(90deg, rgba(74,107,143,0.11) 0 1px, transparent 1px 13px); }
+    repeating-linear-gradient(0deg, ${P('gridLine',0.11)} 0 1px, transparent 1px 13px),
+    repeating-linear-gradient(90deg, ${P('gridLine',0.11)} 0 1px, transparent 1px 13px); }
 .ndw .r3 .band { border: 1.3px solid var(--ink-2); opacity: 0.85; padding: 4px 7px;
   font: 10.5px var(--kai); color: var(--ink-2); display: flex; justify-content: space-between;
   align-items: baseline; }
@@ -65,15 +66,15 @@ export default {
 
 /* ④ 它自己动手 */
 .ndw .r4 { left: 38%; top: 57%; width: 15.5%; padding: 11px 13px 12px; border-radius: 3px;
-  background: linear-gradient(180deg, #2b2318, #241d14);
+  background: linear-gradient(180deg, ${PAPER.termA}, ${PAPER.termB});
   box-shadow: 0 4px 11px rgba(43,33,23,0.34), 0 1px 2px rgba(43,33,23,0.2);
-  font: 10px var(--code); color: #E4DCC8; line-height: 2.05; }
-.ndw .r4 .t { font: 600 9px var(--code); letter-spacing: 0.16em; color: #9b917c;
-  border-bottom: 1px solid rgba(228,220,200,0.16); padding-bottom: 6px; margin-bottom: 7px; }
-.ndw .r4 .ok { color: #9DBF9A; }
-.ndw .r4 .dim { color: #8A8069; }
-.ndw .r4 .tail { margin-top: 7px; font-size: 9px; color: #8A8069; }
-.ndw .r4 .cur { display: inline-block; width: 6px; height: 11px; background: #E4DCC8;
+  font: 10px var(--code); color: ${PAPER.termInk}; line-height: 2.05; }
+.ndw .r4 .t { font: 600 9px var(--code); letter-spacing: 0.16em; color: ${PAPER.termLabel};
+  border-bottom: 1px solid ${P('termHair',0.16)}; padding-bottom: 6px; margin-bottom: 7px; }
+.ndw .r4 .ok { color: ${PAPER.termOk}; }
+.ndw .r4 .dim { color: ${PAPER.termDim}; }
+.ndw .r4 .tail { margin-top: 7px; font-size: 9px; color: ${PAPER.termDim}; }
+.ndw .r4 .cur { display: inline-block; width: 6px; height: 11px; background: ${PAPER.termInk};
   vertical-align: -1px; opacity: 0.75; }
 
 /* ⑤ 演出页第一次开口：纸上印出来的一页，不是照片 */
@@ -86,7 +87,7 @@ export default {
 .ndw .r5 .line em { flex-shrink: 0; font-style: normal; font: 10px var(--kai);
   color: var(--pencil); letter-spacing: 0.1em; padding-top: 1px; }
 .ndw .r5 .line p { font: 12px var(--kai); line-height: 1.65; color: var(--ink-2); }
-.ndw .r5 .line.me p { color: rgba(60,50,38,0.72); }
+.ndw .r5 .line.me p { color: ${P('traceInk',0.72)}; }
 .ndw .r5 .box { margin-top: 10px; padding: 5px 8px; border: 1px solid rgba(43,33,23,0.16);
   border-radius: 2px; font: 11px var(--kai); color: var(--pencil); display: flex; }
 .ndw .r5 .box i { display: inline-block; width: 1.5px; height: 12px; background: var(--ink-2);
@@ -102,8 +103,8 @@ export default {
   font: 11.5px var(--kai); color: var(--ink-2); border-radius: 4px 4px 0 0; }
 .ndw .r6 .t { font: 700 14.5px var(--kai); padding-right: 74px; }
 .ndw .r6 .d { margin-top: 3px; font: 11.5px var(--kai); line-height: 1.65; color: var(--ink-2); }
-.ndw .r6 .r { margin-top: 9px; padding-top: 7px; border-top: 1px solid rgba(95,81,66,0.3);
-  font: 9.5px var(--kai); letter-spacing: 0.06em; color: rgba(95,81,66,0.8);
+.ndw .r6 .r { margin-top: 9px; padding-top: 7px; border-top: 1px solid ${P('ink2',0.3)};
+  font: 9.5px var(--kai); letter-spacing: 0.06em; color: ${P('ink2',0.8)};
   display: flex; justify-content: space-between; }
 .ndw .r6 .live { position: absolute; right: 13px; top: 14px; padding: 3px 9px; border: 1.5px solid var(--red);
   border-radius: 2px; font: 11px var(--kai); color: var(--red); letter-spacing: 0.16em;
@@ -119,7 +120,7 @@ export default {
 /* 这周做完的 */
 .ndw .p-legal { left: 56%; top: 4%; width: 12.5%; padding: 15px 14px 16px;
   background-color: var(--legal);
-  background-image: var(--grain), repeating-linear-gradient(0deg, transparent 0 25px, rgba(168,54,43,0.15) 25px 26px);
+  background-image: var(--grain), repeating-linear-gradient(0deg, transparent 0 25px, ${P('red',0.15)} 25px 26px);
   clip-path: polygon(0 5px, 4% 0, 8% 5px, 12% 0, 16% 5px, 20% 0, 24% 5px, 28% 0, 32% 5px, 36% 0, 40% 5px, 44% 0, 48% 5px, 52% 0, 56% 5px, 60% 0, 64% 5px, 68% 0, 72% 5px, 76% 0, 80% 5px, 84% 0, 88% 5px, 92% 0, 96% 5px, 100% 0, 100% 100%, 0 100%); }
 .ndw .p-legal .h { font: 700 14px var(--kai); margin-bottom: 6px; }
 .ndw .p-legal li { list-style: none; font: 13px var(--kai); line-height: 25px; color: var(--ink-2); }
@@ -127,9 +128,9 @@ export default {
 
 /* 一句台词：描图纸压一版 */
 .ndw .p-line { left: 86%; top: 72%; width: 11%; padding: 12px 12px 14px;
-  background-color: rgba(243,241,230,0.72); background-image: var(--grain);
+  background-color: ${P('trace',0.72)}; background-image: var(--grain);
   box-shadow: 0 2px 6px rgba(93,74,44,0.14);
-  font: 11.5px var(--kai); line-height: 1.68; color: rgba(60,50,38,0.78); }
+  font: 11.5px var(--kai); line-height: 1.68; color: ${P('traceInk',0.78)}; }
 
 /* 用量小票 */
 .ndw .p-receipt { left: 30%; top: 84%; width: 5.4%; padding: 10px 9px 14px;
@@ -141,8 +142,8 @@ export default {
 /* 下一场 */
 .ndw .p-next { right: 4.5%; top: 2.4%; width: 19.5%; padding: 13px 14px 14px;
   background-image: var(--grain),
-    repeating-linear-gradient(180deg, transparent 0 25px, rgba(74,107,143,0.13) 25px 26px); }
-.ndw .p-next .h { font: 700 13px var(--kai); border-bottom: 1.5px solid rgba(168,54,43,0.35); padding-bottom: 5px; }
+    repeating-linear-gradient(180deg, transparent 0 25px, ${P('gridLine',0.13)} 25px 26px); }
+.ndw .p-next .h { font: 700 13px var(--kai); border-bottom: 1.5px solid ${P('red',0.35)}; padding-bottom: 5px; }
 .ndw .p-next .b { margin-top: 7px; font: 12.5px var(--kai); line-height: 1.8; color: var(--ink-2); }
 `,
   render: () => (
@@ -151,7 +152,7 @@ export default {
         <span className="t">八月第三周</span>
         <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
           <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
-            stroke="rgba(122,111,92,0.55)" strokeWidth="1.4" strokeLinecap="round" />
+            stroke={P('sketch', 0.55)} strokeWidth="1.4" strokeLinecap="round" />
         </svg>
         在做 <span className="n">时停之城</span><br />
         写了 <span className="n">4 个角色</span><br />

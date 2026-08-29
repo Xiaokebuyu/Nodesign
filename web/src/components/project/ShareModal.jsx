@@ -31,7 +31,7 @@ export default function ShareModal({ show, onClose, project }) {
               <label key={p.id} style={{
                 display: 'flex', alignItems: 'flex-start', gap: GAP.md,
                 padding: `${GAP.md}px ${GAP.lg}px`,
-                background: perm === p.id ? 'rgba(45,36,24,0.05)' : COLOR.bgWhite,
+                background: perm === p.id ? 'rgba(43,33,23,0.05)' : COLOR.bgWhite,
                 border: `1px solid ${perm === p.id ? COLOR.btn : COLOR.borderLt}`,
                 borderRadius: RADIUS.lg,
                 cursor: 'pointer',

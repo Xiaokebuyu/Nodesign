@@ -748,7 +748,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
             alignItems: 'center',
             gap: GAP.xs,
             padding: `${GAP.xxs}px ${GAP.sm}px`,
-            background: 'rgba(45, 36, 24, 0.06)',
+            background: 'rgba(43,33,23, 0.06)',
             borderRadius: RADIUS.sm,
             fontFamily: FONT_MONO,
             fontSize: FONT_SIZE.xs,
@@ -789,7 +789,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
                   padding: `${GAP.sm}px ${GAP.md}px`,
                   border: `1px solid ${isPicked ? COLOR.btn : COLOR.borderLt}`,
                   borderRadius: RADIUS.md,
-                  background: isPicked ? 'rgba(45, 36, 24, 0.06)' : COLOR.bgWhite,
+                  background: isPicked ? 'rgba(43,33,23, 0.06)' : COLOR.bgWhite,
                   cursor: disabled ? 'not-allowed' : 'pointer',
                   fontFamily: FONT_SANS,
                   fontSize: FONT_SIZE.sm,
@@ -799,11 +799,11 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
                 }}
                 onMouseEnter={e => {
                   if (disabled) return;
-                  e.currentTarget.style.background = 'rgba(45, 36, 24, 0.04)';
+                  e.currentTarget.style.background = 'rgba(43,33,23, 0.04)';
                   e.currentTarget.style.borderColor = COLOR.borderHv;
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = isPicked ? 'rgba(45, 36, 24, 0.06)' : COLOR.bgWhite;
+                  e.currentTarget.style.background = isPicked ? 'rgba(43,33,23, 0.06)' : COLOR.bgWhite;
                   e.currentTarget.style.borderColor = isPicked ? COLOR.btn : COLOR.borderLt;
                 }}
               >
@@ -894,7 +894,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
                 fontFamily: FONT_SANS,
                 fontSize: FONT_SIZE.sm,
                 color: COLOR.text,
-                background: currentCustom.trim() ? 'rgba(45, 36, 24, 0.04)' : COLOR.bgWhite,
+                background: currentCustom.trim() ? 'rgba(43,33,23, 0.04)' : COLOR.bgWhite,
                 resize: 'vertical',
                 outline: 'none',
                 boxSizing: 'border-box',
@@ -1028,7 +1028,7 @@ function NavBtn({ onClick, disabled, icon: Icon, label, variant = 'default', ico
 function SystemMessage({ variant = 'warn', content, pending = false }) {
   const config = {
     warn:    { icon: ShieldAlert, color: COLOR.warn,    bgRgba: 'rgba(255, 193, 7, 0.08)',  border: 'rgba(255, 193, 7, 0.35)' },
-    info:    { icon: Info,        color: COLOR.btn,     bgRgba: 'rgba(45, 36, 24, 0.05)',   border: 'rgba(45, 36, 24, 0.18)' },
+    info:    { icon: Info,        color: COLOR.btn,     bgRgba: 'rgba(43,33,23, 0.05)',   border: 'rgba(43,33,23, 0.18)' },
     error:   { icon: AlertCircle, color: COLOR.error,   bgRgba: 'rgba(220, 53, 69, 0.06)',  border: 'rgba(220, 53, 69, 0.30)' },
     success: { icon: CheckCircle2,color: COLOR.success, bgRgba: 'rgba(40, 167, 69, 0.06)',  border: 'rgba(40, 167, 69, 0.30)' },
   }[variant] || { icon: Info, color: COLOR.text2, bgRgba: 'rgba(43,33,23,0.04)', border: COLOR.borderLt };

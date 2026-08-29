@@ -145,7 +145,7 @@ export default function PostDragNotePanel({
         marginBottom: GAP.sm,
       }}>
         <span style={{
-          fontSize: FONT_SIZE.xxs, color: 'rgba(45,36,24,0.6)',
+          fontSize: FONT_SIZE.xxs, color: 'rgba(43,33,23,0.6)',
           textTransform: 'uppercase', letterSpacing: 0.5,
         }}>
           可选备注 · 默认最小改动
@@ -158,7 +158,7 @@ export default function PostDragNotePanel({
             width: 16, height: 16, padding: 0,
             background: 'transparent',
             border: 'none',
-            color: 'rgba(45,36,24,0.4)',
+            color: 'rgba(43,33,23,0.4)',
             cursor: 'pointer',
             borderRadius: RADIUS.xs,
           }}
@@ -182,7 +182,7 @@ export default function PostDragNotePanel({
           fontFamily: 'inherit',
           fontSize: FONT_SIZE.sm,
           lineHeight: '15px',
-          color: 'rgba(45,36,24,0.9)',
+          color: 'rgba(43,33,23,0.9)',
           background: 'rgba(43,33,23,0.02)',
           border: `1px solid ${COLOR.borderMd}`,
           borderRadius: RADIUS.sm,
