@@ -24,6 +24,7 @@ import { promises as fs } from 'node:fs';
 import { readBoard, patchBoard } from '../../projects/board-store.js';
 import { getSharedDir } from '../../projects/workspace.js';
 import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
+import { obstaclesIn } from '../../lib/board-obstacles.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
 import {
   currentSheet, nextSpotInSheet, allocateSheetRect, sheetSizeFor, nextSheetName,
@@ -109,9 +110,7 @@ export async function seatArtifacts(projectId, rels) {
     }
 
     const zone = layerOf(id, live[id], known);
-    const obstacles = inflateSpriteSeats(Object.entries(live)
-      .filter(([oid, e]) => oid !== id && Number.isFinite(e?.x) && layerOf(oid, e, known) === zone)
-      .map(([oid, e]) => ({ id: oid, x: e.x, y: e.y, ...estimateSizeOn(board, oid, e) })), live);
+    const obstacles = obstaclesIn(board, zone, { objects: live, exclude: [id] });
     // 落位（2026-08-29 纸范式）：线程接楼 > 锚点贴放 > 纸内顺排（根层）/内容底下（文件夹层）
     const liveBoard = { ...board, objects: live, sheets: liveSheets };
     let placed = null;
@@ -128,7 +127,9 @@ export async function seatArtifacts(projectId, rels) {
         const rect = allocateSheetRect({
           board: liveBoard, size: sheetSizeFor(fitFor(vp)),
           viewport: (!cur && vp?.camera && !vp.layer) ? vp.camera : null,
-          nearSheet: cur ? cur.id : null, obstacles,
+          nearSheet: cur ? cur.id : null,
+          // 铺纸不避家具（纸不渲染，见 board-obstacles.js 的 furniture 参数）
+          obstacles: obstaclesIn(board, zone, { objects: live, exclude: [id], furniture: false }),
         });
         const name = nextSheetName(liveBoard);
         const entry = { x: rect.x, y: rect.y, w: rect.w, h: rect.h, by: 'agent', at: new Date().toISOString() };

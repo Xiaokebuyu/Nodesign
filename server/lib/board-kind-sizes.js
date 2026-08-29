@@ -25,6 +25,27 @@ export const KIND_SIZES = {
   file: { w: 224, h: 32 },
 };
 
+/**
+ * 文件夹卡的身位（2026-08-29 占位契约刀 A）。真身在前端
+ * `web/src/lib/board-geometry.js` 的 FOLDER_CARD —— zones 存档 08-13 瘦身后只剩
+ * 坐标，尺寸就是这个常量，两边靠 parity 测试钉着。
+ *
+ * ⛔ 它以前从不参与落位：三处障碍集合都只遍历 objects，文件夹对落位系统**结构性
+ * 隐形**（生产 128 块真板实测：文件夹被压 112 次 —— 被产物 34、被文件 33、
+ * 被文档 23、被板书 13）。现在它跟别的物件一样是障碍，见 board-obstacles.js。
+ */
+export const FOLDER_CARD = { w: 288, h: 240 };
+
+/** 文件夹卡矩形（根层物件；id = 目录路径，跟 zones 的键一致） */
+export function zoneRects(board) {
+  const out = [];
+  for (const [path, z] of Object.entries(board?.zones || {})) {
+    if (!Number.isFinite(z?.x) || !Number.isFinite(z?.y)) continue;
+    out.push({ id: path, x: z.x, y: z.y, ...FOLDER_CARD, folder: true });
+  }
+  return out;
+}
+
 // 前缀表从注册表派生（「写死表家族」第 4 处，2026-08-18 收）：手写
 // `deck|site|docx` 的话加形态必漏，新形态的卡掉到 file 兜底（224×32 细条），
 // agent 摆位按错矩形算。⚠️ 新形态要同步给 ARTIFACT_PREVIEW_H 加一行

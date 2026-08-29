@@ -19,7 +19,7 @@
 
 import { UNIT, overlaps, bboxOf, pointIn } from './rect.js';
 import { ONE_SCREEN, ZOOM_BASIS } from './screen.js';
-import { estimateSizeOn } from './board-kind-sizes.js';
+import { estimateSizeOn, zoneRects } from './board-kind-sizes.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 
 /** 纸与纸之间的沟（格子感放在纸与纸之间 —— 登录墙定格动画同一条经验） */
@@ -64,7 +64,11 @@ export function sheetOfPoint(board, pt) {
   return hit;
 }
 
-/** 一张纸的成员（几何派生：物件中心在纸内；staging 也算 —— 草稿也占纸面） */
+/**
+ * 一张纸的成员（几何派生：物件中心在纸内；staging 也算 —— 草稿也占纸面）。
+ * 文件夹卡（zones）也是成员：它实打实占着那块地，往下接排必须从它底下起
+ * （2026-08-29 占位契约刀 A —— 在这之前它对落位系统整个是隐形的）。
+ */
 export function sheetMembers(board, sheetId) {
   const s = board?.sheets?.[sheetId];
   if (!s) return [];
@@ -74,6 +78,10 @@ export function sheetMembers(board, sheetId) {
     const sz = estimateSizeOn(board, id, e);
     const c = { x: e.x + sz.w / 2, y: e.y + sz.h / 2 };
     if (pointIn(c, s)) out.push({ id, x: e.x, y: e.y, w: sz.w, h: sz.h, entry: e });
+  }
+  for (const z of zoneRects(board)) {
+    const c = { x: z.x + z.w / 2, y: z.y + z.h / 2 };
+    if (pointIn(c, s)) out.push({ id: z.id, x: z.x, y: z.y, w: z.w, h: z.h, entry: null, folder: true });
   }
   return out.sort((a, b) => (a.y - b.y) || (a.x - b.x));
 }

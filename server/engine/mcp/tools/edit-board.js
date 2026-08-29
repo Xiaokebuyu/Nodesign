@@ -29,7 +29,8 @@ import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
-import { placeBeside, placeAtOnSheet, overlapIds, inflateSpriteSeats, currentSheet } from '../../../lib/board-sheets.js';
+import { placeBeside, placeAtOnSheet, overlapIds, currentSheet } from '../../../lib/board-sheets.js';
+import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
@@ -184,10 +185,8 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       return byLid(raw);
     };
     const rectOf = (id) => { const e = live[id]; return e ? { x: e.x, y: e.y, ...estimateSizeOn(board, id, e) } : null; };
-    /** 压上判定的障碍集（同层，subject/组员除外；含精灵身位外扩） */
-    const obstaclesNear = (zone, exclude = new Set()) => inflateSpriteSeats(Object.entries(live)
-      .filter(([id, e]) => !exclude.has(id) && Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
-      .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) })), live);
+    /** 压上判定的障碍集（同层，subject/组员除外；含文件夹卡/卷卡/精灵身位） */
+    const obstaclesNear = (zone, exclude = new Set()) => obstaclesIn(board, zone, { objects: live, exclude });
     /** 相对落位 = 精确贴放（2026-08-29：环搜退役 —— 压上如实报，不代找洞） */
     const placeRel = (subjectId, box, rel) => {
       const refId = rid(rel.ref);

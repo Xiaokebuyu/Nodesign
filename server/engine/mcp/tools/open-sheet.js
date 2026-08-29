@@ -17,8 +17,7 @@ import { z } from 'zod';
 import { byOf } from '../actor.js';
 import { readBoard, patchBoard } from '../../../projects/board-store.js';
 import { TAG_RE } from '../../../projects/board-sanitize.js';
-import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
-import { layerOf } from '../../../lib/canvas-id.js';
+import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import {
@@ -41,10 +40,9 @@ export async function openSheetFor(projectId, {
   const cur = currentSheet(board, currentSheetIdOf(sessionId));
   // 缺省：还没有纸（或点名 viewport）→ 对准用户视口；有当前纸 → 铺在它正下方
   const mode = where || (cur ? 'next' : 'viewport');
-  const known = new Set(Object.keys(board.zones || {}));
-  const obstacles = Object.entries(board.objects || {})
-    .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === '')
-    .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
+  // 铺纸尽量不压散件。⛔ 不含文件夹/卷卡这类常驻家具：纸不渲染，纸矩形盖住文件夹
+  // 用户什么也看不见，而纸内落位照样会避开它 —— 算进来只会把第一张纸推离用户视口。
+  const obstacles = obstaclesIn(board, '', { furniture: false });
   const rect = allocateSheetRect({
     board, size,
     viewport: mode === 'viewport' && vp?.camera && !vp.layer ? vp.camera : null,

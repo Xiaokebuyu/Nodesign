@@ -34,7 +34,8 @@ import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { endpointReal } from './edit-board.js';
 import { BINDING_TYPE_IDS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fitFor } from '../../../lib/sketch-layout.js';
-import { innerRect, inflateSpriteSeats } from '../../../lib/board-sheets.js';
+import { innerRect } from '../../../lib/board-sheets.js';
+import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { makeSheetPlacer } from './write-on-board-place.js';
 import { openSheetFor } from './open-sheet.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
@@ -152,10 +153,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
     let board = await readBoard(projectId);
     const known = new Set(Object.keys(board.zones || {}));
-    // 精灵身位：角色最新一条板书旁贴着它的精灵（客户端摆），压上判定给那圈让空
-    const obstaclesOf = (b, zone) => inflateSpriteSeats(Object.entries(b.objects || {})
-      .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === zone)
-      .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(b, id, e) })), b.objects);
+    // 这一层上谁占着地方（含文件夹卡/卷卡/精灵身位，见 lib/board-obstacles.js）
+    const obstaclesOf = (b, zone) => obstaclesIn(b, zone);
     const vp = getViewpoint(projectId);
     const fit = fitFor(vp);
     // 车道封顶（08-28）：触屏档一件不许超过一屏宽。**板书和草图两条路都要过它** ——
