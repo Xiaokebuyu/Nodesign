@@ -64,6 +64,7 @@ import {
   makePreToolUseBashStarterFilesFallback,
 } from './hooks/pre-starter-files.js';
 import { makePreToolUseBoardNeighborhoodInjector } from './hooks/pre-board-neighborhood.js';
+import { makePreToolUseBoardDirtyInjector } from './hooks/pre-board-dirty.js';
 import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.js';
 import { createRoleRoster } from './cast.js';
 import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './hooks/resident-role-lifecycle.js';
@@ -224,6 +225,11 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // UserPromptSubmit 的全图摘要截断后，这里做精确补充。每个文件一个会话只注一次。
       matcher: 'Read|Edit|Write',
       hooks: [makePreToolUseBoardNeighborhoodInjector({ workspaceRoot, projectId })],
+    }, {
+      // 板上动静（2026-08-29 纸范式刀 4）：用户回合中途拖动/搬家/擦组，agent 下一次
+      // 摸板前插话（按会话恰好一次，台账在 lib/board-dirty.js）。
+      matcher: 'mcp__nodesign__(write_on_board|edit_board|read_board|board_batch|open_sheet|organize_board|look_at_board)',
+      hooks: [makePreToolUseBoardDirtyInjector({ projectId, sessionId })],
     }, {
       matcher: 'Write',
       hooks: [

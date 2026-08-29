@@ -28,6 +28,7 @@ import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
 import { sheetSummaries } from '../../../lib/board-sheets.js';
+import { dirtyEvents, describeDirty } from '../../../lib/board-dirty.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
@@ -145,6 +146,18 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；写板走纸（at = 纸内坐标，写满自动翻纸）。要看画面细节才调 read_user_view。` });
     }
   } catch { /* 视点读不到就沉默 */ }
+  // 板上动静（2026-08-29 纸范式刀 4）：用户拖动/搬家/擦组此前完全静默，agent 只能
+  // 撞运气。这里报最近半小时的动静（指纹只在有新动静时变，未变随「未变」行收拢）；
+  // 回合中途的动静另有 PreToolUse 注入器在 agent 摸板前插话。
+  try {
+    const evts = dirtyEvents(projectId, 0);
+    if (evts.length) {
+      const line = describeDirty(evts, { limit: 6 });
+      sections.push({ key: 'boardDirty', title: '板上动静', text:
+        `用户最近亲手动过板面：${line}。这些位置以现状为准 —— 摆放前先 read_board，别按你记忆里的旧位置来。` });
+    }
+  } catch { /* 动静读不到就沉默 */ }
+
   try {
     const digest = await relationsDigest(projectId, { limit: 12 });
     if (digest) {

@@ -39,6 +39,7 @@ import {
 import { injectSrcset } from '../lib/html-srcset.js';
 import { sendVideo, isVideo } from '../lib/video-variant.js';
 import { IMAGE_EXTS, VIDEO_EXTS, decorateCardKind } from '../lib/kinds/file-kinds.js';
+import { noteBoardDirty } from '../lib/board-dirty.js';
 
 const router = express.Router();
 
@@ -648,6 +649,8 @@ router.post('/:pid/move', express.json(), async (req, res, next) => {
     const out = await moveEntry(req.params.pid, req.body?.from, req.body?.to);
     res.json(out);                                                            // ③
     if (out.moved) {
+      // 板上动静（2026-08-29 刀 4）：用户搬了文件，agent 下次摸板前该知道
+      try { noteBoardDirty(req.params.pid, [{ kind: 'mv', id: out.from, to: out.to }]); } catch { /* 记不上不挡搬家 */ }
       // ④ 响应之后再 commit：它只服务于稍后的对账，不该让用户多等一次 git add
       commitWorkspace(req.params.pid, null, `move: ${out.from} → ${out.to}`, { author: 'user' })
         .catch(err => console.warn('[git] move commit failed:', err.message));

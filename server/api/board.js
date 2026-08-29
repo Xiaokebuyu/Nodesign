@@ -15,6 +15,7 @@ import { getWorkspaceRoot } from '../projects/workspace.js';
 import { validateProjectId, getProject } from '../projects/store.js';
 import { guardProject } from './_guard.js';
 import { readBoard, replaceBoard, patchBoard, commitStaging, removeByTag } from '../projects/board-store.js';
+import { noteBoardDirty } from '../lib/board-dirty.js';
 import { setViewpoint, getViewpoint } from '../projects/viewpoint-store.js';
 import { exportGraph, exportGraphZip } from '../lib/board-graph-export.js';
 import { getSharedDir } from '../projects/workspace.js';
@@ -43,7 +44,26 @@ router.patch('/:pid/board', express.json({ limit: '600kb' }), async (req, res, n
     if (!guard(req, res)) return;
     const patch = req.body?.patch;
     if (!patch || typeof patch !== 'object') return res.status(400).json({ error: 'patch required' });
+    // 板上动静（2026-08-29 刀 4）：HTTP PATCH 就是用户的手。**位置真变了才算动静**
+    // —— 前端的尺寸回写（useMeasuredSize）也走这条路，只有 w/h 变化不该吵 agent。
+    let prev = null;
+    if (patch.objects && typeof patch.objects === 'object') {
+      try { prev = await readBoard(req.params.pid); } catch { /* 记不上不挡写 */ }
+    }
     const board = await patchBoard(req.params.pid, patch);
+    if (prev) {
+      const events = [];
+      for (const [id, o] of Object.entries(patch.objects)) {
+        const was = prev.objects?.[id];
+        if (o === null) { if (was) events.push({ kind: 'removed', id }); continue; }
+        const now = board.objects?.[id];
+        if (!was || !now) continue;
+        if (Math.round(was.x) !== Math.round(now.x) || Math.round(was.y) !== Math.round(now.y)) {
+          events.push({ kind: 'moved', id });
+        }
+      }
+      if (events.length) noteBoardDirty(req.params.pid, events);
+    }
     res.json({ ok: true, board });
   } catch (err) {
     if (err?.status === 400) return res.status(400).json({ error: err.message });
@@ -101,6 +121,7 @@ router.post('/:pid/board/erase', express.json({ limit: '16kb' }), async (req, re
     const tag = typeof req.body?.tag === 'string' ? req.body.tag : '';
     if (!tag) return res.status(400).json({ error: 'tag required' });
     const { board, removed } = await removeByTag(req.params.pid, tag);
+    if (removed) noteBoardDirty(req.params.pid, [{ kind: 'erased', id: tag }]);
     res.json({ ok: true, removed, board });
   } catch (err) { next(err); }
 });
