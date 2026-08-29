@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { COLOR } from '../../lib/theme.js';
 import EdgeTab, { TAB_LEN } from '../ui/EdgeTab.jsx';
 import { useMedia, COARSE } from '../../lib/use-media.js';
@@ -70,6 +71,8 @@ export default function AppShell({
    * ⚠️ 提前 return 在所有 hook 之后 —— 这条 return 上面不许再加 hook。
    */
   const deviceClass = useDeviceClass();
+  // 回首页那一步由这层给：版面件不认识路由（MobileShell 的契约），而这层本来就活在路由里
+  const navigate = useNavigate();
   const touch = isTouchLane(deviceClass);
   const [revealed, setRevealed] = useState(true);
   /**
@@ -162,7 +165,7 @@ export default function AppShell({
   if (touch && overlayTop) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: COLOR.bg, overflow: 'hidden' }}>
-        <MobileTopBar breadcrumb={breadcrumb} actions={actions} onBack={onBack} />
+        <MobileTopBar breadcrumb={breadcrumb} actions={actions} onBack={onBack} onHome={() => navigate('/')} />
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>{children}</div>
       </div>
     );

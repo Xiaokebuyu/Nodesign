@@ -50,7 +50,7 @@ export const MOBILE_BAR_H = 44;
  * ⚠️ 这条**不许加 overflow: hidden**。actions 里那些下拉全是绝对定位挂在条里的，
  * 一裁就整条看不见（08-21 在桌面顶栏上踩过，表现为「点了没反应」）。
  */
-export function MobileTopBar({ breadcrumb = [], actions, onMore = null, onBack = null }) {
+export function MobileTopBar({ breadcrumb = [], actions, onMore = null, onBack = null, onHome = null }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef(null);
   useEffect(() => {
@@ -65,12 +65,24 @@ export function MobileTopBar({ breadcrumb = [], actions, onMore = null, onBack =
   const here = crumbs[crumbs.length - 1] || null;
   const upCrumb = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
   /**
-   * ‹ 的动作：调用方给了就听它的（它知道有没有窗开着 —— 那是最里面那一层），
-   * 没给就退到面包屑上一级。⚠️ 这儿**不判断**哪层在最里面：那是业务问题，
-   * 版面件只负责把一颗按钮画出来。
+   * ‹ 的动作，从里往外退：
+   *   ① onBack（调用方给的，它知道有没有窗开着 —— 那是最里面那一层）
+   *   ② 面包屑上一级
+   *   ③ **回首页**
+   *
+   * ⛔ 08-29 用户报「返回键不可点」时才发现漏了第 ③ 层，而且比"不可点"更糟：
+   * 桌面顶栏靠左上角那个 Nodesign 字标回首页，移动条上我把它砍了 —— 于是手机上
+   * **进了项目就没有任何回首页的路**（整条只剩 ⋯ 一个能点的）。
+   * ⚠️ 退到尽头该是"离开这一页"，不是"灰掉"。手机上一颗永远灰着的返回键，
+   * 读起来就是坏了。
+   *
+   * ⚠️ 这儿**不判断**哪层在最里面、也不认识路由：两者都由调用方递进来
+   * （见文件头那条契约）。
    */
-  const back = onBack || upCrumb?.onClick || null;
-  const backLabel = onBack ? '返回' : (upCrumb ? `回到${upCrumb.label}` : '上一层');
+  const back = onBack || upCrumb?.onClick || onHome || null;
+  const backLabel = onBack ? '返回'
+    : upCrumb ? `回到${upCrumb.label}`
+      : onHome ? '回到项目列表' : '上一层';
 
   return (
     <header

@@ -32,9 +32,39 @@ const CRUMBS = [
 ];
 
 describe('返回键的层次', () => {
-  it('只有一级（在根上、没窗）→ 灰着，点不动', () => {
+  it('只有一级、也没给回首页 → 灰着（版面件自己不编路）', () => {
     const m = mount({ breadcrumb: [{ label: '项目' }] });
     expect(m.back().disabled).toBe(true);
+    m.unmount();
+  });
+
+  /**
+   * ⛔ 08-29 用户报「返回键不可点」。真相比"不可点"更糟：桌面靠左上角 Nodesign
+   * 字标回首页，移动条上砍掉了 —— 手机上进了项目就**没有任何回首页的路**。
+   * 退到尽头该是"离开这一页"，不是"灰掉"；一颗永远灰着的返回键读起来就是坏了。
+   */
+  it('⭐ 退到尽头 = 回首页，不是灰掉', () => {
+    const home = vi.fn();
+    const m = mount({ breadcrumb: [{ label: '项目' }], onHome: home });
+    expect(m.back().disabled, '有回首页可退就不该灰').toBe(false);
+    expect(m.back().getAttribute('aria-label')).toContain('项目列表');
+    act(() => { m.back().click(); });
+    expect(home).toHaveBeenCalledTimes(1);
+    m.unmount();
+  });
+
+  it('层次从里往外：窗 > 文件夹上一级 > 回首页，一次只退一层', () => {
+    const close = vi.fn(); const up = vi.fn(); const home = vi.fn();
+    const deep = { breadcrumb: [{ label: '项目' }, { label: '甲', onClick: up }, { label: '乙' }] };
+    // 有窗：只关窗
+    let m = mount({ ...deep, onBack: close, onHome: home });
+    act(() => { m.back().click(); });
+    expect([close.mock.calls.length, up.mock.calls.length, home.mock.calls.length]).toEqual([1, 0, 0]);
+    m.unmount();
+    // 没窗但在文件夹里：只退一层，不回首页
+    m = mount({ ...deep, onHome: home });
+    act(() => { m.back().click(); });
+    expect([up.mock.calls.length, home.mock.calls.length]).toEqual([1, 0]);
     m.unmount();
   });
 
