@@ -2,7 +2,7 @@
  * 台词侧挂集成（2026-08-28 用户拍板）：角色 reply_to 旁白时——
  *   桌面横屏（视点 w>h）→ 挂到旁白两侧的空位（主列留给 GM 的章节链）
  *   竖屏/没有视点     → 保持正下方（手机竖排 = 环境→台词往下摞）
- *   rounds 场         → 不动（桌位机器排）
+ *   （08-29：模式概念退役，侧挂对所有角色一律成立）
  * 走真 handler + actor 盖章 + 真视点存储。
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
@@ -20,7 +20,6 @@ const { makeWriteOnBoardTool } = await import('./write-on-board.js');
 const { makePreToolUseActorStamp } = await import('../../agent/hooks/pre-defaults.js');
 const { _resetActorTrail } = await import('../../agent/actor-trail.js');
 const { setViewpoint, _resetViewpoints } = await import('../../../projects/viewpoint-store.js');
-const { setScene, _resetScenes } = await import('../../agent/scene.js');
 
 const stamp = makePreToolUseActorStamp();
 let n = 0;
@@ -32,7 +31,7 @@ beforeEach(async () => {
   pid = `proj_roleside_t${pidN += 1}`;
   await ensureProjectWorkspace(pid);
   ws = getWorkspaceRoot(pid);
-  _resetViewpoints(); _resetScenes();
+  _resetViewpoints();
 });
 beforeAll(() => {});
 
@@ -90,12 +89,15 @@ describe('台词侧挂', () => {
     expect(role.entry.y).toBeGreaterThanOrEqual(gm.y + gm.h);
   });
 
-  it('rounds 场：横屏侧挂且恒偏右（08-28 摆位直觉版 —— 同拍台词挤成一排，桌位表退役）', async () => {
+  it('同一拍的第二个角色也侧挂 —— 挤成一排就是「这一拍」的样子', async () => {
     const gm = await gmRect();
     landscape(gm.x - 200, gm.y - 100);
-    setScene(pid, { mode: 'rounds', order: ['rp-jiangli', 'rp-bu'] });
-    const role = await writeAs('rp-jiangli', { text: '台词一句。', reply_to: gm.id });
-    expect(role.entry.x).toBeGreaterThanOrEqual(gm.x + gm.w);   // 右半平面
+    const a = await writeAs('rp-jiangli', { text: '台词一句。', reply_to: gm.id });
+    const b = await writeAs('rp-bu', { text: '另一个人接了一句。', reply_to: gm.id });
+    for (const r of [a, b]) {
+      expect(r.entry.y, '侧挂：不该落到旁白正下方').toBeLessThan(gm.y + gm.h);
+    }
+    expect(b.entry.x).not.toBe(a.entry.x);   // 两个人不重叠
   });
 
   it('主控自己 reply_to 自己照旧下行（侧挂只归角色的台词）', async () => {

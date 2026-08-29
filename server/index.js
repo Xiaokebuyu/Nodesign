@@ -34,7 +34,7 @@ import exportsRouter from './api/exports.js';
 import sessionsRouter from './api/sessions.js';
 import instructionRouter from './api/instruction.js';
 import boardRouter from './api/board.js';
-import rolesRouter from './api/roles.js';
+import stageRouter from './api/stage.js';
 import pendingChangesRouter from './api/pending-changes.js';
 import browseRouter from './api/browse.js';
 import publishRouter from './api/publish.js';
@@ -119,7 +119,7 @@ app.use('/api/projects', exportsRouter);
 app.use('/api/projects', sessionsRouter);
 app.use('/api/projects', instructionRouter);
 app.use('/api/projects', boardRouter);
-app.use('/api/projects', rolesRouter);        // 常驻角色名册 + 用户直接对角色说话
+app.use('/api/projects', stageRouter);        // 用户从画布对角色说的话落在画布上
 app.use('/api/projects', pendingChangesRouter);  // C4: 用户直接编辑 + 评论 buffer
 app.use('/api/projects', browseRouter);          // 刷新后拿回浏览器窗/求助状态
 app.use('/api/projects', publishRouter);         // 站点一键上线 Cloudflare Pages

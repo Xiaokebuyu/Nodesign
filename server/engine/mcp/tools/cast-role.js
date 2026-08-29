@@ -23,7 +23,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { ROLE_PREFIX, SLOT_TYPES, isSlotType, isValidRoleSlug } from '../../agent/cast.js';
+import { ROLE_PREFIX, ROLE_SLOT, isSlotType, isValidRoleSlug } from '../../agent/cast.js';
 import { readCastRegistry } from '../../agent/role-card.js';
 
 /** 角色 id（不含 rp- 前缀）：ASCII、能当文件名、能当 SendMessage 收件人名。
@@ -54,27 +54,27 @@ export function makeCastRoleTool({ workspaceRoot, sessionId = null, ctx, roster 
   void sessionId; void roster;   // 旧签名的调用方兼容位（公告续接与回合闸已随重构退役）
   return tool(
     'cast_role',
-    `Register a character card so a role can take the stage with a proper name.
+    `Register a character card so this person can take the stage with a proper name.
 
 Writes the card to ${ROLES_DIR}/<name>/角色卡.md (user-visible, user-editable) and records
 the display name for board attribution. The card is DATA — the acting body is a
-pre-registered actor slot, so you can dispatch IMMEDIATELY after this call (no waiting):
+pre-registered role slot, so you can dispatch IMMEDIATELY after this call (no waiting):
 
-  Agent(subagent_type: "rp-actor", name: "${ROLE_PREFIX}<id>", run_in_background: true,
+  Agent(subagent_type: "${ROLE_SLOT}", name: "${ROLE_PREFIX}<id>", run_in_background: true,
         prompt: first line "你的角色卡：${ROLES_DIR}/<名>/角色卡.md", then the full card
-        text plus your opening direction for this scene)
+        text, what has just happened, and what this person is being asked to react to)
 
-Use subagent_type "rp-narrator" for a narrator-pen role (writes scenes, never speaks for
-named characters). A dispatched role is RESIDENT: talk to it with
-SendMessage({to: "${ROLE_PREFIX}<id>"}) — it remembers everything; never spawn the same
-name twice. When the user hands you a ready-made card/preset for a solo partner, prefer
-copying it in verbatim over rewriting it.`,
+A character writes ONE passage per turn and then that turn ends — you wake it again for
+the next beat with SendMessage({to: "${ROLE_PREFIX}<id>"}), which resumes it instantly with
+its full memory. Never spawn the same name twice: that creates an amnesiac duplicate.
+Scene description, the world and everything around the characters is YOUR pen, not theirs.
+When the user hands you a ready-made character card, prefer copying it in verbatim over
+rewriting it.`,
     {
       id: z.string().describe('ASCII slug, no prefix: lowercase letters/digits/_/- , 2-41 chars. Becomes the address (rp-<id>).'),
       name: z.string().min(1).max(40).describe('Display name, any language — what this character is actually called. Board signatures use it.'),
       duty: z.string().min(1).max(400).describe('One line: who this is and when you would talk to them.'),
-      persona: z.string().min(1).describe("The role card itself. Goes into the dispatch prompt as the role's entire identity: who they are, how they speak, what they must never do. House rules (pen discipline, private-chat dual voice) live in the actor slot — do NOT restate them here."),
-      pen: z.enum(['character', 'narrator']).optional().describe("Which pen this role holds — decides the slot to dispatch. 'character' (default): plays ONE person, spawn via rp-actor. 'narrator': writes scene prose, spawn via rp-narrator."),
+      persona: z.string().min(1).describe("The card itself. Goes into the dispatch prompt as this person's entire identity: who they are, how they speak, what they would never do. The division of labour (they write only themselves, you write the world) is already in the role slot — do NOT restate it here."),
     },
     async (args) => {
       const fail = (msg) => ({ content: [{ type: 'text', text: msg }], isError: true });
@@ -96,8 +96,6 @@ copying it in verbatim over rewriting it.`,
         return fail(`persona 有 ${persona.length} 字符，超过 ${PERSONA_MAX} 上限。`
           + `把大部头设定挪进世界书/设定文件让角色自己 grep，卡上留人设主干。`);
       }
-      const pen = args.pen === 'narrator' ? 'narrator' : 'character';
-      const slot = Object.keys(SLOT_TYPES).find((k) => SLOT_TYPES[k] === pen);
 
       // 卡落盘：角色/<名>/角色卡.md（文件夹范式：这个文件夹就是该角色的家，
       // 之后的记忆/日记等件都住这里；用户随时可改，改动对"下次派发/唤醒后重读卡"生效）
@@ -131,7 +129,7 @@ copying it in verbatim over rewriting it.`,
       await fs.writeFile(file, [
         `# ${displayName}`,
         '',
-        `<!-- ${slug} · ${pen === 'narrator' ? '旁白笔' : '角色笔'} · cast_role 登记。`,
+        `<!-- ${slug} · cast_role 登记。`,
         '     正文就是角色的人设，派发时全文随 prompt 进入角色 —— 想改人设直接改这里，',
         '     对已在场的角色用 SendMessage 告知，对下次开演自动生效。 -->',
         '',
@@ -143,7 +141,7 @@ copying it in verbatim over rewriting it.`,
       const cardRel = path.join(ROLES_DIR, folder, '角色卡.md');
       try {
         const reg = await readCastRegistry(workspaceRoot);
-        reg.roles[slug] = { name: displayName, duty: oneLine(args.duty, 400), pen, card: cardRel };
+        reg.roles[slug] = { name: displayName, duty: oneLine(args.duty, 400), card: cardRel };
         await fs.mkdir(path.join(workspaceRoot, '.nd'), { recursive: true });
         await fs.writeFile(path.join(workspaceRoot, REGISTRY_REL), JSON.stringify(reg, null, 2), 'utf8');
       } catch { /* 展示层，坏了角色照样能上场（署名退回 slug） */ }
@@ -154,10 +152,11 @@ copying it in verbatim over rewriting it.`,
         `${existed ? '改写' : '写好'}了角色卡「${displayName}」→ ${cardRel}（登记为 ${slug}）`,
         '',
         `**现在就可以派它上场**（不用等）：`,
-        `Agent(subagent_type: "${slot}", name: "${slug}", run_in_background: true,`,
+        `Agent(subagent_type: "${ROLE_SLOT}", name: "${slug}", run_in_background: true,`,
         `  prompt: 第一行写「你的角色卡：${cardRel}，你的记忆：${path.join(ROLES_DIR, folder, '记忆.md')}」，`,
-        `  然后贴卡的全文 + 这一场的开场指令（从哪一拍接、跟谁对戏、演完这拍是候场 await_user 还是收场））`,
-        `**之后跟它说话**：SendMessage({to: "${slug}"}) —— 它记得自己演过的一切，不要重新派。`,
+        `  然后贴卡的全文 + 场上刚发生了什么 + 要它回应的是哪一句）`,
+        `它写完一段就结束这一轮。**下一拍再叫它**：SendMessage({to: "${slug}"}) —— 当场醒，`,
+        `记得自己演过的一切，不要重新派。`,
       ];
       if (existed) {
         lines.push('', '⚠️ 这个角色如果**已经在场**，改卡不会改变它 —— 人设在派发那一刻就进了它的'

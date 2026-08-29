@@ -59,7 +59,7 @@ import { MEMORY_EXTRA_GUIDELINES, mergeAgentSettings } from './memory-config.js'
 import { createNodesignMcpServer } from '../mcp/index.js';
 import { MCP_SERVER_NAME } from '../mcp/server-name.js';
 import { assertInitContract } from './init-contract.js';
-import { clearProject as clearRoleInboxes } from './inbox.js'; import { clearSessionFlights } from './subagent-flight.js'; import { clearScene } from './scene.js'; import { clearStage } from './stage-broadcast.js';
+import { clearSessionFlights } from './subagent-flight.js'; import { clearStageStatus } from './stage-status.js';
 import { createRoleRoster } from './cast.js';
 import { createAgents, resolveDefaultFastModel } from '../agents/index.js';
 import { resolveSdkSpoofModel, pickThinkingConfig, resolveModelRoute, isUncensoredModel } from './model-context.js';
@@ -1003,7 +1003,7 @@ export async function runSession({
     unregisterIngressSession(sessionId);   // API 会话的 fast 兜底路由配对注销（订阅会话 noop）
     unregisterSessionNotice(sessionId, noticeHandler);   // ingress → 会话的通知通道配对注销（按身份，别删掉新会话的）
     takeUpstreamTruncation(sessionId);     // 半截标记跟会话同生命周期，别留
-    clearRoleInboxes(projectId); clearScene(projectId); clearStage(projectId); clearSessionFlights(sessionId);   // 收件箱 waiter + 场 + 广播链 + 在飞台账，都跟角色同寿命
+    clearSessionFlights(sessionId); clearStageStatus(projectId);   // 在飞台账 + 台上一览，都跟角色同寿命
     // 带 token 比对：sid 若已被新 register 占用（closeQuerySession 已同步让位 +
     // 用户重发起新 runSession），unregister 看到 _token 不匹配 → noop 不误删新 entry
     unregisterQuerySession(sessionId, sessionToken);

@@ -66,7 +66,7 @@ import {
 import { makePreToolUseBoardNeighborhoodInjector } from './hooks/pre-board-neighborhood.js';
 import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.js';
 import { createRoleRoster } from './cast.js';
-import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice } from './hooks/resident-role-lifecycle.js';
+import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './hooks/resident-role-lifecycle.js';
 import { makePostToolUseSlotAliasHandler } from './hooks/slot-alias.js';
 import { makePreToolUsePerformanceLogGuard } from './hooks/pre-performance-log-guard.js';
 import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-guard.js';
@@ -354,7 +354,9 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // SubagentStart / SubagentStop —— 主动捕子代理生命周期。当前只 emit 事件
     // 给上层观察；不阻塞流程。stage 2 真接通子代理时这里加调度逻辑。
     SubagentStart: [{
-      hooks: [makeSubagentStartHandler({ ctx, sessionId })],
+      // 第二个 handler 是署名的正门：agent_id ↔ 角色名在起飞这一刻绑定
+      // （见 resident-role-lifecycle.js；旧的"从 tool_result 抠 id"已退役）
+      hooks: [makeSubagentStartHandler({ ctx, sessionId }), makeSubagentStartRoleAlias({ projectId })],
     }],
     SubagentStop: [{
       // 常驻角色退场时补一句「怎么把它叫回来」给主控。放在通用 emit 之后：

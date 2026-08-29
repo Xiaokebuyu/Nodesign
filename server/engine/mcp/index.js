@@ -73,9 +73,7 @@ import { makeReadTavernJsonTool } from './tools/read-tavern-json.js';
 import { makeDeliverFilesTool } from './tools/deliver-files.js';
 import { makeCrystallizeSkillTool } from './tools/crystallize-skill.js';
 import { makeCastRoleTool } from './tools/cast-role.js';
-import { makeAwaitUserTool, makeCheckInboxTool } from './tools/role-inbox.js';
 import { makeJotMemoryTool } from './tools/role-memory.js';
-import { makeSetSceneTool, makeReadSceneTool, makePassTurnTool, makeCueRoleTool } from './tools/scene-tools.js';
 import { makeRollDiceTool } from './tools/roll-dice.js';
 import { assertRoleToolsRegistered } from '../agent/cast.js';
 import { makePublishSiteTool } from './tools/publish-site.js';
@@ -215,24 +213,10 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // C10 export_handoff — 复用 exports.js 的 buildHandoffZip，写到 workspace/exports/
       makeExportHandoffTool({ workspaceRoot, sharedRoot, projectId, sessionId, ctx }),
 
-      // cast_role — 把一张角色卡变成真的常驻子代理（2026-08-26 RP 线）。
-      // 写 .claude/agents/rp-<id>.md，CLI 的 watcher 几秒后拾取就能派。
-      // 角色是常驻的：派一次，之后靠 SendMessage 唤醒，它记得自己写过的一切。
+      // cast_role — 写一张角色卡并登记名字（2026-08-26 建，08-29 简化）。
+      // 卡是数据，身体是预注册的角色位；写完当回合就能派，之后靠 SendMessage 叫醒。
       makeCastRoleTool({ workspaceRoot, sessionId, ctx, roster: roleRoster }),
-
-      // await_user / check_inbox — 角色的收件箱（2026-08-26）。用户在画布上回角色的话
-      // 直达它，不惊动主 agent。角色**主动来取**（服务端没法给子代理投消息），
-      // await_user 挂着等 = 「像主 agent 一样对话」的形态。见 agent/inbox.js
-      makeAwaitUserTool({ projectId, ctx }),
-      makeCheckInboxTool({ projectId }),
       makeJotMemoryTool({ workspaceRoot }),
-      // 场务三件（2026-08-27 编排）：set_scene 只认主控，pass_turn 只认角色
-      makeSetSceneTool({ projectId, ctx }),
-      makeReadSceneTool({ projectId }),
-      makePassTurnTool({ projectId, ctx }),
-      // cue_role — GM 点名走收件箱即刻唤醒（08-28 转发机；SendMessage 对挂着的角色
-      // 迟到 300s，见 stage-broadcast.js 顶注）。台面本身的转发不用它，机器管。
-      makeCueRoleTool({ projectId }),
       // roll_dice — 服务端真随机骰（08-28 沉浸感机制刀①）：模型编的骰运不可信，
       // 这把走 crypto + run.dice 事件直达用户屏幕。GM only（不进角色白名单）。
       makeRollDiceTool({ projectId, ctx }),

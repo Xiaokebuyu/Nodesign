@@ -1,8 +1,8 @@
 /**
- * rounds 本拍锚定（2026-08-28 摆位直觉版，前身"桌位表"退役）：
- * 轮次场里角色不给任何落位线索 = 它在回应本拍 —— 缺省 reply_to 最新一条旁白板书，
- * 台词经侧挂直觉落到旁白身侧。「章节竖列、每拍横排」从回应语义里长出来，
- * 不再是按人分列的写死桌位（用户拍板：版面从机械摆位直觉下手）。
+ * 「这一拍」锚定（2026-08-28 摆位直觉版；08-29 从 rounds 泛化到所有角色）：
+ * 角色不给任何落位线索 = 它在回应主持人最新写的那一条 —— 缺省 reply_to 它，
+ * 再经侧挂直觉落到它身侧。「章节竖着走、同一拍横着排」从回应语义里长出来，
+ * 不是写死的版式。08-29 模式概念退役后这一级对所有角色一律成立。
  * 走真 handler + actor 盖章（署名链与 attribution 测试同款）。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -19,7 +19,6 @@ const { ensureProjectWorkspace, getWorkspaceRoot } = await import('../../../proj
 const { makeWriteOnBoardTool } = await import('./write-on-board.js');
 const { makePreToolUseActorStamp } = await import('../../agent/hooks/pre-defaults.js');
 const { _resetActorTrail } = await import('../../agent/actor-trail.js');
-const { setScene, _resetScenes } = await import('../../agent/scene.js');
 const { setViewpoint } = await import('../../../projects/viewpoint-store.js');
 const { parseChalk } = await import('../../../lib/chalk.js');
 
@@ -46,10 +45,8 @@ const writeAs = async (agentType, args) => {
 };
 const replyToOf = async (rel) => parseChalk(await fs.readFile(path.join(ws, rel), 'utf8')).chalk.replyTo;
 
-describe('rounds 本拍锚定', () => {
-  it('⭐ 旁白落板后，角色无线索发言自动 reply_to 本拍；横屏时侧挂到右半平面', async () => {
-    _resetScenes();
-    setScene(pid, { mode: 'rounds', order: ['rp-jian', 'rp-yue'] });
+describe('「这一拍」锚定', () => {
+  it('⭐ 主持人落板后，角色无线索发言自动 reply_to 这一拍；横屏时侧挂到旁边', async () => {
     const gm = await writeAs(null, { text: '# 第一拍\n\n城门在暮色里合拢。', tag: '章节' });
     const [gmId, gmE] = gm.latest;
     // 横屏视点（侧挂直觉的前提）
@@ -57,15 +54,15 @@ describe('rounds 本拍锚定', () => {
 
     const a = await writeAs('rp-jian', { text: '「今夜风紧。」' });
     expect(await replyToOf(a.latest[0])).toBe(gmId);              // 缺省锚 = 本拍旁白
-    expect(a.latest[1].x).toBeGreaterThanOrEqual(gmE.x + gmE.w);  // 侧挂右半平面
+    expect(a.latest[1].y).toBeLessThan(gmE.y + gmE.h);            // 侧挂：不在正下方
 
     // 第二个角色同拍发言：同样锚到本拍，也在右半平面（同拍挤成一排）
     const b = await writeAs('rp-yue', { text: '「我去看看。」' });
     expect(await replyToOf(b.latest[0])).toBe(gmId);
-    expect(b.latest[1].x).toBeGreaterThanOrEqual(gmE.x + gmE.w);
+    expect(b.latest[1].y).toBeLessThan(gmE.y + gmE.h);
   });
 
-  it('新一拍旁白落板后，角色的缺省锚跟着换成最新那拍', async () => {
+  it('主持人写了新的一拍之后，角色的缺省锚跟着换成最新那条', async () => {
     const gm2 = await writeAs(null, { text: '# 第二拍\n\n巡夜人举起了灯。', tag: '章节' });
     const c = await writeAs('rp-jian', { text: '「灯灭了一盏。」' });
     expect(await replyToOf(c.latest[0])).toBe(gm2.latest[0]);
@@ -81,10 +78,9 @@ describe('rounds 本拍锚定', () => {
     expect(await replyToOf(r.latest[0])).toBe(userNote);
   });
 
-  it('板上还没有旁白（角色先开口）：不锚，正常落位', async () => {
+  it('板上还没有主持人的字（角色先开口）：不锚，正常落位', async () => {
     const pid2 = 'proj_roundsbeat_t2';
     await ensureProjectWorkspace(pid2);
-    setScene(pid2, { mode: 'rounds', order: ['rp-jian'] });
     _resetActorTrail();
     await stamp({ agent_id: 'a1', agent_type: 'rp-jian' }, 'toolu_rb_first');
     const t = makeWriteOnBoardTool({ projectId: pid2, sharedRoot: getWorkspaceRoot(pid2), sessionId: 's1', ctx: { emit() {} } });
@@ -95,12 +91,6 @@ describe('rounds 本拍锚定', () => {
     expect(parseChalk(await fs.readFile(path.join(getWorkspaceRoot(pid2), rel), 'utf8')).chalk.replyTo).toBeNull();
   });
 
-  it('free 场：不自动锚（free 的落位交给角色的 reply_to 纪律）', async () => {
-    _resetScenes();
-    setScene(pid, { mode: 'free' });
-    const r = await writeAs('rp-jian', { text: '「散了吧。」' });
-    expect(await replyToOf(r.latest[0])).toBeNull();
-  });
 });
 
 describe('角色专线（08-28 预制摆位：GM open_lane 开线，角色只管补台词）', () => {
@@ -108,7 +98,6 @@ describe('角色专线（08-28 预制摆位：GM open_lane 开线，角色只管
     const pid3 = 'proj_rolelane_t1';
     await ensureProjectWorkspace(pid3);
     const ws3 = getWorkspaceRoot(pid3);
-    _resetScenes();
     const t = makeWriteOnBoardTool({ projectId: pid3, sharedRoot: ws3, sessionId: 's1', ctx: { emit() {} } });
     const head = await t.handler({ text: '# 程晚的线\n\n她的故事从这里开始。', tag: 'rp-wan', open_lane: 'fresh' }, {});
     expect(head.isError, head.content?.[0]?.text).toBeUndefined();
@@ -144,7 +133,6 @@ describe('角色专线（08-28 预制摆位：GM open_lane 开线，角色只管
     await fs.mkdir(path.join(ws4, '.nd'), { recursive: true });
     await fs.writeFile(path.join(ws4, '.nd', 'cast.json'),
       JSON.stringify({ version: 1, roles: { 'rp-wan2': { name: '晚晚', pen: 'character', card: '角色/晚晚/角色卡.md' } } }), 'utf8');
-    _resetScenes();
     const t = makeWriteOnBoardTool({ projectId: pid4, sharedRoot: ws4, sessionId: 's1', ctx: { emit() {} } });
     const head = await t.handler({ text: '# 晚晚的线', tag: '晚晚', open_lane: 'fresh' }, {});
     expect(head.isError, head.content?.[0]?.text).toBeUndefined();
@@ -162,7 +150,6 @@ describe('角色专线（08-28 预制摆位：GM open_lane 开线，角色只管
   it('没开线的角色不受影响（free 场无锚照旧）', async () => {
     const pid5 = 'proj_rolelane_t3';
     await ensureProjectWorkspace(pid5);
-    _resetScenes();
     const t = makeWriteOnBoardTool({ projectId: pid5, sharedRoot: getWorkspaceRoot(pid5), sessionId: 's1', ctx: { emit() {} } });
     _resetActorTrail();
     await stamp({ agent_id: 'a7', agent_type: 'rp-solo' }, 'toolu_lane_4');
@@ -179,7 +166,6 @@ describe('控件围栏自愈（08-28 泉此方案：裸 nd:controls 开头补围
     const pid6 = 'proj_ctlfence_t1';
     await ensureProjectWorkspace(pid6);
     const ws6 = getWorkspaceRoot(pid6);
-    _resetScenes();
     const t = makeWriteOnBoardTool({ projectId: pid6, sharedRoot: ws6, sessionId: 's1', ctx: { emit() {} } });
     const r = await t.handler({ text: 'nd:controls\nsupersede: 章节选项\n- [A] 跟上去 -> 选A' }, {});
     expect(r.isError, r.content?.[0]?.text).toBeUndefined();

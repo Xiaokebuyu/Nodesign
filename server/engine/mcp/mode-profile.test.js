@@ -32,7 +32,7 @@ describe('mode-profile —— rp 模式的注册面', () => {
     const rp = new Set(mk('rp'));
     for (const n of [
       'write_on_board', 'edit_board', 'read_board', 'board_batch', 'look_at_board', 'read_user_view',
-      'cast_role', 'await_user', 'check_inbox', 'read_tavern_json',
+      'cast_role', 'jot_memory', 'read_tavern_json',
       'generate_image', 'remove_background', 'lookup_tags',
       'browser_navigate', 'browser_batch', 'screenshot_url', 'web_search',
       'get_pending_changes', 'clear_pending_changes',   // DirectEdit 是用户输入通道，不是设计产线

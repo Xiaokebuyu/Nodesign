@@ -38,9 +38,7 @@ import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
 import { WORLD_PT, NODES, SHAPES, EDGES } from './write-on-board-schema.js';
-import { getScene } from '../../agent/scene.js';
 import { roleDefaultAnchor } from './write-on-board-role-anchor.js';
-import { broadcastStageNote } from '../../agent/stage-broadcast.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
@@ -72,8 +70,6 @@ const SCHEMA = {
     .describe("Open a NEW thread column named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic column at the right edge of the map. Requires tag; continue the lane later with {tag, chain:true}. read_board's 版图 section lists existing lanes."),
   tag: z.string().regex(TAG_RE).optional()
     .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
-  facts: z.array(z.string().min(1).max(200)).max(8).optional()
-    .describe("RP narration only: this beat's objective facts for on-stage roles — one dry line each (who did/said what, what changed). The stage machine delivers THESE to the roles' inboxes instead of your prose, so their voice does not absorb your style. Fill it on every narration beat; without it roles only get a prose excerpt."),
   ink: z.enum(['chalk', 'hand']).optional()
     .describe("Single note body: 'chalk' (default) = a real file under notes/板书 (Read/Edit later; chain/reply threads live on these); 'hand' = canvas-native handwritten text — a light remark like the user's own handwriting, no file, no threading"),
   font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional().describe("Single note font (ink:'hand'; default kai)"),
@@ -215,7 +211,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       let nearRaw = args.near || null;
       if (args.ink !== 'hand' && !replyToRaw && !nearRaw && !args.at && !args.open_lane
         && ROLE_SLUG_RE.test(by)) {
-        const d = await roleDefaultAnchor({ board, by, projectId, sharedRoot });
+        const d = await roleDefaultAnchor({ board, by, sharedRoot });
         if (d.replyTo) {
           replyToRaw = d.replyTo;
           if (d.tag && !args.tag) args.tag = d.tag;   // 进线就着线的 tag，下一条才续得上
@@ -284,16 +280,15 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         : null;
       // 落位直觉（08-27）：接楼方向和自动挑侧都先问用户把这条线往哪边摆过
       const flowDir = inferFlowDir(b2, { tag: args.tag || null });
-      // 台词侧挂（08-28 用户拍板；08-28 晚 rounds 也放行）：角色回旁白，桌面横屏时
-      // 挂到旁白身侧 —— 叙事主列留给 GM 的章节链，台词读作"这一拍的和声"。
-      // rounds 恒偏右（半平面环搜把同拍的几条挤成一排，正是用户要的"每拍横排"）；
-      // free 用 pickFreeSide（右满换左无妨）。竖屏/无视点保持下行（手机竖排免费正确）；
-      // 用户掰过的走向（flowDir）仍然最大。
+      // 台词侧挂（08-28 用户拍板）：角色回主持人的那一段时，横屏就挂到它身侧 ——
+      // 叙事主列留给主持人的章节链，角色的话读作「这一段的和声」，同一拍的几个人
+      // 自然挤成一排。竖屏/没有视点时保持下行（手机竖排免费正确）；用户自己掰过的
+      // 走向（flowDir）仍然最大。
       let replyDir = flowDir;
       if (!replyDir && replyRect && ROLE_SLUG_RE.test(by)
         && (board.objects?.[parentId]?.by || 'agent') === 'agent'
         && vpRect && vpRect.w > vpRect.h) {
-        replyDir = getScene(projectId)?.mode === 'rounds' ? 'right' : pickFreeSide(replyRect, box, obstacles);
+        replyDir = pickFreeSide(replyRect, box, obstacles);
       }
       // 同时有线程和锚点时，落位跟线程走、但到锚点的线也别压第三块
       const lineTargets = (replyRect && anchorRect)
@@ -373,14 +368,6 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describePlacement(placed, { requestedAt: args.at })}.`,
         `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
       ];
-      // 台上广播（08-28 转发机）：话落板 = 在场角色自动收到，GM 不用转发；rounds 下旁白开轮。
-      // facts 填了就投场况干货不投散文（文风节食 —— 角色的嗓子别染上旁白腔）。
-      // （08-28 晚撤掉 tag=房间那层隔离：在场即听见，域的粒度由 GM 派发/散场直接管）
-      try {
-        const st = broadcastStageNote(projectId, { rel, by, text: body, facts: args.facts || null });
-        if (st?.scene) { try { ctx?.emit?.(Events.scene(st.scene)); } catch { /* fail-soft */ } }
-        if (st?.line) lines.push(st.line);
-      } catch { /* 广播坏了不拦落板 */ }
       if (box.h > SKETCH_FIT.h * 0.6) lines.push('⚠ It is tall — next time split or shorten.');
       if (learnedDir) lines.push(`Layout followed the user's habit: they have been arranging this thread ${learnedDir}-ward, so placement leaned that way.`);
       // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话

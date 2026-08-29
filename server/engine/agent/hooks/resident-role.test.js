@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { isResidentRole, isSlotType, createRoleRoster, slotAgentFile, SLOT_TYPES } from '../cast.js';
+import { isResidentRole, isSlotType, createRoleRoster, slotAgentFile, ROLE_SLOT, RETIRED_SLOTS } from '../cast.js';
 import { normalizeBy } from '../../../lib/chalk.js';
 import { sanitizeObject } from '../../../projects/board-sanitize.js';
 import { noteAgentName, agentNameOf, _resetActorTrail } from '../actor-trail.js';
@@ -20,18 +20,18 @@ import { makePostToolUseSlotAliasHandler } from './slot-alias.js';
 const sanitizeObjectBy = (by) => sanitizeObject({ x: 0, y: 0, by })?.by;
 import { makePreToolUseAgentForceForegroundHandler } from './pre-defaults.js';
 import { makePreToolUseSendMessageRecipientGuard } from './pre-peer-guard.js';
-import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice } from './resident-role-lifecycle.js';
+import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './resident-role-lifecycle.js';
+import { stageStatus, _resetStageStatus } from '../stage-status.js';
+import { notePendingRoleName } from '../actor-trail.js';
 
 const upd = async (h, tool_input) => (await h({ tool_input }))?.hookSpecificOutput?.updatedInput ?? null;
 const decision = async (h, tool_input) => (await h({ tool_input }))?.hookSpecificOutput?.permissionDecision ?? 'allow';
 
-// 演员位派发要过 illegalRoleTools（读演员位文件的 tools 行）——夹具用**真的**
-// slotAgentFile 落盘，验的同时也是"harness 自己写的演员位过得了自己的闸"。
+// 角色位派发要过 illegalRoleTools（读角色位文件的 tools 行）——夹具用**真的**
+// slotAgentFile 落盘，验的同时也是"harness 自己写的角色位过得了自己的闸"。
 const WS = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-resident-test-'));
 fs.mkdirSync(path.join(WS, '.claude', 'agents'), { recursive: true });
-for (const slot of Object.keys(SLOT_TYPES)) {
-  fs.writeFileSync(path.join(WS, '.claude', 'agents', `${slot}.md`), slotAgentFile(slot, 'nodesign'));
-}
+fs.writeFileSync(path.join(WS, '.claude', 'agents', `${ROLE_SLOT}.md`), slotAgentFile('nodesign'));
 
 describe('判据：谁算常驻角色', () => {
   it('rp- 前缀 + 合法 ASCII slug 才算', () => {
@@ -53,10 +53,12 @@ describe('判据：谁算常驻角色', () => {
     expect(isResidentRole('rp-' + 'a'.repeat(61))).toBe(true);    // 共 64
     expect(isResidentRole('rp-' + 'a'.repeat(62))).toBe(false);   // 65 → CLI 会拒
   });
-  it('演员位是常驻角色判据的子集，但 isSlotType 单独认（位置不是人）', () => {
-    expect(isResidentRole('rp-actor')).toBe(true);
-    expect(isSlotType('rp-actor')).toBe(true);
-    expect(isSlotType('rp-narrator')).toBe(true);
+  it('⭐ 角色位是角色名判据的子集，但 isSlotType 单独认（位置不是人）；退役的旧位也照认', () => {
+    expect(isResidentRole(ROLE_SLOT)).toBe(true);
+    expect(isSlotType(ROLE_SLOT)).toBe(true);
+    // 08-29 合成一个位之后，旧位的名字仍要被认成"位置" —— 存量项目盘上可能还有
+    // 它们的文件，而且谁都不该拿 rp-actor 当角色名
+    for (const old of RETIRED_SLOTS) expect(isSlotType(old)).toBe(true);
     expect(isSlotType('rp-cheng-wan')).toBe(false);
     expect(isSlotType(null)).toBe(false);
   });
@@ -83,40 +85,42 @@ describe('演员位派发：name 闸（2026-08-28 重构）', () => {
 
   it('⭐ 漏传 name → deny 并说清 name 是收件地址（探针实证：deny 一次模型就补上）', async () => {
     const { cast } = mk();
-    const out = await cast({ tool_input: { subagent_type: 'rp-actor' } });
+    const out = await cast({ tool_input: { subagent_type: ROLE_SLOT } });
     expect(out.hookSpecificOutput.permissionDecision).toBe('deny');
     expect(out.hookSpecificOutput.permissionDecisionReason).toMatch(/name/);
   });
 
   it('⭐ 拿演员位自己的名字当实例名 → deny（rp-actor 是位置不是人）', async () => {
     const { cast } = mk();
-    expect(await decision(cast, { subagent_type: 'rp-actor', name: 'rp-narrator' })).toBe('deny');
-    expect(await decision(cast, { subagent_type: 'rp-actor', name: 'rp-actor' })).toBe('deny');
+    expect(await decision(cast, { subagent_type: ROLE_SLOT, name: ROLE_SLOT })).toBe('deny');
+    for (const old of RETIRED_SLOTS) {
+      expect(await decision(cast, { subagent_type: ROLE_SLOT, name: old })).toBe('deny');
+    }
   });
 
   it('合法 name → 强制后台、名字进名册、名字保持是实例名；model 参数被剥掉', async () => {
     const { roster, cast } = mk();
-    const out = await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan', model: 'sonnet' } });
+    const out = await cast({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan', model: 'sonnet' } });
     expect(out.hookSpecificOutput.permissionDecision).toBe('allow');
     expect(out.hookSpecificOutput.updatedInput.run_in_background).toBe(true);
     expect(out.hookSpecificOutput.updatedInput.name).toBe('rp-cheng-wan');
     expect(out.hookSpecificOutput.updatedInput.model).toBeUndefined();   // 角色跟会话模型走（glm 点 sonnet 案）
     expect(roster.has('rp-cheng-wan')).toBe(true);
-    expect(roster.has('rp-actor')).toBe(false);        // 位置不进名册
+    expect(roster.has(ROLE_SLOT)).toBe(false);        // 位置不进名册
   });
 
   it('已显式后台 + 合法 name → 幂等不重复改（但名册照登）', async () => {
     const { roster, cast } = mk();
-    expect(await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-elle', run_in_background: true } })).toEqual({});
+    expect(await cast({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-elle', run_in_background: true } })).toEqual({});
     expect(roster.has('rp-elle')).toBe(true);
   });
 
   it('⭐ 同名重派被硬拦（重派 = 静默失忆），换名字放行 —— 两个演员位共用一本名册', async () => {
     const { cast } = mk();
-    await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan' } });
-    expect(await decision(cast, { subagent_type: 'rp-actor', name: 'rp-cheng-wan' })).toBe('deny');
-    expect(await decision(cast, { subagent_type: 'rp-narrator', name: 'rp-cheng-wan' })).toBe('deny');
-    expect(await decision(cast, { subagent_type: 'rp-narrator', name: 'rp-teller' })).toBe('allow');
+    await cast({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' } });
+    expect(await decision(cast, { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' })).toBe('deny');
+    expect(await decision(cast, { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' })).toBe('deny');
+    expect(await decision(cast, { subagent_type: ROLE_SLOT, name: 'rp-teller' })).toBe('allow');
   });
 
   it('⭐⭐ 漏传 name 但 prompt 第一行有登记过的卡路径 → 闸自己认出名字（glm 撞闸案）', async () => {
@@ -126,7 +130,7 @@ describe('演员位派发：name 闸（2026-08-28 重构）', () => {
       roles: { 'rp-izumi': { name: '泉此方', pen: 'narrator', card: '角色/泉此方/角色卡.md' } },
     }), 'utf8');
     const { roster, cast } = mk();
-    const out = await cast({ tool_input: { subagent_type: 'rp-narrator', run_in_background: true,
+    const out = await cast({ tool_input: { subagent_type: ROLE_SLOT, run_in_background: true,
       prompt: '你的角色卡：角色/泉此方/角色卡.md，你的记忆：角色/泉此方/记忆.md\n\n【卡全文】你是泉此方……' } });
     expect(out.hookSpecificOutput.permissionDecision).toBe('allow');
     expect(out.hookSpecificOutput.updatedInput.name).toBe('rp-izumi');   // 推断名必须回写进 input
@@ -135,7 +139,7 @@ describe('演员位派发：name 闸（2026-08-28 重构）', () => {
 
   it('prompt 正文里写了 name: rp-xxx（模型把参数写错了地方）也认', async () => {
     const { cast } = mk();
-    const out = await cast({ tool_input: { subagent_type: 'rp-actor',
+    const out = await cast({ tool_input: { subagent_type: ROLE_SLOT,
       prompt: 'name: rp-hand-written\n\n你的角色卡：（现编的人设）……' } });
     expect(out.hookSpecificOutput.permissionDecision).toBe('allow');
     expect(out.hookSpecificOutput.updatedInput.name).toBe('rp-hand-written');
@@ -143,7 +147,7 @@ describe('演员位派发：name 闸（2026-08-28 重构）', () => {
 
   it('推不出名字（没参数、没卡路径、没 slug）→ 仍然 deny，出路说了两条', async () => {
     const { cast } = mk();
-    const out = await cast({ tool_input: { subagent_type: 'rp-actor', prompt: '你是一个神秘人。' } });
+    const out = await cast({ tool_input: { subagent_type: ROLE_SLOT, prompt: '你是一个神秘人。' } });
     expect(out.hookSpecificOutput.permissionDecision).toBe('deny');
     expect(out.hookSpecificOutput.permissionDecisionReason).toMatch(/角色卡/);
   });
@@ -151,10 +155,10 @@ describe('演员位派发：name 闸（2026-08-28 重构）', () => {
   it('⭐ 演员位文件被改装（tools 行加了外发工具）→ 派发时照样被拦', async () => {
     const ws2 = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-resident-evil-'));
     fs.mkdirSync(path.join(ws2, '.claude', 'agents'), { recursive: true });
-    fs.writeFileSync(path.join(ws2, '.claude', 'agents', 'rp-actor.md'),
-      slotAgentFile('rp-actor', 'nodesign').replace('tools: ', 'tools: mcp__nodesign__publish_site, '));
+    fs.writeFileSync(path.join(ws2, '.claude', 'agents', `${ROLE_SLOT}.md`),
+      slotAgentFile('nodesign').replace('tools: ', 'tools: mcp__nodesign__publish_site, '));
     const cast = makePreToolUseAgentForceForegroundHandler({ roster: createRoleRoster(), workspaceRoot: ws2 });
-    const out = await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-x2' } });
+    const out = await cast({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-x2' } });
     expect(out.hookSpecificOutput.permissionDecision).toBe('deny');
     expect(out.hookSpecificOutput.permissionDecisionReason).toMatch(/publish_site/);
   });
@@ -178,14 +182,6 @@ describe('agentId 别名：同型多实例的身份桥（2026-08-28）', () => {
   beforeEach(() => _resetActorTrail());
   const alias = makePostToolUseSlotAliasHandler();
 
-  it('⭐ 派发的 tool_result 里学 agentId → 实例名', async () => {
-    await alias({
-      tool_input: { subagent_type: 'rp-actor', name: 'rp-alice' },
-      tool_response: [{ type: 'text', text: 'Async agent launched successfully.\nagentId: abcdef0123456789a (use SendMessage...)' }],
-    });
-    expect(agentNameOf('abcdef0123456789a')).toBe('rp-alice');
-  });
-
   it('⭐ SendMessage 唤醒的 tool_result 里重新学（覆盖重启后别名表清零）', async () => {
     await alias({
       tool_input: { to: 'rp-bob', message: 'hi' },
@@ -194,18 +190,10 @@ describe('agentId 别名：同型多实例的身份桥（2026-08-28）', () => {
     expect(agentNameOf('a4f15eccfdcb4337f')).toBe('rp-bob');
   });
 
-  it('⭐⭐ 推断名派发（无 name 参数）也学得到别名：PostToolUse 从派发闸的盖章里拿名字（泉此方案）', async () => {
-    // 前置：name 闸 describe 已把 rp-izumi 写进 WS 的登记表
-    const roster = createRoleRoster();
-    const cast = makePreToolUseAgentForceForegroundHandler({ roster, workspaceRoot: WS });
-    const ti = { subagent_type: 'rp-narrator', run_in_background: true,
-      prompt: '你的角色卡：角色/泉此方/角色卡.md\n【卡全文】……' };
-    const out = await cast({ tool_input: ti }, 'toolu_alias_inf');
-    expect(out.hookSpecificOutput.updatedInput.name).toBe('rp-izumi');
-    // ⛔ PostToolUse 拿到的是模型原始入参（没有 name）—— 泉此方场就是这里断的
-    await alias({ tool_input: ti, tool_response: [{ type: 'text', text: 'Async agent launched successfully.\nagentId: 99aabbccddeeff001' }] }, 'toolu_alias_inf');
-    expect(agentNameOf('99aabbccddeeff001')).toBe('rp-izumi');
-  });
+  // （「派发的 tool_result 里抠 agentId」那两条 08-29 退役：派发这条路搬去了
+  //  SubagentStart，harness 直接给 agent_id，不再解析任何文本 —— 旧桥在 08-28 的
+  //  真会话里断过，症状是六条板书里五条署名落成角色位而没有任何报错。新桥的断言
+  //  在下面「起飞时就认名字」那一族。）
 
   it('普通子代理与非 rp 收件人不进别名表', async () => {
     await alias({ tool_input: { subagent_type: 'worker', name: 'rp-x9' }, tool_response: [{ type: 'text', text: 'agentId: 1234567890abcdef1' }] });
@@ -214,13 +202,37 @@ describe('agentId 别名：同型多实例的身份桥（2026-08-28）', () => {
     expect(agentNameOf('fedcba0987654321f')).toBe(null);
   });
 
-  it('SubagentStop：演员位实例经别名解析成角色；没学到别名就跳过（别把 rp-actor 标进收件箱）', async () => {
+  it('⭐⭐ 起飞时就认名字：闸认领的名字 + harness 给的 agent_id 配对（不解析任何文本）', async () => {
+    _resetStageStatus();
+    const start = makeSubagentStartRoleAlias({ projectId: 'proj_start_alias' });
+    notePendingRoleName('rp-cheng-wan');                      // 派发闸认领
+    await start({ agent_type: ROLE_SLOT, agent_id: 'bbbb000011112222c' });
+    expect(agentNameOf('bbbb000011112222c')).toBe('rp-cheng-wan');
+    // 台上一览同时记下「它在写」—— 主持人的状态可见性建在这条上
+    expect(stageStatus('proj_start_alias')).toEqual([
+      expect.objectContaining({ slug: 'rp-cheng-wan', writing: true }),
+    ]);
+  });
+
+  it('干活型子代理起飞不占角色名（队列里的名字留给下一个真角色）', async () => {
+    const start = makeSubagentStartRoleAlias({ projectId: 'proj_start_alias2' });
+    notePendingRoleName('rp-elle');
+    await start({ agent_type: 'vision-checker', agent_id: 'cccc000011112222d' });
+    expect(agentNameOf('cccc000011112222d')).toBe(null);
+    await start({ agent_type: ROLE_SLOT, agent_id: 'dddd000011112222e' });
+    expect(agentNameOf('dddd000011112222e')).toBe('rp-elle');
+  });
+
+  it('SubagentStop：角色收笔进台上一览；别名没学到就跳过（别把角色位当成一个人）', async () => {
+    _resetStageStatus();
     noteAgentName('aaaa000011112222b', 'rp-cheng-wan');
     const stop = makeSubagentStopRoleNotice({ projectId: 'proj_alias_test0' });
-    const known = await stop({ agent_type: 'rp-actor', agent_id: 'aaaa000011112222b' });
-    expect(known.systemMessage).toMatch(/rp-cheng-wan/);
-    const unknown = await stop({ agent_type: 'rp-actor', agent_id: 'ffff000011112222b' });
-    expect(unknown).toEqual({});
+    await stop({ agent_type: ROLE_SLOT, agent_id: 'aaaa000011112222b', last_assistant_message: '我把伞留给了她。' });
+    expect(stageStatus('proj_alias_test0')).toEqual([
+      expect.objectContaining({ slug: 'rp-cheng-wan', writing: false, lastLine: '我把伞留给了她。' }),
+    ]);
+    await stop({ agent_type: ROLE_SLOT, agent_id: 'ffff000011112222b' });
+    expect(stageStatus('proj_alias_test0')).toHaveLength(1);   // 认不出是谁就不记
   });
 });
 
@@ -232,7 +244,7 @@ describe('收件人闸：白名单缺省拒绝', () => {
     return { roster, cast, guard };
   };
   // 演员位派发是名册的正门 —— 闸的放行判据必须跟着实例名走
-  const castOne = (cast, name) => cast({ tool_input: { subagent_type: 'rp-actor', name } });
+  const castOne = (cast, name) => cast({ tool_input: { subagent_type: ROLE_SLOT, name } });
 
   it('main 和本会话 agentId 放行', async () => {
     const { guard } = mk();
@@ -251,7 +263,7 @@ describe('收件人闸：白名单缺省拒绝', () => {
     await castOne(cast, 'rp-cheng-wan');
     expect(await decision(guard, { to: 'rp-cheng-wan' })).toBe('allow');
     expect(await decision(guard, { to: 'rp-somebody-else' })).toBe('deny');   // 别的名字不跟着开
-    expect(await decision(guard, { to: 'rp-actor' })).toBe('deny');           // 位置永远不是收件人
+    expect(await decision(guard, { to: ROLE_SLOT })).toBe('deny');           // 位置永远不是收件人
   });
 
   it('⭐ 同机其他 Claude 会话（真实 ListAgents 输出里的名字）全部拒绝', async () => {
@@ -313,23 +325,23 @@ describe('派发失败 → 名字撤回（claim 在派发之前，失败了必�
 
   it('⭐ 演员位派发失败：撤的是实例名（tool_input.name），不是演员位', async () => {
     const { cast, guard, onFail } = mk();
-    await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan' } });
+    await cast({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' } });
     expect(await decision(guard, { to: 'rp-cheng-wan' })).toBe('allow');
-    await onFail({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan' }, error: 'boom' });
+    await onFail({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' }, error: 'boom' });
     expect(await decision(guard, { to: 'rp-cheng-wan' })).toBe('deny');
   });
 
   it('⭐ 派发失败后可以再派（不然这个名字整个会话被 brick）', async () => {
     const { cast, onFail } = mk();
-    await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan' } });
-    expect(await decision(cast, { subagent_type: 'rp-actor', name: 'rp-cheng-wan' })).toBe('deny');
-    await onFail({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan' }, error: 'boom' });
-    expect(await decision(cast, { subagent_type: 'rp-actor', name: 'rp-cheng-wan' })).toBe('allow');
+    await cast({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' } });
+    expect(await decision(cast, { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' })).toBe('deny');
+    await onFail({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' }, error: 'boom' });
+    expect(await decision(cast, { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' })).toBe('allow');
   });
 
   it('普通子代理失败不碰名册', async () => {
     const { roster, cast, onFail } = mk();
-    await cast({ tool_input: { subagent_type: 'rp-actor', name: 'rp-cheng-wan' } });
+    await cast({ tool_input: { subagent_type: ROLE_SLOT, name: 'rp-cheng-wan' } });
     await onFail({ tool_input: { subagent_type: 'worker' }, error: 'boom' });
     expect(roster.list()).toEqual(['rp-cheng-wan']);
   });

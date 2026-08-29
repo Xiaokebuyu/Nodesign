@@ -31,6 +31,7 @@ import { resolvePlacement, inferFlowDir } from '../../../lib/board-place.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
+import { stageStatus } from '../stage-status.js';
 import { roleLabel } from '../../mcp/actor.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -207,6 +208,28 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       sections.push({ key: 'chalk', title: '最近板书', text: `画布上最近的板书（${CHALK_DIR}/，新在前；正文 Read 文件）：\n${lines.join('\n')}`, items: recent.map(c => c.path) });
     }
   } catch { /* 板书读不到就沉默 */ }
+
+  // 台上（2026-08-29）：角色现在的状态。判据全是 harness 盖的章（SubagentStart/Stop，
+  // 见 stage-status.js）—— 此前主持人对这件事是半盲的：只在角色**结束**时收到一条
+  // 通知，中间既不知道谁在写，也不知道谁写完在等它接。08-28 真会话里用户替它问出了
+  // 这个洞（「说书人是不是要重启一下？」），而主持人手上没有任何工具能回答。
+  try {
+    const st = stageStatus(projectId);
+    if (st.length) {
+      const names = await listRoleNames(workspaceRoot);
+      const mins = (ms) => Math.round(ms / 60000);
+      const lines = st.map((r) => {
+        const who = roleLabel(r.slug, names.get(r.slug));
+        if (r.writing) return `  ${who}（${r.slug}）正在写`;
+        const idle = r.idleMs > 90000 ? `，${mins(r.idleMs)} 分钟没动了` : '';
+        return `  ${who}（${r.slug}）写完了这一段${idle}${r.lastLine ? `，收笔时说：「${r.lastLine}」` : ''}`;
+      });
+      sections.push({ key: 'stage', title: '台上', text:
+        `这场故事里的角色：\n${lines.join('\n')}\n`
+        + `写完的角色这一轮已经结束了 —— 要它接着演，SendMessage 寄给它的名字（当场醒，记得之前所有事）；`
+        + `不用重新派（重派会新起一个失忆的同名角色顶掉它）。` });
+    }
+  } catch { /* 台上读不到就沉默 */ }
 
   // 黑板模式（2026-08-23；08-24 起默认开 —— 没写过这个键的按开算，显式 false 才算关）
   try {

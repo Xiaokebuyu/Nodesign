@@ -5,7 +5,7 @@
 
 import { isResidentRole, isSlotType, ROLE_SLUG_RE, resolveRoleTools } from '../cast.js';
 import { readRoleCard, inferRoleNameFromPrompt } from '../role-card.js';
-import { noteToolCaller, agentNameOf } from '../actor-trail.js';
+import { noteToolCaller, agentNameOf, notePendingRoleName } from '../actor-trail.js';
 import { MCP_SERVER_NAME } from '../../mcp/server-name.js';
 
 /**
@@ -128,6 +128,10 @@ export function makePreToolUseAgentForceForegroundHandler({ roster = null, works
         };
       }
       if (roster) roster.claim(name);
+      // agent_id ↔ 名字的桥：名字排队等 SubagentStart 那一刻配对（actor-trail.js）。
+      // 不从 tool_result 文本里抠 id —— 那条旧桥 08-28 在生产上断过，症状是署名
+      // 整片落成演员位而没有任何报错。
+      notePendingRoleName(name);
       // 盖章按**实例名**：byOf / 收件箱 / 板书署名全按名字走，不认演员位（rp-actor
       // 是位置不是人）。agentId→名字的别名在 PostToolUse 学（hooks/slot-alias.js）。
       noteToolCaller(toolUseId || input?.tool_use_id, { agentType: name });

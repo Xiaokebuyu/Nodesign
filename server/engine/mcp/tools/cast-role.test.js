@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { makeCastRoleTool, ID_RE } from './cast-role.js';
 import { readCastRegistry, listRoleNames } from '../../agent/role-card.js';
-import { ROLE_SLUG_RE } from '../../agent/cast.js';
+import { ROLE_SLUG_RE, ROLE_SLOT } from '../../agent/cast.js';
 
 const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-cast-'));
 const call = (args) => makeCastRoleTool({ workspaceRoot: ws, ctx: { emit() {} } }).handler(args, {});
@@ -17,20 +17,19 @@ const ok = { id: 'moli', name: '墨璃', duty: '负责讲故事', persona: '你�
 const text = (r) => r.content[0].text;
 
 describe('角色卡落盘（文件夹范式：角色/<名>/角色卡.md）', () => {
-  it('卡进角色文件夹，persona 原样在正文里，标了 slug 和笔权', async () => {
+  it('卡进角色文件夹，persona 原样在正文里，标了 slug', async () => {
     const r = await call(ok);
     expect(r.isError).toBeUndefined();
     const card = fs.readFileSync(path.join(ws, '角色', '墨璃', '角色卡.md'), 'utf8');
     expect(card).toContain('# 墨璃');
     expect(card).toContain('rp-moli');
     expect(card).toContain('MAGIC-WORD-7');
-    expect(card).toContain('角色笔');
   });
 
-  it('登记表记下 slug → 展示名/笔权/卡路径，listRoleNames 读得到', async () => {
+  it('登记表记下 slug → 展示名/卡路径，listRoleNames 读得到', async () => {
     await call(ok);
     const reg = await readCastRegistry(ws);
-    expect(reg.roles['rp-moli']).toMatchObject({ name: '墨璃', pen: 'character' });
+    expect(reg.roles['rp-moli']).toMatchObject({ name: '墨璃' });
     expect(reg.roles['rp-moli'].card).toContain('角色卡.md');
     const names = await listRoleNames(ws);
     expect(names.get('rp-moli')).toBe('墨璃');
@@ -51,20 +50,17 @@ describe('角色卡落盘（文件夹范式：角色/<名>/角色卡.md）', () 
   });
 });
 
-describe('返回话术：立即可派 + 正确的演员位', () => {
-  it('character 笔指到 rp-actor，narrator 笔指到 rp-narrator，都说了不用等', async () => {
+describe('返回话术：立即可派 + 唯一的角色位', () => {
+  it('⭐ 派发配方指到唯一的角色位，说了不用等，也说了下一拍靠 SendMessage', async () => {
     const a = text(await call(ok));
     expect(a).toContain('现在就可以派');
-    expect(a).toContain('subagent_type: "rp-actor"');
+    expect(a).toContain(`subagent_type: "${ROLE_SLOT}"`);
     expect(a).toContain('name: "rp-moli"');
-    const b = text(await call({ ...ok, id: 'teller', name: '说书人', pen: 'narrator' }));
-    expect(b).toContain('subagent_type: "rp-narrator"');
+    expect(a, '写完一段就结束这一轮，下一拍要说清怎么再叫它').toMatch(/SendMessage/);
   });
-  it('enum 之外的 pen 折回 character', async () => {
+  it('⛔ 没有第二个位可选：pen 这类旧参数传了也不影响落点（schema 已收）', async () => {
     // ⚠️ 展示名跟别的用例错开：家按展示名取，共用工作区里同名会撞「一个家一个角色」那道闸
-    expect(text(await call({ ...ok, id: 'moli2', name: '墨璃二', pen: 'weird' }))).toContain('rp-actor');
-    const reg = await readCastRegistry(ws);
-    expect(reg.roles['rp-moli2'].pen).toBe('character');
+    expect(text(await call({ ...ok, id: 'moli2', name: '墨璃二', pen: 'narrator' }))).toContain(ROLE_SLOT);
   });
   it('改写已有的卡要说清「改卡不改在场的它」', async () => {
     await call({ ...ok, id: 'twice', name: '重写君' });

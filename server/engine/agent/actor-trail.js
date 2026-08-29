@@ -74,5 +74,37 @@ export function agentNameOf(agentId) {
   return (agentId && agentNames.get(String(agentId))) || null;
 }
 
+/**
+ * 派发闸认领了名字、还等着跟 agent_id 配对的队列（2026-08-29）。
+ *
+ * ## 为什么换掉旧桥
+ *
+ * 旧桥（hooks/slot-alias.js 的派发分支）从 **tool_result 的文本**里正则抠 `agentId:`。
+ * 2026-08-28 真会话实录：六条板书里五条署名落成演员位（`rp-narrator`），也就是那条
+ * 桥在生产上没接上 —— 而它一断，byOf 就塌回演员位，署名、去向判据、前端点名全认错人。
+ *
+ * 新桥不解析任何文本：派发闸认领名字时把名字排进队列，`SubagentStart` 那一刻
+ * harness 亲手给 `agent_id` + `agent_type`，两边一配就绑定。顺序天然对得上 ——
+ * 闸跑在工具执行前，子代理起飞在工具执行后，FIFO 就是派发顺序。
+ */
+const pendingRoleNames = [];
+const PENDING_MAX = 16;
+
+/** 派发闸侧：认领了这个名字，等它起飞 */
+export function notePendingRoleName(name) {
+  if (!name) return;
+  pendingRoleNames.push(String(name));
+  // 上限防跑量：派出去却从没起飞的名字（派发失败）会留在队里，超了就丢最旧的。
+  // 最坏后果是某个角色的署名落回演员位 —— 跟旧桥断掉时一样，不会更糟。
+  if (pendingRoleNames.length > PENDING_MAX) pendingRoleNames.shift();
+}
+
+/** SubagentStart 侧：取走队头的名字 */
+export function takePendingRoleName() {
+  return pendingRoleNames.shift() || null;
+}
+
 /** 测试用 */
-export function _resetActorTrail() { trail.clear(); agentNames.clear(); }
+export function _resetActorTrail() {
+  trail.clear(); agentNames.clear(); pendingRoleNames.length = 0;
+}

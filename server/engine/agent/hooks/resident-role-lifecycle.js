@@ -21,8 +21,29 @@
  */
 
 import { isResidentRole, isSlotType } from '../cast.js';
-import { agentNameOf } from '../actor-trail.js';
-import { clearStreak, markAsleep } from '../inbox.js';
+import { agentNameOf, noteAgentName, takePendingRoleName } from '../actor-trail.js';
+import { noteRoleStart, noteRoleFinish } from '../stage-status.js';
+
+/**
+ * SubagentStart：把这个 agent_id 认成刚派出去的那个角色（2026-08-29）。
+ *
+ * hook input 只有 `agent_id` + `agent_type`（演员位），没有实例名 —— 名字在派发闸
+ * 那一刻就知道了，所以闸把它排进队列（actor-trail.notePendingRoleName），这里取队头
+ * 配对。**这是署名的正门**：harness 在起飞那一刻亲手给的 id，不解析任何模型可写的文本。
+ *
+ * 只认演员位起飞：干活型子代理（vision-checker 那类）不进别名表。
+ */
+export function makeSubagentStartRoleAlias({ projectId = null } = {}) {
+  return async function subagentStartRoleAlias(input) {
+    if (!isSlotType(input?.agent_type) || !input?.agent_id) return {};
+    const known = agentNameOf(input.agent_id);        // 已经认过（唤醒重入）
+    const name = known || takePendingRoleName();
+    if (!name) return {};
+    if (!known) noteAgentName(input.agent_id, name);
+    noteRoleStart(projectId, name);                  // 台上一览：它开始写了
+    return {};
+  };
+}
 
 export function makePostToolUseFailureRoleRelease({ roster = null } = {}) {
   return async (input) => {
@@ -53,36 +74,27 @@ export function makePostToolUseFailureRoleRelease({ roster = null } = {}) {
 }
 
 /**
- * SubagentStop：常驻角色退场时告诉主控怎么把它叫回来。
+ * SubagentStop：角色收笔了，记一笔进台上一览（2026-08-26 建；08-29 改写）。
  *
- * 为什么挂在 SubagentStop 而不是 await_user 那句散场话术旁边：话术只是**劝**它退场，
- * 这个 hook 是它**真的退场了**才响。这条线上模型两次谎报「已派」的教训 ——
- * 关于「它做没做」的事实，只认事件不认自述。
+ * 08-29 之前这里做两件事：标「散场」+ 用 systemMessage 教主控怎么召回。两件都随
+ * 常驻/散场概念一起退役 —— 新回路里角色本来就写一段结束一轮，「结束」是正常节拍
+ * 不是事故。而且 systemMessage 这条路 08-28 真会话里查无痕迹（SDK 的 SubagentStop
+ * 只有 additionalContext，且按类型定义那是**发给子代理**的），主持人真正收到的是
+ * SDK 自带的 task-notification。所以这里不再试图跟主持人说话，只记账 ——
+ * 状态由每回合状态块的「台上」一节统一注入（user-prompt-submit.js）。
  *
- * ⛔ **不 release 名字**：角色退场 ≠ 不存在了。它的转录还在，SendMessage 叫得回来；
- * 把名字放回去等于允许重派，而重派会新起一个失忆的同名角色顶掉它（cast.js 的 claim 语义）。
- *
- * ℹ️ 主控此刻**本来就会被唤醒** —— 后台子代理一结束就发 `task_notification`，
- * 里面的 `summary` 就是角色最后那句话（2026-08-26 实测）。所以这里只补一条
- * systemMessage 说清楚怎么叫它回来，不另推消息，免得同一件事把主控叫醒两次。
+ * ⛔ **不 release 名字**：角色收笔 ≠ 不存在了。它的转录还在，SendMessage 叫得回来；
+ * 把名字放回去等于允许重派，而重派会新起一个失忆的同名角色顶掉它。
  */
 export function makeSubagentStopRoleNotice({ projectId = null } = {}) {
   return async (input) => {
-    // 演员位实例：agent_type 是位置（rp-actor），实例名走别名表。别名没学到的
-    // 演员位退场只能跳过（不知道是谁散的场 —— 别把 'rp-actor' 当角色标进收件箱）。
-    const type = isSlotType(input?.agent_type)
+    // 角色位实例：agent_type 是位置（rp-role），实例名走别名表。别名没学到就跳过
+    // （不知道是谁收的笔 —— 别把 'rp-role' 当角色记进台上一览）。
+    const name = isSlotType(input?.agent_type)
       ? agentNameOf(input?.agent_id)
       : input?.agent_type;
-    if (!type || !isResidentRole(type) || isSlotType(type)) return {};
-    // 这一趟在场结束 → 散场计数归零，不然召回的角色只等一次就又被劝退（见 inbox.js）；
-    // 顺手标散场状态位 —— say 端点据此告诉前端「这话进了没人取的队列」，前端托 GM 召回
-    if (projectId) { clearStreak(projectId, type); markAsleep(projectId, type); }
-    // nd:rp-prompt
-    return {
-      systemMessage:
-        `常驻角色「${type}」退场了（它等不到人说话，自己收的场）。它没有消失 ——`
-        + `转录还在，用 SendMessage({to: "${type}"}) 就能把它叫回来，之前演过的它都记得。`
-        + `⛔ 不要用 Agent 重新派它：重派会新起一个失忆的同名角色，把它顶掉。`,
-    };
+    if (!name || !isResidentRole(name) || isSlotType(name)) return {};
+    noteRoleFinish(projectId, name, input?.last_assistant_message || null);
+    return {};
   };
 }

@@ -72,16 +72,5 @@ describe('echoUserChalk', () => {
   });
 });
 
-describe('renderMessages 的落痕指针', () => {
-  it('带 echo 的用户消息附板书路径与 reply_to 指引；不带的原样', async () => {
-    const { renderMessages } = await import('../mcp/tools/role-inbox.js');
-    const withEcho = renderMessages([{ text: '来一杯麦酒。', from: 'user', echo: 'notes/板书/x.md' }]);
-    expect(withEcho).toContain('用户说：来一杯麦酒。');
-    expect(withEcho).toContain('notes/板书/x.md');
-    expect(withEcho).toContain('reply_to');
-    const plain = renderMessages([{ text: '来一杯麦酒。', from: 'user' }]);
-    expect(plain).not.toContain('reply_to');
-    // scene cue 不受影响（不是用户的话，别加指针）
-    expect(renderMessages([{ text: '（轮到你了）', from: 'scene', echo: 'x' }])).toBe('（轮到你了）');
-  });
-});
+// （renderMessages 的落痕指针 2026-08-29 随收件箱一起退役：用户的话不再直投角色，
+//  由主持人转交，落痕本身仍在 —— 上面那几条就是它的账。）

@@ -13,22 +13,16 @@
  * 从用户视角看就是「角色不写了」。这正是 07-27 那道闸要保住的东西（"用户关 tab 时
  * 后端应该把活干完"），只是当时在飞工作只有 turn 一种形态。
  *
- * ## 判据为什么不能是「有活子代理就续命」
+ * ## 判据（2026-08-29 简化）
  *
- * 常驻角色的设计就是**永不收回合**：写完挂 await_user 候场，回合不结束（见
- * role-inbox.js 的散场闸注释）。拿「SubagentStart 过且没 SubagentStop」当判据，
- * 一个挂着候场的角色就能让会话永远关不掉 —— 每个 SDK 进程 ~250MB 且 RSS 单调不减，
- * 这台盒子 1vCPU/8G、swap=0。那不是修好一个洞，是换一个更贵的洞。
+ * **在飞 = SubagentStart 过且 SubagentStop 还没到**，就这一条。
  *
- * 所以判据是 **在飞 − 候场**：候场的角色不算在干活，会话该回收就回收（角色本来
- * 就活不过会话，这是既有边界，不是这一刀新造的损失）。
+ * 08-29 之前它还要减掉「候场」——那时角色写完一段会挂在 await_user 上不收回合，
+ * 一个挂着的角色就能让会话永远关不掉（每个 SDK 进程 ~250MB 且 RSS 单调不减，
+ * 这台盒子 1vCPU/8G、swap=0）。新回路里角色写一段就结束这一轮，「永不收回合」这个
+ * 形态不存在了，减数也就跟着没了。
  *
- * ## 两个信号都不是模型能写的
- *
- *   在飞  SubagentStart/SubagentStop —— harness 在 spawn / 结束那一刻亲眼所见并盖章
- *   候场  inbox 的 waiters —— 角色调 await_user 挂进去的，进出都由服务端记
- *
- * 判据不建在模型可写的东西上。
+ * 信号是 harness 在 spawn / 结束那一刻亲眼所见并盖的章，不是模型能写的东西。
  *
  * ## 生命周期
  *
@@ -37,7 +31,6 @@
  */
 
 import { agentNameOf } from './actor-trail.js';
-import { isWaiting } from './inbox.js';
 
 const flights = new Map();   // sessionId -> Map<agentId, { agentType, startedAt }>
 
@@ -49,7 +42,7 @@ export function noteSubagentStart(sessionId, agentId, agentType = null) {
   m.set(agentId, { agentType, startedAt: Date.now() });
 }
 
-/** 子代理落地。⚠️ 角色挂 await_user 时**不会**走到这 —— 那是候场，见 workingSubagents */
+/** 子代理落地 */
 export function noteSubagentStop(sessionId, agentId) {
   if (!sessionId || !agentId) return;
   const m = flights.get(sessionId);
@@ -59,27 +52,21 @@ export function noteSubagentStop(sessionId, agentId) {
 }
 
 /**
- * 这个会话里**真在干活**的后台子代理。
+ * 这个会话里还在飞的后台子代理。
  *
- * 候场判定要把 agentId 翻成实例名（收件箱按实例名开坑，hook 只给 agent_type=rp-actor，
- * 中间隔着别名桥）。翻不出名字的按「在干活」算：普通后台子代理没有候场形态，
- * 而漏判成候场 = 又一次腰斩，两种错的代价不对称。
+ * name 是实例名（角色）——翻不出来的（普通干活子代理）也照样算在飞，只是没名字。
  *
+ * @param {string} sessionId
+ * @param {string|null} _projectId  旧签名的兼容位（候场判定退役后不再需要）
  * @returns {Array<{ agentId, agentType, name, startedAt }>}
  */
-export function workingSubagents(sessionId, projectId = null) {
+export function workingSubagents(sessionId, _projectId = null) {
   const m = flights.get(sessionId);
   if (!m || m.size === 0) return [];
-  const out = [];
-  for (const [agentId, info] of m) {
-    const name = agentNameOf(agentId);
-    if (projectId && name && isWaiting(projectId, name)) continue;   // 候场，不算干活
-    out.push({ agentId, name, ...info });
-  }
-  return out;
+  return [...m].map(([agentId, info]) => ({ agentId, name: agentNameOf(agentId), ...info }));
 }
 
-/** 会话收摊（跟 inbox.clearProject 一起调） */
+/** 会话收摊 */
 export function clearSessionFlights(sessionId) { flights.delete(sessionId); }
 
 /** 测试用：清空全局态 */

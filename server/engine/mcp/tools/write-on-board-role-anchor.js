@@ -1,27 +1,29 @@
 /**
- * mcp/tools/write-on-board-role-anchor.js —— 角色板书的缺省锚（2026-08-28；棘轮拆件）
+ * mcp/tools/write-on-board-role-anchor.js —— 角色板书的缺省锚（2026-08-28；08-29 泛化成「这一拍」）
  *
  * 角色不带任何落位线索（reply_to/near/at/open_lane）时，机器替它选锚。两级：
  *
- * 1. **角色专线**（预制摆位，用户拍板）：GM 用 open_lane 以角色名（slug 或展示名）
- *    开过线 → 自动续进自己的线（reply_to 线内最新一条 + tag 着线）。摆位和延伸
- *    方向是 GM 预制的，角色的工作退化成「补台词」。
- * 2. **rounds 本拍锚定**（摆位直觉版，前身"桌位表"退役）：轮次场里无线索 = 在
- *    回应本拍 → reply_to 最新一条旁白板书，台词经侧挂直觉落到旁白身侧 ——
- *    「章节竖列、每拍横排」从回应语义里自己长出来，不硬编格式。
+ * 1. **属于它的那条线**（预制摆位，用户拍板）：主持人用 open_lane 以角色名（slug 或
+ *    展示名）开过线 → 自动接在自己那条线上（reply_to 线内最新一条 + 着线的 tag）。
+ *    摆位和延伸方向是主持人预制的，角色的工作退化成「补一段话」。
+ * 2. **这一拍**（08-29）：角色没有专属线时，它这一段就是在回应**主持人最新写的那一条**
+ *    —— reply_to 它，再经侧挂直觉落到它身侧。「章节竖着走、同一拍的几个人横着排」
+ *    是从「在回应谁」这个语义里自己长出来的，不硬编版式。
  *
- * 角色明确给了落位（比如回用户落痕那条）时它的手优先，这里不抢。
+ *    08-28 时这一级只在 rounds 模式下开；模式概念 08-29 整个退役（谁接这一拍由主持人
+ *    每拍决定，不再是一个服务端状态），所以这一级对所有角色一律成立。
+ *
+ * 角色明确给了落位（比如回用户那条）时它的手优先，这里不抢。
  */
 import { CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../../agent/role-card.js';
-import { getScene } from '../../agent/scene.js';
 
 /**
  * @returns {Promise<{replyTo: string|null, tag: string|null}>}
- *   replyTo 非空 = 用它当缺省锚；tag 非空 = 这条板书顺带着线的 tag（仅专线路径给）。
+ *   replyTo 非空 = 用它当缺省锚；tag 非空 = 这条板书顺带着线的 tag（仅专属线路径给）。
  */
-export async function roleDefaultAnchor({ board, by, projectId, sharedRoot }) {
-  // 专线优先
+export async function roleDefaultAnchor({ board, by, sharedRoot }) {
+  // 属于它的那条线优先
   if (board.lanes) {
     let laneTag = board.lanes[by] ? by : null;
     if (!laneTag) {
@@ -37,12 +39,10 @@ export async function roleDefaultAnchor({ board, by, projectId, sharedRoot }) {
       if (inLane.length) return { replyTo: inLane[inLane.length - 1], tag: laneTag };
     }
   }
-  // rounds 本拍
-  if (getScene(projectId)?.mode === 'rounds') {
-    const beats = Object.entries(board.objects)
-      .filter(([id, e]) => id.startsWith(`${CHALK_DIR}/`) && Number.isFinite(e?.x) && (e.by || 'agent') === 'agent')
-      .map(([id]) => id).sort();   // 板书文件名以时间戳开头，路径序即时间序
-    if (beats.length) return { replyTo: beats[beats.length - 1], tag: null };
-  }
+  // 这一拍 = 主持人最新写的那一条
+  const beats = Object.entries(board.objects)
+    .filter(([id, e]) => id.startsWith(`${CHALK_DIR}/`) && Number.isFinite(e?.x) && (e.by || 'agent') === 'agent')
+    .map(([id]) => id).sort();   // 板书文件名以时间戳开头，路径序即时间序
+  if (beats.length) return { replyTo: beats[beats.length - 1], tag: null };
   return { replyTo: null, tag: null };
 }
