@@ -64,7 +64,7 @@ export default function TransformControls({ o, sz, camScale = 1, toWorld, onChan
 
   const handleShared = {
     position: 'absolute', pointerEvents: 'auto', touchAction: 'none',
-    background: '#fff', border: `${1.5 * k}px solid ${CANVAS.brass}`,
+    background: '#FFFEF6', border: `${1.5 * k}px solid ${CANVAS.brass}`,
     boxSizing: 'border-box',
   };
 

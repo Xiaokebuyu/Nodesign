@@ -49,8 +49,8 @@ export default function FolderCard({
         border: `1px solid ${dropTarget ? CANVAS.brass : COLOR.borderLt}`,
         borderRadius: RADIUS.xl,
         boxShadow: dropTarget
-          ? `0 0 0 3px ${alpha(CANVAS.brass, 0.18)}, 0 8px 20px rgba(0,0,0,0.14)`
-          : '0 1px 4px rgba(0,0,0,0.05)',
+          ? `0 0 0 3px ${alpha(CANVAS.brass, 0.18)}, 0 8px 20px rgba(43,33,23,0.14)`
+          : '0 1px 4px rgba(43,33,23,0.05)',
         // 窗里的卡不参与拖拽（位置是算出来的），别给一个骗人的抓手光标
         cursor: dragging ? 'grabbing' : (gestureProps.onPointerDown ? 'grab' : 'pointer'),
         ...(selected ? { outline: `2px solid ${CANVAS.brass}`, outlineOffset: 1 } : null),

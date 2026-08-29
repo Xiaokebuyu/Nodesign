@@ -430,7 +430,7 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
           : POP_IN,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `${GAP.sm}px ${GAP.base}px`, background: 'rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `${GAP.sm}px ${GAP.base}px`, background: 'rgba(255,254,246,0.06)' }}>
         {/* 深色终端面：铅笔稿在这儿是看不见的（它是给纸面画的），关掉；OpenCode 那枚换 onDark 档 */}
         <ModelMark brand={brand} size={12} pencil={false} dark />
         {isTerm ? <Terminal size={10} color="#c8b98c" /> : <PencilLine size={10} color="#c8b98c" />}
@@ -455,7 +455,7 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
           padding: `${GAP.xs}px ${GAP.base}px`, background: 'rgba(176,85,79,0.16)', color: '#dba49f',
           fontFamily: FONT_MONO, fontSize: 9.5, lineHeight: 1.5,
           whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 64, overflow: 'hidden',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
+          borderBottom: '1px solid rgba(255,254,246,0.05)',
         }}>
           {clampLines(card.oldString, 3)}
         </div>
@@ -467,7 +467,7 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
         placeholder={running ? (isTerm ? '运行中…' : '正在生成…') : ''}
       />
       {card.status === 'fail' && card.error && (
-        <div style={{ padding: `5px ${GAP.base}px`, fontFamily: FONT_MONO, fontSize: 9.5, color: TERM.err, whiteSpace: 'pre-wrap', wordBreak: 'break-all', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ padding: `5px ${GAP.base}px`, fontFamily: FONT_MONO, fontSize: 9.5, color: TERM.err, whiteSpace: 'pre-wrap', wordBreak: 'break-all', borderTop: '1px solid rgba(255,254,246,0.06)' }}>
           {card.error}
         </div>
       )}

@@ -194,7 +194,7 @@ export default function ArtifactWindow({
               width: 24, height: 24, borderRadius: RADIUS.sm, flexShrink: 0,
               border: 'none', background: 'transparent', color: COLOR.sub, cursor: 'pointer',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(43,33,23,0.06)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
           >
             <X size={14} />

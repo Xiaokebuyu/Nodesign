@@ -18,7 +18,7 @@ export const MOCK_DECK_SPEC = {
     },
     spacing: [4, 8, 12, 16, 24, 32, 48, 64],
     radius: { sm: 4, md: 8, lg: 16 },
-    shadow: { card: '0 1px 4px rgba(0,0,0,0.1)' },
+    shadow: { card: '0 1px 4px rgba(93,74,44,0.11)' },
   },
   outline: [
     { id: 'cover',     index: 0, layout: 'cover',         intent: '建立"工作台"心智，弱化 AI 元素强调"基础设施"', keyPoints: ['Nodesign', '设计代理工作台', '云端 SaaS skill engine'], motionHint: 'fade slow', notes: '不要 emoji 不要插画' },

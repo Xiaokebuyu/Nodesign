@@ -99,8 +99,8 @@ iframe { border: 0; }
 /* 滚动条美化（仅 webkit）*/
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+::-webkit-scrollbar-thumb { background: rgba(43,33,23,0.12); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(43,33,23,0.2); }
 
 /* shimmer effect — 工具调用 running 状态用。"一束光从左到右扫过文字"
    表示"工具在跑，不是卡住"。thinking 不用（thinking 自带逐字打字效果）。

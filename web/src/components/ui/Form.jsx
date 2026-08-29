@@ -10,12 +10,12 @@ export function FormModal({ title, show, onClose, children }) {
 }
 
 export function FInput({ label, value, onChange, placeholder, multiline, type = "text" }) {
-  const s = { width: "100%", padding: `${GAP.md}px ${GAP.base}px`, background: "rgba(255,255,255,0.4)", border: `1px solid ${COLOR.border}`, borderRadius: RADIUS.lg, fontFamily: FONT_SANS, fontSize: FONT_SIZE.h2, color: COLOR.text, outline: "none", boxSizing: "border-box", resize: "vertical" };
+  const s = { width: "100%", padding: `${GAP.md}px ${GAP.base}px`, background: "rgba(255,254,246,0.4)", border: `1px solid ${COLOR.border}`, borderRadius: RADIUS.lg, fontFamily: FONT_SANS, fontSize: FONT_SIZE.h2, color: COLOR.text, outline: "none", boxSizing: "border-box", resize: "vertical" };
   return (<div style={{ marginBottom: GAP.lg }}><div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xl, color: COLOR.text3, marginBottom: GAP.xs }}>{label}</div>{multiline ? <textarea value={value} onChange={onChange} placeholder={placeholder} rows={3} style={s} /> : <input type={type} value={value} onChange={onChange} placeholder={placeholder} style={s} />}</div>);
 }
 
 export function FSelect({ label, value, onChange, options }) {
-  return (<div style={{ marginBottom: GAP.lg }}><div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xl, color: COLOR.text3, marginBottom: GAP.xs }}>{label}</div><div style={{ display: "flex", gap: GAP.sm }}>{options.map(o => (<button key={o.v} onClick={() => onChange(o.v)} style={{ padding: `5px ${GAP.base}px`, borderRadius: RADIUS.md, cursor: "pointer", background: value === o.v ? "rgba(43,33,23,0.1)" : "rgba(255,255,255,0.3)", border: value === o.v ? `2px solid ${COLOR.borderHv}` : `1px solid ${COLOR.border}`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xl, color: o.c || COLOR.text }}>{o.l}</button>))}</div></div>);
+  return (<div style={{ marginBottom: GAP.lg }}><div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xl, color: COLOR.text3, marginBottom: GAP.xs }}>{label}</div><div style={{ display: "flex", gap: GAP.sm }}>{options.map(o => (<button key={o.v} onClick={() => onChange(o.v)} style={{ padding: `5px ${GAP.base}px`, borderRadius: RADIUS.md, cursor: "pointer", background: value === o.v ? "rgba(43,33,23,0.1)" : "rgba(255,254,246,0.3)", border: value === o.v ? `2px solid ${COLOR.borderHv}` : `1px solid ${COLOR.border}`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xl, color: o.c || COLOR.text }}>{o.l}</button>))}</div></div>);
 }
 
 export function FBtn({ label, onClick, full }) {

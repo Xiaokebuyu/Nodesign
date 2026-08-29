@@ -596,7 +596,7 @@ export default function DragOverlay({
         borderRadius: RADIUS.sm,
         boxShadow: drag.freeMode
           ? '0 8px 24px rgba(20, 184, 166, 0.30)'
-          : '0 8px 24px rgba(0,0,0,0.18)',
+          : '0 8px 24px rgba(43,33,23,0.18)',
         zIndex: 30,
         opacity: 0.92,
       }}>
@@ -654,7 +654,7 @@ export default function DragOverlay({
             padding: `1px ${GAP.sm}px`,
             fontSize: FONT_SIZE.xxs, lineHeight: '14px',
             fontFamily: FONT_MONO,
-            color: 'rgba(255,255,255,0.75)',
+            color: 'rgba(255,254,246,0.75)',
             background: 'rgba(45,36,24,0.7)',
             borderRadius: RADIUS.xs,
             whiteSpace: 'nowrap',

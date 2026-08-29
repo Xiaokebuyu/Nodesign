@@ -58,7 +58,7 @@ export default function SystemPopover({
         background: COLOR.bgWhite,
         borderRadius: 2,
         boxShadow:
-          '0 2px 4px rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.08), 0 24px 48px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8)',
+          '0 2px 4px rgba(43,33,23,0.04), 0 8px 20px rgba(43,33,23,0.08), 0 24px 48px rgba(43,33,23,0.10), inset 0 1px 0 rgba(255,254,246,0.8)',
         zIndex: 60,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
@@ -218,7 +218,7 @@ function ToggleSwitch({ checked, onChange, title }) {
       style={{
         width: 28, height: 16, padding: 0, border: 'none',
         borderRadius: RADIUS.lg,
-        background: checked ? COLOR.text : 'rgba(0,0,0,0.18)',
+        background: checked ? COLOR.text : 'rgba(43,33,23,0.18)',
         position: 'relative', cursor: 'pointer',
         transition: 'background 0.15s', flexShrink: 0,
       }}
@@ -236,7 +236,7 @@ function ToggleSwitch({ checked, onChange, title }) {
 const popoverToolBtn = {
   padding: `${GAP.xs + 1}px ${GAP.md}px`,
   fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.text4,
-  background: 'rgba(0,0,0,0.04)',
+  background: 'rgba(43,33,23,0.04)',
   border: 'none',
   borderRadius: RADIUS.sm,
   display: 'inline-flex', alignItems: 'center', gap: GAP.xs,

@@ -216,7 +216,7 @@ function ShowcaseCard({ entry, onRemove }) {
           style={{
             position: 'absolute', top: GAP.sm, right: GAP.sm,
             width: 26, height: 26, borderRadius: 13,
-            background: 'rgba(255,255,255,0.92)',
+            background: 'rgba(255,254,246,0.92)',
             border: `1px solid ${COLOR.border}`,
             color: COLOR.sub, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',

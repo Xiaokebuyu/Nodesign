@@ -314,7 +314,7 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
             position: 'absolute',
             top: GAP.md, right: GAP.md,
             width: 26, height: 26, borderRadius: RADIUS.sm,
-            background: 'rgba(255,255,255,0.95)',
+            background: 'rgba(255,254,246,0.95)',
             border: `1px solid ${COLOR.borderMd}`,
             color: COLOR.text2,
             display: 'flex', alignItems: 'center', justifyContent: 'center',

@@ -152,7 +152,7 @@ function Field({ label, children }) {
 
 function Segmented({ value, options, onChange }) {
   return (
-    <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.04)', borderRadius: RADIUS.md, padding: GAP.xxs }}>
+    <div style={{ display: 'inline-flex', background: 'rgba(43,33,23,0.04)', borderRadius: RADIUS.md, padding: GAP.xxs }}>
       {options.map(opt => {
         const active = value === opt.id;
         return (
@@ -167,7 +167,7 @@ function Segmented({ value, options, onChange }) {
               border: 'none',
               borderRadius: RADIUS.sm,
               cursor: 'pointer',
-              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              boxShadow: active ? '0 1px 2px rgba(93,74,44,0.066)' : 'none',
             }}
           >
             {opt.label}

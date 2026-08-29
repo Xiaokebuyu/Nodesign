@@ -687,10 +687,10 @@ export default function SiteWindow({
                 border: 0,
                 background: COLOR.bgWhite,
                 boxShadow: tab === 'edit'
-                  ? `0 0 0 2px ${COLOR.btn}, 0 2px 18px rgba(0,0,0,0.08)`
+                  ? `0 0 0 2px ${COLOR.btn}, 0 2px 18px rgba(43,33,23,0.08)`
                   : tab === 'drag'
-                    ? '0 0 0 2px #3a7afe, 0 2px 18px rgba(0,0,0,0.08)'
-                    : '0 2px 18px rgba(0,0,0,0.08)',
+                    ? '0 0 0 2px #3a7afe, 0 2px 18px rgba(43,33,23,0.08)'
+                    : '0 2px 18px rgba(43,33,23,0.08)',
                 display: 'block',
                 transform: scale < 1 ? `scale(${scale})` : 'none',
                 transformOrigin: 'top left',
@@ -785,7 +785,7 @@ export default function SiteWindow({
               padding: `7px ${GAP.md}px`, borderRadius: RADIUS.pill,
               background: COLOR.text, color: COLOR.bgWhite,
               fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.3)', zIndex: 60,
+              boxShadow: '0 8px 24px rgba(93,74,44,0.33)', zIndex: 60,
             }}>
               <span style={{ opacity: 0.85 }}>
                 {stagedCount} 处调整未保存
@@ -808,7 +808,7 @@ export default function SiteWindow({
                 onClick={undoStaged}
                 style={{
                   padding: `3px ${GAP.base}px`, borderRadius: RADIUS.pill, cursor: 'pointer',
-                  border: '1px solid rgba(255,255,255,0.4)', background: 'transparent',
+                  border: '1px solid rgba(255,254,246,0.4)', background: 'transparent',
                   color: COLOR.bgWhite, fontSize: FONT_SIZE.xs, fontFamily: FONT_SANS,
                 }}
               >
@@ -819,7 +819,7 @@ export default function SiteWindow({
                 style={{
                   padding: `3px ${GAP.base}px`, borderRadius: RADIUS.pill, cursor: 'pointer',
                   border: 'none', background: 'transparent',
-                  color: 'rgba(255,255,255,0.65)', fontSize: FONT_SIZE.xs, fontFamily: FONT_SANS,
+                  color: 'rgba(255,254,246,0.65)', fontSize: FONT_SIZE.xs, fontFamily: FONT_SANS,
                 }}
               >
                 全部放弃

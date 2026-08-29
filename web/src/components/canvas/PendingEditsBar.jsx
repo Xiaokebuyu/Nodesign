@@ -40,7 +40,7 @@ export default function PendingEditsBar({
       gap: GAP.md,
       fontFamily: FONT_MONO,
       fontSize: FONT_SIZE.xs,
-      boxShadow: '0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.18)',
+      boxShadow: '0 8px 32px rgba(93,74,44,0.275), 0 2px 8px rgba(93,74,44,0.198)',
       zIndex: 50,
       backdropFilter: 'blur(8px)',
       WebkitBackdropFilter: 'blur(8px)',
@@ -134,5 +134,5 @@ const btnStylePrimary = {
   background: COLOR.btnText,
   border: 'none',
   borderRadius: RADIUS.sm,
-  boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+  boxShadow: '0 1px 2px rgba(93,74,44,0.165)',
 };

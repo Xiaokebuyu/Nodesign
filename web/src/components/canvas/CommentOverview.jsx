@@ -87,7 +87,7 @@ export default function CommentOverview({
         background: COLOR.bgWhite,
         borderRadius: 2,
         boxShadow:
-          '0 2px 4px rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.08), 0 24px 48px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8)',
+          '0 2px 4px rgba(43,33,23,0.04), 0 8px 20px rgba(43,33,23,0.08), 0 24px 48px rgba(43,33,23,0.10), inset 0 1px 0 rgba(255,254,246,0.8)',
         zIndex: 60,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
@@ -191,7 +191,7 @@ function CommentCard({ comment, available, onClick, onResolve, onDelete }) {
     }}
     onClick={available ? onClick : undefined}
     onMouseEnter={(e) => {
-      if (available) e.currentTarget.style.background = 'rgba(0,0,0,0.02)';
+      if (available) e.currentTarget.style.background = 'rgba(43,33,23,0.02)';
     }}
     onMouseLeave={(e) => {
       e.currentTarget.style.background = COLOR.bgWhite;

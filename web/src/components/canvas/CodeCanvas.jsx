@@ -36,7 +36,7 @@ export default function CodeCanvas({ value = '', onChange, readOnly = false }) {
       <div style={{
         flexShrink: 0,
         padding: `${GAP.sm}px ${GAP.lg}px`,
-        background: 'rgba(0,0,0,0.04)',
+        background: 'rgba(43,33,23,0.04)',
         borderBottom: `1px solid ${COLOR.borderLt}`,
         fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
