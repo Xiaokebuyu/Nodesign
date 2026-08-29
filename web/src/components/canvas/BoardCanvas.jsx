@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, ChevronsUpDown, Focus, Group, Check, Download, Eraser, MessageSquarePlus, Archive } from 'lucide-react';
 import RollLayer, { useRollActions, ArchiveChip } from './RollLayer.jsx';
-import SheetLayer from './SheetLayer.jsx';
 import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
@@ -1820,8 +1819,6 @@ export default function BoardCanvas({
             transformOrigin: '0 0',
           }}
         >
-          {/* 纸（2026-08-29 纸范式）：agent 的工作区矩形，垫在一切之下 */}
-          <SheetLayer sheets={sheets} />
           {/* 文件夹：一张方卡（2026-08-13，"分区"时代两态退役）——
               桌面上的一个东西，双击进去换一层。 */}
           {visibleZones.map((z) => renderFolderCard(z))}

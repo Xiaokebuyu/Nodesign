@@ -7,7 +7,9 @@
  * write_on_board 的 at 坐标以它的版心左上角为原点，没给 at 的写入在纸内自动
  * 往下排，写满自动翻下一张。
  *
- * 纸是分配纪律不是容器：用户可以把东西拖出纸外，组照旧由 tag/线派生。
+ * 纸是分配纪律不是容器，**也不渲染**（用户拍板：纸只是位置范围的概念）——用户
+ * 看到的只有内容本身；纸的存在体现在落位秩序、翻纸导航和 read_board 的账本里。
+ * 用户可以把东西拖出纸外，组照旧由 tag/线派生。
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
@@ -72,7 +74,7 @@ The user can drag things off a sheet freely — the sheet constrains you, not th
 
 export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
   return tool('open_sheet', DESCRIPTION, {
-    title: z.string().max(60).optional().describe('What this sheet is about (shown on the sheet edge, e.g. 第二章)'),
+    title: z.string().max(60).optional().describe('What this sheet is about (for read_board / your own map, e.g. 第二章 — sheets are invisible to the user)'),
     name: z.string().regex(TAG_RE).optional().describe('Sheet name to refer to it later (ASCII like act2; default auto p1/p2/…)'),
     where: z.enum(['next', 'viewport']).optional()
       .describe("next = below the current sheet (default when sheets exist); viewport = right where the user is looking now (default for the first sheet — also use it to bring work back to the user's eyes)"),
