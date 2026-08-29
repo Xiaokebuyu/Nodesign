@@ -7,6 +7,8 @@
  * 没进 globals.css：这些动画只有画布这一层用，跟画布一起加载、一起被找到，
  * 比散进全站样式表好。`nd` 前缀是全站约定。
  */
+import { TERM, CANVAS, alpha } from '../../lib/theme.js';
+
 export const BOARD_KEYFRAMES = [
   '@keyframes ndPopIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}',
   '@keyframes ndStageOut{to{opacity:0;transform:scale(.97)}}',
@@ -20,13 +22,13 @@ export const BOARD_KEYFRAMES = [
   '@keyframes ndCaret{0%,100%{opacity:1}50%{opacity:0}}',
   '@keyframes ndSpin{to{transform:rotate(360deg)}}',
   '@keyframes ndPresencePulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.25);opacity:.75}}',
-  '@keyframes ndPulse{from{box-shadow:0 0 0 0 rgba(79,143,91,0.4)}to{box-shadow:0 0 0 12px rgba(79,143,91,0)}}',
+  `@keyframes ndPulse{from{box-shadow:0 0 0 0 ${alpha(TERM.edgeOk, 0.4)}}to{box-shadow:0 0 0 12px ${alpha(TERM.edgeOk, 0)}}}`,
   // agent 正在动的目标：外圈橙色呼吸光圈
   // agent 正在动这个东西：**一圈跑动的光**，不只是边框在呼吸。
   // 用户要的是"运动环绕光圈"—— 呼吸是"这里有点什么"，跑动才是"有人正在
   // 这儿干活"。两层叠着：底下一圈稳的实边（认得出是哪一个），上面
   // 一段亮弧沿着边转（看得出在动）。
-  '@keyframes ndAgentRing{0%,100%{box-shadow:0 0 0 2px rgba(176,140,79,0.85),0 0 0 7px rgba(176,140,79,0.16),0 6px 20px rgba(40,32,16,0.12)}50%{box-shadow:0 0 0 2px rgba(176,140,79,0.95),0 0 0 13px rgba(176,140,79,0.05),0 6px 20px rgba(40,32,16,0.12)}}',
+  `@keyframes ndAgentRing{0%,100%{box-shadow:0 0 0 2px ${alpha(CANVAS.brass, 0.85)},0 0 0 7px ${alpha(CANVAS.brass, 0.16)},0 6px 20px ${alpha(TERM.shade, 0.12)}}50%{box-shadow:0 0 0 2px ${alpha(CANVAS.brass, 0.95)},0 0 0 13px ${alpha(CANVAS.brass, 0.05)},0 6px 20px ${alpha(TERM.shade, 0.12)}}}`,
   // 亮弧沿边跑：转的是**渐变的起始角**，不是那个矩形。
   //
   // ⚠️ 原来写的是 `transform:rotate(1turn)` —— 那转的是整个遮罩矩形。只有正方

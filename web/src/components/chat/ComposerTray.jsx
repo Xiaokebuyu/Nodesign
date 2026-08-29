@@ -1,5 +1,5 @@
 import { X, FileText, Image as ImageIcon, AlertCircle, Check, Loader2 } from 'lucide-react';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_SANS, FONT_MONO } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_SANS, FONT_MONO, alpha } from '../../lib/theme.js';
 import { formatSize } from '../../lib/helpers.js';
 
 /**
@@ -74,7 +74,7 @@ function TrayChip({ item, onRemove }) {
         {uploading && (
           <div style={{
             position: 'absolute', inset: 0,
-            background: 'rgba(245,240,228,0.55)',
+            background: alpha(COLOR.btnText, 0.55),
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <Loader2 size={16} style={{ color: COLOR.text2, animation: 'ct-spin 0.9s linear infinite' }} />

@@ -15,7 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { isInsideReactMount } from './DirectEditBridge.js';
 import { overlayBase } from '../../lib/overlay-rect.js';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, EDITOR } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, EDITOR, alpha } from '../../lib/theme.js';
 
 const HANDLE_COLOR = EDITOR.blue;
 const HANDLE_COLOR_REACT = COLOR.warn;
@@ -139,8 +139,8 @@ export default function GrabHandle({
         height: previewH,
         border: `2px dashed ${color}`,
         borderRadius: RADIUS.sm,
-        background: hover.reactMount ? 'rgba(184,92,26,0.04)' : 'rgba(58,122,254,0.04)',
-        boxShadow: `0 0 0 1px ${hover.reactMount ? 'rgba(184,92,26,0.15)' : 'rgba(58,122,254,0.15)'}`,
+        background: hover.reactMount ? 'rgba(184,92,26,0.04)' : alpha(EDITOR.blue, 0.04),
+        boxShadow: `0 0 0 1px ${hover.reactMount ? 'rgba(184,92,26,0.15)' : alpha(EDITOR.blue, 0.15)}`,
         zIndex: 8,
       }} />
       {/* 顶部 tag label —— 告诉用户这个框是 drag target + 是否 React 区 */}
@@ -158,7 +158,7 @@ export default function GrabHandle({
         background: color,
         borderRadius: RADIUS.xs,
         whiteSpace: 'nowrap',
-        boxShadow: `0 1px 3px ${hover.reactMount ? 'rgba(184,92,26,0.3)' : 'rgba(58,122,254,0.3)'}`,
+        boxShadow: `0 1px 3px ${hover.reactMount ? 'rgba(184,92,26,0.3)' : alpha(EDITOR.blue, 0.3)}`,
         zIndex: 9,
       }}>
         {hover.reactMount ? '⊕ 拖动（React 区·改 JSX）' : '⊕ 拖动 ' + (hover.source.tagName?.toLowerCase() || '')}

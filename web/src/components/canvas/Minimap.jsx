@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { CANVAS, alpha } from '../../lib/theme.js';
 import { PAPER, PAPER_SHADOW } from '../../lib/paper.js';
 import { viewportWorldBox, boxUnion } from '../../lib/board-camera.js';
 import { GAP } from '../../lib/theme.js';
@@ -148,7 +149,7 @@ export default function Minimap({ bounds, cam, viewport, items = [], onJump }) {
         left: vTL.x, top: vTL.y,
         width: Math.max(6, view.w * p.k), height: Math.max(6, view.h * p.k),
         border: '1.5px solid rgba(176,140,79,0.95)',
-        background: 'rgba(176,140,79,0.10)',
+        background: alpha(CANVAS.brass, 0.10),
         pointerEvents: 'none',
       }} />
     </div>

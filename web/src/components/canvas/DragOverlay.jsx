@@ -32,7 +32,7 @@ import {
 } from '../../lib/drag-intent.js';
 import { isInsideReactMount } from './DirectEditBridge.js';
 import { overlayBase, toOverlayXY } from '../../lib/overlay-rect.js';
-import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, EDITOR } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, EDITOR, alpha } from '../../lib/theme.js';
 
 const GHOST_COLOR = 'rgba(43,33,23, 0.85)';        // 跟 EditOverlay 一致的深棕
 const CARET_COLOR = EDITOR.blue;                      // 亮蓝（区别于评论橙）
@@ -509,7 +509,7 @@ export default function DragOverlay({
           width: s.width + 8, height: s.height + 8,
           border: `3px solid ${CARET_COLOR}`,
           borderRadius: RADIUS.sm,
-          background: 'rgba(58,122,254, 0.12)',
+          background: alpha(EDITOR.blue, 0.12),
           boxShadow: '0 0 16px rgba(58,122,254, 0.5)',
           zIndex: 25,
           animation: 'nd-drag-landing-flash 350ms ease-out forwards',
@@ -591,7 +591,7 @@ export default function DragOverlay({
         left: ghostStyle.left,
         width: ghostStyle.width,
         height: ghostStyle.height,
-        background: drag.freeMode ? 'rgba(20, 184, 166, 0.10)' : 'rgba(58,122,254, 0.08)',
+        background: drag.freeMode ? alpha(EDITOR.teal, 0.10) : alpha(EDITOR.blue, 0.08),
         border: `2px solid ${drag.freeMode ? EDITOR.teal : GHOST_COLOR}`,
         borderRadius: RADIUS.sm,
         boxShadow: drag.freeMode
@@ -694,7 +694,7 @@ export default function DragOverlay({
           width: childOfZoneStyle.width + 6,
           height: childOfZoneStyle.height + 6,
           border: `3px solid ${CARET_COLOR}`,
-          background: 'rgba(58,122,254, 0.14)',
+          background: alpha(EDITOR.blue, 0.14),
           borderRadius: 5,
           zIndex: 33,
         }}>
@@ -725,7 +725,7 @@ export default function DragOverlay({
           width: slotPreviewStyle.width,
           height: slotPreviewStyle.height,
           border: `2px dashed ${CARET_COLOR}`,
-          background: 'rgba(58,122,254, 0.10)',
+          background: alpha(EDITOR.blue, 0.10),
           borderRadius: RADIUS.xs,
           zIndex: 32,
         }}>

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { FONT_MONO, FONT_SIZE, GAP, RADIUS, TERM } from '../../lib/theme.js';
+import { FONT_MONO, FONT_SIZE, GAP, RADIUS, TERM, alpha } from '../../lib/theme.js';
 
 /**
  * PagePager — 预览态的左右翻页（2026-07-28）
@@ -105,7 +105,7 @@ function PagerBtn({ onClick, disabled, icon: Icon, title }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         width: 26, height: 26, borderRadius: RADIUS.round,
         border: 'none', background: 'transparent',
-        color: disabled ? 'rgba(232,226,210,0.3)' : TERM.ink,
+        color: disabled ? alpha(TERM.ink, 0.3) : TERM.ink,
         cursor: disabled ? 'default' : 'pointer',
         transition: 'background 0.15s',
       }}

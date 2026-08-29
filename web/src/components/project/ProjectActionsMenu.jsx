@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Edit2, Copy, Trash2, History, Code2, Camera, ArrowUpRight, RotateCcw,
   ScrollText, Files, Clapperboard } from 'lucide-react';
-import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_SANS, alpha } from '../../lib/theme.js';
 import { t } from '../../lib/i18n.js';
 
 /**
@@ -120,7 +120,7 @@ export function ProjectModeBadge({ mode }) {
       title={t('演出模式：常驻角色演故事的舞台（切换在 ⋯ 菜单，下个会话生效）')}
       style={{
         font: '700 11px var(--kai, inherit)', letterSpacing: '0.2em', textIndent: '0.2em',
-        color: 'rgba(168,54,43,0.9)', border: '1px solid rgba(168,54,43,0.55)',
+        color: alpha(COLOR.error, 0.9), border: '1px solid rgba(168,54,43,0.55)',
         borderRadius: 999, padding: '2px 9px 3px', alignSelf: 'center',
         transform: 'rotate(-1deg)', userSelect: 'none',
       }}

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
+import { PAPER } from '../lib/paper.js';
 import { Link } from 'react-router-dom';
 import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import QuickEntry from './home-quick-entry.jsx';
-import { CHROME, GAP, RADIUS, FONT_SIZE } from '../lib/theme.js';
+import { CHROME, GAP, RADIUS, FONT_SIZE, alpha } from '../lib/theme.js';
 import { CSS } from './home-styles.js';
 import { Underline } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
@@ -223,7 +224,7 @@ function BoardNote({ projects, summary }) {
       <span className="t">{dateLabel}</span>
       <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
         <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
-          stroke="rgba(122,111,92,0.55)" strokeWidth="1.4" strokeLinecap="round" />
+          stroke={alpha(PAPER.sketch, 0.55)} strokeWidth="1.4" strokeLinecap="round" />
       </svg>
       <Counted pattern="手上 {n} 件" n={projects.length} />
       <Counted pattern="这周动过 {n} 件" n={touched} />
