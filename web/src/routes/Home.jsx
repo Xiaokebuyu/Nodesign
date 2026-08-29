@@ -132,6 +132,12 @@ export default function Home() {
     >
       <div className="ndd">
         <style>{CSS}</style>
+        {/* 树影：两层叶隙光斑，压在板面之上、内容之下。
+            必须是**独立的 fixed 层**，不能并进 .ndd::before 那十四层 ——
+            那一层是静态的，掺进动画就等于每帧重画十四层背景，正是
+            08-28「项目一多就奇卡」的病根。这里只动 transform / opacity，
+            合成器自己就能处理，主线程不参与。 */}
+        <div className="ndd-sun" aria-hidden="true"><i /><i /></div>
         <div className="ndd-in">
 
           <div className="ndd-top">
@@ -173,6 +179,11 @@ export default function Home() {
             </div>
           )}
         </div>
+        {/* 落在纸上的那半片光。跟上面那层是**同一片树影**（同一组 keyframes、
+            同时挂上所以相位一致），只是这一层压在内容之上 —— 真站在树下，
+            光是连着落在桌面和手里的纸上的，只照桌子不照纸反而露馅。
+            很淡 + soft-light：够看出纸上有光在晃，又不至于压着字读不了。 */}
+        <div className="ndd-sun over" aria-hidden="true"><i /><i /></div>
       </div>
     </AppShell>
   );

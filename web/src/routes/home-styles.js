@@ -6,6 +6,7 @@
  */
 import { PAPER_VARS, PAPER_SHADOW, PAPER, P } from '../lib/paper.js';
 import { COLOR } from '../lib/theme.js';
+import { SUN_CSS } from './home-sun.js';
 
 export const CSS = `
 /* 板面跟登录墙是同一块板：卡片是拿钉子钉上去的，那底下就不能是一片平涂的色。
@@ -73,6 +74,9 @@ export const CSS = `
     auto;
 }
 .ndd *, .ndd *::before, .ndd *::after { box-sizing: border-box; }
+
+${SUN_CSS}
+
 .ndd-in { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; }
 
 /* 顶区三栏：左边把这周的账写在板子上，中间便签本，右边一个涂鸦。
