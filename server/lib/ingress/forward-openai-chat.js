@@ -22,6 +22,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAIToAnthropicSSE, truncationOfChatResponse } from './openai-chat.js';
 import { upstreamCostOf } from './upstream-billing.js';
+import { armIdleWatchdog } from './stream-watchdog.js';
 
 export const DEFAULT_EMPTY_RETRIES = 2;
 export const DEFAULT_RETRY_BUDGET_MS = 120_000;
@@ -235,6 +236,12 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, target, pa
         proxyRes.on('aborted', () => attemptOver('aborted'));
         proxyRes.on('error', (err) => attemptOver(err.code || err.message));
         proxyRes.on('end', () => attemptOver(null));
+        // 断流看门狗（2026-08-29）：destroy 触发上面的 'error' → attemptOver 走
+        // 现成的判决/重发机 —— 不新开收尾路，只补「静默也算死」这一种死法。
+        armIdleWatchdog(proxyRes, { onIdle: (silentMs) => {
+          console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 流静默 ${Math.round(silentMs / 1000)}s —— 看门狗掐断死流`);
+          try { proxyRes.destroy(new Error('stream idle watchdog')); } catch { /* 已经死了就算了 */ }
+        } });
         proxyRes.pipe(xf, { end: false });   // end:false —— 这条 SSE 还要接着用（可能再打一发）
       }, (detail) => attemptOver(detail, false));   // 连不上 / RST：同一条判决路，绝不自己碰 res
     };

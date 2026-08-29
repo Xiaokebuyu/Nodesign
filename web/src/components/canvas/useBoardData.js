@@ -31,6 +31,16 @@ import { useBoardFilter } from './board-filter.jsx';
  * 尺寸来自无头 chromium 的字体度量，回写会盖掉用户浏览器量的真值；入座落盘同理。
  * 这一页所有落盘都从 scheduleSave 走，所以在这儿一刀关掉（fable 08-23 审出 P1）。
  */
+/**
+ * 这个补丁配不配落座？（纯函数，幽灵座位闸的判据）
+ * 有座位的条目什么补丁都收；没座位的只收**带坐标**的补丁（新建/拖拽都带 x），
+ * 纯尺寸补丁（useMeasuredSize 的 w/h 回写）没资格造座位。
+ */
+export function shouldPersistLayoutPatch(prevEntry, patch) {
+  if (prevEntry) return true;
+  return Number.isFinite(patch?.x);
+}
+
 export function useBoardData({ projectId, listVersion, boardVersion, readOnly = false }) {
   // ── 数据源 ──
   const [artifacts, setArtifacts] = useState([]);
@@ -147,6 +157,10 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   }, [projectId, readOnly]);
 
   const patchLayout = useCallback((id, patch) => {
+    // 幽灵座位闸（2026-08-29，proj_mtexu1kp 现场）：测量回写扩面后，文件夹窗里渲染的
+    // 卡也会量高回写 —— 它们没有座位，兜底展开成 (0,0) 就凭空造出一张原点幽灵卡，
+    // 还会把纸的成员判定搅错（第一幕被挤去 p2 的真凶）。纯尺寸补丁只许落在已有座位上。
+    if (!shouldPersistLayoutPatch(layoutRef.current[id], patch)) return;
     setLayout(prev => ({ ...prev, [id]: { x: 0, y: 0, z: 1, ...prev[id], ...patch } }));
     dirtyRef.current.objects.add(id);
     scheduleSave();

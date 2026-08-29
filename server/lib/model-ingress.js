@@ -39,6 +39,7 @@ import { resolveWireModel, UPSTREAMS } from '../engine/agent/model-context.js';
 import { resolveSessionWire, fallbackLogged } from './ingress/session-routes.js';
 import { forwardOpenAIChat } from './ingress/forward-openai-chat.js';
 import { failStreaks, exhaustedErrorBody } from './ingress/upstream-fail-streak.js';
+import { armIdleWatchdog } from './ingress/stream-watchdog.js';
 import { noteUpstreamBilling } from './ingress/upstream-billing.js';
 import { noteUpstreamTruncation } from './ingress/upstream-truncation.js';
 import { noticeSession } from './ingress/session-notice.js';
@@ -295,6 +296,15 @@ async function handleRequest(req, res, bodyBuf) {
       noteOutcome(true);
     }
     res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    // 断流看门狗（2026-08-29，proj_mtexu1kp 现场）：上游 SSE 半路断粮不报错不 EOF，
+    // run 会无限挂起。只对流式响应上岗；掐掉后 CLI 收到流错误自己重试。
+    if (proxyRes.statusCode < 400 && String(proxyRes.headers['content-type'] || '').includes('event-stream')) {
+      armIdleWatchdog(proxyRes, { onIdle: (silentMs) => {
+        console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 流静默 ${Math.round(silentMs / 1000)}s —— 看门狗掐断死流`);
+        noteOutcome(false, 'stream idle');
+        try { proxyRes.destroy(new Error('ingress stream idle watchdog')); } catch { /* 已经死了就算了 */ }
+      } });
+    }
     proxyRes.pipe(res);
   });
 
