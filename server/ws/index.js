@@ -76,7 +76,7 @@ function refSession(sid, projectId = null) {
     entry = { count: 0, graceTimer: null, projectId, subagentDefers: 0 };
     sessionRefs.set(sid, entry);
   }
-  if (projectId) entry.projectId = projectId;   // 候场判定要按 projectId 查收件箱
+  if (projectId) entry.projectId = projectId;   // 事件与状态按项目分桶
   entry.subagentDefers = 0;                     // 人回来了，续命额度重新计
   entry.count += 1;
   if (entry.graceTimer) {
@@ -108,11 +108,11 @@ function unrefSession(sid) {
       cur.graceTimer.unref?.();
       return;
     }
-    // 后台角色在写也不杀（2026-08-28）：演员位范式下 GM 的场务 turn 几秒钟就结束，
-    // 角色还要写好几分钟 —— 上面那道闸只认 turn，认不出这种在飞工作。08-28 泉此方场
-    // 实录：角色派出 110s 后 grace 到期，人被腰斩在第三个 Read 上，板上永远没有第二拍。
-    // ⚠️ 判据是「在飞 − 候场」不是「有活子代理」：常驻角色挂 await_user 永不收回合，
-    // 按后者一个候场的角色就能让会话永远关不掉。见 subagent-flight.js 头注。
+    // 后台角色在写也不杀（2026-08-28）：主持人的一拍几秒钟就结束，角色还要写好几分钟
+    // —— 上面那道闸只认 turn，认不出这种在飞工作。08-28 实录：角色派出 110s 后 grace
+    // 到期，人被腰斩在第三个 Read 上，板上永远没有第二段。
+    // （08-29：判据从「在飞 − 候场」简化成「在飞」—— 角色写完就结束这一轮，
+    //  没有挂着不收回合的形态了。见 subagent-flight.js 头注。）
     const working = workingSubagents(sid, cur.projectId);
     if (working.length > 0) {
       if (cur.subagentDefers < MAX_SUBAGENT_DEFERS) {

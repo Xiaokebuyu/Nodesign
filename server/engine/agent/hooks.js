@@ -168,8 +168,8 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       //
       // ⛔ 这里曾是手写工具名单，漏过两次，两次症状都是「闸装着、判据永远落 'agent'」：
       //   - 08-26 漏 await_user/check_inbox/read_board → 整条收件箱回路在生产里是死的
-      //   - 08-28 审出漏场务四件（set_scene/read_scene/cue_role/pass_turn）→ pass_turn
-      //     对真角色恒拒（它永远被当成主控），set_scene/cue_role 的 GM-only 闸反向漏开
+      //   - 08-28 审出漏场务四件 → 对真角色恒拒（它们永远被当成主控）
+      //   （两族工具 08-29 随编排收敛一起退役，教训留着：通配挂法就是从这两次来的）
       // 手写名单和「写死表家族」同病：加新工具必漏。改成全量盖章 —— 盖章本身只是往
       // 500 容量的 LRU Map 记一条，多盖无副作用，凡是可能用 byOf 的工具永远在闸内。
       // 装配层有测试钉着（hooks-assembly.test.js）：别再收窄回名单。
