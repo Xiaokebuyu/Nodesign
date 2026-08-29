@@ -215,7 +215,20 @@ export default function CanvasFrame({
 
   // 有窗开着 = 屏幕被一件产物占满，外层据此收掉顶栏的浮现
   const windowOpen = (deckOpen && (sessionId || deckTaskSrc)) || !!siteSrc || !!docxSrc || !!browseWin;
-  useEffect(() => { onWindowOpenChange?.(!!windowOpen); }, [windowOpen, onWindowOpenChange]);
+  /**
+   * 关掉当前这扇窗，不管它是哪一种（2026-08-29 移动端外壳第三刀）。
+   *
+   * 四种窗各有各的关法，而外面那颗返回键不该也不能认识它们 —— 它只想说
+   * 「退回上一层」。所以关法收成一个函数、跟 windowOpen 一起报上去。
+   * ⚠️ 稳定引用：它会进调用方的 memo/依赖，每渲染换身份会把"上报"变成
+   * 无限循环（closeBrowse 头上那条 08-18 的教训，同一个坑）。
+   */
+  const closeWindow = useCallback(() => {
+    setDeckOpen(false); setDeckTaskSrc(null);
+    setSiteSrc(null); setDocxSrc(null);
+    closeBrowse();
+  }, [closeBrowse]);
+  useEffect(() => { onWindowOpenChange?.(!!windowOpen, closeWindow); }, [windowOpen, onWindowOpenChange, closeWindow]);
 
   /**
    * 窗口态的常驻「评论」按钮（2026-08-24 用户提）：窗开着时画布被盖住，卡片

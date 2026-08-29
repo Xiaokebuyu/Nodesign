@@ -351,9 +351,22 @@ export default function FloatingToolbar({
         position: 'absolute', left: pos.x, top: pos.y,
         zIndex: zIndex ?? (panel?.zIndex || 400),
         display: 'flex', flexDirection: stack, alignItems: 'center', gap: GAP.xs,
-        // 窄屏折行：**不给横向滚动**（整站在手机上只该上下滑），排不下就换一行。
-        // 按钮一律不缩 —— 触屏上 30px 已经是下限，再小就点不准了。
-        ...(narrow ? { flexWrap: 'wrap', justifyContent: 'center', maxWidth: `calc(100% - ${DOCK_INSET * 2}px)` } : null),
+        /**
+         * 排不下就折行：**不给横向滚动**（整站在手机上只该上下滑）。
+         * 按钮一律不缩 —— 触屏上 30px 已经是下限，再小就点不准了。
+         *
+         * ⭐ 08-29 从「窄屏才折」改成「dock 着就许折」。病根是判据量错了对象：
+         * narrow 问的是**视口**宽不宽，而真正约束它的是**它 dock 进的那个容器**。
+         * 平板上聊天卡一开，画布容器收到 422，工具栏 584 宽照旧不折，直接怼出
+         * 容器压在卡上（真机量到：容器 0..422，工具栏 0..584）。
+         *
+         * ⛔ 这条不能用 JS 量：一量就震荡 —— 折行后 offsetWidth 变小 → 判定"不挤了"
+         * → 取消折行 → 又变宽 → 再折。所以把判断交给 CSS：maxWidth 卡住容器，
+         * flexWrap 只在真放不下时生效，放得下就是个 no-op。桌面因此一个像素不变。
+         */
+        ...(dock || narrow
+          ? { flexWrap: 'wrap', justifyContent: 'center', maxWidth: `calc(100% - ${DOCK_INSET * 2}px)` }
+          : null),
         cursor: dock ? 'default' : (dragging ? 'grabbing' : 'grab'),
         userSelect: 'none', touchAction: 'none',
         // 拖拽中略透，让底下的内容还看得见落点

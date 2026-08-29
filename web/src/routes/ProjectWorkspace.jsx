@@ -12,6 +12,8 @@ import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
 import { Sliders, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
+import { buildBreadcrumb } from './workspace-chrome.js';
+import { useDeviceClass } from '../lib/device-class.js';
 // InspectTab 由 InspectFloatingCard 间接使用（不在此处直接 import）
 // CommentsTab 已删 — comments 嵌入到 InspectFloatingCard
 import TweaksPanel from '../components/context-panel/TweaksPanel.jsx';
@@ -229,8 +231,19 @@ export default function ProjectWorkspace() {
   // 有产物窗铺满屏幕时收掉顶栏的浮现（它的关闭钮在右上角，鼠标够它的路上
   // 必然扫过顶部感应带）
   const [artifactWindowOpen, setArtifactWindowOpen] = useState(false);
+  // 关当前这扇窗的把手（CanvasFrame 报上来）。ref 不是 state：只在按返回那一刻读
+  const closeWindowRef = useRef(null);
   // 聊天卡开着 = 右缘那一整条被它占着，顶栏不浮现（issue #1 第 1、4 条）
   const [chatDockOpen, setChatDockOpen] = useState(false);
+  /**
+   * 聊天卡占了多宽（平板上画布区要让出这么多，2026-08-29 外壳第四刀）。
+   * ⭐ 让位不是挪工具栏，是**收窄画布容器** —— 工具栏/翻页器/小地图都往这个
+   * 容器里 dock，容器一收它们自己重排，以后加的东西也自动跟着。
+   * 只平板让：手机是抽屉（本来就盖着），桌面屏够宽压根不撞（工具栏 501-1099、
+   * 卡 1212 起）；810 的平板是唯一撞车那一档（真机量到卡 422 起、工具栏 113-697）。
+   */
+  const deviceClass = useDeviceClass();
+  const [chatDockW, setChatDockW] = useState(0);
   const [exportsListOpen, setExportsListOpen] = useState(false);
   const [pickExportOpen, setPickExportOpen] = useState(false);
   const [pickType, setPickType] = useState(null);   // 从菜单点进来的产物类型
@@ -1970,6 +1983,8 @@ export default function ProjectWorkspace() {
       // 两层界面轮流占屏不叠着抢 —— 08-17 拍板，配套把卡的出厂默认从「固定
       // 展开」翻成「不固定」，否则顶栏等于没了。
       topSuppressed={artifactWindowOpen || chatDockOpen}
+      // ‹ 先退最里面那一层：有窗开着就关窗，否则交给面包屑上一级（MobileTopBar 兜）
+      onBack={artifactWindowOpen ? () => closeWindowRef.current?.() : null}
       /**
        * 文件夹窗开着 = 右上角有它的关闭叉。产物窗那条路是整条顶栏不浮现
        * （topSuppressed），文件夹窗不能照办 —— 下面那串面包屑**只有文件夹窗
@@ -1977,27 +1992,7 @@ export default function ProjectWorkspace() {
        * 那一段感应带。issue #1 第 4 条。
        */
       topRightSafe={!!boardUi?.cwd}
-      /**
-       * 面包屑 = **当前目录一路拆到根**（2026-08-13）。
-       *
-       * 以前这里最多两级（项目名 / 任务名），因为那时只有"在项目区"和"聚焦
-       * 某一块区"两种状态。现在文件夹可以套文件夹，进到第三层就得能一眼看出
-       * 自己在哪、还能点回去任意一级。
-       *
-       * 项目名那一级 = 根目录。点它回根，跟点 logo 回首页不是一回事。
-       */
-      breadcrumb={[
-        {
-          label: project.name,
-          title: '回到桌面根',
-          ...(boardUi?.cwd ? { onClick: () => boardApiRef.current?.goTo?.('') } : {}),
-        },
-        ...((boardUi?.crumbs || []).map((c, i, all) => ({
-          label: c.title,
-          // 最后一级是"你现在在这儿"，不可点
-          ...(i < all.length - 1 ? { onClick: () => boardApiRef.current?.goTo?.(c.id) } : {}),
-        }))),
-      ]}
+      breadcrumb={buildBreadcrumb(project.name, boardUi, (d) => boardApiRef.current?.goTo?.(d))}
       actions={
         <>
           {/* 顶栏只留导航和动作两类（2026-07-30 重构）。原来这里还挂着上下文进度条 +
@@ -2089,9 +2084,11 @@ export default function ProjectWorkspace() {
          * 同一个上下文里比大小，把聊天盖死。 */}
         <section style={{
           position: 'absolute', inset: 0,
+          right: deviceClass === 'tablet' && chatDockOpen ? chatDockW + 8 : 0,
           display: 'flex', flexDirection: 'column',
           background: COLOR.bgWhite,
           isolation: 'isolate',
+          transition: 'right 220ms cubic-bezier(0.22, 1, 0.36, 1)',
         }}>
           <CanvasFrame
             htmlSrc={currentSessionId ? Canvas.artifactUrl(id, versionOfFile(fileVersions, 'canvas.html')) : null}
@@ -2146,7 +2143,10 @@ export default function ProjectWorkspace() {
             boardUi={boardUi}
             boardApiRef={boardApiRef}
             onBoardUiState={setBoardUi}
-            onWindowOpenChange={setArtifactWindowOpen}
+            onWindowOpenChange={(open, close) => {
+              setArtifactWindowOpen(open);
+              closeWindowRef.current = close || null;
+            }}
             onExport={handleExport}
             stageRef={stageRef}
             onAddToContext={(item) => {
@@ -2213,7 +2213,7 @@ export default function ProjectWorkspace() {
         {/* 对话 —— 悬浮 AI 卡（2026-08-13）：关着零遮挡，鼠标贴屏缘唤出，
             图钉固定。放在 canvas section **之外**、视口容器之内：它跟画布
             内容不共用坐标系，画布怎么滚它都待在屏幕原处（这就是「跟随镜头」）。 */}
-        <ChatDock title={currentSessionTitle || '对话'} onOpenChange={setChatDockOpen}>
+        <ChatDock title={currentSessionTitle || '对话'} onOpenChange={(o, w) => { setChatDockOpen(o); setChatDockW(w || 0); }}>
           {({ collapse, pinned, onTogglePin }) => (
           <ChatPanel
             onCollapse={collapse}

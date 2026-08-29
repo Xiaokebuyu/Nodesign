@@ -56,6 +56,8 @@ export default function AppShell({
   topSuppressed = false,
   /** 右上角有别人的关闭钮：感应带在那一段让路（顶栏本身照旧可用） */
   topRightSafe = false,
+  /** 触屏档那颗 ‹ 的动作。给了就盖过「面包屑上一级」（调用方知道哪一层在最里面） */
+  onBack = null,
 }) {
   /**
    * 触屏档走另一条（2026-08-29 外壳第一刀）：**常驻窄条，没有 hover 这回事**。
@@ -160,7 +162,7 @@ export default function AppShell({
   if (touch && overlayTop) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: COLOR.bg, overflow: 'hidden' }}>
-        <MobileTopBar breadcrumb={breadcrumb} actions={actions} />
+        <MobileTopBar breadcrumb={breadcrumb} actions={actions} onBack={onBack} />
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>{children}</div>
       </div>
     );

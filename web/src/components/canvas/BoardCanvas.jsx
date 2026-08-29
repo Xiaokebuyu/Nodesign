@@ -880,7 +880,7 @@ export default function BoardCanvas({
   }, [folderView]);
 
   // 手机 / 平板的阅读导航（开局取景 + 翻件），整块在 useReadingNav.js
-  const { readGroup, deviceEnv } = useReadingNav({ camApiRef, camera, cam, visibleObjects, layout });
+  const { readGroup, deviceEnv, touchLane } = useReadingNav({ camApiRef, camera, cam, visibleObjects, layout });
 
   // ⚠️ 这里曾有「切 session 就切视图」：有会话进工作模式聚焦它的区、回 /work
   // 回项目区。会话与产物 08-08 解绑、双视图 08-13 退役之后，切对话不该动你
@@ -2022,10 +2022,13 @@ export default function BoardCanvas({
 
         {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
             全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。
-            ⚠️ 手机上撤掉（08-28）：它在 390 宽的屏上占掉左下角一大块、还压着
-            工具栏，而它回答的那个问题（"我在哪"）翻页器用一句「17/17」答得更好。
-            平板留着 —— 那儿放得下，而且宽屏上一眼看全貌仍然是它最快。 */}
-        {!deckOpen && !winDir && deviceEnv.class !== 'phone' && (
+            ⚠️ 触屏档上**按容器宽**撤掉（08-28 起，08-29 改判据）：它在窄容器里
+            占掉左下角一大块、还压着工具栏，而它回答的那个问题（"我在哪"）翻页器
+            用一句「17/17」答得更好。
+            ⭐ 判据是**容器宽不是设备档**：平板本来放得下，但聊天卡一开画布区收到
+            422，小地图又开始压工具栏 —— 决定放不放得下的从来是容器，不是屏幕。
+            桌面这一轮不动（同样窄的桌面窗口仍然留着它）。 */}
+        {!deckOpen && !winDir && !(touchLane && camera.viewport.w < 560) && (
           <Minimap
             bounds={camera.bounds}
             cam={cam}

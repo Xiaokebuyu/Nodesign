@@ -129,7 +129,21 @@ export default function ChatDock({
     try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch { /* 隐私模式 */ }
   }, [cfg]);
 
-  useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
+  /**
+   * 真正落地的宽度：窄屏上按视口铺满，但**永远给贴纸留出 TAB_LANE 那一条**。
+   * 用户拖出来的 cfg.width 原样存着（换回宽屏还是他调的那个数），这里只钳显示值。
+   * ⚠️ 算在这么靠上是因为下面那条 onOpenChange 要报它，而报的那条不能挪到
+   * 手机档那个提前 return 之后（hook 不许有条件地跑）。
+   */
+  const width = Math.min(cfg.width, Math.max(240, vw - (coarse ? TAB_LANE : EDGE_GAP * 2)));
+
+  /**
+   * 报「开没开」的同时报「占了多宽」（2026-08-29 外壳第四刀）。
+   * 平板上调用方要靠这个数把画布区让出来 —— 810 宽的屏上卡一开就压住工具栏
+   * 右半边（真机量到：卡从 x=422 起，工具栏占 113-697）。桌面屏够宽不犯，
+   * 所以让不让位由调用方按设备档决定，这儿只负责把数报准。
+   */
+  useEffect(() => { onOpenChange?.(open, open ? width : 0); }, [open, width, onOpenChange]);
 
   // ── 程序化唤出：就地标注/圈选发送（openChatDock）、要把光标放进输入框
   //   （focusComposer —— 对着收起的卡聚焦是空操作，所以它隐含"先出来"）。
@@ -276,11 +290,6 @@ export default function ChatDock({
       </>
     );
   }
-  /**
-   * 真正落地的宽度：窄屏上按视口铺满，但**永远给贴纸留出 TAB_LANE 那一条**。
-   * 用户拖出来的 cfg.width 原样存着（换回宽屏还是他调的那个数），这里只钳显示值。
-   */
-  const width = Math.min(cfg.width, Math.max(240, vw - (coarse ? TAB_LANE : EDGE_GAP * 2)));
 
   // 收起 ≠ 卸载：草稿在 ChatComposer 的本地 state 里（滚动位置、子代理 tab
   // 同理），卸载 = 用户没发出去的话被吹掉。所以关着的时候是**平移出屏**：

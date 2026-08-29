@@ -50,7 +50,7 @@ export const MOBILE_BAR_H = 44;
  * ⚠️ 这条**不许加 overflow: hidden**。actions 里那些下拉全是绝对定位挂在条里的，
  * 一裁就整条看不见（08-21 在桌面顶栏上踩过，表现为「点了没反应」）。
  */
-export function MobileTopBar({ breadcrumb = [], actions, onMore = null }) {
+export function MobileTopBar({ breadcrumb = [], actions, onMore = null, onBack = null }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef(null);
   useEffect(() => {
@@ -63,7 +63,14 @@ export function MobileTopBar({ breadcrumb = [], actions, onMore = null }) {
 
   const crumbs = breadcrumb.filter(Boolean);
   const here = crumbs[crumbs.length - 1] || null;
-  const up = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
+  const upCrumb = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null;
+  /**
+   * ‹ 的动作：调用方给了就听它的（它知道有没有窗开着 —— 那是最里面那一层），
+   * 没给就退到面包屑上一级。⚠️ 这儿**不判断**哪层在最里面：那是业务问题，
+   * 版面件只负责把一颗按钮画出来。
+   */
+  const back = onBack || upCrumb?.onClick || null;
+  const backLabel = onBack ? '返回' : (upCrumb ? `回到${upCrumb.label}` : '上一层');
 
   return (
     <header
@@ -89,16 +96,16 @@ export function MobileTopBar({ breadcrumb = [], actions, onMore = null }) {
     >
       <button
         type="button"
-        aria-label={up ? `回到${up.label}` : '上一层'}
-        title={up ? `回到${up.label}` : '上一层'}
-        disabled={!up?.onClick}
-        onClick={() => up?.onClick?.()}
+        aria-label={backLabel}
+        title={backLabel}
+        disabled={!back}
+        onClick={() => back?.()}
         style={{
           width: 36, height: 36, flexShrink: 0, borderRadius: RADIUS.md,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'transparent', border: 'none', padding: 0,
-          color: CHROME.ink2, opacity: up?.onClick ? 1 : 0.28,
-          cursor: up?.onClick ? 'pointer' : 'default',
+          color: CHROME.ink2, opacity: back ? 1 : 0.28,
+          cursor: back ? 'pointer' : 'default',
         }}
       >
         <ChevronLeft size={20} />
