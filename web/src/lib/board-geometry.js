@@ -24,6 +24,13 @@ export const ZONE_GAP_Y = 28;             // 堆叠工作区之间的垂直间�
 export const FOLDER_CARD = { w: 288, h: 240 };
 export const FOLDER_CARD_H = FOLDER_CARD.h;
 export const DECK_EMBED_W = 640;          // deck 内嵌渲染宽度（1920 → 1/3 缩放）
+/**
+ * 一张卡的高度天花板（2026-08-29 占位契约刀 B，站主定「一张纸的 40%」）。
+ * 真身与理由在 `server/lib/screen.js` 的 CARD_MAX_H（parity 测试钉着两端一致）：
+ * 生产真板上最高一条板书 2471px，卡高原来完全由内容决定、没有上限。
+ * 超出部分在卡上折叠（可展开，展开是临时的、不进占位）。
+ */
+export const CARD_MAX_H = 384;
 export const STAGE_CARD_W = 560;          // 舞台卡宽度（板内坐标系）
 
 // 项目区顶带（2026-07-28）：项目级四件套（记忆 / 指引 / 品牌 / 文件）常驻桌面顶部，

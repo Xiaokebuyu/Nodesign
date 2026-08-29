@@ -9,6 +9,7 @@
 
 import { promises as fs } from 'node:fs';
 import { parseChalk } from '../../lib/chalk.js';
+import { jsonPreview } from '../../lib/json-preview.js';
 
 /** 单层路径片段：不含分隔符、不含 `..`、不以点开头、长度可控 */
 export function safeSegment(s) {
@@ -54,6 +55,13 @@ export async function decorateFilePreview(item, absPath) {
     const raw = await fs.readFile(absPath, 'utf8');
     const head = /^---\n[\s\S]{0,1200}?\n---\n?/.exec(raw)?.[0] || '';
     const body = raw.slice(head.length).trimStart();
+    // json 走结构裁剪（08-29 刀 B）：产出仍是合法 json，前端才画得出折叠树。
+    // 硬截断的 json parse 不动，卡面上只能是半行 `{"name":"…`。
+    if (/\.json$/i.test(absPath)) {
+      const shrunk = jsonPreview(body);
+      if (shrunk !== null) { item.preview = shrunk; item.previewKind = 'json'; return item; }
+      // 不是合法 json（写了一半 / 带注释）：退回原样，别假装看得懂
+    }
     item.preview = body.length > 1024 ? body.slice(0, 1024) + '…' : body;
   } catch { /* 读不到就没有预览，卡退回细条 */ }
   return item;

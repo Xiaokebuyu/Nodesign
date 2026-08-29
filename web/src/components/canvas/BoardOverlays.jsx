@@ -17,6 +17,7 @@
  */
 import { useState } from 'react';
 import MarkdownMath from '../ui/MarkdownMath.jsx';
+import JsonInk from './cards/JsonInk.jsx';
 import { Plus, ExternalLink, X, BookOpen, PencilLine } from 'lucide-react';
 import { Assets, Instruction } from '../../lib/api.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, MODAL } from '../../lib/theme.js';
@@ -68,6 +69,21 @@ export function makeBoardReaders({ projectId, setViewer, roleNames = {} }) {
         }
       } catch {
         setViewer({ title, content: o.preview || '(读不出来)' });
+      }
+    },
+
+    /**
+     * json 显示器（2026-08-29 占位契约刀 B，站主点名「给 json 一个预览器和显示器」）。
+     * 卡面预览走服务端裁剪过的结构（lib/json-preview.js），这里是**完整**内容 ——
+     * 所以不裁，原样交给 JsonInk 画树（parse 不动它自己退回等宽原样）。
+     */
+    async json(o) {
+      const title = o.name || o.title || 'json';
+      try {
+        const res = await fetch(Assets.artifactFileUrl(projectId, o.path));
+        setViewer({ title, content: await res.text(), viewKind: 'json' });
+      } catch {
+        setViewer({ title, content: o.preview || '(读不出来)', viewKind: 'json' });
       }
     },
 
@@ -150,9 +166,15 @@ export function MarkdownViewerOverlay({ projectId, viewer, onClose, onSaved }) {
             style={{ ...toolBtn, ...(viewer.editKind ? { marginLeft: GAP.xs } : { marginLeft: 'auto' }) }}><X size={12} /></button>
         </div>
         {draft === null ? (
-          <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text, lineHeight: 1.7 }}>
-            <MarkdownMath>{viewer.content}</MarkdownMath>
-          </div>
+          viewer.viewKind === 'json' ? (
+            /* json 显示器（08-29 刀 B）：完整内容画成可折叠键值树。把 json 丢给
+               MarkdownMath 的下场是一整块灰代码 —— 结构一点都看不见。 */
+            <JsonInk text={viewer.content} fontSize={FONT_SIZE.sm} openDepth={3} />
+          ) : (
+            <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text, lineHeight: 1.7 }}>
+              <MarkdownMath>{viewer.content}</MarkdownMath>
+            </div>
+          )
         ) : (
           <textarea
             value={draft}

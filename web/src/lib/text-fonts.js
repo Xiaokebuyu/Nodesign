@@ -9,6 +9,7 @@
  * 等宽只留给机器写的东西（这条规矩全站一致，见 lib/theme.js 的 FONT_MONO）。
  */
 import { FONT_KAI, FONT_MONO, FONT_EMOJI } from './theme.js';
+import { CARD_MAX_H } from './board-geometry.js';
 
 export const TEXT_FONT_CSS = {
   // 手写（默认）：拉丁字符走 Caveat（龙藏的英文字形糙），中文落龙藏体硬笔字
@@ -42,5 +43,8 @@ export function estimateTextBox(t, sizeKey) {
   const longest = Math.min(26, Math.max(4, ...rows.map(em)));
   const lines = rows.reduce((n, l) => n + Math.max(1, Math.ceil(em(l) / longest)), 0);
   // 系数 1.05 与服务端 sketch-layout.js textBox 同款（2026-08-29 刀 3 统一；parity 测试钉着）
-  return { w: Math.round(longest * px * 1.05) + 12, h: Math.round(lines * px * 1.6) + 10 };
+  const w = Math.round(longest * px * 1.05) + 12;
+  const h = Math.round(lines * px * 1.6) + 10;
+  // 卡高天花板（占位契约刀 B）：超出的在卡上折叠，占位只认封顶后的高度
+  return h > CARD_MAX_H ? { w, h: CARD_MAX_H, capped: true, fullH: h } : { w, h };
 }

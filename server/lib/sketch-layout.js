@@ -15,7 +15,7 @@
  */
 
 import { UNIT, overlaps, bboxOf as rectBbox } from './rect.js';
-import { ZOOM_BASIS, ONE_SCREEN } from './screen.js';
+import { ZOOM_BASIS, ONE_SCREEN, CARD_MAX_H } from './screen.js';
 export { UNIT };                   // 兼容出口（真身在 rect.js）
 /**
  * 可读性规范（2026-08-23，用户定；2026-08-29 纸范式改 0.75 基准）：黑板上的字要在
@@ -30,6 +30,12 @@ const SIZE_PX = { sm: 13, md: 16, lg: 22, xl: 30 };
 
 /** 字宽 em 估（CJK/全角 1em，其余 0.62em）—— plain/md 两分支共用 */
 const em2 = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
+
+/**
+ * 卡高封顶（占位契约刀 B）：超过天花板的返回 h=CARD_MAX_H + capped/fullH，
+ * 让调用方能如实告诉 agent「这条被折叠了，实际多高」。前端 estimateTextBox 同款。
+ */
+const capH = (h) => (h > CARD_MAX_H ? { h: CARD_MAX_H, capped: true, fullH: h } : { h });
 
 /** 手写字身位估算（与前端 text-fonts.js estimateTextBox 同公式，parity 测试钉着） */
 export function textBox(t, sizeKey, { md = false, wUnits = null } = {}) {
@@ -55,7 +61,7 @@ export function textBox(t, sizeKey, { md = false, wUnits = null } = {}) {
       const body = mm[1].split('\n').filter(l => l.trim()).length;
       n += /\b(LR|RL)\b/.test(mm[1]) ? 3 : Math.max(4, body * 1.6);
     }
-    return { w, h: Math.round(n * px * 1.6) + 8 + paras * 8 };
+    return { w, ...capH(Math.round(n * px * 1.6) + 8 + paras * 8) };
   }
   // plain 也按 em 估（2026-08-29 刀 3：原来按 t.length，CJK 全错 —— 与前端
   // text-fonts.js estimateTextBox 同公式，parity 测试钉着，改一边看另一边）
@@ -63,7 +69,7 @@ export function textBox(t, sizeKey, { md = false, wUnits = null } = {}) {
   const longest0 = Math.min(26, Math.max(4, ...rows.map(em2)));
   const cols = wUnits ? Math.max(4, (wUnits * UNIT) / (px * 1.05)) : longest0;
   const lines = rows.reduce((n, l) => n + Math.max(1, Math.ceil(em2(l) / cols)), 0);
-  return { w: wUnits ? wUnits * UNIT : Math.round(cols * px * 1.05) + 12, h: Math.round(lines * px * 1.6) + 10 };
+  return { w: wUnits ? wUnits * UNIT : Math.round(cols * px * 1.05) + 12, ...capH(Math.round(lines * px * 1.6) + 10) };
 }
 
 /* ── 确定性随机（与前端 board-bindings 同款 FNV + mulberry32）── */

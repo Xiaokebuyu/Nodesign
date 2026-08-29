@@ -74,6 +74,11 @@ export function isMarkdown(o) {
   return /\.(md|markdown)$/i.test(o?.ext || o?.name || o?.path || '');
 }
 
+/** json（2026-08-29 刀 B）：卡面画结构预览、双击进站内键值树显示器。 */
+export function isJson(o) {
+  return /\.json$/i.test(o?.ext || o?.name || o?.path || '');
+}
+
 /** 带内容预览的文本文件（08-24：文件卡从细条升级；与服务端 PREVIEW_EXTS/estimateSize 同口径） */
 export function isTextPreview(o) {
   return /\.(md|markdown|txt|json|csv|ya?ml)$/i.test(o?.ext || o?.name || o?.path || '');
@@ -298,6 +303,9 @@ export const KINDS = {
       if (isMarkdown(o)) return { reader: 'file', primary: 'read', actions: ['add', 'read', 'open'] };
       // 编排.yaml：双击/「编排」按钮进图形设置页；「打开」留给原始文件
       if (isOrchestration(o)) return { label: '编排', primary: 'orchestrate', actions: ['orchestrate', 'open'] };
+      // json（2026-08-29 刀 B）：跟 .md 同路数 —— 双击进站内显示器（可折叠键值树），
+      // 「打开」仍留给原始文件。以前双击直接把原文丢给浏览器自带的 json 查看器。
+      if (isJson(o)) return { reader: 'json', primary: 'read', actions: ['add', 'read', 'open'] };
       return null;
     },
   },

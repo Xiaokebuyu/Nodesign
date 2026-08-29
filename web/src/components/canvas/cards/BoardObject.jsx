@@ -7,6 +7,8 @@ import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview } from '../../../lib/boa
 import { buildObjectActions } from './object-actions.js';
 import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../../lib/text-fonts.js';
 import MdInk from './MdInk.jsx';
+import JsonInk from './JsonInk.jsx';
+import FoldBox from './FoldBox.jsx';
 import { useMeasuredSize } from './useMeasuredSize.js';
 import { splitNoteFaces, faceParts } from '../../../lib/note-faces.js';
 import { formatSize } from '../../../lib/helpers.js';
@@ -66,7 +68,11 @@ function BoardObject({
   // board.json 里压根没有 w/h，read_board 报的是形态表猜值。涂鸦不量 —— 它的
   // w/h 就是路径包围盒，本来就是真值。
   const measured = o.type !== 'scribble';
-  useMeasuredSize(rootRef, o, measured ? onMeasured : null, [o.data?.t, o.text, o.data?.size, o.data?.format]);
+  // 长内容折叠（2026-08-29 占位契约刀 B）：卡高封顶 CARD_MAX_H，超出的折进 FoldBox。
+  // ⚠️ 展开期间**不回写高度** —— 展开是临时的、不进占位（用户点开的东西临时压住
+  // 下面，跟他自己拖卡一样合法）；回写了就等于把天花板拆了。
+  const [unfolded, setUnfolded] = useState(false);
+  useMeasuredSize(rootRef, o, measured && !unfolded ? onMeasured : null, [o.data?.t, o.text, o.data?.size, o.data?.format]);
   // 板书 MdInk 的 origin 要引用稳定（MdInk 已 memo：相机平移时 200 张板书别再
   // 每帧重跑 markdown 解析 —— 08-25 性能探针 17fps 案）
   const chalkOrigin = useMemo(() => ({
@@ -296,12 +302,14 @@ function BoardObject({
       {o.type === 'text' && o.data?.format === 'md' && (
         /* md 档（2026-08-23 黑板）：同一块纸上的字，只是排版认 markdown/KaTeX/mermaid */
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
-          <MdInk
-            text={o.data?.t || ''}
-            fontFamily={TEXT_FONT_CSS[o.data?.font] || FONT_READ}
-            fontSize={TEXT_SIZE_PX[o.data?.size] || TEXT_SIZE_PX.md}
-            color={SCRIBBLE_INK[o.data?.color] || PAPER.ink}
-          />
+          <FoldBox open={unfolded} onToggle={() => setUnfolded(v => !v)}>
+            <MdInk
+              text={o.data?.t || ''}
+              fontFamily={TEXT_FONT_CSS[o.data?.font] || FONT_READ}
+              fontSize={TEXT_SIZE_PX[o.data?.size] || TEXT_SIZE_PX.md}
+              color={SCRIBBLE_INK[o.data?.color] || PAPER.ink}
+            />
+          </FoldBox>
         </div>
       )}
       {o.type === 'text' && o.data?.format !== 'md' && (
@@ -314,7 +322,9 @@ function BoardObject({
           color: SCRIBBLE_INK[o.data?.color] || PAPER.ink,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           padding: '4px 6px', pointerEvents: 'none', userSelect: 'none',
-        }}>{o.data?.t || ''}</div>
+        }}>
+          <FoldBox open={unfolded} onToggle={() => setUnfolded(v => !v)}>{o.data?.t || ''}</FoldBox>
+        </div>
       )}
 
       {o.type === 'scribble' && (
@@ -341,10 +351,12 @@ function BoardObject({
            pointerEvents none 让闲置板书对手势是空地；nd:controls 围栏的按钮在
            MdInk 里自己开 auto（点选项不该要求先武装板书）。 */
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
-          <MdInk
-            text={o.text || ''} fontFamily={FONT_READ} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
-            origin={chalkOrigin}
-          />
+          <FoldBox open={unfolded} onToggle={() => setUnfolded(v => !v)}>
+            <MdInk
+              text={o.text || ''} fontFamily={FONT_READ} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
+              origin={chalkOrigin}
+            />
+          </FoldBox>
         </div>
       )}
 
@@ -383,12 +395,17 @@ function BoardObject({
             </span>
             <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, color: COLOR.sub }}>{formatSize(o.size)}</span>
           </div>
-          {/* 文本文件预览体（08-24）：md 渲染、其余（json/csv/yaml）等宽原样。
-              服务端截 1KB 进 preview（frontmatter 已藏），完整内容双击进阅读器 */}
+          {/* 文本文件预览体（08-24）：md 渲染、json 键值树（08-29 刀 B）、其余等宽原样。
+              服务端截 1KB 进 preview（frontmatter 已藏；json 走结构裁剪，产出仍是
+              合法 json 所以画得出树），完整内容双击进阅读器 */}
           {o.preview && isTextPreview(o) && (
             /\.(md|markdown)$/i.test(o.name || '') ? (
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: `0 ${GAP.md}px ${GAP.sm}px`, fontSize: FONT_SIZE.xs, lineHeight: 1.5, color: COLOR.text2, maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>
                 <MdInk text={o.preview} fontSize={11} />
+              </div>
+            ) : /\.json$/i.test(o.name || '') ? (
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: `0 ${GAP.md}px ${GAP.sm}px`, maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>
+                <JsonInk text={o.preview} fontSize={10} />
               </div>
             ) : (
               <pre style={{ flex: 1, minHeight: 0, overflow: 'hidden', margin: 0, padding: `0 ${GAP.md}px ${GAP.sm}px`, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, lineHeight: 1.5, color: COLOR.text2, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>

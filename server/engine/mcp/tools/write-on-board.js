@@ -354,7 +354,11 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describeSpot(b2, placed)}.`,
         `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
       ];
-      if (box.h > SKETCH_FIT.h * 0.6) lines.push('⚠ It is tall — next time split or shorten.');
+      // 折叠如实报（08-29 占位契约刀 B）：卡高封顶到 CARD_MAX_H，超出的折在卡里。
+      // ⚠ 旧判据 `box.h > SKETCH_FIT.h*0.6`（720px）封顶之后永远不成立 —— 换成真话。
+      if (box.capped) {
+        lines.push(`⚠ Too long for one card: it shows ${box.h}px of ~${box.fullH}px — the rest is folded (the reader must click to unfold). Split it into several notes (chain:true keeps them threaded), or start a fresh sheet.`);
+      }
       // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话
       {
         const rolledInto = [args.tag, board.objects?.[parentId]?.tag, board.objects?.[anchorId]?.tag]

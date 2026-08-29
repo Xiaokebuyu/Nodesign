@@ -217,6 +217,16 @@ describe('两条轴', () => {
     expect(readerOf({ type: 'note', name: 'x.md', ext: '.md' })).toBe('note');
   });
 
+  /** json 显示器（2026-08-29 刀 B）：跟 .md 同路数进阅读器，别再把原文丢给浏览器 */
+  it('json 变体：双击进站内显示器，「打开」仍留着原始文件', () => {
+    const j = { type: 'file', name: 'config.json', ext: '.json' };
+    expect(traitsOf(j).reader).toBe('json');
+    expect(traitsOf(j).primary).toBe('read');
+    expect(actionsOf(j)).toContain('open');
+    // 别的文本文件不跟着走（csv/yaml 还是等宽原样，没有树可画）
+    expect(traitsOf({ type: 'file', name: 'a.csv', ext: '.csv' }).reader).toBe(null);
+  });
+
   it('isMarkdown 认扩展名也认路径，三个字段任一命中即可', () => {
     expect(isMarkdown({ ext: '.md' })).toBe(true);
     expect(isMarkdown({ name: '正文.markdown' })).toBe(true);
