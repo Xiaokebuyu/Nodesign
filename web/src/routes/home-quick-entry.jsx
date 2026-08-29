@@ -15,7 +15,7 @@ import { Plus } from 'lucide-react';
 import ComposerTray from '../components/chat/ComposerTray.jsx';
 import ModelPicker from '../components/chat/ModelPicker.jsx';
 import { isImeEnter } from '../lib/helpers.js';
-import { useMedia, COARSE } from '../lib/use-media.js';
+import { useMedia, COARSE, NARROW } from '../lib/use-media.js';
 import { Clip } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
@@ -154,6 +154,8 @@ export default function QuickEntry({ prefill }) {
     if (host && peel?.foot) host.replaceChildren(peel.foot);
   }, [peel]);
   const coarse = useMedia(COARSE);
+  // 这张纸的宽度跟着视口走（max-width 720，窄屏就是视口宽），所以版面判据用 NARROW
+  const narrow = useMedia(NARROW);
   // 暂存附件（QuickEntry 阶段还没 project，只能存 File 对象，submit 时再 createProject + 上传）
   // chip 形态：path/error 都 undefined → ComposerTray 显示 "上传中…"（实际是"待上传"，hover 看 title）
   const [attachments, setAttachments] = useState([]);
@@ -408,7 +410,7 @@ export default function QuickEntry({ prefill }) {
                 首页这一步反而没有 —— 而首页恰恰是**唯一**能决定新会话用哪个模型的地方
                 （进了会话之后模型的真相在服务端，这颗按钮改的是本地偏好）。
                 往下开：这张纸贴着页顶，往上开会顶出视口。 */}
-            <ModelPicker className="model" menuPlacement="down" disabled={submitting} />
+            <ModelPicker className="model" menuPlacement="down" disabled={submitting} compact={narrow} />
             {/* 手指设备上这句是错的（没有 Shift+Enter，回车也不发送），不如不说 */}
             {!coarse && <span className="tip">{t('Enter 发送 · Shift + Enter 换行')}</span>}
             <input

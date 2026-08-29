@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Square, Upload } from 'lucide-react';
 import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_KAI } from '../../lib/theme.js';
 import { PAPER, GRAIN, PAPER_SHADOW } from '../../lib/paper.js';
+import { useDeviceClass, isTouchLane } from '../../lib/device-class.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { useDropzone } from '../../lib/useDropzone.js';
 import { isImeEnter } from '../../lib/helpers.js';
@@ -49,6 +50,7 @@ export default function ChatComposer({
   projectId = null,
   sessionId = null,
 }) {
+  const touchLane = isTouchLane(useDeviceClass());
   const [text, setText] = useState('');
   const coarse = useMedia(COARSE);
   const ref = useRef(null);
@@ -280,6 +282,9 @@ export default function ChatComposer({
               projectId={projectId}
               sessionId={sessionId}
               contextTokens={contextUsage?.totalTokens || 0}
+              // 触屏两档都窄：手机是 390 的抽屉，平板是 380 的卡（视口 810 但容器 380
+              // —— 所以判的是设备档不是视口，跟工具栏折行那条同一个道理）
+              compact={touchLane}
             />
           </div>
 

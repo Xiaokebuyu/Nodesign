@@ -480,9 +480,13 @@ export const CSS = `
   .nd-tabs { right: 14px; }
   .nd-tabs > * { padding: 5px 11px 16px; letter-spacing: 0.12em;
     text-indent: 0.12em; }
-  /* 工具栏一行排不下就折行；「开工」始终自己占右边 */
+  /* 工具栏一行排不下就折行；「开工」始终自己占右边。
+     ⚠️ 靠中间那根 flex:1 的撑杆把它顶到右边是**碰运气**：撑杆自己也参与折行 ——
+     08-29 模型名改短之后撑杆挤进了第一行，开工当场掉到第二行**左端**。
+     margin-left:auto 让它在自己那一行里自己贴右，跟撑杆折不折没关系。 */
   .ndd-pad .bar { flex-wrap: wrap; gap: 8px; padding-top: 12px; }
-  .ndd-pad .go { padding: 8px 18px; letter-spacing: 0.22em; text-indent: 0.22em; }
+  .ndd-pad .go { padding: 8px 18px; letter-spacing: 0.22em; text-indent: 0.22em;
+    margin-left: auto; }
   .ndd-pad .model > button { padding: 4px 8px !important; }
   /* 便签本收成 3 格（29 的整数倍，别写别的数）—— 手机上 4 格加工具栏要吃掉三分之一屏 */
   .ndd-pad textarea { min-height: 87px; }

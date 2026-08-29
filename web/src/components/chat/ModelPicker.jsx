@@ -51,6 +51,33 @@ function shortLabel(id, options) {
   return id;
 }
 
+const stripParen = (s) => String(s || '').replace(/[（(][^）)]*[）)]\s*$/, '').trim();
+const headOf = (s) => stripParen(String(s || '').split('·')[0]);
+
+/**
+ * 窄地方用的短名（2026-08-29 用户提：「超长模型名很影响排版」）。
+ *
+ * 模型行的 label 是给下拉看的，写全了路线和卖点
+ * （`GLM-5.3-Flash · 官方直连（限时免费）` 有 24 个字），而按钮上只需要够认出是谁。
+ * 规则：**取第一段、去掉尾部括号**。
+ *
+ * ⚠️ 但有两行的第一段是一样的（官方直连 / Merge 网关 都是 GLM-5.3-Flash），
+ * 一刀切会让按钮对两条不同的线说同一句话 —— 那是把排版问题换成了一句谎。
+ * 所以只在**第一段确实唯一**时才砍到一段，撞名了就留两段（仍然去掉括号）。
+ * 下拉里永远是全名，选的时候信息不少。
+ */
+export function __compactLabel(full, options) {
+  return compactLabel(full, options);
+}
+
+function compactLabel(full, options) {
+  const head = headOf(full);
+  if (!head) return full;
+  const clash = (options || []).filter(o => headOf(o.label) === head).length > 1;
+  if (!clash) return head;
+  return String(full).split('·').map(stripParen).filter(Boolean).slice(0, 2).join(' · ');
+}
+
 /**
  * 换模型的隐性代价：**提示词缓存是按模型绑定的**，换一个就等于整段上下文缓存作废。
  * 下一轮那些 token 不再按 $0.30/M 的缓存命中价读，而是按 $3/M 的 input 重读一遍，
@@ -70,6 +97,8 @@ export default function ModelPicker({
   className,
   /** 下拉往上开还是往下开。首页的纸底下没地方，仍旧往上开 */
   menuPlacement = 'up',
+  /** 地方窄：按钮上只印短名（下拉里仍是全名）。由调用方判，见 compactLabel 头上 */
+  compact = false,
 }) {
   const modelPref = useGlobalStore(s => s.modelPref);
   const setModelPref = useGlobalStore(s => s.setModelPref);
@@ -182,7 +211,10 @@ export default function ModelPicker({
     }
   }, [hasSession, effective, remote, projectId, sessionId, setModelPref, showToast, contextTokens, options, confirmDialog]);
 
-  const label = none ? '未配置模型' : shortLabel(effective, options);
+  const full = none ? '未配置模型' : shortLabel(effective, options);
+  // compact = 调用方说"这儿地方窄"。⭐ 由调用方判而不是这儿读视口：真正约束它的是
+  // **它待的那个容器**（平板上视口 810 但聊天卡只有 380），今晚刚在工具栏折行上栽过同一条
+  const label = compact && !none ? compactLabel(full, options) : full;
   const busy = disabled || saving;
   /**
    * 实心 = 现在跑在重档上。
