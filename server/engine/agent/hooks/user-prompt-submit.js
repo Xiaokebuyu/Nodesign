@@ -32,6 +32,7 @@ import { fitFor } from '../../../lib/sketch-layout.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
 import { stageStatus } from '../stage-status.js';
+import { resetBeat } from '../beat-state.js';
 import { roleLabel } from '../../mcp/actor.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -296,6 +297,8 @@ export function renderTurnState(sections, prev) {
 
 export function makeUserPromptSubmitHandler({ ctx: _ctx, workspaceRoot, sessionId, projectId }) {
   return async (_input, _toolUseId, _options) => {
+    // 新的一轮：收尾闸重新记账（判的是「这一轮」，见 beat-state.js）
+    resetBeat(sessionId);
     try {
       if (!workspaceRoot) return {};
       const sections = await collectSections({ workspaceRoot, sessionId, projectId });
