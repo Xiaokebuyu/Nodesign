@@ -32,11 +32,11 @@ beforeAll(async () => {
   });
 });
 
-describe('read_board 版图', () => {
+describe('read_board 线的清单', () => {
   it('⭐ 已注册的线报节数与 frontier；口径行仍在', async () => {
     const r = await call();
     const text = r.content[0].text;
-    expect(text).toContain('版图');
+    expect(text).toContain('线的清单');
     expect(text).toMatch(/#主线：2 节/);
     expect(text).toContain('接着写会落');
     expect(text).toContain('口径');

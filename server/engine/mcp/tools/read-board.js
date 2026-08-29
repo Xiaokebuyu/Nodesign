@@ -196,7 +196,7 @@ on the minimap and listed with what is inside it.`,
       if (!tag) {
         const laneList = laneSummaries(board);
         if (laneList.length) {
-          lines.push('', '版图（线 = 同 tag 纵列；{tag,chain:true} 续线，open_lane 开新线）：');
+          lines.push('', '线的清单（一条线 = 同一个 tag 的一纵列；{tag,chain:true} 接着写，open_lane 开新的一条）：');
           for (const l of laneList) {
             // 收着的线一行带过：细节不进上下文（要看就 read_board tag= 点名，或 unroll）
             const roll = board.rolls?.[l.tag];

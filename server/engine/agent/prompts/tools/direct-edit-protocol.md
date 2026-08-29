@@ -53,7 +53,7 @@
     **`linkedToEditId` follow-up comment 的优先级最高**：用户填了"重排 OK" / "保持完全不动" 等明确指令，按 comment 来。没填走默认（你自己判断"尽量不动"）
 - **pending-style** —— 按 `styleDelta` 改 inline style 或对应 Tailwind class（如 styleDelta.marginLeft 改 `ml-*`）。
   - **自由模式（free position）—— 最小改动原则**：
-    - `styleDelta` 只含 `{position:'absolute', left, top}` —— 这是用户的真实意图（落位）
+    - `styleDelta` 只含 `{position:'absolute', left, top}` —— 这是用户的真实意图（他把东西摆到了哪里）
     - **不要无脑写整个 source 的样式**。默认只改这 3 个定位字段，**保留 source 原本的 CSS class 行为**（响应式、flex/grid 分配的尺寸、margin、transform 等）
     - 看 `aiContext.parentNeedsRelative` —— true 时把 `parentAnchor` 父元素加 `position:relative`
     - **`aiContext.preDragLayout` 是关键决策上下文**——source 拖前的 computed style 快照，让你判断是否需要追加补救：

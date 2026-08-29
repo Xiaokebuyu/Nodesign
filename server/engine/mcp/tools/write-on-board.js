@@ -67,7 +67,7 @@ const SCHEMA = {
   chain: z.boolean().optional()
     .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights)'),
   open_lane: z.string().max(300).optional()
-    .describe("Open a NEW thread column named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic column at the right edge of the map. Requires tag; continue the lane later with {tag, chain:true}. read_board's 版图 section lists existing lanes."),
+    .describe("Open a NEW thread column named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic column at the right edge of the map. Requires tag; continue the lane later with {tag, chain:true}. read_board 的「线的清单」一节 lists existing lanes."),
   tag: z.string().regex(TAG_RE).optional()
     .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
   ink: z.enum(['chalk', 'hand']).optional()
@@ -102,7 +102,7 @@ One thought = one call. What you pass decides what lands:
 Threads are LANES: a tag names a line of thought growing downward. Continue one with
 {tag, chain:true}; fork a new direction off any note with {tag:"新名", open_lane:"<that id>"}
 (the column is allocated for you, a flow line marks the fork); a brand-new topic is
-{tag:"名", open_lane:"fresh"}. read_board's 版图 section is the map — read it, then place
+{tag:"名", open_lane:"fresh"}. read_board 的「线的清单」一节 is the map — read it, then place
 by RELATION, not by coordinates.
 - at:{x,y} (either mode) is a world-coord suggestion: the server snaps to a free cell
   nearby; placement never fails — if your spot is unusable it lands somewhere sensible
@@ -193,7 +193,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           return err('open_lane 是开新线，跟 reply_to/chain/at/near 互斥 —— 岔出点直接写在 open_lane 里。');
         }
         if (board.lanes?.[args.tag]) {
-          return err(`线 #${args.tag} 已经开过了（read_board 的版图一节看得到）。接着写用 {tag:"${args.tag}", chain:true}；真要另起炉灶，换个名字。`);
+          return err(`线 #${args.tag} 已经开过了（read_board 的「线的清单」那一节看得到）。接着写用 {tag:"${args.tag}", chain:true}；真要另起炉灶，换个名字。`);
         }
       }
       // chain：接在同 tag 最新一条**自己写的**板书后面（chapter 线程不再手抄路径）。
@@ -378,7 +378,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       }
       if (lanePlan) {
         lines.push(`Opened lane #${args.tag}${laneFrom !== 'fresh' ? ` branching from ${laneFrom.id}` : ''}`
-          + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists all lanes under 版图.`);
+          + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists all lanes under 「线的清单」.`);
       }
       lines.push('The user can annotate it to reply; answer with reply_to (or chain:true on the same tag).');
       return { content: [{ type: 'text', text: lines.join('\n') }] };
