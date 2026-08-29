@@ -30,9 +30,9 @@
  *   桌面   原样，一个像素不动
  */
 import { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, MoreHorizontal } from 'lucide-react';
+import { ChevronLeft, MoreHorizontal, MessageSquare } from 'lucide-react';
 import { CHROME, COLOR, GAP, FONT_SIZE, RADIUS } from '../../lib/theme.js';
-import { GRAIN } from '../../lib/paper.js';
+import { GRAIN, PAPER, PAPER_SHADOW } from '../../lib/paper.js';
 
 /** 常驻窄条的高度。比桌面顶栏（56）矮 —— 手机上每一行像素都得挣来 */
 export const MOBILE_BAR_H = 44;
@@ -145,5 +145,156 @@ export function MobileTopBar({ breadcrumb = [], actions, onMore = null }) {
         )}
       </div>
     </header>
+  );
+}
+
+/** 抽屉的两个停靠档：半开（读得见画布）/ 全开（专心说话） */
+export const SHEET_SNAPS = [0.62, 0.94];
+
+/**
+ * 底部抽屉 —— 手机上「跟它说话」那一层的容器（2026-08-29）。
+ *
+ * ## 为什么是从下往上，不是从右边滑进来
+ *
+ * 桌面那张聊天卡贴右缘、按 hover 贴边召唤。手机上这两条都不成立：右上角离
+ * 拇指最远，而卡在窄屏上已经被钳成几乎满宽 —— "卡"的形态名存实亡，实际就是
+ * 一层盖住整屏的东西，只是从错误的方向进来。从下往上推才是拇指的方向。
+ *
+ * ## 拖把手：位移直接跟手，不做惯性
+ *
+ * 两个停靠档（62% / 94%）。拖过半程就换档，松手回弹到最近的档。
+ * ⛔ 不做 fling/惯性：这层里装的是**会滚的消息列表**，抽屉自己再吃一层惯性，
+ * 手指往上一滑到底是滚消息还是拉抽屉就成了猜谜。判据放在**起手位置**上 ——
+ * 只有把手那 28px 高的区域起手才算拉抽屉，别处一律交给里面滚。
+ *
+ * ⚠️ 高度用 dvh：地址栏收展改可视高度，用 vh 抽屉底沿会长期落在屏幕外。
+ */
+export function MobileSheet({ open, onClose, children, label = '对话' }) {
+  const [snap, setSnap] = useState(0);
+  const dragRef = useRef(null);
+  const [dragDy, setDragDy] = useState(0);
+
+  // 关上时回到半开档：下次拉开是个熟悉的高度，而不是上次碰巧停的地方
+  useEffect(() => { if (!open) { setSnap(0); setDragDy(0); } }, [open]);
+
+  const h = `${SHEET_SNAPS[snap] * 100}dvh`;
+  const onDown = (e) => {
+    dragRef.current = { y: e.clientY, snap };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onMove = (e) => {
+    if (!dragRef.current) return;
+    setDragDy(e.clientY - dragRef.current.y);
+  };
+  const onUp = () => {
+    const d = dragRef.current; const dy = dragDy;
+    dragRef.current = null; setDragDy(0);
+    if (!d) return;
+    // 往下拖过 120px：关掉（半开档时）或降一档
+    if (dy > 120) { if (d.snap === 0) onClose?.(); else setSnap(d.snap - 1); return; }
+    if (dy < -60 && d.snap < SHEET_SNAPS.length - 1) setSnap(d.snap + 1);
+  };
+
+  return (
+    <>
+      {/* 幕：点它收起。抽屉盖住大半屏时，「点外面关掉」是手机上唯一还剩的退路 */}
+      <div
+        aria-hidden
+        onPointerDown={() => open && onClose?.()}
+        style={{
+          position: 'absolute', inset: 0, zIndex: 119,
+          background: 'rgba(24,18,12,0.28)',
+          opacity: open ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+          transition: 'opacity 220ms ease',
+        }}
+      />
+      <div
+        data-mobile-sheet
+        role="dialog"
+        aria-label={label}
+        style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          height: h,
+          display: 'flex', flexDirection: 'column',
+          background: PAPER.paper,
+          backgroundImage: GRAIN,
+          borderRadius: '14px 14px 0 0',
+          boxShadow: PAPER_SHADOW.near,
+          zIndex: 120,
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          transform: open ? `translateY(${Math.max(0, dragDy)}px)` : 'translateY(101%)',
+          visibility: open ? 'visible' : 'hidden',
+          pointerEvents: open ? 'auto' : 'none',
+          // 拖的时候不要过渡（不然位移追不上手指）；松手和开关走同一条曲线
+          transition: dragRef.current
+            ? 'none'
+            : `transform 240ms cubic-bezier(0.22, 1, 0.36, 1), height 240ms cubic-bezier(0.22, 1, 0.36, 1), visibility 0s ${open ? '' : '240ms'}`,
+        }}
+      >
+        {/* 把手：拉抽屉的**唯一**起手区（别处起手一律交给里面滚）。点一下也换档。 */}
+        <div
+          data-sheet-handle
+          onPointerDown={onDown}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerCancel={onUp}
+          onClick={() => setSnap((s) => (s + 1) % SHEET_SNAPS.length)}
+          style={{
+            height: 28, flexShrink: 0, cursor: 'grab',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            touchAction: 'none',
+          }}
+        >
+          <span style={{
+            width: 44, height: 4, borderRadius: 2,
+            background: 'rgba(43,33,23,0.22)',
+          }} />
+        </div>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {children}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * 「跟它说话」那颗钮 —— 手机上指挥主 agent 的主入口。
+ *
+ * 位置在画布工具栏**上方**靠右：工具栏 322 宽居中（390 屏上左右各余 34），
+ * 一颗 52 的圆钮塞不进那两条缝，只能上移一行。⚠️ 别往下挪去跟工具栏抢那一行 ——
+ * 底部两条东西横向撞车这件事今晚已经踩过一次（翻页器）。
+ */
+export function TalkFab({ onClick, busy = false, hidden = false }) {
+  if (hidden) return null;
+  return (
+    <button
+      type="button"
+      data-talk-fab
+      aria-label="跟它说话"
+      title="跟它说话"
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={onClick}
+      style={{
+        position: 'absolute', right: 12, zIndex: 118,
+        bottom: `calc(66px + env(safe-area-inset-bottom, 0px))`,
+        width: 52, height: 52, borderRadius: '50%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: COLOR.btn, color: COLOR.btnText,
+        border: 'none', cursor: 'pointer',
+        boxShadow: '0 3px 10px rgba(24,18,12,0.28), 0 10px 26px rgba(24,18,12,0.22)',
+      }}
+    >
+      <MessageSquare size={22} />
+      {busy && (
+        // 在跑：钮上挂一点，不用另开一处状态显示
+        <span aria-hidden style={{
+          position: 'absolute', top: 6, right: 6,
+          width: 8, height: 8, borderRadius: '50%',
+          background: '#B08C4F', boxShadow: '0 0 0 2px rgba(24,18,12,0.35)',
+        }} />
+      )}
+    </button>
   );
 }

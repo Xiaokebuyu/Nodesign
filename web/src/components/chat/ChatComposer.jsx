@@ -272,14 +272,18 @@ export default function ChatComposer({
           />
           {/* 模型 picker：切换从下一条消息生效（服务端空闲时重启 query），
               正在跑时禁用 —— 不给"点了立刻切"的错觉 */}
-          <ModelPicker
-            disabled={disabled || isRunning}
-            projectId={projectId}
-            sessionId={sessionId}
-            contextTokens={contextUsage?.totalTokens || 0}
-          />
+          {/* 窄屏上让位的是它：minWidth:0 才让得动（flex 子项默认 min-width:auto，
+              不写这句它宁可把整行撑折也不缩） */}
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
+            <ModelPicker
+              disabled={disabled || isRunning}
+              projectId={projectId}
+              sessionId={sessionId}
+              contextTokens={contextUsage?.totalTokens || 0}
+            />
+          </div>
 
-          <div style={{ flex: 1 }} />
+          <div style={{ flex: 1, minWidth: 0 }} />
 
           {/* 第三态：台上有角色，但主对话**没被占用**（2026-08-26）。
               以前这里什么都不显示，而按钮因为一个 bug 卡在「停止」，用户以为对话被占了
@@ -296,6 +300,7 @@ export default function ChatComposer({
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
                 padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
                 fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, fontWeight: 700,
+                whiteSpace: 'nowrap', flexShrink: 0,   // 同发送：这一行的主角不折行
                 color: '#F5F0E4',
                 background: PAPER.red,
                 border: `1px solid ${PAPER.red}`,
@@ -318,6 +323,10 @@ export default function ChatComposer({
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs + 1,
                 padding: `${GAP.xs + 1}px ${GAP.md + 2}px`,
                 fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, fontWeight: 700,
+                // 390 宽的抽屉里这一行放不下，谁都不声明就一起折 —— 「发送」被压成
+                // 竖着两个字（08-29 手机抽屉上量到的）。发送是这一行的主角，
+                // 它不缩不折，要让位的是旁边那颗模型钮。
+                whiteSpace: 'nowrap', flexShrink: 0,
                 color: disabled || empty ? PAPER.pencil : '#F5F0E4',
                 background: disabled || empty ? 'transparent' : PAPER.ink,
                 border: `1px solid ${disabled || empty ? PAPER.hair : PAPER.ink}`,

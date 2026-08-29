@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { PAPER, PAPER_SHADOW, GRAIN } from '../../lib/paper.js';
 import EdgeTab, { TAB_LEN } from '../ui/EdgeTab.jsx';
 import { useViewportWidth, useMedia, COARSE } from '../../lib/use-media.js';
+import { useDeviceClass } from '../../lib/device-class.js';
+import { MobileSheet, TalkFab } from './MobileShell.jsx';
 import { useGlobalStore } from '../../stores/globalStore.js';
 
 /**
@@ -246,6 +248,34 @@ export default function ChatDock({
 
   const { side, pinned } = cfg;
   const togglePin = () => setCfg(c => ({ ...c, pinned: !c.pinned }));
+
+  /**
+   * ── 手机档：换一层皮，内容一行不动（2026-08-29 外壳第二刀）──
+   *
+   * 上面那整套（贴屏缘 10px 停 150ms 召唤 / 300ms 离开自动收 / 宽度把手 /
+   * 图钉）都是为鼠标和宽屏写的。手机上它们各自的坏法：
+   *   召唤   没有 hover，只能靠 08-21 补的那枚边缘贴纸
+   *   位置   贴右缘 = 离拇指最远，而窄屏上它已经被钳成几乎满宽，「卡」名存实亡
+   *   图钉   "不自动收"在没有 hover 的地方本来就没有对立面
+   *
+   * 换成：底部抽屉（从拇指的方向来）+ 一颗「跟它说话」的钮。
+   * ⭐ children 是 render prop，内容（ChatPanel 那 20 个入参）全在调用方手里 ——
+   * 这一刀只换容器，**一份逻辑照旧只有一份**。pinned 传 true / onTogglePin 传
+   * null：手机上没有"自动收"这回事，那颗图钉没有对立面，ChatPanel 见 null 自然不画。
+   */
+  const phone = useDeviceClass() === 'phone';
+  if (phone) {
+    return (
+      <>
+        <TalkFab onClick={() => setOpen(true)} hidden={open} />
+        <MobileSheet open={open} onClose={() => setOpen(false)} label={title || '对话'}>
+          {typeof children === 'function'
+            ? children({ collapse: () => setOpen(false), pinned: true, onTogglePin: null })
+            : children}
+        </MobileSheet>
+      </>
+    );
+  }
   /**
    * 真正落地的宽度：窄屏上按视口铺满，但**永远给贴纸留出 TAB_LANE 那一条**。
    * 用户拖出来的 cfg.width 原样存着（换回宽屏还是他调的那个数），这里只钳显示值。
@@ -283,6 +313,7 @@ export default function ChatDock({
       />}
       <div
         ref={rootRef}
+        data-chat-card
         onPointerEnter={clearHide}
         // 只认鼠标：触屏的 pointerleave 在**手指抬起**时也会发，一视同仁的话
         // 在卡里划一下消息就把卡收了
