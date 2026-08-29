@@ -300,6 +300,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           box, replyTo: replyRect, at: args.at || null, anchor: anchorRect, side: args.side || null,
           replyDir, sideHint: flowDir, lineTargets,
           obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect, screen: fit.screen ? fit : null,
+          column: fit.column,
         });
       const learnedDir = !lanePlan && flowDir && !args.side && (replyRect || anchorRect) ? flowDir : null;
 
@@ -531,7 +532,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       // 落位直觉：side 不给时自动挑（空侧+线不压块），偏好排用户摆放习惯
       sideHint: inferFlowDir(sketchBase, { tag: args.tag || null }),
       obstacles, contentBottom: contentBottomOf(obstacles, zone), viewport: vpRect,
-      screen: fit.screen ? fit : null,
+      screen: fit.screen ? fit : null, column: fit.column,
     });
     const ox = placed.x - local.x + 12; const oy = placed.y - local.y + 12;
     // mindmap 的方位重排要**真实图心**（落位前算不出，单锚时质心还会退化）——
@@ -578,7 +579,12 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         + `改走 {tag, chain:true} 让它长成线。`);
     }
     if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}`);
-    if (world.w > fit.w || world.h > fit.h) lines.push(`⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
+    if (world.w > fit.w || world.h > fit.h) {
+      lines.push(fit.column
+        // 手机/平板：宽是硬约束（横向滑动没人受得了），所以话要说在宽上
+        ? `⚠ Too big for a ${fit.lane} screen (${fit.screen.w}x${fit.screen.h}px). Keep each sketch ≤${fit.w} wide — anything wider means sideways scrolling. Stack the next one below, don't put it to the side.`
+        : `⚠ Bigger than one screen at 80% zoom${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
+    }
     if (autoAnchorIds.length) {
       lines.push(`（没给 near/at，但这张图的线连着 ${autoAnchorIds.slice(0, 4).join('、')}${autoAnchorIds.length > 4 ? ' 等' : ''} —— 自动落在它们旁边）`);
     }

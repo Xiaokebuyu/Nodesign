@@ -191,6 +191,18 @@ function sideOf(pos, box, anchor) {
  *   contentBottom 数字
  *   viewport     {x,y,w,h}|null 用户视口（世界坐标）
  *   screen       {w,h}|null 用户一屏的世界像素（远场判据用；缺省 1750×1125）
+ *   column       true = 纵向单列（手机/平板档，见下）
+ *
+ * ## 纵向单列（2026-08-28 移动端第二轮）
+ *
+ * 手机上一屏装不下一件（390 宽的屏 vs 450 宽的板书），所以横向铺开的板在手机上
+ * **根本读不了** —— 真板量的：3326x1652 的内容全内容 fit 只有 10%。用户拍板的
+ * 版式是「一件 = 一屏，纵向单列」。
+ *
+ * ⭐ 这条**在几何这一层执行，不只靠提示词**：column 开着时，near 的左右两侧一律
+ * 降级成正下方（线程接楼的横接同理）。理由是「模型配合与否」不该决定版面能不能
+ * 读 —— 它偶尔想并排比较两块，而在 390 宽的屏上并排就是"第二块在屏幕外"。
+ * 降级会在 resolution 里如实报出来（near-below + nudged），文案照旧报实际发生的事。
  */
 export function resolvePlacement({
   box, replyTo = null, at = null, anchor = null, side = null, gap = UNIT,
@@ -198,6 +210,7 @@ export function resolvePlacement({
   // 落位直觉（08-27）：replyDir = 线程接楼方向（从用户摆放学来，缺省 below）；
   // sideHint = side 自动挑时排最前的偏好；lineTargets = 除锚点外还会连线的点
   replyDir = null, sideHint = null, lineTargets = [],
+  column = false,
 }) {
   const w = Math.max(1, Math.round(box?.w || 0));
   const h = Math.max(1, Math.round(box?.h || 0));
@@ -208,7 +221,8 @@ export function resolvePlacement({
   // 1) 线程：缺省正下方同列；replyDir 学到用户把这条线横着摆时改成同排横接
   //    （above 不认 —— 线程倒着往上长没有读序可言）。
   if (replyTo) {
-    const dir = (replyDir === 'right' || replyDir === 'left') ? replyDir : 'below';
+    // 单列档：横着接楼等于把下一条推到屏幕外
+    const dir = (!column && (replyDir === 'right' || replyDir === 'left')) ? replyDir : 'below';
     const ideal = dir === 'below'
       ? { x: Math.round(replyTo.x), y: Math.round(replyTo.y + replyTo.h + PAD) }
       : dir === 'right'
@@ -251,8 +265,9 @@ export function resolvePlacement({
     // 连线走廊：near 落位几乎总配一条到锚点的线（write_on_board 的 near-line /
     // relation），挑侧和环搜都尽量选「线不压第三块」的位置
     const linesFrom = [{ x: anchor.x + anchor.w / 2, y: anchor.y + anchor.h / 2 }, ...lineTargets];
-    const pref = side
-      || pickSide({ anchor, box: b, gap: g, obstacles, prefer: sideHint, linesFrom });
+    // 单列档：不挑侧，一律正下方（左右两侧在 390 宽的屏上就是"看不见"）
+    const pref = column ? 'below' : (side
+      || pickSide({ anchor, box: b, gap: g, obstacles, prefer: sideHint, linesFrom }));
     const ideals = {
       right: { x: anchor.x + anchor.w + g, y: anchor.y },
       left: { x: anchor.x - g - w, y: anchor.y },

@@ -340,13 +340,40 @@ export function bboxOrZero(rects) {
 }
 
 /**
- * 按用户屏幕算「一屏」：视点里有相机矩形和缩放 → 屏幕像素 = 世界 × 缩放；
- * 0.8 倍可读 → 一屏世界像素 = 屏幕 / 0.8。没视点就用 SKETCH_FIT 的缺省。
+ * 按用户屏幕算「一屏」，并说清这台机器该拿哪一套版式（2026-08-28 移动端第二轮）。
+ *
+ * 屏幕像素：优先读上报的 `device.w/h`（浏览器直接量的），没有就退回
+ * 「相机矩形 × 缩放」（08-23 起就在这么算，缩放怎么变都得同一个数）。
+ *
+ * ## 两套版式
+ *
+ *   桌面   一屏世界像素 = 屏幕 / 0.8（用户在 0.8 倍上读得动，所以内容可以比屏幕大一点）
+ *   触屏   **一件 = 一屏**：宽 = 屏宽 − 48（两边各留 24 呼吸），纵向单列
+ *
+ * ⭐ 触屏这条不是"把桌面的数按比例缩小"。桌面那 1.25 倍富余的前提是**用户会缩小
+ * 了看全貌再放大读细节**，而手机上缩小到 0.19 倍就什么都读不了（真板量的：1766x2018
+ * 的内容在 390 宽的屏上全内容 fit = 19%）。手机上唯一可用的姿势是一件占满一屏、
+ * 竖着翻，所以内容必须**按屏幕生产**，而不是生产完再想办法塞进去。
+ *
+ * ⚠️ 高度给到 1.6 屏而不是 1 屏：竖着滚是手机上读长内容的天然姿势，硬压到一屏
+ * 会逼出一堆"为了短而短"的碎块。宽度才是硬约束（横向滑动没人受得了）。
  */
 export function fitFor(vp) {
-  if (vp?.camera?.w && vp?.zoom) {
-    const sw = vp.camera.w * vp.zoom; const sh = vp.camera.h * vp.zoom;
-    return { w: Math.round(sw / 0.8), h: Math.round(sh / 0.8), screen: { w: Math.round(sw), h: Math.round(sh) } };
+  const cls = vp?.device?.class;
+  const lane = (cls === 'phone' || cls === 'tablet') ? cls : 'desktop';
+  let sw = Number(vp?.device?.w) || 0;
+  let sh = Number(vp?.device?.h) || 0;
+  if (!(sw > 0) && vp?.camera?.w && vp?.zoom) {
+    sw = vp.camera.w * vp.zoom; sh = vp.camera.h * vp.zoom;
   }
-  return { ...SKETCH_FIT, screen: null };
+  if (!(sw > 0)) return { ...SKETCH_FIT, screen: null, lane, column: lane !== 'desktop' };
+  const screen = { w: Math.round(sw), h: Math.round(sh) };
+  if (lane === 'desktop') {
+    return { w: Math.round(sw / 0.8), h: Math.round(sh / 0.8), screen, lane, column: false };
+  }
+  return {
+    w: Math.max(240, Math.round(sw - 48)),
+    h: Math.max(320, Math.round(sh * 1.6)),
+    screen, lane, column: true,
+  };
 }

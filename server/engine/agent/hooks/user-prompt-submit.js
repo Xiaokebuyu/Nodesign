@@ -28,6 +28,7 @@ import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
 import { resolvePlacement, inferFlowDir } from '../../../lib/board-place.js';
+import { fitFor } from '../../../lib/sketch-layout.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
 import { roleLabel } from '../../mcp/actor.js';
@@ -135,7 +136,25 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
             + `${learned.length > 4 ? ' 等' : ''}（接楼和自动挑侧会跟这个方向，别对着摆）`;
         }
       } catch { /* 学不出就不占字 */ }
-      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；落新东西优先进他的视口或贴着视口里的东西（near/at）。要看画面细节才调 read_user_view。` });
+      /**
+       * 手机 / 平板档的版式（2026-08-28 移动端第二轮，用户拍板「一件 = 一屏，纵向单列」）。
+       *
+       * ⚠️ 这段是**事前**说的，不是靠 write_on_board 的返回文案事后纠正 —— 一块
+       * 1700 宽的板书在 390 的屏上已经写出来了，再告诉它"下次窄一点"没有意义，
+       * 用户这一轮拿到的就是要横着滑四屏的东西。
+       *
+       * ⭐ 同时几何那边也在执行（resolvePlacement 的 column：左右侧一律降级成正下方）。
+       * 两处都做不是重复：提示词管"它主动写多宽"，几何管"它没照做时版面还读得了"。
+       */
+      const fit = fitFor(vp);
+      const laneLine = fit.column
+        ? `⚠️ 他在${fit.lane === 'phone' ? '手机' : '平板'}上（屏幕 ${fit.screen?.w}x${fit.screen?.h}px）。`
+          + `版面规矩：**一件 = 一屏，纵向单列**。每件宽度 ≤${fit.w}（超了就要横向滑动，手机上没人受得了），`
+          + `高度到 ${fit.h} 都行（竖着滚是手机上读长内容的天然姿势）。`
+          + `接着写就往**正下方**接，别用 side:'right'/'left' 并排 —— 并排的第二件在他屏幕外。`
+          + `宁可多拆几件竖着排，也别把一件写宽。`
+        : '';
+      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；落新东西优先进他的视口或贴着视口里的东西（near/at）。要看画面细节才调 read_user_view。` });
     }
   } catch { /* 视点读不到就沉默 */ }
   try {

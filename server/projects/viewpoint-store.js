@@ -30,9 +30,27 @@ function sanitizeViewpoint(raw, userId) {
   } : null;
   if (camera && Object.values(camera).some(v => v === null)) return null;
   const str = (v, n) => (typeof v === 'string' && v.length <= n ? v : null);
+  /**
+   * 设备档（2026-08-28 移动端第二轮）。**浏览器判好了报上来**，这边只验不算 ——
+   * 真屏幕多大、是不是手指，只有浏览器知道；服务端手里只有相机矩形和缩放，
+   * 反推屏幕要除以缩放，而且分不清「390 宽的手机」和「拖窄了的桌面窗口」。
+   * 认不出的档一律当桌面：宁可给手机用户一份桌面版式（能用，只是要缩放），
+   * 也别给桌面用户一份 342 宽的窄条（那是坏的）。
+   */
+  const dc = raw.device && typeof raw.device === 'object' ? raw.device : null;
+  const dw = num(dc?.w, 200, 8000); const dh = num(dc?.h, 200, 8000);
+  // ⚠️ 夹持在这儿是错的判法：一个夹出来的 8000 会变成 8000 宽的版式建议。
+  // 尺寸不在真实屏幕的范围里就**整个丢掉 device**，退回相机×缩放那条老路。
+  const device = (dc && dw !== null && dh !== null && dw === Number(dc.w) && dh === Number(dc.h)) ? {
+    class: (dc.class === 'phone' || dc.class === 'tablet') ? dc.class : 'desktop',
+    w: dw, h: dh,
+    dpr: num(dc.dpr, 0.5, 8),
+    coarse: !!dc.coarse,
+  } : null;
   return {
     userId: userId || null,
     camera,
+    device,
     zoom: num(raw.zoom, 0.01, 100),
     layer: str(raw.layer, 300) || '',
     openWindow: str(raw.openWindow, 300),
@@ -56,10 +74,20 @@ export function getViewpoint(pid) {
   return v;
 }
 
+/** 档位的人话（注入和工具共用一份措辞；桌面不说 —— 那是默认情况，说了是噪音） */
+export function describeDevice(v) {
+  const d = v?.device;
+  if (!d || d.class === 'desktop') return null;
+  const name = d.class === 'phone' ? '手机' : '平板';
+  return `${name}（屏幕 ${d.w}x${d.h}px，触屏）`;
+}
+
 /** 一行人话（注入/工具共用一份措辞）。rects 可选：给了就报视口里有什么 */
 export function describeViewpoint(v, rects = null) {
   if (!v) return null;
   const bits = [];
+  const dev = describeDevice(v);
+  if (dev) bits.push(`用的是${dev}`);
   if (v.layer) bits.push(`在文件夹「${v.layer}」里`);
   if (v.camera) {
     bits.push(`视口 (${Math.round(v.camera.x)},${Math.round(v.camera.y)}) ${Math.round(v.camera.w)}x${Math.round(v.camera.h)}${v.zoom ? ` 缩放 ${Number(v.zoom).toFixed(2)}` : ''}`);
