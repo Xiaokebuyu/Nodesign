@@ -5,6 +5,7 @@ import TimelineGroup from './TimelineGroup.jsx';
 import { History } from 'lucide-react';
 import { COLOR, CHROME, GAP, RADIUS, FONT_KAI, FONT_SIZE } from '../../lib/theme.js';
 import { PAPER, GRAIN, PAPER_SHADOW } from '../../lib/paper.js';
+import { useDeviceClass } from '../../lib/device-class.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 
 /**
@@ -174,16 +175,30 @@ const STARTERS = [
   '梳理一下这个项目的视觉风格，写进风格档案',
 ];
 
+/**
+ * 空态在手机上要瘦一圈（2026-08-29）。
+ *
+ * 桌面上这块住在一张 380x1000 的卡里，四段（邀请语 / 三条起手 / 它能干什么 /
+ * 去历史对话）摊开正好。手机上它住在一个 412 高的抽屉里，同样四段占满整屏还要滚 ——
+ * 而人打开抽屉是**为了说话**，不是为了读说明。
+ *
+ * 砍的两段都有替代品，不是硬删：
+ *   「它能干什么」那段是第一次用时的介绍，抽屉不是读介绍的地方；
+ *   「之前的对话都在这」在手机上是重复的 —— 抽屉顶上那颗会话选择器（新对话 ⌄）
+ *   就是同一个入口，而且更近。
+ * 留下的是**唯一能立刻动手的那两段**：邀请语 + 三条起手。
+ */
 function EmptyState({ onOpenSessionList }) {
   const setChatDraft = useGlobalStore(s => s.setChatDraft);
+  const phone = useDeviceClass() === 'phone';
   return (
     <div style={{
       flex: 1, minHeight: 0, overflow: 'auto',
-      padding: `${GAP.xxl}px ${GAP.lg}px`,
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: GAP.lg,
+      padding: `${phone ? GAP.lg : GAP.xxl}px ${GAP.lg}px`,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: phone ? GAP.md : GAP.lg,
       fontFamily: FONT_KAI, color: CHROME.pencil, textAlign: 'center',
     }}>
-      <div style={{ fontSize: FONT_SIZE.lg, lineHeight: 1.9, color: CHROME.ink2 }}>
+      <div style={{ fontSize: FONT_SIZE.lg, lineHeight: phone ? 1.6 : 1.9, color: CHROME.ink2 }}>
         说一句话开始<br />
         想做什么、什么场合看、想让人感觉到什么。
       </div>
@@ -212,15 +227,17 @@ function EmptyState({ onOpenSessionList }) {
         ))}
       </div>
 
-      <div style={{
-        maxWidth: 300, fontSize: FONT_SIZE.md, lineHeight: 1.9, color: CHROME.pencil,
-        borderTop: `1px solid ${CHROME.border}`, paddingTop: GAP.md,
-      }}>
-        agent 会在项目里建一个任务文件夹放产出，写的每一步都在右边画布上实时演。
-        它能生成图片、联网查资料、自己截图检查排版、按元素微调。
-      </div>
+      {!phone && (
+        <div style={{
+          maxWidth: 300, fontSize: FONT_SIZE.md, lineHeight: 1.9, color: CHROME.pencil,
+          borderTop: `1px solid ${CHROME.border}`, paddingTop: GAP.md,
+        }}>
+          agent 会在项目里建一个任务文件夹放产出，写的每一步都在右边画布上实时演。
+          它能生成图片、联网查资料、自己截图检查排版、按元素微调。
+        </div>
+      )}
 
-      {onOpenSessionList && (
+      {onOpenSessionList && !phone && (
         <button
           onClick={onOpenSessionList}
           style={{
