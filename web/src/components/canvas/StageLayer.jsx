@@ -345,11 +345,59 @@ export function StageBoardLayer({ stageBadges, anchoredCards, positioned, visibl
 
 // ── 屏幕坐标系那一面（dock）──
 
+/** 没有工具栏时贴底留这么多 */
+const DOCK_INSET = 14;
+/** 让开工具栏之后还要留的一条缝 */
+const DOCK_CLEAR = 12;
+
+/**
+ * dock 要让开那条常驻工具栏（2026-08-30）。
+ *
+ * ⛔ 两个都钉在容器底边正中：工具栏 y 908–946，dock 卡的底边 936 ——
+ * **卡片底部 28px 压在工具栏底下**，而 AskUserQuestion 的按钮正好在那一条。
+ * 工具栏 z-index 510、dock 80，所以永远是工具栏赢。
+ *
+ * 让位的做法跟外壳那次一致（"让位不是挪工具栏"）：工具栏是画布的常驻控件，
+ * 位置不能跟着一张临时卡片跑；该动的是这张卡。
+ *
+ * ⚠️ 高度要**现量**不能写死：工具栏在窄容器里会折行（平板上聊天卡一开就折成
+ * 两排），写死的偏移到那一档就又压上了。
+ * ⚠️ 用 offsetTop 不用 getBoundingClientRect：工具栏自动收起时会 translateY(14px)，
+ * 拿 rect 量的话卡片会跟着鼠标上下跳。offsetTop 不受 transform 影响。
+ */
+function useToolbarClearance(deps) {
+  const ref = useRef(null);
+  const [bottom, setBottom] = useState(DOCK_INSET);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const host = el.parentElement;
+    const measure = () => {
+      const tb = document.querySelector('[data-floating-toolbar="tools"]');
+      const box = tb?.offsetParent;
+      if (!tb || !box) { setBottom(DOCK_INSET); return; }
+      const want = box.clientHeight - tb.offsetTop + DOCK_CLEAR;
+      // 封顶：工具栏折成很多排时别把卡顶出容器
+      const cap = Math.round((host?.clientHeight || box.clientHeight) * 0.4);
+      setBottom(Math.min(Math.max(DOCK_INSET, Math.round(want)), cap));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (host) ro.observe(host);
+    const tb = document.querySelector('[data-floating-toolbar="tools"]');
+    if (tb) ro.observe(tb);
+    return () => ro.disconnect();
+    // 卡片数量变了顺便重挂一次：工具栏可能比 dock 晚一步挂上来
+  }, deps);
+  return [ref, bottom];
+}
+
 export function StageDock({ dockPanels, dockChips, onDismiss }) {
+  const [dockRef, bottom] = useToolbarClearance([dockPanels.length, dockChips.length]);
   if (dockPanels.length === 0 && dockChips.length === 0) return null;
   return (
-    <div data-stage="dock" style={{
-      position: 'absolute', left: '50%', bottom: 14, transform: 'translateX(-50%)',
+    <div ref={dockRef} data-stage="dock" style={{
+      position: 'absolute', left: '50%', bottom, transform: 'translateX(-50%)',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: GAP.sm,
       zIndex: 80, pointerEvents: 'none', maxWidth: '74%',
     }}>
