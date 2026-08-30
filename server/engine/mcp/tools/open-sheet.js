@@ -18,7 +18,8 @@ import { byOf } from '../actor.js';
 import { readBoard, patchBoard } from '../../../projects/board-store.js';
 import { TAG_RE } from '../../../projects/board-sanitize.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
-import { fitFor } from '../../../lib/sketch-layout.js';
+import { fitFor, capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
+import { CARD_MAX_H } from '../../../lib/screen.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import {
   sheetSizeFor, allocateSheetRect, nextSheetName, currentSheet, innerRect, SHEET_MARGIN,
@@ -86,9 +87,13 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
       ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `铺了一张纸 ${s.id}` });
       ctx?.emit?.(Events.boardFocus({ x: s.x, y: s.y, w: s.w, h: s.h }, { layer: '', soft: s.basis !== 'viewport', actor: by !== 'agent' ? by : null }));
     } catch { /* fail-soft */ }
+    const colCap = capacityOf(DEFAULT_CHALK_W, s.innerH);
     const lines = [
       `Sheet ${s.id} laid at world (${s.x},${s.y}) ${s.w}x${s.h}${s.title ? ` — “${s.title}”` : ''}; it is now the current sheet.`,
       `Writable area: ${s.innerW}x${s.innerH}px, margin ${SHEET_MARGIN}. at:{x,y} in write_on_board now means pixels from its top-left writable corner (x→right, y→down).`,
+      // 给 agent 的量纲（08-29 刀 D）：它手里的东西是字，护栏却全是像素 ——
+      // 让它自己换算 = 每次落笔前做一道做不准的算术，结果是写完才发现装不下。
+      `Room: ${colCap.lines} lines tall; a default ${DEFAULT_CHALK_W}px-wide note fits ~${colCap.perLine} CJK chars (~${Math.round(colCap.perLine / 0.62)} latin) per line, so ~${colCap.cjk} CJK chars per column, and ~${Math.max(1, Math.floor(s.innerW / (DEFAULT_CHALK_W + 24)))} such columns fit side by side. One card is capped at ${CARD_MAX_H}px tall (~${capacityOf(DEFAULT_CHALK_W, CARD_MAX_H).lines} lines) — longer notes get folded, so split them.`,
       s.basis === 'viewport' ? 'Opened under the user’s current view.' : (s.basis === 'below-sheet' ? 'Stacked below the current sheet.' : 'Placed below existing content.'),
     ];
     if (s.overlapsLoose) lines.push('⚠ Some loose items already sit in this area — they now read as “on this sheet”; move them (edit_board) if that is wrong.');

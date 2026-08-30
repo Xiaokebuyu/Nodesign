@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { PencilLine, Terminal, X } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_MONO, FONT_KAI, FONT_SIZE, TERM, CANVAS, alpha } from '../../lib/theme.js';
+import { PAPER } from '../../lib/paper.js';
 import MdInk from './cards/MdInk.jsx';
 import { stageKindOf, resolveObjectId, zoneOfObjectId, fileNameOf, chipHintOf, toolLabelOf } from '../../lib/stage.js';
 import { ZONE, STAGE_CARD_W, POP_IN } from '../../lib/board-geometry.js';
@@ -98,6 +99,10 @@ export function useStageState({
               ...c,
               filePath: c.filePath || evt.filePath || null,
               objectId: c.objectId || oid,
+              // 位置（08-29 刀 C）：agent 给的纸内坐标，随 text 的第一拍一起到 ——
+              // 有它就能把字直接流到真位置，而不是先写在一块空地上再跳过去。
+              // reset（批里换了一条）时跟着换成新那条的位置。
+              spot: evt.reset ? (evt.spot || null) : (c.spot || evt.spot || null),
               // reset = 批里换了一条板书：另起一张（不清的话两条正文粘一起）
               text: evt.reset ? (evt.append || '') : c.text + (evt.append || ''),
             },
@@ -484,11 +489,16 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
 export function ChalkLiveInk({ card, spot }) {
   if (!spot) return null;
   const running = card.status === 'running';
+  // 落在 agent 自己选的位置上（08-29 刀 C）：画一道很淡的左缘，表示"这块地已经
+  // 定下了，字正往里流"。落在我们找的空地上（agent 没给位置）时不画 —— 那块地
+  // 并不是真的属于它，画个框反而是撒谎。
+  const placed = spot.placed && running;
   return (
-    <div data-stage="chalk-live" style={{
-      position: 'absolute', left: spot.x, top: spot.y, width: 432, zIndex: 3,
+    <div data-stage="chalk-live" data-placed={spot.placed ? '1' : undefined} style={{
+      position: 'absolute', left: spot.x, top: spot.y, width: spot.w || 432, zIndex: 3,
       pointerEvents: 'none', padding: '4px 6px', opacity: card.status === 'fail' ? 0.3 : 0.88,
       animation: card.status === 'ok' ? 'ndStageOut 500ms ease 700ms forwards' : POP_IN,
+      ...(placed ? { borderLeft: `2px solid ${alpha(PAPER.ink, 0.16)}`, marginLeft: -8, paddingLeft: 6 } : null),
     }}>
       {card.sketching && !card.text
         ? <span style={{ fontFamily: FONT_KAI, fontSize: 14, color: COLOR.sub }}>（正在画图…）</span>

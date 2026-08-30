@@ -20,6 +20,7 @@ import { layerOf } from '../../../lib/canvas-id.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
+import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
 import { sheetSummaries, rollCardRect } from '../../../lib/board-sheets.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
@@ -199,7 +200,10 @@ on the minimap and listed with what is inside it.`,
           if (ss.length) {
             lines.push('', '纸（sheet）：at:{x,y} 写的是纸内像素（版心左上为原点）；写满自动翻纸，新话题 open_sheet：');
             for (const s of ss) {
-              lines.push(`  ${s.id}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高${s.lastId ? `，最新 ${s.lastId}` : ''}`);
+              // 剩多少地方按**字**报（08-29 刀 D）：agent 手里的东西是字，
+              // 只给像素等于让它每次落笔前做一道做不准的算术
+              const cap = capacityOf(DEFAULT_CHALK_W, s.freeH);
+              lines.push(`  ${s.id}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高（≈${cap.lines} 行 / ${cap.cjk} 字）${s.lastId ? `，最新 ${s.lastId}` : ''}`);
             }
           }
         } catch { /* 纸读不出不挡座次 */ }

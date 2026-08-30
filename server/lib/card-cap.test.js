@@ -13,7 +13,7 @@ const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-cardcap-'));
 process.env.PROJECTS_DATA_DIR = path.join(tmp, 'projects-data');
 process.env.DB_PATH = path.join(tmp, 'test.db');
 
-const { textBox } = await import('./sketch-layout.js');
+const { textBox, capacityOf, DEFAULT_CHALK_W } = await import('./sketch-layout.js');
 const { CARD_MAX_H } = await import('./screen.js');
 
 const long = Array.from({ length: 40 }, (_, i) => `第 ${i + 1} 行，写满一整章的板书就是这么来的。`).join('\n');
@@ -85,5 +85,37 @@ describe('工具如实报折叠', () => {
   it('⭐ 反向：短板书不许报折叠（防止把提醒写成永远都说）', async () => {
     const r = await write1({ text: short });
     expect(r.content[0].text).not.toMatch(/folded/);
+  });
+});
+
+/**
+ * 给 agent 的字数量纲（2026-08-29 刀 D）。
+ *
+ * ⚠️ 这一组同时是**教义与代码的 parity**：prelude 里白纸黑字写着「默认板书宽
+ * 432px ≈ 一行 26 个汉字」「一张纸竖着排 35 行上下」。公式一改，那两句就成了
+ * 谎话，而提示词不会报错 —— 所以把它们钉在这里。
+ */
+describe('capacityOf 字数量纲', () => {
+  it('⭐ 默认板书宽（432px）一行 26 个汉字 —— prelude 里就是这么教的', () => {
+    expect(capacityOf(DEFAULT_CHALK_W, 1000).perLine).toBe(26);
+    expect(DEFAULT_CHALK_W).toBe(432);
+  });
+
+  it('⭐ 一张 2000x925 版心的纸竖着排 35 行 —— prelude 里就是这么教的', () => {
+    expect(capacityOf(DEFAULT_CHALK_W, 925).lines).toBe(35);
+  });
+
+  it('拉丁字符按 0.62em 折算（跟 textBox 同一把尺）', () => {
+    const c = capacityOf(DEFAULT_CHALK_W, 925);
+    expect(c.latin).toBe(Math.round(c.cjk / 0.62));
+  });
+
+  it('一块卡的天花板约 14 行（超了就折叠）', () => {
+    expect(capacityOf(DEFAULT_CHALK_W, CARD_MAX_H).lines).toBe(14);
+  });
+
+  it('地方不够就是 0 行，不给负数', () => {
+    expect(capacityOf(DEFAULT_CHALK_W, 0).lines).toBe(0);
+    expect(capacityOf(0, 0).perLine).toBeGreaterThanOrEqual(1);
   });
 });

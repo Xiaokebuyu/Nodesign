@@ -220,13 +220,24 @@ export function sheetSummaries(board) {
  *   placeBeside     贴放是精确几何不是搜索（压上如实报，不代找洞）
  */
 
-/** 纸内定点：局部坐标 → 世界坐标，钳进版心。钳过要如实报（越界钳住但要说）。 */
+/**
+ * 纸内定点：局部坐标 → 世界坐标，钳进版心。钳过要如实报（越界钳住但要说）。
+ *
+ * `overflowY` = 从 agent 要的那个 y 往下**真的不够高**还差多少（2026-08-29 刀 C）。
+ * 站主定的换纸判据第一条就是"当前这块地放不下剩下一整块内容"—— 光说"钳住了"
+ * 不够，钳住的结果是那条被压到贴着纸底、跟上一条挤在一起，而 agent 完全不知道
+ * 该翻页了。
+ */
 export function placeAtOnSheet(s, at, box) {
   const inner = innerRect(s);
   const ideal = toWorld(s, { x: Math.round(at.x), y: Math.round(at.y) });
   const x = Math.min(Math.max(ideal.x, inner.x), Math.max(inner.x, inner.x + inner.w - box.w));
   const y = Math.min(Math.max(ideal.y, inner.y), Math.max(inner.y, inner.y + inner.h - box.h));
-  return { x: Math.round(x), y: Math.round(y), clamped: x !== ideal.x || y !== ideal.y };
+  return {
+    x: Math.round(x), y: Math.round(y),
+    clamped: x !== ideal.x || y !== ideal.y,
+    overflowY: Math.max(0, Math.round(ideal.y + box.h - (inner.y + inner.h))),
+  };
 }
 
 /**

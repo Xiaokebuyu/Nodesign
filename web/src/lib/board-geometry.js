@@ -31,6 +31,37 @@ export const DECK_EMBED_W = 640;          // deck 内嵌渲染宽度（1920 → 
  * 超出部分在卡上折叠（可展开，展开是临时的、不进占位）。
  */
 export const CARD_MAX_H = 384;
+
+/**
+ * 纸的版心边距（真身 `server/lib/board-sheets.js` 的 SHEET_MARGIN，parity 钉着）。
+ * 前端要它是因为流式板书要把 agent 给的**纸内局部坐标**换算成世界坐标 —— 字才
+ * 能流到它真正要去的地方（2026-08-29 占位契约刀 C）。
+ */
+export const SHEET_MARGIN = 24;
+
+/**
+ * 纸内局部坐标 → 世界坐标。
+ *
+ * `sheet` 没点名时回落到"登记时间最新的那张"—— 跟服务端 currentSheet 的回落逻辑
+ * 一致（服务端还多一层会话指针，那是前端够不着的；模型点名了 sheet 就没有分歧）。
+ * 算不出来返回 null，调用方退回原来的"视口里一块空地"。
+ *
+ * @param {object} sheets  board.sheets
+ * @param {{at?:{x,y}, sheet?:string}} spot  流式入参里抽出来的位置字段
+ */
+export function sheetSpotToWorld(sheets, spot) {
+  if (!spot?.at || !Number.isFinite(spot.at.x) || !Number.isFinite(spot.at.y)) return null;
+  const table = sheets || {};
+  let s = spot.sheet ? table[spot.sheet] : null;
+  if (!s) {
+    for (const v of Object.values(table)) {
+      if (!Number.isFinite(v?.x)) continue;
+      if (!s || String(v.at || '') > String(s.at || '')) s = v;
+    }
+  }
+  if (!s || !Number.isFinite(s.x)) return null;
+  return { x: Math.round(s.x + SHEET_MARGIN + spot.at.x), y: Math.round(s.y + SHEET_MARGIN + spot.at.y) };
+}
 export const STAGE_CARD_W = 560;          // 舞台卡宽度（板内坐标系）
 
 // 项目区顶带（2026-07-28）：项目级四件套（记忆 / 指引 / 品牌 / 文件）常驻桌面顶部，

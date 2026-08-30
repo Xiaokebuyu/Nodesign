@@ -72,6 +72,33 @@ export function textBox(t, sizeKey, { md = false, wUnits = null } = {}) {
   return { w: wUnits ? wUnits * UNIT : Math.round(cols * px * 1.05) + 12, ...capH(Math.round(lines * px * 1.6) + 10) };
 }
 
+/**
+ * 一块地方大概能写多少字（2026-08-29 占位契约刀 D，站主点名「给 agent 一个
+ * 每个中英文字符占多大的参考」）。
+ *
+ * 公式就是 textBox 那一套的逆用，不是另立一把尺：CJK 记 1em、拉丁记 0.62em，
+ * 行高 = 字号×1.6。板书渲染字号恒定 16px（BoardObject 写死，不读 size 参数），
+ * 所以这里也钉 16。
+ *
+ * 为什么要有它：在这之前给 agent 的护栏**全是像素**（"硬上限 2600×1700"、
+ * "剩 ~412px 高"），而 agent 手里的东西是字。让它自己把字数换算成像素，等于
+ * 每次落笔前做一道它做不准的算术 —— 结果就是写完才发现装不下。
+ *
+ * @param {number} w 可写宽度（像素）
+ * @param {number} h 可写高度（像素）
+ * @returns {{lines:number, cjk:number, latin:number, perLine:number}}
+ *   lines=能排几行，perLine=一行几个汉字，cjk/latin=总字数（纯中文 / 纯拉丁）
+ */
+/** 一条板书的默认版心宽（18 格）—— 自动宽度那三档的上档，也是 prelude 教的列宽 */
+export const DEFAULT_CHALK_W = 18 * UNIT;
+
+export function capacityOf(w, h) {
+  const px = 16;
+  const perLine = Math.max(1, Math.floor((w - 12) / px));
+  const lines = Math.max(0, Math.floor((h - 8) / (px * 1.6)));
+  return { lines, perLine, cjk: lines * perLine, latin: Math.round(lines * perLine / 0.62) };
+}
+
 /* ── 确定性随机（与前端 board-bindings 同款 FNV + mulberry32）── */
 function hashSeed(s) {
   let h = 0x811c9dc5;

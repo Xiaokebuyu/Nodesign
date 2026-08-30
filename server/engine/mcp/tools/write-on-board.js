@@ -56,18 +56,26 @@ const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 /** md 侦测：正文带 markdown 记号却标 plain 会把 **加粗** 原样吐出来（ldx 案） */
 const looksLikeMd = (t) => /(\*\*|__|^#{1,4}\s|^\s*[-*]\s|\|.+\||```|\$[^$]+\$|\[.+\]\(.+\))/m.test(t);
 
+/**
+ * ⚠️ 字段顺序有意义（2026-08-29 占位契约刀 C）：模型是按 schema 声明顺序生成
+ * JSON 的，而入参是**流式**到达前端的 —— 位置字段排在 text 前面，画布才能在
+ * 第一个字到达时就把框立在真位置上，让正文流进去（排在后面的话，字已经流完了
+ * 位置才到，只能先画在一块空地上再跳过去 —— 那正是这一刀要治的）。
+ * 抽取规则在 agent-shared.js 的 TOOL_INPUT_STREAM_FIELDS.spot。
+ */
 const SCHEMA = {
-  text: z.string().min(1).max(8000).optional()
-    .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
-  near: z.string().max(300).optional()
-    .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it. Placement itself is by sheet (at / flow), not by near'),
-  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; a full sheet turns the page)`),
   at: SHEET_PT.optional()
     .describe("Where on the CURRENT SHEET, in pixels from its top-left writable corner (x→right, y→down). Clamped into the sheet — the return says if it was. Omit it to flow top-to-bottom"),
   sheet: z.string().regex(TAG_RE).optional()
     .describe('Write on this sheet instead of the current one (names from open_sheet / read_board)'),
+  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px). Default: the width the user last dragged chalk blocks to, else by content. Omit it unless this one block needs a different measure - the default already follows the user.'),
+  near: z.string().max(300).optional()
+    .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it. Placement itself is by sheet (at / flow), not by near'),
   side: z.enum(['right', 'left', 'above', 'below']).optional()
     .describe('ONLY with near, when the SEMANTICS demand a side (e.g. a caption must sit above): exact placement beside the anchor. Normally omit — sheets flow downward'),
+  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; a full sheet turns the page)`),
+  text: z.string().min(1).max(8000).optional()
+    .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
   relation: z.enum(BINDING_TYPE_IDS).optional()
     .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
   chain: z.boolean().optional()
@@ -81,7 +89,6 @@ const SCHEMA = {
   font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional().describe("Single note font (ink:'hand'; default kai)"),
   color: z.enum(['ink', 'red', 'pencil', 'brass']).optional().describe("Single note color (ink:'hand')"),
   size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe("Single note text size. Real for ink:'hand'; for chalk notes it only sizes the placement box (chalk renders at a fixed size)"),
-  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px). Default: the width the user last dragged chalk blocks to, else by content. Omit it unless this one block needs a different measure - the default already follows the user.'),
   title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
   layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap', 'flow']).optional()
     .describe('Sketch layout. auto FOLLOWS YOUR EDGES: with edges it lays out in flow layers (roots on top, children below — give edges and placement is structure); mindmap picks the hub by degree. free needs at on EVERY node'),

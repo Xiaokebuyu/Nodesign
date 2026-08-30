@@ -117,9 +117,16 @@ describe('write_on_board 统一入口（件数判据）', () => {
     expect(r.content[0].text).toMatch(/on sheet /);
     const board = await readBoard(pid);
     expect(Object.keys(board.sheets || {}).length).toBeGreaterThanOrEqual(1);
+    // 垂直装不下（08-29 刀 C 的换纸判据）：光说"钳住了"没用 —— 那条会被压到贴着
+    // 纸底跟上一条挤一起，而 agent 不知道该翻页。报文要点名"这张纸没地方了"并给出路
     const r2 = await call({ text: '越界的话', at: { x: 11999, y: 11999 } });
     expect(r2.isError).toBeUndefined();
-    expect(r2.content[0].text).toContain('CLAMPED');
+    expect(r2.content[0].text).toContain('RAN OUT');
+    expect(r2.content[0].text).toMatch(/open_sheet/);
+    // 只在水平方向越界（纸下面还有地方）→ 仍然只是钳住，不该谎报"没地方了"
+    const r3 = await call({ text: '只是太靠右', at: { x: 11999, y: 60 } });
+    expect(r3.content[0].text).toContain('CLAMPED');
+    expect(r3.content[0].text).not.toContain('RAN OUT');
   });
 
   it('near 指向没座位但真实存在的文件：救援入座后照锚（「还没有座位」失败类收口）', async () => {

@@ -36,7 +36,10 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     const done = (p, resolution, sheetId, clamped = false) => {
       if (sheetId) setCurrentSheetId(sessionId, sheetId);
       const pressed = overlapIds({ x: p.x, y: p.y, w: box.w, h: box.h }, obstacles);
-      return { x: Math.round(p.x), y: Math.round(p.y), resolution, sheetId, opened, clamped, pressed };
+      return {
+        x: Math.round(p.x), y: Math.round(p.y), resolution, sheetId, opened, clamped, pressed,
+        overflowY: p.overflowY || 0,   // 纸从那个 y 往下不够高还差多少（换纸判据）
+      };
     };
     const sheetOf = (p) => {
       const hit = sheetOfPoint(bWith(), { x: p.x + box.w / 2, y: p.y + box.h / 2 });
@@ -97,7 +100,13 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     else if (placed.resolution === 'thread-new-sheet') bits.push('the thread filled its sheet — turned the page (new sheet)');
     else if (placed.resolution === 'flow') bits.push('flowed below the last item');
     else if (placed.resolution === 'flow-new-sheet') bits.push('sheet was full — turned the page (new sheet)');
-    else if (placed.resolution === 'at') bits.push(placed.clamped ? 'at your spot, CLAMPED into the sheet (it stuck out)' : 'exactly where you asked');
+    else if (placed.resolution === 'at') {
+      // 换纸判据（08-29 刀 C）：光说"钳住了"不够 —— 钳住的结果是这条被压到贴着
+      // 纸底、跟上一条挤在一起，而 agent 不知道该翻页了。
+      bits.push(placed.overflowY
+        ? `at your spot but this sheet RAN OUT below that y (short by ${placed.overflowY}px) — it was pushed up to fit. Turn the page (open_sheet) or write it shorter`
+        : (placed.clamped ? 'at your spot, CLAMPED into the sheet (it stuck out)' : 'exactly where you asked'));
+    }
     else if (placed.resolution?.startsWith('beside-')) bits.push(`${placed.resolution.slice(7)} of the anchor (exact — no auto-nudging)`);
     else if (placed.resolution === 'lane-open') bits.push('at the head of its fresh sheet');
     else if (placed.resolution === 'below-content') bits.push('below current content (folder layer has no sheets)');
