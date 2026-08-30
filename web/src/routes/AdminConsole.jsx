@@ -26,15 +26,30 @@ import { ModLevelChip, LimitEditor } from '../components/admin/LimitEditor.jsx';
 
 const usd = (n) => `$${(Number(n) || 0).toFixed(2)}`;
 
+/**
+ * 顶上那两张模式卡。value = 项目数，sub = 回合数和每项目回合数。
+ *
+ * ⭐ 真正有信息量的是**每项目回合数**，不是项目数 —— 08-30 第一次拉这个数时，
+ * 设计 2.7、演出 8.1，差三倍。项目数只说明谁点得多，每项目回合数说明谁留下来了。
+ *
+ * ⚠️ 演出模式 08-29 16:02 才有，比设计晚得多。两栏的累计数**不可直接相比**，
+ *    看的是各自的每项目回合数。这句话没地方写进卡里，写在这儿。
+ */
+const MODE_CARDS = [['design', '设计'], ['rp', '演出']];
+
 export default function AdminConsole() {
   const [tab, setTab] = useState('users');
   const [users, setUsers] = useState(null);
   const [invites, setInvites] = useState(null);
+  const [modes, setModes] = useState(null);
   const showToast = useGlobalStore(s => s.showToast);
 
   const reload = useCallback(() => {
     Admin.users().then(d => setUsers(d.users)).catch(err => showToast(`用户拉取失败：${err.message}`, 'error'));
     Admin.invites().then(d => setInvites(d.invites)).catch(err => showToast(`邀请码拉取失败：${err.message}`, 'error'));
+    // 两个模式的用量。拉不到就不显示那两张卡，不弹 toast —— 它不是运营必需品，
+    // 为它弹一条错误提示只会在真出事的时候盖住真正的报错。
+    Admin.modes().then(d => setModes(d.modes)).catch(() => setModes([]));
   }, [showToast]);
   useEffect(reload, [reload]);
 
@@ -82,6 +97,19 @@ export default function AdminConsole() {
             <StatCard label="今日全站" value={usd(stats.costToday)} accent={stats.costToday > 20} />
             <StatCard label="累计花费" value={usd(stats.costTotal)} />
             <StatCard label="可用邀请码" value={`${stats.invitesOpen}`} />
+            {MODE_CARDS.map(([mode, label]) => {
+              const m = (modes || []).find(x => x.mode === mode);
+              if (!m) return null;
+              return (
+                <StatCard
+                  key={mode}
+                  label={label}
+                  value={`${m.projects}`}
+                  sub={`${m.runs} 回合 · ${(m.runs / (m.projects || 1)).toFixed(1)}/项目 · ${usd(m.costUsd)}`}
+                  title={`${label}模式：${m.users} 个人建了 ${m.projects} 个项目。不含你自己的项目。`}
+                />
+              );
+            })}
           </div>
         )}
 
@@ -119,9 +147,9 @@ export default function AdminConsole() {
   );
 }
 
-function StatCard({ label, value, sub, accent }) {
+function StatCard({ label, value, sub, accent, title }) {
   return (
-    <div style={{
+    <div title={title} style={{
       minWidth: 148, padding: `${GAP.lg}px ${GAP.xl}px`,
       background: COLOR.bgWhite, border: `1px solid ${COLOR.border}`, borderRadius: RADIUS.xxl,
       boxShadow: PAPER_SHADOW.far,
@@ -137,17 +165,50 @@ function StatCard({ label, value, sub, accent }) {
 
 // ── 用户 ──────────────────────────────────────────────────────────────
 
+/**
+ * 排序档。三档都是"降序看头部"：花得最多 / 来得最晚 / 今天最活跃。
+ *
+ * ⭐ 为什么要有这个开关：默认那档（累计花费）在二十来个用户的时候是对的 ——
+ * 观察期最想看的就是谁在真用。但用户过百之后，绝大多数人恒等于 $0.00 并列在
+ * 后半段，今天新注册的一律沉到最底下，找一个具体的人要翻八屏。列表本身没坏
+ * （92 个一个不少全渲染），坏的是"看得见的那一屏永远是同一批人"。
+ *
+ * ⚠️ admin 恒置顶，与档位无关 —— 它是站主自己，三档里都不该跟着排。
+ * ⚠️ 每档都缀一个兜底次序（注册时间倒序）。并列的那一大片（几十个 $0.00）
+ *    比较函数返回 0 时靠的是输入顺序，而输入顺序来自接口，不该指望它。
+ */
+const SORTS = {
+  cost: ['累计花费', (a, b) => (b.costTotal || 0) - (a.costTotal || 0)],
+  // 这一档的比较就是下面那个兜底次序本身，写全免得读的人以为是个没写完的桩
+  fresh: ['注册时间', (a, b) => String(b.createdAt).localeCompare(String(a.createdAt))],
+  today: ['今日活跃', (a, b) => (b.costToday || 0) - (a.costToday || 0)],
+};
+
 function UsersTab({ users, reload }) {
+  const [sort, setSort] = useState('cost');
   const sorted = useMemo(() => {
     if (!users) return null;
-    // admin 置顶，其余按累计花费降序 —— 观察期最想看的是"谁在真用"
+    const cmp = SORTS[sort]?.[1] || SORTS.cost[1];
     return [...users].sort((a, b) =>
-      (b.role === 'admin') - (a.role === 'admin') || (b.costTotal || 0) - (a.costTotal || 0));
-  }, [users]);
+      (b.role === 'admin') - (a.role === 'admin')
+      || cmp(a, b)
+      || String(b.createdAt).localeCompare(String(a.createdAt)));
+  }, [users, sort]);
 
   if (!sorted) return <div style={emptyStyle}>加载中…</div>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.md }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md, flexWrap: 'wrap' }}>
+        <Segmented
+          value={sort}
+          onChange={setSort}
+          options={Object.entries(SORTS).map(([k, [label]]) => [k, label])}
+        />
+        {/* 这一行是这次改动的由头：翻到一半时，没有任何东西告诉你后面还有多少 */}
+        <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>
+          共 {sorted.length} 人
+        </span>
+      </div>
       {sorted.map(u => <UserRow key={u.id} u={u} reload={reload} />)}
     </div>
   );

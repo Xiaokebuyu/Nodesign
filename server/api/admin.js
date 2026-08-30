@@ -8,6 +8,7 @@
  *   GET    /api/admin/invites          邀请码列表（含用量）
  *   PATCH  /api/admin/invites/:code    {maxUses} 改总次数（0 = 封死）
  *   GET    /api/admin/users            用户列表 + 今日用量
+ *   GET    /api/admin/modes            设计 / 演出 两个模式各自的用量（不含站主）
  *   PATCH  /api/admin/users/:id        {disabled?, dailyCostLimitUsd?, lifetimeCostLimitUsd?} 封禁/调限额
  *   GET    /api/admin/issues           harness 问题库（按次数降序）+ 按工具聚合
  *   PATCH  /api/admin/issues/:id       {status} open|ack|ignored|closed
@@ -17,6 +18,7 @@
 import express from 'express';
 import { adminGuard } from '../auth/middleware.js';
 import { createInvite, listInvites, getInvite, updateInvite, listUsers, getUserById, updateUser } from '../auth/users-store.js';
+import { modeStats } from '../projects/store.js';
 import { tierOf, PLANS } from '../auth/tier.js';
 import { usedCostToday, usedCostTotal, usedTokensToday, limitFor } from '../lib/quota.js';
 import { listIssues, setIssueStatus, removeIssue, issueStats } from '../lib/issues-store.js';
@@ -71,6 +73,11 @@ router.get('/users', (_req, res) => {
     effectiveModerationLevelApi: levelForKnob(u, 'api'),         // 本地/中转旋钮的生效值
   }));
   res.json({ users });
+});
+
+// 两个模式各自的用量。只读、无参数，控制台顶上那两张卡用。
+router.get('/modes', (_req, res) => {
+  res.json({ modes: modeStats() });
 });
 
 router.patch('/users/:id', (req, res) => {

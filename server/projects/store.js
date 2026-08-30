@@ -282,6 +282,41 @@ export function setActiveSession(projectId, sessionId) {
 }
 
 /** 列 project 关联的 runs（用于级联清理） */
+/**
+ * 两个模式各自的用量（控制台那两张卡）。
+ *
+ * ⛔ **排掉站主自己**：他一个人的设计项目就比所有用户加起来还多，混进去这两个数
+ *    就只是在量他自己。同仓口径，见 feedback-creative-tool-metrics。
+ *
+ * ⚠️ 两条查询分开跑不合并：runs 要 join run_model_usage 才拿得到钱，而那张表
+ *    一个 run 有多行（一轮里换过几个模型就几行），并到项目那条里会把 projects
+ *    乘出好几份。COUNT(DISTINCT) 能救回来，但读的人得先看出这里有个陷阱。
+ *
+ * @returns {Array<{mode, projects, users, runs, costUsd, firstAt}>}
+ */
+export function modeStats() {
+  const HUMANS = "p.owner_id IN (SELECT id FROM users WHERE role <> 'admin')";
+  const out = new Map();
+  for (const r of db.prepare(
+    `SELECT p.mode AS mode, COUNT(*) AS projects, COUNT(DISTINCT p.owner_id) AS users,
+            MIN(p.created_at) AS firstAt
+     FROM projects p WHERE ${HUMANS} GROUP BY p.mode`,
+  ).all()) out.set(r.mode, { ...r, runs: 0, costUsd: 0 });
+
+  for (const r of db.prepare(
+    `SELECT p.mode AS mode, COUNT(DISTINCT r.id) AS runs,
+            COALESCE(SUM(m.cost_usd), 0) AS costUsd
+     FROM runs r
+     JOIN projects p ON p.id = r.project_id
+     LEFT JOIN run_model_usage m ON m.run_id = r.id
+     WHERE ${HUMANS} GROUP BY p.mode`,
+  ).all()) {
+    const e = out.get(r.mode) || { mode: r.mode, projects: 0, users: 0, firstAt: null };
+    out.set(r.mode, { ...e, runs: r.runs, costUsd: r.costUsd });
+  }
+  return [...out.values()];
+}
+
 export function listRunsForProject(projectId) {
   validateProjectId(projectId);
   return db.prepare('SELECT id FROM runs WHERE project_id = ? ORDER BY created_at DESC').all(projectId);

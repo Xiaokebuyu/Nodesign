@@ -24,6 +24,8 @@ export const Admin = {
   // 控制台（2026-08-02）：用户 / 邀请码 / 公告，后端早齐了，这里只是接线
   users: () => jsonRequest('GET', '/api/admin/users'),
   patchUser: (id, patch) => jsonRequest('PATCH', `/api/admin/users/${id}`, patch),
+  /** 设计 / 演出各自的项目数、回合数、花费（后端已排掉站主自己） */
+  modes: () => jsonRequest('GET', '/api/admin/modes'),
   invites: () => jsonRequest('GET', '/api/admin/invites'),
   createInvite: (body) => jsonRequest('POST', '/api/admin/invites', body),
   patchInvite: (code, body) => jsonRequest('PATCH', `/api/admin/invites/${encodeURIComponent(code)}`, body),
