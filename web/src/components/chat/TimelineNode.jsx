@@ -1,4 +1,4 @@
-import { COLOR, GAP, WORKBENCH } from '../../lib/theme.js';
+import { COLOR, GAP } from '../../lib/theme.js';
 import { useTimelinePosition } from './TimelineGroupContext.js';
 
 /**
@@ -19,7 +19,19 @@ import { useTimelinePosition } from './TimelineGroupContext.js';
  *   - 'last' 时线只到 icon center 停（不溢出 done icon 之下）
  *   - 'first' 时线从 icon center 开始（不溢出 group title 与第一个 icon 之间）
  *   - 'only' 不画线（单节点 group 罕见但要 cover）
- *   - 不在 group 里时（position=null）保持 v2 行为：top:0 / bottom:0 全长
+ *   - 不在 group 里时（position=null）保持 v2 行为：全长
+ *
+ * ⭐ v4（2026-08-30）：**线断开，不再拿一块底色去盖。**
+ *   v2 的"打断"是在 icon 底下铺一块不透明方片，颜色写死 WORKBENCH.panel ——
+ *   那是 ThreeColumnLayout 左栏的色，而那个布局**现在一个调用方都没有了**：
+ *   聊天早就搬到 ChatDock 那张纸上（PAPER.paper + GRAIN），方片的颜色再没跟过去。
+ *   08-30 纸的颗粒加重之后当场现形。真机量到的（生产，聊天卡上）：
+ *     方片 background #FBF7EC / background-image: none
+ *     纸   background #FFFEF9 / background-image: GRAIN
+ *   —— 颜色差一档，而且是**平的**：满屏纸纹里一个个光滑的小方。
+ *
+ *   所以不盖了，改成上下两截线各自让开图标。这样它跟纸的颜色、颗粒、季节皮肤、
+ *   夜里那层光**永远不会再对不上** —— 因为它压根不参与配色。
  */
 export default function TimelineNode({
   icon: Icon,
@@ -32,23 +44,21 @@ export default function TimelineNode({
   const PAD_LEFT = GAP.lg;
   const CONTENT_GAP = GAP.sm;
 
-  // icon 相对节点顶部的中心 y（top + height/2），用于计算 first/last 线裁剪边界
+  // icon 相对节点顶部的中心 y（top + height/2），线在这儿断开
   const ICON_TOP = GAP.sm + 3;
   const ICON_CENTER_FROM_TOP = ICON_TOP + ICON_SIZE / 2;
+  const BREAK = ICON_SIZE / 2 + 3;   // 线到图标之间留的那口气
 
   const position = useTimelinePosition(); // 'first' | 'last' | 'only' | 'middle' | null
 
-  // 线的 top/bottom（数字 = px from top；string = CSS expr from bottom edge）
-  let lineTop = 0;
-  let lineBottom = 0;
-  let hideLine = false;
-  if (position === 'only') {
-    hideLine = true;
-  } else if (position === 'first') {
-    lineTop = ICON_CENTER_FROM_TOP;
-  } else if (position === 'last') {
-    lineBottom = `calc(100% - ${ICON_CENTER_FROM_TOP}px)`;
-  }
+  // 图标上下两截线，各自决定画不画：first 上面没有来路，last 下面没有去路
+  const showUp = position !== 'first' && position !== 'only';
+  const showDown = position !== 'last' && position !== 'only';
+  const lineX = PAD_LEFT + NODE_AREA / 2 - 0.5;
+  const seg = (extra) => ({
+    position: 'absolute', left: lineX, width: 1,
+    background: COLOR.borderLt, pointerEvents: 'none', ...extra,
+  });
 
   return (
     <div style={{
@@ -56,28 +66,16 @@ export default function TimelineNode({
       padding: `${GAP.sm}px ${GAP.lg}px ${GAP.sm}px ${PAD_LEFT + NODE_AREA + CONTENT_GAP}px`,
       minWidth: 0,
     }}>
-      {!hideLine && (
-        <div style={{
-          position: 'absolute',
-          left: PAD_LEFT + NODE_AREA / 2 - 0.5,
-          top: lineTop,
-          bottom: lineBottom,
-          width: 1,
-          background: COLOR.borderLt,
-          pointerEvents: 'none',
-        }} />
-      )}
+      {showUp && <div style={seg({ top: 0, height: ICON_CENTER_FROM_TOP - BREAK })} />}
+      {showDown && <div style={seg({ top: ICON_CENTER_FROM_TOP + BREAK, bottom: 0 })} />}
       <div style={{
         position: 'absolute',
         left: PAD_LEFT + (NODE_AREA - ICON_SIZE) / 2,
         top: ICON_TOP,
         width: ICON_SIZE,
         height: ICON_SIZE,
-        // 这块底色的职责是"打断时间轴线"，所以必须跟它所在的那一栏同色：聊天栏是
-        // WORKBENCH.panel（#FBF7EC），以前写成 COLOR.bgWhite（#FFFEF6，纸色）—— 每个
-        // 图标背后一小块比栏色亮一档的方块，用户 08-21 看出来的"图标和侧栏底色有色差"
-        background: WORKBENCH.panel,
-        zIndex: 1,
+        // ⛔ 这里不许再有 background：线已经自己断开了，不需要谁去盖。
+        //    一旦铺底色，就得永远追着纸的颜色 / 颗粒 / 季节皮肤跑（追丢过两次）。
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
