@@ -14,7 +14,7 @@
  * 「还没排完的长内容」当成短内容（useMeasuredSize 同款教训），所以量两拍 +
  * ResizeObserver 跟着变。
  */
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { CARD_MAX_H } from '../../../lib/board-geometry.js';
 import { COLOR, FONT_SIZE, GAP, RADIUS, alpha } from '../../../lib/theme.js';
 import { PAPER } from '../../../lib/paper.js';
@@ -23,7 +23,10 @@ export default function FoldBox({ open = false, onToggle = null, maxH = CARD_MAX
   const innerRef = useRef(null);
   const [tall, setTall] = useState(false);
 
-  useEffect(() => {
+  // ⚠️ useLayoutEffect 不是 useEffect：折叠必须发生在 paint 之前。用 useEffect 的话
+  // 存量的高卡（老板上有 2471px 的板书）第一拍会以原高渲染出来，而 useMeasuredSize
+  // 同在 effect 阶段量高 —— 它会把折叠前的 2471 先回写一次，再收敛到 384，白落一次盘。
+  useLayoutEffect(() => {
     const el = innerRef.current;
     if (!el) return undefined;
     // 4px 容差：正好卡在天花板上的内容别为了几个像素挂一枚角标
