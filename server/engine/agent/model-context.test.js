@@ -99,21 +99,36 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
     expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
-    // ⭐⭐ Merge 网关这行的厂商顺序（08-28 建，08-30 深夜定案，推翻了当晚早些时候的 particle 打头）。
-    //   ① **zai 打头** —— particle 有**内联图 8 张的硬上限**（第 9 张起一律 400），zai 到 20 张都收
-    //      且真读得进去；本站一个真会话就有 51 张图。particle 每步快 2.5-3 倍是真的，但吃不到。
-    //      ⛔ 复验 particle 的图**必须发 9 张以上**：三张图的题目它不需要拦，会 36/36 全绿骗过你。
-    //   ② **后面得有人兜底** —— 网关的语义是"按顺序取第一个可用的"，只写一家就没有后备了。
-    //   ③ ⛔ **baseten 不许出现**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的 11 倍。
+    // ⭐⭐ Merge 网关上那**两条** GLM 行的厂商（08-28 建，08-30 深夜拆成两行）。
+    //   同一个模型、同一个网关、同样的价钱，**差别只有厂商**：
+    //   ① 默认行（`glm-5.3-flash-merge`，label「· 设计」）**zai 打头** —— particle 有内联图
+    //      8 张的硬上限，而本站一个真会话就有 51 张图。后面得有人兜底（"按顺序取第一个可用的"）。
+    //   ② 演出行（`glm-5.3-flash-rp`，label「· 演出」）**点死 particle** —— 每步快 2.5-3 倍，
+    //      rp 模式的会话实测最多 6 张图，吃得下这条上限。⛔ 它不许有后备：掉到 zai 就没有"更快"了，
+    //      而用户是冲着快选的它 —— 静默变慢比报错更难查。
+    //   ③ ⛔ **baseten 一条都不许出现**：同一发请求实测 $0.000626，是 particle 的 48 倍。
     //      它进来不报错，只在月底的账上出现。
-    const pool = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
-    const okPool = (v) => Array.isArray(v) && v[0] === 'zai' && v.length >= 2 && !v.includes('baseten');
-    expect(okPool(pool), `merge 行的厂商顺序现在是 ${JSON.stringify(pool)}`).toBe(true);
-    // 判据先验一遍：四种坏写法都得拦下来，否则上面那条是恒真的
-    expect(okPool(['particle', 'zai']), 'particle 打头 = 带图的会话第 9 张就 400').toBe(false);
-    expect(okPool(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
-    expect(okPool(['zai']), '只剩一家 = 没有后备').toBe(false);
-    expect(okPool(undefined), '整个撤掉 = 网关自己挑，而它的默认自己会变').toBe(false);
+    const design = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
+    const rp = resolveWireModel('glm-5.3-flash-rp')?.bodyExtra?.vendors;
+    const okDesign = (v) => Array.isArray(v) && v[0] === 'zai' && v.length >= 2 && !v.includes('baseten');
+    const okRp = (v) => Array.isArray(v) && v.length === 1 && v[0] === 'particle';
+    expect(okDesign(design), `设计行的厂商顺序现在是 ${JSON.stringify(design)}`).toBe(true);
+    expect(okRp(rp), `演出行的厂商现在是 ${JSON.stringify(rp)}`).toBe(true);
+    // 判据先验一遍：坏写法都得拦下来，否则上面两条是恒真的
+    expect(okDesign(['particle', 'zai']), 'particle 打头 = 带图的会话第 9 张就 400').toBe(false);
+    expect(okDesign(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
+    expect(okDesign(['zai']), '默认行只剩一家 = 没有后备').toBe(false);
+    expect(okDesign(undefined), '整个撤掉 = 网关自己挑，而它的默认自己会变').toBe(false);
+    expect(okRp(['particle', 'zai']), '演出行加了后备 = 掉过去就静默变慢，选它的理由没了').toBe(false);
+    expect(okRp(['zai']), '演出行落到 zai = 它跟设计行没区别了').toBe(false);
+    // ⭐ 两行除了厂商之外必须逐字一致 —— 写成共用 GLM_MERGE_API 就是为了这条，别把它拆开写
+    const bare = (id) => { const { bodyExtra, ...rest } = MODELS_BUILTIN.find((m) => m.id === id).api; return JSON.stringify(rest); };
+    expect(bare('glm-5.3-flash-rp'), '两行除 bodyExtra 外漂了').toBe(bare('glm-5.3-flash-merge'));
+    const row = (id) => MODELS_BUILTIN.find((m) => m.id === id);
+    expect([row('glm-5.3-flash-rp').window, row('glm-5.3-flash-rp').brand])
+      .toEqual([row('glm-5.3-flash-merge').window, row('glm-5.3-flash-merge').brand]);
+    // ⛔ 演出行不许当默认：默认那条要兜得住所有人，图不限张数的才兜得住
+    expect(row('glm-5.3-flash-rp').select.default).toBeUndefined();
     expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
   });
 
@@ -527,8 +542,11 @@ describe('全员默认行 = glm-5.3-flash-merge（2026-08-30 起，第一条付�
       && (m.api.prices.input + m.api.prices.output) > 0);
     const sum = (m) => m.api.prices.input + m.api.prices.output;
     expect(openPaid.length, '一条不带闸的付费行都没有 = 这条断言在空转').toBeGreaterThan(1);
+    // ⚠️ 08-30 深夜起 merge 上有**两条同价**的行（设计 / 演出），判据不能再写成"排序第一名是谁"
+    //    —— 那样并列时靠的是表里的先后顺序，是个假判据。真正在管的规矩是"没有更便宜的"。
+    const def = MODELS_BUILTIN.find((m) => m.id === defaultModelFor(null));
     const cheapest = [...openPaid].sort((a, b) => sum(a) - sum(b))[0];
-    expect(cheapest.id, '默认行是付费行时必须是最便宜的那条').toBe('glm-5.3-flash-merge');
+    expect(openPaid.every((m) => sum(m) >= sum(def)), '有比默认行更便宜的开放付费行').toBe(true);
     // 对照：确实有更贵的行存在，排序不是在一个元素上做的
     expect(sum([...openPaid].sort((a, b) => sum(b) - sum(a))[0])).toBeGreaterThan(sum(cheapest));
     // ② 还留着一条真免费的行可选（默认收费了，picker 里不能一条免费的都没有）
@@ -545,5 +563,24 @@ describe('全员默认行 = glm-5.3-flash-merge（2026-08-30 起，第一条付�
     expect(at(4, true).ok, '非订阅行 4 个在飞应当照放').toBe(true);
     expect(at(4, false).ok, '订阅那一档 4 个在飞就该拦 —— 对照组，证明这个断言不是恒真').toBe(false);
     expect(at(12, true).ok, '非订阅行也有防失控上限 12').toBe(false);
+  });
+});
+
+describe('前端兜底清单 ↔ 服务端表（08-30 拆出「演出」行时补的）', () => {
+  it('⭐⭐ FALLBACK_MODELS 每一条都要在表里查得到，且 label/desc/brand 逐字一致', async () => {
+    // 为什么要这条：兜底清单是**接口挂了时用户看到的东西**，它跟表是两份手写的真相。
+    // 拆「设计 / 演出」两行时，两边的 label 第二段是它俩唯一的区分（compactLabel 靠撞名
+    // 决定按钮上印长名还是短名），只改一边就会出现"按钮上写着设计、菜单里写着 Merge 网关"。
+    // ⛔ 注释里写「必须逐字一致」拦不住任何人 —— 同族老账见 feedback-contract-needs-a-lint。
+    const { FALLBACK_MODELS } = await import('../../../web/src/lib/models.js');
+    expect(FALLBACK_MODELS.length, '兜底清单空了 = 这条断言在空转').toBeGreaterThan(2);
+    for (const f of FALLBACK_MODELS) {
+      const row = MODELS_BUILTIN.find((m) => m.id === f.id);
+      expect(row, `兜底清单里的 ${f.id} 在表里查不到（下架了没同步？）`).toBeTruthy();
+      expect([f.label, f.desc, f.brand], `${f.id} 两边对不上`).toEqual([row.select?.label, row.select?.desc, row.brand]);
+    }
+    // 判据先验一遍：真去比了内容，不是只比了条数
+    expect(MODELS_BUILTIN.find((m) => m.id === 'glm-5.3-flash-rp').select.label).toBe('GLM-5.3-Flash · 演出');
+    expect(FALLBACK_MODELS.some((f) => f.id === 'glm-5.3-flash-rp'), '演出行没进兜底清单').toBe(true);
   });
 });

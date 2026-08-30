@@ -20,8 +20,9 @@
  *      行的第一顺位被人换成 particle 的话，这一步会直接 400。
  *   ② ⛔ 直连网关看 `x-merge-vendor`：必须落 zai，**一发都不许落到 baseten**
  *      （同一发请求实测 $0.000626，是 particle 的 48 倍）。入口不转发上游响应头，只能直连看。
- *   ③ 量具自检：显式点名 particle 发九张，**它必须 400**。这一条不算失败项 —— 它要是通了，
- *      说明 particle 抬了上限，那就该回头重新评估「谁打头」（它每步快 2.5-3 倍、同价）。
+ *   ③ 演出行 + 量具自检：同样这九张图走 `glm-5.3-flash-rp`（那条点死 particle）**必须被拦**，
+ *      而且拦出来的得是人话（upstream-error-hints 把那句英文翻成"换到设计那条线"）。
+ *      它要是通了，说明 particle 抬了上限 —— 那就该回头重新评估两条线还分不分。
  */
 import { getOrStartIngress, registerIngressSession, stopIngress } from './model-ingress.js';
 import { resolveModelRoute, resolveWireModel } from '../engine/agent/model-context.js';
@@ -68,6 +69,25 @@ for (let i = 0; i < N; i++) {
   else { blind++; console.log(`  ${i + 1}. 200  ⛔ 只认出 ${n}/3 个词：${said.slice(0, 110)}`); }
 }
 console.log(`\n① 真通路九张图：全认 ${ok}/${N}   瞎图 ${blind}   报错 ${err}`);
+
+// ── ③ 演出行：同样这九张图**必须**被拦，且拦出来的得是人话不是英文 ──
+registerIngressSession('mergevendor-rp', 'glm-5.3-flash-rp');
+// ⚠️ 流式/非流式**两条都要走**：转换层的 4xx 是孪生的两条路，翻译第一版只挂了流式那条，
+//    而探针当时只走非流式 —— 一跑就撞出来了。反过来只验流式同样会漏，所以这里两条都发。
+let rpToothy = true;
+for (const streaming of [false, true]) {
+  const r = await fetch(`${baseUrl}/__nd/mergevendor-rp/v1/messages`, {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': 'placeholder', 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ ...body, model: resolveModelRoute('glm-5.3-flash-rp').sdkAlias, ...(streaming ? { stream: true } : {}) }),
+  });
+  const t = await r.text();
+  const ok3 = r.status === 400 && /最多带 8 张图/.test(t) && /设计/.test(t);
+  if (!ok3) rpToothy = false;
+  const shape = streaming ? '流式' : '非流式';
+  if (ok3) console.log(`③ 演出行（${shape}）照旧拦在 8 张，回的是人话`);
+  else console.log(`③ ⚠️ 演出行（${shape}）没按预期拦下九张图（${r.status}）—— 要么 particle 抬了上限（那该回头重估两条线还分不分），要么这一条路上的翻译断了：${t.replace(/\s+/g, ' ').slice(0, 160)}`);
+}
+
 await stopIngress();
 
 // ── ② 直连网关：谁在服务，有没有落到贵 10 倍那家 ──
@@ -87,22 +107,9 @@ if (KEY) {
   console.log(`② 厂商分布 ${JSON.stringify(dist)}`);
 } else console.log('② 跳过（没钥匙）');
 
-// ── ③ 量具自检：点名 particle 发九张，它必须拦下来 ──
-if (KEY) {
-  const r = await fetch(GW, {
-    method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${KEY}` },
-    body: JSON.stringify({
-      model: wire.wireModel, max_tokens: 30, vendor: 'particle',
-      messages: [{ role: 'user', content: [{ type: 'text', text: '念出最后一张图里的词' }, ...DATA.map((d) => ({ type: 'image_url', image_url: { url: `data:image/png;base64,${d}` } }))] }],
-    }),
-  });
-  const t = await r.text();
-  if (r.status === 400 && /at most 8 inline/i.test(t)) console.log('③ 量具还有牙：particle 九张图照旧 400');
-  else console.log(`③ ⚠️ particle 收下了九张图（${r.status}）—— 它可能抬了上限，回头重新评估「谁打头」`);
-} else console.log('③ 跳过（没钥匙）');
 
 const toBaseten = Object.keys(dist).some((k) => k.includes('baseten'));
 const toParticle = Object.keys(dist).some((k) => k.includes('particle'));
 if (toBaseten) console.log('⛔ 有请求落到 baseten —— 贵 48 倍，去看 model-table 那行的 vendors');
-if (toParticle) console.log('⛔ 有请求落到 particle —— 带图的会话会在第 9 张上 400，zai 该排第一');
-process.exit(blind > 0 || err > 0 || toBaseten || toParticle ? 1 : 0);
+if (toParticle) console.log('⛔ **默认行**落到 particle —— 带图的会话会在第 9 张上 400，zai 该排第一');
+process.exit(blind > 0 || err > 0 || toBaseten || toParticle || !rpToothy ? 1 : 0);

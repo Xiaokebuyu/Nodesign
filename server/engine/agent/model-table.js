@@ -203,6 +203,32 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
 export const BRANDS = Object.freeze(['claude', 'deepseek', 'opencode', 'glm', 'gemini', 'qwen', 'minimax', 'kimi', 'custom']);
 
 /**
+ * Merge 网关上那两条 GLM 行**共用**的 api 配置：它们是同一个模型、同一个网关，
+ * **差别只有厂商**（各自行里的 `bodyExtra.vendors`；为什么要分两行见表里那两行上方一整段）。
+ * ⛔ 写成共用不是为了省行数：思考档 / maxOutput / 价 / helper 行这些**必须对两条同时生效**，
+ *    分开写迟早漂。改厂商以外的任何东西改这里，model-context.test.js 有断言盯着两行别分家。
+ */
+const GLM_MERGE_API = Object.freeze({
+    upstream: 'merge', wireModel: 'zai/glm-5.3-flash',
+    // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由，08-25 起的默认写法
+    fastModel: 'deepseek-v4-flash-helper',   // helper 挑最耐久的线不是最便宜的线：这家的厂商轮盘不该让标题/压缩也跟着掷骰子
+    thinking: 'strip',              // 出口删 thinking 字段；转换层按 reasoningEffort 发 reasoning_effort
+    // 08-27 实测这家 low|medium|high|max **四档都收**（thinking 字数 922/981/1753/1843），
+    // 比 zen 系宽（那边没有 medium）。取 high 跟另外两条 glm 行一致。
+    reasoningEffort: 'high',
+    maxOutput: 131_072,             // 131072 实测直接吃下
+    // ⚠️ 这家的思考文本字段叫 **thinking / thinking_signature**，不是 zen 系的 reasoning_content
+    // （08-27 第一趟真 SDK 循环"看到 thinking 块：false"就是这么来的）。转换层两处已改成
+    // 「reasoning_content 优先、回退 thinking」，所以这行不用配任何东西 —— 记在这儿是给下一家看的：
+    // **接新行时先看一眼它的思考字段叫什么**，掉了不报错、只是用户看不见思考。
+    // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息（同 zenGo 那行）
+    // 网关目录价（$0.015/$0.05，缓存读 $0.003）。⚠️ 它的响应把真金额放在 **usage.cost** 里而不是
+    // 顶层 cost（Zen 是顶层），lib/ingress/upstream-billing.js 的 upstreamCostOf 两处都认，
+    // 所以额度口径以上游自报为准，这里的表价是兜底
+    prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
+});
+
+/**
  * **共用 spoof 别名**：`sdkAlias` 不写时的默认值（model-context.js 派生时补上）。
  *
  * SDK binary 认识的 1M 名只有七个（strings 扫出来：opus-4-6/4-7/4-8/5、sonnet-4-5-20250929/4-6/5），
@@ -393,6 +419,31 @@ export const MODELS_BUILTIN = Object.freeze([
   // 08-27 撤掉的 zenGo 那条（$0.15/$0.50）是三条里最贵的，本行的输入价是它的 1/10：
   // 满窗一轮的缓存读从 $0.03 掉到 $0.003。**zai 那条订阅用完之后，这条是接得住量的那一条**
   // （有缓存、并发不紧），只是接默认之前得先解决瞎图那 7~10%（或者接受它）。
+  // ── Merge 网关上的**两条** GLM 行（08-30 深夜拆开）：同模型、同网关、同价，**差别只有厂商** ──
+  //   particle：内联图 **8 张是硬上限** —— n=8 ✅，n=9 起一律 400
+  //     「GLM requests accept at most 8 inline PNG…」（9/10/12/16/20 全挂）。
+  //   zai：n=4→20 全 ✅，且抽问第 1/10/16 张里印的词都念得出来 —— 是真读了，不是收下再悄悄丢。
+  //   速度（28 万上下文、逐轮追加、缓存 4/4 命中）：particle 每步 1.8-2.8s / 冷启 14.4s，
+  //     zai 每步 3.9-7.0s / 冷启 20.6s，5 轮同价 $0.00787。⛔ 早前「只快 20%」是 6.5 万上量的，
+  //     差距随上下文放大 —— **这类账必须在真实体量上量**。
+  //   → 默认行（设计）走 zai：真会话一个就有 51 张图，图多是这个产品的主路径不是边角。
+  //     演出行走 particle：rp 模式的会话实测最多 6 张图（见那行的注释）。
+  // ⛔⛔ 留给下一个人的判据：**复验 particle 的图必须发 9 张以上。**08-30 白天那趟用三张图复测，
+  //   得出「多图 400 已经没了 36/36」于是把默认改成 particle，上线 40 分钟就被真会话打回 ——
+  //   那条限制不是没了，是从 1 张放宽到 8 张，三张的题目它根本不需要拦。同族老账见
+  //   feedback-verify-the-instrument：判一道闸在不在，要给它一个它必须拦的东西。
+  // ⚠️ particle 次要弱项：图散在多轮历史 + **请求没声明 tools** 时只看得见最后一张（20 发挂 8 发）；
+  //   声明了 tools 就 20/20。本站请求永远带 tools，撞不到。
+  // ⭐⭐ 真正决定「一步要等多久」的是**这一轮缓存命不命中**，不是挑了哪家：命中时上下文从 4.5 万
+  //   涨到 28 万、延迟只从 5s 到 6.7s；不命中一路涨到 29s（compact 后必冷一轮，28 万 14-20s）。
+  // vendors 的语义是「按顺序取第一个**可用的**」（OpenAPI 原话 "First available wins."）。
+  // ⚠️ 「后备」含金量有限：实测**不在错误后转移**（`['zai','baseten']` 拿一个 zai 必拒的请求试，
+  //   回 400 而不是转给 baseten）。particle 兜的是「zai 被标成不可用」那一档，不是「zai 这一发报错」。
+  // ⛔ **baseten 不许进这两串**：同一发请求 usage.cost $0.000626，是 particle 的 48 倍、zai 的 11 倍。
+  // ⛔ 「不指定让网关自己挑」是假出路：不点名实测 20/20 全落 zai，而网关的默认自己会变（08-28 裸请求
+  //   8/8 落 particle）。它自带的 round_robin / least_latency / 策略 API 也不能用 —— **全是按请求选的，
+  //   而 prompt cache 每家一份跨不过去**（同一前缀换一家 cached 立刻归 0、贵 5 倍）＝每轮都冷。
+  //   ⏸ 曾按 sessionId 哈希做过会话粘性分配（`4939279`），撤了；要回来去那个 commit 拿。
   {
     // 08-30 起 **1M**（跟上面那行一起开，用户拍板）。网关目录里这个模型本来就写的 1000000
     // （max_output 131072），此前的 272k 是我们自己收的口。两条 glm 行同时改，换线时
@@ -403,9 +454,8 @@ export const MODELS_BUILTIN = Object.freeze([
     // 08-27 用户拍板**直接对全员开**（含 basic）：跟 deepseek 视觉行同一套管法 ——
     // 它**不是免费行**（四价非 0），走的是每日美元额度，basic 的 $5/天 + 表价记账管着它，
     // 而这行的单价是全表最低的一档，同样的钱能跑十倍的量。
-    // 08-28 之前这里写着"偶发瞎图约 7~10%、已知且接受"—— 那是没点名 vendor 时的账；现在 bodyExtra
-    // 把它钉死在 zai 一家，desc 里的"偶尔会漏看图"随之撤掉。要收回这行就在 select 里加回
-    // `gate: 'localGen'` 一处：清单 / PUT /model / turn.js 三个消费方都走 selectableModelsFor。
+    // 08-28 之前这里写着"偶发瞎图约 7~10%"—— 那是没点名 vendor 时的账，点名之后 desc 里的
+    // "偶尔会漏看图"已撤。要收回这行就在 select 里加 `gate: 'localGen'` 一处（三个消费方都走 selectableModelsFor）。
     // 08-30 desc 砍短：价格表撤进注释，picker 里只留"极便宜"这个判断。
     // ⭐⭐ **08-30 起接过全员默认**（zai 那条订阅额度耗尽撤行，用户拍板「默认丢到 merge 那边」）。
     // 这一脚**故意踩破了「默认行必须是免费行」那条规矩**，所以把破了之后各处怎么变写在这儿：
@@ -419,55 +469,22 @@ export const MODELS_BUILTIN = Object.freeze([
     //    那个 3 从来是护站主 Claude 订阅的，不是护一个 $0.015/M 的网关（见 lib/quota.js）。
     // ③ 单点：厂商偏好序第一顺位是 zai（`vendors:['zai','particle']`），而网关**不在错误后转移**，
     //    所以那一家挂 = 全站默认路径挂；掉到 particle 也只有不带图的会话还能用（8 张上限）。
-    // label 留两段不动 —— 原来是靠第二段跟 zai 那行区分；zai 撤了之后第一段已经唯一，
-    // ⚠️ 但别顺手砍成一段：`compactLabel` 会自己按"撞不撞名"决定短名，表里不用替它做这个决定。
-    select: { label: 'GLM-5.3-Flash · Merge 网关', desc: '有视觉 · 1M 上下文 · 极便宜', default: true },
-    api: {
-      upstream: 'merge', wireModel: 'zai/glm-5.3-flash',
-      // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由，08-25 起的默认写法
-      fastModel: 'deepseek-v4-flash-helper',   // helper 挑最耐久的线不是最便宜的线：这家的厂商轮盘不该让标题/压缩也跟着掷骰子
-      thinking: 'strip',              // 出口删 thinking 字段；转换层按 reasoningEffort 发 reasoning_effort
-      // 08-27 实测这家 low|medium|high|max **四档都收**（thinking 字数 922/981/1753/1843），
-      // 比 zen 系宽（那边没有 medium）。取 high 跟另外两条 glm 行一致。
-      reasoningEffort: 'high',
-      maxOutput: 131_072,             // 131072 实测直接吃下
-      // ⚠️ 这家的思考文本字段叫 **thinking / thinking_signature**，不是 zen 系的 reasoning_content
-      // （08-27 第一趟真 SDK 循环"看到 thinking 块：false"就是这么来的）。转换层两处已改成
-      // 「reasoning_content 优先、回退 thinking」，所以这行不用配任何东西 —— 记在这儿是给下一家看的：
-      // **接新行时先看一眼它的思考字段叫什么**，掉了不报错、只是用户看不见思考。
-      // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息（同 zenGo 那行）
-      // ⭐⭐ **08-30 深夜定案（推翻当晚早些时候的 particle 优先）：zai 优先、particle 后备。**
-      //   病根是 particle 有一条**内联图 8 张的硬上限**，而本站的真会话动辄几十张：
-      //     particle n=8 ✅ / n=9 起一律 400「GLM requests accept at most 8 inline PNG…」（9/10/12/16/20 全挂）
-      //     zai      n=4→20 全 ✅，且抽问第 1/10/16 张里印的词都念得出来 —— 是真读了，不是悄悄丢
-      //   真会话对照：proj_mtg61or1_hiak 一个会话 **51 张图**、末尾每回合一张。图多是这个产品的主路径，
-      //   不是边角，所以 8 张这条线等于 particle 当不了默认。
-      // ⛔⛔ 留给下一个人的判据：**复验 particle 的图必须发 9 张以上。**08-30 白天那趟复测用三张图
-      //   得出「多图 400 已经没了 36/36」—— 那条限制不是没了，是从 1 张放宽到 8 张，三张题目它根本
-      //   不需要拦。同族老账见 feedback-verify-the-instrument：判一道闸在不在，要给它一个它必须拦的东西。
-      // ⚠️ particle 另有一条弱项（次要）：图散在多轮历史 + **请求没声明 tools** 时只看得见最后一张
-      //   （20 发挂 8 发，zai 20/20）；声明了 tools 就 20/20。本站请求永远带 tools，撞不到。
-      // ⭐ 速度账仍然成立、只是**用不上**：28 万上下文逐轮追加、缓存 4/4 命中时，particle 每步 1.8-2.8s、
-      //   冷启 14.4s；zai 每步 3.9-7.0s、冷启 20.6s；5 轮同价 $0.00787。⛔ 早前「只快 20%」是 6.5 万上
-      //   量的，差距随上下文放大。要吃这份快只能是**用户可见的"快线（不能发图）"另起一行**，别当默认。
-      // ⭐⭐ 真正决定「一步要等多久」的是**这一轮缓存命不命中**，不是挑了哪家：命中时上下文从
-      //   4.5 万涨到 28 万、延迟只从 5s 到 6.7s；不命中一路涨到 29s（compact 后必冷一轮，28 万 14-20s）。
-      // 网关对 vendors 的语义是「按顺序取第一个**可用的**」（OpenAPI 原话 "First available wins."）。
-      // ⚠️ 「后备」含金量有限：实测**不在错误后转移**（拿一个 zai 必拒的请求试 `['zai','baseten']`
-      //   回 400 而不是转给 baseten）。所以 particle 兜的是「zai 被标成不可用」那一档，**不是**
-      //   「zai 这一发报错」；真掉到 particle 时，带图的会话仍会在第 9 张上 400。
-      // ⛔ **baseten 不许进这一串**：同一发请求 usage.cost $0.000626，是 particle 的 48 倍、zai 的 11 倍。
-      // ⛔ 「不指定让网关自己挑」是假出路：不点名实测 20/20 全落 zai，而且网关的默认自己会变
-      //   （08-28 裸请求 8/8 落 particle）。它自带的 round_robin / least_latency / 策略 API 也都不能用
-      //   —— **全是按请求选的，而 prompt cache 每家一份跨不过去**（同一前缀换一家 cached 立刻归 0、
-      //   贵 5 倍），按请求换家 = 每轮都冷。⏸ 曾按 sessionId 哈希做过会话粘性分配（`4939279`），
-      //   撤了；要回来去那个 commit 拿。
-      bodyExtra: { vendors: ['zai', 'particle'] },
-      // 网关目录价（$0.015/$0.05，缓存读 $0.003）。⚠️ 它的响应把真金额放在 **usage.cost** 里而不是
-      // 顶层 cost（Zen 是顶层），lib/ingress/upstream-billing.js 的 upstreamCostOf 两处都认，
-      // 所以额度口径以上游自报为准，这里的表价是兜底
-      prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
-    },
+    // ⚠️ label 第二段是这两行**唯一**的区分（第一段一模一样）：`compactLabel` 按"撞不撞名"
+    // 自己决定按钮上印长名还是短名，表里不用替它做这个决定，但第二段不能砍。
+    select: { label: 'GLM-5.3-Flash · 设计', desc: '有视觉 · 图不限张数 · 1M 上下文 · 极便宜', default: true },
+    api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['zai', 'particle'] } },
+  },
+  {
+    // ⭐⭐ 08-30 深夜加的第二条（用户拍板「让 RP 和设计玩家对号入座」）。跟上面那行同模型同价，
+    // 只是把厂商换成 particle：**每步更快，代价是内联图上限 8 张**（见上面那整段）。
+    // ⭐ 拍板前先量了真会话，用户的直觉是对的：rp 模式 12 个会话图数 0/0/0/0/0/0/0/1/1/2/5/6 —— 
+    //   一个都没到过 8；design 模式 25 个里有 7 个超过 8（9/9/10/11/21/31/51）。
+    // ⚠️ 但最高那个 6 离 8 只差两张，所以撞线是迟早的事：转换层把那条 400 翻译成了
+    //   「换到设计那条线」的人话（lib/ingress/upstream-error-hints.js），别把它删了。
+    // ⛔ 不设 default —— 默认永远是上面那条（图不限张数的那条兜得住所有人）。
+    id: 'glm-5.3-flash-rp', window: 1_000_000, brand: 'glm',
+    select: { label: 'GLM-5.3-Flash · 演出', desc: '每步更快 · 但整场最多 8 张图 · 1M 上下文 · 极便宜' },
+    api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['particle'] } },
   },
   // ── GMI Cloud · MiniMax（08-25）── 两行都是 GMI 标 `is_free` 的免费部署；账户无余额，付费行 402，
   // 所以这条上游不存在"选错模型静默烧钱"。目录价（免费期结束后才会真收）：M3 $0.60/$2.40 缓存 $0.12，

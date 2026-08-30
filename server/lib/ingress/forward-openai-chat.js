@@ -22,6 +22,7 @@ import http from 'node:http';
 import https from 'node:https';
 import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAIToAnthropicSSE, truncationOfChatResponse } from './openai-chat.js';
 import { upstreamCostOf } from './upstream-billing.js';
+import { upstreamErrorHint } from './upstream-error-hints.js';
 import { armIdleWatchdog } from './stream-watchdog.js';
 
 export const DEFAULT_EMPTY_RETRIES = 2;
@@ -216,7 +217,8 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, target, pa
             if (settled || dead) return;
             settled = true;
             currentReq = null;
-            const msg = text?.trim() ? text : `${label} 上游返回 ${status}（模型暂时不可用，稍后再发一次）`;
+            // 上游 4xx 的英文原文会原样落到用户的聊天框里 —— 能给出路的那几条翻成人话（原文保留在括号里）
+            const msg = upstreamErrorHint(text, wire) || (text?.trim() ? text : `${label} 上游返回 ${status}（模型暂时不可用，稍后再发一次）`);
             console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} ${status} model=${wire.wireModel} body=${String(text || '').slice(0, 200).replace(/\s+/g, ' ')}`);
             failHard(status, msg, `HTTP ${status}${streaming ? ' on retry' : ''}`);
           };
@@ -273,7 +275,8 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, target, pa
       const text = Buffer.concat(chunks).toString('utf8');
       if (status >= 400) {
         console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} ${status} model=${wire.wireModel} body=${text.slice(0, 200).replace(/\s+/g, ' ')}`);
-        const msg = text.trim() ? text : `${label} 上游返回 ${status}（模型暂时不可用，稍后再发一次）`;
+        // ⚠️ 跟上面流式那条是**孪生的两条路**，翻译要两边都挂（生产走流式，探针走非流式，只补一边会以为修好了）
+        const msg = upstreamErrorHint(text, wire) || (text.trim() ? text : `${label} 上游返回 ${status}（模型暂时不可用，稍后再发一次）`);
         onOutcome(false, `HTTP ${status}`);
         const errBody = JSON.stringify(toAnthropicError(status, msg));
         res.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(errBody)) });
