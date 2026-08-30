@@ -146,12 +146,14 @@ describe('lint：权限判断只走 auth/tier.js', () => {
     // role==='admin' 是 role 判断（到处都有、合法），这里只盯 plan/tier 名
     expect(hits(/[!=]==\s*'(basic|pro)'|tierOf\([^)]*\)\s*[!=]==|\.plan\s*[!=]==/, ['auth/tier.js', 'auth/users-store.js'])).toEqual([]);
   });
-  it("SDK 的 query 只许 session-loop.js（跑回合）与 sessions.js（rewind，不跑回合）拿到 —— 订阅 OAuth 的入口就这两个", () => {
+  it("SDK 的 query 只许 session-loop.js（跑回合）与 sessions-rewind.js（回退，不跑回合）拿到 —— 订阅 OAuth 的入口就这两个", () => {
     // 整文件匹配（多行 import 块也抓）+ 命名空间 import + 动态 import 三种形态。
     // 评审 08-21 抓过：逐行正则对 sessions.js 的多行 import 假过。
     // 动态 import 只认 `await import(...)` / `= import(...)`；JSDoc 的 `{import('…sdk').Query}` 类型引用不算（active-runs.js 有一堆）
     const re = /import\s*\{[^}]*\bquery\b[^}]*\}\s*from\s*['"]@anthropic-ai\/claude-agent-sdk['"]|import\s*\*\s*as\s+\w+\s*from\s*['"]@anthropic-ai\/claude-agent-sdk['"]|(?:await|=)\s*import\(\s*['"]@anthropic-ai\/claude-agent-sdk['"]\s*\)/;
-    expect(fileHits(re, ['engine/agent/session-loop.js', 'api/sessions.js'])).toEqual([]);
+    // 08-30：回退那块从 api/sessions.js 拆去了 api/sessions-rewind.js（行数棘轮），
+    // 持有 query 的换成了它 —— 白名单是**换**不是加，sessions.js 现在够不到 SDK。
+    expect(fileHits(re, ['engine/agent/session-loop.js', 'api/sessions-rewind.js'])).toEqual([]);
   });
 });
 

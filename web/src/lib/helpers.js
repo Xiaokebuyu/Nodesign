@@ -23,6 +23,23 @@ export function newId(prefix = 'id') {
 }
 
 /**
+ * 用户消息的 id —— 必须是 SDK uuid 形态（36-char），不能是 newId('msg')。
+ *
+ * 这条气泡的 id 不只是 React key：服务端把它盖到 SDKUserMessage.uuid 上，CLI 原样
+ * 写进 jsonl，于是「回到此处」（rewindFiles）和「从这里分叉」（fork 的 upToMessageId）
+ * 认的就是它。用 `msg_xxx` 的年代里这两个按钮的 uuid 判据一律不认乐观气泡，**得刷新
+ * 页面**等 hydrate 从 jsonl 读回真 uuid 才出现（2026-08-30 修）。
+ *
+ * crypto.randomUUID 需要安全上下文（https / localhost）；退化路径手拼一个同形 v4，
+ * 服务端只校验形状，来源不重要。
+ */
+export function newUserMessageId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  const hex = (n) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-${'89ab'[Math.floor(Math.random() * 4)]}${hex(3)}-${hex(12)}`;
+}
+
+/**
  * 时间戳 → Date。SQLite 的 `datetime('now')` 落的是 **UTC 但不带时区标记**的
  * "YYYY-MM-DD HH:MM:SS"，JS 按规范会把这种格式当**本地时间**解析——东八区就凭空
  * 差 8 小时（实测项目卡片上 6 小时前的东西显示成"14 小时前"，新建的东西因为落在

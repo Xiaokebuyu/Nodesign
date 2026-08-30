@@ -281,20 +281,42 @@ export default {
   '从下一条消息生效，对话与画布不丢': 'Takes effect from the next message. Your chat and canvas stay put.',
   '这条只影响接下来新建的会话': 'This only affects sessions you start from now on',
 
-  // ── 对话消息（components/chat/Message.jsx）──
+  // ── 对话消息（components/chat/UserMessage.jsx · RewindDialog.jsx）──
   // 回滚那一批的口径：中文说「回到此处」，英文用 rewind（back/revert 都容易被读成
-  // 「撤销一步」，这里撤的是这条之后的**全部**文件改动）。
+  // 「撤销一步」，这里撤的是这条之后的**全部**文件改动）。分叉那一档用 branch ——
+  // fork 在这个语境里会被读成"复刻别人的项目"，而这里分的是自己的一条对话。
   '回到此处': 'Rewind to here',
-  '回到此处？这会丢弃后续所有文件改动。\n\n历史会话首次回滚需 3-5 秒（重启临时会话）；后续回滚瞬间完成。':
-    'Rewind to here? Every file change after this point will be discarded.\n\nThe first rewind in an old session takes 3-5 seconds (a temporary session has to start up). Later ones are instant.',
-  '回滚': 'Rewind',
+  '回到这条消息之前': 'Rewind to before this message',
+  '回到这条消息之前（可只回对话，也可连产物一起；还能留着原来那条线开新分支）':
+    'Rewind to before this message (chat only, or the work along with it; you can also keep this line and branch off)',
+  '回退什么': 'What to rewind',
+  '只回退对话': 'The chat only',
+  '这条之后的来回不算数了。已经做出来的文件、板书、图片原样留着。':
+    'Everything said after this point stops counting. Files, blackboard and images stay exactly as they are.',
+  '对话和产物一起回退': 'The chat and the work',
+  '这条之后写的文件全部撤销，板书和产物一起回到那时的样子。':
+    'Every file written after this point is undone. The blackboard and the artifacts go back to how they looked then.',
+  '产物这个项目只有一份，所以这一步会影响项目里的所有会话，不只是当前这条。':
+    'A project has only one copy of its work, so this affects every session in the project, not just this one.',
+  '原来这条线': 'This line of chat',
+  '覆盖掉': 'Overwrite it',
+  '这条之后的对话从记录里删掉，就当没发生过。':
+    'Everything after this point is dropped from the record, as if it never happened.',
+  '留着，另开一条分支': 'Keep it, branch off',
+  '现在这条会话一字不动，另外开一条从这里继续。两条都能在会话列表里找到。':
+    'This session is left untouched and a new one continues from here. Both show up in the session list.',
+  '回退': 'Rewind',
+  '分叉': 'Branch',
   '此处不支持回滚': 'Cannot rewind to this point',
   '上一个回滚还在进行，稍候重试': 'The previous rewind is still running. Try again shortly.',
   '会话历史已删，无法回滚': 'The session history is gone, so there is nothing to rewind to',
   '回滚超时，请重试（临时会话启动较慢时偶发）':
     'The rewind timed out. Try again (this happens when the temporary session is slow to start).',
-  '回滚到此处之前的状态（撤销后续所有文件改动）':
-    'Rewind to the state before this point (undoes every file change after it)',
+  '已回退对话，撤销了 {n} 个文件': 'Rewound the chat and undid {n} file(s)',
+  '已回退对话（没有文件改动要撤销）': 'Rewound the chat (there were no file changes to undo)',
+  '已回退对话，产物留在原处': 'Rewound the chat. The work stays as it was.',
+  '已开新分支，产物也回到了那时的样子': 'Branched off, and the work went back to how it looked then',
+  '已开新分支，产物保持现在的样子': 'Branched off. The work stays as it is now.',
   '回滚中...': 'Rewinding…',
 
   'Agent 调用了 AskUserQuestion 但 input.questions 为空（SDK schema 违规）':

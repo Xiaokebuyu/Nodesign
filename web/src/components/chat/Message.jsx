@@ -5,14 +5,12 @@ import {
 } from 'lucide-react';
 import { diffLines } from 'diff';
 import MarkdownText from './MarkdownText.jsx';
-import { Undo2 } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, alpha } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
-import { Turn, Sessions } from '../../lib/api.js';
+import { Turn } from '../../lib/api.js';
 import TimelineNode from './TimelineNode.jsx';
 import { getToolIcon, isSubagentTool } from './tool-icons.js';
-import { parseAnnotationMessage, annotationTargets } from '../../lib/annotation-message.js';
-import AnnotationNote from './AnnotationNote.jsx';
+import UserMessage from './UserMessage.jsx';
 import { useTimelinePosition } from './TimelineGroupContext.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
 import { t } from '../../lib/i18n.js';
@@ -147,137 +145,6 @@ function Message({ message, projectId, sessionId, onCanvasReload }) {
  * 整张卡，progress 直接显 "已完成"，所有按钮灰；POST 路径不会触发。
  */
 
-/**
- * UserMessage —— 用户消息气泡 + 悬停 Undo 按钮（rewindFiles）。
- *
- * Undo 按钮逻辑：
- *   - 仅在 hover + projectId/sessionId 都已知时显示
- *   - 点击 → confirm → POST /api/projects/:pid/sessions/:sid/rewind { userMessageId: message.id }
- *   - 后端调 SDK Query.rewindFiles() 把所有文件回滚到该 user message 之前
- *   - 成功 → toast + onCanvasReload()（让 iframe bump reloadToken）
- *   - 410 (session 已 close) → toast 'session 已关闭，无法撤销'
- */
-// SDK uuid 36-char 形态（"abc12345-1234-1234-1234-123456789abc"）—— SDK Query.rewindFiles
-// 只认这个；前端乐观插入的 newId('msg') = "msg_xxx" 拿来调会被 SDK 拒（canRewind:false）
-// 一闪即逝，用户感觉"无反应"。所以 undo 按钮只在 hydrate 来的真 uuid 上启用。
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
-  const showToast = useGlobalStore(s => s.showToast);
-  const confirm = useGlobalStore(s => s.confirm);
-  const [hover, setHover] = useState(false);
-  const [busy, setBusy] = useState(false);
-  // 画布标注那条：机械描述默认折起来，见下面 anno
-  const [annoOpen, setAnnoOpen] = useState(false);
-
-  // 场务托词（08-28 自动召回无扰化）：nd:gm-nudge 替玩家发的召回请托是机器话，
-  // 不占一整个用户气泡 —— 渲染成一行淡色场记，指令尾巴（SendMessage 那段）不给人看。
-  const plainText = typeof message.content === 'string' ? message.content : '';
-  if (plainText.startsWith('【场务】')) {
-    return (
-      <div style={{ fontSize: 12, opacity: 0.55, padding: '2px 8px', fontStyle: 'italic' }}>
-        {plainText.split('——')[0]}
-      </div>
-    );
-  }
-
-  /**
-   * 画布标注（2026-08-28 用户报「完整的附加内容都被显示在侧边栏」）：
-   * 用户在板上圈一段字回话，前端拼的那条里有路径、作者、原文摘录、reply_to 指令 ——
-   * 那些是**给 agent 的**（它要靠它们接线程），发出去的内容一个字不动；
-   * 但侧边栏原样显示，用户自己那句话淹在机械里。这里只管显示：机械折起来，
-   * 留一行小字说标了什么，点开能看全。拆分判据在 lib/annotation-message.js（有单测）。
-   */
-  const anno = parseAnnotationMessage(plainText);
-  const annoWhat = anno ? annotationTargets(anno.desc) : [];
-
-  const canUndo = !!(projectId && sessionId && message.id && UUID_RE.test(message.id));
-
-  async function handleUndo() {
-    if (!canUndo || busy) return;
-    if (!(await confirm({ title: t('回到此处'), message: t("回到此处？这会丢弃后续所有文件改动。\n\n历史会话首次回滚需 3-5 秒（重启临时会话）；后续回滚瞬间完成。"), confirmLabel: t('回滚'), danger: true }))) return;
-    setBusy(true);
-    try {
-      const result = await Sessions.rewind(projectId, sessionId, message.id);
-      if (result?.canRewind === false) {
-        showToast(result.error || t('此处不支持回滚'), 'warn');
-      } else {
-        const n = result?.filesChanged?.length || 0;
-        // iframe reload 由后端 emit 的 run.file_changed event 自动触发（ProjectWorkspace 已 case），
-        // 不再依赖 onCanvasReload —— 但保留兼容调用（active query 路径同步返回时也 bump）
-        const talk = result?.conversationTruncated ? '，对话已截回该处' : '';
-        showToast(n > 0 ? `已回滚 ${n} 个文件${talk}` : `已回滚${talk || '（无文件改动）'}`, 'success');
-        if (onCanvasReload) onCanvasReload();
-        // 对话层已被服务端截断 → 通知 ProjectWorkspace 重拉消息（免传三层 props）
-        if (result?.conversationTruncated) {
-          window.dispatchEvent(new CustomEvent('nd-conversation-rewound', { detail: { sessionId } }));
-        }
-      }
-    } catch (err) {
-      const msg = err?.message || String(err);
-      if (msg.includes('REWIND_BUSY') || msg.includes('409')) {
-        showToast(t('上一个回滚还在进行，稍候重试'), 'warn');
-      } else if (msg.includes('JSONL_MISSING') || msg.includes('404')) {
-        showToast(t('会话历史已删，无法回滚'), 'warn');
-      } else if (msg.includes('REWIND_FAILED') || msg.includes('timeout')) {
-        showToast(t('回滚超时，请重试（临时会话启动较慢时偶发）'), 'error');
-      } else {
-        showToast(`回滚失败：${msg}`, 'error');
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div
-      style={{ display: 'flex', justifyContent: 'flex-end', padding: `${GAP.sm}px ${GAP.lg}px`, position: 'relative' }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-    >
-      {canUndo && hover && (
-        <button
-          onClick={handleUndo}
-          disabled={busy}
-          title={t('回滚到此处之前的状态（撤销后续所有文件改动）')}
-          style={{
-            position: 'absolute',
-            top: 4,
-            right: GAP.lg,
-            display: 'flex', alignItems: 'center', gap: GAP.xs,
-            padding: `${GAP.xs}px ${GAP.md}px`,
-            background: COLOR.bgCard,
-            color: COLOR.text2,
-            border: `1px solid ${COLOR.border}`,
-            borderRadius: RADIUS.md,
-            fontSize: FONT_SIZE.xs || 11,
-            fontFamily: FONT_SANS,
-            cursor: busy ? 'wait' : 'pointer',
-            opacity: busy ? 0.6 : 0.95,
-            zIndex: 1,
-          }}
-        >
-          <Undo2 size={11} />
-          {busy ? t('回滚中...') : t('回到此处')}
-        </button>
-      )}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', maxWidth: '85%', minWidth: 0 }}>
-        {anno && (
-          <AnnotationNote desc={anno.desc} what={annoWhat} open={annoOpen} onToggle={() => setAnnoOpen((v) => !v)} />
-        )}
-        <div style={{
-          background: COLOR.btn, color: COLOR.btnText,
-          padding: `${GAP.md}px ${GAP.lg}px`,
-          borderRadius: 14,
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.base,
-          lineHeight: 1.5,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}>{anno ? anno.text : message.content}</div>
-      </div>
-    </div>
-  );
-}
 
 /**
  * Phase Image-5：preview 字段的智能渲染分派。

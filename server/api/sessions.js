@@ -22,7 +22,6 @@ import {
   renameSession,
   tagSession,
   deleteSession,
-  query,
 } from '@anthropic-ai/claude-agent-sdk';
 import { validateProjectId, getProject, setActiveSession } from '../projects/store.js';
 import { guardProject, modelUserFor } from './_guard.js';
@@ -41,20 +40,20 @@ import {
 import { withConfigDir } from '../lib/sdk-session.js';
 import { patchBoard } from '../projects/board-store.js';
 import { platform } from '../runtime/platform.js';
-import { AsyncQueue } from '../lib/async-queue.js';
 import { getProjectBus } from '../ws/broker.js';
 import { getLastContextUsage } from '../engine/runs/live-turn.js';
 import { Events } from '../engine/agent/events.js';
 import { resolveSessionModel, applySessionModel, defaultModel } from '../engine/agent/session-model.js';
 import { selectableModelsFor, allowedModelsFor, isModelLockedFor, defaultModelFor, modelSwitchRejection } from '../engine/agent/model-context.js';
 
-/**
- * 进行中的 rewind 操作 sid 集合 —— 供 turn.js startNewRunSession 守卫使用，
- * 防止同 sid 临时 rewind query 跟 normal turn query 同时启动撞 jsonl。
- */
-export const pendingRewinds = new Set();
+
+import { mountRewindRoute } from './sessions-rewind.js';
+import { jsonlExistsForSession, truncateJsonlAtLastUserMessage } from '../projects/session-jsonl.js';
 
 const router = express.Router();
+
+// 「回到某条消息之前」整块住在 sessions-rewind.js（行数棘轮，2026-08-30 拆出）
+mountRewindRoute(router);
 
 // SDK session API 需要 CLAUDE_CONFIG_DIR 指向 JSONL 实际存储的全局目录
 // 来自 runtime/platform.js（跨平台决策单一来源）
@@ -283,9 +282,25 @@ router.post('/:pid/sessions/:sid/fork', async (req, res, next) => {
     const srcSessionRoot = getSessionWorkspace(req.params.pid, srcSid);
     const { upToMessageId, title } = req.body || {};
 
+    // 标题：不传就自己拼一个（08-30）。SDK 会把源会话的标题原样复制过来，于是
+    // 会话列表里两条同名，用户分不出哪条是刚分出来的。带 upToMessageId 的入口
+    // （气泡上的「从这里分叉」）拿不到标题也不该为它穿三层 props，所以在这拼。
+    let finalTitle = title;
+    if (!finalTitle && upToMessageId) {
+      const srcInfo = await withConfigDir(GLOBAL_CLAUDE_CONFIG_DIR, () =>
+        getSessionInfo(srcSid, { dir: srcSessionRoot }),
+      ).catch(() => null);
+      const base = srcInfo?.customTitle || srcInfo?.summary || '';
+      finalTitle = base ? `${base} · 分支` : '分支';
+    }
+
     // 1. SDK fork —— 在 GLOBAL_CLAUDE_CONFIG_DIR 下生成新 sid 的 jsonl
+    //
+    // ⚠️ 带 upToMessageId 时**不在这里设标题**：下面第 4 步的补刀是前缀截断，而
+    // forkSession 写的 custom-title 行排在最后那条用户消息之后，会被一起砍掉
+    // （探针实测：9 行 fork 补刀删 3 行，标题那行在里面）。所以补完刀再设。
     const result = await withConfigDir(GLOBAL_CLAUDE_CONFIG_DIR, () =>
-      forkSession(srcSid, { dir: srcSessionRoot, upToMessageId, title }),
+      forkSession(srcSid, { dir: srcSessionRoot, upToMessageId, title: upToMessageId ? undefined : finalTitle }),
     );
     const newSid = result.sessionId;
     validateSessionId(newSid);
@@ -323,6 +338,23 @@ router.post('/:pid/sessions/:sid/fork', async (req, res, next) => {
             break;
           } catch { /* continue */ }
         }
+      }
+    }
+
+    // 4. 「到这条为止」在我们这儿是**不含**那条（08-30）。
+    //
+    // SDK 的 upToMessageId 是含的（探针实测），而这个接口的调用方是「从这条消息
+    // 分叉」—— 用户点的是自己那句想重说的话，含着它 fork 出来等于什么都没改。
+    // uuid 被 fork 重映射过，拿原 id 截不到，所以按"最后一条真用户消息"下刀。
+    // 不传 upToMessageId 的整条 fork（会话列表那个入口）不受影响。
+    if (upToMessageId) {
+      await truncateJsonlAtLastUserMessage(newSessionRoot, newSid);
+      // 标题在补刀之后才落得住（见上）。设不上不算失败 —— 分支本身已经好了，
+      // 列表里退回摘要显示而已。
+      if (finalTitle) {
+        await withConfigDir(GLOBAL_CLAUDE_CONFIG_DIR, () =>
+          renameSession(newSid, finalTitle, { dir: newSessionRoot }),
+        ).catch((err) => console.warn(`[fork] 设分支标题失败：${err.message}`));
       }
     }
 
@@ -417,184 +449,5 @@ router.delete('/:pid/sessions/:sid', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-
-// ── POST /:pid/sessions/:sid/rewind ──
-// SDK Query.rewindFiles(userMessageId) 控制方法 —— 把 session 内文件回滚到该
-// user message 之前的状态（后续 Edit/Write 全撤销）。SDK file checkpoint 写在
-// session jsonl（type='file-history-snapshot'），跨进程持久化天然搞定。
-//
-// 两条路径：
-//   1. active query 在跑 → 直接用现有 query.rewindFiles（最快，无 spawn 成本）
-//   2. session 已 close（历史 session）→ 起临时 query (resume + drain) → rewindFiles → close
-//
-// 历史 session 也能 undo —— 之前返 410 是应用层偷懒，SDK 完全支持 resume + rewindFiles。
-//
-// body: { userMessageId }
-// 200 { canRewind, filesChanged?, insertions?, deletions? }
-// 404 { code: 'JSONL_MISSING' }   jsonl 不存在（session 删了 / 部分创建）
-// 409 { code: 'REWIND_BUSY' }     同 sid 已有 rewind 进行中
-// 500 { code: 'REWIND_FAILED' }   临时 query 启动 / rewindFiles 失败
-router.post('/:pid/sessions/:sid/rewind', async (req, res, next) => {
-  try {
-    validateSessionId(req.params.sid);
-    const project = guardProject(req, res);
-    if (!project) return;
-
-    const { userMessageId } = req.body || {};
-    if (!userMessageId || typeof userMessageId !== 'string') {
-      return res.status(400).json({ error: 'userMessageId required' });
-    }
-
-    const { pid, sid } = req.params;
-
-    // 路径 1：active query 在跑 —— 直接用现有 query
-    const rec = getQuerySession(sid);
-    if (rec?.query && !rec.abortController.signal.aborted) {
-      const result = await rec.query.rewindFiles(userMessageId);
-      // 对话层同步回滚（2026-08-08「做完整」）：rewindFiles 只回文件。显示与模型
-      // 记忆读的都是这份 jsonl —— 关掉活口 query（下条消息从截断后的 jsonl resume，
-      // 记忆才真的回退），等 SDK flush 后把 jsonl 截到该 user 消息之前。
-      try { closeQuerySession(sid, 'rewind_truncate'); } catch { /* */ }
-      await new Promise((r) => setTimeout(r, 800));
-      const removed = await truncateJsonlAtMessage(getSessionWorkspace(pid, sid), sid, userMessageId);
-      const payload = { ...result, conversationTruncated: removed != null, removedEntries: removed ?? 0 };
-      emitRewindFiles(pid, sid, payload);
-      return res.json(payload);
-    }
-
-    // race guard：active session 存在但 query handle 未 attach（session 启动中
-    // 的窄 race window — registerQuerySession 已 set Map 但 attachSessionQuery
-    // 还没赋值 query 字段）→ 拒 409 让用户重试。如果直接 fallthrough 进路径 2
-    // 起临时 query，两个 SDK binary 会同时 attach 同一 jsonl 文件 → 错乱不可恢复。
-    if (hasActiveQuerySession(sid) && rec && !rec.abortController.signal.aborted) {
-      return res.status(409).json({
-        error: 'session is starting (query handle not yet attached), retry shortly',
-        code: 'SESSION_STARTING',
-      });
-    }
-
-    // 路径 2：起临时 query resume → rewindFiles → close
-    if (pendingRewinds.has(sid)) {
-      return res.status(409).json({ error: 'rewind in progress', code: 'REWIND_BUSY' });
-    }
-    const sessionRoot = getSessionWorkspace(pid, sid);
-    if (!await jsonlExistsForSession(sessionRoot, sid)) {
-      return res.status(404).json({ error: 'session jsonl not found', code: 'JSONL_MISSING' });
-    }
-
-    pendingRewinds.add(sid);
-    const inputQueue = new AsyncQueue();
-    let tempQuery = null;
-    let drain = null;
-    try {
-      tempQuery = query({
-        prompt: inputQueue,
-        options: {
-          resume: sid,
-          enableFileCheckpointing: true,
-          cwd: sessionRoot,
-          // 关键：跟 runSession 一致传 CLAUDE_CONFIG_DIR，否则 SDK 找不到 jsonl
-          env: { ...process.env, CLAUDE_CONFIG_DIR: GLOBAL_CLAUDE_CONFIG_DIR },
-          persistSession: true,
-          // 不传 hooks / mcpServers / agents / canUseTool —— 临时 query 不跑 turn
-        },
-      });
-      // fire-and-forget consume —— SDK control method 走 bidirectional protocol，
-      // stream 不消费会卡死 control RPC。drain 跑在后台，close 后自然结束。
-      drain = (async () => {
-        try { for await (const _ of tempQuery) { /* discard */ } }
-        catch { /* expected on close */ }
-      })();
-      // 15s timeout（SDK boot + jsonl load + control RPC ~3-5s 正常 → 3× margin）
-      const result = await Promise.race([
-        tempQuery.rewindFiles(userMessageId),
-        new Promise((_, rj) => setTimeout(() => rj(new Error('rewind timeout')), 15000)),
-      ]);
-      // 对话层回滚：先收干净临时 query（文件句柄/尾部 flush），再截断 jsonl
-      try { tempQuery.close(); } catch { /* */ }
-      try { inputQueue.close(); } catch { /* */ }
-      if (drain) { try { await drain; } catch { /* */ } }
-      tempQuery = null; drain = null;
-      await new Promise((r) => setTimeout(r, 300));
-      const removed = await truncateJsonlAtMessage(sessionRoot, sid, userMessageId);
-      const payload = { ...result, conversationTruncated: removed != null, removedEntries: removed ?? 0 };
-      emitRewindFiles(pid, sid, payload);
-      res.json(payload);
-    } catch (err) {
-      console.warn(`[sessions.rewind] temp query failed (sid=${sid.slice(0, 8)}): ${err.message}`);
-      res.status(500).json({ error: err.message, code: 'REWIND_FAILED' });
-    } finally {
-      try { tempQuery?.close(); } catch { /* ignore */ }
-      try { inputQueue.close(); } catch { /* ignore */ }
-      if (drain) { try { await drain; } catch { /* ignore */ } }
-      pendingRewinds.delete(sid);
-    }
-  } catch (err) { next(err); }
-});
-
-/**
- * 检查 SDK jsonl 是否存在 —— 历史 session 在 ~/.claude/projects/<encoded-cwd>/<sid>.jsonl。
- * encodeCwdForSDK + GLOBAL_CLAUDE_CONFIG_DIR 都已在文件顶部定义。
- */
-/**
- * 对话层回滚（2026-08-08）：把 jsonl 截断到 userMessageId 那条之前（含它与其后全部）。
- * jsonl 是追加式日志，截到 prefix = 它历史上真实存在过的状态，resume 天然自洽；
- * 之后的 file-history-snapshot 属于被撤销的编辑，一并丢弃是正确语义。
- * 原子写（tmp+rename）。找不到该 uuid 返 null（fail-soft：文件回滚仍算成功）。
- */
-async function truncateJsonlAtMessage(sessionRoot, sid, userMessageId) {
-  const jsonlPath = path.join(GLOBAL_CLAUDE_CONFIG_DIR, 'projects', encodeCwdForSDK(sessionRoot), `${sid}.jsonl`);
-  try {
-    const raw = await fs.readFile(jsonlPath, 'utf8');
-    const lines = raw.split('\n');
-    let cut = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (!lines[i] || !lines[i].includes(userMessageId)) continue;
-      try { if (JSON.parse(lines[i]).uuid === userMessageId) { cut = i; break; } } catch { /* 非 JSON 行跳过 */ }
-    }
-    if (cut < 0) {
-      console.warn(`[sessions.rewind] uuid ${userMessageId.slice(0, 8)} 不在 jsonl 里，跳过对话截断`);
-      return null;
-    }
-    const kept = lines.slice(0, cut).join('\n');
-    const tmp = `${jsonlPath}.tmp-rewind`;
-    await fs.writeFile(tmp, kept ? `${kept}\n` : '');
-    await fs.rename(tmp, jsonlPath);
-    return lines.filter(Boolean).length - lines.slice(0, cut).filter(Boolean).length;
-  } catch (err) {
-    console.warn(`[sessions.rewind] jsonl 截断失败（不影响文件回滚）：${err.message}`);
-    return null;
-  }
-}
-
-async function jsonlExistsForSession(sessionRoot, sid) {
-  const encoded = encodeCwdForSDK(sessionRoot);
-  const jsonlPath = path.join(GLOBAL_CLAUDE_CONFIG_DIR, 'projects', encoded, `${sid}.jsonl`);
-  try {
-    await fs.access(jsonlPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * rewindFiles 成功后 emit run.file_changed 事件让前端 iframe 自动 reload。
- * 复用现有 event 类型 —— ProjectWorkspace.jsx 已 case 它（仅 .html 后缀 bump reloadToken），
- * 0 前端事件代码改动。
- */
-function emitRewindFiles(pid, sid, result) {
-  if (!result?.canRewind || !Array.isArray(result.filesChanged) || !result.filesChanged.length) return;
-  const bus = getProjectBus(pid);
-  for (const filePath of result.filesChanged) {
-    bus.publish({
-      type: 'run.file_changed',
-      filePath,
-      event: 'change',
-      sessionId: sid,
-      ts: new Date().toISOString(),
-    });
-  }
-}
 
 export default router;

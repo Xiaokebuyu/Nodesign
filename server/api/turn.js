@@ -54,11 +54,18 @@ import { shouldModerate, moderateText, recordViolation, levelFor } from '../lib/
 import { getProjectBus } from '../ws/broker.js';
 import { Events } from '../engine/agent/events.js';
 import { readPendingSummary } from './pending-changes.js';
-import { pendingRewinds } from './sessions.js';
+import { pendingRewinds } from './sessions-rewind.js';
 import { platform } from '../runtime/platform.js';
 import { composeUserMessage } from './turn-compose.js';
 
 const router = express.Router();
+
+/**
+ * SDK uuid 形态。用户消息的 id 在三处必须是**同一个** 36-char uuid：jsonl 里那条
+ * user 记录的 uuid、rewindFiles(userMessageId) 的入参、fork 的 upToMessageId。
+ * 前端同一份判据在 web/src/components/chat/Message.jsx（改一处记得对另一处）。
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Emit run.permission_mode_changed —— 广播 SDK 实际 permissionMode 的变化。唯一的
@@ -95,7 +102,7 @@ router.post('/:pid/turn', async (req, res, next) => {
     const project = guardProject(req, res);
     if (!project) return;
 
-    const { chat, attachments, skillId, sessionId, permissionMode, requestId, raw } = req.body || {};
+    const { chat, attachments, skillId, sessionId, permissionMode, requestId, raw, userMessageUuid } = req.body || {};
     // 只发附件不打字也是一条完整消息（2026-08-17，issue #1 第 8 条）：拖张参考图
     // 进来就该能发，逼用户补一句"看看这个"是白要的动作。
     // 空文字 **且** 空附件才是空消息 —— 那个仍然拦。
@@ -112,14 +119,14 @@ router.post('/:pid/turn', async (req, res, next) => {
     if (typeof requestId === 'string' && requestId) {
       const cached = lruGet(requestId);
       if (cached && cached.pid === project.id) {
-        return res.status(202).json({ runId: cached.runId, sessionId: cached.sessionId, deduped: true });
+        return res.status(202).json({ runId: cached.runId, sessionId: cached.sessionId, userMessageId: cached.userMessageId, deduped: true });
       }
       const inflight = inflightTurns.get(requestId);
       if (inflight) {
         try {
           const r = await inflight;
           if (r && r.pid === project.id) {
-            return res.status(202).json({ runId: r.runId, sessionId: r.sessionId, deduped: true });
+            return res.status(202).json({ runId: r.runId, sessionId: r.sessionId, userMessageId: r.userMessageId, deduped: true });
           }
         } catch { /* first POST failed → fall through 让本 POST 重新跑 */ }
       }
@@ -311,6 +318,18 @@ router.post('/:pid/turn', async (req, res, next) => {
       console.info(`[turn.compose] sid=${sid.slice(0, 8)} blocks=[${summary.join(', ')}]`);
     }
 
+    // 这条用户消息的 uuid（2026-08-30「回退标识要刷新才出现」案）。
+    //
+    // 它是 SDKUserMessage.uuid，CLI 会**原样**写进 jsonl（探针实证：push 时盖的
+    // uuid 与 jsonl 里那条 user 记录的 uuid 一致），而 rewindFiles / fork 的
+    // upToMessageId / truncateJsonlAtMessage 认的都是 jsonl 里那个 uuid。
+    //
+    // 以前它由 pushUserMessage 在 202 之后临时生成（新会话首条甚至不盖，由 CLI 自己
+    // 生成），前端无从知晓 → 乐观插入的气泡只能用本地 `msg_xxx` 做 id → 回退/分叉
+    // 按钮的 UUID 判据不认它 → **必须刷新页面**等 hydrate 从 jsonl 读回真 uuid 才出现。
+    // 现在改成前端先生成、随请求带来（老前端不带则这里生成），202 也回传一份。
+    const userMsgUuid = UUID_RE.test(String(userMessageUuid || '')) ? userMessageUuid : randomUUID();
+
     // 创建 run（pending）— per-turn record，displayText 落 brief 字段做审计
     const run = createRun({
       skillId: finalSkillId, brief: displayText, projectId: project.id,
@@ -321,21 +340,24 @@ router.post('/:pid/turn', async (req, res, next) => {
     // 同时 resolve in-flight Promise 通知正在 await 的并发 POST，5s 后清 in-flight
     // entry（让 LRU 接管后续 dedup 查询）。
     if (typeof requestId === 'string' && requestId) {
-      lruPut(requestId, { pid: project.id, runId: run.id, sessionId: sid });
+      lruPut(requestId, { pid: project.id, runId: run.id, sessionId: sid, userMessageId: userMsgUuid });
       if (inflightResolve) {
-        inflightResolve({ pid: project.id, runId: run.id, sessionId: sid });
+        inflightResolve({ pid: project.id, runId: run.id, sessionId: sid, userMessageId: userMsgUuid });
       }
       setTimeout(() => inflightTurns.delete(requestId), INFLIGHT_RETENTION_MS);
     }
 
     // 立即返回，agent 后台跑
-    res.status(202).json({ runId: run.id, sessionId: sid });
+    res.status(202).json({ runId: run.id, sessionId: sid, userMessageId: userMsgUuid });
     const bus = getProjectBus(project.id);
 
     const sdkUserMessage = {
       type: 'user',
       message: { role: 'user', content: blocks },
       parent_tool_use_id: null,
+      // 两条路径都盖：pushUserMessage 走 runIdByUuid 认领（它见 uuid 已在就不再生成），
+      // startNewRunSession 那条不进认领表（claimRunByUuid 返 null，照旧走 initialRunId）。
+      uuid: userMsgUuid,
     };
 
     if (hasActiveQuerySession(sid)) {

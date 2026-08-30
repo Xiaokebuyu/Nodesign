@@ -158,14 +158,24 @@ export function mergeLiveTurnSnapshot(messages, snapMessages, runId) {
  * hydrate 合并：
  * - display 空而 current 有内容（jsonl 还没 flush）→ 信任 current 不替换
  * - display 缺乐观 user msg（还在 inputQueue 没落 JSONL）→ 保留 orphan
+ *
+ * 认领判据 **id 优先、content 兜底**（2026-08-30）：乐观气泡的 id 现在就是这条消息
+ * 在 jsonl 里的 uuid（helpers.newUserMessageId → turn.js → SDKUserMessage.uuid），
+ * 所以同一条消息两侧 id 必然相同。光比 content 会漏认 —— composeUserMessage 往
+ * 用户那条里注入的 `<system>…</system>`、附件提示都会进 jsonl 的 text block，
+ * hydrate 出来的正文比气泡长，于是同一条消息被当成 orphan 留下 = **显示两遍**。
+ * content 兜底那条留给老气泡（`msg_xxx`）和服务端替发的消息。
  */
 export function mergeHydrated(messages, display) {
   if (display.length === 0 && messages.length > 0) return messages;
+  const displayUserIds = new Set(display.filter(m => m.role === 'user').map(m => m.id));
   const displayUserContents = new Set(
     display.filter(m => m.role === 'user').map(m => (m.content || '').trim())
   );
   const orphans = messages.filter(m =>
-    m.role === 'user' && !displayUserContents.has((m.content || '').trim())
+    m.role === 'user'
+    && !displayUserIds.has(m.id)
+    && !displayUserContents.has((m.content || '').trim())
   );
   if (orphans.length > 0) return [...display, ...orphans];
   return display;

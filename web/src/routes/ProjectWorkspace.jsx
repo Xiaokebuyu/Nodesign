@@ -33,7 +33,8 @@ import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_SANS, FONT_KAI, FONT_MONO, 
 import { INK_SURFACE } from '../lib/paper.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
-import { newId } from '../lib/helpers.js';
+import { newId, newUserMessageId } from '../lib/helpers.js';
+import { useRewindEvents } from './use-rewind-events.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
 import { serializeForAI } from '../lib/element-semantics.js';
 import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges } from '../lib/api.js';
@@ -419,18 +420,8 @@ export default function ProjectWorkspace() {
   const prevHydrateSidRef = useRef(null);
   const wsHydratedSidRef = useRef(null);
 
-  // 回滚成功后对话层重拉（2026-08-08）：服务端已把 jsonl 截断，这里强制整体替换
-  // messages（回滚时必无进行中 turn，不存在洗掉流式正文的问题）。
-  useEffect(() => {
-    const onRewound = (e) => {
-      if (!currentSessionId || e.detail?.sessionId !== currentSessionId) return;
-      Sessions.read(id, currentSessionId)
-        .then(({ messages: m = [] }) => setMessages(sessionMessagesToDisplay(m)))
-        .catch(() => { /* 拉不到就等下次切会话自然重拉 */ });
-    };
-    window.addEventListener('nd-conversation-rewound', onRewound);
-    return () => window.removeEventListener('nd-conversation-rewound', onRewound);
-  }, [id, currentSessionId]);
+  // 「回到此处 / 从这里分叉」落地后的两件事（语义在 use-rewind-events.js）
+  useRewindEvents({ projectId: id, currentSessionId, setMessages, sessionIdRef, setCurrentSessionId, updateProject });
 
   // 板书控件（08-25 nd:controls 围栏）：MdInk 里的按钮点了发这个事件 —— 非触发件
   // 攒进 pending（同标注「攒着」一条路），触发件直接起轮（攒的那批靠每轮注入的
@@ -634,7 +625,9 @@ export default function ProjectWorkspace() {
     // 等 WS 连上一两个 tick 再发，确保 run.start 等事件能收到
     const t = setTimeout(async () => {
       const bubble = text || `（附件：${stateAttachments.map(a => a.name || a.path).join('、')}）`;
-      setMessages((ms) => [...ms, { id: newId('msg'), role: 'user', content: bubble }]);
+      // id 用 SDK uuid 形态并同步给服务端：气泡一出现就能「回到此处」/「从这里分叉」
+      const userMessageUuid = newUserMessageId();
+      setMessages((ms) => [...ms, { id: userMessageUuid, role: 'user', content: bubble }]);
       // 跟 handleSend 同步：sidForRequest 优先用 ref（避 React 闭包陈旧）
       const sidForRequest = sessionIdRef.current ?? currentSessionId;
       try {
@@ -642,6 +635,7 @@ export default function ProjectWorkspace() {
           pid: id,
           chat: text,
           attachments: stateAttachments,
+          userMessageUuid,
           sessionId: sidForRequest,  // /work 路径 → null（新会话）；/sessions/:sid → 续约
           // 只有**新建会话**才带模型偏好：会话建起来之后模型的真相在服务端的
           // session-config，picker 直接改那边。每条消息都捎上本地偏好的话，在另一台
@@ -1382,7 +1376,9 @@ export default function ProjectWorkspace() {
     // 只发了附件的那条：气泡里得有东西，不然界面上是一个空框。写成附件名，
     // 跟托盘里刚消失的那几个 chip 对得上。
     const bubble = body || `（附件：${attachments.map(a => a.name || a.path).join('、')}）`;
-    setMessages(ms => [...ms, { id: newId('msg'), role: 'user', content: bubble }]);
+    // 同上：气泡 id = 这条消息在 jsonl 里的 uuid，回退/分叉按钮当场可用（2026-08-30）
+    const userMessageUuid = newUserMessageId();
+    setMessages(ms => [...ms, { id: userMessageUuid, role: 'user', content: bubble }]);
     try {
       // Phase A.1：优先用 ref 拿 sessionId，避开 React async 闭包陈旧。
       // 极快连发场景下 currentSessionId（useParams）还没刷过来，ref 已是最新。
@@ -1391,6 +1387,7 @@ export default function ProjectWorkspace() {
         pid: id,
         chat: chatWithRecalls,
         attachments,
+        userMessageUuid,
         // S4：显式传选中的 sessionId；null 时后端识别为"新建 session"
         sessionId: sidForRequest,
         // 同上：已有会话时不带 model（真相在 session-config，picker 直接改那边）

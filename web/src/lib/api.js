@@ -323,7 +323,7 @@ export const Turn = {
    *   - 显式 null → 新建 session（用户点"+ 新会话"后第一次发）
    * permissionMode：保留字段兼容，后端已忽略（plan mode 2026-08-21 整体移除，一律 platform 默认）
    */
-  send: async ({ pid, chat, attachments = [], skillId, sessionId, permissionMode, requestId, raw, model }) => {
+  send: async ({ pid, chat, attachments = [], skillId, sessionId, permissionMode, requestId, raw, model, userMessageUuid }) => {
     // Phase A.6（2026-05-07）：requestId 幂等防重发。
     // 弱网下用户可能点两次发送或 fetch 超时自动重试。后端 LRU 同 requestId 直接返
     // 已存在的 { runId, sessionId } 不重复创建 session/run。
@@ -335,6 +335,10 @@ export const Turn = {
     // 重启 query 生效。不传 = 跟随该会话已有配置 / 服务端默认
     if (model) body.model = model;
     if (raw === true) body.raw = true;   // 斜杠命令直达（/compact 等），跳过消息装饰
+    // 这条用户消息的 uuid（2026-08-30）：调用方先生成、乐观气泡拿它当 id，服务端
+    // 原样盖到 SDKUserMessage.uuid 上、CLI 原样写进 jsonl。于是「回到此处」「从这里
+    // 分叉」当场可用，不必等刷新后 hydrate 从 jsonl 读回真 uuid。见 Message.jsx UUID_RE。
+    if (userMessageUuid) body.userMessageUuid = userMessageUuid;
     body.requestId = requestId || (crypto?.randomUUID
       ? crypto.randomUUID()
       : `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
@@ -426,12 +430,15 @@ export const Sessions = {
   close: (pid, sid) =>
     jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/close`),
   /**
-   * 调 SDK Query.rewindFiles(userMessageId) 把所有文件回滚到 userMessageId 之前。
-   * 仅 streamInput query 活着时可用 —— session 已 close 时返 410。
-   * 200 → { canRewind, filesChanged?, insertions?, deletions? }
+   * 回到 userMessageId 之前。两件事两个开关，都默认 true（= 老的「回到此处」）：
+   *   files                产物回退（SDK rewindFiles，把工作区文件撤回那个时点）
+   *   truncateConversation 对话回退（jsonl 截到该消息之前，模型记忆跟着回退）
+   * 只回对话（files:false）不需要起 SDK 临时 query，瞬间完成。
+   * ⚠️ 产物只有一份：files:true 影响这个项目的所有会话。
+   * 200 → { canRewind, filesChanged?, insertions?, deletions?, conversationTruncated, removedEntries }
    */
-  rewind: (pid, sid, userMessageId) =>
-    jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/rewind`, { userMessageId }),
+  rewind: (pid, sid, userMessageId, { files = true, truncateConversation = true } = {}) =>
+    jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/rewind`, { userMessageId, files, truncateConversation }),
   /**
    * 跨项目最近 session 聚合（GET /api/sessions/recent）
    * @param {object} opts
