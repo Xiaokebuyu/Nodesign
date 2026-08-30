@@ -138,7 +138,7 @@ const ALWAYS_LOAD_TOOLS = new Set([
   // read_user_view 不进：视口已经每回合自动进状态块，它降级成"看画面细节"的按需件。
   'write_on_board', 'edit_board', 'read_board', 'board_batch', 'look_at_board',
   // 纸范式（2026-08-29）：铺纸是板面工作的起手式，卖点全在描述里（当前纸/坐标原点/
-  // 自动翻纸），必须常驻。
+  // 排不下就拒收、翻页归 agent），必须常驻。
   'open_sheet',
 ]);
 
@@ -154,6 +154,12 @@ function assertAlwaysLoadNames(registeredNames) {
     throw new Error(`[always-load] 常驻表里有注册表不存在的名字: ${ghosts.join(', ')} —— 改名后表没跟上，这些条目在静默空转`);
   }
 }
+
+/**
+ * 工具名 → 它真正收的参数名集合。装配时回填（见下），PreToolUse 的未知键探针读它。
+ * 全进程共享一份：同一份 schema 跟项目无关。
+ */
+export const TOOL_PARAM_KEYS = new Map();
 
 export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, sessionId, ctx, roleRoster = null, projectMode = 'design' } = {}) {
   // 浏览通道里能被 browser_batch 串起来的七件：先建一次，batch 拿**同一批实例**
@@ -352,25 +358,45 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       makeBatchTool({
         name: 'board_batch',
         description: `Run several board actions in ONE round-trip — the unit of board upkeep.
-One beat of thinking = one batch: read_board first if you have not looked this turn,
-then open_sheet/write/edit/pin/organize in order, and pass screenshotAfter:true when
-looks matter.
-Actions run in order; a failure stops the rest (already-ran steps are NOT rolled back —
-continue from the failed step). Later steps can use what earlier steps made: chain:true
-threads onto the note a previous step wrote (same tag); a sheet opened by an earlier
-step is the current sheet for later at:{x,y}; sketch local ids resolve in edit_board ops.
-Placement is SHEETS — open_sheet for a new topic, at:{x,y} places precisely on the
-current sheet, no at flows downward. Lines still say WHY (chain below = same thread,
-near = annotates) — a note with no line is one nobody can trace back.
+One beat of thinking = one batch: open_sheet to plan the page, then write/edit/pin in order.
+You do NOT need read_board first — the sheet ledger (which sheets, which blocks, how much
+room is left in each) arrives in your turn state for free every turn.
+
+PLACEMENT IS PLANNED BLOCKS. open_sheet{plan:[{slot,at,w,h,about}…]} carves the page into
+named blocks; write_on_board{slot:"main"} drops content into one; pin_to_board{path,slot}
+puts a produced file into one. at:{x,y} still works — sheet-local pixels — but that is a
+note in the margin, not the main road. No slot and no at flows to the next free spot.
+
+CONTENT THAT DOES NOT FIT IS REFUSED, not squeezed — three ways: one card over 384px,
+a full block, a full sheet. Nothing is written and NOTHING TURNS THE PAGE FOR YOU: you
+open and plan the next one. So put anything that might be refused LAST in the batch —
+a failure stops every step after it (already-ran steps are NOT rolled back; continue
+from the failed step, do not re-run the whole batch).
+
+Later steps can use what earlier steps made: chain:true threads onto the note a previous
+step wrote (same tag); a sheet opened by an earlier step is the current sheet; sketch
+local ids resolve in edit_board ops. But a chalk note's FILENAME is generated when it
+lands — you cannot reply_to a note this same batch is about to create. Use chain:true
+(same tag), or write it, then reply_to it in the next batch.
+
+Lines still say WHY (chain below = same thread, near = annotates) — a note with no line
+is one nobody can trace back.
+
 Batchable: open_sheet / write_on_board / edit_board / read_board / pin_to_board /
-organize_board / look_at_board / read_user_view.
-Example: [{"name":"read_board","input":{}},{"name":"write_on_board","input":{"text":"…",
-"tag":"主线","chain":true}},{"name":"edit_board","input":{"ops":[{"op":"add_edge",
-"from":"notes/板书/x.md","to":"assets/图.png","type":"link"}]}}]`,
+organize_board / look_at_board / read_user_view. Nothing else — roll_dice, image
+generation and artifact tools are their own beat.
+Example: [{"name":"open_sheet","input":{"title":"第二章","plan":[{"slot":"main","at":
+{"x":0,"y":0},"w":600,"h":900,"about":"正文"},{"slot":"图","at":{"x":640,"y":0},"w":360,
+"h":900,"about":"配图","for":"artifacts"}]}},{"name":"write_on_board","input":{"slot":
+"main","text":"…","tag":"主线","chain":true}},{"name":"edit_board","input":{"ops":[
+{"op":"add_edge","from":"notes/板书/x.md","to":"assets/图.png","type":"link"}]}}]`,
         resolve: resolveTool,
         batchable: [
           ...boardBatchable.map(t => t.name),
-          'pin_to_board', 'organize_board', 'look_at_board', 'read_user_view',
+          // 08-30 对账：97 个真实 batch 里 organize_board 用过 0 次、pin_to_board 0 次。
+          // pin_to_board 留着（刀 G 起它是"把产物放进规划好的块"的正门，会用起来）；
+          // organize_board 是"把文件搬进文件夹"，跟一拍板面维护不是一件事，撤出名单。
+          'pin_to_board', 'look_at_board', 'read_user_view',
         ],
         finalShot: { name: 'look_at_board', input: {}, default: false },
       }),
@@ -417,6 +443,11 @@ Example: [{"name":"read_board","input":{}},{"name":"write_on_board","input":{"te
 
   // batch 解析表回填：此刻 tools 里的实例已过完 能力闸/模式闸/alwaysLoad/消毒 全套
   for (const t of tools) wrappedByName.set(t.name, t);
+  // 参数名台账（2026-08-30）：给 PreToolUse 的未知键探针用。SDK 在进 handler
+  // 之前就按 schema 把未知键 strip 掉了（zod object 默认行为，不报错），所以
+  // 工具自己**永远看不见**模型多传了什么 —— 真会话里 write_on_board 被塞过 20 次
+  // `facts`（整份剧情事实），一次都没留下痕迹。只有钩子拿得到原始 tool_input。
+  for (const t of tools) TOOL_PARAM_KEYS.set(t.name, new Set(Object.keys(t.inputSchema || {})));
 
   // 角色工具白名单的启动期对账（2026-08-26）：cast_role 会把白名单里的短名写进
   // 角色文件的 frontmatter，名字写错**不会报错**，只会让角色少一只手（CLI 当那个

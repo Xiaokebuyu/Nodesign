@@ -35,6 +35,8 @@ const SLOT = z.object({
   w: z.number().min(48).max(12000).describe('Width in PIXELS (a default note column is 432)'),
   h: z.number().min(24).max(12000).describe('Height in PIXELS (~26px per line of text)'),
   about: z.string().max(60).optional().describe('What goes here (正文 / 人物小传 / 待办) — for your own map'),
+  for: z.literal('artifacts').optional()
+    .describe("Set to 'artifacts' on ONE block to make it this page's landing spot for generated files (images, docs, sites). Without it, files you produce have nowhere planned to go and the page fills up with them wherever there is room."),
 });
 
 /**
@@ -73,7 +75,7 @@ export async function openSheetFor(projectId, {
     const y = Math.min(Math.max(0, Math.round(it.at?.y ?? 0)), Math.max(0, inner0.h - h));
     if (x !== Math.round(it.at?.x ?? 0) || y !== Math.round(it.at?.y ?? 0)
       || w !== Math.round(it.w) || h !== Math.round(it.h)) clampedSlots.push(it.slot);
-    slots[it.slot] = { x, y, w, h, ...(it.about ? { about: it.about } : {}) };
+    slots[it.slot] = { x, y, w, h, ...(it.about ? { about: it.about } : {}), ...(it.for === 'artifacts' ? { for: 'artifacts' } : {}) };
   }
   const entry = {
     x: rect.x, y: rect.y, w: rect.w, h: rect.h,

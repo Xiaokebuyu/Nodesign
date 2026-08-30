@@ -17,6 +17,21 @@
  * 画线落座 —— 从此那句 prelude 是真话。
  *
  * 座位一律 seat:'auto'（可被前端重排）；已有座位的绝不动。
+ *
+ * ## 2026-08-30 刀 G：入座**不再自己铺纸**
+ *
+ * 站主拍板：「产物也需要 agent 提前规划放置位置落在纸上，甚至包括文件夹」。
+ * 在此之前这里排不下就 allocateSheetRect 翻一张新纸 —— 那张纸没标题、没版位、
+ * 署名 by:'agent'，而 agent 根本不知道它存在。真板实证（proj_mtfix5rv）：agent
+ * Write 了 CLAUDE.md，入座顺手铺了 p1，agent 随后自己 open_sheet 开了 p2，板上
+ * 从此永久留着一张空白无规划的纸。这正是「机器是兜底不是版面」要禁的事。
+ *
+ * 现在的三档：
+ *   ① 这一页规划了 `for:'artifacts'` 的地 → 落进那块地（agent 事前说了放哪儿）
+ *   ② 没规划但当前纸还排得下 → 纸内顺排（兜底，跟以前一样）
+ *   ③ 排不下 → **不铺纸**，进 board.pending 待摆队列，每回合状态块点名，
+ *      等 agent 规划出地方（open_sheet{plan} / pin_to_board 点名）再落座。
+ * 唯一的例外是**一张纸都还没有**：那不是翻页，是开工，照旧铺第一张。
  */
 
 import path from 'node:path';
@@ -28,7 +43,7 @@ import { obstaclesIn } from '../../lib/board-obstacles.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
 import {
   currentSheet, nextSpotInSheet, allocateSheetRect, sheetSizeFor, nextSheetName,
-  placeThread, placeBeside, innerRect, inflateSpriteSeats,
+  placeThread, placeBeside, innerRect, inflateSpriteSeats, slotRectOf, nextSpotInSlot,
 } from '../../lib/board-sheets.js';
 import { textBox, fitFor } from '../../lib/sketch-layout.js';
 import { getViewpoint } from '../../projects/viewpoint-store.js';
@@ -59,10 +74,13 @@ const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
  * @returns {Promise<{seated: number, lines: number}>}
  */
 export async function seatArtifacts(projectId, rels) {
-  const uniq = [...new Set(rels)].filter(seatable).slice(0, MAX_SEATS_PER_RUN * 2);
-  if (!uniq.length) return { seated: 0, lines: 0 };
   const sharedRoot = getSharedDir(projectId);
   const board = await readBoard(projectId);
+  // 待摆队列先并进来（刀 G）：上一批排不下的，这一批 agent 可能已经规划出地方了。
+  // 排在新来的前面 —— 等得久的先落。
+  const queued = Array.isArray(board.pending) ? board.pending : [];
+  const uniq = [...new Set([...queued, ...rels])].filter(seatable).slice(0, MAX_SEATS_PER_RUN * 2);
+  if (!uniq.length) return { seated: 0, lines: 0, pending: 0 };
   const known = new Set(Object.keys(board.zones || {}));
   const vp = getViewpoint(projectId);
   const objects = {}; const bindings = {};
@@ -72,6 +90,7 @@ export async function seatArtifacts(projectId, rels) {
   // liveSheets 随翻随更新（本批内后来者排进新纸）；新纸随 patch 一起落盘。
   const liveSheets = { ...(board.sheets || {}) };
   const newSheets = {};
+  const stillPending = [];          // 这一批还是没地方放的（刀 G 待摆队列）
   let seated = 0; let lines = 0;
 
   for (const rel of uniq) {
@@ -83,6 +102,7 @@ export async function seatArtifacts(projectId, rels) {
     try { await fs.access(path.join(sharedRoot, rel)); } catch { continue; }
 
     let box = estimateSizeOn(board, id, null);
+    let inSlot = null;               // 落进了哪块规划好的产物地
     let anchorRect = null; let replyRect = null;
     let anchorId = null; let parentId = null; let tag = null; let by = null;
 
@@ -121,13 +141,23 @@ export async function seatArtifacts(projectId, rels) {
     if (!placed && anchorRect) placed = placeBeside(anchorRect, box, 'below');
     if (!placed && !zone) {
       const cur = currentSheet(liveBoard, null);
-      if (cur) placed = nextSpotInSheet(liveBoard, cur.id, box);
-      if (!placed) {
-        // 纸满（或还没有纸）：翻一张（缺省尺寸按最近视点的设备档）
+      // ① agent 事前规划的产物地（slot.for === 'artifacts'）
+      if (cur) {
+        const named = Object.entries(cur.slots || {}).find(([, sl]) => sl.for === 'artifacts');
+        if (named) {
+          const r = slotRectOf(cur, named[0]);
+          const spot = r ? nextSpotInSlot(liveBoard, r, box) : { full: true };
+          if (!spot.full) { placed = spot; inSlot = named[0]; }
+        }
+      }
+      // ② 没规划就纸内顺排（兜底）
+      if (!placed && cur) placed = nextSpotInSheet(liveBoard, cur.id, box);
+      // ③ 一张纸都还没有 = **开工**，铺第一张（这不是翻页）
+      if (!placed && !cur) {
         const rect = allocateSheetRect({
           board: liveBoard, size: sheetSizeFor(fitFor(vp)),
-          viewport: (!cur && vp?.camera && !vp.layer) ? vp.camera : null,
-          nearSheet: cur ? cur.id : null,
+          viewport: (vp?.camera && !vp.layer) ? vp.camera : null,
+          nearSheet: null,
           // 铺纸不避家具（纸不渲染，见 board-obstacles.js 的 furniture 参数）
           obstacles: obstaclesIn(board, zone, { objects: live, exclude: [id], furniture: false }),
         });
@@ -137,6 +167,9 @@ export async function seatArtifacts(projectId, rels) {
         const inner = innerRect(entry);
         placed = { x: inner.x, y: inner.y };
       }
+      // ④ 有纸但排不下：**不翻页**（刀 G）。机器替 agent 铺出来的纸没标题没版位，
+      //    而 agent 不知道它存在 —— 那是机器在定版面。进队列，等它规划。
+      if (!placed) { stillPending.push(rel); continue; }
     }
     if (!placed) {
       // 文件夹层：这一层内容底下接着排（没有纸也没有启发式 —— 单条规则）
@@ -156,12 +189,21 @@ export async function seatArtifacts(projectId, rels) {
     if (parentId) { bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: id, by: by || 'agent', material: 'pencil', ...(tag ? { tag } : {}) }; lines += 1; }
   }
 
-  if (seated) await patchBoard(projectId, { objects, bindings, ...(Object.keys(newSheets).length ? { sheets: newSheets } : {}) });
+  // 待摆队列整表写回（刀 G）：**必须无条件写**，哪怕这一批一件都没坐下 ——
+  // 队列清空也是一次状态变化（上一批的挂账这一轮落了座，队列该空）。
+  const pendingChanged = JSON.stringify(queued) !== JSON.stringify(stillPending);
+  if (seated || pendingChanged) {
+    await patchBoard(projectId, {
+      ...(seated ? { objects, bindings } : {}),
+      ...(Object.keys(newSheets).length ? { sheets: newSheets } : {}),
+      ...(pendingChanged ? { pending: stillPending } : {}),
+    });
+  }
   // 领养的板书带 tag：有人跟着这个 tag（状态板）就自动重锚（fail-soft）
   for (const [id, e] of Object.entries(objects)) {
     if (e?.tag) { try { await applyFollows(projectId, { tag: e.tag, newId: id }); } catch { /* */ } }
   }
-  return { seated, lines };
+  return { seated, lines, pending: stillPending.length };
 }
 
 /**
@@ -179,8 +221,10 @@ export function attachBoardSeater(bus, projectId) {
     if (!pending.size) return;
     const batch = [...pending]; pending.clear();
     try {
-      const { seated } = await seatArtifacts(projectId, batch);
+      const { seated, pending } = await seatArtifacts(projectId, batch);
       if (seated) bus.publish({ type: 'board.updated', sessionId: null, summary: `${seated} 件新产物入了座` });
+      // 待摆的也要出声：板上没地方了，只有 agent 能开新的一页（刀 G）
+      if (pending) bus.publish({ type: 'board.updated', sessionId: null, summary: `${pending} 件产物还没地方摆（板面排满了）` });
     } catch (err) {
       console.warn('[board-seater]', projectId, err?.message || err);
     }

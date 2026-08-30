@@ -103,6 +103,23 @@ export function toLocal(s, world, margin = SHEET_MARGIN) {
 }
 
 /**
+ * 最新那张纸的名字 = 登记时间（at）最大的那张。**「最新」只有这一份算法**。
+ *
+ * ⚠️ 2026-08-30：这之前有两份。落位走 currentSheet（按 at），而每回合状态块和
+ * read_board 取的是 `sheetRects(board)` 的**最后一项** —— 那个数组按 y 排序，
+ * 拿到的是「最下面那张」。平时新纸往下叠、两者恰好重合，`open_sheet{where:
+ * 'viewport'}` 把纸铺在上方时就分叉：免费账本会去报一张 agent 根本没在写的纸。
+ * 「同一件事各执一词」先想收成一份。
+ */
+export function latestSheetId(board) {
+  let best = null; let bestAt = '';
+  for (const [id, s] of Object.entries(board?.sheets || {})) {
+    if (!best || String(s.at || '') > bestAt) { best = id; bestAt = String(s.at || ''); }
+  }
+  return best;
+}
+
+/**
  * 当前纸：会话指过的那张（还在就认），否则登记时间最新的一张。
  * @param {string|null} preferred  会话层记着的纸名
  */
@@ -111,11 +128,8 @@ export function currentSheet(board, preferred = null) {
   if (preferred && sheets[preferred]) {
     return { id: preferred, ...sheets[preferred] };
   }
-  let best = null;
-  for (const [id, s] of Object.entries(sheets)) {
-    if (!best || String(s.at || '') > String(best.at || '')) best = { id, ...s };
-  }
-  return best;
+  const id = latestSheetId(board);
+  return id ? { id, ...sheets[id] } : null;
 }
 
 /**
@@ -300,6 +314,15 @@ export function sheetSummaries(board) {
     const members = sheetMembers(board, s.id);
     const inner = innerRect(s);
     const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : inner.y;
+    const full = board?.sheets?.[s.id] || {};
+    // 版位余量（2026-08-30）：agent 每回合免费拿到的空间账本此前只有整张纸的
+    // freeH —— 而它写的时候是往**块**里写。报纸不报块，等于让它对着错的数做判断。
+    const slots = Object.entries(full.slots || {}).map(([name, sl]) => {
+      const rect = slotRectOf({ ...full, id: s.id }, name);
+      const spot = rect ? nextSpotInSlot(board, rect, { w: 1, h: 1 }) : { full: true };
+      const freeH = (rect && !spot.full) ? Math.max(0, Math.round(rect.y + rect.h - spot.y)) : 0;
+      return { name, about: sl.about || null, freeH, freeLines: Math.max(0, Math.floor((freeH - 8) / 26)) };
+    });
     return {
       id: s.id, x: s.x, y: s.y, w: s.w, h: s.h,
       title: s.title, by: s.by, at: s.at,
@@ -307,6 +330,7 @@ export function sheetSummaries(board) {
       lastId: members.length ? members[members.length - 1].id : null,
       freeH: Math.max(0, Math.round(inner.y + inner.h - bottom)),
       innerW: inner.w,
+      slots,
     };
   });
 }

@@ -27,7 +27,7 @@ import { readUiConfigFile, withUiDefaults } from '../../../projects/ui-config.js
 import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
-import { sheetSummaries } from '../../../lib/board-sheets.js';
+import { sheetSummaries, latestSheetId } from '../../../lib/board-sheets.js';
 import { dirtyEvents, describeDirty } from '../../../lib/board-dirty.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
@@ -115,13 +115,24 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       // 纸（2026-08-29 纸范式）：报当前有哪些纸、剩多少地 —— 空位建议/走向学习
       // 那套启发式随落位引擎一起退役，agent 的空间账本现在是纸的清单。
       let spot = null;
+      const pendingSeats = Array.isArray(board.pending) ? board.pending : [];
       try {
         const ss = sheetSummaries(board);
-        if (ss.length) {
-          const last = ss[ss.length - 1];
-          spot = `板上 ${ss.length} 张纸；最新 ${last.id}${last.title ? `（${last.title}）` : ''} 还剩 ~${last.freeH}px 高的空地（写满自动翻纸；新话题 open_sheet）`;
+        // 「最新」按登记时间取（latestSheetId 一份算法）—— 不是数组末项那张最下面的
+        const latest = latestSheetId(board);
+        const cur = ss.find(s => s.id === latest) || ss[ss.length - 1];
+        if (cur) {
+          const slots = cur.slots?.length
+            ? `；版位 ${cur.slots.map(s => `${s.name} 剩 ~${s.freeLines} 行`).join('、')}`
+            : '；这张没规划版位';
+          spot = `板上 ${ss.length} 张纸；当前 ${cur.id}${cur.title ? `（${cur.title}）` : ''} 还剩 ~${cur.freeH}px 高的空地${slots}`
+            + '（写满**不会**自动翻页，自己 open_sheet 规划下一页；新话题也是 open_sheet）';
         } else {
           spot = '板上还没铺过纸 —— 第一笔 write_on_board 会自动铺一张在他视口下，或先 open_sheet';
+        }
+        if (pendingSeats.length) {
+          spot += `；⛔ ${pendingSeats.length} 件产物还没地方摆（${pendingSeats.slice(0, 3).join('、')}${pendingSeats.length > 3 ? '…' : ''}）`
+            + ' —— 规划一块地（open_sheet{plan}）或 pin_to_board 点名落位，它们才上得了墙';
         }
       } catch { /* 纸读不出就不占字 */ }
       const dirs = null;
@@ -143,7 +154,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
           + `接着写就往**正下方**接，别用 side:'right'/'left' 并排 —— 并排的第二件在他屏幕外。`
           + `宁可多拆几件竖着排，也别把一件写宽。`
         : '';
-      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；写板走纸（at = 纸内坐标，写满自动翻纸）。要看画面细节才调 read_user_view。` });
+      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；写板走纸（at = 纸内坐标）。要看画面细节才调 read_user_view。` });
     }
   } catch { /* 视点读不到就沉默 */ }
   // 板上动静（2026-08-29 纸范式刀 4）：用户拖动/搬家/擦组此前完全静默，agent 只能

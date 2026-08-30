@@ -71,11 +71,12 @@ nd:controls 是通用按钮：每枚 = 一条待发提示词。生命周期三�
 
 ## 3. 状态板：一个组，跟着最新章走
 
-开场画一次：`write_on_board { tag:"状态板", layout:"column", staging:false, nodes:[PC卡, 当前场景, 明骰表] }`
-（staging:false —— 状态板是常设件不是草稿），
+开场画一次：`write_on_board { slot:"aside", tag:"状态板", layout:"column", staging:false, nodes:[PC卡, 当前场景, 明骰表] }`
+（staging:false —— 状态板是常设件不是草稿；`slot` 是你在 open_sheet 里给它划的那块地），
 然后立一条跟随规则（**只立一次**）：
 `edit_board { ops:[{ op:"follow", group_tag:"状态板", target_tag:"章节", side:"right" }] }`
 —— 从此每章板书一落，状态板自动挪到它右侧、锚线自动重指，你不用每轮手搬。
+`#章节` 这会儿还是空的没关系：规则先立着，第一章一落自动接线并就位。
 每章收尾只剩两步（一次 `edit_board`）：
 1. `set_text` 更新变了的卡（内容变长没关系，下一步会重排）
 2. `reflow {tag:"状态板"}` —— set_text 改高后整组重堆，防叠字

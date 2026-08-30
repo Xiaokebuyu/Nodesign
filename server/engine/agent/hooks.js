@@ -65,6 +65,7 @@ import {
 } from './hooks/pre-starter-files.js';
 import { makePreToolUseBoardNeighborhoodInjector } from './hooks/pre-board-neighborhood.js';
 import { makePreToolUseBoardDirtyInjector } from './hooks/pre-board-dirty.js';
+import { makePreToolUseUnknownParamsProbe } from './hooks/pre-unknown-params.js';
 import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.js';
 import { createRoleRoster } from './cast.js';
 import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './hooks/resident-role-lifecycle.js';
@@ -230,6 +231,11 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // 摸板前插话（按会话恰好一次，台账在 lib/board-dirty.js）。
       matcher: 'mcp__nodesign__(write_on_board|edit_board|read_board|board_batch|open_sheet|organize_board|look_at_board)',
       hooks: [makePreToolUseBoardDirtyInjector({ projectId, sessionId })],
+    }, {
+      // 未知参数探针（2026-08-30）：zod 把 schema 里没有的键静默 strip 掉，工具自己
+      // 看不见 —— 只有钩子拿得到原始 tool_input。挂全部 nodesign 工具。
+      matcher: 'mcp__nodesign__.*',
+      hooks: [makePreToolUseUnknownParamsProbe()],
     }, {
       matcher: 'Write',
       hooks: [

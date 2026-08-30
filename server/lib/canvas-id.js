@@ -22,7 +22,24 @@ export function normalizeCanvasId(raw) {
  * 返回 { x, y, w, h, anchorId, ids } 或 null；anchorId = 最右那个（贴右侧摆用）。
  * sizeOf(id, entry) 由调用方给（estimateSizeOn 绑着 board，不在这层 import）。
  */
-export function tagEnvelope(board, tag, sizeOf) {
+/**
+ * 查 tag 时的归一：剥掉前导 `#`（2026-08-30）。
+ *
+ * ⛔ 我们在 write_on_board 的 `near`、read_board 的 `tag` 等好几处描述里明写
+ * 「Canvas id or **#tag**」，而查询侧一直是 `e.tag === raw` 精确比对，从来没剥过
+ * 这个井号 —— 全库统计：带 # 的写法 5 处，5 处全废；不带 # 的 2773 处全通。
+ * 「注释/描述声称做了、代码没做」的第三例。
+ *
+ * 只用在**查**的一侧。写的一侧（write_on_board 的 tag 参数）走 TAG_RE，本来就
+ * 收不下 # —— 那是 schema 报错，是响的，不用管。
+ */
+export function bareTag(raw) {
+  return String(raw ?? '').trim().replace(/^#+/, '');
+}
+
+export function tagEnvelope(board, rawTag, sizeOf) {
+  const tag = bareTag(rawTag);
+  if (!tag) return null;
   const hits = Object.entries(board?.objects || {})
     .filter(([, e]) => e?.tag === tag && Number.isFinite(e?.x));
   if (!hits.length) return null;

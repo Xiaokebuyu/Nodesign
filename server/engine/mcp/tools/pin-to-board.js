@@ -29,8 +29,11 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import path from 'path';
 import { promises as fs } from 'fs';
-import { pinToZone, readBoard } from '../../../projects/board-store.js';
+import { pinToZone, readBoard, patchBoard } from '../../../projects/board-store.js';
 import { layerOf } from '../../../lib/canvas-id.js';
+import { currentSheet, slotRectOf, nextSpotInSlot, placeAtOnSheet } from '../../../lib/board-sheets.js';
+import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
+import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 
 // （folderOfObjectId 08-24 拆除：它按 dirname 硬算，会给 assets/generated 这类
 //  前端不当层渲染的路径发"层"标签 —— 改问 layerOf + board.zones，跟渲染同口径）
@@ -65,8 +68,14 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         .min(1)
         .max(300)
         .describe('Item to surface — see accepted forms in the tool description'),
+      slot: z.string().max(40).optional()
+        .describe('Drop it into a planned block on the current sheet (names from open_sheet / read_board). This is how a produced file lands where you planned it instead of wherever there was room.'),
+      at: z.object({ x: z.number(), y: z.number() }).optional()
+        .describe('Exact spot on the sheet, pixels from its top-left writable corner. Use slot unless this one file needs a precise place.'),
+      sheet: z.string().max(40).optional()
+        .describe('Which sheet (default: the one you are working on)'),
     },
-    async ({ path: rawPath }) => {
+    async ({ path: rawPath, slot, at, sheet }) => {
       try {
         if (!projectId) {
           return { content: [{ type: 'text', text: 'No project bound; cannot pin.' }], isError: true };
@@ -112,6 +121,52 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         // dirname 硬算的老写法会把 assets/generated 当层写进 zone，arrange 就此拒摆
         const boardNow = await readBoard(projectId);
         const zoneId = layerOf(objectId, null, new Set(Object.keys(boardNow.zones || {})));
+
+        /**
+         * 点名落位（2026-08-30 刀 G）：`slot` / `at` 给了就走纸上落位，跟 write_on_board
+         * 同一套几何。这是「产物也由 agent 规划位置」的那只手 —— 待摆队列里的东西，
+         * agent 规划出地方之后就用它请下来。
+         */
+        if (slot || at) {
+          const sh = (sheet && boardNow.sheets?.[sheet])
+            ? { id: sheet, ...boardNow.sheets[sheet] }
+            : currentSheet(boardNow, currentSheetIdOf(null));
+          if (!sh) {
+            return { content: [{ type: 'text', text: 'No sheet yet — open_sheet first (plan the page, then place things into its blocks).' }], isError: true };
+          }
+          const box = estimateSizeOn(boardNow, objectId, boardNow.objects?.[objectId] || null);
+          let spot = null; let where = '';
+          if (slot) {
+            const rect = slotRectOf(sh, slot);
+            if (!rect) {
+              const names = Object.keys(sh.slots || {});
+              return { content: [{ type: 'text', text: names.length
+                ? `Sheet ${sh.id} has no slot "${slot}". It has: ${names.join(', ')}.`
+                : `Sheet ${sh.id} has no slots planned. Plan the page first: open_sheet{plan:[{slot,at,w,h,about}…]}.` }], isError: true };
+            }
+            const p = nextSpotInSlot(boardNow, rect, box);
+            if (p.full) {
+              return { content: [{ type: 'text', text: `⛔ Slot "${slot}" on sheet ${sh.id} is full — ${objectId} needs ${box.h}px, ~${p.freeH}px left. `
+                + 'Nothing moved. Re-plan the page with a taller block, or point it at another slot.' }], isError: true };
+            }
+            spot = p; where = ` in slot "${slot}"`;
+          } else {
+            const p = placeAtOnSheet(sh, at, box);
+            spot = p; where = p.clamped ? ' (clamped into the sheet)' : '';
+          }
+          const prev = boardNow.objects?.[objectId] || {};
+          const nextPending = (boardNow.pending || []).filter(r => r !== objectId && `deck:${r}` !== objectId && `site:${r}` !== objectId);
+          await patchBoard(projectId, {
+            objects: { [objectId]: { ...prev, x: Math.round(spot.x), y: Math.round(spot.y), w: Math.round(box.w), h: Math.round(box.h), zone: zoneId, seat: 'agent' } },
+            ...(nextPending.length !== (boardNow.pending || []).length ? { pending: nextPending } : {}),
+          });
+          try {
+            ctx?.emit?.({ type: 'board.updated', sessionId: null, objectId, zoneId, summary: `已把 ${objectId} 摆到 ${sh.id}${where}` });
+          } catch { /* emit fail-safe */ }
+          return { content: [{ type: 'text', text: `Placed ${objectId} on sheet ${sh.id}${where} at (${Math.round(spot.x)}, ${Math.round(spot.y)}).`
+            + (nextPending.length !== (boardNow.pending || []).length ? ` It is no longer waiting for a spot (${nextPending.length} still are).` : '') }] };
+        }
+
         const { zone: placedZone, placed } = await pinToZone(projectId, { objectId, zoneId });
 
         try {

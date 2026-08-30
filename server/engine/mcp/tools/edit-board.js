@@ -25,8 +25,8 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { byOf } from '../actor.js';
 import { z } from 'zod';
 import { readBoard, patchBoard, commitStaging, removeByTag, chalkAbsPath, TEXT_FONTS } from '../../../projects/board-store.js';
-import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
-import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
+import { estimateSizeOn, FOLDER_CARD } from '../../../lib/board-kind-sizes.js';
+import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/canvas-id.js';
 import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
 import { placeBeside, placeAtOnSheet, overlapIds, currentSheet } from '../../../lib/board-sheets.js';
@@ -164,6 +164,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
     const known = new Set(Object.keys(board.zones || {}));
     const objects = {}; const bindings = {};      // 增量 patch
     const rolls = {};                              // 卷（收纳器）：tag → {at,by,label}|null
+    const follows = {};                            // 跟随规则增量：组tag → {target,side?,label?}|null
     const live = { ...board.objects };             // 调用内"当前态"
     const liveBindings = { ...board.bindings };
     const local = new Map();                       // add_node 本地句柄 → canvas id
@@ -182,9 +183,18 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       if (local.has(raw)) return local.get(raw);
       const c = normalizeCanvasId(raw);
       if (c && live[c]) return c;
-      return byLid(raw);
+      if (c && isZone(c)) return c;          // 文件夹卡（刀 G）
+      const l = byLid(raw);
+      if (l) return l;
+      // tag 兜底（2026-08-30）：`ref:"状态板"` / `ref:"#状态板"` 是很自然的写法，
+      // 而 tag 本来就是"一片东西的名字"。取包络里最右那件当代表，跟 near 同一条规则。
+      const env = tagEnvelope({ objects: live }, raw, (id, e) => estimateSizeOn(board, id, e));
+      return env ? env.anchorId : null;
     };
-    const rectOf = (id) => { const e = live[id]; return e ? { x: e.x, y: e.y, ...estimateSizeOn(board, id, e) } : null; };
+    const rectOf = (id) => {
+      if (isZone(id)) { const z = liveZones[id]; return Number.isFinite(z?.x) ? { x: z.x, y: z.y, ...FOLDER_CARD } : null; }
+      const e = live[id]; return e ? { x: e.x, y: e.y, ...estimateSizeOn(board, id, e) } : null;
+    };
     /** 压上判定的障碍集（同层，subject/组员除外；含文件夹卡/卷卡/精灵身位） */
     const obstaclesNear = (zone, exclude = new Set()) => obstaclesIn(board, zone, { objects: live, exclude });
     /** 相对落位 = 精确贴放（2026-08-29：环搜退役 —— 压上如实报，不代找洞） */
@@ -208,6 +218,19 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
     };
     const report = []; let ok = 0;
     const setObj = (id, e) => { live[id] = e; objects[id] = e; };
+    /**
+     * 文件夹（board.zones）也进摆位系统（2026-08-30 刀 G）。
+     *
+     * 在此之前 agent **完全没有摆文件夹的手**：move 走 `live`（= board.objects），
+     * 文件夹住 board.zones，rid() 永远查不到它，报错还是「不在板上」。位置全由前端
+     * newStackedZoneRect 一行行码在桌面上，跟纸毫无关系 —— 站主原话「甚至包括
+     * 文件夹..都需要 agent 规划之后放置在对应位置上」。
+     * 尺寸取 FOLDER_CARD（前端同一个常量，board-kind-sizes 里有 parity 测试钉着）。
+     */
+    const liveZones = { ...(board.zones || {}) };
+    const zonesPatch = {};
+    const isZone = (id) => Object.prototype.hasOwnProperty.call(liveZones, id);
+    const setZone = (id, z) => { liveZones[id] = z; zonesPatch[id] = z; };
     /** 贴身记号跟随（08-27 shapes 编辑面）：挪一件东西时，圈着它的涂鸦一起走。
      *  except = 这次已经被挪过的 id 集（整组拖时组员别被挪两次）。 */
     const moveHuggers = (nodeId, dx, dy, except = null) => {
@@ -259,6 +282,18 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           setObj(id, { ...e, data, w: box.w, h: box.h }); ok += 1;
         } else if (o.op === 'move') {
           const id = rid(o.id); const e = id && live[id];
+          // 文件夹卡走自己的分支：它只有坐标，没有 by/seat/tag 那一套（刀 G）
+          if (!e && id && isZone(id)) {
+            const box = rectOf(id);
+            let p = null;
+            if ('ref' in o.to) { p = placeRel(id, box, o.to); if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; } }
+            else if ('x' in o.to) { p = placeAbs(o.to, box); if (!p) { fail(o.to.sheet ? `纸 ${o.to.sheet} 不存在（read_board 看纸的清单）` : '还没有铺过纸 —— 先 open_sheet，或用 {dx,dy}/{ref,side}'); continue; } }
+            else { p = { x: box.x + (o.to.dx || 0), y: box.y + (o.to.dy || 0) }; }
+            setZone(id, { x: Math.round(p.x), y: Math.round(p.y) });
+            ok += 1;
+            report.push(`· #${i + 1} move 文件夹「${id}」→ (${Math.round(p.x)},${Math.round(p.y)})${p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : ''}`);
+            continue;
+          }
           if (!e) { fail(`${o.id} 不在板上`); continue; }
           // seat:'user' 08-28 从「冻结」放开（用户拍板"全部放开试试"）：排位引擎
           // 已经能按用户手感排（inferFlowDir 学票、自动挑侧），硬拒的最大受害者
@@ -286,7 +321,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           }
           ok += 1;
         } else if (o.op === 'move_group') {
-          const members = Object.entries(live).filter(([, e]) => e.tag === o.tag && Number.isFinite(e?.x));
+          const members = Object.entries(live).filter(([, e]) => e.tag === bareTag(o.tag) && Number.isFinite(e?.x));
           if (!members.length) { fail(`没有 #${o.tag} 的东西`); continue; }
           const bb = { x: Math.min(...members.map(([, e]) => e.x)), y: Math.min(...members.map(([, e]) => e.y)) };
           const rects = members.map(([id]) => rectOf(id));
@@ -422,7 +457,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           if (!liveBindings[o.id]) { fail(`线 ${o.id} 不存在`); continue; }
           bindings[o.id] = null; delete liveBindings[o.id]; ok += 1;
         } else if (o.op === 'reflow') {
-          const members = Object.entries(live).filter(([, e]) => e.tag === o.tag && Number.isFinite(e?.x) && e.kind !== 'scribble');
+          const members = Object.entries(live).filter(([, e]) => e.tag === bareTag(o.tag) && Number.isFinite(e?.x) && e.kind !== 'scribble');
           if (!members.length) { fail(`没有 #${o.tag} 的东西`); continue; }
           const horizontal = o.layout === 'row';
           const sorted = members.map(([id, e]) => ({ id, e, r: rectOf(id) }))
@@ -446,16 +481,28 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           if (userSeated.length) report.push(`· #${i + 1} reflow: 含用户拖过的 ${userSeated.length} 件（顺序按他摆的保留）`);
           ok += 1;
         } else if (o.op === 'follow') {
-          const members = Object.entries(live).filter(([, e]) => e.tag === o.group_tag && Number.isFinite(e?.x));
+          const gTag = bareTag(o.group_tag); const tTag = bareTag(o.target_tag);
+          const members = Object.entries(live).filter(([, e]) => e.tag === gTag && Number.isFinite(e?.x));
           if (!members.length) { fail(`没有 #${o.group_tag} 的东西`); continue; }
-          const targets = Object.entries(live).filter(([, e]) => e.tag === o.target_tag && Number.isFinite(e?.x));
-          if (!targets.length) { fail(`目标 tag #${o.target_tag} 板上还没有东西`); continue; }
+          // 规则先立下（2026-08-30）：follow 是**一条规则**，不是一条线。目标 tag 现在
+          // 空着不是错 —— skill 教的顺序就是「开场画状态板 → 立跟随 → 写第一章」，
+          // 而线要求两端此刻都在板上，于是这条最自然的写法过去必炸（全库 5 次 / 4 个
+          // 项目）。规则落进 board.follows，第一件带该 tag 的东西一落，applyFollows
+          // 顺手把线接上。
+          follows[gTag] = { target: tTag, ...(o.side ? { side: o.side } : {}), ...(o.label ? { label: o.label } : {}) };
+          const targets = Object.entries(live).filter(([, e]) => e.tag === tTag && Number.isFinite(e?.x));
+          if (!targets.length) {
+            ok += 1;
+            report.push(`· follow：规则立好了 —— #${gTag} 从此跟着 #${tTag} 的最新一件。`
+              + `#${tTag} 板上还没有东西，等第一件落下来自动接线并就位（不用再调一次）`);
+            continue;
+          }
           const from = members.sort((a, b) => a[1].y - b[1].y)[0][0];   // 组里最上面那件当代表
           const to = targets.sort((a, b) => (a[1].y + (a[1].h || 0)) - (b[1].y + (b[1].h || 0))).pop()[0];   // 最下面 = 最新
           if (from === to) { fail('组代表和目标是同一件（group_tag/target_tag 传反了？）'); continue; }
-          const existing = Object.entries(liveBindings).find(([, b]) => b.follow === o.target_tag && live[b.from]?.tag === o.group_tag);
+          const existing = Object.entries(liveBindings).find(([, b]) => b.follow === bareTag(o.target_tag) && live[b.from]?.tag === bareTag(o.group_tag));
           const id = existing ? existing[0] : `b:a${stamp()}`;
-          const binding = { type: 'annotates', from, to, by, label: o.label || '跟随', follow: o.target_tag, ...(o.side ? { followSide: o.side } : {}) };
+          const binding = { type: 'annotates', from, to, by, label: o.label || '跟随', follow: bareTag(o.target_tag), ...(o.side ? { followSide: o.side } : {}) };
           bindings[id] = binding; liveBindings[id] = binding; ok += 1;
           // 立规则的同时把组摆到目标旁边：之后的跟随是**平移**（保留相对格局），
           // 基线偏移必须在此刻就有意义 —— 不摆的话组停在原地，平移只是搬运一个
@@ -477,9 +524,12 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           }
           report.push(`· follow：#${o.group_tag} 已摆到目标旁并从此跟着 #${o.target_tag} 的最新一件（整组平移，用户摆的相对位置保留）`);
         } else if (o.op === 'unfollow') {
-          const hits = Object.entries(liveBindings).filter(([, b]) => b.follow && live[b.from]?.tag === o.group_tag);
-          if (!hits.length) { fail(`#${o.group_tag} 没有跟随线`); continue; }
+          const gTag = bareTag(o.group_tag);
+          const hits = Object.entries(liveBindings).filter(([, b]) => b.follow && live[b.from]?.tag === gTag);
+          const hadRule = !!board.follows?.[gTag];
+          if (!hits.length && !hadRule) { fail(`#${o.group_tag} 没有跟随线`); continue; }
           for (const [id] of hits) { bindings[id] = null; delete liveBindings[id]; }
+          follows[gTag] = null;   // 规则也撤 —— 只删线的话下一件落下来它又长回来
           ok += 1;
         } else if (o.op === 'commit') {
           const { committed: n } = await commitStaging(projectId, { tag: o.tag || null });
@@ -525,10 +575,12 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       } catch (e) { fail(String(e?.message || e).slice(0, 120)); }
     }
     if (!ok) return err(`没有一条操作成功：\n${report.join('\n')}`);
-    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || heroPatch !== undefined) {
+    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length || heroPatch !== undefined) {
       await patchBoard(projectId, {
         objects, bindings,
+        ...(Object.keys(zonesPatch).length ? { zones: zonesPatch } : {}),
         ...(Object.keys(rolls).length ? { rolls } : {}),
+        ...(Object.keys(follows).length ? { follows } : {}),
         ...(heroPatch !== undefined ? { hero: heroPatch } : {}),
       });
     }

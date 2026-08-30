@@ -26,7 +26,7 @@ import { platform } from '../../../runtime/platform.js';
 import { launchPerceptionBrowser, PERCEPTION_ORIGIN } from './helpers/perception-page.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
-import { normalizeCanvasId } from '../../../lib/canvas-id.js';
+import { normalizeCanvasId, bareTag } from '../../../lib/canvas-id.js';
 
 const VIEW = { width: 1400, height: 900 };
 const READY_TIMEOUT_MS = 25_000;
@@ -60,7 +60,8 @@ Costs a few seconds and ~1.7k tokens; don't call it in a loop.`,
       margin: z.number().min(0).max(2000).optional().describe('World px of margin around `around` (default 160)'),
       view: z.object({ x: z.number(), y: z.number(), w: z.number().min(50), h: z.number().min(50) }).optional(),
     },
-    async ({ tag, around, margin, view }) => {
+    async ({ tag: rawTag, around, margin, view }) => {
+      const tag = rawTag ? bareTag(rawTag) : rawTag;   // 同上：查询侧统一剥 #
       const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
       if (!projectId) return err('No project bound.');
       const origin = webOrigin();

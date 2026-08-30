@@ -16,12 +16,12 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
-import { layerOf } from '../../../lib/canvas-id.js';
+import { layerOf, bareTag } from '../../../lib/canvas-id.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
 import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
-import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot, freeColumnsInSheet } from '../../../lib/board-sheets.js';
+import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot, freeColumnsInSheet, latestSheetId } from '../../../lib/board-sheets.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -75,7 +75,8 @@ on the minimap and listed with what is inside it.`,
         .describe('Only list items/lines carrying this #tag (one group, e.g. a sketch you made)'),
       minimap: z.boolean().optional().describe('Also print an ASCII minimap (off by default — the relative-position summary is usually enough)'),
     },
-    async ({ layer, tag, minimap }, extra) => {
+    async ({ layer, tag: rawTag, minimap }, extra) => {
+      const tag = rawTag ? bareTag(rawTag) : rawTag;   // #状态板 也认（查询侧统一剥 #）
       // 视角：谁在读这块板。常驻角色读到自己写的板书才该显示「你写的」，
       // 读到别人的显示那个人的名字（展示名只是渲染，判断一律用 slug）。
       const view = { by: byOf(extra), names: await listRoleNames(sharedRoot) };
@@ -198,12 +199,14 @@ on the minimap and listed with what is inside it.`,
         try {
           const ss = sheetSummaries(board);
           if (ss.length) {
-            lines.push('', '纸（sheet）：at:{x,y} 写的是纸内像素（版心左上为原点）；写满自动翻纸，新话题 open_sheet：');
+            const latest = latestSheetId(board);
+            lines.push('', '纸（sheet）：at:{x,y} 写的是纸内像素（版心左上为原点）。'
+              + '**写满不会自动翻页** —— 排不下时写入被拒收，下一页由你自己 open_sheet 规划：');
             for (const s of ss) {
               // 剩多少地方按**字**报（08-29 刀 D）：agent 手里的东西是字，
               // 只给像素等于让它每次落笔前做一道做不准的算术
               const cap = capacityOf(DEFAULT_CHALK_W, s.freeH);
-              lines.push(`  ${s.id}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高（≈${cap.lines} 行 / ${cap.cjk} 字）${s.lastId ? `，最新 ${s.lastId}` : ''}`);
+              lines.push(`  ${s.id}${s.id === latest ? '（当前）' : ''}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高（≈${cap.lines} 行 / ${cap.cjk} 字）${s.lastId ? `，最新 ${s.lastId}` : ''}`);
               // 规划过的块各剩多少（08-29 刀 E）：填到一半要知道还有哪块地是空的，
               // 不然只能靠猜 —— 猜错的下场是写入被拒收，白跑一趟
               // 这张纸还剩哪些空地（08-29 刀 F）：只报"最后一件下面剩多少"是不够的 ——
@@ -220,9 +223,18 @@ on the minimap and listed with what is inside it.`,
                 const spot = nextSpotInSlot(board, r, { w: 1, h: 1 });
                 const freeH = spot.full ? 0 : Math.max(0, r.y + r.h - spot.y);
                 const c = capacityOf(r.w, freeH);
-                lines.push(`    · ${nm}${sl.about ? `（${sl.about}）` : ''}：块内 (${sl.x},${sl.y}) ${sl.w}x${sl.h}，剩 ≈${c.lines} 行 / ${c.cjk} 字`);
+                lines.push(`    · ${nm}${sl.about ? `（${sl.about}）` : ''}${sl.for === 'artifacts' ? '【收产物】' : ''}：块内 (${sl.x},${sl.y}) ${sl.w}x${sl.h}，剩 ≈${c.lines} 行 / ${c.cjk} 字`);
               }
             }
+          }
+          // 待摆产物（08-30 刀 G）：磁盘上有、板上没地方放的。只有 agent 能给它们地方
+          const pend = Array.isArray(board.pending) ? board.pending : [];
+          if (pend.length) {
+            lines.push('', `⛔ ${pend.length} 件产物还没地方摆（板面排满了，机器不会替你翻页）：`);
+            for (const r of pend.slice(0, 8)) lines.push(`  ${r}`);
+            if (pend.length > 8) lines.push(`  …还有 ${pend.length - 8} 件`);
+            lines.push('  规划一块地收它们：open_sheet{plan:[{slot:"图",at:{…},w,h,for:"artifacts"}…]}，'
+              + '或逐件 pin_to_board{path,slot} 点名落位。');
           }
         } catch { /* 纸读不出不挡座次 */ }
       }

@@ -29,6 +29,27 @@ export async function applyFollows(projectId, { tag, newId }) {
   const board = await readBoard(projectId);
   const followers = Object.entries(board.bindings || {})
     .filter(([, b]) => b.follow === tag && b.to !== newId);
+  /**
+   * 挂账的跟随规则兑现（2026-08-30）：`board.follows` 里目标是本 tag、但还没有线的，
+   * 现在这一刻目标第一次出现 —— 当场把线补出来，交给下面同一段几何走「首跟」。
+   *
+   * 规则和线分开存就是为了这一刻：立规则时目标可以是空的（skill 教的顺序如此），
+   * 线只在两端都真实存在时才有意义。
+   */
+  for (const [groupTag, rule] of Object.entries(board.follows || {})) {
+    if (rule?.target !== tag) continue;
+    const already = Object.entries(board.bindings || {})
+      .some(([, b]) => b.follow === tag && board.objects?.[b.from]?.tag === groupTag);
+    if (already) continue;
+    const member = Object.entries(board.objects || {})
+      .filter(([, e]) => e?.tag === groupTag && Number.isFinite(e?.x))
+      .sort((a, b) => a[1].y - b[1].y)[0];
+    if (!member || member[0] === newId) continue;
+    followers.push([`b:f${Date.now().toString(36)}${groupTag.length}`, {
+      type: 'annotates', from: member[0], to: '', by: 'agent',
+      label: rule.label || '跟随', follow: tag, ...(rule.side ? { followSide: rule.side } : {}),
+    }]);
+  }
   if (!followers.length) return { followed: 0 };
   const target = board.objects?.[newId];
   if (!target || !Number.isFinite(target.x)) return { followed: 0 };

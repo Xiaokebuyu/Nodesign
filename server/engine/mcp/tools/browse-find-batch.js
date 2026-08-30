@@ -141,9 +141,9 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
         // 修正会让下一次还写错，静默丢弃会让这一次就出错。
         let folded = input || {};
         const notes = [];
+        const own = new Set(Object.keys(def.inputSchema || {}));
         const strayKeys = Object.keys(stray);
         if (strayKeys.length) {
-          const own = new Set(Object.keys(def.inputSchema || {}));
           const patch = {};
           for (const k of strayKeys) {
             if (k === 'screenshotAfter') { shotLifted = shotLifted || stray[k] === true; notes.push('screenshotAfter 是整批的旋钮，已抬到 batch 层'); continue; }
@@ -154,6 +154,26 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
             folded = { ...folded, ...patch };
             notes.push(`${Object.keys(patch).join('/')} 本该写在 input 里（已收进去，下次直接写 input 内）`);
           }
+        }
+        // 双层信封（2026-08-30）：{"input":{"input":{…},"op":"x"}} 真实发生过 ——
+        // 模型要拼两级嵌套，多包一层不出声。里层不是这个工具的参数、而里面的键是，
+        // 就摊平上来。
+        if (!own.has('input') && folded.input && typeof folded.input === 'object' && !Array.isArray(folded.input)) {
+          const inner = folded.input;
+          if (Object.keys(inner).some((k) => own.has(k))) {
+            const { input: _drop, ...rest } = folded;
+            folded = { ...inner, ...rest };
+            notes.push('input 里又套了一层 input，已摊平（下次一层就够）');
+          }
+        }
+        // ⛔ input **内部**的未知键：z.object 静默 strip，不报错不留痕。08-29 那把
+        // looseObject 只盖住了写在 name 旁边的（action 这一层），差一层没盖到 ——
+        // 真会话里 write_on_board 收到过整份 `facts`（一长串剧情事实），一个字没落、
+        // 一句话没报。归不了位就点名，别静默丢。
+        const unknownIn = Object.keys(folded).filter((k) => !own.has(k));
+        if (unknownIn.length) {
+          notes.push(`⛔ ${unknownIn.join('/')} 不是 ${toolName} 的参数，这次**整个丢掉了**（内容没落盘）`
+            + `—— ${toolName} 收的是：${[...own].join('/')}`);
         }
         const parsed = z.object(def.inputSchema).safeParse(folded);
         if (!parsed.success) {

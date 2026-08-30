@@ -322,6 +322,11 @@ export function sanitizeSlot(s) {
     w: Math.round(Math.min(w, 12000)),
     h: Math.round(Math.min(h, 12000)),
     ...(typeof s.about === 'string' && s.about.trim() ? { about: s.about.trim().slice(0, 60) } : {}),
+    // 收产物的那块地（2026-08-30 刀 G）：`for:'artifacts'` 一张纸上最多一块。
+    // 产物（生成的图、写出来的文件、目录型产物）是 agent 干活的**副产品**，
+    // 它没法在写之前一件件点名落位 —— 但它可以提前说「这一页的产物都放这儿」。
+    // 没有这块地，机器就只能自己决定，那就又回到「机器定版面」了。
+    ...(s.for === 'artifacts' ? { for: 'artifacts' } : {}),
   };
 }
 
@@ -404,10 +409,47 @@ export function sanitizeBoard(raw) {
     const s = sanitizeSheet(s0);
     if (s) { sheets[nm] = s; sCount += 1; }
   }
+  /**
+   * 跟随规则（2026-08-30）：`{ 组tag: { target, side?, label? } }`。
+   *
+   * 以前 follow 只有「线」这一种形态，而线要求两端**此刻都在板上**。真会话里最常见的
+   * 写法是开场先立规则再写第一章（skill 的原话就是「开场画一次状态板，然后立一条跟随
+   * 规则」）—— 那一刻目标 tag 还是空的，于是必炸。全库 5 次、跨 4 个项目，形态一模一样。
+   * 规则和线分开存之后，规则可以先立着，目标一出现 applyFollows 顺手把线接上。
+   */
+  const follows = {};
+  let fCount = 0;
+  for (const [g, r] of Object.entries(raw?.follows && typeof raw.follows === 'object' ? raw.follows : {})) {
+    if (fCount >= 12) break;
+    const gt = sanitizeTag(g);
+    const target = sanitizeTag(r?.target);
+    if (!gt || !target || gt === target) continue;
+    follows[gt] = {
+      target,
+      ...(['right', 'left', 'above', 'below'].includes(r?.side) ? { side: r.side } : {}),
+      ...(typeof r?.label === 'string' && r.label.trim() ? { label: r.label.trim().slice(0, 60) } : {}),
+    };
+    fCount += 1;
+  }
+  /**
+   * 待摆产物（2026-08-30 刀 G）：磁盘上有、但板上还没地方放的工作区相对路径。
+   * 入座不再自己铺纸（那是「机器替 agent 定版面」），排不下就进这条队列，
+   * 每回合状态块点名，等 agent 规划出地方再落座。
+   */
+  const pending = [];
+  for (const v of Array.isArray(raw?.pending) ? raw.pending : []) {
+    if (pending.length >= 50) break;
+    if (typeof v !== 'string') continue;
+    const t = v.trim();
+    if (!t || t.length > 300 || t.includes('..') || t.startsWith('/')) continue;
+    if (!pending.includes(t)) pending.push(t);
+  }
   return {
     size, zones, objects, bindings,
     ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}),
     ...(sCount ? { sheets } : {}),
+    ...(fCount ? { follows } : {}),
+    ...(pending.length ? { pending } : {}),
   };
 }
 

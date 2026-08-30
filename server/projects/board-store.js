@@ -174,6 +174,25 @@ export function patchBoard(pid, patch) {
       }
       if (!Object.keys(board.sheets).length) delete board.sheets;
     }
+    // 跟随规则（2026-08-30）：`{ 组tag: {target,side?,label?} | null }`。规则和线分开存
+    // —— 线要求两端此刻都在板上，规则不要求，所以「开场先立规则再写第一章」这条
+    // skill 教了、模型也一直照做的顺序，第一次真的走得通。
+    if (patch?.follows && typeof patch.follows === 'object') {
+      board.follows = board.follows || {};
+      for (const [g, r] of Object.entries(patch.follows)) {
+        const gt = sanitizeTag(g);
+        if (!gt) continue;
+        if (r === null) { delete board.follows[gt]; continue; }
+        board.follows[gt] = r;
+      }
+      const clean = sanitizeBoard({ ...board, follows: board.follows }).follows;
+      if (clean) board.follows = clean; else delete board.follows;
+    }
+    // 待摆产物队列（刀 G）：整表替换（写方只有 board-seater 一个，diff 没意义）
+    if (patch?.pending !== undefined) {
+      const clean = sanitizeBoard({ ...board, pending: patch.pending }).pending;
+      if (clean?.length) board.pending = clean; else delete board.pending;
+    }
     // 主角覆盖：null = 撤销（回到 pickHero 自动推断），字符串 = 显式立主角
     if (patch?.hero !== undefined) {
       if (patch.hero === null) delete board.hero;
