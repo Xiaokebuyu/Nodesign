@@ -3,8 +3,9 @@ import { PAPER } from '../lib/paper.js';
 import { Link } from 'react-router-dom';
 import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
+import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
 import QuickEntry from './home-quick-entry.jsx';
-import { CHROME, GAP, RADIUS, FONT_SIZE, alpha } from '../lib/theme.js';
+import { GAP, alpha } from '../lib/theme.js';
 import { CSS } from './home-styles.js';
 import { Underline } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
@@ -16,7 +17,8 @@ import dHand from '../assets/login-wall/doodles/hand.webp';
 import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
 import { t, getLocale } from '../lib/i18n.js';
 import { sheetClassOf } from './home-sheets.js';
-import { Canopy, DayToggle } from './home-light.jsx';
+import { DayToggle } from './home-light.jsx';
+import { Desk } from './desk.jsx';
 
 /**
  * Home 页 —— 进门之后的那面板子（2026-08-03 改版）
@@ -134,15 +136,9 @@ export default function Home() {
         </>
       }
     >
-      <div className="ndd">
-        <style>{CSS}</style>
-        {/* 光源层（树影 / 台灯）。两块画布：一块压在板面之上内容之下，一块压在
-            所有内容之上，都是 .ndd 的直接子节点，靠 z-index 分前后。
-            必须是**独立的 fixed 层**，不能并进 .ndd::before 那十四层 ——
-            那一层是静态的，掺进动画就等于每帧重画十四层背景，正是
-            08-28「项目一多就奇卡」的病根。 */}
-        <Canopy />
-        <div className="ndd-in">
+      {/* 台面和照在它上面的光都在 <Desk> 里（08-30 搬出去跟橱窗 / Skill 页共用）。
+          首页把自己那一整份样式传进去 —— DESK_CSS 已经拼在 CSS 里面，只注入一份。 */}
+      <Desk css={CSS}>
 
           <div className="ndd-top">
             <div className="ndd-side">
@@ -186,8 +182,7 @@ export default function Home() {
               ))}
             </div>
           )}
-        </div>
-      </div>
+      </Desk>
     </AppShell>
   );
 }
@@ -546,10 +541,4 @@ function EmptyState({ onPick }) {
 }
 
 // 顶栏按钮：顶栏是全站共用的外壳，沿用它自己那套 token，不跟着这一页换纸
-const iconBtnStyle = {
-  display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-  fontSize: FONT_SIZE.lg, color: CHROME.ink2,
-  padding: `${GAP.sm}px ${GAP.lg}px`,
-  borderRadius: RADIUS.lg,
-  background: 'transparent',
-};
+

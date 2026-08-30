@@ -33,7 +33,7 @@
  *   node web/scripts/lens.mjs sheet --mode=auto,day,night --require=.ndd-card
  *   node web/scripts/lens.mjs ab --hide=.ndd-canopy --at=13:00 --out=/tmp/ab.png
  *   node web/scripts/lens.mjs perf --toggle=.ndd-canopy --at=13:00
- *   node web/scripts/lens.mjs contrast --at=22:00
+ *   node web/scripts/lens.mjs contrast --at=22:00 --on=选择器 --top=20
  *   node web/scripts/lens.mjs selftest
  *
  * 公共选项：--base= --route= --viewport=1440x900 --dsf=1 --locale=zh-CN
@@ -246,7 +246,9 @@ const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 async function contrastMode() {
   const sel = opt('on', '.ndd-card .t, .ndd-card .m, .ndd-note');
   const floor = Number(opt('floor', '4.5'));   // WCAG AA 正文
-  const lens = await open({ at: opt('at', '22:00') });
+  // ⭐ freeze：光源层是活的，不定住的话"因为字没了才变的像素"里会混进飘过去的
+  //    光斑 —— 同一块字量出来 1.01:1（真值 2.07:1），而且**看着很像真的**。
+  const lens = await open({ at: opt('at', '22:00'), freeze: true });
   try {
     await lens.goto(ROUTE, WAIT);
     if (REQUIRE.length) await assertRendered(lens, need);
@@ -291,7 +293,7 @@ async function contrastMode() {
     if (!rows.length) throw new Error('每一块的笔画像素都太少 —— --on= 大概没选中真正有字的元素');
     rows.sort((a, c) => a.cr - c.cr);
 
-    for (const r of rows.slice(0, 6)) {
+    for (const r of rows.slice(0, Number(opt('top', '6')))) {
       console.log(`${r.cr < floor ? '⛔' : '✅'} ${r.cr.toFixed(2)}:1  ${String(r.tag).slice(0, 20).padEnd(22)}`
         + `字 ${(r.ink * 100).toFixed(1)} / 纸 ${(r.bg * 100).toFixed(1)}  笔画 ${r.n} 像素  @${r.x},${r.y}`);
     }
@@ -399,7 +401,40 @@ async function selftest() {
     } finally { await a.close(); await b.close(); }
   }
 
-  console.log(bad ? `\n⛔ ${bad} 条没过 —— 在修好之前，这把尺子量出来的东西都不算数` : '\n✅ 五条全过，可以用它下结论');
+  // 6) 动画层定得住（不定住，"比两张的差异"这类判据全废）
+  //    ⛔ 这一条是 08-30 量首页左栏字被骗出来的：光源层在两张之间飘过去，
+  //    差异里全是光斑，对比度量出 1.01:1 —— 定住之后 2.07:1。**错得像真的**。
+  {
+    const a = await open({ login: false, freeze: true });
+    const b = await open({ login: false });
+    try {
+      const page = '<style>body{margin:0}#m{position:fixed;left:0;top:0;width:60px;height:60px;background:#000}</style>'
+        + '<div id=m></div><script>let x=0;(function f(){x=(x+7)%300;document.getElementById("m").style.transform="translateX("+x+"px)";requestAnimationFrame(f)})()<\/script>';
+      const moved = async (lens) => {
+        await lens.page.goto('about:blank');
+        await lens.page.setContent(page);
+        await lens.page.waitForTimeout(600);
+        const p1 = await lens.shot({ clip: { x: 0, y: 0, width: 320, height: 60 } });
+        await lens.page.waitForTimeout(600);
+        const p2 = await lens.shot({ clip: { x: 0, y: 0, width: 320, height: 60 } });
+        // ⚠️ 截图是 PNG，raw 出来是 4 通道 —— 按 3 步进会错位，第一版就是这么
+        //    把"动了 3600 个像素"数成 60 个的。通道数要问出来，别默认。
+        const raw = (z) => sharp(z).raw().toBuffer({ resolveWithObject: true });
+        const [d1, d2] = await Promise.all([raw(p1), raw(p2)]);
+        const ch = d1.info.channels;
+        let diff = 0;
+        for (let i = 0; i < d1.data.length; i += ch) if (Math.abs(d1.data[i] - d2.data[i]) > 24) diff += 1;
+        return diff;
+      };
+      // ⚠️ freeze 走 addInitScript，setContent 不触发它 —— 所以这里先 goto about:blank
+      const frozen = await moved(a);
+      const live = await moved(b);
+      ok(frozen === 0 && live > 100, '动画层定得住',
+        `定住后动了 ${frozen} 个像素，不定住动了 ${live} 个`);
+    } finally { await a.close(); await b.close(); }
+  }
+
+  console.log(bad ? `\n⛔ ${bad} 条没过 —— 在修好之前，这把尺子量出来的东西都不算数` : '\n✅ 六条全过，可以用它下结论');
   process.exit(bad ? 1 : 0);
 }
 

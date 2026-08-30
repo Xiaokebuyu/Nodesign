@@ -6,7 +6,7 @@
  * 契约要配 lint），所以钉在这儿。
  *
  * ⚠️ 这是一道**粗筛**：它只能证明那几行还在，证明不了它们还管用。
- * 真正的守卫是 `node web/scripts/lens.mjs selftest` —— 那五条 canary 会往页面上
+ * 真正的守卫是 `node web/scripts/lens.mjs selftest` —— 那六条 canary 会往页面上
  * 放一个「它必须量到」的东西，逐条验这把尺子准不准。改完探针要跑一次。
  *
  * 这道 lint 自己攻过：逐条把被它钉住的那行拆掉，五条各自变红。
@@ -57,6 +57,7 @@ describe('探针起手式：会变的东西必须钉死', () => {
 
 describe('镜头：三条不许退化的判据', () => {
   const L = code(LENS);
+  const C = code(COMMON);
 
   it('⭐ perf 必须按线程分账，不许整份 trace 求和', () => {
     // 整份求和会把 headless 里 SwiftShader 在 CPU 上模拟 GPU 那笔算进来，
@@ -85,7 +86,25 @@ describe('镜头：三条不许退化的判据', () => {
     expect(L).toMatch(/async function selftest\(/);
     expect(L).toMatch(/RUN\s*=\s*\{[^}]*\bselftest\b/);
     // canary 至少五条（少一条就是有人把某个坑的守卫删了）
-    expect((L.match(/\bok\(/g) || []).length, 'selftest 的 canary 少于五条').toBeGreaterThanOrEqual(5);
+    expect((L.match(/\bok\(/g) || []).length, 'selftest 的 canary 少于六条').toBeGreaterThanOrEqual(6);
+  });
+  it('⭐ 会动的层必须能定住，而且 contrast 一定要开着它', () => {
+    // 08-30：光源层在两张之间飘过去，"因为字没了才变的像素"里混进光斑，
+    // 左栏那几行字量出 1.01:1（真值 2.07:1）。**错得像真的**，所以要钉死。
+    expect(C, 'probe-common 里没有 freeze').toMatch(/o\.freeze/);
+    // 必须是掐 rAF，不是拿 clock 冻（clock 只冻 Date/定时器，rAF 照跑）
+    const freezeBlock = C.slice(C.indexOf('if (o.freeze)'), C.indexOf('if (o.freeze)') + 400);
+    expect(freezeBlock).toMatch(/addInitScript/);
+    expect(freezeBlock).toMatch(/requestAnimationFrame\s*=/);
+    // contrast 模式不开 freeze 就等于没修
+    // ⚠️ 边界不能用注释找 —— code() 已经把注释剥掉了，indexOf 回 -1，
+    //    slice(x,-1) 一路切到文件尾，把 selftest 里那个 freeze:true 也框进来，
+    //    于是把 contrast 的 freeze 删掉这条照样过。攻过一次才发现。
+    const from = L.indexOf('async function contrastMode');
+    const to = L.indexOf('async function selftest');
+    expect(from, 'contrastMode 没了').toBeGreaterThan(0);
+    expect(to, 'selftest 没了').toBeGreaterThan(from);
+    expect(L.slice(from, to), 'contrast 没开 freeze').toMatch(/freeze:\s*true/);
   });
 });
 

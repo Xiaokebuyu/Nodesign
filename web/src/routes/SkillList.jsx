@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Wrench, Plus, Upload, Trash2, BookOpen, Box, ChevronDown, ChevronRight } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
+import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
+import { Desk } from './desk.jsx';
+import { DayToggle } from './home-light.jsx';
 import { paperCard } from '../lib/paper.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
 import { useGlobalStore } from '../stores/globalStore.js';
@@ -134,9 +137,12 @@ export default function SkillList() {
           >
             <Upload size={14} /> {uploading ? '安装中…' : '上传 skill / plugin'}
           </button>
+          <DayToggle style={iconBtnStyle} />
         </>
       }
     >
+      {/* 跟首页站在同一张台面上（08-30）：见 desk.jsx 的文件头 */}
+      <Desk>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: `${GAP.page}px ${GAP.page}px` }}>
         <div style={{ marginBottom: GAP.xl }}>
           <h1 style={{
@@ -213,6 +219,7 @@ export default function SkillList() {
           大小 ≤ 8MB / entries ≤ 200。新会话生效（v1 不支持 hot-reload）。
         </div>
       </div>
+      </Desk>
     </AppShell>
   );
 }

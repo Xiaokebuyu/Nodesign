@@ -227,6 +227,20 @@ function Crumb({ item, last, maxW = 280 }) {
   return <span title={item.title} style={{ ...base, ...(last ? {} : {}) }}>{inner}</span>;
 }
 
+/**
+ * 顶栏右边那排动作的样式。Home 和 Showcase 各写过一份一模一样的，
+ * 08-30 Skill 页也要用，第三份之前收成一份。
+ * （ProjectWorkspace / FilesCard / InstructionsCard 里那几个同名常量是别的语境，不动。）
+ */
+export const TOP_ACTION_STYLE = {
+  display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+  fontSize: FONT_SIZE.lg, color: CHROME.ink2,
+  padding: `${GAP.sm}px ${GAP.lg}px`,
+  borderRadius: RADIUS.lg,
+  background: 'transparent',
+  textDecoration: 'none',
+};
+
 export default function TopBar({ breadcrumb = [], actions }) {
   /**
    * 窄屏收紧（2026-08-21）。顶栏全是内联样式 —— media query 够不着它，

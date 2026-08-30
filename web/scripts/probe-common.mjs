@@ -71,6 +71,7 @@ function authPassword() {
  * @param {string} [o.at]       钉死的时刻，'2026-08-30T13:00:00' 或 '13:00'
  * @param {string} [o.device]   playwright 设备名（真触屏模拟，见 shot-live.mjs 的教训）
  * @param {boolean} [o.login]   是否以 admin 登录（默认 true）
+ * @param {boolean|number} [o.freeze] 画够几帧就掐掉 rAF，把动画层定住（比差异的判据必须开）
  */
 export async function openProbe(o = {}) {
   const base = o.base || DEFAULT_BASE;
@@ -102,6 +103,24 @@ export async function openProbe(o = {}) {
     Math.random = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
   });
   if (o.at) await ctx.clock.setFixedTime(atDate(o.at));
+
+  /**
+   * ⭐⭐ 把会自己动的那一层定住（`freeze: true`）。
+   *
+   * 首页的光源层是活的 WebGL。任何「拍两张、比差异」的判据 —— 对比度探针靠
+   * "这一格因为字没了才变" 认笔画 —— 都会把**飘过去的光斑**当成笔画：
+   * 08-30 量左栏那几行字，量出 1.01:1，而截图里字清清楚楚。定住之后是 2.07:1。
+   *
+   * ⚠️ 不能用 `clock` 定：那只冻 Date/定时器，rAF 照跑。画够几帧再掐 rAF，
+   * 这样层已经画出来了（不是空白），但从此不再动。
+   */
+  if (o.freeze) {
+    await page.addInitScript((n) => {
+      const raf = window.requestAnimationFrame.bind(window);
+      let left = n;
+      window.requestAnimationFrame = (cb) => (left-- > 0 ? raf(cb) : 0);
+    }, typeof o.freeze === 'number' ? o.freeze : 8);
+  }
 
   if (o.login !== false) {
     const pw = authPassword();

@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, Upload, Trash2, Store, ArrowRight } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
+import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
+import { Desk } from './desk.jsx';
+import { DayToggle } from './home-light.jsx';
 import { paperCard } from '../lib/paper.js';
-import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
 import { Me } from '../lib/api.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { timeAgo } from '../lib/helpers.js';
@@ -62,11 +65,17 @@ export default function Showcase() {
     <AppShell
       breadcrumb={[{ label: t('我的橱窗') }]}
       actions={
-        <Link to="/skills" style={iconBtnStyle}>
-          <Upload size={14} /> {t('Skill 管理')}
-        </Link>
+        <>
+          <Link to="/skills" style={iconBtnStyle}>
+            <Upload size={14} /> {t('Skill 管理')}
+          </Link>
+          <DayToggle style={iconBtnStyle} />
+        </>
       }
     >
+      {/* 跟首页站在同一张台面上（08-30）：在这之前这一页是一片平涂的米色，
+          既没有板面纹理，也没有树影和白天黑夜。 */}
+      <Desk>
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: `${GAP.page}px ${GAP.page}px` }}>
         <header style={{ marginBottom: GAP.xxl + 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, marginBottom: GAP.sm }}>
@@ -104,6 +113,7 @@ export default function Showcase() {
 
         <MarketPlaceholder />
       </div>
+      </Desk>
     </AppShell>
   );
 }
@@ -273,11 +283,4 @@ const loadingStyle = {
   fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub,
 };
 
-const iconBtnStyle = {
-  display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-  fontSize: FONT_SIZE.lg, color: CHROME.ink2,
-  padding: `${GAP.sm}px ${GAP.lg}px`,
-  borderRadius: RADIUS.lg,
-  background: 'transparent',
-  textDecoration: 'none',
-};
+
