@@ -36,10 +36,14 @@ import { orderWithGroups } from './relation-order.js';
  * @param {(id: string) => {x:number,y:number}|null} deps.claimSeat 幻影座位过户
  * @param {Array<{x,y,w,h}>} [deps.occupied] 占着地方但不在 layout 里的东西
  *        （生图幻影）—— 它们不落盘也不可拖，只能让排座这边躲开
+ * @param {{x,y}|null} [deps.shelf] 暂存架原点（board.shelf，2026-08-30）。给了就把
+ *        没坐标的新客码进架的竖带（seat:'shelf'），跟服务端入座器同一条纪律 ——
+ *        这条是 1.5s 防抖窗口里前端抢先落座那个 race 的补口：抢先也抢进架，
+ *        不再在内容底下另起一行。没有架（还没立过）才走老的 packRow 兜底。
  */
 export function computeDesktopSeating({
   dirIndex, zonesEff, layout, bindings, lineageOpen, boardHero,
-  folderCardOf, movingIds, claimSeat, occupied = [],
+  folderCardOf, movingIds, claimSeat, occupied = [], shelf = null,
 }) {
   // ── 桌面这一层（根目录）有哪些文件夹 ──
   // 桌面**永远是根**（2026-08-13）：双击文件夹开窗，桌面不动。
@@ -120,19 +124,41 @@ export function computeDesktopSeating({
       bindings,
     );
     const ordered = order.map(id => byId.get(id));
-    const packed = packRow(
-      ordered.map(it => {
+    if (shelf && Number.isFinite(shelf.x) && Number.isFinite(shelf.y)) {
+      // 暂存架模式：竖带占位判据与 server/lib/board-shelf.js nextShelfSpot 同款
+      //（常量 360/24 是那份的对齐拷贝 —— 架带宽/间距）
+      let bottomY = shelf.y;
+      const consider = (x, y, w, h) => {
+        if (x + w > shelf.x && x < shelf.x + 360 && y + h > shelf.y) bottomY = Math.max(bottomY, y + h + 24);
+      };
+      for (const f of folders) consider(f.x, f.y, f.w, f.h);
+      for (const it of visItems) {
+        if (visFresh.includes(it)) continue;
+        const sz = sizeOf(it); consider(it.pos.x, it.pos.y, sz.w, sz.h);
+      }
+      for (const r of occupied) consider(r.x, r.y, r.w, r.h);
+      seatSlots = ordered.map((it) => {
         const sz = sizeOf(it);
-        return { id: it.id, w: sz.w, h: sz.h, breakBefore: breakBefore.has(String(it.id)) };
-      }),
-      { width: DESKTOP_W - MARGIN_X * 2, xMin: MARGIN_X, yTop: seatedBottom ? seatedBottom + ROW_GAP : MARGIN_X },
-    );
-    const slotById = new Map(packed.slots.map(s => [s.id, s]));
-    for (const it of visFresh) {
-      const s = slotById.get(it.id);
-      if (s) it.pos = { ...it.pos, x: s.x, y: s.y };
+        it.pos = { ...it.pos, x: shelf.x, y: bottomY, seat: 'shelf' };
+        const slot = { id: it.id, x: shelf.x, y: bottomY, w: sz.w, h: sz.h };
+        bottomY += sz.h + 24;
+        return slot;
+      });
+    } else {
+      const packed = packRow(
+        ordered.map(it => {
+          const sz = sizeOf(it);
+          return { id: it.id, w: sz.w, h: sz.h, breakBefore: breakBefore.has(String(it.id)) };
+        }),
+        { width: DESKTOP_W - MARGIN_X * 2, xMin: MARGIN_X, yTop: seatedBottom ? seatedBottom + ROW_GAP : MARGIN_X },
+      );
+      const slotById = new Map(packed.slots.map(s => [s.id, s]));
+      for (const it of visFresh) {
+        const s = slotById.get(it.id);
+        if (s) it.pos = { ...it.pos, x: s.x, y: s.y };
+      }
+      seatSlots = packed.slots;
     }
-    seatSlots = packed.slots;
   }
 
   let bottom = 0;
@@ -143,7 +169,7 @@ export function computeDesktopSeating({
   const seatFixes = {};
   for (const it of [...visFresh, ...adopted]) {
     if (movingIds?.has(it.id)) continue;   // 正在搬家，别给旧 id 排座
-    seatFixes[it.id] = { x: it.pos.x, y: it.pos.y };
+    seatFixes[it.id] = { x: it.pos.x, y: it.pos.y, ...(it.pos.seat === 'shelf' ? { seat: 'shelf' } : {}) };
   }
   // 批注文字跟着目标搬家（北极星二程）：目标这一趟被重新落座时，贴着它说话
   // 的手写字跟过去。落点 = 首目标所在**行**的右端空白（不是目标右侧 +24 ——

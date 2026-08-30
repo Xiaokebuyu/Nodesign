@@ -388,8 +388,29 @@ export function nextPick(hits, currentId) {
   return i < 0 ? hits[0] : hits[(i + 1) % hits.length];
 }
 
-/** 新工作区先在现有栈底占位（用存档矩形估算），堆叠 effect 下一拍精确归位 */
-export function newStackedZoneRect(zones) {
+/** 新工作区先在现有栈底占位（用存档矩形估算），堆叠 effect 下一拍精确归位。
+ *  2026-08-30 暂存架：`shelf`（board.shelf 原点）给了就码进架的竖带 —— 空 mkdir
+ *  出的文件夹没有 file_changed，服务端入座器看不见它，这里是它唯一的落位口；
+ *  没有架才走老的一行行排（那套起排点在桌面左上，会压 agent 的纸）。
+ *  占位判据与 server/lib/board-shelf.js nextShelfSpot 同款（360/24 对齐拷贝）。 */
+export function newStackedZoneRect(zones, shelf = null, layout = null) {
+  if (shelf && Number.isFinite(shelf.x) && Number.isFinite(shelf.y)) {
+    let bottom = shelf.y;
+    const consider = (x, y, w, h) => {
+      if (x + w > shelf.x && x < shelf.x + 360 && y + h > shelf.y) bottom = Math.max(bottom, y + h + 24);
+    };
+    for (const z of Object.values(zones || {})) {
+      if (Number.isFinite(z?.x)) consider(z.x, z.y, z.w || FOLDER_CARD.w, z.h || FOLDER_CARD.h);
+    }
+    for (const e of Object.values(layout || {})) {
+      if (Number.isFinite(e?.x) && !e.zone) consider(e.x, e.y, e.w || 200, e.h || 160);
+    }
+    return { x: shelf.x, y: Math.round(bottom), w: FOLDER_CARD.w, h: FOLDER_CARD.h };
+  }
+  return newStackedZoneRectLegacy(zones);
+}
+
+function newStackedZoneRectLegacy(zones) {
   /**
    * 新文件夹的落脚点：从已有的最低边往下再放一行。
    *

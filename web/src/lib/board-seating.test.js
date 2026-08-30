@@ -138,3 +138,22 @@ describe('computeDesktopSeating', () => {
     expect(r.noteFixes['text:t1'].x).toBeGreaterThan(slot.pos.x);
   });
 });
+
+describe('暂存架模式（2026-08-30）', () => {
+  it('⭐ board.shelf 给了 → 新客码进架带（seat:shelf 随 fix 落盘），不再在内容底下另起一行', () => {
+    const r = seat({
+      dirIndex: dirIndexOf([{ id: 'new.png', type: 'image' }, { id: 'old.png', type: 'image' }]),
+      layout: { 'old.png': { x: -360, y: 100, z: 1, w: 200, h: 176, seat: 'shelf' } },
+      shelf: { x: -360, y: 24 },
+    });
+    const fix = r.seatFixes['new.png'];
+    expect(fix.seat).toBe('shelf');
+    expect(fix.x).toBe(-360);
+    expect(fix.y).toBeGreaterThanOrEqual(100 + 176 + 24);   // 码在架上已有那件下面
+  });
+
+  it('没有架（还没立过）→ 走老 packRow 兜底，fix 不带 seat', () => {
+    const r = seat({ dirIndex: dirIndexOf([{ id: 'n.png', type: 'image' }]) });
+    expect(r.seatFixes['n.png'].seat).toBeUndefined();
+  });
+});

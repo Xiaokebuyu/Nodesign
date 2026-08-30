@@ -162,7 +162,7 @@ export default function BoardCanvas({
   const {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
-    rolls, setRolls, sheets,
+    rolls, setRolls, sheets, shelf,
     guideText, fileCount,
     reload, scheduleSave, patchLayout,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,
@@ -416,7 +416,7 @@ export default function BoardCanvas({
         if (next[zid]) continue;
         // 影子区已经占过位就沿用它的矩形（真区接管时画面不跳）
         next[zid] = {
-          ...(ghostZones[zid] || newStackedZoneRect(next)),
+          ...(ghostZones[zid] || newStackedZoneRect(next, shelf, layoutRef.current)),
           // title 不写进 board.json：名字从路径读（见 folderView 那段）
         };
         dirtyRef.current.zones.add(zid);
@@ -424,7 +424,7 @@ export default function BoardCanvas({
       scheduleSave();
       return next;
     });
-  }, [folders, zones, ghostZones, taskTitles, scheduleSave]);
+  }, [folders, zones, ghostZones, taskTitles, scheduleSave, shelf]);
 
   // 影子退场：对应的真工作区已经建出来了就删掉影子
   useEffect(() => {
@@ -448,13 +448,13 @@ export default function BoardCanvas({
     const title = zid.split('/').pop() || '文件夹';
     setGhostZones(prev => (prev[zid] ? prev : {
       ...prev,
-      [zid]: { ...newStackedZoneRect({ ...zonesRef.current, ...prev }), title },
+      [zid]: { ...newStackedZoneRect({ ...zonesRef.current, ...prev }, shelf, layoutRef.current), title },
     }));
     // ⚠️ 影子文件夹是**不过磁盘权威剪枝**的（zonesEff 里 ghost 无条件并入），
     // 所以 zoneOfObjectId 一旦凭空造出一个不存在的 id，这里就会长出一块永不
     // 退场的虚线框（退场条件是"真的出现了"，而它永远不会）。寻址回落到
     // sessionId 那一支正是这么来的 —— 2026-08-13 已从 stage.js 拆掉。
-  }, [ghostZones]);
+  }, [ghostZones, shelf]);
 
   /**
    * 自动摆位 + 归属判定：
@@ -616,12 +616,12 @@ export default function BoardCanvas({
   // 认领即在 memo 里标记，ref 用法同 movingRef 有先例）。
   const { positioned, folderView, contentBottom, seatFixes, noteFixes } = useMemo(() => (
     computeDesktopSeating({
-      dirIndex, zonesEff, layout, bindings, lineageOpen, boardHero, folderCardOf,
+      dirIndex, zonesEff, layout, bindings, lineageOpen, boardHero, folderCardOf, shelf,
       movingIds: movingRef.current,
       claimSeat: (id) => claimPhantomSeat(phantomsRef, id),
       occupied: phantomRects(phantomsRef),   // 生图幻影占的地方：它让不开，只能排座这边躲它
     })
-  ), [dirIndex, folderCardOf, layout, zonesEff, bindings, lineageOpen, boardHero]);
+  ), [dirIndex, folderCardOf, layout, zonesEff, bindings, lineageOpen, boardHero, shelf]);
   positionedRef.current = positioned;
   folderViewRef.current = folderView;
   // 幻影找座的障碍表与起排线（跟这一趟入座同一份现实）
@@ -658,8 +658,8 @@ export default function BoardCanvas({
       const next = { ...prev };
       for (const id of ids) {
         if (prev[id] && Number.isFinite(prev[id].x)) continue;   // 已经有坐标了
-        // seat:'auto' = 排出来的座（出处三值 auto/user/agent，user 的永不被重排）
-        next[id] = { ...(prev[id] || {}), ...seatFixes[id], seat: 'auto', z: prev[id]?.z ?? 1 };
+        // seat 默认 'auto'（出处四值 auto/user/agent/shelf，user 的永不被重排）；架上落的座 fix 自带 seat:'shelf'
+        next[id] = { ...(prev[id] || {}), seat: 'auto', ...seatFixes[id], z: prev[id]?.z ?? 1 };
         dirtyRef.current.objects.add(id);
         touched = true;
       }
