@@ -58,7 +58,6 @@ const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 /** md 侦测：正文带 markdown 记号却标 plain 会把 **加粗** 原样吐出来（ldx 案） */
 const looksLikeMd = (t) => /(\*\*|__|^#{1,4}\s|^\s*[-*]\s|\|.+\||```|\$[^$]+\$|\[.+\]\(.+\))/m.test(t);
 
-
 const DESCRIPTION = `Write on the board — the ONE way to put words and pictures on the canvas.
 The board is the conversation; the sidebar is the log.
 
@@ -329,8 +328,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           `Wrote handwritten note ${hid} at (${hRect.x},${hRect.y}) ${hRect.w}x${hRect.h} — ${describeSpot(b2, placed)}.` }] };
       }
 
-      // 状态表堵写口（2026-08-30）：挂这个 tag 的板书是唯一真相（set_vars/触发器/
-      // 趋势线都读它），建出来的第一版就得是一张能解析的表 —— 坏表落盘比不落更坏。
+      // 状态表堵写口（2026-08-30）：这 tag 载重（set_vars/触发器/趋势线都读它），
+      // 第一版就得是能解析的表 —— 坏表落盘比不落更坏。
       if (args.tag === STATE_TABLE_TAG) {
         const t = parseStateTable(String(body).replace(/\r\n?/g, '\n'));
         if (!t.ok) {
@@ -378,7 +377,15 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       if (slotInfo) {
         const freeH = Math.max(0, Math.round(slotInfo.rect.y + slotInfo.rect.h - (rect.y + rect.h) - UNIT));
         const c = capacityOf(slotInfo.rect.w, freeH);
-        lines.push(`Slot "${args.slot}" now has ~${c.lines} lines (~${c.cjk} CJK chars, ${freeH}px) left${freeH < 60 ? ' — next note of any size goes elsewhere or flow it' : ''}.`);
+        // 版位满 ≠ 纸满（2026-08-30 利用率线）：旧措辞 "goes elsewhere" 把模型往门外
+        // 推（sonnet 真会话走成每拍一张新纸）。版位用完先报纸还剩多少，复用是主路径。
+        let tail = '';
+        if (freeH < 60) {
+          const inn = innerRect(slotInfo.sheet);
+          const sheetFree = Math.round(inn.y + inn.h - (rect.y + rect.h) - UNIT);
+          tail = sheetFree >= 120 ? ` — this slot is full, but the sheet still has ~${sheetFree}px below: keep writing on it (no slot needed — notes flow down; or replan more blocks). A fresh sheet is for a scene change or a refusal, not for every note` : ' — slot and sheet are both nearly full; plan the next page (open_sheet) before the next note';
+        }
+        lines.push(`Slot "${args.slot}" now has ~${c.lines} lines (~${c.cjk} CJK chars, ${freeH}px) left${tail}.`);
       }
       if (box.reserved) lines.push(`Box height reserved at ${box.h}px (content measured shorter — the box keeps your planned size).`);
       // 折叠如实报（08-29 占位契约刀 B）：卡高封顶到 CARD_MAX_H，超出的折在卡里。

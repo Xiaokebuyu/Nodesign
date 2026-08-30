@@ -215,7 +215,15 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
       lines.push(`No slots planned. Plan the page in one go — open_sheet{plan:[{slot,at,w,h,about}…]} — instead of writing one note at a time and hoping it lands well. This sheet takes ${cols} columns side by side; a single column down the left leaves ${Math.round((1 - 1 / cols) * 100)}% of it empty.`);
     }
     lines.push(s.basis === 'viewport' ? 'Opened under the user’s current view.' : (s.basis === 'below-sheet' ? 'Stacked below the current sheet.' : 'Placed below existing content.'));
-    if (s.trimmed) lines.push(`Previous sheet ${s.trimmed.id} was trimmed to its content (${s.trimmed.from}→${s.trimmed.to}px tall) so the pages sit close — its leftover blank is gone, not its content.`);
+    if (s.trimmed) {
+      lines.push(`Previous sheet ${s.trimmed.id} was trimmed to its content (${s.trimmed.from}→${s.trimmed.to}px tall) so the pages sit close — its leftover blank is gone, not its content.`);
+      // 利用率点名（2026-08-30）：裁掉近半张纸 = 翻页翻快了。只点名不拦 ——
+      // 换场景翻新纸永远合法，这里治的是「每拍一张纸」的过度避险。
+      const waste = s.trimmed.from - s.trimmed.to;
+      if (waste >= 400) {
+        lines.push(`⚠ You left ~${waste}px of that sheet unused — pages are turning faster than they fill. Short beats can keep landing on the current sheet (they flow down; no slot needed). Turn the page for a scene change or a refusal, not for every beat.`);
+      }
+    }
     // 占地者点名（刀③）：谁在纸上、占了哪块版位、该怎么办 —— 三样一次说清
     if (s.occupants?.length) {
       const named = s.occupants.slice(0, 6).map((o) =>

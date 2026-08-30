@@ -191,6 +191,28 @@ describe('空位竖排糖（2026-08-30 用户拍板「自己定几个空位分�
   });
 });
 
+describe('利用率三刀（2026-08-30 sonnet「每拍一张纸」真案）', () => {
+  it('⭐ 版位写满但纸还有地 → 报文先指回这张纸，不再说 goes elsewhere', async () => {
+    const t = await mk('proj_sp_reuse');
+    setViewpoint('proj_sp_reuse', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '复用', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 120, about: '一小块' }] });
+    const w = await t.write({ slot: 'main', tag: 'ch', text: '三行左右的一段话，把这个小版位基本写满。\n再来一行。\n第三行。' });
+    expect(w.isError).toBeUndefined();
+    expect(w.content[0].text).toMatch(/sheet still has ~\d+px below/);
+    expect(w.content[0].text).not.toMatch(/goes elsewhere/);
+  });
+
+  it('⭐ 翻纸裁掉近半张 → 点名「翻快了」并教短拍接着写（只提醒不拦）', async () => {
+    const t = await mk('proj_sp_waste');
+    setViewpoint('proj_sp_waste', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '第一拍' });
+    await t.write({ text: '短短一拍。' });
+    const r = await t.open({ title: '第二拍', where: 'next' });
+    expect(r.isError).toBeUndefined();                          // 不拦
+    expect(r.content[0].text).toMatch(/turning faster than they fill/);
+  });
+});
+
 describe('状态表堵写口（2026-08-30 glm \\r 字面量真案）', () => {
   it('⭐ set_text 把状态表改成解析不出的正文 → 大声拒、盘上原文原样', async () => {
     const t = await mk('proj_sp_stguard');
