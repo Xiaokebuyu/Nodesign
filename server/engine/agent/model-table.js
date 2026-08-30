@@ -437,29 +437,51 @@ export const MODELS_BUILTIN = Object.freeze([
       // 「reasoning_content 优先、回退 thinking」，所以这行不用配任何东西 —— 记在这儿是给下一家看的：
       // **接新行时先看一眼它的思考字段叫什么**，掉了不报错、只是用户看不见思考。
       // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息（同 zenGo 那行）
-      // ⭐⭐ **08-30 晚：从"点死 zai"改成偏好序 `['zai','particle']`，但 zai 仍排第一**（用户报排队，
-      // 让我别单点一家、依从网关路由。量完之后结论是"三家都没问题"这个前提不成立，所以只松到这一步）。
-      // 08-28 点死 zai 的理由是 particle 一次只收一张图（400 ... accept at most one inline PNG）。
-      // ⭐ 那条 400 现在确实没了 —— 但 particle 换了个**更难发现的坏法**：
-      //   ⛔⛔ **图散在多轮历史里时它会跑偏**（08-30 消融，各 10 发）：三张图分三轮发 + 简短的
-      //      assistant 回合 → particle 答非所问 5/10、其中 3/10 把 `<tool_call>bash ...` 当正文吐出来；
-      //      同题 zai 0/10。⚠️ 而**三图挤在同一条消息里 particle 0/10 不出事** —— 所以拿单条多图
-      //      测是测不出来的，我第一趟 30/30 全绿就是这么被骗过去的。
-      //      «图散在多轮历史» 正是 agent 循环的形状（每张截图各占一轮），所以这条不能忍。
-      //   ⛔ **baseten 不许进这个列表**：同一发请求 usage.cost 实测 $0.000626，是 particle 的 48 倍、
-      //      zai 的 11 倍。它进来不会报错，只会在月底的账上出现。
+      // ⭐⭐ **08-30 晚：从"点死 zai"改成偏好序 `['zai','particle']`**（用户报排队、要求别单点一家）。
+      // 08-28 点死 zai 的理由（particle 对多图回 400）已作废，复测 36/36 全通。zai 仍排第一只是
+      // 因为这行是默认行、稳字优先；particle 的速度另开了一行（见下面的「快线」，那里有全部实测）。
+      // ⛔ **baseten 不许进列表**：同一发请求 usage.cost $0.000626，是 particle 的 48 倍、zai 的 11 倍。
       // ⚠️ `vendors` 是**偏好序不是故障转移链**：列谁在前就一直落谁（30/30、8/8 两向都验过），
-      //    且拿一个 zai 必拒的请求试 `vendors:['zai','baseten']` 回的是 400 而不是转到 baseten。
-      //    所以 particle 排第二 = 「zai 整个不可服务时网关还有得挑」，**不是**自动兜底。
-      // ⛔ 排队没解决，也解不了：不点名实测 **20/20 全落 zai**，而慢的正是 zai（3 并发 p90
-      //    7207ms vs particle 3410ms；8 并发墙钟 10590 vs 1998ms）。要真快只有 baseten（贵），
-      //    所以「不指定就能不排队」是假的 —— 别再照这个念头改一遍。
-      // ⚠️ 目录自报的 max_output（particle 131000）**不是真闸**，拿 131050 去试它照收 ——
-      //    我本想用它当"必挂"的对照组，是废的。别拿目录数字当判据。
+      //    且拿一个 zai 必拒的请求试 `['zai','baseten']` 回的是 400 而不是转到 baseten。5xx 会不会
+      //    转移没验到（造不出必挂的 5xx）。所以 particle 排第二 = 有得挑，**不是**自动兜底。
+      //    ⭐ 不存在的家名会被静默过滤（`['nope','zai']` → zai 服务），不报错。
+      // ⛔ 「不指定就能不排队」是假的：不点名实测 **20/20 全落 zai**，而慢的正是 zai。
+      //    ⚠️ 网关的默认选择会自己变：08-28 裸请求 8/8 落 particle，08-30 是 20/20 落 zai。
       bodyExtra: { vendors: ['zai', 'particle'] },
       // 网关目录价（$0.015/$0.05，缓存读 $0.003）。⚠️ 它的响应把真金额放在 **usage.cost** 里而不是
       // 顶层 cost（Zen 是顶层），lib/ingress/upstream-billing.js 的 upstreamCostOf 两处都认，
       // 所以额度口径以上游自报为准，这里的表价是兜底
+      prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
+    },
+  },
+  {
+    // ── 同一个模型的第二条线：merge 的 particle 部署（08-30 晚新增）──
+    // 用户拍板「加一个快速的 particle」。**同模型两条独立行、不做请求级动态路由**（沿用 08-27
+    // 的规矩：动态路由伤 prompt cache —— 同一会话在两家之间跳，每跳一次缓存作废按全价重传）。
+    // ⭐⭐ 凭什么单开一行：**快**。同题实测 3 并发 p90 particle 3410ms / zai 7207ms；
+    // 8 并发墙钟 1998ms / 10590ms（baseten 672ms 但贵 48 倍）；单发 usage.cost $0.000013 / $0.000055。
+    // ⚠️ **它唯一的弱项，以及为什么对本站不成立**（08-30 分四轮量，中间翻过两次车）：
+    //   particle 在「图散在多轮历史里 + **请求没声明 tools**」时只看得见最后一张图（20 发挂 8 发，
+    //   同题 zai 20/20）。⭐ 但**声明了 tools 就没这回事**（同消息 + tools 数组 → 20/20；
+    //   真会话形状即历史里带 tool_calls，连测三轮 46/46）。本站的请求永远带 tools（agent SDK
+    //   会话必然声明 MCP 工具），所以撞不到。
+    //   ⛔ 别拿"单条塞多图"复验：那个形状两家都零失败，是恒绿的摆设。
+    //   ⛔ 也别信目录：它说三家 input 都含 image、particle max_output 131000（拿 131050 试它照收）
+    //     —— 目录自报的能力位和上限都不是闸。
+    // ⛔ 08-28 起写在上一行的「particle 一次只收一张图、会回 400」**已作废**（上游修掉了，复测
+    //   36/36 全通）。厂商的能力位会变，别把一次实测当常量。
+    id: 'glm-5.3-flash-fast', window: 1_000_000, brand: 'glm',
+    // label 第一段跟上面那行同名是**故意**的：compactLabel 会自己发现撞名、给两行都留两段。
+    select: { label: 'GLM-5.3-Flash · 快线', desc: '有视觉 · 1M 上下文 · 极便宜 · 并发下明显更快' },
+    api: {
+      upstream: 'merge', wireModel: 'zai/glm-5.3-flash',
+      // 点死 particle：这行存在的理由就是那家的速度，让网关掷骰子的话它跟上面那行没区别。
+      // ⛔ 同样不许出现 baseten（贵 48 倍，见上一行）。
+      bodyExtra: { vendor: 'particle' },
+      fastModel: 'deepseek-v4-flash-helper',
+      thinking: 'strip',
+      reasoningEffort: 'high',
+      maxOutput: 131_000,             // particle 自报 131000（比 zai 少 72，取小的那个）
       prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
     },
   },

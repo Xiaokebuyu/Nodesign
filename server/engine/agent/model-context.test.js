@@ -99,22 +99,24 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
     expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
-    // ⭐⭐ Merge 网关这行的厂商口径（08-28 建，08-30 晚换判据）。旧断言钉的是"必须点名 zai 一家"，
-    // 理由是 particle 会对多图回 400；那条 400 已经没了，所以旧断言不是删掉了事，是换成现在真正
-    // 要守的两条 —— 它们各自都有一次实测撑着：
-    //   ① **zai 必须排在最前**：particle 在「图散在多轮历史」（= agent 循环的形状）下会跑偏，
-    //      08-30 消融各 10 发：particle 答非所问 5/10、3/10 把 <tool_call> 当正文吐；zai 0/10。
-    //      ⚠️ 单条塞多图测不出来（particle 那样 0/10 不出事），别用那个形状复验。
-    //   ② ⛔ **baseten 不许出现**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的 11 倍。
-    //      它进来不报错，只在月底的账上出现。
-    const vendors = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
-    const okList = (v) => Array.isArray(v) && v[0] === 'zai' && !v.includes('baseten');
-    expect(okList(vendors), `merge 行的 vendors 现在是 ${JSON.stringify(vendors)}`).toBe(true);
-    // 判据先验一遍：这四种坏写法它都得拦下来，否则上面那条是恒真的
-    expect(okList(['particle', 'zai']), 'particle 排第一 = agent 循环里会跑偏').toBe(false);
-    expect(okList(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
-    expect(okList(['particle'])).toBe(false);
-    expect(okList(undefined), '整个撤掉点名 = 网关自己挑，08-28 那次它挑的就是 particle').toBe(false);
+    // ⭐⭐ Merge 网关两行的厂商口径（08-28 建，08-30 晚换判据）。旧断言钉的是"必须点名 zai 一家"，
+    // 理由是 particle 会对多图回 400 —— 那条 400 已经没了（复测 36/36），所以旧断言不是删掉了事，
+    // 是换成现在真正要守的两条：
+    //   ① **默认行的第一顺位必须是 zai**：不是因为 particle 坏（它在本站的请求形状下 46/46 全对，
+    //      速度还快得多，所以单开了「快线」那行），而是默认行该挑稳的那家；particle 唯一的弱项
+    //      （没声明 tools + 图散在多轮历史 → 只看得见最后一张）由用户显式选快线时自己承担。
+    //   ② ⛔ **两行都不许出现 baseten**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的
+    //      11 倍。它进来不报错，只在月底的账上出现。
+    const vendorsOf = (id) => { const b = resolveWireModel(id)?.bodyExtra; return b?.vendors || (b?.vendor ? [b.vendor] : undefined); };
+    const noBaseten = (v) => Array.isArray(v) && v.length > 0 && !v.includes('baseten');
+    const merge = vendorsOf('glm-5.3-flash-merge');
+    expect(noBaseten(merge) && merge[0] === 'zai', `merge 行现在是 ${JSON.stringify(merge)}`).toBe(true);
+    expect(vendorsOf('glm-5.3-flash-fast'), '快线那行不点名 particle 就跟 merge 行没区别了').toEqual(['particle']);
+    // 判据先验一遍：四种坏写法都得拦下来，否则上面两条是恒真的
+    expect(noBaseten(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
+    expect(noBaseten(['baseten'])).toBe(false);
+    expect(noBaseten(undefined), '整个撤掉点名 = 网关自己挑，08-28 那次它挑的就是 particle').toBe(false);
+    expect(noBaseten([])).toBe(false);
     expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
   });
 

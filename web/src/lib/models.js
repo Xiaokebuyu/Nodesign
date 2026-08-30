@@ -62,6 +62,8 @@ export function isModelPrefStale(pref, serverOptions) {
 /** 服务端拿不到时的兜底清单（离线 / 接口挂了也别让按钮变成死的） */
 export const FALLBACK_MODELS = [
   { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · Merge 网关', desc: '有视觉 · 1M 上下文 · 极便宜', brand: DEFAULT_BRAND },
+  // 08-30 晚新增：同一个模型走 merge 的 particle 部署，并发下明显更快（服务端表里叫 glm-5.3-flash-fast）
+  { id: 'glm-5.3-flash-fast', label: 'GLM-5.3-Flash · 快线', desc: '有视觉 · 1M 上下文 · 极便宜 · 并发下明显更快', brand: 'glm' },
   { id: 'minimax-m3', label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久', brand: 'minimax' },
   { id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '快 · 日常改稿和铺页够用', brand: 'claude' },
   { id: 'claude-opus-5[1m]', label: 'Opus 5', desc: '前端与审美更强 · 烧订阅额度快得多，重活再开', brand: 'claude' },
