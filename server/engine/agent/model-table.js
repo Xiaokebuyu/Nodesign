@@ -137,10 +137,13 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
   // 钥匙 `~/apikey/merge.md`（`mg_` 46 字符），bearer 与 x-api-key 都通，取 bearer。账只在响应头上：
   // `x-credit-balance-usd: 20.00` / `x-budget-limit-usd: 10.00`，**没有余额端点**（/v1/usage 等全 404）。
   //
-  // ⛔⛔ **这条上游的行必须点名 vendor**（见行内 bodyExtra）。08-28 一次实验把三件事一起解释了：
-  // 裸请求 8/8 全落 particle，而「GLM image requests accept at most one inline PNG...」那条 400
-  // **只有 particle 报**（多图同条 0/24 全挂、跨消息 8/12 挂）；点名 zai 后同样的形状 6/6 通、认字也对。
-  // → 08-27 记的「约 7~10% 瞎图」和「Anthropic 腿的图路死」，多半是同一家的账，不是协议的账。
+  // ⛔ **08-30 更正上一段**：「必须点名 zai 一家」已作废，现在写的是**偏好序** `vendors:['particle','zai']`
+  // （见行内 bodyExtra 那段的实测）。08-28 那次的账仍然成立、只是过期了：当时裸请求 8/8 全落 particle，
+  // 而「GLM image requests accept at most one inline PNG...」那条 400 **只有 particle 报**（多图同条
+  // 0/24 全挂、跨消息 8/12 挂）；08-30 复测 particle 同样的形状 36/36 全通、三个词全认出来。
+  // → 08-27 记的「约 7~10% 瞎图」和「Anthropic 腿的图路死」，多半也是同一家当时的账，不是协议的账。
+  // ⭐ 留给下一个人的判据：**厂商的能力位是会变的，别把一次实测当常量**；判"这家还瞎不瞎图"要
+  // 重跑 `_merge-vendor-check.mjs`，别读注释。
   // 仍走 openai-chat：08-27 那趟它 27 发 25 对（Anthropic 腿当时 tool_result 里的图被当**文本**塞进去，
   // 10KB base64 → prompt 8300 token；那次没点名，归因存疑）。08-28 两条腿点名后复测表现相同 ——
   // 换腿不再被图挡着，但也没有换的理由，不动。
@@ -434,13 +437,26 @@ export const MODELS_BUILTIN = Object.freeze([
       // 「reasoning_content 优先、回退 thinking」，所以这行不用配任何东西 —— 记在这儿是给下一家看的：
       // **接新行时先看一眼它的思考字段叫什么**，掉了不报错、只是用户看不见思考。
       // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息（同 zenGo 那行）
-      // ⛔ **点名厂商，别让网关掷骰子**（08-28）：这个模型名后面挂着 particle / zai / baseten 三家，
-      // 不写这一句就几乎全落 particle，而 particle 一次只收一张图 —— 用户会撞上「400 ... accept at
-      // most one inline PNG ...」，agent 循环里第二张截图一进历史就必挂（跨消息实测 8/12 挂）。
-      // ⚠️ 代价是**这行没有故障转移了**：zai 那家挂了这行就挂，不再自动落到别家。这是故意的 ——
-      // 另外两家一个是病根、一个（baseten）同模型贵 10 倍，静默转过去等于表价说谎。真要转移是
-      // `vendors: ['zai','baseten']`（网关认这个键），但先想清楚贵 10 倍那件事。
-      bodyExtra: { vendor: 'zai' },
+      // ⭐⭐ **08-30 晚：从"点死 zai"改成偏好序 `['zai','particle']`，但 zai 仍排第一**（用户报排队，
+      // 让我别单点一家、依从网关路由。量完之后结论是"三家都没问题"这个前提不成立，所以只松到这一步）。
+      // 08-28 点死 zai 的理由是 particle 一次只收一张图（400 ... accept at most one inline PNG）。
+      // ⭐ 那条 400 现在确实没了 —— 但 particle 换了个**更难发现的坏法**：
+      //   ⛔⛔ **图散在多轮历史里时它会跑偏**（08-30 消融，各 10 发）：三张图分三轮发 + 简短的
+      //      assistant 回合 → particle 答非所问 5/10、其中 3/10 把 `<tool_call>bash ...` 当正文吐出来；
+      //      同题 zai 0/10。⚠️ 而**三图挤在同一条消息里 particle 0/10 不出事** —— 所以拿单条多图
+      //      测是测不出来的，我第一趟 30/30 全绿就是这么被骗过去的。
+      //      «图散在多轮历史» 正是 agent 循环的形状（每张截图各占一轮），所以这条不能忍。
+      //   ⛔ **baseten 不许进这个列表**：同一发请求 usage.cost 实测 $0.000626，是 particle 的 48 倍、
+      //      zai 的 11 倍。它进来不会报错，只会在月底的账上出现。
+      // ⚠️ `vendors` 是**偏好序不是故障转移链**：列谁在前就一直落谁（30/30、8/8 两向都验过），
+      //    且拿一个 zai 必拒的请求试 `vendors:['zai','baseten']` 回的是 400 而不是转到 baseten。
+      //    所以 particle 排第二 = 「zai 整个不可服务时网关还有得挑」，**不是**自动兜底。
+      // ⛔ 排队没解决，也解不了：不点名实测 **20/20 全落 zai**，而慢的正是 zai（3 并发 p90
+      //    7207ms vs particle 3410ms；8 并发墙钟 10590 vs 1998ms）。要真快只有 baseten（贵），
+      //    所以「不指定就能不排队」是假的 —— 别再照这个念头改一遍。
+      // ⚠️ 目录自报的 max_output（particle 131000）**不是真闸**，拿 131050 去试它照收 ——
+      //    我本想用它当"必挂"的对照组，是废的。别拿目录数字当判据。
+      bodyExtra: { vendors: ['zai', 'particle'] },
       // 网关目录价（$0.015/$0.05，缓存读 $0.003）。⚠️ 它的响应把真金额放在 **usage.cost** 里而不是
       // 顶层 cost（Zen 是顶层），lib/ingress/upstream-billing.js 的 upstreamCostOf 两处都认，
       // 所以额度口径以上游自报为准，这里的表价是兜底

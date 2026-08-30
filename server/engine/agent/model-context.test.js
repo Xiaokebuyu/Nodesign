@@ -99,10 +99,22 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
     expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
-    // ⛔ Merge 网关必须点名厂商：不点名几乎全落 particle，而 particle 一次只收一张图
-    //（08-28 实测「400 ... accept at most one inline PNG」只有它报）。删掉这句 = 用户的
-    // agent 循环里第二张截图一进历史就必挂，而且只在真会话里才看得见，所以钉一条断言在这里
-    expect(resolveWireModel('glm-5.3-flash-merge')?.bodyExtra).toEqual({ vendor: 'zai' });
+    // ⭐⭐ Merge 网关这行的厂商口径（08-28 建，08-30 晚换判据）。旧断言钉的是"必须点名 zai 一家"，
+    // 理由是 particle 会对多图回 400；那条 400 已经没了，所以旧断言不是删掉了事，是换成现在真正
+    // 要守的两条 —— 它们各自都有一次实测撑着：
+    //   ① **zai 必须排在最前**：particle 在「图散在多轮历史」（= agent 循环的形状）下会跑偏，
+    //      08-30 消融各 10 发：particle 答非所问 5/10、3/10 把 <tool_call> 当正文吐；zai 0/10。
+    //      ⚠️ 单条塞多图测不出来（particle 那样 0/10 不出事），别用那个形状复验。
+    //   ② ⛔ **baseten 不许出现**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的 11 倍。
+    //      它进来不报错，只在月底的账上出现。
+    const vendors = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
+    const okList = (v) => Array.isArray(v) && v[0] === 'zai' && !v.includes('baseten');
+    expect(okList(vendors), `merge 行的 vendors 现在是 ${JSON.stringify(vendors)}`).toBe(true);
+    // 判据先验一遍：这四种坏写法它都得拦下来，否则上面那条是恒真的
+    expect(okList(['particle', 'zai']), 'particle 排第一 = agent 循环里会跑偏').toBe(false);
+    expect(okList(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
+    expect(okList(['particle'])).toBe(false);
+    expect(okList(undefined), '整个撤掉点名 = 网关自己挑，08-28 那次它挑的就是 particle').toBe(false);
     expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
   });
 
