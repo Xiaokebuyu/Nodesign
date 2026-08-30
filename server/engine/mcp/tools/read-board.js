@@ -21,7 +21,7 @@ import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
 import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
-import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot } from '../../../lib/board-sheets.js';
+import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot, freeColumnsInSheet } from '../../../lib/board-sheets.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -206,6 +206,14 @@ on the minimap and listed with what is inside it.`,
               lines.push(`  ${s.id}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高（≈${cap.lines} 行 / ${cap.cjk} 字）${s.lastId ? `，最新 ${s.lastId}` : ''}`);
               // 规划过的块各剩多少（08-29 刀 E）：填到一半要知道还有哪块地是空的，
               // 不然只能靠猜 —— 猜错的下场是写入被拒收，白跑一趟
+              // 这张纸还剩哪些空地（08-29 刀 F）：只报"最后一件下面剩多少"是不够的 ——
+              // 那一列到底了不等于这张纸满了，右边可能整片空着，而 agent 要靠这个
+              // 判断"还放不放得下、要不要开新一页"
+              const free = freeColumnsInSheet(board, s.id);
+              if (free.length > 1) {
+                const cells = free.map((f) => `x=${f.x} 剩 ${capacityOf(DEFAULT_CHALK_W, f.freeH).lines} 行`);
+                lines.push(`    空地：${cells.join(' / ')}`);
+              }
               const sheet = board.sheets?.[s.id];
               for (const [nm, sl] of Object.entries(sheet?.slots || {})) {
                 const r = slotRectOf({ ...sheet, id: s.id }, nm);

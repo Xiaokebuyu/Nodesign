@@ -204,18 +204,40 @@ export function nextSpotInSheet(board, sheetId, box, { gap = UNIT } = {}) {
     return { x: Math.round(inner.x), y };
   }
 
-  // 横纸：分栏
-  const colW = DEFAULT_CHALK_W;
-  const cols = Math.max(1, Math.floor((inner.w + gap) / (colW + gap)));
-  for (let c = 0; c < cols; c += 1) {
-    const x = inner.x + c * (colW + gap);
-    if (x + box.w > inner.x + inner.w + 1) break;   // 这件在这一栏往右放不下了
+  // 横纸：先往下接；这一列到底了，就在纸上往右找第一块放得下的地方。
+  // 步长跟这件东西的宽度走，不是切死的栏 —— 机器只是帮忙找地方，版面怎么切
+  // 是 agent 自己的事（站主：有限制有规划的自由）。
+  const step = Math.max(UNIT * 4, Math.round(box.w) + gap);
+  for (let x = inner.x; x + box.w <= inner.x + inner.w + 1; x += step) {
     const hit = members.filter((m) => m.x < x + box.w && m.x + m.w > x);
     const bottom = hit.length ? Math.max(...hit.map((m) => m.y + m.h)) : inner.y - gap;
     const y = Math.round(bottom + gap);
-    if (y + box.h <= floor) return { x: Math.round(x), y, col: c };
+    if (y + box.h <= floor) return { x: Math.round(x), y, moved: x > inner.x };
   }
-  return null;
+  return null;   // 纸上哪儿都放不下了 —— 这才叫满
+}
+
+/**
+ * 这张纸还剩哪些空地（2026-08-29 刀 F，站主要的"有规划的自由"的依据）。
+ *
+ * agent 要自己判断"还放不放得下、要不要开新一页"，就得知道纸上哪里还空着 ——
+ * 只报"最后一件下面还剩多少"是不够的：那一列到底了不等于这张纸满了，右边可能
+ * 整片空着。按内容列宽扫一遍，报每一列的剩余高度。
+ *
+ * @returns {Array<{x:number, freeH:number}>}  x = 纸内局部像素
+ */
+export function freeColumnsInSheet(board, sheetId, colW = DEFAULT_CHALK_W, gap = UNIT) {
+  const s = board?.sheets?.[sheetId];
+  if (!s) return [];
+  const inner = innerRect(s);
+  const members = sheetMembers(board, sheetId);
+  const out = [];
+  for (let x = inner.x; x + colW <= inner.x + inner.w + 1; x += colW + gap) {
+    const hit = members.filter((m) => m.x < x + colW && m.x + m.w > x);
+    const bottom = hit.length ? Math.max(...hit.map((m) => m.y + m.h)) : inner.y - gap;
+    out.push({ x: Math.round(x - inner.x), freeH: Math.max(0, Math.round(inner.y + inner.h - (bottom + gap))) });
+  }
+  return out;
 }
 
 /* ── 版位（slot，2026-08-29 占位契约刀 E）────────────────────────────────

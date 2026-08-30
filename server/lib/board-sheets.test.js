@@ -122,15 +122,16 @@ describe('nextSpotInSheet：横纸分栏、竖纸往下', () => {
     expect(p.y).toBe(24 + 200 + 24);
   });
 
-  it('⭐ 横纸：这一栏竖着装不下 → 换右边下一栏的顶上，而不是翻页', () => {
+  it('⭐ 横纸：这一列到底了 → 往右挪一块空地，而不是翻页', () => {
     const p = nextSpotInSheet(land, 'p1', { w: 400, h: 700 });
     expect(p).not.toBeNull();
-    expect(p.col).toBe(1);
-    expect(p.x).toBe(SHEET_MARGIN + 432 + 24);   // 栏宽固定 DEFAULT_CHALK_W
-    expect(p.y).toBe(SHEET_MARGIN);              // 新栏从顶上开始
+    expect(p.moved).toBe(true);
+    // 步长跟这件东西的宽度走（不是切死的栏）：机器只帮忙找地方，版面怎么切是 agent 的事
+    expect(p.x).toBe(SHEET_MARGIN + 400 + 24);
+    expect(p.y).toBe(SHEET_MARGIN);              // 那块空地从顶上开始
   });
 
-  it('⭐ 横纸：所有栏都满了才返回 null（该翻页了）', () => {
+  it('⭐ 纸上哪儿都放不下了才返回 null —— 这才叫满（一列到底不算）', () => {
     const full = {
       sheets: { p1: S(0, 0, 1000, 800) },
       objects: {
@@ -146,8 +147,8 @@ describe('nextSpotInSheet：横纸分栏、竖纸往下', () => {
       objects: { deck: { x: 24, y: 24, w: 640, h: 400 } },   // 中心在第 1 栏，身子压到第 2 栏
     };
     const p = nextSpotInSheet(wide, 'p1', { w: 432, h: 100 });
-    expect(p.col).toBe(0);
-    expect(p.y).toBe(24 + 400 + 24);   // 第 1 栏被它压着 → 接它下面，不是挤进第 2 栏顶上
+    expect(p.moved).toBe(false);
+    expect(p.y).toBe(24 + 400 + 24);   // 被它压着 → 接它下面，不是从它右边挤上去
   });
 
   it('比纸还宽的东西没资格进', () => {
@@ -170,7 +171,7 @@ describe('nextSpotInSheet：横纸分栏、竖纸往下', () => {
   it('空纸从版心顶端排', () => {
     const b2 = { sheets: { p1: S(0, 0, 1000, 800) }, objects: {} };
     expect(nextSpotInSheet(b2, 'p1', { w: 400, h: 100 }))
-      .toEqual({ x: SHEET_MARGIN, y: SHEET_MARGIN, col: 0 });
+      .toEqual({ x: SHEET_MARGIN, y: SHEET_MARGIN, moved: false });
   });
 });
 

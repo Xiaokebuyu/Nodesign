@@ -94,6 +94,7 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
       return {
         x: Math.round(p.x), y: Math.round(p.y), resolution, sheetId, opened, clamped, pressed,
         overflowY: p.overflowY || 0,   // 纸从那个 y 往下不够高还差多少（换纸判据）
+        moved: !!p.moved,              // 这一列到底了、往右挪了一块空地
       };
     };
     const sheetOf = (p) => {
@@ -164,7 +165,11 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
       bits.push(`on sheet ${s.id}${s.title ? `（${s.title}）` : ''} at local (${Math.round(l.x)},${Math.round(l.y)})`);
     }
     if (placed.resolution === 'thread') bits.push('under the note it replies to (thread)');
-    else if (placed.resolution === 'flow') bits.push('flowed below the last item');
+    else if (placed.resolution === 'flow') {
+      bits.push(placed.moved
+        ? 'the column you were in ran out — flowed into free space further right on the same sheet'
+        : 'flowed below the last item');
+    }
     else if (placed.resolution === 'slot') bits.push(`in slot "${placed.slot}" (planned block)`);
     else if (placed.resolution === 'at') {
       // 换纸判据（08-29 刀 C）：光说"钳住了"不够 —— 钳住的结果是这条被压到贴着
