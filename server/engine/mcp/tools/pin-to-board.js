@@ -44,7 +44,7 @@ import { currentSheetIdOf } from '../../../lib/sheet-state.js';
  * @param {string} [deps.projectId]
  * @param {import('../../agent/context.js').AgentContext} [deps.ctx]
  */
-export function makePinToBoardTool({ sharedRoot, projectId, ctx }) {
+export function makePinToBoardTool({ sharedRoot, projectId, sessionId = null, ctx }) {
   return tool(
     'pin_to_board',
     `Bring an item to the front of the user's canvas, at a free spot in whatever
@@ -130,7 +130,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         if (slot || at) {
           const sh = (sheet && boardNow.sheets?.[sheet])
             ? { id: sheet, ...boardNow.sheets[sheet] }
-            : currentSheet(boardNow, currentSheetIdOf(null));
+            : currentSheet(boardNow, currentSheetIdOf(sessionId));   // 会话正写的那张优先
           if (!sh) {
             return { content: [{ type: 'text', text: 'No sheet yet — open_sheet first (plan the page, then place things into its blocks).' }], isError: true };
           }

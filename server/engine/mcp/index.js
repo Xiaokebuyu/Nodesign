@@ -343,7 +343,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
 
       // 工作台分区画布（2026-07-27）：agent 协助摆放 —— 把产物/文档/deck 钉进
       // 某 session 的工作区。写 board.json（board-store 单锁）+ 广播 board.updated。
-      makePinToBoardTool({ sharedRoot, projectId, ctx }),
+      makePinToBoardTool({ sharedRoot, projectId, sessionId, ctx }),
 
       // 关系线（2026-08-07）：agent 把「这版改自那版」「这两个是对照」这类
       // **只有它知道**的关系画到画布上。画布知道每个产物是什么，但不知道它们
