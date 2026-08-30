@@ -250,14 +250,17 @@ export const WALL_CSS = `
   white-space: nowrap; }
 .ndw .hand.p { color: var(--pencil); }
 
-/* 直接写在板上的字：不带纸，压在所有纸之下 */
-.ndw .wall { position: absolute; z-index: 1; pointer-events: none; color: ${P('sketch',0.92)}; }
-.ndw .wall.lbl { font: 12px var(--kai); letter-spacing: 0.1em; color: ${P('sketchSoft',0.88)}; }
+/* 直接写在板上的字：不带纸，压在所有纸之下。
+   ⚠️ 这几档跟首页左栏是**同一支笔**（本来就是从两处收成一份的），08-30 起走
+   PAPER_VARS 里的 --sketch* 变量。登录墙不参与白天黑夜，所以永远拿白天那档
+   —— 夜里换粉笔那条规则只作用在 .ndd 里面。 */
+.ndw .wall { position: absolute; z-index: 1; pointer-events: none; color: var(--sketch); }
+.ndw .wall.lbl { font: 12px var(--kai); letter-spacing: 0.1em; color: var(--sketch-soft); }
 .ndw .wall.blk { font: 12px var(--kai); line-height: 2.05; }
 .ndw .wall.blk .t { display: block; font-weight: 700; font-size: 22px; letter-spacing: 0.1em;
-  line-height: 1.3; color: ${P('sketchDeep',0.95)}; }
+  line-height: 1.3; color: var(--sketch-deep); }
 .ndw .wall.blk .rule { display: block; width: 118px; height: 7px; margin: 5px 0 5px; }
-.ndw .wall.blk .n { font-size: 15px; color: ${P('sketchNum',0.95)}; }
+.ndw .wall.blk .n { font-size: 15px; color: var(--sketch-num); }
 .ndw .when { display: block; margin-top: 7px; font: 9.5px var(--kai); letter-spacing: 0.08em;
   color: var(--pencil); }
 

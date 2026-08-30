@@ -205,6 +205,18 @@ export const PAPER_VARS = `
   --pencil: ${PAPER.pencil};
   --hair: ${PAPER.hair};
   --red: ${PAPER.red};
+  /*
+   * 板上那支笔（写在板面上、不在纸上的那些字）。
+   * ⭐ 连 alpha 一起进变量 —— 各处用的 alpha 不一样（0.92 / 0.95 / 0.9 / 0.55），
+   *   而 CSS 变量里只放一个色号的话，夜里换笔就得在每个用点各写一遍。
+   *   「一个用途一个变量」在这儿比「一个颜色一个变量」便宜。
+   * 夜里这一族会被 desk.jsx 整族换成粉笔（台面那时黑到亮度 12-15%）。
+   */
+  --sketch: ${P('sketch', 0.92)};
+  --sketch-deep: ${P('sketchDeep', 0.95)};
+  --sketch-soft: ${P('sketchSoft', 0.9)};
+  --sketch-num: ${P('sketchNum', 0.95)};
+  --sketch-rule: ${P('sketch', 0.55)};
   --kai: ${FONT_KAI};
   --code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --grain: ${GRAIN};

@@ -286,8 +286,20 @@ async function contrastMode() {
       // 笔画太少说明这块根本没字（或者字没被那条 CSS 命中），不算数
       if (glyph.length < 25) continue;
       glyph.sort((p, q) => p - q); paper.sort((p, q) => p - q);
-      const ink = glyph[Math.floor(glyph.length * 0.15)];      // 笔画芯（避开边缘的半透明）
       const bg = paper[Math.floor(paper.length * 0.5)];
+      /*
+       * ⭐ 取笔画芯 = **离纸最远**的那一档，不是固定取最暗的一档。
+       *
+       * ⛔ 第一版写死 15 分位（"字比纸暗"）。08-30 做夜里的粉笔时当场翻车：
+       *   板上是浅字压在暗底上，最暗的 15% 全是抗锯齿的边缘 —— 量出 1.10:1，
+       *   而那时字已经改亮了、肉眼清清楚楚。**判据里藏着"深色字"这个前提。**
+       */
+      const lo = glyph[Math.floor(glyph.length * 0.15)];
+      const hi = glyph[Math.floor(glyph.length * 0.85)];
+      // ⚠️ 挑哪一头**不能看中位数**：笔画少的块里中位数会被非笔画像素带偏，
+      //    当场把深色卡片标题判成"浅字"，量出 1.03:1（真值 9 以上）。
+      //    看两头哪一头离纸更远就取哪头 —— 那才是"笔画芯"的定义。
+      const ink = Math.abs(lo - bg) >= Math.abs(hi - bg) ? lo : hi;
       rows.push({ ...b, ink, bg, n: glyph.length, cr: ratio(ink, bg) });
     }
     if (!rows.length) throw new Error('每一块的笔画像素都太少 —— --on= 大概没选中真正有字的元素');

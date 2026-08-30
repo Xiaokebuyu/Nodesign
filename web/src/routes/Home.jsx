@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { PAPER } from '../lib/paper.js';
 import { Link } from 'react-router-dom';
 import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
 import QuickEntry from './home-quick-entry.jsx';
-import { GAP, alpha } from '../lib/theme.js';
+import { GAP } from '../lib/theme.js';
 import { CSS } from './home-styles.js';
 import { Underline } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
@@ -160,7 +159,7 @@ export default function Home() {
           <RecentQuickSection />
 
           <div className="ndd-head">
-            <h2>{t('我的项目')}<Underline w={1.6} /></h2>
+            <h2>{t('我的项目')}<Underline w={1.6} color="var(--desk-ink)" /></h2>
             <span className="n">{projects.length} 个项目</span>
           </div>
 
@@ -232,8 +231,10 @@ function BoardNote({ projects, summary }) {
     <div className="ndd-note">
       <span className="t">{dateLabel}</span>
       <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
+        {/* ⚠️ 走 style 不走 stroke 属性：var() 在 SVG 呈现属性上不保证解析，
+            在 CSS 属性里才稳。夜里这支笔要跟着整族翻成粉笔。 */}
         <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
-          stroke={alpha(PAPER.sketch, 0.55)} strokeWidth="1.4" strokeLinecap="round" />
+          style={{ stroke: 'var(--sketch-rule)' }} strokeWidth="1.4" strokeLinecap="round" />
       </svg>
       <Counted pattern="手上 {n} 件" n={projects.length} />
       <Counted pattern="这周动过 {n} 件" n={touched} />
@@ -292,7 +293,7 @@ function RecentQuickSection() {
   return (
     <>
       <div className="ndd-head">
-        <h2>{t('最近对话')}<Underline w={1.6} /></h2>
+        <h2>{t('最近对话')}<Underline w={1.6} color="var(--desk-ink)" /></h2>
       </div>
       <div className="ndd-rows">
         {sessions.map((s, i) => (

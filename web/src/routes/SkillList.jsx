@@ -145,12 +145,13 @@ export default function SkillList() {
       <Desk>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: `${GAP.page}px ${GAP.page}px` }}>
         <div style={{ marginBottom: GAP.xl }}>
+          {/* ⚠️ 这一段写在**台面**上，不在纸上 —— 颜色走 --desk-*，夜里跟着翻粉笔 */}
           <h1 style={{
             fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700,
-            color: COLOR.text, marginBottom: GAP.sm,
+            color: 'var(--desk-ink)', marginBottom: GAP.sm,
           }}>我的 Skill</h1>
           <p style={{
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: COLOR.text2,
+            fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: 'var(--desk-ink-2)',
             lineHeight: 1.6, margin: 0,
           }}>
             {/* 2026-08-29：原文写的是「内置的两份管 deck 和站点」，内置早就不止两份了

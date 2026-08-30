@@ -80,13 +80,15 @@ export default function Showcase() {
         <header style={{ marginBottom: GAP.xxl + 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, marginBottom: GAP.sm }}>
             <Sparkles size={18} color={COLOR.gold} />
+            {/* ⚠️ 这一段写在**台面**上，不在纸上 —— 颜色走 --desk-*，夜里跟着翻粉笔。
+                台面夜里会黑到亮度 12-15%，写死 COLOR.text 的话这行标题就没了（量过 2.54:1）。 */}
             <h1 style={{
               fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700,
-              color: COLOR.text, letterSpacing: '-0.01em', margin: 0,
+              color: 'var(--desk-ink)', letterSpacing: '-0.01em', margin: 0,
             }}>{t('我的橱窗')}</h1>
           </div>
           <p style={{
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: COLOR.text2,
+            fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: 'var(--desk-ink-2)',
             lineHeight: 1.6, margin: 0, maxWidth: 680,
           }}>
             {t('做完并且你想留下的东西放在这里，每件背后绑着那次探索固化出来的 skill。下次开新会话点名这个 skill，agent 会带着当初的判断依据起手，而不是从零猜。')}

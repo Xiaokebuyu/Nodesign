@@ -158,7 +158,7 @@ export default {
         <span className="t">八月第二周</span>
         <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
           <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
-            stroke={P('sketch', 0.55)} strokeWidth="1.4" strokeLinecap="round" />
+            style={{ stroke: 'var(--sketch-rule)' }} strokeWidth="1.4" strokeLinecap="round" />
         </svg>
         刚做完 <span className="n">夜班者</span><br />
         39 个镜头<br />

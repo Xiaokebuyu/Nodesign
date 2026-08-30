@@ -23,20 +23,22 @@ ${DESK_CSS}
 @media (max-width: 1320px) { .ndd-side { display: none; } }
 
 /* 直接写在板上的字：不带纸，是记在板子上的账 */
-.ndd-note { color: ${P('sketch',0.92)}; transform: rotate(-0.9deg);
+.ndd-note { color: var(--sketch); transform: rotate(-0.9deg);
   padding-left: 6px; }
 .ndd-note .t { display: block; font: 700 21px var(--kai); letter-spacing: 0.1em;
-  line-height: 1.3; color: ${P('sketchDeep',0.95)}; }
+  line-height: 1.3; color: var(--sketch-deep); }
 .ndd-note .rule { display: block; width: 112px; height: 7px; margin: 5px 0 7px; }
 .ndd-note .l { display: block; font: 12.5px var(--kai); line-height: 2.05; }
-.ndd-note .n { font-size: 15px; color: ${P('sketchNum',0.95)}; }
+.ndd-note .n { font-size: 15px; color: var(--sketch-num); }
 
 .ndd-side .doodle { display: block; width: 138px; margin: 0 auto; opacity: 0.5; }
 .ndd-side .aside { margin-top: 12px; font: 12.5px var(--kai); line-height: 1.95;
-  color: ${P('sketchSoft',0.9)}; transform: rotate(0.7deg); }
+  color: var(--sketch-soft); transform: rotate(0.7deg); }
 
 /* ===== 便签本：一句话开工 ===== */
-.ndd-greet { text-align: center; font: 700 25px var(--kai); letter-spacing: 0.05em;
+/* ⭐ 这两处（问候语、分组标题）是直接写在台面上的 —— 颜色必须显式走 --desk-ink，
+   夜里才跟着翻粉笔。别指望从 .ndd 继承：那条继承链上还挂着一堆摊在纸上的卡片。 */
+.ndd-greet { color: var(--desk-ink); text-align: center; font: 700 25px var(--kai); letter-spacing: 0.05em;
   /* 纸上沿探出来的那两片页签要占掉约 28px，别贴到问候语上 */
   margin-bottom: 30px; }
 /* ===== 页签：设计 / 演出 =====
@@ -271,10 +273,10 @@ ${DESK_CSS}
 /* ===== 分区标题 ===== */
 .ndd-head { display: flex; justify-content: space-between; align-items: baseline;
   margin: 44px 0 24px; }
-.ndd-head h2 { position: relative; margin: 0;
+.ndd-head h2 { position: relative; margin: 0; color: var(--desk-ink);
   font: 700 20px var(--kai); letter-spacing: 0.08em; }
 .ndd-head h2 svg { position: absolute; left: -2%; bottom: -8px; width: 104%; height: 8px; }
-.ndd-head .n { font: 12.5px var(--kai); color: var(--pencil); letter-spacing: 0.06em; }
+.ndd-head .n { font: 12.5px var(--kai); color: var(--desk-pencil); letter-spacing: 0.06em; }
 
 /* ===== 项目卡：钉在板上的纸 ===== */
 .ndd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -395,7 +397,7 @@ ${DESK_CSS}
 .ndd-sheet .retry { margin-top: 20px; padding: 9px 26px; font: 700 14px var(--kai);
   letter-spacing: 0.24em; text-indent: 0.24em;
   background: var(--ink); color: ${COLOR.btnText}; border: none; border-radius: 2px; cursor: pointer; }
-.ndd-quiet { padding: 60px 0; text-align: center; font: 13.5px var(--kai); color: var(--pencil); }
+.ndd-quiet { padding: 60px 0; text-align: center; font: 13.5px var(--kai); color: var(--desk-pencil); }
 
 /* ═════════ 窄屏（2026-08-21 移动端适配）═════════
    只动**尺寸**，不动结构：三栏里两侧的板上笔记 1320 以下本来就收掉了，

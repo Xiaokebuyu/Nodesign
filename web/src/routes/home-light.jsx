@@ -44,6 +44,33 @@ export function useDayMode() {
 const still = () => typeof window !== 'undefined'
   && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+/** 夜色压到多深就算「夜里」（sunAt 的 night 是 0→1 的连续量） */
+const NIGHT_AT = 0.5;
+/** 自动挡自己会跨过黄昏。这是换一次颜色不是动画，一分钟看一眼绰绰有余。 */
+const WATCH_MS = 60_000;
+
+/**
+ * ⭐ 把「现在是不是夜里」写到 `<html>` 上 —— CSS 才够得着这件事。
+ *
+ * 光的状态本来只活在 localStorage 和这个模块里，着色器每帧现读。可是台面一黑，
+ * **写在板面上的深色笔就跟着灭了**（左栏那本账夜里 1.64:1），要救它得换成粉笔，
+ * 而换笔是一条 CSS 规则的事 —— 规则得有个能挂的钩子。
+ *
+ * ⚠️ 卸载时把属性摘掉：从首页登出走到登录墙，那块板不参与白天黑夜，
+ *   属性留着的话它会莫名其妙地按夜里那套算。
+ */
+function useNightFlag(m) {
+  useEffect(() => {
+    const apply = () => {
+      const night = lightAt(getMode()).night > NIGHT_AT;
+      document.documentElement.dataset.ndLight = night ? 'night' : 'day';
+    };
+    apply();
+    const id = setInterval(apply, WATCH_MS);
+    return () => { clearInterval(id); delete document.documentElement.dataset.ndLight; };
+  }, [m]);
+}
+
 /**
  * 树影 / 台灯。两块画布是 `.ndd` 的兄弟节点，靠 z-index 一块压在内容下、
  * 一块压在内容上（见 home-sun.js 里的 CSS）。
@@ -57,6 +84,7 @@ export function Canopy() {
   const [gl, setGl] = useState(true);
   const m = useDayMode();
   const quiet = still();
+  useNightFlag(m);
 
   useEffect(() => {
     if (!under.current || !over.current) return undefined;

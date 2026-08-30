@@ -34,7 +34,9 @@ export function Clip({ cx, className = 'clip' }) {
 export function Underline({ w = 2, color = COLOR.text, opacity = 0.8 }) {
   return (
     <svg viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true">
-      <path d="M3 4 Q 30 2, 55 4.5 T 97 3.5" fill="none" stroke={color}
+      {/* ⚠️ stroke 走 style 不走属性：调用方可能传 var(--desk-ink)（台面上的那些
+          标题夜里要翻成粉笔），而 var() 在 SVG 呈现属性上不保证解析。 */}
+      <path d="M3 4 Q 30 2, 55 4.5 T 97 3.5" fill="none" style={{ stroke: color }}
         strokeWidth={w} strokeLinecap="round" opacity={opacity} />
     </svg>
   );
