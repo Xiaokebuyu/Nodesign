@@ -28,10 +28,13 @@ describe('sheetSpotToWorld', () => {
       .toEqual({ x: 100 + SHEET_MARGIN, y: 1100 + SHEET_MARGIN });
   });
 
-  it('⭐ 没有 at（agent 让它顺排）→ null，调用方退回视口空地', () => {
-    expect(sheetSpotToWorld(sheets, { sheet: 'p1' })).toBeNull();
-    expect(sheetSpotToWorld(sheets, null)).toBeNull();
-    expect(sheetSpotToWorld(sheets, { at: { x: 1 } })).toBeNull();
+  // ⚠️ 08-29 刀 F 改了这条的答案：没点名位置**不再**返回 null —— 那是顺排，
+  // 前端照服务端同一条规则算得出来（见下方"顺排预测"一组）。
+  it('⭐ 没有 at → 走顺排预测，不再是 null', () => {
+    expect(sheetSpotToWorld(sheets, { sheet: 'p1' }, {})).toMatchObject({ flow: true });
+    expect(sheetSpotToWorld(sheets, null, {})).toMatchObject({ flow: true });
+    // at 只写了一半（x 有 y 没有）也当没给 —— 半截坐标绝不能拿来定位
+    expect(sheetSpotToWorld(sheets, { at: { x: 1 } }, {})).toMatchObject({ flow: true });
   });
 
   it('⭐ 一张纸都没有 → null（别把字画到原点去）', () => {
@@ -80,9 +83,62 @@ describe('sheetSpotToWorld 认版位', () => {
     expect(r.y).toBe(224 + 100 + SHEET_MARGIN);
   });
 
-  it('版位名不存在 → 退回 at；两个都没有就 null', () => {
+  it('版位名不存在 → 退回 at；两个都没有就退到顺排', () => {
     expect(sheetSpotToWorld(planned, { slot: '没有', sheet: 'p1', at: { x: 10, y: 10 } }))
       .toEqual({ x: 100 + SHEET_MARGIN + 10, y: 200 + SHEET_MARGIN + 10 });
-    expect(sheetSpotToWorld(planned, { slot: '没有', sheet: 'p1' })).toBeNull();
+    expect(sheetSpotToWorld(planned, { slot: '没有', sheet: 'p1' }, {})).toMatchObject({ flow: true });
+  });
+});
+
+/**
+ * 顺排预测（2026-08-29 刀 F）。站主看到的现象：「流式完毕之后再移动」。
+ *
+ * 根因不在流式通道，在**最常见的那条调用形态没有位置**：agent 只给 text 时服务端
+ * 按纸内顺排落位，而前端此前无从预知，只能把字写在视口一块空地上、等落盘再跳。
+ * 现在前端照服务端同一条规则（接最低那件往下）自己算。
+ */
+describe('sheetSpotToWorld 顺排预测', () => {
+  const sheets = { p1: { x: 100, y: 200, w: 1000, h: 800, at: '2026-08-29T01:00:00Z' } };
+  const inner = { x: 100 + SHEET_MARGIN, y: 200 + SHEET_MARGIN };
+
+  it('⭐ 空纸 + 什么都没点名 → 版心左上角（这就是服务端会放的地方）', () => {
+    expect(sheetSpotToWorld(sheets, {}, {})).toMatchObject({ x: inner.x, y: inner.y, flow: true });
+  });
+
+  it('⭐ 纸上已有东西 → 接最低那件往下（gap 24）', () => {
+    const layout = {
+      a: { x: 124, y: 224, w: 432, h: 100 },
+      b: { x: 124, y: 348, w: 432, h: 60 },
+    };
+    expect(sheetSpotToWorld(sheets, {}, layout).y).toBe(348 + 60 + 24);
+  });
+
+  it('纸外的东西不算数（中心点判据）', () => {
+    const layout = { far: { x: 5000, y: 5000, w: 100, h: 100 } };
+    expect(sheetSpotToWorld(sheets, {}, layout).y).toBe(inner.y);
+  });
+
+  it('没量过尺寸的条目跳过 —— 宁可少算也不错算', () => {
+    const layout = { noH: { x: 124, y: 400 } };
+    expect(sheetSpotToWorld(sheets, {}, layout).y).toBe(inner.y);
+  });
+
+  it('⭐ 排到纸底了 → null（服务端会翻新纸，那张纸还不存在）', () => {
+    const layout = { tall: { x: 124, y: 224, w: 432, h: 900 } };
+    expect(sheetSpotToWorld(sheets, {}, layout)).toBeNull();
+  });
+
+  it('⭐ 接楼（reply_to）→ 被回应那条的正下方，左缘对齐它', () => {
+    const layout = { 'notes/板书/x.md': { x: 300, y: 400, w: 432, h: 80 } };
+    expect(sheetSpotToWorld(sheets, { reply_to: 'notes/板书/x.md' }, layout))
+      .toEqual({ x: 300, y: 400 + 80 + 24 });
+  });
+
+  it('⭐ 算不准的三种退回空地：贴放 / chain / 批内第二条起', () => {
+    expect(sheetSpotToWorld(sheets, { near: 'deck:a.html', side: 'right' }, {})).toBeNull();
+    expect(sheetSpotToWorld(sheets, { chain: true }, {})).toBeNull();
+    expect(sheetSpotToWorld(sheets, { batchIdx: 1 }, {})).toBeNull();
+    // 批内但点名了位置的照算不误
+    expect(sheetSpotToWorld(sheets, { batchIdx: 2, at: { x: 0, y: 0 } }, {})).toBeTruthy();
   });
 });

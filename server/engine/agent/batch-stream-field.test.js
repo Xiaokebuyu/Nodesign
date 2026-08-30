@@ -46,10 +46,11 @@ describe('pickSpot', () => {
     expect(pickSpot({ at: { x: 100, y: 240 } }, FIELDS)).toEqual({ at: { x: 100, y: 240 } });
   });
 
-  it('⭐ at 只写了一半 → 不收（宁可没有框，也不要错位置的框）', () => {
-    expect(pickSpot({ at: { x: 100 } }, FIELDS)).toBeNull();
-    expect(pickSpot({ at: {} }, FIELDS)).toBeNull();
-    expect(pickSpot({ at: 'p1' }, FIELDS)).toBeNull();
+  it('⭐ at 只写了一半 → 不收那个坐标（宁可没有框，也不要错位置的框）', () => {
+    // 半截数字是合法数字，看不出破绽 —— 所以 x/y 必须都齐
+    expect(pickSpot({ at: { x: 100 } }, FIELDS).at).toBeUndefined();
+    expect(pickSpot({ at: {} }, FIELDS).at).toBeUndefined();
+    expect(pickSpot({ at: 'p1' }, FIELDS).at).toBeUndefined();
   });
 
   it('纸名 / 宽度 / 锚点都带上（框的宽和落点都要它们）', () => {
@@ -57,9 +58,15 @@ describe('pickSpot', () => {
       .toEqual({ at: { x: 1, y: 2 }, sheet: 'p2', width: 18, near: 'deck:a.html', side: 'below' });
   });
 
-  it('一个位置字段都没有（agent 没指定位置，顺排）→ null', () => {
-    expect(pickSpot({ text: '正文' }, FIELDS)).toBeNull();
-    expect(pickSpot({}, FIELDS)).toBeNull();
+  /**
+   * ⚠️ 08-29 刀 F 改了这条的答案：一个位置字段都没有时返回**空对象不是 null**。
+   * "什么都没点名"本身就是位置信息 —— 那是纸内顺排，前端算得出落点。返回 null
+   * 的话这条事件根本不发，而顺排恰恰是最常见的调用形态（站主看到的
+   * "流式完毕之后再移动"就是这么来的）。
+   */
+  it('⭐ 一个位置字段都没有 → 空对象（= 顺排，让前端自己算），只有非对象入参才 null', () => {
+    expect(pickSpot({ text: '正文' }, FIELDS)).toEqual({});
+    expect(pickSpot({}, FIELDS)).toEqual({});
     expect(pickSpot(null, FIELDS)).toBeNull();
   });
 

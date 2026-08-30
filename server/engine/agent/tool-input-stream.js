@@ -39,12 +39,12 @@ export const TOOL_INPUT_STREAM_FIELDS = {
   Write: 'content',
   // 板书直播（2026-08-25 流式路 A）：write_on_board 的 text 逐 token 流到画布上
   // 的舞台粉笔卡（StageLayer chalk 档）—— 粉笔字在用户眼前一行行长出来。
-  mcp__nodesign__write_on_board: { field: 'text', spot: ['slot', 'at', 'sheet', 'width', 'near', 'side'] },
+  mcp__nodesign__write_on_board: { field: 'text', spot: ['slot', 'at', 'sheet', 'width', 'near', 'side', 'reply_to', 'chain'] },
   // board_batch 批内嵌套（08-25 用户报「流式名存实亡」：skill 教的是一章一次
   // batch，正文藏在 actions[].input.text 里，顶层字段抽取器抓不到 —— 等于亲手
   // 教了大家绕开流式）。batch 档抽**最新一条** write_on_board 动作的 text，
   // 换动作时发 reset 让前端另起一张。
-  mcp__nodesign__board_batch: { batch: 'write_on_board', field: 'text', spot: ['slot', 'at', 'sheet', 'width', 'near', 'side'] },
+  mcp__nodesign__board_batch: { batch: 'write_on_board', field: 'text', spot: ['slot', 'at', 'sheet', 'width', 'near', 'side', 'reply_to', 'chain'] },
 };
 const TOOL_INPUT_THROTTLE_MS = 120;
 
@@ -70,7 +70,14 @@ export function latestBatchField(obj, toolName, field) {
 /**
  * 位置字段抽取（占位契约刀 C）。只在**目标字段已经出现**时调用 —— 那时排在它
  * 前面的位置字段都已闭合，数字不会是流到一半的半截值。
- * @returns {object|null} 有什么给什么；一个都没有（agent 没指定位置）返回 null
+ *
+ * ⚠️ 一个位置字段都没有时返回的是**空对象不是 null**（2026-08-29 刀 F）：
+ * "什么都没点名" 本身就是一条位置信息 —— 那是**纸内顺排**，前端照服务端同一条
+ * 规则算得出落点。返回 null 的话这条事件根本不发，前端只能把字先写在视口一块
+ * 空地上、等落盘再跳过去（站主看到的"流式完毕之后再移动"）。而顺排恰恰是最
+ * 常见的调用形态。
+ *
+ * @returns {object|null} null 只在入参根本不是对象时出现
  */
 export function pickSpot(input, fields) {
   if (!input || typeof input !== 'object') return null;
@@ -85,9 +92,9 @@ export function pickSpot(input, fields) {
       }
       continue;
     }
-    if (typeof v === 'string' || Number.isFinite(v)) out[k] = v;
+    if (typeof v === 'string' || Number.isFinite(v) || typeof v === 'boolean') out[k] = v;
   }
-  return Object.keys(out).length ? out : null;
+  return out;
 }
 
 export function pumpToolInputStream(ctx, st, flush) {
@@ -112,7 +119,7 @@ export function pumpToolInputStream(ctx, st, flush) {
   // 位置（刀 C）：目标字段已出现 = 排在它前面的位置字段都闭合了，这一拍可以定框。
   // 一条动作只发一次（batch 换动作时 spotSent 已随 reset 归位）。
   const spot = (!st.spotSent && st.spot && host?.[st.field] !== undefined)
-    ? pickSpot(host, st.spot) : null;
+    ? { ...pickSpot(host, st.spot), ...(st.batch ? { batchIdx: st.actionIdx } : {}) } : null;
   // file_path 只在确定流完后才取：容错解析会把半截字符串也带出来，第一拍常
   // 截在路径中间（e2e 撞过：抽到项目目录名 → 前端物件寻址指错）。目标字段的
   // key 出现（键序在 file_path 之后）或对象已有第二个键 = 路径已闭合。

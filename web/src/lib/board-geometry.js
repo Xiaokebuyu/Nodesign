@@ -82,8 +82,48 @@ export function sheetSpotToWorld(sheets, spot, layout = null) {
     return { x: Math.round(rect.x), y: Math.round(bottom + SLOT_GAP), w: sl.w };
   }
 
-  if (!spot?.at || !Number.isFinite(spot.at.x) || !Number.isFinite(spot.at.y)) return null;
-  return { x: Math.round(s.x + SHEET_MARGIN + spot.at.x), y: Math.round(s.y + SHEET_MARGIN + spot.at.y) };
+  // agent 点名了纸内坐标
+  if (spot?.at && Number.isFinite(spot.at.x) && Number.isFinite(spot.at.y)) {
+    return { x: Math.round(s.x + SHEET_MARGIN + spot.at.x), y: Math.round(s.y + SHEET_MARGIN + spot.at.y) };
+  }
+
+  // 下面三种算不准，宁可退回临时空地也不画错地方：
+  //  · 贴放（near+side）要先解析锚点
+  //  · chain 接的是"同 tag 里你自己最新那条"，前端不知道是哪条
+  //  · 批内第二条起（batchIdx>0）：一批里所有条的入参都在任何一条落盘**之前**
+  //    就流完了，顺排预测只会把它们全算到同一个位置上
+  if (spot?.near && spot?.side) return null;
+  if (spot?.chain) return null;
+  if (Number.isFinite(spot?.batchIdx) && spot.batchIdx > 0 && !spot?.slot && !spot?.at) return null;
+
+  const inner = { x: s.x + SHEET_MARGIN, y: s.y + SHEET_MARGIN, w: s.w - SHEET_MARGIN * 2, h: s.h - SHEET_MARGIN * 2 };
+  const bottomOf = (e) => e.y + (e.h || 0);
+
+  // 接楼（reply_to）：被回应那条的正下方，左缘对齐它（服务端 placeThread 同规则）
+  if (spot?.reply_to) {
+    const parent = (layout || {})[spot.reply_to];
+    if (parent && Number.isFinite(parent.x)) {
+      return { x: Math.round(parent.x), y: Math.round(bottomOf(parent) + SLOT_GAP) };
+    }
+    return null;
+  }
+
+  // 什么都没给 = 纸内顺排（服务端 nextSpotInSheet 同规则：接最低那件往下）。
+  // ⚠️ 这一支是最常见的调用形态 —— 没有它，agent 每次不点名位置，字就只能先画在
+  // 视口一块空地上、写完再跳到真位置（站主看到的"流式完毕之后再移动"）。
+  // 只用 layout 里带 w/h 的条目：没量过的物件算不进最低点，宁可少算也不错算。
+  let bottom = inner.y - SLOT_GAP;
+  let seen = 0;
+  for (const e of Object.values(layout || {})) {
+    if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y) || !Number.isFinite(e?.h)) continue;
+    const cx = e.x + (e.w || 0) / 2; const cy = e.y + (e.h || 0) / 2;
+    if (cx < inner.x || cx >= inner.x + inner.w || cy < inner.y || cy >= inner.y + inner.h) continue;
+    bottom = Math.max(bottom, bottomOf(e)); seen += 1;
+  }
+  const y = Math.round(bottom + SLOT_GAP);
+  // 这张纸已经排到底了 → 服务端会翻到新纸，那张纸还不存在，前端算不出来
+  if (y >= inner.y + inner.h) return null;
+  return { x: Math.round(inner.x), y, flow: true, membersSeen: seen };
 }
 export const STAGE_CARD_W = 560;          // 舞台卡宽度（板内坐标系）
 
