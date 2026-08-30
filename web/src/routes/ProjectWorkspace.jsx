@@ -2050,6 +2050,7 @@ export default function ProjectWorkspace() {
               }}
               onOpenProjectPanel={(key) => boardApiRef.current?.openProjectPanel(key)}
               projectBand={boardUi?.projectBand || null}
+              showArchive={!!boardUi?.showArchive} onToggleArchive={() => boardApiRef.current?.toggleArchive?.()}
             />
           </div>
         </>

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, ChevronsUpDown, Focus, Group, Check, Download, Eraser, MessageSquarePlus, Archive } from 'lucide-react';
-import RollLayer, { useRollActions, ArchiveChip } from './RollLayer.jsx';
+import RollLayer, { useRollActions } from './RollLayer.jsx';
 import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
@@ -1490,6 +1490,7 @@ export default function BoardCanvas({
       // 顶栏的「⋯」——它们是**设置**不是产物，占着画布最好的一条横带每天
       // 看却几乎不点。面板本身没动，只是换了个入口。
       openProjectPanel: (key) => setProjectPanel(key),
+      toggleArchive,   // 档案面显隐：08-30 从画布右上角搬进「⋯」，见 RollLayer.jsx 的墓碑
       /**
        * 就地标注发出的瞬间把精灵放到目标上（E4）：真事件（run.start /
        * file_changed）要过服务端一圈才回来，等它们精灵才动，"收到指令立刻
@@ -1533,13 +1534,14 @@ export default function BoardCanvas({
       // 项目级四件套的一行摘要 —— 卡片撤出画布后，这几句话跟着入口一起
       // 搬进顶栏的「⋯」，不能因为换了个地方就把"里面有没有东西"弄丢
       projectBand: bandSummaries,
+      showArchive,   // 菜单据此渲染"显示/收起档案卡"
     };
     // 布局每次变更都换新引用（拖拽期间逐帧）—— 序列化对比，内容没变不上报
     const key = JSON.stringify(ui);
     if (key === lastUiRef.current) return;
     lastUiRef.current = key;
     onUiState?.(ui);
-  }, [onUiState, winDir, taskTitles, tasks, bandSummaries]);
+  }, [onUiState, winDir, taskTitles, tasks, bandSummaries, showArchive]);
 
   /**
    * 画布的工具组。**这里不渲染工具栏** —— 全项目只有一条，活在 CanvasFrame，
@@ -2018,8 +2020,6 @@ export default function BoardCanvas({
             选中单件在旁边浮一条板书样按钮条。用户拍板撤掉 —— 单击的语义改成
             **直接开标注**（最常用的动作），其余动作仍在 hover 工具条上。 */}
 
-        {/* 档案钮（屏幕空间，右上角）：件在 RollLayer.jsx（画布收纳同族） */}
-        {!deckOpen && !winDir && <ArchiveChip showArchive={showArchive} onToggle={toggleArchive} />}
 
         {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
             全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。

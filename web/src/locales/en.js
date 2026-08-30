@@ -127,6 +127,12 @@ export default {
   '还没出东西': 'Nothing made yet',
 
   '橱窗': 'Gallery',
+  // ⋯ 菜单里的档案面开关（2026-08-30 从画布右上角搬进来）
+  '显示档案卡': 'Show archive cards',
+  '收起档案卡': 'Hide archive cards',
+  '根 CLAUDE.md 与 记忆/ —— agent 的项目档案和长期记忆，默认不上画布':
+    'Root CLAUDE.md and the memory folder — the agent\u2019s project file and long-term memory. Off the board by default.',
+  '画布': 'Board',
   // 顶栏那枚光线开关（routes/home-light.jsx）
   '光线': 'Light',
   '跟着时间': 'Follow the clock',

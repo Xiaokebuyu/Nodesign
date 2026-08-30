@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Edit2, Copy, Trash2, History, Code2, Camera, ArrowUpRight, RotateCcw,
-  ScrollText, Files, Clapperboard } from 'lucide-react';
+  ScrollText, Files, Clapperboard, Archive } from 'lucide-react';
 import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_SANS, alpha } from '../../lib/theme.js';
 import { t } from '../../lib/i18n.js';
 
@@ -20,6 +20,9 @@ export default function ProjectActionsMenu({
   // 项目级四件套（2026-08-07 从画布顶带搬进来）。它们是**设置**不是产物：
   // 每天都在看却几乎不点，却占着画布最好的一条横带。
   onOpenProjectPanel = null, projectBand = null,
+  // 档案面的显隐（2026-08-30 从画布右上角那颗「档案」钮搬进来）。跟上面四件套
+  // 同一个理由：它是**设置**不是产物，一天看八百遍却几乎不点，占着画布右上角。
+  showArchive = false, onToggleArchive = null,
 }) {
   const ref = useRef(null);
 
@@ -60,6 +63,15 @@ export default function ProjectActionsMenu({
               onClick={() => { onOpenProjectPanel(p.key); onClose?.(); }}
             />
           ))}
+          {onToggleArchive && (
+            <Item
+              icon={<Archive size={12} />}
+              label={showArchive ? t('收起档案卡') : t('显示档案卡')}
+              title={t('根 CLAUDE.md 与 记忆/ —— agent 的项目档案和长期记忆，默认不上画布')}
+              onClick={() => { onToggleArchive(); onClose?.(); }}
+              subtle={t('画布')}
+            />
+          )}
           <div style={{ height: 1, background: COLOR.borderLt, margin: `${GAP.xs}px ${GAP.sm}px` }} />
         </>
       )}

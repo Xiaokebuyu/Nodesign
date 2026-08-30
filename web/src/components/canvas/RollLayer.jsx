@@ -70,30 +70,12 @@ export default function RollLayer({ rolls, layout, onUnroll }) {
   ));
 }
 
-/**
- * 档案钮（2026-08-27 档案面；与卷卡同为"画布收纳"件，随棘轮拆件同住）。
- * 根 CLAUDE.md / 记忆/ 默认不上画布 —— 右上角这颗板书样文字钮显形/收起。
+/*
+ * ⚠️ 这里曾有 ArchiveChip：画布右上角那颗「档案」文字钮，管根 CLAUDE.md 与
+ * 记忆/ 的显隐。2026-08-30 用户拍板搬进顶栏的「⋯」，跟 08-07 那次
+ * 「项目级四件套从画布顶带搬进 ⋯」是同一件事 —— 它是设置不是产物。
+ *
+ * **能力没删，换了个入口**：状态仍是 BoardCanvas 的 showArchive（存 localStorage，
+ * 按项目分），切换走 apiRef.toggleArchive，菜单读 uiState.showArchive 决定
+ * 显示「显示档案卡」还是「收起档案卡」。
  */
-export function ArchiveChip({ showArchive, onToggle }) {
-  return (
-    <button
-      type="button" data-board-action
-      title={showArchive
-        ? '收起项目档案（根 CLAUDE.md 与 记忆/）'
-        : '显示项目档案（根 CLAUDE.md 与 记忆/ —— agent 的项目档案和长期记忆）'}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={onToggle}
-      style={{
-        position: 'absolute', top: 12, right: 12, zIndex: 320,
-        fontFamily: TEXT_FONT_CSS.kai, fontSize: 13, lineHeight: 1.4, cursor: 'pointer',
-        padding: '3px 10px', borderRadius: 8,
-        border: `1px solid ${alpha(PAPER.ink, showArchive ? 0.55 : 0.28)}`,
-        background: showArchive ? PAPER.paper : 'transparent',
-        color: PAPER.ink, opacity: showArchive ? 1 : 0.72,
-        transform: 'rotate(-0.4deg)',
-        boxShadow: showArchive ? PAPER_SHADOW.near : 'none',
-        whiteSpace: 'nowrap',
-      }}
-    >档案</button>
-  );
-}
