@@ -259,7 +259,7 @@ export default function ChatPanel({
           fontSize: FONT_SIZE.md,
           color: COLOR.sub,
           letterSpacing: '0.04em',
-          background: 'rgba(45, 36, 24, 0.04)',
+          background: 'rgba(43,33,23, 0.04)',
           borderTop: `1px dashed ${COLOR.borderLt}`,
           display: 'flex', alignItems: 'center', gap: GAP.sm,
         }}>

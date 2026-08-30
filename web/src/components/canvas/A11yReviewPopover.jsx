@@ -51,7 +51,7 @@ export default function A11yReviewPopover({ anchorRef, onClose, iframeDoc }) {
         background: COLOR.bgWhite,
         borderRadius: 2,
         boxShadow:
-          '0 2px 4px rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.08), 0 24px 48px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8)',
+          '0 2px 4px rgba(43,33,23,0.04), 0 8px 20px rgba(43,33,23,0.08), 0 24px 48px rgba(43,33,23,0.10), inset 0 1px 0 rgba(255,254,246,0.8)',
         zIndex: 60,
         overflow: 'hidden',
       }}
@@ -112,7 +112,7 @@ function CheckRow({ kind, label, hint, count }) {
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: GAP.sm,
       padding: `${GAP.xs}px ${GAP.sm}px`,
-      background: isOk ? 'transparent' : 'rgba(0,0,0,0.02)',
+      background: isOk ? 'transparent' : 'rgba(43,33,23,0.02)',
       borderRadius: RADIUS.sm,
     }}>
       <Icon size={12} color={color} style={{ marginTop: GAP.xxs, flexShrink: 0 }} />

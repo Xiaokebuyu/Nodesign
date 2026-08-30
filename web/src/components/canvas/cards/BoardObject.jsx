@@ -122,7 +122,7 @@ function BoardObject({
     // 谱系收叠的纸叠感：两层偏移的「纸边」用 box-shadow 画（填充色一层 +
     // 描边色一层），画在元素底下不占 DOM、不吃指针、不压自家边框
     boxShadow: (() => {
-      const paper = isInk ? null : (hover ? '0 4px 14px rgba(0,0,0,0.12)' : '0 1px 4px rgba(0,0,0,0.05)');
+      const paper = isInk ? null : (hover ? '0 4px 14px rgba(43,33,23,0.12)' : '0 1px 4px rgba(43,33,23,0.05)');
       const stack = (stackCount > 0 && !stackOpen && !isInk)
         ? `4px 4px 0 -1px ${COLOR.bgCard}, 4px 4px 0 0 ${COLOR.borderLt}, 8px 8px 0 -1px ${COLOR.bgCard}, 8px 8px 0 0 ${COLOR.borderLt}`
         : null;
@@ -160,7 +160,7 @@ function BoardObject({
     // 有东西正摞过来 → 亮一圈，示意"松手就把你俩归到一个文件夹里"
     ...(groupTarget ? {
       border: `1px solid ${CANVAS.brass}`,
-      boxShadow: `0 0 0 3px ${alpha(CANVAS.brass, 0.22)}, 0 8px 20px rgba(0,0,0,0.14)`,
+      boxShadow: `0 0 0 3px ${alpha(CANVAS.brass, 0.22)}, 0 8px 20px rgba(93,74,44,0.154)`,
     } : null),
     // agent 改布局（pin / board.updated 重拉 / 自动入座）时位置变化以滑动呈现；
     // 用户拖拽期间关掉（要逐帧跟手）—— dragActive 经 animateLayout 传进来

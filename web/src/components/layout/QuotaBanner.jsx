@@ -157,7 +157,7 @@ export default function QuotaBanner() {
             style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               width: 18, height: 18, padding: 0, flexShrink: 0,
-              background: 'rgba(255,255,255,0.16)', color: COLOR.bgWhite,
+              background: 'rgba(255,254,246,0.16)', color: COLOR.bgWhite,
               border: 'none', borderRadius: RADIUS.sm, cursor: 'pointer',
             }}
           ><X size={12} /></button>

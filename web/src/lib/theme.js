@@ -90,12 +90,24 @@ export const RADIUS = {
   round: '50%',
 };
 
-/** 阴影体系 —— 只收编出现 ≥2 次的写法，孤例先留在原地 */
+/**
+ * 阴影体系 —— 只收编出现 ≥2 次的写法，孤例先留在原地。
+ *
+ * 2026-08-29 暖化：这一组原来是 `rgba(0,0,0,x)`，而 paper.js 的 PAPER_SHADOW 用的是
+ * 暖褐 `rgba(93,74,44,x)` —— **同一件事（东西压在纸上的影子）两份算法**，于是站点上
+ * 一直有两种影子：纸族的是暖的，弹窗菜单那族是灰的，压在同一张暖纸上后者发闷。
+ * 统一到暖褐这一份，alpha 上浮约一成补回亮度差（#5D4A2C 相对亮度 ≈0.075，
+ * 在纸底上同 alpha 会比纯黑淡那么一点）。
+ *
+ * ⚠️ 这是**颜色**的收编，不是形状的。各组件里手写的 `0 8px 24px …` 那些没有改成
+ * 引用本组 —— 那是另一件事，改形状要逐处看层级，值的统一先落地。
+ */
+const SH = (a) => `rgba(93,74,44,${a})`;
 export const SHADOW = {
-  crispSm: "0 1px 2px rgba(0,0,0,0.2)",                              // 小徽章/浮点
-  crisp:   "0 1px 3px rgba(0,0,0,0.2)",                              // 小浮层
-  pop:     "0 8px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)",   // 弹出卡
-  menu:    "0 12px 32px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)",  // 下拉菜单
+  crispSm: `0 1px 2px ${SH(0.22)}`,                          // 小徽章/浮点
+  crisp:   `0 1px 3px ${SH(0.22)}`,                          // 小浮层
+  pop:     `0 8px 24px ${SH(0.13)}, 0 2px 6px ${SH(0.07)}`,   // 弹出卡
+  menu:    `0 12px 32px ${SH(0.13)}, 0 2px 6px ${SH(0.07)}`,  // 下拉菜单
 };
 
 /** 字号体系（px）。xxs=9 是实际存在的第 10 号字级（此前 29 处硬写） */
@@ -143,12 +155,31 @@ export const CHROME = {
 
 // ─── 领域 Token ───────────────────────────────────
 
-/** 终端/工具执行深色区（StageLayer 工具卡与 admin 日志同源） */
+/**
+ * 终端/工具执行深色区（StageLayer 工具卡与 admin 日志同源）。
+ *
+ * 2026-08-29 扩充：原来只有四个值，而深色卡实际用着十几个 —— 边框、图标、
+ * 三种状态的字和底全硬写在 StageLayer 里。压在深色上的状态色跟压在纸上的
+ * 不是同一档（纸上那套在墨底上会糊掉），所以它们是 TERM 的成员而不是
+ * COLOR.error/success 的复用。
+ */
 export const TERM = {
   bg:  "#211e17",
   ink: "#e8e2d2",
   ok:  "#8fc79a",
   err: "#e09a94",
+  /** 卡的边框：跑挂了 / 跑通了 */
+  edgeErr: "#b0554f",
+  edgeOk:  "#4f8f5b",
+  /** 卡头那枚图标 */
+  icon:    "#c8b98c",
+  /** 报错条：底用边框色加透，字比它亮一档 */
+  errText: "#dba49f",
+  /** 跑完 / 正在跑 的字 */
+  okText:  "#cfe3cf",
+  runText: "#d9e4c9",
+  /** 深色卡自己的投影（比纸的影子更沉） */
+  shade:   "#282010",
 };
 
 /**
@@ -193,13 +224,15 @@ export const BANNER = {
 // ─── 组件级 Token ─────────────────────────────────
 
 // Detail modal — 锚定 SkillDetail
+// 2026-08-29：遮罩和影子跟着 SHADOW 一起暖化。遮罩用 PAPER.scrim 同一个值
+// （墨加透，不是中性黑）—— 压暗一张暖纸用中性黑会把它压成灰的。
 export const MODAL = {
   zIndex: 600,
-  overlay: "rgba(0,0,0,0.35)",
+  overlay: "rgba(43,33,23,0.38)",
   blur: "blur(3px)",
   radius: 16,
   width: 340,
-  shadow: "0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)",
+  shadow: `0 12px 40px ${SH(0.13)}, 0 4px 12px ${SH(0.07)}`,
   scaleHidden: "scale(0.92) translateY(20px)",
   scaleVisible: "scale(1) translateY(0)",
   transition: "transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)",
@@ -210,7 +243,7 @@ export const MODAL = {
 // ThreeColumnLayout 中间 main 用 STAGE.bg + padding 形成呼吸空间。
 export const STAGE = {
   bg: "#F5F0E5",                                  // 台面四周那圈呼吸，比台面浅一档
-  shadow: "0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.05)",
+  shadow: `0 8px 32px ${SH(0.11)}, 0 2px 8px ${SH(0.06)}`,
   borderWarm: "rgba(190, 160, 130, 0.15)",        // 暖棕极淡边
   radius: 12,
   pad: 12,                                        // stage 周围呼吸（main padding）

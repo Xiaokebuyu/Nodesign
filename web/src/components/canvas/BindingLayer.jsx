@@ -153,7 +153,7 @@ export default function BindingLayer({
               <g key={i} transform={`translate(${p.x} ${p.y})`}>
                 <circle r={5.2} fill="rgba(43,33,23,0.18)" transform="translate(-0.8 1.4)" />
                 <circle r={4.6} fill={hot ? BINDING_ACCENT : PAPER.red} stroke={PAPER.ink} strokeWidth={0.8} />
-                <circle r={1.3} cx={-1.2} cy={-1.2} fill="rgba(255,255,255,0.75)" />
+                <circle r={1.3} cx={-1.2} cy={-1.2} fill="rgba(255,254,246,0.75)" />
               </g>
             ))}
             {/* 线上的字：手画的线常显（restLabel），悬停放大并补出处。

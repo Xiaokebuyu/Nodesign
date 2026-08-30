@@ -98,7 +98,7 @@ function RoleNameTag({ name, color, waiting, myTurn = false, onClick }) {
       border: `${myTurn ? 2 : 1}px solid ${color}`,
       borderRadius: 3,
       transform: 'rotate(-1.2deg)',
-      boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+      boxShadow: '0 1px 2px rgba(93,74,44,0.132)',
       whiteSpace: 'nowrap',
       opacity: waiting ? 0.72 : 1,
     }}>

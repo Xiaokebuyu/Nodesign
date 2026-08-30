@@ -117,8 +117,8 @@ function ControlsBlock({ source, origin }) {
           onClick={(e) => fire(e, it, i)} title={dead ? '已过期' : it.trigger ? '发出（连同攒着的一起）' : it.prompt} style={{
             font: 'inherit', fontSize: '0.92em', lineHeight: 1.4, cursor: dead ? 'default' : 'pointer',
             padding: `3px 10px`, borderRadius: RADIUS.md,
-            border: `1px ${dead ? 'dashed' : 'solid'} ${alpha('#2b2117', dead ? 0.16 : it.trigger ? 0.45 : 0.25)}`,
-            background: picked[i] ? alpha('#2b2117', 0.12) : (!dead && it.trigger) ? alpha('#2b2117', 0.06) : 'transparent',
+            border: `1px ${dead ? 'dashed' : 'solid'} ${alpha(COLOR.text, dead ? 0.16 : it.trigger ? 0.45 : 0.25)}`,
+            background: picked[i] ? alpha(COLOR.text, 0.12) : (!dead && it.trigger) ? alpha(COLOR.text, 0.06) : 'transparent',
             color: 'inherit', fontWeight: it.trigger ? 600 : 400, opacity: dead ? 0.45 : 1,
             ...(dead ? { pointerEvents: 'none' } : {}),
           }}>

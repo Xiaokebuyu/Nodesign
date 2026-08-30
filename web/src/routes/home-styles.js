@@ -4,7 +4,9 @@
  * 这里的取舍全在原注释里，一行没动：板面纤维、笔记本红边线、横线只画在
  * textarea 那一层（纸的高度是内容撑的，横线铺满纸必然切半格）。
  */
-import { PAPER_VARS, PAPER_SHADOW } from '../lib/paper.js';
+import { PAPER_VARS, PAPER_SHADOW, PAPER, P } from '../lib/paper.js';
+import { COLOR } from '../lib/theme.js';
+import { SUN_CSS } from './home-sun.js';
 
 export const CSS = `
 /* 板面跟登录墙是同一块板：卡片是拿钉子钉上去的，那底下就不能是一片平涂的色。
@@ -51,17 +53,17 @@ export const CSS = `
 .ndd::before {
   content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
-    radial-gradient(ellipse 80% 40% at 50% -6%, rgba(255,247,225,0.55), transparent 62%),
-    radial-gradient(ellipse 44% 22% at 10% 16%, rgba(122,96,56,0.05), transparent 72%),
-    radial-gradient(ellipse 40% 20% at 90% 42%, rgba(122,96,56,0.045), transparent 74%),
+    radial-gradient(ellipse 80% 40% at 50% -6%, ${P('lit',0.55)}, transparent 62%),
+    radial-gradient(ellipse 44% 22% at 10% 16%, ${P('dusk',0.05)}, transparent 72%),
+    radial-gradient(ellipse 40% 20% at 90% 42%, ${P('dusk',0.045)}, transparent 74%),
     radial-gradient(ellipse 34% 18% at 26% 70%, rgba(93,74,44,0.04), transparent 72%),
-    radial-gradient(ellipse 30% 16% at 78% 92%, rgba(255,246,218,0.4), transparent 72%),
+    radial-gradient(ellipse 30% 16% at 78% 92%, ${P('litSoft',0.4)}, transparent 72%),
     var(--grain),
     repeating-linear-gradient(0deg, rgba(43,33,23,0.02) 0 1px, transparent 1px 28px),
     repeating-linear-gradient(90deg, rgba(43,33,23,0.02) 0 1px, transparent 1px 28px),
-    radial-gradient(circle at 37px 51px, rgba(72,55,32,0.15) 0 1.1px, transparent 1.7px),
-    radial-gradient(circle at 119px 23px, rgba(72,55,32,0.12) 0 1px, transparent 1.6px),
-    radial-gradient(circle at 61px 137px, rgba(72,55,32,0.1) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 37px 51px, ${P('hole',0.15)} 0 1.1px, transparent 1.7px),
+    radial-gradient(circle at 119px 23px, ${P('hole',0.12)} 0 1px, transparent 1.6px),
+    radial-gradient(circle at 61px 137px, ${P('hole',0.1)} 0 1.2px, transparent 1.8px),
     repeating-linear-gradient(90deg, rgba(43,33,23,0.017) 0 1px, transparent 1px 3px),
     repeating-linear-gradient(0deg, rgba(43,33,23,0.013) 0 1px, transparent 1px 3px),
     var(--wall);
@@ -72,6 +74,9 @@ export const CSS = `
     auto;
 }
 .ndd *, .ndd *::before, .ndd *::after { box-sizing: border-box; }
+
+${SUN_CSS}
+
 .ndd-in { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; }
 
 /* 顶区三栏：左边把这周的账写在板子上，中间便签本，右边一个涂鸦。
@@ -84,17 +89,17 @@ export const CSS = `
 @media (max-width: 1320px) { .ndd-side { display: none; } }
 
 /* 直接写在板上的字：不带纸，是记在板子上的账 */
-.ndd-note { color: rgba(122,111,92,0.92); transform: rotate(-0.9deg);
+.ndd-note { color: ${P('sketch',0.92)}; transform: rotate(-0.9deg);
   padding-left: 6px; }
 .ndd-note .t { display: block; font: 700 21px var(--kai); letter-spacing: 0.1em;
-  line-height: 1.3; color: rgba(104,93,76,0.95); }
+  line-height: 1.3; color: ${P('sketchDeep',0.95)}; }
 .ndd-note .rule { display: block; width: 112px; height: 7px; margin: 5px 0 7px; }
 .ndd-note .l { display: block; font: 12.5px var(--kai); line-height: 2.05; }
-.ndd-note .n { font-size: 15px; color: rgba(140,127,104,0.95); }
+.ndd-note .n { font-size: 15px; color: ${P('sketchNum',0.95)}; }
 
 .ndd-side .doodle { display: block; width: 138px; margin: 0 auto; opacity: 0.5; }
 .ndd-side .aside { margin-top: 12px; font: 12.5px var(--kai); line-height: 1.95;
-  color: rgba(130,119,99,0.9); transform: rotate(0.7deg); }
+  color: ${P('sketchSoft',0.9)}; transform: rotate(0.7deg); }
 
 /* ===== 便签本：一句话开工 ===== */
 .ndd-greet { text-align: center; font: 700 25px var(--kai); letter-spacing: 0.05em;
@@ -122,7 +127,7 @@ export const CSS = `
   font: 700 13px var(--kai); letter-spacing: 0.2em; text-indent: 0.2em;
   /* 下缘那 12px 藏在纸后面（= 条的 margin-bottom 那个数），露出来的只有上面这截 */
   padding: 5px 15px 16px; border-radius: 3px 3px 0 0;
-  background: var(--kraft); color: rgba(96,84,64,0.8);
+  background: var(--kraft); color: ${P('tabInk',0.8)};
   /* 被前面那张纸压着 = 整片压暗一层 */
   box-shadow: inset 0 0 0 999px rgba(93,74,44,0.07);
   position: relative; z-index: 1;
@@ -161,8 +166,8 @@ export const CSS = `
 .nd-sheet-rp {
   --sheet: var(--aged);
   --sheet-under: var(--paper);
-  --rules:    linear-gradient(180deg, transparent 0 28px, rgba(168,54,43,0.16) 28px 29px);
-  --rules-on: linear-gradient(180deg, transparent 0 28px, rgba(168,54,43,0.26) 28px 29px);
+  --rules:    linear-gradient(180deg, transparent 0 28px, ${P('red',0.16)} 28px 29px);
+  --rules-on: linear-gradient(180deg, transparent 0 28px, ${P('red',0.26)} 28px 29px);
 }
 /* ⚠️ 配方类挂在**整叠**（.ndd-stack）上，不是挂在纸上 —— 页签是纸的兄弟，
    挂在纸上它就继承不到 --sheet，选中那片会变成透明（08-28 真踩到：签只剩红字
@@ -180,14 +185,14 @@ export const CSS = `
 /* 笔记本：左边一条红页边线，字写在线右边 */
 .nd-sheet-design > .ndd-pad::before,
 .ndd-peel.nd-sheet-design::before { content: ''; position: absolute; left: 40px;
-  top: 0; bottom: 0; width: 1px; background: rgba(168,54,43,0.34); }
-.nd-sheet-design > .ndd-pad:focus-within::before { background: rgba(168,54,43,0.6); }
+  top: 0; bottom: 0; width: 1px; background: ${P('red',0.34)}; }
+.nd-sheet-design > .ndd-pad:focus-within::before { background: ${P('red',0.6)}; }
 /* 稿纸：书写区整个框进版心，左边那条粗一档 —— 装订侧，跟页边线是同一个位置的东西 */
 .nd-sheet-rp > .ndd-pad::before,
 .ndd-peel.nd-sheet-rp::before { content: ''; position: absolute; left: 34px; right: 16px;
   top: 13px; bottom: 11px;
-  border: 1px solid rgba(168,54,43,0.32); border-left-width: 2px; }
-.nd-sheet-rp > .ndd-pad:focus-within::before { border-color: rgba(168,54,43,0.52); }
+  border: 1px solid ${P('red',0.32)}; border-left-width: 2px; }
+.nd-sheet-rp > .ndd-pad:focus-within::before { border-color: ${P('red',0.52)}; }
 .ndd-pad { position: relative; z-index: 2;
   padding: 26px 24px 16px 58px;
   background-color: var(--sheet); background-image: var(--grain);
@@ -323,7 +328,7 @@ export const CSS = `
 /* 没写字的时候是个空框，写了字才变成实心墨块 —— 淡一档的实心块看着像坏了 */
 .ndd-pad .go { padding: 8px 22px; font: 700 14px var(--kai);
   letter-spacing: 0.3em; text-indent: 0.3em;
-  background: var(--ink); color: #F5F0E4;
+  background: var(--ink); color: ${COLOR.btnText};
   border: 1px solid var(--ink); border-radius: 2px; cursor: pointer;
   transition: background 0.18s, color 0.18s, border-color 0.18s; }
 .ndd-pad .go:disabled { background: transparent; color: var(--pencil);
@@ -344,9 +349,9 @@ export const CSS = `
 /* 钉子不在纸里 —— 纸被拿起来的时候钉子不该跟着动 */
 .ndd-card .pin { position: absolute; top: 3px; left: 50%; width: 9px; height: 9px;
   border-radius: 50%; margin-left: -4.5px; z-index: 6; pointer-events: none;
-  background: radial-gradient(circle at 35% 30%, #8a7a62, #453a2c 65%);
+  background: radial-gradient(circle at 35% 30%, ${PAPER.pinA}, ${PAPER.pinB} 65%);
   box-shadow: -1px 2px 3px rgba(43,33,23,0.45); }
-.ndd-card .pin.r { background: radial-gradient(circle at 35% 30%, #b4544a, #7d241c 65%); }
+.ndd-card .pin.r { background: radial-gradient(circle at 35% 30%, ${PAPER.pinRedA}, ${PAPER.pinRedB} 65%); }
 /* 卡片的底色跟着这个项目是哪种纸走（.nd-sheet-* 挂在 .ndd-card 上，
    跟输入栏那一叠读的是同一份配方）—— 桌上于是真的混着两种纸，
    而不是靠一枚徽记去说"这个是演出的" */
@@ -365,14 +370,14 @@ export const CSS = `
   box-shadow: ${PAPER_SHADOW.near}; }
 
 /* 封面 = 贴在纸上的印样，自己有一层薄影 */
-.ndd-shot { position: relative; width: 100%; overflow: hidden; background: #EFEAE0;
+.ndd-shot { position: relative; width: 100%; overflow: hidden; background: ${PAPER.shot};
   box-shadow: 0 1px 2px rgba(93,74,44,0.22), inset 0 0 0 1px rgba(43,33,23,0.07); }
 .ndd-shot img { width: 100%; height: 100%; object-fit: cover; object-position: top;
   display: block; border: 0; }
 /* 还没出东西：一张空白的横线纸，不是坏掉的灰块。
    不写字 —— 空白本身就说明了，「还没出东西」那句话由下面那行元信息说一次就够。 */
 .ndd-shot.empty {
-  background-color: #FBF7EC;
+  background-color: ${PAPER.chrome};
   background-image: repeating-linear-gradient(180deg, transparent 0 21px, rgba(43,33,23,0.05) 21px 22px);
   box-shadow: inset 0 0 0 1px rgba(43,33,23,0.06); }
 /* 板书项目的预览：不贴印样，**直接把字写在这张卡的纸上**（板书不是产物，
@@ -381,15 +386,15 @@ export const CSS = `
    顶上空一格再落笔：贴着上沿写不像人写的。 */
 .ndd-shot.empty.chalk { padding: 22px 13px 0; }
 .ndd-shot.empty.chalk p { margin: 0; font: 12.5px var(--kai); line-height: 22px;
-  color: rgba(95,81,66,0.85); white-space: pre-line; overflow: hidden;
+  color: ${P('ink2',0.85)}; white-space: pre-line; overflow: hidden;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; }
 /* 演出项目那张空白纸是**稿纸**：转旧、红格线、四周一道很淡的版心。
    ⚠️ 这儿不能直接用配方里的 --rules：卡片上的格子是 22px 一行（缩略图的比例），
    输入框是 29px（真行高）。同一种纸、两个尺度，所以颜色抄过来、格高各算各的。 */
 .nd-sheet-rp .ndd-shot.empty {
-  background-color: #FBF4E2;
-  background-image: repeating-linear-gradient(180deg, transparent 0 21px, rgba(168,54,43,0.11) 21px 22px);
-  box-shadow: inset 0 0 0 1px rgba(168,54,43,0.16); }
+  background-color: ${PAPER.ruled};
+  background-image: repeating-linear-gradient(180deg, transparent 0 21px, ${P('red',0.11)} 21px 22px);
+  box-shadow: inset 0 0 0 1px ${P('red',0.16)}; }
 
 .ndd-card .t { margin-top: 12px; font: 700 15.5px var(--kai); letter-spacing: 0.02em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -416,7 +421,7 @@ export const CSS = `
   background: transparent; border: none; text-align: left; cursor: pointer; }
 .ndd-menu button:hover { background: rgba(43,33,23,0.055); color: var(--ink); }
 .ndd-menu button.danger { color: var(--red); }
-.ndd-menu button.danger:hover { background: rgba(168,54,43,0.08); }
+.ndd-menu button.danger:hover { background: ${P('red',0.08)}; }
 
 /* ===== 最近对话（老式闪聊会话，没有就整块不出现）===== */
 .ndd-rows { background-color: var(--paper); background-image: var(--grain);
@@ -443,7 +448,7 @@ export const CSS = `
   transform: rotate(0.4deg); transform-origin: 50% 8px; }
 .ndd-sheet .pin { position: absolute; top: 8px; left: 50%; width: 9px; height: 9px;
   border-radius: 50%; margin-left: -4.5px;
-  background: radial-gradient(circle at 35% 30%, #8a7a62, #453a2c 65%);
+  background: radial-gradient(circle at 35% 30%, ${PAPER.pinA}, ${PAPER.pinB} 65%);
   box-shadow: -1px 2px 3px rgba(43,33,23,0.45); }
 .ndd-sheet .h { font: 700 17px var(--kai); letter-spacing: 0.05em; }
 .ndd-sheet .d { margin-top: 10px; font: 13.5px var(--kai); line-height: 1.85; color: var(--ink-2); }
@@ -453,12 +458,9 @@ export const CSS = `
   background: transparent; border: 1px solid rgba(43,33,23,0.2); border-radius: 999px;
   cursor: pointer; transition: border-color 0.15s, color 0.15s; }
 .ndd-sheet .chips button:hover { border-color: var(--ink); color: var(--ink); }
-.ndd-sheet .foot { margin-top: 22px; font: 12.5px var(--kai); color: var(--pencil);
-  background: transparent; border: none; text-decoration: underline;
-  text-underline-offset: 3px; cursor: pointer; }
 .ndd-sheet .retry { margin-top: 20px; padding: 9px 26px; font: 700 14px var(--kai);
   letter-spacing: 0.24em; text-indent: 0.24em;
-  background: var(--ink); color: #F5F0E4; border: none; border-radius: 2px; cursor: pointer; }
+  background: var(--ink); color: ${COLOR.btnText}; border: none; border-radius: 2px; cursor: pointer; }
 .ndd-quiet { padding: 60px 0; text-align: center; font: 13.5px var(--kai); color: var(--pencil); }
 
 /* ═════════ 窄屏（2026-08-21 移动端适配）═════════

@@ -144,7 +144,7 @@ export default function DocxRegionSelect({
           left: shown.x, top: shown.y, width: shown.w, height: shown.h,
           border: `2px solid ${COLOR.btn}`,
           borderRadius: RADIUS.sm,
-          background: 'rgba(255,255,255,0.06)',
+          background: 'rgba(255,254,246,0.06)',
           boxShadow: '0 0 0 9999px rgba(32,26,14,0.18)',
           pointerEvents: 'none',
         }} />

@@ -50,13 +50,17 @@ describe('角色卡落盘（文件夹范式：角色/<名>/角色卡.md）', () 
   });
 });
 
-describe('返回话术：立即可派 + 唯一的角色位', () => {
-  it('⭐ 派发配方指到唯一的角色位，说了不用等，也说了下一拍靠 SendMessage', async () => {
+// 08-30 角色子代理停用：返回文案从「立即可派」翻面成「不要派、自己读卡演」。
+// ⭐ 这段话和工具 description 是同一条教义的两个读者 —— 断言两头都钉住，
+//    免得再出现「改了 description 忘了返回文案」那种半边改（fable 评审抓到过一次）。
+describe('返回话术：明令不派 + 指向读卡', () => {
+  it('⭐ 说了不要派子代理，点名两条被停的路，并指向 Read 角色卡', async () => {
     const a = text(await call(ok));
-    expect(a).toContain('现在就可以派');
-    expect(a).toContain(`subagent_type: "${ROLE_SLOT}"`);
-    expect(a).toContain('name: "rp-moli"');
-    expect(a, '写完一段就结束这一轮，下一拍要说清怎么再叫它').toMatch(/SendMessage/);
+    expect(a).toContain('不要派子代理');
+    expect(a).toContain(`subagent_type: "${ROLE_SLOT}"`);   // 点名被停的那条路
+    expect(a, '停用令要连 SendMessage 那条路一起点名').toMatch(/SendMessage/);
+    expect(a, '要指向卡路径，那是代演时找回腔调的正事').toContain('角色卡.md');
+    expect(a, '⛔ 旧教义不许残留').not.toContain('现在就可以派');
   });
   it('⛔ 没有第二个位可选：pen 这类旧参数传了也不影响落点（schema 已收）', async () => {
     // ⚠️ 展示名跟别的用例错开：家按展示名取，共用工作区里同名会撞「一个家一个角色」那道闸
@@ -66,7 +70,7 @@ describe('返回话术：立即可派 + 唯一的角色位', () => {
     await call({ ...ok, id: 'twice', name: '重写君' });
     const r2 = text(await call({ ...ok, id: 'twice', name: '重写君', persona: '第二版人设' }));
     expect(r2).toMatch(/改写/);
-    expect(r2).toMatch(/不会改变|SendMessage/);
+    expect(r2, '改完卡要提醒重新 Read —— 上下文里那份是旧的').toMatch(/重新 Read|不会改变/);
     expect(fs.readFileSync(path.join(ws, '角色', '重写君', '角色卡.md'), 'utf8')).toContain('第二版人设');
   });
 });

@@ -23,7 +23,7 @@ export default function SuggestionChip({ suggestion, onAccept, onDismiss }) {
       alignItems: 'flex-start',
       gap: GAP.sm,
       padding: `${GAP.sm}px ${GAP.md}px`,
-      background: 'rgba(45, 36, 24, 0.05)',
+      background: 'rgba(43,33,23, 0.05)',
       border: `1px dashed ${COLOR.borderMd}`,
       borderRadius: RADIUS.xl,
       fontFamily: FONT_SANS,

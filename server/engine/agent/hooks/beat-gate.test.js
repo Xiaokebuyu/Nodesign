@@ -19,12 +19,15 @@ const handoff = (input) => makePostToolUseBeatHandoff(RP)(input);
 const stop = (input = {}) => makeStopBeatGate(RP)(input);
 
 describe('拦得住的那一种', () => {
-  it('⭐ 写了正文、没按钮、没交给谁 → block 一次，话里给两条出路', async () => {
+  // 08-30 角色子代理停用：出路从两条收成一条（补按钮）。旧断言钉的是「话里要提
+  // SendMessage」—— 那条出路现在明令禁止，断言反过来钉「别把交给角色当出口」。
+  it('⭐ 写了正文、没按钮 → block 一次，话里只给补按钮这一条出路', async () => {
     await write({ tool_input: { text: '城门在暮色里合拢。' } });
     const out = await stop();
     expect(out.decision).toBe('block');
-    expect(out.reason).toMatch(/SendMessage/);
     expect(out.reason).toMatch(/nd:controls/);
+    expect(out.reason).not.toMatch(/`SendMessage`/);
+    expect(out.reason).toMatch(/角色子代理停用/);
   });
 
   it('⛔ 只拦一次：拦过之后（stop_hook_active）一律放行，别拦成死循环', async () => {

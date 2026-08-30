@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { findElementByAnchor } from '../../lib/html-utils.js';
 import { overlayBase, toOverlayXY } from '../../lib/overlay-rect.js';
-import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, EDITOR } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, EDITOR, alpha } from '../../lib/theme.js';
 
 /**
  * CommentMarkers — 已评论元素的视觉标记（橙色框 + 右上角"已评论"标签）
@@ -167,4 +167,4 @@ export default function CommentMarkers({
 }
 
 const ORANGE = EDITOR.orange;
-const ORANGE_GLOW = 'rgba(230, 126, 34, 0.18)';
+const ORANGE_GLOW = alpha(EDITOR.orange, 0.18);

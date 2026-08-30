@@ -31,6 +31,7 @@ import { AgentContext, freshTurnCounters } from './context.js';
 import { Events } from './events.js';
 import { createRun, markRunStarted, markRunSucceeded, markRunFailed, mergeRunMetadata, setRunMetrics, setRunModelUsage } from '../runs/store.js';
 import { getProject } from '../../projects/store.js';
+import { filterSkillsForMode, assertSkillModeNames } from '../mcp/mode-profile.js';
 import { randomUUID } from 'node:crypto';
 import {
   registerQuerySession,
@@ -330,6 +331,18 @@ export async function runSession({
   const projectMode = (projectId ? getProject(projectId)?.mode : null) || 'design';
   const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx, roleRoster, projectMode });
 
+  // skill 也按模式筛（08-30）：SDK 只把 description 注进系统提示词（body 按需加载），
+  // 所以每个 skill 的几百字节描述是**每个会话**的常驻成本，不分模式。筛之前
+  // RP 会话背着设计三件（deskskill/docx/site 合计 ~2.4KB）的描述，而它们要用的工具
+  // 在 RP 下压根没注册（RP_HIDDEN_TOOLS 已摘）——工具没了描述还在，纯亏。
+  // 对账跟 assertModeProfileNames 一样狠：表里的名字没装上就当场炸，别静默空转。
+  assertSkillModeNames(installed.skills);
+  const modeSkills = filterSkillsForMode(installed.skills, projectMode);
+  if (modeSkills.length !== installed.skills.length) {
+    const dropped = installed.skills.filter((n) => !modeSkills.includes(n));
+    console.log(`[session-loop] skills 按 mode=${projectMode} 筛掉 ${dropped.length}: [${dropped.join(', ')}]`);
+  }
+
   // npm 缓存 + 沙盒可写 tmp（$TMPDIR / pip 缓存）：细节与教训见 isolation.js
   const agentDirs = await prepareAgentDirs({ dataRoot: PROJECTS_DATA_ROOT, projectId, sessionId });
 
@@ -446,7 +459,7 @@ export async function runSession({
       })(),
     },
     plugins: installed.plugins,
-    skills: installed.skills,
+    skills: modeSkills,
 
     // 2026-05-18 安全：关 inline shell execution。SDK 默认允许 skill / slash command 内
     // inline shell 命令（Anthropic 标准 skill 协议的一部分，如 setup script）—— 但 NoDesign

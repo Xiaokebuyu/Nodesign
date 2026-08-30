@@ -8,6 +8,7 @@ import { ZONE, STAGE_CARD_W, POP_IN } from '../../lib/board-geometry.js';
 import { sizeOf } from '../../lib/board-kinds.js';
 import { AskUserQuestionView } from '../chat/Message.jsx';
 import ModelMark, { brandColor } from '../ui/ModelMark.jsx';
+import { CLAUDE_BRAND } from '../ui/claude-mark.js';
 import { useCurrentModelBrand } from '../../lib/model-brand.js';
 
 // （生图占位 2026-08-14 迁出：shimmer 从舞台层搬进纸面层的幻影物件
@@ -349,11 +350,59 @@ export function StageBoardLayer({ stageBadges, anchoredCards, positioned, visibl
 
 // ── 屏幕坐标系那一面（dock）──
 
+/** 没有工具栏时贴底留这么多 */
+const DOCK_INSET = 14;
+/** 让开工具栏之后还要留的一条缝 */
+const DOCK_CLEAR = 12;
+
+/**
+ * dock 要让开那条常驻工具栏（2026-08-30）。
+ *
+ * ⛔ 两个都钉在容器底边正中：工具栏 y 908–946，dock 卡的底边 936 ——
+ * **卡片底部 28px 压在工具栏底下**，而 AskUserQuestion 的按钮正好在那一条。
+ * 工具栏 z-index 510、dock 80，所以永远是工具栏赢。
+ *
+ * 让位的做法跟外壳那次一致（"让位不是挪工具栏"）：工具栏是画布的常驻控件，
+ * 位置不能跟着一张临时卡片跑；该动的是这张卡。
+ *
+ * ⚠️ 高度要**现量**不能写死：工具栏在窄容器里会折行（平板上聊天卡一开就折成
+ * 两排），写死的偏移到那一档就又压上了。
+ * ⚠️ 用 offsetTop 不用 getBoundingClientRect：工具栏自动收起时会 translateY(14px)，
+ * 拿 rect 量的话卡片会跟着鼠标上下跳。offsetTop 不受 transform 影响。
+ */
+function useToolbarClearance(deps) {
+  const ref = useRef(null);
+  const [bottom, setBottom] = useState(DOCK_INSET);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const host = el.parentElement;
+    const measure = () => {
+      const tb = document.querySelector('[data-floating-toolbar="tools"]');
+      const box = tb?.offsetParent;
+      if (!tb || !box) { setBottom(DOCK_INSET); return; }
+      const want = box.clientHeight - tb.offsetTop + DOCK_CLEAR;
+      // 封顶：工具栏折成很多排时别把卡顶出容器
+      const cap = Math.round((host?.clientHeight || box.clientHeight) * 0.4);
+      setBottom(Math.min(Math.max(DOCK_INSET, Math.round(want)), cap));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (host) ro.observe(host);
+    const tb = document.querySelector('[data-floating-toolbar="tools"]');
+    if (tb) ro.observe(tb);
+    return () => ro.disconnect();
+    // 卡片数量变了顺便重挂一次：工具栏可能比 dock 晚一步挂上来
+  }, deps);
+  return [ref, bottom];
+}
+
 export function StageDock({ dockPanels, dockChips, onDismiss }) {
+  const [dockRef, bottom] = useToolbarClearance([dockPanels.length, dockChips.length]);
   if (dockPanels.length === 0 && dockChips.length === 0) return null;
   return (
-    <div data-stage="dock" style={{
-      position: 'absolute', left: '50%', bottom: 14, transform: 'translateX(-50%)',
+    <div ref={dockRef} data-stage="dock" style={{
+      position: 'absolute', left: '50%', bottom, transform: 'translateX(-50%)',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: GAP.sm,
       zIndex: 80, pointerEvents: 'none', maxWidth: '74%',
     }}>
@@ -422,28 +471,28 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
   const isTerm = card.kind === 'terminal';
   // 身份跟着会话模型走（08-21）：边色和徽记都是"谁在写这段代码"，跑 DeepSeek 就不该是 Claude 的橙
   const brand = useCurrentModelBrand();
-  const border = card.status === 'fail' ? '#b0554f' : card.status === 'ok' ? '#4f8f5b' : alpha(brandColor(brand) || '#D97757', 0.7);
+  const border = card.status === 'fail' ? TERM.edgeErr : card.status === 'ok' ? TERM.edgeOk : alpha(brandColor(brand) || CLAUDE_BRAND, 0.7);
   const label = card.tool === 'Edit' ? '修改' : card.tool === 'Write' ? '写入' : toolLabelOf(card.tool);
   return (
     <div
       data-stage="card" data-stage-kind={card.kind} data-stage-status={card.status}
       style={{
         borderRadius: RADIUS.xxl, overflow: 'hidden', border: `1.5px solid ${border}`,
-        background: TERM.bg, boxShadow: '0 10px 30px rgba(40,32,16,0.35)',
+        background: TERM.bg, boxShadow: `0 10px 30px ${alpha(TERM.shade, 0.35)}`,
         animation: card.status === 'ok'
           ? `${POP_IN}, ndPulse 700ms ease-out, ndStageOut 380ms ease 1150ms forwards`
           : POP_IN,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `${GAP.sm}px ${GAP.base}px`, background: 'rgba(255,255,255,0.06)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `${GAP.sm}px ${GAP.base}px`, background: 'rgba(255,254,246,0.06)' }}>
         {/* 深色终端面：铅笔稿在这儿是看不见的（它是给纸面画的），关掉；OpenCode 那枚换 onDark 档 */}
         <ModelMark brand={brand} size={12} pencil={false} dark />
-        {isTerm ? <Terminal size={10} color="#c8b98c" /> : <PencilLine size={10} color="#c8b98c" />}
+        {isTerm ? <Terminal size={10} color={TERM.icon} /> : <PencilLine size={10} color={TERM.icon} />}
         <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: TERM.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
           {isTerm ? (card.command || 'bash') : `${label} · ${fileNameOf(card.filePath) || '…'}`}
         </span>
         {running ? (
-          <span style={{ width: 10, height: 10, border: '1.5px solid rgba(232,226,210,0.35)', borderTopColor: TERM.ink, borderRadius: RADIUS.round, animation: 'ndSpin 800ms linear infinite', flexShrink: 0 }} />
+          <span style={{ width: 10, height: 10, border: `1.5px solid ${alpha(TERM.ink, 0.35)}`, borderTopColor: TERM.ink, borderRadius: RADIUS.round, animation: 'ndSpin 800ms linear infinite', flexShrink: 0 }} />
         ) : (
           <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: card.status === 'ok' ? TERM.ok : TERM.err, flexShrink: 0 }}>
             {card.status === 'ok' ? '✓' : '✗'}
@@ -457,10 +506,10 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
       </div>
       {card.kind === 'code' && card.oldString && (
         <div style={{
-          padding: `${GAP.xs}px ${GAP.base}px`, background: 'rgba(176,85,79,0.16)', color: '#dba49f',
+          padding: `${GAP.xs}px ${GAP.base}px`, background: alpha(TERM.edgeErr, 0.16), color: TERM.errText,
           fontFamily: FONT_MONO, fontSize: 9.5, lineHeight: 1.5,
           whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 64, overflow: 'hidden',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
+          borderBottom: '1px solid rgba(255,254,246,0.05)',
         }}>
           {clampLines(card.oldString, 3)}
         </div>
@@ -468,11 +517,11 @@ export function StageCardBody({ card, scale = 1, onDismiss }) {
       <AutoScrollPre
         text={isTerm ? (card.output || '') : card.text}
         running={running}
-        color={isTerm ? '#cfe3cf' : '#d9e4c9'}
+        color={isTerm ? TERM.okText : TERM.runText}
         placeholder={running ? (isTerm ? '运行中…' : '正在生成…') : ''}
       />
       {card.status === 'fail' && card.error && (
-        <div style={{ padding: `5px ${GAP.base}px`, fontFamily: FONT_MONO, fontSize: 9.5, color: TERM.err, whiteSpace: 'pre-wrap', wordBreak: 'break-all', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ padding: `5px ${GAP.base}px`, fontFamily: FONT_MONO, fontSize: 9.5, color: TERM.err, whiteSpace: 'pre-wrap', wordBreak: 'break-all', borderTop: '1px solid rgba(255,254,246,0.06)' }}>
           {card.error}
         </div>
       )}
@@ -544,7 +593,7 @@ function QuestionStageCard({ card, onDismiss }) {
       data-stage="card" data-stage-kind="question" data-stage-status={card.status}
       style={{
         borderRadius: RADIUS.xxl, border: `1.5px solid ${alpha(CANVAS.brass, 0.65)}`, background: COLOR.bg,
-        boxShadow: '0 12px 34px rgba(40,32,16,0.28)', padding: GAP.md,
+        boxShadow: `0 12px 34px ${alpha(TERM.shade, 0.28)}`, padding: GAP.md,
         maxHeight: '52vh', overflowY: 'auto',
         animation: card.status === 'ok' ? `${POP_IN}, ndStageOut 380ms ease 1150ms forwards` : POP_IN,
       }}
@@ -585,14 +634,14 @@ function StageChip({ card, onDismiss }) {
       onClick={card.status === 'fail' ? onDismiss : undefined}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px',
-        borderRadius: RADIUS.pill, background: 'rgba(33,30,23,0.88)', color: TERM.ink,
+        borderRadius: RADIUS.pill, background: alpha(TERM.bg, 0.88), color: TERM.ink,
         fontFamily: FONT_MONO, fontSize: 9.5, animation: POP_IN,
-        border: `1px solid ${card.status === 'fail' ? '#b0554f' : 'transparent'}`,
+        border: `1px solid ${card.status === 'fail' ? TERM.edgeErr : 'transparent'}`,
         cursor: card.status === 'fail' ? 'pointer' : 'default',
       }}
     >
       {running ? (
-        <span style={{ width: 8, height: 8, border: '1.5px solid rgba(232,226,210,0.3)', borderTopColor: TERM.ink, borderRadius: RADIUS.round, animation: 'ndSpin 800ms linear infinite' }} />
+        <span style={{ width: 8, height: 8, border: `1.5px solid ${alpha(TERM.ink, 0.3)}`, borderTopColor: TERM.ink, borderRadius: RADIUS.round, animation: 'ndSpin 800ms linear infinite' }} />
       ) : (
         <span style={{ color: card.status === 'ok' ? TERM.ok : TERM.err }}>{card.status === 'ok' ? '✓' : '✗'}</span>
       )}

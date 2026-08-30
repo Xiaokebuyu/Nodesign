@@ -59,7 +59,7 @@ export default function UpgradeQuickModal({ show, onClose, project, onUpgraded }
       <div style={{ padding: GAP.xl }}>
         <div style={{
           padding: GAP.md,
-          background: 'rgba(45,36,24,0.04)',
+          background: 'rgba(43,33,23,0.04)',
           border: `1px solid ${COLOR.borderLt}`,
           borderRadius: RADIUS.lg,
           marginBottom: GAP.xl,

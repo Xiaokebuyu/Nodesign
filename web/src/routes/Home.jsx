@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
+import { PAPER } from '../lib/paper.js';
+import { Link } from 'react-router-dom';
+import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
-import CreateProjectModal from '../components/project/CreateProjectModal.jsx';
 import QuickEntry from './home-quick-entry.jsx';
-import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE } from '../lib/theme.js';
+import { CHROME, GAP, RADIUS, FONT_SIZE, alpha } from '../lib/theme.js';
 import { CSS } from './home-styles.js';
 import { Underline } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
@@ -12,10 +12,11 @@ import { useGlobalStore } from '../stores/globalStore.js';
 import { Sessions, Assets, Projects } from '../lib/api.js';
 import { timeAgo } from '../lib/helpers.js';
 import { useMedia, NARROW } from '../lib/use-media.js';
-import dTangle from '../assets/login-wall/doodles/tangle.webp';
+import dHand from '../assets/login-wall/doodles/hand.webp';
 import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
 import { t, getLocale } from '../lib/i18n.js';
 import { sheetClassOf } from './home-sheets.js';
+import { Canopy, DayToggle } from './home-light.jsx';
 
 /**
  * Home 页 —— 进门之后的那面板子（2026-08-03 改版）
@@ -79,13 +80,11 @@ function inventory(st) {
 
 
 export default function Home() {
-  const navigate = useNavigate();
   const projects = useProjectStore(s => s.projects);
   const hydrated = useProjectStore(s => s.hydrated);
   const hydrating = useProjectStore(s => s.hydrating);
   const error = useProjectStore(s => s.error);
   const hydrate = useProjectStore(s => s.hydrate);
-  const [createOpen, setCreateOpen] = useState(false);
   // 空状态示例 chip → 预填顶部输入框（不直接发 turn：让用户看到内容、可改可删）
   const [prefill, setPrefill] = useState(null);   // { text, ts }
   // 产物清单：读磁盘，跟列表分开拉；拿不到就是 null，卡片那行留空不编
@@ -110,32 +109,39 @@ export default function Home() {
     return () => { dead = true; };
   }, []);
 
-  const openCreate = () => setCreateOpen(true);
   const narrow = useMedia(NARROW);
 
   return (
     <AppShell
       actions={
         <>
-          {/* 窄屏只留图标（2026-08-21）：三个动作 + 头像 + 字标在 393 的屏上排不下，
-              带字的话「新建项目」会被挤成两行。次要的两个退成图标，主动作留一个短词。 */}
+          {/* 窄屏只留图标（2026-08-21）：动作 + 头像 + 字标在 393 的屏上排不下，
+              带字的话会被挤成两行。
+              2026-08-29 「新建项目」从这里撤走 —— 开工的入口是下面那本便签，
+              不是顶栏的按钮。留在这的两个都是"去别处看"，不是"在这开工"。 */}
           <Link to="/gallery" title={t('橱窗')} style={iconBtnStyle}>
             <LayoutTemplate size={14} />{narrow ? null : ` ${t('橱窗')}`}
           </Link>
           <Link to="/skills" title="Skill" style={iconBtnStyle}>
             <Wrench size={14} />{narrow ? null : ' Skill'}
           </Link>
-          {/* 窄屏不挂：上面那条注释已经说了 393 的屏排不下，语言不是高频动作，
-              让位给三个主动作。窄屏用户要换语言走登录墙那个（门外那枚常在）。 */}
+          {/* 光线：跟着时间 / 白天 / 夜晚。窄屏只留图标 —— 它是个一眼能认的
+              太阳月亮，不需要字。 */}
+          <DayToggle style={iconBtnStyle} compact={narrow} />
+          {/* 窄屏不挂：上面那条注释已经说了 393 的屏排不下，语言不是高频动作。
+              窄屏用户要换语言走登录墙那个（门外那枚常在）。 */}
           {!narrow && <LanguageSwitcher />}
-          <button style={primaryBtnStyle} onClick={openCreate} title={t('新建项目')}>
-            <Plus size={14} /> {narrow ? t('新建') : t('新建项目')}
-          </button>
         </>
       }
     >
       <div className="ndd">
         <style>{CSS}</style>
+        {/* 光源层（树影 / 台灯）。两块画布：一块压在板面之上内容之下，一块压在
+            所有内容之上，都是 .ndd 的直接子节点，靠 z-index 分前后。
+            必须是**独立的 fixed 层**，不能并进 .ndd::before 那十四层 ——
+            那一层是静态的，掺进动画就等于每帧重画十四层背景，正是
+            08-28「项目一多就奇卡」的病根。 */}
+        <Canopy />
         <div className="ndd-in">
 
           <div className="ndd-top">
@@ -146,7 +152,11 @@ export default function Home() {
               <QuickEntry prefill={prefill} />
             </div>
             <div className="ndd-side r">
-              <img className="doodle" src={dTangle} alt="" />
+              {/* 涂鸦要跟旁边那句话说同一件事。原来挂的是 tangle（「突然通了」）——
+                  那画的是想通了**之后**那一刻，而这句话说的正好相反：不用先想清楚。
+                  换成 hand（「先给它一句话」）：一只手递出一张写了字的纸，
+                  跟这个输入框要的动作是同一个，也跟左边那本便签是同一套物料。 */}
+              <img className="doodle" src={dHand} alt="" />
               <p className="aside">{t('想到什么先写下来。')}<br />{t('不用先想清楚，')}<br />{t('它会问你缺的那部分。')}</p>
             </div>
           </div>
@@ -164,7 +174,6 @@ export default function Home() {
             <ErrorState message={error} onRetry={() => hydrate({ kind: 'project' }).catch(() => {})} />
           ) : projects.length === 0 ? (
             <EmptyState
-              onCreate={openCreate}
               onPick={(text) => {
                 setPrefill({ text, ts: Date.now() });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -179,15 +188,6 @@ export default function Home() {
           )}
         </div>
       </div>
-
-      <CreateProjectModal
-        show={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreated={(proj) => {
-          // 2026-07-27 起工作台是项目主页 —— 新建项目直接进画布
-          navigate(`/projects/${proj.id}/work`);
-        }}
-      />
     </AppShell>
   );
 }
@@ -238,7 +238,7 @@ function BoardNote({ projects, summary }) {
       <span className="t">{dateLabel}</span>
       <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
         <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
-          stroke="rgba(122,111,92,0.55)" strokeWidth="1.4" strokeLinecap="round" />
+          stroke={alpha(PAPER.sketch, 0.55)} strokeWidth="1.4" strokeLinecap="round" />
       </svg>
       <Counted pattern="手上 {n} 件" n={projects.length} />
       <Counted pattern="这周动过 {n} 件" n={touched} />
@@ -530,7 +530,7 @@ const EMPTY_EXAMPLES = [
   '把这半年做的东西整理成一份介绍 deck',
 ];
 
-function EmptyState({ onCreate, onPick }) {
+function EmptyState({ onPick }) {
   return (
     <div className="ndd-sheet">
       <span className="pin" />
@@ -541,7 +541,6 @@ function EmptyState({ onCreate, onPick }) {
           <button key={text} onClick={() => onPick?.(text)}>{text}</button>
         ))}
       </div>
-      <button className="foot" onClick={onCreate}>{t('或者从「+ 新建项目」开始一件长期的事')}</button>
     </div>
   );
 }
@@ -553,13 +552,4 @@ const iconBtnStyle = {
   padding: `${GAP.sm}px ${GAP.lg}px`,
   borderRadius: RADIUS.lg,
   background: 'transparent',
-};
-
-const primaryBtnStyle = {
-  display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-  fontSize: FONT_SIZE.lg, fontWeight: 700,
-  color: COLOR.btnText, background: COLOR.btn,
-  padding: `${GAP.sm + 1}px ${GAP.xl}px`,
-  border: `1px solid ${COLOR.btn}`,
-  borderRadius: RADIUS.lg,
 };

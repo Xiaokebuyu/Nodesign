@@ -107,7 +107,7 @@ export default function EditOverlay({ selectedAnchor, iframeRef, zoom = 1 }) {
         height: height + 8,
         border: `2px solid ${COLOR.btn}`,
         borderRadius: RADIUS.sm,
-        boxShadow: '0 0 0 4px rgba(45, 36, 24, 0.08)',
+        boxShadow: '0 0 0 4px rgba(43,33,23, 0.08)',
         zIndex: 10,
         // 不加 transition —— 滚动跟随要瞬时，否则会拖尾
       }}

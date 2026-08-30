@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "nice -n 15 vitest run",
-    "deploy": "bash scripts/deploy.sh"
+    "deploy": "bash scripts/deploy.sh",
+    "lens": "node scripts/lens.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

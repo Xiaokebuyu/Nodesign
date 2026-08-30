@@ -147,7 +147,10 @@ export default function SkillList() {
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: COLOR.text2,
             lineHeight: 1.6, margin: 0,
           }}>
-            skill 是一套做事的方法论，agent 开工前会读。内置的两份管 deck 和站点，卸不掉；
+            {/* 2026-08-29：原文写的是「内置的两份管 deck 和站点」，内置早就不止两份了
+                （现在还有 word 和演出）。不再写死数字 —— 下面那张表本来就把每份都列着，
+                这行字重复一遍只会再过时一次。 */}
+            skill 是一套做事的方法论，agent 开工前会读。内置的那几份卸不掉；
             你自己的（做完一件东西让 agent 固化下来、或者别人发你的文件）装在这里，所有项目通用。
             只想给某一个项目用的，在那个项目的 System 面板里装。
           </p>

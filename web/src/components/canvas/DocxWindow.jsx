@@ -319,7 +319,7 @@ export default function DocxWindow({
               {loading && (
                 <div style={{
                   position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(255,255,255,0.65)', gap: GAP.sm,
+                  background: 'rgba(255,254,246,0.65)', gap: GAP.sm,
                   fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2, borderRadius: 2,
                 }}>
                   {/* spin 不是全局 keyframes，得自带 —— 少了这条图标是冻住的（实踩） */}

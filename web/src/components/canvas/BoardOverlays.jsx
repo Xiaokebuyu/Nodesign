@@ -257,7 +257,7 @@ function Overlay({ children, onClose }) {
     <div
       onClick={onClose}
       style={{
-        position: 'absolute', inset: 0, zIndex: MODAL.zIndex, background: 'rgba(0,0,0,0.42)',
+        position: 'absolute', inset: 0, zIndex: MODAL.zIndex, background: 'rgba(43,33,23,0.42)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: GAP.page,
       }}
     >

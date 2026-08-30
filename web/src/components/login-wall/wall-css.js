@@ -15,7 +15,8 @@
  * 画的，硬塞进统一 schema 只会让每个场景都在跟 schema 打架。墙是**设计**
  * 不是数据。
  */
-import { PAPER_VARS } from '../../lib/paper.js';
+import { PAPER_VARS, PAPER, P } from '../../lib/paper.js';
+import { COLOR } from '../../lib/theme.js';
 import { DESIGN_W, DESIGN_H } from './geometry.js';
 
 /**
@@ -118,14 +119,14 @@ export const WALL_CSS = `
   font-family: var(--kai); color: var(--ink);
   -webkit-font-smoothing: antialiased;
   background:
-    radial-gradient(ellipse 120% 90% at 50% 118%, rgba(80,62,40,0.08), transparent 55%),
-    linear-gradient(105deg, transparent 50%, rgba(255,244,210,0.30) 51% 58%, transparent 59%, transparent 64%, rgba(255,244,210,0.22) 66% 70%, transparent 71%),
-    radial-gradient(ellipse 90% 70% at 80% 4%, rgba(255,210,130,0.22), transparent 62%),
+    radial-gradient(ellipse 120% 90% at 50% 118%, ${P('dusk2',0.08)}, transparent 55%),
+    linear-gradient(105deg, transparent 50%, ${P('litSlant',0.30)} 51% 58%, transparent 59%, transparent 64%, ${P('litSlant',0.22)} 66% 70%, transparent 71%),
+    radial-gradient(ellipse 90% 70% at 80% 4%, ${P('litWarm',0.22)}, transparent 62%),
     /* 大块斑驳：板子不是一块匀色板 */
-    radial-gradient(ellipse 46% 40% at 16% 26%, rgba(122,96,56,0.055), transparent 72%),
-    radial-gradient(ellipse 38% 46% at 72% 74%, rgba(122,96,56,0.05), transparent 74%),
-    radial-gradient(ellipse 30% 28% at 94% 20%, rgba(255,246,218,0.45), transparent 72%),
-    radial-gradient(ellipse 26% 30% at 4% 84%, rgba(122,96,56,0.045), transparent 72%),
+    radial-gradient(ellipse 46% 40% at 16% 26%, ${P('dusk',0.055)}, transparent 72%),
+    radial-gradient(ellipse 38% 46% at 72% 74%, ${P('dusk',0.05)}, transparent 74%),
+    radial-gradient(ellipse 30% 28% at 94% 20%, ${P('litSoft',0.45)}, transparent 72%),
+    radial-gradient(ellipse 26% 30% at 4% 84%, ${P('dusk',0.045)}, transparent 72%),
     radial-gradient(ellipse 40% 30% at 10% 66%, rgba(93,74,44,0.045), transparent 70%),
     radial-gradient(ellipse 34% 26% at 90% 40%, rgba(93,74,44,0.04), transparent 70%),
     var(--grain),
@@ -139,19 +140,19 @@ export const WALL_CSS = `
 .ndw::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background:
-    radial-gradient(circle at 37px 51px, rgba(72,55,32,0.17) 0 1.1px, transparent 1.7px),
-    radial-gradient(circle at 119px 23px, rgba(72,55,32,0.14) 0 1px, transparent 1.6px),
-    radial-gradient(circle at 61px 137px, rgba(72,55,32,0.12) 0 1.2px, transparent 1.8px),
+    radial-gradient(circle at 37px 51px, ${P('hole',0.17)} 0 1.1px, transparent 1.7px),
+    radial-gradient(circle at 119px 23px, ${P('hole',0.14)} 0 1px, transparent 1.6px),
+    radial-gradient(circle at 61px 137px, ${P('hole',0.12)} 0 1.2px, transparent 1.8px),
     repeating-linear-gradient(90deg, rgba(43,33,23,0.019) 0 1px, transparent 1px 3px),
     repeating-linear-gradient(0deg, rgba(43,33,23,0.015) 0 1px, transparent 1px 3px);
   background-size: 163px 211px, 271px 149px, 197px 313px, auto, auto;
 }
 /* 旧痕：这儿以前挂过东西，取下来了 */
 .ndw-ghost { position: absolute; z-index: 0; pointer-events: none;
-  background: rgba(255,252,240,0.22); border-radius: 1px;
-  box-shadow: 0 0 0 1px rgba(43,33,23,0.02), 0 0 12px 7px rgba(255,252,240,0.1); }
+  background: ${P('litCool',0.22)}; border-radius: 1px;
+  box-shadow: 0 0 0 1px rgba(43,33,23,0.02), 0 0 12px 7px ${P('litCool',0.1)}; }
 .ndw-ghost::after { content: ''; position: absolute; left: 50%; top: 5px; width: 3px; height: 3px;
-  margin-left: -1.5px; border-radius: 50%; background: rgba(72,55,32,0.26); }
+  margin-left: -1.5px; border-radius: 50%; background: ${P('hole',0.26)}; }
 .ndw * { margin: 0; padding: 0; box-sizing: border-box; }
 
 /* 整面墙 = 一张 1500x800 的设计稿，顶边对齐缩放 */
@@ -181,7 +182,7 @@ export const WALL_CSS = `
 /* 最近：影子大而散 */
 .ndw .paper.z2 { box-shadow: -2px 3px 4px rgba(93,74,44,0.18), -6px 13px 26px rgba(93,74,44,0.22); }
 /* 垫在后面那张空纸：只露一道边 */
-.ndw .pstack { z-index: 1; background-color: #F8F3E7;
+.ndw .pstack { z-index: 1; background-color: ${PAPER.stack};
   box-shadow: -1px 2px 4px rgba(93,74,44,0.13), -2px 5px 9px rgba(93,74,44,0.11); }
 /* 底边起拱：单钉吊着的纸，下缘往外弯，中间背光 */
 .ndw .bow { position: absolute; left: 0; right: 0; bottom: 0; height: 32%; z-index: 3;
@@ -210,13 +211,13 @@ export const WALL_CSS = `
 
 /* 固定件：一张纸一种，别都用钉 */
 .ndw .pin { position: absolute; top: 6px; left: 50%; width: 9px; height: 9px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #8a7a62, #453a2c 65%);
+  background: radial-gradient(circle at 35% 30%, ${PAPER.pinA}, ${PAPER.pinB} 65%);
   box-shadow: -1px 2px 3px rgba(43,33,23,0.45); transform: translateX(-50%); z-index: 6; }
-.ndw .pin.r { background: radial-gradient(circle at 35% 30%, #b4544a, #7d241c 65%); }
+.ndw .pin.r { background: radial-gradient(circle at 35% 30%, ${PAPER.pinRedA}, ${PAPER.pinRedB} 65%); }
 .ndw .clip { position: absolute; top: -13px; left: var(--cx, 22%); width: 17px; z-index: 6;
   filter: drop-shadow(-1px 2px 2px rgba(43,33,23,0.32)); }
 .ndw .staple { position: absolute; top: 9px; left: var(--cx, 12px); width: 15px; height: 4px; z-index: 6;
-  transform: rotate(-28deg); background: linear-gradient(180deg, #b9b2a4, #6f6759);
+  transform: rotate(-28deg); background: linear-gradient(180deg, ${PAPER.clipA}, ${PAPER.clipB});
   box-shadow: -1px 1.5px 1.5px rgba(43,33,23,0.45); }
 
 /* 瑕疵 */
@@ -230,7 +231,7 @@ export const WALL_CSS = `
     linear-gradient(84deg, transparent 62%, rgba(255,255,255,0.4) 70%, transparent 79%); }
 .ndw .dog::after { content: ''; position: absolute; right: 0; bottom: 0; width: 24px; height: 24px;
   pointer-events: none; z-index: 4;
-  background: linear-gradient(315deg, var(--wall) 48%, rgba(43,33,23,0.14) 50%, rgba(255,255,254,0.85) 58%, rgba(240,234,219,0.2) 72%, transparent 78%);
+  background: linear-gradient(315deg, var(--wall) 48%, rgba(43,33,23,0.14) 50%, rgba(255,255,254,0.85) 58%, ${P('wall',0.2)} 72%, transparent 78%);
   box-shadow: -1px -1px 2px rgba(43,33,23,0.05); }
 .ndw .holes { position: absolute; left: 8px; top: 17%; height: 66%; width: 8px; z-index: 4;
   background-image: radial-gradient(circle at 50% 50%, rgba(43,33,23,0.3) 0 3px, transparent 3.6px);
@@ -250,13 +251,13 @@ export const WALL_CSS = `
 .ndw .hand.p { color: var(--pencil); }
 
 /* 直接写在板上的字：不带纸，压在所有纸之下 */
-.ndw .wall { position: absolute; z-index: 1; pointer-events: none; color: rgba(122,111,92,0.92); }
-.ndw .wall.lbl { font: 12px var(--kai); letter-spacing: 0.1em; color: rgba(130,119,99,0.88); }
+.ndw .wall { position: absolute; z-index: 1; pointer-events: none; color: ${P('sketch',0.92)}; }
+.ndw .wall.lbl { font: 12px var(--kai); letter-spacing: 0.1em; color: ${P('sketchSoft',0.88)}; }
 .ndw .wall.blk { font: 12px var(--kai); line-height: 2.05; }
 .ndw .wall.blk .t { display: block; font-weight: 700; font-size: 22px; letter-spacing: 0.1em;
-  line-height: 1.3; color: rgba(104,93,76,0.95); }
+  line-height: 1.3; color: ${P('sketchDeep',0.95)}; }
 .ndw .wall.blk .rule { display: block; width: 118px; height: 7px; margin: 5px 0 5px; }
-.ndw .wall.blk .n { font-size: 15px; color: rgba(140,127,104,0.95); }
+.ndw .wall.blk .n { font-size: 15px; color: ${P('sketchNum',0.95)}; }
 .ndw .when { display: block; margin-top: 7px; font: 9.5px var(--kai); letter-spacing: 0.08em;
   color: var(--pencil); }
 
@@ -304,7 +305,7 @@ export const WALL_CSS = `
 .ndw-field input:focus { border-bottom-color: var(--ink); }
 .ndw-err { margin-top: 12px; min-height: 17px; font: 12.5px var(--kai); color: var(--red); }
 .ndw-card button.go { width: 100%; margin-top: 10px; padding: 12px 0; font: 700 16px var(--kai);
-  letter-spacing: 0.35em; text-indent: 0.35em; background: var(--ink); color: #F5F0E4;
+  letter-spacing: 0.35em; text-indent: 0.35em; background: var(--ink); color: ${COLOR.btnText};
   border: none; border-radius: 3px; cursor: pointer; }
 .ndw-card button.go:disabled { opacity: 0.55; cursor: default; }
 .ndw-card .foot { margin-top: 13px; font: 12px var(--kai); color: var(--pencil); text-align: center; }

@@ -61,7 +61,7 @@ export default function CanvasCandidateBar({ candidates, activeId, onSelect, onA
           borderRadius: RADIUS.sm,
           cursor: 'pointer',
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = COLOR.text2; e.currentTarget.style.background = 'rgba(0,0,0,0.03)'; }}
+        onMouseEnter={e => { e.currentTarget.style.color = COLOR.text2; e.currentTarget.style.background = 'rgba(43,33,23,0.03)'; }}
         onMouseLeave={e => { e.currentTarget.style.color = COLOR.sub; e.currentTarget.style.background = 'transparent'; }}
       >
         <Plus size={11} /> 新候选
@@ -109,7 +109,7 @@ function CandidateTab({ candidate, active, onSelect, onRemove, onRename }) {
         flexShrink: 0,
         position: 'relative',
         display: 'inline-flex', alignItems: 'center',
-        background: active ? 'rgba(45,36,24,0.06)' : 'transparent',
+        background: active ? 'rgba(43,33,23,0.06)' : 'transparent',
         borderRadius: RADIUS.sm,
         transition: 'background 0.15s',
       }}
@@ -137,13 +137,13 @@ function CandidateTab({ candidate, active, onSelect, onRemove, onRename }) {
           style={{
             position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)',
             width: 14, height: 14, borderRadius: RADIUS.xs,
-            background: 'rgba(0,0,0,0.06)',
+            background: 'rgba(43,33,23,0.06)',
             color: COLOR.sub,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = 'rgba(184,58,42,0.15)'; e.currentTarget.style.color = COLOR.error; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.06)'; e.currentTarget.style.color = COLOR.sub; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(43,33,23,0.06)'; e.currentTarget.style.color = COLOR.sub; }}
           title="删除候选"
         >
           <X size={9} />

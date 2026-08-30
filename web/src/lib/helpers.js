@@ -1,5 +1,7 @@
 /** 通用工具函数 */
 
+import { t } from './i18n.js';
+
 export function classNames(...args) {
   return args.filter(Boolean).join(' ');
 }
@@ -48,19 +50,26 @@ export function formatClock(iso) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-/** "刚刚" / "X 分钟前" / "X 小时前" / "X 天前" */
+/**
+ * "刚刚" / "X 分钟前" / "X 小时前" / "X 天前"，超过 30 天走 formatDate。
+ *
+ * 2026-08-29 包 t()：这个函数的输出印在首页每张卡、橱窗每张卡、会话列表和控制台上
+ * （8 个文件在调），英文界面里它是最扎眼的一处中文。英文的单复数走
+ * `{ one, other }` + count，中文不受影响（zh-CN 没词表，t 恒等）。
+ * 30 天以上落 formatDate 的 `2026-08-29`，那是数字格式，两种语言通用。
+ */
 export function timeAgo(iso) {
   const at = parseStamp(iso);
   if (!at) return '';
   const ms = Date.now() - at.getTime();
   if (isNaN(ms)) return '';
   const m = Math.floor(ms / 60000);
-  if (m < 1) return '刚刚';
-  if (m < 60) return `${m} 分钟前`;
+  if (m < 1) return t('刚刚');
+  if (m < 60) return t('{n} 分钟前', { n: m, count: m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} 小时前`;
+  if (h < 24) return t('{n} 小时前', { n: h, count: h });
   const d = Math.floor(h / 24);
-  if (d < 30) return `${d} 天前`;
+  if (d < 30) return t('{n} 天前', { n: d, count: d });
   return formatDate(iso);
 }
 

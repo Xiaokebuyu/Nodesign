@@ -168,7 +168,7 @@ export default function InspectFloatingCard({
         background: COLOR.bgWhite,
         borderRadius: 2,
         boxShadow:
-          '0 2px 4px rgba(0,0,0,0.04), 0 8px 20px rgba(0,0,0,0.08), 0 24px 48px rgba(0,0,0,0.10), inset 0 1px 0 rgba(255,255,255,0.8)',
+          '0 2px 4px rgba(43,33,23,0.04), 0 8px 20px rgba(43,33,23,0.08), 0 24px 48px rgba(43,33,23,0.10), inset 0 1px 0 rgba(255,254,246,0.8)',
         zIndex: 50,
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden',
@@ -181,11 +181,11 @@ export default function InspectFloatingCard({
         display: 'flex', alignItems: 'center', gap: GAP.sm,
         borderBottom: `1px solid ${COLOR.borderLt}`,
         flexShrink: 0,
-        background: 'rgba(255,255,255,0.95)',
+        background: 'rgba(255,254,246,0.95)',
       }}>
         <span style={{
           fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.text4,
-          background: 'rgba(0,0,0,0.05)',
+          background: 'rgba(43,33,23,0.05)',
           padding: `1px ${GAP.sm}px`,
           borderRadius: RADIUS.xs,
         }}>&lt;{tag}&gt;</span>
@@ -202,7 +202,7 @@ export default function InspectFloatingCard({
             title="滚动到该元素"
             style={{
               padding: GAP.xs, color: COLOR.text4, borderRadius: RADIUS.xs,
-              background: 'rgba(0,0,0,0.04)',
+              background: 'rgba(43,33,23,0.04)',
             }}
           >
             <MapPin size={11} />
@@ -226,7 +226,7 @@ export default function InspectFloatingCard({
         <div style={{
           padding: `${GAP.md}px ${GAP.lg}px`,
           borderBottom: `1px solid ${COLOR.borderLt}`,
-          background: 'rgba(0,0,0,0.015)',
+          background: 'rgba(43,33,23,0.015)',
         }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: GAP.xs,

@@ -67,8 +67,11 @@ html, body, #root {
   padding: 0;
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  background: #F9F8F6;
-  color: #3a2a18;
+  /* 2026-08-29：原来是 #F9F8F6 冷白 + #3a2a18，两个都是体系外的值。
+     这是全站的根，08-03 定的口径「白→纸、中性灰→暖墨」偏偏漏了它。
+     取 COLOR.bg / COLOR.text 的值（纯 CSS 文件插不了 JS，只能同步写死）。 */
+  background: #F4EFE3;
+  color: #2B2117;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -99,8 +102,8 @@ iframe { border: 0; }
 /* 滚动条美化（仅 webkit）*/
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+::-webkit-scrollbar-thumb { background: rgba(43,33,23,0.12); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(43,33,23,0.2); }
 
 /* shimmer effect — 工具调用 running 状态用。"一束光从左到右扫过文字"
    表示"工具在跑，不是卡住"。thinking 不用（thinking 自带逐字打字效果）。
@@ -108,11 +111,14 @@ iframe { border: 0; }
 .nd-shimmer {
   background: linear-gradient(
     90deg,
-    #4a4540 0%,
-    #4a4540 40%,
-    #d97706 50%,
-    #4a4540 60%,
-    #4a4540 100%
+    /* 底色取 COLOR.text2；扫过去那道光原来是 #d97706（Tailwind amber-600，
+       整套暖纸里唯一一个外来的高饱和橙）。换成 CANVAS.brass —— 它的定义就是
+       「暖棕描边/**运行态**」，跟 agent 正在动的那圈同色，语义本来就该是它。 */
+    #4A3E31 0%,
+    #4A3E31 40%,
+    #b08c4f 50%,
+    #4A3E31 60%,
+    #4A3E31 100%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -130,7 +136,7 @@ iframe { border: 0; }
    窄容器里的行为 —— 长公式自己横向滚动，别把聊天栏/舞台卡撑破；块级公式上下
    留一口气；写坏的公式红一行就算了（throwOnError:false 出的就是这个类）。 */
 .katex-display { margin: 8px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
-.katex-error { color: #b0554f; font-family: 'SF Mono', 'Cascadia Code', Menlo, monospace; font-size: 11px; }
+.katex-error { color: #A8362B; font-family: 'SF Mono', 'Cascadia Code', Menlo, monospace; font-size: 11px; }
 
 /* 画布上的字一律不可选（2026-08-17，issue #1 第 5 条）。
 

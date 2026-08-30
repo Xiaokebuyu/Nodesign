@@ -30,6 +30,7 @@
  *   桌面   原样，一个像素不动
  */
 import { useState, useRef, useEffect } from 'react';
+import { CANVAS } from '../../lib/theme.js';
 import { ChevronLeft, MoreHorizontal, MessageSquare } from 'lucide-react';
 import { CHROME, COLOR, GAP, FONT_SIZE, RADIUS } from '../../lib/theme.js';
 import { GRAIN, PAPER, PAPER_SHADOW } from '../../lib/paper.js';
@@ -311,7 +312,7 @@ export function TalkFab({ onClick, busy = false, hidden = false }) {
         <span aria-hidden style={{
           position: 'absolute', top: 6, right: 6,
           width: 8, height: 8, borderRadius: '50%',
-          background: '#B08C4F', boxShadow: '0 0 0 2px rgba(24,18,12,0.35)',
+          background: CANVAS.brass, boxShadow: '0 0 0 2px rgba(24,18,12,0.35)',
         }} />
       )}
     </button>

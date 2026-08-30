@@ -234,7 +234,7 @@ export default function FloatingPanel({
             gap: GAP.sm,
             padding: `${GAP.md}px ${GAP.lg}px`,
             // 标题条 = 纸的抬头：比纸身略深一点点的暖色，不是白条
-            background: 'rgba(240,234,219,0.55)',
+            background: alpha(PAPER.wall, 0.55),
             borderBottom: `1px solid ${PAPER.hair}`,
             fontFamily: FONT_SANS,
             fontSize: FONT_SIZE.xs,

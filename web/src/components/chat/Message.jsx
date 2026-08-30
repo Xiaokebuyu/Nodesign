@@ -6,7 +6,7 @@ import {
 import { diffLines } from 'diff';
 import MarkdownText from './MarkdownText.jsx';
 import { Undo2 } from 'lucide-react';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, alpha } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { Turn, Sessions } from '../../lib/api.js';
 import TimelineNode from './TimelineNode.jsx';
@@ -319,7 +319,7 @@ function renderQuestionPreview(preview, label) {
         borderRadius: RADIUS.sm,
         overflow: 'hidden',
         border: `1px solid ${COLOR.borderLt}`,
-        background: '#fafafa',
+        background: COLOR.bgCard,
       }}>
         <img
           src={s}
@@ -347,7 +347,7 @@ function renderQuestionPreview(preview, label) {
         borderRadius: RADIUS.sm,
         overflow: 'hidden',
         border: `1px solid ${COLOR.borderLt}`,
-        background: '#fafafa',
+        background: COLOR.bgCard,
       }}>
         <iframe
           title={`preview-${label}`}
@@ -748,7 +748,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
             alignItems: 'center',
             gap: GAP.xs,
             padding: `${GAP.xxs}px ${GAP.sm}px`,
-            background: 'rgba(45, 36, 24, 0.06)',
+            background: 'rgba(43,33,23, 0.06)',
             borderRadius: RADIUS.sm,
             fontFamily: FONT_MONO,
             fontSize: FONT_SIZE.xs,
@@ -789,7 +789,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
                   padding: `${GAP.sm}px ${GAP.md}px`,
                   border: `1px solid ${isPicked ? COLOR.btn : COLOR.borderLt}`,
                   borderRadius: RADIUS.md,
-                  background: isPicked ? 'rgba(45, 36, 24, 0.06)' : COLOR.bgWhite,
+                  background: isPicked ? 'rgba(43,33,23, 0.06)' : COLOR.bgWhite,
                   cursor: disabled ? 'not-allowed' : 'pointer',
                   fontFamily: FONT_SANS,
                   fontSize: FONT_SIZE.sm,
@@ -799,11 +799,11 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
                 }}
                 onMouseEnter={e => {
                   if (disabled) return;
-                  e.currentTarget.style.background = 'rgba(45, 36, 24, 0.04)';
+                  e.currentTarget.style.background = 'rgba(43,33,23, 0.04)';
                   e.currentTarget.style.borderColor = COLOR.borderHv;
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = isPicked ? 'rgba(45, 36, 24, 0.06)' : COLOR.bgWhite;
+                  e.currentTarget.style.background = isPicked ? 'rgba(43,33,23, 0.06)' : COLOR.bgWhite;
                   e.currentTarget.style.borderColor = isPicked ? COLOR.btn : COLOR.borderLt;
                 }}
               >
@@ -894,7 +894,7 @@ export function AskUserQuestionView({ toolInput, toolOutput, status, toolUseId }
                 fontFamily: FONT_SANS,
                 fontSize: FONT_SIZE.sm,
                 color: COLOR.text,
-                background: currentCustom.trim() ? 'rgba(45, 36, 24, 0.04)' : COLOR.bgWhite,
+                background: currentCustom.trim() ? 'rgba(43,33,23, 0.04)' : COLOR.bgWhite,
                 resize: 'vertical',
                 outline: 'none',
                 boxSizing: 'border-box',
@@ -1027,10 +1027,10 @@ function NavBtn({ onClick, disabled, icon: Icon, label, variant = 'default', ico
  */
 function SystemMessage({ variant = 'warn', content, pending = false }) {
   const config = {
-    warn:    { icon: ShieldAlert, color: COLOR.warn,    bgRgba: 'rgba(255, 193, 7, 0.08)',  border: 'rgba(255, 193, 7, 0.35)' },
-    info:    { icon: Info,        color: COLOR.btn,     bgRgba: 'rgba(45, 36, 24, 0.05)',   border: 'rgba(45, 36, 24, 0.18)' },
-    error:   { icon: AlertCircle, color: COLOR.error,   bgRgba: 'rgba(220, 53, 69, 0.06)',  border: 'rgba(220, 53, 69, 0.30)' },
-    success: { icon: CheckCircle2,color: COLOR.success, bgRgba: 'rgba(40, 167, 69, 0.06)',  border: 'rgba(40, 167, 69, 0.30)' },
+    warn:    { icon: ShieldAlert, color: COLOR.warn,    bgRgba: alpha(COLOR.warn, 0.08),    border: alpha(COLOR.warn, 0.35) },
+    info:    { icon: Info,        color: COLOR.btn,     bgRgba: 'rgba(43,33,23, 0.05)',   border: 'rgba(43,33,23, 0.18)' },
+    error:   { icon: AlertCircle, color: COLOR.error,   bgRgba: alpha(COLOR.error, 0.06),   border: alpha(COLOR.error, 0.30) },
+    success: { icon: CheckCircle2,color: COLOR.success, bgRgba: alpha(COLOR.success, 0.06), border: alpha(COLOR.success, 0.30) },
   }[variant] || { icon: Info, color: COLOR.text2, bgRgba: 'rgba(43,33,23,0.04)', border: COLOR.borderLt };
 
   const Icon = config.icon;
@@ -1753,7 +1753,7 @@ function ToolMessage({
           {toolError && (
             <div style={{
               padding: GAP.lg,
-              background: 'rgba(220, 53, 69, 0.06)',
+              background: alpha(COLOR.error, 0.06),
               border: `1px solid ${COLOR.error}33`,
               borderRadius: RADIUS.lg,
               fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
@@ -1810,9 +1810,9 @@ function DiffView({ oldStr, newStr }) {
     }}>
       {rows.map((r, i) => {
         const bg = r.type === 'add'
-          ? 'rgba(74,138,74,0.10)'
+          ? alpha(COLOR.success, 0.10)
           : r.type === 'del'
-            ? 'rgba(184,58,42,0.08)'
+            ? alpha(COLOR.error, 0.08)
             : 'transparent';
         const prefixColor = r.type === 'add'
           ? COLOR.success
