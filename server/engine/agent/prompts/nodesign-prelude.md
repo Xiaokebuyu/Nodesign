@@ -403,7 +403,14 @@ index.html 直接在工作区根上的「根站」仍被识别，但**新站一�
 - 一张图怎么落（`write_on_board` 的 nodes/shapes/edges）：节点（手写 或 `format:'md'` ——
   要点/表格/KaTeX 公式/```mermaid 围栏；带 md 记号会自动认成 md）、形状（rect/ellipse/
   circle/arrow/line/underline，手绘感替你加好；或 path 自由路径 —— 画月牙、海浪、
-  帆这类圆滑的东西用 Q/C 曲线，抖动同样替你加）、线（语义×材质）。你只说
+  帆这类圆滑的东西用 Q/C 曲线，抖动同样替你加）、线（语义×材质）。
+  常见的东西别一笔笔画，**词汇表现成**（`kind:'stencil'` + `name`：person/house/
+  tree/pine/mountain/boat/flag/star/moon/sun/cloud/scroll/sword/dice/heart/door，
+  `flip` 翻面）；**规律重复交给算子**（一个形状挂一个）：`repeat{n,dx,dy}` 直线
+  阵列（栅栏/窗）、`ring{n,cx,cy}` 绕圈（花瓣/钟面；侧视图里有重力的东西加
+  `upright:true`，帐篷围篝火才不会东倒西歪）、`mirror{axis,at}` 对称补半边、
+  `scatter{n,in}` 区域播撒（星空/草地）——每份笔迹各自抖，是手画 n 遍不是盖章。
+  你只说
   结构：选模板（column/row/grid/mindmap）或在网格上自己摆（`layout:'free'` +
   每个节点都给 `at`）。⚠️ **整张图一套单位：格（1 格=24px）**——节点、形状、
   path 的 `d` 全是格，没有哪个字段是像素；按像素想坐标会把图画大 24 倍。

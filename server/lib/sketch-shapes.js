@@ -10,6 +10,8 @@
  */
 
 import { UNIT, shapePath, roughFreePath } from './sketch-layout.js';
+import { stencilStrokes, STENCIL_NAMES } from './sketch-stencils.js';
+import { expandModifiers } from './sketch-array.js';
 
 /** 板书墨色表（zod 不硬拒，认不出落 ink —— 风格不用 -32602 管） */
 export const SKETCH_COLORS = ['ink', 'red', 'pencil', 'brass'];
@@ -33,7 +35,9 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
     // 落盘前的白名单每次都把它打回 'ink'，意图从未生效 —— 08-28 勘查后铲平。
     const color = SKETCH_COLORS.includes(s.color) ? s.color : 'ink';
     const width = s.width || 2;
-    let rect; let d;
+    // makeOne：按种子重新生成一份本尊 —— 算子展开的每一份各自的抖（看起来是
+    // 手画了 n 遍，不是图章盖了 n 下）。返回 {rect, d}，d 局部于 rect。
+    let makeOne;
     if (s.kind === 'path') {
       // 单位单义（2026-08-30 画图探针案）：d 的坐标与 at/w/h **同一套格**（1 格 =
       // 24px，小数随意）。此前 schema 写着"d 是像素"而 at 是格 —— 同一个形状两套
@@ -53,8 +57,22 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
         const v = Number(n) * UNIT - ((k++ % 2 === 0) ? minX : minY) + P;
         return String(Math.round(v * 10) / 10);
       });
-      rect = { x: (s.at?.x || 0) * UNIT + minX - P, y: (s.at?.y || 0) * UNIT + minY - P, w: w + P * 2, h: h + P * 2 };
-      d = roughFreePath(local, seed);
+      const rect0 = { x: (s.at?.x || 0) * UNIT + minX - P, y: (s.at?.y || 0) * UNIT + minY - P, w: w + P * 2, h: h + P * 2 };
+      makeOne = (sx) => ({ rect: { ...rect0 }, d: roughFreePath(local, seed + sx) });
+    } else if (s.kind === 'stencil') {
+      // 词汇表（刀①）：参数化简笔画 —— 名字 + 位置 + 尺寸，一笔一画归机器
+      if (!STENCIL_NAMES.includes(s.name)) return { error: `形状 ${sid}：stencil 认识这些名字 —— ${STENCIL_NAMES.join(', ')}` };
+      if (!s.at || !s.w) return { error: `形状 ${sid}：stencil 要 at + w（格；h 可省 = 按图形比例）` };
+      const st = stencilStrokes(s.name, s.w * UNIT, s.h ? s.h * UNIT : null);
+      const flipped = s.flip
+        ? st.strokes.map((d) => { let k2 = 0; return d.replace(/-?\d*\.?\d+/g, (n) => ((k2++ % 2 === 0) ? String(Math.round((st.w - Number(n)) * 10) / 10) : n)); })
+        : st.strokes;
+      const rect0 = { x: s.at.x * UNIT - 6, y: s.at.y * UNIT - 6, w: st.w + 12, h: st.h + 12 };
+      makeOne = (sx) => ({
+        rect: { ...rect0 },
+        d: flipped.map((d2, j) => roughFreePath(d2, `${seed}${sx}:${j}`)).join(' ')
+          .replace(/(^| )M/g, ' M').trim().replace(/^M/, 'M'),
+      });
     } else if (s.kind === 'line' || s.kind === 'arrow' || s.kind === 'underline') {
       let a; let b;
       if (s.kind === 'underline' && s.around) {
@@ -70,9 +88,10 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
         else if (s.kind === 'underline') b = { x: a.x + (s.w || 4) * UNIT, y: a.y };
         else return { error: `形状 ${sid}：${s.kind} 要 to 或 toNode` };
       }
-      const sp = shapePath(s.kind, { to: { x: b.x - a.x, y: b.y - a.y } }, seed);
-      rect = { x: Math.min(a.x, b.x) - 6, y: Math.min(a.y, b.y) - 6, w: sp.w, h: sp.h };
-      d = sp.d;
+      makeOne = (sx) => {
+        const sp = shapePath(s.kind, { to: { x: b.x - a.x, y: b.y - a.y } }, seed + sx);
+        return { rect: { x: Math.min(a.x, b.x) - 6, y: Math.min(a.y, b.y) - 6, w: sp.w, h: sp.h }, d: sp.d };
+      };
     } else {
       let box;
       if (s.around) {
@@ -84,13 +103,21 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
         if (!s.at || !s.w) return { error: `形状 ${sid}：${s.kind} 要 at + w（+h）或 around` };
         box = { x: s.at.x * UNIT, y: s.at.y * UNIT, w: s.w * UNIT, h: (s.h || s.w) * UNIT };
       }
-      const sp = shapePath(s.kind, { w: box.w, h: box.h }, seed);
-      rect = { x: box.x - 6, y: box.y - 6, w: sp.w, h: sp.h };
-      d = sp.d;
+      makeOne = (sx) => {
+        const sp = shapePath(s.kind, { w: box.w, h: box.h }, seed + sx);
+        return { rect: { x: box.x - 6, y: box.y - 6, w: sp.w, h: sp.h }, d: sp.d };
+      };
     }
+    // 算子展开（刀④）：repeat/ring/mirror/scatter —— 等距和对称归机器
+    const pieces = expandModifiers(s, makeOne, sid);
+    if (pieces.error) return { error: pieces.error };
     // 包着节点的记号记 hug：落盘后编辑侧挪节点它跟着走（散架病的另一半在 edit-board）
-    const hugKey = (s.around && s.kind !== 'line' && s.kind !== 'arrow' && s.kind !== 'path') ? s.around : null;
-    shapes.push({ key: sid, rect, d, color, width, hug: hugKey });
+    const hugKey = (s.around && ['rect', 'ellipse', 'circle', 'underline'].includes(s.kind)) ? s.around : null;
+    for (const pc of pieces) {
+      if (isTaken(pc.key) || shapes.some((x) => x.key === pc.key)) return { error: `形状 id「${pc.key}」撞名（算子副本叫 <id>-2, <id>-3…，别的形状别占这些名）` };
+      shapes.push({ key: pc.key, rect: pc.rect, d: pc.d, color, width, hug: hugKey });
+    }
+    if (shapes.length > 120) return { error: `形状展开后超过 120 件（第 ${i + 1} 个展开完是 ${shapes.length}）—— 阵列收敛一点，或拆成几张图` };
   }
   return { shapes };
 }

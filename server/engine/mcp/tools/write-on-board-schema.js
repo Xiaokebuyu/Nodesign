@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { TAG_RE } from '../../../projects/board-sanitize.js';
 import { CHALK_DIR } from '../../../lib/chalk.js';
+import { STENCIL_NAMES } from '../../../lib/sketch-stencils.js';
 
 const MAX_NODES = 200;
 const MAX_SHAPES = 120;
@@ -40,8 +41,11 @@ export const NODES = z.array(z.object({
 
 export const SHAPES = z.array(z.object({
   id: LOCAL_ID.optional(),
-  kind: z.enum(['rect', 'ellipse', 'circle', 'line', 'arrow', 'underline', 'path']),
+  kind: z.enum(['rect', 'ellipse', 'circle', 'line', 'arrow', 'underline', 'path', 'stencil']),
   at: GRID_PT.optional(),
+  name: z.enum(STENCIL_NAMES).optional()
+    .describe('stencil kind: which pictogram — a hand-tuned little drawing placed at at, scaled to w (h optional, defaults to its natural aspect). Use these instead of drawing common things stroke by stroke'),
+  flip: z.boolean().optional().describe('stencil: mirror horizontally (facing the other way)'),
   around: LOCAL_ID.optional().describe('rect/ellipse/circle/underline: wrap this node instead of at/w/h'),
   w: z.number().min(0).max(200).optional(),
   h: z.number().min(0).max(200).optional(),
@@ -50,6 +54,15 @@ export const SHAPES = z.array(z.object({
   d: z.string().max(8000).optional().describe('path kind: SVG path, UPPERCASE absolute M/L/Q/C/Z only. Coordinates are in the SAME GRID UNITS as at/w/h (1 unit = 24px; decimals fine) — one coordinate space for the whole sketch. Hand-drawn wobble is applied for you; Q/C curves are how you draw anything smooth (a crescent moon, a wave, a sail)'),
   color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
   width: z.number().min(1).max(12).optional(),
+  // ── 算子（一次挂一个；等距/对称/播撒这类算术归机器，每份笔迹各自抖）──
+  repeat: z.object({ n: z.number().int().min(2).max(24), dx: z.number().min(-200).max(200).optional(), dy: z.number().min(-200).max(200).optional() }).optional()
+    .describe('LINEAR ARRAY: n copies stepped by (dx,dy) grid units — a fence, windows, steps. Copies are re-inked, not stamped'),
+  ring: z.object({ n: z.number().int().min(2).max(24), cx: z.number().min(-2000).max(2000), cy: z.number().min(-2000).max(2000), upright: z.boolean().optional() }).optional()
+    .describe('CIRCULAR ARRAY: n copies around grid point (cx,cy). Draw ONE at its 12-o-clock spot. Default ROTATES each copy (petals, clock marks, top-down chairs facing a table); upright:true keeps them unrotated and just seats them round the circle (side-view things with gravity — tents or people round a fire)'),
+  mirror: z.object({ axis: z.enum(['x', 'y']), at: z.number().min(-2000).max(2000) }).optional()
+    .describe("SYMMETRY: adds a mirrored copy across the axis at grid position `at` (axis:'x' = vertical mirror line). Draw half a butterfly, get the whole one"),
+  scatter: z.object({ n: z.number().int().min(2).max(40), in: z.object({ x: z.number(), y: z.number(), w: z.number().min(1), h: z.number().min(1) }) }).optional()
+    .describe('SPRINKLE: n copies at seeded-random spots inside the grid rect, with slight size jitter — a starry sky, grass, pebbles. Same call replays identically'),
 })).max(MAX_SHAPES);
 
 export const EDGES = z.array(z.object({

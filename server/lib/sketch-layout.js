@@ -212,6 +212,24 @@ export function roughFreePath(dIn, seed = 'freepath') {
 }
 
 /**
+ * 逐坐标对变换一条 path（大写绝对 M/L/Q/C/Z）。旋转/镜像/缩放全走它 ——
+ * 数字成对喂给 fn，命令字原样保留。
+ */
+export function transformD(d, fn) {
+  const tokens = String(d).match(/[MLQCZ]|-?\d*\.?\d+(?:[eE][-+]?\d+)?/g) || [];
+  const out = [];
+  let i = 0;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (/^[MLQCZ]$/.test(t)) { out.push(t); i += 1; continue; }
+    const p = fn({ x: Number(tokens[i]), y: Number(tokens[i + 1]) });
+    i += 2;
+    out.push(f1(p.x), f1(p.y));
+  }
+  return out.join(' ');
+}
+
+/**
  * 模板排布。nodes: [{ key, w, h, at?: {x,y}(网格) }] → Map key → {x,y}（局部像素）
  * - free：有 at 的按网格落，没 at 的排在 free 区域下面一列
  * - column / row / grid(cols) / mindmap（第一个是中心，其余环绕）
