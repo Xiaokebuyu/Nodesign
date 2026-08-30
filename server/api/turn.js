@@ -47,7 +47,7 @@ import {
 import { pushUserMessage, getQueueDepth } from '../engine/runs/turn-relay.js';
 import { applySessionModel, resolveSessionModel } from '../engine/agent/session-model.js';
 import { lruGet, lruPut, inflightTurns, INFLIGHT_RETENTION_MS } from './turn-inflight.js';
-import { allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree, hasSubscriptionAccess, modelSwitchRejection } from '../engine/agent/model-context.js';
+import { allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree, hasSubscriptionAccess, modelSwitchRejection, resolveModelRoute } from '../engine/agent/model-context.js';
 import { AsyncQueue } from '../lib/async-queue.js';
 import { checkQuota, checkFreeQuota, checkConcurrency, fmtUsd } from '../lib/quota.js';
 import { shouldModerate, moderateText, recordViolation, levelFor } from '../lib/moderation.js';
@@ -221,9 +221,11 @@ router.post('/:pid/turn', async (req, res, next) => {
       });
     }
     // 并发：只拦"会立刻开跑"的 turn；session 正忙时这条消息进排队（既有串行语义，
-    // 不产生新并发）。免费行不受全局固定数限制，只受内存闸（quota.js）
+    // 不产生新并发）。**非订阅行**不受全局固定数限制，只受内存闸 + 防失控上限（quota.js）。
+    // ⚠️ 判据是"花不花站主订阅"，不是"这一轮花不花钱"（08-30 改）：那个固定数 3 护的是订阅，
+    // 一条 $0.015/M 的 API 行塞进那一档只会把站点默认路径的天花板从 12 砍到 3。
     if (!getQuerySession(sid)?.currentRunId) {
-      const gate = checkConcurrency(req.user, { free: modelIsFree(turnModel) });
+      const gate = checkConcurrency(req.user, { offSubscription: resolveModelRoute(turnModel).mode === 'api' });
       if (!gate.ok) {
         return res.status(429).json({ error: gate.message, code: gate.code });
       }

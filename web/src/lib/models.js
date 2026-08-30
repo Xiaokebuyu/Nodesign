@@ -23,10 +23,12 @@
  * `GET /api/me/models` 的 `default` 字段按用户算好给前端）—— 这里的常量只是接口挂了时
  * 的最后一道兜底，跟 FALLBACK_MODELS 同级。改服务端默认时顺手核一眼这里。
  * （08-17 到 08-21 之间这里是 Sonnet 并且是一等真相；经营态转向后是免费的 Ox，08-26 Ox 整族下架
- * → minimax-m3；08-27 → glm-5.3-flash-zai，站主的智谱订阅行，同样四价全 0。
- * ⛔ 那条订阅是限时的，撤它的那天服务端表和这里要一起改。）
+ * → minimax-m3；08-27 → glm-5.3-flash-zai，站主的智谱订阅行。
+ * ⭐ 08-30 那条订阅额度耗尽、整行撤掉 → glm-5.3-flash-merge，**同一个模型的另一条线**。
+ * ⚠️ 它跟历任默认不同的一点：**这是第一条付费的默认行**（$0.015/M，走每日美元额度而不是
+ * 免费轮次闸）。当时算过：一轮 ≈ $0.0023，basic 的 $5/天 ≈ 2000 轮。）
  */
-export const DEFAULT_MODEL_ID = 'glm-5.3-flash-zai';
+export const DEFAULT_MODEL_ID = 'glm-5.3-flash-merge';
 
 /**
  * `DEFAULT_MODEL_ID` 出自谁家（ui/ModelMark.jsx 的 brand）。⚠️ 跟上面那行**必须同时改** ——
@@ -59,8 +61,7 @@ export function isModelPrefStale(pref, serverOptions) {
 
 /** 服务端拿不到时的兜底清单（离线 / 接口挂了也别让按钮变成死的） */
 export const FALLBACK_MODELS = [
-  { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · 官方直连', desc: '限时免费 · 有视觉 · 1M 上下文', brand: DEFAULT_BRAND },
-  { id: 'glm-5.3-flash-merge', label: 'GLM-5.3-Flash · Merge 网关', desc: '有视觉 · 1M 上下文 · 极便宜', brand: 'glm' },
+  { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · Merge 网关', desc: '有视觉 · 1M 上下文 · 极便宜', brand: DEFAULT_BRAND },
   { id: 'minimax-m3', label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久', brand: 'minimax' },
   { id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '快 · 日常改稿和铺页够用', brand: 'claude' },
   { id: 'claude-opus-5[1m]', label: 'Opus 5', desc: '前端与审美更强 · 烧订阅额度快得多，重活再开', brand: 'claude' },

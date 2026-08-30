@@ -222,12 +222,22 @@ export function usedTodayByFamily(userId, now = Date.now()) {
 //
 // 08-21 经营态转向后分两档：
 // - 订阅行（花站主的订阅）：全局固定数 NODESIGN_MAX_CONCURRENT_RUNS（默认 3）
-// - 免费行（Ox 这类零价模型）：不受全局固定数限制。它的约束只剩机器本身 ——
+// - 非订阅行（走 ingress 的 API 行）：不受全局固定数限制。它的约束只剩机器本身 ——
 //   每个 claude CLI 进程 350MB~1GB、机器 1 vCPU/8G 无 swap，所以改成**内存闸**：
 //   MemAvailable 低于 NODESIGN_MIN_FREE_MEM_MB（默认 700）就拒，外加一个防失控的
 //   上限 NODESIGN_FREE_MAX_CONCURRENT_RUNS（默认 12）。内存闸对两档都生效（订阅行
 //   的固定数 3 本来就是按内存拍的，内存先见底时固定数也救不了）
 // - 每用户同时 1 个（admin 免）两档都一样：这是公平性不是资源
+//
+// ⭐⭐ **2026-08-30 判据从「免费/付费」改成「订阅/非订阅」**。起因：全员默认行换成
+// glm-5.3-flash-merge（付费但极便宜，$0.015/M）。按老判据它落进"付费"那一档，站点默认
+// 路径的并发天花板会从 12 掉到 3，而这台盒子实测峰值在飞 turn 是 4 —— 第 4 个人当场
+// 吃「现在有点挤」。
+// 这不是把闸放松，是**把闸对准它本来护的东西**：那个 3 从头到尾护的是站主的 Claude 订阅
+// （同时开太多 query 会烧额度、也会被上游限流），跟"这一轮花不花钱"没有关系。一条
+// $0.015/M 的网关行既不烧订阅、也不烧机器以外的任何东西，它该受的约束就是内存。
+// ⚠️ 于是**付费的 API 行现在也走 12 + 内存闸**（deepseek 视觉行、merge 行）。真要给某一家
+// 单独收并发，那是 per-upstream 的闸，不是把它塞回订阅那一档。
 
 export function memAvailableMb() {
   try {
@@ -236,13 +246,20 @@ export function memAvailableMb() {
   } catch { return null; }   // 非 Linux / 读不到 → 不以内存拒
 }
 
-/** 纯决策：输入全是数，方便测 */
-export function decideConcurrency({ running, mine, isAdmin, free, memMb, env = process.env }) {
+/**
+ * 纯决策：输入全是数，方便测。
+ * @param {boolean} offSubscription 这一轮**不花站主订阅**（走 ingress 的 API 行）。
+ *   ⚠️ 08-30 前这个参数叫 `free`、判据是"模型免不免费"，改名是因为那个名字骗过人一次：
+ *   默认行换成一条付费但极便宜的 API 行时，它被判进订阅那一档、天花板从 12 掉到 3。
+ */
+export function decideConcurrency({ running, mine, isAdmin, offSubscription, free, memMb, env = process.env }) {
+  // 老参数名还认（旧调用方 / 测试），但新名优先
+  const offSub = offSubscription !== undefined ? offSubscription : !!free;
   const minMem = Number(env.NODESIGN_MIN_FREE_MEM_MB) || 700;
   if (memMb != null && memMb < minMem) {
     return { ok: false, code: 'BUSY', message: `机器内存快满了（${running} 个任务在跑），稍等一会儿再发` };
   }
-  const globalMax = free
+  const globalMax = offSub
     ? (Number(env.NODESIGN_FREE_MAX_CONCURRENT_RUNS) || 12)
     : (Number(env.NODESIGN_MAX_CONCURRENT_RUNS) || 3);
   if (running >= globalMax) {
@@ -257,7 +274,7 @@ export function decideConcurrency({ running, mine, isAdmin, free, memMb, env = p
   return { ok: true };
 }
 
-export function checkConcurrency(user, { free = false } = {}) {
+export function checkConcurrency(user, { offSubscription = false, free = false } = {}) {
   // running turn → user 归属：runId 查 runs.user_id（不给 session 注册表加
   // userId 字段 —— 正在跑的 turn 就几个，查表成本可忽略）
   let mine = 0;
@@ -266,5 +283,8 @@ export function checkConcurrency(user, { free = false } = {}) {
       if (getRun(rid)?.userId === user?.id) mine += 1;
     }
   }
-  return decideConcurrency({ running: countRunningTurns(), mine, isAdmin: user?.role === 'admin', free, memMb: memAvailableMb() });
+  return decideConcurrency({
+    running: countRunningTurns(), mine, isAdmin: user?.role === 'admin',
+    offSubscription: offSubscription || free, memMb: memAvailableMb(),
+  });
 }

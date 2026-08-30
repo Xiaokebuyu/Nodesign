@@ -20,6 +20,8 @@ import {
   UPSTREAMS, BRANDS, brandOfModel, SHARED_SDK_ALIAS,
 } from './model-context.js';
 import { MODELS_BUILTIN, SHARED_SDK_ALIAS as SHARED_FROM_TABLE } from './model-table.js';
+// 08-30：默认行换成付费行之后，「并发闸把它算在哪一档」成了这张表的一条硬约束（见文末 describe）
+import { decideConcurrency } from '../../lib/quota.js';
 
 describe('派生导出（旧签名不变）', () => {
   it('SELECTABLE_MODELS 只暴露带 select 的行；helper 行 / 摘牌行 / 删掉的行都不进 picker', () => {
@@ -64,7 +66,7 @@ describe('派生导出（旧签名不变）', () => {
     expect(anon).not.toContain('gemini-3.7-flash');
   });
 
-  it('订阅闸（08-21）：没订阅资格的账号看得见 Claude 行但 locked；邀请码号/admin 正常；默认模型=glm-5.3-flash-zai（08-27）', () => {
+  it('订阅闸（08-21）：没订阅资格的账号看得见 Claude 行但 locked；邀请码号/admin 正常；默认模型=glm-5.3-flash-merge（08-30）', () => {
     const pub = { role: 'user', plan: 'basic' };
     const sub = { role: 'user', plan: 'pro' };
     const pubSel = selectableModelsFor(pub);
@@ -78,11 +80,9 @@ describe('派生导出（旧签名不变）', () => {
     expect(isModelLockedFor(pub, 'gemini-3.7-flash')).toBe(false);   // 看不见的不是 locked，是不存在
     expect(selectableModelsFor(sub).some((m) => m.locked)).toBe(false);
     expect(selectableModelsFor({ role: 'admin' }).some((m) => m.locked)).toBe(false);
-    // 08-27 默认从 minimax-m3 挪到 zai 那条官方直连（用户拍板；M3 那条上游 08-26 实测大面积 429）
-    for (const u of [pub, sub, { role: 'admin' }, null]) expect(defaultModelFor(u)).toBe('glm-5.3-flash-zai');
-    // ⭐ 默认行**必须是免费行**（四价全 0）：公开注册号的经营态靠 turn.js 的按轮次免费闸，不是金额闸。
-    // 哪天默认再挪家，这条会先炸（08-26 从 Ox 挪到 M3、08-27 挪到 zai，两次都被它挡着重新想了一遍）
-    expect(modelIsFree(defaultModelFor(null)), '默认行不免费 = 公开注册直接烧钱').toBe(true);
+    // 默认行的历任：Ox → minimax-m3（08-26）→ zai 官方直连（08-27）→ **merge 网关（08-30，zai 订阅额度耗尽）**
+    for (const u of [pub, sub, { role: 'admin' }, null]) expect(defaultModelFor(u)).toBe('glm-5.3-flash-merge');
+    // ⚠️ 「默认行必须免费」那条老规矩 08-30 被用户拍板破了（详见下面那个 describe 的三条新规矩）
     expect(modelIsFree('minimax-m3')).toBe(true);
     expect(modelIsFree('glm-5.3-flash-merge')).toBe(false);   // Merge 网关那条是付费行，走美元日限
     expect(modelIsFree('claude-sonnet-5[1m]')).toBe(false);
@@ -472,83 +472,67 @@ describe('加载期断言真的会炸（换一张毒表 import 一遍 —— 装
   });
 });
 
-describe('Z.ai 官方直连 · glm-5.3-flash-zai（08-26）', () => {
-  it('上游：Anthropic 原生透传、x-api-key、baseUrl 不带 /v1', () => {
-    const u = UPSTREAMS.zai;
-    expect(u).toBeTruthy();
-    expect(u.baseUrl).toBe('https://api.z.ai/api/anthropic');
-    // ⛔ 透传路是 baseUrl + 原始路径（model-ingress.js 的 joinPath）。baseUrl 带 /v1 就会拼成
-    // /api/anthropic/v1/v1/messages —— 404，而且是那种"看着像配错了名字"的 404
-    expect(u.baseUrl.endsWith('/v1'), 'baseUrl 带 /v1 会把路径拼重').toBe(false);
-    expect(u.authStyle).toBe('x-api-key');
-    // 不写 protocol = 透传 Anthropic（不过 openai-chat 转换层）
-    expect(u.protocol).toBeUndefined();
-    expect(resolveWireModel('glm-5.3-flash-zai').protocol).toBe('anthropic');
+describe('⛔ glm-5.3-flash-zai 已下架（2026-08-30，包月订阅额度耗尽）', () => {
+  it('⭐⭐ 行和上游都不许还查得到 —— 留着 = 请求带着一把废钥匙去打一个 401 的真名', () => {
+    expect(resolveWireModel('glm-5.3-flash-zai')).toBeNull();
+    expect(resolveModelRoute('glm-5.3-flash-zai').mode).toBe('subscription');   // 不认识的名字退回订阅通路，不瞎猜
+    expect(SELECTABLE_MODELS.find((m) => m.id === 'glm-5.3-flash-zai')).toBeUndefined();
+    expect(UPSTREAMS.zai, '上游只有它一行在用，行走了上游也要走').toBeUndefined();
   });
 
-  it('⛔⛔ countTokens 必须是 false —— 这家的 count_tokens 是恒回 0 的桩，不是 404', () => {
-    // 08-26 实测：/v1/messages/count_tokens 回 200 {"input_tokens":0}，而同一段文本
-    // 真实请求计 462。入口对 countTokens:true 的语义是「先转发、404 才回退本地」，
-    // 于是这个 200 的 0 会被当真话传给 CLI → **auto-compact 永远不触发** →
-    // 会话一路涨到撞上游硬上限才 400，而且全程没有任何报错。
-    // 这条断言是这个洞唯一的看守：改成 true 不会有任何测试失败，除了它。
-    expect(UPSTREAMS.zai.countTokens, 'Z.ai 的 count_tokens 会撒谎，必须本地估算').toBe(false);
-  });
-
-  it('行：跟 merge 网关那条是同一模型的两条独立线路（不同 id、各自钉死自己的上游、同窗口）', () => {
-    const mg = resolveWireModel('glm-5.3-flash-merge');
-    const zai = resolveWireModel('glm-5.3-flash-zai');
-    expect(mg.appModel).not.toBe(zai.appModel);        // 两行
-    expect(mg.upstreamId).toBe('merge');
-    expect(zai.upstreamId).toBe('zai');
-    // 同一个模型，两家的线上真名写法不同：zai 官方就叫 glm-5.3-flash，merge 网关要带 vendor 前缀
-    expect(zai.wireModel).toBe('glm-5.3-flash');
-    expect(mg.wireModel).toBe('zai/glm-5.3-flash');
-    // ⭐ 做成两行而不是一行加动态路由，是为了缓存：各家各有各的 prompt cache，
-    // 同一会话在几家之间跳每次都是冷的。会话钉死在一行 = 缓存热得起来。
-    const r = resolveModelRoute('glm-5.3-flash-zai');
-    expect(r.mode).toBe('api');
-    expect(r.window).toBe(1_000_000);                   // 08-30 起 1M（此前 272k）
-    // 两行同窗口这条约束本身不变：换线时 auto-compact 的分母不变，上下文条不会突然缩水
-    expect(r.window).toBe(resolveModelRoute('glm-5.3-flash-merge').window);
-    expect(r.sdkAlias).toBe(SHARED_SDK_ALIAS);
-  });
-
-  it('helper 不留在这家：并发桶只有 3，标题那几发会跟主回合抢槽位', () => {
-    expect(resolveModelRoute('glm-5.3-flash-zai').fastModel).toBe('deepseek-v4-flash-helper');
-    expect(resolveWireModel('deepseek-v4-flash-helper').upstreamId).toBe('zenGo');   // 跨上游做 helper，同 kimi-k3
-  });
-
-  it('图原生直通不提升；thinking 删字段让上游自决（budget_tokens 在这家不管用）', () => {
-    const w = resolveWireModel('glm-5.3-flash-zai');
-    expect(w.liftImages).toBe(false);   // 08-26 体检 3b：tool_result 里的图原样过桥
-    expect(w.thinking).toBe('strip');
-    expect(w.maxOutput).toBe(131_072);
-  });
-
-  it('订阅行记 0 → 走按轮次的免费闸；08-26 起对所有档开放（限时额度，用完撤掉）', () => {
-    expect(modelIsFree('glm-5.3-flash-zai')).toBe(true);
-    // 08-26 用户拍板不 gate：这条订阅只剩约一周，压着给 admin 试跑等于浪费额度
-    expect(SELECTABLE_MODELS.find((m) => m.id === 'glm-5.3-flash-zai')?.gate).toBeUndefined();
-    for (const u of [{ role: 'user', plan: 'basic' }, { role: 'user', plan: 'pro' }, { role: 'admin' }]) {
-      expect(allowedModelsFor(u).map((m) => m.id)).toContain('glm-5.3-flash-zai');
+  it('⭐ 撤行三查（Ox 那次栽过的三个坑，逐条钉住）', () => {
+    // ① 没有别的行的 fastModel 指着它 —— 指着一个不存在的行不会报错，只会静默失效
+    for (const m of SELECTABLE_MODELS) {
+      const fm = resolveModelRoute(m.id)?.fastModel;
+      expect(fm, `${m.id} 的 fastModel 指着下架的行`).not.toBe('glm-5.3-flash-zai');
+      if (fm) expect(resolveWireModel(fm), `${m.id} 的 fastModel「${fm}」查不到`).toBeTruthy();
     }
-    // ⚠️ 免费闸只看四价全 0。它花的是站主的包月订阅额度，不是真免费 —— 只是那笔钱按月付、不按 token 走
-    expect(modelIsFree(defaultModelFor(null)), '默认行仍必须是免费行').toBe(true);
-    // ⭐⭐ 08-27 用户拍板让它当**全员默认**（此前这里钉的是"它不该是默认行"）。
-    // ⛔ 换来的债写在这儿：这条订阅是限时的，**撤它的那天必须同一个动作把 default 挪走**
-    // （候补 minimax-m3 或别的四价全 0 的行），否则新会话第一轮就落在一个不存在的行上。
-    // 这条断言看不住那件事 —— 它只保证"默认行是谁"这件事有人在钉，改默认的人会先在这里绊一下。
-    expect(defaultModelFor(null)).toBe('glm-5.3-flash-zai');
+    // ② 没有别的行还挂在 zai 上游上
+    for (const m of SELECTABLE_MODELS) expect(resolveModelRoute(m.id)?.upstreamId).not.toBe('zai');
+    // ③ default 已经挪走（这是撤行当天最容易漏的一步：不挪的话新会话第一轮落在不存在的行上）
+    expect(defaultModelFor(null)).not.toBe('glm-5.3-flash-zai');
+    expect(resolveWireModel(defaultModelFor(null)), '默认行必须查得到').toBeTruthy();
+  });
+});
+
+describe('全员默认行 = glm-5.3-flash-merge（2026-08-30 起，第一条付费的默认行）', () => {
+  it('⭐⭐ 默认行对每一档都是同一个、而且 basic 真的选得到（否则公开注册第一轮就 403）', () => {
+    for (const u of [{ role: 'user', plan: 'basic' }, { role: 'user', plan: 'pro' }, { role: 'admin' }, null]) {
+      expect(defaultModelFor(u)).toBe('glm-5.3-flash-merge');
+    }
+    expect(allowedModelsFor({ role: 'user', plan: 'basic' }).map((m) => m.id)).toContain('glm-5.3-flash-merge');
+    expect(SELECTABLE_MODELS.find((m) => m.id === 'glm-5.3-flash-merge')?.gate).toBeUndefined();
   });
 
-  it('⚠️ 两行互切：zenGo → zai 被跨通路闸拦（openai-chat → anthropic），反向放行', () => {
-    // 记在这儿是因为它反直觉：**同一个模型**的两条线路，中途只能单向换。
-    // 闸拦的是"转换层合成的无 signature thinking 块回传给原生 Anthropic 那一头"。
-    // 08-26 实测 Z.ai 其实**不校验 signature**（删掉/空串/瞎编都收），所以这一对客观上是安全的，
-    // 只是闸按 protocol 判、没有 per-upstream 的能力位。要放开就得先加那个字段。
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'glm-5.3-flash-zai')).toMatch(/新开一个会话/);
-    expect(crossLaneSwitchReason('glm-5.3-flash-zai', 'glm-5.3-flash-merge')).toBeNull();
-    expect(crossLaneSwitchReason('glm-5.3-flash-zai', 'minimax-m3')).toBeNull();   // 两边都是 anthropic
+  it('⭐⭐ 默认行不再是免费行 —— 旧规矩换成新规矩，别只是把断言删了', () => {
+    // 08-26/27 两次挪默认时，这里钉的是「默认行必须四价全 0」，它把人绊住过两次。
+    // 08-30 用户拍板「默认丢到 merge 那边」，那条规矩是**故意破的**，所以换成现在真正在管事的两条：
+    expect(modelIsFree('glm-5.3-flash-merge'), '它确实是付费行，走美元日限不走免费轮次闸').toBe(false);
+    // ① 付费的默认行必须是**所有人都选得到的那些行里最便宜的一条**：默认可以收费，但不许悄悄变贵。
+    // ⚠️ 价格真身在 MODELS_BUILTIN 的 api.prices —— resolveWireModel 不带 prices 出来。
+    // 第一版这条断言就是问它要的，于是拿 undefined 一路比成 Infinity、退化成"表里第一条付费行"，
+    // 红了才发现（红得对，但理由是假的）。判据本身要先验一遍，这是第 n 次。
+    const openPaid = MODELS_BUILTIN.filter((m) => m.select && !m.select.gate && m.api?.prices
+      && (m.api.prices.input + m.api.prices.output) > 0);
+    const sum = (m) => m.api.prices.input + m.api.prices.output;
+    expect(openPaid.length, '一条不带闸的付费行都没有 = 这条断言在空转').toBeGreaterThan(1);
+    const cheapest = [...openPaid].sort((a, b) => sum(a) - sum(b))[0];
+    expect(cheapest.id, '默认行是付费行时必须是最便宜的那条').toBe('glm-5.3-flash-merge');
+    // 对照：确实有更贵的行存在，排序不是在一个元素上做的
+    expect(sum([...openPaid].sort((a, b) => sum(b) - sum(a))[0])).toBeGreaterThan(sum(cheapest));
+    // ② 还留着一条真免费的行可选（默认收费了，picker 里不能一条免费的都没有）
+    expect(SELECTABLE_MODELS.some((m) => modelIsFree(m.id) && !m.gate), '一条不带闸的免费行都没有了').toBe(true);
+  });
+
+  it('⭐⭐ 并发闸必须把它算成"非订阅"：算成订阅那一档的话全站默认路径从 12 掉到 3', () => {
+    // 这条是 08-30 换默认时真踩到的：checkConcurrency 原来按"免费/付费"分档，
+    // 而 .env 里 NODESIGN_MAX_CONCURRENT_RUNS=3（那个 3 护的是站主的 Claude 订阅）。
+    // 实测峰值在飞 turn 是 4 —— 判据不改的话第 4 个人当场吃「现在有点挤」。
+    expect(resolveModelRoute('glm-5.3-flash-merge').mode).toBe('api');
+    const env = { NODESIGN_MAX_CONCURRENT_RUNS: '3', NODESIGN_FREE_MAX_CONCURRENT_RUNS: '12', NODESIGN_USER_CONCURRENT_RUNS: '99' };
+    const at = (n, offSubscription) => decideConcurrency({ running: n, mine: 0, isAdmin: false, offSubscription, memMb: 4000, env });
+    expect(at(4, true).ok, '非订阅行 4 个在飞应当照放').toBe(true);
+    expect(at(4, false).ok, '订阅那一档 4 个在飞就该拦 —— 对照组，证明这个断言不是恒真').toBe(false);
+    expect(at(12, true).ok, '非订阅行也有防失控上限 12').toBe(false);
   });
 });
