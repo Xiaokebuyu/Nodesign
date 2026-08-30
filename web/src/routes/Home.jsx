@@ -12,7 +12,7 @@ import { useGlobalStore } from '../stores/globalStore.js';
 import { Sessions, Assets, Projects } from '../lib/api.js';
 import { timeAgo } from '../lib/helpers.js';
 import { useMedia, NARROW } from '../lib/use-media.js';
-import dTangle from '../assets/login-wall/doodles/tangle.webp';
+import dHand from '../assets/login-wall/doodles/hand.webp';
 import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
 import { t, getLocale } from '../lib/i18n.js';
 import { sheetClassOf } from './home-sheets.js';
@@ -152,7 +152,11 @@ export default function Home() {
               <QuickEntry prefill={prefill} />
             </div>
             <div className="ndd-side r">
-              <img className="doodle" src={dTangle} alt="" />
+              {/* 涂鸦要跟旁边那句话说同一件事。原来挂的是 tangle（「突然通了」）——
+                  那画的是想通了**之后**那一刻，而这句话说的正好相反：不用先想清楚。
+                  换成 hand（「先给它一句话」）：一只手递出一张写了字的纸，
+                  跟这个输入框要的动作是同一个，也跟左边那本便签是同一套物料。 */}
+              <img className="doodle" src={dHand} alt="" />
               <p className="aside">{t('想到什么先写下来。')}<br />{t('不用先想清楚，')}<br />{t('它会问你缺的那部分。')}</p>
             </div>
           </div>
