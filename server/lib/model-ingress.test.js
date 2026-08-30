@@ -9,8 +9,7 @@ import {
   transformForUpstream, liftImagesFromToolResult, estimateInputTokens,
   resolveSessionWire, registerIngressSession, unregisterIngressSession,
 } from './model-ingress.js';
-import { rotateVendors } from './ingress/session-routes.js';
-import { resolveWireModel, resolveModelRoute, UPSTREAMS } from '../engine/agent/model-context.js';
+import { resolveWireModel, UPSTREAMS } from '../engine/agent/model-context.js';
 import sharp from 'sharp';
 
 const IMG = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'aGVsbG8=' } };
@@ -81,68 +80,6 @@ describe('bodyExtra：上游要的额外顶层字段（08-28 merge 的 vendor �
     const plain = { model: 'zai/glm-5.3-flash', messages: [{ role: 'user', content: 'hi' }] };
     await transformForUpstream(plain, { wireModel: 'zai/glm-5.3-flash', thinking: 'strip' });
     expect('vendor' in plain).toBe(false);
-  });
-});
-
-describe('厂商候选池按会话旋转（08-30 晚，merge 那种多部署网关）', () => {
-  /**
-   * 为什么是"按会话"而不是"按请求"：prompt cache **每家一份、跨不过去**（实测 6.5 万 token 前缀
-   * 在 zai 上热着 cached=63232、$0.000192 一轮，同一前缀换到 particle 立刻 cached=0、$0.000951）。
-   * 网关自带的 round_robin / least_latency 都是按请求选的，对我们是负收益。
-   */
-  const POOL = ['zai', 'particle'];
-
-  it('⭐⭐ 同一个会话永远算出同一个顺序（缓存的地基；重启也不变，因为只依赖 sid）', () => {
-    const first = rotateVendors(POOL, 'sess-abc');
-    for (let i = 0; i < 20; i++) expect(rotateVendors(POOL, 'sess-abc')).toEqual(first);
-  });
-
-  it('⭐⭐ 不同会话真的分得开 —— 两家都得有人落，否则这个机制在空转', () => {
-    const heads = new Set();
-    for (let i = 0; i < 200; i++) heads.add(rotateVendors(POOL, `sess-${i}`)[0]);
-    expect(heads, '200 个会话全落同一家 = 哈希没散开').toEqual(new Set(POOL));
-    // 大致均匀（别要求精确一半，那是给哈希提无理要求）
-    const zai = Array.from({ length: 200 }, (_, i) => rotateVendors(POOL, `sess-${i}`)[0]).filter((v) => v === 'zai').length;
-    expect(zai).toBeGreaterThan(60);
-    expect(zai).toBeLessThan(140);
-  });
-
-  it('⛔ 只旋转，不增不删 —— 谁能进池子是 model-table 那行说了算（那里写死了 baseten 不许进）', () => {
-    for (let i = 0; i < 50; i++) {
-      const r = rotateVendors(POOL, `s${i}`);
-      expect([...r].sort()).toEqual([...POOL].sort());
-      expect(r).not.toContain('baseten');
-    }
-  });
-
-  it('池子不够两家 / 没有会话 → 原样穿过（连拷贝都不做）', () => {
-    const one = ['zai'];
-    expect(rotateVendors(one, 'sess-abc')).toBe(one);
-    expect(rotateVendors(POOL, null)).toBe(POOL);
-    expect(rotateVendors(undefined, 'sess-abc')).toBeUndefined();
-  });
-
-  it('⭐⭐ 真的落到 wire.bodyExtra 上（两个读者都从这儿取，不落上去等于没做）', () => {
-    // 判据先验一遍：先找一对顺序不同的 sid，否则下面比出来的"不同"是假的
-    const a = 'sticky-A'; const b = 'sticky-B';
-    const pool = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
-    expect(pool.length, '这行的池子少于两家，这条测试就没有意义了').toBeGreaterThan(1);
-    const pick = (sid) => {
-      registerIngressSession(sid, 'glm-5.3-flash-merge');
-      const w = resolveSessionWire(resolveModelRoute('glm-5.3-flash-merge').sdkAlias, sid).wire;
-      unregisterIngressSession(sid);
-      return w.bodyExtra.vendors;
-    };
-    const va = pick(a); const vb = pick(b);
-    expect([...va].sort()).toEqual([...pool].sort());
-    expect(pick(a), '同一会话两次取到的顺序必须一样').toEqual(va);
-    // 这一对是挑出来顺序相反的；哪天换了哈希函数它会红，那时候换一对 sid 就好
-    expect(vb).not.toEqual(va);
-  });
-
-  it('没注册过的会话（探针、体检）不旋转 —— 表里写的什么就是什么', () => {
-    const w = resolveSessionWire('glm-5.3-flash-merge', null).wire;
-    expect(w.bodyExtra.vendors).toEqual(resolveWireModel('glm-5.3-flash-merge').bodyExtra.vendors);
   });
 });
 

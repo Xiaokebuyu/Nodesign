@@ -437,27 +437,32 @@ export const MODELS_BUILTIN = Object.freeze([
       // 「reasoning_content 优先、回退 thinking」，所以这行不用配任何东西 —— 记在这儿是给下一家看的：
       // **接新行时先看一眼它的思考字段叫什么**，掉了不报错、只是用户看不见思考。
       // 不设 liftImages：openai-chat 转换层本身就把 tool_result 里的图搬进随后的 user 消息（同 zenGo 那行）
-      // ⭐⭐ **08-30 晚：这串不是"偏好序"而是本行的厂商候选池**（用户报排队、要求别单点一家）。
-      // 顺序在运行时按 sessionId 哈希旋转（lib/ingress/session-routes.js 的 rotateVendors）：
-      // **同一会话永远同一顺序、不同会话均匀分到两家**。为什么必须按会话而不是按请求 ——
-      //   ⛔⛔ prompt cache **每家一份、跨不过去**（实测：6.5 万 token 前缀在 zai 上热着 cached=63232
-      //   $0.000192/轮，同一前缀换到 particle 立刻 cached=0、$0.000951，**贵 5 倍、慢 2-3 倍**；
-      //   换回来 zai 仍命中 —— 缓存没毁，只是各家一份）。所以网关自己那套 round_robin /
-      //   least_latency 策略对我们是负收益：它们按**请求**选，每轮都冷。这也是 08-27
-      //   「同模型不做请求级动态路由」那条规矩的实测地基。
-      // ⛔ **baseten 不许进池**：同一发请求 usage.cost $0.000626，是 particle 的 48 倍、zai 的 11 倍。
-      // ⭐ 旋转而不是硬点一家：网关对 vendors 的语义是「按顺序取第一个**可用的**」（它 OpenAPI 原话
-      //   "Ordered list of acceptable vendors. First available wins."），排第二的那家仍是活的后备。
-      // ⛔ 「不指定就能不排队」是假的：不点名实测 20/20 全落 zai，而慢的正是 zai。⚠️ 网关的默认
-      //   选择还会自己变：08-28 裸请求 8/8 落 particle，08-30 是 20/20 落 zai。
-      // 两家实测（6.5 万 token、缓存已热、4 条会话同时发一轮）：墙钟 particle 3111ms / zai 3874ms，
-      // 每轮 $0.000816 / $0.000836 —— 快约 20%、价钱打平。particle 的图能力见下面那段。
+      // ⭐⭐ **08-30 晚定案：particle 优先、zai 后备**（用户拍板）。网关对 vendors 的语义是
+      // 「按顺序取第一个**可用的**」（它 OpenAPI 原话 "Ordered list of acceptable vendors.
+      // First available wins."），所以这一串就是「优先谁 + 谁兜底」。
+      // ⭐⭐ 为什么是 particle：**在用户的真实体量上它快 2.5-3 倍，价钱一模一样。**
+      //   28 万上下文、逐轮追加（真会话形状）、缓存都命中 4/4：
+      //     particle 每步 1.8-2.8s、冷启 14.4s；zai 每步 3.9-7.0s、冷启 20.6s；5 轮都是 $0.00787。
+      //   ⛔ 早前记的「只快 20%」是在 6.5 万上量的 —— **两家的差距随上下文放大，小体量上量不出来**。
+      // ⭐⭐ 真正决定「一步要等多久」的是**这一轮缓存命不命中**，不是挑了哪家：命中时上下文从
+      //   4.5 万涨到 28 万、延迟只从 5s 到 6.7s；不命中则一路涨到 29s。用户报的「转圈很久」
+      //   第一嫌疑永远是「这轮没命中」（compact 之后必冷一轮，28 万上要 14-20s）。
+      // ⚠️ 「后备」的含金量有限：实测它**不在错误后转移**（拿一个 zai 必拒的请求试
+      //   `['zai','baseten']` 回的是 400 而不是转给 baseten）。所以 zai 兜的是「particle 被标成
+      //   不可用」那一档，**不是**「particle 这一发报错」。
+      // ⛔ **baseten 不许进这一串**：同一发请求 usage.cost $0.000626，是 particle 的 48 倍、zai 的 11 倍。
+      // ⛔ 「不指定让网关自己挑」是假出路：不点名实测 20/20 全落 zai（慢的那家），而且网关的默认
+      //   选择自己会变（08-28 裸请求 8/8 落 particle）。它自带的 round_robin / least_latency /
+      //   策略 API 也都不能用 —— **全是按请求选的，而 prompt cache 每家一份跨不过去**（同一前缀
+      //   换一家 cached 立刻归 0、贵 5 倍），按请求换家 = 每轮都冷。
+      //   ⏸ 曾按 sessionId 哈希做过「会话粘性分配」（50/50 摊到两家，`4939279`），用户拍板
+      //   改成 particle 优先后那套没有用户了，同批撤除；要回来去那个 commit 拿。
       // ⚠️ particle 唯一的弱项：「图散在多轮历史 + **请求没声明 tools**」时只看得见最后一张图
       //   （20 发挂 8 发，zai 20/20）；声明了 tools 就 20/20，真会话形状连测三轮 46/46。本站的请求
       //   永远带 tools（agent SDK 必然声明 MCP 工具），撞不到。⛔ 别拿"单条塞多图"复验，那形状
       //   两家都零失败、是恒绿的摆设；也别信目录自报的能力位（它说 particle max_output 131000，
       //   拿 131050 试它照收）。08-28 记的「particle 一次只收一张图、回 400」已作废（36/36 全通）。
-      bodyExtra: { vendors: ['zai', 'particle'] },
+      bodyExtra: { vendors: ['particle', 'zai'] },
       // 网关目录价（$0.015/$0.05，缓存读 $0.003）。⚠️ 它的响应把真金额放在 **usage.cost** 里而不是
       // 顶层 cost（Zen 是顶层），lib/ingress/upstream-billing.js 的 upstreamCostOf 两处都认，
       // 所以额度口径以上游自报为准，这里的表价是兜底

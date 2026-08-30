@@ -99,20 +99,21 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
     expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
-    // ⭐⭐ Merge 网关这行的厂商候选池（08-28 建，08-30 晚第三次换判据）。最早钉的是"必须点名 zai
-    // 一家"（当时 particle 对多图回 400，那条已作废、复测 36/36）。现在这串是**池子**，运行时按
-    // sessionId 旋转（session-routes.js），所以断言只剩真正要守的两条：
-    //   ① 池子里至少两家 —— 只剩一家 = 会话粘性分配没得分，全站又压回一家
-    //   ② ⛔ **baseten 不许进池**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的 11 倍。
+    // ⭐⭐ Merge 网关这行的厂商顺序（08-28 建，08-30 晚定案）。最早钉的是"必须点名 zai 一家"
+    // （当时 particle 对多图回 400，已作废、复测 36/36）。现在钉的是用户拍板的口径：
+    //   ① **particle 打头** —— 真实体量（28 万上下文、逐轮追加）上它每步 1.8-2.8s，zai 3.9-7.0s，
+    //      价钱一模一样。⛔ 别拿 6.5 万去复验，那个体量上两家只差 20%，量不出来。
+    //   ② **后面得有人兜底** —— 网关的语义是"按顺序取第一个可用的"，只写一家就没有后备了。
+    //   ③ ⛔ **baseten 不许出现**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的 11 倍。
     //      它进来不报错，只在月底的账上出现。
     const pool = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
-    const okPool = (v) => Array.isArray(v) && v.length >= 2 && !v.includes('baseten');
-    expect(okPool(pool), `merge 行的候选池现在是 ${JSON.stringify(pool)}`).toBe(true);
+    const okPool = (v) => Array.isArray(v) && v[0] === 'particle' && v.length >= 2 && !v.includes('baseten');
+    expect(okPool(pool), `merge 行的厂商顺序现在是 ${JSON.stringify(pool)}`).toBe(true);
     // 判据先验一遍：四种坏写法都得拦下来，否则上面那条是恒真的
-    expect(okPool(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
-    expect(okPool(['zai']), '池子只剩一家 = 分配机制空转').toBe(false);
-    expect(okPool(undefined), '整个撤掉 = 网关自己挑，08-28 那次它挑的就是 particle').toBe(false);
-    expect(okPool([])).toBe(false);
+    expect(okPool(['zai', 'particle']), 'zai 打头 = 每步慢 2.5 倍').toBe(false);
+    expect(okPool(['particle', 'baseten']), 'baseten 混进来 = 静默贵 48 倍').toBe(false);
+    expect(okPool(['particle']), '只剩一家 = 没有后备').toBe(false);
+    expect(okPool(undefined), '整个撤掉 = 网关自己挑，实测 20/20 全落慢的那家').toBe(false);
     expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
   });
 
