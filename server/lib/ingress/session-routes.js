@@ -14,9 +14,49 @@
  * 08-22 起**会话优先**而不是全表优先：不写 sdkAlias 的行（外部插槽全部 + 08-25 起的内置新行）共用同一个
  * spoof 名（model-table.js SHARED_SDK_ALIAS），全表反查分不出它们，只有会话知道自己是谁。先问会话、再查全表，
  * 对独占别名的行结果不变（自己的 alias 反查到的就是自己）。
+ *
+ * ## 会话粘性的厂商分配（2026-08-30 晚）
+ *
+ * merge 那种聚合网关一个模型名后面挂着好几家部署。**按请求让网关自己挑是有害的** —— 实测
+ * prompt cache 是**每家一份、跨不过去**（6.5 万 token 前缀在 zai 上热着 cached=63232、$0.000192
+ * 一轮，同一前缀换到 particle 立刻 cached=0、$0.000951，贵 5 倍、慢 2-3 倍）。所以网关那些
+ * round_robin / least_latency 策略对我们全是负收益：它们按**请求**选，而我们要的是按**会话**选。
+ *
+ * 做法：把行里 `bodyExtra.vendors` 那串当**候选池**，按 sessionId 的哈希**旋转**它 —— 同一个
+ * 会话永远算出同一个顺序（缓存不丢，重启也不变，不用存任何状态），不同会话均匀落到不同家。
+ * 旋转而不是硬点一家：网关对 vendors 的语义是"按顺序取第一个可用的"（它 OpenAPI 原话
+ * "Ordered list of acceptable vendors. First available wins."），所以排第二的那家仍然是活的后备。
  */
 
 import { resolveWireModel, resolveModelRoute, wireNamesOf } from '../../engine/agent/model-context.js';
+
+/**
+ * 会话 id → 稳定的小整数。要的只有两条：同一个 id 每次一样、不同 id 散得开。
+ * （不用 crypto：这不是安全用途，且要在热路径上便宜。）
+ */
+function hashOf(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0);
+}
+
+/**
+ * 把候选池按会话旋转。池子少于两家 = 没得分，原样返回（**同一个对象**，别白拷贝）。
+ * ⛔ 只旋转不增删：谁能进池子是 model-table 那行说了算（那里明写了 baseten 不许进）。
+ */
+export function rotateVendors(vendors, sessionTag) {
+  if (!Array.isArray(vendors) || vendors.length < 2 || !sessionTag) return vendors;
+  const k = hashOf(String(sessionTag)) % vendors.length;
+  return k === 0 ? vendors : [...vendors.slice(k), ...vendors.slice(0, k)];
+}
+
+/** 给这一发的 wire 换上本会话的厂商顺序。没有 vendors 的行原样穿过。 */
+function stickyVendors(wire, sessionTag) {
+  const pool = wire?.bodyExtra?.vendors;
+  const rotated = rotateVendors(pool, sessionTag);
+  if (rotated === pool) return wire;
+  return { ...wire, bodyExtra: { ...wire.bodyExtra, vendors: rotated } };
+}
 
 const sessionRoutes = new Map();     // sessionId → { appModel, fastModel }
 /** `${sid}:${model}` 只告一次，防日志洪水（model-ingress.js 读写） */
@@ -54,11 +94,11 @@ export function resolveSessionWire(bodyModel, sessionTag) {
     const direct = resolveWireModel(bodyModel);
     return { wire: direct, reason: direct ? 'table' : 'none', role: 'main' };
   }
-  if (wireNamesOf(sess.appModel).includes(bodyModel)) return { wire: resolveWireModel(sess.appModel), reason: 'table', role: 'main' };
-  if (wireNamesOf(sess.fastModel).includes(bodyModel)) return { wire: resolveWireModel(sess.fastModel), reason: 'table', role: 'helper' };
+  if (wireNamesOf(sess.appModel).includes(bodyModel)) return { wire: stickyVendors(resolveWireModel(sess.appModel), sessionTag), reason: 'table', role: 'main' };
+  if (wireNamesOf(sess.fastModel).includes(bodyModel)) return { wire: stickyVendors(resolveWireModel(sess.fastModel), sessionTag), reason: 'table', role: 'helper' };
   const direct = resolveWireModel(bodyModel);
   return {
-    wire: resolveWireModel(sess.fastModel),
+    wire: stickyVendors(resolveWireModel(sess.fastModel), sessionTag),
     role: 'helper',
     reason: direct ? 'collision' : 'fallback',
     fastModel: sess.fastModel,

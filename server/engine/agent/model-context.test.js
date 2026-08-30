@@ -99,24 +99,20 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
     expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
-    // ⭐⭐ Merge 网关两行的厂商口径（08-28 建，08-30 晚换判据）。旧断言钉的是"必须点名 zai 一家"，
-    // 理由是 particle 会对多图回 400 —— 那条 400 已经没了（复测 36/36），所以旧断言不是删掉了事，
-    // 是换成现在真正要守的两条：
-    //   ① **默认行的第一顺位必须是 zai**：不是因为 particle 坏（它在本站的请求形状下 46/46 全对，
-    //      速度还快得多，所以单开了「快线」那行），而是默认行该挑稳的那家；particle 唯一的弱项
-    //      （没声明 tools + 图散在多轮历史 → 只看得见最后一张）由用户显式选快线时自己承担。
-    //   ② ⛔ **两行都不许出现 baseten**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的
-    //      11 倍。它进来不报错，只在月底的账上出现。
-    const vendorsOf = (id) => { const b = resolveWireModel(id)?.bodyExtra; return b?.vendors || (b?.vendor ? [b.vendor] : undefined); };
-    const noBaseten = (v) => Array.isArray(v) && v.length > 0 && !v.includes('baseten');
-    const merge = vendorsOf('glm-5.3-flash-merge');
-    expect(noBaseten(merge) && merge[0] === 'zai', `merge 行现在是 ${JSON.stringify(merge)}`).toBe(true);
-    expect(vendorsOf('glm-5.3-flash-fast'), '快线那行不点名 particle 就跟 merge 行没区别了').toEqual(['particle']);
-    // 判据先验一遍：四种坏写法都得拦下来，否则上面两条是恒真的
-    expect(noBaseten(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
-    expect(noBaseten(['baseten'])).toBe(false);
-    expect(noBaseten(undefined), '整个撤掉点名 = 网关自己挑，08-28 那次它挑的就是 particle').toBe(false);
-    expect(noBaseten([])).toBe(false);
+    // ⭐⭐ Merge 网关这行的厂商候选池（08-28 建，08-30 晚第三次换判据）。最早钉的是"必须点名 zai
+    // 一家"（当时 particle 对多图回 400，那条已作废、复测 36/36）。现在这串是**池子**，运行时按
+    // sessionId 旋转（session-routes.js），所以断言只剩真正要守的两条：
+    //   ① 池子里至少两家 —— 只剩一家 = 会话粘性分配没得分，全站又压回一家
+    //   ② ⛔ **baseten 不许进池**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的 11 倍。
+    //      它进来不报错，只在月底的账上出现。
+    const pool = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
+    const okPool = (v) => Array.isArray(v) && v.length >= 2 && !v.includes('baseten');
+    expect(okPool(pool), `merge 行的候选池现在是 ${JSON.stringify(pool)}`).toBe(true);
+    // 判据先验一遍：四种坏写法都得拦下来，否则上面那条是恒真的
+    expect(okPool(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
+    expect(okPool(['zai']), '池子只剩一家 = 分配机制空转').toBe(false);
+    expect(okPool(undefined), '整个撤掉 = 网关自己挑，08-28 那次它挑的就是 particle').toBe(false);
+    expect(okPool([])).toBe(false);
     expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
   });
 
