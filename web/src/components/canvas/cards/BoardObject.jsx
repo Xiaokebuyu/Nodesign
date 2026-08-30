@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Image as ImageIcon, FileText, Film } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, FONT_READ, CANVAS, alpha } from '../../../lib/theme.js';
 import { PAPER, PAPER_SHADOW } from '../../../lib/paper.js';
-import { EASE, POP_IN } from '../../../lib/board-geometry.js';
+import { EASE, POP_IN, CARD_MAX_H } from '../../../lib/board-geometry.js';
 import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview } from '../../../lib/board-kinds.js';
 import { buildObjectActions } from './object-actions.js';
 import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../../lib/text-fonts.js';
@@ -33,6 +33,18 @@ const SCRIBBLE_INK = {
   pencil: PAPER.pencil,
   brass: CANVAS.brass,
 };
+
+/**
+ * 文本文件卡预览体的高度天花板（2026-08-29 占位契约刀 B 补）。
+ *
+ * 卡的根容器**只设宽不设高**，高度全由内容撑 —— 于是 1KB 的 markdown 预览能把
+ * 一张文件卡顶到 1382px（exp 真板上量到的），版面被一根柱子劈开，而且测量回写
+ * 还会把这个高度落进 layout，占位系统跟着一起错。
+ *
+ * 减 44 是给卡头（文件名那一行）留的位置，让整张卡收在 CARD_MAX_H 以内。
+ * 这里不挂「展开」角标：文件卡双击进阅读器看全文，卡面只需要一个诚实的渐隐。
+ */
+const PREVIEW_MAX_H = CARD_MAX_H - 44;
 
 /** 单个画布物件（按 type 分派卡片渲染 + 通用 hover 动作条）*/
 function BoardObject({
@@ -400,15 +412,15 @@ function BoardObject({
               合法 json 所以画得出树），完整内容双击进阅读器 */}
           {o.preview && isTextPreview(o) && (
             /\.(md|markdown)$/i.test(o.name || '') ? (
-              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: `0 ${GAP.md}px ${GAP.sm}px`, fontSize: FONT_SIZE.xs, lineHeight: 1.5, color: COLOR.text2, maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>
+              <div style={{ flex: 1, minHeight: 0, maxHeight: PREVIEW_MAX_H, overflow: 'hidden', padding: `0 ${GAP.md}px ${GAP.sm}px`, fontSize: FONT_SIZE.xs, lineHeight: 1.5, color: COLOR.text2, maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>
                 <MdInk text={o.preview} fontSize={11} />
               </div>
             ) : /\.json$/i.test(o.name || '') ? (
-              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: `0 ${GAP.md}px ${GAP.sm}px`, maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>
+              <div style={{ flex: 1, minHeight: 0, maxHeight: PREVIEW_MAX_H, overflow: 'hidden', padding: `0 ${GAP.md}px ${GAP.sm}px`, maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>
                 <JsonInk text={o.preview} fontSize={10} />
               </div>
             ) : (
-              <pre style={{ flex: 1, minHeight: 0, overflow: 'hidden', margin: 0, padding: `0 ${GAP.md}px ${GAP.sm}px`, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, lineHeight: 1.5, color: COLOR.text2, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>
+              <pre style={{ flex: 1, minHeight: 0, maxHeight: PREVIEW_MAX_H, overflow: 'hidden', margin: 0, padding: `0 ${GAP.md}px ${GAP.sm}px`, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, lineHeight: 1.5, color: COLOR.text2, whiteSpace: 'pre-wrap', wordBreak: 'break-all', maskImage: 'linear-gradient(180deg, #000 70%, transparent)' }}>
                 {o.preview}
               </pre>
             )

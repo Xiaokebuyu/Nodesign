@@ -328,8 +328,13 @@ router.get('/:pid/artifacts', async (req, res, next) => {
           } catch { /* 无 sidecar（旧图）→ 无 meta */ }
         }
         // 便签/板书带正文、文本文件带 1KB 预览（完整内容都走 artifact-file；见 helpers）
+        // ⚠️ upload 也要（2026-08-29）：用户上传的角色卡/世界卡就住在 用户内容/，
+        // kind='upload' —— 原来只认 task-file，于是上传来的 json/md 卡面永远是空的
+        // 细条。json 预览器做完才发现最常见的那一类 json 根本走不到这里。
         if (kind === 'note' && ext === '.md') await decorateNoteText(item, path.join(dir, e.name));
-        else if (kind === 'task-file' && PREVIEW_EXTS.has(ext)) await decorateFilePreview(item, path.join(dir, e.name));
+        else if ((kind === 'task-file' || kind === 'upload') && PREVIEW_EXTS.has(ext)) {
+          await decorateFilePreview(item, path.join(dir, e.name));
+        }
         artifacts.push(item);
       }
     };
