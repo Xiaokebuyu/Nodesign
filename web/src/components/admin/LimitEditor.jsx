@@ -8,7 +8,9 @@ import { Segmented } from '../../routes/Issues.jsx';
 import { Chip, Field, NumInput, PrimaryBtn, GhostBtn } from './primitives.jsx';
 
 // 外审档章：显示实际生效档，显式设过的加个点（区分"我设的"和"跟着默认走"）。
-// 08-20 起两个旋钮并排：订阅模型（Sonnet/Opus）一枚、本地/中转（qwen、gemini）一枚。
+// 08-20 起两个旋钮并排：订阅模型（Sonnet/Opus）一枚、非订阅模型一枚。
+// ⚠️ 生效值一律由服务端算好给（effectiveModerationLevel*，走 levelForKnob）——
+// 前端不许自己推默认档，08-30 两栏默认拆开之后前端一个字都不用改就是因为这条。
 const MOD_LEVEL_META = {
   off: { label: '外审关', color: COLOR.sub },
   loose: { label: '外审宽松', color: COLOR.text3 },
@@ -18,7 +20,7 @@ const MOD_LEVEL_META = {
 export function ModLevelChip({ u }) {
   const knobs = [
     ['订阅', u.effectiveModerationLevel, u.moderationLevel],
-    ['本地/中转', u.effectiveModerationLevelApi, u.moderationLevelApi],
+    ['非订阅', u.effectiveModerationLevelApi, u.moderationLevelApi],
   ];
   return (
     <>
@@ -93,7 +95,7 @@ export function LimitEditor({ u, onDone, onCancel }) {
           ['', '跟随默认'], ['off', '关闭'], ['loose', '宽松'], ['strict', '严格'],
         ]} />
       </Field>
-      <Field label="内容外审 · 本地/中转（Qwen、Gemini）">
+      <Field label="内容外审 · 非订阅模型（GLM / MiniMax / DeepSeek…）">
         <Segmented value={levelApi} onChange={setLevelApi} options={[
           ['', '跟随默认'], ['off', '关闭'], ['loose', '宽松'], ['strict', '严格'],
         ]} />
@@ -115,8 +117,9 @@ export function LimitEditor({ u, onDone, onCancel }) {
       <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub, flex: 1, minWidth: 220, lineHeight: 1.5 }}>
         {!isAdmin && <>终身额度非空即生效且取代日限：对全史花费封顶、不刷新（试用码口径）—— 它只是花费上限，不决定档位。<br /></>}
         档位：basic = 免费模型 + 联网搜索（每天有上限），不开生图/发布/订阅 Claude；pro = 全开（本地产线另需下方单独批准）。<br />
-        两个外审旋钮按模型通路各自生效（订阅模型跑在站主账号上，本地/中转只花电费或 API 钱），互不牵连。
-        外审默认档两边相同：非 admin 一律严格（08-21 起）/ admin 关闭；想放宽某个人在这里单独钉。宽松只拦硬违规
+        两个外审旋钮按模型通路各自生效（订阅模型跑在站主账号上，非订阅模型只花电费或 API 钱），互不牵连。
+        默认档也各算各的（08-30 起）：<b>订阅通路</b>非 admin 一律严格 / admin 关闭；<b>非订阅通路</b>三档一律关闭。
+        想给某个人改在这里单独钉，钉过的不受默认档变动影响。宽松只拦硬违规
         （未成年人色情、恐怖主义、武器毒品、犯罪教程、恶意软件、教唆自残、人肉），
         虚构里的暴力与成人向情节放行；严格再加色情、美化暴力、群体仇恨。
       </div>

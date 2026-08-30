@@ -20,7 +20,9 @@
  * 强度三档，**per-user、per-通路可调**（站主在控制台按人设）。08-20 起按模型通路分成
  * 两个独立旋钮：users.moderation_level 管订阅模型（Sonnet/Opus，跑在站主账号上），
  * users.moderation_level_api 管本地 qwen / 中转站那些走 ingress 的 API 行。哪条通路
- * 由 model-context 的 resolveModelRoute 说了算，这里不判模型名。两边默认档推导相同。
+ * 由 model-context 的 resolveModelRoute 说了算，这里不判模型名。
+ * ⭐ **08-30 起两边的默认档也各算各的**（tier.js 的 moderationDefault / moderationDefaultApi）：
+ * 订阅 strict、非订阅 off。在此之前两边推导同一个值，"订阅严、其他放开"只能靠逐人钉。
  * 同一档位值同时管 GPT 外审和 prelude 的成人句（见 agent/system-prompts.js）。
  *   off     不审
  *   loose   只拦"换个说法也还是违法"的硬线：未成年人色情 / 恐怖主义 / 武器毒品
@@ -29,8 +31,10 @@
  *           小说 / RP 形态天然要碰这些，误伤创作比漏审更伤产品。
  *   strict  loose 全部 + 露骨色情 / 美化煽动真实暴力 / 群体仇恨歧视。
  *
- * 默认档（users.moderation_level 为 NULL 时）：试用号 strict / 正式号 loose /
- * admin off。改默认档不影响已显式设过的号。`NODESIGN_MODERATION=off` 是全站总闸。
+ * 默认档（该旋钮为 NULL 时）走 tier.js 的能力表：订阅通路 admin off / pro·basic strict，
+ * API 通路一律 off。改默认档不影响已显式钉过档的号 —— 所以改默认时要顺手看一眼库里还有多少
+ * 显式值压着（08-30 那次把 41 个显式的 API 档清回 NULL，就是为了让这张表真的说了算）。
+ * `NODESIGN_MODERATION=off` 是全站总闸。
  */
 
 import db from '../engine/runs/store.js';
@@ -94,9 +98,10 @@ export function levelForKnob(user, knob) {
   if (!user) return 'off';
   const explicit = knob === 'api' ? user.moderationLevelApi : user.moderationLevel;
   if (LEVELS.includes(explicit)) return explicit;
-  // 默认档按账号档位（auth/tier.js 能力表）：admin off / pro loose / basic strict。
+  // 默认档按账号档位**和通路**（auth/tier.js 能力表）：订阅 admin off / pro·basic strict，API 一律 off。
   // 08-21 前这里猜的是 lifetimeCostLimitUsd（试用码 ⇒ strict），开放注册号该字段为 null 被当成正式号拿 loose。
-  return defaultModerationLevel(user);
+  // ⚠️ knob 必须往下传：08-30 之前这里不传，于是 tier 表里就算分了两栏也读不到第二栏。
+  return defaultModerationLevel(user, knob);
 }
 
 export function shouldModerate(user, appModel = null) {

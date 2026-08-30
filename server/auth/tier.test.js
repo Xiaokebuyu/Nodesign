@@ -43,6 +43,7 @@ describe('tierOf / can', () => {
       expect(can(basic, cap), cap).toBe(cap === 'webSearch' || cap === 'imageGen');
     }
     expect(CAPABILITY_NAMES).toContain('moderationDefault');
+    expect(CAPABILITY_NAMES).toContain('moderationDefaultApi');
     expect(basicDefaultDailyUsd({})).toBe(5);
     expect(basicDefaultDailyUsd({ NODESIGN_BASIC_DEFAULT_DAILY_USD: '8' })).toBe(8);
     expect(basicDefaultDailyUsd({ NODESIGN_BASIC_DEFAULT_DAILY_USD: '0' })).toBeNull();
@@ -50,11 +51,20 @@ describe('tierOf / can', () => {
   it('未知能力名抛错（拼错不能静默 false/true）', () => {
     expect(() => can(pro, 'imagegen')).toThrow(/unknown capability/);
   });
-  it('外审默认档：admin off / pro strict / basic strict（08-21 晚「所有审查开到严格」）', () => {
+  it('外审默认档 · 订阅通路：admin off / pro strict / basic strict（08-21 晚「所有审查开到严格」）', () => {
     expect(defaultModerationLevel(admin)).toBe('off');
     expect(defaultModerationLevel(pro)).toBe('strict');
     expect(defaultModerationLevel(basic)).toBe('strict');
     expect(defaultModerationLevel(null)).toBe('strict');
+  });
+  it('⭐⭐ 外审默认档 · API 通路：三档一律 off（08-30 用户拍板「非 Claude 订阅的模型不审」）', () => {
+    // 两栏合回一栏的话 pro/basic 这两句会拿到 strict —— 这就是它必须拦住的局面
+    for (const u of [admin, pro, basic]) expect(defaultModerationLevel(u, 'api'), u.id).toBe('off');
+    // null 用户仍然 fail-closed：没有账号可依据时不许落到更松的一边
+    expect(defaultModerationLevel(null, 'api')).toBe('strict');
+    // 旋钮名拼错 / 不给 → 落订阅那一边（同 moderationKnobFor 的口径：只能落紧的一边）
+    expect(defaultModerationLevel(pro, 'aip')).toBe('strict');
+    expect(defaultModerationLevel(pro)).toBe('strict');
   });
   it('web_search 日上限：只有 basic 有（默认 60，env 可调）；null 用户 0', () => {
     const saved = process.env.NODESIGN_BASIC_WEB_SEARCH_PER_DAY;

@@ -437,8 +437,8 @@ export async function runSession({
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',
-      // 成人段随项目 owner 的外审档联动（agent-shared.renderPrelude）；
-      // 找不到 owner 时落 loose 默认，绝不落 off。
+      // 成人段随项目 owner 的外审档联动（renderPrelude）；无主项目落 tier.js 的 strict，绝不落 off。
+      // ⚠️ 08-30 默认档按通路拆成两栏（订阅 strict / 非订阅 off）→ 同一个项目换个模型跑成人段就换一档。
       //
       // uncensored 走模型表的标记位（model-context.isUncensoredModel），不在这里
       // 判模型名 —— 那是模型属性，写在这儿就是给那张表开第二个真相源。为 true 的

@@ -59,8 +59,8 @@ export function isModelPrefStale(pref, serverOptions) {
 
 /** 服务端拿不到时的兜底清单（离线 / 接口挂了也别让按钮变成死的） */
 export const FALLBACK_MODELS = [
-  { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · 官方直连（限时免费）', desc: '限时免费 · 有视觉 · 272k 上下文 · 走智谱官方线路 · 并发有限，人多时会自动重试等待', brand: DEFAULT_BRAND },
-  { id: 'glm-5.3-flash-merge', label: 'GLM-5.3-Flash · Merge 网关', desc: '快 · 有视觉 · 272k 上下文 · 思考档 high · 极便宜（$0.015/$0.05 缓存 $0.003）', brand: 'glm' },
+  { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · 官方直连', desc: '限时免费 · 有视觉 · 1M 上下文', brand: DEFAULT_BRAND },
+  { id: 'glm-5.3-flash-merge', label: 'GLM-5.3-Flash · Merge 网关', desc: '有视觉 · 1M 上下文 · 极便宜', brand: 'glm' },
   { id: 'minimax-m3', label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久', brand: 'minimax' },
   { id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '快 · 日常改稿和铺页够用', brand: 'claude' },
   { id: 'claude-opus-5[1m]', label: 'Opus 5', desc: '前端与审美更强 · 烧订阅额度快得多，重活再开', brand: 'claude' },

@@ -35,16 +35,29 @@ export const PLANS = Object.freeze(['pro', 'basic']);
  *   localGen          本地产线资格（paint_still / roll_film / 演出端点 / 本地无审查模型行）；
  *                     pro 档还要叠 allowLocalGen 批准，见 localGenApproved
  *   publishSite       publish_site 上 CF Pages（占站主四级域名 + 每账户 100 站硬上限）
- *   moderationDefault 外审默认档（用户没被显式钉档时生效）
+ *   moderationDefault    订阅通路的外审默认档（用户没被显式钉档时生效）
+ *   moderationDefaultApi API 通路（非订阅模型）的外审默认档 —— **两条通路各一个默认**
  *   webSearchDailyCap basic 档 web_search 每日上限（null = 不限）；env NODESIGN_BASIC_WEB_SEARCH_PER_DAY 可调
+ *
+ * ⭐⭐ **外审默认档 08-30 拆成两个**（用户拍板：「新账户默认按订阅严格、其他模型关闭」）。
+ * 在此之前一格值同时管两条通路，于是"订阅要严、非订阅不审"这个口径根本表达不出来 ——
+ * 只能一个人一个人去 admin 台钉 moderation_level_api，钉过 41 个号，钉漏的还在按 strict 跑。
+ * 现在两条通路各有各的默认，口径的家在这张表里，不在 88 行用户数据里。
+ *
+ * 为什么这个口径讲得通：外审那道闸（lib/moderation.js）的存在理由是**违规消息不能进站主的
+ * Claude 订阅**（骑的是站主账号，封号风险在站主头上）。非订阅模型走的是各家 API，
+ * 各家自己有内容策略、出事也是那家的账 —— 我们再叠一层 GPT 外审只是在误伤创作。
+ * ⚠️ 连带效果不止于"不审"：同一格值也管 prelude 的成人段（agent/system-prompts.js），
+ * 'off' 那档写的是「成人内容明确允许，不用迂回」。改这一格 = 同时改口径和提示词。
  */
 const CAPABILITIES = Object.freeze({
-  admin: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'off', webSearchDailyCap: null }),
+  admin: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'off', moderationDefaultApi: 'off', webSearchDailyCap: null }),
   // 08-21 晚用户拍板「所有审查都开到严格」：pro 默认档 loose → strict（admin 仍免审）
-  pro: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'strict', webSearchDailyCap: null }),
+  // 08-30 起这条只管订阅通路；API 通路见 moderationDefaultApi
+  pro: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'strict', moderationDefaultApi: 'off', webSearchDailyCap: null }),
   // 08-21 深夜用户拍板：basic 是今后唯一对外分发的档（pro 不再新发，只手动给）；basic 可用 Ox 免费行 + OpenCode Go 付费行 +
   // 生图（$0.20/张计入同一本账），每人每天 $5 总额度（注册时写 dailyCostLimitUsd，见 basicDefaultDailyUsd）；订阅 Claude / 本地产线 / 发布仍不开
-  basic: Object.freeze({ subscription: false, webSearch: true, imageGen: true, localGen: false, publishSite: false, moderationDefault: 'strict', webSearchDailyCap: 'env' }),
+  basic: Object.freeze({ subscription: false, webSearch: true, imageGen: true, localGen: false, publishSite: false, moderationDefault: 'strict', moderationDefaultApi: 'off', webSearchDailyCap: 'env' }),
 });
 
 /** basic 档注册时写入的每日总额度（美元）。env NODESIGN_BASIC_DEFAULT_DAILY_USD；0 或非法 = 不写（走全局默认日限） */
@@ -75,10 +88,17 @@ export function can(user, capability) {
   return CAPABILITIES[tier][capability] === true;
 }
 
-/** 外审默认档（off | loose | strict）。null 用户 → 'off' 的老语义留给 moderation.js 自己判。 */
-export function defaultModerationLevel(user) {
+/**
+ * 外审默认档（off | loose | strict）。null 用户 → 'off' 的老语义留给 moderation.js 自己判。
+ *
+ * @param {object|null} user
+ * @param {'subscription'|'api'} [knob]  哪条通路的默认。**不给 = 订阅** —— 拼错 / 没传
+ *   只能落到管站主账号的那一边，不能落到更松的一边（同 moderationKnobFor 的口径）。
+ */
+export function defaultModerationLevel(user, knob = 'subscription') {
   const tier = tierOf(user);
-  return tier ? CAPABILITIES[tier].moderationDefault : 'strict';
+  const key = knob === 'api' ? 'moderationDefaultApi' : 'moderationDefault';
+  return tier ? CAPABILITIES[tier][key] : 'strict';
 }
 
 /** basic 档 web_search 每日上限；其它档 null（不限）。 */

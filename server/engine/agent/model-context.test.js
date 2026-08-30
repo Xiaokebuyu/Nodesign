@@ -428,7 +428,7 @@ describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜）', () => 
     const g = resolveModelRoute('glm-5.3-flash-merge');
     expect(g.upstream).toBe(UPSTREAMS.merge);
     expect(g.sdkAlias).toBe(SHARED_SDK_ALIAS);
-    expect(g.window).toBe(272_000);
+    expect(g.window).toBe(1_000_000);   // 08-30 用户拍板 GLM 两行一起开到 1M
     expect(resolveWireModel('glm-5.3-flash-merge')?.wireModel).toBe('zai/glm-5.3-flash');
     expect(resolveWireModel('glm-5.3-flash-merge')?.protocol).toBe('openai-chat');
     expect(modelIsFree('glm-5.3-flash-merge')).toBe(false);
@@ -508,7 +508,8 @@ describe('Z.ai 官方直连 · glm-5.3-flash-zai（08-26）', () => {
     // 同一会话在几家之间跳每次都是冷的。会话钉死在一行 = 缓存热得起来。
     const r = resolveModelRoute('glm-5.3-flash-zai');
     expect(r.mode).toBe('api');
-    expect(r.window).toBe(272_000);                     // 两行同窗口：换线时上下文条分母不变
+    expect(r.window).toBe(1_000_000);                   // 08-30 起 1M（此前 272k）
+    // 两行同窗口这条约束本身不变：换线时 auto-compact 的分母不变，上下文条不会突然缩水
     expect(r.window).toBe(resolveModelRoute('glm-5.3-flash-merge').window);
     expect(r.sdkAlias).toBe(SHARED_SDK_ALIAS);
   });

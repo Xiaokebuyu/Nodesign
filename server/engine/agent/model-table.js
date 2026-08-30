@@ -358,7 +358,8 @@ export const MODELS_BUILTIN = Object.freeze([
   // 表里没有"退役 → 继任"的映射，也**不会**静默落到订阅通路。
   // ⚠️ 上游 `zenGo` 本身留着：deepseek 视觉行和全站唯一的 helper 行都挂在它上面。
   // 复牌就是照下面两条 glm 行的形状写一份：upstream 'zenGo'、wireModel 'glm-5.3-flash'、
-  // 272k、thinking strip、reasoningEffort high、maxOutput 131072、prices 0.15/0.50/0.03/0。
+  // 窗口跟那两行取同一个数（08-30 起是 1M）、thinking strip、reasoningEffort high、
+  // maxOutput 131072、prices 0.15/0.50/0.03/0。
   // ── Z.ai 官方直连 · GLM-5.3-Flash（08-26）·**全员默认行**（08-27 起）── 跟下面那条 merge 网关的
   // glm 行**是同一个模型的两条独立线路**，故意做成两行而不是一行加动态路由（用户 08-26 拍板，跟表里
   // "别造 provider 抽象层"同一条判断）：⭐ **动态路由会伤缓存** —— 各家各有各的 prompt cache，
@@ -374,10 +375,14 @@ export const MODELS_BUILTIN = Object.freeze([
   // 包月下这不花钱，但**慢**，而且订阅额度按什么口径扣查不出来（/usage、/account/quota 全 404，
   // 响应头里也没有任何 quota/limit/remaining 字段）。
   {
-    // 窗口跟 zenGo 那行取同一个数：理由与它一致（每轮重传全量上下文，这台机器出网超 200GiB/月要钱）。
-    // 两行同窗口还有一个好处 —— 用户在两条线之间换行时 auto-compact 的分母不变，不会"换个线路
-    // 上下文条突然缩水一半"。
-    id: 'glm-5.3-flash-zai', window: 272_000, brand: 'glm',
+    // ⭐⭐ 08-30 用户拍板 **GLM 两行的窗口一起开到 1M**（此前 272k 是省钱档：每轮重传全量上下文、
+    // 这台机器出网超 200GiB/月要钱 —— 那笔代价仍在，只是站主要长上下文这件事本身）。两行同改，
+    // "换线时 auto-compact 分母不变"仍成立。三件跟着变的事，别到时候现找：
+    // ① 压缩窗口 = min(CLAUDE_CODE_AUTO_COMPACT_WINDOW, 别名 rawMaxTokens)，共用别名是 1M 档 → 写 1M 真能到 1M。
+    // ② **这行没有 prompt cache**（同段打两遍都是 0）→ 长会话后期每轮 prefill 跟着 ×3.7，慢且吃出网。
+    // ③ 压缩变少 = CC 子进程的堆活更久。盒子 1vCPU/8G、swap=0、earlyoom dryrun，而 CC 的 RSS 单调不减、
+    //    只有 compact 边界才真回收 —— **内存是这次最实的风险**，真撞上就把这个数调回去，别加别的机制。
+    id: 'glm-5.3-flash-zai', window: 1_000_000, brand: 'glm',
     // 08-26 用户拍板**直接免费开放**（不 gate）：这条订阅只剩约一周可用，「用完就用完了，用完撤掉」。
     // 既然是限时的，压着给 admin 试跑没有意义 —— 额度放着不用才是浪费。
     //
@@ -404,7 +409,10 @@ export const MODELS_BUILTIN = Object.freeze([
     // **必须同一个动作把 `default: true` 挪走**（候补：minimax-m3 或别的四价全 0 的行）——
     // 否则新会话的第一轮就落在一个不存在的行上。model-context.test.js 里那条"默认行必须免费"的断言
     // 拦不住这一种：它只看价，不看这行还在不在。
-    select: { label: 'GLM-5.3-Flash · 官方直连（限时免费）', desc: '限时免费 · 有视觉 · 272k 上下文 · 走智谱官方线路 · 并发有限，人多时会自动重试等待', default: true },
+    // 08-30 用户提「名字太长、后面的介绍短一点」：括号里的"限时免费"挪进 desc（label 少 7 个字），
+    // desc 从 5 段砍到 3 段。⚠️ 砍掉的"并发有限，人多时会自动重试等待"是**真实存在的体感**
+    // （上游桶只有 3），撤掉这句不等于那件事没了 —— 它退到 CLI 的重试提示里说。
+    select: { label: 'GLM-5.3-Flash · 官方直连', desc: '限时免费 · 有视觉 · 1M 上下文', default: true },
     api: {
       upstream: 'zai', wireModel: 'glm-5.3-flash',
       // 不写 sdkAlias = 共用别名走会话级路由（08-25 起的默认写法）
@@ -438,17 +446,21 @@ export const MODELS_BUILTIN = Object.freeze([
   // 满窗一轮的缓存读从 $0.03 掉到 $0.003。**zai 那条订阅用完之后，这条是接得住量的那一条**
   // （有缓存、并发不紧），只是接默认之前得先解决瞎图那 7~10%（或者接受它）。
   {
-    // 真窗口 1M（网关目录里写的 1000000，max_output 131072），这里仍按 272k 收口：跟另外两条 glm 行
-    // 取同一个数，一是每轮重传全量上下文、这台机器出网超 200GiB/月要真付钱，二是三条线同窗口的话
-    // 用户在它们之间换行时 auto-compact 的分母不变，上下文条不会"换条线突然缩水"。
-    id: 'glm-5.3-flash-merge', window: 272_000, brand: 'glm',
+    // 08-30 起 **1M**（跟上面那行一起开，用户拍板）。网关目录里这个模型本来就写的 1000000
+    // （max_output 131072），此前的 272k 是我们自己收的口。两条 glm 行同时改，换线时
+    // auto-compact 的分母仍然一致，上下文条不会"换条线突然缩水"。
+    // ⭐ 跟 zai 那行不同的是**这条有 prompt cache**（9038 → 第二发 cache_read 9024），
+    // 所以窗口开大对它的边际成本温和得多：重传的部分大都按 $0.003/M 的缓存读走。
+    id: 'glm-5.3-flash-merge', window: 1_000_000, brand: 'glm',
     // 08-27 用户拍板**直接对全员开**（含 basic）：跟 deepseek 视觉行同一套管法 ——
     // 它**不是免费行**（四价非 0），走的是每日美元额度，basic 的 $5/天 + 表价记账管着它，
     // 而这行的单价是全表最低的一档，同样的钱能跑十倍的量。
     // 08-28 之前这里写着"偶发瞎图约 7~10%、已知且接受"—— 那是没点名 vendor 时的账；现在 bodyExtra
     // 把它钉死在 zai 一家，desc 里的"偶尔会漏看图"随之撤掉。要收回这行就在 select 里加回
     // `gate: 'localGen'` 一处：清单 / PUT /model / turn.js 三个消费方都走 selectableModelsFor。
-    select: { label: 'GLM-5.3-Flash · Merge 网关', desc: '快 · 有视觉 · 272k 上下文 · 思考档 high · 极便宜（$0.015/$0.05 缓存 $0.003）' },
+    // 08-30 desc 砍短（同上行）：价格表撤进注释，picker 里只留"极便宜"这个判断。
+    // label 留两段不动 —— 两条 glm 行的第一段一样，ModelPicker 的 compactLabel 靠第二段区分它们。
+    select: { label: 'GLM-5.3-Flash · Merge 网关', desc: '有视觉 · 1M 上下文 · 极便宜' },
     api: {
       upstream: 'merge', wireModel: 'zai/glm-5.3-flash',
       // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由，08-25 起的默认写法
