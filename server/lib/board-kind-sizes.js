@@ -36,11 +36,26 @@ export const KIND_SIZES = {
  */
 export const FOLDER_CARD = { w: 288, h: 240 };
 
-/** 文件夹卡矩形（根层物件；id = 目录路径，跟 zones 的键一致） */
-export function zoneRects(board) {
+/**
+ * 文件夹卡矩形（id = 目录路径，跟 zones 的键一致）。
+ *
+ * ⚠️ 每张文件夹卡只住在**一层**：`世界书/常驻` 的卡摆在 `世界书` 那一层里，
+ * 它存的坐标是那一层的坐标——拿它当根层矩形用就是跨层幻影（2026-08-30
+ * proj_mtfpehm3 案：铺在根层的纸被别的层的卡「占满」，一连 6 发容量拒收里
+ * 4 发是假的）。所以取矩形必须点名要哪一层的；`layer: null` 是给「所有层
+ * 一起数」的调用方（目前只有对账/测试）留的口。
+ *
+ * @param {string|null} layer  ''=根层（缺省）；'世界书'=那一层里的子文件夹卡；null=全部
+ */
+export function zoneRects(board, { layer = '' } = {}) {
   const out = [];
   for (const [path, z] of Object.entries(board?.zones || {})) {
     if (!Number.isFinite(z?.x) || !Number.isFinite(z?.y)) continue;
+    if (layer !== null) {
+      const i = path.lastIndexOf('/');
+      const parent = i > 0 ? path.slice(0, i) : '';
+      if (parent !== layer) continue;
+    }
     out.push({ id: path, x: z.x, y: z.y, ...FOLDER_CARD, folder: true });
   }
   return out;

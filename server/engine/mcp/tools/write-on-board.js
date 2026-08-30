@@ -26,7 +26,6 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { byOf } from '../actor.js';
-import { z } from 'zod';
 import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store.js';
 import { TAG_RE } from '../../../projects/board-sanitize.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -43,8 +42,9 @@ import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-
 import { makeAnchorResolver } from '../../../lib/board-anchor.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
+import { maybeFlowWrite } from './write-on-board-flow.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
-import { SHEET_PT, NODES, SHAPES, EDGES } from './write-on-board-schema.js';
+import { WRITE_SCHEMA as SCHEMA } from './write-on-board-schema.js';
 import { roleDefaultAnchor } from './write-on-board-role-anchor.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
@@ -57,50 +57,6 @@ const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 /** md 侦测：正文带 markdown 记号却标 plain 会把 **加粗** 原样吐出来（ldx 案） */
 const looksLikeMd = (t) => /(\*\*|__|^#{1,4}\s|^\s*[-*]\s|\|.+\||```|\$[^$]+\$|\[.+\]\(.+\))/m.test(t);
 
-/**
- * ⚠️ 字段顺序有意义（2026-08-29 占位契约刀 C）：模型是按 schema 声明顺序生成
- * JSON 的，而入参是**流式**到达前端的 —— 位置字段排在 text 前面，画布才能在
- * 第一个字到达时就把框立在真位置上，让正文流进去（排在后面的话，字已经流完了
- * 位置才到，只能先画在一块空地上再跳过去 —— 那正是这一刀要治的）。
- * 抽取规则在 agent-shared.js 的 TOOL_INPUT_STREAM_FIELDS.spot。
- */
-const SCHEMA = {
-  slot: z.string().regex(TAG_RE).optional()
-    .describe('Drop this into a PLANNED BLOCK of the current sheet (names come from open_sheet{plan}). The block decides the width and where it lands; notes stack downward inside it. If it does not fit, the write is REFUSED with how much room is left — split the content or re-plan. Prefer this over at: plan the page first, then fill it.'),
-  at: SHEET_PT.optional()
-    .describe("Where on the CURRENT SHEET, in pixels from its top-left writable corner (x→right, y→down). Clamped into the sheet — the return says if it was. Omit it to flow top-to-bottom"),
-  sheet: z.string().regex(TAG_RE).optional()
-    .describe('Write on this sheet instead of the current one (names from open_sheet / read_board)'),
-  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px). Default: the width the user last dragged chalk blocks to, else by content. Omit it unless this one block needs a different measure - the default already follows the user.'),
-  near: z.string().max(300).optional()
-    .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it. Placement itself is by sheet (at / flow), not by near'),
-  side: z.enum(['right', 'left', 'above', 'below']).optional()
-    .describe('ONLY with near, when the SEMANTICS demand a side (e.g. a caption must sit above): exact placement beside the anchor. Normally omit — sheets flow downward'),
-  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; a full sheet turns the page)`),
-  text: z.string().min(1).max(8000).optional()
-    .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
-  relation: z.enum(BINDING_TYPE_IDS).optional()
-    .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
-  chain: z.boolean().optional()
-    .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights)'),
-  open_lane: z.string().max(300).optional()
-    .describe("Open a NEW thread line named by tag: lays a fresh sheet for it and lands this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic. Requires tag; continue with {tag, chain:true}."),
-  tag: z.string().regex(TAG_RE).optional()
-    .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
-  ink: z.enum(['chalk', 'hand']).optional()
-    .describe("Single note body: 'chalk' (default) = a real file under notes/板书 (Read/Edit later; chain/reply threads live on these); 'hand' = canvas-native handwritten text — a light remark like the user's own handwriting, no file, no threading"),
-  font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional().describe("Single note font (ink:'hand'; default kai)"),
-  color: z.enum(['ink', 'red', 'pencil', 'brass']).optional().describe("Single note color (ink:'hand')"),
-  size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe("Single note text size. Real for ink:'hand'; for chalk notes it only sizes the placement box (chalk renders at a fixed size)"),
-  title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
-  layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap', 'flow']).optional()
-    .describe('Sketch layout. auto FOLLOWS YOUR EDGES: with edges it lays out in flow layers (roots on top, children below — give edges and placement is structure); mindmap picks the hub by degree. free needs at on EVERY node'),
-  cols: z.number().int().min(1).max(8).optional().describe('grid columns'),
-  staging: z.boolean().optional().describe('Sketch only: default true (translucent until commit/turn end). Ignored for single notes — they always land solid'),
-  nodes: NODES.optional(),
-  shapes: SHAPES.optional(),
-  edges: EDGES.optional(),
-};
 
 const DESCRIPTION = `Write on the board — the ONE way to put words and pictures on the canvas.
 The board is the conversation; the sidebar is the log.
@@ -241,7 +197,12 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         ? Math.max(4, Math.floor(slotInfo.rect.w / UNIT))
         : capW(args.width || learnedChalkWidth(board)
           || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
-      const box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
+      let box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
+      // 占位（刀⑧ 2026-08-30）：agent 先声明框的高度、再往里流内容 —— 容量检查、
+      // 落位、流式预览全按预约框算。内容更高时按真身来（框不许对内容撒谎）。
+      if (!args.flow && Number.isFinite(args.h) && args.h > box.h) {
+        box = { ...box, h: Math.round(args.h), reserved: true };
+      }
 
       let zone = '';
       let anchorId = null; let parentId = null;
@@ -287,13 +248,27 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
       const obstacles = obstaclesOf(b2, zone);
       const vpRect = vpRectFor(zone);
+
+      // ── flow（刀⑦ 2026-08-30）：长文由机器按段拆成一串卡大小的板书（拆件见
+      // write-on-board-flow.js）。返回 null = 用不上（守卫不过/一块就装下），走正常路。
+      if (args.flow && args.text) {
+        const fr = await maybeFlowWrite({
+          projectId, sharedRoot, sessionId, by, ctx, args, body, wUnits, zone,
+          slotInfo, parentId, replyRect, anchorId, b2, obstaclesOf,
+          placeInSlot, placeOnSheets, describeSheetFull, stamp,
+        });
+        if (fr) return fr;
+      }
+
+
       // 卡高上限（08-29 刀 E）：没规划版面时也不许写出一根柱子。执行点在工具层
       // 不在渲染层 —— 折叠/裁切都是替它把问题藏起来，它下一条还会照写。
       if (!slotInfo && box.h > CARD_MAX_H) {
         const c = capacityOf(box.w, CARD_MAX_H);
         return err([
           `⛔ Too long for one card: this needs ${box.h}px, a card holds ${CARD_MAX_H}px (~${c.lines} lines / ~${c.cjk} CJK chars at ${box.w}px wide).`,
-          '   Nothing was written. Split it into several notes (chain:true threads them),',
+          '   Nothing was written. EASIEST: retry the same call with flow:true — the machine splits it',
+          '   at paragraph breaks into a chain of card-sized notes. Or split it yourself (chain:true),',
           '   or plan the page first — open_sheet{plan:[{slot,at,w,h,about}…]} — and write into slots.',
         ].join('\n'));
       }
@@ -389,6 +364,14 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describeSpot(b2, placed)}.`,
         `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
       ];
+      // 余量随手报（2026-08-30 容量线）：下一条要不要拆、还塞不塞得下，
+      // 最有用的时机就是刚写完这一刻 —— 别让它再去翻状态块或者赌一发。
+      if (slotInfo) {
+        const freeH = Math.max(0, Math.round(slotInfo.rect.y + slotInfo.rect.h - (rect.y + rect.h) - UNIT));
+        const c = capacityOf(slotInfo.rect.w, freeH);
+        lines.push(`Slot "${args.slot}" now has ~${c.lines} lines (~${c.cjk} CJK chars, ${freeH}px) left${freeH < 60 ? ' — next note of any size goes elsewhere or flow it' : ''}.`);
+      }
+      if (box.reserved) lines.push(`Box height reserved at ${box.h}px (content measured shorter — the box keeps your planned size).`);
       // 折叠如实报（08-29 占位契约刀 B）：卡高封顶到 CARD_MAX_H，超出的折在卡里。
       // ⚠ 旧判据 `box.h > SKETCH_FIT.h*0.6`（720px）封顶之后永远不成立 —— 换成真话。
       if (box.capped) {

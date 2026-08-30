@@ -62,6 +62,35 @@ export function sheetSpotToWorld(sheets, spot, layout = null) {
       if (!s || String(v.at || '') > String(s.at || '')) s = v;
     }
   }
+
+  // 新纸预告（2026-08-30 刀④）：batch 里这条 write 排在一个 open_sheet 后面 ——
+  // 流式时那张纸**还不存在**（batch 的入参全部流完才开始执行）。没有这一支，
+  // 回落逻辑会拿「最新那张纸」当目标：预览画在上一张纸上，偏一整屏，落盘再跳
+  //（站主看到的「都集中在一处流式」正是它）。预测规则跟服务端同款：新纸铺在
+  // 最新纸的内容底 + 沟（翻页裁纸后的位置），版位矩形直接用流进来的 plan。
+  if (spot?.freshSheet && s && Number.isFinite(s.x)) {
+    let bot = s.y + SHEET_MARGIN;
+    for (const e of Object.values(layout || {})) {
+      if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y) || !Number.isFinite(e?.h)) continue;
+      const cx = e.x + (e.w || 0) / 2; const cy = e.y + (e.h || 0) / 2;
+      if (cx < s.x || cx >= s.x + s.w || cy < s.y || cy >= s.y + s.h) continue;
+      bot = Math.max(bot, e.y + e.h);
+    }
+    const trimmedH = Math.max(240, Math.ceil((bot + SHEET_MARGIN - s.y) / 24) * 24);
+    const origin = { x: s.x, y: s.y + Math.min(s.h, trimmedH) + 48 };
+    if (spot.planSlot) {
+      return {
+        x: Math.round(origin.x + SHEET_MARGIN + spot.planSlot.x),
+        y: Math.round(origin.y + SHEET_MARGIN + spot.planSlot.y),
+        w: spot.planSlot.w,
+      };
+    }
+    if (spot.at && Number.isFinite(spot.at.x) && Number.isFinite(spot.at.y)) {
+      return { x: Math.round(origin.x + SHEET_MARGIN + spot.at.x), y: Math.round(origin.y + SHEET_MARGIN + spot.at.y) };
+    }
+    return { x: Math.round(origin.x + SHEET_MARGIN), y: Math.round(origin.y + SHEET_MARGIN) };
+  }
+
   if (!s || !Number.isFinite(s.x)) return null;
 
   // 版位优先（2026-08-29 刀 E）：agent 规划过的块。落点跟服务端 nextSpotInSlot

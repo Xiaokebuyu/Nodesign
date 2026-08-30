@@ -59,11 +59,15 @@ export function obstaclesIn(board, zone = '', { objects = null, exclude = null, 
     if (layerOf(id, e, known) !== zone) continue;
     rects.push({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) });
   }
-  // 根层还住着两类不在 objects 里的占面积物件
-  if (!zone && furniture) {
-    for (const z of zoneRects(board)) {
+  // 每层还住着不在 objects 里的占面积物件：文件夹卡按**所在层**取
+  //（子文件夹卡住在父层里，2026-08-30 跨层幻影案之前这儿把它们全当根层矩形，
+  //  文件夹层内的落位则完全看不见它们 —— 同一个错的两面）；卷卡只在根层。
+  if (furniture) {
+    for (const z of zoneRects(board, { layer: zone })) {
       if (!skip.has(z.id)) rects.push(z);
     }
+  }
+  if (!zone && furniture) {
     for (const tag of Object.keys(board?.rolls || {})) {
       if (skip.has(tag)) continue;
       const r = rollCardRect(board, tag);

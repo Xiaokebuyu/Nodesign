@@ -120,3 +120,20 @@ export function assertSkillModeNames(installedNames) {
     );
   }
 }
+
+/**
+ * skill 按模式筛的总入口（08-30；从 session-loop 拆来 —— 行数棘轮）。
+ * SDK 只把 description 注进系统提示词（body 按需加载），所以每个 skill 的几百字节
+ * 描述是**每个会话**的常驻成本，不分模式。筛之前 RP 会话背着设计三件
+ * （deskskill/docx/site 合计 ~2.4KB）的描述，而它们要用的工具在 RP 下压根没注册。
+ * 对账跟 assertModeProfileNames 一样狠：表里的名字没装上就当场炸，别静默空转。
+ */
+export function modeSkillsFor(installedNames, mode) {
+  assertSkillModeNames(installedNames);
+  const out = filterSkillsForMode(installedNames, mode);
+  if (out.length !== installedNames.length) {
+    const dropped = installedNames.filter((n) => !out.includes(n));
+    console.log(`[session-loop] skills 按 mode=${mode} 筛掉 ${dropped.length}: [${dropped.join(', ')}]`);
+  }
+  return out;
+}

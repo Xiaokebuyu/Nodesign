@@ -22,6 +22,27 @@ import { ONE_SCREEN, ZOOM_BASIS } from './screen.js';
 import { estimateSizeOn, zoneRects } from './board-kind-sizes.js';
 import { DEFAULT_CHALK_W } from './sketch-layout.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
+import { layerOf } from './canvas-id.js';
+
+/**
+ * 根层物件（纸只存在于根层桌面，纸面账目只许数根层的东西）。
+ *
+ * ⛔ 2026-08-30 跨层幻影案（proj_mtfpehm3 首拍连败 4 发）：文件夹里的文件卡
+ * 存的是**文件夹层内坐标**，数值恰好落在根层第一张纸的范围里；这儿原来不分层
+ * 直接扫全部 objects，前端根本不渲染的卡在服务端把纸「占满」了 —— 版位报
+ * 剩 0 行、整张纸报 full，全是假账。判据只有一条：layerOf 说它在根层才算。
+ */
+function rootObjects(board) {
+  const objs = board?.objects || {};
+  const known = new Set(Object.keys(board?.zones || {}));
+  const out = [];
+  for (const [id, e] of Object.entries(objs)) {
+    if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y)) continue;
+    if (layerOf(id, e, known) !== '') continue;
+    out.push([id, e]);
+  }
+  return out;
+}
 
 /** 纸与纸之间的沟（格子感放在纸与纸之间 —— 登录墙定格动画同一条经验） */
 export const SHEET_GAP = 2 * UNIT;   // 48
@@ -74,8 +95,7 @@ export function sheetMembers(board, sheetId) {
   const s = board?.sheets?.[sheetId];
   if (!s) return [];
   const out = [];
-  for (const [id, e] of Object.entries(board?.objects || {})) {
-    if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y)) continue;
+  for (const [id, e] of rootObjects(board)) {
     const sz = estimateSizeOn(board, id, e);
     const c = { x: e.x + sz.w / 2, y: e.y + sz.h / 2 };
     if (pointIn(c, s)) out.push({ id, x: e.x, y: e.y, w: sz.w, h: sz.h, entry: e });
@@ -278,14 +298,18 @@ export function slotRectOf(sheet, name, margin = SHEET_MARGIN) {
   };
 }
 
-/** 落在某块地里的物件（中心点判据，同 sheetMembers） */
+/** 落在某块地里的物件（中心点判据，同 sheetMembers；只数根层 —— 版位在纸上，
+ *  纸在根层。顶层文件夹卡真占着地也算成员：它就摆在那儿）。 */
 export function membersInRect(board, rect) {
   const out = [];
-  for (const [id, e] of Object.entries(board?.objects || {})) {
-    if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y)) continue;
+  for (const [id, e] of rootObjects(board)) {
     const sz = estimateSizeOn(board, id, e);
     const c = { x: e.x + sz.w / 2, y: e.y + sz.h / 2 };
     if (pointIn(c, rect)) out.push({ id, x: e.x, y: e.y, w: sz.w, h: sz.h });
+  }
+  for (const z of zoneRects(board)) {
+    const c = { x: z.x + z.w / 2, y: z.y + z.h / 2 };
+    if (pointIn(c, rect)) out.push({ id: z.id, x: z.x, y: z.y, w: z.w, h: z.h, folder: true });
   }
   return out.sort((a, b) => (a.y - b.y) || (a.x - b.x));
 }

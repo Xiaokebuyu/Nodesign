@@ -56,14 +56,18 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     if (spot.full) {
       const left = capacityOf(rect.w, spot.freeH);
       const whole = capacityOf(rect.w, rect.h);
+      // 量纲对齐（刀⑥ 2026-08-30）：两边都报 px + 行，还差多少直接说 —— 此前
+      // 「剩 ~15 行 / 要 ~15 行」被拒，在模型眼里就是量具坏了（真差 21px）。
+      const short = spot.needH - spot.freeH;
       return {
         full: true,
         message: [
-          `⛔ Slot "${slotName}" on sheet ${sheet.id} cannot take this.`,
-          `   It is ${rect.w}x${rect.h} (~${whole.cjk} CJK chars total)${spot.taken ? `, already holding ${spot.taken} note(s)` : ''};`,
-          `   ~${left.lines} lines / ~${left.cjk} CJK chars are still free, this note needs ${spot.needH}px (~${capacityOf(rect.w, spot.needH).lines} lines).`,
-          '   Nothing was written. Split the content into smaller blocks, put the rest in another slot,',
-          '   or re-plan the sheet (open_sheet{plan:[…]}) with a taller block.',
+          `⛔ Slot "${slotName}" on sheet ${sheet.id} cannot take this — short by ${short}px (~${Math.max(1, Math.ceil(short / 26))} line${short > 26 ? 's' : ''}).`,
+          `   Free: ${spot.freeH}px (~${left.lines} lines / ~${left.cjk} CJK chars); this note needs ${spot.needH}px.`
+            + `${spot.taken ? ` The ${rect.w}x${rect.h} slot (~${whole.cjk} CJK chars) already holds ${spot.taken} item(s).` : ''}`,
+          '   Nothing was written. EASIEST: retry with flow:true — the machine fills this slot as far',
+          '   as it goes and returns the rest to you. Or trim/split it yourself, put the rest in',
+          '   another slot, or re-plan the sheet (open_sheet{plan:[…]}) with a taller block.',
         ].join('\n'),
       };
     }

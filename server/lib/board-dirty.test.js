@@ -54,3 +54,37 @@ describe('board-dirty 台账', () => {
     expect(r.hookSpecificOutput.additionalContext).toContain('挪了 x');
   });
 });
+
+describe('有限负责制（2026-08-30 刀⑤）：动静按纸分拣', () => {
+  const sheetOf = (id) => ({ 我纸上的: 'p2', 别张纸的: 'p1' }[id] || null);
+
+  it('⭐ 挪进当前纸的归 inMine，别处的归 elsewhere（纸外算 elsewhere）', async () => {
+    const { splitDirtyByCharge } = await import('./board-dirty.js');
+    const evts = [
+      { kind: 'moved', id: '我纸上的' },
+      { kind: 'moved', id: '别张纸的' },
+      { kind: 'moved', id: '散地上的' },
+    ];
+    const r = splitDirtyByCharge(evts, { sheetOf, currentSheetId: 'p2' });
+    expect(r.inMine).toEqual(['我纸上的']);
+    expect(r.elsewhere.sort()).toEqual(['别张纸的', '散地上的']);
+  });
+
+  it('同一件动多次只算一次；erased 不进分拣（东西没了没有归属可言）；mv 按新家判', async () => {
+    const { splitDirtyByCharge } = await import('./board-dirty.js');
+    const r = splitDirtyByCharge([
+      { kind: 'moved', id: '我纸上的' }, { kind: 'moved', id: '我纸上的' },
+      { kind: 'erased', id: '旧组' },
+      { kind: 'mv', id: '旧名', to: '我纸上的' },
+    ], { sheetOf, currentSheetId: 'p2' });
+    expect(r.inMine).toEqual(['我纸上的', '旧名']);
+    expect(r.elsewhere).toEqual([]);
+  });
+
+  it('没有当前纸（还没铺过）→ 全归 elsewhere，不瞎认领', async () => {
+    const { splitDirtyByCharge } = await import('./board-dirty.js');
+    const r = splitDirtyByCharge([{ kind: 'moved', id: '我纸上的' }], { sheetOf, currentSheetId: null });
+    expect(r.inMine).toEqual([]);
+    expect(r.elsewhere).toEqual(['我纸上的']);
+  });
+});

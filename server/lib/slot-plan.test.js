@@ -91,7 +91,8 @@ describe('write_on_board 的版位落位', () => {
     expect(r.isError).toBe(true);
     const txt = r.content[0].text;
     expect(txt).toMatch(/cannot take this/);
-    expect(txt).toMatch(/still free/);
+    expect(txt).toMatch(/short by \d+px/);   // 08-30 刀⑥：两边同量纲，差多少直说
+    expect(txt).toMatch(/Free: \d+px/);
     expect(txt).toMatch(/Split the content|re-plan/);
     // ⭐ 什么都没写：拒收不能是"半写"
     expect(await countObjects()).toBe(before);

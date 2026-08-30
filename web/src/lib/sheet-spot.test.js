@@ -142,3 +142,24 @@ describe('sheetSpotToWorld 顺排预测', () => {
     expect(sheetSpotToWorld(sheets, { batchIdx: 2, at: { x: 0, y: 0 } }, {})).toBeTruthy();
   });
 });
+
+describe('freshSheet 预告（2026-08-30 刀④）', () => {
+  // batch = [open_sheet, write{slot}]：流式时新纸还没登记。没有这一支，预览
+  // 会退到「最新那张纸」（偏一整屏）或空地（叠一堆）——「都集中在一处流式」的病根。
+  const sheets = { p1: { x: 24, y: 48, w: 2048, h: 973, at: '2026-08-30T10:00:00Z' } };
+  const layout = { 'notes/板书/a.md': { x: 48, y: 72, w: 600, h: 300 } };
+
+  it('⭐ freshSheet + planSlot → 框立在「新纸将出现的位置」的那个版位上（裁纸后紧贴内容底+48）', () => {
+    const r = sheetSpotToWorld(sheets, { freshSheet: true, slot: 'side', planSlot: { x: 700, y: 0, w: 600, h: 880 } }, layout);
+    // 内容底 372 → 裁到 (372+24-48) 上取整 24 → 360；新纸 y = 48+360+48 = 456
+    expect(r.x).toBe(24 + 24 + 700);
+    expect(r.y).toBe(456 + 24);
+    expect(r.w).toBe(600);
+  });
+
+  it('freshSheet 无 planSlot → 新纸版心左上；空板上 freshSheet 退 null（没得预测）', () => {
+    const r = sheetSpotToWorld(sheets, { freshSheet: true }, layout);
+    expect(r.y).toBe(456 + 24);
+    expect(sheetSpotToWorld({}, { freshSheet: true }, {})).toBeNull();
+  });
+});

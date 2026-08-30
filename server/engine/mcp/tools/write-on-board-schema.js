@@ -6,6 +6,8 @@
 
 import { z } from 'zod';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
+import { TAG_RE } from '../../../projects/board-sanitize.js';
+import { CHALK_DIR } from '../../../lib/chalk.js';
 
 const MAX_NODES = 200;
 const MAX_SHAPES = 120;
@@ -57,3 +59,52 @@ export const EDGES = z.array(z.object({
   material: z.enum(BINDING_MATERIALS).optional().describe('default pencil'),
   label: z.string().max(60).optional(),
 })).max(MAX_EDGES);
+
+/**
+ * ⚠️ 字段顺序有意义（2026-08-29 占位契约刀 C）：模型是按 schema 声明顺序生成
+ * JSON 的，而入参是**流式**到达前端的 —— 位置字段排在 text 前面，画布才能在
+ * 第一个字到达时就把框立在真位置上，让正文流进去（排在后面的话，字已经流完了
+ * 位置才到，只能先画在一块空地上再跳过去 —— 那正是这一刀要治的）。
+ * 抽取规则在 agent-shared.js 的 TOOL_INPUT_STREAM_FIELDS.spot。
+ */
+export const WRITE_SCHEMA = {
+  slot: z.string().regex(TAG_RE).optional()
+    .describe('Drop this into a PLANNED BLOCK of the current sheet (names come from open_sheet{plan}). The block decides the width and where it lands; notes stack downward inside it. If it does not fit, the write is REFUSED with how much room is left — split the content or re-plan. Prefer this over at: plan the page first, then fill it.'),
+  at: SHEET_PT.optional()
+    .describe("Where on the CURRENT SHEET, in pixels from its top-left writable corner (x→right, y→down). Clamped into the sheet — the return says if it was. Omit it to flow top-to-bottom"),
+  sheet: z.string().regex(TAG_RE).optional()
+    .describe('Write on this sheet instead of the current one (names from open_sheet / read_board)'),
+  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px). Default: the width the user last dragged chalk blocks to, else by content. Omit it unless this one block needs a different measure - the default already follows the user.'),
+  near: z.string().max(300).optional()
+    .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it. Placement itself is by sheet (at / flow), not by near'),
+  side: z.enum(['right', 'left', 'above', 'below']).optional()
+    .describe('ONLY with near, when the SEMANTICS demand a side (e.g. a caption must sit above): exact placement beside the anchor. Normally omit — sheets flow downward'),
+  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; a full sheet turns the page)`),
+  text: z.string().min(1).max(8000).optional()
+    .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
+  flow: z.boolean().optional()
+    .describe('Long text? Set true and the MACHINE splits it at paragraph breaks into a chain of card-sized notes, packing them into the slot/sheet as far as they fit — what does not fit is returned to you untouched (never squeezed, never silently dropped, never auto-turning the page). Use this instead of guessing whether your text fits.'),
+  h: z.number().min(24).max(2000).optional()
+    .describe('Reserve this HEIGHT in pixels for the note box, placed before the text settles (plan the box, then fill it). Shorter content keeps the box; longer content overrides it. Ignored with flow.'),
+  relation: z.enum(BINDING_TYPE_IDS).optional()
+    .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
+  chain: z.boolean().optional()
+    .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights)'),
+  open_lane: z.string().max(300).optional()
+    .describe("Open a NEW thread line named by tag: lays a fresh sheet for it and lands this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic. Requires tag; continue with {tag, chain:true}."),
+  tag: z.string().regex(TAG_RE).optional()
+    .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
+  ink: z.enum(['chalk', 'hand']).optional()
+    .describe("Single note body: 'chalk' (default) = a real file under notes/板书 (Read/Edit later; chain/reply threads live on these); 'hand' = canvas-native handwritten text — a light remark like the user's own handwriting, no file, no threading"),
+  font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional().describe("Single note font (ink:'hand'; default kai)"),
+  color: z.enum(['ink', 'red', 'pencil', 'brass']).optional().describe("Single note color (ink:'hand')"),
+  size: z.enum(['sm', 'md', 'lg', 'xl']).optional().describe("Single note text size. Real for ink:'hand'; for chalk notes it only sizes the placement box (chalk renders at a fixed size)"),
+  title: z.string().max(60).optional().describe('Sketch: optional heading written at the top'),
+  layout: z.enum(['auto', 'free', 'column', 'row', 'grid', 'mindmap', 'flow']).optional()
+    .describe('Sketch layout. auto FOLLOWS YOUR EDGES: with edges it lays out in flow layers (roots on top, children below — give edges and placement is structure); mindmap picks the hub by degree. free needs at on EVERY node'),
+  cols: z.number().int().min(1).max(8).optional().describe('grid columns'),
+  staging: z.boolean().optional().describe('Sketch only: default true (translucent until commit/turn end). Ignored for single notes — they always land solid'),
+  nodes: NODES.optional(),
+  shapes: SHAPES.optional(),
+  edges: EDGES.optional(),
+};

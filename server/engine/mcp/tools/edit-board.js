@@ -30,6 +30,8 @@ import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/c
 import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
 import { placeBeside, placeAtOnSheet, overlapIds, currentSheet } from '../../../lib/board-sheets.js';
+import { SLOT } from './open-sheet.js';
+import { applyReplan } from './sheet-replan.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
@@ -96,6 +98,7 @@ const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('unroll'), tag: z.string().min(1).max(40).describe('expand a rolled group back — everything returns to its original seat') }),
   z.object({ op: z.literal('feature'), id: z.string().min(1).max(300).describe('make this the hero of the desktop') }),
   z.object({ op: z.literal('unfeature') }),
+  z.object({ op: z.literal('replan'), sheet: z.string().max(40).optional().describe('which sheet (default: the current one)'), plan: z.array(SLOT).min(1).max(24).describe('slots to ADD or RESIZE on an existing sheet (merged by name; slots you do not mention stay). Same local-pixel coordinates as open_sheet{plan}') }),
   z.object({ op: z.literal('chalk_edit'), on: z.boolean().describe('true = turn ON the user-side 改板书 toggle (notes become freely draggable/editable for the user); false = back to guarded mode') }),
 ]);
 
@@ -121,7 +124,8 @@ ops (run in order; a failing op is reported, the rest still apply):
  hugs it and follows when it moves) · set_shape{id,color?,width?} ·
  add_edge{from,to,type?,material?,label?} · set_edge{id,from?,to?,label?,type?,material?}
  (re-point a line in one op) · remove_edge{id} · reflow{tag,layout?} (restack a group after
- text edits changed heights) · follow{group_tag,target_tag,side?} (standing rule: whenever a
+ text edits changed heights) · replan{sheet?,plan:[{slot,at,w,h,about}…]} (ADD or RESIZE planned
+ blocks on an existing sheet — fix a bad layout instead of abandoning the page; unnamed slots stay) · follow{group_tag,target_tag,side?} (standing rule: whenever a
  new item with target_tag lands, the group auto-moves beside it — a status panel that tracks
  the latest chapter needs this ONCE, not per turn) · unfollow{group_tag} ·
  commit{tag?} (staging → solid) · erase_group{tag} ·
@@ -230,6 +234,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
      */
     const liveZones = { ...(board.zones || {}) };
     const zonesPatch = {};
+    const sheetsPatch = {};                        // replan：纸的版位增改
     const isZone = (id) => Object.prototype.hasOwnProperty.call(liveZones, id);
     const setZone = (id, z) => { liveZones[id] = z; zonesPatch[id] = z; };
     /** 贴身记号跟随（08-27 shapes 编辑面）：挪一件东西时，圈着它的涂鸦一起走。
@@ -556,6 +561,13 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           heroPatch = id; ok += 1;
         } else if (o.op === 'unfeature') {
           heroPatch = null; ok += 1;
+        } else if (o.op === 'replan') {
+          // 补版位/调版位（刀⑧ 2026-08-30，拆件见 sheet-replan.js）
+          const r = applyReplan({ board, sheetsPatch, sessionId, op: o });
+          if (r.error) { fail(r.error); continue; }
+          sheetsPatch[r.sheetId] = r.entry;
+          report.push(r.report);
+          ok += 1;
         } else if (o.op === 'chalk_edit') {
           // 改板书开关（08-25 用户提：黑板 RP 这类板书密集会话该由 agent 帮忙打开）。
           // 存 ui-config（重开页面还在），并广播给开着的前端当场生效。
@@ -568,10 +580,11 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       } catch (e) { fail(String(e?.message || e).slice(0, 120)); }
     }
     if (!ok) return err(`没有一条操作成功：\n${report.join('\n')}`);
-    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length || heroPatch !== undefined) {
+    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length || Object.keys(sheetsPatch).length || heroPatch !== undefined) {
       await patchBoard(projectId, {
         objects, bindings,
         ...(Object.keys(zonesPatch).length ? { zones: zonesPatch } : {}),
+        ...(Object.keys(sheetsPatch).length ? { sheets: sheetsPatch } : {}),
         ...(Object.keys(rolls).length ? { rolls } : {}),
         ...(Object.keys(follows).length ? { follows } : {}),
         ...(heroPatch !== undefined ? { hero: heroPatch } : {}),

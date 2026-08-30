@@ -53,6 +53,30 @@ export function markSeen(pid, sessionId, seenSeq = seq) {
   if (pid && sessionId) markers.set(`${pid}:${sessionId}`, seenSeq);
 }
 
+/**
+ * 有限负责制（刀⑤ 2026-08-30，站主原话改的）：agent 只对**自己专注的工作区**
+ * （当前纸的内部）的摆放负责 —— 挪进当前纸的东西点名出来、要它处理；挪出纸面
+ * 的是用户自留地，只报不催。板整个是「用户随便动、agent 别拔河」，这条只是把
+ * 「动到哪儿了」按纸分拣，agent 才知道哪些动静该接手。
+ *
+ * @param events   dirtyEvents 的产物
+ * @param board    现在的板（位置以现状为准，不看动静发生时的旧坐标）
+ * @param sheetOf  (id) => sheetId|null —— 由调用方绑好 board 的判定函数
+ * @param currentSheetId  agent 此刻的当前纸
+ * @returns {{ inMine: string[], elsewhere: string[] }}  两拨 id
+ */
+export function splitDirtyByCharge(events, { sheetOf, currentSheetId } = {}) {
+  const inMine = []; const elsewhere = [];
+  const seen = new Set();
+  for (const e of events) {
+    if (e.kind === 'erased' || seen.has(e.id)) continue;
+    seen.add(e.id);
+    const sid = sheetOf ? sheetOf(e.kind === 'mv' ? (e.to || e.id) : e.id) : null;
+    (currentSheetId && sid === currentSheetId ? inMine : elsewhere).push(e.id);
+  }
+  return { inMine, elsewhere };
+}
+
 /** 一批动静的人话（注入两处共用一份措辞） */
 export function describeDirty(events, { limit = 6 } = {}) {
   if (!events?.length) return null;

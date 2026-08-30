@@ -27,8 +27,9 @@ import { readUiConfigFile, withUiDefaults } from '../../../projects/ui-config.js
 import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
-import { sheetSummaries, latestSheetId } from '../../../lib/board-sheets.js';
-import { dirtyEvents, describeDirty } from '../../../lib/board-dirty.js';
+import { sheetSummaries, latestSheetId, currentSheet, sheetOfPoint } from '../../../lib/board-sheets.js';
+import { currentSheetIdOf } from '../../../lib/sheet-state.js';
+import { dirtyEvents, describeDirty, splitDirtyByCharge } from '../../../lib/board-dirty.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
 import { readStateVars } from '../../../lib/state-table.js';
 import { parseTriggers, evalTriggers, readLatch, writeLatch } from '../../../lib/state-triggers.js';
@@ -124,11 +125,14 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
         const latest = latestSheetId(board);
         const cur = ss.find(s => s.id === latest) || ss[ss.length - 1];
         if (cur) {
+          // 报「还能装下什么」不是裸数字（2026-08-30 容量线）：行数是模型真正用来
+          // 决策的量纲 —— 顺手教它超过余量别赌一发，flow 会替它拆
           const slots = cur.slots?.length
             ? `；版位 ${cur.slots.map(s => `${s.name} 剩 ~${s.freeLines} 行`).join('、')}`
             : '；这张没规划版位';
           spot = `板上 ${ss.length} 张纸；当前 ${cur.id}${cur.title ? `（${cur.title}）` : ''} 还剩 ~${cur.freeH}px 高的空地${slots}`
-            + '（写满**不会**自动翻页，自己 open_sheet 规划下一页；新话题也是 open_sheet）';
+            + '（内容眼看要超余量就别赌一发 —— write_on_board 加 flow:true 由机器按段拆条；'
+            + '写满**不会**自动翻页，自己 open_sheet 规划下一页；新话题也是 open_sheet）';
         } else {
           spot = '板上还没铺过纸 —— 第一笔 write_on_board 会自动铺一张在他视口下，或先 open_sheet';
         }
@@ -166,8 +170,31 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
     const evts = dirtyEvents(projectId, 0);
     if (evts.length) {
       const line = describeDirty(evts, { limit: 6 });
+      // 有限负责制（刀⑤ 2026-08-30）：动静按纸分拣 —— 挪进你当前纸的要接手处理，
+      // 挪去别处的是用户自留地，只报不催（板整个是用户随便动，别拔河）。
+      let charge = '';
+      try {
+        const b = await readBoard(projectId);
+        const curId = currentSheet(b, currentSheetIdOf(sessionId))?.id || null;
+        const sheetOf = (id) => {
+          const e = b.objects?.[id];
+          if (!e || !Number.isFinite(e.x)) return null;
+          const sz = estimateSizeOn(b, id, e);
+          return sheetOfPoint(b, { x: e.x + sz.w / 2, y: e.y + sz.h / 2 })?.id || null;
+        };
+        const { inMine, elsewhere } = splitDirtyByCharge(evts, { sheetOf, currentSheetId: curId });
+        if (inMine.length) {
+          charge = `\n⚠️ 其中 ${inMine.slice(0, 4).join('、')}${inMine.length > 4 ? ` 等 ${inMine.length} 件` : ''} 现在落在**你正在写的纸（${curId}）**上：`
+            + '这块工作区的版面归你管 —— 若它挡了你的版位/内容，用 edit_board 给它挪个合适的位置（挪要挪得讲理，别甩出用户视野）；用户明说过要放那儿的除外。';
+        }
+        if (elsewhere.length && inMine.length) {
+          charge += `\n其余 ${elsewhere.length} 件在你的纸外 —— 那是用户自留地，不要去动。`;
+        } else if (elsewhere.length) {
+          charge = '\n这些都在你当前的纸外 —— 用户自留地，看在眼里就好，不要去动。';
+        }
+      } catch { /* 分拣失败就退回不分拣的报法 */ }
       sections.push({ key: 'boardDirty', title: '板上动静', text:
-        `用户最近亲手动过板面：${line}。这些位置以现状为准 —— 摆放前先 read_board，别按你记忆里的旧位置来。` });
+        `用户最近亲手动过板面：${line}。这些位置以现状为准 —— 摆放前先 read_board，别按你记忆里的旧位置来。${charge}` });
     }
   } catch { /* 动静读不到就沉默 */ }
 

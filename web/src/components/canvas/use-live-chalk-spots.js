@@ -25,7 +25,12 @@ export function useLiveChalkSpots({ sheets, layout, camera, scrollRef }) {
         // placed = 这是 agent 自己选的位置（不是我们找的空地）：渲染层据此画出
         // "这块地已经定下了"的框。width 是它给的格数（24px 一格）。
         // 版位给的宽度直接来自那块地；否则用 agent 点名的格宽
-        m.set(blockId, { ...real, placed: true, w: real.w || (Number.isFinite(spot?.width) ? spot.width * 24 : null) });
+        m.set(blockId, {
+          ...real, placed: true,
+          w: real.w || (Number.isFinite(spot?.width) ? spot.width * 24 : null),
+          // 预约高度（刀⑧）：agent 声明了 h 就先把框立到那么高，字往里流
+          hMin: Number.isFinite(spot?.h) ? spot.h : null,
+        });
       } else {
         const r = scrollRef.current?.getBoundingClientRect();
         if (!r) return null;

@@ -545,6 +545,7 @@ export function ChalkLiveInk({ card, spot }) {
   return (
     <div data-stage="chalk-live" data-placed={spot.placed ? '1' : undefined} style={{
       position: 'absolute', left: spot.x, top: spot.y, width: spot.w || 432, zIndex: 3,
+      ...(spot.hMin ? { minHeight: spot.hMin } : null),
       pointerEvents: 'none', padding: '4px 6px', opacity: card.status === 'fail' ? 0.3 : 0.88,
       animation: card.status === 'ok' ? 'ndStageOut 500ms ease 700ms forwards' : POP_IN,
       ...(placed ? { borderLeft: `2px solid ${alpha(PAPER.ink, 0.16)}`, marginLeft: -8, paddingLeft: 6 } : null),
