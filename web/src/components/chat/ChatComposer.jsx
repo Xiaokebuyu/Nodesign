@@ -163,7 +163,12 @@ export default function ChatComposer({
     <div style={{
       padding: GAP.lg,
       borderTop: `1px solid ${CHROME.border}`,
-      background: CHROME.bg,
+      // ⛔ 这里以前铺 CHROME.bg —— 那是**栏**的色，画的是"输入纸摊在左栏底下"
+      //    那一层托盘。栏早就没了：聊天整个搬到 ChatDock 那张纸上，托盘就成了
+      //    纸卡底部一条 420px 宽的平色带（#FBF7EC 平的 / 纸 #FFFEF9 带颗粒），
+      //    跟时间轴图标底下那块方片是同一个来历。
+      //    收掉之后这里是纸卡自己的纸，输入纸靠自己的影子浮在上面。
+      background: 'transparent',
     }}>
       <div
         className="nd-composer"
