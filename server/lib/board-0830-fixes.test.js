@@ -147,3 +147,42 @@ describe('③ 文件夹卡进摆位系统', () => {
     expect(r.content[0].text).toContain('不在板上');
   });
 });
+
+describe('⑤ 未知参数探针：查的是真注册表，不是手塞的表', () => {
+  /**
+   * ⚠️ 这条测试存在的理由就是我自己踩过的那一脚：第一版探针只按**带前缀**的名字
+   * 查台账，而台账是按 tool() 的**裸名**建的 —— 钩子永远不响。我的冒烟测试当时
+   * 手动往 map 里塞了带前缀的键，把洞完整地盖住了。所以这里**不许手塞**，
+   * 必须先把真 MCP server 装配起来，让台账按真实注册名回填。
+   */
+  let probe;
+  beforeAll(async () => {
+    const { createNodesignMcpServer } = await import('../engine/mcp/index.js');
+    createNodesignMcpServer({ workspaceRoot: tmp, sharedRoot: tmp, projectId: 'p_probe', sessionId: 's', ctx: { emit() {} }, projectMode: 'rp' });
+    const { makePreToolUseUnknownParamsProbe } = await import('../engine/agent/hooks/pre-unknown-params.js');
+    probe = makePreToolUseUnknownParamsProbe();
+  });
+  const ctxOf = async (tool_name, tool_input) => (await probe({ tool_name, tool_input }))?.hookSpecificOutput?.additionalContext || null;
+
+  it('⭐⭐ write_on_board.facts（真会话里出现过 20 次）会被点名', async () => {
+    const t = await ctxOf('mcp__nodesign__write_on_board', { text: 'x', facts: ['本章确立的事实'] });
+    expect(t).toContain('facts');
+    expect(t).toContain('整个被丢掉了');
+    expect(t).toContain('write_on_board 收的是');   // 顺带告诉它真参数有哪些
+  });
+  it('⭐ 干净调用一声不吭（不响也是判据：会误报的探针没人会理）', async () => {
+    expect(await ctxOf('mcp__nodesign__write_on_board', { text: 'x', tag: '章节', slot: 'main' })).toBeNull();
+    expect(await ctxOf('mcp__nodesign__board_batch', { actions: [{ name: 'edit_board', input: { ops: [] } }], screenshotAfter: true })).toBeNull();
+  });
+  it('⭐ batch 里逐步查，裸名也认', async () => {
+    const t = await ctxOf('mcp__nodesign__board_batch', { actions: [{ name: 'write_on_board', input: { text: 'x', facts: [1] } }] });
+    expect(t).toContain('第 1 步');
+    expect(t).toContain('facts');
+  });
+  it('⭐ edit_board 把单条 op 摊平写（真会话 4 次）也点名', async () => {
+    expect(await ctxOf('mcp__nodesign__edit_board', { op: 'set_text', on: true })).toContain('`op`/`on`');
+  });
+  it('非 nodesign 工具不管（Read/Edit 有自己的 schema，别越界瞎报）', async () => {
+    expect(await ctxOf('Read', { file_path: '/x', 乱七八糟: 1 })).toBeNull();
+  });
+});

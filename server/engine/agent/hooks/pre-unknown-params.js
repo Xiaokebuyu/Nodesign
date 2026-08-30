@@ -22,9 +22,21 @@ const BATCH_TOOLS = new Set(['mcp__nodesign__board_batch', 'mcp__nodesign__brows
 /** batch 自己的旋钮，不算未知 */
 const BATCH_OWN = new Set(['actions', 'screenshotAfter']);
 
-/** 一个工具的未知键（schema 没登记过的）。台账里没有这个工具 → 返回空，别瞎报 */
-function unknownKeysOf(bareName, input) {
-  const own = TOOL_PARAM_KEYS.get(bareName);
+/**
+ * 一个工具的未知键（schema 没登记过的）。台账里没有这个工具 → 返回空，别瞎报。
+ *
+ * ⚠️ 名字两种写法都要认：台账按 tool() 的**裸名**建（write_on_board），而钩子拿到的
+ * tool_name 是**带前缀**的（mcp__nodesign__write_on_board），batch 里模型两种都写过。
+ * 第一版只查带前缀那一种，于是钩子从来不响 —— 我自己的冒烟测试给 map 塞的正好是
+ * 带前缀的键，把这个洞盖住了（判据本身要先验一遍，量具错得比 bug 还多）。
+ */
+const PREFIX = 'mcp__nodesign__';
+function schemaOf(name) {
+  if (typeof name !== 'string') return null;
+  return TOOL_PARAM_KEYS.get(name) || TOOL_PARAM_KEYS.get(name.startsWith(PREFIX) ? name.slice(PREFIX.length) : `${PREFIX}${name}`) || null;
+}
+function unknownKeysOf(name, input) {
+  const own = schemaOf(name);
   if (!own || !own.size || !input || typeof input !== 'object') return [];
   return Object.keys(input).filter((k) => !own.has(k) && !k.startsWith('__'));
 }
@@ -54,8 +66,8 @@ export function makePreToolUseUnknownParamsProbe() {
       }
       if (!lines.length) return {};
 
-      const own = BATCH_TOOLS.has(name) ? null : TOOL_PARAM_KEYS.get(name);
-      const take = own?.size ? `${name.replace('mcp__nodesign__', '')} 收的是：${[...own].join(' / ')}。` : '';
+      const own = BATCH_TOOLS.has(name) ? null : schemaOf(name);
+      const take = own?.size ? `${name.replace(PREFIX, '')} 收的是：${[...own].join(' / ')}。` : '';
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
