@@ -183,16 +183,16 @@ export const TERM = {
 };
 
 /**
- * 工作台外壳（2026-08-03 换肤第二块）—— 三栏的底色和分界。
+ * ⛔ WORKBENCH 已随 ThreeColumnLayout 一起删掉（2026-08-30）。
  *
- * 物理逻辑：首页那面板子上钉着所有项目，进到工作台等于把其中一张取下来摊在台面上。
- * 所以左右两栏跟顶栏是同一张纸（外壳是连续的），中间那片是台面 —— 比纸深一档，
- * 白色的产物摊上去才浮得起来。
+ * 那是三栏工作台左右两栏的底色（panel = #FBF7EC，跟 CHROME.bg 同一个值）。
+ * 三栏布局早就没人用了 —— 聊天搬到 ChatDock 那张纸、上下文搬进 FloatingPanel，
+ * 中间的台面留在 STAGE。但**栏的色留在了搬走的组件身上**：时间轴图标底下那块
+ * 方片、输入纸外面那圈托盘，都还在纸上铺 #FBF7EC，纸的颗粒一加重就露馅。
+ *
+ * 教训写在 components/chat/chat-on-paper.lint.test.js 里：纸上别铺栏的色。
+ * 真要一块跟纸不同的面，用 PAPER 里的纸变体并带上 GRAIN。
  */
-export const WORKBENCH = {
-  panel: "#FBF7EC",                  // 左右两栏：与 CHROME.bg 同色，外壳连成一片
-  edge:  "rgba(43,33,23,0.13)",      // 栏与栏之间那道墨痕
-};
 
 /** 画布工作面专属（暖纸方言；换肤时整组处置） */
 export const CANVAS = {
@@ -240,7 +240,7 @@ export const MODAL = {
 
 // Stage — Canvas 焕新升级 S2（2026-05-02）：把 iframe 从"贴边平铺"变成
 // "浮在暖底上的卡片"。CanvasFrame 用 STAGE.shadow + STAGE.radius，
-// ThreeColumnLayout 中间 main 用 STAGE.bg + padding 形成呼吸空间。
+// 画布那片台面用 STAGE.bg + padding 形成呼吸空间（原三栏布局的中栏，布局已删）。
 export const STAGE = {
   bg: "#F5F0E5",                                  // 台面四周那圈呼吸，比台面浅一档
   shadow: `0 8px 32px ${SH(0.11)}, 0 2px 8px ${SH(0.06)}`,

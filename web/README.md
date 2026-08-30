@@ -47,7 +47,7 @@ src/
 │   ├── DesignSystemList.jsx    # 占位
 │   └── SkillList.jsx           # 占位
 ├── components/
-│   ├── layout/                 # AppShell / TopBar / ThreeColumnLayout
+│   ├── layout/                 # AppShell / TopBar / ChatDock / FloatingPanel
 │   ├── chat/                   # ChatPanel / MessageList / Message / ChatComposer
 │   ├── canvas/                 # CanvasFrame / Toolbar / HtmlIframe / EditOverlay / DirectEditBridge / CodeCanvas
 │   ├── context-panel/          # ContextPanel / InputsTab / SystemTab
