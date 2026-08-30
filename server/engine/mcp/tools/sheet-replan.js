@@ -31,7 +31,8 @@ export function applyReplan({ board, sheetsPatch, sessionId, op }) {
       if (merged[nm].for === 'artifacts') { merged[nm] = { ...merged[nm] }; delete merged[nm].for; }
     }
   }
-  Object.assign(merged, addSlots);
+  // 属性级合并（2026-08-30）：replan 只想改尺寸时不该把旧的 about / for 一并抹掉
+  for (const [nm, sl] of Object.entries(addSlots)) merged[nm] = { ...(merged[nm] || {}), ...sl };
   const names = Object.entries(addSlots).map(([nm, sl]) => {
     const c = capacityOf(sl.w, sl.h);
     return `${nm} at (${sl.x},${sl.y}) ${sl.w}x${sl.h}（~${c.lines} 行 / ~${c.cjk} 字）`;

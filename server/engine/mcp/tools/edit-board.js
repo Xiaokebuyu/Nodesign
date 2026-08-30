@@ -222,7 +222,9 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
             // 同一件事，抄第二份必然漏掉「用户拖出来的留白留得住」那条 —— 三条语义里
             // 只有它漏了不报错，只是用户的排版悄悄没了。
             let box2;
-            try { box2 = await rewriteChalkBody(abs, o.text, e); } catch { fail(`${id} 文件读不到（磁盘上已无此路径？）`); continue; }
+            try { box2 = await rewriteChalkBody(abs, o.text, e); } catch (ex) {
+              fail(ex?.code === 'STATE_TABLE' ? `⛔ ${ex.message}` : `${id} 文件读不到（磁盘上已无此路径？）`); continue;
+            }
             setObj(id, { ...e, w: box2.w, h: box2.h }); ok += 1;
             report.push(`· #${i + 1} set_text 重写了板书 ${id} 的正文（线/标注/座位全保留）`);
             continue;

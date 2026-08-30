@@ -42,6 +42,7 @@ import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-
 import { makeAnchorResolver } from '../../../lib/board-anchor.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
+import { STATE_TABLE_TAG, parseStateTable } from '../../../lib/state-table.js';
 import { maybeFlowWrite } from './write-on-board-flow.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
 import { WRITE_SCHEMA as SCHEMA } from './write-on-board-schema.js';
@@ -328,6 +329,14 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           `Wrote handwritten note ${hid} at (${hRect.x},${hRect.y}) ${hRect.w}x${hRect.h} — ${describeSpot(b2, placed)}.` }] };
       }
 
+      // 状态表堵写口（2026-08-30）：挂这个 tag 的板书是唯一真相（set_vars/触发器/
+      // 趋势线都读它），建出来的第一版就得是一张能解析的表 —— 坏表落盘比不落更坏。
+      if (args.tag === STATE_TABLE_TAG) {
+        const t = parseStateTable(String(body).replace(/\r\n?/g, '\n'));
+        if (!t.ok) {
+          return err(`⛔ tag「${STATE_TABLE_TAG}」是载重的，但这份正文里解析不出状态表（${t.error === 'no-table' ? '找不到「| 键 | 值 |」表' : t.error}）—— 什么都没写。正文放一张两列表（| 键 | 值 | ／ | --- | --- | ／ 一行一键）再来。`);
+        }
+      }
       const fileName = chalkFileName(body);
       const content = renderChalk({ body, by, anchor: anchorId, replyTo: parentId, tag: args.tag || null, sessionId: sessionId || null });
       const rel = await writeChalkFile(sharedRoot, fileName, content);

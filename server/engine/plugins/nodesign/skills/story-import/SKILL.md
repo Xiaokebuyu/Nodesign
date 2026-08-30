@@ -109,4 +109,4 @@ CoT 框架、自定义回复格式、`regex_scripts`、`tavern_helper`、marker 
 1. 拿本拍要写的人名/地名/物件/事件 **grep `世界书/`**（触发词在 frontmatter keys
    和文件名里），命中就 Read 进来。**你手上的 Grep 就是酒馆的关键词触发器。**
    宁可多 grep 一个词，也别凭记忆编设定。
-2. 写完过一眼状态板要不要更新（连同 reflow，一次 `board_batch`）。
+2. 写完过一眼状态板要不要更新（连同 reflow，就手做掉）。

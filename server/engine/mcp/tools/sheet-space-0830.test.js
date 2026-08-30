@@ -175,4 +175,59 @@ describe('空位竖排糖（2026-08-30 用户拍板「自己定几个空位分�
     const b = await readBoard('proj_sp_stack2');
     expect(Object.values(b.sheets)[0].slots.more).toMatchObject({ x: 0, y: 324 });
   });
+
+  it('⭐ replan 点名已有版位、省坐标 = 原地改尺寸（glm 真案：此前被竖排糖传送到 (0,0) 跟 main 叠上）', async () => {
+    const t = await mk('proj_sp_resize');
+    setViewpoint('proj_sp_resize', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '原地加高', plan: [
+      { slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 700, about: '正文' },
+      { slot: 'state', at: { x: 640, y: 120 }, w: 360, h: 240, about: '状态板' },
+    ] });
+    await t.edit({ ops: [{ op: 'replan', plan: [{ slot: 'state', w: 360, h: 500 }] }] });
+    const sl = Object.values((await readBoard('proj_sp_resize')).sheets)[0].slots;
+    expect(sl.state).toMatchObject({ x: 640, y: 120, h: 500 });   // 位置没动，只长高
+    expect(sl.state.about).toBe('状态板');                          // 旧 about 不丢
+    expect(sl.main).toMatchObject({ x: 0, y: 0, h: 700 });
+  });
+});
+
+describe('状态表堵写口（2026-08-30 glm \\r 字面量真案）', () => {
+  it('⭐ set_text 把状态表改成解析不出的正文 → 大声拒、盘上原文原样', async () => {
+    const t = await mk('proj_sp_stguard');
+    setViewpoint('proj_sp_stguard', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '守卫' });
+    const w = await t.write({ tag: '状态表', text: '状态表\n\n| 键 | 值 |\n| --- | --- |\n| 好感度 | 3 |' });
+    expect(w.isError).toBeUndefined();
+    const b = await readBoard('proj_sp_stguard');
+    const [id] = Object.entries(b.objects).find(([k]) => k.startsWith('notes/板书/'));
+    const r = await t.edit({ ops: [{ op: 'set_text', id, text: '状态表\r\rn| 键 | 值 |\r\rn| --- | --- |\r\rn| 好感度 | 4 |' }] });
+    expect(r.content[0].text).toMatch(/写坏|表没了|状态表/);
+    const { readStateVars } = await import('../../../lib/state-table.js');
+    const live = await readStateVars((await import('../../../projects/workspace.js')).getSharedDir('proj_sp_stguard'));
+    expect(live.state).toBe('ok');                                 // 表还活着
+    expect(live.rows.find((x) => x.key === '好感度').value).toBe('3');
+  });
+
+  it('创建口同样设防：write_on_board 挂状态表 tag 但正文没有表 → 拒收不落盘', async () => {
+    const t = await mk('proj_sp_stguard2');
+    setViewpoint('proj_sp_stguard2', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '守卫2' });
+    const w = await t.write({ tag: '状态表', text: '状态表\r\rn| 键 | 值 |\r\rn| --- | --- |\r\rn| 好感度 | 0 |' });
+    expect(w.isError).toBe(true);
+    expect(w.content[0].text).toMatch(/载重|解析不出/);
+    const b = await readBoard('proj_sp_stguard2');
+    expect(Object.keys(b.objects || {}).filter((k) => k.startsWith('notes/板书/'))).toHaveLength(0);
+  });
+
+  it('CRLF 老实换行在写口归一化，不进守卫的黑名单', async () => {
+    const t = await mk('proj_sp_stguard3');
+    setViewpoint('proj_sp_stguard3', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '守卫3' });
+    const w = await t.write({ tag: '状态表', text: '状态表\r\n\r\n| 键 | 值 |\r\n| --- | --- |\r\n| 好感度 | 7 |' });
+    expect(w.isError).toBeUndefined();
+    const { readStateVars } = await import('../../../lib/state-table.js');
+    const live = await readStateVars((await import('../../../projects/workspace.js')).getSharedDir('proj_sp_stguard3'));
+    expect(live.state).toBe('ok');
+    expect(live.rows.find((x) => x.key === '好感度').value).toBe('7');
+  });
 });

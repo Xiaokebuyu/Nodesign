@@ -40,7 +40,7 @@ const SLOT_AT = z.object({
  *（export 给 edit_board 的 replan 用 —— 版位的合法性只有这一份定义） */
 export const SLOT = z.object({
   slot: z.string().regex(TAG_RE).describe('Name for this block, ASCII like main/aside/notes'),
-  at: SLOT_AT.optional().describe("Top-left of this block, pixels from the sheet's writable corner. OMIT it to stack this block right below the previous one in the list (or below the block named in `below`) — carve a column of slots without doing any y arithmetic"),
+  at: SLOT_AT.optional().describe("Top-left of this block, pixels from the sheet's writable corner. OMIT it to stack this block right below the previous one in the list (or below the block named in `below`) — carve a column of slots without doing any y arithmetic. In a replan, omitting it on an EXISTING slot means resize in place (position kept)"),
   below: z.string().regex(TAG_RE).optional().describe('Stack this block right under the named slot (24px gap). x follows that slot unless at.x says otherwise'),
   w: z.number().min(48).max(12000).describe('Width in PIXELS (a default note column is 432)'),
   h: z.number().min(24).max(12000).describe('Height in PIXELS (~26px per line of text)'),
@@ -57,7 +57,8 @@ export const SLOT = z.object({
  * 竖排糖（2026-08-30 用户拍板「agent 自己定几个空位分段填」）：省掉 at（或点名
  * `below`）＝接在上一块正下方 24px。**y 累加这道算术归机器**，几个空位怎么切、
  * 每段写什么归 agent —— 分段的语义权不外包，只有几何外包。
- * `prevSlots` 是 replan 时该纸已有的版位（below 可以引用它们）。
+ * `prevSlots` 是 replan 时该纸已有的版位（below 可以引用它们；点名已有版位又
+ * 没给坐标＝原地改尺寸，不走竖排糖）。
  */
 export function clampPlan(plan, inner0, prevSlots = {}) {
   const slots = {};
@@ -67,9 +68,13 @@ export function clampPlan(plan, inner0, prevSlots = {}) {
   for (const it of Array.isArray(plan) ? plan : []) {
     const w = Math.min(Math.round(it.w), inner0.w);
     const h = Math.min(Math.round(it.h), inner0.h);
-    const base = it.below ? refOf(it.below) : (it.at ? null : prev);
-    const wantX = it.at?.x ?? base?.x ?? 0;
-    const wantY = it.at?.y ?? (base ? base.y + base.h + 24 : 0);
+    // 点名**已有**版位又没给坐标 = 原地改尺寸（2026-08-30）：replan 想把 state 加高、
+    // 位置没提，此前走竖排糖落到 (0,0) 跟别的版位叠上 —— glm 真会话为这一下花了
+    // 三分钟理版面。竖排糖只对新版位生效。
+    const keep = !it.at && !it.below ? prevSlots[it.slot] : null;
+    const base = keep ? null : (it.below ? refOf(it.below) : (it.at ? null : prev));
+    const wantX = it.at?.x ?? keep?.x ?? base?.x ?? 0;
+    const wantY = it.at?.y ?? keep?.y ?? (base ? base.y + base.h + 24 : 0);
     const x = Math.min(Math.max(0, Math.round(wantX)), Math.max(0, inner0.w - w));
     const y = Math.min(Math.max(0, Math.round(wantY)), Math.max(0, inner0.h - h));
     if (x !== Math.round(wantX) || y !== Math.round(wantY)

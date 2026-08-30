@@ -31,7 +31,7 @@ describe('mode-profile —— rp 模式的注册面', () => {
   it('rp 模式留下的家底：黑板 / 角色 / 生图 / 浏览器 / DirectEdit 收口', () => {
     const rp = new Set(mk('rp'));
     for (const n of [
-      'write_on_board', 'edit_board', 'read_board', 'board_batch', 'look_at_board', 'read_user_view',
+      'write_on_board', 'edit_board', 'read_board', 'look_at_board', 'read_user_view',
       'cast_role', 'jot_memory', 'read_tavern_json',
       'generate_image', 'remove_background', 'lookup_tags',
       'browser_navigate', 'browser_batch', 'screenshot_url', 'web_search',

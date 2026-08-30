@@ -138,7 +138,8 @@ const ALWAYS_LOAD_TOOLS = new Set([
   // 全在 deferred 区，agent 只看得到名字，教义在 prelude 里教、schema 却要现搜。
   // 膨胀由模式闸控：rp 模式 unregister 掉 artifact/量具族后常驻集自动收缩。
   // read_user_view 不进：视口已经每回合自动进状态块，它降级成"看画面细节"的按需件。
-  'write_on_board', 'edit_board', 'read_board', 'board_batch', 'look_at_board',
+  // board_batch 2026-08-30 暂停（见下面注册处的注释），常驻表同步摘牌。
+  'write_on_board', 'edit_board', 'read_board', 'look_at_board',
   // 纸范式（2026-08-29）：铺纸是板面工作的起手式，卖点全在描述里（当前纸/坐标原点/
   // 排不下就拒收、翻页归 agent），必须常驻。
   'open_sheet',
@@ -357,53 +358,14 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // arrange/finish/relate/edit_sketch），看=read_board。board_batch 用
       // **同一批实例**串行跑（一章 RP 的板面维护八次往返收成一次）。
       ...boardBatchable,
-      // board_batch（2026-08-27 重置）：覆盖全板面家族 + 运行时解析（resolve）。
-      // 一个思考单位的板面维护 = 一次 batch，这是板面工具的**首选入口**。
-      makeBatchTool({
-        name: 'board_batch',
-        description: `Run several board actions in ONE round-trip — the unit of board upkeep.
-One beat of thinking = one batch: open_sheet to plan the page, then write/edit/pin in order.
-You do NOT need read_board first — the sheet ledger (which sheets, which blocks, how much
-room is left in each) arrives in your turn state for free every turn.
-
-PLACEMENT IS PLANNED BLOCKS. open_sheet{plan:[{slot,at,w,h,about}…]} carves the page into
-named blocks; write_on_board{slot:"main"} drops content into one; pin_to_board{path,slot}
-puts a produced file into one. at:{x,y} still works — sheet-local pixels — but that is a
-note in the margin, not the main road. No slot and no at flows to the next free spot.
-
-CONTENT THAT DOES NOT FIT IS REFUSED, not squeezed — three ways: one card over 384px,
-a full block, a full sheet. Nothing is written and NOTHING TURNS THE PAGE FOR YOU: you
-open and plan the next one. So put anything that might be refused LAST in the batch —
-a failure stops every step after it (already-ran steps are NOT rolled back; continue
-from the failed step, do not re-run the whole batch).
-
-Later steps can use what earlier steps made: chain:true threads onto the note a previous
-step wrote (same tag); a sheet opened by an earlier step is the current sheet; sketch
-local ids resolve in edit_board ops. But a chalk note's FILENAME is generated when it
-lands — you cannot reply_to a note this same batch is about to create. Use chain:true
-(same tag), or write it, then reply_to it in the next batch.
-
-Lines still say WHY (chain below = same thread, near = annotates) — a note with no line
-is one nobody can trace back.
-
-Batchable: open_sheet / write_on_board / edit_board / read_board / pin_to_board /
-organize_board / look_at_board / read_user_view. Nothing else — roll_dice, image
-generation and artifact tools are their own beat.
-Example: [{"name":"open_sheet","input":{"title":"第二章","plan":[{"slot":"main","at":
-{"x":0,"y":0},"w":600,"h":900,"about":"正文"},{"slot":"图","at":{"x":640,"y":0},"w":360,
-"h":900,"about":"配图","for":"artifacts"}]}},{"name":"write_on_board","input":{"slot":
-"main","text":"…","tag":"主线","chain":true}},{"name":"edit_board","input":{"ops":[
-{"op":"add_edge","from":"notes/板书/x.md","to":"assets/图.png","type":"link"}]}}]`,
-        resolve: resolveTool,
-        batchable: [
-          ...boardBatchable.map(t => t.name),
-          // 08-30 对账：97 个真实 batch 里 organize_board 用过 0 次、pin_to_board 0 次。
-          // pin_to_board 留着（刀 G 起它是"把产物放进规划好的块"的正门，会用起来）；
-          // organize_board 是"把文件搬进文件夹"，跟一拍板面维护不是一件事，撤出名单。
-          'pin_to_board', 'look_at_board', 'read_user_view',
-        ],
-        finalShot: { name: 'look_at_board', input: {}, default: false },
-      }),
+      // board_batch 暂停（2026-08-30 用户拍板）：batch 适合语法机械、单步几乎不会
+      // 语义性失败的家族（浏览器/产物检查照旧），板面动作不是 —— 拒收/容量/引用
+      // 都是单步就可能断的语义闸。真会话对账：batch 内每动作失败 16.1% vs 单调用
+      // 9.1%，另有 9.4% 好动作被连坐；今天 glm 一场 board_batch 0/6 全败，sonnet
+      // 同一张卡几乎不用 batch 反而顺。是暂停不是拆除：makeBatchTool/流式预知/
+      // beat-gate/角色白名单里的 batch 支路全保留原样，恢复 = git 翻回这一块注册
+      // （git log -S board_batch -- server/engine/mcp/index.js）+ 常驻表加回名字
+      // + prelude/SKILL 把"攒一车"的教学翻回来。
       makeOrganizeBoardTool({ projectId, ctx }),
       makeLookAtBoardTool({ projectId, ctx }),
       makeReadUserViewTool({ projectId }),

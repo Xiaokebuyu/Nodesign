@@ -21,6 +21,7 @@
 
 import { promises as fs } from 'node:fs';
 import { parseChalk, renderChalk } from './chalk.js';
+import { STATE_TABLE_TAG, parseStateTable } from './state-table.js';
 import { UNIT, textBox } from './sketch-layout.js';
 
 /**
@@ -35,6 +36,17 @@ import { UNIT, textBox } from './sketch-layout.js';
 export async function rewriteChalkBody(abs, body, entry = {}) {
   const parsed = parseChalk(await fs.readFile(abs, 'utf8'));
   const c = parsed.chalk || {};
+  // 状态表堵写口（2026-08-30）：这条板书是载重的（set_vars/nd:triggers/draw_trend
+  // 全读它），一次"成功"的重写就能把它们全弄死 —— glm 真会话用 \r 系字面量重写，
+  // set_text 报 Applied 2/2、表却永久 broken。重写后表必须还在，不在就大声拒。
+  if (c.tag === STATE_TABLE_TAG) {
+    const t = parseStateTable(String(body).replace(/\r\n?/g, '\n'));
+    if (!t.ok) {
+      const ex = new Error(`这一改会把状态表写坏（${t.error === 'no-table' ? '「| 键 | 值 |」表没了' : t.error}）—— 什么都没写。改值用 set_vars；重写正文要保证那张两列表还在。`);
+      ex.code = 'STATE_TABLE';
+      throw ex;
+    }
+  }
   await fs.writeFile(abs, renderChalk({
     body,
     by: c.by || entry.by || 'agent',

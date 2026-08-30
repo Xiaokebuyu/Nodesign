@@ -65,7 +65,9 @@ export function renderChalk({ body, by = 'agent', at = new Date().toISOString(),
   if (replyTo) lines.push(`reply_to: ${replyTo}`);
   if (tag) lines.push(`tag: ${tag}`);
   if (sessionId) lines.push(`session: ${sessionId}`);
-  lines.push('---', '', String(body).trim(), '');
+  // CR 系换行在唯一写口归一（2026-08-30）：glm 真会话把换行写成 \r 系字面量，
+  // 整张表被压成一行还落了盘 —— CR 在板书正文里没有合法用途，进门就换成 \n。
+  lines.push('---', '', String(body).replace(/\r\n?/g, '\n').trim(), '');
   return lines.join('\n');
 }
 

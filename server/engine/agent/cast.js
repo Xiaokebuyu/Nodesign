@@ -148,7 +148,8 @@ export function createRoleRoster() {
 export const ROLE_TOOL_WHITELIST = Object.freeze([
   // 板上（MCP 短名；旧别名 create/relate/arrange/sketch/edit_sketch/finish 08-28 随注册表一起收摊）
   'write_on_board', 'read_board', 'edit_board',
-  'look_at_board', 'read_user_view', 'organize_board', 'pin_to_board', 'board_batch',
+  // board_batch 2026-08-30 暂停（注册表摘牌，这里的对账闸会点名）；恢复时加回
+  'look_at_board', 'read_user_view', 'organize_board', 'pin_to_board',
   // 记忆（2026-08-28 角色文件夹范式）：角色没有 Write，往自己家记一笔只能走这件
   'jot_memory',
   // 内置
@@ -160,7 +161,7 @@ const BUILTIN = new Set(['SendMessage', 'ToolSearch', 'Read', 'Glob', 'Grep']);
 
 /** 角色默认拿到的一套：够它在板上演，不多不少 */
 export const ROLE_DEFAULT_TOOLS = Object.freeze([
-  'write_on_board', 'read_board', 'board_batch', 'look_at_board', 'read_user_view',
+  'write_on_board', 'read_board', 'look_at_board', 'read_user_view',
   'jot_memory',
   'SendMessage', 'ToolSearch', 'Read', 'Grep',
 ]);
