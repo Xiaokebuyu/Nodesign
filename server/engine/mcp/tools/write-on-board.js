@@ -179,7 +179,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // 锚点解析（真 id > tag 包络 > 救援入座）本体在 lib/board-anchor.js（棘轮拆件）
     const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
     // 纸上落位三分支（棘轮拆件，见 write-on-board-place.js）
-    const { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot } = makeSheetPlacer({ projectId, sessionId, by });
+    const { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull } = makeSheetPlacer({ projectId, sessionId, by });
 
     // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
     if (args.text) {
@@ -320,6 +320,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           box, at: args.at || null, sheetName: args.sheet || null,
           replyRect, anchorRect, side: args.side || null, obstacles,
         });
+        // 纸排满了：不替它翻页，让它自己规划下一页（刀 F，站主"每张纸规划一次"）
+        if (placed.sheetFull) return err(describeSheetFull(b2, placed.sheetFull));
         if (placed.opened) b2 = { ...b2, sheets: { ...(b2.sheets || {}), [placed.opened.id]: { x: placed.opened.x, y: placed.opened.y, w: placed.opened.w, h: placed.opened.h, at: placed.opened.at, by } } };
       }
 
@@ -523,11 +525,21 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     if (zone) {
       if (args.at) return err('at 是纸内坐标，文件夹层没有纸 —— 在文件夹里用 near 落位。');
       placed = placeInZone({ box: sketchBox, replyRect: null, anchorRect, side: args.side || null, obstacles });
+    } else if (args.slot) {
+      // 草图也能进规划好的块（2026-08-29 刀 F 补）。⛔ 之前 slot 只有板书那条路认，
+      // 而状态板/对照表这类东西正是走草图写的 —— 真会话 proj_mtfhey1x 里 agent
+      // 规划了 aside 却一个字没进去，它想用也用不了，只能拿 at 手摆到别处。
+      const si = resolveSlot(sketchBase, { slotName: args.slot, sheetName: args.sheet || null });
+      if (si.error) return err(si.message);
+      const p = placeInSlot(sketchBase, { rect: si.rect, sheet: si.sheet, slotName: args.slot, box: sketchBox, obstacles });
+      if (p.full) return err(p.message);
+      placed = p;
     } else {
       placed = await placeOnSheets(sketchBase, {
         box: sketchBox, at: args.at || null, sheetName: args.sheet || null,
         replyRect: null, anchorRect, side: args.side || null, obstacles,
       });
+      if (placed.sheetFull) return err(describeSheetFull(sketchBase, placed.sheetFull));
       if (placed.opened) sketchBase = { ...sketchBase, sheets: { ...(sketchBase.sheets || {}), [placed.opened.id]: { x: placed.opened.x, y: placed.opened.y, w: placed.opened.w, h: placed.opened.h, at: placed.opened.at, by } } };
     }
     const ox = placed.x - local.x + 12; const oy = placed.y - local.y + 12;

@@ -84,21 +84,29 @@ describe('write_on_board 的纸流程', () => {
     expect(note[1].y).toBe(board.sheets.p1.y + SHEET_MARGIN);
   });
 
-  it('⭐ 纸写满自动翻下一张（flow-new-sheet），当前纸指针跟着走', async () => {
+  /**
+   * ⚠️ 08-29 刀 F 改了这条的答案：纸写满**不再自动翻页**。
+   * 站主拍板「每张纸规划一次摆放」—— 机器悄悄翻页的话 agent 根本不知道自己换了页，
+   * 新纸自然也没有版面（真会话 proj_mtfhey1x：p2 规划得好好的，写满翻到 p3 就散了）。
+   * 纸是它开的，满了该由它决定下一页什么样。
+   */
+  it('⭐ 纸写满 → 拒收并让它自己规划下一页，不替它翻页', async () => {
     const pid3 = 'proj_opensheet_full';
     await ensureProjectWorkspace(pid3);
     const w = (args) => makeWriteOnBoardTool({ projectId: pid3, sharedRoot: getSharedDir(pid3), sessionId: 's3', ctx: { emit() {} } }).handler(args, {});
-    // 长正文（占高）连写把 p1 填满：一屏 1200 高，每条 ~300+ 高，五六条必满
-    let turned = false;
-    for (let i = 0; i < 8; i += 1) {
+    let refused = null;
+    for (let i = 0; i < 40; i += 1) {
       const r = await w({ text: `第 ${i} 段\n\n${'内容行\n'.repeat(10)}` });
-      expect(r.isError, r.content?.[0]?.text).toBeUndefined();
-      if (/turned the page/.test(r.content[0].text)) { turned = true; break; }
+      if (r.isError) { refused = r.content[0].text; break; }
     }
-    expect(turned).toBe(true);
+    expect(refused, '连写这么多条都没填满，判据本身可疑').toBeTruthy();
+    expect(refused).toMatch(/is full/);
+    expect(refused).toMatch(/nothing was written/i);
+    expect(refused).toMatch(/open_sheet\{title/);
+    // 没有替它铺新纸
     const board = await readBoard(pid3);
-    expect(Object.keys(board.sheets).length).toBeGreaterThanOrEqual(2);
-    expect(currentSheetIdOf('s3')).toBe('p2');
+    expect(Object.keys(board.sheets).length).toBe(1);
+    expect(currentSheetIdOf('s3')).toBe('p1');
   });
 
   it('sheet 点名：写到指定的纸上而不是当前纸', async () => {

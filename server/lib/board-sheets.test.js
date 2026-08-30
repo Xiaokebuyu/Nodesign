@@ -106,24 +106,71 @@ describe('allocateSheetRect：分配纪律', () => {
   });
 });
 
-describe('nextSpotInSheet：纸内自动落位只有「往下接」一条规则', () => {
-  const board = {
+/**
+ * 顺排跟着纸的形状走（2026-08-29 站主拍板）：横纸报纸分栏、竖纸只往下。
+ * 原来无论什么纸都只排一列 —— 一张两个屏幕宽的纸，四分之三是空的。
+ */
+describe('nextSpotInSheet：横纸分栏、竖纸往下', () => {
+  const land = {   // 横纸 1000x800（版心 952x752）
     sheets: { p1: S(0, 0, 1000, 800) },
     objects: { 'notes/板书/a.md': { x: 24, y: 24, w: 400, h: 200 } },
   };
-  it('接着最低成员往下排，左缘 = 版心左缘', () => {
-    const p = nextSpotInSheet(board, 'p1', { w: 400, h: 100 });
+
+  it('同一栏里接着最低成员往下排，左缘 = 版心左缘', () => {
+    const p = nextSpotInSheet(land, 'p1', { w: 400, h: 100 });
     expect(p.x).toBe(SHEET_MARGIN);
     expect(p.y).toBe(24 + 200 + 24);
   });
-  it('装不下返回 null（调用方翻新纸），比纸宽的没资格进', () => {
-    expect(nextSpotInSheet(board, 'p1', { w: 400, h: 700 })).toBeNull();
-    expect(nextSpotInSheet(board, 'p1', { w: 2000, h: 100 })).toBeNull();
+
+  it('⭐ 横纸：这一栏竖着装不下 → 换右边下一栏的顶上，而不是翻页', () => {
+    const p = nextSpotInSheet(land, 'p1', { w: 400, h: 700 });
+    expect(p).not.toBeNull();
+    expect(p.col).toBe(1);
+    expect(p.x).toBe(SHEET_MARGIN + 432 + 24);   // 栏宽固定 DEFAULT_CHALK_W
+    expect(p.y).toBe(SHEET_MARGIN);              // 新栏从顶上开始
   });
+
+  it('⭐ 横纸：所有栏都满了才返回 null（该翻页了）', () => {
+    const full = {
+      sheets: { p1: S(0, 0, 1000, 800) },
+      objects: {
+        a: { x: 24, y: 24, w: 900, h: 700 },     // 横跨所有栏，整页压死
+      },
+    };
+    expect(nextSpotInSheet(full, 'p1', { w: 400, h: 200 })).toBeNull();
+  });
+
+  it('⭐ 宽物件挡住它真正盖住的那几栏（判据是水平重叠，不是中心点）', () => {
+    const wide = {
+      sheets: { p1: S(0, 0, 1000, 800) },
+      objects: { deck: { x: 24, y: 24, w: 640, h: 400 } },   // 中心在第 1 栏，身子压到第 2 栏
+    };
+    const p = nextSpotInSheet(wide, 'p1', { w: 432, h: 100 });
+    expect(p.col).toBe(0);
+    expect(p.y).toBe(24 + 400 + 24);   // 第 1 栏被它压着 → 接它下面，不是挤进第 2 栏顶上
+  });
+
+  it('比纸还宽的东西没资格进', () => {
+    expect(nextSpotInSheet(land, 'p1', { w: 2000, h: 100 })).toBeNull();
+  });
+
+  it('⭐ 竖纸（手机）不分栏，只往下 —— 竖屏上分栏等于把每栏挤成一指宽', () => {
+    const port = {
+      sheets: { p1: S(0, 0, 500, 1400) },
+      objects: { a: { x: 24, y: 24, w: 400, h: 200 } },
+    };
+    // 版心 452x1352，已占到 y=224 —— 再来 1200 高就出底了
+    const p = nextSpotInSheet(port, 'p1', { w: 400, h: 1200 });
+    expect(p).toBeNull();                     // 装不下就是装不下，不换栏
+    const q = nextSpotInSheet(port, 'p1', { w: 400, h: 100 });
+    expect(q.x).toBe(SHEET_MARGIN);
+    expect(q.y).toBe(24 + 200 + 24);
+  });
+
   it('空纸从版心顶端排', () => {
     const b2 = { sheets: { p1: S(0, 0, 1000, 800) }, objects: {} };
-    const p = nextSpotInSheet(b2, 'p1', { w: 400, h: 100 });
-    expect(p).toEqual({ x: SHEET_MARGIN, y: SHEET_MARGIN });
+    expect(nextSpotInSheet(b2, 'p1', { w: 400, h: 100 }))
+      .toEqual({ x: SHEET_MARGIN, y: SHEET_MARGIN, col: 0 });
   });
 });
 

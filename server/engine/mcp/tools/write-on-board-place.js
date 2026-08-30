@@ -11,7 +11,7 @@
  */
 
 import {
-  currentSheet, innerRect, toLocal, placeAtOnSheet, placeThread, placeBeside,
+  currentSheet, toLocal, placeAtOnSheet, placeThread, placeBeside,
   nextSpotInSheet, overlapIds, sheetOfPoint, slotRectOf, nextSpotInSlot,
 } from '../../../lib/board-sheets.js';
 import { capacityOf } from '../../../lib/sketch-layout.js';
@@ -81,8 +81,9 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
       if (sheetName && sheets[sheetName]) return { id: sheetName, ...sheets[sheetName] };
       return currentSheet({ sheets }, currentSheetIdOf(sessionId));
     };
-    const openNext = async (near) => {
-      opened = await openSheetFor(projectId, { sessionId, by, where: near ? 'next' : null });
+    /** 铺第一张纸（还一张都没有时）。**不用于翻页** —— 见下方 sheetFull。 */
+    const openFirst = async () => {
+      opened = await openSheetFor(projectId, { sessionId, by, where: null });
       sheets = { ...sheets, [opened.id]: { x: opened.x, y: opened.y, w: opened.w, h: opened.h, at: opened.at, by: opened.by } };
       return { id: opened.id, ...sheets[opened.id] };
     };
@@ -109,22 +110,22 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     if (replyRect) {
       const p = placeThread(bWith(), replyRect, box, { obstacles });
       if (!p.sheetFull) return done(p, 'thread', p.sheetId);
-      const ns = await openNext(p.sheetFull);
-      const inner = innerRect(ns);
-      return done({ x: inner.x, y: inner.y }, 'thread-new-sheet', ns.id);
+      return { sheetFull: p.sheetFull };
     }
     // 定点 / 顺排：都要有一张纸
     let s = pick();
-    if (!s) s = await openNext(null);
+    if (!s) s = await openFirst();
     if (at) {
       const p = placeAtOnSheet(s, at, box);
       return done(p, 'at', s.id, p.clamped);
     }
     const flow = nextSpotInSheet(bWith(), s.id, box);
     if (flow) return done(flow, 'flow', s.id);
-    const ns = await openNext(s.id);
-    const inner2 = innerRect(ns);
-    return done({ x: inner2.x, y: inner2.y }, 'flow-new-sheet', ns.id);
+    // 这张纸排满了。**不替它翻页**（2026-08-29 刀 F，站主拍板"每张纸规划一次"）：
+    // 机器悄悄翻页的话，agent 根本不知道自己换了页，新纸自然也没有版面 —— 真会话
+    // proj_mtfhey1x 里 p2 规划得好好的，写满翻到 p3 就散回顺排了。纸是它开的，
+    // 满了该由它决定下一页什么样。
+    return { sheetFull: s.id };
   };
 
   /** 文件夹层落位（没有纸）：线程/贴放照常，否则排在这一层内容底下 */
@@ -142,6 +143,18 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     return { x: Math.round(left), y: Math.round(bottom) + 40, resolution: 'below-content', pressed: [] };
   };
 
+  /** 纸排满了的报文：不替它翻页，告诉它该规划下一页了 */
+  const describeSheetFull = (b, sheetId) => {
+    const sh = b.sheets?.[sheetId];
+    const inner = sh ? { w: sh.w - 48, h: sh.h - 48 } : { w: 0, h: 0 };
+    const landscape = inner.w > inner.h;
+    return [
+      `⛔ Sheet ${sheetId} is full${landscape ? ' (all columns used)' : ''} — nothing was written.`,
+      `   Open the next page yourself and plan it: open_sheet{title:"…", plan:[{slot,at,w,h,about}…]}.`,
+      `   Each sheet gets its own layout — decide what this next page is for before filling it.`,
+    ].join('\n');
+  };
+
   /** 返回文案：从真实落点生成（"工具返回不许撒谎"—— 08-25 陷阱③ 的纪律不变） */
   const describeSpot = (b, placed) => {
     const bits = [];
@@ -151,9 +164,7 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
       bits.push(`on sheet ${s.id}${s.title ? `（${s.title}）` : ''} at local (${Math.round(l.x)},${Math.round(l.y)})`);
     }
     if (placed.resolution === 'thread') bits.push('under the note it replies to (thread)');
-    else if (placed.resolution === 'thread-new-sheet') bits.push('the thread filled its sheet — turned the page (new sheet)');
     else if (placed.resolution === 'flow') bits.push('flowed below the last item');
-    else if (placed.resolution === 'flow-new-sheet') bits.push('sheet was full — turned the page (new sheet)');
     else if (placed.resolution === 'slot') bits.push(`in slot "${placed.slot}" (planned block)`);
     else if (placed.resolution === 'at') {
       // 换纸判据（08-29 刀 C）：光说"钳住了"不够 —— 钳住的结果是这条被压到贴着
@@ -170,5 +181,5 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     return bits.join('; ');
   };
 
-  return { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot };
+  return { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull };
 }

@@ -20,6 +20,7 @@
 import { UNIT, overlaps, bboxOf, pointIn } from './rect.js';
 import { ONE_SCREEN, ZOOM_BASIS } from './screen.js';
 import { estimateSizeOn, zoneRects } from './board-kind-sizes.js';
+import { DEFAULT_CHALK_W } from './sketch-layout.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 
 /** 纸与纸之间的沟（格子感放在纸与纸之间 —— 登录墙定格动画同一条经验） */
@@ -173,10 +174,19 @@ export function allocateSheetRect({ board, size, viewport = null, nearSheet = nu
 
 /**
  * 纸内自动落位（给没带坐标的写入用：产物入座、步骤清单、agent 偷懒不给 at）。
- * 纪律：纸内按阅读序**接着最低的成员往下排**（左缘=版心左缘），装不下返回 null
- * （调用方翻新纸）。这不是启发式引擎 —— 只有「往下接」一条规则。
  *
- * @returns {{x,y}|null}  世界坐标；null = 这张纸满了
+ * **跟着设备的形状走**（2026-08-29 站主拍板）：
+ *   - 横纸（电脑：2048×973 那种）→ **报纸分栏**：竖着填满一栏，再到右边下一栏顶上，
+ *     整页填满才翻页。原来只会往下排一列 —— 一张两个屏幕宽的纸，四分之三是空的。
+ *   - 竖纸（手机：屏宽 × 1.6 屏高）→ 只往下。竖屏上分栏等于把每栏挤成一指宽。
+ *
+ * 栏宽固定 DEFAULT_CHALK_W（不随内容变），否则每写一件栏边界就漂一次，读起来
+ * 是锯齿。比一栏宽的东西（产物卡 640）自然占掉它压住的所有栏 —— 算某栏的底部时
+ * 认**水平重叠**而不是中心点，宽物件才挡得住它真正盖住的那几栏。
+ *
+ * 装不下返回 null（调用方翻新纸）。仍然不是启发式引擎：规则只有"竖着填、填满换栏"。
+ *
+ * @returns {{x,y,col?}|null}  世界坐标；null = 这张纸满了
  */
 export function nextSpotInSheet(board, sheetId, box, { gap = UNIT } = {}) {
   const s = board?.sheets?.[sheetId];
@@ -184,10 +194,28 @@ export function nextSpotInSheet(board, sheetId, box, { gap = UNIT } = {}) {
   const inner = innerRect(s);
   if (box.w > inner.w) return null;   // 比纸还宽的东西没资格进这张纸
   const members = sheetMembers(board, sheetId);
-  const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : inner.y - gap;
-  const y = Math.round(bottom + gap);
-  if (y + box.h > inner.y + inner.h) return null;
-  return { x: Math.round(inner.x), y };
+  const floor = inner.y + inner.h;
+
+  // 竖纸：只往下（原规则）
+  if (inner.w <= inner.h) {
+    const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : inner.y - gap;
+    const y = Math.round(bottom + gap);
+    if (y + box.h > floor) return null;
+    return { x: Math.round(inner.x), y };
+  }
+
+  // 横纸：分栏
+  const colW = DEFAULT_CHALK_W;
+  const cols = Math.max(1, Math.floor((inner.w + gap) / (colW + gap)));
+  for (let c = 0; c < cols; c += 1) {
+    const x = inner.x + c * (colW + gap);
+    if (x + box.w > inner.x + inner.w + 1) break;   // 这件在这一栏往右放不下了
+    const hit = members.filter((m) => m.x < x + box.w && m.x + m.w > x);
+    const bottom = hit.length ? Math.max(...hit.map((m) => m.y + m.h)) : inner.y - gap;
+    const y = Math.round(bottom + gap);
+    if (y + box.h <= floor) return { x: Math.round(x), y, col: c };
+  }
+  return null;
 }
 
 /* ── 版位（slot，2026-08-29 占位契约刀 E）────────────────────────────────
