@@ -75,6 +75,7 @@ import { makeDeliverFilesTool } from './tools/deliver-files.js';
 import { makeCrystallizeSkillTool } from './tools/crystallize-skill.js';
 import { makeCastRoleTool } from './tools/cast-role.js';
 import { makeSetVarsTool } from './tools/set-vars.js';
+import { makeDrawTrendTool } from './tools/draw-trend.js';
 import { makeJotMemoryTool } from './tools/role-memory.js';
 import { makeRollDiceTool } from './tools/roll-dice.js';
 import { assertRoleToolsRegistered } from '../agent/cast.js';
@@ -229,6 +230,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // 卡是数据，身体是预注册的角色位；写完当回合就能派，之后靠 SendMessage 叫醒。
       makeCastRoleTool({ workspaceRoot, sessionId, ctx, roster: roleRoster }),
       makeSetVarsTool({ projectId, sharedRoot: workspaceRoot || sharedRoot }),
+      makeDrawTrendTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
       makeJotMemoryTool({ workspaceRoot }),
       // roll_dice — 服务端真随机骰（08-28 沉浸感机制刀①）：模型编的骰运不可信，
       // 这把走 crypto + run.dice 事件直达用户屏幕。GM only（不进角色白名单）。

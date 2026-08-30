@@ -54,6 +54,8 @@ export const SHAPES = z.array(z.object({
   d: z.string().max(8000).optional().describe('path kind: SVG path, UPPERCASE absolute M/L/Q/C/Z only. Coordinates are in the SAME GRID UNITS as at/w/h (1 unit = 24px; decimals fine) — one coordinate space for the whole sketch. Hand-drawn wobble is applied for you; Q/C curves are how you draw anything smooth (a crescent moon, a wave, a sail)'),
   color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
   width: z.number().min(1).max(12).optional(),
+  fill: z.enum(['hatch']).optional()
+    .describe('Shade the inside with hand-drawn 45° hatching — the line-art way to darken an area (a shadow side, water, a filled banner). Closed shapes only (rect/ellipse/circle, a path whose subpaths end with Z, closable stencils)'),
   // ── 算子（一次挂一个；等距/对称/播撒这类算术归机器，每份笔迹各自抖）──
   repeat: z.object({ n: z.number().int().min(2).max(24), dx: z.number().min(-200).max(200).optional(), dy: z.number().min(-200).max(200).optional() }).optional()
     .describe('LINEAR ARRAY: n copies stepped by (dx,dy) grid units — a fence, windows, steps. Copies are re-inked, not stamped'),

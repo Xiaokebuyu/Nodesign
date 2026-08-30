@@ -12,6 +12,7 @@
 import { UNIT, shapePath, roughFreePath } from './sketch-layout.js';
 import { stencilStrokes, STENCIL_NAMES } from './sketch-stencils.js';
 import { expandModifiers } from './sketch-array.js';
+import { flattenClosed, hatchD } from './sketch-hatch.js';
 
 /** 板书墨色表（zod 不硬拒，认不出落 ink —— 风格不用 -32602 管） */
 export const SKETCH_COLORS = ['ink', 'red', 'pencil', 'brass'];
@@ -58,7 +59,13 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
         return String(Math.round(v * 10) / 10);
       });
       const rect0 = { x: (s.at?.x || 0) * UNIT + minX - P, y: (s.at?.y || 0) * UNIT + minY - P, w: w + P * 2, h: h + P * 2 };
-      makeOne = (sx) => ({ rect: { ...rect0 }, d: roughFreePath(local, seed + sx) });
+      let fillPolys = null;
+      if (s.fill) {
+        const fc = flattenClosed(local);
+        if (!fc.closedAny) return { error: `形状 ${sid}：fill 只对闭合轮廓生效（Z 收尾）—— 这条 path 没有闭合的子路径` };
+        fillPolys = fc.polys;
+      }
+      makeOne = (sx) => ({ rect: { ...rect0 }, d: roughFreePath(local, seed + sx) + (fillPolys ? ' ' + hatchD(fillPolys, seed + sx) : '') });
     } else if (s.kind === 'stencil') {
       // 词汇表（刀①）：参数化简笔画 —— 名字 + 位置 + 尺寸，一笔一画归机器
       if (!STENCIL_NAMES.includes(s.name)) return { error: `形状 ${sid}：stencil 认识这些名字 —— ${STENCIL_NAMES.join(', ')}` };
@@ -68,12 +75,19 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
         ? st.strokes.map((d) => { let k2 = 0; return d.replace(/-?\d*\.?\d+/g, (n) => ((k2++ % 2 === 0) ? String(Math.round((st.w - Number(n)) * 10) / 10) : n)); })
         : st.strokes;
       const rect0 = { x: s.at.x * UNIT - 6, y: s.at.y * UNIT - 6, w: st.w + 12, h: st.h + 12 };
+      let stFill = null;
+      if (s.fill) {
+        const fc = flattenClosed(flipped.join(' '));
+        if (!fc.closedAny) return { error: `形状 ${sid}：这个 stencil 没有闭合轮廓，fill 排不了线` };
+        stFill = fc.polys;
+      }
       makeOne = (sx) => ({
         rect: { ...rect0 },
         d: flipped.map((d2, j) => roughFreePath(d2, `${seed}${sx}:${j}`)).join(' ')
-          .replace(/(^| )M/g, ' M').trim().replace(/^M/, 'M'),
+          + (stFill ? ' ' + hatchD(stFill, seed + sx) : ''),
       });
     } else if (s.kind === 'line' || s.kind === 'arrow' || s.kind === 'underline') {
+      if (s.fill) return { error: `形状 ${sid}：${s.kind} 是一笔线，没有内部可填 —— fill 只给闭合形状` };
       let a; let b;
       if (s.kind === 'underline' && s.around) {
         const r = rectOfNode(s.around); if (!r) return { error: `形状 ${sid}：around 指向不存在的节点 ${s.around}` };
@@ -103,9 +117,24 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
         if (!s.at || !s.w) return { error: `形状 ${sid}：${s.kind} 要 at + w（+h）或 around` };
         box = { x: s.at.x * UNIT, y: s.at.y * UNIT, w: s.w * UNIT, h: (s.h || s.w) * UNIT };
       }
+      let boxFill = null;
+      if (s.fill) {
+        const P2 = 6;
+        if (s.kind === 'rect') {
+          boxFill = [[{ x: P2, y: P2 }, { x: P2 + box.w, y: P2 }, { x: P2 + box.w, y: P2 + box.h }, { x: P2, y: P2 + box.h }]];
+        } else {
+          const rx = box.w / 2; const ry = (s.kind === 'circle' ? box.w : box.h) / 2;
+          const pts = [];
+          for (let a2 = 0; a2 < 24; a2 += 1) {
+            const t2 = (a2 / 24) * Math.PI * 2;
+            pts.push({ x: P2 + rx + Math.cos(t2) * rx, y: P2 + ry + Math.sin(t2) * ry });
+          }
+          boxFill = [pts];
+        }
+      }
       makeOne = (sx) => {
         const sp = shapePath(s.kind, { w: box.w, h: box.h }, seed + sx);
-        return { rect: { x: box.x - 6, y: box.y - 6, w: sp.w, h: sp.h }, d: sp.d };
+        return { rect: { x: box.x - 6, y: box.y - 6, w: sp.w, h: sp.h }, d: sp.d + (boxFill ? ' ' + hatchD(boxFill, seed + sx) : '') };
       };
     }
     // 算子展开（刀④）：repeat/ring/mirror/scatter —— 等距和对称归机器
