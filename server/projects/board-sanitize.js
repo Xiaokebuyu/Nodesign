@@ -301,10 +301,42 @@ export function sanitizeRoll(r) {
  * w/h 显式存 —— 纸尺寸取决于铺纸那一刻的设备档（手机纸小、桌面纸大），
  * 不能全局常量化。
  */
+/** 一张纸上最多规划几块地（版面切太碎就不是版面了） */
+export const MAX_SLOTS = 24;
+
+/**
+ * 版位（slot，2026-08-29 占位契约刀 E）：开工时先把这一屏切成几块地，各自起名。
+ *
+ * ⚠️ 坐标**跟 at 同一套**：纸内局部像素、原点在版心左上角。不用格数 —— 同一组
+ * 字段两种单位是站主点过名的老坑（"同字段按数值切单位＝中间那段必错且不出声"）。
+ */
+export function sanitizeSlot(s) {
+  if (!s || typeof s !== 'object') return null;
+  const x = Number(s.x); const y = Number(s.y);
+  const w = Number(s.w); const h = Number(s.h);
+  if (![x, y, w, h].every(Number.isFinite)) return null;
+  if (w < 48 || h < 24) return null;      // 比这还小的地放不下一行字
+  return {
+    x: Math.round(Math.min(Math.max(0, x), 12000)),
+    y: Math.round(Math.min(Math.max(0, y), 12000)),
+    w: Math.round(Math.min(w, 12000)),
+    h: Math.round(Math.min(h, 12000)),
+    ...(typeof s.about === 'string' && s.about.trim() ? { about: s.about.trim().slice(0, 60) } : {}),
+  };
+}
+
 export function sanitizeSheet(s) {
   if (!s || typeof s !== 'object') return null;
   const x = Number(s.x); const y = Number(s.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const slots = {};
+  let slotN = 0;
+  for (const [nm, v] of Object.entries(s?.slots && typeof s.slots === 'object' ? s.slots : {})) {
+    if (slotN >= MAX_SLOTS) break;
+    if (!TAG_RE.test(nm)) continue;
+    const sl = sanitizeSlot(v);
+    if (sl) { slots[nm] = sl; slotN += 1; }
+  }
   return {
     x: Math.round(x), y: Math.round(y),
     w: clampNum(s.w, 240, 8000, ONE_SCREEN.w),
@@ -312,6 +344,7 @@ export function sanitizeSheet(s) {
     ...(sanitizeBy(s.by) ? { by: sanitizeBy(s.by) } : {}),
     ...(typeof s.at === 'string' && s.at.length <= 40 ? { at: s.at } : {}),
     ...(typeof s.title === 'string' && s.title.trim() ? { title: s.title.trim().slice(0, 60) } : {}),
+    ...(slotN ? { slots } : {}),
   };
 }
 

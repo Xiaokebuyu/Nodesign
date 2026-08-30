@@ -53,3 +53,36 @@ describe('两端常量 parity', () => {
     expect(CARD_MAX_H).toBe(SRV_CARD_MAX_H);
   });
 });
+
+/**
+ * 版位落点（2026-08-29 刀 E）：流式预览要跟服务端落在同一个地方，否则写完还要
+ * 跳一下 —— 站主原话「填入文本完毕后就不用再二次刷新了」。
+ */
+describe('sheetSpotToWorld 认版位', () => {
+  const planned = {
+    p1: {
+      x: 100, y: 200, w: 1000, h: 800, at: '2026-08-29T01:00:00Z',
+      slots: { main: { x: 0, y: 0, w: 432, h: 600 }, aside: { x: 460, y: 0, w: 300, h: 300 } },
+    },
+  };
+
+  it('⭐ 空版位 → 落在那块地的左上角，宽度也是那块地的', () => {
+    expect(sheetSpotToWorld(planned, { slot: 'main', sheet: 'p1' }))
+      .toEqual({ x: 100 + SHEET_MARGIN, y: 200 + SHEET_MARGIN, w: 432 });
+  });
+
+  it('⭐ 版位里已有东西 → 接在最低那件下面（跟服务端 nextSpotInSlot 同规则）', () => {
+    const layout = {
+      a: { x: 124, y: 224, w: 432, h: 100 },      // 在 main 里
+      b: { x: 584, y: 224, w: 300, h: 500 },      // 在 aside 里，不该影响 main
+    };
+    const r = sheetSpotToWorld(planned, { slot: 'main', sheet: 'p1' }, layout);
+    expect(r.y).toBe(224 + 100 + SHEET_MARGIN);
+  });
+
+  it('版位名不存在 → 退回 at；两个都没有就 null', () => {
+    expect(sheetSpotToWorld(planned, { slot: '没有', sheet: 'p1', at: { x: 10, y: 10 } }))
+      .toEqual({ x: 100 + SHEET_MARGIN + 10, y: 200 + SHEET_MARGIN + 10 });
+    expect(sheetSpotToWorld(planned, { slot: '没有', sheet: 'p1' })).toBeNull();
+  });
+});

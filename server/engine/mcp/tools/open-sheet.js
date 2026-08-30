@@ -26,13 +26,23 @@ import {
 } from '../../../lib/board-sheets.js';
 import { setCurrentSheetId, currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { Events } from '../../agent/events.js';
+import { SHEET_PT } from './write-on-board-schema.js';
+
+/** 一块地（版位）。坐标/尺寸全是纸内局部像素 —— 跟 write_on_board 的 at 同一套 */
+const SLOT = z.object({
+  slot: z.string().regex(TAG_RE).describe('Name for this block, ASCII like main/aside/notes'),
+  at: SHEET_PT.describe('Top-left of this block, pixels from the sheet\'s writable corner'),
+  w: z.number().min(48).max(12000).describe('Width in PIXELS (a default note column is 432)'),
+  h: z.number().min(24).max(12000).describe('Height in PIXELS (~26px per line of text)'),
+  about: z.string().max(60).optional().describe('What goes here (正文 / 人物小传 / 待办) — for your own map'),
+});
 
 /**
  * 铺一张纸并登记（write_on_board 自动铺纸也走这一份 —— 分配纪律只有一份）。
  * @returns {{ id, x, y, w, h, innerW, innerH, basis, overlapsLoose }}
  */
 export async function openSheetFor(projectId, {
-  sessionId = null, by = 'agent', title = null, name = null, where = null,
+  sessionId = null, by = 'agent', title = null, name = null, where = null, plan = null,
 } = {}) {
   const board = await readBoard(projectId);
   const vp = getViewpoint(projectId);
@@ -51,14 +61,32 @@ export async function openSheetFor(projectId, {
     obstacles,
   });
   const id = (name && TAG_RE.test(name) && !board.sheets?.[name]) ? name : nextSheetName(board);
+  const inner0 = innerRect({ x: rect.x, y: rect.y, w: rect.w, h: rect.h });
+  // 版面规划（2026-08-29 刀 E）：开工先把这一屏切成几块地。坐标跟 at 同一套
+  // （纸内局部像素）。越出版心的钳回来 —— 钳过如实报（规划错了要当场知道）。
+  const slots = {};
+  const clampedSlots = [];
+  for (const it of Array.isArray(plan) ? plan : []) {
+    const w = Math.min(Math.round(it.w), inner0.w);
+    const h = Math.min(Math.round(it.h), inner0.h);
+    const x = Math.min(Math.max(0, Math.round(it.at?.x ?? 0)), Math.max(0, inner0.w - w));
+    const y = Math.min(Math.max(0, Math.round(it.at?.y ?? 0)), Math.max(0, inner0.h - h));
+    if (x !== Math.round(it.at?.x ?? 0) || y !== Math.round(it.at?.y ?? 0)
+      || w !== Math.round(it.w) || h !== Math.round(it.h)) clampedSlots.push(it.slot);
+    slots[it.slot] = { x, y, w, h, ...(it.about ? { about: it.about } : {}) };
+  }
   const entry = {
     x: rect.x, y: rect.y, w: rect.w, h: rect.h,
     by, at: new Date().toISOString(), ...(title ? { title } : {}),
+    ...(Object.keys(slots).length ? { slots } : {}),
   };
   await patchBoard(projectId, { sheets: { [id]: entry } });
   setCurrentSheetId(sessionId, id);
   const inner = innerRect({ ...entry });
-  return { id, ...entry, innerW: inner.w, innerH: inner.h, basis: rect.basis, overlapsLoose: rect.overlapsLoose };
+  return {
+    id, ...entry, innerW: inner.w, innerH: inner.h,
+    basis: rect.basis, overlapsLoose: rect.overlapsLoose, clampedSlots,
+  };
 }
 
 const DESCRIPTION = `Lay a fresh SHEET on the board and make it the current one — do this before you
@@ -77,25 +105,45 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
     name: z.string().regex(TAG_RE).optional().describe('Sheet name to refer to it later (ASCII like act2; default auto p1/p2/…)'),
     where: z.enum(['next', 'viewport']).optional()
       .describe("next = below the current sheet (default when sheets exist); viewport = right where the user is looking now (default for the first sheet — also use it to bring work back to the user's eyes)"),
+    plan: z.array(SLOT).max(24).optional()
+      .describe('PLAN THE WHOLE PAGE HERE, before writing anything: carve the sheet into named blocks (slots) and say what goes in each. Then write_on_board{slot:"main"} drops content into that block. A sheet is WIDE (landscape) — a single column down the left wastes most of it; think in columns and rows.'),
   }, async (args, extra) => {
     if (!projectId) return { content: [{ type: 'text', text: 'No project bound.' }], isError: true };
     const by = byOf(extra);
     const s = await openSheetFor(projectId, {
       sessionId, by, title: args.title || null, name: args.name || null, where: args.where || null,
+      plan: args.plan || null,
     });
     try {
       ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `铺了一张纸 ${s.id}` });
       ctx?.emit?.(Events.boardFocus({ x: s.x, y: s.y, w: s.w, h: s.h }, { layer: '', soft: s.basis !== 'viewport', actor: by !== 'agent' ? by : null }));
     } catch { /* fail-soft */ }
     const colCap = capacityOf(DEFAULT_CHALK_W, s.innerH);
+    const cols = Math.max(1, Math.floor(s.innerW / (DEFAULT_CHALK_W + SHEET_MARGIN)));
     const lines = [
       `Sheet ${s.id} laid at world (${s.x},${s.y}) ${s.w}x${s.h}${s.title ? ` — “${s.title}”` : ''}; it is now the current sheet.`,
-      `Writable area: ${s.innerW}x${s.innerH}px, margin ${SHEET_MARGIN}. at:{x,y} in write_on_board now means pixels from its top-left writable corner (x→right, y→down).`,
-      // 给 agent 的量纲（08-29 刀 D）：它手里的东西是字，护栏却全是像素 ——
-      // 让它自己换算 = 每次落笔前做一道做不准的算术，结果是写完才发现装不下。
-      `Room: ${colCap.lines} lines tall; a default ${DEFAULT_CHALK_W}px-wide note fits ~${colCap.perLine} CJK chars (~${Math.round(colCap.perLine / 0.62)} latin) per line, so ~${colCap.cjk} CJK chars per column, and ~${Math.max(1, Math.floor(s.innerW / (DEFAULT_CHALK_W + 24)))} such columns fit side by side. One card is capped at ${CARD_MAX_H}px tall (~${capacityOf(DEFAULT_CHALK_W, CARD_MAX_H).lines} lines) — longer notes get folded, so split them.`,
-      s.basis === 'viewport' ? 'Opened under the user’s current view.' : (s.basis === 'below-sheet' ? 'Stacked below the current sheet.' : 'Placed below existing content.'),
+      `Writable area: ${s.innerW}x${s.innerH}px, margin ${SHEET_MARGIN}. at:{x,y} means pixels from its top-left writable corner (x→right, y→down).`,
+      // 量纲（刀 D）：agent 手里的东西是字，护栏却全是像素 —— 让它自己换算
+      // ＝ 每次落笔前做一道做不准的算术，结果是写完才发现装不下。
+      `Scale: ~26px per line, ~${colCap.perLine} CJK chars per ${DEFAULT_CHALK_W}px-wide line. This sheet is ${colCap.lines} lines deep and ${cols} columns wide (≈${colCap.cjk * cols} CJK chars if you use all of it).`,
     ];
+    const slotList = Object.entries(s.slots || {});
+    if (slotList.length) {
+      // 覆盖率（刀 E）：一张横着的纸只画一条竖栏，大半是空的 —— 把这个数直接报出来
+      const used = slotList.reduce((n, [, v]) => n + v.w * v.h, 0);
+      const pct = Math.round((used / (s.innerW * s.innerH)) * 100);
+      lines.push(`Planned ${slotList.length} slots covering ${pct}% of the sheet:`);
+      for (const [nm, v] of slotList) {
+        const c = capacityOf(v.w, v.h);
+        lines.push(`  ${nm}${v.about ? `（${v.about}）` : ''}: at (${v.x},${v.y}) ${v.w}x${v.h} — ~${c.lines} lines, ~${c.cjk} CJK chars`);
+      }
+      lines.push('write_on_board{slot:"<name>"} drops a note into a block (they stack downward inside it). Content that does not fit is REFUSED, not squeezed — re-plan or split it.');
+      if (pct < 45) lines.push(`⚠ ${100 - pct}% of this sheet is unplanned. A landscape sheet holds ${cols} columns side by side — carve more blocks rather than leaving it empty.`);
+      if (s.clampedSlots?.length) lines.push(`⚠ Clamped into the sheet (they stuck out): ${s.clampedSlots.join(', ')} — check their at/w/h.`);
+    } else {
+      lines.push(`No slots planned. Plan the page in one go — open_sheet{plan:[{slot,at,w,h,about}…]} — instead of writing one note at a time and hoping it lands well. This sheet takes ${cols} columns side by side; a single column down the left leaves ${Math.round((1 - 1 / cols) * 100)}% of it empty.`);
+    }
+    lines.push(s.basis === 'viewport' ? 'Opened under the user’s current view.' : (s.basis === 'below-sheet' ? 'Stacked below the current sheet.' : 'Placed below existing content.'));
     if (s.overlapsLoose) lines.push('⚠ Some loose items already sit in this area — they now read as “on this sheet”; move them (edit_board) if that is wrong.');
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   });

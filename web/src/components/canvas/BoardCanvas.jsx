@@ -1424,7 +1424,11 @@ export default function BoardCanvas({
   //   连同它的唯一消费方 placeImageCard 一起拆除）
   const visibleIdSet = new Set(visibleObjects.map(o => o.id));
   // 板书直播的落点（真身在 use-live-chalk-spots.js，08-29 棘轮拆件）
-  const liveChalkSpotFor = useLiveChalkSpots({ sheets, camera, scrollRef });
+  const liveChalkSpotFor = useLiveChalkSpots({ sheets, layout, camera, scrollRef });
+  /** 这个落点上是不是已经有真卡了（流式卡的退场判据，见下方渲染处） */
+  const spotTakenByReal = (spot) => Object.values(layout || {}).some(
+    (e) => Number.isFinite(e?.x) && Math.abs(e.x - spot.x) < 12 && Math.abs(e.y - spot.y) < 12,
+  );
 
   const { anchoredCards, dockPanels, dockChips, spriteCards, chalkCards } = splitStageCards({
     stageCards, positioned, visibleIdSet, visibleZones, focusZone: '',
@@ -1823,7 +1827,15 @@ export default function BoardCanvas({
           <TagHullLayer positioned={positioned} onGrab={onTagGrab} onMenu={openTagMenu} />
           {/* 卷卡（收纳器）：收着的组在包络左上角留一张卡，单击展开归位 */}
           <RollLayer rolls={rolls} layout={layout} onUnroll={unrollGroup} />
-          {!eyeMode && chalkCards.map(c => <ChalkLiveInk key={c.blockId} card={c} spot={liveChalkSpotFor(c.blockId, c.spot)} />)}
+          {!eyeMode && chalkCards.map((c) => {
+            const spot = liveChalkSpotFor(c.blockId, c.spot);
+            // 真卡接棒（2026-08-29 刀 E）：同一个位置上已经有落定的物件了 → 流式卡
+            // 当场退场。原来是写完 700ms 后再淡出 500ms —— 那 1.2 秒里流式字和真卡
+            // 重叠着，看起来就是"填完还闪一下"（站主：填完不该再二次刷新）。
+            // 只对 placed（agent 自己选的位置）成立；落在临时空地上的仍走定时淡出。
+            if (c.status === 'ok' && spot?.placed && spotTakenByReal(spot)) return null;
+            return <ChalkLiveInk key={c.blockId} card={c} spot={spot} />;
+          })}
           <BindingLayer
             bindings={bindings}
             roleNames={roleNames}

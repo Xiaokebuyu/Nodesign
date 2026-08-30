@@ -12,13 +12,67 @@
 
 import {
   currentSheet, innerRect, toLocal, placeAtOnSheet, placeThread, placeBeside,
-  nextSpotInSheet, overlapIds, sheetOfPoint,
+  nextSpotInSheet, overlapIds, sheetOfPoint, slotRectOf, nextSpotInSlot,
 } from '../../../lib/board-sheets.js';
+import { capacityOf } from '../../../lib/sketch-layout.js';
 import { currentSheetIdOf, setCurrentSheetId } from '../../../lib/sheet-state.js';
 import { UNIT } from '../../../lib/rect.js';
 import { openSheetFor } from './open-sheet.js';
 
 export function makeSheetPlacer({ projectId, sessionId, by }) {
+  /**
+   * 版位解析（2026-08-29 刀 E）。**要在算板书宽度之前调** —— 一块地多宽，
+   * 写进去的东西就多宽，不再各自按内容估。
+   * @returns {{rect,sheet}|{error:string,message:string}}
+   */
+  const resolveSlot = (b, { slotName, sheetName }) => {
+    const sheets = b.sheets || {};
+    const sheet = (sheetName && sheets[sheetName])
+      ? { id: sheetName, ...sheets[sheetName] }
+      : currentSheet({ sheets }, currentSheetIdOf(sessionId));
+    if (!sheet) {
+      return { error: 'no-sheet', message: 'No sheet yet — open_sheet first (plan the page, then write into its slots).' };
+    }
+    const rect = slotRectOf(sheet, slotName);
+    if (!rect) {
+      const names = Object.keys(sheet.slots || {});
+      return {
+        error: 'no-slot',
+        message: names.length
+          ? `Sheet ${sheet.id} has no slot "${slotName}". It has: ${names.join(', ')}.`
+          : `Sheet ${sheet.id} has no slots planned. Plan the page first: open_sheet{plan:[{slot,at,w,h,about}…]}.`,
+      };
+    }
+    return { rect, sheet };
+  };
+
+  /**
+   * 版位内落位。装不下**拒收**（站主拍板：提示 agent 分块内容、重新布置）——
+   * 折叠/裁切/挤进去都是替它把问题藏起来，而它下一条还会照写不误。
+   */
+  const placeInSlot = (b, { rect, sheet, slotName, box, obstacles }) => {
+    const spot = nextSpotInSlot(b, rect, box);
+    if (spot.full) {
+      const left = capacityOf(rect.w, spot.freeH);
+      const whole = capacityOf(rect.w, rect.h);
+      return {
+        full: true,
+        message: [
+          `⛔ Slot "${slotName}" on sheet ${sheet.id} cannot take this.`,
+          `   It is ${rect.w}x${rect.h} (~${whole.cjk} CJK chars total)${spot.taken ? `, already holding ${spot.taken} note(s)` : ''};`,
+          `   ~${left.lines} lines / ~${left.cjk} CJK chars are still free, this note needs ${spot.needH}px (~${capacityOf(rect.w, spot.needH).lines} lines).`,
+          '   Nothing was written. Split the content into smaller blocks, put the rest in another slot,',
+          '   or re-plan the sheet (open_sheet{plan:[…]}) with a taller block.',
+        ].join('\n'),
+      };
+    }
+    setCurrentSheetId(sessionId, sheet.id);
+    return {
+      x: spot.x, y: spot.y, resolution: 'slot', slot: slotName, sheetId: sheet.id,
+      pressed: overlapIds({ x: spot.x, y: spot.y, w: box.w, h: box.h }, obstacles),
+    };
+  };
+
   /** 根层：纸上落位。返回 {x,y,resolution,sheetId,opened,clamped,pressed} */
   const placeOnSheets = async (b, { box, at, sheetName, replyRect, anchorRect, side, obstacles }) => {
     let sheets = b.sheets || {};
@@ -100,6 +154,7 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     else if (placed.resolution === 'thread-new-sheet') bits.push('the thread filled its sheet — turned the page (new sheet)');
     else if (placed.resolution === 'flow') bits.push('flowed below the last item');
     else if (placed.resolution === 'flow-new-sheet') bits.push('sheet was full — turned the page (new sheet)');
+    else if (placed.resolution === 'slot') bits.push(`in slot "${placed.slot}" (planned block)`);
     else if (placed.resolution === 'at') {
       // 换纸判据（08-29 刀 C）：光说"钳住了"不够 —— 钳住的结果是这条被压到贴着
       // 纸底、跟上一条挤在一起，而 agent 不知道该翻页了。
@@ -115,5 +170,5 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     return bits.join('; ');
   };
 
-  return { placeOnSheets, placeInZone, describeSpot };
+  return { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot };
 }

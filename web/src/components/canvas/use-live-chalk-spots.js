@@ -15,16 +15,17 @@ import { sheetSpotToWorld } from '../../lib/board-geometry.js';
 
 const MAX_TRACKED = 12;
 
-export function useLiveChalkSpots({ sheets, camera, scrollRef }) {
+export function useLiveChalkSpots({ sheets, layout, camera, scrollRef }) {
   const spotsRef = useRef(new Map());
   return (blockId, spot) => {
     const m = spotsRef.current;
     if (!m.has(blockId)) {
-      const real = sheetSpotToWorld(sheets, spot);
+      const real = sheetSpotToWorld(sheets, spot, layout);
       if (real) {
         // placed = 这是 agent 自己选的位置（不是我们找的空地）：渲染层据此画出
         // "这块地已经定下了"的框。width 是它给的格数（24px 一格）。
-        m.set(blockId, { ...real, placed: true, w: Number.isFinite(spot?.width) ? spot.width * 24 : null });
+        // 版位给的宽度直接来自那块地；否则用 agent 点名的格宽
+        m.set(blockId, { ...real, placed: true, w: real.w || (Number.isFinite(spot?.width) ? spot.width * 24 : null) });
       } else {
         const r = scrollRef.current?.getBoundingClientRect();
         if (!r) return null;

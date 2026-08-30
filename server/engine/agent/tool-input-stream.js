@@ -39,12 +39,12 @@ export const TOOL_INPUT_STREAM_FIELDS = {
   Write: 'content',
   // 板书直播（2026-08-25 流式路 A）：write_on_board 的 text 逐 token 流到画布上
   // 的舞台粉笔卡（StageLayer chalk 档）—— 粉笔字在用户眼前一行行长出来。
-  mcp__nodesign__write_on_board: { field: 'text', spot: ['at', 'sheet', 'width', 'near', 'side'] },
+  mcp__nodesign__write_on_board: { field: 'text', spot: ['slot', 'at', 'sheet', 'width', 'near', 'side'] },
   // board_batch 批内嵌套（08-25 用户报「流式名存实亡」：skill 教的是一章一次
   // batch，正文藏在 actions[].input.text 里，顶层字段抽取器抓不到 —— 等于亲手
   // 教了大家绕开流式）。batch 档抽**最新一条** write_on_board 动作的 text，
   // 换动作时发 reset 让前端另起一张。
-  mcp__nodesign__board_batch: { batch: 'write_on_board', field: 'text', spot: ['at', 'sheet', 'width', 'near', 'side'] },
+  mcp__nodesign__board_batch: { batch: 'write_on_board', field: 'text', spot: ['slot', 'at', 'sheet', 'width', 'near', 'side'] },
 };
 const TOOL_INPUT_THROTTLE_MS = 120;
 

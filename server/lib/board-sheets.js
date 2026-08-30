@@ -190,6 +190,57 @@ export function nextSpotInSheet(board, sheetId, box, { gap = UNIT } = {}) {
   return { x: Math.round(inner.x), y };
 }
 
+/* ── 版位（slot，2026-08-29 占位契约刀 E）────────────────────────────────
+ *
+ * 站主拍板：**agent 应当提前规划所有落位，然后再开始生成**。所以开工那一步不是
+ * 「写第一条」而是「把这一屏切成几块地」（open_sheet 的 plan），之后每条内容
+ * 点名往哪块地里放。
+ *
+ * 为什么这比「一条一条自己给 at」强：一张纸是横的（约 2.1:1），一条一条往下写
+ * 只会用掉最左边一栏、剩下大半空着；而且写到第五条才发现装不下时，前四条已经
+ * 落盘了。先规划＝**版面在内容之前就定死**，装不下当场就知道。
+ *
+ * 装不下的处理是**拒收**不是挤进去（站主原话：提示 agent 让她分块内容、重新
+ * 布置）—— 折叠、裁切、自动缩排都是替它把问题藏起来。
+ */
+
+/** 版位矩形（世界坐标）。名字不存在返回 null */
+export function slotRectOf(sheet, name, margin = SHEET_MARGIN) {
+  const sl = sheet?.slots?.[name];
+  if (!sl) return null;
+  return {
+    x: sheet.x + margin + sl.x, y: sheet.y + margin + sl.y,
+    w: sl.w, h: sl.h, about: sl.about || null,
+  };
+}
+
+/** 落在某块地里的物件（中心点判据，同 sheetMembers） */
+export function membersInRect(board, rect) {
+  const out = [];
+  for (const [id, e] of Object.entries(board?.objects || {})) {
+    if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y)) continue;
+    const sz = estimateSizeOn(board, id, e);
+    const c = { x: e.x + sz.w / 2, y: e.y + sz.h / 2 };
+    if (pointIn(c, rect)) out.push({ id, x: e.x, y: e.y, w: sz.w, h: sz.h });
+  }
+  return out.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+}
+
+/**
+ * 版位内往下接排。装不下**不返回兜底位置** —— 返回 full + 还剩多少，
+ * 调用方据此拒收并把这个数报给 agent。
+ *
+ * @returns {{x,y}|{full:true, freeH:number, needH:number}}
+ */
+export function nextSpotInSlot(board, rect, box, { gap = UNIT } = {}) {
+  const members = membersInRect(board, rect);
+  const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : rect.y - gap;
+  const y = Math.round(bottom + gap);
+  const freeH = Math.max(0, Math.round(rect.y + rect.h - y));
+  if (box.h > freeH) return { full: true, freeH, needH: box.h, taken: members.length };
+  return { x: Math.round(rect.x), y };
+}
+
 /**
  * 符号地图：板上现在有哪些纸（read_board / 注入 用）。
  * 每张：名字、矩形、件数、剩余高度（版心内从成员最低边到纸底）。

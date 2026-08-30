@@ -33,7 +33,8 @@ import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { endpointReal } from './edit-board.js';
 import { BINDING_TYPE_IDS } from '../../../lib/binding-types.js';
-import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fitFor } from '../../../lib/sketch-layout.js';
+import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fitFor, capacityOf } from '../../../lib/sketch-layout.js';
+import { CARD_MAX_H } from '../../../lib/screen.js';
 import { innerRect } from '../../../lib/board-sheets.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { makeSheetPlacer } from './write-on-board-place.js';
@@ -64,6 +65,8 @@ const looksLikeMd = (t) => /(\*\*|__|^#{1,4}\s|^\s*[-*]\s|\|.+\||```|\$[^$]+\$|\
  * 抽取规则在 agent-shared.js 的 TOOL_INPUT_STREAM_FIELDS.spot。
  */
 const SCHEMA = {
+  slot: z.string().regex(TAG_RE).optional()
+    .describe('Drop this into a PLANNED BLOCK of the current sheet (names come from open_sheet{plan}). The block decides the width and where it lands; notes stack downward inside it. If it does not fit, the write is REFUSED with how much room is left — split the content or re-plan. Prefer this over at: plan the page first, then fill it.'),
   at: SHEET_PT.optional()
     .describe("Where on the CURRENT SHEET, in pixels from its top-left writable corner (x→right, y→down). Clamped into the sheet — the return says if it was. Omit it to flow top-to-bottom"),
   sheet: z.string().regex(TAG_RE).optional()
@@ -176,7 +179,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // 锚点解析（真 id > tag 包络 > 救援入座）本体在 lib/board-anchor.js（棘轮拆件）
     const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
     // 纸上落位三分支（棘轮拆件，见 write-on-board-place.js）
-    const { placeOnSheets, placeInZone, describeSpot } = makeSheetPlacer({ projectId, sessionId, by });
+    const { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot } = makeSheetPlacer({ projectId, sessionId, by });
 
     // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
     if (args.text) {
@@ -223,13 +226,21 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         }
       }
 
+      // 版位（08-29 刀 E）：解析要在算宽度之前 —— 一块地多宽，写进去的就多宽
+      let slotInfo = null;
+      if (args.slot) {
+        slotInfo = resolveSlot(board, { slotName: args.slot, sheetName: args.sheet || null });
+        if (slotInfo.error) return err(slotInfo.message);
+      }
       const em = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
       const longest = Math.max(...body.split('\n').map(em));
       // 宽度三档回落（2026-08-28）：模型点名 > 用户调出来的偏好 > 按正文估。
       // 中间那档是「模仿用户」：他拖宽过板书就说明这个版心读着舒服，下一拍照做，
       // 别让他反复调同一件事。判据是前端拖手柄盖的 sized:'user' 章，模型盖不出。
-      const wUnits = capW(args.width || learnedChalkWidth(board)
-        || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
+      const wUnits = slotInfo
+        ? Math.max(4, Math.floor(slotInfo.rect.w / UNIT))
+        : capW(args.width || learnedChalkWidth(board)
+          || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
       const box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
 
       let zone = '';
@@ -276,8 +287,23 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
       const obstacles = obstaclesOf(b2, zone);
       const vpRect = vpRectFor(zone);
+      // 卡高上限（08-29 刀 E）：没规划版面时也不许写出一根柱子。执行点在工具层
+      // 不在渲染层 —— 折叠/裁切都是替它把问题藏起来，它下一条还会照写。
+      if (!slotInfo && box.h > CARD_MAX_H) {
+        const c = capacityOf(box.w, CARD_MAX_H);
+        return err([
+          `⛔ Too long for one card: this needs ${box.h}px, a card holds ${CARD_MAX_H}px (~${c.lines} lines / ~${c.cjk} CJK chars at ${box.w}px wide).`,
+          '   Nothing was written. Split it into several notes (chain:true threads them),',
+          '   or plan the page first — open_sheet{plan:[{slot,at,w,h,about}…]} — and write into slots.',
+        ].join('\n'));
+      }
       let placed;
-      if (zone) {
+      if (slotInfo) {
+        // 装不下就拒收：什么都不写，把还剩多少报回去让它分块重排（站主拍板）
+        const p = placeInSlot(b2, { rect: slotInfo.rect, sheet: slotInfo.sheet, slotName: args.slot, box, obstacles });
+        if (p.full) return err(p.message);
+        placed = p;
+      } else if (zone) {
         if (args.at) return err('at 是纸内坐标，文件夹层没有纸 —— 在文件夹里用 reply_to/near 落位。');
         placed = placeInZone({ box, replyRect, anchorRect, side: args.side || null, obstacles });
       } else if (laneFrom) {

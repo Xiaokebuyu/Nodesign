@@ -25,10 +25,12 @@ export const FOLDER_CARD = { w: 288, h: 240 };
 export const FOLDER_CARD_H = FOLDER_CARD.h;
 export const DECK_EMBED_W = 640;          // deck 内嵌渲染宽度（1920 → 1/3 缩放）
 /**
- * 一张卡的高度天花板（2026-08-29 占位契约刀 B，站主定「一张纸的 40%」）。
- * 真身与理由在 `server/lib/screen.js` 的 CARD_MAX_H（parity 测试钉着两端一致）：
- * 生产真板上最高一条板书 2471px，卡高原来完全由内容决定、没有上限。
- * 超出部分在卡上折叠（可展开，展开是临时的、不进占位）。
+ * 一张卡的高度天花板（2026-08-29 占位契约刀 B→E，站主定「一张纸的 40%」）。
+ * 真身与理由在 `server/lib/screen.js` 的 CARD_MAX_H（parity 测试钉着两端一致）。
+ *
+ * ⚠️ 执行点在**工具层**不在这里：写不下就拒收，让 agent 分块重排。前端留着这个
+ * 常量只为算文件卡预览体的裁切高度（那是文件内容，agent 分不了块）。
+ * 折叠展开做过一版，站主否掉 ——「收起展开没必要」，那是替它把问题藏起来。
  */
 export const CARD_MAX_H = 384;
 
@@ -38,6 +40,8 @@ export const CARD_MAX_H = 384;
  * 能流到它真正要去的地方（2026-08-29 占位契约刀 C）。
  */
 export const SHEET_MARGIN = 24;
+/** 版位内两件之间的间距（服务端 nextSpotInSlot 的 gap，同为 UNIT） */
+const SLOT_GAP = 24;
 
 /**
  * 纸内局部坐标 → 世界坐标。
@@ -49,10 +53,9 @@ export const SHEET_MARGIN = 24;
  * @param {object} sheets  board.sheets
  * @param {{at?:{x,y}, sheet?:string}} spot  流式入参里抽出来的位置字段
  */
-export function sheetSpotToWorld(sheets, spot) {
-  if (!spot?.at || !Number.isFinite(spot.at.x) || !Number.isFinite(spot.at.y)) return null;
+export function sheetSpotToWorld(sheets, spot, layout = null) {
   const table = sheets || {};
-  let s = spot.sheet ? table[spot.sheet] : null;
+  let s = spot?.sheet ? table[spot.sheet] : null;
   if (!s) {
     for (const v of Object.values(table)) {
       if (!Number.isFinite(v?.x)) continue;
@@ -60,6 +63,26 @@ export function sheetSpotToWorld(sheets, spot) {
     }
   }
   if (!s || !Number.isFinite(s.x)) return null;
+
+  // 版位优先（2026-08-29 刀 E）：agent 规划过的块。落点跟服务端 nextSpotInSlot
+  // 同一条规则 —— 接在这块地里最低那件下面。**两处算同一件事**是有意的：服务端
+  // 是权威（落盘的那个数），这里只是让流式预览落在同一个地方，写完不跳。
+  // 规则只有"往下接"一条，简单到不值得为它开一条前后端通信。
+  const sl = spot?.slot ? s.slots?.[spot.slot] : null;
+  if (sl) {
+    const rect = { x: s.x + SHEET_MARGIN + sl.x, y: s.y + SHEET_MARGIN + sl.y, w: sl.w, h: sl.h };
+    let bottom = rect.y - SLOT_GAP;
+    for (const e of Object.values(layout || {})) {
+      if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y)) continue;
+      const cx = e.x + (e.w || 0) / 2; const cy = e.y + (e.h || 0) / 2;
+      if (cx >= rect.x && cx < rect.x + rect.w && cy >= rect.y && cy < rect.y + rect.h) {
+        bottom = Math.max(bottom, e.y + (e.h || 0));
+      }
+    }
+    return { x: Math.round(rect.x), y: Math.round(bottom + SLOT_GAP), w: sl.w };
+  }
+
+  if (!spot?.at || !Number.isFinite(spot.at.x) || !Number.isFinite(spot.at.y)) return null;
   return { x: Math.round(s.x + SHEET_MARGIN + spot.at.x), y: Math.round(s.y + SHEET_MARGIN + spot.at.y) };
 }
 export const STAGE_CARD_W = 560;          // 舞台卡宽度（板内坐标系）

@@ -21,7 +21,7 @@ import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
 import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
-import { sheetSummaries, rollCardRect } from '../../../lib/board-sheets.js';
+import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot } from '../../../lib/board-sheets.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -204,6 +204,16 @@ on the minimap and listed with what is inside it.`,
               // 只给像素等于让它每次落笔前做一道做不准的算术
               const cap = capacityOf(DEFAULT_CHALK_W, s.freeH);
               lines.push(`  ${s.id}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高（≈${cap.lines} 行 / ${cap.cjk} 字）${s.lastId ? `，最新 ${s.lastId}` : ''}`);
+              // 规划过的块各剩多少（08-29 刀 E）：填到一半要知道还有哪块地是空的，
+              // 不然只能靠猜 —— 猜错的下场是写入被拒收，白跑一趟
+              const sheet = board.sheets?.[s.id];
+              for (const [nm, sl] of Object.entries(sheet?.slots || {})) {
+                const r = slotRectOf({ ...sheet, id: s.id }, nm);
+                const spot = nextSpotInSlot(board, r, { w: 1, h: 1 });
+                const freeH = spot.full ? 0 : Math.max(0, r.y + r.h - spot.y);
+                const c = capacityOf(r.w, freeH);
+                lines.push(`    · ${nm}${sl.about ? `（${sl.about}）` : ''}：块内 (${sl.x},${sl.y}) ${sl.w}x${sl.h}，剩 ≈${c.lines} 行 / ${c.cjk} 字`);
+              }
             }
           }
         } catch { /* 纸读不出不挡座次 */ }

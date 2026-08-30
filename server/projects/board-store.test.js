@@ -101,6 +101,41 @@ describe('sheets 注册表（2026-08-29 纸范式）：合并语义同 lanes', (
     expect(b.sheets).toBeUndefined();
   });
 
+  /**
+   * 版位（2026-08-29 刀 E）。⚠️ sanitize 是**白名单重建**：新字段不显式登记就静默丢，
+   * 而丢了的表现是"agent 规划完版面，下一句就说没有这块地" —— 不报错。
+   * 所以每个新字段都配一条「过两遍不掉」。
+   */
+  it('⭐ slots 过两遍不掉（白名单重建陷阱）', async () => {
+    const sp2 = 'proj_boardstore_slots';
+    await patchBoard(sp2, { sheets: { p1: {
+      x: 0, y: 0, w: 2000, h: 900, by: 'agent', at: '2026-08-29T01:00:00Z',
+      slots: {
+        main: { x: 0, y: 0, w: 432, h: 360, about: '正文' },
+        aside: { x: 460, y: 0, w: 288, h: 200 },
+      },
+    } } });
+    const b1 = await readBoard(sp2);
+    expect(Object.keys(b1.sheets.p1.slots)).toEqual(['main', 'aside']);
+    expect(b1.sheets.p1.slots.main).toEqual({ x: 0, y: 0, w: 432, h: 360, about: '正文' });
+    // 再存一遍读出来还在（过两遍）
+    await patchBoard(sp2, { sheets: { p1: { title: '第二章' } } });
+    const b2 = await readBoard(sp2);
+    expect(b2.sheets.p1.slots.main).toEqual({ x: 0, y: 0, w: 432, h: 360, about: '正文' });
+    expect(b2.sheets.p1.title).toBe('第二章');
+  });
+
+  it('太小的地和名字非法的地被丢掉（放不下一行字的不算一块地）', async () => {
+    const sp3 = 'proj_boardstore_slots2';
+    await patchBoard(sp3, { sheets: { p1: {
+      x: 0, y: 0, w: 2000, h: 900,
+      slots: { ok: { x: 0, y: 0, w: 200, h: 100 }, tiny: { x: 0, y: 0, w: 10, h: 10 }, 'bad name!': { x: 0, y: 0, w: 200, h: 100 } },
+    } } });
+    const b = await readBoard(sp3);
+    expect(Object.keys(b.sheets.p1.slots)).toEqual(['ok']);
+  });
+
+
   it('坏名静默丢弃，不炸整个 patch', async () => {
     await patchBoard(sp, { sheets: { 'bad name!!': { x: 0, y: 0 }, p9: { x: 10, y: 10 } } });
     const b = await readBoard(sp);
