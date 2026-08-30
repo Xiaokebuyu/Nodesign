@@ -77,6 +77,43 @@ function depArrays(lines) {
   return out;
 }
 
+/**
+ * 组件体那一层的 **hook 入参**（08-30 补）：
+ *
+ *     const { a } = useSomething({
+ *       camera, setAnnotate,      // ← 这些在渲染时就求值
+ *     });
+ *
+ * 判据同样保守到底：只认**整行就是一个名字**（`foo,`）或 `key: 名字,` 两种形状，
+ * 含 `(` 或 `=>` 的一律不认（那是函数，晚点才跑，不构成 TDZ）。
+ *
+ * ⚠️ 为什么补这条：08-30 把 clickSelect 拆成 useObjectClick，`setAnnotate` 当入参
+ * 传了进去，而它在 200 行之后才 useState —— 依赖数组那条判据看不见入参，于是
+ * **build 过、三条 lint 过、这个检查也 PASS，真跑白屏**。这正是本文件开头说的
+ * 那种事故，只是换了个入口。
+ */
+function hookArgs(lines) {
+  const out = [];
+  let open = null;
+  lines.forEach((line, i) => {
+    if (open === null) {
+      if (/^ {2}(?:(?:const|let)\s+.*=\s*)?use[A-Z][\w$]*\(\{\s*$/.test(line)) open = { line: i + 1, names: [] };
+      return;
+    }
+    if (/^ {2}\}\)/.test(line)) {
+      if (open.names.length) out.push(open);
+      open = null;
+      return;
+    }
+    if (line.includes('=>') || line.includes('(')) return;   // 函数：晚点才求值
+    for (const seg of line.split(',')) {
+      const m = /^\s*(?:[A-Za-z_$][\w$]*\s*:\s*)?([A-Za-z_$][\w$]*)\s*$/.exec(seg);
+      if (m) open.names.push(m[1]);
+    }
+  });
+  return out;
+}
+
 let failed = 0;
 let checked = 0;
 for (const file of FILES) {
@@ -91,6 +128,16 @@ for (const file of FILES) {
       if (at != null && at > line) {
         failed += 1;
         console.error(`✗ ${file}:${line} 依赖 \`${d}\`，而它在 ${file}:${at} 才声明 —— 渲染时 TDZ，整页白屏`);
+      }
+    }
+  }
+  for (const { line, names } of hookArgs(lines)) {
+    for (const n of names) {
+      checked += 1;
+      const at = decls.get(n);
+      if (at != null && at > line) {
+        failed += 1;
+        console.error(`✗ ${file}:${line} hook 入参 \`${n}\`，而它在 ${file}:${at} 才声明 —— 渲染时 TDZ，整页白屏`);
       }
     }
   }

@@ -12,9 +12,9 @@ import { PAPER, PAPER_SHADOW, paperCard } from '../../lib/paper.js';
 import {
   DESKTOP_W, MARGIN_X, FOLDER_CARD,
   EASE, POP_IN, newStackedZoneRect, packRow, ROW_GAP,
-  hitsAt, nextPick,
 } from '../../lib/board-geometry.js';
 import { useLiveChalkSpots } from './use-live-chalk-spots.js';
+import { useObjectClick } from './useObjectClick.js';
 import {
   SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, passesFilter, isDirArtifact, isArchivePath,
 } from '../../lib/board-kinds.js';
@@ -913,21 +913,18 @@ export default function BoardCanvas({
     positioned.filter(o => o.chalk && typeof o.text === 'string' && o.text.includes('```nd:controls')),
   ), [positioned]);
 
-  // 单击 = 直接开标注（2026-08-27 用户拍板：标注是最常用的动作，点选操作条
-  // 同日撤役）。命中仍走几何 + 叠堆下翻：DOM 命中在指针捕获下会被重定向
-  // （08-25 板书武装案），所以拿世界坐标对矩形算；叠成一摞的产物再点同一处
-  // 循环翻到底下那件，翻到谁标注就落到谁 —— 挤堆场景靠这个解。
-  // 标注纸自己管退场（点外面/Esc 即关），点下一件时上一张已被 pointerdown 收掉。
-  const clickSelect = (domId, cx, cy) => {
-    const pt = camera.toWorld(cx, cy);
-    const hits = hitsAt(positionedRef.current, sizeOf, pt);
-    const cur = selectedIdsRef.current.length === 1 ? selectedIdsRef.current[0] : null;
-    const pick = nextPick(hits.length ? hits : (domId ? [domId] : []), cur);
-    if (!pick && !selectedIdsRef.current.length) return;   // 空地点空地，别空转渲染
-    setSelectedIds(pick ? [pick] : []);
-    const o = pick ? positionedRef.current.find(it => it.id === pick) : null;
-    if (o) setAnnotate({ x: cx, y: cy + 12, target: annotTargetOf(o, roleNames) });
-  };
+  // 就地标注浮层：{ x, y, target:{ kind, id, title, typeLabel } }（E3）
+  // ⚠️ 它必须声明在 useObjectClick 之前：setAnnotate 是**当作入参传进去**的，
+  //    而入参在渲染时就求值，写在下面就是 TDZ 白屏（08-30 真栽过一次，
+  //    _hook-order-check 只查依赖数组、查不到 hook 入参，所以它放行了）。
+  const [annotate, setAnnotate] = useState(null);
+
+  // 在一件东西上点一下意味着什么（选中 + 开标注纸，以及为什么要压一个双击窗口）
+  // → useObjectClick.js。语义和那几条踩过的坑都在那个文件头上。
+  const { clickSelect, cancelPendingClick } = useObjectClick({
+    camera, positionedRef, selectedIdsRef, setSelectedIds, setAnnotate, roleNames,
+    windowOpen: deckOpen,
+  });
 
   // 拖拽全家（pointerdown/move/up/相机补帧/边缘跟车/整组抓手/板书双按武装）
   // 2026-08-25 抽进 useBoardObjectDrag.js —— 语义与注释原样搬走，改拖拽行为去那看。
@@ -1152,8 +1149,6 @@ export default function BoardCanvas({
    * 的地方，而菜单弹出后镜头可能已经被别的事挪过了。
    */
   const [menu, setMenu] = useState(null);   // { x, y, at:{x,y}, items }
-  // 就地标注浮层：{ x, y, target:{ kind, id, title, typeLabel } }（E3）
-  const [annotate, setAnnotate] = useState(null);
   /** 「移动到…」浮层：{ x, y, ids:[], current, exclude? } */
   const [moveTo, setMoveTo] = useState(null);
   /** 连线拾取模式：{ id, title } = 起点已定，等着点目标（Esc 取消） */
@@ -1651,6 +1646,10 @@ export default function BoardCanvas({
         // 不冻的话窗里窗外是同一个站点的双实例全速跑 —— 08-24 性能案）
         previewPaused={deckOpen}
         onPrimary={() => {
+          // ⭐ 双击到手：把那两下单击的后果掐掉（标注纸 + 叠堆下翻），见上面
+          // clickSelect 那段。dblclick 紧跟在第二下之后，所以这一下必定赶在
+          // 220ms 的定时器之前。
+          cancelPendingClick();
           // 板书只认「改板书」开关（08-25 拍板）：关着时双击不开编辑器（这条
           // dblclick 理论上到不了这儿 —— 空地按下被平移层捕获重定向；留闸兜底）
           if (!win && obj.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(obj.id)) return;
