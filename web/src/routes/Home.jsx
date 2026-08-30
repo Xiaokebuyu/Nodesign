@@ -16,6 +16,7 @@ import dTangle from '../assets/login-wall/doodles/tangle.webp';
 import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
 import { t, getLocale } from '../lib/i18n.js';
 import { sheetClassOf } from './home-sheets.js';
+import { Canopy, DayToggle } from './home-light.jsx';
 
 /**
  * Home 页 —— 进门之后的那面板子（2026-08-03 改版）
@@ -124,6 +125,9 @@ export default function Home() {
           <Link to="/skills" title="Skill" style={iconBtnStyle}>
             <Wrench size={14} />{narrow ? null : ' Skill'}
           </Link>
+          {/* 光线：跟着时间 / 白天 / 夜晚。窄屏只留图标 —— 它是个一眼能认的
+              太阳月亮，不需要字。 */}
+          <DayToggle style={iconBtnStyle} compact={narrow} />
           {/* 窄屏不挂：上面那条注释已经说了 393 的屏排不下，语言不是高频动作。
               窄屏用户要换语言走登录墙那个（门外那枚常在）。 */}
           {!narrow && <LanguageSwitcher />}
@@ -132,12 +136,12 @@ export default function Home() {
     >
       <div className="ndd">
         <style>{CSS}</style>
-        {/* 树影：两层叶隙光斑，压在板面之上、内容之下。
+        {/* 光源层（树影 / 台灯）。两块画布：一块压在板面之上内容之下，一块压在
+            所有内容之上，都是 .ndd 的直接子节点，靠 z-index 分前后。
             必须是**独立的 fixed 层**，不能并进 .ndd::before 那十四层 ——
             那一层是静态的，掺进动画就等于每帧重画十四层背景，正是
-            08-28「项目一多就奇卡」的病根。这里只动 transform / opacity，
-            合成器自己就能处理，主线程不参与。 */}
-        <div className="ndd-sun" aria-hidden="true"><i /><i /></div>
+            08-28「项目一多就奇卡」的病根。 */}
+        <Canopy />
         <div className="ndd-in">
 
           <div className="ndd-top">
@@ -179,11 +183,6 @@ export default function Home() {
             </div>
           )}
         </div>
-        {/* 落在纸上的那半片光。跟上面那层是**同一片树影**（同一组 keyframes、
-            同时挂上所以相位一致），只是这一层压在内容之上 —— 真站在树下，
-            光是连着落在桌面和手里的纸上的，只照桌子不照纸反而露馅。
-            很淡 + soft-light：够看出纸上有光在晃，又不至于压着字读不了。 */}
-        <div className="ndd-sun over" aria-hidden="true"><i /><i /></div>
       </div>
     </AppShell>
   );

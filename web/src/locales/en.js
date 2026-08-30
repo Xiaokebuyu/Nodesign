@@ -127,6 +127,11 @@ export default {
   '还没出东西': 'Nothing made yet',
 
   '橱窗': 'Gallery',
+  // 顶栏那枚光线开关（routes/home-light.jsx）
+  '光线': 'Light',
+  '跟着时间': 'Follow the clock',
+  '白天': 'Day',
+  '夜晚': 'Night',
   '我的项目': 'My projects',
   '最近对话': 'Recent chats',
   '正在打开…': 'Opening…',
