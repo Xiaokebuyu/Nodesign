@@ -23,7 +23,8 @@ export function applyReplan({ board, sheetsPatch, sessionId, op }) {
     : currentSheet(base, currentSheetIdOf(sessionId));
   if (!sh) return { error: '还没有纸 —— 先 open_sheet' };
   const inn = innerRect(sh);
-  const { slots: addSlots, clampedSlots } = clampPlan(op.plan, { w: inn.w, h: inn.h });
+  // prevSlots：below 可以引用纸上已有的版位（「在 main 底下补一块」是最常见的补法）
+  const { slots: addSlots, clampedSlots } = clampPlan(op.plan, { w: inn.w, h: inn.h }, base.sheets[sh.id].slots || {});
   const merged = { ...(base.sheets[sh.id].slots || {}) };
   if (Object.values(addSlots).some((sl) => sl.for === 'artifacts')) {
     for (const nm of Object.keys(merged)) {

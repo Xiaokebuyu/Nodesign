@@ -69,7 +69,7 @@ describe('工具层拒收超长（没规划版面时）', () => {
     expect(txt).toMatch(new RegExp(`${CARD_MAX_H}px`));
     expect(txt).toMatch(/CJK chars/);
     expect(txt).toMatch(/chain:true/);          // 出路①：拆成几条串起来
-    expect(txt).toMatch(/open_sheet\{plan:/);   // 出路②：先规划版面
+    expect(txt).toMatch(/open_sheet\{plan\}/);   // 出路②：先规划版面
     // ⭐ 什么都没写 —— 拒收不能是"半写"
     expect(await countObjects()).toBe(before);
   });

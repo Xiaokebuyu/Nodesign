@@ -27,13 +27,21 @@ import {
 } from '../../../lib/board-sheets.js';
 import { setCurrentSheetId, currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { Events } from '../../agent/events.js';
-import { SHEET_PT } from './write-on-board-schema.js';
+
+/** 版位的 at：两轴各自可省 —— 省掉的轴由竖排糖补（below/接上一块）。
+ * ⛔ 不复用 write_on_board 的 SHEET_PT：它双轴必填，`at:{x:640}, below:"s1"`
+ * 这种半坐标会被 zod 整调用拒掉。 */
+const SLOT_AT = z.object({
+  x: z.number().min(0).max(12000).optional(),
+  y: z.number().min(0).max(12000).optional(),
+});
 
 /** 一块地（版位）。坐标/尺寸全是纸内局部像素 —— 跟 write_on_board 的 at 同一套
  *（export 给 edit_board 的 replan 用 —— 版位的合法性只有这一份定义） */
 export const SLOT = z.object({
   slot: z.string().regex(TAG_RE).describe('Name for this block, ASCII like main/aside/notes'),
-  at: SHEET_PT.describe('Top-left of this block, pixels from the sheet\'s writable corner'),
+  at: SLOT_AT.optional().describe("Top-left of this block, pixels from the sheet's writable corner. OMIT it to stack this block right below the previous one in the list (or below the block named in `below`) — carve a column of slots without doing any y arithmetic"),
+  below: z.string().regex(TAG_RE).optional().describe('Stack this block right under the named slot (24px gap). x follows that slot unless at.x says otherwise'),
   w: z.number().min(48).max(12000).describe('Width in PIXELS (a default note column is 432)'),
   h: z.number().min(24).max(12000).describe('Height in PIXELS (~26px per line of text)'),
   about: z.string().max(60).optional().describe('What goes here (正文 / 人物小传 / 待办) — for your own map'),
@@ -45,18 +53,29 @@ export const SLOT = z.object({
  * 版面规划钳制（2026-08-29 刀 E；2026-08-30 抽出来给 replan 共用）：
  * 开工先把这一屏切成几块地。坐标跟 at 同一套（纸内局部像素）。
  * 越出版心的钳回来 —— 钳过如实报（规划错了要当场知道）。
+ *
+ * 竖排糖（2026-08-30 用户拍板「agent 自己定几个空位分段填」）：省掉 at（或点名
+ * `below`）＝接在上一块正下方 24px。**y 累加这道算术归机器**，几个空位怎么切、
+ * 每段写什么归 agent —— 分段的语义权不外包，只有几何外包。
+ * `prevSlots` 是 replan 时该纸已有的版位（below 可以引用它们）。
  */
-export function clampPlan(plan, inner0) {
+export function clampPlan(plan, inner0, prevSlots = {}) {
   const slots = {};
   const clampedSlots = [];
+  let prev = null;                       // 数组序上一块（本批的）
+  const refOf = (name) => slots[name] || prevSlots[name] || null;
   for (const it of Array.isArray(plan) ? plan : []) {
     const w = Math.min(Math.round(it.w), inner0.w);
     const h = Math.min(Math.round(it.h), inner0.h);
-    const x = Math.min(Math.max(0, Math.round(it.at?.x ?? 0)), Math.max(0, inner0.w - w));
-    const y = Math.min(Math.max(0, Math.round(it.at?.y ?? 0)), Math.max(0, inner0.h - h));
-    if (x !== Math.round(it.at?.x ?? 0) || y !== Math.round(it.at?.y ?? 0)
+    const base = it.below ? refOf(it.below) : (it.at ? null : prev);
+    const wantX = it.at?.x ?? base?.x ?? 0;
+    const wantY = it.at?.y ?? (base ? base.y + base.h + 24 : 0);
+    const x = Math.min(Math.max(0, Math.round(wantX)), Math.max(0, inner0.w - w));
+    const y = Math.min(Math.max(0, Math.round(wantY)), Math.max(0, inner0.h - h));
+    if (x !== Math.round(wantX) || y !== Math.round(wantY)
       || w !== Math.round(it.w) || h !== Math.round(it.h)) clampedSlots.push(it.slot);
     slots[it.slot] = { x, y, w, h, ...(it.about ? { about: it.about } : {}), ...(it.for === 'artifacts' ? { for: 'artifacts' } : {}) };
+    prev = slots[it.slot];
   }
   return { slots, clampedSlots };
 }

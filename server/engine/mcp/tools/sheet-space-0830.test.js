@@ -145,3 +145,34 @@ describe('刀⑥ 拒收报文量纲', () => {
     expect(r.content[0].text).toMatch(/flow:true/);
   });
 });
+
+describe('空位竖排糖（2026-08-30 用户拍板「自己定几个空位分段填」）', () => {
+  it('⭐ plan 省掉 at → 依次竖排（y 累加归机器）；below 点名接在谁底下', async () => {
+    const t = await mk('proj_sp_stack');
+    setViewpoint('proj_sp_stack', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '分段', plan: [
+      { slot: 's1', w: 600, h: 340 },
+      { slot: 's2', w: 600, h: 280 },                    // 没 at：s1 正下方
+      { slot: 'aside', below: 's1', at: { x: 640 }, w: 360, h: 400 },  // 点名接 s1，x 自己给
+    ] });
+    const b = await readBoard('proj_sp_stack');
+    const sl = Object.values(b.sheets)[0].slots;
+    expect(sl.s1).toMatchObject({ x: 0, y: 0 });
+    expect(sl.s2).toMatchObject({ x: 0, y: 340 + 24 });
+    expect(sl.aside).toMatchObject({ x: 640, y: 340 + 24 });
+    // 分段填：三段各进各的空位，互不连坐
+    for (const s of ['s1', 's2']) {
+      const w = await t.write({ slot: s, tag: 'ch', chain: true, text: `${s} 的那一段。` });
+      expect(w.isError).toBeUndefined();
+    }
+  });
+
+  it('replan 的 below 能引用纸上已有的版位（写到一半补一块地）', async () => {
+    const t = await mk('proj_sp_stack2');
+    setViewpoint('proj_sp_stack2', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '补地', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 300 }] });
+    await t.edit({ ops: [{ op: 'replan', plan: [{ slot: 'more', below: 'main', w: 600, h: 240 }] }] });
+    const b = await readBoard('proj_sp_stack2');
+    expect(Object.values(b.sheets)[0].slots.more).toMatchObject({ x: 0, y: 324 });
+  });
+});

@@ -131,8 +131,8 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
             ? `；版位 ${cur.slots.map(s => `${s.name} 剩 ~${s.freeLines} 行`).join('、')}`
             : '；这张没规划版位';
           spot = `板上 ${ss.length} 张纸；当前 ${cur.id}${cur.title ? `（${cur.title}）` : ''} 还剩 ~${cur.freeH}px 高的空地${slots}`
-            + '（内容眼看要超余量就别赌一发 —— write_on_board 加 flow:true 由机器按段拆条；'
-            + '写满**不会**自动翻页，自己 open_sheet 规划下一页；新话题也是 open_sheet）';
+            + '（内容眼看要超余量就别赌一发 —— 自己多切几个空位分段填（plan/replan 省掉 at 即竖排接放），'
+            + '或兜底 flow:true；写满**不会**自动翻页，自己 open_sheet 规划下一页；新话题也是 open_sheet）';
         } else {
           spot = '板上还没铺过纸 —— 第一笔 write_on_board 会自动铺一张在他视口下，或先 open_sheet';
         }

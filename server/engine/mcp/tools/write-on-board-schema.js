@@ -83,7 +83,7 @@ export const WRITE_SCHEMA = {
   text: z.string().min(1).max(8000).optional()
     .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
   flow: z.boolean().optional()
-    .describe('Long text? Set true and the MACHINE splits it at paragraph breaks into a chain of card-sized notes, packing them into the slot/sheet as far as they fit — what does not fit is returned to you untouched (never squeezed, never silently dropped, never auto-turning the page). Use this instead of guessing whether your text fits.'),
+    .describe('Lazy FALLBACK for a ready-made long text: the machine splits it at paragraph breaks into a chain of card-sized notes, packs them as far as they fit, and returns the rest untouched (never squeezed, dropped, or auto-paged). PREFER carving slots yourself (open_sheet{plan}/replan, omit at to stack) and filling them one note each — you keep control of where each part breaks.'),
   h: z.number().min(24).max(2000).optional()
     .describe('Reserve this HEIGHT in pixels for the note box, placed before the text settles (plan the box, then fill it). Shorter content keeps the box; longer content overrides it. Ignored with flow.'),
   relation: z.enum(BINDING_TYPE_IDS).optional()

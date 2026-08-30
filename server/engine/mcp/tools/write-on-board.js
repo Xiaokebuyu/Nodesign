@@ -267,9 +267,9 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         const c = capacityOf(box.w, CARD_MAX_H);
         return err([
           `⛔ Too long for one card: this needs ${box.h}px, a card holds ${CARD_MAX_H}px (~${c.lines} lines / ~${c.cjk} CJK chars at ${box.w}px wide).`,
-          '   Nothing was written. EASIEST: retry the same call with flow:true — the machine splits it',
-          '   at paragraph breaks into a chain of card-sized notes. Or split it yourself (chain:true),',
-          '   or plan the page first — open_sheet{plan:[{slot,at,w,h,about}…]} — and write into slots.',
+          '   Nothing was written. Split it YOUR way: carve a few blocks (open_sheet{plan} / edit_board',
+          '   replan — omit at to stack them) and fill one note each, or chain:true a few short notes.',
+          '   Lazy fallback: flow:true lets the machine split at paragraph breaks.',
         ].join('\n'));
       }
       let placed;

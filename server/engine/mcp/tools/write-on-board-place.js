@@ -65,9 +65,9 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
           `⛔ Slot "${slotName}" on sheet ${sheet.id} cannot take this — short by ${short}px (~${Math.max(1, Math.ceil(short / 26))} line${short > 26 ? 's' : ''}).`,
           `   Free: ${spot.freeH}px (~${left.lines} lines / ~${left.cjk} CJK chars); this note needs ${spot.needH}px.`
             + `${spot.taken ? ` The ${rect.w}x${rect.h} slot (~${whole.cjk} CJK chars) already holds ${spot.taken} item(s).` : ''}`,
-          '   Nothing was written. EASIEST: retry with flow:true — the machine fills this slot as far',
-          '   as it goes and returns the rest to you. Or trim/split it yourself, put the rest in',
-          '   another slot, or re-plan the sheet (open_sheet{plan:[…]}) with a taller block.',
+          '   Nothing was written. Split it YOUR way: make this slot taller or carve fresh blocks',
+          '   (edit_board replan — omit at to stack them below an existing slot) and fill them one',
+          '   note each. Or trim it. Lazy fallback: flow:true lets the machine split at paragraph breaks.',
         ].join('\n'),
       };
     }
