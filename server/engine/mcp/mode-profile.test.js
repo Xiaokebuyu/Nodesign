@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { RP_HIDDEN_TOOLS, shouldRegisterForMode, assertModeProfileNames } from './mode-profile.js';
+import { RP_HIDDEN_TOOLS, shouldRegisterForMode, assertModeProfileNames, SKILL_MODES, filterSkillsForMode, assertSkillModeNames } from './mode-profile.js';
 import { createNodesignMcpServer } from './index.js';
 
 const mk = (mode) => createNodesignMcpServer({
@@ -58,5 +58,52 @@ describe('mode-profile —— 对账', () => {
   it('表里出现注册表没有的名字 → 当场炸并点名', () => {
     const names = mk('design').filter((n) => n !== 'build_docx');
     expect(() => assertModeProfileNames(names)).toThrow(/build_docx/);
+  });
+});
+
+// ── skill × 模式（2026-08-30）────────────────────────────────────────────
+// 判据跟工具那张表同源，但失效方式不同：工具筛错了模型会报「工具不存在」，
+// skill 筛错了**什么都不会发生** —— 描述少注一份没人看得见，多注一份也没人看得见。
+// 所以这一族断言要钉得比感觉更死一点。
+const ALL_SKILLS = Object.keys(SKILL_MODES);
+
+describe('mode-profile —— skill 按模式筛', () => {
+  it('设计会话拿不到演出侧的包（那是常驻描述的纯亏）', () => {
+    const got = filterSkillsForMode(ALL_SKILLS, 'design');
+    expect(got).not.toContain('story-voice');
+    expect(got).not.toContain('story-craft');
+    expect(got).not.toContain('story-intimacy');
+    expect(got).toContain('deskskill-engine-mini');
+  });
+
+  it('⭐ 演出会话拿不到设计三件 —— 它们的工具在 RP 下本来就没注册', () => {
+    const got = filterSkillsForMode(ALL_SKILLS, 'rp');
+    for (const n of ['deskskill-engine-mini', 'docx-craft', 'site-craft']) {
+      expect(got, `${n} 的工具在 RP 下已 unregister，描述不该还在`).not.toContain(n);
+    }
+    expect(got).toContain('story-voice');
+  });
+
+  it('both 的两个包两边都在（轻度演故事发生在设计项目里，酒馆卡也常丢进设计项目）', () => {
+    for (const mode of ['design', 'rp']) {
+      const got = filterSkillsForMode(ALL_SKILLS, mode);
+      expect(got, `${mode} 少了 blackboard-rp`).toContain('blackboard-rp');
+      expect(got, `${mode} 少了 story-import`).toContain('story-import');
+    }
+  });
+
+  it('⛔ 表里没有的名字一律放行 —— 用户自己装的 plugin 不归我们裁', () => {
+    const mine = ['story-voice', '用户装的-skill', 'someone-elses'];
+    expect(filterSkillsForMode(mine, 'design')).toEqual(['用户装的-skill', 'someone-elses']);
+    expect(filterSkillsForMode(mine, 'rp')).toEqual(mine);
+  });
+
+  it('未知模式落 design（跟工具那张表同口径）', () => {
+    expect(filterSkillsForMode(ALL_SKILLS, 'weird')).toEqual(filterSkillsForMode(ALL_SKILLS, 'design'));
+  });
+
+  it('对账：表里有没装上的 skill → 当场炸并点名', () => {
+    expect(() => assertSkillModeNames(ALL_SKILLS)).not.toThrow();
+    expect(() => assertSkillModeNames(ALL_SKILLS.filter(n => n !== 'story-voice'))).toThrow(/story-voice/);
   });
 });

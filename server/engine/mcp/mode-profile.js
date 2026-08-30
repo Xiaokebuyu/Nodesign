@@ -59,3 +59,64 @@ export function assertModeProfileNames(registeredNames) {
     );
   }
 }
+
+/**
+ * skill × 模式（2026-08-30）。跟上面那张表同一个语义，另一个载体。
+ *
+ * ## 为什么 skill 也要按模式筛
+ *
+ * `session-loop.js` 把 `installed.skills` 整个交给 SDK，而 SDK **只把 description
+ * 注进系统提示词**（body 才是按需加载，见 agent/skill.js 头注）。所以每装一个 skill，
+ * 它那几百字节的描述就在**每一个会话**里常驻 —— 不分模式。
+ *
+ * 实测（08-30）：RP 会话现在背着 deskskill-engine-mini(562B) / docx-craft(1123B) /
+ * site-craft(782B) 三份描述，合计 ~2.4KB，而这三个 skill 要用的工具
+ * （`build_docx` / `publish_site` / `preview_deck`）在 RP 模式下**根本没注册**
+ * ——上面那张 RP_HIDDEN_TOOLS 已经把它们摘掉了。工具没了描述还在，是纯亏。
+ * 反过来同理：演出侧的文风/技法包不该压在设计会话的常驻区里。
+ *
+ * ## 判据
+ *
+ * 表里没有的名字**一律放行** —— 用户自己装的 plugin（用户级 / 项目级）不归我们裁，
+ * 只管内置这几个。这条别改成白名单：那会让用户装的 skill 静默消失，
+ * 而「静默消失」是这条线上最难查的一类。
+ */
+export const SKILL_MODES = Object.freeze({
+  // 设计产线：工具在 RP 下已下架，描述跟着走
+  'deskskill-engine-mini': 'design',
+  'docx-craft': 'design',
+  'site-craft': 'design',
+  // 演出侧
+  'story-voice': 'rp',
+  'story-craft': 'rp',
+  'story-intimacy': 'rp',
+  // 两边都要：轻度演故事发生在设计项目里（prelude 设计区明写这条路），
+  // 而酒馆卡也常常被丢进设计项目
+  'blackboard-rp': 'both',
+  'story-import': 'both',
+});
+
+/** 按模式筛 skill 名单。表里没有的一律保留（用户装的不归我们裁）。 */
+export function filterSkillsForMode(names, mode) {
+  const want = mode === 'rp' ? 'rp' : 'design';
+  return (Array.isArray(names) ? names : []).filter((n) => {
+    const m = SKILL_MODES[n];
+    return !m || m === 'both' || m === want;
+  });
+}
+
+/**
+ * 启动期对账：表里每个名字必须真的装着。
+ * 跟 assertModeProfileNames 同样的狠法 —— skill 改名/下线后表没跟上就是静默空转。
+ * @param {string[]} installedNames 本次会话实际装上的 skill 名单
+ */
+export function assertSkillModeNames(installedNames) {
+  const have = new Set(installedNames || []);
+  const ghosts = Object.keys(SKILL_MODES).filter((n) => !have.has(n));
+  if (ghosts.length) {
+    throw new Error(
+      `[mode-profile] SKILL_MODES 里有没装上的 skill: ${ghosts.join(', ')} `
+      + '—— skill 改名或下线后对照表没跟上，这些条目在静默空转',
+    );
+  }
+}

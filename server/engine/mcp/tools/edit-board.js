@@ -29,6 +29,7 @@ import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { BINDING_TYPES, BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
+import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
 import { resolvePlacement, inflateSpriteSeats } from '../../../lib/board-place.js';
 import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
@@ -217,20 +218,12 @@ function makeHandler({ projectId, sharedRoot, ctx }) {
             if (!o.text) { fail('改板书给 text（字号/字体/颜色是画布原生节点的旋钮，板书没有）'); continue; }
             const abs = chalkAbsPath(projectId, id);
             if (!abs) { fail(`${id} 的文件路径解析不了`); continue; }
-            let parsed;
-            try { parsed = parseChalk(await fs.readFile(abs, 'utf8')); } catch { fail(`${id} 文件读不到（磁盘上已无此路径？）`); continue; }
-            const c = parsed.chalk || {};
-            await fs.writeFile(abs, renderChalk({
-              body: o.text, by: c.by || e.by || 'agent',
-              ...(c.at ? { at: c.at } : {}),
-              anchor: c.anchor, replyTo: c.replyTo, tag: c.tag, sessionId: parsed.sessionId,
-            }), 'utf8');
-            const box2 = textBox(o.text, 'md', { md: true, wUnits: Math.max(8, Math.round((e.w || 432) / UNIT)) });
-            // 宽照旧沿用现有的（改正文不该改版心）；高按新正文重算，但**用户亲手
-            // 拖出来的留白留得住**（sized:'user' 时取两者较大的）—— 他调的是
-            // 「这一块留多少空」，重写一次正文就把它抹掉是把他的排版意图当缓存。
-            const h2 = e.sized === 'user' ? Math.max(box2.h, Number(e.h) || 0) : box2.h;
-            setObj(id, { ...e, w: box2.w, h: h2 }); ok += 1;
+            // 落盘 + 量高收成一份（lib/chalk-rewrite.js，2026-08-30）：set_vars 做的是
+            // 同一件事，抄第二份必然漏掉「用户拖出来的留白留得住」那条 —— 三条语义里
+            // 只有它漏了不报错，只是用户的排版悄悄没了。
+            let box2;
+            try { box2 = await rewriteChalkBody(abs, o.text, e); } catch { fail(`${id} 文件读不到（磁盘上已无此路径？）`); continue; }
+            setObj(id, { ...e, w: box2.w, h: box2.h }); ok += 1;
             report.push(`· #${i + 1} set_text 重写了板书 ${id} 的正文（线/标注/座位全保留）`);
             continue;
           }

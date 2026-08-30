@@ -29,6 +29,8 @@ import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
 import { resolvePlacement, inferFlowDir } from '../../../lib/board-place.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
+import { readStateVars } from '../../../lib/state-table.js';
+import { parseTriggers, evalTriggers, readLatch, writeLatch } from '../../../lib/state-triggers.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
 import { stageStatus } from '../stage-status.js';
@@ -209,6 +211,63 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       sections.push({ key: 'chalk', title: '最近板书', text: `画布上最近的板书（${CHALK_DIR}/，新在前；正文 Read 文件）：\n${lines.join('\n')}`, items: recent.map(c => c.path) });
     }
   } catch { /* 板书读不到就沉默 */ }
+
+  // 状态表（2026-08-30）：板上那张 `| 键 | 值 |` 的现值，每轮开头端到手边 ——
+  // 演出里"会变、要记得"的东西（好感度/时间/线索）不该靠模型自己在上下文里背。
+  //
+  // ⚠️ 这一节**不给 items**，走整节 hash 比对（renderTurnState 的默认分支）。
+  // 给了 items 会被 diffItems 渲染成「新增 好感度=4；移除 好感度=3」—— 信息对、
+  // 话是错的（那个渲染器被 9 个节共用，为一张小表去改它不值）。而且对读者来说，
+  // 变了的时候看到**整表现值**比看到增量有用：它按现值行事，不按 delta 行事。
+  //
+  // ⛔ 「解析不出来」必须出声。collectSections 的房规是"采不到就不出现"，对普通节
+  // 是对的，对这一节就是坑：表被 set_text / 用户手改写坏之后会静默消失，而写口闸
+  // 只守得住 set_vars 那一路（另外两路是合法的写入方）。所以 broken 一律推一节。
+  try {
+    const st = await readStateVars(workspaceRoot);
+    if (st.state === 'ok' && st.rows.length) {
+      const table = st.rows.map(r => `  ${r.key} = ${r.value}`).join('\n');
+      const parts = [];
+
+      // 条件触发器（2026-08-30）：求值点 = 注入点。只在这里求一次，命中就写进
+      // 这一轮的状态块 —— 不在 set_vars 里求值攒到下一轮，那样中间一次进程重启
+      // 就静默吞掉一次触发。沿状态落 .nd/（派生记账，丢了只是"上膛不击发"）。
+      let trig = null;
+      try {
+        const parsed = parseTriggers(st.body || '');
+        if (parsed.triggers.length || parsed.errors.length) {
+          const { latch, fresh } = await readLatch(workspaceRoot);
+          trig = evalTriggers(parsed.triggers, st.rows, latch, { fresh });
+          try { await writeLatch(workspaceRoot, trig.latch); } catch (e) {
+            console.warn('[vars] 沿状态写不进去，下一轮可能重复触发：', e.message);
+          }
+          if (trig.fired.length) {
+            parts.push(`⚡ 这一拍有 ${trig.fired.length} 个条件命中了（你之前挂的）：\n`
+              + trig.fired.map(f => `  · ${f.message}\n    （条件：${f.raw}）`).join('\n'));
+          }
+          const roster = [];
+          if (trig.armed) roster.push(`${trig.armed} 条挂着`);
+          if (trig.retired) roster.push(`${trig.retired} 条已退休`);
+          if (roster.length) parts.push(`  触发器：${roster.join('、')}（声明在 ${st.rel} 的 \`\`\`nd:triggers 围栏里，删一行就是撤一条）`);
+          for (const e of [...parsed.errors, ...trig.errors]) {
+            parts.push(`  ⚠️ 触发器写错了，这条一直不会响：${e}`);
+          }
+        }
+      } catch (e) { console.warn('[vars] 触发器求值失败：', e.message); }
+
+      parts.push(`状态表现值（${st.rel}，共 ${st.rows.length} 格）：\n${table}\n`
+        + `  改数字用 set_vars（只动那一格）；改表的结构/加说明文字才用 edit_board 的 set_text。`);
+      sections.push({ key: 'vars', title: '状态表', text: parts.join('\n') });
+    } else if (st.state === 'broken') {
+      sections.push({
+        key: 'vars',
+        title: '状态表',
+        text: `⚠️ 状态表读不出来了：${st.why}\n`
+          + `  在修好之前 set_vars 会一直拒绝（它不会"尽力写"，那只会把表写得更坏）。`
+          + `${st.rel ? ` Read 一下 ${st.rel} 看看表被改成什么样了。` : ''}`,
+      });
+    }
+  } catch { /* 状态表这一节自己不能变成故障源 */ }
 
   // 台上（2026-08-29）：角色现在的状态。判据全是 harness 盖的章（SubagentStart/Stop，
   // 见 stage-status.js）—— 此前主持人对这件事是半盲的：只在角色**结束**时收到一条
