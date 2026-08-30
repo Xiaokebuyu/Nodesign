@@ -17,13 +17,12 @@
  * 被 WHATWG 归一、连线浮层 Enter 焦点被 chip 抢走。配方沉淀：拿不准请求
  * 从哪儿发的，配 CDP Network.requestWillBeSent 的 initiator 栈（见 memory）。
  */
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const { chromium, devices } = createRequire(import.meta.url)(path.join(ROOT, 'node_modules/playwright/index.js'));
+// 起浏览器的参数和"会变的东西钉死"那套住在 probe-common.mjs，一份 —— 08-30 之前
+// 这里自己 launch，少了 WebGL 那三个参数、也没钉 locale，于是同一轮截图有的
+// 中文有的英文、画布那层拍不到。见那个文件的头。
+import { ROOT, chromium, devices, LAUNCH_ARGS, pixelStats } from './probe-common.mjs';
 
 const args = process.argv.slice(2);
 const route = args.find((a) => a.startsWith('/')) || '/';
@@ -94,10 +93,15 @@ if (!token) {
   if (!token) { console.error(`登录失败 (${res.status})`); process.exit(1); }
 }
 
-const browser = await chromium.launch({ args: ['--no-sandbox'] });
+const browser = await chromium.launch({ args: LAUNCH_ARGS });
 const ctx = await browser.newContext(ctxOpts);
 await ctx.addCookies([{ name: 'nd_auth', value: token, url: BASE }]);
 const page = await ctx.newPage();
+// ⭐ 界面语言钉死：playwright 默认 en-US，站点跟着走 —— 不钉的话同一轮里
+// 有的图中文有的图英文，拿去比对直接作废（08-30 踩过）。
+await page.addInitScript((loc) => {
+  try { localStorage.setItem('nd:locale', loc); } catch { /* 隐私模式 */ }
+}, opt('locale', 'zh-CN'));
 const errors = [];
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message.slice(0, 200)}`));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(`console.error: ${m.text().slice(0, 300)}`); });
@@ -116,5 +120,11 @@ const emul = await page.evaluate(() => ({
   hover: window.matchMedia('(hover: hover)').matches,
   touchPoints: navigator.maxTouchPoints,
 })).catch(() => null);
-console.log(JSON.stringify({ out: OUT, device: DEV || 'desktop', emul, errors, probe }, null, 2));
+// ⭐ 连数字一起给：亮度/对比的判断不许只靠看预览 —— 预览通道会归一化，
+// 整张图变暗时它看起来跟没变一样（夜晚模式那次连着误判了四五张）。
+const px = await pixelStats(readFileSync(OUT)).catch(() => null);
+console.log(JSON.stringify({
+  out: OUT, device: DEV || 'desktop', emul, errors, probe,
+  pixels: px && { mean: px.mean.map((v) => +v.toFixed(1)), stdev: +px.stdev[0].toFixed(1), min: px.min, max: px.max },
+}, null, 2));
 await browser.close();
