@@ -181,6 +181,36 @@ export function shapePath(kind, { w = 0, h = 0, to = null, d = null } = {}, seed
   return null;
 }
 
+
+/**
+ * 自由 path 的手绘化（2026-08-30 画图探针案）：别的图元都过 wobblySeg，唯独
+ * path 原文直通 —— 同一幅画里一半抖一半死直，风格劈叉。这里把 **L 段**换成
+ * 微抖折线（M/Q/C 原样保留：曲线本身已经"活"，再抖是画蛇添足；Z 换成抖回
+ * 起点的显式线段，SVG 的 Z 是死直线）。端点一个不动 —— agent 的几何意图神圣。
+ *
+ * @param {string} dIn  已换算成像素的绝对坐标 path（大写 M/L/Q/C/Z）
+ */
+export function roughFreePath(dIn, seed = 'freepath') {
+  const rand = rng(hashSeed(seed));
+  const tokens = String(dIn).match(/[MLQCZ]|-?\d*\.?\d+(?:[eE][-+]?\d+)?/g) || [];
+  let out = ''; let i = 0;
+  let cur = null; let start = null;
+  const num = () => Number(tokens[i++]);
+  while (i < tokens.length) {
+    const t = tokens[i++];
+    if (t === 'M') { cur = { x: num(), y: num() }; start = { ...cur }; out += `M ${f1(cur.x)} ${f1(cur.y)}`; continue; }
+    if (t === 'L') {
+      const p = { x: num(), y: num() };
+      out += cur ? wobblySeg(rand, cur, p) : ` L ${f1(p.x)} ${f1(p.y)}`;
+      cur = p; continue;
+    }
+    if (t === 'Q') { const c = { x: num(), y: num() }; const p = { x: num(), y: num() }; out += ` Q ${f1(c.x)} ${f1(c.y)} ${f1(p.x)} ${f1(p.y)}`; cur = p; continue; }
+    if (t === 'C') { const a = { x: num(), y: num() }; const b = { x: num(), y: num() }; const p = { x: num(), y: num() }; out += ` C ${f1(a.x)} ${f1(a.y)} ${f1(b.x)} ${f1(b.y)} ${f1(p.x)} ${f1(p.y)}`; cur = p; continue; }
+    if (t === 'Z') { if (cur && start) { out += wobblySeg(rand, cur, start); cur = { ...start }; } continue; }
+  }
+  return out.trim();
+}
+
 /**
  * 模板排布。nodes: [{ key, w, h, at?: {x,y}(网格) }] → Map key → {x,y}（局部像素）
  * - free：有 at 的按网格落，没 at 的排在 free 区域下面一列

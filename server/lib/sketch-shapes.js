@@ -9,7 +9,7 @@
  * 自己包成工具错误 —— 这层不该知道 MCP 的返回形状）。
  */
 
-import { UNIT, shapePath } from './sketch-layout.js';
+import { UNIT, shapePath, roughFreePath } from './sketch-layout.js';
 
 /** 板书墨色表（zod 不硬拒，认不出落 ink —— 风格不用 -32602 管） */
 export const SKETCH_COLORS = ['ink', 'red', 'pencil', 'brass'];
@@ -35,12 +35,26 @@ export function buildSketchShapes(shapesIn, { rectOfNode, isTaken, tag }) {
     const width = s.width || 2;
     let rect; let d;
     if (s.kind === 'path') {
-      if (!s.d || !/^[\dMLQCZ ,.\-eE]+$/.test(s.d)) return { error: `形状 ${sid}：path 只收 M/L/Q/Z 与数字` };
+      // 单位单义（2026-08-30 画图探针案）：d 的坐标与 at/w/h **同一套格**（1 格 =
+      // 24px，小数随意）。此前 schema 写着"d 是像素"而 at 是格 —— 同一个形状两套
+      // 单位，真会话里整幅画的 path 墨迹只有别的图元 1/24 大，agent 误诊成
+      // 「path 不渲染」，从此只敢用 rect/circle 拼图，曲线全灭。
+      if (!s.d || !/^[\dMLQCZ ,.\-eE]+$/.test(s.d)) return { error: `形状 ${sid}：path 只收大写 M/L/Q/C/Z 与数字（绝对坐标，单位=格）` };
       const nums = s.d.match(/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g)?.map(Number) || [];
+      if (!nums.length) return { error: `形状 ${sid}：path 里没有坐标` };
       const xs = nums.filter((_, k) => k % 2 === 0); const ys = nums.filter((_, k) => k % 2 === 1);
-      const w = Math.max(4, Math.max(...xs) - Math.min(0, Math.min(...xs))); const h = Math.max(4, Math.max(...ys) - Math.min(0, Math.min(...ys)));
-      rect = { x: (s.at?.x || 0) * UNIT, y: (s.at?.y || 0) * UNIT, w: w + 6, h: h + 6 };
-      d = s.d;
+      const P = 6;
+      const minX = Math.min(...xs) * UNIT; const minY = Math.min(...ys) * UNIT;
+      const w = Math.max(4, (Math.max(...xs) - Math.min(...xs)) * UNIT);
+      const h = Math.max(4, (Math.max(...ys) - Math.min(...ys)) * UNIT);
+      // ×UNIT 并平移到墨迹包围盒（pad 6）—— rect 跟墨走，选中框不再套住一片空气
+      let k = 0;
+      const local = s.d.replace(/-?\d*\.?\d+(?:[eE][-+]?\d+)?/g, (n) => {
+        const v = Number(n) * UNIT - ((k++ % 2 === 0) ? minX : minY) + P;
+        return String(Math.round(v * 10) / 10);
+      });
+      rect = { x: (s.at?.x || 0) * UNIT + minX - P, y: (s.at?.y || 0) * UNIT + minY - P, w: w + P * 2, h: h + P * 2 };
+      d = roughFreePath(local, seed);
     } else if (s.kind === 'line' || s.kind === 'arrow' || s.kind === 'underline') {
       let a; let b;
       if (s.kind === 'underline' && s.around) {

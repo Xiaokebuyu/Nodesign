@@ -47,7 +47,7 @@ export const SHAPES = z.array(z.object({
   h: z.number().min(0).max(200).optional(),
   to: GRID_PT.optional(),
   toNode: LOCAL_ID.optional(),
-  d: z.string().max(8000).optional().describe('path kind: SVG M/L/Q/Z in local px'),
+  d: z.string().max(8000).optional().describe('path kind: SVG path, UPPERCASE absolute M/L/Q/C/Z only. Coordinates are in the SAME GRID UNITS as at/w/h (1 unit = 24px; decimals fine) — one coordinate space for the whole sketch. Hand-drawn wobble is applied for you; Q/C curves are how you draw anything smooth (a crescent moon, a wave, a sail)'),
   color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
   width: z.number().min(1).max(12).optional(),
 })).max(MAX_SHAPES);

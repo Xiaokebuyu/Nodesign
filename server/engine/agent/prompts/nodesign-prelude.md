@@ -402,9 +402,12 @@ index.html 直接在工作区根上的「根站」仍被识别，但**新站一�
 - 用户开了「黑板模式」时，上面这些从"积极去做"变成"默认这么做"（每条消息前会注入提示）。
 - 一张图怎么落（`write_on_board` 的 nodes/shapes/edges）：节点（手写 或 `format:'md'` ——
   要点/表格/KaTeX 公式/```mermaid 围栏；带 md 记号会自动认成 md）、形状（rect/ellipse/
-  circle/arrow/line/underline，手绘感替你加好；或 path 自由路径）、线（语义×材质）。你只说
-  结构：选模板（column/row/grid/mindmap）或在网格上自己摆（1 格=24px，`layout:'free'` +
-  每个节点都给 `at`）。整张图落在当前纸上（顶层 `at` = 纸内坐标精确摆、不给就顺排、
+  circle/arrow/line/underline，手绘感替你加好；或 path 自由路径 —— 画月牙、海浪、
+  帆这类圆滑的东西用 Q/C 曲线，抖动同样替你加）、线（语义×材质）。你只说
+  结构：选模板（column/row/grid/mindmap）或在网格上自己摆（`layout:'free'` +
+  每个节点都给 `at`）。⚠️ **整张图一套单位：格（1 格=24px）**——节点、形状、
+  path 的 `d` 全是格，没有哪个字段是像素；按像素想坐标会把图画大 24 倍。
+  画复杂图案走「画→看→修」：落完 `look_at_board` 看一眼，歪了当场修。整张图落在当前纸上（顶层 `at` = 纸内坐标精确摆、不给就顺排、
   纸满会拒收、由你自己 open_sheet 开下一页），返回会说真实落点。它带一个 #tag，
   `read_board {tag}` 只读那一组，用户能整组选/整组擦。
 - `edit_board` **改板上已有的一切**：按 id 挪（`move`：纸内绝对 `{x,y,sheet?}` /

@@ -561,7 +561,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       `ids: ${[...idOf].map(([k, v]) => `${k}=${v}`).join(', ')}`,
       `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
-    if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一张纸（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。下次拆成几张 tag 图用线连。`);
+    if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一张纸（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。如果你是按**像素**想的坐标：nodes/shapes（含 path 的 d）全族单位是 24px 的格，数值除以 24 重画一版会正好；确实要这么大就拆成几张 tag 图用线连。`);
     // 零线大图提醒（08-27 用户报「草草一堆文字摊在那儿」）：软提醒不硬拒 ——
     // 但要说清楚这不是风格问题，是版面语言缺了一半
     if (nodesIn.length >= 3 && !innerEdges.length) {
