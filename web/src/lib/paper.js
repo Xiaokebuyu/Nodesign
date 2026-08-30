@@ -15,8 +15,40 @@
 import { FONT_KAI, alpha } from './theme.js';
 import { currentSkin, seasonOf } from './season.js';
 
-/** 纸面颗粒：140px 一格的 fractalNoise，压得很淡，只是让纯色不那么塑料 */
-export const GRAIN = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.13 0 0 0 0 0.06 0 0 0 0.1 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")`;
+/**
+ * 纸面颗粒 —— 纸的**齿**（2026-08-30 加重）。
+ *
+ * 原来是一层很淡的深色噪点（140px 一格，alpha 0.1），作用只是「让纯色不那么塑料」。
+ * 现在要的是能看出手感的纸，所以改成两层：
+ *
+ *   深的一层 = 纤维之间的凹处（压暗）
+ *   浅的一层 = 纤维顶上的受光面（提亮）
+ *
+ * ⭐ **只加深色不叫加颗粒，那叫把纸弄脏。** 真纸在侧光下之所以有质感，是因为
+ * 同一片面积里既有比底色暗的也有比底色亮的；只压暗的话加到哪一档都只是变灰。
+ *
+ * fractalNoise 的输出是围绕 0.5 的钟形分布，直接乘 alpha 会糊成一片均匀的雾，
+ * 所以深的那层先过一道 feComponentTransfer 把对比拉开（slope 1.8）——
+ * 这一步才是「看得见颗粒」和「看着发灰」的分界。
+ *
+ * ⚠️ stitchTiles='stitch'：颗粒加重之后接缝就看得见了，淡的时候不用管。
+ * 格子也从 140 放到 180，同样是为了让重复周期别被认出来。
+ */
+const grainSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'>\
+<filter id='d'>\
+<feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' seed='2' stitchTiles='stitch'/>\
+<feComponentTransfer><feFuncA type='linear' slope='1.8' intercept='-0.42'/></feComponentTransfer>\
+<feColorMatrix values='0 0 0 0 0.17 0 0 0 0 0.13 0 0 0 0 0.06 0 0 0 0.28 0'/>\
+</filter>\
+<filter id='l'>\
+<feTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='2' seed='9' stitchTiles='stitch'/>\
+<feColorMatrix values='0 0 0 0 1 0 0 0 0 0.99 0 0 0 0 0.93 0 0 0 0.26 0'/>\
+</filter>\
+<rect width='180' height='180' filter='url(#d)'/>\
+<rect width='180' height='180' filter='url(#l)'/>\
+</svg>`;
+
+export const GRAIN = `url("data:image/svg+xml,${encodeURIComponent(grainSvg).replace(/'/g, '%27')}")`;
 
 /**
  * 纸物料的实色。写 inline style 的组件（弹窗那一族）从这里取；
