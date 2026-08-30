@@ -11,8 +11,9 @@
  * edit_board move 写 seat:'agent'、用户拖拽写 seat:'user' —— 任何一只手一挪，
  * seat 被改写，它就自然不在架上了（单一真相 = 座位出处字段本身）。
  *
- * 架的原点存 board.shelf {x,y}，立了就不挪；唯一的例外是被后来铺的纸压住
- * （agent 有权把纸开在任何地方），这时搬去纸群左侧重立。
+ * 架的原点存 board.shelf {x,y}，立了就不挪；唯一的例外是**架带跟后来铺的纸
+ * 横向撞上**（agent 有权把纸开在任何地方），这时搬去纸群左侧重立 —— 判据是
+ * 整条竖带不是原点那一个点，见 bandHitsSheet。
  */
 
 export const SHELF_W = 360;
@@ -21,10 +22,22 @@ export const SHELF_GAP = 24;
 // zones 存档只有坐标，尺寸恒为前端那份；这里只用来算架上的避让）
 export const FOLDER_BOX = { w: 288, h: 240 };
 
-const inSheet = (s, x, y) => x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h;
+/**
+ * 架带跟这张纸撞不撞。**架不是原点那一个点，是从原点往下的一条竖带**
+ * （宽 SHELF_W，向下不封口）。
+ *
+ * 原来这儿测的是「原点这个点落没落进纸里」，于是架立在纸群**正上方**时
+ * 永远判不出冲突，然后顺着这条带一路往下长穿每一张纸。真案 proj_mtg61or1：
+ * 架原点 (24,24) 在 p1 上方 1464px，四张纸一张都没"压住"它，但架带 x[24,384)
+ * 跟四张纸的横向重叠率是 100% —— agent 写的板书全从 x=24 起排，42 个根层
+ * 对象里 38 个压在架带上，架被自己码的货一路顶到 y=8322（板子才高 2600）；
+ * 反过来铺新纸又要躲开架上的散件，纸也被顶着往下走（p3 底 3805 → p4 顶 4621）。
+ * 两边互相顶，板子只会单向长高。
+ */
+const bandHitsSheet = (s, x, y) => s.x < x + SHELF_W && s.x + s.w > x && s.y + s.h > y;
 
 /**
- * 架的原点。已立的沿用（除非被纸压住）；没立过的：有纸靠纸群左上侧，
+ * 架的原点。已立的沿用（除非架带跟纸撞上）；没立过的：有纸靠纸群左上侧，
  * 没纸落在用户视口左上（到货要让用户看得见）。
  * @param {object} board
  * @param {{x,y,w,h}|null} viewport 用户相机（根层才传）
@@ -34,7 +47,7 @@ export function resolveShelfOrigin(board, viewport = null) {
   const sheets = Object.values(board.sheets || {})
     .filter(s => Number.isFinite(s?.x) && Number.isFinite(s?.y) && Number.isFinite(s?.w) && Number.isFinite(s?.h));
   const cur = board.shelf;
-  if (cur && Number.isFinite(cur.x) && Number.isFinite(cur.y) && !sheets.some(s => inSheet(s, cur.x, cur.y))) {
+  if (cur && Number.isFinite(cur.x) && Number.isFinite(cur.y) && !sheets.some(s => bandHitsSheet(s, cur.x, cur.y))) {
     return { x: cur.x, y: cur.y, changed: false };
   }
   if (sheets.length) {

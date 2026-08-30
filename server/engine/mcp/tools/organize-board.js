@@ -9,8 +9,8 @@
  * 实现 = **和用户拖拽「移动到…」同一份核心**（projects/move-entry.js）：
  * 磁盘先行、画布身份同步、转发表记账，一个字不重写。
  *
- * 批量制（同 roll_film / paint_still）：≤16 件、串行、**中途失败即停**
- * （后面的不动，报告哪件停的）。目标夹不存在就建 —— 归纳常配新夹。
+ * 批量制（同 roll_film / paint_still）：≤16 件、串行。**重名跳过、其余即停**
+ * （停了就报哪件停的，后面的不动）。目标夹不存在就建 —— 归纳常配新夹。
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
@@ -33,7 +33,7 @@ at the moved items) are rewritten to the new paths automatically — the count o
 rewritten spots is reported per file so you can verify. Pass rewrite_refs:false
 to move only.
 
-Batch: up to 16 items, moved in order, stops at first failure.`,
+Batch: up to 16 items, moved in order. A name clash at the destination is skipped (that one is likely already filed) and the rest still move; any other failure stops the batch.`,
     {
       items: z.array(z.string().min(1)).min(1).max(16)
         .describe('Workspace-relative paths to move (files or folders), e.g. ["assets/generated/a.png", "旧稿.html"]'),
@@ -45,7 +45,7 @@ Batch: up to 16 items, moved in order, stops at first failure.`,
     async ({ items, into, rewrite_refs: rewriteRefs }) => {
       const lines = [];
       const moves = [];
-      let moved = 0;
+      let moved = 0; let skipped = 0;
       for (const item of items) {
         try {
           const out = await moveEntry(projectId, item, into, { createFolder: true });
@@ -61,8 +61,22 @@ Batch: up to 16 items, moved in order, stops at first failure.`,
           }
         } catch (err) {
           const why = err instanceof MoveError ? err.message : (err?.message || String(err));
+          /**
+           * 重名（MoveError 409）**不中断整批**：目标夹里已经有个同名的，说明这件
+           * 大概率已经收过一遍了，它挡不住后面十几件。其余错误照旧即停。
+           *
+           * 真案 proj_mtg61or1 19:37，用户说"把素材都收到一块，别四处丢"，agent
+           * 一次收 12 件，第 1 件重名 → 后面 11 件全没动，暂存架自始至终没清过。
+           * 收纳这个动词本来就不是事务性的（前面搬成的不会回滚），中途停下只是
+           * 让人分不清搬到哪儿了。
+           */
+          if (err instanceof MoveError && err.status === 409) {
+            skipped += 1;
+            lines.push(`· ${item}：${why}（跳过，接着搬后面的）`);
+            continue;
+          }
           lines.push(`✗ ${item}：${why}`);
-          lines.push(`（后面 ${items.length - moved - 1} 件没动 —— 修正后重调）`);
+          lines.push(`（后面 ${items.length - moved - skipped - 1} 件没动 —— 修正后重调）`);
           break;
         }
       }

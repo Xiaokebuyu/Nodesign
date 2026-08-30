@@ -34,7 +34,14 @@ describe('whichBinary', () => {
 });
 
 describe('capability-gate（子进程真起工具表）', () => {
-  it('缺钥匙的 web_search：描述前缀 ⛔ + 调用期 isError；有钥匙：原样；build_docx 缺 LibreOffice 只加说明不拦', () => {
+  /**
+   * ⏱ 30s（2026-08-30 从默认 5s 抬上来）：这一条要**起一个子进程**、在里面 import
+   * 整张 MCP 工具表、再 probe 外部二进制（soffice 之类）。单跑 1.4s，跑全套时实测
+   * 7.6s / 10.3s —— 5s 的闸量的是这台机器此刻的负载，不是这条断言本身。
+   * 加一个新测试文件（几个 git init 的临时工作区）就能把它顶红，红了还查不出所以然。
+   * 30s 留够余量，真卡死照样会失败。
+   */
+  it('缺钥匙的 web_search：描述前缀 ⛔ + 调用期 isError；有钥匙：原样；build_docx 缺 LibreOffice 只加说明不拦', { timeout: 30_000 }, () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'nd-gate-'));
     const code = `
       import { probeCapabilities, capabilityState } from './capabilities.js';

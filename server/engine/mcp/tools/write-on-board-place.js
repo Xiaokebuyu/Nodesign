@@ -112,10 +112,26 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
       const p = placeBeside(anchorRect, box, side, UNIT);
       return done(p, `beside-${side}`, sheetOf(p));
     }
-    // 线程：正下方，纸满翻页
+    // 线程：正下方；接不下去就在同一张纸上顺排（真满了才翻页）
     if (replyRect) {
       const p = placeThread(bWith(), replyRect, box, { obstacles });
       if (!p.sheetFull) return done(p, 'thread', p.sheetId);
+      /**
+       * ⚠️ placeThread 只认**正下方一个方向**，被挡住就往那件底下跳，一跳出纸底
+       * 就报 sheetFull —— 但这只说明"这条线接不下去"，不说明"这张纸满了"。
+       *
+       * 真案 proj_mtg61or1 19:13：p1 上母板书正下方杵着 960x628 的试作站点卡，
+       * 接楼跳过它就出了版心底（2437），于是报了
+       * 「⛔ Sheet p1 is full (all columns used) — nothing was written」。
+       * 同一张纸同一刻，nextSpotInSheet 返回 (1392,1512) —— 第 4 栏整栏空着。
+       * agent 信了这句话去 open_sheet，一场会话开出四张纸；每开一张，暂存架和
+       * 纸互相顶的那个棘轮就再转一格（见 lib/board-shelf.js bandHitsSheet）。
+       *
+       * 所以先在同一张纸上顺排。回复关系靠 reply_to 落的那条边保着，本来就
+       * 不依赖几何相邻 —— 挪一栏丢的只是"紧贴在下面"这个视觉暗示。
+       */
+      const flow = nextSpotInSheet(bWith(), p.sheetFull, box);
+      if (flow) return done(flow, 'thread-flow', p.sheetFull);
       return { sheetFull: p.sheetFull };
     }
     // 定点 / 顺排：都要有一张纸

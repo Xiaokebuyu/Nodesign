@@ -28,6 +28,39 @@ describe('resolveShelfOrigin', () => {
     expect(o.changed).toBe(true);
     expect(o.x).toBe(-SHELF_W - SHELF_GAP);
   });
+
+  it('⭐⭐ 原点在纸群**正上方**（点没被压住，但架带横穿每张纸）→ 照样要搬', () => {
+    // proj_mtg61or1 真形状：架立在 (24,24)，第一张纸在 1464px 之下。
+    // 判据只测原点那一个点的话，四张纸一张都"压不住"它 —— 而架带 x[24,384)
+    // 跟四张纸的横向重叠率是 100%，于是架顺着这条带一路往下长穿了整块板
+    // （码到 y=8322，板子声明高度才 2600）。
+    const b = {
+      shelf: { x: 24, y: 24 },
+      sheets: {
+        p1: { x: 0, y: 1488, w: 2048, h: 973 },
+        p2: { x: 0, y: 2509, w: 2048, h: 360 },
+        p3: { x: 0, y: 2917, w: 2048, h: 888 },
+        p4: { x: 0, y: 4621, w: 2048, h: 973 },
+      },
+    };
+    const o = resolveShelfOrigin(b, null);
+    expect(o.changed, '架带横穿四张纸，必须搬').toBe(true);
+    expect(o.x).toBe(-SHELF_W - SHELF_GAP);
+    // 搬完之后架带跟纸再无横向重叠 —— 而且这个新原点要稳定，下一轮不能再搬
+    expect(o.x + SHELF_W).toBeLessThanOrEqual(0);
+    const again = resolveShelfOrigin({ ...b, shelf: { x: o.x, y: o.y } }, null);
+    expect(again, '搬到位之后就该沿用，不能来回跳').toEqual({ x: o.x, y: o.y, changed: false });
+  });
+
+  it('架在纸**上方**但横向错开 → 不用搬（判的是带不是点）', () => {
+    const b = { shelf: { x: -900, y: 0 }, sheets: { p1: { x: 0, y: 500, w: 1600, h: 900 } } };
+    expect(resolveShelfOrigin(b, null)).toEqual({ x: -900, y: 0, changed: false });
+  });
+
+  it('架在纸**下方**、横向重叠 → 不用搬（纸不在它往下长的路上）', () => {
+    const b = { shelf: { x: 24, y: 2000 }, sheets: { p1: { x: 0, y: 0, w: 1600, h: 900 } } };
+    expect(resolveShelfOrigin(b, null)).toEqual({ x: 24, y: 2000, changed: false });
+  });
 });
 
 describe('nextShelfSpot', () => {

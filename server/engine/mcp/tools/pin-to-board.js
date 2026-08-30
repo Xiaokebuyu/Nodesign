@@ -157,14 +157,31 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
             const p = placeAtOnSheet(sh, at, box);
             spot = p; where = p.clamped ? ' (clamped into the sheet)' : '';
           }
+          /**
+           * ⛔ 摆到纸上 = 摆到**根层**，zone 必须写 ''（不是文件所在的文件夹层）。
+           *
+           * spot 是 nextSpotInSlot 在根层纸矩形里算出来的**世界坐标**；zone 写成
+           * 文件夹层的话，这两个字段当场互相矛盾：前端 dirOf 按 zone 把它渲染进
+           * 那个文件夹里（世界坐标在那儿是没意义的局部坐标），根层画布上根本
+           * 看不见它 —— 而工具还报了「Placed on sheet p3 in slot refs at (24,2941)」。
+           *
+           * 更实的后果：rootObjects 只收根层，membersInRect 跟着看不见它，于是
+           * **下一件 pin 进同一个版位的东西算出来还是同一个坐标**。真案
+           * proj_mtg61or1 19:18 连 pin 五张官方参考图，后四张全落 (24,3405)，
+           * 工具四次都报 success。对照组（同样五张放根层）落点正常且装不下时
+           * 如实报「版位满」。
+           *
+           * 把文件夹里的文件 pin 到纸上，语义就是把它拎到桌面上摆着 —— 跟用户
+           * 从文件夹里拖一张卡出来是同一件事（前端注释：拖出来的写 ''）。
+           */
           const prev = boardNow.objects?.[objectId] || {};
           const nextPending = (boardNow.pending || []).filter(r => r !== objectId && `deck:${r}` !== objectId && `site:${r}` !== objectId);
           await patchBoard(projectId, {
-            objects: { [objectId]: { ...prev, x: Math.round(spot.x), y: Math.round(spot.y), w: Math.round(box.w), h: Math.round(box.h), zone: zoneId, seat: 'agent' } },
+            objects: { [objectId]: { ...prev, x: Math.round(spot.x), y: Math.round(spot.y), w: Math.round(box.w), h: Math.round(box.h), zone: '', seat: 'agent' } },
             ...(nextPending.length !== (boardNow.pending || []).length ? { pending: nextPending } : {}),
           });
           try {
-            ctx?.emit?.({ type: 'board.updated', sessionId: null, objectId, zoneId, summary: `已把 ${objectId} 摆到 ${sh.id}${where}` });
+            ctx?.emit?.({ type: 'board.updated', sessionId: null, objectId, zoneId: '', summary: `已把 ${objectId} 摆到 ${sh.id}${where}` });
           } catch { /* emit fail-safe */ }
           return { content: [{ type: 'text', text: `Placed ${objectId} on sheet ${sh.id}${where} at (${Math.round(spot.x)}, ${Math.round(spot.y)}).`
             + (nextPending.length !== (boardNow.pending || []).length ? ` It is no longer waiting for a spot (${nextPending.length} still are).` : '') }] };
