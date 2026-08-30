@@ -99,21 +99,21 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
     expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
-    // ⭐⭐ Merge 网关这行的厂商顺序（08-28 建，08-30 晚定案）。最早钉的是"必须点名 zai 一家"
-    // （当时 particle 对多图回 400，已作废、复测 36/36）。现在钉的是用户拍板的口径：
-    //   ① **particle 打头** —— 真实体量（28 万上下文、逐轮追加）上它每步 1.8-2.8s，zai 3.9-7.0s，
-    //      价钱一模一样。⛔ 别拿 6.5 万去复验，那个体量上两家只差 20%，量不出来。
+    // ⭐⭐ Merge 网关这行的厂商顺序（08-28 建，08-30 深夜定案，推翻了当晚早些时候的 particle 打头）。
+    //   ① **zai 打头** —— particle 有**内联图 8 张的硬上限**（第 9 张起一律 400），zai 到 20 张都收
+    //      且真读得进去；本站一个真会话就有 51 张图。particle 每步快 2.5-3 倍是真的，但吃不到。
+    //      ⛔ 复验 particle 的图**必须发 9 张以上**：三张图的题目它不需要拦，会 36/36 全绿骗过你。
     //   ② **后面得有人兜底** —— 网关的语义是"按顺序取第一个可用的"，只写一家就没有后备了。
     //   ③ ⛔ **baseten 不许出现**：同一发请求实测 $0.000626，是 particle 的 48 倍、zai 的 11 倍。
     //      它进来不报错，只在月底的账上出现。
     const pool = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
-    const okPool = (v) => Array.isArray(v) && v[0] === 'particle' && v.length >= 2 && !v.includes('baseten');
+    const okPool = (v) => Array.isArray(v) && v[0] === 'zai' && v.length >= 2 && !v.includes('baseten');
     expect(okPool(pool), `merge 行的厂商顺序现在是 ${JSON.stringify(pool)}`).toBe(true);
     // 判据先验一遍：四种坏写法都得拦下来，否则上面那条是恒真的
-    expect(okPool(['zai', 'particle']), 'zai 打头 = 每步慢 2.5 倍').toBe(false);
-    expect(okPool(['particle', 'baseten']), 'baseten 混进来 = 静默贵 48 倍').toBe(false);
-    expect(okPool(['particle']), '只剩一家 = 没有后备').toBe(false);
-    expect(okPool(undefined), '整个撤掉 = 网关自己挑，实测 20/20 全落慢的那家').toBe(false);
+    expect(okPool(['particle', 'zai']), 'particle 打头 = 带图的会话第 9 张就 400').toBe(false);
+    expect(okPool(['zai', 'baseten']), 'baseten 混进来 = 静默贵 11 倍').toBe(false);
+    expect(okPool(['zai']), '只剩一家 = 没有后备').toBe(false);
+    expect(okPool(undefined), '整个撤掉 = 网关自己挑，而它的默认自己会变').toBe(false);
     expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
   });
 
