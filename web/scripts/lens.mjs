@@ -7,6 +7,7 @@
  *   sheet   几个状态并排（一天四个时刻 / 三档模式 / 几个视口）拼成**一张**图
  *   ab      某一层开和关，差在哪、差多少、差在哪个框里
  *   perf    某一层的开销，**按线程分账**
+ *   contrast 最暗那几块上的字还读不读得动（WCAG 对比度）
  *   selftest 这把尺子自己准不准
  *
  * ## ⭐⭐ 为什么非要拼成一张
@@ -32,6 +33,7 @@
  *   node web/scripts/lens.mjs sheet --mode=auto,day,night --require=.ndd-card
  *   node web/scripts/lens.mjs ab --hide=.ndd-canopy --at=13:00 --out=/tmp/ab.png
  *   node web/scripts/lens.mjs perf --toggle=.ndd-canopy --at=13:00
+ *   node web/scripts/lens.mjs contrast --at=22:00
  *   node web/scripts/lens.mjs selftest
  *
  * 公共选项：--base= --route= --viewport=1440x900 --dsf=1 --locale=zh-CN
@@ -220,6 +222,87 @@ async function perf() {
   } finally { await lens.close(); }
 }
 
+
+// ─────────────────────────────────────────────────────────────
+// contrast —— 压了一层暗之后，字还读不读得动
+// ─────────────────────────────────────────────────────────────
+/** sRGB 通道线性化（WCAG 2.x 的相对亮度） */
+const lin = (c) => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+const lum = (r, g, b) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+/**
+ * ⭐ 「夜里太暗了」这句话没法调参 —— 得有个数。这里量的是**字对纸的 WCAG 对比度**。
+ *
+ * ⛔ 第一版是按亮度取分位数（最暗的 8% 当字、60% 当纸）。看着合理，**白天一量
+ * 也是 1.13:1** —— 跟夜里的 1.15 几乎一样，等于什么都没量到：一个文字块里字只占
+ * 一两成面积，抗锯齿之后落在"最暗 8%"里的全是纸的颗粒和笔画边缘，够不着笔画芯。
+ * 拿一个已知好的状态（白天）去标定，是这条判据唯一被戳穿的方式。
+ *
+ * 现在的做法：**让页面自己告诉我哪些像素是字** —— 拍一张，再把这些元素的
+ * `color` 设成透明拍第二张，两张的差集就是笔画。纸取第二张的中位数，字取
+ * 笔画像素里偏暗的那一档。
+ */
+async function contrastMode() {
+  const sel = opt('on', '.ndd-card .t, .ndd-card .m, .ndd-note');
+  const floor = Number(opt('floor', '4.5'));   // WCAG AA 正文
+  const lens = await open({ at: opt('at', '22:00') });
+  try {
+    await lens.goto(ROUTE, WAIT);
+    if (REQUIRE.length) await assertRendered(lens, need);
+    const boxes = await lens.page.evaluate((s) => [...document.querySelectorAll(s)]
+      .map((e) => { const r = e.getBoundingClientRect(); return { tag: e.className || e.tagName, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; })
+      .filter((r) => r.w > 40 && r.h > 12 && r.x >= 0 && r.y >= 0 && r.x + r.w <= window.innerWidth && r.y + r.h <= window.innerHeight), sel);
+    if (!boxes.length) throw new Error(`没找到可量的块（${sel}）—— 换个 --on= 或者先滚到能看见它们的位置`);
+
+    const withText = await lens.shot();
+    // ⭐ 让页面自己指出哪些像素是字：把字设成透明再拍一张，差集就是笔画。
+    await lens.page.evaluate((s) => {
+      const st = document.createElement('style');
+      st.textContent = `${s} { color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; }`;
+      document.head.appendChild(st);
+    }, sel);
+    await lens.page.waitForTimeout(500);
+    const noText = await lens.shot();
+
+    const raw = (b) => sharp(b).raw().toBuffer({ resolveWithObject: true });
+    const [S1, S2] = await Promise.all([raw(withText), raw(noText)]);
+    const { width: W, channels: CH } = S1.info;
+    const rows = [];
+    for (const b of boxes) {
+      const glyph = [], paper = [];
+      for (let y = b.y; y < b.y + b.h; y++) {
+        for (let x = b.x; x < b.x + b.w; x++) {
+          const i = (y * W + x) * CH;
+          const l1 = lum(S1.data[i], S1.data[i + 1], S1.data[i + 2]);
+          const l2 = lum(S2.data[i], S2.data[i + 1], S2.data[i + 2]);
+          paper.push(l2);
+          const d = Math.abs(S1.data[i] - S2.data[i]) + Math.abs(S1.data[i + 1] - S2.data[i + 1]) + Math.abs(S1.data[i + 2] - S2.data[i + 2]);
+          if (d > 24) glyph.push(l1);      // 这一格因为"字没了"而变了 → 它是笔画
+        }
+      }
+      // 笔画太少说明这块根本没字（或者字没被那条 CSS 命中），不算数
+      if (glyph.length < 25) continue;
+      glyph.sort((p, q) => p - q); paper.sort((p, q) => p - q);
+      const ink = glyph[Math.floor(glyph.length * 0.15)];      // 笔画芯（避开边缘的半透明）
+      const bg = paper[Math.floor(paper.length * 0.5)];
+      rows.push({ ...b, ink, bg, n: glyph.length, cr: ratio(ink, bg) });
+    }
+    if (!rows.length) throw new Error('每一块的笔画像素都太少 —— --on= 大概没选中真正有字的元素');
+    rows.sort((a, c) => a.cr - c.cr);
+
+    for (const r of rows.slice(0, 6)) {
+      console.log(`${r.cr < floor ? '⛔' : '✅'} ${r.cr.toFixed(2)}:1  ${String(r.tag).slice(0, 20).padEnd(22)}`
+        + `字 ${(r.ink * 100).toFixed(1)} / 纸 ${(r.bg * 100).toFixed(1)}  笔画 ${r.n} 像素  @${r.x},${r.y}`);
+    }
+    const bad = rows.filter((r) => r.cr < floor).length;
+    console.log(`\n量了 ${rows.length} 块：最差 ${rows[0].cr.toFixed(2)}:1，低于 ${floor} 的有 ${bad} 块`);
+    // ⚠️ 这个数只在**和白天并排**的时候有意义。单看一个夜里的数字判断不了
+    // 「是压暗压过头了」还是「这块字本来就是浅色的」（元信息那行天生是铅笔灰）。
+    console.log('⚠️ 判断要跟白天并排看：node web/scripts/lens.mjs contrast --at=13:00');
+  } finally { await lens.close(); }
+}
+
 // ─────────────────────────────────────────────────────────────
 // selftest —— 这把尺子自己准不准
 // ─────────────────────────────────────────────────────────────
@@ -320,7 +403,7 @@ async function selftest() {
   process.exit(bad ? 1 : 0);
 }
 
-const RUN = { sheet, ab, perf, selftest };
+const RUN = { sheet, ab, perf, contrast: contrastMode, selftest };
 if (!RUN[MODE]) {
   console.log(`不认识的模式 ${MODE}。可用：${Object.keys(RUN).join(' / ')}（详见文件头）`);
   process.exit(2);
