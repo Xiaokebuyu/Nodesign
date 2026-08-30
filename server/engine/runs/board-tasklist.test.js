@@ -68,9 +68,37 @@ describe('board-tasklist（步骤清单镜像成板书）', () => {
 
     bus.publish({ type: 'run.done', runId, sessionId: 's1' });
     await wait(100);
+    // 工完线收（2026-08-30）：这一轮的 auto 步骤线随 run 结束拆掉，便签留着
+    board = await readBoard(pid);
+    expect(Object.values(board.bindings).filter(b => b.from === chalkIds[0]).length).toBe(0);
     bus.publish({ type: 'run.file_changed', runId, sessionId: 's1', filePath: 'b.png', event: 'change' });
     await wait(200);
     board = await readBoard(pid);
-    expect(Object.values(board.bindings).filter(b => b.from === chalkIds[0]).length).toBe(1);
+    expect(Object.values(board.bindings).filter(b => b.from === chalkIds[0]).length).toBe(0);
+
+    // 项目单例（2026-08-30）：第二轮不再新建便签，同一张原地重写；位置跨轮保留
+    const seatBefore = board.objects[chalkIds[0]];
+    bus.publish({ type: 'run.todo.updated', runId: 'run_zzz999888777', sessionId: 's2', todos: [
+      { content: '铺开档案站', status: 'in_progress', activeForm: '铺开档案站' },
+    ] });
+    await wait(300);
+    board = await readBoard(pid);
+    expect(Object.keys(board.objects).filter(id => id.startsWith('notes/板书/'))).toEqual(chalkIds);
+    expect(board.objects[chalkIds[0]].x).toBe(seatBefore.x);
+    expect(await fs.readFile(path.join(getSharedDir(pid), chalkIds[0]), 'utf8')).toContain('**→ 铺开档案站**');
+  });
+
+  it('重启后按 tag 认领旧便签，不再新建（proj_mtfz7n8p 的重复病）', async () => {
+    _resetBoardTasklist();   // 模拟服务端重启：内存台账全丢
+    const bus = new EventBus();
+    attachBoardTasklist(bus, pid);
+    bus.publish({ type: 'run.todo.updated', runId: 'run_reboot000001', sessionId: 's3', todos: [
+      { content: '接着干', status: 'in_progress', activeForm: '接着干' },
+    ] });
+    await wait(300);
+    const board = await readBoard(pid);
+    const chalkIds = Object.keys(board.objects).filter(id => id.startsWith('notes/板书/'));
+    expect(chalkIds.length).toBe(1);
+    expect(await fs.readFile(path.join(getSharedDir(pid), chalkIds[0]), 'utf8')).toContain('**→ 接着干**');
   });
 });

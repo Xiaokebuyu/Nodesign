@@ -193,6 +193,12 @@ export function patchBoard(pid, patch) {
       const clean = sanitizeBoard({ ...board, pending: patch.pending }).pending;
       if (clean?.length) board.pending = clean; else delete board.pending;
     }
+    // 暂存架原点（2026-08-30）：整值替换，写方只有 board-seater / board-tasklist；
+    // null = 撤架（下批到货重立）
+    if (patch?.shelf !== undefined) {
+      const clean = sanitizeBoard({ ...board, shelf: patch.shelf }).shelf;
+      if (clean) board.shelf = clean; else delete board.shelf;
+    }
     // 主角覆盖：null = 撤销（回到 pickHero 自动推断），字符串 = 显式立主角
     if (patch?.hero !== undefined) {
       if (patch.hero === null) delete board.hero;

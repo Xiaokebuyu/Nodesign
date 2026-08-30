@@ -227,14 +227,18 @@ on the minimap and listed with what is inside it.`,
               }
             }
           }
-          // 待摆产物（08-30 刀 G）：磁盘上有、板上没地方放的。只有 agent 能给它们地方
+          // 暂存架（2026-08-30）：机器到货的默认座 —— 上了墙但还没进版面，等 agent 安置
+          const shelf = Object.entries(board.objects || {})
+            .filter(([, e]) => e?.seat === 'shelf' && !e.zone && Number.isFinite(e?.x))
+            .map(([id]) => id);
           const pend = Array.isArray(board.pending) ? board.pending : [];
-          if (pend.length) {
-            lines.push('', `⛔ ${pend.length} 件产物还没地方摆（板面排满了，机器不会替你翻页）：`);
-            for (const r of pend.slice(0, 8)) lines.push(`  ${r}`);
-            if (pend.length > 8) lines.push(`  …还有 ${pend.length - 8} 件`);
-            lines.push('  规划一块地收它们：open_sheet{plan:[{slot:"图",at:{…},w,h,for:"artifacts"}…]}，'
-              + '或逐件 pin_to_board{path,slot} 点名落位。');
+          const unplaced = [...shelf, ...pend];
+          if (unplaced.length) {
+            lines.push('', `📦 暂存架上 ${unplaced.length} 件等安置（机器只码在架上，版面归你）：`);
+            for (const r of unplaced.slice(0, 8)) lines.push(`  ${r}`);
+            if (unplaced.length > 8) lines.push(`  …还有 ${unplaced.length - 8} 件`);
+            lines.push('  安置的手：open_sheet{plan:[{slot:"图",at:{…},w,h,for:"artifacts"}…]} 规划产物地，'
+              + '或逐件 pin_to_board{path,slot} / edit_board{ops:[{op:"move",…}]}。');
           }
         } catch { /* 纸读不出不挡座次 */ }
       }

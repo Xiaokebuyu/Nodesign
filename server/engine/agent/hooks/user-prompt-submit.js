@@ -118,6 +118,10 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       // 纸（2026-08-29 纸范式）：报当前有哪些纸、剩多少地 —— 空位建议/走向学习
       // 那套启发式随落位引擎一起退役，agent 的空间账本现在是纸的清单。
       let spot = null;
+      // 暂存架（2026-08-30）：机器到货的默认座。点名 + 三个安置动词，agent 不动它们就一直在
+      const shelfSeats = Object.entries(board.objects || {})
+        .filter(([, e]) => e?.seat === 'shelf' && !e.zone && Number.isFinite(e?.x))
+        .map(([id]) => id);
       const pendingSeats = Array.isArray(board.pending) ? board.pending : [];
       try {
         const ss = sheetSummaries(board);
@@ -136,9 +140,11 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
         } else {
           spot = '板上还没铺过纸 —— 第一笔 write_on_board 会自动铺一张在他视口下，或先 open_sheet';
         }
-        if (pendingSeats.length) {
-          spot += `；⛔ ${pendingSeats.length} 件产物还没地方摆（${pendingSeats.slice(0, 3).join('、')}${pendingSeats.length > 3 ? '…' : ''}）`
-            + ' —— 规划一块地（open_sheet{plan}）或 pin_to_board 点名落位，它们才上得了墙';
+        const unplaced = [...shelfSeats, ...pendingSeats];
+        if (unplaced.length) {
+          spot += `；📦 ${unplaced.length} 件在暂存架等你安置（${unplaced.slice(0, 3).map(r => r.split('/').pop()).join('、')}${unplaced.length > 3 ? '…' : ''}）`
+            + ' —— 给它们规划的地：open_sheet{plan:[…{for:"artifacts"}]} 或逐件 pin_to_board{path,slot} / edit_board move。'
+            + '架不是版面，东西留在架上就是没摆';
         }
       } catch { /* 纸读不出就不占字 */ }
       const dirs = null;

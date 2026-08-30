@@ -38,6 +38,7 @@ import RoleSprites from './RoleSprites.jsx';
 import { useReadingNav } from './ReadingPager.jsx';
 import RoleTalkPanel from './RoleTalkPanel.jsx';
 import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
+import ShelfHint from './ShelfHint.jsx';
 import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
 import { zoneOfObjectId, resolveObjectId } from '../../lib/stage.js';
@@ -1816,6 +1817,7 @@ export default function BoardCanvas({
         >
           {/* 文件夹：一张方卡（2026-08-13，"分区"时代两态退役）——
               桌面上的一个东西，双击进去换一层。 */}
+          <ShelfHint positioned={positioned} />
           {visibleZones.map((z) => renderFolderCard(z))}
 
           {visibleObjects.map((o) => renderObjectCard(o))}

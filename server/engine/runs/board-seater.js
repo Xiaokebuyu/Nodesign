@@ -32,6 +32,17 @@
  *   ③ 排不下 → **不铺纸**，进 board.pending 待摆队列，每回合状态块点名，
  *      等 agent 规划出地方（open_sheet{plan} / pin_to_board 点名）再落座。
  * 唯一的例外是**一张纸都还没有**：那不是翻页，是开工，照旧铺第一张。
+ *
+ * ## 2026-08-30 暂存架：机器的手只够得到架
+ *
+ * 上面那个「开工例外」当天就翻了车（proj_mtfz7n8p）：web_search 采回的参考图
+ * 先于 agent 的第一笔到场，入座器铺了 p1 —— 第一张纸又成了机器铺的，agent
+ * 不知道它存在，自己的板书全在缝里流。站主拍板：**机器从此完全不产纸、
+ * 也不往纸面顺排**。三档收成两档：
+ *   ① 这一页规划了 `for:'artifacts'` 的地 → 落进那块地（agent 事前说了放哪儿）
+ *   ② 其余（没规划 / 排不下 / 一张纸都没有）→ 一律上暂存架（lib/board-shelf.js，
+ *      seat:'shelf'），每回合状态块点名，agent 用 pin_to_board / edit_board move
+ *      安置。旧 board.pending 队列并进架上（它们从「看不见」变「看得见」）。
  */
 
 import path from 'node:path';
@@ -42,13 +53,13 @@ import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
 import { obstaclesIn } from '../../lib/board-obstacles.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
 import {
-  currentSheet, nextSpotInSheet, allocateSheetRect, sheetSizeFor, nextSheetName,
-  placeThread, placeBeside, innerRect, inflateSpriteSeats, slotRectOf, nextSpotInSlot,
+  currentSheet, placeThread, placeBeside, slotRectOf, nextSpotInSlot,
 } from '../../lib/board-sheets.js';
-import { textBox, fitFor } from '../../lib/sketch-layout.js';
+import { resolveShelfOrigin, nextShelfSpot, FOLDER_BOX } from '../../lib/board-shelf.js';
+import { textBox } from '../../lib/sketch-layout.js';
 import { getViewpoint } from '../../projects/viewpoint-store.js';
 import { parseChalk, CHALK_DIR } from '../../lib/chalk.js';
-import { isReservedFile, HARD_IGNORE_DIRS, DRAFTS_DIR } from '../../lib/task-scan.js';
+import { isReservedFile, HARD_IGNORE_DIRS, RESERVED_DIRS, DRAFTS_DIR } from '../../lib/task-scan.js';
 import { applyFollows } from '../../lib/board-follow.js';
 import { canvasIdForRel } from './board-tasklist.js';
 
@@ -86,18 +97,42 @@ export async function seatArtifacts(projectId, rels) {
   const objects = {}; const bindings = {};
   // 本批内后来者要避开先来者：live 副本随排随更新
   const live = { ...board.objects };
-  // 纸（2026-08-29）：根层产物入座 = 落进当前纸往下排，纸满自动翻一张。
-  // liveSheets 随翻随更新（本批内后来者排进新纸）；新纸随 patch 一起落盘。
-  const liveSheets = { ...(board.sheets || {}) };
-  const newSheets = {};
-  const stillPending = [];          // 这一批还是没地方放的（刀 G 待摆队列）
-  let seated = 0; let lines = 0;
+  // 暂存架（2026-08-30）：批内原点算一次（架立了就不挪）；本批内后来者靠
+  // live 障碍矩形自然码在先来者下面。
+  const rootCam = (vp?.camera && !vp.layer) ? vp.camera : null;
+  const shelfOrigin = resolveShelfOrigin(board, rootCam);
+  const stillPending = [];          // 本批没轮到的（只剩封顶截流一种情况）
+  let seated = 0; let lines = 0; let shelved = 0;
+
+  // 文件夹卡也上架（2026-08-30，站主拍板「文件夹和单个文件一律落暂存区」）：
+  // 这批文件揭示的顶层目录，还没有文件夹卡坐标的，先码在架上 —— 前端的
+  // newStackedZoneRect 只给没坐标的排位，这里写了它就不再排。判据与 seatable
+  // 同一套精神：保留目录（assets/notes/…）和隐藏目录不是用户的文件夹。
+  const zonesPatch = {};
+  const zoneRects = Object.entries(board.zones || {})
+    .filter(([, z]) => Number.isFinite(z?.x) && Number.isFinite(z?.y))
+    .map(([, z]) => ({ x: z.x, y: z.y, w: FOLDER_BOX.w, h: FOLDER_BOX.h }));
+  for (const rel of uniq) {
+    const segs = rel.split('/');
+    if (segs.length < 2 || !seatable(rel)) continue;
+    const top = segs[0];
+    if (RESERVED_DIRS.has(top) || zonesPatch[top]) continue;
+    if (board.zones?.[top] && Number.isFinite(board.zones[top].x)) continue;
+    const rootRects = Object.entries(live)
+      .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === '')
+      .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
+    const spot = nextShelfSpot(shelfOrigin, [...rootRects, ...zoneRects]);
+    zonesPatch[top] = { x: spot.x, y: spot.y };
+    zoneRects.push({ x: spot.x, y: spot.y, w: FOLDER_BOX.w, h: FOLDER_BOX.h });
+    known.add(top);   // 这批的文件按新文件夹归层（跟前端 homeOf 同判）
+  }
 
   for (const rel of uniq) {
-    if (seated >= MAX_SEATS_PER_RUN) break;
     const id = canvasIdForRel({ objects: live, zones: board.zones }, rel);
     if (!id) continue;
     if (live[id] && Number.isFinite(live[id].x)) continue;   // 已有座位
+    // 封顶截流：没轮到的留在队列里下批再来（暂存架永远有地方，这是唯一的排队原因）
+    if (seated >= MAX_SEATS_PER_RUN) { stillPending.push(rel); continue; }
     // 文件还在才入座（本轮建又删的别复活）
     try { await fs.access(path.join(sharedRoot, rel)); } catch { continue; }
 
@@ -131,12 +166,13 @@ export async function seatArtifacts(projectId, rels) {
 
     const zone = layerOf(id, live[id], known);
     const obstacles = obstaclesIn(board, zone, { objects: live, exclude: [id] });
-    // 落位（2026-08-29 纸范式）：线程接楼 > 锚点贴放 > 纸内顺排（根层）/内容底下（文件夹层）
-    const liveBoard = { ...board, objects: live, sheets: liveSheets };
-    let placed = null;
+    // 落位（2026-08-30 暂存架）：线程接楼 > 锚点贴放 > 产物地（根层）> 暂存架（根层）
+    // / 内容底下（文件夹层）。机器不产纸、不往纸面顺排。
+    const liveBoard = { ...board, objects: live };
+    let placed = null; let onShelf = false;
     if (replyRect) {
       const p = placeThread(liveBoard, replyRect, box, { obstacles });
-      placed = p.sheetFull ? null : p;   // 线程纸满：退回顺排（翻纸逻辑统一走下面那条）
+      placed = p.sheetFull ? null : p;   // 线程纸满：接不了楼就上暂存架（线还在，找得回）
     }
     if (!placed && anchorRect) placed = placeBeside(anchorRect, box, 'below');
     if (!placed && !zone) {
@@ -150,26 +186,12 @@ export async function seatArtifacts(projectId, rels) {
           if (!spot.full) { placed = spot; inSlot = named[0]; }
         }
       }
-      // ② 没规划就纸内顺排（兜底）
-      if (!placed && cur) placed = nextSpotInSheet(liveBoard, cur.id, box);
-      // ③ 一张纸都还没有 = **开工**，铺第一张（这不是翻页）
-      if (!placed && !cur) {
-        const rect = allocateSheetRect({
-          board: liveBoard, size: sheetSizeFor(fitFor(vp)),
-          viewport: (vp?.camera && !vp.layer) ? vp.camera : null,
-          nearSheet: null,
-          // 铺纸不避家具（纸不渲染，见 board-obstacles.js 的 furniture 参数）
-          obstacles: obstaclesIn(board, zone, { objects: live, exclude: [id], furniture: false }),
-        });
-        const name = nextSheetName(liveBoard);
-        const entry = { x: rect.x, y: rect.y, w: rect.w, h: rect.h, by: 'agent', at: new Date().toISOString() };
-        liveSheets[name] = entry; newSheets[name] = entry;
-        const inner = innerRect(entry);
-        placed = { x: inner.x, y: inner.y };
+      // ② 其余一律上暂存架：agent 没说放哪儿的，机器不替它定版面。
+      //    文件夹卡不在 objects 里，避让要把 zoneRects 一并算上
+      if (!placed) {
+        placed = nextShelfSpot(shelfOrigin, [...obstacles, ...zoneRects]);
+        onShelf = true;
       }
-      // ④ 有纸但排不下：**不翻页**（刀 G）。机器替 agent 铺出来的纸没标题没版位，
-      //    而 agent 不知道它存在 —— 那是机器在定版面。进队列，等它规划。
-      if (!placed) { stillPending.push(rel); continue; }
     }
     if (!placed) {
       // 文件夹层：这一层内容底下接着排（没有纸也没有启发式 —— 单条规则）
@@ -180,30 +202,34 @@ export async function seatArtifacts(projectId, rels) {
     const entry = {
       x: Math.round(placed.x), y: Math.round(placed.y), z: 1,
       w: Math.round(box.w), h: Math.round(box.h),
-      zone, seat: 'auto',
+      zone, seat: onShelf ? 'shelf' : 'auto',
       ...(by ? { by } : {}), ...(tag ? { tag } : {}),
     };
+    if (onShelf) shelved += 1;
     objects[id] = entry; live[id] = entry;
     seated += 1;
     if (anchorId) { bindings[`b:a${stamp()}`] = { type: 'annotates', from: id, to: anchorId, by: by || 'agent', ...(tag ? { tag } : {}) }; lines += 1; }
     if (parentId) { bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: id, by: by || 'agent', material: 'pencil', ...(tag ? { tag } : {}) }; lines += 1; }
   }
 
-  // 待摆队列整表写回（刀 G）：**必须无条件写**，哪怕这一批一件都没坐下 ——
-  // 队列清空也是一次状态变化（上一批的挂账这一轮落了座，队列该空）。
+  // 队列整表写回：**必须无条件写**，哪怕这一批一件都没坐下 ——
+  // 队列清空也是一次状态变化（旧 pending 这一轮上了架，队列该空）。
   const pendingChanged = JSON.stringify(queued) !== JSON.stringify(stillPending);
-  if (seated || pendingChanged) {
+  const zoned = Object.keys(zonesPatch).length;
+  if (seated || pendingChanged || zoned) {
     await patchBoard(projectId, {
       ...(seated ? { objects, bindings } : {}),
-      ...(Object.keys(newSheets).length ? { sheets: newSheets } : {}),
+      ...(zoned ? { zones: zonesPatch } : {}),
       ...(pendingChanged ? { pending: stillPending } : {}),
+      // 架的原点：第一次用到（或被纸压住重立）才落盘
+      ...((shelved || zoned) && shelfOrigin.changed ? { shelf: { x: shelfOrigin.x, y: shelfOrigin.y } } : {}),
     });
   }
   // 领养的板书带 tag：有人跟着这个 tag（状态板）就自动重锚（fail-soft）
   for (const [id, e] of Object.entries(objects)) {
     if (e?.tag) { try { await applyFollows(projectId, { tag: e.tag, newId: id }); } catch { /* */ } }
   }
-  return { seated, lines, pending: stillPending.length };
+  return { seated, lines, shelved, pending: stillPending.length };
 }
 
 /**
@@ -221,10 +247,12 @@ export function attachBoardSeater(bus, projectId) {
     if (!pending.size) return;
     const batch = [...pending]; pending.clear();
     try {
-      const { seated, pending } = await seatArtifacts(projectId, batch);
-      if (seated) bus.publish({ type: 'board.updated', sessionId: null, summary: `${seated} 件新产物入了座` });
-      // 待摆的也要出声：板上没地方了，只有 agent 能开新的一页（刀 G）
-      if (pending) bus.publish({ type: 'board.updated', sessionId: null, summary: `${pending} 件产物还没地方摆（板面排满了）` });
+      const { seated, shelved } = await seatArtifacts(projectId, batch);
+      // 上架的要出声：架不是版面，agent 得给它们找地方（状态块每回合也点名）
+      if (seated) {
+        bus.publish({ type: 'board.updated', sessionId: null,
+          summary: `${seated} 件新产物入了座${shelved ? `（${shelved} 件在暂存架等安置）` : ''}` });
+      }
     } catch (err) {
       console.warn('[board-seater]', projectId, err?.message || err);
     }

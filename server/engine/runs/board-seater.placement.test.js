@@ -1,12 +1,10 @@
 /**
- * 刀 G：产物入座进占位契约（2026-08-30）。
+ * 产物入座的落位契约（2026-08-30 暂存架版）。
  *
- * 站主拍板「产物也需要 agent 提前规划放置位置落在纸上，甚至包括文件夹」。这里钉的
- * 是那条最贵的行为改变：**入座不再自己铺纸**。
- *
- * 为什么值得单独钉：这个 bug 在真板上留了痕迹却一直没人发现（proj_mtfix5rv 的 p1 是
- * 入座顺手铺的，没标题没版位署名 agent，agent 自己都不知道它存在）。它不报错、不掉
- * 数据，只是悄悄替 agent 定了版面 —— 只有专门给它一张"排不下"的板才看得见。
+ * 刀 G（入座不铺纸、排不下进队列）当天就被真板打脸：proj_mtfz7n8p 里 web_search
+ * 采回的参考图撞进「开工例外」，第一张纸还是机器铺的。站主拍板收成暂存架范式，
+ * 这里钉的是三条最贵的行为：**机器完全不产纸**、**机器不往纸面顺排**、
+ * **没规划的到货（含文件夹卡）一律上架**。
  *
  * ⚠️ 判据先验一遍：每条断言先造一个**它必须拦住**的局面，再看它拦没拦。
  */
@@ -23,6 +21,7 @@ const { seatArtifacts } = await import('./board-seater.js');
 const { readBoard, patchBoard } = await import('../../projects/board-store.js');
 const { getSharedDir, ensureProjectWorkspace } = await import('../../projects/workspace.js');
 const { setViewpoint, _resetViewpoints } = await import('../../projects/viewpoint-store.js');
+const { SHELF_W, SHELF_GAP } = await import('../../lib/board-shelf.js');
 
 let n = 0; let projectId;
 beforeEach(async () => {
@@ -39,71 +38,85 @@ const touch = async (rel) => {
   await fs.writeFile(abs, 'x');
   return rel;
 };
-/**
- * 一张**真的写满了**的纸。
- * ⚠️ 判据先验一遍才发现的坑：一开始我把纸做成 h:108 想让它装不下任何东西 ——
- * sanitizeSheet 把高度钳回下限 240，纸其实空着，产物照样坐得下，于是"拦住了"
- * 这条断言恒假地过不去。真要让它满，得往里塞一件填满版心的东西。
- */
-const fullSheet = { x: 0, y: 0, w: 800, h: 500, at: '2026-08-30T01:00:00Z', by: 'agent' };
-const fillIt = { 'notes/板书/占满.md': { x: 24, y: 24, w: 700, h: 440, z: 1, zone: '', seat: 'agent', by: 'agent' } };
 
-describe('刀 G：入座不再自己铺纸', () => {
-  it('⭐ 一张纸都没有 → 照旧铺第一张（那是开工，不是翻页）', async () => {
+const emptySheet = { x: 0, y: 0, w: 1600, h: 900, at: '2026-08-30T01:00:00Z', by: 'agent' };
+
+describe('暂存架：机器的手只够得到架', () => {
+  it('⭐⭐ 一张纸都没有 → **不铺纸**，上架（视口左上，seat:shelf，原点落盘）', async () => {
     await touch('assets/a.png');
     const r = await seatArtifacts(projectId, ['assets/a.png']);
     const b = await readBoard(projectId);
+    // 这就是"它必须拦住"的局面：改回开工例外的话 sheets 会变成 1
+    expect(Object.keys(b.sheets || {})).toHaveLength(0);
     expect(r.seated).toBe(1);
-    expect(Object.keys(b.sheets || {})).toHaveLength(1);
-    expect(b.pending).toBeUndefined();
+    expect(r.shelved).toBe(1);
+    const e = b.objects['assets/a.png'];
+    expect(e.seat).toBe('shelf');
+    expect(e.x).toBe(24);   // camera.x + SHELF_GAP
+    expect(b.shelf).toEqual({ x: 24, y: 24 });
   });
 
-  it('⭐⭐ 有纸但排不下 → **一张新纸都不许铺**，进待摆队列', async () => {
-    await patchBoard(projectId, { sheets: { p1: fullSheet }, objects: fillIt });
-    await touch('assets/big.png');
-    const r = await seatArtifacts(projectId, ['assets/big.png']);
+  it('⭐⭐ 有纸、纸还空着 → 也**不往纸面顺排**，上架在纸群左侧', async () => {
+    await patchBoard(projectId, { sheets: { p1: emptySheet } });
+    await touch('assets/a.png');
+    await seatArtifacts(projectId, ['assets/a.png']);
     const b = await readBoard(projectId);
-    // 这就是"它必须拦住"的那个局面：改回自动翻页的话 sheets 会变成 2、seated 变成 1
+    const e = b.objects['assets/a.png'];
+    // 拦住的局面：老逻辑会把它放进版心 (24,24)；现在必须在纸外左侧
+    expect(e.seat).toBe('shelf');
+    expect(e.x).toBe(0 - SHELF_W - SHELF_GAP);
     expect(Object.keys(b.sheets)).toEqual(['p1']);
-    expect(r.seated).toBe(0);
-    expect(r.pending).toBe(1);
-    expect(b.pending).toEqual(['assets/big.png']);
-    expect(b.objects['assets/big.png']).toBeUndefined();
   });
 
-  it('⭐ 待摆的会重试：agent 规划出地方之后，下一批自动落座并出队', async () => {
-    await patchBoard(projectId, { sheets: { p1: fullSheet }, objects: fillIt });
+  it('⭐ 旧 board.pending 队列并进架上（从看不见变看得见），队列清空要写回', async () => {
     await touch('assets/big.png');
-    await seatArtifacts(projectId, ['assets/big.png']);
-    expect((await readBoard(projectId)).pending).toEqual(['assets/big.png']);
-
-    // agent 开了一张真能放下东西的纸
-    await patchBoard(projectId, { sheets: { p2: { x: 0, y: 400, w: 1200, h: 900, at: '2026-08-30T02:00:00Z', by: 'agent' } } });
-    const r = await seatArtifacts(projectId, []);          // 新文件一个都没有，只重试队列
+    await patchBoard(projectId, { sheets: { p1: emptySheet }, pending: ['assets/big.png'] });
+    const r = await seatArtifacts(projectId, []);          // 新文件一个都没有，只清队列
     const b = await readBoard(projectId);
     expect(r.seated).toBe(1);
-    expect(b.pending).toBeUndefined();                      // 队列清空也要写回
-    expect(b.objects['assets/big.png']).toBeDefined();
+    expect(b.pending).toBeUndefined();
+    expect(b.objects['assets/big.png'].seat).toBe('shelf');
   });
 
-  it('⭐⭐ 规划了 for:"artifacts" 的地 → 产物落进那块地，不是纸内顺排', async () => {
+  it('⭐⭐ 规划了 for:"artifacts" 的地 → 产物落进那块地，不上架', async () => {
     await patchBoard(projectId, { sheets: { p1: {
       x: 0, y: 0, w: 1600, h: 900, at: '2026-08-30T01:00:00Z', by: 'agent',
       slots: { main: { x: 0, y: 0, w: 600, h: 800 }, 图: { x: 700, y: 0, w: 400, h: 800, for: 'artifacts' } },
     } } });
     await touch('assets/a.png');
-    await seatArtifacts(projectId, ['assets/a.png']);
+    const r = await seatArtifacts(projectId, ['assets/a.png']);
     const e = (await readBoard(projectId)).objects['assets/a.png'];
     // 图块的世界左缘 = 纸 x + margin 24 + slot.x 700
     expect(e.x).toBe(724);
-    // 对照：没有这块地时它会落在版心左上（24）—— 断言不是恒真的
-    expect(e.x).not.toBe(24);
+    expect(e.seat).toBe('auto');
+    expect(r.shelved).toBe(0);
   });
 
-  it('_drafts/ 永不入座，也不进待摆队列（那是纪律不是"没地方"）', async () => {
-    await patchBoard(projectId, { sheets: { p1: fullSheet }, objects: fillIt });
+  it('_drafts/ 永不入座，也不上架（那是纪律不是"没地方"）', async () => {
     const r = await seatArtifacts(projectId, ['_drafts/x.html']);
     expect(r.seated).toBe(0);
-    expect((await readBoard(projectId)).pending).toBeUndefined();
+    expect((await readBoard(projectId)).objects['_drafts/x.html']).toBeUndefined();
+  });
+
+  it('⭐ 文件夹卡也上架：新顶层目录得到架上的卡位，文件归进文件夹层', async () => {
+    await touch('小说/第一章.md');
+    await touch('说明.md');
+    await seatArtifacts(projectId, ['小说/第一章.md', '说明.md']);
+    const b = await readBoard(projectId);
+    expect(b.zones['小说']).toBeTruthy();
+    expect(b.zones['小说'].x).toBe(24);            // 架的列上
+    const chapter = b.objects['小说/第一章.md'];
+    expect(chapter.zone).toBe('小说');             // 住进文件夹层，不在根桌面
+    const readme = b.objects['说明.md'];
+    expect(readme.seat).toBe('shelf');
+    expect(readme.y).toBeGreaterThanOrEqual(24 + 240);   // 码在文件夹卡下面，不压它
+  });
+
+  it('保留目录不长文件夹卡：assets/ 下的东西上架但不出 assets 卡', async () => {
+    await touch('assets/references/ref-1.jpg');
+    await seatArtifacts(projectId, ['assets/references/ref-1.jpg']);
+    const b = await readBoard(projectId);
+    expect(b.zones['assets']).toBeUndefined();
+    expect(b.objects['assets/references/ref-1.jpg'].seat).toBe('shelf');
   });
 });

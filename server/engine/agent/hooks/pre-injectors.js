@@ -8,7 +8,7 @@
  */
 import path from 'node:path';
 import { toWorkspaceRel } from '../../../lib/workspace-path.js';
-import { kindOfPath, kindDef, KIND_DECK } from '../../../lib/artifact-target.js';
+import { kindOfPath, kindDef, KIND_DECK, KIND_SITE } from '../../../lib/artifact-target.js';
 import { loadToolPrompt } from './tool-prompts.js';
 
 /**
@@ -80,7 +80,21 @@ export function makePreToolUseHybridReferenceInjector({ workspaceRoot } = {}) {
     const fp = input?.tool_input?.file_path;
     if (typeof fp !== 'string') return {};
     const rel = workspaceRoot ? toWorkspaceRel(fp, workspaceRoot) : fp;
-    const kind = workspaceRoot ? await kindOfPath(workspaceRoot, rel) : KIND_DECK;
+    let kind = workspaceRoot ? await kindOfPath(workspaceRoot, rel) : KIND_DECK;
+    /**
+     * 散装 .html 的内容嗅探（2026-08-30）。kindOfPath 对清单里没有、又不叫
+     * index/canvas 的 .html 一律回落 deck —— 而 site-craft 的试作恰恰规定放
+     * `_drafts/<名字>.html`，于是**每场按方法论走的站点会话，第一笔试作都被
+     * 塞一份 deck 参考**（data-page/importmap/Babel，文不对题），该到的 site
+     * 参考（相对路径铁律/目录约定）反而没到（真案 proj_mtfz7n8p）。
+     * 嗅探判据：deck 有模板 verbatim 军规兜底，正身必带 __nd-deck-wrap /
+     * data-page；一个都没有的散装 .html 当 site 对待。
+     */
+    if (kind === KIND_DECK && path.extname(fp).toLowerCase() === '.html') {
+      const body = typeof input?.tool_input?.content === 'string' ? input.tool_input.content : '';
+      const base = path.basename(fp).toLowerCase();
+      if (base !== 'canvas.html' && !body.includes('__nd-deck-wrap') && !body.includes('data-page=')) kind = KIND_SITE;
+    }
     // 触发条件从「写 .html」改成「写的文件跟这个形态的入口同类型」（2026-08-01）。
     // 写死 .html 的年代只有 deck 和 site，两者入口都是 html 所以恰好没错；非 html 入口的形态
     // 的入口不是 .html，于是它的技术参考**永远不会被注入**，agent 一辈子不知道

@@ -52,6 +52,9 @@ folder it lives in. The canvas is their desktop: whatever you write appears
 there automatically — you do NOT need this tool for your own outputs.
 Use it only to deliberately surface something:
 
+- Place a staged arrival: new files land on the staging shelf (the vertical
+  strip of unplaced cards the status block names) — pin_to_board{path, slot}
+  moves one into a block you planned
 - Pull a reference (an uploaded asset, a memory note, an older image) into view
 - Restore something the user dragged off-screen, when they ask for it back
 
@@ -124,8 +127,8 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
 
         /**
          * 点名落位（2026-08-30 刀 G）：`slot` / `at` 给了就走纸上落位，跟 write_on_board
-         * 同一套几何。这是「产物也由 agent 规划位置」的那只手 —— 待摆队列里的东西，
-         * agent 规划出地方之后就用它请下来。
+         * 同一套几何。这是「产物也由 agent 规划位置」的那只手 —— 暂存架上的东西，
+         * agent 规划出地方之后就用它请下来（seat 改写成 agent，自然离架）。
          */
         if (slot || at) {
           const sh = (sheet && boardNow.sheets?.[sheet])

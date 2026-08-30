@@ -187,7 +187,9 @@ export function sanitizeObject(o, size) {
     //   agent = agent 显式摆的 —— 用户可拖走（拖走后变 user）
     // 没有这个字段，用户拖的和自动排的在数据上分不清
     // （08-25 体检结论：老数据 by 被前端回写抹掉）。
-    ...(o.seat === 'user' || o.seat === 'auto' || o.seat === 'agent' ? { seat: o.seat } : {}),
+    //   shelf = 暂存架上等安置（2026-08-30）—— 机器到货默认座。pin_to_board /
+    //           edit_board move / 用户拖拽一改写 seat 就自然离架（lib/board-shelf.js）
+    ...(o.seat === 'user' || o.seat === 'auto' || o.seat === 'agent' || o.seat === 'shelf' ? { seat: o.seat } : {}),
     // 尺寸出处（2026-08-28）：'user' = 这块板书的宽高是用户亲手拖出来的。
     // 两个用途：① 重排/估算别拿内容宽度盖掉他调过的宽 ② 写入端拿它当**学习票源**
     // 推断"他喜欢多宽的板书"（lib/chalk-size-pref.js）。跟 seat 是两件事 ——
@@ -444,12 +446,17 @@ export function sanitizeBoard(raw) {
     if (!t || t.length > 300 || t.includes('..') || t.startsWith('/')) continue;
     if (!pending.includes(t)) pending.push(t);
   }
+  // 暂存架原点（2026-08-30，lib/board-shelf.js）：机器到货码放的竖带左上角
+  const shelf = (raw?.shelf && Number.isFinite(Number(raw.shelf.x)) && Number.isFinite(Number(raw.shelf.y)))
+    ? { x: clampNum(raw.shelf.x, -COORD_LIMIT, COORD_LIMIT, 0), y: clampNum(raw.shelf.y, -COORD_LIMIT, COORD_LIMIT, 0) }
+    : null;
   return {
     size, zones, objects, bindings,
     ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}),
     ...(sCount ? { sheets } : {}),
     ...(fCount ? { follows } : {}),
     ...(pending.length ? { pending } : {}),
+    ...(shelf ? { shelf } : {}),
   };
 }
 
