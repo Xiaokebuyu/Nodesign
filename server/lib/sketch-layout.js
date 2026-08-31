@@ -444,17 +444,28 @@ export function bboxOrZero(rects) {
  *
  * ## 两套版式
  *
- *   桌面   一屏世界像素 = 屏幕 / 0.75（纸范式基准，见 lib/screen.js —— 用户在
- *          0.75 倍上读得动，所以内容可以比屏幕大一点）
- *   触屏   **一件 = 一屏**：宽 = 屏宽 − 48（两边各留 24 呼吸），纵向单列
+ *   桌面 / 平板   一屏世界像素 = 屏幕 / 0.75（纸范式基准，见 lib/screen.js ——
+ *                 用户在 0.75 倍上读得动，所以内容可以比屏幕大一点）
+ *   手机          **一件 = 一屏**：宽 = 屏宽 − 48（两边各留 24 呼吸），纵向单列
  *
- * ⭐ 触屏这条不是"把桌面的数按比例缩小"。桌面那 1.25 倍富余的前提是**用户会缩小
+ * ⭐ 手机这条不是"把桌面的数按比例缩小"。桌面那 1.25 倍富余的前提是**用户会缩小
  * 了看全貌再放大读细节**，而手机上缩小到 0.19 倍就什么都读不了（真板量的：1766x2018
  * 的内容在 390 宽的屏上全内容 fit = 19%）。手机上唯一可用的姿势是一件占满一屏、
  * 竖着翻，所以内容必须**按屏幕生产**，而不是生产完再想办法塞进去。
  *
  * ⚠️ 高度给到 1.6 屏而不是 1 屏：竖着滚是手机上读长内容的天然姿势，硬压到一屏
  * 会逼出一堆"为了短而短"的碎块。宽度才是硬约束（横向滑动没人受得了）。
+ *
+ * ## ⭐⭐ 平板 2026-08-31 走回桌面那套（用户拍板「平板甚至不用做多余的适配」）
+ *
+ * 08-28 建这条链时平板和手机合成一档，于是 810 的屏上一件封顶 762、强制单列、
+ * 学来的走向不认。那一档从来不是判断出来的，是"触屏"这个词把两台不一样的机器
+ * 装进了同一个盒子。平板的屏幕装得下并排，手指也够得着，**它缺的只是命中区大
+ * 一点**，那是前端的事，不该让 agent 少写半个版面。
+ *
+ * ⭐ 这里是**唯一的开关**：`column` 一改，下游三处（write-on-board 的宽度封顶
+ * capUnits、resolveTemplate 的强制单列、超框那句警告）和 sheetSizeFor 铺纸的尺寸
+ * 全都跟着走。加第四处消费点的时候也从这儿取，别在别处再判一次设备。
  */
 export function fitFor(vp) {
   const cls = vp?.device?.class;
@@ -464,9 +475,11 @@ export function fitFor(vp) {
   if (!(sw > 0) && vp?.camera?.w && vp?.zoom) {
     sw = vp.camera.w * vp.zoom; sh = vp.camera.h * vp.zoom;
   }
-  if (!(sw > 0)) return { ...SKETCH_FIT, screen: null, lane, column: lane !== 'desktop' };
+  // 一件一屏那套只给手机。平板和桌面同一个公式（08-31，见函数头）
+  const column = lane === 'phone';
+  if (!(sw > 0)) return { ...SKETCH_FIT, screen: null, lane, column };
   const screen = { w: Math.round(sw), h: Math.round(sh) };
-  if (lane === 'desktop') {
+  if (!column) {
     return { w: Math.round(sw / ZOOM_BASIS), h: Math.round(sh / ZOOM_BASIS), screen, lane, column: false };
   }
   return {

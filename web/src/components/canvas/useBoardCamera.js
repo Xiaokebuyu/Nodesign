@@ -5,6 +5,7 @@ import {
 } from '../../lib/board-camera.js';
 import { onBlankCanvas, onChrome } from '../../lib/board-hit.js';
 import { useTouchGestures } from './useTouchGestures.js';
+import { useDeviceClass } from '../../lib/device-class.js';
 
 /**
  * useBoardCamera —— 画布相机的状态、输入与动画（2026-08-07）
@@ -50,7 +51,27 @@ const ZOOM_SPEED = 0.0022;
 
 const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
-export function useBoardCamera({ paneRef, contentBox, enabled = true }) {
+/**
+ * @param {boolean|null} [p.fingerPansAnywhere]  单指按在哪儿都是推画面。
+ *   缺省（null）= **按设备档自己判**，只有手机为真。给显式值是为了测试和以后的
+ *   用户偏好，别在调用方那边再抄一遍这个判据。
+ *
+ * ## 单指归谁：2026-08-31 拆开手机和平板
+ *
+ * 08-21 为了修「双指捏合把卡带跑」，定的是「手指按在哪儿都是推画面」。那条规矩
+ * 在**手机**上是对的：390 宽的屏上卡片几乎铺满，要求先找一块空地才能推画面，
+ * 等于没法推。但它在**平板**上只有代价没有收益 —— 810 的屏上空地到处都是，
+ * 而这条规矩让平板上落不了笔、选不中、拖不动，一整套工具跟着被撤掉。
+ *
+ * 现在的规矩一句话：**两根手指永远是相机**（那条路在 useTouchGestures，跟这里
+ * 无关，任何时候都成立）；**单根手指归当前工具** —— 指针工具按在空地上就是推
+ * 画面，按在卡上就是拿卡，跟鼠标一模一样。手机保留旧规矩（fingerPansAnywhere），
+ * 因为那里"空地"这个前提本身不成立。
+ */
+export function useBoardCamera({ paneRef, contentBox, enabled = true, fingerPansAnywhere = null }) {
+  const deviceClass = useDeviceClass();
+  // 判据用设备档不用视口宽：拖窄的桌面窗口没有这个问题，它手里有鼠标。
+  const fingerPans = fingerPansAnywhere == null ? deviceClass === 'phone' : fingerPansAnywhere;
   const [cam, setCam] = useState(IDENTITY_CAMERA);
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const [panning, setPanning] = useState(false);
@@ -70,11 +91,22 @@ export function useBoardCamera({ paneRef, contentBox, enabled = true }) {
    */
   const spaceRef = useRef(false);
   /**
-   * 手指按在屏幕上（2026-08-21）。并进抓手态一起看 —— 触屏上"拖卡"这条路整条撤掉：
-   * 手指按在哪儿都是推画面。拖卡 / 工作区手势 / 相机三方本来就都在问 isHandMode()，
-   * 所以这一个开关就够，不用各改各的。
+   * 手指按在屏幕上（2026-08-21）。**只记录事实**：这一下归不归相机，由下面的
+   * fingerPanRef 决定（2026-08-31 拆开手机和平板，理由在函数头）。
+   * 拖卡 / 工作区手势 / 相机三方本来就都在问 isHandMode()，所以这一个开关就够。
    */
   const touchRef = useRef(false);
+  /**
+   * 上面那条「手指落下就归相机」认不认数（2026-08-31）。
+   *
+   * ⚠️ 闸装在**读的那一侧**不装在写的那一侧：touchRef 仍然如实记录"有没有手指
+   * 按着"，只是平板上不再拿它去抢手势。写的那侧改成条件赋值的话，
+   * touchRef 就变成一个有时候撒谎的字段，别处再读它就没法信。
+   */
+  const fingerPanRef = useRef(fingerPans);
+  fingerPanRef.current = fingerPans;
+  /** 此刻单指该不该归相机 */
+  const fingerOwnsCamera = () => touchRef.current && fingerPanRef.current;
   /**
    * 手指把一张卡「拿起来」了（长按武装成功，2026-08-29）。
    *
@@ -228,7 +260,7 @@ export function useBoardCamera({ paneRef, contentBox, enabled = true }) {
     if (e.button !== 0) return false;
     // 空格抓手 / 手指：任何位置都平移，**但仍要躲开界面控件** —— 按着空格点工具栏，
     // 按钮会被当成画布抢走指针捕获（board-hit.js 顶上记的第 1 个坑）。
-    if (spaceRef.current || touchRef.current) return !onChrome(e);
+    if (spaceRef.current || fingerOwnsCamera()) return !onChrome(e);
     return onBlankCanvas(e);
   }, [enabled]);
 
@@ -384,7 +416,7 @@ export function useBoardCamera({ paneRef, contentBox, enabled = true }) {
     cam, camRef, viewport, panning, bounds,
     // 按住空格中，或者手指正按在屏幕上（抓手工具 08-17 已退役）
     // 拿着卡的时候不是抓手态：这一串事件已经判给拖卡了，相机和别的手势都让开
-    isHandMode: () => !cardGrabRef.current && (spaceRef.current || touchRef.current),
+    isHandMode: () => !cardGrabRef.current && (spaceRef.current || fingerOwnsCamera()),
     /**
      * 拖卡跟相机要走这一串事件。相机当场停掉在飞的平移（否则画面会跟着手指
      * 一起走，卡和背景双份位移）。abort 存着：第二根手指落下时相机负责调它。

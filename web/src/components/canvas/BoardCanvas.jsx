@@ -1580,7 +1580,7 @@ export default function BoardCanvas({
         added={addedPaths.has(obj.id)}
         // 避让系统：拖拽中只有被拖的卡逐帧跟手（关过渡），被避让的邻居保持 380ms 滑动
         animateLayout={!win && (!dragActive || dragRef.current?.id !== obj.id)}
-        vanishing={!win && flyingIds.has(obj.id)}
+        vanishing={!win && flyingIds.has(obj.id)} grabbed={!win && dragActive && dragRef.current?.id === obj.id}
         agentActive={ringObjects.has(obj.id)}
         groupTarget={!win && dropHint?.kind === 'group' && dropHint.id === obj.id}
         // 单选一件墨类时选中态由变换控制器画（那圈框就是它的选中框），

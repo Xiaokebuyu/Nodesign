@@ -36,8 +36,15 @@ import { computeDropHint } from '../../lib/board-drop-hint.js';
 
 /** 长按多久算「拿起来」。短了会跟"滑一下推画面"打架，长了像没反应 */
 const LONG_PRESS_MS = 350;
-/** 武装期间允许的手指抖动（超过就是要推画面，不是要拿卡） */
-const MOVE_SLOP = 8;
+/**
+ * 武装期间允许的手指抖动（超过就是要推画面，不是要拿卡）。
+ *
+ * ⚠️ 2026-08-31 从 8 放宽到 14，并且改用直线距离而不是 |dx|+|dy|。原来那个数是拿
+ * CDP 合成触摸验出来的，而合成事件的坐标零抖动：真手指按在屏幕上，接触面的重心
+ * 本来就有几个像素的漂移，横纵各漂 4px 就够把长按取消。判据自己太严，表现出来
+ * 就是「长按了没反应」，跟「这个功能被关了」分不开。
+ */
+const MOVE_SLOP = 14;
 
 export function useBoardObjectDrag({
   camera, cam, positioned, folderView, dragActive,
@@ -81,7 +88,7 @@ export function useBoardObjectDrag({
     const p = { timer: null };
     p.onMove = (ev) => {
       if (ev.pointerId !== pt.pointerId) return;
-      if (Math.abs(ev.clientX - pt.clientX) + Math.abs(ev.clientY - pt.clientY) > MOVE_SLOP) clearPress();
+      if (Math.hypot(ev.clientX - pt.clientX, ev.clientY - pt.clientY) > MOVE_SLOP) clearPress();
     };
     p.onUp = (ev) => { if (ev.pointerId === pt.pointerId) clearPress(); };
     p.onDown = () => clearPress();
@@ -93,7 +100,10 @@ export function useBoardObjectDrag({
       clearPress();
       // 跟相机要走这一串（它当场停掉在飞的平移，否则卡和背景双份位移）
       camApiRef.current?.beginCardGrab?.(abortDrag);
-      // 一点点震：长按没有反馈的话，人分不清"武装好了"和"没反应"
+      // 一点点震：长按没有反馈的话，人分不清"武装好了"和"没反应"。
+      // ⚠️ iOS Safari 至今不支持 navigator.vibrate，所以在 iPhone 上这一句是空的 ——
+      // 真正管用的反馈是卡片自己的「拿起来」样子（BoardObject 的 grabbed），
+      // 那个是所有机器上都看得见的那一份，别把反馈只押在震动上。
       try { navigator.vibrate?.(12); } catch { /* 不震就不震 */ }
       startDrag(pt, o, el);
     }, LONG_PRESS_MS);
@@ -225,7 +235,15 @@ export function useBoardObjectDrag({
     const d = dragRef.current;
     if (!d) return;
     const dx = e.clientX - d.startX; const dy = e.clientY - d.startY;
-    if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
+    /**
+     * 「算不算动过」的门槛（2026-08-31 给手指单独抬高）。
+     *
+     * 手指的接触面比光标大得多，按下去和抬起来的重心本来就会漂几个像素 —— 4px
+     * 在平板上会让一次单纯的点击留下一条 5px 的位移**并且落盘**。鼠标那 4px 不动，
+     * 它本来就准。⚠️ moved 决定的不只是画面：落盘、落点判定、以及点击类 handler
+     * 区分"拖完松手"和"真点击"全看它。
+     */
+    if (Math.abs(dx) + Math.abs(dy) > (e.pointerType === 'touch' ? 10 : 4)) d.moved = true;
     d.lastClientX = e.clientX; d.lastClientY = e.clientY;
     {
       // 位移在**世界坐标系**里算：当前相机下光标处的世界点 − 按下时的抓点。

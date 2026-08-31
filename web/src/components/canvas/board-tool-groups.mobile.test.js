@@ -1,11 +1,15 @@
 /**
- * 工具栏在三档设备上留下哪几颗（2026-08-28 移动端第二轮）。
+ * 工具栏在三档设备上留下哪几颗（2026-08-28 移动端第二轮，2026-08-31 平板归队）。
  *
  * 这几条守的不是"好看"，是两件会悄悄坏掉的事：
- *   1. 触屏上摆着**按了没反应**的按钮（指针/文字/涂鸦那一组）——
+ *   1. 手机上摆着**按了没反应**的按钮（指针/文字/涂鸦那一组）——
  *      比没有更坏，用户会以为是自己点不准；
  *   2. 手机上那条工具栏折成两行常驻，吃掉屏幕底部一大块。折行的主因是中文标签，
  *      而"撤标签"这件事有个一撤就废的例外：没有图标的那颗（缩放百分比）。
+ *
+ * ⭐ 08-31：平板不再跟着手机一起挨刀。判据从"是不是触屏"换成"是不是手机"，
+ * 因为按不出反应的根源是「单指按在哪儿都推画面」，而那条规矩现在只留给手机
+ * （390 宽的屏上没有空地可按）。改这里之前先读 useBoardCamera 的函数头。
  */
 import { describe, it, expect } from 'vitest';
 import { buildBoardToolGroups } from './board-tool-groups.js';
@@ -29,21 +33,27 @@ describe('工具栏按设备档收敛', () => {
     }
   });
 
-  it('⛔ 触屏上撤掉指针/文字/涂鸦 —— 它们在触屏上按了没有任何反应', () => {
-    // 病根在 useBoardCamera 的 shouldPan：手指一落下就是推画面，落不了笔也选不中
-    for (const cls of ['phone', 'tablet']) {
-      const ids = idsOf(build(cls));
-      expect(ids, `${cls} 还留着 select`).not.toContain('select');
-      expect(ids, `${cls} 还留着 text`).not.toContain('text');
-      expect(ids, `${cls} 还留着 draw`).not.toContain('draw');
-      expect(groupIds(build(cls)), `${cls} 还留着 tools 组`).not.toContain('tools');
-    }
+  it('⛔ 手机上撤掉指针/文字/涂鸦 —— 它们在手机上按了没有任何反应', () => {
+    // 病根在 useBoardCamera：手机保留「单指按在哪儿都推画面」，落不了笔也选不中
+    const ids = idsOf(build('phone'));
+    expect(ids, '手机还留着 select').not.toContain('select');
+    expect(ids, '手机还留着 text').not.toContain('text');
+    expect(ids, '手机还留着 draw').not.toContain('draw');
+    expect(groupIds(build('phone')), '手机还留着 tools 组').not.toContain('tools');
   });
 
-  it('拿着笔的子模式组在触屏上也不出现（那个态本来就到不了）', () => {
+  it('⭐ 平板拿回这三颗（08-31：单指归工具那条规矩让它们真的能按了）', () => {
+    const ids = idsOf(build('tablet'));
+    for (const id of ['select', 'text', 'draw']) {
+      expect(ids, `平板上少了 ${id} —— 08-31 起它在平板上是能按的`).toContain(id);
+    }
+    expect(groupIds(build('tablet'))).toContain('tools');
+  });
+
+  it('拿着笔的子模式组：桌面和平板有，手机没有（手机上那个态到不了）', () => {
     expect(groupIds(build('desktop', { tool: 'draw' }))).toContain('drawMode');
+    expect(groupIds(build('tablet', { tool: 'draw' }))).toContain('drawMode');
     expect(groupIds(build('phone', { tool: 'draw' }))).not.toContain('drawMode');
-    expect(groupIds(build('tablet', { tool: 'draw' }))).not.toContain('drawMode');
   });
 
   it('手机再撤三颗：改板书 / 缩放的 − 和 +（用户拍板「只读 + 对话」）', () => {

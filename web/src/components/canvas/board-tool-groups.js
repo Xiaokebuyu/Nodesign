@@ -20,14 +20,15 @@ import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, Prese
  *   本文件是 .js 且"只造数据不渲染"，所以节点在 board-filter.jsx 里造好了递进来）
  * @param {'phone'|'tablet'|'desktop'} [p.deviceClass]  见 lib/device-class.js
  *
- * ## 触屏上少哪几颗（2026-08-28 移动端第二轮）
+ * ## 手机上少哪几颗（2026-08-31 起只剩手机这一档）
  *
- * ⛔ **指针 / 文字 / 涂鸦这一组在触屏上是死的，不是被我们藏了**：useBoardCamera
- * 的 shouldPan 里写着「空格抓手 / 手指：任何位置都平移」，所以手指一落下就是推
- * 画面，落不了笔、选不中、也起不了文字框。这是 08-21 修「双指捏合把卡带跑并落盘」
- * 时的有意取舍（用现成的 isHandMode 而不是新写一套手势仲裁），取舍还算数，但那
- * 之后这三颗按钮就一直摆在手机屏幕最底下**按了没有任何反应** —— 比没有更坏。
- * 顺手的 drawMode 子组同理（它只在 tool==='draw' 时出现，而那个态在触屏上到不了）。
+ * 08-28 这里撤的是**整个触屏档**的指针 / 文字 / 涂鸦，理由写的是「它们在触屏上
+ * 按了没反应」：useBoardCamera 的 shouldPan 里手指一落下就推画面，落不了笔。
+ *
+ * ⭐ 08-31 把那条规矩本身换掉了（两指永远归相机、单指归当前工具，理由在
+ * useBoardCamera 头上），平板于是走回桌面那套，这三颗跟着回来。**手机保留旧规矩**，
+ * 因为 390 宽的屏上卡片几乎铺满，"先找一块空地才能推画面"等于推不动 ——
+ * 所以手机上这三颗仍然按不出反应，仍然不给。
  *
  * ⭐ 手机再少一颗：改板书。它**能**工作，撤掉是因为用户拍板「手机上只读 + 对话，
  * 编辑留给桌面」。平板留着 —— 屏幕放得下，而且平板上真有人会顺手改一下。
@@ -43,7 +44,6 @@ export function buildBoardToolGroups({
   deviceClass = 'desktop',
   readGroup = null,
 }) {
-  const touch = deviceClass === 'phone' || deviceClass === 'tablet';
   const phone = deviceClass === 'phone';
   return dropLabelsOnPhone(phone, ([
     ...(filterGroup ? [filterGroup] : []),
@@ -88,7 +88,7 @@ export function buildBoardToolGroups({
         }] : []),
       ],
     },
-    ...(touch ? [] : [{
+    ...(phone ? [] : [{
       id: 'tools',
       type: 'mode',
       value: tool,
@@ -113,7 +113,7 @@ export function buildBoardToolGroups({
       ],
     }]),
     // 拿着笔时多出的子模式组：落笔 / 摆放（见 drawMode 的说明）
-    ...(tool === 'draw' && !touch ? [{
+    ...(tool === 'draw' && !phone ? [{
       id: 'drawMode',
       type: 'mode',
       value: drawMode,

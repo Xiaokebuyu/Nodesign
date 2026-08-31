@@ -50,6 +50,14 @@ function BoardObject({
   o, projectId, currentSessionId, fileVersions, added, animateLayout = false, agentActive = false,
   vanishing = false,
   groupTarget = false, selected = false, noteCount = 0,
+  /**
+   * 这张卡此刻被手（或鼠标）拿在手里（2026-08-31）。
+   *
+   * ⭐ 它存在的理由是**触屏上长按武装成功这件事此前完全看不见**：唯一的反馈是
+   * navigator.vibrate，而 iOS Safari 至今不支持它。于是在 iPhone 上，「按住 350ms
+   * 拿起来了」和「这个功能被关了」是同一幅画面，连建它的人隔几小时都会认错。
+   */
+  grabbed = false,
   renaming = false, onRenameCommit, onRenameCancel,
   /** 文字类真实高度回写（useMeasuredSize）：(id, { h }) → 写 layout */
   onMeasured = null,
@@ -105,6 +113,14 @@ function BoardObject({
   // 纯手写字：块宽由正文决定（max-content，封顶 26em），存档的 w 只是回写的镜像 —— 估宽不准
   // 就折行/留白，用户点到空白也算点到字（08-23 误触案）。md 节点和板书仍按 w 折行。
   const plainText = o.type === 'text' && o.data?.format !== 'md';
+  /**
+   * 墨类自身的变换（2026-08-13，选中态控制器写入 data.rotation / data.scale）：
+   * 围绕中心转 / 缩。抽成变量是因为「拿在手里」那一下也要写 transform，
+   * 两个来源必须叠在同一个字符串里。
+   */
+  const inkTransform = isInk && (o.data?.rotation || (o.data?.scale && o.data.scale !== 1))
+    ? `rotate(${o.data?.rotation || 0}deg) scale(${o.data?.scale ?? 1})`
+    : '';
   const base = {
     position: 'absolute', left: o.pos.x, top: o.pos.y,
     ...(plainText
@@ -139,7 +155,11 @@ function BoardObject({
     // 谱系收叠的纸叠感：两层偏移的「纸边」用 box-shadow 画（填充色一层 +
     // 描边色一层），画在元素底下不占 DOM、不吃指针、不压自家边框
     boxShadow: (() => {
-      const paper = isInk ? null : (hover ? '0 4px 14px rgba(43,33,23,0.12)' : '0 1px 4px rgba(43,33,23,0.05)');
+      // 拿在手里的那一档影子比悬停更重：它是「已经拿起来了」在触屏上唯一看得见的
+      // 那份反馈（配合下面的 scale(1.03)），而触屏上根本没有悬停这一档。
+      const paper = isInk ? null
+        : (grabbed ? '0 10px 26px rgba(43,33,23,0.30)'
+          : hover ? '0 4px 14px rgba(43,33,23,0.12)' : '0 1px 4px rgba(43,33,23,0.05)');
       const stack = (stackCount > 0 && !stackOpen && !isInk)
         ? `4px 4px 0 -1px ${COLOR.bgCard}, 4px 4px 0 0 ${COLOR.borderLt}, 8px 8px 0 -1px ${COLOR.bgCard}, 8px 8px 0 0 ${COLOR.borderLt}`
         : null;
@@ -149,14 +169,24 @@ function BoardObject({
     // 闲置板书不给抓手光标 —— 它此刻对手势就是空地，别暗示"能拖"
     cursor: chalkIdle ? 'default' : 'grab', userSelect: 'none',
     touchAction: 'none',
+    /**
+     * iOS：长按图片或文字会弹系统自己的菜单（存图 / 拷贝），系统一接管手势就给
+     * 页面发 pointercancel，长按拿卡当场作废。userSelect 只管"选中文字"那半边，
+     * 菜单那半边归 -webkit-touch-callout，两条都要写。
+     *
+     * ⚠️ 这个属性是继承的，所以写在卡片根上就覆盖了卡里的图和正文，不用逐个去加。
+     */
+    WebkitTouchCallout: 'none',
     animation: POP_IN,
     // 草稿态（2026-08-23 黑板）：agent 这一轮还在打草稿的东西半透明，落定变实
     ...((o.staging || o.pos?.staging) ? { opacity: 0.55 } : null),
     // 变换（2026-08-13，选中态控制器写入 data.rotation / data.scale）：
     // 围绕中心转/缩。命中不用另算 —— DOM 事件本来就跟着 transform 走，
     // 选中框作为子层也一起转。只有墨类（text/scribble）有这两个字段。
-    ...(isInk && (o.data?.rotation || (o.data?.scale && o.data.scale !== 1)) ? {
-      transform: `rotate(${o.data?.rotation || 0}deg) scale(${o.data?.scale ?? 1})`,
+    ...(inkTransform || grabbed ? {
+      // ⚠️ 两个来源要**叠**不能互相盖：墨类的自身变换 + 拿在手里那一下的放大。
+      // 直接在下面再写一个 transform 会把旋转抹掉，卡一拿起来就转正回去。
+      transform: `${inkTransform}${grabbed ? ' scale(1.03)' : ''}`.trim(),
       transformOrigin: '50% 50%',
     } : null),
     // agent 此刻正在动这个物件 → 外圈光圈（放在 animation 之后才盖得住）。

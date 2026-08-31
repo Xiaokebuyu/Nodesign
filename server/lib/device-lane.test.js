@@ -70,11 +70,27 @@ describe('fitFor 出的版式', () => {
     expect(f.h).toBe(Math.round(664 * 1.6));
   });
 
-  it('平板同一条规矩，只是屏幕大', () => {
+  /**
+   * ⭐⭐ 2026-08-31 平板归队（用户拍板「平板甚至不用做多余的适配」）。
+   *
+   * 08-28 建这条链时平板跟手机合成一档，那不是判断出来的，是"触屏"这个词把两台
+   * 不一样的机器装进了同一个盒子。平板屏幕装得下并排、手指也够得着，它缺的只是
+   * 命中区大一点，那是前端的事。**它仍然要报出 lane:'tablet'** —— 档位这个事实
+   * 别丢，丢了就没法再区分"平板"和"桌面"（提示词里还要说他在平板上）。
+   */
+  it('⭐ 平板走桌面那套公式，但档位名字还在', () => {
     const f = fitFor(vpOf(TABLET));
     expect(f.lane).toBe('tablet');
-    expect(f.column).toBe(true);
-    expect(f.w).toBe(762);
+    expect(f.column, '平板又被当成手机了 —— 一件一屏那套只给手机').toBe(false);
+    expect(f.w).toBe(1080);      // 810 / 0.75，跟桌面同一个公式
+    expect(f.h).toBe(1440);      // 1080 / 0.75
+  });
+
+  it('⛔ 一件一屏那套只有手机拿得到（这是下游三处封顶的唯一开关）', () => {
+    expect(fitFor(vpOf(PHONE)).column).toBe(true);
+    for (const d of [TABLET, DESKTOP]) expect(fitFor(vpOf(d)).column, `${d.class} 不该单列`).toBe(false);
+    // 认不出档 / 没有 device 的都当桌面，一样不单列
+    expect(fitFor(vpOf(null)).column).toBe(false);
   });
 
   it('桌面一个数都没变（这一轮不许动桌面）', () => {
@@ -138,7 +154,7 @@ describe('单列版式下沉到布局引擎', () => {
     expect(resolveTemplate(nodes, { template: 'auto', edges })).toBe('flow');
   });
 
-  it('触屏：auto 一律竖排一列', () => {
+  it('手机：auto 一律竖排一列', () => {
     expect(resolveTemplate(nodes, { template: 'auto', edges, column: true })).toBe('column');
   });
 

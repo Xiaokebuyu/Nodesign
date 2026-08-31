@@ -150,18 +150,20 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       } catch { /* 纸读不出就不占字 */ }
       const dirs = null;
       /**
-       * 手机 / 平板档的版式（2026-08-28 移动端第二轮，用户拍板「一件 = 一屏，纵向单列」）。
+       * 手机档的版式（2026-08-28 移动端第二轮，用户拍板「一件 = 一屏，纵向单列」；
+       * 2026-08-31 起**只剩手机**，平板走桌面那套，判据整条在 sketch-layout 的 fitFor）。
        *
        * ⚠️ 这段是**事前**说的，不是靠 write_on_board 的返回文案事后纠正 —— 一块
        * 1700 宽的板书在 390 的屏上已经写出来了，再告诉它"下次窄一点"没有意义，
        * 用户这一轮拿到的就是要横着滑四屏的东西。
        *
-       * ⭐ 同时几何那边也在执行（resolvePlacement 的 column：左右侧一律降级成正下方）。
-       * 两处都做不是重复：提示词管"它主动写多宽"，几何管"它没照做时版面还读得了"。
+       * ⭐ 同时几何那边也在执行（write-on-board 的 capUnits 封顶 + resolveTemplate
+       * 强制单列）。两处都做不是重复：提示词管"它主动写多宽"，几何管"它没照做时
+       * 版面还读得了"。
        */
       const fit = fitFor(vp);
       const laneLine = fit.column
-        ? `⚠️ 他在${fit.lane === 'phone' ? '手机' : '平板'}上（屏幕 ${fit.screen?.w}x${fit.screen?.h}px）。`
+        ? `⚠️ 他在手机上（屏幕 ${fit.screen?.w}x${fit.screen?.h}px）。`
           + `版面规矩：**一件 = 一屏，纵向单列**。每件宽度 ≤${fit.w}（超了就要横向滑动，手机上没人受得了），`
           + `高度到 ${fit.h} 都行（竖着滚是手机上读长内容的天然姿势）。`
           + `接着写就往**正下方**接，别用 side:'right'/'left' 并排 —— 并排的第二件在他屏幕外。`

@@ -34,6 +34,10 @@ import { ZOOM_MIN, ZOOM_MAX, screenToWorld } from '../../lib/board-camera.js';
  * 三方都已经在问这一句了 —— 手指一落下就把它置真，于是拖卡自己让路、相机接管平移，
  * 一行新的平移代码都不用写。**点一下**照旧（click 是浏览器另外生成的），点开卡片没受影响。
  *
+ * ⭐ 2026-08-31：`handRef` 置真这件事本身没变，**变的是相机认不认它** ——
+ * 只有手机认（useBoardCamera 的 fingerPansAnywhere）。平板上单指归当前工具，
+ * 相机走两指那条路。这里一个字都不用改，因为两指那条路从来不问抓手态。
+ *
  * ## 两个必须这么写的地方
  *
  * 1. ⭐**监听挂在捕获阶段的原生事件上，不走 React 的 props。**
@@ -55,7 +59,8 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const CLICK_MUTE_MS = 350;
 
 /**
- * @param {object} handRef 手指按着的时候置真 —— 相机那边把它并进"抓手态"，
+ * @param {object} handRef 手指按着的时候置真 —— 相机那边**可能**把它并进"抓手态"
+ *   （手机认、平板不认，见 useBoardCamera 的 fingerPansAnywhere），
  *   拖卡/工作区手势看见抓手态就让路。⚠️ 必须在**捕获阶段**置：画布那些
  *   handler 是 React 委托在根节点上的冒泡回调，比这里晚一步，才读得到。
  */
