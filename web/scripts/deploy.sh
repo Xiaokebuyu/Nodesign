@@ -72,8 +72,14 @@ fi
 SRV_PID=$(ss -lptnH "sport = :$PORT" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2)
 if [ -n "$SRV_PID" ]; then
   PROC_EPOCH=$(date -d "$(ps -o lstart= -p "$SRV_PID")" +%s 2>/dev/null || echo 0)
+  # ⚠️ `|| true` 不是保险起见，是这道闸 2026-08-31 之前**一直是死的**：
+  # `find … | sort -rn | head -1` 里 head 取完一行就关管道 → sort 吃 SIGPIPE 退 141 →
+  # `set -euo pipefail` 把整个脚本静默掐掉在这一行。表现是部署跑完一切正常、
+  # 「服务端有改动比进程还新」一个字不印 —— 而它正是用来防「改了服务端忘了 restart」
+  # 的那道闸。⭐ 它还跟文件数量有关（少几个文件时 sort 一次写完就不触发），
+  # 所以能装死很久：这仓库为「node 不热重载」中过至少三次，每次都以为是自己忘了。
   NEWEST=$(find ../server -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.md' \) \
-    -not -path '*/node_modules/*' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1)
+    -not -path '*/node_modules/*' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 || true)
   NEWEST_EPOCH=${NEWEST%% *}
   NEWEST_FILE=${NEWEST#* }
   if [ -n "$NEWEST_EPOCH" ] && [ "${NEWEST_EPOCH%.*}" -gt "$PROC_EPOCH" ]; then
