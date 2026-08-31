@@ -18,6 +18,7 @@ import { PanelManagerProvider } from './components/layout/PanelManager.jsx';
 import SiteWindow from './components/canvas/SiteWindow.jsx';
 import ArtifactWindow from './components/canvas/ArtifactWindow.jsx';
 import FloatingToolbar from './components/ui/FloatingToolbar.jsx';
+import BoardObject from './components/canvas/cards/BoardObject.jsx';
 
 /**
  * 迟到的工具组：站点窗的「上线」控件要先请求发布状态，loaded 之前整个返回
@@ -82,6 +83,46 @@ function Host({ children: render }) {
     </div>
   );
 }
+
+/**
+ * 分级渲染（2026-08-31）：同一批卡在四个缩放下并排，看「拉远换名字」这一刀
+ * 到底长什么样。⭐ 每一列都真的套一层 `transform: scale(z)` —— 这一刀的效果
+ * 全在"世界层缩了、脸自己反缩回来"这个抵消上，不套变换就等于没测。
+ * 第三张是涂鸦，它在形态表里豁免，四列都该是那笔画。
+ */
+CASES.lod = () => {
+  const CARDS = [
+    { id: 'notes/线索板.md', type: 'note', chalk: true, title: '线索板',
+      text: '第一条线索：门锁没有撬动痕迹，凶手有钥匙或者被主人放了进来。', pos: { x: 0, y: 0, z: 1 } },
+    { id: '素材/角色设定.md', type: 'file', name: '角色设定.md', size: 4210,
+      preview: '# 伊蕾娜\n旅行中的魔女，灰发。', pos: { x: 0, y: 0, z: 1 } },
+    { id: 'ink1', type: 'scribble', pos: { x: 0, y: 0, z: 1 },
+      data: { d: 'M10 90 C 40 10, 80 10, 110 90 S 150 30, 150 90', color: 'ink', width: 3 } },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 40, padding: 30, alignItems: 'flex-start' }}>
+      {[1, 0.5, 0.3, 0.15].map((z) => (
+        <div key={z} style={{ width: 260 }}>
+          <div style={{ fontFamily: 'monospace', fontSize: 12, marginBottom: 10 }}>
+            {Math.round(z * 100)}%（便签渲染宽 {Math.round(200 * z)}px）
+          </div>
+          {/* 世界层：整块按 z 缩，卡片自己不知道这回事，它只收到 scale={z} */}
+          <div style={{ transform: `scale(${z})`, transformOrigin: '0 0', height: 700 }}>
+            {CARDS.map((o, i) => (
+              <div key={o.id} style={{ position: 'relative', height: 220, marginBottom: 20, top: i * 0 }}>
+                <BoardObject
+                  o={{ ...o, pos: { ...o.pos } }}
+                  projectId="p_demo" fileVersions={{}} scale={z}
+                  wasDrag={() => false}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const which = new URLSearchParams(location.search).get('case') || 'site';
 createRoot(document.getElementById('root')).render(

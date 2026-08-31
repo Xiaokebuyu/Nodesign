@@ -14,8 +14,9 @@ import { DESKTOP_W, FOLDER_CARD, newStackedZoneRect } from '../../lib/board-geom
 import { useLiveChalkSpots } from './use-live-chalk-spots.js';
 import { useObjectClick } from './useObjectClick.js';
 import {
-  SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, passesFilter, isDirArtifact, isArchivePath,
+  SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, isDirArtifact, titleOf,
 } from '../../lib/board-kinds.js';
+import { passesFilter, isArchivePath } from '../../lib/board-filter-axes.js';
 import { deriveBoardObjects } from '../../lib/board-objects.js';
 import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
@@ -735,7 +736,8 @@ export default function BoardCanvas({
   camApiRef.current = camera;
 
   // 黑板三件（视点上报 / 眼睛模式 / 黑板模式+跟随）→ useBlackboardMode.js
-  const { blackboardMode, toggleBlackboard } = useBlackboardWiring({
+  // ⚠️ 08-31 起没人接它的返回值（开关下架），但这一句必须照旧调用：视点上报和镜头跟随都在里面
+  useBlackboardWiring({
     projectId, cam, viewport: camera.viewport, winDir, openWindow, selectedIds,
     camRef: camApiRef, positionedRef, focusRequest,
   });
@@ -791,12 +793,8 @@ export default function BoardCanvas({
   /** 给浮层/提示用的端点名字。手写字直接报内容 —— 它没有别的名字。 */
   const titleOfId = useCallback((id) => {
     const o = positionedRef.current.find(it => it.id === id) || objectsRef.current.find(it => it.id === id);
-    if (o) {
-      if (o.type === 'text') return `「${String(o.data?.t || '').slice(0, 14)}」`;
-      if (o.type === 'scribble') return '一笔涂鸦';
-      return o.title || id.split('/').pop() || id;
-    }
-    return id.split('/').pop() || id;   // 文件夹（zone）或还没摆上桌的产物
+    // 怎么称呼一张卡收在 board-kinds.titleOf（远处那张脸也念同一个名字）
+    return o ? titleOf(o) : (id.split('/').pop() || id);   // 找不到 = 文件夹或还没摆上桌
   }, []);
 
   /**
@@ -1550,10 +1548,9 @@ export default function BoardCanvas({
   const boardToolGroups = useMemo(() => buildBoardToolGroups({
     tool, setTool, drawMode, setDrawMode, scale,
     zoomFit: zoomFitStable, zoomBy: zoomByStable, zoomTo: zoomToStable, filterGroup,
-    blackboardMode, toggleBlackboard,
     chalkEditMode, toggleChalkEdit,
     openCanvasNote, deviceClass: deviceEnv.class, readGroup,
-  }), [tool, drawMode, scale, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, readGroup]);
+  }), [tool, drawMode, scale, zoomFitStable, zoomByStable, zoomToStable, filterGroup, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, readGroup]);
 
   useEffect(() => { onToolbarGroups?.(boardToolGroups); }, [boardToolGroups, onToolbarGroups]);
 

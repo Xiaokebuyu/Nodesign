@@ -90,8 +90,27 @@ describe('闸三：仲裁只有一个主人', () => {
   });
 });
 
-describe('板书不给拖（手机上防误触最不能松的那类）', () => {
-  it('armLongPress 第一件事就是把板书挡掉', () => {
-    expect(body(DRAG, 'armLongPress')).toMatch(/if\s*\(o\.chalk\)\s*return/);
+/**
+ * 板书的防误触（2026-08-31 从「一律不给拖」改成「跟桌面同一条规矩」）。
+ *
+ * 08-29 这里钉的是 `if (o.chalk) return`，理由原文是「它在桌面上有专门的防误触闸
+ * （改板书开关），而那颗按钮手机上撤掉了」。08-31 站主把那颗按钮放回了手机（占掉
+ * 下架的「黑板」那一格），理由不成立了，闸跟着换。
+ *
+ * ⭐ 现在钉的是**两条路同一个判据**这个形状。armLongPress（触屏长按那条）和
+ * onObjectPointerDown（鼠标/平板那条）必须写一模一样的条件，只改一条的下场是：
+ * 手机上开关按了没反应，或者反过来关着也拖得动，两种都让那颗开关变成谎话。
+ */
+describe('板书防误触：两条路一个判据', () => {
+  const GUARD = /o\.chalk\s*&&\s*!chalkEditModeRef\.current\s*&&\s*!selectedIdsRef\.current\.includes\(o\.id\)/;
+
+  it('长按那条路认「改板书」开关，不再一刀切挡掉', () => {
+    expect(body(DRAG, 'armLongPress')).toMatch(GUARD);
+    expect(body(DRAG, 'armLongPress'), '又回到一刀切了 —— 那颗开关会变成假的')
+      .not.toMatch(/if\s*\(o\.chalk\)\s*return/);
+  });
+
+  it('鼠标那条路的判据一字不差', () => {
+    expect(body(DRAG, 'onObjectPointerDown')).toMatch(GUARD);
   });
 });

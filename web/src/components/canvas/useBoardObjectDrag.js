@@ -80,8 +80,19 @@ export function useBoardObjectDrag({
    */
   const armLongPress = (e, o) => {
     clearPress();
-    // 不给拖的照旧不给：板书有专门的防误触闸（改板书开关），手机上尤其不能松
-    if (o.chalk) return;
+    /**
+     * 板书：跟桌面同一条规矩（2026-08-31 改）。
+     *
+     * 08-29 这里写的是 `if (o.chalk) return;`，一律不给拖，理由原文是「它在桌面上
+     * 有专门的防误触闸（改板书开关），而那颗按钮手机上撤掉了」。08-31 站主把那颗
+     * 按钮放回了手机（占掉「黑板」腾出来的格子），**理由就不成立了**，闸跟着解除。
+     *
+     * ⭐ 解除不是拆掉，是换成桌面那一条：关着的时候板书对手势仍然是空地，
+     * 开了开关（或者已经被选中）才拿得起来。手机最容易误触，防误触这件事没有放松，
+     * 只是从"永远不给"变成"你说要动我才给"。判据跟 onObjectPointerDown 里那条一字不差，
+     * ⚠️ 两条必须同时改，只改一条就是一个按了没反应的假开关。
+     */
+    if (o.chalk && !chalkEditModeRef.current && !selectedIdsRef.current.includes(o.id)) return;
     if (toolRef.current !== 'select') return;
     const el = e.currentTarget;
     const pt = { clientX: e.clientX, clientY: e.clientY, pointerId: e.pointerId };

@@ -8,7 +8,7 @@
  * 调用方仍然要用 useMemo 包住它，而且**镜头动作必须先经 ref 转一手**：理由
  * 记在 BoardCanvas 那个 memo 的头上（每帧换身份 → 死循环，build 和单测都照不出来）。
  */
-import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, Presentation, NotebookPen, MessageSquarePlus } from 'lucide-react';
+import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, NotebookPen, MessageSquarePlus } from 'lucide-react';
 
 /**
  * @param {object} p
@@ -30,15 +30,15 @@ import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, Prese
  * 因为 390 宽的屏上卡片几乎铺满，"先找一块空地才能推画面"等于推不动 ——
  * 所以手机上这三颗仍然按不出反应，仍然不给。
  *
- * ⭐ 手机再少一颗：改板书。它**能**工作，撤掉是因为用户拍板「手机上只读 + 对话，
- * 编辑留给桌面」。平板留着 —— 屏幕放得下，而且平板上真有人会顺手改一下。
- * 缩放的 −/+ 也在手机上撤掉：捏合是更自然的那条路，百分比那颗（点一下回 100%）留着。
- * （这里原来还有「整理」，2026-08-31 整颗按钮下架，不再分设备档。）
+ * ⭐ 手机只再少两颗：缩放的 −/+，捏合是更自然的那条路（百分比那颗点一下回 100%，留着）。
+ * 「改板书」08-31 起**三档都有** —— 它原来手机上没有，理由是站主拍板「手机上只读 + 对话」，
+ * 而同一天他拍板把它放回来（占掉下架的「黑板」那一格）。⚠️ 它跟 useBoardObjectDrag
+ * 那条板书防误触闸是绑死的，改这一格必须同时改那一条，否则是个按了没反应的假开关。
+ * （这里原来还有「整理」和「黑板」，2026-08-31 先后整颗下架，都不再分设备档。）
  */
 export function buildBoardToolGroups({
   tool, setTool, drawMode, setDrawMode, scale,
   zoomFit, zoomBy, zoomTo, filterGroup,
-  blackboardMode = false, toggleBlackboard = null,
   chalkEditMode = false, toggleChalkEdit = null,
   openCanvasNote = null,
   deviceClass = 'desktop',
@@ -61,18 +61,19 @@ export function buildBoardToolGroups({
         ...(phone ? [] : [{ id: 'zoomOut', icon: Minus, title: '缩小（Ctrl -）', onClick: () => zoomBy(-1) }]),
         { id: 'zoomLevel', icon: null, label: `${Math.round(scale * 100)}%`, title: '回到 100%（Ctrl 0）', onClick: () => zoomTo(1) },
         ...(phone ? [] : [{ id: 'zoomIn', icon: Plus, title: '放大（Ctrl +）', onClick: () => zoomBy(1) }]),
-        // 黑板模式（2026-08-23）：画布取代侧栏成为主窗口 —— agent 每轮主体内容落画布、
-        // 聊天只留一两句，草图落下时镜头跟过去。开关是项目级偏好（ui-config.json）。
-        ...(toggleBlackboard ? [{
-          id: 'blackboard', icon: Presentation, label: '黑板', active: blackboardMode,
-          title: blackboardMode
-            ? '黑板模式：开 —— agent 把想法画在画布上、聊天只旁白、镜头跟着新图走。点一下关'
-            : '黑板模式：关 —— 开了以后 agent 默认把讨论画到画布上，聊天只留一两句，镜头跟着新图走',
-          onClick: toggleBlackboard,
-        }] : []),
+        // ⚠️ 「黑板」2026-08-31 整颗下架。它是 08-23 的遗留：那时画布取代侧栏成为主窗口
+        // 是一件要选的事，今天它就是这个产品本身，桌面和移动端一律在这个模式里。
+        // 实证：全库 ui-config.json 里写过 blackboard_mode 的项目 **0 个** —— 上线至今
+        // 没有任何人用这颗按钮关过它。模式本身没拆（默认 true，服务端 UserPromptSubmit
+        // 照旧读它注入「主体内容落画布」，镜头跟随照旧），拆的只是这个选项。
+        // 真要再给用户一个关它的口子，先想清楚关掉之后 agent 该把东西放哪。
         // 板书编辑开关（2026-08-24 用户提，防误触）：关着（默认）时板书对单击/
         // 拖拽是空地，双击才武装成可拖可编辑；开着时板书随时可选中、双击进编辑
-        ...(toggleChalkEdit && !phone ? [{
+        // 板书可移动（2026-08-31 站主拍板，占了「黑板」腾出来的那一格）：手机上从此也有。
+        // 这一格的存在**同时解除了** useBoardObjectDrag 那条「板书一律不给拖」——
+        // 08-29 立那条闸的理由原文是「它在桌面上有专门的防误触闸，而那颗按钮手机上撤掉了」，
+        // 按钮回来了，理由就不成立了，两处必须一起改，只改一处就是留个假开关。
+        ...(toggleChalkEdit ? [{
           id: 'chalkEdit', icon: NotebookPen, label: '改板书', active: chalkEditMode,
           title: chalkEditMode
             ? '板书编辑：开 —— 板书随时可拖动，双击进编辑。点一下关'

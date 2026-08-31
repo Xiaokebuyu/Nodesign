@@ -32,11 +32,19 @@ SRC_FONTS = {
 EXTRA = '　、。〈〉《》「」『』【】〔〕〖〗！（），．：；？［］｛｝…—～·¥％＋－／＜＞＝＠'
 
 
+# 不上屏的源文件：测试、lint，以及渲染检查台（harness 不进 vite build，
+# 它的假数据只在 chromium 截图里出现过，为它切字进生产字体是白白加重）
+NOT_RENDERED = ('.test.', '.lint.')
+
+
 def render_sources():
-    """会被渲染的前端源文件（测试/lint 里的中文不上屏，不算）"""
+    """会被渲染的前端源文件（测试/lint/检查台里的中文不上屏，不算）"""
     for p in sorted((ROOT / 'web/src').rglob('*')):
-        if p.suffix in ('.js', '.jsx', '.css') and '.test.' not in p.name and '.lint.' not in p.name:
-            yield p
+        if p.suffix not in ('.js', '.jsx', '.css'):
+            continue
+        if any(m in p.name for m in NOT_RENDERED) or p.name == 'harness.jsx':
+            continue
+        yield p
 
 
 def chars_in(paths):

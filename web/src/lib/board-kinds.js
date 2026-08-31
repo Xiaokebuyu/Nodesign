@@ -260,6 +260,10 @@ export const KINDS = {
     primary: null,
     actions: ['delete'],
     legacyBucket: 'art',
+    // 拉远了也照画（2026-08-31 分级渲染）：换脸的前提是"内容缩小之后变成噪点、
+    // 而名字比它有信息量"。一笔画缩小了还是那笔画，而它的名字就是「一笔涂鸦」——
+    // 换过去等于把有信息的东西换成没信息的。判据在 board-lod.test.js。
+    farFace: false,
   },
 
   /**
@@ -311,94 +315,6 @@ export const KINDS = {
   },
 };
 
-/**
- * 桌面过滤的**两条轴**（2026-08-18 用户定的："产物和来源叠加"）。
- *
- * ## 为什么是两条，而不是一张大清单
- *
- * 「这东西是什么」和「谁弄出来的」是两个互不包含的问题。一张站点卡可能是 agent
- * 写的，也可能是用户传上来的一整包；一张图可能是他自己拍的、生图产线画的、
- * 或者工具从参照站采回来的。压成一条轴就得列 `agent的站点 / 用户的站点 / …`
- * 这种笛卡尔积 —— 加一种形态就翻一倍。**两条独立的轴各自过滤、结果取交集**，
- * 加形态只需要在一条轴上表态。
- *
- * ## 内容轴（`category`，写在形态表上）
- *
- * - `work`     产物：agent 做出来交付的东西（deck / 站点 / word）
- * - `material` 素材：图、视频、便签、散文件 —— 用来做产物的原料
- * - `tool`     **工具卡**：既装着工具采集到的内容，本身又能点进去交互（浏览器）
- * - `ink`      画布上的笔迹：涂鸦、手写字（只给自己看，agent 读不到）
- * - `doc`      项目文档（记忆 / 品牌）的画布分身
- *
- * ## 来源轴（`sourceOf(o)`，从物件本身判，不写在形态表上）
- *
- * 它**不能**写在形态表里：同一种形态可以有不同来源（一张图可以是上传的也可以是
- * 生图产线画的）。所以按物件的实际出处判。
- *
- * - `user` 用户自己放进来的（上传）
- * - `tool` 工具产出/采集的（生图产线、浏览器采集）
- * - `agent` 其余 —— agent 写的产物和便签
- */
-export const CATEGORIES = Object.freeze([
-  { id: 'work', label: '产物' },
-  { id: 'material', label: '素材' },
-  { id: 'tool', label: '工具' },
-  { id: 'ink', label: '笔迹' },
-  { id: 'doc', label: '文档' },
-]);
-
-export const SOURCES = Object.freeze([
-  { id: 'agent', label: 'agent 做的' },
-  { id: 'tool', label: '工具采的' },
-  { id: 'user', label: '我放的' },
-]);
-
-/** 内容轴。未知形态按 file 走（= material）。 */
-export function categoryOf(o) {
-  return kindOf(o).category || 'material';
-}
-
-/**
- * 来源轴。判据的**顺序有讲究**：先看路径（那是最硬的证据 —— 文件真的躺在
- * 工具的目录里），再看服务端给的 `kind`（upload/generated 是扫描时分的栏），
- * 最后才兜底 agent。
- */
-export function sourceOf(o) {
-  if (kindOf(o).category === 'tool') return 'tool';
-  const p = String(o?.path || o?.rel || '');
-  if (p.startsWith('assets/references/')) return 'tool';    // 浏览器采集 / 搜索下载
-  if (p.startsWith('assets/generated/')) return 'tool';     // 生图产线
-  if (o?.kind === 'generated') return 'tool';
-  if (p.startsWith('用户内容/')) return 'user';           // 上传落点（2026-08-28），路径是最硬的证据
-  if (o?.kind === 'upload') return 'user';
-  // ⚠️ 老形状：上传的东西路径长 `../../shared/assets/x`（扁平化前的写法）。
-  // 不认它的话用户上传的素材会被标成"agent 做的"。
-  if (/(^|\/)shared\/assets\/[^/]+$/.test(p)) return 'user';   // legacy-ok
-  return 'agent';
-}
-
-/**
- * 过滤器：两条轴各自一个"要显示哪些"的集合，**结果取交集**。
- * `null` / 空集 = 这条轴不过滤（不是"全都不要"）—— 默认状态就该是全都看得见。
- */
-/**
- * 项目档案面（2026-08-27 用户拍板）：根 CLAUDE.md 和 记忆/ 是 agent 的后台
- * 档案，不是产出 —— 默认不上画布，用户点画布右上角「档案」才显形。
- * 判据按路径（物件 id 和文件夹 zone id 都是工作区相对路径，同一个函数判两边）。
- */
-export function isArchivePath(p) {
-  const s = String(p || '');
-  return s === 'CLAUDE.md' || s === '记忆' || s.startsWith('记忆/');
-}
-
-export function passesFilter(o, filter) {
-  if (!filter) return true;
-  const cats = filter.categories;
-  const srcs = filter.sources;
-  if (cats && cats.length && !cats.includes(categoryOf(o))) return false;
-  if (srcs && srcs.length && !srcs.includes(sourceOf(o))) return false;
-  return true;
-}
 
 /** 未知 type 一律按 file 处理（跟老的 `SIZES[o.type] || SIZES.file` 同口径）。 */
 export function kindOf(o) {
@@ -446,6 +362,39 @@ export function sizeOf(o) {
 /** 中文名（标注浮层、无障碍标签用） */
 export function labelOf(o) {
   return traitsOf(o).label || '产物';
+}
+
+/**
+ * 拉远之后换不换脸（2026-08-31 分级渲染）。
+ *
+ * 缺省换。⛔ 只有"内容本身就是一幅画、而且没有比它更有信息量的名字"的形态才写
+ * `farFace: false`，理由写在那条形态条目上。别拿它当"我这张卡很重要"的标记 ——
+ * 每多一个豁免，拉远看全局时就多一张糊掉的卡。
+ */
+export function farFaceOf(o) {
+  return traitsOf(o).farFace !== false;
+}
+
+/**
+ * 这张卡叫什么（2026-08-31 从 BoardCanvas 的 titleOfId 抽出来）。
+ *
+ * 两个读者：连线浮层说「A 指向 B」时要念的名字，和拉远之后卡片上画的那个名字
+ * （cards/FarFace.jsx）。⭐ 抽出来是因为第二个读者出现的时候，原地再写一遍
+ * "怎么称呼一张卡"必然跟第一份分叉 —— 画布上写着一个名字、连线弹窗里念另一个。
+ *
+ * ⚠️ 墨类没有名字可用，只能拿内容顶上：手写字取头 14 个字，涂鸦压根没有内容。
+ * 板书优先 frontmatter 的标题，没有标题才退到正文首行 —— 退到文件名（xxx.md）
+ * 是最差的一档，那个名字用户从来没见过。
+ */
+export function titleOf(o) {
+  if (!o) return '';
+  if (o.type === 'text') return `「${String(o.data?.t || '').slice(0, 14)}」`;
+  if (o.type === 'scribble') return '一笔涂鸦';
+  if (o.chalk && !o.title) {
+    const first = String(o.text || '').split('\n').find(l => l.trim());
+    if (first) return first.replace(/^#+\s*/, '').slice(0, 24);
+  }
+  return o.title || String(o.id || '').split('/').pop() || String(o.id || '');
 }
 
 export function chromeOf(o) {

@@ -24,7 +24,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Filter } from 'lucide-react';
-import { CATEGORIES, SOURCES } from '../../lib/board-kinds.js';
+import { CATEGORIES, SOURCES } from '../../lib/board-filter-axes.js';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
 
 const keyOf = (projectId) => `nd.boardFilter.${projectId}`;

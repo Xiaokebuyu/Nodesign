@@ -3,7 +3,9 @@ import { Image as ImageIcon, FileText, Film } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, FONT_READ, CANVAS, alpha } from '../../../lib/theme.js';
 import { PAPER, PAPER_SHADOW } from '../../../lib/paper.js';
 import { EASE, POP_IN, CARD_MAX_H } from '../../../lib/board-geometry.js';
-import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview } from '../../../lib/board-kinds.js';
+import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview, farFaceOf } from '../../../lib/board-kinds.js';
+import FarFace from './FarFace.jsx';
+import { lodOf } from '../../../lib/board-lod.js';
 import { buildObjectActions } from './object-actions.js';
 import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../../lib/text-fonts.js';
 import MdInk from './MdInk.jsx';
@@ -118,6 +120,16 @@ function BoardObject({
    * 围绕中心转 / 缩。抽成变量是因为「拿在手里」那一下也要写 transform，
    * 两个来源必须叠在同一个字符串里。
    */
+  /**
+   * 分级渲染（2026-08-31，判据在 lib/board-lod.js）：卡片在屏幕上窄到读不了的时候，
+   * 不画内容只画名字。⭐ 闸只有这**一处** —— 下面每个门面分支判的都是 faceType /
+   * faceCard 而不是 o.type / cardOf(o)，远处它俩恒为 null，于是九个分支一起熄灭。
+   * ⛔ 新加一种门面时照抄 faceType，别写回 o.type：写回去的那一种会在拉远时
+   * 单独还在渲染，而这种事在自己的屏幕上永远看不见（判据 board-lod.lint.test.js）。
+   */
+  const far = farFaceOf(o) && lodOf(sz.w, scale) !== 'full';
+  const faceType = far ? null : o.type;
+  const faceCard = far ? null : cardOf(o);
   const inkTransform = isInk && (o.data?.rotation || (o.data?.scale && o.data.scale !== 1))
     ? `rotate(${o.data?.rotation || 0}deg) scale(${o.data?.scale ?? 1})`
     : '';
@@ -298,13 +310,14 @@ function BoardObject({
     >
       {Actions}
       <NoteBadge count={noteCount} />
+      {far && <FarFace o={o} scale={scale} worldW={sz.w} worldH={sz.h} />}
 
       {/* （doc 卡分支 2026-08-24 拆除：记忆/品牌/指引画布分身退役） */}
 
       {/* deck / 站点 / 世界共用一张方卡（cards/ArtifactCard.jsx）。
           在这之前这里是六个分支约 180 行 —— 三种形态 × 收起/展开两态，骨架
           逐字节相同，只有图标、一行小字、缩略图内容三处不一样。 */}
-      {cardOf(o) === 'artifact' && (
+      {faceCard === 'artifact' && (
         <ArtifactCard
           o={o} projectId={projectId} fileVersions={fileVersions} scale={scale}
           renaming={renaming} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel}
@@ -312,7 +325,7 @@ function BoardObject({
         />
       )}
 
-      {o.type === 'image' && (
+      {faceType === 'image' && (
         <div>
           <div style={{ aspectRatio: '4 / 3', overflow: 'hidden', borderRadius: '10px 10px 0 0', background: '#f4f2ee' }}>
             <img
@@ -353,7 +366,7 @@ function BoardObject({
         }} />
       )}
 
-      {o.type === 'text' && o.data?.format === 'md' && (
+      {faceType === 'text' && o.data?.format === 'md' && (
         /* md 档（2026-08-23 黑板）：同一块纸上的字，只是排版认 markdown/KaTeX/mermaid */
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
           <MdInk
@@ -364,7 +377,7 @@ function BoardObject({
           />
         </div>
       )}
-      {o.type === 'text' && o.data?.format !== 'md' && (
+      {faceType === 'text' && o.data?.format !== 'md' && (
         /* 画布手写文字：没有卡片外观（同涂鸦），就是一段字浮在纸上。
            白名单字体表在 lib/text-fonts.js，跟服务端那份校验对齐。 */
         <div data-text-body style={{
@@ -379,7 +392,7 @@ function BoardObject({
         </div>
       )}
 
-      {o.type === 'scribble' && (
+      {faceType === 'scribble' && (
         /* 涂鸦：路径存的是**相对物件左上角**的偏移，所以这里不用管 o.pos，
            直接铺满卡片即可 —— 拖动涂鸦只改 x/y，路径一个字节不重写。
            overflow:visible 是必需的：笔画的抗锯齿会稍稍溢出包围盒。 */
@@ -397,8 +410,8 @@ function BoardObject({
         </svg>
       )}
 
-      {o.type === 'note' && !o.chalk && <NoteFaces o={o} />}
-      {o.type === 'note' && o.chalk && (
+      {faceType === 'note' && !o.chalk && <NoteFaces o={o} />}
+      {faceType === 'note' && o.chalk && (
         /* 板书：agent/用户写在画布上的话 —— 裸 md 文字浮在纸上（同手写字的 md 档）。
            pointerEvents none 让闲置板书对手势是空地；nd:controls 围栏的按钮在
            MdInk 里自己开 auto（点选项不该要求先武装板书）。 */
@@ -410,7 +423,7 @@ function BoardObject({
         </div>
       )}
 
-      {o.type === 'video' && (
+      {faceType === 'video' && (
         <div>
           {/* 播放器区拦下 pointer 事件：video controls 的点击不能变成拖卡 */}
           <div
@@ -434,7 +447,7 @@ function BoardObject({
         </div>
       )}
 
-      {o.type === 'file' && (
+      {faceType === 'file' && (
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
           <div
             style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `${GAP.sm}px ${GAP.md}px`, flexShrink: 0 }}

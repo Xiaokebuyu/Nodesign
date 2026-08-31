@@ -17,7 +17,6 @@ import { buildBoardToolGroups } from './board-tool-groups.js';
 const build = (deviceClass, extra = {}) => buildBoardToolGroups({
   tool: 'select', setTool: () => {}, drawMode: 'ink', setDrawMode: () => {}, scale: 0.84,
   zoomFit: () => {}, zoomBy: () => {}, zoomTo: () => {},
-  blackboardMode: false, toggleBlackboard: () => {},
   chalkEditMode: false, toggleChalkEdit: () => {},
   openCanvasNote: () => {},
   deviceClass, ...extra,
@@ -28,7 +27,7 @@ const groupIds = (groups) => groups.map((g) => g.id);
 describe('工具栏按设备档收敛', () => {
   it('桌面一颗不少（这一轮不许动桌面）', () => {
     const ids = idsOf(build('desktop'));
-    for (const id of ['fit', 'zoomOut', 'zoomLevel', 'zoomIn', 'blackboard', 'chalkEdit', 'canvasNote', 'select', 'text', 'draw']) {
+    for (const id of ['fit', 'zoomOut', 'zoomLevel', 'zoomIn', 'chalkEdit', 'canvasNote', 'select', 'text', 'draw']) {
       expect(ids, `桌面上少了 ${id}`).toContain(id);
     }
   });
@@ -56,15 +55,36 @@ describe('工具栏按设备档收敛', () => {
     expect(groupIds(build('phone', { tool: 'draw' }))).not.toContain('drawMode');
   });
 
-  it('手机再撤三颗：改板书 / 缩放的 − 和 +（用户拍板「只读 + 对话」）', () => {
+  it('手机再撤两颗：缩放的 − 和 +（捏合是更自然的那条路）', () => {
     const phone = idsOf(build('phone'));
-    for (const id of ['chalkEdit', 'zoomOut', 'zoomIn']) {
+    for (const id of ['zoomOut', 'zoomIn']) {
       expect(phone, `手机上还留着 ${id}`).not.toContain(id);
     }
-    // 平板留着 —— 屏幕放得下
     const tablet = idsOf(build('tablet'));
-    for (const id of ['chalkEdit', 'zoomOut', 'zoomIn']) {
+    for (const id of ['zoomOut', 'zoomIn']) {
       expect(tablet, `平板不该撤 ${id}`).toContain(id);
+    }
+  });
+
+  /**
+   * ⭐⭐ 2026-08-31 站主拍板：「黑板」下架，那一格换成「板书可移动」。
+   *
+   * 黑板是 08-23 的遗留 —— 那时"画布取代侧栏"是一件要选的事，今天它就是这个产品
+   * 本身。实证：全库 ui-config.json 里写过 blackboard_mode 的项目 0 个。
+   *
+   * ⚠️ 改板书这一格**三档都要有**，而且它跟 useBoardObjectDrag 是绑死的：
+   * 08-29「板书一律不给拖」的理由原文就是「那颗按钮手机上撤掉了」。按钮回来了闸就
+   * 得解除，只改一处就是一个按了没反应的假开关。那一头的判据在 touch-drag.lint.test.js。
+   */
+  it('⛔ 「黑板」哪一档都不许再出现', () => {
+    for (const cls of ['phone', 'tablet', 'desktop']) {
+      expect(idsOf(build(cls)), `${cls} 上又冒出了 blackboard`).not.toContain('blackboard');
+    }
+  });
+
+  it('⭐ 「改板书」三档都要有（手机那一格是黑板腾出来的）', () => {
+    for (const cls of ['phone', 'tablet', 'desktop']) {
+      expect(idsOf(build(cls)), `${cls} 上没有改板书 —— 板书就永远动不了`).toContain('chalkEdit');
     }
   });
 
@@ -84,7 +104,7 @@ describe('工具栏按设备档收敛', () => {
 
   it('手机上留下的这几颗是「只读 + 对话」需要的', () => {
     const phone = idsOf(build('phone'));
-    for (const id of ['fit', 'zoomLevel', 'blackboard', 'canvasNote']) {
+    for (const id of ['fit', 'zoomLevel', 'chalkEdit', 'canvasNote']) {
       expect(phone, `手机上少了 ${id}`).toContain(id);
     }
   });

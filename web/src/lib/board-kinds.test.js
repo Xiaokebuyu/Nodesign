@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   KINDS, kindOf, traitsOf, sizeOf, actionsOf, primaryOf, readerOf,
   chromeOf, cardOf, isFileBacked, legacyBucketOf, isMarkdown, SIZES,
-  CATEGORIES, SOURCES, categoryOf, sourceOf, passesFilter, isArchivePath,
 } from './board-kinds.js';
+// 过滤两条轴 2026-08-31 拆去 board-filter-axes.js（行数棘轮），断言原样留在这里
+import { CATEGORIES, SOURCES, categoryOf, sourceOf, passesFilter, isArchivePath } from './board-filter-axes.js';
 
 /**
  * 形态能力表的回归锁。
