@@ -7,6 +7,7 @@ import { parseAnnotationMessage, annotationTargets } from '../../lib/annotation-
 import AnnotationNote from './AnnotationNote.jsx';
 import RewindDialog from './RewindDialog.jsx';
 import { t } from '../../lib/i18n.js';
+import { useHoverReveal } from '../../lib/use-hover-reveal.js';
 
 /**
  * UserMessage —— 用户消息气泡 + 悬停「回到此处」按钮。
@@ -29,7 +30,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
   const showToast = useGlobalStore(s => s.showToast);
-  const [hover, setHover] = useState(false);
+  const { revealed: hover, hoverProps } = useHoverReveal();
   const [busy, setBusy] = useState(false);
   const [dlgOpen, setDlgOpen] = useState(false);
   // 画布标注那条：机械描述默认折起来，见下面 anno
@@ -122,8 +123,7 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
   return (
     <div
       style={{ display: 'flex', justifyContent: 'flex-end', padding: `${GAP.sm}px ${GAP.lg}px`, position: 'relative' }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...hoverProps}
     >
       {canUndo && hover && (
         <button

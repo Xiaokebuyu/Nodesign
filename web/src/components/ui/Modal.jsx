@@ -57,11 +57,13 @@ export default function Modal({ show, onClose, title, width = 480, children, clo
       }}
     >
       <div
+        className="nd-vh-cap"
         style={{
           position: 'relative',
           width,
           maxWidth: 'calc(100vw - 48px)',
-          maxHeight: 'calc(100vh - 48px)',
+          /* 高度上限走 .nd-vh-cap（globals.css）：dvh 优先 + vh 兜底，
+             内联样式写不出"同一属性两遍"那个兜底写法 */
           background: PAPER.paper,
           backgroundImage: GRAIN,
           borderRadius: 2,

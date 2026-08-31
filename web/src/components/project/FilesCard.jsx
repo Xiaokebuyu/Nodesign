@@ -6,6 +6,7 @@ import { formatSize } from '../../lib/helpers.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { useDropzone } from '../../lib/useDropzone.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
+import { useHoverReveal } from '../../lib/use-hover-reveal.js';
 
 /**
  * FilesCard —— Hub 右栏卡片：项目共享 files（shared/assets/）
@@ -205,12 +206,12 @@ export default function FilesCard({ projectId }) {
 }
 
 function FileRow({ file, onDelete }) {
-  const [hover, setHover] = useState(false);
+  // hover 管底色（触屏恒 false，不然每行都亮着），revealed 管那颗删除钮（触屏恒 true）
+  const { revealed, hover, hoverProps } = useHoverReveal();
   const Icon = isImageFile(file.name) ? ImageIcon : FileText;
   return (
     <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...hoverProps}
       style={{
         display: 'flex', alignItems: 'center', gap: GAP.sm,
         padding: `${GAP.xs + 1}px ${GAP.sm}px`,
@@ -229,7 +230,7 @@ function FileRow({ file, onDelete }) {
           fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
         }}>{formatSize(file.size)}</div>
       </div>
-      {hover && (
+      {revealed && (
         <button
           onClick={onDelete}
           title="删除"

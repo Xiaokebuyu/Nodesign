@@ -33,6 +33,7 @@ import { useState, useRef, useEffect } from 'react';
 import { CANVAS } from '../../lib/theme.js';
 import { ChevronLeft, MoreHorizontal, MessageSquare } from 'lucide-react';
 import { CHROME, COLOR, GAP, FONT_SIZE, RADIUS } from '../../lib/theme.js';
+import { useKeyboardInset } from '../../lib/use-keyboard-inset.js';
 import { GRAIN, PAPER, PAPER_SHADOW } from '../../lib/paper.js';
 
 /** 常驻窄条的高度。比桌面顶栏（56）矮 —— 手机上每一行像素都得挣来 */
@@ -197,7 +198,20 @@ export function MobileSheet({ open, onClose, children, label = '对话' }) {
   // 关上时回到半开档：下次拉开是个熟悉的高度，而不是上次碰巧停的地方
   useEffect(() => { if (!open) { setSnap(0); setDragDy(0); } }, [open]);
 
-  const h = `${SHEET_SNAPS[snap] * 100}dvh`;
+  /**
+   * 键盘弹出时把抽屉整个抬到键盘上面（2026-08-31）。
+   *
+   * ⭐ 抽屉底沿本来贴着屏幕底，而输入框就在抽屉最下面 —— 覆盖模式下键盘直接压在
+   * 它身上，而 body 是 position: fixed，浏览器**没法**像以前那样滚一下把它露出来。
+   * 所以这里自己抬：`bottom` 让开键盘那一截，高度改按**键盘之上剩多少**算。
+   *
+   * ⚠️ 没键盘时**照旧走 dvh 那条原路**（一个字都没动）—— 只在 inset > 0 时换算法，
+   * 免得为了一个边缘情况把常态也改了。
+   */
+  const { inset: kb, visibleH } = useKeyboardInset();
+  const h = kb > 0
+    ? `${Math.round(SHEET_SNAPS[snap] * visibleH)}px`
+    : `${SHEET_SNAPS[snap] * 100}dvh`;
   const onDown = (e) => {
     dragRef.current = { y: e.clientY, snap };
     e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -234,7 +248,7 @@ export function MobileSheet({ open, onClose, children, label = '对话' }) {
         role="dialog"
         aria-label={label}
         style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0,
+          position: 'absolute', left: 0, right: 0, bottom: kb,
           height: h,
           display: 'flex', flexDirection: 'column',
           background: PAPER.paper,

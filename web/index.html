@@ -6,8 +6,19 @@
     <meta name="google" content="notranslate" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%232d2418'/%3E%3Ctext x='50' y='62' font-family='Menlo, monospace' font-size='44' fill='%23f5f0e8' text-anchor='middle' font-weight='600'%3EN%3C/text%3E%3C/svg%3E" />
     <!-- 手机上关掉整页缩放：版面是竖着读的，捏合放大之后还得左右滑（2026-08-21 用户报的）。
-         ⚠️ Safari 从 iOS 10 起无视这两个参数，那条路在 lib/lock-zoom.js 里补 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+         ⚠️ Safari 从 iOS 10 起无视这两个参数，那条路在 lib/lock-zoom.js 里补
+
+         interactive-widget=resizes-visual（2026-08-31）＝ **键盘覆盖模式**：
+         软键盘弹出时只缩视觉视口，**布局视口和 dvh 一个像素都不动**，页面不重排 ——
+         画布不会因为弹个键盘就跳一下。
+         ⭐ 这也正是 Chrome 108 起安卓的默认值、以及 iOS Safari 一直以来的行为，
+           所以写它**不是在改行为，是把行为钉住**（默认值会变，我们的依赖不该跟着变）。
+         ⛔ 别改成 resizes-content：那是 Chrome 108 之前的老行为，回去等于让画布
+           跟着键盘一起重排。也别用 overlays-content：那个连视觉视口都不缩，
+           于是 visualViewport 量不出键盘多高，下面那套"自己抬"就没了依据。
+         配套：lib/use-keyboard-inset.js（谁被盖住谁自己抬 —— body 是 fixed，
+         浏览器已经没法替我们滚了）。 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-visual" />
     <title>Nodesign · 创作者的 agent 工作台</title>
   </head>
   <body>

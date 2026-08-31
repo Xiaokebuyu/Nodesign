@@ -12,6 +12,7 @@ import { useGlobalStore } from '../stores/globalStore.js';
 import { Sessions, Assets, Projects } from '../lib/api.js';
 import { timeAgo } from '../lib/helpers.js';
 import { useMedia, NARROW } from '../lib/use-media.js';
+import { useHoverReveal } from '../lib/use-hover-reveal.js';
 import dHand from '../assets/login-wall/doodles/hand.webp';
 import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
 import { t, getLocale } from '../lib/i18n.js';
@@ -310,17 +311,13 @@ function RecentQuickSection() {
 }
 
 function RecentQuickRow({ session: s, isFirst, onDelete }) {
-  const [hover, setHover] = useState(false);
+  const { revealed, hoverProps } = useHoverReveal();
   const handleDeleteClick = (e) => {
     e.preventDefault(); e.stopPropagation();
     onDelete?.();
   };
   return (
-    <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ position: 'relative' }}
-    >
+    <div {...hoverProps} style={{ position: 'relative' }}>
       <Link
         to={`/projects/${s.projectId}/sessions/${s.sessionId}`}
         className={isFirst ? '' : 'sep'}
@@ -334,9 +331,9 @@ function RecentQuickRow({ session: s, isFirst, onDelete }) {
           </div>
         </div>
         <span style={{ color: 'var(--pencil)', fontSize: 15, width: 26, textAlign: 'right',
-          opacity: hover ? 0 : 1, transition: 'opacity 0.15s' }}>›</span>
+          opacity: revealed ? 0 : 1, transition: 'opacity 0.15s' }}>›</span>
       </Link>
-      {hover && (
+      {revealed && (
         <button className="del" onClick={handleDeleteClick} title={t('删除对话')}>
           <Trash2 size={12} />
         </button>
@@ -349,7 +346,8 @@ function RecentQuickRow({ session: s, isFirst, onDelete }) {
 
 function ProjectCard({ project, stat, newest }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [hover, setHover] = useState(false);
+  // 鼠标移开时顺手把菜单关掉（触屏上 hoverProps 是空的，菜单靠点别处关）
+  const { revealed, hoverProps } = useHoverReveal({ onLeave: () => setMenuOpen(false) });
   const updateProject = useProjectStore(s => s.updateProject);
   const deleteProject = useProjectStore(s => s.deleteProject);
   const duplicateProject = useProjectStore(s => s.duplicateProject);
@@ -408,8 +406,7 @@ function ProjectCard({ project, stat, newest }) {
       // 卡片就是那个项目的那张纸：演出项目是稿纸（米黄 + 红格线），设计是横格本。
       // 跟输入栏读同一份配方，所以桌上摆的和手里写的是同一个世界的纸。
       className={`ndd-card ${sheetClassOf(project.mode)}${newest ? ' top' : ''}`}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => { setHover(false); setMenuOpen(false); }}
+      {...hoverProps}
     >
       <Link to={`/projects/${project.id}/work`} style={{ '--rot': tilt(project.id) }}>
         <ThumbnailBox project={project} stat={stat} />
@@ -422,7 +419,7 @@ function ProjectCard({ project, stat, newest }) {
       <span className={`pin${newest ? ' r' : ''}`} />
       {newest && <span className="last">{t('接着做')}</span>}
 
-      {hover && (
+      {revealed && (
         <button
           className="more"
           onMouseDown={(e) => { e.stopPropagation(); }}

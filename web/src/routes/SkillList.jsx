@@ -3,6 +3,7 @@ import { Wrench, Plus, Upload, Trash2, BookOpen, Box, ChevronDown, ChevronRight 
 import AppShell from '../components/layout/AppShell.jsx';
 import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
 import { Desk } from './desk.jsx';
+import { useMedia, NARROW } from '../lib/use-media.js';
 import { DayToggle } from './home-light.jsx';
 import { paperCard } from '../lib/paper.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
@@ -35,6 +36,7 @@ const SCOPE_COLOR = {
 export default function SkillList() {
   const showToast = useGlobalStore(s => s.showToast);
   const confirm = useGlobalStore(s => s.confirm);
+  const narrow = useMedia(NARROW);
 
   const [plugins, setPlugins] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -121,29 +123,37 @@ export default function SkillList() {
               if (f) handleUpload(f);
             }}
           />
+          {/* 窄屏只留图标（2026-08-31）：带字的话这颗按钮一个人就占 162px，
+              360 的屏上把面包屑压到 16px、整条还溢出 76px。安装中那句话也一起
+              收成图标的忙态 —— 顶栏上没有地方讲进度，toast 才是讲进度的地方。 */}
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
+            title={uploading ? '安装中…' : '上传 skill / plugin'}
+            aria-label={uploading ? '安装中…' : '上传 skill / plugin'}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-              padding: `${GAP.sm + 1}px ${GAP.xl}px`,
+              padding: narrow ? `${GAP.sm + 1}px ${GAP.base}px` : `${GAP.sm + 1}px ${GAP.xl}px`,
               fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, fontWeight: 500,
               color: COLOR.btnText, background: COLOR.btn,
               border: `1px solid ${COLOR.btn}`,
               borderRadius: RADIUS.lg,
               cursor: uploading ? 'not-allowed' : 'pointer',
               opacity: uploading ? 0.6 : 1,
+              flexShrink: 0,
             }}
           >
-            <Upload size={14} /> {uploading ? '安装中…' : '上传 skill / plugin'}
+            <Upload size={14} />{narrow ? null : ` ${uploading ? '安装中…' : '上传 skill / plugin'}`}
           </button>
-          <DayToggle style={iconBtnStyle} />
+          <DayToggle style={iconBtnStyle} compact={narrow} />
         </>
       }
     >
       {/* 跟首页站在同一张台面上（08-30）：见 desk.jsx 的文件头 */}
       <Desk>
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: `${GAP.page}px ${GAP.page}px` }}>
+      {/* 窄屏收边（2026-08-31）：台面自己已经留了 12px（desk.jsx），这儿再压
+          40px 的话 360 的屏上正文只剩 200px —— 说明文字一行挤不下六个汉字。 */}
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: narrow ? `${GAP.xxl}px ${GAP.lg}px` : `${GAP.page}px ${GAP.page}px` }}>
         <div style={{ marginBottom: GAP.xl }}>
           {/* ⚠️ 这一段写在**台面**上，不在纸上 —— 颜色走 --desk-*，夜里跟着翻粉笔 */}
           <h1 style={{
@@ -191,7 +201,7 @@ export default function SkillList() {
 
         <div style={{
           marginTop: GAP.page,
-          padding: `${GAP.lg}px ${GAP.xl}px`,
+          padding: narrow ? `${GAP.lg}px ${GAP.lg}px` : `${GAP.lg}px ${GAP.xl}px`,
           background: COLOR.bgCard,
           border: `1px dashed ${COLOR.borderMd}`,
           borderRadius: RADIUS.xxl,
@@ -199,7 +209,7 @@ export default function SkillList() {
           lineHeight: 1.6,
         }}>
           ⓘ <strong style={{ color: COLOR.text2 }}>上传格式</strong>（三种皆可，host 自动包装）：
-          <ul style={{ margin: `${GAP.xs}px 0`, paddingLeft: GAP.xl, lineHeight: 1.7 }}>
+          <ul style={{ margin: `${GAP.xs}px 0`, paddingLeft: narrow ? GAP.xl : GAP.xl, lineHeight: 1.7, overflowWrap: 'anywhere' }}>
             <li>
               <strong>单个 .md 文件</strong>（最简）：含 YAML frontmatter
               <code style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, margin: `0 ${GAP.xs}px` }}>name</code>的 SKILL.md
@@ -227,6 +237,7 @@ export default function SkillList() {
 
 function PluginRow({ plugin, onUninstall }) {
   const [expanded, setExpanded] = useState(false);
+  const narrow = useMedia(NARROW);
   const scopeLabel = SCOPE_LABEL[plugin.scope] || plugin.scope;
   const scopeColor = SCOPE_COLOR[plugin.scope] || COLOR.sub;
   const skillCount = plugin.skills?.length || 0;
@@ -239,13 +250,13 @@ function PluginRow({ plugin, onUninstall }) {
       <div
         onClick={() => skillCount > 0 && setExpanded(e => !e)}
         style={{
-          padding: `${GAP.lg}px ${GAP.xl}px`,
-          display: 'flex', alignItems: 'center', gap: GAP.lg,
+          padding: narrow ? `${GAP.lg}px ${GAP.lg}px` : `${GAP.lg}px ${GAP.xl}px`,
+          display: 'flex', alignItems: 'center', gap: narrow ? GAP.base : GAP.lg,
           cursor: skillCount > 0 ? 'pointer' : 'default',
         }}
       >
         <div style={{
-          width: 40, height: 40, borderRadius: RADIUS.lg,
+          width: narrow ? 30 : 40, height: narrow ? 30 : 40, borderRadius: RADIUS.lg,
           background: COLOR.bgCard,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,
@@ -254,8 +265,13 @@ function PluginRow({ plugin, onUninstall }) {
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: GAP.md, marginBottom: GAP.xxs }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.lg, fontWeight: 600, color: COLOR.text }}>
+          {/* ⚠️ 窄屏必须 flexWrap：这一行是四件横排（名字 / 版本 / 归属 / skill 数），
+              360 的屏上排不下，不折行就整块推出容器。 */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: narrow ? GAP.sm : GAP.md, marginBottom: GAP.xxs, flexWrap: narrow ? 'wrap' : 'nowrap', minWidth: 0 }}>
+            <span style={{
+              fontFamily: FONT_MONO, fontSize: FONT_SIZE.lg, fontWeight: 600, color: COLOR.text,
+              maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
               {plugin.name}
             </span>
             <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>
@@ -315,7 +331,7 @@ function PluginRow({ plugin, onUninstall }) {
         <div style={{
           borderTop: `1px solid ${COLOR.borderLt}`,
           background: 'rgba(43,33,23,0.02)',
-          padding: `${GAP.md}px ${GAP.xl}px`,
+          padding: narrow ? `${GAP.md}px ${GAP.lg}px` : `${GAP.md}px ${GAP.xl}px`,
           display: 'flex', flexDirection: 'column', gap: GAP.sm,
         }}>
           {plugin.skills.map(s => (

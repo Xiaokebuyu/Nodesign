@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus, X, GitBranch } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { useHoverReveal } from '../../lib/use-hover-reveal.js';
 
 /**
  * CanvasCandidateBar — 候选切换条
@@ -81,7 +82,7 @@ export default function CanvasCandidateBar({ candidates, activeId, onSelect, onA
 }
 
 function CandidateTab({ candidate, active, onSelect, onRemove, onRename }) {
-  const [hover, setHover] = useState(false);
+  const { revealed: hover, hoverProps } = useHoverReveal();
   const prompt = useGlobalStore(s => s.prompt);
   const confirm = useGlobalStore(s => s.confirm);
 
@@ -103,8 +104,7 @@ function CandidateTab({ candidate, active, onSelect, onRemove, onRename }) {
 
   return (
     <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...hoverProps}
       style={{
         flexShrink: 0,
         position: 'relative',

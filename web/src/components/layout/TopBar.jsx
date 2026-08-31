@@ -259,7 +259,7 @@ export default function TopBar({ breadcrumb = [], actions }) {
       display: 'flex',
       alignItems: 'center',
       padding: `0 ${narrow ? 12 : GAP.xl}px`,
-      gap: narrow ? 10 : GAP.lg,
+      gap: narrow ? 8 : GAP.lg,
       // 窄屏：一行排不下让各自缩，**不许折行** —— 折了就把 56px 的条撑爆（手机上真见过）。
       // 桌面本来就不会折，不加这条，免得动到已经好好的东西。
       // ⛔ 这里**绝对不能加 overflow: hidden**：顶栏上所有下拉（头像菜单、导出、⋯）
@@ -288,12 +288,21 @@ export default function TopBar({ breadcrumb = [], actions }) {
       {/* Breadcrumb —— 可点的一级做成 hover 高亮的小块，一眼看出能按 */}
       {breadcrumb.length > 0 && (
         <>
-          <span style={{ color: CHROME.pencil, fontSize: FONT_SIZE.lg }}>/</span>
+          <span style={{ color: CHROME.pencil, fontSize: FONT_SIZE.lg, flexShrink: 0 }}>/</span>
+          {/*
+            ⚠️ 面包屑是这条上**唯一能缩的东西**：字标和动作区都写着 flexShrink: 0，
+            而中间那根撑杆是 flex:1（basis 0，本来就没有可缩的量）。所以只要动作区
+            比放得下的宽一点点，超出的部分**全部**由面包屑独自承担 —— 08-31 在
+            360 的屏上量到 /skills 和 /gallery 的面包屑被压到 **16px**（「Skill」
+            只剩一个残字），而条本身还是溢出 76px。
+            真正的修法在动作区那边（窄屏一律只留图标，见各路由），这儿只做两件事：
+            分隔线不参与压缩、窄屏把上限从 120 放宽到 160（腾出来的地方给它）。
+          */}
           <nav style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, color: CHROME.ink2, minWidth: 0 }}>
             {breadcrumb.map((item, i) => (
               <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: GAP.sm, minWidth: 0 }}>
                 {i > 0 && <span style={{ color: COLOR.dim }}>/</span>}
-                <Crumb item={item} last={i === breadcrumb.length - 1} maxW={narrow ? 120 : 280} />
+                <Crumb item={item} last={i === breadcrumb.length - 1} maxW={narrow ? 160 : 280} />
               </span>
             ))}
           </nav>

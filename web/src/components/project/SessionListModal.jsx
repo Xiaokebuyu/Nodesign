@@ -6,6 +6,7 @@ import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, FONT_SANS } from '../
 import { Sessions } from '../../lib/api.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { timeAgo } from '../../lib/helpers.js';
+import { useHoverReveal } from '../../lib/use-hover-reveal.js';
 
 /**
  * SessionListModal —— 项目内 session 历史列表（S4）
@@ -211,7 +212,7 @@ export default function SessionListModal({
 }
 
 function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, onSwitch, onFork, onRename, onTag, onDelete }) {
-  const [hover, setHover] = useState(false);
+  const { revealed, hoverProps } = useHoverReveal({ onLeave: () => { if (!menuOpen) onMenuClose?.(); } });
   // 菜单曾经是 absolute 挂在行里 → 被列表的 overflow 裁掉，得滚动才看得见，
   // 而一滚鼠标离开行菜单又关了。改成 fixed + 按钮实际坐标（2026-07-28）
   const menuRef = useRef(null);
@@ -245,8 +246,7 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
 
   return (
     <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => { setHover(false); if (!menuOpen) onMenuClose?.(); }}
+      {...hoverProps}
       style={{ position: 'relative', borderBottom: `1px solid ${COLOR.borderLt}` }}
     >
       <button
@@ -299,7 +299,7 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
           </div>
         </div>
       </button>
-      {hover && (
+      {revealed && (
         <button
           data-session-menu
           onClick={(e) => {

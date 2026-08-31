@@ -9,6 +9,8 @@ import { paperCard } from '../lib/paper.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
 import { Me } from '../lib/api.js';
 import { useGlobalStore } from '../stores/globalStore.js';
+import { useMedia, NARROW } from '../lib/use-media.js';
+import { useHoverReveal } from '../lib/use-hover-reveal.js';
 import { timeAgo } from '../lib/helpers.js';
 import { t } from '../lib/i18n.js';
 import DistillPanel from './showcase-distill.jsx';
@@ -36,6 +38,7 @@ export default function Showcase() {
   const [entries, setEntries] = useState(null);   // null = 加载中
   const showToast = useGlobalStore(s => s.showToast);
   const confirm = useGlobalStore(s => s.confirm);
+  const narrow = useMedia(NARROW);
 
   useEffect(() => {
     let dead = false;
@@ -66,17 +69,20 @@ export default function Showcase() {
       breadcrumb={[{ label: t('我的橱窗') }]}
       actions={
         <>
-          <Link to="/skills" style={iconBtnStyle}>
-            <Upload size={14} /> {t('Skill 管理')}
+          {/* 窄屏只留图标（2026-08-31）：带字的两颗一共 190px，360 的屏上把
+              「我的橱窗」压到 16px 还溢出 20px。 */}
+          <Link to="/skills" style={iconBtnStyle} title={t('Skill 管理')} aria-label={t('Skill 管理')}>
+            <Upload size={14} />{narrow ? null : ` ${t('Skill 管理')}`}
           </Link>
-          <DayToggle style={iconBtnStyle} />
+          <DayToggle style={iconBtnStyle} compact={narrow} />
         </>
       }
     >
       {/* 跟首页站在同一张台面上（08-30）：在这之前这一页是一片平涂的米色，
           既没有板面纹理，也没有树影和白天黑夜。 */}
       <Desk>
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: `${GAP.page}px ${GAP.page}px` }}>
+      {/* 窄屏收边（2026-08-31）：跟 Skill 页同一条理由，见 desk.jsx 里那段。 */}
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: narrow ? `${GAP.xxl}px ${GAP.lg}px` : `${GAP.page}px ${GAP.page}px` }}>
         <header style={{ marginBottom: GAP.xxl + 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, marginBottom: GAP.sm }}>
             <Sparkles size={18} color={COLOR.gold} />
@@ -104,8 +110,11 @@ export default function Showcase() {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-            gap: GAP.xl,
+            /* ⛔ 轨道下限写 min(300px, 100%) 不写 300px：容器比 300 还窄的时候
+               （360 的屏减掉两侧留白就是），写死 300 会让每张卡横着顶出去 ——
+               08-31 在 360 上量到整页溢出 20px 就是这一条。跟首页 .ndd-grid 同病。 */
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))',
+            gap: narrow ? GAP.lg : GAP.xl,
           }}>
             {entries.map(e => (
               <ShowcaseCard key={e.id} entry={e} onRemove={() => handleRemove(e)} />
@@ -144,7 +153,8 @@ function EmptyState() {
 }
 
 function ShowcaseCard({ entry, onRemove }) {
-  const [hover, setHover] = useState(false);
+  // hover 管视觉抬起（触屏恒 false），revealed 管那颗移出钮（触屏恒 true）
+  const { revealed, hover, hoverProps } = useHoverReveal();
   const [noCover, setNoCover] = useState(false);
   const workHref = entry.projectAlive ? `/projects/${entry.projectId}/work` : null;
 
@@ -175,8 +185,7 @@ function ShowcaseCard({ entry, onRemove }) {
 
   return (
     <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      {...hoverProps}
       style={{
         ...paperCard(hover ? 'near' : 'mid'),
         overflow: 'hidden',
@@ -221,7 +230,7 @@ function ShowcaseCard({ entry, onRemove }) {
         </div>
       </div>
 
-      {hover && (
+      {revealed && (
         <button
           onClick={onRemove}
           title={t('移出橱窗')}

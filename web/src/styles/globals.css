@@ -76,6 +76,92 @@ html, body, #root {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/*
+ * ⭐⭐ 文档自己永不滚动（2026-08-31 移动端第三轮）
+ *
+ * 用户报：手机上在画布工作区打开对话、拖消息列表，**包括顶栏在内的整个界面
+ * 一起脱离视窗**。
+ *
+ * 机制叫 **scroll chaining（滚动链）**：一个内层滚动容器滚到尽头之后，浏览器
+ * 默认把剩下的滚动量**继续交给它的祖先**，一路交到文档。文档这一层在真机上
+ * 表现为 iOS Safari 的橡皮筋回弹、Android Chrome 的下拉刷新 —— 两者都会把
+ * 整页连同顶栏一起平移出视口。这不是布局 bug，是滚动语义的默认值。
+ *
+ * 实测（2026-08-31，chain.html 对照组）：同一个手势，默认那个容器把文档滚了
+ * 250px；加了 overscroll-behavior 的那个，文档一动不动。
+ *
+ * 两条一起下，各挡一半：
+ *
+ *   overscroll-behavior: none   越界的滚动不再往外传，文档自己也不做越界效果
+ *                               （这是关掉下拉刷新和橡皮筋的标准写法）
+ *   overflow: hidden            文档结构上就没有可滚的量。实测全站 22 个组合
+ *                               （7 条路由 × 3 种视口 + 登录墙）**没有任何一页
+ *                               靠文档滚动** —— 滚动一律发生在 AppShell 那个
+ *                               内层容器里，所以这条是把既成事实钉死，不是新约束。
+ *
+ * ⛔ 别改成给每个滚动容器挨个加 overscroll-behavior: contain：仓里有 41 处内联
+ *    overflow: auto，挨个加必漏；而且消息里的代码块滚到底时**本来就该**把滚动
+ *    交给消息列表继续，一刀切 contain 等于把那个正确行为一起掐掉。
+ *    闸装在文档这一层，不管哪个容器把链传过来都拦得住，且只有一处。
+ *
+ * ⚠️ overscroll-behavior 在 iOS Safari 要 16.0 以上。更老的机器上 overflow: hidden
+ *    仍然管用，但橡皮筋可能还在（那需要 body position: fixed 那套老写法）。
+ *    判据在 web/src/styles/scroll-lock.lint.test.js。
+ */
+html, body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+/*
+ * ⭐⭐ body 钉死在视口上（2026-08-31 第二次追加）
+ *
+ * 上面两条修好了「拖消息列表把整页拖走」，但用户随后在首页找到第二个触发点：
+ * **点进便签本的输入框（光标开始闪）之后再拖那一栏，整页照样橡皮筋**。
+ *
+ * 这是 iOS 上另一条独立的毛病，不是滚动链：**输入框拿到焦点之后，Safari 为了
+ * 「让光标露出来」会允许把整个文档推着走，`overflow: hidden` 拦不住它**
+ * （它绕过文档的滚动能力，直接挪视口和文档的相对位置）。
+ *
+ * 唯一可靠的治法是让文档在结构上就没有这个自由度：body 自己 position: fixed
+ * 四边贴死。Safari 挪不动一个钉在视口上的 body。
+ *
+ * ⭐ 安全性是量出来的，不是赌的：全站 22 个组合（7 条路由 × 3 种视口 + 登录墙）
+ *   **没有任何一页靠文档滚动**，滚动一律发生在 AppShell 那个内层容器里；
+ *   而外壳的高度全部走 100dvh（自己定高，不依赖 body 多高）。
+ *
+ * ⚠️ position: fixed 单独出现**不会**给 fixed 后代造出新的包含块（要 transform /
+ *   filter / perspective 那几个才会），所以 .ndd::before 那层台面、toast、弹窗
+ *   照旧对着视口定位，一个像素不动。
+ */
+body {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+}
+
+/*
+ * 撑满一屏的那一层。**两条 height 是有意写两遍**（2026-08-31 安卓复核时加的）：
+ *
+ *   height: 100vh;    老浏览器认这条
+ *   height: 100dvh;   认得 dvh 的浏览器用后面这条盖掉前面那条
+ *
+ * dvh 要 Chrome 108 / Safari 15.4 以上。⛔ 不认识 dvh 的浏览器会把**整条声明
+ * 丢掉**（CSS 的容错就是这么工作的），只写 dvh 的话外壳高度当场变成 auto ——
+ * 而 body 是 position:fixed + overflow:hidden，塌掉的外壳就是**一张白页**。
+ * 国内一堆 App 内置 WebView 的内核版本比系统浏览器旧，这条兜底是给它们的。
+ *
+ * ⚠️ 用 class 不用内联样式：内联样式压不出"同一个属性写两遍"这个写法，
+ *    而这个写法正是兜底本身。所以 AppShell 那三条外壳的高度只能写在这儿。
+ */
+.nd-shell {
+  height: 100vh;
+  height: 100dvh;
+}
+/* 弹窗的高度上限同理（丢了上限 = 底下那排按钮被 body 的 overflow:hidden 裁掉） */
+.nd-vh-cap {
+  max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
+}
+
 button, input, textarea, select {
   font-family: inherit;
   font-size: inherit;

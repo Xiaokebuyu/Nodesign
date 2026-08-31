@@ -4,6 +4,7 @@ import { COLOR } from '../../lib/theme.js';
 import EdgeTab, { TAB_LEN } from '../ui/EdgeTab.jsx';
 import { useMedia, COARSE } from '../../lib/use-media.js';
 import { useDeviceClass, isTouchLane } from '../../lib/device-class.js';
+import { useKeyboardInset, useKeepFocusAboveKeyboard } from '../../lib/use-keyboard-inset.js';
 import TopBar from './TopBar.jsx';
 import { MobileTopBar } from './MobileShell.jsx';
 
@@ -71,6 +72,13 @@ export default function AppShell({
    * ⚠️ 提前 return 在所有 hook 之后 —— 这条 return 上面不许再加 hook。
    */
   const deviceClass = useDeviceClass();
+  /**
+   * 键盘覆盖模式的兜底那一层（2026-08-31）：正在打字的框被键盘压住了就滚出来。
+   * 挂在这儿是因为三条 return 都经过它，而且它对桌面是纯 no-op（没有 visualViewport
+   * 变化就永远 inset = 0）。抽屉那种自己知道该抬多少的容器不吃这条，各抬各的。
+   */
+  const { inset: keyboardInset } = useKeyboardInset();
+  useKeepFocusAboveKeyboard(keyboardInset);
   // 回首页那一步由这层给：版面件不认识路由（MobileShell 的契约），而这层本来就活在路由里
   const navigate = useNavigate();
   const touch = isTouchLane(deviceClass);
@@ -135,10 +143,23 @@ export default function AppShell({
   }, [overlayTop, topSuppressed, topRightSafe, touch]);
 
   if (!overlayTop) {
+    /*
+     * ⭐ 顶栏在滚动容器**外面**：这一层 100dvh 定高，顶栏占掉自己那 56，剩下的
+     * 全给下面那个 overflow:auto 的容器 —— 页面滚的从来不是文档，是它。所以
+     * 顶栏不参与滚动，也就不存在"滑着滑着顶栏没了"。
+     *
+     * ⚠️ 高度必须是 **100dvh 不是 100vh**（2026-08-31 改）。vh 取的是**地址栏
+     * 收起时**那个最大高度，手机上地址栏展开时 100vh 比看得见的部分高 60-90px，
+     * 底部那一截长期落在屏幕外。触屏工作台那条 08-29 就用了 dvh，这条漏了。
+     * ⛔ 08-31 给 html/body 上了 overflow:hidden 之后这条从"能滑出来看"变成
+     *    "永远看不到"，两条必须一起改。
+     */
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: COLOR.bg }}>
+      <div className="nd-shell" style={{ display: 'flex', flexDirection: 'column', background: COLOR.bg, overflow: 'hidden' }}>
         <TopBar breadcrumb={breadcrumb} actions={actions} />
-        <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>{children}</div>
+        {/* overscrollBehavior: contain —— 滚到头那下回弹留在这个容器里，不往文档传
+            （文档那层还有 body position:fixed 兜底，这条是让回弹发生在**对的地方**） */}
+        <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>{children}</div>
       </div>
     );
   }
@@ -164,7 +185,7 @@ export default function AppShell({
    */
   if (touch && overlayTop) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh', background: COLOR.bg, overflow: 'hidden' }}>
+      <div className="nd-shell" style={{ display: 'flex', flexDirection: 'column', background: COLOR.bg, overflow: 'hidden' }}>
         <MobileTopBar breadcrumb={breadcrumb} actions={actions} onBack={onBack} onHome={() => navigate('/')} />
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>{children}</div>
       </div>
@@ -174,7 +195,7 @@ export default function AppShell({
   const shown = !topSuppressed && (revealed || stuck);
 
   return (
-    <div ref={hostRef} style={{ position: 'relative', height: '100vh', background: COLOR.bg, overflow: 'hidden' }}>
+    <div ref={hostRef} className="nd-shell" style={{ position: 'relative', background: COLOR.bg, overflow: 'hidden' }}>
       {/* 内容吃满整屏。顶栏来去不改它一个像素 —— 这是整件事的重点 */}
       <div style={{ position: 'absolute', inset: 0 }}>{children}</div>
 

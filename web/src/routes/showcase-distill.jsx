@@ -105,8 +105,8 @@ export default function DistillPanel() {
 
   return (
     <section style={{
-      marginBottom: GAP.page,
-      padding: `${GAP.xl}px ${GAP.xl}px ${GAP.lg}px`,
+      marginBottom: narrow ? GAP.xxl : GAP.page,
+      padding: narrow ? `${GAP.lg}px ${GAP.lg}px ${GAP.md}px` : `${GAP.xl}px ${GAP.xl}px ${GAP.lg}px`,
       background: COLOR.bgCard,
       border: `1px solid ${COLOR.border}`,
       borderRadius: RADIUS.xxl,
@@ -168,7 +168,7 @@ export default function DistillPanel() {
                 gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
                 // 显式 3 行：最后一页不满时行位仍在，翻过去容器高度不会往上跳
                 gridTemplateRows: `repeat(${ROWS}, minmax(52px, auto))`,
-                gap: GAP.md,
+                gap: narrow ? GAP.sm : GAP.md,
                 alignContent: 'start',
               }}
             >
@@ -181,9 +181,9 @@ export default function DistillPanel() {
                   title={t('让 agent 回头读一遍「{name}」，把方法整理成 skill', { name: p.name })}
                   style={{
                     display: 'flex', flexDirection: 'column',
-                    alignItems: 'flex-start', justifyContent: 'center', gap: GAP.xs,
+                    alignItems: 'flex-start', justifyContent: 'center', gap: narrow ? 2 : GAP.xs,
                     minWidth: 0,
-                    padding: `${GAP.md}px ${GAP.lg}px`,
+                    padding: narrow ? `${GAP.sm}px ${GAP.base}px` : `${GAP.md}px ${GAP.lg}px`,
                     background: COLOR.bgWhite,
                     border: `1px solid ${hoverId === p.id ? COLOR.borderHv : COLOR.border}`,
                     borderRadius: RADIUS.lg,
@@ -192,16 +192,27 @@ export default function DistillPanel() {
                   }}
                 >
                   <span style={{
-                    fontFamily: FONT_MONO, fontSize: FONT_SIZE.base, color: COLOR.text,
+                    fontFamily: FONT_MONO, fontSize: narrow ? FONT_SIZE.md : FONT_SIZE.base, color: COLOR.text,
                     maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}>{p.name}</span>
+                  {/*
+                    ⚠️ 这一行必须整行 nowrap + 自己省略：手机上一格只有 ~150px，
+                    inline-flex 的默认行为是**每个孩子各自折行** —— 08-31 在 390
+                    上看到的是「演 3 小 / 出 时前」，两个词各被劈成两行竖着排，
+                    读起来完全不知道是什么。
+                    箭头是 hover 才亮的东西，窄屏一律不挂（手指没有 hover，
+                    它在那儿只是白占 11px）。
+                  */}
                   <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: GAP.sm,
+                    display: 'flex', alignItems: 'center', gap: narrow ? GAP.xs : GAP.sm,
                     fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub,
+                    maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                   }}>
-                    {t(MODE_LABEL[p.mode] || MODE_LABEL.design)}
-                    <span>{timeAgo(p.updatedAt)}</span>
-                    <ArrowRight size={11} style={{ opacity: hoverId === p.id ? 1 : 0, transition: 'opacity 0.15s' }} />
+                    <span style={{ flexShrink: 0 }}>{t(MODE_LABEL[p.mode] || MODE_LABEL.design)}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{timeAgo(p.updatedAt)}</span>
+                    {!narrow && (
+                      <ArrowRight size={11} style={{ flexShrink: 0, opacity: hoverId === p.id ? 1 : 0, transition: 'opacity 0.15s' }} />
+                    )}
                   </span>
                 </button>
               ))}

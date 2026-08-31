@@ -181,6 +181,10 @@ ${DESK_CSS}
   /* 原生 caret 全程让位给上面那根自己画的（唯一例外是组字期间） */
   caret-color: transparent;
   padding: 0; max-height: 290px; min-height: 116px; overflow: auto;
+  /* 滚到尽头别把滚动交出去（2026-08-31）：contain = 回弹留在这张纸里、但不往上传。
+     用 contain 不用 none —— 用户要的是「橡皮筋只存在于我们的容器内」，
+     none 会把纸自己那下回弹也一起掐掉。 */
+  overscroll-behavior: contain;
   /* 横线画在 textarea **自己身上**，靠 background-attachment: local 跟着内容一起滚
      （2026-08-21）。原来画在外层 .lines 上：那一层不滚，于是粘一段长文之后随便滚一下
      滚动量就不是 29 的整数倍，横线当场横穿字面 —— 用户报的"横线浮在文字上方"就是它。
@@ -278,10 +282,17 @@ ${DESK_CSS}
 .ndd-head h2 svg { position: absolute; left: -2%; bottom: -8px; width: 104%; height: 8px; }
 .ndd-head .n { font: 12.5px var(--kai); color: var(--desk-pencil); letter-spacing: 0.06em; }
 
-/* ===== 项目卡：钉在板上的纸 ===== */
-.ndd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+/* ===== 项目卡：钉在板上的纸 =====
+   ⛔ 轨道的下限必须写成 min(300px, 100%)、卡自己必须 min-width: 0 —— 两条都是
+   在挡同一件事：**grid 轨道的自动下限是格子里内容的 min-content**，而卡片标题
+   （.ndd-card .t）是 white-space: nowrap 的，它的 min-content 就是整行标题的宽。
+   于是一个长项目名会把**整条轨道**撑到它那么宽，同一列的每张卡跟着变宽 ——
+   08-31 手机上量到：视口 390、板面留给内容 366，轨道却是 434.75，43 张卡张张
+   溢出 57px（新账号看不见这个病，只因为它还没有长名字的项目）。
+   写死 300px 时容器比 300 还窄也会溢出（橱窗页 360 屏上溢出 20px 就是这条）。 */
+.ndd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 36px 28px; }
-.ndd-card { position: relative; }
+.ndd-card { position: relative; min-width: 0; }
 /* 钉子不在纸里 —— 纸被拿起来的时候钉子不该跟着动 */
 .ndd-card .pin { position: absolute; top: 3px; left: 50%; width: 9px; height: 9px;
   border-radius: 50%; margin-left: -4.5px; z-index: 6; pointer-events: none;
@@ -405,7 +416,8 @@ ${DESK_CSS}
    ⚠️ textarea 的 min/max-height 一个都别在这儿改 —— 它们必须是 29 的整数倍
    （见上面横线那一段），改了最后一格会被切一半，而 lint 只看基础规则。 */
 @media (max-width: 640px) {
-  .ndd { padding: 20px 12px 64px; }
+  /* ⭐ .ndd 自己的窄屏留白搬去 desk.jsx 了（橱窗 / Skill 页要吃同一份），
+     这儿不再写第二遍 —— 两处同名规则迟早只改一处。 */
   /* ⚠️ margin-bottom 这儿再写一遍就会盖掉基础规则那份 —— 页签要从纸上沿探出来
      约 26px，给少了它就顶到问候语上（窄屏问候语长、会折行，顶得更明显）。
      由 home-pad.lint.test.js 逐处对。 */
@@ -436,7 +448,11 @@ ${DESK_CSS}
      成立；一列窄卡从上往下排的时候，歪斜只剩边缘毛糙，图钉变成每张卡头上一个黑点。
      橱窗那张卡是**一件作品的展台**：封面比例统一、卡面平、字在下面 —— 一列排下来
      每张一样高，一眼扫得完。 */
-  .ndd-grid { grid-template-columns: 1fr; gap: 22px; }
+  /* ⛔ 这里是 minmax(0, 1fr) 不是 1fr：「1fr」等价于「minmax(auto, 1fr)」，那个
+     auto 下限就是上面说的 min-content，长标题照样把整列撑爆。差一个 minmax(0,)
+     的写法，实测就是 366 和 434.75 的差别。
+     ⚠️ 这段注释住在 JS 模板串里，一个反引号就炸整个文件 —— 所以用「」不用反引号。 */
+  .ndd-grid { grid-template-columns: minmax(0, 1fr); gap: 22px; }
   .ndd-card > a,
   .ndd-card:hover > a { transform: none; padding: 0 0 14px; }
   .ndd-card .pin { display: none; }
@@ -446,8 +462,10 @@ ${DESK_CSS}
     box-shadow: none; border-bottom: 1px solid rgba(43,33,23,0.09); }
   .ndd-card .t { margin-top: 11px; padding: 0 14px; }
   .ndd-card .m { padding: 0 14px; }
-  /* 「接着做」收进封面里，别挂在卡外面（窄屏上它会顶到屏幕边） */
-  .ndd-card .last { top: 8px; right: 8px; transform: rotate(2deg); }
+  /* 「接着做」收进封面里，别挂在卡外面（窄屏上它会顶到屏幕边）。
+     ⚠️ 靠**左**：08-31 之后 ⋯ 在触屏上常驻（见 lib/use-hover-reveal.js），
+     它钉在 top:9 right:9，签再待在右上角就是两块东西叠在一起。 */
+  .ndd-card .last { top: 8px; left: 8px; right: auto; transform: rotate(-2deg); }
   .ndd-rows a { padding: 12px 14px; }
   .ndd-sheet { padding: 26px 18px; }
   .ndd-sheet .chips { gap: 8px; }

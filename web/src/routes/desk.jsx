@@ -127,6 +127,19 @@ export const DESK_CSS = `
 ${SUN_CSS}
 
 .ndd-in { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; }
+
+/*
+ * 窄屏：台面自己的留白收掉一半多（2026-08-31）。
+ *
+ * ⭐ 这条**必须住在这儿**，不能像以前那样只写在 home-styles.js 的 @media 里。
+ *   08-30 把台面搬出来共用的时候只搬了台面，没搬台面的窄屏尺寸 —— 于是首页
+ *   在手机上是 12px 边距，而橱窗和 Skill 页仍然吃着桌面那份 40px，再叠上它们
+ *   自己那层 GAP.page(40)，360 的屏上正文只剩 200px 宽。共用的东西要连同它的
+ *   断点一起共用，否则「搬出来共用」只对宽屏成立。
+ */
+@media (max-width: 640px) {
+  .ndd { padding: 20px 12px 64px; }
+}
 `;
 
 /**

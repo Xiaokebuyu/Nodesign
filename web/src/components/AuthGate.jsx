@@ -136,7 +136,7 @@ export default function AuthGate({ children }) {
   }
 
   if (phase === 'ok') return children;
-  if (phase === 'checking') return <div style={{ minHeight: '100vh', background: PAPER.wall }} />;
+  if (phase === 'checking') return <div className="nd-shell" style={{ background: PAPER.wall }} />;
 
   const isRegister = mode === 'register';
 
