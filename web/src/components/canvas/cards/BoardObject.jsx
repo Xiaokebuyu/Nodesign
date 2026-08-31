@@ -115,6 +115,23 @@ function BoardObject({
     // 是 minHeight 不是 height：正文永远撑得开，绝不裁字（板要能导出，
     // 看不见的字等于丢了字）。
     ...(o.chalk && o.pos?.sized === 'user' && sz.h > 0 ? { minHeight: sz.h } : null),
+    /**
+     * 文本预览卡定高（2026-08-31，站主拍板"收成固定高度"）。
+     *
+     * ⛔ 这张卡此前**只设宽不设高**，靠预览体把自己撑开（封顶 PREVIEW_MAX_H）。
+     * 而 KINDS.note.size 写死 200x148，落位/避让/read_board 余量/暂存架空位
+     * 全信那个 148 —— 真页面量到的是 **200x369**，每张少算 221px。
+     * 全库 1037 张这种卡（98 块板），其中 1005 张没有落盘尺寸，全靠这张表。
+     *
+     * ⚠️ parity 测试（board-kind-sizes.parity.test.js）钉的是"前端表 == 服务端表"，
+     * 两边都是 148 所以一直绿 —— 它比的是两份拷贝，没比屏幕。这一族的教训见
+     * memory [[feedback-verify-the-instrument]]。
+     *
+     * 定高之后预览被截短（内层已有 overflow:hidden + 渐隐遮罩，看起来就是"没写完"），
+     * 完整内容双击进阅读器。**只对文本预览卡生效**：产物卡的预览区本来就显式写了
+     * height={sz.h}，图片是固定长宽比，板书的真尺寸落盘时就估好了 —— 那三档实测都对得上。
+     */
+    ...(o.type === 'file' && isTextPreview(o) && sz.h > 0 ? { height: sz.h } : null),
     zIndex: o.pos.z || 1,
     borderRadius: isInk ? 4 : RADIUS.xl,
     background: isInk ? (hover ? alpha(CANVAS.brass, 0.10) : 'transparent') : COLOR.bgCard,

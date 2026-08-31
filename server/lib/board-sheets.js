@@ -325,6 +325,15 @@ export function nextSpotInSlot(board, rect, box, { gap = UNIT } = {}) {
   const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : rect.y - gap;
   const y = Math.round(bottom + gap);
   const freeH = Math.max(0, Math.round(rect.y + rect.h - y));
+  /**
+   * 宽度也要查（2026-08-31）。这里原来**只查高**，于是把一张 640 宽的产物卡放进
+   * 一块 360 宽的版位是"成功"的 —— 卡向右溢出 280px 压到隔壁，工具还报 Placed。
+   * 真案 proj_mtgeaeps_7kly：agent 规划了 360 宽的 `for:'artifacts'` 版位专门收
+   * v8 的 docx，而 docx 卡恒宽 640。版位装不下就该像装不下高度一样如实拒收。
+   */
+  if (box.w > rect.w) {
+    return { full: true, tooWide: true, freeW: rect.w, needW: box.w, freeH, needH: box.h, taken: members.length };
+  }
   if (box.h > freeH) return { full: true, freeH, needH: box.h, taken: members.length };
   return { x: Math.round(rect.x), y };
 }

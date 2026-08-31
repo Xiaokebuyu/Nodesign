@@ -137,6 +137,69 @@ export function isDirArtifact(a) {
 }
 
 /**
+ * 产物实例 → **画布卡 id**（2026-08-31 收编）。
+ *
+ * ⛔ 这条规则此前全仓有三份实现，而且第三份是坏的：
+ *   ① 前端 web/src/lib/board-kinds.js 的 cardIdOf（正字法，前端照它渲染）
+ *   ② lib/auto-relations.js 里那段三元（自动关系边用）
+ *   ③ mcp/tools/pin-to-board.js 的内联猜测 —— **只认 .html → deck:**
+ *
+ * ③ 的后果（真案 proj_mtgeaeps_7kly）：agent pin 一份 .docx，id 停在裸路径。
+ * 而 assets.js 的 docxClaimedFiles 会把被产物认领的 .docx 从散文件清单里滤掉，
+ * 于是那个裸 id **在前端根本不渲染任何卡** —— 是个只活在 board.json 和
+ * read_board 报文里的幽灵。工具照样回「Placed ... at (688,120)」，屏幕上什么
+ * 也没发生；更狠的是它身上的三条关系线也一条都画不出（BindingLayer 的 rectOf
+ * 拿不到矩形就 continue，静默跳过）。agent 的量具全程在骗它，它没有任何机会
+ * 自己发现。这是「加形态时最容易漏的写死处」家族的第四例，前三例见
+ * lib/board-relations.js 头上那段。
+ *
+ * 单文件 .html 还有个更阴的变种：裸路径会被 ③ 提升成 deck:，而单页站的正字法
+ * 是 site:<path> —— 不是不提升，是**提升错**，看起来还像做对了。
+ *
+ * 所以这里不猜扩展名，一律由**形态注册表 + 产物扫描**回答。
+ *
+ * @param {string} taskId  任务 id（= 任务目录相对工作区的路径，根任务是 ''）
+ * @param {object} a       taskManifest().artifacts 里的一项
+ */
+export function cardIdOf(taskId, a) {
+  if (!a) return null;
+  // 站点：单页产物的地址是入口文件，目录站的地址是产物根
+  if (a.kind === 'site') return `site:${a.single ? a.entryRel : (a.root || taskId)}`;
+  // 其余目录型（word 文件夹）：卡即文件夹，地址 = 文件夹路径
+  if (isDirArtifact(a)) return `${a.kind}:${a.root || taskId}`;
+  // 单文件产物（deck 的 .html、散放的单份 .docx）：前缀 = 形态名，地址 = 文件
+  return `${a.kind || 'deck'}:${a.file}`;
+}
+
+/** 卡 id 的合法前缀集（从注册表派生 —— 别手写，见 lib/board-relations.js 的同款） */
+export const KIND_PREFIX_RE = new RegExp(`^(${Object.keys(KINDS).join('|')}):`);
+
+/**
+ * 工作区相对路径 → 正字法卡 id；这条路径不属于任何产物就返回 null（调用方保持原样）。
+ *
+ * 查序跟 assets.js 的 collect 递归同向：**从根往下**，第一个认领它的任务赢
+ * （浅的先认，跟「目录型产物整段认领子目录、递归到此为止」是同一口径）。
+ */
+export async function cardIdForPath(workspaceRoot, rel) {
+  const clean = String(rel || '').replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
+  if (!clean || clean.includes('..')) return null;
+  const segs = clean.split('/');
+  // 候选任务目录：'' → 第一段 → 前两段 …（最后一段是文件名，不当任务目录）
+  for (let i = 0; i < segs.length; i += 1) {
+    const taskId = segs.slice(0, i).join('/');
+    const relInTask = segs.slice(i).join('/');
+    let manifest = null;
+    try { manifest = await taskManifest(path.join(workspaceRoot, taskId)); } catch { manifest = null; }
+    if (!manifest) continue;
+    const a = artifactOfPath(manifest, relInTask);
+    if (!a) continue;
+    const id = cardIdOf(taskId, a);
+    if (id) return id;
+  }
+  return null;
+}
+
+/**
  * 路径 → 所属产物。specificity 从高到低：单文件产物（deck / 单页）精确命中 →
  * 目录型产物按 root 前缀（长的优先；word 文件夹的成员、token 源、散文件都在
  * 这条上归位）→ 根站（root='' 的站是整任务的兜底，源文件和构建产物都归它）。

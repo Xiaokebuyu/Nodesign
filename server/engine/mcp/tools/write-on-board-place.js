@@ -58,6 +58,12 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
       const whole = capacityOf(rect.w, rect.h);
       // 量纲对齐（刀⑥ 2026-08-30）：两边都报 px + 行，还差多少直接说 —— 此前
       // 「剩 ~15 行 / 要 ~15 行」被拒，在模型眼里就是量具坏了（真差 21px）。
+      if (spot.tooWide) {
+        return {
+          full: true,
+          message: `⛔ Slot "${slotName}" on sheet ${sheet.id} is only ${spot.freeW}px wide, this needs ${spot.needW}px. Nothing was written. Re-plan that block wider (replan it by name, omit at — it resizes in place).`,
+        };
+      }
       const short = spot.needH - spot.freeH;
       return {
         full: true,

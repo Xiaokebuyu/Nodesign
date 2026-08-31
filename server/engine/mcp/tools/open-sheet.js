@@ -26,6 +26,7 @@ import {
   membersInRect, sheetMembers,
 } from '../../../lib/board-sheets.js';
 import { setCurrentSheetId, currentSheetIdOf } from '../../../lib/sheet-state.js';
+import { resolveShelfOrigin } from '../../../lib/board-shelf.js';
 import { Events } from '../../agent/events.js';
 
 /** 版位的 at：两轴各自可省 —— 省掉的轴由竖排糖补（below/接上一块）。
@@ -140,6 +141,24 @@ export async function openSheetFor(projectId, {
     ...(Object.keys(slots).length ? { slots } : {}),
   };
   await patchBoard(projectId, { sheets: { [id]: entry } });
+  /**
+   * 铺完纸重算一次暂存架的原点（2026-08-31）。
+   *
+   * 架的原点是**存下来**的（board.shelf），前端 useBoardData 直接镜像它、
+   * board-seating 拿它排新到货，中间没有任何撞纸检查。而回写只发生在入座器
+   * 真有东西上架的那一刻（board-seater.js 的 `(shelved || zoned) && changed`）——
+   * 于是「铺了一张纸把架带盖住了、但这一轮没有任何东西到货」的板，会带着一个
+   * 已经失效的原点一直跑到下次到货为止。真案 proj_mtgeaeps_7kly：架停在 (24,24)，
+   * 判据算出来该搬到 (-360,96)，前端照着旧值把新到货码在 x=24 那一列，
+   * 正好是纸的地盘。
+   *
+   * 铺纸是架**唯一**会失效的时刻（判据本身只看纸），所以补在这里就闭合了。
+   */
+  try {
+    const after = { ...board, sheets: { ...(board.sheets || {}), [id]: entry } };
+    const origin = resolveShelfOrigin(after, null);
+    if (origin.changed) await patchBoard(projectId, { shelf: { x: origin.x, y: origin.y } });
+  } catch { /* 架挪不动不挡铺纸 */ }
   setCurrentSheetId(sessionId, id);
   const inner = innerRect({ ...entry });
   // 占地者点名（刀③ 2026-08-30）：铺纸不避家具（纸不渲染，压着文件夹用户什么也

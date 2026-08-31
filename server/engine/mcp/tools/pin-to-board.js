@@ -34,6 +34,7 @@ import { layerOf } from '../../../lib/canvas-id.js';
 import { currentSheet, slotRectOf, nextSpotInSlot, placeAtOnSheet } from '../../../lib/board-sheets.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
+import { cardIdForPath, KIND_PREFIX_RE } from '../../../lib/kinds/index.js';
 
 // （folderOfObjectId 08-24 拆除：它按 dirname 硬算，会给 assets/generated 这类
 //  前端不当层渲染的路径发"层"标签 —— 改问 layerOf + board.zones，跟渲染同口径）
@@ -89,10 +90,14 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         if (!objectId || objectId.includes('..')) {
           return { content: [{ type: 'text', text: 'Invalid path.' }], isError: true };
         }
-        if (!/^(deck|site):/.test(objectId)) {
-          // 裸路径：.html 是一份 deck，其余（图片 / 便签 / 数据文件）id 就是路径。
-          // 站点的目录要显式写 `site:` —— 光看路径分不出
-          // "一个收纳文件夹"和"一件目录型产物"，猜错了钉上去的是个不存在的 id。
+        if (!KIND_PREFIX_RE.test(objectId)) {
+          // 裸路径：先确认它在磁盘上，再问**正字法卡 id 是什么**。
+          // ⛔ 这里原来是 `if (/\.html?$/i.test(objectId)) objectId = 'deck:'+objectId`
+          //    —— 只认 .html 的一句猜测。.docx 因此停在裸路径，而裸 id 在前端
+          //    根本不渲染（assets.js 的 docxClaimedFiles 把它滤掉了），工具却照样
+          //    报「Placed ... at (x,y)」，连它身上的关系线也一条画不出来。
+          //    单页站更阴：裸 .html 会被提升成 deck:，可它的正字法是 site:。
+          //    现在一律交给 kinds/index.js 的 cardIdForPath（注册表 + 产物扫描）。
           if (sharedRoot) {
             const abs = path.join(sharedRoot, objectId);
             try { await fs.access(abs); } catch {
@@ -101,8 +106,9 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
                 isError: true,
               };
             }
+            const canonical = await cardIdForPath(sharedRoot, objectId);
+            if (canonical) objectId = canonical;
           }
-          if (/\.html?$/i.test(objectId)) objectId = `deck:${objectId}`;
         }
 
         // 可见性预检（08-21 案：钉 assets/ 深处的图报成功，用户画布上根本没有）。
@@ -148,6 +154,10 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
                 : `Sheet ${sh.id} has no slots planned. Plan the page first: open_sheet{plan:[{slot,at,w,h,about}…]}.` }], isError: true };
             }
             const p = nextSpotInSlot(boardNow, rect, box);
+            if (p.tooWide) {
+              return { content: [{ type: 'text', text: `⛔ Slot "${slot}" on sheet ${sh.id} is only ${p.freeW}px wide — ${objectId} is a ${p.needW}px-wide card and would spill ${p.needW - p.freeW}px into whatever is next to it. `
+                + 'Nothing moved. Re-plan that block wider (replan it by name, omit at — it resizes in place), or point it at another slot.' }], isError: true };
+            }
             if (p.full) {
               return { content: [{ type: 'text', text: `⛔ Slot "${slot}" on sheet ${sh.id} is full — ${objectId} needs ${box.h}px, ~${p.freeH}px left. `
                 + 'Nothing moved. Re-plan the page with a taller block, or point it at another slot.' }], isError: true };
