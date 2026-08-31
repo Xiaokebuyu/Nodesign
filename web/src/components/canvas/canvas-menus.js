@@ -8,7 +8,7 @@
  */
 import {
   FolderOpen, FolderPlus, FolderInput, Plus, PencilLine, Trash2,
-  MessageSquarePlus, Link2, StickyNote, LayoutGrid, Group, Check, Eraser, Download,
+  MessageSquarePlus, Link2, StickyNote, Group, Check, Eraser, Download,
 } from 'lucide-react';
 import { canAddToContext, isFileBacked } from '../../lib/board-kinds.js';
 
@@ -135,8 +135,8 @@ export function buildBoardMenu(ctx, act) {
   }
 
   if (winIn !== null) {
-    // 文件夹窗里的空白：能做的只有"在这一层新建"。写字/涂鸦/整理画布都是
-    // 桌面那一层的动作（窗里是算出来的网格，没有"摆在哪儿"这回事）
+    // 文件夹窗里的空白：能做的只有"在这一层新建"。写字/涂鸦都是桌面那一层的
+    // 动作（窗里是算出来的网格，没有"摆在哪儿"这回事）
     return [
       { id: 'new', icon: FolderPlus, label: '新建文件夹', onClick: () => act.createFolderAt(winIn, null) },
     ];
@@ -149,7 +149,6 @@ export function buildBoardMenu(ctx, act) {
     { id: 'note', icon: StickyNote, label: '新建便利贴', hint: 'agent 能看到', onClick: () => act.createNoteAt(at) },
     { divider: true },
     { id: 'ask', icon: MessageSquarePlus, label: '让 agent 在这儿做…', onClick: () => act.onAskAgent?.({ at }) },
-    { id: 'tidy', icon: LayoutGrid, label: '整理这块画布', onClick: act.tidyBoard },
     { divider: true },
     // 连接图导出（2026-08-23 黑板）：节点 + 线 + 位置，真相是 board.json，这里只派生
     { id: 'exp-svg', icon: Download, label: '导出连接图（SVG）', onClick: () => act.exportGraph?.('svg') },

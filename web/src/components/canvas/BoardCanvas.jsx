@@ -5,14 +5,12 @@ import RollLayer, { useRollActions } from './RollLayer.jsx';
 import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
-import { orderWithGroups } from '../../lib/relation-order.js';
 import { computeDesktopSeating } from '../../lib/board-seating.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, alpha } from '../../lib/theme.js';
 import { PAPER, PAPER_SHADOW, paperCard } from '../../lib/paper.js';
-import {
-  DESKTOP_W, MARGIN_X, FOLDER_CARD,
-  EASE, POP_IN, newStackedZoneRect, packRow, ROW_GAP,
-} from '../../lib/board-geometry.js';
+// ⚠️ EASE / POP_IN / packRow / ROW_GAP 2026-08-31 一并从这行摘掉：grep 全文件只剩
+// 这一行和注释里的名字，四个都是早年搬走代码时留下的死引用（不是这次删「整理」造成的）。
+import { DESKTOP_W, FOLDER_CARD, newStackedZoneRect } from '../../lib/board-geometry.js';
 import { useLiveChalkSpots } from './use-live-chalk-spots.js';
 import { useObjectClick } from './useObjectClick.js';
 import {
@@ -164,7 +162,7 @@ export default function BoardCanvas({
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
     rolls, setRolls, sheets, shelf,
     guideText, fileCount,
-    reload, scheduleSave, patchLayout,
+    reload, scheduleSave, patchLayout, removeLayoutEntry,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,
   } = useBoardData({ projectId, listVersion, boardVersion, readOnly: !!eyeParams() });
   const eyeMode = !!eyeParams();   // 眼睛模式（look_at_board 截图）：只渲染板面内容
@@ -761,8 +759,8 @@ export default function BoardCanvas({
     createNoteAt, handleCreateScribble,
   } = useBoardAuthoring({
     projectId, canvasFont,
-    patchLayout, setLayout, reload, scheduleSave,
-    layoutRef, dirtyRef, zMaxRef,
+    patchLayout, reload, removeLayoutEntry,
+    layoutRef, zMaxRef,
     positionedRef, zoneAtPoint,
   });
 
@@ -946,7 +944,7 @@ export default function BoardCanvas({
     handleDeleteNote, focusDeck, primaryOpen,
   } = useBoardOpen({
     projectId, onAddToContext, onFocusDeck,
-    setLayout, dirtyRef, scheduleSave, reload,
+    removeLayoutEntry, reload,
     setAddedPaths, setViewer, setOrchestrate, setDetail,
     openTextEditor, roleNames,
   });
@@ -1041,71 +1039,27 @@ export default function BoardCanvas({
   const folderGoUp = useCallback(() => setWinDir(d => parentDir(d)), []);
   const closeFolderWindow = useCallback(() => setWinDir(null), []);
   /**
-   * 「整理」—— 现在是**手动**的一次动作，不再每帧自动跑（2026-08-07）。
+   * ⚠️ 这儿曾是「整理」（tidyBoard，2026-08-07 起手 / 08-13 定型）。
+   * **2026-08-31 连同工具栏和右键两个入口一起撤了**，理由记在这儿：
    *
-   * 做法故意选了最简单的一种：**把坐标忘掉**。没有坐标的物件会被入座那一趟
-   * 重新排（packRow：列宽取最宽的卡、行高贴该行最高的、整块居中），所以
-   * "整理"不需要第二套排版实现 —— 它就是让入座重来一遍。
+   * 它的做法是"把坐标忘掉" —— 删掉根层所有 file-backed 物件的布局条目，让入座
+   * 重排一遍。08-13 那会儿这是对的：`board.objects` 的条目上确实只有坐标。之后
+   * 板上一代代加字段（tag / by / seat / 实测 w,h / sized / zone / hug），而"删条目"
+   * 走的是 `patch.objects[id] = null`，**从 board-store 08-25 那条合并语义底下绕了
+   * 过去**，一键把这些全删掉。生产 148 块真板实测：会删 1735 条，其中带 tag 227 /
+   * by 307 / seat:agent 136 / seat:user 47 / 实测尺寸 368 —— 越新的板越满。
    *
-   * 两处不碰：
-   * - **画布原生物件**（涂鸦）：它的坐标就是它本身，不是"摆在哪"。把一笔涂鸦
-   *   流进网格等于毁了内容。
-   * - 收起的文件夹：里面的东西没在渲染，排了也看不见，等展开时自然入座。
+   * 但真正判死它的不是这个 bug，是**版面归属今天是三份的**：agent 规划的
+   * （seat:'agent'）、用户亲手摆的（seat:'user'）、机器暂存的（seat:'shelf'）。
+   * 任何一颗"一键整理整块画布"都必然越过其中两份的界 —— 这颗按钮不是修得好的，
+   * 是形态本身作废了。
    *
-   * **文件夹也一起排**（2026-08-08）：从左到右铺、排满换行，跟桌面上的图标一样。
-   * 平时不动它们（你摆哪儿就是哪儿），但这是个显式动作 —— 你点了"整理"，
-   * 意思就是"把这一桌收拾干净"。存量数据尤其需要：它们的坐标是旧的纵向堆叠
-   * 写下来的，全挤在左边一列。
+   * 它提供过的两件事各有归宿，别在这儿重造：
+   *   - **把机器码上去的货码整齐** → 归暂存架自己（lib/board-shelf.js）。机器码货
+   *     时就该码好（含按屏高折列那条挂账），不该让用户点按钮去救。
+   *   - **重新规划整块板的版面** → 归 agent（open_sheet{plan} / pin_to_board）。
+   *     用户直接说一句就行，不需要工具栏上的第二个入口。
    */
-  const tidyBoard = useCallback(() => {
-    const targets = positionedRef.current.filter(o => isFileBacked(o));
-    const zv = folderViewRef.current;
-    if (!targets.length && !zv.length) return;
-
-    setLayout(prev => {
-      const next = { ...prev };
-      for (const o of targets) { delete next[o.id]; dirtyRef.current.objects.add(o.id); }
-      return next;
-    });
-
-    if (zv.length) {
-      // 顶层文件夹进网格；嵌套的（`a/b`）不单独排 —— 它画在父文件夹里面，
-      // 位置由父的排布决定，单独摆会跑到外面去
-      const byZid = new Map(zv.filter(z => !z.id.includes('/')).map(z => [z.id, z]));
-      const { order: topOrder, breakBefore: topBreaks } = orderWithGroups(
-        [...byZid.values()].sort((a, b) => a.y - b.y || a.x - b.x).map(z => z.id),
-        bindings,
-      );
-      const tops = topOrder.map(id => byZid.get(id));
-      const GAP_X = 24; const GAP_Y = 24;
-      const maxW = DESKTOP_W - MARGIN_X * 2;
-      // 文件夹是**固定尺寸的方卡**（2026-08-13），排布退化成"一行一行摆格子"。
-      // 以前这里要按内容算每块区的宽度，还得在同一趟里定死写进去 —— 那是
-      // 「贴内容宽的实体区」时代的麻烦，随区几何一起没了。
-      let cx = MARGIN_X; let cy = MARGIN_X; let rowH = 0;
-      const patches = {};
-      for (const z of tops) {
-        const { w, h } = FOLDER_CARD;
-        if (topBreaks.has(z.id) && cx > MARGIN_X) { cx = MARGIN_X; cy += rowH + GAP_Y; rowH = 0; }
-        if (cx > MARGIN_X && cx + w > MARGIN_X + maxW) { cx = MARGIN_X; cy += rowH + GAP_Y; rowH = 0; }
-        patches[z.id] = { x: cx, y: cy, w };
-        cx += w + GAP_X; rowH = Math.max(rowH, h);
-      }
-      setZones(prev => {
-        const next = { ...prev };
-        for (const [zid, patch] of Object.entries(patches)) {
-          if (!next[zid]) continue;
-          next[zid] = { ...next[zid], ...patch };
-          dirtyRef.current.zones.add(zid);
-        }
-        return next;
-      });
-    }
-    scheduleSave();
-    useGlobalStore.getState().showToast(
-      `已整理 ${targets.length} 件产物` + (zv.length ? ` · ${zv.filter(z => !z.id.includes('/')).length} 个文件夹` : ''),
-      'success');
-  }, [scheduleSave, bindings]);
 
   const openFolderRef = useRef(null);
   openFolderRef.current = openFolder;
@@ -1277,12 +1231,12 @@ export default function BoardCanvas({
         handleAdd, handleDeleteNote, handleDeleteFolder,
         openObject: (o) => primaryOpenRef.current?.(o),
         openFolder, createFolderAt, createNoteAt,
-        onAskAgent, tidyBoard, annotTargetOf, titleOfId,
+        onAskAgent, annotTargetOf, titleOfId,
         selectGroup, commitGroup, eraseGroup, exportGraph,
       },
     );
     setMenu({ x: e.clientX, y: e.clientY, items });
-  }, [zoneAtPoint, createFolderAt, createNoteAt, handleAdd, handleDeleteNote, handleDeleteFolder, tidyBoard, onAskAgent, selectGroup, commitGroup, eraseGroup, exportGraph]);
+  }, [zoneAtPoint, createFolderAt, createNoteAt, handleAdd, handleDeleteNote, handleDeleteFolder, onAskAgent, selectGroup, commitGroup, eraseGroup, exportGraph]);
 
   // ── agent 正在写什么 → 视图跟过去（2026-08-13 从"自动展开"改剩这一半）──
   //
@@ -1595,11 +1549,11 @@ export default function BoardCanvas({
 
   const boardToolGroups = useMemo(() => buildBoardToolGroups({
     tool, setTool, drawMode, setDrawMode, scale,
-    tidyBoard, zoomFit: zoomFitStable, zoomBy: zoomByStable, zoomTo: zoomToStable, filterGroup,
+    zoomFit: zoomFitStable, zoomBy: zoomByStable, zoomTo: zoomToStable, filterGroup,
     blackboardMode, toggleBlackboard,
     chalkEditMode, toggleChalkEdit,
     openCanvasNote, deviceClass: deviceEnv.class, readGroup,
-  }), [tool, drawMode, scale, tidyBoard, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, readGroup]);
+  }), [tool, drawMode, scale, zoomFitStable, zoomByStable, zoomToStable, filterGroup, blackboardMode, toggleBlackboard, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, readGroup]);
 
   useEffect(() => { onToolbarGroups?.(boardToolGroups); }, [boardToolGroups, onToolbarGroups]);
 

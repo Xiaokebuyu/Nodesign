@@ -12,7 +12,7 @@ import { buildBoardToolGroups } from './board-tool-groups.js';
 
 const build = (deviceClass, extra = {}) => buildBoardToolGroups({
   tool: 'select', setTool: () => {}, drawMode: 'ink', setDrawMode: () => {}, scale: 0.84,
-  tidyBoard: () => {}, zoomFit: () => {}, zoomBy: () => {}, zoomTo: () => {},
+  zoomFit: () => {}, zoomBy: () => {}, zoomTo: () => {},
   blackboardMode: false, toggleBlackboard: () => {},
   chalkEditMode: false, toggleChalkEdit: () => {},
   openCanvasNote: () => {},
@@ -24,7 +24,7 @@ const groupIds = (groups) => groups.map((g) => g.id);
 describe('工具栏按设备档收敛', () => {
   it('桌面一颗不少（这一轮不许动桌面）', () => {
     const ids = idsOf(build('desktop'));
-    for (const id of ['tidy', 'fit', 'zoomOut', 'zoomLevel', 'zoomIn', 'blackboard', 'chalkEdit', 'canvasNote', 'select', 'text', 'draw']) {
+    for (const id of ['fit', 'zoomOut', 'zoomLevel', 'zoomIn', 'blackboard', 'chalkEdit', 'canvasNote', 'select', 'text', 'draw']) {
       expect(ids, `桌面上少了 ${id}`).toContain(id);
     }
   });
@@ -46,15 +46,29 @@ describe('工具栏按设备档收敛', () => {
     expect(groupIds(build('tablet', { tool: 'draw' }))).not.toContain('drawMode');
   });
 
-  it('手机再撤四颗：整理 / 改板书 / 缩放的 − 和 +（用户拍板「只读 + 对话」）', () => {
+  it('手机再撤三颗：改板书 / 缩放的 − 和 +（用户拍板「只读 + 对话」）', () => {
     const phone = idsOf(build('phone'));
-    for (const id of ['tidy', 'chalkEdit', 'zoomOut', 'zoomIn']) {
+    for (const id of ['chalkEdit', 'zoomOut', 'zoomIn']) {
       expect(phone, `手机上还留着 ${id}`).not.toContain(id);
     }
     // 平板留着 —— 屏幕放得下
     const tablet = idsOf(build('tablet'));
-    for (const id of ['tidy', 'chalkEdit', 'zoomOut', 'zoomIn']) {
+    for (const id of ['chalkEdit', 'zoomOut', 'zoomIn']) {
       expect(tablet, `平板不该撤 ${id}`).toContain(id);
+    }
+  });
+
+  /**
+   * 「整理」2026-08-31 整颗下架 —— 这条不是设备档，是**哪一档都不许再有**。
+   *
+   * 它删的是根层物件的整条布局记录（tag / by / seat / 实测 w,h 一起没），而版面
+   * 归属今天分属 agent（seat:'agent'）、用户（seat:'user'）、暂存架（seat:'shelf'）
+   * 三方，一键全局重排必然越过其中两份的界。真要再加一颗"整理"，先读
+   * BoardCanvas.jsx 里那块墓碑注释。
+   */
+  it('⛔ 「整理」哪一档都不许再出现', () => {
+    for (const cls of ['phone', 'tablet', 'desktop']) {
+      expect(idsOf(build(cls)), `${cls} 上又冒出了 tidy`).not.toContain('tidy');
     }
   });
 
@@ -73,7 +87,7 @@ describe('工具栏按设备档收敛', () => {
       }
     }
     // 平板和桌面照旧带标签
-    expect(idsOf(build('tablet'))).toContain('tidy');
+    expect(idsOf(build('tablet'))).toContain('chalkEdit');
     expect(build('tablet').flatMap((g) => g.items || []).find((i) => i.id === 'fit').label).toBe('全部');
   });
 

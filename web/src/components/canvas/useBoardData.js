@@ -41,6 +41,41 @@ export function shouldPersistLayoutPatch(prevEntry, patch) {
   return Number.isFinite(patch?.x);
 }
 
+/**
+ * 这一拍要发给服务端的补丁（纯函数，2026-08-31 从 scheduleSave 里抽出来）。
+ *
+ * 抽出来是因为它里面藏着一条**生死判据**：`patch.objects[id] = null` 在服务端
+ * 是"删掉整条记录"，而条目上挂的远不止坐标 —— tag / by / seat / 实测 w,h /
+ * sized / zone / hug 都在那一条上。这个判据原来是**推断**的（脏了而本地没座位
+ * 就发 null），撤「整理」那颗按钮时才看清它有多险。现在写死成三档：
+ *
+ *   有座位          → 发座位（服务端是合并语义，瘦补丁只更新它带来的字段）
+ *   没座位 + 删过    → 发 null（唯一一条删整条的路，进这个集合只能走 removeLayoutEntry）
+ *   没座位 + 没删过  → **什么都不发**（多半是搬家/改名的半拍，不是删除指令）
+ *
+ * 第二档还自带自愈：本地座位又回来了就走第一档，null 发不出去。
+ */
+export function buildBoardPatch({ dirtyObjects, dirtyZones, layout, zones, removed }) {
+  const patch = {};
+  const objects = {};
+  for (const id of dirtyObjects || []) {
+    const entry = layout?.[id];
+    if (entry) objects[id] = entry;
+    else if (removed?.has(id)) objects[id] = null;
+  }
+  if (Object.keys(objects).length) patch.objects = objects;
+  const zs = {};
+  // 只发坐标：zones 存档只剩 x/y（#14，服务端 sanitizeZone 同款）。本地 state 里的
+  // w/h 是影子区/旧数据的残留，别让 PATCH 背死字段。**zones 没有 null 那一档** ——
+  // 删文件夹走的是它自己的端点，不从这儿推断。
+  for (const id of dirtyZones || []) {
+    const z = zones?.[id];
+    if (z) zs[id] = { x: z.x, y: z.y };
+  }
+  if (Object.keys(zs).length) patch.zones = zs;
+  return patch;
+}
+
 export function useBoardData({ projectId, listVersion, boardVersion, readOnly = false }) {
   // ── 数据源 ──
   const [artifacts, setArtifacts] = useState([]);
@@ -78,6 +113,18 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   const zMaxRef = useRef(10);
   const saveTimerRef = useRef(null);
   const dirtyRef = useRef({ objects: new Set(), zones: new Set() });
+  /**
+   * **明确要删掉的条目**（2026-08-31）。
+   *
+   * 服务端把 `patch.objects[id] = null` 当"删掉整条"，而这条命令原来是**推断**
+   * 出来的：只要一个 id 进了 dirty 而本地又没有它的座位，就发 null。删「整理」
+   * 那颗按钮时才看清这条推断有多险 —— 它删掉的不只是坐标，条目上还挂着
+   * tag / by / seat / 实测 w,h / sized / zone / hug，一个字的警告都没有。
+   *
+   * 现在改成**只有真的说了要删才删**：走 removeLayoutEntry 的才进这个集合。
+   * 判据还带自愈 —— 本地又有座位了就发座位、不发 null（见 scheduleSave）。
+   */
+  const removedRef = useRef(new Set());
   // 事件回调（拖拽/舞台）要读最新布局 —— 状态镜像
   const layoutRef = useRef(layout); layoutRef.current = layout;
   const zonesRef = useRef(zones); zonesRef.current = zones;
@@ -129,31 +176,18 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
 
   // ── 布局持久化（diff 式 PATCH，只发脏条目）──
   const scheduleSave = useCallback(() => {
-    if (readOnly) { dirtyRef.current = { objects: new Set(), zones: new Set() }; return; }
+    if (readOnly) { dirtyRef.current = { objects: new Set(), zones: new Set() }; removedRef.current.clear(); return; }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const d = dirtyRef.current;
       if (!d.objects.size && !d.zones.size) return;
-      const patch = {};
-      if (d.objects.size) {
-        patch.objects = {};
-        for (const id of d.objects) {
-          // 没有坐标了 = 明确删掉这条（服务端 null 即删）。原来这里是
-          // `if (layoutRef.current[id])` 直接跳过，于是「整理」清掉的坐标
-          // 只清在内存里，刷新一次全回来了
-          patch.objects[id] = layoutRef.current[id] || null;
-        }
-      }
-      if (d.zones.size) {
-        patch.zones = {};
-        // 只发坐标：zones 存档只剩 x/y（#14，服务端 sanitizeZone 同款）。
-        // 本地 state 里的 w/h 是影子区/旧数据的残留，别让 PATCH 背死字段。
-        for (const id of d.zones) {
-          const z = zonesRef.current[id];
-          if (z) patch.zones[id] = { x: z.x, y: z.y };
-        }
-      }
+      const patch = buildBoardPatch({
+        dirtyObjects: d.objects, dirtyZones: d.zones,
+        layout: layoutRef.current, zones: zonesRef.current, removed: removedRef.current,
+      });
       dirtyRef.current = { objects: new Set(), zones: new Set() };
+      removedRef.current.clear();
+      if (!patch.objects && !patch.zones) return;   // 这一拍没什么可说的，别发空包
       Assets.patchBoard(projectId, patch).catch(() => {});
     }, 800);
   }, [projectId, readOnly]);
@@ -168,12 +202,33 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
     scheduleSave();
   }, [scheduleSave]);
 
+  /**
+   * 删掉一条布局记录 —— **本地和服务端一起**（2026-08-31）。
+   *
+   * 这是唯一一条会让 `patch.objects[id] = null` 发出去的路。原来它是三步仪式
+   * （setLayout 里 delete + dirtyRef.add + scheduleSave），谁都能就地拼一遍，
+   * 而拼错的后果是静默删掉整条记录（tag / by / seat / 实测 w,h 一起没）。收成
+   * 一个动词之后，"要删"这件事在代码里有名字，grep 得到调用方。
+   *
+   * ⚠️ 只给**真的要让这件东西从板上消失**的用（删画布原生物件、写字清空）。
+   * 想让它重新入座不要用这个 —— 那条路 2026-08-31 随「整理」一起废了。
+   */
+  const removeLayoutEntry = useCallback((id) => {
+    setLayout(prev => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev }; delete next[id]; return next;
+    });
+    removedRef.current.add(id);
+    dirtyRef.current.objects.add(id);
+    scheduleSave();
+  }, [scheduleSave]);
+
   return {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
     rolls, setRolls, sheets, shelf,
     guideText, fileCount,
-    reload, scheduleSave, patchLayout,
+    reload, scheduleSave, patchLayout, removeLayoutEntry,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,
   };
 }

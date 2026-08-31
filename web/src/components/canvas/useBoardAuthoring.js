@@ -1,7 +1,7 @@
 /**
  * 在画布上"造一件东西"（2026-08-17 从 BoardCanvas 拆出 —— 行数棘轮）。
  *
- * 三条造物的路，共用一套落盘口（useBoardData 的 patchLayout / setLayout）：
+ * 三条造物的路，共用一套落盘口（useBoardData 的 patchLayout / removeLayoutEntry）：
  *   写一段字   handleCreateText / openTextEditor / commitTextEdit
  *   写便利贴   createNoteAt   —— **这条落成 notes/*.md，是给 agent 看的**
  *   画一笔     handleCreateScribble —— 挨着旧墨迹就并成一组
@@ -26,8 +26,8 @@ const SCRIBBLE_INK = { ink: PAPER.ink, red: PAPER.red, pencil: PAPER.pencil, bra
 
 export function useBoardAuthoring({
   projectId, canvasFont,
-  patchLayout, setLayout, reload, scheduleSave,
-  layoutRef, dirtyRef, zMaxRef,
+  patchLayout, reload, removeLayoutEntry,
+  layoutRef, zMaxRef,
   positionedRef, zoneAtPoint,
 }) {
   /** 正在改内容的那段字：{ id, at, initial }。null = 没在改 */
@@ -108,15 +108,13 @@ export function useBoardAuthoring({
     if (!old) return;
     if (!t) {
       // 清空 = 删掉这段字（服务端对空文本也是整条丢弃，两边同一个语义）
-      setLayout(prev => { const next = { ...prev }; delete next[ed.id]; return next; });
-      dirtyRef.current.objects.add(ed.id);
-      scheduleSave();
+      removeLayoutEntry(ed.id);
       return;
     }
     // 尺寸按新内容重估（只定命中区和避让矩形；渲染后 useMeasuredSize 会按真值回写）
     const box = estimateTextBox(t, old.data?.size);
     patchLayout(ed.id, { w: box.w, h: box.h, data: { ...old.data, t } });
-  }, [editingText, patchLayout, scheduleSave]);
+  }, [editingText, patchLayout, removeLayoutEntry]);
 
   /** 写一张便利贴 → `notes/*.md`（**这条是给 agent 看的**，走右键菜单） */
   const createNoteAt = useCallback(async (at) => {

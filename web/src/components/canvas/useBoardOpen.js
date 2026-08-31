@@ -46,7 +46,7 @@ export function sitePageFrom(o, previewPath) {
 
 export function useBoardOpen({
   projectId, onAddToContext, onFocusDeck,
-  setLayout, dirtyRef, scheduleSave, reload,
+  removeLayoutEntry, reload,
   setAddedPaths, setViewer, setOrchestrate, setDetail,
   openTextEditor, roleNames,
 }) {
@@ -86,9 +86,7 @@ export function useBoardOpen({
     // 走下面文件那条路会静默失败 —— native 物件没有 `name`，垃圾桶和右键
     // 删除对它们从来没生效过（2026-08-13 查实）。
     if (o.native) {
-      setLayout(prev => { const next = { ...prev }; delete next[o.id]; return next; });
-      dirtyRef.current.objects.add(o.id);   // scheduleSave 对缺席的 id 发 null = 服务端删除
-      scheduleSave();
+      removeLayoutEntry(o.id);   // 唯一一条会发 null（= 服务端删整条）的路，见 useBoardData
       return;
     }
     try {

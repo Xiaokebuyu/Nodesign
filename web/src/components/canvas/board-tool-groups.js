@@ -8,14 +8,13 @@
  * 调用方仍然要用 useMemo 包住它，而且**镜头动作必须先经 ref 转一手**：理由
  * 记在 BoardCanvas 那个 memo 的头上（每帧换身份 → 死循环，build 和单测都照不出来）。
  */
-import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, LayoutGrid, Presentation, NotebookPen, MessageSquarePlus } from 'lucide-react';
+import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, Presentation, NotebookPen, MessageSquarePlus } from 'lucide-react';
 
 /**
  * @param {object} p
  * @param {string} p.tool / p.drawMode        当前工具与涂鸦子模式
  * @param {Function} p.setTool / p.setDrawMode
  * @param {number} p.scale                    当前缩放（只用来印百分比）
- * @param {Function} p.tidyBoard              整理
  * @param {Function} p.zoomFit / p.zoomBy / p.zoomTo   **要传 ref 转过手的稳定引用**
  * @param {object} [p.filterGroup]  按类别过滤那颗漏斗（`{id, node}`，自己带 JSX ——
  *   本文件是 .js 且"只造数据不渲染"，所以节点在 board-filter.jsx 里造好了递进来）
@@ -30,13 +29,14 @@ import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, Layou
  * 之后这三颗按钮就一直摆在手机屏幕最底下**按了没有任何反应** —— 比没有更坏。
  * 顺手的 drawMode 子组同理（它只在 tool==='draw' 时出现，而那个态在触屏上到不了）。
  *
- * ⭐ 手机再少两颗：整理 / 改板书。它们**能**工作，撤掉是因为用户拍板「手机上只读
- * + 对话，编辑留给桌面」。平板留着 —— 屏幕放得下，而且平板上真有人会顺手改一下。
+ * ⭐ 手机再少一颗：改板书。它**能**工作，撤掉是因为用户拍板「手机上只读 + 对话，
+ * 编辑留给桌面」。平板留着 —— 屏幕放得下，而且平板上真有人会顺手改一下。
  * 缩放的 −/+ 也在手机上撤掉：捏合是更自然的那条路，百分比那颗（点一下回 100%）留着。
+ * （这里原来还有「整理」，2026-08-31 整颗按钮下架，不再分设备档。）
  */
 export function buildBoardToolGroups({
   tool, setTool, drawMode, setDrawMode, scale,
-  tidyBoard, zoomFit, zoomBy, zoomTo, filterGroup,
+  zoomFit, zoomBy, zoomTo, filterGroup,
   blackboardMode = false, toggleBlackboard = null,
   chalkEditMode = false, toggleChalkEdit = null,
   openCanvasNote = null,
@@ -53,11 +53,10 @@ export function buildBoardToolGroups({
     {
       id: 'view',
       items: [
-        ...(phone ? [] : [{
-          id: 'tidy', icon: LayoutGrid, label: '整理',
-          title: '重排这块画布上的产物（自动排版只在新产物到货时跑一次，别的时候不动你摆的位置）',
-          onClick: tidyBoard,
-        }]),
+        // ⚠️ 「整理」2026-08-31 撤了（右键菜单那颗同批）。它删的是根层物件的**整条**
+        // 布局记录（tag / by / seat / 实测 w,h 一起没），而版面归属今天分属 agent、
+        // 用户、暂存架三方，一键全局重排必然越界。理由与两件旧功能的去处写在
+        // BoardCanvas.jsx 那块墓碑注释上，别在这儿重造一颗。
         { id: 'fit', icon: Maximize2, label: '全部', title: '全部内容入镜（Shift+1）', onClick: zoomFit },
         ...(phone ? [] : [{ id: 'zoomOut', icon: Minus, title: '缩小（Ctrl -）', onClick: () => zoomBy(-1) }]),
         { id: 'zoomLevel', icon: null, label: `${Math.round(scale * 100)}%`, title: '回到 100%（Ctrl 0）', onClick: () => zoomTo(1) },
@@ -133,6 +132,7 @@ export function buildBoardToolGroups({
  * 390 宽的屏上，「整理 全部 − 84% + 黑板 改板书 评论」这一条量到 **80px 两行**，
  * 常驻压着内容。折行的主因是那几个中文标签 —— 一个「黑板」比它的图标宽出一倍多。
  * 撤掉标签之后同样这些功能一行放得下。
+ * （那一条里的「整理」08-31 已整颗下架。原话照抄是为了留住当时量到的那条基线。）
  *
  * ⚠️ **没有图标的那颗不许动**（缩放百分比 icon:null label:'84%'）—— 撤了它的标签
  * 就是一颗空按钮。所以判据是「有图标才撤标签」，不是「一律撤」。
