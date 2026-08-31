@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, bareTag } from '../../../lib/canvas-id.js';
+import { shelfItems } from '../../../lib/board-shelf.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
@@ -227,10 +228,9 @@ on the minimap and listed with what is inside it.`,
               }
             }
           }
-          // 暂存架（2026-08-30）：机器到货的默认座 —— 上了墙但还没进版面，等 agent 安置
-          const shelf = Object.entries(board.objects || {})
-            .filter(([, e]) => e?.seat === 'shelf' && !e.zone && Number.isFinite(e?.x))
-            .map(([id]) => id);
+          // 暂存架（2026-08-30）：机器到货的默认座 —— 上了墙但还没进版面，等 agent 安置。
+          // 判据一份：lib/board-shelf.js shelfItems（2026-08-31 收编，见那儿的两条修正）
+          const shelf = shelfItems(board);
           const pend = Array.isArray(board.pending) ? board.pending : [];
           const unplaced = [...shelf, ...pend];
           if (unplaced.length) {

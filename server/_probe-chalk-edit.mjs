@@ -5,7 +5,7 @@ import path from 'node:path';
 import { mintToken, COOKIE_NAME } from './auth/session.js';
 import { makeWriteOnBoardTool } from './engine/mcp/tools/write-on-board.js';
 import { getSharedDir } from './projects/workspace.js';
-import { removeByTag } from './projects/board-store.js';
+import { removeByTag } from './projects/board-tags.js';
 const [pid, owner] = process.argv.slice(2);
 const origin = process.env.NODESIGN_WEB_ORIGIN;
 const tag = `chalkedit-${Date.now().toString(36)}`;

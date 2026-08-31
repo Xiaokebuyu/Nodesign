@@ -84,18 +84,28 @@ describe('write_on_board 的版位落位', () => {
     expect(second.y).toBeGreaterThanOrEqual(first.y + first.h);
   });
 
-  it('⭐ 装不下 → 拒收，报还剩多少、要它分块重排', async () => {
+  /**
+   * ⚠️ 2026-08-31 改了这条的答案：装不下**不再拒收**，改成溢出暂存（内容照写、
+   * 落暂存架、当场要它安置）。理由是代价——全库四分之一的工具失败是"装不下，
+   * 一个字没写"，其中六分之一差的还不到一行。
+   * 这条测试原来守的两件事仍然守着：**量纲报文**（差多少 px，两边同单位）和
+   * **位置仍然没定**（座位出处是 shelf，架不是版面）。
+   */
+  it('⭐ 装不下 → 溢出暂存：内容照写、落架、报文仍报差多少', async () => {
     const before = await countObjects();
     const long = Array.from({ length: 60 }, (_, i) => `这是第 ${i} 行，用来把这块地撑爆。`).join('\n');
     const r = await write1({ slot: 'main', text: long });
-    expect(r.isError).toBe(true);
+    expect(r.isError).toBeUndefined();
     const txt = r.content[0].text;
-    expect(txt).toMatch(/cannot take this/);
+    expect(txt).toMatch(/OVERFLOW/);
+    expect(txt).toMatch(/parked on the shelf/);
     expect(txt).toMatch(/short by \d+px/);   // 08-30 刀⑥：两边同量纲，差多少直说
-    expect(txt).toMatch(/Free: \d+px/);
-    expect(txt).toMatch(/Split it YOUR way|replan/);
-    // ⭐ 什么都没写：拒收不能是"半写"
-    expect(await countObjects()).toBe(before);
+    expect(txt).toMatch(/replan/);
+    // ⭐ 内容落盘了（这正是这一刀救的东西），但位置仍然没定
+    expect(await countObjects()).toBe(before + 1);
+    const b = await readBoard(pid);
+    const shelved = Object.values(b.objects).filter(e => e.seat === 'shelf');
+    expect(shelved.length).toBe(1);
   });
 
   it('⭐ slot 名不存在 → 报错并列出这张纸有哪些地', async () => {

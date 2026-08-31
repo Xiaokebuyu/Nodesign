@@ -24,14 +24,16 @@ import { promises as fs } from 'node:fs';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { byOf } from '../actor.js';
 import { z } from 'zod';
-import { readBoard, patchBoard, commitStaging, removeByTag, chalkAbsPath, TEXT_FONTS } from '../../../projects/board-store.js';
+import { readBoard, patchBoard, chalkAbsPath, TEXT_FONTS } from '../../../projects/board-store.js';
+import { commitStaging, removeByTag, clearTags } from '../../../projects/board-tags.js';
 import { estimateSizeOn, FOLDER_CARD } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/canvas-id.js';
+import { applyFollows } from '../../../lib/board-follow.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
 import { placeBeside, placeAtOnSheet, overlapIds, currentSheet } from '../../../lib/board-sheets.js';
 import { applyReplan } from './sheet-replan.js';
 import { transformGroup } from '../../../lib/board-transform.js';
-import { OP } from './edit-board-schema.js';
+import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
@@ -60,40 +62,7 @@ export function makeEditBoardTool({ projectId, sharedRoot, sessionId = null, ctx
   const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
   return tool(
     'edit_board',
-    `Edit what is already on the board — by id, without redrawing. Positions: sheet-absolute
-{x,y,sheet?} (pixels from a sheet's top-left writable corner — you own the layout),
-relative {ref, side, gap}, or a shift {dx,dy}. Every distance is in PIXELS — the same
-pixels read_board and look_at_board report back, no grid conversion. Placement is EXACT
-(no auto-nudging); if you cover something the return says so. ids come from read_board
-(nodes text:…/scribble:…, cards deck:…/site:…/paths, lines b:…); local names from the
-sketch that drew them work too.
-ops (run in order; a failing op is reported, the rest still apply):
- set_text{id,text?,…} (canvas text nodes AND your own board-note files — a note's body is
- rewritten in place, threads/lines/annotations survive; never redraw to change words) ·
- move{id,to} · move_group{tag,to} (a tagged panel is ONE thing — move the whole status
- board with its tag, never its members one by one; pair with reflow to re-stack it) ·
- remove{id} (agent-written board
- notes included: file + seat + lines go together) · add_node{id?,text,at:{ref,side,gap?},…} ·
- add_shape{kind,around,…} (circle/box/underline an EXISTING thing after the fact — the mark
- hugs it and follows when it moves) · set_shape{id,color?,width?} ·
- add_edge{from,to,type?,material?,label?} · set_edge{id,from?,to?,label?,type?,material?}
- (re-point a line in one op) · remove_edge{id} · reflow{tag,layout?} (restack a group after
- text edits changed heights) · replan{sheet?,plan:[{slot,at,w,h,about}…]} (ADD or RESIZE planned
- blocks on an existing sheet — fix a bad layout instead of abandoning the page; unnamed slots stay) ·
- transform_group{tag,scale?,rotate?} (scale/rotate a whole tagged drawing about its center —
- scribbles truly transform; text/cards just re-seat, reported honestly) · follow{group_tag,target_tag,side?} (standing rule: whenever a
- new item with target_tag lands, the group auto-moves beside it — a status panel that tracks
- the latest chapter needs this ONCE, not per turn) · unfollow{group_tag} ·
- commit{tag?} (staging → solid) · erase_group{tag} ·
- roll{tag,label?} (STOW a finished scene/act/chapter behind one compact scroll card —
- seats/files/lines all kept, user or you can unroll anytime; the tidy way to end an act) ·
- unroll{tag} · feature{id} / unfeature (hero) ·
- chalk_edit{on} (flip the user's 改板书 toggle — turn it ON when the session leans on
- board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming).
-Moves avoid collisions (nearest free cell). User-dragged items CAN be moved (the result
-says so when you do) — move them for a reason, and never tug-of-war: if the user drags
-it back, that placement is final.
-For brand-new content use write_on_board.`,
+    EDIT_BOARD_DESC,
     {
       tag: z.string().max(40).optional().describe('Default tag for add_node/add_edge (the group you are editing)'),
       ops: z.array(OP).min(1).max(MAX_OPS),
@@ -178,6 +147,8 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       return { ...p, sheetId: s.id };
     };
     const report = []; let ok = 0;
+    const tagTouched = [];                         // set_tag 这一趟碰过的 [id, tag]（落盘后触发跟随）
+    const untag = [];                              // set_tag{tag:''} 要摘的（合并语义表达不了删键，走专用路）
     const setObj = (id, e) => { live[id] = e; objects[id] = e; };
     /**
      * 文件夹（board.zones）也进摆位系统（2026-08-30 刀 G）。
@@ -462,8 +433,20 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           bindings[id] = binding; liveBindings[id] = binding; ok += 1;
           // 立规则的同时把组摆到目标旁边：之后的跟随是**平移**（保留相对格局），
           // 基线偏移必须在此刻就有意义 —— 不摆的话组停在原地，平移只是搬运一个
-          // 无意义的初始偏移（08-25 平移跟随改造时补）
-          {
+          // 无意义的初始偏移（08-25 平移跟随改造时补）。
+          // ⭐ 除非 agent 明说"现在这个位置就是我要的偏移"→ keep_offset（见下）。
+          /**
+           * `keep_offset: true` = **第一跳也不动它**（2026-08-31 站主提「纯方向相对
+           * 且平行的移动，距离不再固定，不主动拉近和拉远」）。
+           *
+           * 跟随本来就是平移：第二跳起照搬「新目标 − 旧目标」的位移，相对位置一格
+           * 不差。唯一会改变距离的是**第一跳** —— 那时还没有"上一个目标"可参照，
+           * 只能贴到 side 那一侧定出一个初始偏移。keep_offset 就是说"现在这个位置
+           * 就是我要的偏移，别帮我摆"。
+           */
+          if (o.keep_offset) {
+            report.push(`· follow：#${o.group_tag} 原地不动，从此按现在这个相对位置跟着 #${o.target_tag} 的最新一件`);
+          } else {
             const r = rectOf(to);
             const memberIds = new Set(members.map(([mid]) => mid));
             const zone = layerOf(to, live[to], known);
@@ -477,8 +460,34 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
             const pp = placeBeside(r, { w: bb.w, h: bb.h }, o.side || 'right', UNIT);
             const mdx = Math.round(pp.x - bb.x); const mdy = Math.round(pp.y - bb.y);
             if (mdx || mdy) for (const [mid, me] of members) setObj(mid, { ...me, x: me.x + mdx, y: me.y + mdy, seat: 'agent' });
+            report.push(`· follow：#${o.group_tag} 已摆到目标旁并从此跟着 #${o.target_tag} 的最新一件（之后每一跳都是平移，相对位置保留）`);
           }
-          report.push(`· follow：#${o.group_tag} 已摆到目标旁并从此跟着 #${o.target_tag} 的最新一件（整组平移，用户摆的相对位置保留）`);
+        } else if (o.op === 'set_tag') {
+          /**
+           * 给**已经在板上的任何东西**打分组标签（2026-08-31 站主提：「我期望 agent
+           * 可以为所有内容（包括图 站点 docx 等）设置 follow」）。
+           *
+           * 在这之前 tag 只能在**造东西那一刻**给（write_on_board.tag / add_node /
+           * add_shape / add_edge / 板书 frontmatter）。产物不是这么来的 —— 图是
+           * generate_image 生的、站点是 publish_site 出的、docx 是 build_docx 打的，
+           * 落板时一律没有 tag。而 follow 的两端（跟随组 group_tag、目标 target_tag）
+           * **都是按 tag 找成员**，所以"给图片设 follow"以前根本无从下手。
+           */
+          const tag = bareTag(o.tag || '');
+          const hit = []; const miss = [];
+          for (const raw of o.ids) {
+            const id = rid(raw);
+            const e = id && live[id];
+            if (!e) { miss.push(raw); continue; }
+            if (tag) setObj(id, { ...e, tag });
+            else { const n = { ...e }; delete n.tag; live[id] = n; untag.push(id); }
+            hit.push(id);
+          }
+          if (!hit.length) { fail(`一件都不在板上：${miss.join('、')}`); continue; }
+          ok += 1;
+          tagTouched.push(...hit.map(id => [id, tag]));
+          report.push(`· #${i + 1} set_tag：${hit.length} 件${tag ? ` → #${tag}` : ' 去掉了标签'}`
+            + `${miss.length ? `（${miss.length} 件不在板上：${miss.slice(0, 3).join('、')}）` : ''}`);
         } else if (o.op === 'unfollow') {
           const gTag = bareTag(o.group_tag);
           const hits = Object.entries(liveBindings).filter(([, b]) => b.follow && live[b.from]?.tag === gTag);
@@ -561,6 +570,21 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         ...(heroPatch !== undefined ? { hero: heroPatch } : {}),
       });
     }
+    /**
+     * 打完标签就是"这个 tag 有新成员落板"—— 跟 write_on_board 落一条带 tag 的板书
+     * 是同一件事，跟随线该在这一刻重指并挪组（2026-08-31）。
+     *
+     * ⛔ 在这之前 applyFollows 只挂在三处：write_on_board / write_on_board(flow) /
+     * board-seater。产物（图 / 站点 / docx）走的是别的路，**永远触发不了跟随** ——
+     * 「follow 是所有组件都可用吗」的答案原来是"数据层是、触发层不是"。
+     * fail-soft：跟随失败绝不连累这次编辑本身。
+     */
+    for (const [id, tag] of tagTouched) {
+      if (!tag) continue;
+      try { await applyFollows(projectId, { tag, newId: id }); } catch { /* */ }
+    }
+    // 摘标签走专用路（patchBoard 是合并语义，补丁里"没有这个键"≠"删掉这个键"）
+    if (untag.length) { try { await clearTags(projectId, untag); } catch { /* fail-soft */ } }
     // 软删进 .nd/trash/（08-25：删掉的板书要捞得回来，别裸 unlink）
     for (const abs of chalkUnlinks) await trashChalkFile(sharedRoot, abs);
     try { ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `改了黑板（${ok} 处）` }); } catch { /* */ }

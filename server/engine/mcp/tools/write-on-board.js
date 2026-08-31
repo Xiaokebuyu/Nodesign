@@ -135,7 +135,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // 锚点解析（真 id > tag 包络 > 救援入座）本体在 lib/board-anchor.js（棘轮拆件）
     const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
     // 纸上落位三分支（棘轮拆件，见 write-on-board-place.js）
-    const { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull } = makeSheetPlacer({ projectId, sessionId, by });
+    const {
+      placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull,
+      placeOverflowOnShelf, describeOverflow, describeChalkWrite,
+    } = makeSheetPlacer({ projectId, sessionId, by });
 
     // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
     if (args.text) {
@@ -274,10 +277,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       }
       let placed;
       if (slotInfo) {
-        // 装不下就拒收：什么都不写，把还剩多少报回去让它分块重排（站主拍板）
+        // 装不下不再拒收：内容照写、落暂存架、返回里当场要它安置（2026-08-31 站主拍板，
+        // 理由与那条线没被跨过的说明见 write-on-board-place.js placeOverflowOnShelf）
         const p = placeInSlot(b2, { rect: slotInfo.rect, sheet: slotInfo.sheet, slotName: args.slot, box, obstacles });
-        if (p.full) return err(p.message);
-        placed = p;
+        placed = p.full ? placeOverflowOnShelf(b2, { box, why: p.message }) : p;
       } else if (zone) {
         if (args.at) return err('at 是纸内坐标，文件夹层没有纸 —— 在文件夹里用 reply_to/near 落位。');
         placed = placeInZone({ box, replyRect, anchorRect, side: args.side || null, obstacles });
@@ -295,8 +298,11 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           box, at: args.at || null, sheetName: args.sheet || null,
           replyRect, anchorRect, side: args.side || null, obstacles,
         });
-        // 纸排满了：不替它翻页，让它自己规划下一页（刀 F，站主"每张纸规划一次"）
-        if (placed.sheetFull) return err(describeSheetFull(b2, placed.sheetFull));
+        // 纸排满了：还是不替它翻页（刀 F，站主"每张纸规划一次"），但也不再整条拒收 ——
+        // 内容落暂存架，返回里要它自己规划下一页再把这条挪过去
+        if (placed.sheetFull) {
+          placed = placeOverflowOnShelf(b2, { box, why: describeSheetFull(b2, placed.sheetFull) });
+        }
         if (placed.opened) b2 = { ...b2, sheets: { ...(b2.sheets || {}), [placed.opened.id]: { x: placed.opened.x, y: placed.opened.y, w: placed.opened.w, h: placed.opened.h, at: placed.opened.at, by } } };
       }
 
@@ -342,7 +348,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
       const objects = { [rel]: {
         x: Math.round(placed.x), y: Math.round(placed.y), z: 1, w: box.w, h: box.h,
-        zone, by, seat: 'agent', ...(args.tag ? { tag: args.tag } : {}),
+        // 溢出暂存的落在根层的架上（placed.zone === ''），座位出处是 shelf ——
+        // 每回合状态块照旧点名，agent 一挪 seat 就被改写、自然离架
+        zone: placed.zone !== undefined ? placed.zone : zone,
+        by, seat: placed.seat || 'agent', ...(args.tag ? { tag: args.tag } : {}),
       } };
       const bindings = {};
       if (anchorId) {
@@ -354,6 +363,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
       await patchBoard(projectId, {
         objects, bindings,
+        // 架第一次用到（或被纸压住重立）才落原点
+        ...(placed.shelf ? { shelf: placed.shelf } : {}),
         // 线注册表照旧登记（read_board 的线清单/角色专线都靠它）：登记点 = 这条线的纸
         ...(laneFrom ? { lanes: { [args.tag]: {
           x: Math.round(placed.x), y: Math.round(placed.y), w: box.w,
@@ -368,42 +379,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: parentId ? '回了一条板书' : '写了一条板书' });
         ctx?.emit?.(Events.boardFocus(rect, { tag: args.tag || null, layer: zone, soft: true, chalk: rel, actor: by !== 'agent' ? by : null }));
       } catch { /* fail-soft */ }
-      const lines = [
-        `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describeSpot(b2, placed)}.`,
-        `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
-      ];
-      // 余量随手报（2026-08-30 容量线）：下一条要不要拆、还塞不塞得下，
-      // 最有用的时机就是刚写完这一刻 —— 别让它再去翻状态块或者赌一发。
-      if (slotInfo) {
-        const freeH = Math.max(0, Math.round(slotInfo.rect.y + slotInfo.rect.h - (rect.y + rect.h) - UNIT));
-        const c = capacityOf(slotInfo.rect.w, freeH);
-        // 版位满 ≠ 纸满（2026-08-30 利用率线）：旧措辞 "goes elsewhere" 把模型往门外
-        // 推（sonnet 真会话走成每拍一张新纸）。版位用完先报纸还剩多少，复用是主路径。
-        let tail = '';
-        if (freeH < 60) {
-          const inn = innerRect(slotInfo.sheet);
-          const sheetFree = Math.round(inn.y + inn.h - (rect.y + rect.h) - UNIT);
-          tail = sheetFree >= 120 ? ` — this slot is full, but the sheet still has ~${sheetFree}px below: keep writing on it (no slot needed — notes flow down; or replan more blocks). A fresh sheet is for a scene change or a refusal, not for every note` : ' — slot and sheet are both nearly full; plan the next page (open_sheet) before the next note';
-        }
-        lines.push(`Slot "${args.slot}" now has ~${c.lines} lines (~${c.cjk} CJK chars, ${freeH}px) left${tail}.`);
-      }
-      if (box.reserved) lines.push(`Box height reserved at ${box.h}px (content measured shorter — the box keeps your planned size).`);
-      // 折叠如实报（08-29 占位契约刀 B）：卡高封顶到 CARD_MAX_H，超出的折在卡里。
-      // ⚠ 旧判据 `box.h > SKETCH_FIT.h*0.6`（720px）封顶之后永远不成立 —— 换成真话。
-      if (box.capped) {
-        lines.push(`⚠ Too long for one card: it shows ${box.h}px of ~${box.fullH}px — the rest is folded (the reader must click to unfold). Split it into several notes (chain:true keeps them threaded), or start a fresh sheet.`);
-      }
-      // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话
-      {
-        const rolledInto = [args.tag, board.objects?.[parentId]?.tag, board.objects?.[anchorId]?.tag]
-          .find(t => t && b2.rolls?.[t]);
-        if (rolledInto) lines.push(`⚠ #${rolledInto} 这条线收着卷（用户看不见里面）——这条也进了卷。要让用户看见，先 edit_board unroll{tag:"${rolledInto}"}。`);
-      }
-      if (laneFrom) {
-        lines.push(`Opened lane #${args.tag}${laneFrom !== 'fresh' ? ` branching from ${laneFrom.id}` : ''} on its own sheet`
-          + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists lanes and sheets.`);
-      }
-      lines.push('The user can annotate it to reply; answer with reply_to (or chain:true on the same tag).');
+      const lines = describeChalkWrite({
+        rel, rect, board: b2, placed, slotInfo, box, args, vpRect,
+        parentId, anchorId, laneFrom, boardBefore: board,
+      });
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
 
@@ -531,14 +510,16 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const si = resolveSlot(sketchBase, { slotName: args.slot, sheetName: args.sheet || null });
       if (si.error) return err(si.message);
       const p = placeInSlot(sketchBase, { rect: si.rect, sheet: si.sheet, slotName: args.slot, box: sketchBox, obstacles });
-      if (p.full) return err(p.message);
-      placed = p;
+      // 装不下 → 溢出暂存（同板书那条路，2026-08-31）
+      placed = p.full ? placeOverflowOnShelf(sketchBase, { box: sketchBox, why: p.message }) : p;
     } else {
       placed = await placeOnSheets(sketchBase, {
         box: sketchBox, at: args.at || null, sheetName: args.sheet || null,
         replyRect: null, anchorRect, side: args.side || null, obstacles,
       });
-      if (placed.sheetFull) return err(describeSheetFull(sketchBase, placed.sheetFull));
+      if (placed.sheetFull) {
+        placed = placeOverflowOnShelf(sketchBase, { box: sketchBox, why: describeSheetFull(sketchBase, placed.sheetFull) });
+      }
       if (placed.opened) sketchBase = { ...sketchBase, sheets: { ...(sketchBase.sheets || {}), [placed.opened.id]: { x: placed.opened.x, y: placed.opened.y, w: placed.opened.w, h: placed.opened.h, at: placed.opened.at, by } } };
     }
     const ox = placed.x - local.x + 12; const oy = placed.y - local.y + 12;
@@ -551,7 +532,11 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
     // ── 落盘 ──
     const objects = {};
-    const common = { z: 1, zone, by, seat: 'agent', ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}) };
+    // 溢出暂存的整张草图落在根层的架上（placed.zone === ''），座位出处 shelf
+    const common = {
+      z: 1, zone: placed.zone !== undefined ? placed.zone : zone, by,
+      seat: placed.seat || 'agent', ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}),
+    };
     for (const n of nodes) {
       const p = pos.get(n.key);
       objects[idOf.get(n.key)] = {
@@ -563,7 +548,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     for (const sh of shapes) {
       objects[idOf.get(sh.key)] = { x: Math.round(sh.rect.x + ox), y: Math.round(sh.rect.y + oy), w: Math.round(sh.rect.w), h: Math.round(sh.rect.h), kind: 'scribble', data: { d: sh.d, color: sh.color, width: sh.width }, ...(sh.hug && idOf.get(sh.hug) ? { hug: idOf.get(sh.hug) } : {}), ...common };
     }
-    const saved = await patchBoard(projectId, { objects, bindings });
+    const saved = await patchBoard(projectId, { objects, bindings, ...(placed.shelf ? { shelf: placed.shelf } : {}) });
     const landed = Object.keys(objects).filter(id => saved.objects?.[id]).length;
     if (!landed) return err('草图被 board 拒了（内容或字段不合法）。');
     if (tag && nodes.length) { try { await applyFollows(projectId, { tag, newId: idOf.get(nodes[0].key) }); } catch { /* */ } }
@@ -577,6 +562,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       `ids: ${[...idOf].map(([k, v]) => `${k}=${v}`).join(', ')}`,
       `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
+    if (placed.resolution === 'shelf-overflow') lines.push(describeOverflow(placed));
     if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一张纸（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。如果你是按**像素**想的坐标：nodes/shapes（含 path 的 d）全族单位是 24px 的格，数值除以 24 重画一版会正好；确实要这么大就拆成几张 tag 图用线连。`);
     // 零线大图提醒（08-27 用户报「草草一堆文字摊在那儿」）：软提醒不硬拒 ——
     // 但要说清楚这不是风格问题，是版面语言缺了一半

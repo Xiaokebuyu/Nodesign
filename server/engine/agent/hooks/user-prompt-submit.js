@@ -41,6 +41,7 @@ import { roleLabel } from '../../mcp/actor.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf } from '../../../lib/canvas-id.js';
+import { shelfItems } from '../../../lib/board-shelf.js';
 import {
   getActiveArtifact, listWorkspaceArtifacts, taskManifest, kindDef,
   KIND_DECK, KIND_SITE, ENTRY_FILE,
@@ -118,10 +119,10 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       // 纸（2026-08-29 纸范式）：报当前有哪些纸、剩多少地 —— 空位建议/走向学习
       // 那套启发式随落位引擎一起退役，agent 的空间账本现在是纸的清单。
       let spot = null;
-      // 暂存架（2026-08-30）：机器到货的默认座。点名 + 三个安置动词，agent 不动它们就一直在
-      const shelfSeats = Object.entries(board.objects || {})
-        .filter(([, e]) => e?.seat === 'shelf' && !e.zone && Number.isFinite(e?.x))
-        .map(([id]) => id);
+      // 暂存架（2026-08-30）：机器到货的默认座。点名 + 三个安置动词，agent 不动它们就一直在。
+      // ⚠️ 判据只有 lib/board-shelf.js shelfItems 一份（2026-08-31）——这儿和 read_board
+      // 原来各抄了一遍 `!e.zone`，而那条判据本身是错的（幽灵点名，见 shelfItems 头注）
+      const shelfSeats = shelfItems(board);
       const pendingSeats = Array.isArray(board.pending) ? board.pending : [];
       try {
         const ss = sheetSummaries(board);

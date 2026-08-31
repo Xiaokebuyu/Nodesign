@@ -90,20 +90,25 @@ describe('write_on_board 的纸流程', () => {
    * 新纸自然也没有版面（真会话 proj_mtfhey1x：p2 规划得好好的，写满翻到 p3 就散了）。
    * 纸是它开的，满了该由它决定下一页什么样。
    */
-  it('⭐ 纸写满 → 拒收并让它自己规划下一页，不替它翻页', async () => {
+  /**
+   * ⚠️ 2026-08-31 再改一次：纸写满**也不再拒收**，改成溢出暂存。
+   * 这条真正要守的那半件事没变 —— **机器绝不替它翻页**（新纸没有版面）。
+   */
+  it('⭐ 纸写满 → 溢出暂存，机器仍然不替它翻页', async () => {
     const pid3 = 'proj_opensheet_full';
     await ensureProjectWorkspace(pid3);
     const w = (args) => makeWriteOnBoardTool({ projectId: pid3, sharedRoot: getSharedDir(pid3), sessionId: 's3', ctx: { emit() {} } }).handler(args, {});
-    let refused = null;
+    let overflow = null;
     for (let i = 0; i < 40; i += 1) {
       const r = await w({ text: `第 ${i} 段\n\n${'内容行\n'.repeat(10)}` });
-      if (r.isError) { refused = r.content[0].text; break; }
+      expect(r.isError, '纸满不该再整条拒收').toBeUndefined();
+      if (/OVERFLOW/.test(r.content[0].text)) { overflow = r.content[0].text; break; }
     }
-    expect(refused, '连写这么多条都没填满，判据本身可疑').toBeTruthy();
-    expect(refused).toMatch(/is full/);
-    expect(refused).toMatch(/nothing was written/i);
-    expect(refused).toMatch(/open_sheet\{title/);
-    // 没有替它铺新纸
+    expect(overflow, '连写这么多条都没填满，判据本身可疑').toBeTruthy();
+    expect(overflow).toMatch(/is full/);            // 为什么溢出：原报文照旧带着
+    expect(overflow).toMatch(/parked on the shelf/);
+    expect(overflow).toMatch(/open_sheet/);
+    // ⭐ 没有替它铺新纸（这一条是刀 F 的本体，不许因为改了处置就丢）
     const board = await readBoard(pid3);
     expect(Object.keys(board.sheets).length).toBe(1);
     expect(currentSheetIdOf('s3')).toBe('p1');

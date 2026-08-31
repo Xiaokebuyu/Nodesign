@@ -121,7 +121,7 @@ export async function seatArtifacts(projectId, rels) {
     const rootRects = Object.entries(live)
       .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === '')
       .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
-    const spot = nextShelfSpot(shelfOrigin, [...rootRects, ...zoneRects]);
+    const spot = nextShelfSpot(shelfOrigin, [...rootRects, ...zoneRects], FOLDER_BOX);
     zonesPatch[top] = { x: spot.x, y: spot.y };
     zoneRects.push({ x: spot.x, y: spot.y, w: FOLDER_BOX.w, h: FOLDER_BOX.h });
     known.add(top);   // 这批的文件按新文件夹归层（跟前端 homeOf 同判）
@@ -189,7 +189,7 @@ export async function seatArtifacts(projectId, rels) {
       // ② 其余一律上暂存架：agent 没说放哪儿的，机器不替它定版面。
       //    文件夹卡不在 objects 里，避让要把 zoneRects 一并算上
       if (!placed) {
-        placed = nextShelfSpot(shelfOrigin, [...obstacles, ...zoneRects]);
+        placed = nextShelfSpot(shelfOrigin, [...obstacles, ...zoneRects], box);
         onShelf = true;
       }
     }

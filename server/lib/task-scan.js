@@ -35,6 +35,30 @@ import fs from 'node:fs/promises';
 export const RESERVED_DIRS = new Set(['assets', 'exports', 'notes', 'node_modules', 'agent-memory']);
 
 /**
+ * **档案目录**（2026-08-31）：住在工作区里、agent 天天 Read，但**不是版面上的东西**。
+ *
+ * 跟 RESERVED_DIRS 的分别：保留目录是基础设施，桌面上根本不出现；档案目录是
+ * 用户的文件夹，照常渲染成文件夹卡、照常能翻开看 —— 它们只是**不该被当作
+ * "等你安置的到货"每回合催 agent 摆上版面**。
+ *
+ * 证据（proj_mth8wd7k，晴可 RP）：暂存架上 11 件，`角色/晴可/角色卡.md`、五份
+ * 阶段人设、三份世界书、落点对账 —— 11/11 全是这类，一件都不该上版面，而状态块
+ * 每回合都在催。agent 自己报了这条 friction（iss_mth9td8n）并给出了同一个修法。
+ *
+ * 名字是约定不是发明：`角色/` = cast-role.js 的 ROLES_DIR，`记忆/` = SDK
+ * auto-memory 的家（memory-migration.js），`世界书/` `预设/` 出自 story-import
+ * 那条线的酒馆卡导入。
+ */
+export const ARCHIVE_DIRS = new Set(['角色', '世界书', '预设', '记忆']);
+
+/** 这条路径住在档案目录里吗（只看第一段 —— 档案是顶层目录，不是散落各处的标记） */
+export function isArchivePath(rel) {
+  if (typeof rel !== 'string' || !rel) return false;
+  const i = rel.indexOf('/');
+  return i > 0 && ARCHIVE_DIRS.has(rel.slice(0, i));
+}
+
+/**
  * 不当产物看的文件：起手模板（拷进来是给 agent 抄/改的，不是成品）。
  * 2026-08-15 加 js/mjs —— RP 的管线模块 `演出.template.js` 走同一条起手文件路，
  * 规则只认 html/css 的话它会当成一张产物卡上墙。

@@ -4,7 +4,7 @@
  * 成员判据（seat:'shelf' 单一真相）。
  */
 import { describe, it, expect } from 'vitest';
-import { resolveShelfOrigin, nextShelfSpot, shelfItems, SHELF_W, SHELF_GAP } from './board-shelf.js';
+import { resolveShelfOrigin, nextShelfSpot, shelfItems, SHELF_W, SHELF_GAP, SHELF_COL_H } from './board-shelf.js';
 
 describe('resolveShelfOrigin', () => {
   it('已立的原点沿用（changed:false）', () => {
@@ -66,7 +66,7 @@ describe('resolveShelfOrigin', () => {
 describe('nextShelfSpot', () => {
   const origin = { x: 24, y: 24 };
   it('空架 → 原点', () => {
-    expect(nextShelfSpot(origin, [])).toEqual({ x: 24, y: 24 });
+    expect(nextShelfSpot(origin, [])).toEqual({ x: 24, y: 24, col: 0 });
   });
   it('架带内的矩形往下让；带外和原点上方的不算', () => {
     const spot = nextShelfSpot(origin, [
@@ -74,17 +74,48 @@ describe('nextShelfSpot', () => {
       { x: 24 + SHELF_W + 10, y: 24, w: 400, h: 400 },  // 带外：不算
       { x: 24, y: -300, w: 200, h: 200 },            // 原点上方：不算
     ]);
-    expect(spot).toEqual({ x: 24, y: 24 + 176 + SHELF_GAP });
+    expect(spot).toEqual({ x: 24, y: 24 + 176 + SHELF_GAP, col: 0 });
   });
   it('⭐ 避让不看 seat：用户拖来堵在架上的卡也得让（压上去是数据损坏）', () => {
     const spot = nextShelfSpot(origin, [{ x: 100, y: 500, w: 300, h: 100, seat: 'user' }]);
     expect(spot.y).toBe(500 + 100 + SHELF_GAP);
   });
+
+  /**
+   * 折列（2026-08-31）。架原来是一根**不封口**的竖列：真案 proj_mtg61or1 26 件
+   * 码到 8322px（板高 2600），前端 ShelfHint 画出来是个 1:41 的虚线框横穿四张纸。
+   * ⚠️ 给了 box 才折 —— 不给就是老行为（那是唯一还会长成柱子的调用形态）。
+   */
+  it('⭐ 给了尺寸就折列：一列码满一屏换下一列，往左长（远离纸）', () => {
+    const obstacles = []; const ys = []; const xs = new Set();
+    for (let i = 0; i < 20; i += 1) {
+      const s = nextShelfSpot(origin, obstacles, { w: 200, h: 172 });
+      obstacles.push({ x: s.x, y: s.y, w: 200, h: 172 });
+      ys.push(s.y); xs.add(s.x);
+    }
+    expect(Math.max(...ys) + 172 - origin.y).toBeLessThanOrEqual(SHELF_COL_H);
+    expect(xs.size).toBeGreaterThan(1);
+    expect(Math.min(...xs)).toBeLessThan(origin.x);
+  });
+
+  it('⛔ 不给尺寸 = 老行为（一路往下，不折）', () => {
+    const obstacles = []; const ys = [];
+    for (let i = 0; i < 20; i += 1) {
+      const s = nextShelfSpot(origin, obstacles);
+      obstacles.push({ x: s.x, y: s.y, w: 200, h: 172 });
+      ys.push(s.y);
+    }
+    expect(Math.max(...ys)).toBeGreaterThan(SHELF_COL_H);
+  });
+
+  it('⛔ 一件比整列还高：给它一个空列，不许把列全跳完', () => {
+    expect(nextShelfSpot(origin, [], { w: 300, h: SHELF_COL_H * 2 })).toEqual({ x: 24, y: 24, col: 0 });
+  });
 });
 
 describe('shelfItems', () => {
   it('只认根层 seat:shelf；挪过的（agent/user）自然离架', () => {
-    const b = { objects: {
+    const b = { zones: { 素材: { x: 0, y: 0 } }, objects: {
       a: { x: 0, y: 0, seat: 'shelf' },
       b: { x: 0, y: 0, seat: 'shelf', zone: '素材' },   // 文件夹层：不算
       c: { x: 0, y: 0, seat: 'agent' },
@@ -92,5 +123,33 @@ describe('shelfItems', () => {
       e: { seat: 'shelf' },                              // 没坐标：不算
     } };
     expect(shelfItems(b)).toEqual(['a']);
+  });
+
+  /**
+   * 真案 proj_mth8wd7k：架上 11 件全是这个形状 —— 前端 fresh-seater 在文件夹卡
+   * 出现之前按根层给了它们架上的座，那种座位**不带 zone 字段**；文件夹随后出现，
+   * 卡被渲染进文件夹里，而 board.json 里那条根层架座永远留着。屏幕上架是空的，
+   * 状态块每回合报 11 件等安置。
+   */
+  it('⛔ 层归属按 layerOf 算，不读 zone 字段（前端落的座根本没有那个字段）', () => {
+    const b = {
+      zones: { '角色': { x: 0, y: 0 }, '角色/晴可': { x: 0, y: 0 } },
+      objects: {
+        '角色/晴可/角色卡.md': { x: -504, y: 100, z: 1, seat: 'shelf' },   // 无 zone 字段
+        '散件.png': { x: -504, y: 300, z: 1, seat: 'shelf' },
+      },
+    };
+    expect(shelfItems(b)).toEqual(['散件.png']);
+  });
+
+  it('⛔ 档案目录不算到货（角色/世界书/预设/记忆）', () => {
+    const b = { zones: {}, objects: {
+      '角色/晴可/角色卡.md': { x: 0, y: 0, seat: 'shelf' },
+      '世界书/常驻/世界观.md': { x: 0, y: 0, seat: 'shelf' },
+      '记忆/口味.md': { x: 0, y: 0, seat: 'shelf' },
+      '预设/晴可/落点对账.md': { x: 0, y: 0, seat: 'shelf' },
+      '海报.png': { x: 0, y: 0, seat: 'shelf' },
+    } };
+    expect(shelfItems(b)).toEqual(['海报.png']);
   });
 });

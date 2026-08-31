@@ -6,6 +6,8 @@
  * 删除 —— zones 存档只剩坐标，尺寸恒为这里的 FOLDER_CARD。）
  */
 
+import { nextShelfSpot, hasShelf } from './board-shelf.js';
+
 // 桌面逻辑宽度固定（跨端坐标稳定），视口窄时整体 fitScale 等比缩（非交互）
 export const DESKTOP_W = 1360;
 // 反馈两轮都是同一句"文件夹周边空隙太多"：48 → 24（07-29）→ 10（07-30）。
@@ -389,23 +391,22 @@ export function nextPick(hits, currentId) {
 }
 
 /** 新工作区先在现有栈底占位（用存档矩形估算），堆叠 effect 下一拍精确归位。
- *  2026-08-30 暂存架：`shelf`（board.shelf 原点）给了就码进架的竖带 —— 空 mkdir
- *  出的文件夹没有 file_changed，服务端入座器看不见它，这里是它唯一的落位口；
- *  没有架才走老的一行行排（那套起排点在桌面左上，会压 agent 的纸）。
- *  占位判据与 server/lib/board-shelf.js nextShelfSpot 同款（360/24 对齐拷贝）。 */
+ *  2026-08-30 暂存架：`shelf`（board.shelf 原点）给了就码进架 —— 空 mkdir 出的
+ *  文件夹没有 file_changed，服务端入座器看不见它，这里是它唯一的落位口；没有架
+ *  才走老的一行行排（那套起排点在桌面左上，会压 agent 的纸）。
+ *  ⚠️ 架的几何 2026-08-31 收进 lib/board-shelf.js（折列之后判据不再是一条竖带，
+ *  抄第三遍必分叉）—— 那份跟服务端有逐例 parity 断言看着。 */
 export function newStackedZoneRect(zones, shelf = null, layout = null) {
-  if (shelf && Number.isFinite(shelf.x) && Number.isFinite(shelf.y)) {
-    let bottom = shelf.y;
-    const consider = (x, y, w, h) => {
-      if (x + w > shelf.x && x < shelf.x + 360 && y + h > shelf.y) bottom = Math.max(bottom, y + h + 24);
-    };
+  if (hasShelf(shelf)) {
+    const obstacles = [];
     for (const z of Object.values(zones || {})) {
-      if (Number.isFinite(z?.x)) consider(z.x, z.y, z.w || FOLDER_CARD.w, z.h || FOLDER_CARD.h);
+      if (Number.isFinite(z?.x)) obstacles.push({ x: z.x, y: z.y, w: z.w || FOLDER_CARD.w, h: z.h || FOLDER_CARD.h });
     }
     for (const e of Object.values(layout || {})) {
-      if (Number.isFinite(e?.x) && !e.zone) consider(e.x, e.y, e.w || 200, e.h || 160);
+      if (Number.isFinite(e?.x) && !e.zone) obstacles.push({ x: e.x, y: e.y, w: e.w || 200, h: e.h || 160 });
     }
-    return { x: shelf.x, y: Math.round(bottom), w: FOLDER_CARD.w, h: FOLDER_CARD.h };
+    const spot = nextShelfSpot(shelf, obstacles, FOLDER_CARD);
+    return { x: spot.x, y: spot.y, w: FOLDER_CARD.w, h: FOLDER_CARD.h };
   }
   return newStackedZoneRectLegacy(zones);
 }

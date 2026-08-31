@@ -31,6 +31,29 @@ import {
 /** 一条线的命中区宽度（透明，只为让细线也好悬停） */
 const HIT_W = 12;
 
+/**
+ * **贴着的两件不画线**（2026-08-31 站主提：「距离过近的两个板书或者产物也许
+ * 不需要连线」）。
+ *
+ * 实测 proj_mth8wd7k（晴可 RP）那块板：42 条线全部端点可见，两端矩形的最短
+ * 间距 **≤24px 的有 19 条（45%）**，其中 16 条整整齐齐都是 20px —— 全是「选项板
+ * annotates 本拍正文」，两张卡并排贴着，中间还画一根 20px 的线。
+ *
+ * 判据是几何不是语义：两个矩形贴在一起，"它俩有关系"这件事**贴着本身就说完了**，
+ * 再画一根短线只是版面噪音。悬停任一端仍然亮出来 —— 信息没丢，只是平时不占眼睛。
+ *
+ * 24 = UNIT。接楼（placeThread）和贴放（placeBeside）默认就是这个间距，所以这条
+ * 闸盖住的正好是"机器按规矩紧贴排出来的那些"。
+ */
+const ADJACENT_PX = 24;
+
+/** 两个矩形之间的最短间距（贴着/重叠 = 0） */
+function gapBetween(a, b) {
+  const dx = Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)));
+  const dy = Math.max(0, Math.max(a.y - (b.y + b.h), b.y - (a.y + a.h)));
+  return Math.hypot(dx, dy);
+}
+
 export default function BindingLayer({
   bindings,           // { [id]: { type, from, to, label?, by? } }
   // 常驻角色的展示名（slug → 名字），派生态，跟 /board 一起来。查不到就显示 slug。
@@ -68,7 +91,9 @@ export default function BindingLayer({
       // 材质轴（2026-08-23）：墨线/手绘/丝线各有各的几何；抖动以线 id 做种子
       const material = materialOf(b);
       const geo = bindingGeometry(pts.from, pts.to, material, id);
-      out.push({ id, b, style, material, d: geo.d, mid: geo.mid, from: pts.from, to: pts.to });
+      // 贴着的：算出来但平时不画（悬停任一端才亮）—— 见 ADJACENT_PX 头注
+      const adjacent = gapBetween(a, z) <= ADJACENT_PX;
+      out.push({ id, b, style, material, adjacent, d: geo.d, mid: geo.mid, from: pts.from, to: pts.to });
     }
     return out;
   }, [bindings, rectOf, epoch]);
@@ -91,9 +116,12 @@ export default function BindingLayer({
         ].filter(Boolean))}
       </defs>
 
-      {drawn.map(({ id, b, style, material, d, mid, from, to }) => {
+      {drawn.map(({ id, b, style, material, adjacent, d, mid, from, to }) => {
         const hot = hoveredId === id
           || (!!hotEndpointId && (b.from === hotEndpointId || b.to === hotEndpointId));
+        // 贴着的线平时整条不出现（连命中区也不留 —— 留着就是在两张卡缝里
+        // 埋一条抢指针的隐形粗线）。悬停端点时照常亮出来。
+        if (adjacent && !hot) return null;
         const mat = BINDING_MATERIALS[material];
         const stroke = hot ? BINDING_ACCENT : (mat?.stroke || style.stroke);
         const width = mat?.width || style.width;

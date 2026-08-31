@@ -4,21 +4,27 @@
  *
  * 决策树（启发式引擎退役后仅存的分支）：
  *   near+side 显式 → 精确贴放（语义要求；压上如实报）
- *   slot          → 规划好的那块地里往下堆（装不下**拒收**，一个字不落盘）
- *   reply_to      → 接楼正下方（纸满拒收）
+ *   slot          → 规划好的那块地里往下堆（装不下 → **溢出暂存**，见下）
+ *   reply_to      → 接楼正下方（纸满 → 溢出暂存）
  *   at            → 纸内定点（钳进版心，钳了如实报）
- *   什么都没有    → 纸内顺排（先往下、这一列到底往右；真的排不下才拒收）
+ *   什么都没有    → 纸内顺排（先往下、这一列到底往右；纸真排不下 → 溢出暂存）
  * 文件夹层没有纸：线程/贴放照常，否则排在这一层内容底下。
  */
 
 import {
   currentSheet, toLocal, placeAtOnSheet, placeThread, placeBeside,
-  nextSpotInSheet, overlapIds, sheetOfPoint, slotRectOf, nextSpotInSlot,
+  nextSpotInSheet, overlapIds, sheetOfPoint, slotRectOf, nextSpotInSlot, innerRect,
 } from '../../../lib/board-sheets.js';
 import { capacityOf } from '../../../lib/sketch-layout.js';
 import { currentSheetIdOf, setCurrentSheetId } from '../../../lib/sheet-state.js';
 import { UNIT } from '../../../lib/rect.js';
+import { resolveShelfOrigin, nextShelfSpot } from '../../../lib/board-shelf.js';
+import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { openSheetFor } from './open-sheet.js';
+
+/** 这个矩形在用户视口里吗（报文里那句 "Visible in the user's viewport"） */
+const visibleIn = (rect, vpRect) => !!vpRect && !(rect.x + rect.w < vpRect.x || vpRect.x + vpRect.w < rect.x
+  || rect.y + rect.h < vpRect.y || vpRect.y + vpRect.h < rect.y);
 
 export function makeSheetPlacer({ projectId, sessionId, by }) {
   /**
@@ -183,6 +189,51 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     ].join('\n');
   };
 
+  /**
+   * **溢出暂存**（2026-08-31 站主拍板，替掉整条拒收）。
+   *
+   * 拒收原来的道理是对的："折叠/裁切/挤进去都是替它把问题藏起来"。错的是**代价**：
+   * 全库 547 次自动记录的工具失败里，182 次是 write_on_board，其中 **136 次是
+   * 「装不下，一个字没写」——占全系统工具失败的四分之一**。而 116 次版位拒收里
+   * 19 次差的不到一行（差 1px / 2px / 9px / 11px 的都有）：一整条内容重写一遍，
+   * 换一个像素。
+   *
+   * 站主的判词：「不直接拒绝 agent 的输入…而是暂存，然后要求 agent 立刻指定
+   * 溢出块的放置位置」。所以现在：**内容照写、落到暂存架上、返回里当场点名要
+   * 它安置**。藏问题的那条线没有被跨过 —— 位置仍然没定，架不是版面，每回合状态块
+   * 还会继续点名，只是不再拿"重写一遍"当收费站。
+   *
+   * ⚠️ `zone` 强制回根层：架是根层的东西。坐标算在根层、层归属却写文件夹层，
+   * 就是 08-30 pin_to_board 那个「前端按 zone 渲染进文件夹、根层画布上根本看不见」
+   * 的幽灵卡（同一个病族，别再犯第三次）。
+   */
+  const placeOverflowOnShelf = (b, { box, why }) => {
+    const origin = resolveShelfOrigin(b, null);
+    const spot = nextShelfSpot(origin, obstaclesIn(b, ''), box);
+    return {
+      x: spot.x, y: spot.y, zone: '', seat: 'shelf', resolution: 'shelf-overflow',
+      shelf: origin.changed ? { x: origin.x, y: origin.y } : null,
+      why, pressed: [],
+    };
+  };
+
+  /**
+   * 溢出之后跟给 agent 的那段话：为什么溢出 + 现在在哪 + 立刻要做什么。
+   *
+   * ⚠️ `why` **整段照抄，不许只取第一行** —— 原拒收报文的后几行带着这一刀真正
+   * 有用的数（还剩几行几字、这张纸底下还有多少、flow 这条懒人路），把它们截掉
+   * 就是拿"改了处置"换掉"报得清楚"，两件事本来不冲突。
+   */
+  const describeOverflow = (placed) => [
+    `⚠ OVERFLOW — it was written, but there was no room where you asked, so it is parked on the shelf at (${placed.x},${placed.y}).`,
+    'Why it did not fit:',
+    String(placed.why || '').trimEnd(),
+    'The shelf is NOT a layout — place it now, in this same turn:',
+    '   · make room where it belongs: edit_board{ops:[{op:"replan", slot:"…", h:…}]} then pin it back, or',
+    '   · give it a spot: edit_board{ops:[{op:"move", id:"<the path above>", to:{…}}]}, or',
+    '   · plan the next page for it: open_sheet{title:"…", plan:[…]} then move it there.',
+  ].join('\n');
+
   /** 返回文案：从真实落点生成（"工具返回不许撒谎"—— 08-25 陷阱③ 的纪律不变） */
   const describeSpot = (b, placed) => {
     const bits = [];
@@ -208,10 +259,62 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     else if (placed.resolution?.startsWith('beside-')) bits.push(`${placed.resolution.slice(7)} of the anchor (exact — no auto-nudging)`);
     else if (placed.resolution === 'lane-open') bits.push('at the head of its fresh sheet');
     else if (placed.resolution === 'below-content') bits.push('below current content (folder layer has no sheets)');
+    else if (placed.resolution === 'shelf-overflow') bits.push('PARKED ON THE SHELF (it did not fit where you asked — see the overflow note below)');
     if (placed.opened) bits.push(`opened sheet ${placed.opened.id} (${placed.opened.innerW}x${placed.opened.innerH} writable)`);
     if (placed.pressed?.length) bits.push(`⚠ overlaps ${placed.pressed.slice(0, 4).join(', ')} — move yours (edit_board) if unintended`);
     return bits.join('; ');
   };
 
-  return { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull };
+
+  /**
+   * 板书写完那一段返回文案（2026-08-31 从 write-on-board.js 迁来 —— 行数棘轮
+   * 619 > 600，按规矩拆不抬上限）。
+   *
+   * 落在这个文件是因为它本来就是「落位与返回文案」那一半：describeSpot /
+   * describeSheetFull / describeOverflow 都在这儿，报文的措辞纪律（"工具返回不许
+   * 撒谎"、量纲两边同单位）也都记在这儿的注释里。散在两个文件迟早各说各话。
+   */
+  const describeChalkWrite = ({ rel, rect, board, placed, slotInfo, box, args, vpRect, parentId, anchorId, laneFrom, boardBefore }) => {
+    const lines = [
+      `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describeSpot(board, placed)}.`,
+      `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
+    ];
+    // 溢出暂存：这段必须紧跟落点，且要点名这条的路径 —— agent 下一步就是拿它去 move
+    if (placed.resolution === 'shelf-overflow') lines.push(describeOverflow(placed));
+    // 余量随手报（2026-08-30 容量线）：下一条要不要拆、还塞不塞得下，
+    // 最有用的时机就是刚写完这一刻 —— 别让它再去翻状态块或者赌一发。
+    if (slotInfo) {
+      const freeH = Math.max(0, Math.round(slotInfo.rect.y + slotInfo.rect.h - (rect.y + rect.h) - UNIT));
+      const c = capacityOf(slotInfo.rect.w, freeH);
+      // 版位满 ≠ 纸满（2026-08-30 利用率线）：旧措辞 "goes elsewhere" 把模型往门外
+      // 推（sonnet 真会话走成每拍一张新纸）。版位用完先报纸还剩多少，复用是主路径。
+      let tail = '';
+      if (freeH < 60) {
+        const inn = innerRect(slotInfo.sheet);
+        const sheetFree = Math.round(inn.y + inn.h - (rect.y + rect.h) - UNIT);
+        tail = sheetFree >= 120 ? ` — this slot is full, but the sheet still has ~${sheetFree}px below: keep writing on it (no slot needed — notes flow down; or replan more blocks). A fresh sheet is for a scene change or a refusal, not for every note` : ' — slot and sheet are both nearly full; plan the next page (open_sheet) before the next note';
+      }
+      lines.push(`Slot "${args.slot}" now has ~${c.lines} lines (~${c.cjk} CJK chars, ${freeH}px) left${tail}.`);
+    }
+    if (box.reserved) lines.push(`Box height reserved at ${box.h}px (content measured shorter — the box keeps your planned size).`);
+    // 折叠如实报（08-29 占位契约刀 B）：卡高封顶到 CARD_MAX_H，超出的折在卡里。
+    // ⚠ 旧判据 `box.h > SKETCH_FIT.h*0.6`（720px）封顶之后永远不成立 —— 换成真话。
+    if (box.capped) {
+      lines.push(`⚠ Too long for one card: it shows ${box.h}px of ~${box.fullH}px — the rest is folded (the reader must click to unfold). Split it into several notes (chain:true keeps them threaded), or start a fresh sheet.`);
+    }
+    // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话
+    {
+      const rolledInto = [args.tag, boardBefore.objects?.[parentId]?.tag, boardBefore.objects?.[anchorId]?.tag]
+        .find(t => t && board.rolls?.[t]);
+      if (rolledInto) lines.push(`⚠ #${rolledInto} 这条线收着卷（用户看不见里面）——这条也进了卷。要让用户看见，先 edit_board unroll{tag:"${rolledInto}"}。`);
+    }
+    if (laneFrom) {
+      lines.push(`Opened lane #${args.tag}${laneFrom !== 'fresh' ? ` branching from ${laneFrom.id}` : ''} on its own sheet`
+        + ` — continue it with {tag:"${args.tag}", chain:true}; read_board lists lanes and sheets.`);
+    }
+    lines.push('The user can annotate it to reply; answer with reply_to (or chain:true on the same tag).');
+    return lines;
+  };
+
+  return { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull, placeOverflowOnShelf, describeOverflow, describeChalkWrite };
 }

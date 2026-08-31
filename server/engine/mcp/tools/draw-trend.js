@@ -11,7 +11,8 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { readBoard, patchBoard, removeByTag } from '../../../projects/board-store.js';
+import { readBoard, patchBoard } from '../../../projects/board-store.js';
+import { removeByTag } from '../../../projects/board-tags.js';
 import { trendSeries, trendGeometry } from '../../../lib/state-trend.js';
 import { roughFreePath, textBox } from '../../../lib/sketch-layout.js';
 import { KEY_MAX } from '../../../lib/state-table.js';

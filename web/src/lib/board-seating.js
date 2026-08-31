@@ -18,6 +18,7 @@
  *   - movingIds 里的旧 id 不落盘（搬家中，落了就是指向死路径的幽灵行）
  */
 import { DESKTOP_W, MARGIN_X, ROW_GAP, packRow } from './board-geometry.js';
+import { nextShelfSpot, hasShelf } from './board-shelf.js';
 import { sizeOf } from './board-kinds.js';
 import { lineageFolds } from './lineage.js';
 import { pickHero } from './hero.js';
@@ -124,24 +125,23 @@ export function computeDesktopSeating({
       bindings,
     );
     const ordered = order.map(id => byId.get(id));
-    if (shelf && Number.isFinite(shelf.x) && Number.isFinite(shelf.y)) {
-      // 暂存架模式：竖带占位判据与 server/lib/board-shelf.js nextShelfSpot 同款
-      //（常量 360/24 是那份的对齐拷贝 —— 架带宽/间距）
-      let bottomY = shelf.y;
-      const consider = (x, y, w, h) => {
-        if (x + w > shelf.x && x < shelf.x + 360 && y + h > shelf.y) bottomY = Math.max(bottomY, y + h + 24);
-      };
-      for (const f of folders) consider(f.x, f.y, f.w, f.h);
+    if (hasShelf(shelf)) {
+      // 暂存架模式：几何走 lib/board-shelf.js（跟服务端那份有逐例 parity 断言
+      // 看着）。⚠️ 2026-08-31 起架**折列**：一列码满一屏换下一列，所以这里不能
+      // 再自己攒一个 bottomY 往下加 —— 每放一件都要重新问一次落点。
+      const obstacles = [];
+      for (const f of folders) obstacles.push({ x: f.x, y: f.y, w: f.w, h: f.h });
       for (const it of visItems) {
         if (visFresh.includes(it)) continue;
-        const sz = sizeOf(it); consider(it.pos.x, it.pos.y, sz.w, sz.h);
+        const sz = sizeOf(it); obstacles.push({ x: it.pos.x, y: it.pos.y, w: sz.w, h: sz.h });
       }
-      for (const r of occupied) consider(r.x, r.y, r.w, r.h);
+      for (const r of occupied) obstacles.push({ x: r.x, y: r.y, w: r.w, h: r.h });
       seatSlots = ordered.map((it) => {
         const sz = sizeOf(it);
-        it.pos = { ...it.pos, x: shelf.x, y: bottomY, seat: 'shelf' };
-        const slot = { id: it.id, x: shelf.x, y: bottomY, w: sz.w, h: sz.h };
-        bottomY += sz.h + 24;
+        const spot = nextShelfSpot(shelf, obstacles, sz);
+        it.pos = { ...it.pos, x: spot.x, y: spot.y, seat: 'shelf' };
+        const slot = { id: it.id, x: spot.x, y: spot.y, w: sz.w, h: sz.h };
+        obstacles.push(slot);   // 这一批里后面的要躲开前面刚放下的
         return slot;
       });
     } else {

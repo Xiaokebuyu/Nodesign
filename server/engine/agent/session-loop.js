@@ -84,7 +84,7 @@ import { autoNameProjectFromSession } from '../../projects/auto-name.js';
 // getUserById/levelFor 是 main 的每用户内容尺度旋钮（78ceaac）；
 // main 的 listTasks 已随任务层退役，不再引入
 import { commitTaskWorkspace, commitWorkspace, PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
-import { commitStaging } from '../../projects/board-store.js';
+import { commitStaging } from '../../projects/board-tags.js';
 import { taskManifest } from '../../lib/artifact-target.js';
 import { getUserById } from '../../auth/users-store.js';
 import { can, defaultModerationLevel } from '../../auth/tier.js';

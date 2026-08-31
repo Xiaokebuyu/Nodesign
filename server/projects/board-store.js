@@ -43,7 +43,7 @@ function boardPath(pid) {
 
 // ── per-project 写锁（进程内串行化）──
 const locks = new Map();
-function withBoardLock(pid, fn) {
+export function withBoardLock(pid, fn) {
   const prev = locks.get(pid) || Promise.resolve();
   const run = prev.catch(() => {}).then(fn);
   locks.set(pid, run.catch(() => {}));
@@ -59,7 +59,7 @@ export async function readBoard(pid) {
   }
 }
 
-async function writeBoard(pid, board) {
+export async function writeBoard(pid, board) {
   const json = JSON.stringify(board);
   if (Buffer.byteLength(json) > MAX_BOARD_BYTES) {
     const err = new Error('board layout too large');
@@ -245,60 +245,6 @@ export function patchBoard(pid, patch) {
  * 进程重启、以及 agent 在画布背后自己 mv 的情况，由 git 改名对账兜底
  * （见 workspace.js 的 reconcileBoardRenames）。
  */
-/**
- * 草稿落定（2026-08-23 黑板）：把 staging 位清掉，tag 留着当逻辑分组。
- * 不传 tag = 这个项目上所有草稿一起落定（回合结束的兜底用它）。
- * 返回落定了几件，0 = 没草稿，不写盘。
- */
-export function commitStaging(pid, { tag = null } = {}) {
-  return withBoardLock(pid, async () => {
-    const board = await readBoard(pid);
-    let n = 0;
-    const hit = (e) => e?.staging === true && (!tag || e.tag === tag);
-    for (const o of Object.values(board.objects || {})) if (hit(o)) { delete o.staging; n += 1; }
-    for (const b of Object.values(board.bindings || {})) if (hit(b)) { delete b.staging; n += 1; }
-    if (n) await writeBoard(pid, board);
-    return { board, committed: n };
-  });
-}
-
-/**
- * 按标签整组删除（物件 + 线）。黑板擦 —— 用户或 agent 把一次头脑风暴整块抹掉。
- * 删画布原生物件（text/scribble）和这组的板书文件（notes/板书/，它们是这组自己的话）；
- * 带同一标签的产物卡只摘标签不删座位，产物的本体不归黑板擦管。
- */
-export function removeByTag(pid, tag) {
-  const t = sanitizeTag(tag);
-  if (!t) return Promise.resolve({ board: null, removed: 0 });
-  return withBoardLock(pid, async () => {
-    const board = await readBoard(pid);
-    let removed = 0;
-    const gone = new Set();
-    for (const [id, o] of Object.entries(board.objects || {})) {
-      if (o.tag !== t) continue;
-      if (o.kind) { delete board.objects[id]; gone.add(id); removed += 1; continue; }
-      // 板书（notes/板书/*.md）是这组自己的话，擦组连文件一起删；其它文件只摘标签。
-      // ⛔ 删前按绝对路径断言落在 notes/板书/ 里且是单段文件名（fable 08-23 审出：id 里塞 ../ 能
-      // 以进程身份删任意文件；sanitize 现在也拒 `..`，这里是第二道闸）
-      if (id.startsWith(`${CHALK_DIR}/`)) {
-        const abs = chalkAbsPath(pid, id);
-        // 软删进 .nd/trash/（08-25：擦掉的板书要捞得回来）
-        if (abs) await trashChalkFile(getSharedDir(pid), abs);
-        delete board.objects[id]; gone.add(id); removed += 1; continue;
-      }
-      delete o.tag;
-    }
-    for (const [id, b] of Object.entries(board.bindings || {})) {
-      if (b.tag === t || gone.has(b.from) || gone.has(b.to)) { delete board.bindings[id]; removed += 1; }
-    }
-    if (board.hero && gone.has(board.hero)) delete board.hero;
-    // 擦组连卷的状态位一起清（收着的组被 erase_group 后不该留一张空卷卡）
-    if (board.rolls?.[t]) { delete board.rolls[t]; if (!Object.keys(board.rolls).length) delete board.rolls; }
-    await writeBoard(pid, board);
-    return { board, removed };
-  });
-}
-
 /** 板书 id → 绝对路径，越界/多段/非 .md 一律 null（删与读两处共用） */
 export function chalkAbsPath(pid, id) {
   if (typeof id !== 'string' || !id.startsWith(`${CHALK_DIR}/`)) return null;

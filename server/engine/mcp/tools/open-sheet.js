@@ -105,10 +105,21 @@ export async function openSheetFor(projectId, {
   // 设计间隔明明只有 48）。翻页那一刻把上一张裁到内容底 —— 纸是分配纪律不是
   // 画出来的框，裁掉的只是"再也不会写进去的余白"；它的版位一并钳到新底。
   let trimmed = null;
+  /**
+   * 翻页前当前这张纸还剩多少（2026-08-31，agent 自己报的 iss_mthb9nef）。
+   *
+   * 「纸缝对用户可见、对 agent 不可见」—— 状态块只报纸内余量，从不报两张纸之间
+   * 那条空白带，于是「每拍翻一张」的代价它看不见。真案 proj_mth8wd7k：一章开了
+   * 12 张纸，覆盖率 20%~45%（平均 27%），纸内尾部空白 1871px + 纸缝 576px，
+   * 合起来是板高的 23%。这个数报在**决策点上**（就在它开纸这一刻）比事后警告有用。
+   */
+  let prevFree = null; let prevId = null;
   if (mode === 'next' && cur) {
     const members = sheetMembers(board, cur.id);
     const innerC = innerRect(cur);
     const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : innerC.y;
+    prevFree = Math.max(0, Math.round(innerC.y + innerC.h - bottom));
+    prevId = cur.id;
     const newH = Math.max(240, Math.ceil((bottom + SHEET_MARGIN - cur.y) / 24) * 24);
     if (newH < cur.h - 24) {
       const oldEntry = board.sheets[cur.id];
@@ -176,6 +187,9 @@ export async function openSheetFor(projectId, {
   return {
     id, ...entry, innerW: inner.w, innerH: inner.h,
     basis: rect.basis, overlapsLoose: rect.overlapsLoose, clampedSlots, occupants, trimmed,
+    prevFree, prevId,
+    // 纸缝：这张纸的顶边离上一张**内容底部**多远（用户眼里那条横穿版面的空白带）
+    gapAbove: (mode === 'next' && prevFree !== null) ? Math.max(0, Math.round(rect.y - (cur.y + cur.h))) : null,
   };
 }
 
@@ -227,13 +241,23 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
         const c = capacityOf(v.w, v.h);
         lines.push(`  ${nm}${v.about ? `（${v.about}）` : ''}: at (${v.x},${v.y}) ${v.w}x${v.h} — ~${c.lines} lines, ~${c.cjk} CJK chars`);
       }
-      lines.push('write_on_board{slot:"<name>"} drops a note into a block (they stack downward inside it). Content that does not fit is REFUSED, not squeezed — re-plan or split it.');
+      lines.push('write_on_board{slot:"<name>"} drops a note into a block (they stack downward inside it). Content that does not fit is NOT squeezed in and NOT dropped — it is written and PARKED ON THE SHELF, and you are asked to place it on the spot (re-plan the block taller, or move it somewhere deliberate).');
       if (pct < 45) lines.push(`⚠ ${100 - pct}% of this sheet is unplanned. A landscape sheet holds ${cols} columns side by side — carve more blocks rather than leaving it empty.`);
       if (s.clampedSlots?.length) lines.push(`⚠ Clamped into the sheet (they stuck out): ${s.clampedSlots.join(', ')} — check their at/w/h.`);
     } else {
       lines.push(`No slots planned. Plan the page in one go — open_sheet{plan:[{slot,at,w,h,about}…]} — instead of writing one note at a time and hoping it lands well. This sheet takes ${cols} columns side by side; a single column down the left leaves ${Math.round((1 - 1 / cols) * 100)}% of it empty.`);
     }
     lines.push(s.basis === 'viewport' ? 'Opened under the user’s current view.' : (s.basis === 'below-sheet' ? 'Stacked below the current sheet.' : 'Placed below existing content.'));
+    /**
+     * 纸缝 + 翻页代价，报在决策点上（2026-08-31，agent 自己报的 iss_mthb9nef）。
+     * 它看得见纸内余量，看不见两张纸之间那条空白带 —— 而用户看到的就是那条带。
+     */
+    if (s.gapAbove !== null) {
+      lines.push(`Gap above: ${s.gapAbove}px of blank between the bottom of ${s.prevId} and the top of this sheet — that band is what the user scrolls through.`);
+    }
+    if (s.prevFree !== null && s.prevFree >= 400) {
+      lines.push(`⚠ ${s.prevId} still had ~${s.prevFree}px free (~${capacityOf(DEFAULT_CHALK_W, s.prevFree).lines} lines) when you turned the page. Short beats keep landing on the current sheet — they flow down, no slot needed. Turn the page for a scene change or an overflow, not for every beat.`);
+    }
     if (s.trimmed) {
       lines.push(`Previous sheet ${s.trimmed.id} was trimmed to its content (${s.trimmed.from}→${s.trimmed.to}px tall) so the pages sit close — its leftover blank is gone, not its content.`);
       // 利用率点名（2026-08-30）：裁掉近半张纸 = 翻页翻快了。只点名不拦 ——

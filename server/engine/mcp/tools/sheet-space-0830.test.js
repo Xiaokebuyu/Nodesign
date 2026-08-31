@@ -133,13 +133,15 @@ describe('刀③ 铺纸点名占地者', () => {
   });
 });
 
-describe('刀⑥ 拒收报文量纲', () => {
-  it('版位拒收：两边都是 px，差多少直说，教 flow', async () => {
+// ⚠️ 2026-08-31：处置从"拒收"改成"溢出暂存"，但**报文的量纲纪律原样保留** ——
+// 这一组守的是"差多少直说、两边同单位"，跟放不放行无关。
+describe('刀⑥ 装不下的报文量纲', () => {
+  it('溢出报文：两边都是 px，差多少直说，教 flow', async () => {
     const t = await mk('proj_sp_msg');
     setViewpoint('proj_sp_msg', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await t.open({ title: '小格', plan: [{ slot: 'tiny', at: { x: 0, y: 0 }, w: 432, h: 60, about: '塞不下' }] });
     const r = await t.write({ slot: 'tiny', text: Array.from({ length: 6 }, () => '这一条明显超过六十像素的高度，句子还在继续。').join('\n') });
-    expect(r.isError).toBe(true);
+    expect(r.isError).toBeUndefined();
     expect(r.content[0].text).toMatch(/short by \d+px/);
     expect(r.content[0].text).toMatch(/Free: \d+px/);
     expect(r.content[0].text).toMatch(/flow:true/);

@@ -90,9 +90,38 @@ const BOARD = {
       x: 640, y: 420, w: 80, h: 40, z: 6,
       kind: 'scribble', data: { d: 'M 8 8 Q 28 38 48 16 L 72 28', color: 'ink', width: 2 },
     },
+    /**
+     * 「一拍正文 + 贴右的选项板」那一对（2026-08-31）。**渲染出来的间距是 20px** ——
+     * 生产真板 proj_mth8wd7k 上 42 条线里有 16 条正是这个形状（两张卡并排贴着，
+     * 中间还画一根 20px 的短线）。留在 fixture 里是为了让「贴着不画线」那道闸
+     * 在检查通道里看得见：两条线只该画出一条。
+     *
+     * ⚠️ `1140` 不是随手写的圆整数，是**量出来的**：画布原生文字按内容自适应宽度
+     * （存档里的 w/h 对它不作数），text:beat 实测渲染 220 宽 → 900+220+20。字体或
+     * 文案一改这个数就会漂，那时 hit 会从 1 变回 2 —— 那是提醒不是回归。
+     * **精确判据在单测里**（components/canvas/binding-adjacent.test.jsx，用固定矩形），
+     * 这儿只负责"真跑一遍看得见"。
+     */
+    'text:beat': {
+      x: 900, y: 200, w: 300, h: 200, z: 7,
+      kind: 'text', data: { t: '她把话丢在那儿就转过去了。', font: 'kai', size: 'md', color: 'ink' },
+    },
+    'text:opts': {
+      x: 1140, y: 200, w: 200, h: 160, z: 8,
+      kind: 'text', data: { t: 'A 跟上去\nB 留在原地', font: 'sans', size: 'sm', color: 'ink' },
+    },
   },
   zones: {},
-  bindings: {},
+  /**
+   * 两条线，专为**贴着不画线**那道闸留的（2026-08-31）：
+   *   b-near  text:opts → text:beat —— 间距 20px（真板上那 16 条的形状），平时不该画
+   *   b-far   text:demo1 → notes/灵感.md —— 隔了几百像素，照画
+   * 检查通道数 `svg > g path` 就能一眼看出闸在不在（0 条 = 两条都没画 = 坏了）。
+   */
+  bindings: {
+    'b-near': { type: 'annotates', from: 'text:opts', to: 'text:beat', by: 'agent' },
+    'b-far': { type: 'flow', from: 'text:demo1', to: 'notes/灵感.md', by: 'agent' },
+  },
 };
 
 const SESSIONS = [

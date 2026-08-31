@@ -30,7 +30,8 @@ import { z } from 'zod';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { pinToZone, readBoard, patchBoard } from '../../../projects/board-store.js';
-import { layerOf } from '../../../lib/canvas-id.js';
+import { layerOf, bareTag } from '../../../lib/canvas-id.js';
+import { applyFollows } from '../../../lib/board-follow.js';
 import { currentSheet, slotRectOf, nextSpotInSlot, placeAtOnSheet } from '../../../lib/board-sheets.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
@@ -78,8 +79,10 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         .describe('Exact spot on the sheet, pixels from its top-left writable corner. Use slot unless this one file needs a precise place.'),
       sheet: z.string().max(40).optional()
         .describe('Which sheet (default: the one you are working on)'),
+      tag: z.string().max(40).optional()
+        .describe('Put it in a group. Produced files (images, sites, docx) are never created by you, so this is the one place they can get a tag at all — and a tag is what follow{group_tag,target_tag} matches on, on both ends.'),
     },
-    async ({ path: rawPath, slot, at, sheet }) => {
+    async ({ path: rawPath, slot, at, sheet, tag }) => {
       try {
         if (!projectId) {
           return { content: [{ type: 'text', text: 'No project bound; cannot pin.' }], isError: true };
@@ -187,9 +190,15 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
           const prev = boardNow.objects?.[objectId] || {};
           const nextPending = (boardNow.pending || []).filter(r => r !== objectId && `deck:${r}` !== objectId && `site:${r}` !== objectId);
           await patchBoard(projectId, {
-            objects: { [objectId]: { ...prev, x: Math.round(spot.x), y: Math.round(spot.y), w: Math.round(box.w), h: Math.round(box.h), zone: '', seat: 'agent' } },
+            objects: { [objectId]: {
+              ...prev, x: Math.round(spot.x), y: Math.round(spot.y), w: Math.round(box.w), h: Math.round(box.h),
+              zone: '', seat: 'agent', ...(tag ? { tag: bareTag(tag) } : {}),
+            } },
             ...(nextPending.length !== (boardNow.pending || []).length ? { pending: nextPending } : {}),
           });
+          // 产物也能当跟随目标（2026-08-31）：带 tag 落板 = 这个 tag 有新成员，
+          // 跟 write_on_board 写一条带 tag 的板书是同一件事。fail-soft。
+          if (tag) { try { await applyFollows(projectId, { tag: bareTag(tag), newId: objectId }); } catch { /* */ } }
           try {
             ctx?.emit?.({ type: 'board.updated', sessionId: null, objectId, zoneId: '', summary: `已把 ${objectId} 摆到 ${sh.id}${where}` });
           } catch { /* emit fail-safe */ }
