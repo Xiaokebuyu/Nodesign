@@ -21,6 +21,19 @@ export async function applyUiOp(o, { board, ctx, sharedRoot }) {
     try { ctx?.emit?.({ type: 'ui.chalk_edit', sessionId: null, on: !!o.on }); } catch { /* */ }
     return { ok: true, report: `· 改板书开关 → ${o.on ? '开（用户现在可直接拖动/编辑板书）' : '关'}` };
   }
+  if (o.op === 'pin_view') {
+    /**
+     * 钉住/松开用户的视区（叠纸刀 6）。跟 chalk_edit 同一条路：存 ui-config
+     * （重开页面还在）+ 广播当场生效。
+     *
+     * 什么时候该替他钉上：演出开场、或者接下来几拍都写在同一摞上 —— 钉住之后
+     * 他不用再满板找你写在哪儿了。⚠️ 钉住**不是不许动**，他照旧能缩放凑近看。
+     */
+    const cfg = (await readUiConfigFile(sharedRoot)) || {};
+    await writeUiConfig(sharedRoot, { ...cfg, pin_view: !!o.on });
+    try { ctx?.emit?.({ type: 'ui.pin_view', sessionId: null, on: !!o.on }); } catch { /* */ }
+    return { ok: true, report: `· 钉住视区 → ${o.on ? '开（镜头守着当前这一摞，你写在哪一页他都看得见）' : '关'}` };
+  }
   /**
    * 把某一页呈到用户眼前（叠纸刀 5）。
    *

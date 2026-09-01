@@ -8,7 +8,7 @@
  * 调用方仍然要用 useMemo 包住它，而且**镜头动作必须先经 ref 转一手**：理由
  * 记在 BoardCanvas 那个 memo 的头上（每帧换身份 → 死循环，build 和单测都照不出来）。
  */
-import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, NotebookPen, MessageSquarePlus } from 'lucide-react';
+import { Maximize2, Minus, Plus, MousePointer2, Move, Hand, Type, PenLine, NotebookPen, MessageSquarePlus, Pin } from 'lucide-react';
 
 /**
  * @param {object} p
@@ -43,6 +43,7 @@ export function buildBoardToolGroups({
   openCanvasNote = null,
   deviceClass = 'desktop',
   readGroup = null,
+  pinnedView = false, togglePin = null,
 }) {
   const phone = deviceClass === 'phone';
   return dropLabelsOnPhone(phone, ([
@@ -79,6 +80,23 @@ export function buildBoardToolGroups({
             ? '板书编辑：开 —— 板书随时可拖动，双击进编辑。点一下关'
             : '板书编辑：关 —— 板书防误触：对手势是空地（框选仍可整批选中拖动）。要动板书就点开，agent 也会替你开',
           onClick: toggleChalkEdit,
+        }] : []),
+        /**
+         * 钉住视区（2026-09-01 叠纸刀 6，站主拍板「固定操作我们或许可以分发给所有平台」）。
+         *
+         * 钉住之后镜头框住当前这一摞，agent 写在哪一页都不用满板找；触屏上横滑
+         * 换摞、竖滑翻页（useSwipeNav）。⚠️ 钉住**不是不许动** —— 用户照旧能缩放
+         * 凑近看，只是镜头不会自己跑到别的摞去。每帧都框住等于把缩放也夺走。
+         *
+         * 只在板上真有叠起来的摞时才出这一格：一张纸一摞的板上钉住没有意义，
+         * 而多一颗按不出效果的按钮比少一颗更糟。
+         */
+        ...(togglePin ? [{
+          id: 'pinView', icon: Pin, label: '钉住', active: pinnedView,
+          title: pinnedView
+            ? '视区已钉住：镜头守着当前这一摞，agent 换页也不跑。触屏上横滑换摞、竖滑翻页。点一下松开'
+            : '钉住视区：镜头守着当前这一摞，不用再满板找 agent 写在哪儿了',
+          onClick: togglePin,
         }] : []),
         // 常驻评论钮（2026-08-25 用户提）：画布态也要有开口说话的地方 —— 选中了
         // 东西就标注选中集，没选就对整块画布说一句（发给 agent / 攒着两条路照旧）

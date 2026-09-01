@@ -13,7 +13,7 @@ import { useGlobalStore } from '../../stores/globalStore.js';
 import { useViewpointReport } from './useViewpointReport.js';
 import { eyeParams, useEyeMode } from './eye-mode.js';
 
-export function useBlackboardMode({ projectId, focusRequest, camRef }) {
+export function useBlackboardMode({ projectId, focusRequest, camRef, pinned = false }) {
   // 默认开（2026-08-24 用户拍板）；配置里显式关过的读回 false
   const [on, setOn] = useState(true);
   useEffect(() => {
@@ -51,11 +51,18 @@ export function useBlackboardMode({ projectId, focusRequest, camRef }) {
       const view = { x: -cam.x, y: -cam.y, w: vp.w / z, h: vp.h / z };
       inside = r.x >= view.x && r.y >= view.y && r.x + r.w <= view.x + view.w && r.y + r.h <= view.y + view.h;
     }
-    if (on && !focusRequest.soft) { fly(); return; }
+    /**
+     * 钉住视区时**绝不自己飞**（2026-09-01 叠纸刀 6）。
+     *
+     * 「钉住」这三个字对用户的承诺就是「别把我甩走」—— 这时候还去追 agent 的新
+     * 内容，等于这颗开关按了没用。落在当前这一摞里的，翻页那条路已经让它看得见；
+     * 落在别的摞里的，给一条带「看一眼」的提示，去不去他自己定。
+     */
+    if (on && !focusRequest.soft && !pinned) { fly(); return; }
     if (inside) return;
     const what = focusRequest.chalk ? '写了一条板书' : '画了一张草图';
     useGlobalStore.getState().showToast(`agent 在画布上${what}（视野之外）`, 'info', { action: { label: '看一眼', onClick: fly } });
-  }, [on, focusRequest, camRef]);
+  }, [on, focusRequest, camRef, pinned]);
 
   return { blackboardMode: on, toggleBlackboard: toggle };
 }
@@ -64,12 +71,12 @@ export function useBlackboardMode({ projectId, focusRequest, camRef }) {
  * 黑板三件一起挂（BoardCanvas 行数棘轮逼出来的收口，语义不变）：
  * 视点上报（眼睛模式不报）+ 眼睛模式 + 黑板模式开关/跟随。
  */
-export function useBlackboardWiring({ projectId, cam, viewport, winDir, openWindow, selectedIds, camRef, positionedRef, focusRequest }) {
+export function useBlackboardWiring({ projectId, cam, viewport, winDir, openWindow, selectedIds, camRef, positionedRef, focusRequest, pinned = false }) {
   const eye = eyeParams();
   useViewpointReport({
     projectId, cam, viewport, layer: winDir || '',
     openWindow: winDir ? `folder:${winDir}` : openWindow, selectedIds, enabled: !eye,
   });
   useEyeMode({ eye, camRef, positionedRef });
-  return useBlackboardMode({ projectId, focusRequest, camRef });
+  return useBlackboardMode({ projectId, focusRequest, camRef, pinned });
 }

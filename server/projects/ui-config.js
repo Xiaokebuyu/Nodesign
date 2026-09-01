@@ -29,6 +29,12 @@ export const DEFAULT_UI_CONFIG = Object.freeze({
    * 2026-08-24 用户拍板默认开（老项目没写过这个键的也按开算；关过的尊重文件里的 false）。
    */
   blackboard_mode: true,
+  /**
+   * 钉住视区（2026-09-01 叠纸刀 6）：镜头守着用户当前所在的那一摞纸，agent 写在
+   * 哪一页都不会把他甩到别处；触屏上横滑换摞、竖滑翻页。默认关 —— 它改变的是
+   * 镜头的行为，得由人（或 agent 替他）主动要。
+   */
+  pin_view: false,
 });
 
 /**

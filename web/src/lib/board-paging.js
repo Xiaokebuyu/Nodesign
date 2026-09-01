@@ -114,6 +114,28 @@ export function currentPileOf(piles, center) {
   return best;
 }
 
+/**
+ * 哪一轴的滑动该归导航（2026-09-01 叠纸刀 6）。
+ *
+ * 判据不是「钉住了就全归导航」，而是**这一轴上还有没有可平移的量**：
+ * 视口在世界里的宽已经装得下整摞，横着推就推不出新东西来，那横滑只剩一种讲得通
+ * 的意思 —— 换摞。反过来放大到读细节时两轴都有余量，手势自动全部让回给平移。
+ *
+ * ⭐ 这么定的好处是**没有阈值要调**：两个条件都是当下的状态，不是拍脑袋的数。
+ * 「钉住」是另一道闸（在调用方），管的是"用户此刻要不要导航"，跟这里管的
+ * "这一轴还有没有别的意思"是两件事，别混。
+ *
+ * @param {{w:number,h:number}} pile     当前这一摞的矩形
+ * @param {{w:number,h:number}} viewWorld 视口对应的世界矩形
+ */
+export function navAxes(pile, viewWorld) {
+  if (!pile || !viewWorld) return { x: false, y: false };
+  return {
+    x: viewWorld.w >= pile.w - 1,
+    y: viewWorld.h >= pile.h - 1,
+  };
+}
+
 /** 左右换摞：到头返回 null */
 export function neighborPile(piles, name, dir) {
   const i = piles.findIndex((p) => p.name === name);

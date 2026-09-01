@@ -1272,8 +1272,7 @@ export default function ProjectWorkspace() {
         break;
       }
       // agent「改看的人这一侧」的手 → lib/ui-bridge.js（转窗口事件，免 prop 钻五层）
-      case 'ui.show_sheet':
-      case 'ui.chalk_edit': {
+      case 'ui.show_sheet': case 'ui.pin_view': case 'ui.chalk_edit': {
         const note = dispatchUiEvent(evt);
         if (note) showToast(note, 'info');
         break;

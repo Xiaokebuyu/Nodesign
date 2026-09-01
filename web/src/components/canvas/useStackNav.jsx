@@ -11,13 +11,14 @@
  * 屏幕上完全不存在，缩小也看不见（它们本来就在同一块地上）。没有目录，用户找不
  * 回自己刚才读到的那一页。
  */
-import { useState, useMemo, useCallback, useEffect } from 'react';
-import { currentPileOf } from '../../lib/board-paging.js';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { currentPileOf, navAxes } from '../../lib/board-paging.js';
 import { useReadingNav } from './ReadingPager.jsx';
+import { useSwipeNav } from './useSwipeNav.js';
 import StackPager from './StackPager.jsx';
 import BoardIndex from './BoardIndex.jsx';
 
-export function useStackNav({ paging, camera, cam, camApiRef, sheets }) {
+export function useStackNav({ paging, camera, cam, camApiRef, sheets, pinned = false, paneRef = null }) {
   const [indexOpen, setIndexOpen] = useState(false);
 
   /** 视口中心此刻落在哪一摞里 */
@@ -63,6 +64,39 @@ export function useStackNav({ paging, camera, cam, camApiRef, sheets }) {
   }, [paging, pick]);
 
   /**
+   * 钉住视区（叠纸刀 6）：镜头框住当前这一摞，agent 写在哪一页都不用满板找。
+   *
+   * ⚠️ 只在**摞换了**或者**刚钉上**时飞一次，不是每帧都框 —— 每帧框住等于把
+   * 用户的缩放也一起夺走，他连凑近看一眼都做不到。钉住管的是"别跑到别处去"，
+   * 不是"不许动"。
+   */
+  const pinnedAtRef = useRef(null);
+  useEffect(() => {
+    if (!pinned || !pile) { pinnedAtRef.current = null; return; }
+    if (pinnedAtRef.current === pile.name) return;
+    pinnedAtRef.current = pile.name;
+    camApiRef.current?.flyToBox({ x: pile.x, y: pile.y, w: pile.w, h: pile.h }, { force: true, maxZoom: 1 });
+  }, [pinned, pile, camApiRef]);
+
+  /**
+   * 手势：钉住 + 这一轴上没有可平移的量时，横滑换摞、竖滑翻页。
+   * 判据放 ref 里传给手势层 —— 那边是捕获阶段的原生监听，读 state 会读到旧值。
+   */
+  const axesRef = useRef({ x: false, y: false });
+  axesRef.current = pinned
+    ? navAxes(pile, { w: camera.viewport.w / cam.z, h: camera.viewport.h / cam.z })
+    : { x: false, y: false };
+  const onSwipe = useCallback((axis, dir) => {
+    if (!pile) return;
+    if (axis === 'y') { paging.flip(pile.name, dir); return; }
+    const next = paging.neighbor(pile.name, dir);
+    if (!next) return;   // 到头不循环，也不回弹（回弹是渲染层的事，这儿只管别越界）
+    camApiRef.current?.noteTakeover();
+    camApiRef.current?.flyToBox({ x: next.x, y: next.y, w: next.w, h: next.h }, { force: true, maxZoom: 1 });
+  }, [pile, paging, camApiRef]);
+  useSwipeNav({ paneRef, enabled: !!pinned && !!paneRef, axesRef, onSwipe });
+
+  /**
    * 板上一张叠起来的纸都没有就不出这一族（存量板、还没开工的板）——
    * FloatingToolbar 的组判据本来就在过滤空组，这里回 null 就行。
    */
@@ -85,7 +119,7 @@ export function useStackNav({ paging, camera, cam, camApiRef, sheets }) {
     )
     : null;
 
-  return { group, panel, pile, index, flip, pick, hasStack };
+  return { group, panel, pile, index, flip, pick, hasStack, onSwipe, axesRef };
 }
 
 /**
@@ -95,9 +129,9 @@ export function useStackNav({ paging, camera, cam, camApiRef, sheets }) {
  * 板上有叠起来的摞就走前者，没有（存量板、还没开工的板）就走后者。收在这一个口
  * 是为了让 BoardCanvas 那边只有一行：谁该出场是导航自己的事，不是画布的事。
  */
-export function useBoardNav({ paging, camera, cam, camApiRef, sheets, visibleObjects, layout }) {
+export function useBoardNav({ paging, camera, cam, camApiRef, sheets, visibleObjects, layout, pinned, paneRef }) {
   const reading = useReadingNav({ camApiRef, camera, cam, visibleObjects, layout, sheets });
-  const stack = useStackNav({ paging, camera, cam, camApiRef, sheets });
+  const stack = useStackNav({ paging, camera, cam, camApiRef, sheets, pinned, paneRef });
   return {
     ...reading,
     navGroup: stack.group || reading.readGroup,

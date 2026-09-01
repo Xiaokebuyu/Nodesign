@@ -20,12 +20,13 @@ import { isArchivePath } from '../../lib/board-filter-axes.js';
 import { useSheetPaging } from './useSheetPaging.js';
 import { useVisibleObjects } from './useVisibleObjects.js';
 import { useBoardNav } from './useStackNav.jsx';
+import { usePinnedView } from './usePinnedView.js';
 import { useBandSummaries, useSessionTitles, useTaskTitles } from './board-labels.js';
 import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
 import TransformControls from './TransformControls.jsx';
 import ChalkSizeHandles from './ChalkSizeHandles.jsx';
-import Minimap from './Minimap.jsx';
+import BoardScreenLayer from './BoardScreenLayer.jsx';
 import { useBoardCamera } from './useBoardCamera.js';
 import { submitLinkPop, deleteLinkPop } from './link-pop-actions.js';
 import { useBoardGroups } from './useBoardGroups.js';
@@ -722,11 +723,13 @@ export default function BoardCanvas({
   scaleRef.current = scale;
   camApiRef.current = camera;
 
+  // 钉住视区（叠纸刀 6）：镜头守着当前这一摞，全平台。agent 也拨得动
+  const { pinned, togglePin } = usePinnedView({ projectId });
   // 黑板三件（视点上报 / 眼睛模式 / 黑板模式+跟随）→ useBlackboardMode.js
   // ⚠️ 08-31 起没人接它的返回值（开关下架），但这一句必须照旧调用：视点上报和镜头跟随都在里面
   useBlackboardWiring({
     projectId, cam, viewport: camera.viewport, winDir, openWindow, selectedIds,
-    camRef: camApiRef, positionedRef, focusRequest,
+    camRef: camApiRef, positionedRef, focusRequest, pinned,
   });
 
   // ── 画布工具（选择 / 文字 / 笔 / 评论）────────────────────────────────
@@ -866,9 +869,9 @@ export default function BoardCanvas({
   }, [folderView]);
 
   // 画布导航：翻页器（叠起来的摞，相机不动）/ 翻件器（存量板，飞过去）二选一，
-  // 加目录面板。谁该出场由 useBoardNav 自己判，整块在 useStackNav.jsx
+  // 加目录面板和钉住时的滑动手势。谁该出场由 useBoardNav 自己判
   const { navGroup, panel: navPanel, deviceEnv, touchLane } = useBoardNav({
-    paging, camera, cam, camApiRef, sheets, visibleObjects, layout,
+    paging, camera, cam, camApiRef, sheets, visibleObjects, layout, pinned, paneRef: scrollRef,
   });
 
   // ⚠️ 这里曾有「切 session 就切视图」：有会话进工作模式聚焦它的区、回 /work
@@ -1540,7 +1543,8 @@ export default function BoardCanvas({
     zoomFit: zoomFitStable, zoomBy: zoomByStable, zoomTo: zoomToStable, filterGroup,
     chalkEditMode, toggleChalkEdit,
     openCanvasNote, deviceClass: deviceEnv.class, readGroup: navGroup,
-  }), [tool, drawMode, scale, zoomFitStable, zoomByStable, zoomToStable, filterGroup, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, navGroup]);
+    pinnedView: pinned, togglePin: navGroup ? togglePin : null,
+  }), [tool, drawMode, scale, zoomFitStable, zoomByStable, zoomToStable, filterGroup, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, navGroup, pinned, togglePin]);
 
   useEffect(() => { onToolbarGroups?.(boardToolGroups); }, [boardToolGroups, onToolbarGroups]);
 
@@ -1961,28 +1965,11 @@ export default function BoardCanvas({
             **直接开标注**（最常用的动作），其余动作仍在 hover 工具条上。 */}
 
 
-        {/* 小地图（屏幕空间，左下角）。总览从"一种视图"变成"一个导航控件"之后
-            全貌靠它看 —— 干活始终在当前这一层。窗开着时跟工具栏一起收掉。
-            ⚠️ 触屏档上**按容器宽**撤掉（08-28 起，08-29 改判据）：它在窄容器里
-            占掉左下角一大块、还压着工具栏，而它回答的那个问题（"我在哪"）翻页器
-            用一句「17/17」答得更好。
-            ⭐ 判据是**容器宽不是设备档**：平板本来放得下，但聊天卡一开画布区收到
-            422，小地图又开始压工具栏 —— 决定放不放得下的从来是容器，不是屏幕。
-            桌面这一轮不动（同样窄的桌面窗口仍然留着它）。 */}
-        {!eyeMode && !deckOpen && !winDir && !(touchLane && camera.viewport.w < 560) && (
-          <Minimap
-            bounds={camera.bounds}
-            cam={cam}
-            viewport={camera.viewport}
-            items={minimapItems}
-            onJump={(pt) => camera.jumpToPoint(pt)}
-          />
-        )}
-
-        {/* 目录（叠纸刀 5）：一摞纸只画得出最上面那张，底下几页在屏幕上不存在、
-            缩小也看不见 —— 没有目录用户就找不回刚读到的那一页。屏幕坐标系，
-            跟小地图同一层；眼睛页不出（截图里不该有 chrome）。 */}
-        {!eyeMode && !deckOpen && !winDir && navPanel}
+        {/* 屏幕坐标系的两件导航（小地图 + 目录）→ BoardScreenLayer.jsx */}
+        <BoardScreenLayer
+          eyeMode={eyeMode} deckOpen={deckOpen} winDir={winDir} touchLane={touchLane}
+          camera={camera} cam={cam} minimapItems={minimapItems} navPanel={navPanel}
+        />
 
       </div>
 

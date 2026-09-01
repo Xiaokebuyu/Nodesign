@@ -534,7 +534,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           sheetsPatch[r.sheetId] = r.entry;
           report.push(r.report);
           ok += 1;
-        } else if (o.op === 'show' || o.op === 'chalk_edit') {
+        } else if (o.op === 'show' || o.op === 'chalk_edit' || o.op === 'pin_view') {
           // 不改板、只改看的人那一侧的两个动作 → edit-board-ui-ops.js
           const r = await applyUiOp(o, { board, ctx, sharedRoot });
           if (r.error) { fail(r.error); continue; }
