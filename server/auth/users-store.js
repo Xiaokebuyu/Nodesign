@@ -133,7 +133,7 @@ if (!inviteCols.has('grant_lifetime_usd')) {
 
 // ── 密码 ──
 
-const SCRYPT_N = 16384;
+const SCRYPT_N = 32768;
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -244,7 +244,7 @@ export function updateUser(id, { disabled, dailyTokenLimit, dailyCostLimitUsd, l
   if (dailyTokenLimit !== undefined) { sets.push('daily_token_limit = ?'); args.push(dailyTokenLimit ?? null); }
   if (role !== undefined) { sets.push('role = ?'); args.push(role); }
   if (!sets.length) return getUserById(id);
-  db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...args, id);
+  db.prepare('UPDATE users SET ' + sets.join(', ') + ' WHERE id = ?').run(...args, id);
   userCache.delete(id);
   return getUserById(id);
 }
