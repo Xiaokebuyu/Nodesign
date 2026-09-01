@@ -13,6 +13,7 @@
  */
 import { useState, useMemo, useCallback } from 'react';
 import { pilesOf, displayedPage, hiddenByPaging, flipTo, neighborPile } from '../../lib/board-paging.js';
+import { SHELF_W, SHELF_H } from '../../lib/board-shelf.js';
 
 /**
  * 墨 = 会参与叠放的那一类：板书（file-backed 的 markdown）、手写字、涂鸦。
@@ -22,11 +23,36 @@ function isInk(o) {
   return !!o?.chalk || (!!o?.native && (o.type === 'text' || o.type === 'scribble'));
 }
 
-export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf }) {
-  /** 用户显式翻过的：摞名 → 纸名。没翻过的摞不在这张表里 */
+/** 暂存架那一摞的摞名。它跟纸的摞并排住在同一张 picked 表里，翻法也一样 */
+export const SHELF_PILE = '__shelf__';
+
+export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf, layout, shelf }) {
+  /** 用户显式翻过的：摞名 → 那一摞里的第几件。没翻过的摞不在这张表里 */
   const [picked, setPicked] = useState({});
 
-  const piles = useMemo(() => pilesOf(sheets, stacks), [sheets, stacks]);
+  /**
+   * 暂存架也是一摞（2026-09-01，站主拍板「暂存架我们干脆也就改成栈吧」）。
+   *
+   * 架上的货全部叠在架位上（服务端 nextShelfSpot 现在恒返回原点），一次显示最
+   * 上面那件，上下翻找 —— 跟纸用同一套导航。区别只有一个：这一摞的"页"是**物件**
+   * 不是纸，所以顺序取 layout 的键序（= board.objects 的插入序 = 到货序，
+   * 最后到的在最上面）。
+   */
+  const shelfIds = useMemo(
+    () => Object.entries(layout || {}).filter(([, e]) => e?.seat === 'shelf').map(([id]) => id),
+    [layout],
+  );
+
+  const piles = useMemo(() => {
+    const list = pilesOf(sheets, stacks);
+    if (!shelfIds.length || !Number.isFinite(shelf?.x)) return list;
+    // 架位的脚印跟服务端 SHELF_W/SHELF_H 对齐（board-shelf.js，parity 测试钉着）
+    list.push({
+      name: SHELF_PILE, shelf: true, x: shelf.x, y: shelf.y, w: SHELF_W, h: SHELF_H,
+      title: '暂存', at: '', sheets: shelfIds, implicit: true,
+    });
+    return list.sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  }, [sheets, stacks, shelfIds, shelf]);
   const hiddenSheets = useMemo(() => hiddenByPaging(sheets, stacks, picked), [sheets, stacks, picked]);
 
   /** 这件东西此刻该不该藏（认领的那一页没在显示） */
@@ -35,11 +61,23 @@ export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf }) {
     [hiddenSheets],
   );
 
+  /** 架上这一件该不该藏（一摞只画最上面那件）。架上只有一件时谁都不藏 */
+  const shelfShown = useMemo(() => {
+    if (shelfIds.length < 2) return null;
+    const want = picked[SHELF_PILE];
+    return want && shelfIds.includes(want) ? want : shelfIds[shelfIds.length - 1];
+  }, [shelfIds, picked]);
+  const isShelfHidden = useCallback(
+    (id) => !!shelfShown && id !== shelfShown && shelfIds.includes(id),
+    [shelfShown, shelfIds],
+  );
+
   /** 上下翻这一摞：+1 更新的、-1 更早的。到头不动 */
   const flip = useCallback((pileName, dir) => {
     setPicked((prev) => {
       const pile = piles.find((p) => p.name === pileName);
       if (!pile) return prev;
+      // 架那一摞的"页"是物件 id，纸那一摞是纸名 —— flipTo 只认顺序，两种都能翻
       const next = flipTo(pile, prev, dir);
       return next === displayedPage(pile, prev) ? prev : { ...prev, [pileName]: next };
     });
@@ -83,5 +121,8 @@ export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf }) {
     return pile ? (shownOf(pile.name) || '') : '';
   }, [piles, shownOf, positionedRef, sizeOf]);
 
-  return { piles, picked, isHidden, hiddenSheets, flip, showSheet, shownOf, neighbor, claimFor };
+  return {
+    piles, picked, isHidden, hiddenSheets, flip, showSheet, shownOf, neighbor, claimFor,
+    isShelfHidden, shelfCount: shelfIds.length,
+  };
 }

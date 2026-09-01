@@ -118,7 +118,19 @@ describe('架的原点与折列', () => {
     expect(e.x).toBe(b.shelf.x);
   });
 
-  it('⭐ 连着溢出一堆：不再码成一根柱子（竖向封在一屏内，超了就换列）', async () => {
+  /**
+   * ⭐ 这一条 2026-09-01 **换了契约**（站主拍板「暂存架我们干脆也就改成栈吧」）。
+   *
+   * 08-31 折列治的是柱子：架原来是一根不封口的竖列，真案 proj_mtg61or1 26 件
+   * 码到 8322px、前端画出来是个 1:41 的虚线框横穿四张纸。折列把它封进一屏高，
+   * 满了往左折。但架仍然按件数往横里长，而纸这一批也改成横着排（摞与摞左右
+   * 相邻）—— 两边迟早还要抢地方。
+   *
+   * 一摞把这条账整个结掉：架只占一个位置，所有货叠在原点，一次显示最上面那件。
+   * 所以现在要钉的**恰好是当初要防的形状**（全挤在一处），因为"挤"这件事已经
+   * 由渲染层只画一件来处理了。
+   */
+  it('⭐ 连着溢出一堆：全部叠在架位上，架不按件数长', async () => {
     const t = await mk('proj_ovf_many');
     setViewpoint('proj_ovf_many', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await t.open({ title: '窄', plan: [{ slot: 'tiny', at: { x: 0, y: 0 }, w: 432, h: 80 }] });
@@ -127,7 +139,9 @@ describe('架的原点与折列', () => {
     const shelved = Object.values(b.objects).filter(e => e.seat === 'shelf');
     expect(shelved.length).toBe(10);
     const xs = new Set(shelved.map(e => e.x));
-    expect(xs.size, '10 条全挤在一列 = 折列没生效').toBeGreaterThan(1);
+    const ys = new Set(shelved.map(e => e.y));
+    expect([xs.size, ys.size], '一摞：10 条落点必须完全重合').toEqual([1, 1]);
+    expect({ x: [...xs][0], y: [...ys][0] }).toEqual({ x: b.shelf.x, y: b.shelf.y });
     const span = Math.max(...shelved.map(e => e.y + (e.h || 0))) - Math.min(...shelved.map(e => e.y));
     expect(span, '架的竖向跨度要封在一屏量级').toBeLessThan(1400);
   });

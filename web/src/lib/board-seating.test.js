@@ -140,7 +140,7 @@ describe('computeDesktopSeating', () => {
 });
 
 describe('暂存架模式（2026-08-30）', () => {
-  it('⭐ board.shelf 给了 → 新客码进架带（seat:shelf 随 fix 落盘），不再在内容底下另起一行', () => {
+  it('⭐ board.shelf 给了 → 新客落在架位上（seat:shelf 随 fix 落盘），不再在内容底下另起一行', () => {
     const r = seat({
       dirIndex: dirIndexOf([{ id: 'new.png', type: 'image' }, { id: 'old.png', type: 'image' }]),
       layout: { 'old.png': { x: -360, y: 100, z: 1, w: 200, h: 176, seat: 'shelf' } },
@@ -148,8 +148,9 @@ describe('暂存架模式（2026-08-30）', () => {
     });
     const fix = r.seatFixes['new.png'];
     expect(fix.seat).toBe('shelf');
-    expect(fix.x).toBe(-360);
-    expect(fix.y).toBeGreaterThanOrEqual(100 + 176 + 24);   // 码在架上已有那件下面
+    // 2026-09-01 架改成一摞：新客**叠在架位上**，不再码到已有那件下面。
+    // 原来这儿钉的是「码在架上已有那件下面」，那是竖列时代的契约。
+    expect({ x: fix.x, y: fix.y }).toEqual({ x: -360, y: 24 });
   });
 
   it('没有架（还没立过）→ 走老 packRow 兜底，fix 不带 seat', () => {

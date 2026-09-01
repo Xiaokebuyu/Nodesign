@@ -109,7 +109,7 @@ async function upsert(st, projectId, session) {
     .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
   const vp = getViewpoint(projectId);
   const origin = resolveShelfOrigin(board, (vp?.camera && !vp.layer) ? vp.camera : null);
-  const spot = nextShelfSpot(origin, obstacles);
+  const spot = nextShelfSpot(origin);   // 一摞：所有货叠在原点（2026-09-01）
   await patchBoard(projectId, {
     objects: { [st.rel]: { x: spot.x, y: spot.y, z: 1, w: box.w, h: box.h, by: 'agent', seat: 'shelf', tag: TAG } },
     ...(origin.changed ? { shelf: { x: origin.x, y: origin.y } } : {}),

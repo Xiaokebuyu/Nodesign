@@ -342,7 +342,7 @@ export default function BoardCanvas({
    * 翻页（2026-09-01 叠纸刀 4）。一摞纸占同一块地，一次只显示其中一张 ——
    * 别的页此刻不画。显示到第几页是**看的人自己的事**，不进 board.json。
    */
-  const paging = useSheetPaging({ sheets, stacks, positionedRef, sizeOf });
+  const paging = useSheetPaging({ sheets, stacks, positionedRef, sizeOf, layout, shelf });
 
   const objects = useVisibleObjects({ tasks, artifacts, layout, browse, filter, showArchive, rolls, paging });
 
@@ -1767,7 +1767,7 @@ export default function BoardCanvas({
         >
           {/* 文件夹：一张方卡（2026-08-13，"分区"时代两态退役）——
               桌面上的一个东西，双击进去换一层。 */}
-          <ShelfHint positioned={positioned} />
+          <ShelfHint positioned={positioned} total={paging.shelfCount} />
           {visibleZones.map((z) => renderFolderCard(z))}
 
           {visibleObjects.map((o) => renderObjectCard(o))}

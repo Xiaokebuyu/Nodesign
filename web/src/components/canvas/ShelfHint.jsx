@@ -6,6 +6,10 @@
  * 画一圈铅笔虚线加一行小字，让用户一眼分清「摆好的版面」和「还没归置的到货」。
  * 东西被 agent/用户挪走（seat 改写）圈就自己缩小、清空即消失，没有第二份状态。
  *
+ * 2026-09-01 架改成一摞：所有货叠在架位上，屏幕上只画最上面那件（藏在
+ * useVisibleObjects 那一道）。所以包络现在就是那一件的大小，而**件数要从外面拿** ——
+ * 照 positioned 里数会永远得 1。
+ *
  * 画在世界层、pointer-events:none、压在卡片下面 —— 它是桌面上的一道粉笔记号，
  * 不是一个可交互组件。
  */
@@ -14,7 +18,7 @@ import { sizeOf } from '../../lib/board-kinds.js';
 
 const PAD = 14;
 
-export default function ShelfHint({ positioned }) {
+export default function ShelfHint({ positioned, total = null }) {
   const items = (positioned || []).filter(o => o?.pos?.seat === 'shelf');
   if (!items.length) return null;
   let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
@@ -39,7 +43,9 @@ export default function ShelfHint({ positioned }) {
       }}
     >
       <div style={{ position: 'absolute', top: 3, left: 10, fontSize: 12, lineHeight: '16px', color: PAPER.pencil, userSelect: 'none' }}>
-        暂存 · 还没归置（{items.length}）
+        {/* 2026-09-01 架改成一摞：屏幕上只画最上面那件，所以件数要从外面拿 ——
+            照 items.length 数会永远报 1，那是「量具读的是被自己藏起来之后的现实」 */}
+        暂存 · 还没归置（{total ?? items.length}）{(total ?? items.length) > 1 ? ' · 一摞' : ''}
       </div>
     </div>
   );

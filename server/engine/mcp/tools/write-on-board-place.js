@@ -211,7 +211,7 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
    */
   const placeOverflowOnShelf = (b, { box, why }) => {
     const origin = resolveShelfOrigin(b, null);
-    const spot = nextShelfSpot(origin, obstaclesIn(b, ''), box);
+    const spot = nextShelfSpot(origin);   // 一摞：所有货叠在原点（2026-09-01）
     return {
       x: spot.x, y: spot.y, zone: '', seat: 'shelf', resolution: 'shelf-overflow',
       shelf: origin.changed ? { x: origin.x, y: origin.y } : null,

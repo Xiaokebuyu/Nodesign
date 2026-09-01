@@ -138,7 +138,7 @@ export function computeDesktopSeating({
       for (const r of occupied) obstacles.push({ x: r.x, y: r.y, w: r.w, h: r.h });
       seatSlots = ordered.map((it) => {
         const sz = sizeOf(it);
-        const spot = nextShelfSpot(shelf, obstacles, sz);
+        const spot = nextShelfSpot(shelf);   // 一摞（2026-09-01）
         it.pos = { ...it.pos, x: spot.x, y: spot.y, seat: 'shelf' };
         const slot = { id: it.id, x: spot.x, y: spot.y, w: sz.w, h: sz.h };
         obstacles.push(slot);   // 这一批里后面的要躲开前面刚放下的

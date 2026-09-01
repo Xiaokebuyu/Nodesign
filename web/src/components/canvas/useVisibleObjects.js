@@ -32,7 +32,9 @@ export function useVisibleObjects({ tasks, artifacts, layout, browse, filter, sh
        * 服务端算占位那份是同一条（board-sheets.js 的 claimedBy），两边一致才不会
        * 出现「屏幕上没有、可服务端说那儿占着地方」。
        */
-      .filter((o) => !paging.isHidden(layout[o.id])),
+      .filter((o) => !paging.isHidden(layout[o.id]))
+      // 暂存架也是一摞（2026-09-01）：架上的货叠在架位上，一次只画最上面那件
+      .filter((o) => !paging.isShelfHidden(o.id)),
     [tasks, artifacts, layout, browse, filter, showArchive, rolls, paging],
   );
 }

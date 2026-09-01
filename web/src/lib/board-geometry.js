@@ -405,7 +405,7 @@ export function newStackedZoneRect(zones, shelf = null, layout = null) {
     for (const e of Object.values(layout || {})) {
       if (Number.isFinite(e?.x) && !e.zone) obstacles.push({ x: e.x, y: e.y, w: e.w || 200, h: e.h || 160 });
     }
-    const spot = nextShelfSpot(shelf, obstacles, FOLDER_CARD);
+    const spot = nextShelfSpot(shelf);   // 一摞（2026-09-01）
     return { x: spot.x, y: spot.y, w: FOLDER_CARD.w, h: FOLDER_CARD.h };
   }
   return newStackedZoneRectLegacy(zones);

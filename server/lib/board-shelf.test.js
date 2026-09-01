@@ -4,7 +4,7 @@
  * 成员判据（seat:'shelf' 单一真相）。
  */
 import { describe, it, expect } from 'vitest';
-import { resolveShelfOrigin, nextShelfSpot, shelfItems, SHELF_W, SHELF_GAP, SHELF_COL_H } from './board-shelf.js';
+import { resolveShelfOrigin, nextShelfSpot, shelfItems, SHELF_W, SHELF_GAP, SHELF_H } from './board-shelf.js';
 
 describe('resolveShelfOrigin', () => {
   it('已立的原点沿用（changed:false）', () => {
@@ -29,11 +29,21 @@ describe('resolveShelfOrigin', () => {
     expect(o.x).toBe(-SHELF_W - SHELF_GAP);
   });
 
-  it('⭐⭐ 原点在纸群**正上方**（点没被压住，但架带横穿每张纸）→ 照样要搬', () => {
-    // proj_mtg61or1 真形状：架立在 (24,24)，第一张纸在 1464px 之下。
-    // 判据只测原点那一个点的话，四张纸一张都"压不住"它 —— 而架带 x[24,384)
-    // 跟四张纸的横向重叠率是 100%，于是架顺着这条带一路往下长穿了整块板
-    // （码到 y=8322，板子声明高度才 2600）。
+  /**
+   * ⭐⭐ 这一条 2026-09-01 **翻案了**，历史留在这儿因为它讲的是一整条推理链怎么
+   * 随形状变化作废的。
+   *
+   * 08-30 的判据是「架带横穿纸就得搬」：架当时是一条**从原点往下不封口的竖带**，
+   * 真案 proj_mtg61or1 架立在 (24,24)、第一张纸在 1464px 之下，四张纸一张都
+   * "压不住"原点那个点，而架带 x[24,384) 跟四张纸横向重叠率 100% —— 架顺着
+   * 那条带一路长穿整块板，码到 y=8322（板子声明高度才 2600）。
+   *
+   * 架改成一摞之后**它不往下长了**，就是一个 360×400 的矩形。纸在它下面 1464px
+   * 处不再是任何冲突，所以现在的正确答案是「不用搬」。⭐ 判据的形状要跟被判的
+   * 东西的形状对上 —— 那条课这次是反着用的：形状简单了，专门为它想的那条规则
+   * 也跟着作废，不该留着。
+   */
+  it('⭐⭐ 原点在纸群正上方、离得开 → 不用搬（架不再往下长）', () => {
     const b = {
       shelf: { x: 24, y: 24 },
       sheets: {
@@ -43,73 +53,57 @@ describe('resolveShelfOrigin', () => {
         p4: { x: 0, y: 4621, w: 2048, h: 973 },
       },
     };
-    const o = resolveShelfOrigin(b, null);
-    expect(o.changed, '架带横穿四张纸，必须搬').toBe(true);
-    expect(o.x).toBe(-SHELF_W - SHELF_GAP);
-    // 搬完之后架带跟纸再无横向重叠 —— 而且这个新原点要稳定，下一轮不能再搬
-    expect(o.x + SHELF_W).toBeLessThanOrEqual(0);
-    const again = resolveShelfOrigin({ ...b, shelf: { x: o.x, y: o.y } }, null);
-    expect(again, '搬到位之后就该沿用，不能来回跳').toEqual({ x: o.x, y: o.y, changed: false });
+    expect(resolveShelfOrigin(b, null)).toEqual({ x: 24, y: 24, changed: false });
   });
 
-  it('架在纸**上方**但横向错开 → 不用搬（判的是带不是点）', () => {
+  it('⭐ 但纸真的盖到架位上还是要搬，搬完要稳（不能来回跳）', () => {
+    const b = {
+      shelf: { x: 24, y: 24 },
+      sheets: { p1: { x: 0, y: 0, w: 2048, h: 973 }, p2: { x: 0, y: 1021, w: 2048, h: 973 } },
+    };
+    const o = resolveShelfOrigin(b, null);
+    expect(o.changed).toBe(true);
+    expect(o.x + SHELF_W).toBeLessThanOrEqual(0);
+    const again = resolveShelfOrigin({ ...b, shelf: { x: o.x, y: o.y } }, null);
+    expect(again, '搬到位之后就该沿用').toEqual({ x: o.x, y: o.y, changed: false });
+  });
+
+  it('架在纸上方但横向错开 → 不用搬', () => {
     const b = { shelf: { x: -900, y: 0 }, sheets: { p1: { x: 0, y: 500, w: 1600, h: 900 } } };
     expect(resolveShelfOrigin(b, null)).toEqual({ x: -900, y: 0, changed: false });
   });
 
-  it('架在纸**下方**、横向重叠 → 不用搬（纸不在它往下长的路上）', () => {
+  it('架在纸下方、横向重叠但纵向错开 → 不用搬', () => {
     const b = { shelf: { x: 24, y: 2000 }, sheets: { p1: { x: 0, y: 0, w: 1600, h: 900 } } };
     expect(resolveShelfOrigin(b, null)).toEqual({ x: 24, y: 2000, changed: false });
   });
 });
 
-describe('nextShelfSpot', () => {
+describe('nextShelfSpot：一摞（2026-09-01）', () => {
   const origin = { x: 24, y: 24 };
-  it('空架 → 原点', () => {
-    expect(nextShelfSpot(origin, [])).toEqual({ x: 24, y: 24, col: 0 });
-  });
-  it('架带内的矩形往下让；带外和原点上方的不算', () => {
-    const spot = nextShelfSpot(origin, [
-      { x: 24, y: 24, w: 200, h: 176 },              // 架上第一件
-      { x: 24 + SHELF_W + 10, y: 24, w: 400, h: 400 },  // 带外：不算
-      { x: 24, y: -300, w: 200, h: 200 },            // 原点上方：不算
-    ]);
-    expect(spot).toEqual({ x: 24, y: 24 + 176 + SHELF_GAP, col: 0 });
-  });
-  it('⭐ 避让不看 seat：用户拖来堵在架上的卡也得让（压上去是数据损坏）', () => {
-    const spot = nextShelfSpot(origin, [{ x: 100, y: 500, w: 300, h: 100, seat: 'user' }]);
-    expect(spot.y).toBe(500 + 100 + SHELF_GAP);
-  });
 
   /**
-   * 折列（2026-08-31）。架原来是一根**不封口**的竖列：真案 proj_mtg61or1 26 件
-   * 码到 8322px（板高 2600），前端 ShelfHint 画出来是个 1:41 的虚线框横穿四张纸。
-   * ⚠️ 给了 box 才折 —— 不给就是老行为（那是唯一还会长成柱子的调用形态）。
+   * 架从一根竖列改成一摞（站主拍板「暂存架我们干脆也就改成栈吧」）。
+   * 这一族原来钉的是折列：一列一屏高、满了往左折、一件比整列高就给它一个空列。
+   * 那些判据连同 SHELF_COL_H / SHELF_COL_STEP / shelfColumnX / COL_LIMIT 一起
+   * 退役了 —— 一摞不需要让位，本来就是叠着的。
    */
-  it('⭐ 给了尺寸就折列：一列码满一屏换下一列，往左长（远离纸）', () => {
-    const obstacles = []; const ys = []; const xs = new Set();
-    for (let i = 0; i < 20; i += 1) {
-      const s = nextShelfSpot(origin, obstacles, { w: 200, h: 172 });
-      obstacles.push({ x: s.x, y: s.y, w: 200, h: 172 });
-      ys.push(s.y); xs.add(s.x);
-    }
-    expect(Math.max(...ys) + 172 - origin.y).toBeLessThanOrEqual(SHELF_COL_H);
-    expect(xs.size).toBeGreaterThan(1);
-    expect(Math.min(...xs)).toBeLessThan(origin.x);
+  it('⭐ 所有货叠在原点：连码 20 件，落点一个像素都不动', () => {
+    const spots = [];
+    for (let i = 0; i < 20; i += 1) spots.push(nextShelfSpot(origin));
+    expect(new Set(spots.map(s => `${s.x},${s.y}`)).size).toBe(1);
+    expect(spots[0]).toEqual({ x: 24, y: 24 });
   });
 
-  it('⛔ 不给尺寸 = 老行为（一路往下，不折）', () => {
-    const obstacles = []; const ys = [];
-    for (let i = 0; i < 20; i += 1) {
-      const s = nextShelfSpot(origin, obstacles);
-      obstacles.push({ x: s.x, y: s.y, w: 200, h: 172 });
-      ys.push(s.y);
-    }
-    expect(Math.max(...ys)).toBeGreaterThan(SHELF_COL_H);
+  it('⭐ 架不再按件数长（这是改成一摞的全部理由）', () => {
+    // 老行为：26 件码到 8322px 横穿四张纸（真案 proj_mtg61or1）
+    let bottom = origin.y;
+    for (let i = 0; i < 26; i += 1) bottom = Math.max(bottom, nextShelfSpot(origin).y);
+    expect(bottom - origin.y).toBe(0);
   });
 
-  it('⛔ 一件比整列还高：给它一个空列，不许把列全跳完', () => {
-    expect(nextShelfSpot(origin, [], { w: 300, h: SHELF_COL_H * 2 })).toEqual({ x: 24, y: 24, col: 0 });
+  it('原点取整（存量里有小数坐标）', () => {
+    expect(nextShelfSpot({ x: 23.6, y: -0.4 })).toEqual({ x: 24, y: -0 });
   });
 });
 

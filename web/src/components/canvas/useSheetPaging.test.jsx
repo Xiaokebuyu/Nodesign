@@ -39,11 +39,21 @@ const POSITIONED = { current: [
   { id: 'assets/图.png', type: 'image', pos: { x: 300, y: 300 }, w: 200, h: 148 },
 ] };
 
-function harness(onRender) {
+/** 架上三件到货（键序 = 到货序，最后到的在最上面） */
+const SHELF = { x: -400, y: 0 };
+const SHELF_LAYOUT = {
+  'assets/到货1.png': { x: -400, y: 0, seat: 'shelf' },
+  'assets/到货2.png': { x: -400, y: 0, seat: 'shelf' },
+  'assets/到货3.png': { x: -400, y: 0, seat: 'shelf' },
+};
+
+function harness(onRender, opts = {}) {
   return function Probe() {
     const paging = useSheetPaging({
       sheets: SHEETS, stacks: STACKS,
       positionedRef: POSITIONED, sizeOf: (o) => ({ w: o.w || 432, h: o.h || 200 }),
+      layout: opts.shelf ? { ...LAYOUT, ...SHELF_LAYOUT } : LAYOUT,
+      shelf: opts.shelf ? SHELF : null,
     });
     const objects = useVisibleObjects({
       tasks: [], artifacts: [], layout: LAYOUT, browse: null,
@@ -54,11 +64,11 @@ function harness(onRender) {
   };
 }
 
-function mount(onRender) {
+function mount(onRender, opts = {}) {
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);
-  const Probe = harness(onRender);
+  const Probe = harness(onRender, opts);
   act(() => root.render(<Probe />));
   return () => act(() => root.unmount());
 }
@@ -131,6 +141,45 @@ describe('叠纸：屏幕上到底还剩几件', () => {
     expect(last.paging.neighbor('main', 1).name).toBe('st');
     expect(last.paging.neighbor('st', 1)).toBeNull();
     expect(last.paging.shownOf('main')).toBe('p1');
+    unmount();
+  });
+});
+
+describe('暂存架也是一摞（2026-09-01）', () => {
+  it('⭐ 架上三件叠在一处，屏幕上只画最上面那件（最后到的）', () => {
+    let last = null;
+    const unmount = mount((r) => { last = r; }, { shelf: true });
+    expect(last.paging.shelfCount).toBe(3);
+    expect(last.paging.isShelfHidden('assets/到货3.png')).toBe(false);
+    expect(last.paging.isShelfHidden('assets/到货1.png')).toBe(true);
+    expect(last.paging.isShelfHidden('assets/到货2.png')).toBe(true);
+    unmount();
+  });
+
+  it('⭐ 架那一摞照样上下翻找（它的页是物件不是纸）', () => {
+    let last = null;
+    const unmount = mount((r) => { last = r; }, { shelf: true });
+    act(() => last.paging.flip('__shelf__', -1));
+    expect(last.paging.isShelfHidden('assets/到货2.png')).toBe(false);
+    expect(last.paging.isShelfHidden('assets/到货3.png')).toBe(true);
+    unmount();
+  });
+
+  it('架上只有一件时谁都不藏；没有架时这条整个不参与', () => {
+    let last = null;
+    const unmount = mount((r) => { last = r; });      // 不带架
+    expect(last.paging.shelfCount).toBe(0);
+    expect(last.paging.isShelfHidden('assets/到货1.png')).toBe(false);
+    unmount();
+  });
+
+  it('架进 piles，左右换摞够得着它', () => {
+    let last = null;
+    const unmount = mount((r) => { last = r; }, { shelf: true });
+    expect(last.paging.piles.map(p => p.name)).toContain('__shelf__');
+    // 架在 x=-400，纸群从 x=0 起 —— 它排在最左边
+    expect(last.paging.piles[0].name).toBe('__shelf__');
+    expect(last.paging.neighbor('__shelf__', -1)).toBeNull();
     unmount();
   });
 });

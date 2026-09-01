@@ -109,7 +109,10 @@ describe('暂存架：机器的手只够得到架', () => {
     expect(chapter.zone).toBe('小说');             // 住进文件夹层，不在根桌面
     const readme = b.objects['说明.md'];
     expect(readme.seat).toBe('shelf');
-    expect(readme.y).toBeGreaterThanOrEqual(24 + 240);   // 码在文件夹卡下面，不压它
+    // 2026-09-01 架改成一摞：文件夹卡和散文件**叠在同一个架位**上，一次显示
+    // 最上面那件。原来这儿钉的是「码在文件夹卡下面不压它」，那是竖列时代的
+    // 契约 —— 一摞本来就是叠着的，"不压"这件事由渲染层只画一件来保证。
+    expect({ x: readme.x, y: readme.y }).toEqual({ x: b.zones['小说'].x, y: b.zones['小说'].y });
   });
 
   it('保留目录不长文件夹卡：assets/ 下的东西上架但不出 assets 卡', async () => {
