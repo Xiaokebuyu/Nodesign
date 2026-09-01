@@ -64,7 +64,8 @@ const GRANDFATHERED = {
   // web/src/lib/api.js 08-19 顶到 600：导出族（收 blob 那一批 + 文件名头解析）
   // 迁去 lib/api-exports.js（520），仍走通用上限，没进表
   // 08-31 按标签整组操作（commitStaging/clearTags/removeByTag）迁去 board-tags.js：640 → 583
-  'server/projects/board-store.js': 583,
+  // 09-01 叠纸加第四张注册表时棘轮拦下，四块几乎逐字相同的合并语义收成 patchRegistry：583 → 581
+  'server/projects/board-store.js': 581,
   'server/engine/mcp/tools/web-search.js': 548,
 };
 

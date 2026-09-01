@@ -189,7 +189,8 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
           const e = b.objects?.[id];
           if (!e || !Number.isFinite(e.x)) return null;
           const sz = estimateSizeOn(b, id, e);
-          return sheetOfPoint(b, { x: e.x + sz.w / 2, y: e.y + sz.h / 2 })?.id || null;
+          // e.sheet：叠纸之后这件东西自己认领的纸优先（2026-09-01）
+          return sheetOfPoint(b, { x: e.x + sz.w / 2, y: e.y + sz.h / 2 }, e.sheet || null)?.id || null;
         };
         const { inMine, elsewhere } = splitDirtyByCharge(evts, { sheetOf, currentSheetId: curId });
         if (inMine.length) {

@@ -27,9 +27,9 @@ export {
   DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS,
 } from './board-limits.js';
 export { TEXT_FONTS } from './board-sanitize.js';
-import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES, MAX_SHEETS } from './board-limits.js';
+import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES, MAX_SHEETS, MAX_STACKS } from './board-limits.js';
 import {
-  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane, sanitizeRoll, sanitizeSheet,
+  clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane, sanitizeRoll, sanitizeSheet, sanitizeStack,
   isSafeCanvasId,
 } from './board-sanitize.js';
 
@@ -83,6 +83,31 @@ export function replaceBoard(pid, raw) {
  * diff 式合并写：{ size?, objects?: {id: obj|null}, zones?: {id: zone|null} }
  * null 值 = 删除该条目。返回合并后的完整 board。
  */
+/**
+ * 名字键的注册表（lanes / rolls / sheets / stacks）落 patch —— **四张表一份合并语义**。
+ *
+ * 四块原来是四段几乎逐字相同的代码（2026-09-01 加第四张表时行数棘轮拦下来，
+ * 按规矩拆而不是抬上限）。合并语义在这一处说清，别处就不会各自漂：
+ *   坏名丢弃（不炸整发 patch）／`null` = 删这一条／瘦 patch 与存量**合并**后过
+ *   sanitize（回写一个字段不会抹掉别的）／到上限了只许改存量不许新增／
+ *   删空之后整个键消失（board.json 里不留空壳）。
+ *
+ * @param {Function} [fix]  落盘前最后一道（lanes 的 parent 要走改名转发）
+ */
+function patchRegistry(board, key, table, sanitize, max, fix = null) {
+  board[key] = board[key] || {};
+  for (const [name, v] of Object.entries(table)) {
+    const tag = sanitizeTag(name);
+    if (!tag) continue;
+    if (v === null) { delete board[key][tag]; continue; }
+    const clean = sanitize(board[key][tag] ? { ...board[key][tag], ...v } : v);
+    if (!clean) continue;
+    const fixed = fix ? fix(clean) : clean;
+    if (board[key][tag] || Object.keys(board[key]).length < max) board[key][tag] = fixed;
+  }
+  if (!Object.keys(board[key]).length) delete board[key];
+}
+
 export function patchBoard(pid, patch) {
   return withBoardLock(pid, async () => {
     const board = await readBoard(pid);
@@ -132,47 +157,20 @@ export function patchBoard(pid, patch) {
         if (board.bindings[id] || Object.keys(board.bindings).length < MAX_BINDINGS) board.bindings[id] = fixed;
       }
     }
-    // 线注册表（08-27 空间规划）：合并语义同 objects；parent 也走改名转发
-    if (patch?.lanes && typeof patch.lanes === 'object') {
-      board.lanes = board.lanes || {};
-      for (const [name, l] of Object.entries(patch.lanes)) {
-        const tag = sanitizeTag(name);
-        if (!tag) continue;
-        if (l === null) { delete board.lanes[tag]; continue; }
-        const s = sanitizeLane(board.lanes[tag] ? { ...board.lanes[tag], ...l } : l);
-        if (!s) continue;
-        const fixed = s.parent ? { ...s, parent: fwd(s.parent) } : s;
-        if (board.lanes[tag] || Object.keys(board.lanes).length < MAX_LANES) board.lanes[tag] = fixed;
-      }
-      if (!Object.keys(board.lanes).length) delete board.lanes;
-    }
-    // 卷（2026-08-27 收纳器）：合并语义同 lanes；null = 展开（删条目）。
-    // 只动状态位不动成员座位 —— 展开即归位靠的就是这里什么都不搬。
-    if (patch?.rolls && typeof patch.rolls === 'object') {
-      board.rolls = board.rolls || {};
-      for (const [name, r] of Object.entries(patch.rolls)) {
-        const tag = sanitizeTag(name);
-        if (!tag) continue;
-        if (r === null) { delete board.rolls[tag]; continue; }
-        const s = sanitizeRoll(board.rolls[tag] ? { ...board.rolls[tag], ...r } : r);
-        if (!s) continue;
-        if (board.rolls[tag] || Object.keys(board.rolls).length < MAX_LANES) board.rolls[tag] = s;
-      }
-      if (!Object.keys(board.rolls).length) delete board.rolls;
-    }
-    // 纸（2026-08-29 纸范式）：合并语义同 lanes；null = 撕掉登记（成员座位不动）。
-    // 纸名不是路径，不走改名转发。
-    if (patch?.sheets && typeof patch.sheets === 'object') {
-      board.sheets = board.sheets || {};
-      for (const [name, s0] of Object.entries(patch.sheets)) {
-        const nm = sanitizeTag(name);
-        if (!nm) continue;
-        if (s0 === null) { delete board.sheets[nm]; continue; }
-        const s = sanitizeSheet(board.sheets[nm] ? { ...board.sheets[nm], ...s0 } : s0);
-        if (!s) continue;
-        if (board.sheets[nm] || Object.keys(board.sheets).length < MAX_SHEETS) board.sheets[nm] = s;
-      }
-      if (!Object.keys(board.sheets).length) delete board.sheets;
+    /**
+     * 名字键的四张注册表，合并语义一份（patchRegistry）。各自的 `null` 是什么意思：
+     *   lanes  线（08-27 空间规划）—— parent 走改名转发，agent 本轮拿旧路径挂的线要跟着改名
+     *   rolls  卷（08-27 收纳器）—— null = 展开。只动状态位不动成员座位，展开即归位
+     *   sheets 纸（08-29 纸范式）—— null = 撕掉登记，成员座位不动。纸名不是路径，不转发
+     *   stacks 摞（09-01 叠纸）—— null = 撤掉这一摞的登记，成员纸退回各自单独一摞，位置不变
+     */
+    for (const [key, clean, max, fix] of [
+      ['lanes', sanitizeLane, MAX_LANES, (l) => (l.parent ? { ...l, parent: fwd(l.parent) } : l)],
+      ['rolls', sanitizeRoll, MAX_LANES, null],        // 卷跟线同量级：一线一卷
+      ['sheets', sanitizeSheet, MAX_SHEETS, null],
+      ['stacks', sanitizeStack, MAX_STACKS, null],
+    ]) {
+      if (patch?.[key] && typeof patch[key] === 'object') patchRegistry(board, key, patch[key], clean, max, fix);
     }
     // 跟随规则（2026-08-30）：`{ 组tag: {target,side?,label?} | null }`。规则和线分开存
     // —— 线要求两端此刻都在板上，规则不要求，所以「开场先立规则再写第一章」这条

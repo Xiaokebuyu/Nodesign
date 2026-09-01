@@ -35,7 +35,7 @@ import { BINDING_TYPE_IDS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fitFor, capacityOf } from '../../../lib/sketch-layout.js';
 import { CARD_MAX_H } from '../../../lib/screen.js';
 import { innerRect } from '../../../lib/board-sheets.js';
-import { obstaclesIn } from '../../../lib/board-obstacles.js';
+
 import { makeSheetPlacer } from './write-on-board-place.js';
 import { openSheetFor } from './open-sheet.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
@@ -119,8 +119,6 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
     let board = await readBoard(projectId);
     const known = new Set(Object.keys(board.zones || {}));
-    // 这一层上谁占着地方（含文件夹卡/卷卡/精灵身位，见 lib/board-obstacles.js）
-    const obstaclesOf = (b, zone) => obstaclesIn(b, zone);
     const vp = getViewpoint(projectId);
     const fit = fitFor(vp);
     // 车道封顶（08-28）：触屏档一件不许超过一屏宽。**板书和草图两条路都要过它** ——
@@ -137,7 +135,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // 纸上落位三分支（棘轮拆件，见 write-on-board-place.js）
     const {
       placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull,
-      placeOverflowOnShelf, describeOverflow, describeChalkWrite,
+      placeOverflowOnShelf, describeOverflow, describeChalkWrite, obstaclesFor,
     } = makeSheetPlacer({ projectId, sessionId, by });
 
     // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
@@ -249,7 +247,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; if (a.board) b2 = a.board; }
       }
 
-      const obstacles = obstaclesOf(b2, zone);
+      const obstacles = obstaclesFor(b2, zone, { slotInfo, sheetName: args.sheet || null });
       const vpRect = vpRectFor(zone);
 
       // ── flow（刀⑦ 2026-08-30）：长文由机器按段拆成一串卡大小的板书（拆件见
@@ -257,7 +255,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       if (args.flow && args.text) {
         const fr = await maybeFlowWrite({
           projectId, sharedRoot, sessionId, by, ctx, args, body, wUnits, zone,
-          slotInfo, parentId, replyRect, anchorId, b2, obstaclesOf,
+          slotInfo, parentId, replyRect, anchorId, b2, obstaclesFor,
           placeInSlot, placeOnSheets, describeSheetFull, stamp,
         });
         if (fr) return fr;
@@ -317,6 +315,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         const hObjects = { [hid]: {
           x: Math.round(placed.x), y: Math.round(placed.y), z: 1, w: box.w, h: box.h,
           kind: 'text', data, zone, by, seat: 'agent', ...(args.tag ? { tag: args.tag } : {}),
+          ...(placed.sheetId ? { sheet: placed.sheetId } : {}),
         } };
         const hBindings = {};
         if (anchorId) {
@@ -352,6 +351,9 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         // 每回合状态块照旧点名，agent 一挪 seat 就被改写、自然离架
         zone: placed.zone !== undefined ? placed.zone : zone,
         by, seat: placed.seat || 'agent', ...(args.tag ? { tag: args.tag } : {}),
+        // 认领这一页（2026-09-01 叠纸刀 1）：一摞纸共用一块地，几何分不出这条写在
+        // 哪一页上。溢出上架的没有 sheetId，也就不认领任何一页 —— 架不是版面
+        ...(placed.sheetId ? { sheet: placed.sheetId } : {}),
       } };
       const bindings = {};
       if (anchorId) {
@@ -496,7 +498,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         if (a.rect.w > anchorRect.w) anchorRect = a.rect;   // tag 包络比单卡大就用包络
       }
     }
-    const obstacles = obstaclesOf(sketchBase, zone);
+    const obstacles = obstaclesFor(sketchBase, zone, { sheetName: args.sheet || null });
     const vpRect = vpRectFor(zone);
     const sketchBox = { w: local.w + 24, h: local.h + 24 };
     let placed;
@@ -536,6 +538,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const common = {
       z: 1, zone: placed.zone !== undefined ? placed.zone : zone, by,
       seat: placed.seat || 'agent', ...(tag ? { tag } : {}), ...(staging ? { staging: true } : {}),
+      // 整张草图认同一页（叠纸刀 1）—— 它本来就是一次落一整块
+      ...(placed.sheetId ? { sheet: placed.sheetId } : {}),
     };
     for (const n of nodes) {
       const p = pos.get(n.key);

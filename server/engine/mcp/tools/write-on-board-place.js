@@ -58,7 +58,9 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
    * 折叠/裁切/挤进去都是替它把问题藏起来，而它下一条还会照写不误。
    */
   const placeInSlot = (b, { rect, sheet, slotName, box, obstacles }) => {
-    const spot = nextSpotInSlot(b, rect, box);
+    // sheetId 必传（2026-09-01 叠纸刀 1）：一摞纸共用一块地，不传的话在第二页的
+    // 版位里算余量会把第一页的内容也数进去，报出来的「还剩几行」偏少
+    const spot = nextSpotInSlot(b, rect, box, { sheetId: sheet.id });
     if (spot.full) {
       const left = capacityOf(rect.w, spot.freeH);
       const whole = capacityOf(rect.w, rect.h);
@@ -316,5 +318,22 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     return lines;
   };
 
-  return { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull, placeOverflowOnShelf, describeOverflow, describeChalkWrite };
+  /**
+   * 这一层上谁占着地方（含文件夹卡 / 卷卡 / 精灵身位，见 lib/board-obstacles.js）。
+   *
+   * 叠纸（2026-09-01 刀 2）：根层要说清**往哪一页上放**。一摞纸占同一块地，别页的
+   * 墨此刻没画在屏幕上，把它算成障碍就是让一块看不见的东西挡住真正空着的地方 ——
+   * 在第二页写第一笔当场报「纸满」。文件夹层没有纸，那儿传了也没用。
+   *
+   * 落在哪一页：版位点名的那张 > 入参点名的 > 会话正写的那张。
+   */
+  const obstaclesFor = (b, zone, { slotInfo = null, sheetName = null } = {}) => {
+    const sheetId = zone ? null : (slotInfo?.sheet?.id
+      || (sheetName && b?.sheets?.[sheetName] ? sheetName : null)
+      || currentSheet(b, currentSheetIdOf(sessionId))?.id
+      || null);
+    return obstaclesIn(b, zone, { sheetId });
+  };
+
+  return { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull, placeOverflowOnShelf, describeOverflow, describeChalkWrite, obstaclesFor };
 }

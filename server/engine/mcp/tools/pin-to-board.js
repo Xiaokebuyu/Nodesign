@@ -156,7 +156,17 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
                 ? `Sheet ${sh.id} has no slot "${slot}". It has: ${names.join(', ')}.`
                 : `Sheet ${sh.id} has no slots planned. Plan the page first: open_sheet{plan:[{slot,at,w,h,about}…]}.` }], isError: true };
             }
-            const p = nextSpotInSlot(boardNow, rect, box);
+            /**
+             * 算余量按**目标页**算（2026-09-01 叠纸刀 1）：一摞纸共用一块地。
+             *
+             * ⚠️ 产物落盘时**不写 sheet 字段**，这是有意的 —— 这一版栈只叠墨
+             * （板书 / 手写字 / 涂鸦），产物不参与叠放、翻到哪一页都看得见，
+             * 而"看得见"在占位账上就是"每一页都得绕开它"（sheetMembers 里
+             * 没认领纸的东西算每一页的成员）。代价是它可能压住别页的板书，
+             * 出路是把产物收进这一摞共享的产物地（board.stacks[].artifacts），
+             * 那是后面一刀的事。
+             */
+            const p = nextSpotInSlot(boardNow, rect, box, { sheetId: sh.id });
             if (p.tooWide) {
               return { content: [{ type: 'text', text: `⛔ Slot "${slot}" on sheet ${sh.id} is only ${p.freeW}px wide — ${objectId} is a ${p.needW}px-wide card and would spill ${p.needW - p.freeW}px into whatever is next to it. `
                 + 'Nothing moved. Re-plan that block wider (replan it by name, omit at — it resizes in place), or point it at another slot.' }], isError: true };

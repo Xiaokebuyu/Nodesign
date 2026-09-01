@@ -12,3 +12,8 @@ export const MAX_ZONES = 200;
 export const MAX_BINDINGS = 4000;
 export const MAX_LANES = 60;      // 线（lane 注册表）：几十条线的脑图已是极限读感
 export const MAX_SHEETS = 200;    // 纸（sheet 注册表，2026-08-29 纸范式）：一纸一屏，200 张已是长篇连载量级
+/**
+ * 栈（stack 注册表，2026-09-01 叠纸）：一摞纸。栈是横向排开的，一块板上并排
+ * 几十摞已经翻不过来了；纸的上限仍是 MAX_SHEETS，栈只管有几摞。
+ */
+export const MAX_STACKS = 60;

@@ -12,7 +12,7 @@
 
 import { isBindingType, isBindingMaterial } from '../lib/binding-types.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
-import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES, MAX_SHEETS } from './board-limits.js';
+import { DEFAULT_BOARD_SIZE, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES, MAX_SHEETS, MAX_STACKS } from './board-limits.js';
 import { ONE_SCREEN } from '../lib/screen.js';
 
 /**
@@ -202,6 +202,20 @@ export function sanitizeObject(o, size) {
     // 入座不看它、read_board 默认不列它、画面上半透明；落定（commitStaging）清位。
     ...(sanitizeTag(o.tag) ? { tag: sanitizeTag(o.tag) } : {}),
     ...(o.staging === true ? { staging: true } : {}),
+    /**
+     * 这件东西写在哪张纸上（2026-09-01 叠纸刀 0）。
+     *
+     * 在这之前成员归属是**几何派生**的：中心点落在哪张纸的矩形里就算谁的。
+     * 那套判据换来一件好事（用户把卡拖出纸外，归属自动跟着变，机器不用维护
+     * 第二份成员表），但它有一个前提：**两张纸不许占同一块地**。叠纸把这个
+     * 前提拿掉了，于是同一个坐标上会有好几张纸，几何再也分不出这件东西属于
+     * 其中哪一张 —— 在第二页上写第一笔，第一页的全部内容都会被算成障碍。
+     *
+     * 所以归属改成显式登记。⚠️ 缺这个字段时调用方**回落几何**（存量的 103 张
+     * 纸一张都没有这个字段，而它们本来就不叠，几何在那儿是准的）：显式优先、
+     * 几何兜底，不需要先跑一次全库迁移才敢上线。
+     */
+    ...(sanitizeTag(o.sheet) ? { sheet: sanitizeTag(o.sheet) } : {}),
     ...(kind ? { kind, data } : {}),
   };
 }
@@ -351,7 +365,55 @@ export function sanitizeSheet(s) {
     ...(sanitizeBy(s.by) ? { by: sanitizeBy(s.by) } : {}),
     ...(typeof s.at === 'string' && s.at.length <= 40 ? { at: s.at } : {}),
     ...(typeof s.title === 'string' && s.title.trim() ? { title: s.title.trim().slice(0, 60) } : {}),
+    /**
+     * 这张纸属于哪一摞（2026-09-01 叠纸刀 0）。没有这个字段 = 它自己单独一摞
+     * （存量的纸全是这样，行为一个字不变）。
+     *
+     * ⚠️ 不变量：**同一摞里所有纸的 x/y 必须相等**（那就是"叠在一起"的定义）。
+     * 位置仍然存在纸上而不是搬到栈上，是因为有二十来处代码在 `{...board.sheets[id]}`
+     * 上直接读 x/y，把位置抽走会让它们静默拿到 undefined，再经 innerRect 变成
+     * NaN —— 那是最难查的一类坏法。栈只管身份和顺序，几何照旧长在纸上，
+     * 不变量由铺纸那一个入口守（lib/board-stacks.js stackOriginOf）。
+     */
+    ...(sanitizeTag(s.stack) ? { stack: sanitizeTag(s.stack) } : {}),
     ...(slotN ? { slots } : {}),
+  };
+}
+
+/**
+ * 栈（stack，2026-09-01 叠纸）：一摞纸。**只有身份，没有几何** —— 原点是成员
+ * 纸的 x/y（同一摞里它们相等），宽高是成员的最大值，都现算不存。
+ *
+ * 为什么栈要有名字：翻页从一条轴变成两条（左右换摞、上下翻这一摞里的纸）之后，
+ * 相邻的那一摞得能被点名 —— agent 要说得出「把状态表铺到旁边那一摞」。一条
+ * 匿名的链表达不了这件事。
+ */
+export function sanitizeStack(s) {
+  if (!s || typeof s !== 'object') return null;
+  const artifacts = s.artifacts && typeof s.artifacts === 'object' ? s.artifacts : null;
+  const ax = Number(artifacts?.x); const ay = Number(artifacts?.y);
+  const aw = Number(artifacts?.w); const ah = Number(artifacts?.h);
+  const artOk = [ax, ay, aw, ah].every(Number.isFinite) && aw >= 48 && ah >= 24;
+  return {
+    ...(sanitizeBy(s.by) ? { by: sanitizeBy(s.by) } : {}),
+    ...(typeof s.at === 'string' && s.at.length <= 40 ? { at: s.at } : {}),
+    ...(typeof s.title === 'string' && s.title.trim() ? { title: s.title.trim().slice(0, 60) } : {}),
+    /**
+     * 这一摞的产物地（相对栈原点的像素，跟版位同一套坐标）。
+     *
+     * 产物地原来是**纸**的属性（版位的 `for:'artifacts'`）。叠纸之后那样不成立：
+     * 两张叠在一起的纸各规划一块产物地，两件产物会落在同一块世界坐标上互相压，
+     * 而产物是**不参与叠放**的（这一版栈只叠墨：板书、手写字、涂鸦）。所以这块
+     * 地升到栈上，一摞纸共享一块，翻页只换正文，产物原地不动。
+     */
+    ...(artOk ? {
+      artifacts: {
+        x: Math.round(Math.min(Math.max(-12000, ax), 12000)),
+        y: Math.round(Math.min(Math.max(-12000, ay), 12000)),
+        w: Math.round(Math.min(aw, 12000)),
+        h: Math.round(Math.min(ah, 12000)),
+      },
+    } : {}),
   };
 }
 
@@ -411,6 +473,16 @@ export function sanitizeBoard(raw) {
     const s = sanitizeSheet(s0);
     if (s) { sheets[nm] = s; sCount += 1; }
   }
+  // 栈（2026-09-01 叠纸）：一摞纸的身份。几何不在这儿，见 sanitizeStack 头注。
+  const stacks = {};
+  let stCount = 0;
+  for (const [name, s0] of Object.entries(raw?.stacks && typeof raw.stacks === 'object' ? raw.stacks : {})) {
+    if (stCount >= MAX_STACKS) break;
+    const nm = sanitizeTag(name);
+    if (!nm) continue;
+    const s = sanitizeStack(s0);
+    if (s) { stacks[nm] = s; stCount += 1; }
+  }
   /**
    * 跟随规则（2026-08-30）：`{ 组tag: { target, side?, label? } }`。
    *
@@ -454,6 +526,7 @@ export function sanitizeBoard(raw) {
     size, zones, objects, bindings,
     ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}),
     ...(sCount ? { sheets } : {}),
+    ...(stCount ? { stacks } : {}),
     ...(fCount ? { follows } : {}),
     ...(pending.length ? { pending } : {}),
     ...(shelf ? { shelf } : {}),

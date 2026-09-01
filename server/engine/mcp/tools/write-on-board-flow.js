@@ -23,7 +23,7 @@ import { Events } from '../../agent/events.js';
  */
 export async function maybeFlowWrite({
   projectId, sharedRoot, sessionId, by, ctx, args, body, wUnits, zone,
-  slotInfo, parentId, replyRect, anchorId, b2, obstaclesOf,
+  slotInfo, parentId, replyRect, anchorId, b2, obstaclesFor,
   placeInSlot, placeOnSheets, describeSheetFull, stamp,
 }) {
   const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
@@ -40,7 +40,8 @@ export async function maybeFlowWrite({
   let leftover = 0; let fullMsg = null;
   for (let i = 0; i < chunks.length; i += 1) {
     const cBox = textBox(chunks[i], args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
-    const obs = obstaclesOf(live, '');
+    // 障碍按**这一段要落的那一页**算（2026-09-01 叠纸刀 2）：一条 flow 链可能跨页
+    const obs = obstaclesFor(live, '', { slotInfo, sheetName: args.sheet || null });
     let p;
     if (slotInfo) {
       p = placeInSlot(live, { rect: slotInfo.rect, sheet: slotInfo.sheet, slotName: args.slot, box: cBox, obstacles: obs });
@@ -61,6 +62,8 @@ export async function maybeFlowWrite({
     const entry = {
       x: Math.round(p.x), y: Math.round(p.y), z: 1, w: cBox.w, h: cBox.h,
       zone: '', by, seat: 'agent', ...(args.tag ? { tag: args.tag } : {}),
+      // 认领这一页（2026-09-01 叠纸刀 1）：一条链可能跨页，每段各认各的
+      ...(p.sheetId ? { sheet: p.sheetId } : {}),
     };
     objects[rel] = entry;
     if (i === 0 && anchorId) {

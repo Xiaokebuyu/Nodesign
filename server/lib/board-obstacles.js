@@ -31,7 +31,7 @@
 
 import { layerOf } from './canvas-id.js';
 import { estimateSizeOn, zoneRects } from './board-kind-sizes.js';
-import { inflateSpriteSeats, rollCardRect } from './board-sheets.js';
+import { inflateSpriteSeats, rollCardRect, claimedBy } from './board-sheets.js';
 
 /**
  * 一层的障碍集。
@@ -42,6 +42,12 @@ import { inflateSpriteSeats, rollCardRect } from './board-sheets.js';
  * @param {object} [opts.objects]  用哪份 objects（缺省 board.objects；edit_board
  *   要用带上本批改动的 live 副本，那份才是"这一刻"的板）
  * @param {Set|string[]} [opts.exclude]  排除的 id（主角自己、同组成员）
+ * @param {string} [opts.sheetId]  正在往哪一页上放东西（2026-09-01 叠纸刀 2）。
+ *   一摞纸占同一块地，别页的墨此刻**根本没画在屏幕上**，把它算成障碍就是拿一块
+ *   看不见的东西挡住真正空着的地方 —— 在第二页写第一笔当场报「纸满」。判据跟
+ *   成员归属同一份（board-sheets.js 的 claimedBy）：认领了别页的跳过，**没认领
+ *   任何一页的照旧算**（散件、文件夹卡、产物不参与叠放，翻到哪一页都看得见）。
+ *   不传 = 全算，存量不叠的板行为一个字不变。
  * @param {boolean} [opts.furniture=true]  含不含"常驻家具"（文件夹卡/卷卡）。
  *   **落位要（true），铺纸不要（false）**：纸不渲染，一张纸的矩形盖在文件夹上
  *   用户什么也看不见，而纸内落位本来就会避开文件夹；把家具算进铺纸避让，只换来
@@ -49,7 +55,7 @@ import { inflateSpriteSeats, rollCardRect } from './board-sheets.js';
  *   的端到端测试逮住：纸从 (0,0) 滑到 y=384 绕开一个文件夹）。
  * @returns {Array<{id,x,y,w,h}>}
  */
-export function obstaclesIn(board, zone = '', { objects = null, exclude = null, furniture = true } = {}) {
+export function obstaclesIn(board, zone = '', { objects = null, exclude = null, furniture = true, sheetId = null } = {}) {
   const objs = objects || board?.objects || {};
   const known = new Set(Object.keys(board?.zones || {}));
   const skip = exclude instanceof Set ? exclude : new Set(exclude || []);
@@ -57,6 +63,7 @@ export function obstaclesIn(board, zone = '', { objects = null, exclude = null, 
   for (const [id, e] of Object.entries(objs)) {
     if (skip.has(id) || !Number.isFinite(e?.x)) continue;
     if (layerOf(id, e, known) !== zone) continue;
+    if (sheetId && !claimedBy(e, sheetId)) continue;   // 别页的墨此刻不在屏幕上
     rects.push({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) });
   }
   // 每层还住着不在 objects 里的占面积物件：文件夹卡按**所在层**取

@@ -23,8 +23,9 @@ import { CARD_MAX_H } from '../../../lib/screen.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import {
   sheetSizeFor, allocateSheetRect, nextSheetName, currentSheet, innerRect, SHEET_MARGIN,
-  membersInRect, sheetMembers,
+  membersInRect, sheetMembers, stackSheetRect, nextStackRect,
 } from '../../../lib/board-sheets.js';
+import { stackOfSheet } from '../../../lib/board-stacks.js';
 import { setCurrentSheetId, currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { resolveShelfOrigin } from '../../../lib/board-shelf.js';
 import { Events } from '../../agent/events.js';
@@ -92,13 +93,23 @@ export function clampPlan(plan, inner0, prevSlots = {}) {
  */
 export async function openSheetFor(projectId, {
   sessionId = null, by = 'agent', title = null, name = null, where = null, plan = null,
+  stack = null,
 } = {}) {
   const board = await readBoard(projectId);
   const vp = getViewpoint(projectId);
   const fit = fitFor(vp);
   const size = sheetSizeFor(fit);
   let cur = currentSheet(board, currentSheetIdOf(sessionId));
-  // 缺省：还没有纸（或点名 viewport）→ 对准用户视口；有当前纸 → 铺在它正下方
+  /**
+   * 缺省：还没有纸（或点名 viewport）→ 对准用户视口；有当前纸 → 铺在它正下方。
+   *
+   * 叠纸（2026-09-01 刀 3）多出一档 `stack`：新纸跟当前那一摞占同一块地。
+   * ⚠️ **缺省仍然是 next**，要等前端会藏页之后才翻案 —— 现在就把默认改成叠，
+   * 屏幕上就是几页字压在一起（纸不渲染，内容按世界坐标画）。
+   *
+   * `stack` 入参点名铺到哪一摞：那一摞还没有纸就在最右边另起一摞（摞横向排开）。
+   */
+  const stackName = stack || null;
   const mode = where || (cur ? 'next' : 'viewport');
   // 翻页裁纸（刀② 2026-08-30）：纸固定一屏高、下一张贴满高矩形正下方，上一张
   // 只用了一半时内容之间就是几百像素的空白（proj_mtfpehm3 实测 268~557px，
@@ -137,12 +148,18 @@ export async function openSheetFor(projectId, {
   // 铺纸尽量不压散件。⛔ 不含文件夹/卷卡这类常驻家具：纸不渲染，纸矩形盖住文件夹
   // 用户什么也看不见，而纸内落位照样会避开它 —— 算进来只会把第一张纸推离用户视口。
   const obstacles = obstaclesIn(board, '', { furniture: false });
-  const rect = allocateSheetRect({
-    board, size,
-    viewport: mode === 'viewport' && vp?.camera && !vp.layer ? vp.camera : null,
-    nearSheet: mode === 'next' && cur ? cur.id : null,
-    obstacles,
-  });
+  // 叠这一档不搜位置：抄这一摞的原点就是"叠在一起"的全部含义
+  const wantStack = (mode === 'stack' || stackName)
+    ? (stackName || (cur ? stackOfSheet(board, cur.id) : null))
+    : null;
+  const rect = wantStack
+    ? (stackSheetRect(board, wantStack, size) || nextStackRect(board, size))
+    : allocateSheetRect({
+      board, size,
+      viewport: mode === 'viewport' && vp?.camera && !vp.layer ? vp.camera : null,
+      nearSheet: mode === 'next' && cur ? cur.id : null,
+      obstacles,
+    });
   const id = (name && TAG_RE.test(name) && !board.sheets?.[name]) ? name : nextSheetName(board);
   const inner0 = innerRect({ x: rect.x, y: rect.y, w: rect.w, h: rect.h });
   const { slots, clampedSlots } = clampPlan(plan, inner0);
@@ -150,8 +167,22 @@ export async function openSheetFor(projectId, {
     x: rect.x, y: rect.y, w: rect.w, h: rect.h,
     by, at: new Date().toISOString(), ...(title ? { title } : {}),
     ...(Object.keys(slots).length ? { slots } : {}),
+    ...(wantStack ? { stack: wantStack } : {}),
   };
-  await patchBoard(projectId, { sheets: { [id]: entry } });
+  await patchBoard(projectId, {
+    sheets: { [id]: entry },
+    /**
+     * 摞的登记表只记身份（标题、产物地）；几何长在纸上，见 lib/board-stacks.js。
+     *
+     * ⛔ **标题只在真的另起一摞时才写**（`stack-new`）。叠上去那一档如果也写，
+     * 新一页的标题会盖掉整摞的名字 —— 第一版就这么干的，demo 里一摞叫「第一拍
+     * 码头」的纸，叠了第二页之后整摞变成「第二拍 灯塔」。一摞的名字讲的是这一摞
+     * 是什么，不是最上面那一页是什么。
+     */
+    ...(wantStack && !board.stacks?.[wantStack]
+      ? { stacks: { [wantStack]: { by, at: entry.at, ...(title && rect.basis === 'stack-new' ? { title } : {}) } } }
+      : {}),
+  });
   /**
    * 铺完纸重算一次暂存架的原点（2026-08-31）。
    *
@@ -185,7 +216,7 @@ export async function openSheetFor(projectId, {
         .map(([nm]) => nm),
     }));
   return {
-    id, ...entry, innerW: inner.w, innerH: inner.h,
+    id, ...entry, stack: wantStack, innerW: inner.w, innerH: inner.h,
     basis: rect.basis, overlapsLoose: rect.overlapsLoose, clampedSlots, occupants, trimmed,
     prevFree, prevId,
     // 纸缝：这张纸的顶边离上一张**内容底部**多远（用户眼里那条横穿版面的空白带）
@@ -207,8 +238,10 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
   return tool('open_sheet', DESCRIPTION, {
     title: z.string().max(60).optional().describe('What this sheet is about (for read_board / your own map, e.g. 第二章 — sheets are invisible to the user)'),
     name: z.string().regex(TAG_RE).optional().describe('Sheet name to refer to it later (ASCII like act2; default auto p1/p2/…)'),
-    where: z.enum(['next', 'viewport']).optional()
-      .describe("next = below the current sheet (default when sheets exist); viewport = right where the user is looking now (default for the first sheet — also use it to bring work back to the user's eyes)"),
+    where: z.enum(['next', 'viewport', 'stack']).optional()
+      .describe("next = below the current sheet (default when sheets exist); viewport = right where the user is looking now (default for the first sheet — also use it to bring work back to the user's eyes); stack = ON TOP OF the current sheet, same ground (the reader flips to it instead of scrolling down)"),
+    stack: z.string().regex(TAG_RE).optional()
+      .describe('Put this sheet on a NAMED PILE (ASCII like main/state). Sheets on one pile share the same ground and the reader flips through them; a name with no pile yet starts a new pile to the RIGHT of the existing ones. Use a second pile for something that must stay reachable while you write elsewhere, e.g. a status table.'),
     plan: z.array(SLOT).max(24).optional()
       .describe('PLAN THE WHOLE PAGE HERE, before writing anything: carve the sheet into named blocks (slots) and say what goes in each. Then write_on_board{slot:"main"} drops content into that block. A sheet is WIDE (landscape) — a single column down the left wastes most of it; think in columns and rows.'),
   }, async (args, extra) => {
@@ -216,7 +249,7 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
     const by = byOf(extra);
     const s = await openSheetFor(projectId, {
       sessionId, by, title: args.title || null, name: args.name || null, where: args.where || null,
-      plan: args.plan || null,
+      plan: args.plan || null, stack: args.stack || null,
     });
     try {
       ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `铺了一张纸 ${s.id}` });
@@ -247,7 +280,13 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
     } else {
       lines.push(`No slots planned. Plan the page in one go — open_sheet{plan:[{slot,at,w,h,about}…]} — instead of writing one note at a time and hoping it lands well. This sheet takes ${cols} columns side by side; a single column down the left leaves ${Math.round((1 - 1 / cols) * 100)}% of it empty.`);
     }
-    lines.push(s.basis === 'viewport' ? 'Opened under the user’s current view.' : (s.basis === 'below-sheet' ? 'Stacked below the current sheet.' : 'Placed below existing content.'));
+    const BASIS_LINE = {
+      viewport: 'Opened under the user’s current view.',
+      'below-sheet': 'Stacked below the current sheet.',
+      stack: `Laid ON TOP of pile "${s.stack}" — same ground as the sheet(s) under it. The reader flips to this page instead of scrolling; the pages below stay where they are and are not covered.`,
+      'stack-new': `Started a new pile "${s.stack}" to the right of the existing ones. Left/right moves between piles, up/down flips through this one.`,
+    };
+    lines.push(BASIS_LINE[s.basis] || 'Placed below existing content.');
     /**
      * 纸缝 + 翻页代价，报在决策点上（2026-08-31，agent 自己报的 iss_mthb9nef）。
      * 它看得见纸内余量，看不见两张纸之间那条空白带 —— 而用户看到的就是那条带。

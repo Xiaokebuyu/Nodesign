@@ -136,6 +136,58 @@ describe('sheets 注册表（2026-08-29 纸范式）：合并语义同 lanes', (
   });
 
 
+  /**
+   * 叠纸刀 0（2026-09-01）的三个新字段各配一条「过两遍不掉」—— 理由同上面那条 slots：
+   * sanitize 是白名单重建，漏登记就静默丢，而丢了的表现是"翻页翻到一张空纸"，不报错。
+   */
+  it('⭐ 叠纸三件套过两遍不掉：sheet.stack / object.sheet / stacks 表', async () => {
+    const sp4 = 'proj_boardstore_stacks';
+    await patchBoard(sp4, {
+      sheets: { p1: { x: 0, y: 0, w: 2000, h: 900, at: '2026-09-01T01:00:00Z', stack: 'main' } },
+      stacks: { main: { at: '2026-09-01T01:00:00Z', by: 'agent', title: '主线', artifacts: { x: 1500, y: 0, w: 400, h: 800 } } },
+      objects: { 'notes/板书/a.md': { x: 10, y: 20, sheet: 'p1' } },
+    });
+    const b1 = await readBoard(sp4);
+    expect(b1.sheets.p1.stack).toBe('main');
+    expect(b1.stacks.main).toMatchObject({ title: '主线', by: 'agent', artifacts: { x: 1500, y: 0, w: 400, h: 800 } });
+    expect(b1.objects['notes/板书/a.md'].sheet).toBe('p1');
+    // 第二遍读写（readBoard→writeBoard 全走 sanitize）
+    await patchBoard(sp4, { objects: { 'notes/板书/b.md': { x: 0, y: 0 } } });
+    const b2 = await readBoard(sp4);
+    expect(b2.sheets.p1.stack).toBe('main');
+    expect(b2.stacks.main.artifacts).toEqual({ x: 1500, y: 0, w: 400, h: 800 });
+    expect(b2.objects['notes/板书/a.md'].sheet).toBe('p1');
+  });
+
+  it('栈：瘦 patch 合并不抹字段；null 撤登记而成员纸不动；删空后整个键消失', async () => {
+    const sp5 = 'proj_boardstore_stacks2';
+    await patchBoard(sp5, {
+      sheets: { p1: { x: 24, y: 24, w: 800, h: 600, stack: 'main' } },
+      stacks: { main: { title: '主线', artifacts: { x: 500, y: 0, w: 200, h: 400 } } },
+    });
+    await patchBoard(sp5, { stacks: { main: { title: '第一幕' } } });
+    let b = await readBoard(sp5);
+    expect(b.stacks.main).toMatchObject({ title: '第一幕', artifacts: { x: 500, y: 0, w: 200, h: 400 } });
+    await patchBoard(sp5, { stacks: { main: null } });
+    b = await readBoard(sp5);
+    expect(b.stacks).toBeUndefined();
+    // 撤掉登记不动成员：纸还在原地，只是退回自己单独一摞
+    expect(b.sheets.p1).toMatchObject({ x: 24, y: 24, stack: 'main' });
+  });
+
+  it('产物地太小的丢掉（放不下一行字的不算一块地）；坏摞名不炸整个 patch', async () => {
+    const sp6 = 'proj_boardstore_stacks3';
+    await patchBoard(sp6, { stacks: {
+      ok: { artifacts: { x: 0, y: 0, w: 200, h: 100 } },
+      tiny: { artifacts: { x: 0, y: 0, w: 10, h: 10 } },
+      'bad name!': { title: '不该收' },
+    } });
+    const b = await readBoard(sp6);
+    expect(b.stacks.ok.artifacts).toEqual({ x: 0, y: 0, w: 200, h: 100 });
+    expect(b.stacks.tiny.artifacts).toBeUndefined();
+    expect(b.stacks['bad name!']).toBeUndefined();
+  });
+
   it('坏名静默丢弃，不炸整个 patch', async () => {
     await patchBoard(sp, { sheets: { 'bad name!!': { x: 0, y: 0 }, p9: { x: 10, y: 10 } } });
     const b = await readBoard(sp);

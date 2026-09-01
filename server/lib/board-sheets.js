@@ -76,8 +76,18 @@ export function nextSheetName(board) {
   return `p${max + 1}`;
 }
 
-/** 点落在哪张纸上（重叠时取登记时间最新的 —— 正常分配不产生重叠，这是兜底） */
-export function sheetOfPoint(board, pt) {
+/**
+ * 点落在哪张纸上。
+ *
+ * @param {string|null} [own]  这个点上那件东西自己认领的纸（`objects[id].sheet`）。
+ *   叠纸之后一个点会同时落在一摞里的每一张纸上（2026-09-01），几何分不出来 ——
+ *   它自己说了算。说的那张不在板上或者压根没盖住这个点，才退回几何。
+ *   退回时取**登记时间最新**的那张（一摞的顶上那张），跟 latestSheetId 同口径。
+ */
+export function sheetOfPoint(board, pt, own = null) {
+  if (own && board?.sheets?.[own] && pointIn(pt, { id: own, ...board.sheets[own] })) {
+    return { id: own, ...board.sheets[own] };
+  }
   let hit = null;
   for (const s of sheetRects(board)) {
     if (!pointIn(pt, s)) continue;
@@ -87,19 +97,45 @@ export function sheetOfPoint(board, pt) {
 }
 
 /**
- * 一张纸的成员（几何派生：物件中心在纸内；staging 也算 —— 草稿也占纸面）。
- * 文件夹卡（zones）也是成员：它实打实占着那块地，往下接排必须从它底下起
- * （2026-08-29 占位契约刀 A —— 在这之前它对落位系统整个是隐形的）。
+ * 归属判据（2026-09-01 叠纸刀 1）：**几何仍然是闸，`sheet` 字段只在同一块地上
+ * 有好几张纸时用来消歧**。
+ *
+ *   成员 = 中心点落在这张纸的矩形里 且（没有 sheet 字段 或 sheet 字段就是这张纸）
+ *
+ * 两个性质同时保住，这是选这个形状而不是"显式登记整个取代几何"的全部理由：
+ *
+ * - **用户的手照旧说了算。** 把卡拖出纸外，几何当场判它不再是成员，不需要谁去
+ *   改字段（08-29 纲领：纸约束 agent，不约束人）。改成纯显式登记的话，"拖出去了
+ *   但登记还挂在这张纸上"会变成一个吃着版面余量的幽灵。
+ * - **叠起来的纸分得开。** 一摞纸共用一块地，几何对它们的答案完全一样；`sheet`
+ *   字段就是用来分这一下的。没有它，在第二页写第一笔时第一页的全部内容都会被
+ *   算成障碍，第一发就报"纸满"。
+ *
+ * ⚠️ **没有 sheet 字段的东西算每一页的成员**（用户拖进来的散件、文件夹卡）——
+ * 它们不参与叠放、一直画在那儿，所以每一页都得绕开它们。这跟渲染层是同一条
+ * 判据：藏起来的只有认领了纸的墨。
+ */
+export function claimedBy(e, sheetId) {
+  const own = e?.sheet;
+  return !own || own === sheetId;
+}
+
+/**
+ * 一张纸的成员。文件夹卡（zones）也是成员：它实打实占着那块地，往下接排必须
+ * 从它底下起（2026-08-29 占位契约刀 A —— 在这之前它对落位系统整个是隐形的）。
+ * staging 也算 —— 草稿也占纸面。
  */
 export function sheetMembers(board, sheetId) {
   const s = board?.sheets?.[sheetId];
   if (!s) return [];
   const out = [];
   for (const [id, e] of rootObjects(board)) {
+    if (!claimedBy(e, sheetId)) continue;
     const sz = estimateSizeOn(board, id, e);
     const c = { x: e.x + sz.w / 2, y: e.y + sz.h / 2 };
     if (pointIn(c, s)) out.push({ id, x: e.x, y: e.y, w: sz.w, h: sz.h, entry: e });
   }
+  // 文件夹卡不认领纸（它不参与叠放），所以每一页都要绕开它
   for (const z of zoneRects(board)) {
     const c = { x: z.x + z.w / 2, y: z.y + z.h / 2 };
     if (pointIn(c, s)) out.push({ id: z.id, x: z.x, y: z.y, w: z.w, h: z.h, entry: null, folder: true });
@@ -163,6 +199,42 @@ export function currentSheet(board, preferred = null) {
  *
  * @returns {{x,y,w,h, basis:'viewport'|'below-sheet'|'below-content', overlapsLoose:boolean}}
  */
+/**
+ * 叠一张：新纸跟这一摞现有的纸占同一块地（2026-09-01 叠纸刀 3）。
+ *
+ * 位置直接抄这一摞的原点 —— 「叠在一起」就是这个意思，这儿没有可搜索的东西。
+ * 尺寸仍按此刻的设备档走（人换了机器，新的一页该按新机器铺），所以同一摞里
+ * 各页的宽高可以不同；不变量只管 x/y。
+ *
+ * @returns {{x,y,w,h,basis:'stack',overlapsLoose:false}|null} 摞里一张纸都没有时 null
+ */
+export function stackSheetRect(board, stackName, size) {
+  const members = Object.entries(board?.sheets || {})
+    .filter(([id, s]) => (s.stack || id) === stackName && Number.isFinite(s?.x))
+    .sort(([, a], [, b]) => String(a.at || '').localeCompare(String(b.at || '')));
+  if (!members.length) return null;
+  const [, head] = members[0];
+  return {
+    x: head.x, y: head.y,
+    w: Math.max(240, Math.round(size?.w || head.w)),
+    h: Math.max(240, Math.round(size?.h || head.h)),
+    basis: 'stack', overlapsLoose: false,
+  };
+}
+
+/**
+ * 另起一摞，铺在最右边那一摞的右边（2026-09-01 叠纸刀 3）。
+ * 摞是横向排开的 —— 左右换摞、上下翻页，两条轴各管一件事。
+ */
+export function nextStackRect(board, size) {
+  const sheets = sheetRects(board);
+  const sz = { w: Math.max(240, Math.round(size?.w || ONE_SCREEN.w)), h: Math.max(240, Math.round(size?.h || ONE_SCREEN.h)) };
+  if (!sheets.length) return { x: 0, y: 0, ...sz, basis: 'stack-new', overlapsLoose: false };
+  const right = Math.max(...sheets.map((s) => s.x + s.w));
+  const top = Math.min(...sheets.map((s) => s.y));
+  return { x: snap(right) + SHEET_GAP, y: snap(top), ...sz, basis: 'stack-new', overlapsLoose: false };
+}
+
 export function allocateSheetRect({ board, size, viewport = null, nearSheet = null, obstacles = [] }) {
   const sz = { w: Math.max(240, Math.round(size?.w || ONE_SCREEN.w)), h: Math.max(240, Math.round(size?.h || ONE_SCREEN.h)) };
   const sheets = sheetRects(board);
@@ -298,11 +370,19 @@ export function slotRectOf(sheet, name, margin = SHEET_MARGIN) {
   };
 }
 
-/** 落在某块地里的物件（中心点判据，同 sheetMembers；只数根层 —— 版位在纸上，
- *  纸在根层。顶层文件夹卡真占着地也算成员：它就摆在那儿）。 */
-export function membersInRect(board, rect) {
+/**
+ * 落在某块地里的物件（中心点判据，同 sheetMembers；只数根层 —— 版位在纸上，
+ * 纸在根层。顶层文件夹卡真占着地也算成员：它就摆在那儿）。
+ *
+ * @param {string|null} [sheetId] 这块地属于哪张纸。**叠纸之后必须传**（2026-09-01）：
+ *   一摞纸共用一块地，不传的话在第二页的版位里算余量会把第一页的内容也数进去，
+ *   报出来的"剩几行"是错的，而错的方向是偏少 —— agent 会以为满了去开新纸。
+ *   不传等于"这块地不属于任何一张纸"，只对不叠的板成立（存量全是那样）。
+ */
+export function membersInRect(board, rect, sheetId = null) {
   const out = [];
   for (const [id, e] of rootObjects(board)) {
+    if (sheetId && !claimedBy(e, sheetId)) continue;
     const sz = estimateSizeOn(board, id, e);
     const c = { x: e.x + sz.w / 2, y: e.y + sz.h / 2 };
     if (pointIn(c, rect)) out.push({ id, x: e.x, y: e.y, w: sz.w, h: sz.h });
@@ -320,8 +400,8 @@ export function membersInRect(board, rect) {
  *
  * @returns {{x,y}|{full:true, freeH:number, needH:number}}
  */
-export function nextSpotInSlot(board, rect, box, { gap = UNIT } = {}) {
-  const members = membersInRect(board, rect);
+export function nextSpotInSlot(board, rect, box, { gap = UNIT, sheetId = null } = {}) {
+  const members = membersInRect(board, rect, sheetId);
   const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : rect.y - gap;
   const y = Math.round(bottom + gap);
   const freeH = Math.max(0, Math.round(rect.y + rect.h - y));
@@ -403,8 +483,10 @@ export function placeAtOnSheet(s, at, box) {
  * 只往下 —— 读序即方向。落点出了所在纸的版心底 → 报 sheetFull（调用方翻纸）。
  * 纸外（文件夹层/散地）没有纸界，滑到空为止。
  */
-export function placeThread(board, replyRect, box, { obstacles = [], gap = UNIT } = {}) {
-  const sheet = sheetOfPoint(board, { x: replyRect.x + replyRect.w / 2, y: replyRect.y + replyRect.h / 2 });
+export function placeThread(board, replyRect, box, { obstacles = [], gap = UNIT, own = null } = {}) {
+  // own = 被回应那条自己认领的纸。一摞纸叠在一起时，"接在它下面"接的是**它那一页**，
+  // 不是这块地上最新的那一页（2026-09-01 叠纸刀 1）
+  const sheet = sheetOfPoint(board, { x: replyRect.x + replyRect.w / 2, y: replyRect.y + replyRect.h / 2 }, own);
   const floor = sheet ? innerRect(sheet).y + innerRect(sheet).h : Infinity;
   const x = Math.round(replyRect.x);
   let y = replyRect.y + replyRect.h + gap;

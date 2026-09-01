@@ -182,7 +182,9 @@ export async function seatArtifacts(projectId, rels) {
         const named = Object.entries(cur.slots || {}).find(([, sl]) => sl.for === 'artifacts');
         if (named) {
           const r = slotRectOf(cur, named[0]);
-          const spot = r ? nextSpotInSlot(liveBoard, r, box) : { full: true };
+          // 余量按这张纸算（2026-09-01 叠纸刀 1）：一摞纸共用一块地。到货的是
+          // 产物，跟 pin_to_board 同口径 —— 不认领页，所以每一页都得绕开它
+          const spot = r ? nextSpotInSlot(liveBoard, r, box, { sheetId: cur.id }) : { full: true };
           if (!spot.full) { placed = spot; inSlot = named[0]; }
         }
       }
