@@ -44,6 +44,28 @@ const PROBE = `(async () => {
   q('[data-stack-pager="index"]')?.click();
   await nap(300);
   out.index = [...document.querySelectorAll('[data-board-index="page"]')].map((b) => b.textContent.trim());
+  // 册（2026-09-01）：版式画得出来吗、拖得动吗
+  out.guides = [...document.querySelectorAll('[data-slot-guide]')].map((e) => e.getAttribute('data-slot-guide'));
+  const g = document.querySelector('[data-slot-guide="main"]');
+  const h = document.querySelector('[data-slot-handle="main:y"]');
+  if (g && h) {
+    out.slotH0 = g.style.height;
+    const r = h.getBoundingClientRect();
+    // 先问「真指针点那儿会打到谁」：直接往元素上派事件绕过了命中测试，
+    // 第一版判据就栽在这上面 —— 把命中带改成 pointerEvents:none（等于整个不可改）
+    // 之后测试照样绿。elementFromPoint 走浏览器真正那套命中，z 序也算数。
+    // ⚠️ 这段注释在模板串里，别写反引号（写了整个文件当场炸，这仓库栽过两次）。
+    const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    out.hitHandle = hit?.getAttribute?.('data-slot-handle') || null;
+    const opt = (x, y) => ({ bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 0, clientX: x, clientY: y });
+    h.dispatchEvent(new PointerEvent('pointerdown', opt(r.x + 2, r.y + 2)));
+    await nap(60);
+    h.dispatchEvent(new PointerEvent('pointermove', opt(r.x + 2, r.y + 2 + 150)));
+    await nap(60);
+    out.slotH1 = document.querySelector('[data-slot-guide="main"]').style.height;
+    h.dispatchEvent(new PointerEvent('pointerup', opt(r.x + 2, r.y + 2 + 150)));
+    await nap(150);
+  }
   return JSON.stringify(out);
 })()`;
 
@@ -62,6 +84,10 @@ const checks = [
   ['④ 滑完旧页走了', p.after.B === false, p.after],
   ['⑤ 翻页器读数对', /1\/2$/.test(p.pager || ''), p.pager],
   ['⑥ 目录列得出叠起来那两页', p.index.some((r) => r.includes('叠·第一页')) && p.index.some((r) => r.includes('叠·第二页')), p.index],
+  // 册：版式长在摞上，两页都不带自己的 slots，所以画出来的是继承来的那一份
+  ['⑦ 摞的版式画得出来（继承，两页都没自己声明）', p.guides.includes('main') && p.guides.includes('aside'), p.guides],
+  ['⑧ 命中带真的接得到指针（不是只有 handler 挂着）', !!p.hitHandle, p.hitHandle],
+  ['⑨ 拖得动（拖完高度真变了）', !!p.slotH1 && p.slotH1 !== p.slotH0, [p.slotH0, p.slotH1]],
 ];
 let bad = 0;
 for (const [name, ok, detail] of checks) {

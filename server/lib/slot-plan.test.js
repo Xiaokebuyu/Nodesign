@@ -45,15 +45,21 @@ describe('open_sheet 的版面规划', () => {
     });
     expect(r.isError).toBeUndefined();
     const txt = r.content[0].text;
-    expect(txt).toMatch(/Planned 2 slots covering \d+%/);
+    // 2026-09-01 册：plan 落在**摞**上（这一摞还没有版式时），报文跟着说清楚
+    expect(txt).toMatch(/Planned 2 slots — saved as the LAYOUT OF PILE/);
+    expect(txt).toMatch(/cover \d+% of the sheet/);
     expect(txt).toMatch(/main（正文）/);
     expect(txt).toMatch(/CJK chars/);
     const board = await readBoard(pid);
-    expect(board.sheets.p1.slots.main).toMatchObject({ x: 0, y: 0, w: 432, h: 600, about: '正文' });
+    // 版式长在摞上了（p1 没登记过 stack，隐式摞名就是纸名）
+    expect(board.stacks.p1.slots.main).toMatchObject({ x: 0, y: 0, w: 432, h: 600, about: '正文' });
+    expect(board.sheets.p1.slots, '这一页没有自己的覆盖').toBeUndefined();
   });
 
   it('⭐ 没规划时点破浪费：一张横纸只写一栏会空掉大半', async () => {
-    const r = await open1({ title: '没规划' });
+    // ⚠️ 2026-09-01 册：得在**没有版式的摞**上开，否则会继承上一摞的版式 ——
+    // 那正是这一批想要的行为，但这条钉的是"真的什么都没规划"那一档
+    const r = await open1({ title: '没规划', stack: 'bare' });
     expect(r.content[0].text).toMatch(/No slots planned/);
     expect(r.content[0].text).toMatch(/columns side by side/);
   });

@@ -17,7 +17,7 @@
 import { readBoard, patchBoard } from '../projects/board-store.js';
 import { estimateSizeOn } from './board-kind-sizes.js';
 import { layerOf } from './canvas-id.js';
-import { placeBeside } from './board-sheets.js';
+import { placeBeside } from './board-place.js';
 import { UNIT } from './rect.js';
 
 /**

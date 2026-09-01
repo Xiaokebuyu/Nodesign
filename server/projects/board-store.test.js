@@ -159,6 +159,43 @@ describe('sheets 注册表（2026-08-29 纸范式）：合并语义同 lanes', (
     expect(b2.objects['notes/板书/a.md'].sheet).toBe('p1');
   });
 
+  /**
+   * 册（2026-09-01）：版式长在摞上、纸只存覆盖。两个新字段各配一条「过两遍不掉」——
+   * 理由同上面那条 slots：白名单重建漏登记就静默丢，而丢了的表现是「翻一页版面
+   * 全空了」，不报错。
+   */
+  it('⭐ stacks[].slots 过两遍不掉，且 slot 的 by:user 章留得住', async () => {
+    const sp9 = 'proj_boardstore_booklet';
+    await patchBoard(sp9, {
+      sheets: { p1: { x: 0, y: 0, w: 2000, h: 900, stack: 'main' } },
+      stacks: { main: { slots: {
+        main: { x: 0, y: 0, w: 600, h: 500, about: '正文' },
+        aside: { x: 620, y: 0, w: 300, h: 500, by: 'user' },
+        bad: { x: 0, y: 0, w: 10, h: 10 },              // 太小，该被丢掉
+      } } },
+    });
+    const b1 = await readBoard(sp9);
+    expect(Object.keys(b1.stacks.main.slots).sort()).toEqual(['aside', 'main']);
+    expect(b1.stacks.main.slots.aside.by, '用户亲手调过的章').toBe('user');
+    expect(b1.stacks.main.slots.main.about).toBe('正文');
+    // 第二遍读写
+    await patchBoard(sp9, { sheets: { p1: { title: '第一页' } } });
+    const b2 = await readBoard(sp9);
+    expect(b2.stacks.main.slots.aside.by).toBe('user');
+    expect(b2.stacks.main.slots.main).toEqual({ x: 0, y: 0, w: 600, h: 500, about: '正文' });
+  });
+
+  it('slot 的 by 只收 user，别的值一律丢（模型盖不出这个章）', async () => {
+    const sp10 = 'proj_boardstore_slotby';
+    await patchBoard(sp10, { stacks: { s: { slots: {
+      a: { x: 0, y: 0, w: 200, h: 100, by: 'user' },
+      b: { x: 0, y: 0, w: 200, h: 100, by: 'agent' },
+    } } } });
+    const b = await readBoard(sp10);
+    expect(b.stacks.s.slots.a.by).toBe('user');
+    expect(b.stacks.s.slots.b.by).toBeUndefined();
+  });
+
   it('⭐ sheet.sid 过两遍不掉（目录靠它跳回那一轮对话）', async () => {
     const sp8 = 'proj_boardstore_sid';
     await patchBoard(sp8, { sheets: { p1: { x: 0, y: 0, w: 800, h: 600, sid: 'sess-abc-123' } } });

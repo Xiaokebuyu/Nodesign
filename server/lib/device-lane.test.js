@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 import { setViewpoint, getViewpoint, describeDevice, _resetViewpoints } from '../projects/viewpoint-store.js';
 import { fitFor, SKETCH_FIT, resolveTemplate, layoutNodes, textBox, UNIT } from './sketch-layout.js';
-import { placeThread, nextSpotInSheet } from './board-sheets.js';
+import { nextSpotInSheet } from './board-sheets.js';
+import { placeThread } from './board-place.js';
 
 const vpOf = (device) => ({
   camera: { x: 0, y: 0, w: 1600, h: 950 }, zoom: 1, ...(device ? { device } : {}),

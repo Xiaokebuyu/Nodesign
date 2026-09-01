@@ -52,9 +52,8 @@ import { getSharedDir } from '../../projects/workspace.js';
 import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
 import { obstaclesIn } from '../../lib/board-obstacles.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
-import {
-  currentSheet, placeThread, placeBeside, slotRectOf, nextSpotInSlot,
-} from '../../lib/board-sheets.js';
+import { currentSheet, slotRectOf, nextSpotInSlot } from '../../lib/board-sheets.js';
+import { placeThread, placeBeside } from '../../lib/board-place.js';
 import { resolveShelfOrigin, nextShelfSpot, FOLDER_BOX } from '../../lib/board-shelf.js';
 import { textBox } from '../../lib/sketch-layout.js';
 import { getViewpoint } from '../../projects/viewpoint-store.js';

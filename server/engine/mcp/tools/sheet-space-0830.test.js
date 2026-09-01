@@ -17,6 +17,13 @@ const { makeOpenSheetTool } = await import('./open-sheet.js');
 const { makeWriteOnBoardTool } = await import('./write-on-board.js');
 const { makeEditBoardTool } = await import('./edit-board.js');
 const { readBoard, patchBoard } = await import('../../../projects/board-store.js');
+const { slotsOf } = await import('../../../lib/board-sheets.js');
+/**
+ * 2026-09-01 册：版式有两层了（摞的默认 + 这一页的覆盖），直接读
+ * `sheets[id].slots` 只看得见后者。这些断言要的一直是**此刻生效的那一份**，
+ * 所以统一走 slotsOf —— 换的是读的门，不是断言本身。
+ */
+const liveSlots = (b, i = 0) => slotsOf(b, Object.keys(b.sheets)[i]);
 const { getSharedDir, ensureProjectWorkspace } = await import('../../../projects/workspace.js');
 const { setViewpoint, _resetViewpoints } = await import('../../../projects/viewpoint-store.js');
 const { _resetSheetState } = await import('../../../lib/sheet-state.js');
@@ -84,7 +91,7 @@ describe('刀⑧ h 占位 + replan', () => {
     const r = await t.edit({ ops: [{ op: 'replan', plan: [{ slot: 'aside', at: { x: 640, y: 0 }, w: 360, h: 560 }] }] });
     expect(r.content[0].text).toMatch(/replan/);
     const b = await readBoard('proj_sp_replan');
-    const slots = Object.values(b.sheets)[0].slots;
+    const slots = liveSlots(b);
     expect(Object.keys(slots).sort()).toEqual(['aside', 'main']);   // 旧的保留
     expect(slots.aside.h).toBe(560);
     const w = await t.write({ slot: 'aside', text: '状态表进新家。' });
@@ -159,7 +166,7 @@ describe('空位竖排糖（2026-08-30 用户拍板「自己定几个空位分�
       { slot: 'aside', below: 's1', at: { x: 640 }, w: 360, h: 400 },  // 点名接 s1，x 自己给
     ] });
     const b = await readBoard('proj_sp_stack');
-    const sl = Object.values(b.sheets)[0].slots;
+    const sl = liveSlots(b);
     expect(sl.s1).toMatchObject({ x: 0, y: 0 });
     expect(sl.s2).toMatchObject({ x: 0, y: 340 + 24 });
     expect(sl.aside).toMatchObject({ x: 640, y: 340 + 24 });
@@ -176,7 +183,7 @@ describe('空位竖排糖（2026-08-30 用户拍板「自己定几个空位分�
     await t.open({ title: '补地', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 300 }] });
     await t.edit({ ops: [{ op: 'replan', plan: [{ slot: 'more', below: 'main', w: 600, h: 240 }] }] });
     const b = await readBoard('proj_sp_stack2');
-    expect(Object.values(b.sheets)[0].slots.more).toMatchObject({ x: 0, y: 324 });
+    expect(liveSlots(b).more).toMatchObject({ x: 0, y: 324 });
   });
 
   it('⭐ replan 点名已有版位、省坐标 = 原地改尺寸（glm 真案：此前被竖排糖传送到 (0,0) 跟 main 叠上）', async () => {
@@ -187,7 +194,7 @@ describe('空位竖排糖（2026-08-30 用户拍板「自己定几个空位分�
       { slot: 'state', at: { x: 640, y: 120 }, w: 360, h: 240, about: '状态板' },
     ] });
     await t.edit({ ops: [{ op: 'replan', plan: [{ slot: 'state', w: 360, h: 500 }] }] });
-    const sl = Object.values((await readBoard('proj_sp_resize')).sheets)[0].slots;
+    const sl = liveSlots(await readBoard('proj_sp_resize'));
     expect(sl.state).toMatchObject({ x: 640, y: 120, h: 500 });   // 位置没动，只长高
     expect(sl.state.about).toBe('状态板');                          // 旧 about 不丢
     expect(sl.main).toMatchObject({ x: 0, y: 0, h: 700 });

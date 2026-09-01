@@ -12,9 +12,10 @@
  */
 
 import {
-  currentSheet, toLocal, placeAtOnSheet, placeThread, placeBeside,
-  nextSpotInSheet, overlapIds, sheetOfPoint, slotRectOf, nextSpotInSlot, innerRect,
+  currentSheet, toLocal,
+  nextSpotInSheet, overlapIds, sheetOfPoint, slotRectOf, nextSpotInSlot, innerRect, resolveSheet,
 } from '../../../lib/board-sheets.js';
+import { placeAtOnSheet, placeThread, placeBeside } from '../../../lib/board-place.js';
 import { capacityOf } from '../../../lib/sketch-layout.js';
 import { currentSheetIdOf, setCurrentSheetId } from '../../../lib/sheet-state.js';
 import { UNIT } from '../../../lib/rect.js';
@@ -34,9 +35,10 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
    */
   const resolveSlot = (b, { slotName, sheetName }) => {
     const sheets = b.sheets || {};
+    // 版式合好的那一份（摞的 + 这一页的）—— resolveSheet 是唯一的合并口
     const sheet = (sheetName && sheets[sheetName])
-      ? { id: sheetName, ...sheets[sheetName] }
-      : currentSheet({ sheets }, currentSheetIdOf(sessionId));
+      ? resolveSheet(b, sheetName)
+      : currentSheet(b, currentSheetIdOf(sessionId));
     if (!sheet) {
       return { error: 'no-sheet', message: 'No sheet yet — open_sheet first (plan the page, then write into its slots).' };
     }
@@ -97,7 +99,7 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     let sheets = b.sheets || {};
     let opened = null;
     const pick = () => {
-      if (sheetName && sheets[sheetName]) return { id: sheetName, ...sheets[sheetName] };
+      if (sheetName && sheets[sheetName]) return resolveSheet(b, sheetName);
       return currentSheet({ sheets }, currentSheetIdOf(sessionId));
     };
     /** 铺第一张纸（还一张都没有时）。**不用于翻页** —— 见下方 sheetFull。 */
@@ -240,7 +242,7 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
   const describeSpot = (b, placed) => {
     const bits = [];
     if (placed.sheetId && b.sheets?.[placed.sheetId]) {
-      const s = { id: placed.sheetId, ...b.sheets[placed.sheetId] };
+      const s = resolveSheet(b, placed.sheetId);
       const l = toLocal(s, placed);
       bits.push(`on sheet ${s.id}${s.title ? `（${s.title}）` : ''} at local (${Math.round(l.x)},${Math.round(l.y)})`);
     }

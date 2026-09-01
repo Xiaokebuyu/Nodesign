@@ -30,9 +30,11 @@ describe('open_sheet 叠纸（2026-09-01 刀 3）', () => {
   it('⭐ 叠上去不许改整摞的名字（新一页的标题不是这一摞的标题）', async () => {
     const board = await readBoard(pid);
     const pile = stacksOf(board).find(p => p.sheets.length === 2);
-    // 两页分别叫「第一拍」「第二拍」，整摞该跟着第一页，不是最上面那一页
+    // 两页分别叫「第一拍」「第二拍」，整摞该跟着第一页，不是最上面那一页。
+    // ⚠️ 2026-09-01 册：摞的登记表现在会存标题（第一页那次建摞时写的），所以这条
+    // 从「没存」改成钉**行为**：叠上去那一页的标题不许盖掉整摞的名字。
     expect(pile.title).toBe('第一拍');
-    expect(board.stacks[pile.name]?.title).toBeUndefined();
+    expect(board.stacks[pile.name]?.title, '叠上去不许改摞名').not.toBe('第二拍');
   });
 
   it('⭐ 点名一摞没见过的名字 = 在最右边另起一摞', async () => {

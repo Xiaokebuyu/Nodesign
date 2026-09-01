@@ -338,6 +338,14 @@ export function sanitizeSlot(s) {
     w: Math.round(Math.min(w, 12000)),
     h: Math.round(Math.min(h, 12000)),
     ...(typeof s.about === 'string' && s.about.trim() ? { about: s.about.trim().slice(0, 60) } : {}),
+    /**
+     * 用户亲手调过这一块（2026-09-01 册）。版式画出来给用户看之后他就能拖了，
+     * 而 agent 的 replan 随时会改同一块地 —— 「别跟用户拔河」那条规矩要成立，
+     * 前提是 agent **知道**这一块是他调的。所以留一个章，跟 objects 的
+     * `sized:'user'` 同一个用法：模型盖不出来（白名单只收 'user'），
+     * 它只是让 replan 的报文能说一句「这块是他调的，你改了」。
+     */
+    ...(s.by === 'user' ? { by: 'user' } : {}),
     // 收产物的那块地（2026-08-30 刀 G）：`for:'artifacts'` 一张纸上最多一块。
     // 产物（生成的图、写出来的文件、目录型产物）是 agent 干活的**副产品**，
     // 它没法在写之前一件件点名落位 —— 但它可以提前说「这一页的产物都放这儿」。
@@ -402,6 +410,19 @@ export function sanitizeSheet(s) {
  */
 export function sanitizeStack(s) {
   if (!s || typeof s !== 'object') return null;
+  /**
+   * 这一摞的版式（2026-09-01 册）。跟纸的版位**同一份 sanitizeSlot 同一个上限** ——
+   * 它们是同一种东西，只是挂的层不同：摞的是默认，纸的是这一页的覆盖，
+   * 取纸时按名合并（lib/board-sheets.js 的 slotsOf）。
+   */
+  const slots = {};
+  let slotN = 0;
+  for (const [nm, v] of Object.entries(s?.slots && typeof s.slots === 'object' ? s.slots : {})) {
+    if (slotN >= MAX_SLOTS) break;
+    if (!TAG_RE.test(nm)) continue;
+    const sl = sanitizeSlot(v);
+    if (sl) { slots[nm] = sl; slotN += 1; }
+  }
   const artifacts = s.artifacts && typeof s.artifacts === 'object' ? s.artifacts : null;
   const ax = Number(artifacts?.x); const ay = Number(artifacts?.y);
   const aw = Number(artifacts?.w); const ah = Number(artifacts?.h);
@@ -418,6 +439,7 @@ export function sanitizeStack(s) {
      * 而产物是**不参与叠放**的（这一版栈只叠墨：板书、手写字、涂鸦）。所以这块
      * 地升到栈上，一摞纸共享一块，翻页只换正文，产物原地不动。
      */
+    ...(slotN ? { slots } : {}),
     ...(artOk ? {
       artifacts: {
         x: Math.round(Math.min(Math.max(-12000, ax), 12000)),

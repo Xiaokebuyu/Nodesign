@@ -15,12 +15,13 @@ import { sheetSpotToWorld } from '../../lib/board-geometry.js';
 
 const MAX_TRACKED = 12;
 
-export function useLiveChalkSpots({ sheets, layout, camera, scrollRef }) {
+export function useLiveChalkSpots({ sheets, layout, camera, scrollRef, stacks = null }) {
   const spotsRef = useRef(new Map());
   return (blockId, spot) => {
     const m = spotsRef.current;
     if (!m.has(blockId)) {
-      const real = sheetSpotToWorld(sheets, spot, layout);
+      // stacks：版式可能长在摞上（2026-09-01 册），预览要跟服务端合同一份
+      const real = sheetSpotToWorld(sheets, spot, layout, stacks);
       if (real) {
         // placed = 这是 agent 自己选的位置（不是我们找的空地）：渲染层据此画出
         // "这块地已经定下了"的框。width 是它给的格数（24px 一格）。

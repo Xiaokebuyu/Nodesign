@@ -30,7 +30,8 @@ import { estimateSizeOn, FOLDER_CARD } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/canvas-id.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
-import { placeBeside, placeAtOnSheet, overlapIds, currentSheet, isInk } from '../../../lib/board-sheets.js';
+import { overlapIds, currentSheet, isInk } from '../../../lib/board-sheets.js';
+import { placeBeside } from '../../../lib/board-place.js';
 import { makeEditPlacer } from './edit-board-place.js';
 import { applyUiOp } from './edit-board-ui-ops.js';
 import { applyReplan } from './sheet-replan.js';
@@ -138,6 +139,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
     const liveZones = { ...(board.zones || {}) };
     const zonesPatch = {};
     const sheetsPatch = {};                        // replan：纸的版位增改
+    const stacksPatch = {};                        // replan scope:'stack'：整摞的版式
     const isZone = (id) => Object.prototype.hasOwnProperty.call(liveZones, id);
     const setZone = (id, z) => { liveZones[id] = z; zonesPatch[id] = z; };
     // 落位四件（rectOf / obstaclesNear / placeRel / placeAbs）2026-09-01 迁去
@@ -531,7 +533,9 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           // 补版位/调版位（刀⑧ 2026-08-30，拆件见 sheet-replan.js）
           const r = applyReplan({ board, sheetsPatch, sessionId, op: o });
           if (r.error) { fail(r.error); continue; }
-          sheetsPatch[r.sheetId] = r.entry;
+          // scope:'stack' 改的是整摞的版式（2026-09-01 册），落 stacks 不落 sheets
+          if (r.pile) stacksPatch[r.pile] = { ...(board.stacks?.[r.pile] || {}), slots: r.pileSlots };
+          else sheetsPatch[r.sheetId] = r.entry;
           report.push(r.report);
           ok += 1;
         } else if (o.op === 'show' || o.op === 'chalk_edit' || o.op === 'pin_view') {
@@ -544,11 +548,12 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       } catch (e) { fail(String(e?.message || e).slice(0, 120)); }
     }
     if (!ok) return err(`没有一条操作成功：\n${report.join('\n')}`);
-    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length || Object.keys(sheetsPatch).length || heroPatch !== undefined) {
+    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length || Object.keys(sheetsPatch).length || Object.keys(stacksPatch).length || heroPatch !== undefined) {
       await patchBoard(projectId, {
         objects, bindings,
         ...(Object.keys(zonesPatch).length ? { zones: zonesPatch } : {}),
         ...(Object.keys(sheetsPatch).length ? { sheets: sheetsPatch } : {}),
+        ...(Object.keys(stacksPatch).length ? { stacks: stacksPatch } : {}),
         ...(Object.keys(rolls).length ? { rolls } : {}),
         ...(Object.keys(follows).length ? { follows } : {}),
         ...(heroPatch !== undefined ? { hero: heroPatch } : {}),

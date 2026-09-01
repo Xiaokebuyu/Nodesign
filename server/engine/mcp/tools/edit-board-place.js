@@ -13,7 +13,8 @@ import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { layerOf } from '../../../lib/canvas-id.js';
 import { UNIT } from '../../../lib/sketch-layout.js';
 import { estimateSizeOn, FOLDER_CARD } from '../../../lib/board-kind-sizes.js';
-import { placeBeside, placeAtOnSheet, currentSheet, overlapIds } from '../../../lib/board-sheets.js';
+import { currentSheet, overlapIds, resolveSheet } from '../../../lib/board-sheets.js';
+import { placeBeside, placeAtOnSheet } from '../../../lib/board-place.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 
 export function makeEditPlacer({ board, live, liveZones, known, sessionId, rid, isZone }) {
@@ -46,7 +47,7 @@ export function makeEditPlacer({ board, live, liveZones, known, sessionId, rid, 
   /** 纸内绝对坐标 → 世界（sheet 缺省当前纸；钳进版心，钳了如实报） */
   const placeAbs = (to, box) => {
     const s = to.sheet && board.sheets?.[to.sheet]
-      ? { id: to.sheet, ...board.sheets[to.sheet] }
+      ? resolveSheet(board, to.sheet)
       : currentSheet(board, currentSheetIdOf(sessionId));
     if (!s) return null;
     const p = placeAtOnSheet(s, { x: to.x, y: to.y }, box);

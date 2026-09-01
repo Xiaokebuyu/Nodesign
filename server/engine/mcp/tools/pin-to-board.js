@@ -32,7 +32,8 @@ import { promises as fs } from 'fs';
 import { pinToZone, readBoard, patchBoard } from '../../../projects/board-store.js';
 import { layerOf, bareTag } from '../../../lib/canvas-id.js';
 import { applyFollows } from '../../../lib/board-follow.js';
-import { currentSheet, slotRectOf, nextSpotInSlot, placeAtOnSheet } from '../../../lib/board-sheets.js';
+import { currentSheet, slotRectOf, nextSpotInSlot, resolveSheet } from '../../../lib/board-sheets.js';
+import { placeAtOnSheet } from '../../../lib/board-place.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { cardIdForPath, KIND_PREFIX_RE } from '../../../lib/kinds/index.js';
@@ -141,7 +142,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
          */
         if (slot || at) {
           const sh = (sheet && boardNow.sheets?.[sheet])
-            ? { id: sheet, ...boardNow.sheets[sheet] }
+            ? resolveSheet(boardNow, sheet)
             : currentSheet(boardNow, currentSheetIdOf(sessionId));   // 会话正写的那张优先
           if (!sh) {
             return { content: [{ type: 'text', text: 'No sheet yet — open_sheet first (plan the page, then place things into its blocks).' }], isError: true };

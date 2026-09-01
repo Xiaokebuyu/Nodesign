@@ -29,7 +29,7 @@ const GRANDFATHERED = {
   // annotTargetOf 收进 board-kinds.js（它的形状要跟右键菜单一字不差，抄两份会分叉）
   // 08-31 撤「整理」（tidyBoard 整块 + 四个死 import）：2169 → 2123
   // 09-01 叠纸给物件过滤链加了「翻页藏页」，棘轮拦下 → 整条链迁去 useVisibleObjects：2123 → 2120
-  'web/src/components/canvas/BoardCanvas.jsx': 2082,
+  'web/src/components/canvas/BoardCanvas.jsx': 2025,
   // 08-17 导出重做：顶栏导出动作迁去 canvas/card-export.js 的 exportFromMenu
   'web/src/routes/ProjectWorkspace.jsx': 2407,
   // server/engine/agent/hooks.js 2026-08-14 拆完出表（1975 → 组装层 ~330，走 600 通用上限）

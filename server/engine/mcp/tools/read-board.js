@@ -22,7 +22,7 @@ import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
 import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
-import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot, freeColumnsInSheet, latestSheetId } from '../../../lib/board-sheets.js';
+import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot, freeColumnsInSheet, latestSheetId, resolveSheet } from '../../../lib/board-sheets.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -222,9 +222,10 @@ on the minimap and listed with what is inside it.`,
                 const cells = free.map((f) => `x=${f.x} 剩 ${capacityOf(DEFAULT_CHALK_W, f.freeH).lines} 行`);
                 lines.push(`    空地：${cells.join(' / ')}`);
               }
-              const sheet = board.sheets?.[s.id];
+              // 版式合好的那一份（摞的 + 这一页的）
+              const sheet = resolveSheet(board, s.id);
               for (const [nm, sl] of Object.entries(sheet?.slots || {})) {
-                const r = slotRectOf({ ...sheet, id: s.id }, nm);
+                const r = slotRectOf(sheet, nm);
                 const spot = nextSpotInSlot(board, r, { w: 1, h: 1 });
                 const freeH = spot.full ? 0 : Math.max(0, r.y + r.h - spot.y);
                 const c = capacityOf(r.w, freeH);

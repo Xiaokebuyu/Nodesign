@@ -93,7 +93,7 @@ export function clampPlan(plan, inner0, prevSlots = {}) {
  */
 export async function openSheetFor(projectId, {
   sessionId = null, by = 'agent', title = null, name = null, where = null, plan = null,
-  stack = null, size: wantSize = null,
+  stack = null, size: wantSize = null, scope = null,
 } = {}) {
   const board = await readBoard(projectId);
   const vp = getViewpoint(projectId);
@@ -189,27 +189,54 @@ export async function openSheetFor(projectId, {
   const id = (name && TAG_RE.test(name) && !board.sheets?.[name]) ? name : nextSheetName(board);
   const inner0 = innerRect({ x: rect.x, y: rect.y, w: rect.w, h: rect.h });
   const { slots, clampedSlots } = clampPlan(plan, inner0);
+  /**
+   * 版式落在哪一层（2026-09-01 册）。
+   *
+   * 站主原话：「如果 agent 不在写新的内容时声明，那么就继续沿用之前的布局，
+   * 反之则按照 agent 的要求改动」。落到规则上只有一句：
+   *
+   *   **这一摞还没有版式 → plan 成为这一摞的版式；已经有了 → plan 只改这一页**
+   *   （要改整摞另说 `scope:'stack'`）。
+   *
+   * ⚠️ 「只改这一页」是默认，因为改整摞会**追溯影响已经写好的页** —— 那种事
+   * 不该是默认。摞名对没登记过 stack 的纸就是纸名自己（隐式单张摞），所以第一张
+   * 纸的 plan 也是落在摞上的，后面叠上去就自动继承。
+   */
+  const pileName = wantStack || id;
+  const pileSlots = board.stacks?.[pileName]?.slots || null;
+  const toPile = Object.keys(slots).length > 0 && (!pileSlots || scope === 'stack');
+  const stackPatch = {};
+  if (toPile) {
+    // scope:'stack' 是按名合并（跟 replan 同口径：没点名的原样保留）
+    stackPatch.slots = pileSlots ? { ...pileSlots, ...slots } : slots;
+  }
   const entry = {
     x: rect.x, y: rect.y, w: rect.w, h: rect.h,
     by, at: new Date().toISOString(), ...(title ? { title } : {}),
-    ...(Object.keys(slots).length ? { slots } : {}),
+    ...((!toPile && Object.keys(slots).length) ? { slots } : {}),
     ...(wantStack ? { stack: wantStack } : {}),
     // 哪一轮对话铺的（叠纸刀 8）—— 目录里能从一页跳回当时那段对话
     ...(sessionId ? { sid: String(sessionId).slice(0, 100) } : {}),
   };
+  const newPile = !board.stacks?.[pileName];
   await patchBoard(projectId, {
     sheets: { [id]: entry },
     /**
-     * 摞的登记表只记身份（标题、产物地）；几何长在纸上，见 lib/board-stacks.js。
+     * 摞的登记：身份（标题、产物地）+ **这一摞的版式**（2026-09-01 册）。
      *
-     * ⛔ **标题只在真的另起一摞时才写**（`stack-new`）。叠上去那一档如果也写，
-     * 新一页的标题会盖掉整摞的名字 —— 第一版就这么干的，demo 里一摞叫「第一拍
-     * 码头」的纸，叠了第二页之后整摞变成「第二拍 灯塔」。一摞的名字讲的是这一摞
-     * 是什么，不是最上面那一页是什么。
+     * ⛔ **标题只在真的另起一摞时才写**。叠上去那一档如果也写，新一页的标题会盖掉
+     * 整摞的名字 —— 第一版就这么干的，demo 里一摞叫「第一拍 码头」的纸，叠了第二页
+     * 之后整摞变成「第二拍 灯塔」。一摞的名字讲的是这一摞是什么，不是最上面那一页
+     * 是什么。
      */
-    ...(wantStack && !board.stacks?.[wantStack]
-      ? { stacks: { [wantStack]: { by, at: entry.at, ...(title && rect.basis === 'stack-new' ? { title } : {}) } } }
-      : {}),
+    ...((newPile || Object.keys(stackPatch).length) ? {
+      stacks: {
+        [pileName]: {
+          ...(newPile ? { by, at: entry.at, ...(title && rect.basis !== 'stack' ? { title } : {}) } : {}),
+          ...stackPatch,
+        },
+      },
+    } : {}),
   });
   /**
    * 铺完纸重算一次暂存架的原点（2026-08-31）。
@@ -230,6 +257,8 @@ export async function openSheetFor(projectId, {
     if (origin.changed) await patchBoard(projectId, { shelf: { x: origin.x, y: origin.y } });
   } catch { /* 架挪不动不挡铺纸 */ }
   setCurrentSheetId(sessionId, id);
+  // 返回给 agent 的是**合并后**的版式（摞的 + 这一页的），那才是真正生效的
+  const liveSlots = { ...(toPile ? stackPatch.slots : pileSlots || {}), ...(entry.slots || {}) };
   const inner = innerRect({ ...entry });
   // 占地者点名（刀③ 2026-08-30）：铺纸不避家具（纸不渲染，压着文件夹用户什么也
   // 看不见），但**必须说清这块地上已经住着谁** —— proj_mtfpehm3 首拍就是纸铺在
@@ -244,7 +273,9 @@ export async function openSheetFor(projectId, {
         .map(([nm]) => nm),
     }));
   return {
-    id, ...entry, stack: wantStack, innerW: inner.w, innerH: inner.h,
+    id, ...entry, slots: liveSlots, stack: wantStack, pile: pileName,
+    layoutFrom: toPile ? 'pile' : (Object.keys(entry.slots || {}).length ? 'page' : (pileSlots ? 'inherited' : 'none')),
+    innerW: inner.w, innerH: inner.h,
     basis: rect.basis, overlapsLoose: rect.overlapsLoose, clampedSlots, occupants, trimmed,
     prevFree, prevId,
     // 纸缝：这张纸的顶边离上一张**内容底部**多远（用户眼里那条横穿版面的空白带）
@@ -276,6 +307,8 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
       .describe('Sheet height in px. Same rule as w — both must be given together, otherwise the device default is used.'),
     stack: z.string().regex(TAG_RE).optional()
       .describe('Put this sheet on a NAMED PILE (ASCII like main/state). Sheets on one pile share the same ground and the reader flips through them; a name with no pile yet starts a new pile to the RIGHT of the existing ones. Use a second pile for something that must stay reachable while you write elsewhere, e.g. a status table.'),
+    scope: z.enum(['page', 'stack']).optional()
+      .describe('Only with plan, and only when the pile ALREADY has a layout: "stack" rewrites the pile\'s layout (every later page gets it; pages already written keep their own content where it is). Default is this page only.'),
     plan: z.array(SLOT).max(24).optional()
       .describe('PLAN THE WHOLE PAGE HERE, before writing anything: carve the sheet into named blocks (slots) and say what goes in each. Then write_on_board{slot:"main"} drops content into that block. A sheet is WIDE (landscape) — a single column down the left wastes most of it; think in columns and rows.'),
   }, async (args, extra) => {
@@ -283,7 +316,7 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
     const by = byOf(extra);
     const s = await openSheetFor(projectId, {
       sessionId, by, title: args.title || null, name: args.name || null, where: args.where || null,
-      plan: args.plan || null, stack: args.stack || null,
+      plan: args.plan || null, stack: args.stack || null, scope: args.scope || null,
       size: (args.w && args.h) ? { w: args.w, h: args.h } : null,
     });
     try {
@@ -304,7 +337,18 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
       // 覆盖率（刀 E）：一张横着的纸只画一条竖栏，大半是空的 —— 把这个数直接报出来
       const used = slotList.reduce((n, [, v]) => n + v.w * v.h, 0);
       const pct = Math.round((used / (s.innerW * s.innerH)) * 100);
-      lines.push(`Planned ${slotList.length} slots covering ${pct}% of the sheet:`);
+      /**
+       * 版式从哪来（2026-09-01 册）。⭐ 这一句是继承这件事**唯一**能让 agent 知道的
+       * 地方 —— 不说清楚它会以为版位里还有上一页的东西。所以顺带点明：继承的是地，
+       * 不是地上的东西，这一页的每个版位都是空的（下面逐个报余量正好是满格）。
+       */
+      const FROM = {
+        pile: `Planned ${slotList.length} slots — saved as the LAYOUT OF PILE "${s.pile}", so every page you stack on it starts with the same blocks (empty ones).`,
+        page: `Planned ${slotList.length} slots — this PAGE ONLY (pile "${s.pile}" keeps its own layout for the next page). Pass scope:"stack" to change the whole pile instead.`,
+        inherited: `Inherited the ${slotList.length} slots of pile "${s.pile}" — same blocks, all EMPTY on this page. You do not need to plan again; just write into them. Pass plan to change this page, or plan+scope:"stack" to change the pile.`,
+      };
+      lines.push(FROM[s.layoutFrom] || `Planned ${slotList.length} slots.`);
+      lines.push(`They cover ${pct}% of the sheet:`);
       for (const [nm, v] of slotList) {
         const c = capacityOf(v.w, v.h);
         lines.push(`  ${nm}${v.about ? `（${v.about}）` : ''}: at (${v.x},${v.y}) ${v.w}x${v.h} — ~${c.lines} lines, ~${c.cjk} CJK chars`);

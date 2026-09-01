@@ -55,7 +55,13 @@ const SLOT_GAP = 24;
  * @param {object} sheets  board.sheets
  * @param {{at?:{x,y}, sheet?:string}} spot  流式入参里抽出来的位置字段
  */
-export function sheetSpotToWorld(sheets, spot, layout = null) {
+/** 反查纸名（隐式摞名 = 纸名；sheets 表的键就是纸名） */
+function sheetIdOf(table, s) {
+  for (const [id, v] of Object.entries(table)) if (v === s) return id;
+  return null;
+}
+
+export function sheetSpotToWorld(sheets, spot, layout = null, stacks = null) {
   const table = sheets || {};
   let s = spot?.sheet ? table[spot.sheet] : null;
   if (!s) {
@@ -99,7 +105,15 @@ export function sheetSpotToWorld(sheets, spot, layout = null) {
   // 同一条规则 —— 接在这块地里最低那件下面。**两处算同一件事**是有意的：服务端
   // 是权威（落盘的那个数），这里只是让流式预览落在同一个地方，写完不跳。
   // 规则只有"往下接"一条，简单到不值得为它开一条前后端通信。
-  const sl = spot?.slot ? s.slots?.[spot.slot] : null;
+  /**
+   * 版式两层（2026-09-01 册）：摞的默认 + 这一页的覆盖，按名合并、纸盖摞。
+   * 服务端那份在 lib/board-sheets.js 的 slotsOf，这儿是对齐拷贝 —— 不合的话
+   * 流式预览会把继承来的版位当作不存在，字先流到空地上再跳回去，
+   * 而那正是 08-29 刀 C 花力气治掉的观感。
+   */
+  const pileSlots = stacks?.[s.stack || sheetIdOf(table, s)]?.slots || null;
+  const live = pileSlots ? { ...pileSlots, ...(s.slots || {}) } : (s.slots || null);
+  const sl = spot?.slot ? live?.[spot.slot] : null;
   if (sl) {
     const rect = { x: s.x + SHEET_MARGIN + sl.x, y: s.y + SHEET_MARGIN + sl.y, w: sl.w, h: sl.h };
     let bottom = rect.y - SLOT_GAP;
