@@ -111,16 +111,19 @@ export async function openSheetFor(projectId, {
     : sheetSizeFor(fit);
   let cur = currentSheet(board, currentSheetIdOf(sessionId));
   /**
-   * 缺省：还没有纸（或点名 viewport）→ 对准用户视口；有当前纸 → 铺在它正下方。
+   * 缺省：还没有纸（或点名 viewport）→ 对准用户视口；**有当前纸 → 叠上去**。
    *
-   * 叠纸（2026-09-01 刀 3）多出一档 `stack`：新纸跟当前那一摞占同一块地。
-   * ⚠️ **缺省仍然是 next**，要等前端会藏页之后才翻案 —— 现在就把默认改成叠，
-   * 屏幕上就是几页字压在一起（纸不渲染，内容按世界坐标画）。
+   * ⭐ 2026-09-01 翻案（刀 3 埋的那条）。原来的缺省是 `next`（铺在正下方），
+   * 那时前端还不会藏页，把默认改成叠等于让几页字压在一起。前端会藏页之后这条
+   * 就该翻过来了：**翻页本来就是"下一页"，不是"下面那张纸"**。板子从此不再
+   * 越长越高，用户也不用滑屏幕去追 agent 写在哪儿。
    *
-   * `stack` 入参点名铺到哪一摞：那一摞还没有纸就在最右边另起一摞（摞横向排开）。
+   * 三档还在：`next` 留给"我就是要一条竖排"（老板子接着往下写）；`viewport`
+   * 第一张对准用户；`stack` 入参点名铺到哪一摞，那一摞还没有纸就在最右边
+   * 另起一摞（摞横向排开）。
    */
   const stackName = stack || null;
-  const mode = where || (cur ? 'next' : 'viewport');
+  const mode = where || (cur ? 'stack' : 'viewport');
   // 翻页裁纸（刀② 2026-08-30）：纸固定一屏高、下一张贴满高矩形正下方，上一张
   // 只用了一半时内容之间就是几百像素的空白（proj_mtfpehm3 实测 268~557px，
   // 设计间隔明明只有 48）。翻页那一刻把上一张裁到内容底 —— 纸是分配纪律不是
@@ -135,6 +138,19 @@ export async function openSheetFor(projectId, {
    * 合起来是板高的 23%。这个数报在**决策点上**（就在它开纸这一刻）比事后警告有用。
    */
   let prevFree = null; let prevId = null;
+  /**
+   * 叠这一档也报「上一页还剩多少」（2026-09-01），只是不裁纸也没有纸缝 ——
+   * 叠起来的页不占竖向空间，裁掉余白没有意义。但**利用率那笔账照算**：
+   * 08-30 那个「每拍一张纸」的真案（14 张纸每张剩三分之二）跟纸怎么排没关系，
+   * 换成叠一样会发生，而且更隐蔽（板子不长高，看不出来浪费）。
+   */
+  if (mode === 'stack' && cur) {
+    const members = sheetMembers(board, cur.id);
+    const innerC = innerRect(cur);
+    const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : innerC.y;
+    prevFree = Math.max(0, Math.round(innerC.y + innerC.h - bottom));
+    prevId = cur.id;
+  }
   if (mode === 'next' && cur) {
     const members = sheetMembers(board, cur.id);
     const innerC = innerRect(cur);
@@ -238,8 +254,10 @@ export async function openSheetFor(projectId, {
 
 const DESCRIPTION = `Lay a fresh SHEET on the board and make it the current one — do this before you
 start writing (like turning to a clean page). A sheet is one screen of the user's
-device at 75% zoom; the machine picks where it goes (the first sheet opens right
-under the user's current view; later ones stack below the current sheet).
+device; the machine picks where it goes — the first one opens right under his current
+view, and after that each new sheet is A NEW PAGE ON THE SAME PILE: same ground, he
+flips to it. Only one page of a pile is on screen at a time, so the board stops growing
+taller and he never has to scroll off to find what you just wrote.
 After this, write_on_board's at:{x,y} means PIXELS from this sheet's top-left
 writable corner, and writes without at flow top-to-bottom on it; when a sheet
 fills up a new one is opened for you automatically — call open_sheet yourself when
@@ -251,7 +269,7 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
     title: z.string().max(60).optional().describe('What this sheet is about (for read_board / your own map, e.g. 第二章 — sheets are invisible to the user)'),
     name: z.string().regex(TAG_RE).optional().describe('Sheet name to refer to it later (ASCII like act2; default auto p1/p2/…)'),
     where: z.enum(['next', 'viewport', 'stack']).optional()
-      .describe("next = below the current sheet (default when sheets exist); viewport = right where the user is looking now (default for the first sheet — also use it to bring work back to the user's eyes); stack = ON TOP OF the current sheet, same ground (the reader flips to it instead of scrolling down)"),
+      .describe("stack = a NEW PAGE on the current pile, same ground, the reader flips to it (THE DEFAULT once a sheet exists — the board stops growing taller and he never has to hunt for where you wrote); viewport = right where the user is looking now (default for the very first sheet — also use it to bring work back to his eyes); next = a separate sheet BELOW this pile, which he has to scroll to (rare; only when you really want a vertical run)"),
     w: z.number().min(240).max(8000).optional()
       .describe("Sheet width in px. LEAVE IT OUT normally — the default is computed from the user's screen. Pass it only when he has told you (or shown you) what he wants: he changed the zoom, or dragged notes to a width. Ask him first."),
     h: z.number().min(240).max(12000).optional()

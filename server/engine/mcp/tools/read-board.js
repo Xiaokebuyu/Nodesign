@@ -201,8 +201,12 @@ on the minimap and listed with what is inside it.`,
           const ss = sheetSummaries(board);
           if (ss.length) {
             const latest = latestSheetId(board);
+            // ⚠️ 这句话 08-31 就该改了：装不下**不再拒收**，内容照写、落暂存架
+            // （write-on-board 刀 1）。「注释/报文声称做了、代码没做」是这个仓库
+            // 点过名的老病，改行为要连着报文一起改。
             lines.push('', '纸（sheet）：at:{x,y} 写的是纸内像素（版心左上为原点）。'
-              + '**写满不会自动翻页** —— 排不下时写入被拒收，下一页由你自己 open_sheet 规划：');
+              + '**写满不会自动翻页** —— 排不下的内容照写但落暂存架等你安置，'
+              + '下一页由你自己 open_sheet 开（缺省就叠在当前这一摞上）：');
             for (const s of ss) {
               // 剩多少地方按**字**报（08-29 刀 D）：agent 手里的东西是字，
               // 只给像素等于让它每次落笔前做一道做不准的算术

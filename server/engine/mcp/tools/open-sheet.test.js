@@ -46,14 +46,21 @@ describe('open_sheet 铺纸', () => {
     expect(currentSheetIdOf('s1')).toBe('p1');
   });
 
-  it('续铺缺省在当前纸正下方；name 点名可自定名字', async () => {
+  it('⭐ 续铺缺省是叠在当前这一摞上（2026-09-01 翻案）；name 点名可自定名字', async () => {
     const r = await open1({ name: 'act2', title: '第二幕' });
     expect(r.isError).toBeUndefined();
     const board = await readBoard(pid);
     const p1 = board.sheets.p1; const act2 = board.sheets.act2;
     expect(act2).toBeTruthy();
-    expect(act2.y).toBeGreaterThanOrEqual(p1.y + p1.h);    // 正下方（隔沟）
+    expect({ x: act2.x, y: act2.y }, '同一块地').toEqual({ x: p1.x, y: p1.y });
     expect(currentSheetIdOf('s1')).toBe('act2');
+  });
+
+  it("where:'next' 仍然铺在正下方（隔一条沟）", async () => {
+    const r = await open1({ name: 'below1', title: '往下一张', where: 'next' });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    expect(board.sheets.below1.y).toBeGreaterThanOrEqual(board.sheets.act2.y + board.sheets.act2.h);
   });
 
   it("where:'viewport' 把工作拉回用户眼皮底下", async () => {

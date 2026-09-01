@@ -78,7 +78,16 @@ const BOARD = {
   sheets: {
     p1: { x: 480, y: 240, w: 1867, h: 1200, by: 'agent', at: '2026-08-29T01:00:00Z', title: '第一章' },
     p2: { x: 480, y: 1488, w: 1867, h: 1200, by: 'agent', at: '2026-08-29T02:00:00Z' },
+    /**
+     * 叠起来的一摞（2026-09-01 叠纸）：s1/s2 **占同一块地**，一次只画一张。
+     * 留在 fixture 里是为了让「藏页」这件事在检查通道里真跑得到 —— 它是整批
+     * 里唯一一个单测照不出来的东西（单测看的是物件清单，这儿看的是 DOM）。
+     * 摆在 p1/p2 右边，不打扰既有那几条判据（贴着不画线那对还在原处）。
+     */
+    s1: { x: 2600, y: 240, w: 1200, h: 900, by: 'agent', at: '2026-09-01T01:00:00Z', title: '叠·第一页', stack: 'demo' },
+    s2: { x: 2600, y: 240, w: 1200, h: 900, by: 'agent', at: '2026-09-01T02:00:00Z', title: '叠·第二页', stack: 'demo' },
   },
+  stacks: { demo: { title: '叠起来的一摞', at: '2026-09-01T01:00:00Z' } },
   // 大体留空走"首次落点"那条路（验自动排布）；墨类两件是例外 —— 它们的
   // 本体就在 board.json 里，不给就永远测不到（选中/变换/编辑都在它们身上）
   objects: {
@@ -102,6 +111,15 @@ const BOARD = {
      * **精确判据在单测里**（components/canvas/binding-adjacent.test.jsx，用固定矩形），
      * 这儿只负责"真跑一遍看得见"。
      */
+    // 叠起来那一摞上的两页各一件墨（认领了 sheet）—— 屏幕上只该看得见 s2 那件
+    'text:stackA': {
+      x: 2640, y: 300, w: 200, h: 40, z: 3,
+      kind: 'text', data: { t: '第一页上的字', font: 'kai', size: 'md', color: 'ink' }, sheet: 's1',
+    },
+    'text:stackB': {
+      x: 2640, y: 380, w: 200, h: 40, z: 4,
+      kind: 'text', data: { t: '第二页上的字', font: 'kai', size: 'md', color: 'ink' }, sheet: 's2',
+    },
     'text:beat': {
       x: 900, y: 200, w: 300, h: 200, z: 7,
       kind: 'text', data: { t: '她把话丢在那儿就转过去了。', font: 'kai', size: 'md', color: 'ink' },

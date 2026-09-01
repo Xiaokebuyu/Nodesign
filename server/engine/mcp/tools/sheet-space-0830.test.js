@@ -98,7 +98,8 @@ describe('刀② 翻页裁纸', () => {
     setViewpoint('proj_sp_trim', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await t.open({ title: '第一页', name: 'a1' });
     await t.write({ at: { x: 0, y: 0 }, text: '只有一小条。' });
-    const r2 = await t.open({ title: '第二页', name: 'a2' });
+    // 裁纸只发生在「往下铺」那一档（叠起来的页不留竖向余白，没什么可裁）
+    const r2 = await t.open({ title: '第二页', name: 'a2', where: 'next' });
     expect(r2.content[0].text).toMatch(/trimmed to its content/);
     const b = await readBoard('proj_sp_trim');
     expect(b.sheets.a1.h).toBeLessThan(500);                          // 一屏高被裁下来了

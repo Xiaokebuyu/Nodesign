@@ -79,13 +79,28 @@ describe('open_sheet 叠纸（2026-09-01 刀 3）', () => {
     expect(b.w).not.toBe(1200);
   });
 
-  it('缺省仍然是往下铺（前端会藏页之前不许翻案）', async () => {
+  /**
+   * ⭐ 2026-09-01 翻案。刀 3 落地时缺省还是 `next`（铺在正下方），理由写在代码里：
+   * 那时前端还不会藏页，把默认改成叠等于让几页字压在一起。前端会藏页（刀 4）之后
+   * 这条就该翻过来 —— **翻页本来就是「下一页」，不是「下面那张纸」**。
+   */
+  it('⭐ 缺省就是叠上去（板子不再越长越高）', async () => {
     const p2 = 'proj_opensheet_stack_default';
     await ensureProjectWorkspace(p2);
     const a = await openSheetFor(p2, { title: '一' });
     const b = await openSheetFor(p2, { title: '二' });
+    expect(b.basis).toBe('stack');
+    expect({ x: b.x, y: b.y }).toEqual({ x: a.x, y: a.y });
+    expect((await readBoard(p2)).sheets[b.id].stack).toBe(a.id);
+  });
+
+  it('where:"next" 留着：真要一条竖排还是铺得出来', async () => {
+    const p4 = 'proj_opensheet_next';
+    await ensureProjectWorkspace(p4);
+    const a = await openSheetFor(p4, { title: '一' });
+    const b = await openSheetFor(p4, { title: '二', where: 'next' });
     expect(b.basis).toBe('below-sheet');
     expect(b.y).toBeGreaterThan(a.y);
-    expect((await readBoard(p2)).sheets[b.id].stack).toBeUndefined();
+    expect((await readBoard(p4)).sheets[b.id].stack).toBeUndefined();
   });
 });

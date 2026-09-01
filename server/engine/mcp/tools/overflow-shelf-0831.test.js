@@ -158,11 +158,23 @@ describe('open_sheet 报纸缝与翻页代价', () => {
     setViewpoint('proj_gap_warn', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await t.open({ title: '第一张' });
     await t.write({ text: '就写一条短的。' });          // 纸几乎全空
-    const r = await t.open({ title: '第二张' });
+    // 2026-09-01：纸缝只有「往下铺」那一档才有（叠起来的页不占竖向空间，
+    // 没有缝可报）。缺省已经翻案成叠 —— 这条钉的是竖排那一档，所以点名 next。
+    const r = await t.open({ title: '第二张', where: 'next' });
     const txt = r.content[0].text;
     expect(txt).toMatch(/Gap above: \d+px/);
     expect(txt).toMatch(/still had ~\d+px free/);
     expect(txt).toMatch(/not for every beat/);
+  });
+
+  it('⭐ 叠一页也报「上一页还剩多少」（没有纸缝，但利用率那笔账照算）', async () => {
+    const t = await mk('proj_gap_stack');
+    setViewpoint('proj_gap_stack', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '第一页' });
+    await t.write({ text: '就写一条短的。' });
+    const txt = (await t.open({ title: '第二页' })).content[0].text;
+    expect(txt).toMatch(/still had ~\d+px free/);
+    expect(txt, '叠起来的页之间没有缝').not.toMatch(/Gap above/);
   });
 
   it('第一张纸没有"上一张"，不报纸缝', async () => {
