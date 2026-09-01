@@ -11,7 +11,7 @@
  * 一页都不藏，它们不参与叠放。判据跟服务端算占位那份是同一条（claimedBy），
  * 两边一致才不会出现"屏幕上没有、可服务端说那儿占着地方"。
  */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { pilesOf, displayedPage, hiddenByPaging, flipTo, neighborPile } from '../../lib/board-paging.js';
 import { SHELF_W, SHELF_H } from '../../lib/board-shelf.js';
 
@@ -26,9 +26,38 @@ function isInk(o) {
 /** 暂存架那一摞的摞名。它跟纸的摞并排住在同一张 picked 表里，翻法也一样 */
 export const SHELF_PILE = '__shelf__';
 
+/**
+ * 一次翻页滑多久。跟 BoardObject 的 `left/top 380ms` 过渡对齐 —— 这个数只管
+ * 「什么时候把旧页从 DOM 里摘掉」，滑动本身是 CSS 的事。留 40ms 余量，
+ * 摘早了会看到旧页在半路上凭空消失。
+ */
+const FLIP_MS = 420;
+
 export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf, layout, shelf }) {
   /** 用户显式翻过的：摞名 → 那一摞里的第几件。没翻过的摞不在这张表里 */
   const [picked, setPicked] = useState({});
+
+  /**
+   * 翻页过渡（2026-09-01）：旧页往一边滑出去、新页从另一边滑进来，像手机主屏那样。
+   *
+   * ⭐ **动画不能靠相机**：叠起来的两页占同一块世界坐标，相机怎么动都没法把它们
+   * 错开。所以是给两页的物件各加一个临时的横向位移 —— 卡片本来就有
+   * `left/top 380ms` 的过渡（BoardObject 的 animateLayout），所以只要**先把新页
+   * 摆在一屏之外渲染一帧，下一帧再摆回原位**，滑动就是 CSS 自己做的，一帧都不用
+   * 我们逐帧算。用 rAF 逐帧推进的话整块画布要重渲十几次，那正是「板一多就卡」的来路。
+   *
+   * `phase`：'enter' = 新页还在屏外那一帧；'run' = 已摆回原位，CSS 正在滑。
+   */
+  const [flipping, setFlipping] = useState(null);
+  const flipTimersRef = useRef([]);
+  const beginFlip = useCallback((pile, from, to, dir) => {
+    for (const t of flipTimersRef.current) clearTimeout(t);
+    flipTimersRef.current = [];
+    setFlipping({ pile: pile.name, from, to, dir, w: pile.w, phase: 'enter' });
+    flipTimersRef.current.push(setTimeout(() => setFlipping((f) => (f ? { ...f, phase: 'run' } : f)), 16));
+    flipTimersRef.current.push(setTimeout(() => setFlipping(null), FLIP_MS));
+  }, []);
+  useEffect(() => () => { for (const t of flipTimersRef.current) clearTimeout(t); }, []);
 
   /**
    * 暂存架也是一摞（2026-09-01，站主拍板「暂存架我们干脆也就改成栈吧」）。
@@ -55,11 +84,28 @@ export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf, layout, 
   }, [sheets, stacks, shelfIds, shelf]);
   const hiddenSheets = useMemo(() => hiddenByPaging(sheets, stacks, picked), [sheets, stacks, picked]);
 
-  /** 这件东西此刻该不该藏（认领的那一页没在显示） */
+  /**
+   * 这件东西此刻该不该藏（认领的那一页没在显示）。
+   * ⚠️ 过渡期间**旧页不藏** —— 它得留在屏幕上滑出去，藏了就是硬切。
+   */
   const isHidden = useCallback(
-    (obj) => !!obj?.sheet && hiddenSheets.has(obj.sheet),
-    [hiddenSheets],
+    (obj) => !!obj?.sheet && hiddenSheets.has(obj.sheet) && obj.sheet !== flipping?.from,
+    [hiddenSheets, flipping],
   );
+
+  /**
+   * 这件东西此刻要往旁边挪多少（过渡期间才非零）。
+   * 新页 'enter' 那一帧摆在来的方向一屏之外，'run' 摆回 0（CSS 负责这段滑动）；
+   * 旧页反过来，从 0 滑到去的方向一屏之外。
+   */
+  const shiftOf = useCallback((obj) => {
+    const f = flipping;
+    if (!f || !obj?.sheet) return 0;
+    const span = f.w + 48;
+    if (obj.sheet === f.to) return f.phase === 'enter' ? f.dir * span : 0;
+    if (obj.sheet === f.from) return f.phase === 'enter' ? 0 : -f.dir * span;
+    return 0;
+  }, [flipping]);
 
   /** 架上这一件该不该藏（一摞只画最上面那件）。架上只有一件时谁都不藏 */
   const shelfShown = useMemo(() => {
@@ -72,6 +118,7 @@ export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf, layout, 
     [shelfShown, shelfIds],
   );
 
+
   /** 上下翻这一摞：+1 更新的、-1 更早的。到头不动 */
   const flip = useCallback((pileName, dir) => {
     setPicked((prev) => {
@@ -79,17 +126,26 @@ export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf, layout, 
       if (!pile) return prev;
       // 架那一摞的"页"是物件 id，纸那一摞是纸名 —— flipTo 只认顺序，两种都能翻
       const next = flipTo(pile, prev, dir);
-      return next === displayedPage(pile, prev) ? prev : { ...prev, [pileName]: next };
+      const cur = displayedPage(pile, prev);
+      if (next === cur) return prev;
+      beginFlip(pile, cur, next, dir);
+      return { ...prev, [pileName]: next };
     });
-  }, [piles]);
+  }, [piles, beginFlip]);
 
   /** 直接翻到点名的那一页（agent 的 show / 目录点击都走这条） */
   const showSheet = useCallback((sheetId) => {
     const pile = piles.find((p) => p.sheets.includes(sheetId));
     if (!pile) return false;
-    setPicked((prev) => ({ ...prev, [pile.name]: sheetId }));
+    setPicked((prev) => {
+      const cur = displayedPage(pile, prev);
+      if (cur === sheetId) return prev;
+      // 跳着翻也走同一段滑动：方向按两页在这一摞里的先后
+      beginFlip(pile, cur, sheetId, pile.sheets.indexOf(sheetId) > pile.sheets.indexOf(cur) ? 1 : -1);
+      return { ...prev, [pile.name]: sheetId };
+    });
     return true;
-  }, [piles]);
+  }, [piles, beginFlip]);
 
   /** 这一摞现在显示哪一页 */
   const shownOf = useCallback((pileName) => {
@@ -123,6 +179,6 @@ export function useSheetPaging({ sheets, stacks, positionedRef, sizeOf, layout, 
 
   return {
     piles, picked, isHidden, hiddenSheets, flip, showSheet, shownOf, neighbor, claimFor,
-    isShelfHidden, shelfCount: shelfIds.length,
+    isShelfHidden, shelfCount: shelfIds.length, shiftOf, flipping,
   };
 }

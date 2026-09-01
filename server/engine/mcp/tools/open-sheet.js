@@ -178,6 +178,8 @@ export async function openSheetFor(projectId, {
     by, at: new Date().toISOString(), ...(title ? { title } : {}),
     ...(Object.keys(slots).length ? { slots } : {}),
     ...(wantStack ? { stack: wantStack } : {}),
+    // 哪一轮对话铺的（叠纸刀 8）—— 目录里能从一页跳回当时那段对话
+    ...(sessionId ? { sid: String(sessionId).slice(0, 100) } : {}),
   };
   await patchBoard(projectId, {
     sheets: { [id]: entry },

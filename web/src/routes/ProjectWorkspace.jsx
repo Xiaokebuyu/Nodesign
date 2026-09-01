@@ -33,7 +33,7 @@ import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_SANS, FONT_KAI, FONT_MONO, 
 import { INK_SURFACE } from '../lib/paper.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
-import { dispatchUiEvent } from '../lib/ui-bridge.js';
+import { dispatchUiEvent, useOpenSessionFromBoard } from '../lib/ui-bridge.js';
 import { newId, newUserMessageId } from '../lib/helpers.js';
 import { useRewindEvents } from './use-rewind-events.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
@@ -423,6 +423,7 @@ export default function ProjectWorkspace() {
 
   // 「回到此处 / 从这里分叉」落地后的两件事（语义在 use-rewind-events.js）
   useRewindEvents({ projectId: id, currentSessionId, setMessages, sessionIdRef, setCurrentSessionId, updateProject });
+  useOpenSessionFromBoard({ sessionIdRef, currentRunIdRef, setCurrentSessionId });
 
   // 板书控件（08-25 nd:controls 围栏）：MdInk 里的按钮点了发这个事件 —— 非触发件
   // 攒进 pending（同标注「攒着」一条路），触发件直接起轮（攒的那批靠每轮注入的

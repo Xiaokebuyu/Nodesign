@@ -159,6 +159,16 @@ describe('sheets 注册表（2026-08-29 纸范式）：合并语义同 lanes', (
     expect(b2.objects['notes/板书/a.md'].sheet).toBe('p1');
   });
 
+  it('⭐ sheet.sid 过两遍不掉（目录靠它跳回那一轮对话）', async () => {
+    const sp8 = 'proj_boardstore_sid';
+    await patchBoard(sp8, { sheets: { p1: { x: 0, y: 0, w: 800, h: 600, sid: 'sess-abc-123' } } });
+    expect((await readBoard(sp8)).sheets.p1.sid).toBe('sess-abc-123');
+    await patchBoard(sp8, { sheets: { p1: { title: '第二章' } } });
+    const b = await readBoard(sp8);
+    expect(b.sheets.p1.sid).toBe('sess-abc-123');
+    expect(b.sheets.p1.title).toBe('第二章');
+  });
+
   /**
    * 归属清除（2026-09-01 叠纸）：用户把卡拖出所有的纸，前端要把 `sheet` 摘掉。
    *

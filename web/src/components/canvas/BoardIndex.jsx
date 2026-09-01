@@ -55,6 +55,18 @@ export default function BoardIndex({ piles, sheets, shownOf, currentPile, onPick
                 data-board-index="page"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => onPick(pile, id)}
+                /**
+                 * 中键 / Alt 点 = 回到铺这一页时那段对话（叠纸刀 8）。
+                 * ⚠️ 做成副动作而不是第二颗按钮：目录的主职责是「翻到那一页」，
+                 * 一行两颗钮在手机上按不准，而"回对话"是低频的。会话删了 sid 就
+                 * 指不到，那时静默不响应 —— 板上的字不该因为对话没了变成坏链接。
+                 */
+                onAuxClick={(e) => {
+                  const sid = sheets?.[id]?.sid;
+                  if (e.button !== 1 || !sid) return;
+                  e.preventDefault();
+                  window.dispatchEvent(new CustomEvent('nd:open-session', { detail: { sid } }));
+                }}
                 style={{
                   display: 'block', width: '100%', textAlign: 'left',
                   padding: '5px 8px', marginBottom: 1,
@@ -68,6 +80,7 @@ export default function BoardIndex({ piles, sheets, shownOf, currentPile, onPick
                 {/* 纸有标题就用标题（真板 103 张里 95 张有）；架那一摞的「页」是
                     物件，退回文件名 */}
                 {i + 1}. {sheets?.[id]?.title || String(id).split('/').pop() || id}
+                {sheets?.[id]?.sid ? <span style={{ color: PAPER.pencil, marginLeft: 6 }} title="中键点：回到铺这一页时那段对话">·</span> : null}
               </button>
             ))}
           </div>

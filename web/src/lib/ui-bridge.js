@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+
 /**
  * ui-bridge.js —— agent 那几只「改看的人这一侧」的手（2026-09-01 拆出）
  *
@@ -33,4 +35,32 @@ export function dispatchUiEvent(evt) {
       : 'agent 关上了「改板书」';
   }
   return null;
+}
+
+/**
+ * useOpenSessionFromBoard —— 从板上的目录跳回「铺这一页时那段对话」
+ * （2026-09-01 叠纸刀 8）
+ *
+ * 反方向的同一族：上面那几条是 agent → 界面，这条是**板 → 外壳**。叠纸之前板上的
+ * 东西和聊天记录之间没有任何链接；一摞纸叠起来之后这件事更要紧 —— 用户翻到第三页
+ * 想不起来当时聊的是什么，而那一页在屏幕上就是全部线索。铺纸那一刻把会话 id 记在
+ * 纸上（`sheets[].sid`），目录里中键点一行就回到那段对话。
+ *
+ * 走窗口事件而不是 prop：目录活在 BoardCanvas 里，中间隔着 CanvasFrame 两层，
+ * 为一个低频动作钻两层 prop 不值。
+ *
+ * ⚠️ **正在流式的时候不切** —— 把用户正看着的对话从脚下抽走，比让他多点一下糟得多。
+ * 这跟 `project.active_session` 那条用的是同一个判据。
+ */
+export function useOpenSessionFromBoard({ sessionIdRef, currentRunIdRef, setCurrentSessionId }) {
+  useEffect(() => {
+    const onOpen = (e) => {
+      const sid = e?.detail?.sid;
+      if (!sid || sid === sessionIdRef.current || currentRunIdRef.current) return;
+      sessionIdRef.current = sid;
+      setCurrentSessionId(sid);
+    };
+    window.addEventListener('nd:open-session', onOpen);
+    return () => window.removeEventListener('nd:open-session', onOpen);
+  }, [sessionIdRef, currentRunIdRef, setCurrentSessionId]);
 }

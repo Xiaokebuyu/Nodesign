@@ -8,7 +8,7 @@
  * 之前，藏起来的卡连命中区都不留；滤在渲染那一步的话，点空白处会选中一张看不见
  * 的卡（08-31「贴着不画线」那次留过同一个坑）。
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { useSheetPaging } from './useSheetPaging.js';
@@ -90,16 +90,30 @@ describe('叠纸：屏幕上到底还剩几件', () => {
     unmount();
   });
 
-  it('⭐ 往回翻一页，露出来的和藏起来的当场对调', () => {
+  /**
+   * ⭐ 翻页有一段过渡（旧页滑出去、新页滑进来，像手机主屏那样），所以判据分两段：
+   * **过渡期间两页都在屏幕上**（旧页要留着滑，藏了就是硬切），**过渡结束旧页消失**。
+   * 只钉后半段的话，把过渡整个删掉测试照样绿 —— 那就等于没测到动画。
+   */
+  it('⭐ 往回翻一页：过渡期间新旧两页都在，滑完只剩新页', () => {
+    vi.useFakeTimers();
     let last = null;
     const unmount = mount((r) => { last = r; });
     act(() => last.paging.flip('main', -1));
+    expect(last.ids, '过渡期间旧页要留着滑出去').toEqual(
+      expect.arrayContaining(['text:一', 'text:二']),
+    );
+    // 新页先摆在来的方向一屏之外，下一帧摆回 0 —— 滑动是 CSS 做的
+    expect(last.paging.shiftOf({ sheet: 'p1' })).not.toBe(0);
+    act(() => { vi.advanceTimersByTime(500); });
     expect(last.ids).toContain('text:一');
-    expect(last.ids).not.toContain('text:二');
+    expect(last.ids, '滑完旧页就该走').not.toContain('text:二');
+    expect(last.paging.shiftOf({ sheet: 'p1' })).toBe(0);
     // 再往回翻已经到头，不循环
     act(() => last.paging.flip('main', -1));
     expect(last.ids).toContain('text:一');
     unmount();
+    vi.useRealTimers();
   });
 
   it('⭐ 点名翻到某一页（agent 的 show / 目录点击走这条）', () => {

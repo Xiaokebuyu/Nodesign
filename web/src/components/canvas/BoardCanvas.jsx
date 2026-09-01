@@ -21,6 +21,7 @@ import { useSheetPaging } from './useSheetPaging.js';
 import { useVisibleObjects } from './useVisibleObjects.js';
 import { useBoardNav } from './useStackNav.jsx';
 import { usePinnedView } from './usePinnedView.js';
+import { useSeatWriteback } from './useSeatWriteback.js';
 import { useBandSummaries, useSessionTitles, useTaskTitles } from './board-labels.js';
 import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
@@ -624,45 +625,8 @@ export default function BoardCanvas({
    * 只写"这一趟才算出来的"那些（`layout` 里没有的），所以第二帧就没得写了，
    * 不会来回。写完之后它们在 `layout` 里，布局对拖拽这类交互免疫。
    */
-  useEffect(() => {
-    const ids = Object.keys(seatFixes || {});
-    const nIds = Object.keys(noteFixes || {});
-    if (!ids.length && !nIds.length) return;
-    /**
-     * ⚠️ 有东西正在改身份（搬家 / 改名）时**一律不落位**。
-     *
-     * 改名是前缀改名：`鉴赏页` → `作品集` 之后，里面每一件的 id 都变了。产物
-     * 清单和文件夹清单不是同一拍回来的，中间那一拍里 `作品集` 还不在文件夹
-     * 清单里，于是归属规则往上走一直走到根 —— 里面的东西短暂地"出现在桌面上"，
-     * 这一趟就给它们排座并写盘。等清单追上，它们回到文件夹里，却带着一组
-     * 在根上算出来的坐标。
-     *
-     * 落位是"给新东西一个落脚点"，不是"给正在改名的东西重新安家"。等这一拍过去。
-     */
-    if (movingRef.current.size) return;
-    setLayout(prev => {
-      let touched = false;
-      const next = { ...prev };
-      for (const id of ids) {
-        if (prev[id] && Number.isFinite(prev[id].x)) continue;   // 已经有坐标了
-        // seat 默认 'auto'（出处四值 auto/user/agent/shelf，user 的永不被重排）；架上落的座 fix 自带 seat:'shelf'
-        next[id] = { ...(prev[id] || {}), seat: 'auto', ...seatFixes[id], z: prev[id]?.z ?? 1 };
-        dirtyRef.current.objects.add(id);
-        touched = true;
-      }
-      // 批注跟随是**覆写**：手写字本来就有坐标，跟随的意义就是换个位置。
-      // 只动还存在的（字可能刚被删）。
-      for (const id of nIds) {
-        if (!prev[id]) continue;
-        if (prev[id].x === noteFixes[id].x && prev[id].y === noteFixes[id].y) continue;
-        next[id] = { ...prev[id], ...noteFixes[id] };
-        dirtyRef.current.objects.add(id);
-        touched = true;
-      }
-      if (touched) scheduleSave();
-      return touched ? next : prev;
-    });
-  }, [seatFixes, noteFixes, scheduleSave]);
+  // 算出来的座位（入座 / 批注跟随）写回 layout → useSeatWriteback.js
+  useSeatWriteback({ seatFixes, noteFixes, movingRef, setLayout, dirtyRef, scheduleSave });
 
   // ⚠️ 这里曾有「遮盖修正落盘」：区内避让把卡推开之后，把新坐标写回 board.json。
   // 区内避让 2026-08-07 起其实就没在跑了（`resolveZoneAvoidance` 是死导入、
@@ -1560,7 +1524,16 @@ export default function BoardCanvas({
    */
   const renderObjectCard = (o, winPos = null) => {
     const win = !!winPos;
-    const obj = win ? { ...o, pos: { ...winPos, z: 1 } } : o;
+    /**
+     * 翻页滑动（叠纸刀 5）：过渡那一小段里，两页的物件各带一个临时横向位移 ——
+     * 新页先摆在一屏之外，下一帧回到 0，卡片本来就有的 `left 380ms` 过渡把它滑过去。
+     * ⚠️ 只加在**渲染**这一步：`positioned` 那份不动，所以命中区、contentBox、
+     * 相机边界都不会跟着抖。过渡期间画布不吃指针（下面 pointerEvents），
+     * 所以画面和命中区对不上的那 400ms 不会有人点得中。
+     */
+    const shift = win ? 0 : paging.shiftOf(layout[o.id]);
+    const obj = win ? { ...o, pos: { ...winPos, z: 1 } }
+      : (shift ? { ...o, pos: { ...o.pos, x: o.pos.x + shift } } : o);
     return (
       <BoardObject
         key={obj.id}
@@ -1757,6 +1730,13 @@ export default function BoardCanvas({
             position: 'absolute', left: 0, top: 0, width: 0, height: 0,
             transform: `scale(${scale}) translate(${cam.x}px, ${cam.y}px)`,
             transformOrigin: '0 0',
+            /**
+             * 翻页那 400ms 里画布不吃指针（叠纸刀 5）。位移只加在渲染上，命中区那份
+             * （positionedRef）没动 —— 画面和命中区对不上的这一小段，宁可点不中也
+             * 不能点错。⭐ 这是「一份数据两个用途时，先把不一致关在门外」的老办法，
+             * 比让两份坐标各说各的便宜得多。
+             */
+            ...(paging.flipping ? { pointerEvents: 'none' } : null),
           }}
         >
           {/* 文件夹：一张方卡（2026-08-13，"分区"时代两态退役）——
