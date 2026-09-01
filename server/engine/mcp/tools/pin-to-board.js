@@ -32,11 +32,12 @@ import { promises as fs } from 'fs';
 import { pinToZone, readBoard, patchBoard } from '../../../projects/board-store.js';
 import { layerOf, bareTag } from '../../../lib/canvas-id.js';
 import { applyFollows } from '../../../lib/board-follow.js';
-import { currentSheet, slotRectOf, nextSpotInSlot, resolveSheet } from '../../../lib/board-sheets.js';
+import { currentSheet, nextSpotInSheet, resolveSheet } from '../../../lib/board-sheets.js';
 import { placeAtOnSheet } from '../../../lib/board-place.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { cardIdForPath, KIND_PREFIX_RE } from '../../../lib/kinds/index.js';
+import { openSheetFor } from './open-sheet.js';
 
 // （folderOfObjectId 08-24 拆除：它按 dirname 硬算，会给 assets/generated 这类
 //  前端不当层渲染的路径发"层"标签 —— 改问 layerOf + board.zones，跟渲染同口径）
@@ -55,9 +56,9 @@ folder it lives in. The canvas is their desktop: whatever you write appears
 there automatically — you do NOT need this tool for your own outputs.
 Use it only to deliberately surface something:
 
-- Place a staged arrival: new files land on the staging shelf (the vertical
-  strip of unplaced cards the status block names) — pin_to_board{path, slot}
-  moves one into a block you planned
+- Place a staged arrival: new files land on the staging shelf (the pile of
+  unplaced cards the status block names) — pin_to_board{path} moves one onto
+  the page you are writing on, or pin_to_board{path, at} to an exact spot
 - Pull a reference (an uploaded asset, a memory note, an older image) into view
 - Restore something the user dragged off-screen, when they ask for it back
 
@@ -74,16 +75,14 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         .min(1)
         .max(300)
         .describe('Item to surface — see accepted forms in the tool description'),
-      slot: z.string().max(40).optional()
-        .describe('Drop it into a planned block on the current sheet (names from open_sheet / read_board). This is how a produced file lands where you planned it instead of wherever there was room.'),
       at: z.object({ x: z.number(), y: z.number() }).optional()
-        .describe('Exact spot on the sheet, pixels from its top-left writable corner. Use slot unless this one file needs a precise place.'),
+        .describe('Exact spot on the sheet, pixels from its top-left writable corner. Omit it and the machine columns it in with everything else (and turns the page if the sheet is full).'),
       sheet: z.string().max(40).optional()
         .describe('Which sheet (default: the one you are working on)'),
       tag: z.string().max(40).optional()
         .describe('Put it in a group. Produced files (images, sites, docx) are never created by you, so this is the one place they can get a tag at all — and a tag is what follow{group_tag,target_tag} matches on, on both ends.'),
     },
-    async ({ path: rawPath, slot, at, sheet, tag }) => {
+    async ({ path: rawPath, at, sheet, tag }) => {
       try {
         if (!projectId) {
           return { content: [{ type: 'text', text: 'No project bound; cannot pin.' }], isError: true };
@@ -136,50 +135,53 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         const zoneId = layerOf(objectId, null, new Set(Object.keys(boardNow.zones || {})));
 
         /**
-         * 点名落位（2026-08-30 刀 G）：`slot` / `at` 给了就走纸上落位，跟 write_on_board
-         * 同一套几何。这是「产物也由 agent 规划位置」的那只手 —— 暂存架上的东西，
-         * agent 规划出地方之后就用它请下来（seat 改写成 agent，自然离架）。
+         * 落到纸上（2026-08-30 刀 G；09-01 刀 2 把 `slot` 那一支换成机器排）：
+         * 这是「暂存架上的东西请下来」的那只手 —— seat 改写成 agent，自然离架。
+         * 给了 `at` 就是点名定点，没给就交给机器（跟正文同一套栏格，满了翻页）。
+         *
+         * ⭐ 2026-09-01 刀 2：**这条路现在是缺省**（此前只有点名 slot/at 才走）。
+         * 「把一件东西 pin 到板上」的意思本来就是「拎到桌面上摆着」—— 跟用户
+         * 从文件夹里拖一张卡出来是同一件事，工具描述从第一天起就是这么写的。
+         * 版位在的时候不点名就没地方可去，只好退回文件夹层；机器会排版之后
+         * 那个理由没了。板上一张纸都没有时才退回文件夹层。
          */
-        if (slot || at) {
-          const sh = (sheet && boardNow.sheets?.[sheet])
-            ? resolveSheet(boardNow, sheet)
-            : currentSheet(boardNow, currentSheetIdOf(sessionId));   // 会话正写的那张优先
-          if (!sh) {
-            return { content: [{ type: 'text', text: 'No sheet yet — open_sheet first (plan the page, then place things into its blocks).' }], isError: true };
-          }
+        const sh = (sheet && boardNow.sheets?.[sheet])
+          ? resolveSheet(boardNow, sheet)
+          : currentSheet(boardNow, currentSheetIdOf(sessionId));   // 会话正写的那张优先
+        if (sh) {
           const box = estimateSizeOn(boardNow, objectId, boardNow.objects?.[objectId] || null);
           let spot = null; let where = '';
-          if (slot) {
-            const rect = slotRectOf(sh, slot);
-            if (!rect) {
-              const names = Object.keys(sh.slots || {});
-              return { content: [{ type: 'text', text: names.length
-                ? `Sheet ${sh.id} has no slot "${slot}". It has: ${names.join(', ')}.`
-                : `Sheet ${sh.id} has no slots planned. Plan the page first: open_sheet{plan:[{slot,at,w,h,about}…]}.` }], isError: true };
-            }
+          if (at) {
+            const p = placeAtOnSheet(sh, at, box);
+            spot = p; where = p.clamped ? ' (clamped into the sheet)' : '';
+          } else {
             /**
-             * 算余量按**目标页**算（2026-09-01 叠纸刀 1）：一摞纸共用一块地。
-             *
              * ⚠️ 产物落盘时**不写 sheet 字段**，这是有意的 —— 这一版栈只叠墨
              * （板书 / 手写字 / 涂鸦），产物不参与叠放、翻到哪一页都看得见，
              * 而"看得见"在占位账上就是"每一页都得绕开它"（sheetMembers 里
-             * 没认领纸的东西算每一页的成员）。代价是它可能压住别页的板书，
-             * 出路是把产物收进这一摞共享的产物地（board.stacks[].artifacts），
-             * 那是后面一刀的事。
+             * 没认领纸的东西算每一页的成员）。
              */
-            const p = nextSpotInSlot(boardNow, rect, box, { sheetId: sh.id });
-            if (p.tooWide) {
-              return { content: [{ type: 'text', text: `⛔ Slot "${slot}" on sheet ${sh.id} is only ${p.freeW}px wide — ${objectId} is a ${p.needW}px-wide card and would spill ${p.needW - p.freeW}px into whatever is next to it. `
-                + 'Nothing moved. Re-plan that block wider (replan it by name, omit at — it resizes in place), or point it at another slot.' }], isError: true };
+            const p = nextSpotInSheet(boardNow, sh.id, box);
+            if (!p) {
+              const opened = await openSheetFor(projectId, { sessionId, where: 'stack', fromSheet: sh.id });
+              const p2 = nextSpotInSheet(
+                { ...boardNow, sheets: { ...boardNow.sheets, [opened.id]: opened } }, opened.id, box,
+              );
+              if (!p2) {
+                /**
+                 * 翻了页还是放不下，只有两种原因，报文要分清楚 ——
+                 * 第二种最容易被读成"机器坏了"：产物**不认领任何一页**（这一版栈
+                 * 只叠墨），所以它在这一摞的每一页上都占着地，翻页对它没有用。
+                 */
+                const tooBig = box.w > opened.innerW || box.h > opened.innerH;
+                return { content: [{ type: 'text', text: tooBig
+                  ? `⛔ ${objectId} is ${box.w}x${box.h} — bigger than a whole page here (${opened.innerW}x${opened.innerH}). Nothing moved; open a bigger sheet for it (open_sheet{w,h}) and pin it there.`
+                  : `⛔ No room for ${objectId} (${box.w}x${box.h}) on this pile. Turning the page does not help: files, images and sites do NOT belong to a page — they sit on every page of the pile, so they take the same ground each time. Nothing moved. Give it its own ground: open_sheet{near:"<something already placed>", w, h} beside the work, or edit_board move it somewhere deliberate.` }], isError: true };
+              }
+              spot = p2; where = ` on a fresh page ${opened.id} (the previous one was full)`;
+            } else {
+              spot = p; where = p.moved ? ' in the next free column' : '';
             }
-            if (p.full) {
-              return { content: [{ type: 'text', text: `⛔ Slot "${slot}" on sheet ${sh.id} is full — ${objectId} needs ${box.h}px, ~${p.freeH}px left. `
-                + 'Nothing moved. Re-plan the page with a taller block, or point it at another slot.' }], isError: true };
-            }
-            spot = p; where = ` in slot "${slot}"`;
-          } else {
-            const p = placeAtOnSheet(sh, at, box);
-            spot = p; where = p.clamped ? ' (clamped into the sheet)' : '';
           }
           /**
            * ⛔ 摆到纸上 = 摆到**根层**，zone 必须写 ''（不是文件所在的文件夹层）。
@@ -187,7 +189,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
            * spot 是 nextSpotInSlot 在根层纸矩形里算出来的**世界坐标**；zone 写成
            * 文件夹层的话，这两个字段当场互相矛盾：前端 dirOf 按 zone 把它渲染进
            * 那个文件夹里（世界坐标在那儿是没意义的局部坐标），根层画布上根本
-           * 看不见它 —— 而工具还报了「Placed on sheet p3 in slot refs at (24,2941)」。
+           * 看不见它 —— 而工具还报了「Placed on sheet p3 at (24,2941)」。
            *
            * 更实的后果：rootObjects 只收根层，membersInRect 跟着看不见它，于是
            * **下一件 pin 进同一个版位的东西算出来还是同一个坐标**。真案

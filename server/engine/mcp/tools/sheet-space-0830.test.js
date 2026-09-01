@@ -1,8 +1,12 @@
 /**
- * 屏幕空间六刀的集成断言（2026-08-30：flow / h 占位 / replan / 翻页裁纸 /
- * 铺纸点名占地者 / 拒收报文量纲）。
+ * 屏幕空间六刀的集成断言（2026-08-30：flow / h 占位 / 翻页裁纸 /
+ * 铺纸点名占地者 / 报文量纲）。
  *
  * 每条都是 proj_mtfpehm3 真会话里挂过或看不清的那一发的回归钉。
+ *
+ * ⛔ 2026-09-01 刀 2：版位退役，这一份里挂在版位上的六条一并撤了（replan 两条、
+ * 竖排糖三条、版位报文一条）。它们守的东西没有丢，只是换了执行点 ——
+ * 「装不下要如实报」现在守在纸和栏上（server/lib/sheet-flow.test.js）。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs/promises';
@@ -17,13 +21,6 @@ const { makeOpenSheetTool } = await import('./open-sheet.js');
 const { makeWriteOnBoardTool } = await import('./write-on-board.js');
 const { makeEditBoardTool } = await import('./edit-board.js');
 const { readBoard, patchBoard } = await import('../../../projects/board-store.js');
-const { slotsOf } = await import('../../../lib/board-sheets.js');
-/**
- * 2026-09-01 册：版式有两层了（摞的默认 + 这一页的覆盖），直接读
- * `sheets[id].slots` 只看得见后者。这些断言要的一直是**此刻生效的那一份**，
- * 所以统一走 slotsOf —— 换的是读的门，不是断言本身。
- */
-const liveSlots = (b, i = 0) => slotsOf(b, Object.keys(b.sheets)[i]);
 const { getSharedDir, ensureProjectWorkspace } = await import('../../../projects/workspace.js');
 const { setViewpoint, _resetViewpoints } = await import('../../../projects/viewpoint-store.js');
 const { _resetSheetState } = await import('../../../lib/sheet-state.js');
@@ -43,36 +40,35 @@ const LONG = Array.from({ length: 26 }, (_, i) => `第 ${i + 1} 段：这一段�
 beforeAll(() => { _resetViewpoints(); _resetSheetState(); });
 
 describe('刀⑦ flow：长文拆链', () => {
-  it('⭐ 版位装不下一整篇 → 拆成多条链好、装到哪儿是哪儿、剩余原样退回并教续写', async () => {
+  it('⭐ 一整篇长文 → 拆成多条链好的板书，装满一页就翻下一页（2026-09-01 起不再退回）', async () => {
     const t = await mk('proj_sp_flow');
     setViewpoint('proj_sp_flow', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '流', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 850, about: '正文' }] });
-    const r = await t.write({ slot: 'main', flow: true, tag: 'ch', text: LONG });
+    await t.open({ title: '流' });
+    const r = await t.write({ flow: true, tag: 'ch', text: LONG });
     expect(r.isError).toBeUndefined();
     const txt = r.content[0].text;
-    expect(txt).toMatch(/Flowed into \d+ chained notes/);
-    expect(txt).toMatch(/did NOT fit/);                       // 850px 装不下 26 段
-    expect(txt).toMatch(/flow:true, chain:true/);             // 教了怎么续
-    expect(txt).toMatch(/Slot "main" now has/);               // 余量随手报
+    expect(txt).toMatch(/The machine split this into \d+ chained notes/);
     const b = await readBoard('proj_sp_flow');
     const notes = Object.keys(b.objects).filter((k) => k.startsWith('notes/板书/'));
     expect(notes.length).toBeGreaterThan(1);
     // 链真的接上了：flow 线一条不少
     const flows = Object.values(b.bindings).filter((x) => x?.type === 'flow');
     expect(flows.length).toBe(notes.length - 1);
+    // ⭐ 26 段全落了盘 —— 旧范式在这里会退回一部分（"did NOT fit"），现在没有退回
+    expect(txt).not.toMatch(/did NOT fit/);
   });
 
-  it('flow 全装下时没有退回段；不带 slot 也能在纸上流', async () => {
+  it('短内容用不上 flow（拆分不是无条件发生的）', async () => {
     const t = await mk('proj_sp_flow2');
     setViewpoint('proj_sp_flow2', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await t.open({ title: '白纸' });
-    const r = await t.write({ flow: true, tag: 'ch', text: LONG.split('\n\n').slice(0, 8).join('\n\n') });
+    const r = await t.write({ flow: true, tag: 'ch', text: '就一句话，拆不出第二块。' });
     expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).not.toMatch(/did NOT fit/);
+    expect(r.content[0].text).not.toMatch(/split this into/);
   });
 });
 
-describe('刀⑧ h 占位 + replan', () => {
+describe('刀⑧ h 占位', () => {
   it('h 预约：内容比框矮时框保留，返回说清', async () => {
     const t = await mk('proj_sp_hbox');
     setViewpoint('proj_sp_hbox', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
@@ -82,20 +78,6 @@ describe('刀⑧ h 占位 + replan', () => {
     const b = await readBoard('proj_sp_hbox');
     const note = Object.entries(b.objects).find(([k]) => k.startsWith('notes/板书/'));
     expect(note[1].h).toBe(360);
-  });
-
-  it('⭐ replan 给已有的纸补版位（按名合并，旧版位保留），补完立刻能写', async () => {
-    const t = await mk('proj_sp_replan');
-    setViewpoint('proj_sp_replan', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '重规划', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 800, about: '正文' }] });
-    const r = await t.edit({ ops: [{ op: 'replan', plan: [{ slot: 'aside', at: { x: 640, y: 0 }, w: 360, h: 560 }] }] });
-    expect(r.content[0].text).toMatch(/replan/);
-    const b = await readBoard('proj_sp_replan');
-    const slots = liveSlots(b);
-    expect(Object.keys(slots).sort()).toEqual(['aside', 'main']);   // 旧的保留
-    expect(slots.aside.h).toBe(560);
-    const w = await t.write({ slot: 'aside', text: '状态表进新家。' });
-    expect(w.isError).toBeUndefined();
   });
 });
 
@@ -132,94 +114,64 @@ describe('刀③ 铺纸点名占地者', () => {
     const t = await mk(pid);
     setViewpoint(pid, { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await patchBoard(pid, { zones: { 记忆: { x: 300, y: 300 } } });
-    const r = await t.open({ title: '压上了', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 700, h: 800, about: '正文' }] });
+    const r = await t.open({ title: '压上了' });
     const txt = r.content[0].text;
     expect(txt).toMatch(/ALREADY LIVE/);
     expect(txt).toMatch(/📁 记忆/);
-    expect(txt).toMatch(/sits in your slot "main"/);
-    expect(txt).toMatch(/replan/);
+    // 出路也要说清（真案里这里整段是沉默的）
+    expect(txt).toMatch(/edit_board move/);
   });
 });
 
 // ⚠️ 2026-08-31：处置从"拒收"改成"溢出暂存"，但**报文的量纲纪律原样保留** ——
 // 这一组守的是"差多少直说、两边同单位"，跟放不放行无关。
 describe('刀⑥ 装不下的报文量纲', () => {
-  it('溢出报文：两边都是 px，差多少直说，教 flow', async () => {
+  it('⭐ 比一整页还大的东西：如实报这一页有几栏几行，并教 flow', async () => {
     const t = await mk('proj_sp_msg');
     setViewpoint('proj_sp_msg', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '小格', plan: [{ slot: 'tiny', at: { x: 0, y: 0 }, w: 432, h: 60, about: '塞不下' }] });
-    const r = await t.write({ slot: 'tiny', text: Array.from({ length: 6 }, () => '这一条明显超过六十像素的高度，句子还在继续。').join('\n') });
-    expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toMatch(/short by \d+px/);
-    expect(r.content[0].text).toMatch(/Free: \d+px/);
-    expect(r.content[0].text).toMatch(/flow:true/);
+    // 小纸（贴产物用的那种）：一整页也装不下一张 640 宽的卡
+    await t.open({ title: '小纸', w: 480, h: 300 });
+    const { makeSheetPlacer } = await import('./write-on-board-place.js');
+    const { describeSheetFull } = makeSheetPlacer({ projectId: 'proj_sp_msg', sessionId: 'x', by: 'agent' });
+    const b = await readBoard('proj_sp_msg');
+    const msg = describeSheetFull(b, Object.keys(b.sheets)[0]);
+    expect(msg).toMatch(/bigger than a whole sheet/);
+    expect(msg).toMatch(/column\(s\) of \d+px/);
+    expect(msg).toMatch(/~\d+ lines each/);
+    expect(msg).toMatch(/flow:true/);
   });
 });
 
-describe('空位竖排糖（2026-08-30 用户拍板「自己定几个空位分段填」）', () => {
-  it('⭐ plan 省掉 at → 依次竖排（y 累加归机器）；below 点名接在谁底下', async () => {
-    const t = await mk('proj_sp_stack');
-    setViewpoint('proj_sp_stack', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '分段', plan: [
-      { slot: 's1', w: 600, h: 340 },
-      { slot: 's2', w: 600, h: 280 },                    // 没 at：s1 正下方
-      { slot: 'aside', below: 's1', at: { x: 640 }, w: 360, h: 400 },  // 点名接 s1，x 自己给
-    ] });
-    const b = await readBoard('proj_sp_stack');
-    const sl = liveSlots(b);
-    expect(sl.s1).toMatchObject({ x: 0, y: 0 });
-    expect(sl.s2).toMatchObject({ x: 0, y: 340 + 24 });
-    expect(sl.aside).toMatchObject({ x: 640, y: 340 + 24 });
-    // 分段填：三段各进各的空位，互不连坐
-    for (const s of ['s1', 's2']) {
-      const w = await t.write({ slot: s, tag: 'ch', chain: true, text: `${s} 的那一段。` });
-      expect(w.isError).toBeUndefined();
-    }
-  });
-
-  it('replan 的 below 能引用纸上已有的版位（写到一半补一块地）', async () => {
-    const t = await mk('proj_sp_stack2');
-    setViewpoint('proj_sp_stack2', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '补地', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 300 }] });
-    await t.edit({ ops: [{ op: 'replan', plan: [{ slot: 'more', below: 'main', w: 600, h: 240 }] }] });
-    const b = await readBoard('proj_sp_stack2');
-    expect(liveSlots(b).more).toMatchObject({ x: 0, y: 324 });
-  });
-
-  it('⭐ replan 点名已有版位、省坐标 = 原地改尺寸（glm 真案：此前被竖排糖传送到 (0,0) 跟 main 叠上）', async () => {
-    const t = await mk('proj_sp_resize');
-    setViewpoint('proj_sp_resize', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '原地加高', plan: [
-      { slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 700, about: '正文' },
-      { slot: 'state', at: { x: 640, y: 120 }, w: 360, h: 240, about: '状态板' },
-    ] });
-    await t.edit({ ops: [{ op: 'replan', plan: [{ slot: 'state', w: 360, h: 500 }] }] });
-    const sl = liveSlots(await readBoard('proj_sp_resize'));
-    expect(sl.state).toMatchObject({ x: 640, y: 120, h: 500 });   // 位置没动，只长高
-    expect(sl.state.about).toBe('状态板');                          // 旧 about 不丢
-    expect(sl.main).toMatchObject({ x: 0, y: 0, h: 700 });
-  });
-});
-
-describe('利用率三刀（2026-08-30 sonnet「每拍一张纸」真案）', () => {
-  it('⭐ 版位写满但纸还有地 → 报文先指回这张纸，不再说 goes elsewhere', async () => {
+describe('利用率两刀（2026-08-30 sonnet「每拍一张纸」真案）', () => {
+  it('⭐ 写完随手报这一页每栏还剩多少（照着它判断，别凭感觉）', async () => {
     const t = await mk('proj_sp_reuse');
     setViewpoint('proj_sp_reuse', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '复用', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 120, about: '一小块' }] });
-    const w = await t.write({ slot: 'main', tag: 'ch', text: '三行左右的一段话，把这个小版位基本写满。\n再来一行。\n第三行。' });
+    await t.open({ title: '复用' });
+    const w = await t.write({ tag: 'ch', text: '三行左右的一段话。\n再来一行。\n第三行。' });
     expect(w.isError).toBeUndefined();
-    expect(w.content[0].text).toMatch(/sheet still has ~\d+px below/);
-    expect(w.content[0].text).not.toMatch(/goes elsewhere/);
+    expect(w.content[0].text).toMatch(/now has \d+ column\(s\); the roomiest has ~\d+ lines/);
+    expect(w.content[0].text).toMatch(/turns the page for you/);
   });
 
-  it('⭐ 翻纸裁掉近半张 → 点名「翻快了」并教短拍接着写（只提醒不拦）', async () => {
+  it('⭐ 一页还剩大半就自己翻 → 点名「不用你翻」（只提醒不拦）', async () => {
     const t = await mk('proj_sp_waste');
     setViewpoint('proj_sp_waste', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await t.open({ title: '第一拍' });
     await t.write({ text: '短短一拍。' });
     const r = await t.open({ title: '第二拍', where: 'next' });
     expect(r.isError).toBeUndefined();                          // 不拦
-    expect(r.content[0].text).toMatch(/turning faster than they fill/);
+    expect(r.content[0].text).toMatch(/still had ~\d+px free/);
+    expect(r.content[0].text).toMatch(/You do not need to turn pages/);
+    // 对照：上一页真写满了就不该说这句
+    const t2 = await mk('proj_sp_waste2');
+    setViewpoint('proj_sp_waste2', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t2.open({ title: '满页', name: 'f1' });
+    const b0 = await readBoard('proj_sp_waste2');
+    await patchBoard('proj_sp_waste2', { objects: { 'notes/板书/full.md': {
+      x: b0.sheets.f1.x + 24, y: b0.sheets.f1.y + 24, w: 400, h: b0.sheets.f1.h - 80,
+    } } });
+    const r2 = await t2.open({ title: '下一页' });
+    expect(r2.content[0].text).not.toMatch(/You do not need to turn pages/);
   });
 });
 

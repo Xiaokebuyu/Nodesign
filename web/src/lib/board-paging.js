@@ -42,6 +42,8 @@ export function pilesOf(sheets, stacks) {
     const head = members[0];
     out.push({
       name,
+      // 正序 / 倒序（2026-09-01 刀 2，站主点名的参数）—— 见 displayedPage
+      order: reg?.order === 'asc' ? 'asc' : 'desc',
       x: head.x, y: head.y,
       w: Math.max(...members.map((m) => m.w)),
       h: Math.max(...members.map((m) => m.h)),
@@ -57,15 +59,22 @@ export function pilesOf(sheets, stacks) {
 /**
  * 这一摞此刻显示第几页。
  *
- * 缺省是**最新那一张**（摞里最后登记的），而且 agent 新开一页会自动跟过去 ——
- * 直到用户自己翻过。翻过之后认他选的那张，除非那张纸没了（撕掉/改名）。
- * 这是相机「用户一接管就让位」的同一条规矩，换到翻页这一轴上。
+ * 用户自己翻过就认他选的那张（除非那张纸没了）—— 相机「用户一接管就让位」的
+ * 同一条规矩，换到翻页这一轴上。他没翻过时看这一摞的**正倒序**：
+ *
+ *   desc（缺省）= 最新那一张，agent 新开一页会自动跟过去 —— 一场戏、一段日志、
+ *                 一次对话，读的人要的就是跟着走。
+ *   asc         = **第一页**，往后翻由他自己来 —— 这一摞是一份文档的时候，
+ *                 把他按在最新一页上等于逼他倒着读。
+ *
+ * ⚠️ 只管「他没翻过时停在哪」。上下翻页的方向两档一样（下＝更新的一页）——
+ * 那是手势与内容顺序的关系，不该随这个参数变。
  */
 export function displayedPage(pile, picked) {
   if (!pile?.sheets?.length) return null;
   const want = picked?.[pile.name];
   if (want && pile.sheets.includes(want)) return want;
-  return pile.sheets[pile.sheets.length - 1];
+  return pile.order === 'asc' ? pile.sheets[0] : pile.sheets[pile.sheets.length - 1];
 }
 
 /**

@@ -78,18 +78,21 @@ describe('暂存架：机器的手只够得到架', () => {
     expect(b.objects['assets/big.png'].seat).toBe('shelf');
   });
 
-  it('⭐⭐ 规划了 for:"artifacts" 的地 → 产物落进那块地，不上架', async () => {
+  /**
+   * ⛔ 2026-09-01 刀 2：这条原来钉的是「规划了 for:'artifacts' 的地 → 产物落进
+   * 那块地，不上架」。版位退役，那一档整个撤了 —— **机器从此只码架**，一档不留。
+   * 产物的归宿改由 agent 一件件 pin_to_board 请下来。所以这里钉的换成
+   * 「有纸也照样上架」，正是那条纪律最容易被人偷偷加回去的地方。
+   */
+  it('⭐⭐ 板上有纸也照样上架 —— 机器一档都不产版面', async () => {
     await patchBoard(projectId, { sheets: { p1: {
       x: 0, y: 0, w: 1600, h: 900, at: '2026-08-30T01:00:00Z', by: 'agent',
-      slots: { main: { x: 0, y: 0, w: 600, h: 800 }, 图: { x: 700, y: 0, w: 400, h: 800, for: 'artifacts' } },
     } } });
     await touch('assets/a.png');
     const r = await seatArtifacts(projectId, ['assets/a.png']);
     const e = (await readBoard(projectId)).objects['assets/a.png'];
-    // 图块的世界左缘 = 纸 x + margin 24 + slot.x 700
-    expect(e.x).toBe(724);
-    expect(e.seat).toBe('auto');
-    expect(r.shelved).toBe(0);
+    expect(e.seat).toBe('shelf');
+    expect(r.shelved).toBe(1);
   });
 
   it('_drafts/ 永不入座，也不上架（那是纪律不是"没地方"）', async () => {

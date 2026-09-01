@@ -35,7 +35,7 @@ describe('状态块：暂存架点名', () => {
     const r1 = (await h({ prompt: 'hi' }, 't', {})).hookSpecificOutput.additionalContext;
     expect(r1).toMatch(/2 件在暂存架等你安置/);
     expect(r1).toMatch(/ref-1\.jpg、说明\.md/);
-    expect(r1).toMatch(/pin_to_board\{path,slot\}/);
+    expect(r1).toMatch(/pin_to_board\{path\}/);
 
     // agent 把一件安置了（seat 改写 = 离架），另一件用户拖走了
     await patchBoard(pid, { objects: {

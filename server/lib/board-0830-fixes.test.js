@@ -171,7 +171,7 @@ describe('⑤ 未知参数探针：查的是真注册表，不是手塞的表', 
     expect(t).toContain('write_on_board 收的是');   // 顺带告诉它真参数有哪些
   });
   it('⭐ 干净调用一声不吭（不响也是判据：会误报的探针没人会理）', async () => {
-    expect(await ctxOf('mcp__nodesign__write_on_board', { text: 'x', tag: '章节', slot: 'main' })).toBeNull();
+    expect(await ctxOf('mcp__nodesign__write_on_board', { text: 'x', tag: '章节', width: 18 })).toBeNull();
     expect(await ctxOf('mcp__nodesign__board_batch', { actions: [{ name: 'edit_board', input: { ops: [] } }], screenshotAfter: true })).toBeNull();
   });
   it('⭐ batch 里逐步查，裸名也认', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sheetMembers, membersInRect, nextSpotInSlot, sheetOfPoint, slotRectOf, isInk } from './board-sheets.js';
+import { sheetMembers, membersInRect, nextSpotInSheet, sheetOfPoint, isInk } from './board-sheets.js';
 import { obstaclesIn } from './board-obstacles.js';
 
 /**
@@ -12,12 +12,10 @@ import { obstaclesIn } from './board-obstacles.js';
 const stacked = () => ({
   sheets: {
     p1: {
-      x: 0, y: 0, w: 1000, h: 800, at: '2026-09-01T01:00:00Z', stack: 'main',
-      slots: { main: { x: 0, y: 0, w: 400, h: 600 } },
+      x: 0, y: 0, w: 1000, h: 800, at: '2026-09-01T01:00:00Z', stack: 'main', colW: 432,
     },
     p2: {
-      x: 0, y: 0, w: 1000, h: 800, at: '2026-09-01T02:00:00Z', stack: 'main',
-      slots: { main: { x: 0, y: 0, w: 400, h: 600 } },
+      x: 0, y: 0, w: 1000, h: 800, at: '2026-09-01T02:00:00Z', stack: 'main', colW: 432,
     },
   },
   stacks: { main: { at: '2026-09-01T01:00:00Z' } },
@@ -49,25 +47,21 @@ describe('叠纸：一摞纸共用一块地，成员归属靠认领消歧', () =
     expect(sheetMembers(b, 'p1').map(m => m.id)).not.toContain('notes/板书/a.md');
   });
 
-  it('⭐ 版位余量按页算：第二页的 main 是空的，第一页的 main 快满了', () => {
+  it('⭐ 栏内余量按页算：第二页的第一栏是空的，第一页那一栏已经写到 524', () => {
     const b = stacked();
-    const r1 = slotRectOf({ id: 'p1', ...b.sheets.p1 }, 'main');
-    const r2 = slotRectOf({ id: 'p2', ...b.sheets.p2 }, 'main');
     const box = { w: 400, h: 200 };
-    // 第一页：500 高的板书已经占着，只剩不到 200
-    expect(nextSpotInSlot(b, r1, box, { sheetId: 'p1' }).full).toBe(true);
-    // 第二页：同一块地，空的
-    const p = nextSpotInSlot(b, r2, box, { sheetId: 'p2' });
-    expect(p.full).toBeUndefined();
-    expect(p.y).toBe(r2.y);
+    // 第一页：500 高的板书占着第一栏 → 接在它下面
+    expect(nextSpotInSheet(b, 'p1', box).y).toBe(24 + 500 + 24);
+    // 第二页：同一块地，第一栏是空的 —— 不消歧的话这里会跟第一页拿到同一个数
+    expect(nextSpotInSheet(b, 'p2', box).y).toBe(24);
   });
 
-  it('不传 sheetId 时退回老口径（存量不叠的板行为不变）', () => {
+  it('membersInRect 不传 sheetId 时退回老口径（存量不叠的板行为不变）', () => {
     const b = stacked();
-    const r2 = slotRectOf({ id: 'p2', ...b.sheets.p2 }, 'main');
-    expect(nextSpotInSlot(b, r2, { w: 400, h: 200 }).full).toBe(true);
     expect(membersInRect(b, { x: 0, y: 0, w: 1000, h: 800 }).map(m => m.id))
       .toContain('notes/板书/a.md');
+    expect(membersInRect(b, { x: 0, y: 0, w: 1000, h: 800 }, 'p2').map(m => m.id))
+      .not.toContain('notes/板书/a.md');
   });
 
   it('⭐ 障碍集按页分：在第二页上放东西，第一页的墨不挡路', () => {

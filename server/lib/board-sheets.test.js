@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
   SHEET_GAP, SHEET_MARGIN, sheetSizeFor, sheetRects, nextSheetName, sheetOfPoint,
   sheetMembers, innerRect, toWorld, toLocal, currentSheet, allocateSheetRect,
-  nextSpotInSheet, sheetSummaries,
+  nextSpotInSheet, sheetSummaries, sheetColumns, columnX, freeColumnsInSheet,
 } from './board-sheets.js';
 import { ONE_SCREEN } from './screen.js';
 
@@ -107,10 +107,37 @@ describe('allocateSheetRect：分配纪律', () => {
 });
 
 /**
- * 顺排跟着纸的形状走（2026-08-29 站主拍板）：横纸报纸分栏、竖纸只往下。
- * 原来无论什么纸都只排一列 —— 一张两个屏幕宽的纸，四分之三是空的。
+ * 栏格（2026-09-01 刀 2）：版位退役之后，纸内怎么排**全归机器**。
+ * 判据钉的是站主那句「文本的阅读本来就是从左到右从上到下」的执行形状：
+ * 竖着填满一栏 → 右边下一栏 → 整页满了（由调用方翻页）。
  */
-describe('nextSpotInSheet：横纸分栏、竖纸往下', () => {
+describe('sheetColumns：版心切成几栏，余量均摊', () => {
+  it('⭐ 栏宽是均摊出来的，不是切死 432 —— 切死的话右边永远空一截', () => {
+    const c = sheetColumns(S(0, 0, 1000, 800));      // 版心 952
+    expect(c.n).toBe(2);
+    expect(c.colW).toBe(464);                        // (952-24)/2，不是 432
+    expect(columnX(c, 0)).toBe(24);
+    expect(columnX(c, 1)).toBe(24 + 464 + 24);
+    // 均摊之后两栏加一条沟正好铺满版心（这是「均摊」的定义，攻它改 colW 就红）
+    expect(c.colW * c.n + c.gap * (c.n - 1)).toBe(952);
+  });
+
+  it('⭐ 纸自己的 colW 决定切几栏（手机 342 → 一张 780 的纸切两栏）', () => {
+    const phone = sheetColumns(S(0, 0, 780, 1688, { colW: 342 }));
+    expect(phone.n).toBe(2);
+    expect(phone.colW).toBe(354);
+    // 对照：同一张纸不带 colW（存量的纸）走默认 432 → 只有一栏
+    expect(sheetColumns(S(0, 0, 780, 1688)).n).toBe(1);
+  });
+
+  it('窄纸至少一栏（贴着产物的小说明纸）', () => {
+    const c = sheetColumns(S(0, 0, 300, 400));
+    expect(c.n).toBe(1);
+    expect(c.colW).toBe(252);
+  });
+});
+
+describe('nextSpotInSheet：竖着填满一栏，到底换下一栏', () => {
   const land = {   // 横纸 1000x800（版心 952x752）
     sheets: { p1: S(0, 0, 1000, 800) },
     objects: { 'notes/板书/a.md': { x: 24, y: 24, w: 400, h: 200 } },
@@ -122,13 +149,16 @@ describe('nextSpotInSheet：横纸分栏、竖纸往下', () => {
     expect(p.y).toBe(24 + 200 + 24);
   });
 
-  it('⭐ 横纸：这一列到底了 → 往右挪一块空地，而不是翻页', () => {
+  it('⭐ 这一栏到底了 → 下一栏的顶上（落在栏格上，不是贴着上一件的右边）', () => {
     const p = nextSpotInSheet(land, 'p1', { w: 400, h: 700 });
     expect(p).not.toBeNull();
     expect(p.moved).toBe(true);
-    // 步长跟这件东西的宽度走（不是切死的栏）：机器只帮忙找地方，版面怎么切是 agent 的事
-    expect(p.x).toBe(SHEET_MARGIN + 400 + 24);
-    expect(p.y).toBe(SHEET_MARGIN);              // 那块空地从顶上开始
+    expect(p.col).toBe(1);
+    // ⭐ 栏格是切死的：不是 24+400+24=448（跟着上一件的宽度走），而是第 2 栏的左缘。
+    // 攻这一条就是把 nextSpotInSheet 换回按 box.w 步进 —— 当场差 64px。
+    expect(p.x).toBe(columnX(sheetColumns(S(0, 0, 1000, 800)), 1));
+    expect(p.x).toBe(512);
+    expect(p.y).toBe(SHEET_MARGIN);              // 新的一栏从顶上开始
   });
 
   it('⭐ 纸上哪儿都放不下了才返回 null —— 这才叫满（一列到底不算）', () => {
@@ -155,7 +185,7 @@ describe('nextSpotInSheet：横纸分栏、竖纸往下', () => {
     expect(nextSpotInSheet(land, 'p1', { w: 2000, h: 100 })).toBeNull();
   });
 
-  it('⭐ 竖纸（手机）不分栏，只往下 —— 竖屏上分栏等于把每栏挤成一指宽', () => {
+  it('窄纸只有一栏，只往下（一栏装不下就是装不下，没有别的栏可换）', () => {
     const port = {
       sheets: { p1: S(0, 0, 500, 1400) },
       objects: { a: { x: 24, y: 24, w: 400, h: 200 } },
@@ -171,7 +201,24 @@ describe('nextSpotInSheet：横纸分栏、竖纸往下', () => {
   it('空纸从版心顶端排', () => {
     const b2 = { sheets: { p1: S(0, 0, 1000, 800) }, objects: {} };
     expect(nextSpotInSheet(b2, 'p1', { w: 400, h: 100 }))
-      .toEqual({ x: SHEET_MARGIN, y: SHEET_MARGIN, moved: false });
+      .toEqual({ x: SHEET_MARGIN, y: SHEET_MARGIN, col: 0, moved: false });
+  });
+
+  it('⭐ 比一栏宽的东西占掉它压住的那几栏（640 的卡在 464 的栏上要两栏）', () => {
+    const b2 = { sheets: { p1: S(0, 0, 1000, 800) }, objects: {} };
+    const p = nextSpotInSheet(b2, 'p1', { w: 640, h: 100 });
+    expect(p.col).toBe(0);
+    // 对照：它占了两栏，所以第二件 640 的卡就没地方并排了，只能接在它下面
+    const b3 = { sheets: { p1: S(0, 0, 1000, 800) }, objects: { deck: { x: 24, y: 24, w: 640, h: 100 } } };
+    expect(nextSpotInSheet(b3, 'p1', { w: 640, h: 100 })).toMatchObject({ col: 0, y: 148 });
+  });
+
+  it('freeColumnsInSheet 报的是同一套栏（报的和排的必须是一套）', () => {
+    const free = freeColumnsInSheet(land, 'p1');
+    expect(free).toHaveLength(2);
+    expect(free[0].x).toBe(0);                 // 纸内局部像素
+    expect(free[1].x).toBe(488);               // 512 - 24
+    expect(free[0].freeH).toBeLessThan(free[1].freeH);   // 第一栏被 a.md 吃掉一截
   });
 });
 

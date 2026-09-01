@@ -83,22 +83,20 @@ export const EDGES = z.array(z.object({
  * 抽取规则在 agent-shared.js 的 TOOL_INPUT_STREAM_FIELDS.spot。
  */
 export const WRITE_SCHEMA = {
-  slot: z.string().regex(TAG_RE).optional()
-    .describe('Drop this into a PLANNED BLOCK of the current sheet (names come from open_sheet{plan}). The block decides the width and where it lands; notes stack downward inside it. If it does not fit, the write is REFUSED with how much room is left — split the content or re-plan. Prefer this over at: plan the page first, then fill it.'),
   at: SHEET_PT.optional()
-    .describe("Where on the CURRENT SHEET, in pixels from its top-left writable corner (x→right, y→down). Clamped into the sheet — the return says if it was. Omit it to flow top-to-bottom"),
+    .describe("Where on the CURRENT SHEET, in pixels from its top-left writable corner (x→right, y→down). Clamped into the sheet — the return says if it was. OMIT IT: the machine columns your notes and turns the page when the sheet is full. Use at only to pin one thing to an exact spot."),
   sheet: z.string().regex(TAG_RE).optional()
     .describe('Write on this sheet instead of the current one (names from open_sheet / read_board)'),
-  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px). Default: the width the user last dragged chalk blocks to, else by content. Omit it unless this one block needs a different measure - the default already follows the user.'),
+  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px). Default: the COLUMN width of this sheet, so the columns line up (else the width the user last dragged chalk blocks to). Omit it — a note wider than a column breaks the page grid.'),
   near: z.string().max(300).optional()
     .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it. Placement itself is by sheet (at / flow), not by near'),
   side: z.enum(['right', 'left', 'above', 'below']).optional()
     .describe('ONLY with near, when the SEMANTICS demand a side (e.g. a caption must sit above): exact placement beside the anchor. Normally omit — sheets flow downward'),
-  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; a full sheet turns the page)`),
+  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; if there is no room it flows to the next column, then onto a fresh page)`),
   text: z.string().min(1).max(8000).optional()
     .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
   flow: z.boolean().optional()
-    .describe('Lazy FALLBACK for a ready-made long text: the machine splits it at paragraph breaks into a chain of card-sized notes, packs them as far as they fit, and returns the rest untouched (never squeezed, dropped, or auto-paged). PREFER carving slots yourself (open_sheet{plan}/replan, omit at to stack) and filling them one note each — you keep control of where each part breaks.'),
+    .describe('Force paragraph-splitting even for a short text. You rarely need it: anything taller than one card is split this way AUTOMATICALLY — the machine breaks it at paragraph boundaries into a chain of card-sized notes, columns them, and turns the page when the sheet fills.'),
   h: z.number().min(24).max(2000).optional()
     .describe('Reserve this HEIGHT in pixels for the note box, placed before the text settles (plan the box, then fill it). Shorter content keeps the box; longer content overrides it. Ignored with flow.'),
   relation: z.enum(BINDING_TYPE_IDS).optional()

@@ -41,13 +41,21 @@ const BIG = Array.from({ length: 14 }, (_, i) => `第 ${i + 1} 行：这一行�
 
 beforeAll(() => { _resetViewpoints(); _resetSheetState(); });
 
-describe('版位装不下 → 溢出暂存', () => {
+/**
+ * ⚠️ 2026-09-01 刀 2：触发溢出的条件变窄了。
+ *
+ * 版位撤掉、纸满自动翻页之后，「装不下」只剩**一种**：这一条比一整张纸还大。
+ * 所以下面用的是一张贴产物的小纸（480x300），而不是原来那个 80px 高的窄版位。
+ * 被守的东西一个没变 —— 内容照写、落架、报文点名要它安置。
+ */
+describe('比一整页还大 → 溢出暂存', () => {
+  const tiny = { w: 480, h: 300 };
   it('⭐ 内容照写、落到架上、报文点名要它安置（不再 isError）', async () => {
     const t = await mk('proj_ovf_slot');
     setViewpoint('proj_ovf_slot', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '窄', plan: [{ slot: 'tiny', at: { x: 0, y: 0 }, w: 432, h: 80, about: '故意很矮' }] });
+    await t.open({ title: '窄', ...tiny });
 
-    const r = await t.write({ slot: 'tiny', text: BIG });
+    const r = await t.write({ text: BIG });
     // ① 不再是错误
     expect(r.isError, '装不下不该再整条拒收').toBeUndefined();
     const txt = r.content[0].text;
@@ -64,37 +72,36 @@ describe('版位装不下 → 溢出暂存', () => {
     // ⑤ 报文说清了三件事：溢出了 / 为什么 / 现在立刻怎么安置
     expect(txt).toMatch(/OVERFLOW/);
     expect(txt).toMatch(/parked on the shelf/);
-    expect(txt).toMatch(/short by/);          // 为什么（原拒收报文的第一行）
-    expect(txt).toMatch(/replan/);            // 怎么办①
-    expect(txt).toMatch(/op:"move"/);         // 怎么办②
-    expect(txt).toMatch(/open_sheet/);        // 怎么办③
+    expect(txt).toMatch(/bigger than a whole sheet/);   // 为什么
+    expect(txt).toMatch(/op:"move"/);         // 怎么办①
+    expect(txt).toMatch(/open_sheet/);        // 怎么办②
   });
 
-  it('⭐ 差 1px 也走同一条路（不开小溢出的特例 —— 规则只有一条才好预测）', async () => {
-    const t = await mk('proj_ovf_1px');
-    setViewpoint('proj_ovf_1px', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    // 先量出一条的真实高度，再把版位切得刚好差一点
-    await t.open({ title: '刚好', plan: [{ slot: 'a', at: { x: 0, y: 0 }, w: 432, h: 800 }] });
-    const one = await t.write({ slot: 'a', text: '一行字。' });
-    const b1 = await readBoard('proj_ovf_1px');
-    const h = Object.values(b1.objects)[0].h;
-
-    const t2 = await mk('proj_ovf_1px2');
-    setViewpoint('proj_ovf_1px2', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t2.open({ title: '差一点', plan: [{ slot: 'a', at: { x: 0, y: 0 }, w: 432, h: h - 1 }] });
-    const r = await t2.write({ slot: 'a', text: '一行字。' });
-    expect(one.isError).toBeUndefined();
-    expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toMatch(/OVERFLOW/);
-    const b2 = await readBoard('proj_ovf_1px2');
-    expect(Object.values(b2.objects)[0].seat).toBe('shelf');
+  it('⭐⭐ 溢出之前先翻页：小纸上先落一条、再落一条，第二条落在新一页而不是架上', async () => {
+    const t = await mk('proj_ovf_turn');
+    setViewpoint('proj_ovf_turn', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await t.open({ title: '小纸', ...tiny });
+    const a = await t.write({ text: '第一条，把这张小纸占掉大半。\n第二行。\n第三行。\n第四行。' });
+    expect(a.isError).toBeUndefined();
+    await t.write({ text: '第二条。\n第二行。\n第三行。\n第四行。' });
+    const b = await t.write({ text: '第三条，这张小纸再也塞不下了。\n第二行。\n第三行。\n第四行。' });
+    expect(b.isError).toBeUndefined();
+    // ⭐ 关键：它翻了页，而不是上架 —— 这就是刀 2 的全部意思
+    expect(b.content[0].text).toMatch(/turned to page/);
+    expect(b.content[0].text).not.toMatch(/OVERFLOW/);
+    const board = await readBoard('proj_ovf_turn');
+    expect(Object.keys(board.sheets).length).toBe(2);
+    expect(shelfItems(board)).toEqual([]);
+    // 翻出来的那一页尺寸跟着这一摞走（否则一张 480 的小纸会翻出一整屏压在同一块地上）
+    const [, p2] = Object.entries(board.sheets).sort(([, x], [, y]) => String(x.at).localeCompare(String(y.at)))[1];
+    expect({ w: p2.w, h: p2.h }).toEqual(tiny);
   });
 
-  it('装得下的照旧落进版位，seat 是 agent，报文里没有 OVERFLOW', async () => {
+  it('装得下的照旧落在纸上，seat 是 agent，报文里没有 OVERFLOW', async () => {
     const t = await mk('proj_ovf_ok');
     setViewpoint('proj_ovf_ok', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '够用', plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 600, h: 800 }] });
-    const r = await t.write({ slot: 'main', text: '短短一条。' });
+    await t.open({ title: '够用' });
+    const r = await t.write({ text: '短短一条。' });
     expect(r.content[0].text).not.toMatch(/OVERFLOW/);
     const b = await readBoard('proj_ovf_ok');
     expect(Object.values(b.objects)[0].seat).toBe('agent');
@@ -106,9 +113,9 @@ describe('架的原点与折列', () => {
   it('溢出件码进架带（纸群左侧），不落在纸上', async () => {
     const t = await mk('proj_ovf_where');
     setViewpoint('proj_ovf_where', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    const sh = await t.open({ title: '窄', plan: [{ slot: 'tiny', at: { x: 0, y: 0 }, w: 432, h: 80 }] });
+    const sh = await t.open({ title: '窄', w: 480, h: 300 });
     expect(sh.isError).toBeUndefined();
-    await t.write({ slot: 'tiny', text: BIG });
+    await t.write({ text: BIG });
     const b = await readBoard('proj_ovf_where');
     const sheet = Object.values(b.sheets)[0];
     const e = Object.values(b.objects)[0];
@@ -133,8 +140,8 @@ describe('架的原点与折列', () => {
   it('⭐ 连着溢出一堆：全部叠在架位上，架不按件数长', async () => {
     const t = await mk('proj_ovf_many');
     setViewpoint('proj_ovf_many', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
-    await t.open({ title: '窄', plan: [{ slot: 'tiny', at: { x: 0, y: 0 }, w: 432, h: 80 }] });
-    for (let i = 0; i < 10; i += 1) await t.write({ slot: 'tiny', text: `${BIG}\n第 ${i} 条。` });
+    await t.open({ title: '窄', w: 480, h: 300 });
+    for (let i = 0; i < 10; i += 1) await t.write({ text: `${BIG}\n第 ${i} 条。` });
     const b = await readBoard('proj_ovf_many');
     const shelved = Object.values(b.objects).filter(e => e.seat === 'shelf');
     expect(shelved.length).toBe(10);

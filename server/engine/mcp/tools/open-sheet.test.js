@@ -92,33 +92,38 @@ describe('write_on_board 的纸流程', () => {
   });
 
   /**
-   * ⚠️ 08-29 刀 F 改了这条的答案：纸写满**不再自动翻页**。
-   * 站主拍板「每张纸规划一次摆放」—— 机器悄悄翻页的话 agent 根本不知道自己换了页，
-   * 新纸自然也没有版面（真会话 proj_mtfhey1x：p2 规划得好好的，写满翻到 p3 就散了）。
-   * 纸是它开的，满了该由它决定下一页什么样。
+   * ⭐⭐ 这条的答案翻过三次，把三次都留在这儿 —— 它们是同一个问题在不同前提下的答案：
+   *
+   *   08-29 刀 F  纸写满 → 拒收，**机器绝不替它翻页**
+   *               （理由：机器悄悄翻页，agent 不知道自己换了页，新纸没有版面）
+   *   08-31       纸写满 → 不拒收了，内容落暂存架（理由：拒收占了全系统工具失败的 1/4）
+   *   09-01 刀 2  纸写满 → **机器翻到这一摞的下一页**
+   *
+   * ⭐ 第三次翻案不是把第一次推翻，是**第一次的理由没有了**：版位撤了，新一页
+   * 不再"没有版面"—— 它跟上一页同一摞、同一套栏格，读的人一翻就到。
    */
-  /**
-   * ⚠️ 2026-08-31 再改一次：纸写满**也不再拒收**，改成溢出暂存。
-   * 这条真正要守的那半件事没变 —— **机器绝不替它翻页**（新纸没有版面）。
-   */
-  it('⭐ 纸写满 → 溢出暂存，机器仍然不替它翻页', async () => {
+  it('⭐⭐ 纸写满 → 机器翻到这一摞的下一页（不是拒收，也不是往下铺新纸）', async () => {
     const pid3 = 'proj_opensheet_full';
     await ensureProjectWorkspace(pid3);
     const w = (args) => makeWriteOnBoardTool({ projectId: pid3, sharedRoot: getSharedDir(pid3), sessionId: 's3', ctx: { emit() {} } }).handler(args, {});
-    let overflow = null;
-    for (let i = 0; i < 40; i += 1) {
+    let turned = null;
+    for (let i = 0; i < 40 && !turned; i += 1) {
       const r = await w({ text: `第 ${i} 段\n\n${'内容行\n'.repeat(10)}` });
-      expect(r.isError, '纸满不该再整条拒收').toBeUndefined();
-      if (/OVERFLOW/.test(r.content[0].text)) { overflow = r.content[0].text; break; }
+      expect(r.isError, '纸满不该拒收').toBeUndefined();
+      if (/turned to page/.test(r.content[0].text)) turned = r.content[0].text;
     }
-    expect(overflow, '连写这么多条都没填满，判据本身可疑').toBeTruthy();
-    expect(overflow).toMatch(/is full/);            // 为什么溢出：原报文照旧带着
-    expect(overflow).toMatch(/parked on the shelf/);
-    expect(overflow).toMatch(/open_sheet/);
-    // ⭐ 没有替它铺新纸（这一条是刀 F 的本体，不许因为改了处置就丢）
+    expect(turned, '连写这么多条都没填满，判据本身可疑').toBeTruthy();
     const board = await readBoard(pid3);
-    expect(Object.keys(board.sheets).length).toBe(1);
-    expect(currentSheetIdOf('s3')).toBe('p1');
+    expect(Object.keys(board.sheets).length).toBe(2);
+    const [p1, p2] = Object.entries(board.sheets).sort(([, a2], [, b2]) => String(a2.at).localeCompare(String(b2.at)));
+    // ⭐ 叠上去（同一块地），不是往下铺 —— 板子不长高才是这一刀的意义
+    expect(p2[1].x).toBe(p1[1].x);
+    expect(p2[1].y).toBe(p1[1].y);
+    expect(p2[1].stack).toBe(p1[0]);
+    // 会话的当前纸跟到新页上（下一条接着往那儿写）
+    expect(currentSheetIdOf('s3')).toBe(p2[0]);
+    // ⭐ 一件都没上架：翻页接住了，暂存架不该再有事做
+    expect(Object.values(board.objects).filter((e) => e.seat === 'shelf')).toHaveLength(0);
   });
 
   it('sheet 点名：写到指定的纸上而不是当前纸', async () => {

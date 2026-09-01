@@ -321,10 +321,15 @@ export function sanitizeRoll(r) {
 export const MAX_SLOTS = 24;
 
 /**
- * 版位（slot，2026-08-29 占位契约刀 E）：开工时先把这一屏切成几块地，各自起名。
+ * 版位（slot，2026-08-29 占位契约刀 E）。
  *
- * ⚠️ 坐标**跟 at 同一套**：纸内局部像素、原点在版心左上角。不用格数 —— 同一组
- * 字段两种单位是站主点过名的老坑（"同字段按数值切单位＝中间那段必错且不出声"）。
+ * ⛔ **2026-09-01 刀 2 起没有任何一处再产生版位**（站主撤掉纸内切块，改机器按栏排
+ * —— 见 lib/board-sheets.js 那段「版位退役」）。这一份**只为存量数据留着**：
+ * 09-01 之前的板上有 108 张纸带 slots，读它的人已经一个都不剩，但把它从白名单里
+ * 摘掉等于下一次落盘时**静默删掉用户板上的一段历史**，而这一刀还在验收期。
+ * 验收通过之后连同 MAX_SLOTS 一起删。
+ *
+ * ⚠️ 坐标跟 at 同一套：纸内局部像素、原点在版心左上角。
  */
 export function sanitizeSlot(s) {
   if (!s || typeof s !== 'object') return null;
@@ -370,6 +375,13 @@ export function sanitizeSheet(s) {
     x: Math.round(x), y: Math.round(y),
     w: clampNum(s.w, 240, 8000, ONE_SCREEN.w),
     h: clampNum(s.h, 240, 12000, ONE_SCREEN.h),
+    /**
+     * 这张纸的栏宽（2026-09-01 刀 2）：机器按它把版心切成几栏（sheetColumns）。
+     * 铺纸那一刻按设备档 + 用户拖出来的宽度定死并存进来 —— **存下来而不是每次
+     * 现算**，否则用户拖宽一条板书，整张纸的栏格跟着变，已经写好的内容当场错位。
+     * 存量的纸没有这个字段，读的时候退回 DEFAULT_CHALK_W（行为跟以前一样）。
+     */
+    ...(Number.isFinite(Number(s.colW)) ? { colW: clampNum(s.colW, 120, 4000, 432) } : {}),
     ...(sanitizeBy(s.by) ? { by: sanitizeBy(s.by) } : {}),
     ...(typeof s.at === 'string' && s.at.length <= 40 ? { at: s.at } : {}),
     ...(typeof s.title === 'string' && s.title.trim() ? { title: s.title.trim().slice(0, 60) } : {}),
@@ -410,11 +422,7 @@ export function sanitizeSheet(s) {
  */
 export function sanitizeStack(s) {
   if (!s || typeof s !== 'object') return null;
-  /**
-   * 这一摞的版式（2026-09-01 册）。跟纸的版位**同一份 sanitizeSlot 同一个上限** ——
-   * 它们是同一种东西，只是挂的层不同：摞的是默认，纸的是这一页的覆盖，
-   * 取纸时按名合并（lib/board-sheets.js 的 slotsOf）。
-   */
+  /** 存量的摞级版式（⛔ 09-01 刀 2 起没有写入方，留着只为不删用户的旧数据） */
   const slots = {};
   let slotN = 0;
   for (const [nm, v] of Object.entries(s?.slots && typeof s.slots === 'object' ? s.slots : {})) {
@@ -431,6 +439,17 @@ export function sanitizeStack(s) {
     ...(sanitizeBy(s.by) ? { by: sanitizeBy(s.by) } : {}),
     ...(typeof s.at === 'string' && s.at.length <= 40 ? { at: s.at } : {}),
     ...(typeof s.title === 'string' && s.title.trim() ? { title: s.title.trim().slice(0, 60) } : {}),
+    /**
+     * 这一摞正着读还是倒着读（2026-09-01 刀 2，站主点名的参数）。
+     *
+     *   desc（缺省）= 最新的一页在最上面，读的人**跟着 agent 走** —— 一场戏、
+     *                 一段日志、一次对话该是这样。
+     *   asc         = 这一摞是一份文档：读的人停在第一页，自己往后翻。
+     *
+     * ⚠️ 只影响「用户还没翻过时停在哪一页」。翻页的方向和纸的顺序都不变
+     * （纸永远按登记时间排，下＝更新的一页）—— 那是手势与内容的关系，不随参数走。
+     */
+    ...(s.order === 'asc' || s.order === 'desc' ? { order: s.order } : {}),
     /**
      * 这一摞的产物地（相对栈原点的像素，跟版位同一套坐标）。
      *

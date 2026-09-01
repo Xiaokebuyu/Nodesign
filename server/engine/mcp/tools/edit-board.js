@@ -34,7 +34,6 @@ import { overlapIds, currentSheet, isInk } from '../../../lib/board-sheets.js';
 import { placeBeside } from '../../../lib/board-place.js';
 import { makeEditPlacer } from './edit-board-place.js';
 import { applyUiOp } from './edit-board-ui-ops.js';
-import { applyReplan } from './sheet-replan.js';
 import { transformGroup } from '../../../lib/board-transform.js';
 import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
@@ -138,8 +137,8 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
      */
     const liveZones = { ...(board.zones || {}) };
     const zonesPatch = {};
-    const sheetsPatch = {};                        // replan：纸的版位增改
-    const stacksPatch = {};                        // replan scope:'stack'：整摞的版式
+    const sheetsPatch = {};                        // 纸的登记增改
+    const stacksPatch = {};                        // 摞的登记增改
     const isZone = (id) => Object.prototype.hasOwnProperty.call(liveZones, id);
     const setZone = (id, z) => { liveZones[id] = z; zonesPatch[id] = z; };
     // 落位四件（rectOf / obstaclesNear / placeRel / placeAbs）2026-09-01 迁去
@@ -528,15 +527,6 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           const r = transformGroup(members, { scale: o.scale || 1, rotate: o.rotate || 0 });
           for (const [id, e] of Object.entries(r.patch)) setObj(id, e);
           report.push(`· transform_group #${o.tag}：绕组心 (${r.center.x},${r.center.y}) ${o.scale ? `缩放 ${o.scale}×` : ''}${o.rotate ? ` 旋转 ${o.rotate}°` : ''} —— ${r.inked} 件涂鸦真变形${r.seated ? `，${r.seated} 件（文字/卡）只挪了位没变形` : ''}`);
-          ok += 1;
-        } else if (o.op === 'replan') {
-          // 补版位/调版位（刀⑧ 2026-08-30，拆件见 sheet-replan.js）
-          const r = applyReplan({ board, sheetsPatch, sessionId, op: o });
-          if (r.error) { fail(r.error); continue; }
-          // scope:'stack' 改的是整摞的版式（2026-09-01 册），落 stacks 不落 sheets
-          if (r.pile) stacksPatch[r.pile] = { ...(board.stacks?.[r.pile] || {}), slots: r.pileSlots };
-          else sheetsPatch[r.sheetId] = r.entry;
-          report.push(r.report);
           ok += 1;
         } else if (o.op === 'show' || o.op === 'chalk_edit' || o.op === 'pin_view') {
           // 不改板、只改看的人那一侧的两个动作 → edit-board-ui-ops.js

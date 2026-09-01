@@ -27,10 +27,10 @@
  * 从此永久留着一张空白无规划的纸。这正是「机器是兜底不是版面」要禁的事。
  *
  * 现在的三档：
- *   ① 这一页规划了 `for:'artifacts'` 的地 → 落进那块地（agent 事前说了放哪儿）
+ *   ① 这一页规划了产物地 → 落进那块地（agent 事前说了放哪儿）
  *   ② 没规划但当前纸还排得下 → 纸内顺排（兜底，跟以前一样）
  *   ③ 排不下 → **不铺纸**，进 board.pending 待摆队列，每回合状态块点名，
- *      等 agent 规划出地方（open_sheet{plan} / pin_to_board 点名）再落座。
+ *      等 agent 规划出地方再落座。
  * 唯一的例外是**一张纸都还没有**：那不是翻页，是开工，照旧铺第一张。
  *
  * ## 2026-08-30 暂存架：机器的手只够得到架
@@ -39,10 +39,16 @@
  * 先于 agent 的第一笔到场，入座器铺了 p1 —— 第一张纸又成了机器铺的，agent
  * 不知道它存在，自己的板书全在缝里流。站主拍板：**机器从此完全不产纸、
  * 也不往纸面顺排**。三档收成两档：
- *   ① 这一页规划了 `for:'artifacts'` 的地 → 落进那块地（agent 事前说了放哪儿）
+ *   ① 这一页规划了产物地 → 落进那块地（agent 事前说了放哪儿）
  *   ② 其余（没规划 / 排不下 / 一张纸都没有）→ 一律上暂存架（lib/board-shelf.js，
  *      seat:'shelf'），每回合状态块点名，agent 用 pin_to_board / edit_board move
  *      安置。旧 board.pending 队列并进架上（它们从「看不见」变「看得见」）。
+ *
+ * ## 2026-09-01 刀 2：档①也没了
+ *
+ * 版位退役，`for:'artifacts'` 那块地不复存在，两档收成一档 —— **机器只码架**。
+ * 产物的归宿改由 agent 一件件请下来（pin_to_board）或给它铺一张说明纸
+ * （open_sheet{near}）。
  */
 
 import path from 'node:path';
@@ -52,7 +58,7 @@ import { getSharedDir } from '../../projects/workspace.js';
 import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
 import { obstaclesIn } from '../../lib/board-obstacles.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
-import { currentSheet, slotRectOf, nextSpotInSlot } from '../../lib/board-sheets.js';
+import { currentSheet } from '../../lib/board-sheets.js';
 import { placeThread, placeBeside } from '../../lib/board-place.js';
 import { resolveShelfOrigin, nextShelfSpot, FOLDER_BOX } from '../../lib/board-shelf.js';
 import { textBox } from '../../lib/sketch-layout.js';
@@ -136,7 +142,6 @@ export async function seatArtifacts(projectId, rels) {
     try { await fs.access(path.join(sharedRoot, rel)); } catch { continue; }
 
     let box = estimateSizeOn(board, id, null);
-    let inSlot = null;               // 落进了哪块规划好的产物地
     let anchorRect = null; let replyRect = null;
     let anchorId = null; let parentId = null; let tag = null; let by = null;
 
@@ -175,24 +180,17 @@ export async function seatArtifacts(projectId, rels) {
     }
     if (!placed && anchorRect) placed = placeBeside(anchorRect, box, 'below');
     if (!placed && !zone) {
-      const cur = currentSheet(liveBoard, null);
-      // ① agent 事前规划的产物地（slot.for === 'artifacts'）
-      if (cur) {
-        const named = Object.entries(cur.slots || {}).find(([, sl]) => sl.for === 'artifacts');
-        if (named) {
-          const r = slotRectOf(cur, named[0]);
-          // 余量按这张纸算（2026-09-01 叠纸刀 1）：一摞纸共用一块地。到货的是
-          // 产物，跟 pin_to_board 同口径 —— 不认领页，所以每一页都得绕开它
-          const spot = r ? nextSpotInSlot(liveBoard, r, box, { sheetId: cur.id }) : { full: true };
-          if (!spot.full) { placed = spot; inSlot = named[0]; }
-        }
-      }
-      // ② 其余一律上暂存架：agent 没说放哪儿的，机器不替它定版面。
-      //    文件夹卡不在 objects 里，避让要把 zoneRects 一并算上
-      if (!placed) {
-        placed = nextShelfSpot(shelfOrigin);   // 一摞（2026-09-01）
-        onShelf = true;
-      }
+      /**
+       * 一律上暂存架：**机器不替 agent 定版面**（2026-08-30 站主拍板，见文件头）。
+       *
+       * ⛔ 2026-09-01 刀 2 撤掉了这里的第一档（agent 规划的 `for:'artifacts'`
+       * 产物地）—— 版位整个退役了，那块地不再存在。**产物没有因此失去归宿**：
+       * 到货照旧码在架上（架本身就是一摞），agent 用 pin_to_board{path} 一件件
+       * 请到当前这一页（机器按栏排、满了翻页），要配说明就
+       * open_sheet{near:"那件东西"} 在它旁边铺一张小纸。
+       */
+      placed = nextShelfSpot(shelfOrigin);
+      onShelf = true;
     }
     if (!placed) {
       // 文件夹层：这一层内容底下接着排（没有纸也没有启发式 —— 单条规则）

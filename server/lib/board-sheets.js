@@ -194,49 +194,16 @@ export function latestSheetId(board) {
 }
 
 /**
- * 这张纸此刻的版式 —— **一摞的版式 + 这一页自己的覆盖**（2026-09-01 册）。
+ * 取一张纸。
  *
- * ## 为什么版式该长在摞上
- *
- * 08-30 站主否过一次「翻页继承版面」（原话「每张纸规划一次摆放呗？为什么要继承」），
- * ⭐ 但当时否的**不是继承这个想法，是拿继承去补自动翻页那个洞** —— 机器悄悄翻页、
- * agent 不知道自己换了页，继承只是让那个洞不那么难看。那个洞后来是用「纸满不翻页、
- * agent 自己开」堵掉的。
- *
- * 09-01 三件事都变了：agent 每一页都是自己显式开的；页归进了摞，摞是一个有语义的
- * 单位；产物地已经先一步从纸升到了摞（两张叠着的纸各规划一块产物地会互相压）。
- * 版位升上去是同一个动作的另一半。
- *
- * ⭐ 真板实测（77 对相邻页）：**18% 的版位 x/y/w 逐字重复**，另有 **12% 名字一样
- * 但坐标漂了**，漂移量中位数只有 40px 且来回摆（`opts (0,644)→(0,584)→(0,644)`）——
- * 那不是故意换版面，是同一套版面每页重算一遍算不准。这 13 个漂移全出在演出项目上，
- * 正是「一拍一页、版式本该固定」的场合。
- * ⚠️ 第一版统计我拿完整几何比，得出「只有 6% 相同」—— 那个数是假的：翻页裁纸会把
- * 上一张的版位**高度**钳掉，等于在比被裁过的东西。剔掉 h 才是上面这组。
- *
- * 合并语义：按名合并，**纸盖摞**。所以「不声明就沿用，声明了就改这一页」。
- */
-export function slotsOf(board, sheet) {
-  const s = (typeof sheet === 'string')
-    ? (board?.sheets?.[sheet] ? { id: sheet, ...board.sheets[sheet] } : null)
-    : sheet;
-  if (!s) return {};
-  const base = board?.stacks?.[s.stack || s.id]?.slots;
-  return base ? { ...base, ...(s.slots || {}) } : (s.slots || {});
-}
-
-/**
- * 取一张纸，**版式已经合好**（摞的 + 这一页的）。
- *
- * 收在这一个口是有意的：`slotRectOf` / 报文 / 落位一共十来个读者，让它们各自去
- * 合一遍必然分叉。合并只发生在「把纸取出来」这一刻，取出来之后 `.slots` 就是
- * 这一页真正生效的那一份。
+ * ⛔ 2026-09-01 刀 2 之前这里还合并「摞的版式 + 这一页的覆盖」（`slotsOf`）——
+ * 版位退役之后没有可合并的东西了，纸就是它自己那条登记。存量板上留着的
+ * `slots` 字段没人再读（sanitize 仍然收，见 board-sanitize.js 那段说明）。
  */
 export function resolveSheet(board, id) {
   const e = board?.sheets?.[id];
   if (!e) return null;
-  const slots = slotsOf(board, { id, ...e });
-  return { id, ...e, ...(Object.keys(slots).length ? { slots } : {}) };
+  return { id, ...e };
 }
 
 /**
@@ -296,13 +263,17 @@ export function nextStackRect(board, size) {
   return { x: snap(right) + SHEET_GAP, y: snap(top), ...sz, basis: 'stack-new', overlapsLoose: false };
 }
 
-export function allocateSheetRect({ board, size, viewport = null, nearSheet = null, obstacles = [] }) {
+export function allocateSheetRect({ board, size, viewport = null, nearSheet = null, obstacles = [], ideal: want = null, slideAxis = 'y' }) {
   const sz = { w: Math.max(240, Math.round(size?.w || ONE_SCREEN.w)), h: Math.max(240, Math.round(size?.h || ONE_SCREEN.h)) };
   const sheets = sheetRects(board);
   const anchor = nearSheet ? sheets.find((s) => s.id === nearSheet) || null : null;
 
   let ideal; let basis;
-  if (anchor) {
+  if (want && Number.isFinite(want.x)) {
+    // 点名贴在某件东西旁边（2026-09-01 刀 2「摆放升到纸张级」）
+    ideal = { x: snap(want.x), y: snap(want.y) };
+    basis = want.basis || 'beside';
+  } else if (anchor) {
     ideal = { x: anchor.x, y: anchor.y + anchor.h + SHEET_GAP };
     basis = 'below-sheet';
   } else if (viewport && Number.isFinite(viewport.x)) {
@@ -321,12 +292,14 @@ export function allocateSheetRect({ board, size, viewport = null, nearSheet = nu
   const hitsSheet = (r) => sheets.some((s) => overlaps(r, s, SHEET_GAP / 2));
   const hitsLoose = (r) => obstacles.some((o) => overlaps(r, o));
 
-  // 先找「纸不撞纸、也不压散件」的位置；往下滑最多 4 屏，找不到就接受压散件，
-  // 只保硬约束（纸不撞纸）。滑动只沿 y 轴 —— 纸的阅读序是竖着长的。
-  const MAX_SLIDE = sz.h * 4;
+  // 先找「纸不撞纸、也不压散件」的位置；沿 slideAxis 滑最多 4 张纸，找不到就接受
+  // 压散件，只保硬约束（纸不撞纸）。缺省沿 y 轴（纸的阅读序竖着长）；贴着某件
+  // 东西铺的时候由调用方改成 x（往右让开，别掉到它下面去）。
+  const along = slideAxis === 'x' ? 'x' : 'y';
+  const MAX_SLIDE = (along === 'x' ? sz.w : sz.h) * 4;
   let clean = null; let sheetClear = null;
-  for (let dy = 0; dy <= MAX_SLIDE; dy += UNIT * 2) {
-    const r = { x: ideal.x, y: ideal.y + dy, w: sz.w, h: sz.h };
+  for (let d = 0; d <= MAX_SLIDE; d += UNIT * 2) {
+    const r = { x: ideal.x + (along === 'x' ? d : 0), y: ideal.y + (along === 'y' ? d : 0), w: sz.w, h: sz.h };
     if (hitsSheet(r)) continue;
     if (sheetClear === null) sheetClear = r;
     if (!hitsLoose(r)) { clean = r; break; }
@@ -340,96 +313,114 @@ export function allocateSheetRect({ board, size, viewport = null, nearSheet = nu
 }
 
 /**
- * 纸内自动落位（给没带坐标的写入用：产物入座、步骤清单、agent 偷懒不给 at）。
+ * 一张纸切几栏（2026-09-01 刀 2：版位退役，分栏归机器）。
  *
- * **跟着设备的形状走**（2026-08-29 站主拍板）：
- *   - 横纸（电脑：2048×973 那种）→ **报纸分栏**：竖着填满一栏，再到右边下一栏顶上，
- *     整页填满才翻页。原来只会往下排一列 —— 一张两个屏幕宽的纸，四分之三是空的。
- *   - 竖纸（手机：屏宽 × 1.6 屏高）→ 只往下。竖屏上分栏等于把每栏挤成一指宽。
+ * 站主的判词：「文本的阅读本来就是从左到右从上到下，模型在纸张中只需要输入内容，
+ * 然后由机械层自动排版切层」。所以纸内不再有 agent 规划的块，只有**机器切出来的
+ * 栏** —— 一张横纸就是一份报纸的版心。
  *
- * 栏宽固定 DEFAULT_CHALK_W（不随内容变），否则每写一件栏边界就漂一次，读起来
- * 是锯齿。比一栏宽的东西（产物卡 640）自然占掉它压住的所有栏 —— 算某栏的底部时
- * 认**水平重叠**而不是中心点，宽物件才挡得住它真正盖住的那几栏。
+ * 栏宽怎么定：以「读着舒服的一栏」为上限（`sheet.colW`，铺纸那一刻按设备档和
+ * 用户拖出来的宽度定死，见 open-sheet.js），版心塞得下几栏就是几栏，**余量均摊
+ * 回各栏**。均摊是有意的 —— 切死 432 的话 2000 宽的版心右边永远空着 176px，
+ * 那正是「一张横纸四分之三是空的」这个老毛病换个位置又长出来。
  *
- * 装不下返回 null（调用方翻新纸）。仍然不是启发式引擎：规则只有"竖着填、填满换栏"。
+ * ⭐ 栏宽存在纸上而不是每次现算：现算的话用户拖宽一条板书，整张纸的栏格会跟着
+ * 变，已经写好的内容当场全部错位。
+ */
+export function sheetColumns(sheet, { gap = UNIT } = {}) {
+  const inner = innerRect(sheet);
+  const cap = Math.max(120, Math.round(Number(sheet?.colW) || DEFAULT_CHALK_W));
+  const n = Math.max(1, Math.floor((inner.w + gap) / (cap + gap)));
+  const colW = Math.max(120, Math.floor((inner.w - (n - 1) * gap) / n));
+  return { n, colW, gap, inner };
+}
+
+/** 第 i 栏的左缘（世界坐标） */
+export function columnX(cols, i) {
+  return Math.round(cols.inner.x + i * (cols.colW + cols.gap));
+}
+
+/**
+ * 纸内自动落位 —— **现在这是正文的主路，不是兜底**（2026-09-01 刀 2）。
  *
- * @returns {{x,y,col?}|null}  世界坐标；null = 这张纸满了
+ * 规则一共两条，跟读一份报纸一样：
+ *   ① 竖着填满这一栏（接在这一栏最低那件下面）
+ *   ② 这一栏装不下了 → 右边下一栏的顶上
+ * 最后一栏也装不下，返回 null —— 调用方**翻到这一摞的下一页**（write-on-board-place.js
+ * 的 placeOnSheets）。
+ *
+ * ## 为什么是固定栏格，不是「按这件东西的宽度往右挪一块空地」
+ *
+ * 08-29 那一版的步长跟着 `box.w` 走，好处是宽的东西也塞得进去，代价是**栏边界
+ * 每写一件漂一次**：一条 432 的板书后面跟一张 640 的卡，下一条板书的左缘就落在
+ * 664 而不是 456，读起来是锯齿。版位在的时候这个代价被 agent 规划的块盖住了；
+ * 版位一撤，这条锯齿就是用户看到的全部版面，所以栏必须先切死再填。
+ *
+ * 比一栏宽的东西（产物卡 640）自然**占掉它压住的那几栏**（span），算某栏的底部时
+ * 认**水平重叠**而不是中心点 —— 宽物件才挡得住它真正盖住的那几栏。
+ *
+ * @returns {{x,y,col,moved}|null}  世界坐标；null = 这张纸满了
  */
 export function nextSpotInSheet(board, sheetId, box, { gap = UNIT } = {}) {
   const s = board?.sheets?.[sheetId];
   if (!s) return null;
-  const inner = innerRect(s);
+  const cols = sheetColumns({ ...s, id: sheetId }, { gap });
+  const { inner, colW, n } = cols;
   if (box.w > inner.w) return null;   // 比纸还宽的东西没资格进这张纸
   const members = sheetMembers(board, sheetId);
   const floor = inner.y + inner.h;
-
-  // 竖纸：只往下（原规则）
-  if (inner.w <= inner.h) {
-    const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : inner.y - gap;
-    const y = Math.round(bottom + gap);
-    if (y + box.h > floor) return null;
-    return { x: Math.round(inner.x), y };
-  }
-
-  // 横纸：先往下接；这一列到底了，就在纸上往右找第一块放得下的地方。
-  // 步长跟这件东西的宽度走，不是切死的栏 —— 机器只是帮忙找地方，版面怎么切
-  // 是 agent 自己的事（站主：有限制有规划的自由）。
-  const step = Math.max(UNIT * 4, Math.round(box.w) + gap);
-  for (let x = inner.x; x + box.w <= inner.x + inner.w + 1; x += step) {
-    const hit = members.filter((m) => m.x < x + box.w && m.x + m.w > x);
+  // 占几栏：一栏装得下就是 1，否则按栏距往上取整
+  const span = Math.min(n, Math.max(1, Math.ceil((box.w - colW) / (colW + gap)) + 1));
+  for (let c = 0; c + span <= n; c += 1) {
+    const x = columnX(cols, c);
+    const w = span * colW + (span - 1) * gap;
+    const hit = members.filter((m) => m.x < x + w && m.x + m.w > x);
     const bottom = hit.length ? Math.max(...hit.map((m) => m.y + m.h)) : inner.y - gap;
     const y = Math.round(bottom + gap);
-    if (y + box.h <= floor) return { x: Math.round(x), y, moved: x > inner.x };
+    if (y + box.h <= floor) return { x, y, col: c, moved: c > 0 };
   }
   return null;   // 纸上哪儿都放不下了 —— 这才叫满
 }
 
 /**
- * 这张纸还剩哪些空地（2026-08-29 刀 F，站主要的"有规划的自由"的依据）。
- *
- * agent 要自己判断"还放不放得下、要不要开新一页"，就得知道纸上哪里还空着 ——
- * 只报"最后一件下面还剩多少"是不够的：那一列到底了不等于这张纸满了，右边可能
- * 整片空着。按内容列宽扫一遍，报每一列的剩余高度。
+ * 这张纸每一栏还剩多少（栏格跟 sheetColumns 同一份 —— 报的和排的必须是同一套栏，
+ * 否则「还剩 3 行」说的是一条根本不存在的栏）。
  *
  * @returns {Array<{x:number, freeH:number}>}  x = 纸内局部像素
  */
-export function freeColumnsInSheet(board, sheetId, colW = DEFAULT_CHALK_W, gap = UNIT) {
+export function freeColumnsInSheet(board, sheetId, gap = UNIT) {
   const s = board?.sheets?.[sheetId];
   if (!s) return [];
-  const inner = innerRect(s);
+  const cols = sheetColumns({ ...s, id: sheetId }, { gap });
   const members = sheetMembers(board, sheetId);
   const out = [];
-  for (let x = inner.x; x + colW <= inner.x + inner.w + 1; x += colW + gap) {
-    const hit = members.filter((m) => m.x < x + colW && m.x + m.w > x);
-    const bottom = hit.length ? Math.max(...hit.map((m) => m.y + m.h)) : inner.y - gap;
-    out.push({ x: Math.round(x - inner.x), freeH: Math.max(0, Math.round(inner.y + inner.h - (bottom + gap))) });
+  for (let c = 0; c < cols.n; c += 1) {
+    const x = columnX(cols, c);
+    const hit = members.filter((m) => m.x < x + cols.colW && m.x + m.w > x);
+    const bottom = hit.length ? Math.max(...hit.map((m) => m.y + m.h)) : cols.inner.y - gap;
+    out.push({
+      x: Math.round(x - cols.inner.x),
+      freeH: Math.max(0, Math.round(cols.inner.y + cols.inner.h - (bottom + gap))),
+    });
   }
   return out;
 }
 
-/* ── 版位（slot，2026-08-29 占位契约刀 E）────────────────────────────────
+/* ── 版位退役（2026-09-01 刀 2）────────────────────────────────────────
  *
- * 站主拍板：**agent 应当提前规划所有落位，然后再开始生成**。所以开工那一步不是
- * 「写第一条」而是「把这一屏切成几块地」（open_sheet 的 plan），之后每条内容
- * 点名往哪块地里放。
+ * 08-29 立的规矩是「开工先把这一屏切成几块地，之后每条内容点名往哪块地里放」。
+ * 站主 09-01 撤掉它：「有了叠放逻辑之后我们也许根本不需要思考怎么在纸张内部
+ * 摆放文本块（slot），文本的阅读本来就是从左到右从上到下」。
  *
- * 为什么这比「一条一条自己给 at」强：一张纸是横的（约 2.1:1），一条一条往下写
- * 只会用掉最左边一栏、剩下大半空着；而且写到第五条才发现装不下时，前四条已经
- * 落盘了。先规划＝**版面在内容之前就定死**，装不下当场就知道。
+ * ⭐ 真板实测支持这个撤：130 张纸上 108 张带版位，而版位的 `about` 词频是
+ * **选项类 ~53 · 配图 10 · 状态表/卷宗/人物栏 ~19 · 正文类 ~15** ——
+ * 九成的版位根本不是「给正文排版」，是「把别的东西摆在正文旁边」。而那件事
+ * 现在有更结实的做法：**要一直看得见的东西给它自己一摞**（open_sheet{stack}），
+ * 摞跟摞左右排开、互不翻页。剩下那一成正文，机器按栏排就够（sheetColumns）。
  *
- * 装不下的处理是**拒收**不是挤进去（站主原话：提示 agent 让她分块内容、重新
- * 布置）—— 折叠、裁切、自动缩排都是替它把问题藏起来。
+ * 换掉的还有那笔账：版位拒收率 33.5%，占全系统工具失败的四分之一。
+ * 没有块，就没有「装不下这块地」。
  */
-
-/** 版位矩形（世界坐标）。名字不存在返回 null */
-export function slotRectOf(sheet, name, margin = SHEET_MARGIN) {
-  const sl = sheet?.slots?.[name];
-  if (!sl) return null;
-  return {
-    x: sheet.x + margin + sl.x, y: sheet.y + margin + sl.y,
-    w: sl.w, h: sl.h, about: sl.about || null,
-  };
-}
 
 /**
  * 落在某块地里的物件（中心点判据，同 sheetMembers；只数根层 —— 版位在纸上，
@@ -455,29 +446,6 @@ export function membersInRect(board, rect, sheetId = null) {
   return out.sort((a, b) => (a.y - b.y) || (a.x - b.x));
 }
 
-/**
- * 版位内往下接排。装不下**不返回兜底位置** —— 返回 full + 还剩多少，
- * 调用方据此拒收并把这个数报给 agent。
- *
- * @returns {{x,y}|{full:true, freeH:number, needH:number}}
- */
-export function nextSpotInSlot(board, rect, box, { gap = UNIT, sheetId = null } = {}) {
-  const members = membersInRect(board, rect, sheetId);
-  const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : rect.y - gap;
-  const y = Math.round(bottom + gap);
-  const freeH = Math.max(0, Math.round(rect.y + rect.h - y));
-  /**
-   * 宽度也要查（2026-08-31）。这里原来**只查高**，于是把一张 640 宽的产物卡放进
-   * 一块 360 宽的版位是"成功"的 —— 卡向右溢出 280px 压到隔壁，工具还报 Placed。
-   * 真案 proj_mtgeaeps_7kly：agent 规划了 360 宽的 `for:'artifacts'` 版位专门收
-   * v8 的 docx，而 docx 卡恒宽 640。版位装不下就该像装不下高度一样如实拒收。
-   */
-  if (box.w > rect.w) {
-    return { full: true, tooWide: true, freeW: rect.w, needW: box.w, freeH, needH: box.h, taken: members.length };
-  }
-  if (box.h > freeH) return { full: true, freeH, needH: box.h, taken: members.length };
-  return { x: Math.round(rect.x), y };
-}
 
 /**
  * 符号地图：板上现在有哪些纸（read_board / 注入 用）。
@@ -488,16 +456,9 @@ export function sheetSummaries(board) {
     const members = sheetMembers(board, s.id);
     const inner = innerRect(s);
     const bottom = members.length ? Math.max(...members.map((m) => m.y + m.h)) : inner.y;
-    // 版式合好的那一份（摞的 + 这一页的）—— 报余量要按真正生效的版位报
-    const full = resolveSheet(board, s.id) || {};
-    // 版位余量（2026-08-30）：agent 每回合免费拿到的空间账本此前只有整张纸的
-    // freeH —— 而它写的时候是往**块**里写。报纸不报块，等于让它对着错的数做判断。
-    const slots = Object.entries(full.slots || {}).map(([name, sl]) => {
-      const rect = slotRectOf({ ...full, id: s.id }, name);
-      const spot = rect ? nextSpotInSlot(board, rect, { w: 1, h: 1 }) : { full: true };
-      const freeH = (rect && !spot.full) ? Math.max(0, Math.round(rect.y + rect.h - spot.y)) : 0;
-      return { name, about: sl.about || null, freeH, freeLines: Math.max(0, Math.floor((freeH - 8) / 26)) };
-    });
+    // 栏余量（2026-09-01 刀 2，替掉版位余量）：agent 判断「还写不写得下」看的是
+    // 机器接下来会往哪一栏排，报整张纸的 freeH 会让它以为满了 —— 右边可能整栏空着。
+    const cols = freeColumnsInSheet(board, s.id);
     return {
       id: s.id, x: s.x, y: s.y, w: s.w, h: s.h,
       title: s.title, by: s.by, at: s.at,
@@ -505,7 +466,8 @@ export function sheetSummaries(board) {
       lastId: members.length ? members[members.length - 1].id : null,
       freeH: Math.max(0, Math.round(inner.y + inner.h - bottom)),
       innerW: inner.w,
-      slots,
+      cols,
+      colFreeH: cols.reduce((n, c) => Math.max(n, c.freeH), 0),
     };
   });
 }

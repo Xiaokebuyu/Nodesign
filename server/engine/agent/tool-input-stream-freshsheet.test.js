@@ -20,31 +20,31 @@ const pump = (input) => {
 };
 
 describe('freshSheet 预告', () => {
-  it('⭐ write 排在 open_sheet 后面 → spot 带 freshSheet + planSlot（从流进来的 plan 里抠）', () => {
+  /**
+   * ⛔ 2026-09-01 刀 2：版位退役，`planSlot`（从流进来的 plan 里抠规划矩形）
+   * 一并撤了 —— 没有 plan 可抠。剩下的那一半照旧，而且**更要紧了**：
+   * 机器现在会自己翻页，前端更需要知道「这条 write 排在一个 open_sheet 后面」。
+   */
+  it('⭐ write 排在 open_sheet 后面 → spot 标 freshSheet', () => {
     const spot = pump({ actions: [
-      { name: 'open_sheet', input: { title: '第二章', plan: [
-        { slot: 'main', at: { x: 0, y: 0 }, w: 648, h: 880 },
-        { slot: 'side', at: { x: 700, y: 0 }, w: 600, h: 880 },
-      ] } },
-      { name: 'write_on_board', input: { slot: 'side', chain: true, text: '正文正在流…' } },
+      { name: 'open_sheet', input: { title: '第二章' } },
+      { name: 'write_on_board', input: { chain: true, text: '正文正在流…' } },
     ] });
     expect(spot.freshSheet).toBe(true);
-    expect(spot.planSlot).toEqual({ x: 700, y: 0, w: 600, h: 880 });
   });
 
   it('没有 open_sheet 在前 → 不标 freshSheet（当前纸就是目标，别乱预告）', () => {
     const spot = pump({ actions: [
-      { name: 'write_on_board', input: { slot: 'main', text: '接着写…' } },
+      { name: 'write_on_board', input: { at: { x: 0, y: 0 }, text: '接着写…' } },
     ] });
     expect(spot.freshSheet).toBeUndefined();
   });
 
-  it('plan 还没流完（slot 缺 w/h）→ 只标 freshSheet，不给半截矩形', () => {
+  it('⭐ 只看排在自己前面的那几个动作（后面的 open_sheet 不算）', () => {
     const spot = pump({ actions: [
-      { name: 'open_sheet', input: { plan: [{ slot: 'main', at: { x: 0, y: 0 }, w: 648 }] } },
-      { name: 'write_on_board', input: { slot: 'main', text: 'x' } },
+      { name: 'write_on_board', input: { at: { x: 0, y: 0 }, text: '先写…' } },
+      { name: 'open_sheet', input: { title: '再开' } },
     ] });
-    expect(spot.freshSheet).toBe(true);
-    expect(spot.planSlot).toBeUndefined();
+    expect(spot.freshSheet).toBeUndefined();
   });
 });

@@ -133,19 +133,19 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
         if (cur) {
           // 报「还能装下什么」不是裸数字（2026-08-30 容量线）：行数是模型真正用来
           // 决策的量纲 —— 顺手教它超过余量别赌一发，flow 会替它拆
-          const slots = cur.slots?.length
-            ? `；版位 ${cur.slots.map(s => `${s.name} 剩 ~${s.freeLines} 行`).join('、')}`
-            : '；这张没规划版位';
-          spot = `板上 ${ss.length} 张纸；当前 ${cur.id}${cur.title ? `（${cur.title}）` : ''} 还剩 ~${cur.freeH}px 高的空地${slots}`
-            + '（内容眼看要超余量就别赌一发 —— 自己多切几个空位分段填（plan/replan 省掉 at 即竖排接放），'
-            + '或兜底 flow:true；写满**不会**自动翻页，自己 open_sheet 规划下一页；新话题也是 open_sheet）';
+          const colTxt = cur.cols?.length
+            ? `；${cur.cols.length} 栏，最空的一栏还剩 ~${Math.floor((cur.colFreeH - 8) / 26)} 行`
+            : '';
+          spot = `板上 ${ss.length} 张纸；当前 ${cur.id}${cur.title ? `（${cur.title}）` : ''}${colTxt}`
+            + '（版面归机器：不给 at 就按栏往下排，栏满换栏、整页满**自动翻下一页**；'
+            + '一张卡装不下的长文机器自动拆段。自己 open_sheet 只为换话题，或给产物旁边铺张说明纸 open_sheet{near}）';
         } else {
           spot = '板上还没铺过纸 —— 第一笔 write_on_board 会自动铺一张在他视口下，或先 open_sheet';
         }
         const unplaced = [...shelfSeats, ...pendingSeats];
         if (unplaced.length) {
           spot += `；📦 ${unplaced.length} 件在暂存架等你安置（${unplaced.slice(0, 3).map(r => r.split('/').pop()).join('、')}${unplaced.length > 3 ? '…' : ''}）`
-            + ' —— 给它们规划的地：open_sheet{plan:[…{for:"artifacts"}]} 或逐件 pin_to_board{path,slot} / edit_board move。'
+            + ' —— 逐件 pin_to_board{path} 请到当前页（机器按栏排），或 edit_board move。'
             + '架不是版面，东西留在架上就是没摆';
         }
       } catch { /* 纸读不出就不占字 */ }

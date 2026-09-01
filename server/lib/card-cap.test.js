@@ -39,7 +39,7 @@ describe('textBox 报真实高度（不再封顶）', () => {
   });
 });
 
-describe('工具层拒收超长（没规划版面时）', () => {
+describe('超长内容：机器拆段（2026-09-01 起；此前是工具层拒收）', () => {
   const pid = 'proj_cardcap_e2e';
   let write1; let readBoard;
   const countObjects = async () => Object.keys((await readBoard(pid)).objects || {}).length;
@@ -60,18 +60,27 @@ describe('工具层拒收超长（没规划版面时）', () => {
     await makeOpenSheetTool({ projectId: pid, sessionId: 'cap', ctx }).handler({}, {});
   });
 
-  it('⭐ 写一整章 → 拒收，报清楚一块卡能装多少、给出两条出路', async () => {
+  /**
+   * ⭐⭐ 2026-09-01 刀 2 翻案：**超长不再拒收，机器拆段**。
+   *
+   * 08-29 定的拒收是对的 —— 当时 agent 手里有版位，「自己切几块地分段填」是一条
+   * 走得通的出路。版位撤了之后那条出路不存在了，再拒收就是让它无路可走。
+   * 站主的原话正是「由机械层自动排版切层」——「切层」就是这一下。
+   */
+  it('⭐⭐ 写一整章 → 机器拆成一串卡大小的板书，一个字不丢', async () => {
     const before = await countObjects();
     const r = await write1({ text: long });
-    expect(r.isError).toBe(true);
+    expect(r.isError).toBeUndefined();
     const txt = r.content[0].text;
-    expect(txt).toMatch(/Too long for one card/);
-    expect(txt).toMatch(new RegExp(`${CARD_MAX_H}px`));
-    expect(txt).toMatch(/CJK chars/);
-    expect(txt).toMatch(/chain:true/);          // 出路①：拆成几条串起来
-    expect(txt).toMatch(/open_sheet\{plan\}/);   // 出路②：先规划版面
-    // ⭐ 什么都没写 —— 拒收不能是"半写"
-    expect(await countObjects()).toBe(before);
+    expect(txt).toMatch(/The machine split this into \d+ chained notes/);
+    // 落了好几条，而不是一条巨卡
+    expect(await countObjects() - before).toBeGreaterThan(1);
+    const { readBoard } = await import('../projects/board-store.js');
+    const b = await readBoard(pid);
+    for (const [id, e] of Object.entries(b.objects)) {
+      if (!id.startsWith('notes/板书/')) continue;
+      expect(e.h, `${id} 比一张卡还高，说明没拆开`).toBeLessThanOrEqual(CARD_MAX_H);
+    }
   });
 
   it('⭐ 反向：短板书照写不误（防止把拒收写成永远拒）', async () => {

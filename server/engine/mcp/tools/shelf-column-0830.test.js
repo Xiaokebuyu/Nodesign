@@ -66,38 +66,48 @@ describe('③ pin 进版位：文件夹里的文件不能互相隐形', () => {
      */
     await patchBoard('proj_shelf_pin', { zones: { 素材: { x: 3000, y: 3000 }, '素材/官方参考': { x: 3400, y: 3000 } } });
 
-    // 900px 高的版位、200x176 的图卡、24 间隔 → 纵向真只装得下 4 张。
     // 修好之前：五张全报 success 且全叠在同一个坐标（真案 19:18 那五发）。
-    // 修好之后：四张各自落位，第五张如实拒收。
-    await t.open({ title: '素材纸', plan: [{ slot: 'refs', at: { x: 0, y: 0 }, w: 1100, h: 900, for: 'artifacts', about: '参考图' }] });
+    // ⚠️ 2026-09-01 刀 2：版位没了，pin 不点名就交给机器按栏排 —— 病根一模一样
+    // （文件夹层的卡在根层账目里隐形 → 五张算出同一个落点），判据也一模一样：
+    // 五个落点必须两两不同。
+    await t.open({ title: '素材纸' });
     const outs = [];
-    for (const n of names) outs.push(await t.pin({ path: `素材/官方参考/${n}`, slot: 'refs' }));
-    for (const [i, r] of outs.slice(0, 4).entries()) {
+    for (const n of names) outs.push(await t.pin({ path: `素材/官方参考/${n}` }));
+    for (const [i, r] of outs.entries()) {
       expect(r.isError, `${names[i]} 应当 pin 成功：${text(r)}`).toBeUndefined();
     }
-    expect(outs[4].isError, '第五张应当被如实拒收，而不是叠上去').toBe(true);
-    expect(text(outs[4])).toMatch(/full/i);
 
     const b = await t.board();
-    const seats = names.slice(0, 4).map((n) => b.objects[`素材/官方参考/${n}`]).filter(Boolean);
-    expect(seats.length).toBe(4);
+    const seats = names.map((n) => b.objects[`素材/官方参考/${n}`]).filter(Boolean);
+    expect(seats.length).toBe(5);
     const ys = seats.map((e) => `${e.x},${e.y}`);
-    expect(new Set(ys).size, `四张全落在 ${ys[0]} 上了：${ys.join(' | ')}`).toBe(4);
+    expect(new Set(ys).size, `五张全落在 ${ys[0]} 上了：${ys.join(' | ')}`).toBe(5);
     // 摆到纸上就是摆到根层：zone 写文件夹层的话前端把它渲染进文件夹里，
     // 根层画布上根本看不见 —— 而工具还报了「Placed on sheet ... at (x,y)」
     for (const e of seats) expect(e.zone).toBe('');
   });
 
-  it('版位真装满了要如实拒收，不能靠隐形装下无限张', async () => {
+  /**
+   * ⭐⭐ 产物**不认领任何一页**（这一版栈只叠墨），所以它在这一摞的每一页上都占着
+   * 同一块地 —— 翻页对它没有用。装不下就得如实说，而且要说清是这个原因，
+   * 否则读起来像量具坏了。（真正的出路是给产物自己的地，那是下一刀的事。）
+   */
+  it('⭐ 小纸装不下第二件产物 → 如实拒收，并说清翻页救不了', async () => {
     const t = await mk('proj_shelf_pinfull');
     setViewpoint('proj_shelf_pinfull', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await fs.mkdir(path.join(t.sharedRoot, '素材'), { recursive: true });
     for (let i = 0; i < 4; i += 1) await fs.writeFile(path.join(t.sharedRoot, '素材', `x${i}.png`), PNG);
     await patchBoard('proj_shelf_pinfull', { zones: { 素材: { x: 3000, y: 3000 } } });
-    await t.open({ title: '窄版位', plan: [{ slot: 'tiny', at: { x: 0, y: 0 }, w: 400, h: 200, for: 'artifacts', about: '小块' }] });
+    // 一张只装得下一张图卡的小纸（图卡 200x176，版心 252x200）
+    await t.open({ title: '小纸', w: 300, h: 248 });
     const outs = [];
-    for (let i = 0; i < 4; i += 1) outs.push(await t.pin({ path: `素材/x${i}.png`, slot: 'tiny' }));
-    expect(outs.some((r) => r.isError && /full/i.test(text(r))), '窄版位应当报满').toBe(true);
+    for (let i = 0; i < 2; i += 1) outs.push(await t.pin({ path: `素材/x${i}.png` }));
+    expect(outs[0].isError, text(outs[0])).toBeUndefined();       // 第一件放得下
+    expect(outs[1].isError, '第二件应当如实拒收').toBe(true);
+    expect(text(outs[1])).toMatch(/Turning the page does not help/);
+    expect(text(outs[1])).toMatch(/open_sheet\{near/);            // 给出路
+    const b = await t.board();
+    expect(b.objects['素材/x1.png']?.x, '拒收了就不该留下座位').toBeUndefined();
   });
 });
 

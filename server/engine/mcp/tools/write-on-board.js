@@ -34,7 +34,8 @@ import { endpointReal } from './edit-board.js';
 import { BINDING_TYPE_IDS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_FIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fitFor, capacityOf } from '../../../lib/sketch-layout.js';
 import { CARD_MAX_H } from '../../../lib/screen.js';
-import { innerRect } from '../../../lib/board-sheets.js';
+import { innerRect, currentSheet, sheetColumns } from '../../../lib/board-sheets.js';
+import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 
 import { makeSheetPlacer } from './write-on-board-place.js';
 import { openSheetFor } from './open-sheet.js';
@@ -137,7 +138,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
     // 纸上落位三分支（棘轮拆件，见 write-on-board-place.js）
     const {
-      placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull,
+      placeOnSheets, placeInZone, describeSpot, describeSheetFull,
       placeOverflowOnShelf, describeOverflow, describeChalkWrite, obstaclesFor,
     } = makeSheetPlacer({ projectId, sessionId, by });
 
@@ -186,21 +187,25 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         }
       }
 
-      // 版位（08-29 刀 E）：解析要在算宽度之前 —— 一块地多宽，写进去的就多宽
-      let slotInfo = null;
-      if (args.slot) {
-        slotInfo = resolveSlot(board, { slotName: args.slot, sheetName: args.sheet || null });
-        if (slotInfo.error) return err(slotInfo.message);
-      }
       const em = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
       const longest = Math.max(...body.split('\n').map(em));
-      // 宽度三档回落（2026-08-28）：模型点名 > 用户调出来的偏好 > 按正文估。
-      // 中间那档是「模仿用户」：他拖宽过板书就说明这个版心读着舒服，下一拍照做，
-      // 别让他反复调同一件事。判据是前端拖手柄盖的 sized:'user' 章，模型盖不出。
-      const wUnits = slotInfo
-        ? Math.max(4, Math.floor(slotInfo.rect.w / UNIT))
-        : capW(args.width || learnedChalkWidth(board)
-          || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
+      /**
+       * 宽度回落（2026-08-28；09-01 刀 2 把版位那一档换成**这张纸的栏宽**）：
+       *   模型点名 > 这张纸的栏 > 用户调出来的偏好 > 按正文估。
+       *
+       * ⭐ 栏那一档顶替的正是版位那一档，语义一字不差：「一块地多宽，写进去的
+       * 就多宽」—— 只是现在这块地是机器切的栏，不是 agent 规划的块。不接这一档
+       * 的话正文会按内容宽窄各写各的，机器排出来的栏边缘全是锯齿。
+       * 短句（≤12 em）不占满栏 —— 一句"好的"撑成一栏宽是难看的。
+       */
+      const tgtSheet = (args.sheet && board.sheets?.[args.sheet])
+        ? { id: args.sheet, ...board.sheets[args.sheet] }
+        : currentSheet(board, currentSheetIdOf(sessionId));
+      const sheetColW = tgtSheet ? sheetColumns(tgtSheet).colW : null;
+      const wUnits = capW(args.width
+        || (longest > 12 && sheetColW ? Math.floor(sheetColW / UNIT) : null)
+        || learnedChalkWidth(board)
+        || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
       let box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
       // 占位（刀⑧ 2026-08-30）：agent 先声明框的高度、再往里流内容 —— 容量检查、
       // 落位、流式预览全按预约框算。内容更高时按真身来（框不许对内容撒谎）。
@@ -250,39 +255,33 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; if (a.board) b2 = a.board; }
       }
 
-      const obstacles = obstaclesFor(b2, zone, { slotInfo, sheetName: args.sheet || null });
+      const obstacles = obstaclesFor(b2, zone, { sheetName: args.sheet || null });
       const vpRect = vpRectFor(zone);
 
-      // ── flow（刀⑦ 2026-08-30）：长文由机器按段拆成一串卡大小的板书（拆件见
-      // write-on-board-flow.js）。返回 null = 用不上（守卫不过/一块就装下），走正常路。
-      if (args.flow && args.text) {
+      /**
+       * ── flow（刀⑦ 2026-08-30）：长文由机器按段拆成一串卡大小的板书。
+       *
+       * ⭐ 2026-09-01 刀 2：**一张卡装不下就自动走这条路**，不再拒收。
+       *
+       * 08-29 立的规矩是「超过一张卡就整条拒收，让 agent 自己切几块地分段填」——
+       * 那条的前提是纸内有版位可切。站主把版位撤了：「模型在纸张中只需要输入
+       * 内容，然后由机械层自动排版切层」——「切层」就是这件事，它现在是机器的活。
+       * 拆出来的每一段照旧是一条独立板书、链在一起、按栏往下排、排满自动翻页。
+       *
+       * 返回 null = 拆不动（整段是一句话，flowChunks 连句子边界都找不到）：
+       * 那就照原样落一张高卡，前端折起来显示，返回里如实报。比"一个字不写"好。
+       */
+      if (args.text && (args.flow || box.h > CARD_MAX_H)) {
         const fr = await maybeFlowWrite({
           projectId, sharedRoot, sessionId, by, ctx, args, body, wUnits, zone,
-          slotInfo, parentId, replyRect, anchorId, b2, obstaclesFor,
-          placeInSlot, placeOnSheets, describeSheetFull, stamp,
+          parentId, replyRect, anchorId, b2, obstaclesFor,
+          placeOnSheets, describeSheetFull, stamp,
         });
         if (fr) return fr;
       }
 
-
-      // 卡高上限（08-29 刀 E）：没规划版面时也不许写出一根柱子。执行点在工具层
-      // 不在渲染层 —— 折叠/裁切都是替它把问题藏起来，它下一条还会照写。
-      if (!slotInfo && box.h > CARD_MAX_H) {
-        const c = capacityOf(box.w, CARD_MAX_H);
-        return err([
-          `⛔ Too long for one card: this needs ${box.h}px, a card holds ${CARD_MAX_H}px (~${c.lines} lines / ~${c.cjk} CJK chars at ${box.w}px wide).`,
-          '   Nothing was written. Split it YOUR way: carve a few blocks (open_sheet{plan} / edit_board',
-          '   replan — omit at to stack them) and fill one note each, or chain:true a few short notes.',
-          '   Lazy fallback: flow:true lets the machine split at paragraph breaks.',
-        ].join('\n'));
-      }
       let placed;
-      if (slotInfo) {
-        // 装不下不再拒收：内容照写、落暂存架、返回里当场要它安置（2026-08-31 站主拍板，
-        // 理由与那条线没被跨过的说明见 write-on-board-place.js placeOverflowOnShelf）
-        const p = placeInSlot(b2, { rect: slotInfo.rect, sheet: slotInfo.sheet, slotName: args.slot, box, obstacles });
-        placed = p.full ? placeOverflowOnShelf(b2, { box, why: p.message }) : p;
-      } else if (zone) {
+      if (zone) {
         if (args.at) return err('at 是纸内坐标，文件夹层没有纸 —— 在文件夹里用 reply_to/near 落位。');
         placed = placeInZone({ box, replyRect, anchorRect, side: args.side || null, obstacles });
       } else if (laneFrom) {
@@ -299,8 +298,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           box, at: args.at || null, sheetName: args.sheet || null,
           replyRect, anchorRect, side: args.side || null, obstacles,
         });
-        // 纸排满了：还是不替它翻页（刀 F，站主"每张纸规划一次"），但也不再整条拒收 ——
-        // 内容落暂存架，返回里要它自己规划下一页再把这条挪过去
+        // 翻了一页还是装不下（这一条本身比一整页还大）：内容照写、落暂存架，
+        // 返回里当场要它安置（2026-08-31 站主拍板的溢出暂存）
         if (placed.sheetFull) {
           placed = placeOverflowOnShelf(b2, { box, why: describeSheetFull(b2, placed.sheetFull) });
         }
@@ -385,7 +384,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         ctx?.emit?.(Events.boardFocus(rect, { tag: args.tag || null, layer: zone, soft: true, chalk: rel, actor: by !== 'agent' ? by : null }));
       } catch { /* fail-soft */ }
       const lines = describeChalkWrite({
-        rel, rect, board: b2, placed, slotInfo, box, args, vpRect,
+        rel, rect, board: b2, placed, box, args, vpRect,
         parentId, anchorId, laneFrom, boardBefore: board,
       });
       return { content: [{ type: 'text', text: lines.join('\n') }] };
@@ -508,15 +507,6 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     if (zone) {
       if (args.at) return err('at 是纸内坐标，文件夹层没有纸 —— 在文件夹里用 near 落位。');
       placed = placeInZone({ box: sketchBox, replyRect: null, anchorRect, side: args.side || null, obstacles });
-    } else if (args.slot) {
-      // 草图也能进规划好的块（2026-08-29 刀 F 补）。⛔ 之前 slot 只有板书那条路认，
-      // 而状态板/对照表这类东西正是走草图写的 —— 真会话 proj_mtfhey1x 里 agent
-      // 规划了 aside 却一个字没进去，它想用也用不了，只能拿 at 手摆到别处。
-      const si = resolveSlot(sketchBase, { slotName: args.slot, sheetName: args.sheet || null });
-      if (si.error) return err(si.message);
-      const p = placeInSlot(sketchBase, { rect: si.rect, sheet: si.sheet, slotName: args.slot, box: sketchBox, obstacles });
-      // 装不下 → 溢出暂存（同板书那条路，2026-08-31）
-      placed = p.full ? placeOverflowOnShelf(sketchBase, { box: sketchBox, why: p.message }) : p;
     } else {
       placed = await placeOnSheets(sketchBase, {
         box: sketchBox, at: args.at || null, sheetName: args.sheet || null,

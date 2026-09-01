@@ -49,9 +49,9 @@ describe('① pin 一份 .docx：卡 id 必须是前端真会渲染的那一个'
     const t = await mk('proj_ghost_docx');
     setViewpoint('proj_ghost_docx', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await fs.writeFile(path.join(t.sharedRoot, '简历v8.docx'), 'PKfake');
-    await t.open({ title: '母稿', plan: [{ slot: 'art', at: { x: 0, y: 0 }, w: 700, h: 900, for: 'artifacts', about: '产物' }] });
+    await t.open({ title: '母稿' });
 
-    const r = await t.pin({ path: '简历v8.docx', slot: 'art' });
+    const r = await t.pin({ path: '简历v8.docx' });
     expect(r.isError, text(r)).toBeUndefined();
 
     const b = await t.board();
@@ -67,25 +67,39 @@ describe('① pin 一份 .docx：卡 id 必须是前端真会渲染的那一个'
     const t = await mk('proj_ghost_md');
     setViewpoint('proj_ghost_md', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await fs.writeFile(path.join(t.sharedRoot, '笔记.md'), '# hi');
-    await t.open({ title: '页', plan: [{ slot: 'a', at: { x: 0, y: 0 }, w: 700, h: 900, for: 'artifacts', about: 'x' }] });
-    const r = await t.pin({ path: '笔记.md', slot: 'a' });
+    await t.open({ title: '页' });
+    const r = await t.pin({ path: '笔记.md' });
     expect(r.isError, text(r)).toBeUndefined();
     expect(Object.keys(await t.board().then(b => b.objects))).toContain('笔记.md');
   });
 });
 
-describe('② 版位装不下宽度要如实拒收', () => {
-  it('⭐ 360 宽的版位收不下 640 宽的 docx 卡：拒收并说清是宽不是高', async () => {
+/**
+ * ⚠️ 2026-09-01 刀 2：版位没了，这一条守的东西换了执行点。
+ *
+ * 原来守的是「360 宽的版位收不下 640 宽的 docx，要说清是宽不是高」。现在纸内
+ * 没有块，宽度这道闸落在**纸**上：一张 480 宽的说明纸收不下 640 的卡，
+ * 而且翻一页也一样收不下（同一摞的页尺寸一致）——所以要如实拒收，
+ * 不能溢出到隔壁还报成功。
+ */
+describe('② 纸装不下宽度要如实拒收', () => {
+  it('⭐ 480 宽的小纸收不下 640 宽的 docx 卡：拒收并说清它比一整页还大', async () => {
     const t = await mk('proj_ghost_narrow');
     setViewpoint('proj_ghost_narrow', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     await fs.writeFile(path.join(t.sharedRoot, '报告.docx'), 'PKfake');
-    await t.open({ title: '窄', plan: [{ slot: 'art', at: { x: 0, y: 0 }, w: 360, h: 900, for: 'artifacts', about: '产物' }] });
+    await t.open({ title: '窄', w: 480, h: 900 });
 
-    const r = await t.pin({ path: '报告.docx', slot: 'art' });
+    const r = await t.pin({ path: '报告.docx' });
     expect(r.isError, '装不下就该拒收，不能溢出到隔壁还报成功').toBe(true);
-    expect(text(r)).toMatch(/wide/i);
+    expect(text(r)).toMatch(/bigger than a whole page/i);
     const b = await t.board();
     expect(b.objects['docx:报告.docx']?.x, '拒收了就不该留下座位').toBeUndefined();
+    // 对照：够宽的纸上同一张卡照放不误（不然这条断言只是在测「永远拒收」）
+    const t2 = await mk('proj_ghost_wide');
+    setViewpoint('proj_ghost_wide', { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
+    await fs.writeFile(path.join(t2.sharedRoot, '报告.docx'), 'PKfake');
+    await t2.open({ title: '够宽' });
+    expect((await t2.pin({ path: '报告.docx' })).isError).toBeUndefined();
   });
 });
 

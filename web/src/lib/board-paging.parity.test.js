@@ -107,3 +107,42 @@ describe('翻页与藏页', () => {
     expect(flipTo(main, { main: 'p1' }, -1)).toBe('p1');
   });
 });
+
+/**
+ * 正序 / 倒序（2026-09-01 刀 2，站主点名的参数）。
+ * 判据成对：两档必须给出**不同**的落点，否则这个参数只是装饰。
+ */
+describe('一摞的正倒序', () => {
+  const sheets = {
+    p1: { x: 0, y: 0, w: 1000, h: 800, at: '2026-09-01T01:00:00Z', stack: 'main' },
+    p2: { x: 0, y: 0, w: 1000, h: 800, at: '2026-09-01T02:00:00Z', stack: 'main' },
+    p3: { x: 0, y: 0, w: 1000, h: 800, at: '2026-09-01T03:00:00Z', stack: 'main' },
+  };
+  it('⭐ 缺省（倒序）停在最新那一页 —— 读的人跟着 agent 走', () => {
+    const [pile] = pilesOf(sheets, { main: {} });
+    expect(pile.order).toBe('desc');
+    expect(displayedPage(pile, {})).toBe('p3');
+  });
+  it('⭐ 正序停在第一页 —— 这一摞是一份文档，别把他按在最后一页上', () => {
+    const [pile] = pilesOf(sheets, { main: { order: 'asc' } });
+    expect(pile.order).toBe('asc');
+    expect(displayedPage(pile, {})).toBe('p1');
+  });
+  it('用户翻过之后两档一样，都认他选的那张（他一接管就让位）', () => {
+    for (const order of ['asc', 'desc']) {
+      const [pile] = pilesOf(sheets, { main: { order } });
+      expect(displayedPage(pile, { main: 'p2' })).toBe('p2');
+    }
+  });
+  it('翻页方向不随正倒序变（下＝更新的一页，那是手势与内容的关系）', () => {
+    for (const order of ['asc', 'desc']) {
+      const [pile] = pilesOf(sheets, { main: { order } });
+      expect(flipTo(pile, { main: 'p2' }, 1)).toBe('p3');
+      expect(flipTo(pile, { main: 'p2' }, -1)).toBe('p1');
+    }
+  });
+  it('正序那一摞照旧只画显示的那一页（藏页跟着落点走）', () => {
+    const hidden = hiddenByPaging(sheets, { main: { order: 'asc' } }, {});
+    expect([...hidden].sort()).toEqual(['p2', 'p3']);
+  });
+});

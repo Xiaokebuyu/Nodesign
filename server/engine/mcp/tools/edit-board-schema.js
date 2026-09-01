@@ -5,7 +5,6 @@
 
 import { z } from 'zod';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
-import { SLOT } from './open-sheet.js';
 
 const clampTo = (lo, hi) => (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : v);
 const GAP = z.preprocess(clampTo(0, 400), z.number().min(0).max(400));
@@ -52,7 +51,6 @@ export const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('feature'), id: z.string().min(1).max(300).describe('make this the hero of the desktop') }),
   z.object({ op: z.literal('unfeature') }),
   z.object({ op: z.literal('transform_group'), tag: z.string().min(1).max(40), scale: z.number().min(0.3).max(3).optional(), rotate: z.number().min(-180).max(180).optional().describe('degrees clockwise') }),
-  z.object({ op: z.literal('replan'), sheet: z.string().max(40).optional().describe('which sheet (default: the current one)'), scope: z.enum(['page', 'stack']).optional().describe('"stack" = change the LAYOUT OF THE WHOLE PILE, so every page you stack on it from now on gets it. Default is this page only.'), plan: z.array(SLOT).min(1).max(24).describe('slots to ADD or RESIZE (merged by name; slots you do not mention stay). Same local-pixel coordinates as open_sheet{plan}') }),
   z.object({ op: z.literal('chalk_edit'), on: z.boolean().describe('true = turn ON the user-side 改板书 toggle (notes become freely draggable/editable for the user); false = back to guarded mode') }),
   z.object({ op: z.literal('pin_view'), on: z.boolean().describe("true = PIN the user's view to the pile he is on: the camera stops wandering off to wherever you write, and on a touch screen he swipes sideways between piles and up/down through pages. Turn it on when the next several beats land on one pile. It does not stop him zooming in to read.") }),
   z.object({ op: z.literal('show'), sheet: z.string().max(40).describe("Flip the user's view to this sheet. Sheets on one pile share the same ground and only the shown one is drawn, so a page the user asks for ('show me chapter 2') has to be turned up — this is that hand. Changes what they LOOK at, not the board.") }),
@@ -83,8 +81,7 @@ ops (run in order; a failing op is reported, the rest still apply):
  hugs it and follows when it moves) · set_shape{id,color?,width?} ·
  add_edge{from,to,type?,material?,label?} · set_edge{id,from?,to?,label?,type?,material?}
  (re-point a line in one op) · remove_edge{id} · reflow{tag,layout?} (restack a group after
- text edits changed heights) · replan{sheet?,plan:[{slot,at,w,h,about}…]} (ADD or RESIZE planned
- blocks on an existing sheet — fix a bad layout instead of abandoning the page; unnamed slots stay) ·
+ text edits changed heights) ·
  transform_group{tag,scale?,rotate?} (scale/rotate a whole tagged drawing about its center —
  scribbles truly transform; text/cards just re-seat, reported honestly) ·
  set_tag{ids,tag} (put ANYTHING already on the board into a group — images, sites, docx, cards.

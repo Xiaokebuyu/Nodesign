@@ -58,59 +58,36 @@ describe('两端常量 parity', () => {
 });
 
 /**
- * 版位落点（2026-08-29 刀 E）：流式预览要跟服务端落在同一个地方，否则写完还要
- * 跳一下 —— 站主原话「填入文本完毕后就不用再二次刷新了」。
- */
-describe('sheetSpotToWorld 认版位', () => {
-  const planned = {
-    p1: {
-      x: 100, y: 200, w: 1000, h: 800, at: '2026-08-29T01:00:00Z',
-      slots: { main: { x: 0, y: 0, w: 432, h: 600 }, aside: { x: 460, y: 0, w: 300, h: 300 } },
-    },
-  };
-
-  it('⭐ 空版位 → 落在那块地的左上角，宽度也是那块地的', () => {
-    expect(sheetSpotToWorld(planned, { slot: 'main', sheet: 'p1' }))
-      .toEqual({ x: 100 + SHEET_MARGIN, y: 200 + SHEET_MARGIN, w: 432 });
-  });
-
-  it('⭐ 版位里已有东西 → 接在最低那件下面（跟服务端 nextSpotInSlot 同规则）', () => {
-    const layout = {
-      a: { x: 124, y: 224, w: 432, h: 100 },      // 在 main 里
-      b: { x: 584, y: 224, w: 300, h: 500 },      // 在 aside 里，不该影响 main
-    };
-    const r = sheetSpotToWorld(planned, { slot: 'main', sheet: 'p1' }, layout);
-    expect(r.y).toBe(224 + 100 + SHEET_MARGIN);
-  });
-
-  it('版位名不存在 → 退回 at；两个都没有就退到顺排', () => {
-    expect(sheetSpotToWorld(planned, { slot: '没有', sheet: 'p1', at: { x: 10, y: 10 } }))
-      .toEqual({ x: 100 + SHEET_MARGIN + 10, y: 200 + SHEET_MARGIN + 10 });
-    expect(sheetSpotToWorld(planned, { slot: '没有', sheet: 'p1' }, {})).toMatchObject({ flow: true });
-  });
-});
-
-/**
- * 顺排预测（2026-08-29 刀 F）。站主看到的现象：「流式完毕之后再移动」。
+ * 栏格预测（2026-09-01 刀 2）—— 流式预览要跟服务端落在同一个地方，否则写完还要
+ * 跳一下（站主原话「填入文本完毕后就不用再二次刷新了」）。
  *
- * 根因不在流式通道，在**最常见的那条调用形态没有位置**：agent 只给 text 时服务端
- * 按纸内顺排落位，而前端此前无从预知，只能把字写在视口一块空地上、等落盘再跳。
- * 现在前端照服务端同一条规则（接最低那件往下）自己算。
+ * ⛔ 版位那一支 09-01 撤了，换成这一份：规则必须跟服务端 `nextSpotInSheet`
+ * 一字不差 —— 竖着填满一栏，到底换右边一栏，整页满了返回 null（服务端会翻页，
+ * 那张纸此刻还不存在）。
  */
-describe('sheetSpotToWorld 顺排预测', () => {
-  const sheets = { p1: { x: 100, y: 200, w: 1000, h: 800, at: '2026-08-29T01:00:00Z' } };
+describe('sheetSpotToWorld 栏格预测', () => {
+  // 1000 宽的纸、版心 952、栏宽默认 432 → 2 栏 × 464
+  const sheets = { p1: { x: 100, y: 200, w: 1000, h: 800, at: '2026-08-29T01:00:00Z', colW: 432 } };
   const inner = { x: 100 + SHEET_MARGIN, y: 200 + SHEET_MARGIN };
 
   it('⭐ 空纸 + 什么都没点名 → 版心左上角（这就是服务端会放的地方）', () => {
-    expect(sheetSpotToWorld(sheets, {}, {})).toMatchObject({ x: inner.x, y: inner.y, flow: true });
+    expect(sheetSpotToWorld(sheets, {}, {})).toMatchObject({ x: inner.x, y: inner.y, flow: true, col: 0 });
   });
 
-  it('⭐ 纸上已有东西 → 接最低那件往下（gap 24）', () => {
+  it('⭐ 这一栏里已有东西 → 接最低那件往下（gap 24）', () => {
     const layout = {
       a: { x: 124, y: 224, w: 432, h: 100 },
       b: { x: 124, y: 348, w: 432, h: 60 },
     };
     expect(sheetSpotToWorld(sheets, {}, layout).y).toBe(348 + 60 + 24);
+  });
+
+  it('⭐⭐ 第一栏排到底 → 第二栏顶上（服务端会这么排，预览跟不上就等于没有预览）', () => {
+    const layout = { tall: { x: 124, y: 224, w: 432, h: 760 } };   // 底 984 > 版心底 976
+    const r = sheetSpotToWorld(sheets, {}, layout);
+    expect(r.col).toBe(1);
+    expect(r.x).toBe(inner.x + 464 + 24);
+    expect(r.y).toBe(inner.y);
   });
 
   it('纸外的东西不算数（中心点判据）', () => {
@@ -123,8 +100,8 @@ describe('sheetSpotToWorld 顺排预测', () => {
     expect(sheetSpotToWorld(sheets, {}, layout).y).toBe(inner.y);
   });
 
-  it('⭐ 排到纸底了 → null（服务端会翻新纸，那张纸还不存在）', () => {
-    const layout = { tall: { x: 124, y: 224, w: 432, h: 900 } };
+  it('⭐ 每一栏都排到底了 → null（服务端会翻下一页，那张纸还不存在）', () => {
+    const layout = { tall: { x: 124, y: 224, w: 940, h: 760 } };   // 横跨两栏，且排到底
     expect(sheetSpotToWorld(sheets, {}, layout)).toBeNull();
   });
 
@@ -144,22 +121,25 @@ describe('sheetSpotToWorld 顺排预测', () => {
 });
 
 describe('freshSheet 预告（2026-08-30 刀④）', () => {
-  // batch = [open_sheet, write{slot}]：流式时新纸还没登记。没有这一支，预览
+  // batch = [open_sheet, write]：流式时新纸还没登记。没有这一支，预览
   // 会退到「最新那张纸」（偏一整屏）或空地（叠一堆）——「都集中在一处流式」的病根。
   const sheets = { p1: { x: 24, y: 48, w: 2048, h: 973, at: '2026-08-30T10:00:00Z' } };
   const layout = { 'notes/板书/a.md': { x: 48, y: 72, w: 600, h: 300 } };
 
-  it('⭐ freshSheet + planSlot → 框立在「新纸将出现的位置」的那个版位上（裁纸后紧贴内容底+48）', () => {
-    const r = sheetSpotToWorld(sheets, { freshSheet: true, slot: 'side', planSlot: { x: 700, y: 0, w: 600, h: 880 } }, layout);
-    // 内容底 372 → 裁到 (372+24-48) 上取整 24 → 360；新纸 y = 48+360+48 = 456
-    expect(r.x).toBe(24 + 24 + 700);
-    expect(r.y).toBe(456 + 24);
-    expect(r.w).toBe(600);
+  /**
+   * ⭐⭐ 2026-09-01 刀 2：新纸落在**同一块地**上。
+   * 此前这里算的是「上一张内容底 + 48 沟」—— 那是 08-30「往下铺」时的规则；
+   * open_sheet 的缺省 09-01 翻成「叠一页」之后，那个算法每次都把预览画到
+   * 下面一屏去，比没有预览更坏。
+   */
+  it('⭐ freshSheet → 新纸的版心左上（同一块地，不是下面一屏）', () => {
+    const r = sheetSpotToWorld(sheets, { freshSheet: true }, layout);
+    expect(r).toMatchObject({ x: 24 + 24, y: 48 + 24 });
+    // 对照：旧规则会算到 456+24 —— 差着一整屏
+    expect(r.y).not.toBe(456 + 24);
   });
 
-  it('freshSheet 无 planSlot → 新纸版心左上；空板上 freshSheet 退 null（没得预测）', () => {
-    const r = sheetSpotToWorld(sheets, { freshSheet: true }, layout);
-    expect(r.y).toBe(456 + 24);
+  it('空板上 freshSheet 退 null（没得预测）', () => {
     expect(sheetSpotToWorld({}, { freshSheet: true }, {})).toBeNull();
   });
 });

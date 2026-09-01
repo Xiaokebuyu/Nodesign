@@ -4,14 +4,16 @@
  *
  * 「剩 15 行 vs 我这段几行」这道算术模型做不准也不该做（proj_mtfpehm3 真会话
  * 14 发 board_batch 挂 6 发全是容量拒收）。flow 把它拿走：整段内容按段落边界
- * 拆成一串 ≤ 一张卡高的小板书，链着往版位/纸里排，装到哪儿是哪儿 —— 装不下的
- * **原样退回**（不挤 / 不丢 / 不替它翻页，刀 F 的拒收教义一条不破）。
+ * 拆成一串 ≤ 一张卡高的小板书，链着往纸里排。
+ *
+ * ⭐ 2026-09-01 刀 2 之后这不再是「懒人兜底」，而是**长文的正路** ——
+ * 一张卡装不下的正文自动走这里（write-on-board.js 那个入口），拆出来的段按栏排、
+ * 排满自动翻页。站主原话：「模型在纸张中只需要输入内容，然后由机械层自动排版切层」。
  */
 
 import { flowChunks } from '../../../lib/chalk-flow.js';
-import { textBox, capacityOf } from '../../../lib/sketch-layout.js';
+import { textBox } from '../../../lib/sketch-layout.js';
 import { CARD_MAX_H } from '../../../lib/screen.js';
-import { UNIT } from '../../../lib/rect.js';
 import { renderChalk, chalkFileName, writeChalkFile } from '../../../lib/chalk.js';
 import { patchBoard } from '../../../projects/board-store.js';
 import { applyFollows } from '../../../lib/board-follow.js';
@@ -23,8 +25,8 @@ import { Events } from '../../agent/events.js';
  */
 export async function maybeFlowWrite({
   projectId, sharedRoot, sessionId, by, ctx, args, body, wUnits, zone,
-  slotInfo, parentId, replyRect, anchorId, b2, obstaclesFor,
-  placeInSlot, placeOnSheets, describeSheetFull, stamp,
+  parentId, replyRect, anchorId, b2, obstaclesFor,
+  placeOnSheets, describeSheetFull, stamp,
 }) {
   const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
   if (args.ink === 'hand') return err("flow 拆的是板书链，ink:'hand' 没有文件本体接不了链 —— 去掉其中一个。");
@@ -41,18 +43,15 @@ export async function maybeFlowWrite({
   for (let i = 0; i < chunks.length; i += 1) {
     const cBox = textBox(chunks[i], args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
     // 障碍按**这一段要落的那一页**算（2026-09-01 叠纸刀 2）：一条 flow 链可能跨页
-    const obs = obstaclesFor(live, '', { slotInfo, sheetName: args.sheet || null });
-    let p;
-    if (slotInfo) {
-      p = placeInSlot(live, { rect: slotInfo.rect, sheet: slotInfo.sheet, slotName: args.slot, box: cBox, obstacles: obs });
-      if (p.full) { leftover = chunks.length - i; fullMsg = p.message; break; }
-    } else {
-      p = await placeOnSheets(live, {
-        box: cBox, at: (i === 0 && args.at) ? args.at : null, sheetName: args.sheet || null,
-        replyRect: prevRect, anchorRect: null, side: null, obstacles: obs,
-      });
-      if (p.sheetFull) { leftover = chunks.length - i; fullMsg = describeSheetFull(live, p.sheetFull); break; }
-      if (p.opened) live = { ...live, sheets: { ...(live.sheets || {}), [p.opened.id]: { x: p.opened.x, y: p.opened.y, w: p.opened.w, h: p.opened.h, at: p.opened.at, by } } };
+    const obs = obstaclesFor(live, '', { sheetName: args.sheet || null });
+    const p = await placeOnSheets(live, {
+      box: cBox, at: (i === 0 && args.at) ? args.at : null, sheetName: args.sheet || null,
+      replyRect: prevRect, anchorRect: null, side: null, obstacles: obs,
+    });
+    if (p.sheetFull) { leftover = chunks.length - i; fullMsg = describeSheetFull(live, p.sheetFull); break; }
+    // 铺了第一张纸、或者机器翻了一页：本地副本要跟上，后面几段才排得对
+    for (const o of [p.opened, p.turned]) {
+      if (o) live = { ...live, sheets: { ...(live.sheets || {}), [o.id]: { x: o.x, y: o.y, w: o.w, h: o.h, at: o.at, by, ...(o.colW ? { colW: o.colW } : {}), ...(o.stack ? { stack: o.stack } : {}) } } };
     }
     const content = renderChalk({
       body: chunks[i], by, anchor: i === 0 ? anchorId : null,
@@ -73,10 +72,17 @@ export async function maybeFlowWrite({
     }
     if (prevRel) bindings[`b:a${stamp()}`] = { type: 'flow', from: prevRel, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
     live = { ...live, objects: { ...(live.objects || {}), [rel]: entry } };
-    written.push({ rel, rect: { x: entry.x, y: entry.y, w: entry.w, h: entry.h } });
+    written.push({ rel, sheetId: p.sheetId || null, rect: { x: entry.x, y: entry.y, w: entry.w, h: entry.h } });
     prevRel = rel; prevRect = written[written.length - 1].rect;
   }
-  if (!written.length) return err(fullMsg || '⛔ 一条都没放下。');
+  /**
+   * 一条都没放下 —— **退回单条路，别在这儿报错**（2026-09-01 刀 2）。
+   *
+   * 会走到这里只有一种情形：纸小到连一块卡都装不下（贴产物的小说明纸），
+   * 而且机器已经替它翻过一页了。这时候整条拒收就是把内容丢掉，而调用方那边
+   * 有一条更好的路：照原样落一条，溢出到暂存架，报文当场要 agent 安置。
+   */
+  if (!written.length) return null;
   await patchBoard(projectId, { objects, bindings });
   if (args.tag) { try { await applyFollows(projectId, { tag: args.tag, newId: written[written.length - 1].rel }); } catch { /* */ } }
   const xs = written.map((w) => w.rect.x); const ys = written.map((w) => w.rect.y);
@@ -89,22 +95,17 @@ export async function maybeFlowWrite({
     ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `写了一串板书（${written.length} 条）` });
     ctx?.emit?.(Events.boardFocus(bbox, { tag: args.tag || null, layer: '', soft: true, chalk: written[0].rel, actor: by !== 'agent' ? by : null }));
   } catch { /* fail-soft */ }
+  const pages = [...new Set(written.map((w) => w.sheetId).filter(Boolean))];
   const lines = [
-    `Flowed into ${written.length} chained notes${args.slot ? ` in slot "${args.slot}"` : ''}:`,
+    `The machine split this into ${written.length} chained notes and laid them out${pages.length > 1 ? ` across ${pages.length} pages (${pages.join(' → ')})` : ''}:`,
     ...written.map((w) => `  ${w.rel} at (${w.rect.x},${w.rect.y}) ${w.rect.w}x${w.rect.h}`),
   ];
-  if (slotInfo) {
-    const last = written[written.length - 1].rect;
-    const freeH = Math.max(0, Math.round(slotInfo.rect.y + slotInfo.rect.h - (last.y + last.h) - UNIT));
-    const c = capacityOf(slotInfo.rect.w, freeH);
-    lines.push(`Slot "${args.slot}" now has ~${c.lines} lines (~${c.cjk} CJK chars, ${freeH}px) left.`);
-  }
   if (leftover) {
     const rest = chunks.slice(chunks.length - leftover);
     const restH = rest.reduce((n, t) => n + textBox(t, 'md', { md: true, wUnits }).h, 0);
     lines.push(`⚠ ${leftover} paragraph(s) did NOT fit (from 「${[...rest[0]].slice(0, 16).join('')}…」, ~${Math.ceil(restH / 26)} lines). They were returned untouched — nothing was squeezed or dropped.`);
     if (fullMsg) lines.push(fullMsg.split('\n')[0]);
-    lines.push(`Continue them yourself: open the next page (open_sheet) or pick another slot, then write the REST again with {flow:true, chain:true${args.tag ? `, tag:"${args.tag}"` : ''}} — chain threads it onto ${written[written.length - 1].rel}.`);
+    lines.push(`Continue them yourself: write the REST again with {flow:true, chain:true${args.tag ? `, tag:"${args.tag}"` : ''}} — chain threads it onto ${written[written.length - 1].rel}.`);
   }
   lines.push('The user can annotate any of them to reply; answer with reply_to.');
   return { content: [{ type: 'text', text: lines.join('\n') }] };

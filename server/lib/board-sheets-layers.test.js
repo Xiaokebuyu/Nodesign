@@ -9,7 +9,7 @@
  * 判据先验：每条都先摆一个**必须被拒/必须放行**的对照。
  */
 import { describe, it, expect } from 'vitest';
-import { sheetMembers, membersInRect, nextSpotInSlot } from './board-sheets.js';
+import { sheetMembers, membersInRect, nextSpotInSheet } from './board-sheets.js';
 import { zoneRects } from './board-kind-sizes.js';
 import { obstaclesIn } from './board-obstacles.js';
 
@@ -42,14 +42,17 @@ describe('⛔ 纸面账目只数根层', () => {
     expect(ids).not.toContain('世界书/常驻');                // 子文件夹卡住在父层
   });
 
-  it('membersInRect（版位容量）同一条规矩 —— 真案里「剩 0 行」就是它数了幻影', () => {
+  it('membersInRect 同一条规矩 —— 真案里「剩 0 行」就是它数了幻影', () => {
     const mainRect = { x: 48, y: 72, w: 648, h: 880 };
     const ids = membersInRect(board, mainRect).map((m) => m.id);
     expect(ids).toContain('notes/板书/20260830-第一拍.md');
     expect(ids).not.toContain('用户内容/1.png');
-    // 幻影清掉后这块版位装得下下一条（真案里这一发被拒了）
-    const spot = nextSpotInSlot(board, mainRect, { w: 600, h: 254 });
-    expect(spot.full).toBeUndefined();
+    // 幻影清掉后这张纸还排得下（真案里这一发被拒了）。⭐ 判据换成机器排的落位
+    // （2026-09-01 刀 2 版位退役），治的病一模一样：幻影会让它报满
+    const spot = nextSpotInSheet(board, 'ch1', { w: 600, h: 254 });
+    expect(spot).not.toBeNull();
+    // 对照：真的根层板书**要**挡住它自己那一栏（幻影不挡、真货挡，两边都验过才算）
+    expect(spot.y).toBeGreaterThan(510);
   });
 
   it('zoneRects 按层取：根层只有顶层文件夹卡；世界书层里才有 常驻 的卡', () => {

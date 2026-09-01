@@ -42,7 +42,6 @@ import RoleSprites from './RoleSprites.jsx';
 import RoleTalkPanel from './RoleTalkPanel.jsx';
 import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
 import ShelfHint from './ShelfHint.jsx';
-import SlotLayer from './SlotLayer.jsx';
 import { useDirIndex } from './board-dir-index.js';
 import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
@@ -1677,13 +1676,6 @@ export default function BoardCanvas({
         >
           {/* 文件夹：一张方卡（2026-08-13，"分区"时代两态退役）——
               桌面上的一个东西，双击进去换一层。 */}
-          {/* 版式底稿（叠纸·册）：只画当前显示那一页的版位；块内不吃指针，边上可拖 */}
-          {!eyeMode && (
-            <SlotLayer
-              piles={paging.piles} sheets={sheets} stacks={stacks} shownOf={paging.shownOf}
-              scale={scale} projectId={projectId} onChanged={reload}
-            />
-          )}
           <ShelfHint positioned={positioned} total={paging.shelfCount} />
           {visibleZones.map((z) => renderFolderCard(z))}
 

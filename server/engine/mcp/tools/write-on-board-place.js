@@ -2,18 +2,19 @@
  * mcp/tools/write-on-board-place.js —— write_on_board 的纸上落位（2026-08-29 纸范式刀 2，
  * 行数棘轮拆件：text 与 sketch 两条路共用同一份落位与返回文案）。
  *
- * 决策树（启发式引擎退役后仅存的分支）：
+ * 决策树（2026-09-01 刀 2 撤掉版位那一支之后）：
  *   near+side 显式 → 精确贴放（语义要求；压上如实报）
- *   slot          → 规划好的那块地里往下堆（装不下 → **溢出暂存**，见下）
- *   reply_to      → 接楼正下方（纸满 → 溢出暂存）
+ *   reply_to      → 接楼正下方（接不下去 → 同页顺排 → 翻页）
  *   at            → 纸内定点（钳进版心，钳了如实报）
- *   什么都没有    → 纸内顺排（先往下、这一列到底往右；纸真排不下 → 溢出暂存）
+ *   什么都没有    → **机器按栏排**（竖着填满一栏、到底换右边一栏、整页满了翻下一页）
  * 文件夹层没有纸：线程/贴放照常，否则排在这一层内容底下。
+ *
+ * 翻了一页还是装不下（这一条本身比一整页还大）才走溢出暂存。
  */
 
 import {
   currentSheet, toLocal,
-  nextSpotInSheet, overlapIds, sheetOfPoint, slotRectOf, nextSpotInSlot, innerRect, resolveSheet,
+  nextSpotInSheet, overlapIds, sheetOfPoint, innerRect, resolveSheet, sheetColumns, freeColumnsInSheet,
 } from '../../../lib/board-sheets.js';
 import { placeAtOnSheet, placeThread, placeBeside } from '../../../lib/board-place.js';
 import { capacityOf } from '../../../lib/sketch-layout.js';
@@ -29,91 +30,48 @@ const visibleIn = (rect, vpRect) => !!vpRect && !(rect.x + rect.w < vpRect.x || 
 
 export function makeSheetPlacer({ projectId, sessionId, by }) {
   /**
-   * 版位解析（2026-08-29 刀 E）。**要在算板书宽度之前调** —— 一块地多宽，
-   * 写进去的东西就多宽，不再各自按内容估。
-   * @returns {{rect,sheet}|{error:string,message:string}}
+   * 根层：纸上落位。返回 {x,y,resolution,sheetId,opened,turned,clamped,pressed}
+   *
+   * ## ⭐ 2026-09-01 刀 2：纸满**自动翻到这一摞的下一页**
+   *
+   * 08-29 刀 F 定的是反过来的规矩 ——「机器绝不替 agent 翻页」。那条当时是对的，
+   * 理由写在旧注释里：机器悄悄翻页，agent 不知道自己换了页，**新纸自然也没有
+   * 版面**，规划好的 p2 一写满就散回顺排。
+   *
+   * ⭐ 注意那个理由的落点是**版面**。版位 09-01 撤了（站主：「模型在纸张中只需要
+   * 输入内容，然后由机械层自动排版切层」），于是翻页不再毁掉任何东西：新一页
+   * 跟上一页是同一摞、同一套栏格，读的人一翻就到。理由没了，规矩就得跟着改 ——
+   * 留着它只会让「装不下」重新变成 agent 的活。
+   *
+   * 一次调用最多翻**一页**：连新的一整页都装不下，那是这一条本身太大（或者纸
+   * 太小），再翻下去就是无限翻页。那种情况照旧走溢出暂存。
    */
-  const resolveSlot = (b, { slotName, sheetName }) => {
-    const sheets = b.sheets || {};
-    // 版式合好的那一份（摞的 + 这一页的）—— resolveSheet 是唯一的合并口
-    const sheet = (sheetName && sheets[sheetName])
-      ? resolveSheet(b, sheetName)
-      : currentSheet(b, currentSheetIdOf(sessionId));
-    if (!sheet) {
-      return { error: 'no-sheet', message: 'No sheet yet — open_sheet first (plan the page, then write into its slots).' };
-    }
-    const rect = slotRectOf(sheet, slotName);
-    if (!rect) {
-      const names = Object.keys(sheet.slots || {});
-      return {
-        error: 'no-slot',
-        message: names.length
-          ? `Sheet ${sheet.id} has no slot "${slotName}". It has: ${names.join(', ')}.`
-          : `Sheet ${sheet.id} has no slots planned. Plan the page first: open_sheet{plan:[{slot,at,w,h,about}…]}.`,
-      };
-    }
-    return { rect, sheet };
-  };
-
-  /**
-   * 版位内落位。装不下**拒收**（站主拍板：提示 agent 分块内容、重新布置）——
-   * 折叠/裁切/挤进去都是替它把问题藏起来，而它下一条还会照写不误。
-   */
-  const placeInSlot = (b, { rect, sheet, slotName, box, obstacles }) => {
-    // sheetId 必传（2026-09-01 叠纸刀 1）：一摞纸共用一块地，不传的话在第二页的
-    // 版位里算余量会把第一页的内容也数进去，报出来的「还剩几行」偏少
-    const spot = nextSpotInSlot(b, rect, box, { sheetId: sheet.id });
-    if (spot.full) {
-      const left = capacityOf(rect.w, spot.freeH);
-      const whole = capacityOf(rect.w, rect.h);
-      // 量纲对齐（刀⑥ 2026-08-30）：两边都报 px + 行，还差多少直接说 —— 此前
-      // 「剩 ~15 行 / 要 ~15 行」被拒，在模型眼里就是量具坏了（真差 21px）。
-      if (spot.tooWide) {
-        return {
-          full: true,
-          message: `⛔ Slot "${slotName}" on sheet ${sheet.id} is only ${spot.freeW}px wide, this needs ${spot.needW}px. Nothing was written. Re-plan that block wider (replan it by name, omit at — it resizes in place).`,
-        };
-      }
-      const short = spot.needH - spot.freeH;
-      return {
-        full: true,
-        message: [
-          `⛔ Slot "${slotName}" on sheet ${sheet.id} cannot take this — short by ${short}px (~${Math.max(1, Math.ceil(short / 26))} line${short > 26 ? 's' : ''}).`,
-          `   Free: ${spot.freeH}px (~${left.lines} lines / ~${left.cjk} CJK chars); this note needs ${spot.needH}px.`
-            + `${spot.taken ? ` The ${rect.w}x${rect.h} slot (~${whole.cjk} CJK chars) already holds ${spot.taken} item(s).` : ''}`,
-          '   Nothing was written. Split it YOUR way: make this slot taller (replan it by name,',
-          '   omit at — it resizes in place) or carve fresh blocks (omit at to stack below) and fill them one',
-          '   note each. Or trim it. Lazy fallback: flow:true lets the machine split at paragraph breaks.',
-        ].join('\n'),
-      };
-    }
-    setCurrentSheetId(sessionId, sheet.id);
-    return {
-      x: spot.x, y: spot.y, resolution: 'slot', slot: slotName, sheetId: sheet.id,
-      pressed: overlapIds({ x: spot.x, y: spot.y, w: box.w, h: box.h }, obstacles),
-    };
-  };
-
-  /** 根层：纸上落位。返回 {x,y,resolution,sheetId,opened,clamped,pressed} */
   const placeOnSheets = async (b, { box, at, sheetName, replyRect, anchorRect, side, obstacles }) => {
     let sheets = b.sheets || {};
-    let opened = null;
+    let opened = null;      // 铺了第一张纸（板上原来一张都没有）
+    let turned = null;      // 翻了一页（这一摞的下一页）
     const pick = () => {
       if (sheetName && sheets[sheetName]) return resolveSheet(b, sheetName);
       return currentSheet({ sheets }, currentSheetIdOf(sessionId));
     };
-    /** 铺第一张纸（还一张都没有时）。**不用于翻页** —— 见下方 sheetFull。 */
+    const remember = (o) => {
+      sheets = {
+        ...sheets,
+        [o.id]: { x: o.x, y: o.y, w: o.w, h: o.h, at: o.at, by: o.by, ...(o.colW ? { colW: o.colW } : {}), ...(o.stack ? { stack: o.stack } : {}) },
+      };
+      return { id: o.id, ...sheets[o.id] };
+    };
+    /** 铺第一张纸（还一张都没有时） */
     const openFirst = async () => {
       opened = await openSheetFor(projectId, { sessionId, by, where: null });
-      sheets = { ...sheets, [opened.id]: { x: opened.x, y: opened.y, w: opened.w, h: opened.h, at: opened.at, by: opened.by } };
-      return { id: opened.id, ...sheets[opened.id] };
+      return remember(opened);
     };
     const bWith = () => ({ ...b, sheets });
     const done = (p, resolution, sheetId, clamped = false) => {
       if (sheetId) setCurrentSheetId(sessionId, sheetId);
       const pressed = overlapIds({ x: p.x, y: p.y, w: box.w, h: box.h }, obstacles);
       return {
-        x: Math.round(p.x), y: Math.round(p.y), resolution, sheetId, opened, clamped, pressed,
+        x: Math.round(p.x), y: Math.round(p.y), resolution, sheetId, opened, turned, clamped, pressed,
         overflowY: p.overflowY || 0,   // 纸从那个 y 往下不够高还差多少（换纸判据）
         moved: !!p.moved,              // 这一列到底了、往右挪了一块空地
       };
@@ -121,6 +79,18 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     const sheetOf = (p) => {
       const hit = sheetOfPoint(bWith(), { x: p.x + box.w / 2, y: p.y + box.h / 2 });
       return hit ? hit.id : null;
+    };
+    /**
+     * 顺排；这一页满了就翻下一页再排。返回 null = 翻了也放不下（调用方走溢出暂存）。
+     */
+    const flowOrTurn = async (sheetId, resolution) => {
+      const here = nextSpotInSheet(bWith(), sheetId, box);
+      if (here) return done(here, resolution, sheetId);
+      if (turned) return null;                     // 一次调用只翻一页
+      turned = await openSheetFor(projectId, { sessionId, by, where: 'stack', fromSheet: sheetId });
+      const next = remember(turned);
+      const there = nextSpotInSheet(bWith(), next.id, box);
+      return there ? done(there, 'flow-turned', next.id) : null;
     };
 
     // 显式贴放（near + side）：语义要求（题注在上方）的精确几何，不搜索
@@ -140,15 +110,13 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
        * 接楼跳过它就出了版心底（2437），于是报了
        * 「⛔ Sheet p1 is full (all columns used) — nothing was written」。
        * 同一张纸同一刻，nextSpotInSheet 返回 (1392,1512) —— 第 4 栏整栏空着。
-       * agent 信了这句话去 open_sheet，一场会话开出四张纸；每开一张，暂存架和
-       * 纸互相顶的那个棘轮就再转一格（见 lib/board-shelf.js bandHitsSheet）。
+       * agent 信了这句话去 open_sheet，一场会话开出四张纸。
        *
        * 所以先在同一张纸上顺排。回复关系靠 reply_to 落的那条边保着，本来就
        * 不依赖几何相邻 —— 挪一栏丢的只是"紧贴在下面"这个视觉暗示。
        */
-      const flow = nextSpotInSheet(bWith(), p.sheetFull, box);
-      if (flow) return done(flow, 'thread-flow', p.sheetFull);
-      return { sheetFull: p.sheetFull };
+      const flowed = await flowOrTurn(p.sheetFull, 'thread-flow');
+      return flowed || { sheetFull: p.sheetFull };
     }
     // 定点 / 顺排：都要有一张纸
     let s = pick();
@@ -157,13 +125,8 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
       const p = placeAtOnSheet(s, at, box);
       return done(p, 'at', s.id, p.clamped);
     }
-    const flow = nextSpotInSheet(bWith(), s.id, box);
-    if (flow) return done(flow, 'flow', s.id);
-    // 这张纸排满了。**不替它翻页**（2026-08-29 刀 F，站主拍板"每张纸规划一次"）：
-    // 机器悄悄翻页的话，agent 根本不知道自己换了页，新纸自然也没有版面 —— 真会话
-    // proj_mtfhey1x 里 p2 规划得好好的，写满翻到 p3 就散回顺排了。纸是它开的，
-    // 满了该由它决定下一页什么样。
-    return { sheetFull: s.id };
+    const flowed = await flowOrTurn(s.id, 'flow');
+    return flowed || { sheetFull: s.id };
   };
 
   /** 文件夹层落位（没有纸）：线程/贴放照常，否则排在这一层内容底下 */
@@ -181,15 +144,19 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     return { x: Math.round(left), y: Math.round(bottom) + 40, resolution: 'below-content', pressed: [] };
   };
 
-  /** 纸排满了的报文：不替它翻页，告诉它该规划下一页了 */
+  /**
+   * 翻了一页还是装不下的报文（2026-09-01 刀 2 之后这条只在**这一件本身比一整页
+   * 还大**时出现 —— 纸满已经由机器翻页接住了）。
+   */
   const describeSheetFull = (b, sheetId) => {
     const sh = b.sheets?.[sheetId];
-    const inner = sh ? { w: sh.w - 48, h: sh.h - 48 } : { w: 0, h: 0 };
-    const landscape = inner.w > inner.h;
+    const cols = sh ? sheetColumns({ ...sh, id: sheetId }) : null;
+    const cap = cols ? capacityOf(cols.colW, cols.inner.h) : null;
     return [
-      `⛔ Sheet ${sheetId} is full${landscape ? ' (all columns used)' : ''} — nothing was written.`,
-      `   Open the next page yourself and plan it: open_sheet{title:"…", plan:[{slot,at,w,h,about}…]}.`,
-      `   Each sheet gets its own layout — decide what this next page is for before filling it.`,
+      `⛔ This does not fit even on a FRESH page — it is bigger than a whole sheet.`,
+      cap ? `   A page here is ${cols.n} column(s) of ${cols.colW}px (~${cap.lines} lines each, ~${cap.cjk * cols.n} CJK chars for the page).`
+          : `   Sheet ${sheetId} could not take it.`,
+      `   Write it shorter, or pass flow:true and the machine will split it at paragraph breaks across pages.`,
     ].join('\n');
   };
 
@@ -233,9 +200,8 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     'Why it did not fit:',
     String(placed.why || '').trimEnd(),
     'The shelf is NOT a layout — place it now, in this same turn:',
-    '   · make room where it belongs: edit_board{ops:[{op:"replan", slot:"…", h:…}]} then pin it back, or',
     '   · give it a spot: edit_board{ops:[{op:"move", id:"<the path above>", to:{…}}]}, or',
-    '   · plan the next page for it: open_sheet{title:"…", plan:[…]} then move it there.',
+    '   · open a page for it: open_sheet{title:"…"} then move it there.',
   ].join('\n');
 
   /** 返回文案：从真实落点生成（"工具返回不许撒谎"—— 08-25 陷阱③ 的纪律不变） */
@@ -247,12 +213,12 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
       bits.push(`on sheet ${s.id}${s.title ? `（${s.title}）` : ''} at local (${Math.round(l.x)},${Math.round(l.y)})`);
     }
     if (placed.resolution === 'thread') bits.push('under the note it replies to (thread)');
-    else if (placed.resolution === 'flow') {
+    else if (placed.resolution === 'flow' || placed.resolution === 'thread-flow') {
       bits.push(placed.moved
-        ? 'the column you were in ran out — flowed into free space further right on the same sheet'
-        : 'flowed below the last item');
+        ? 'the column it was in filled up — flowed to the top of the next column on the same page'
+        : 'flowed below the last item in its column');
     }
-    else if (placed.resolution === 'slot') bits.push(`in slot "${placed.slot}" (planned block)`);
+    else if (placed.resolution === 'flow-turned') bits.push('the page filled up — the machine TURNED TO A NEW PAGE on the same pile and put it at the top of the first column');
     else if (placed.resolution === 'at') {
       // 换纸判据（08-29 刀 C）：光说"钳住了"不够 —— 钳住的结果是这条被压到贴着
       // 纸底、跟上一条挤在一起，而 agent 不知道该翻页了。
@@ -265,6 +231,7 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
     else if (placed.resolution === 'below-content') bits.push('below current content (folder layer has no sheets)');
     else if (placed.resolution === 'shelf-overflow') bits.push('PARKED ON THE SHELF (it did not fit where you asked — see the overflow note below)');
     if (placed.opened) bits.push(`opened sheet ${placed.opened.id} (${placed.opened.innerW}x${placed.opened.innerH} writable)`);
+    if (placed.turned) bits.push(`turned to page ${placed.turned.id} of pile "${placed.turned.pile}" (the reader flips to it; the page before is intact)`);
     if (placed.pressed?.length) bits.push(`⚠ overlaps ${placed.pressed.slice(0, 4).join(', ')} — move yours (edit_board) if unintended`);
     return bits.join('; ');
   };
@@ -278,27 +245,21 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
    * describeSheetFull / describeOverflow 都在这儿，报文的措辞纪律（"工具返回不许
    * 撒谎"、量纲两边同单位）也都记在这儿的注释里。散在两个文件迟早各说各话。
    */
-  const describeChalkWrite = ({ rel, rect, board, placed, slotInfo, box, args, vpRect, parentId, anchorId, laneFrom, boardBefore }) => {
+  const describeChalkWrite = ({ rel, rect, board, placed, box, args, vpRect, parentId, anchorId, laneFrom, boardBefore }) => {
     const lines = [
       `Wrote board note ${rel} at (${rect.x},${rect.y}) ${rect.w}x${rect.h} — ${describeSpot(board, placed)}.`,
       `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
     // 溢出暂存：这段必须紧跟落点，且要点名这条的路径 —— agent 下一步就是拿它去 move
     if (placed.resolution === 'shelf-overflow') lines.push(describeOverflow(placed));
-    // 余量随手报（2026-08-30 容量线）：下一条要不要拆、还塞不塞得下，
+    // 余量随手报（2026-08-30 容量线；09-01 版位换成栏）：下一条还塞不塞得下，
     // 最有用的时机就是刚写完这一刻 —— 别让它再去翻状态块或者赌一发。
-    if (slotInfo) {
-      const freeH = Math.max(0, Math.round(slotInfo.rect.y + slotInfo.rect.h - (rect.y + rect.h) - UNIT));
-      const c = capacityOf(slotInfo.rect.w, freeH);
-      // 版位满 ≠ 纸满（2026-08-30 利用率线）：旧措辞 "goes elsewhere" 把模型往门外
-      // 推（sonnet 真会话走成每拍一张新纸）。版位用完先报纸还剩多少，复用是主路径。
-      let tail = '';
-      if (freeH < 60) {
-        const inn = innerRect(slotInfo.sheet);
-        const sheetFree = Math.round(inn.y + inn.h - (rect.y + rect.h) - UNIT);
-        tail = sheetFree >= 120 ? ` — this slot is full, but the sheet still has ~${sheetFree}px below: keep writing on it (no slot needed — notes flow down; or replan more blocks). A fresh sheet is for a scene change or a refusal, not for every note` : ' — slot and sheet are both nearly full; plan the next page (open_sheet) before the next note';
-      }
-      lines.push(`Slot "${args.slot}" now has ~${c.lines} lines (~${c.cjk} CJK chars, ${freeH}px) left${tail}.`);
+    if (placed.sheetId && board.sheets?.[placed.sheetId]) {
+      const cols = freeColumnsInSheet(board, placed.sheetId);
+      const best = cols.reduce((n, c) => Math.max(n, c.freeH), 0);
+      const cw = sheetColumns({ ...board.sheets[placed.sheetId], id: placed.sheetId }).colW;
+      const c = capacityOf(cw, best);
+      lines.push(`Page ${placed.sheetId} now has ${cols.length} column(s); the roomiest has ~${c.lines} lines (~${c.cjk} CJK chars, ${best}px) left. When they all fill, the machine turns the page for you.`);
     }
     if (box.reserved) lines.push(`Box height reserved at ${box.h}px (content measured shorter — the box keeps your planned size).`);
     // 折叠如实报（08-29 占位契约刀 B）：卡高封顶到 CARD_MAX_H，超出的折在卡里。
@@ -327,15 +288,14 @@ export function makeSheetPlacer({ projectId, sessionId, by }) {
    * 墨此刻没画在屏幕上，把它算成障碍就是让一块看不见的东西挡住真正空着的地方 ——
    * 在第二页写第一笔当场报「纸满」。文件夹层没有纸，那儿传了也没用。
    *
-   * 落在哪一页：版位点名的那张 > 入参点名的 > 会话正写的那张。
+   * 落在哪一页：入参点名的那张 > 会话正写的那张。
    */
-  const obstaclesFor = (b, zone, { slotInfo = null, sheetName = null } = {}) => {
-    const sheetId = zone ? null : (slotInfo?.sheet?.id
-      || (sheetName && b?.sheets?.[sheetName] ? sheetName : null)
+  const obstaclesFor = (b, zone, { sheetName = null } = {}) => {
+    const sheetId = zone ? null : ((sheetName && b?.sheets?.[sheetName] ? sheetName : null)
       || currentSheet(b, currentSheetIdOf(sessionId))?.id
       || null);
     return obstaclesIn(b, zone, { sheetId });
   };
 
-  return { placeOnSheets, placeInZone, describeSpot, resolveSlot, placeInSlot, describeSheetFull, placeOverflowOnShelf, describeOverflow, describeChalkWrite, obstaclesFor };
+  return { placeOnSheets, placeInZone, describeSpot, describeSheetFull, placeOverflowOnShelf, describeOverflow, describeChalkWrite, obstaclesFor };
 }

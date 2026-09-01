@@ -22,7 +22,7 @@ import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
 import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
-import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot, freeColumnsInSheet, latestSheetId, resolveSheet } from '../../../lib/board-sheets.js';
+import { sheetSummaries, rollCardRect, sheetColumns, freeColumnsInSheet, latestSheetId, resolveSheet } from '../../../lib/board-sheets.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -212,24 +212,13 @@ on the minimap and listed with what is inside it.`,
               // 只给像素等于让它每次落笔前做一道做不准的算术
               const cap = capacityOf(DEFAULT_CHALK_W, s.freeH);
               lines.push(`  ${s.id}${s.id === latest ? '（当前）' : ''}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高（≈${cap.lines} 行 / ${cap.cjk} 字）${s.lastId ? `，最新 ${s.lastId}` : ''}`);
-              // 规划过的块各剩多少（08-29 刀 E）：填到一半要知道还有哪块地是空的，
-              // 不然只能靠猜 —— 猜错的下场是写入被拒收，白跑一趟
-              // 这张纸还剩哪些空地（08-29 刀 F）：只报"最后一件下面剩多少"是不够的 ——
-              // 那一列到底了不等于这张纸满了，右边可能整片空着，而 agent 要靠这个
-              // 判断"还放不放得下、要不要开新一页"
+              // 这张纸每一栏还剩多少（09-01 刀 2：机器按栏排，报的就得是栏）——
+              // 「最后一件下面剩多少」不够：那一栏到底了不等于这张纸满了
+              const cols = sheetColumns({ ...board.sheets[s.id], id: s.id });
               const free = freeColumnsInSheet(board, s.id);
-              if (free.length > 1) {
-                const cells = free.map((f) => `x=${f.x} 剩 ${capacityOf(DEFAULT_CHALK_W, f.freeH).lines} 行`);
-                lines.push(`    空地：${cells.join(' / ')}`);
-              }
-              // 版式合好的那一份（摞的 + 这一页的）
-              const sheet = resolveSheet(board, s.id);
-              for (const [nm, sl] of Object.entries(sheet?.slots || {})) {
-                const r = slotRectOf(sheet, nm);
-                const spot = nextSpotInSlot(board, r, { w: 1, h: 1 });
-                const freeH = spot.full ? 0 : Math.max(0, r.y + r.h - spot.y);
-                const c = capacityOf(r.w, freeH);
-                lines.push(`    · ${nm}${sl.about ? `（${sl.about}）` : ''}${sl.for === 'artifacts' ? '【收产物】' : ''}：块内 (${sl.x},${sl.y}) ${sl.w}x${sl.h}，剩 ≈${c.lines} 行 / ${c.cjk} 字`);
+              if (free.length) {
+                const cells = free.map((f, i) => `第${i + 1}栏 剩 ${capacityOf(cols.colW, f.freeH).lines} 行`);
+                lines.push(`    ${cols.n} 栏 × ${cols.colW}px：${cells.join(' / ')}（都满了机器自动翻下一页）`);
               }
             }
           }
@@ -242,8 +231,9 @@ on the minimap and listed with what is inside it.`,
             lines.push('', `📦 暂存架上 ${unplaced.length} 件等安置（机器只码在架上，版面归你）：`);
             for (const r of unplaced.slice(0, 8)) lines.push(`  ${r}`);
             if (unplaced.length > 8) lines.push(`  …还有 ${unplaced.length - 8} 件`);
-            lines.push('  安置的手：open_sheet{plan:[{slot:"图",at:{…},w,h,for:"artifacts"}…]} 规划产物地，'
-              + '或逐件 pin_to_board{path,slot} / edit_board{ops:[{op:"move",…}]}。');
+            lines.push('  安置的手：pin_to_board{path} 把它请到当前这一页（机器按栏排），'
+              + '或 pin_to_board{path,at} 点名位置 / edit_board{ops:[{op:"move",…}]}。'
+              + '要给它配说明文字：open_sheet{near:"那件东西"} 在它旁边铺一张小纸再写。');
           }
         } catch { /* 纸读不出不挡座次 */ }
       }
