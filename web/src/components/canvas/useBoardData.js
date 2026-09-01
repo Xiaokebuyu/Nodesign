@@ -102,6 +102,9 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   // 纸（2026-08-29 纸范式）：sheet 名 → {x,y,w,h,by,at,title}。**纯概念不渲染**
   // （用户拍板：纸只表示位置范围）——读者只有翻纸器（一纸=一页）和 agent 侧。
   const [sheets, setSheets] = useState({});
+  // 摞（2026-09-01 叠纸）：摞名 → {title,at,artifacts}。一摞纸占同一块地，一次只
+  // 显示其中一张 —— 几何全从成员纸派生，这张表只记身份，见 lib/board-paging.js
+  const [stacks, setStacks] = useState({});
   // 常驻角色的展示名（slug → 名字）。**派生态**，跟 /board 一起来，不存 board.json：
   // 板上署名是 slug（权威），展示名住在角色文件里（模型可改）。只用来渲染，不做判断。
   const [roleNames, setRoleNames] = useState({});
@@ -155,6 +158,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
       setBoardHero(b.board.hero || null);
       setRolls(b.board.rolls || {});
       setSheets(b.board.sheets || {});
+      setStacks(b.board.stacks || {});
       setShelf(b.board.shelf || null);
       if (b.roles && typeof b.roles === 'object') setRoleNames(b.roles);
       // 桌面化：board.json 的 size 不再决定画布大小 —— 桌面宽度固定、高度随内容
@@ -226,7 +230,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   return {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
-    rolls, setRolls, sheets, shelf,
+    rolls, setRolls, sheets, stacks, shelf,
     guideText, fileCount,
     reload, scheduleSave, patchLayout, removeLayoutEntry,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,

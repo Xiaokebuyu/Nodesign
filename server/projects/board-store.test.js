@@ -159,6 +159,25 @@ describe('sheets 注册表（2026-08-29 纸范式）：合并语义同 lanes', (
     expect(b2.objects['notes/板书/a.md'].sheet).toBe('p1');
   });
 
+  /**
+   * 归属清除（2026-09-01 叠纸）：用户把卡拖出所有的纸，前端要把 `sheet` 摘掉。
+   *
+   * 合并语义下「补丁里没有这个键」表达不了「删掉这个键」（tag 那次为此另开了
+   * clearTags 一条专用路）。这里不用另开：**传空串**，merge 之后 sanitizeTag('')
+   * 是假值，白名单重建时那个字段自然不落。走的是现成的路，但它是个隐式契约 ——
+   * 所以钉在这儿，将来谁把 sanitize 那行改成 `?? o.sheet` 之类会当场红。
+   */
+  it('⭐ sheet 传空串 = 清掉归属，同一发里别的字段照旧合并', async () => {
+    const sp7 = 'proj_boardstore_clearsheet';
+    await patchBoard(sp7, { objects: { 'text:a': { x: 0, y: 0, kind: 'text', data: { t: 'x' }, sheet: 'p1', tag: '章节' } } });
+    expect((await readBoard(sp7)).objects['text:a'].sheet).toBe('p1');
+    await patchBoard(sp7, { objects: { 'text:a': { x: 9, y: 9, sheet: '' } } });
+    const e = (await readBoard(sp7)).objects['text:a'];
+    expect(e.sheet).toBeUndefined();
+    expect(e.tag).toBe('章节');     // 合并语义没被这一发带坏
+    expect(e.x).toBe(9);
+  });
+
   it('栈：瘦 patch 合并不抹字段；null 撤登记而成员纸不动；删空后整个键消失', async () => {
     const sp5 = 'proj_boardstore_stacks2';
     await patchBoard(sp5, {

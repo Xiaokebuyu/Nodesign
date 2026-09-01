@@ -23,6 +23,7 @@ import { estimateSizeOn, zoneRects } from './board-kind-sizes.js';
 import { DEFAULT_CHALK_W } from './sketch-layout.js';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 import { layerOf } from './canvas-id.js';
+import { CHALK_DIR } from './chalk.js';
 
 /**
  * 根层物件（纸只存在于根层桌面，纸面账目只许数根层的东西）。
@@ -118,6 +119,23 @@ export function sheetOfPoint(board, pt, own = null) {
 export function claimedBy(e, sheetId) {
   const own = e?.sheet;
   return !own || own === sheetId;
+}
+
+/**
+ * 会参与叠放的那一类 ——「墨」：板书（`notes/板书/*.md` 那种 file-backed 的正文）、
+ * 手写字、涂鸦。
+ *
+ * ⛔ **产物 / 站点卡 / 文档 / 文件夹卡不是墨，它们一页都不认领**（站主拍板：
+ * 这一版栈只叠板书）。给产物认领一页就等于把它藏进某一页，而翻到别页时它消失，
+ * 那正是「站点产物不应该被覆盖」要防的事。它们照旧只有几何，翻到哪一页都看得见，
+ * 于是在占位账上它们是**每一页的成员**（见 claimedBy：没认领的算每一页）。
+ *
+ * 前端那份判据在 `web/src/components/canvas/useSheetPaging.js` 的 `isInk`：
+ * 数据形状不同（那边有 `o.chalk` / `o.native` 标记），分的是同一批东西。
+ */
+export function isInk(id, entry) {
+  if (entry?.kind === 'text' || entry?.kind === 'scribble') return true;
+  return typeof id === 'string' && id.startsWith(`${CHALK_DIR}/`);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sheetMembers, membersInRect, nextSpotInSlot, sheetOfPoint, slotRectOf } from './board-sheets.js';
+import { sheetMembers, membersInRect, nextSpotInSlot, sheetOfPoint, slotRectOf, isInk } from './board-sheets.js';
 import { obstaclesIn } from './board-obstacles.js';
 
 /**
@@ -81,6 +81,18 @@ describe('叠纸：一摞纸共用一块地，成员归属靠认领消歧', () =
     expect(onP2).toContain('assets/loose.png');
     // 不传 sheetId = 全算（存量不叠的板行为不变）
     expect(obstaclesIn(b, '').map(o => o.id)).toContain('notes/板书/a.md');
+  });
+
+  it('⭐ 只有墨会认领页：产物 / 站点卡 / 文件夹卡一页都不认', () => {
+    // 墨：板书本体、手写字、涂鸦
+    expect(isInk('notes/板书/20260901-一.md', {})).toBe(true);
+    expect(isInk('text:abc', { kind: 'text' })).toBe(true);
+    expect(isInk('scribble:abc', { kind: 'scribble' })).toBe(true);
+    // 不是墨：产物、站点、文档、文件夹、随便一个 md
+    for (const [id, e] of [
+      ['assets/图.png', {}], ['site:我的站', {}], ['deck:主稿.html', {}],
+      ['素材', {}], ['预设/体例.md', {}], ['notes/便签/a.md', {}],
+    ]) expect(isInk(id, e), id).toBe(false);
   });
 
   it('⭐ 点落在哪张纸：它自己认领的那一页优先，几何只是兜底', () => {

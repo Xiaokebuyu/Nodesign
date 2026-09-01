@@ -30,7 +30,7 @@ import { estimateSizeOn, FOLDER_CARD } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/canvas-id.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
-import { placeBeside, placeAtOnSheet, overlapIds, currentSheet } from '../../../lib/board-sheets.js';
+import { placeBeside, placeAtOnSheet, overlapIds, currentSheet, isInk } from '../../../lib/board-sheets.js';
 import { makeEditPlacer } from './edit-board-place.js';
 import { applyReplan } from './sheet-replan.js';
 import { transformGroup } from '../../../lib/board-transform.js';
@@ -213,15 +213,17 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
             if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
             // 贴到谁旁边就归谁那一页（2026-09-01 叠纸刀 1）：「摆在它旁边」在
             // 一摞叠着的纸上只有一种讲得通的意思，就是跟它同一页
-            const refSheet = live[rid(o.to.ref)]?.sheet;
+            // ⛔ 只有墨认领页（isInk）：产物 / 站点卡不参与叠放，翻到哪一页都看得见
+            const refSheet = isInk(id, e) ? live[rid(o.to.ref)]?.sheet : null;
             setObj(id, { ...e, x: Math.round(p.x), y: Math.round(p.y), seat: 'agent', ...(refSheet ? { sheet: refSheet } : {}) });
             moveHuggers(id, Math.round(p.x) - e.x, Math.round(p.y) - e.y);
             report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : ''}${wasUser}`);
           } else if ('x' in o.to) {
             const p = placeAbs(o.to, box);
             if (!p) { fail(o.to.sheet ? `纸 ${o.to.sheet} 不存在（read_board 看纸的清单）` : '还没有铺过纸 —— 先 open_sheet，或用 {dx,dy}/{ref,side}'); continue; }
-            // 挪到纸内坐标 = 认领那一页（叠纸刀 1）
-            setObj(id, { ...e, x: p.x, y: p.y, seat: 'agent', ...(p.sheetId ? { sheet: p.sheetId } : {}) });
+            // 挪到纸内坐标 = 认领那一页（叠纸刀 1）。⛔ 只有墨认领：产物不参与叠放
+            const claim = isInk(id, e) ? p.sheetId : null;
+            setObj(id, { ...e, x: p.x, y: p.y, seat: 'agent', ...(claim ? { sheet: claim } : {}) });
             moveHuggers(id, p.x - e.x, p.y - e.y);
             report.push(`· #${i + 1} move → 纸 ${p.sheetId} (${p.x},${p.y})${p.clamped ? '（越界，钳进了版心）' : ''}${wasUser}`);
           } else {

@@ -16,8 +16,9 @@ import { useObjectClick } from './useObjectClick.js';
 import {
   SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, isDirArtifact, titleOf,
 } from '../../lib/board-kinds.js';
-import { passesFilter, isArchivePath } from '../../lib/board-filter-axes.js';
-import { deriveBoardObjects } from '../../lib/board-objects.js';
+import { isArchivePath } from '../../lib/board-filter-axes.js';
+import { useSheetPaging } from './useSheetPaging.js';
+import { useVisibleObjects } from './useVisibleObjects.js';
 import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
 import TransformControls from './TransformControls.jsx';
@@ -161,7 +162,7 @@ export default function BoardCanvas({
   const {
     artifacts, tasks, folders, sessions, browse, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
-    rolls, setRolls, sheets, shelf,
+    rolls, setRolls, sheets, stacks, shelf,
     guideText, fileCount,
     reload, scheduleSave, patchLayout, removeLayoutEntry,
     layoutRef, zonesRef, dirtyRef, layoutLoadedRef, zMaxRef,
@@ -337,14 +338,13 @@ export default function BoardCanvas({
     });
   }, [projectId]);
 
-  const objects = useMemo(
-    () => deriveBoardObjects({ tasks, artifacts, layout, browse })
-      .filter(o => passesFilter(o, filter))
-      .filter(o => showArchive || !isArchivePath(o.id))
-      // 收卷（2026-08-27 收纳器，件在 RollLayer.jsx）：收着的组渲染层不画（卷卡替它
-      // 站着）。座位仍在 layout 里 —— 服务端落位照旧把它们当障碍。
-      .filter(o => { const t = o.tag || o.pos?.tag; return !t || !rolls[t]; }),
-    [tasks, artifacts, layout, browse, filter, showArchive, rolls]);
+  /**
+   * 翻页（2026-09-01 叠纸刀 4）。一摞纸占同一块地，一次只显示其中一张 ——
+   * 别的页此刻不画。显示到第几页是**看的人自己的事**，不进 board.json。
+   */
+  const paging = useSheetPaging({ sheets, stacks, positionedRef, sizeOf });
+
+  const objects = useVisibleObjects({ tasks, artifacts, layout, browse, filter, showArchive, rolls, paging });
 
   const { rollGroup, unrollGroup } = useRollActions(projectId, setRolls);
 
@@ -930,7 +930,7 @@ export default function BoardCanvas({
     recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
     zMaxRef, toolRef, drawModeRef, chalkEditModeRef, selectedIdsRef,
     setSelectedIds, clickSelect, noteUserTakeover, camApiRef, scrollRef,
-    moveEntry, groupInto,
+    moveEntry, groupInto, sheetClaimAt: paging.claimFor,
   });
 
   const wasDrag = () => !!(dragRef.current?.moved || recentDragMovedRef.current);

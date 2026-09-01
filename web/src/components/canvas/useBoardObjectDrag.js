@@ -52,7 +52,7 @@ export function useBoardObjectDrag({
   recentDragMovedRef, layoutRef, setLayout, patchLayout, dirtyRef, scheduleSave,
   zMaxRef, toolRef, drawModeRef, chalkEditModeRef, selectedIdsRef,
   setSelectedIds, clickSelect, noteUserTakeover, camApiRef, scrollRef,
-  moveEntry, groupInto,
+  moveEntry, groupInto, sheetClaimAt,
 }) {
   /**
    * 长按武装用的临时账（计时器 / 起手点 / 那张卡）。
@@ -387,7 +387,22 @@ export function useBoardObjectDrag({
       if (d.moved) {
         setLayout(prev => {
           const next = { ...prev };
-          for (const mid of movedIds) if (next[mid]) next[mid] = { ...next[mid], seat: 'user' };
+          for (const mid of movedIds) {
+            if (!next[mid]) continue;
+            /**
+             * 拖完重认一次页（2026-09-01 叠纸刀 4）。
+             *
+             * 叠起来的纸共用一块地，几何分不出用户把这张卡放到了哪一页 —— 只有
+             * 「他此刻正看着哪一页」讲得通，那就是他放上去的那一页。拖出所有的纸
+             * 就把归属摘掉（传**空串**：合并语义下「补丁里没有这个键」表达不了
+             * 「删掉这个键」，空串过 sanitizeTag 是假值，字段自然不落）。
+             *
+             * ⚠️ 只有真挪过（d.moved）才重认。没挪过就不该动它的归属 —— 那是
+             * 「点一下」不是「拖一下」。
+             */
+            const claim = sheetClaimAt?.(mid) ?? undefined;
+            next[mid] = { ...next[mid], seat: 'user', ...(claim === undefined ? {} : { sheet: claim || '' }) };
+          }
           return next;
         });
       }
