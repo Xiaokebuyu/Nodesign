@@ -31,6 +31,7 @@ import { sheetSummaries, latestSheetId, currentSheet, sheetOfPoint } from '../..
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { dirtyEvents, describeDirty, splitDirtyByCharge } from '../../../lib/board-dirty.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
+import { learnedChalkWidth } from '../../../lib/chalk-size-pref.js';
 import { readStateVars } from '../../../lib/state-table.js';
 import { parseTriggers, evalTriggers, readLatch, writeLatch } from '../../../lib/state-triggers.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
@@ -162,6 +163,32 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
        * 版面还读得了"。
        */
       const fit = fitFor(vp);
+      /**
+       * 用户对版面表过的态（2026-09-01 叠纸刀 7，站主拍板）。
+       *
+       * 两个动作是有信息量的：**他手动改了缩放**、**他把板书拖成某个宽度**。
+       * 后者从 08-28 起就在学（learnedChalkWidth，判据是前端拖手柄盖的 sized:'user'
+       * 章，模型盖不出），但它只影响下一条板书的宽度，够不着纸。前者一直有人报
+       * （viewpoint.zoom）却没有任何人读它来定版面。
+       *
+       * ⚠️ 只在**真有信号**时才占字：他没动过就一个字不说。而且说的是「问一句」
+       * 不是「照做」—— 缩放调小可能只是想看全貌，不一定是要更大的纸。
+       */
+      let wishLine = '';
+      try {
+        const basis = fit.lane === 'phone' ? 0.5 : 0.75;
+        const z = Number(vp?.zoom);
+        const zoomed = Number.isFinite(z) && Math.abs(z - basis) / basis > 0.15;
+        const learned = learnedChalkWidth(board);
+        if (zoomed || learned) {
+          const bits = [];
+          if (zoomed) bits.push(`他把缩放调到了 ${z.toFixed(2)}（这台机器的基准是 ${basis}）`);
+          if (learned) bits.push(`他把板书拖到过 ${learned * 24}px 宽`);
+          wishLine = `📐 ${bits.join('；')} —— 这是他对版面表的态。`
+            + `下一张纸要不要按他的来（open_sheet{w,h}），**问一句再动**，别自作主张：`
+            + '缩小也可能只是想看全貌。';
+        }
+      } catch { /* 读不出就不说 */ }
       const laneLine = fit.column
         ? `⚠️ 他在手机上（屏幕 ${fit.screen?.w}x${fit.screen?.h}px）。`
           + `版面规矩：**一件 = 一屏，纵向单列**。每件宽度 ≤${fit.w}（超了就要横向滑动，手机上没人受得了），`
@@ -169,7 +196,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
           + `接着写就往**正下方**接，别用 side:'right'/'left' 并排 —— 并排的第二件在他屏幕外。`
           + `宁可多拆几件竖着排，也别把一件写宽。`
         : '';
-      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；写板走纸（at = 纸内坐标）。要看画面细节才调 read_user_view。` });
+      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${wishLine}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；写板走纸（at = 纸内坐标）。要看画面细节才调 read_user_view。` });
     }
   } catch { /* 视点读不到就沉默 */ }
   // 板上动静（2026-08-29 纸范式刀 4）：用户拖动/搬家/擦组此前完全静默，agent 只能

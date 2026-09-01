@@ -124,7 +124,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // 车道封顶（08-28）：触屏档一件不许超过一屏宽。**板书和草图两条路都要过它** ——
     // 只封一条的下场是真会话里量到的：草图乖乖 336，板书照旧 432（判据在 device-lane）。
     // ⛔ 要传 wUnits 不能事后夹 w：textBox 按宽度回推行数算高度，只夹宽＝文字溢出框外且不报错。
-    const capUnits = fit.column ? Math.max(4, Math.floor(fit.w / UNIT)) : null;
+    // ⚠️ 读 colW 不读 w（2026-09-01 叠纸刀 7）：手机的纸现在是两个屏幕宽，而**正文
+    // 栏宽仍锁死一屏** —— 放开的话 agent 会写出 780 宽的板书，用户放大到 100% 读
+    // 一行就超出屏幕，又得横向滑动，那正是 08-28 定 column 时要消灭的东西。
+    const capUnits = fit.column ? Math.max(4, Math.floor((fit.colW ?? fit.w) / UNIT)) : null;
     const capW = (u) => (capUnits ? Math.min(u || capUnits, capUnits) : u);
     const vpRectFor = (zone) => (vp && (vp.layer || '') === (zone || '') && vp.camera) ? vp.camera : null;
     const visibleIn = (rect, vpRect) => !!vpRect && !(rect.x + rect.w < vpRect.x || vpRect.x + vpRect.w < rect.x
@@ -577,8 +580,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     }
     if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}`);
     // 触屏档宽是硬约束（横向滑动没人受得了），所以话要说在宽上
-    if (world.w > fit.w || world.h > fit.h) lines.push(fit.column
-      ? `⚠ Too big for a ${fit.lane} screen (${fit.screen.w}x${fit.screen.h}px). Keep each sketch ≤${fit.w} wide — anything wider means sideways scrolling. Stack the next one below, don't put it to the side.`
+    if (world.w > (fit.colW ?? fit.w) || world.h > fit.h) lines.push(fit.column
+      ? `⚠ Too wide for a ${fit.lane} screen (${fit.screen.w}x${fit.screen.h}px). Keep each sketch ≤${fit.colW ?? fit.w} wide — anything wider means sideways scrolling once the reader zooms in to read it. The sheet itself is ${fit.w} wide, so put the next one in a SECOND COLUMN beside this one rather than making one wide.`
       : `⚠ Bigger than one sheet${fit.screen ? ` (user's screen ${fit.screen.w}x${fit.screen.h}px → ${fit.w}x${fit.h} world px fits)` : ` (${fit.w}x${fit.h} fits)`} — split into two tagged sketches next time.`);
     if (vp?.zoom && vp.zoom < 0.75) lines.push(`User's zoom is ${vp.zoom} (<0.75): keep nodes md/lg and say in one line that there is a sketch on the board.`);
     lines.push(staging

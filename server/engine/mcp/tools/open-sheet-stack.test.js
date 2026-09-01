@@ -64,6 +64,21 @@ describe('open_sheet 叠纸（2026-09-01 刀 3）', () => {
     expect(stackInvariantErrors(board)).toEqual([]);
   });
 
+  /**
+   * 纸的尺寸归 agent（2026-09-01 叠纸刀 7）。缺省仍按设备档算 —— 那是对的默认。
+   * `w/h` 是给「用户表过态」的时候用的（他改过缩放 / 拖过板书宽度），教义要求
+   * 先问一句再照做。两个数**必须一起给**，只给一个当没给：一半自选一半机器算
+   * 出来的纸，比两个都机器算的更难预料。
+   */
+  it('⭐ open_sheet{w,h} 照给的尺寸铺；只给一个当没给', async () => {
+    const p3 = 'proj_opensheet_size';
+    await ensureProjectWorkspace(p3);
+    const a = await openSheetFor(p3, { title: '按他的来', size: { w: 1200, h: 900 } });
+    expect([a.w, a.h]).toEqual([1200, 900]);
+    const b = await openSheetFor(p3, { title: '半个不算', size: { w: 1200, h: NaN } });
+    expect(b.w).not.toBe(1200);
+  });
+
   it('缺省仍然是往下铺（前端会藏页之前不许翻案）', async () => {
     const p2 = 'proj_opensheet_stack_default';
     await ensureProjectWorkspace(p2);

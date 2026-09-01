@@ -93,12 +93,22 @@ export function clampPlan(plan, inner0, prevSlots = {}) {
  */
 export async function openSheetFor(projectId, {
   sessionId = null, by = 'agent', title = null, name = null, where = null, plan = null,
-  stack = null,
+  stack = null, size: wantSize = null,
 } = {}) {
   const board = await readBoard(projectId);
   const vp = getViewpoint(projectId);
   const fit = fitFor(vp);
-  const size = sheetSizeFor(fit);
+  /**
+   * 纸的尺寸（2026-09-01 叠纸刀 7）。缺省仍按设备档算 —— 那是对的默认，
+   * 用户没表示过意见时机器按他的屏幕铺。
+   *
+   * `size` 入参是给**他表示过意见**的时候用的：他手动改过缩放、或者把板书拖成
+   * 某个宽度，那都是有信息量的动作（`learnedChalkWidth` 从 08-28 起就在学后者）。
+   * ⚠️ 但别自作主张 —— 教义要求先问一句再照做（prelude「纸的尺寸」那节）。
+   */
+  const size = (wantSize && Number.isFinite(wantSize.w) && Number.isFinite(wantSize.h))
+    ? { w: Math.round(wantSize.w), h: Math.round(wantSize.h) }
+    : sheetSizeFor(fit);
   let cur = currentSheet(board, currentSheetIdOf(sessionId));
   /**
    * 缺省：还没有纸（或点名 viewport）→ 对准用户视口；有当前纸 → 铺在它正下方。
@@ -240,6 +250,10 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
     name: z.string().regex(TAG_RE).optional().describe('Sheet name to refer to it later (ASCII like act2; default auto p1/p2/…)'),
     where: z.enum(['next', 'viewport', 'stack']).optional()
       .describe("next = below the current sheet (default when sheets exist); viewport = right where the user is looking now (default for the first sheet — also use it to bring work back to the user's eyes); stack = ON TOP OF the current sheet, same ground (the reader flips to it instead of scrolling down)"),
+    w: z.number().min(240).max(8000).optional()
+      .describe("Sheet width in px. LEAVE IT OUT normally — the default is computed from the user's screen. Pass it only when he has told you (or shown you) what he wants: he changed the zoom, or dragged notes to a width. Ask him first."),
+    h: z.number().min(240).max(12000).optional()
+      .describe('Sheet height in px. Same rule as w — both must be given together, otherwise the device default is used.'),
     stack: z.string().regex(TAG_RE).optional()
       .describe('Put this sheet on a NAMED PILE (ASCII like main/state). Sheets on one pile share the same ground and the reader flips through them; a name with no pile yet starts a new pile to the RIGHT of the existing ones. Use a second pile for something that must stay reachable while you write elsewhere, e.g. a status table.'),
     plan: z.array(SLOT).max(24).optional()
@@ -250,6 +264,7 @@ export function makeOpenSheetTool({ projectId, sessionId, ctx }) {
     const s = await openSheetFor(projectId, {
       sessionId, by, title: args.title || null, name: args.name || null, where: args.where || null,
       plan: args.plan || null, stack: args.stack || null,
+      size: (args.w && args.h) ? { w: args.w, h: args.h } : null,
     });
     try {
       ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `铺了一张纸 ${s.id}` });

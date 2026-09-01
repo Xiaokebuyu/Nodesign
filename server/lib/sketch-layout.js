@@ -15,7 +15,7 @@
  */
 
 import { UNIT, overlaps, bboxOf as rectBbox } from './rect.js';
-import { ZOOM_BASIS, ONE_SCREEN } from './screen.js';
+import { ZOOM_BASIS, ONE_SCREEN, PHONE_ZOOM_BASIS } from './screen.js';
 export { UNIT };                   // 兼容出口（真身在 rect.js）
 /**
  * 可读性规范（2026-08-23，用户定；2026-08-29 纸范式改 0.75 基准）：黑板上的字要在
@@ -482,9 +482,24 @@ export function fitFor(vp) {
   if (!column) {
     return { w: Math.round(sw / ZOOM_BASIS), h: Math.round(sh / ZOOM_BASIS), screen, lane, column: false };
   }
+  /**
+   * 手机（2026-09-01 叠纸刀 7，站主拍板 50%）：**纸 = 两个屏幕**，正文栏宽仍是一屏。
+   *
+   * 08-28 那一档是「一件 = 一屏」（宽 = 屏宽 − 48、高 1.6 屏），前提是手机上唯一
+   * 可用的姿势是一件占满一屏、竖着翻。叠纸把那个前提换掉了：一摞纸原地翻页，
+   * 屏幕不用再当纸筒使，一页装得下更多东西反而更好读。
+   *
+   * ⚠️ **只有纸变大，别的一概不变**（站主原话「其他显示比如字体大小不变」）。
+   * `colW` 就是这句话的执行点：单件宽度封顶仍按一屏算（write-on-board 的 capUnits
+   * 读它，不读 w）。放开的话 agent 会写出 780 宽的板书 —— 用户放大到 100% 读的
+   * 时候一行超出屏幕，又得横向滑动，而那正是 08-28 定 column 时要消灭的东西。
+   * 现在 780 的纸上可以并排两栏 342，每栏放大到 100% 都正好一屏宽。
+   */
+  const colW = Math.max(240, Math.round(sw - 48));
   return {
-    w: Math.max(240, Math.round(sw - 48)),
-    h: Math.max(320, Math.round(sh * 1.6)),
+    w: Math.round(sw / PHONE_ZOOM_BASIS),
+    h: Math.round(sh / PHONE_ZOOM_BASIS),
+    colW,
     screen, lane, column: true,
   };
 }
