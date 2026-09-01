@@ -25,7 +25,7 @@ export const STAGE_EVENTS = new Set([
   // ⚠️ 名单与 board-presence reducer 消费的类型有 parity 钉子
   //（board-presence.test.js："消费的类型必须在转发名单里"）——两头都在事件才活。
   'run.start', 'run.tool_use_summary',
-  'run.tool_use.started', 'run.delta.tool_use', 'run.delta.tool_input', 'ui.chalk_edit',
+  'run.tool_use.started', 'run.delta.tool_use', 'run.delta.tool_input', 'ui.chalk_edit', 'ui.show_sheet',
   'run.delta.tool_result', 'run.file_changed', 'run.deck_preview',
   'run.done', 'run.error', 'run.cancelled',
   // 铅笔精灵：服务端压好的手写短句

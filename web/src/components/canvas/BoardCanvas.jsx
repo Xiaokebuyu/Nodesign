@@ -19,6 +19,8 @@ import {
 import { isArchivePath } from '../../lib/board-filter-axes.js';
 import { useSheetPaging } from './useSheetPaging.js';
 import { useVisibleObjects } from './useVisibleObjects.js';
+import { useBoardNav } from './useStackNav.jsx';
+import { useBandSummaries, useSessionTitles, useTaskTitles } from './board-labels.js';
 import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
 import TransformControls from './TransformControls.jsx';
@@ -35,7 +37,6 @@ import { emptyPresence, reducePresence, resolvePending, followTarget, rectFor as
 import { useStageState, splitStageCards, ChalkLiveInk, StageBoardLayer, StageDock, StageCardBody } from './StageLayer.jsx';
 import { AmbientSpriteLayer, SpriteAskInput, useSpriteAmbient } from './SpriteSketchLayer.jsx';
 import RoleSprites from './RoleSprites.jsx';
-import { useReadingNav } from './ReadingPager.jsx';
 import RoleTalkPanel from './RoleTalkPanel.jsx';
 import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
 import ShelfHint from './ShelfHint.jsx';
@@ -348,24 +349,10 @@ export default function BoardCanvas({
 
   const { rollGroup, unrollGroup } = useRollActions(projectId, setRolls);
 
-  // 顶带摘要（08-24 记忆体系改版：记忆/风格卡退役 —— 记忆住 记忆/、风格并进
-  // 根 CLAUDE.md，都是画布上的普通文件；这里只剩项目档案与文件两张）
-  const bandSummaries = useMemo(() => ({
-    guide: guideText.trim() ? guideText.trim().slice(0, 60) : '还没写，点开写项目档案',
-    files: fileCount == null ? '' : (fileCount ? `${fileCount} 个文件` : '还没有文件，点开上传'),
-  }), [guideText, fileCount]);
-
-  const sessionTitles = useMemo(() => {
-    const map = new Map();
-    for (const s of sessions) {
-      map.set(s.sessionId || s.id, s.customTitle || s.title || s.summary || s.firstPrompt || '未命名 deck');
-    }
-    return map;
-  }, [sessions]);
-
-  // 文件夹标题：zone id 就是工作区相对路径，末段即标题
-  const taskTitles = useMemo(
-    () => new Map(tasks.filter(t => t.id).map(t => [t.id, t.title])), [tasks]);
+  // 派生的那几行字（顶带摘要 / 会话标题 / 文件夹标题）→ board-labels.js
+  const bandSummaries = useBandSummaries(guideText, fileCount);
+  const sessionTitles = useSessionTitles(sessions);
+  const taskTitles = useTaskTitles(tasks);
 
   /**
    * 真文件夹 + 影子文件夹（影子只活在内存里，真的一出现就退场）。
@@ -878,8 +865,11 @@ export default function BoardCanvas({
     camApiRef.current?.zoomToFit({ force: true });
   }, [folderView]);
 
-  // 手机 / 平板的阅读导航（开局取景 + 翻件），整块在 useReadingNav.js
-  const { readGroup, deviceEnv, touchLane } = useReadingNav({ camApiRef, camera, cam, visibleObjects, layout, sheets });
+  // 画布导航：翻页器（叠起来的摞，相机不动）/ 翻件器（存量板，飞过去）二选一，
+  // 加目录面板。谁该出场由 useBoardNav 自己判，整块在 useStackNav.jsx
+  const { navGroup, panel: navPanel, deviceEnv, touchLane } = useBoardNav({
+    paging, camera, cam, camApiRef, sheets, visibleObjects, layout,
+  });
 
   // ⚠️ 这里曾有「切 session 就切视图」：有会话进工作模式聚焦它的区、回 /work
   // 回项目区。会话与产物 08-08 解绑、双视图 08-13 退役之后，切对话不该动你
@@ -1549,8 +1539,8 @@ export default function BoardCanvas({
     tool, setTool, drawMode, setDrawMode, scale,
     zoomFit: zoomFitStable, zoomBy: zoomByStable, zoomTo: zoomToStable, filterGroup,
     chalkEditMode, toggleChalkEdit,
-    openCanvasNote, deviceClass: deviceEnv.class, readGroup,
-  }), [tool, drawMode, scale, zoomFitStable, zoomByStable, zoomToStable, filterGroup, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, readGroup]);
+    openCanvasNote, deviceClass: deviceEnv.class, readGroup: navGroup,
+  }), [tool, drawMode, scale, zoomFitStable, zoomByStable, zoomToStable, filterGroup, chalkEditMode, toggleChalkEdit, openCanvasNote, deviceEnv.class, navGroup]);
 
   useEffect(() => { onToolbarGroups?.(boardToolGroups); }, [boardToolGroups, onToolbarGroups]);
 
@@ -1988,6 +1978,11 @@ export default function BoardCanvas({
             onJump={(pt) => camera.jumpToPoint(pt)}
           />
         )}
+
+        {/* 目录（叠纸刀 5）：一摞纸只画得出最上面那张，底下几页在屏幕上不存在、
+            缩小也看不见 —— 没有目录用户就找不回刚读到的那一页。屏幕坐标系，
+            跟小地图同一层；眼睛页不出（截图里不该有 chrome）。 */}
+        {!eyeMode && !deckOpen && !winDir && navPanel}
 
       </div>
 

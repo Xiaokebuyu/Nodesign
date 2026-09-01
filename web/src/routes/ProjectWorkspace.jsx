@@ -33,6 +33,7 @@ import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_SANS, FONT_KAI, FONT_MONO, 
 import { INK_SURFACE } from '../lib/paper.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
+import { dispatchUiEvent } from '../lib/ui-bridge.js';
 import { newId, newUserMessageId } from '../lib/helpers.js';
 import { useRewindEvents } from './use-rewind-events.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
@@ -1270,10 +1271,11 @@ export default function ProjectWorkspace() {
         if (evt.rect) setBoardFocus({ rect: evt.rect, tag: evt.tag || null, layer: evt.layer || '', soft: !!evt.soft, chalk: evt.chalk || null, at: Date.now() });
         break;
       }
-      // agent 拨「改板书」开关（08-25）：BoardCanvas 挂窗口事件接（免 prop 钻五层）
+      // agent「改看的人这一侧」的手 → lib/ui-bridge.js（转窗口事件，免 prop 钻五层）
+      case 'ui.show_sheet':
       case 'ui.chalk_edit': {
-        window.dispatchEvent(new CustomEvent('nd:chalk-edit', { detail: { on: !!evt.on } }));
-        showToast(evt.on ? 'agent 打开了「改板书」：板书现在可以直接拖动/编辑' : 'agent 关上了「改板书」', 'info');
+        const note = dispatchUiEvent(evt);
+        if (note) showToast(note, 'info');
         break;
       }
 

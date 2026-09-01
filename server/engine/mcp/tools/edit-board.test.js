@@ -198,6 +198,32 @@ describe('08-25 二批：gap 单位收口 + chalk_edit + 挪动如实报', () =>
     expect(cfg.chalk_edit).toBe(true);
     expect(events.some(e => e.type === 'ui.chalk_edit' && e.on === true)).toBe(true);
   });
+
+  /**
+   * show（2026-09-01 叠纸刀 5）：把某一页翻到用户眼前。
+   *
+   * ⚠️ 它**一个字不改 board.json** —— 显示到第几页是看的人自己的事（两个人同时
+   * 看一块板，一个在读第一拍、一个在读第三拍，都对）。所以判据是「发了事件」
+   * 加「板没变」，后半条同样重要：哪天有人图省事把它存进板里，这条会红。
+   */
+  it('⭐ show：广播事件把那一页翻到用户眼前，board.json 一个字不动', async () => {
+    const events = [];
+    const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: (e) => events.push(e) } });
+    await patchBoard(pid, { sheets: { ch2: { x: 0, y: 0, w: 800, h: 600, title: '第二章' } } });
+    const before = JSON.stringify(await readBoard(pid));
+    const r = await t.handler({ ops: [{ op: 'show', sheet: 'ch2' }] });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toContain('第二章');
+    expect(events.some(e => e.type === 'ui.show_sheet' && e.sheet === 'ch2')).toBe(true);
+    expect(JSON.stringify(await readBoard(pid)), '显示到第几页不该落盘').toBe(before);
+  });
+
+  it('show 点名一张不存在的纸：如实说现在有哪些，不静默', async () => {
+    const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: () => {} } });
+    const r = await t.handler({ ops: [{ op: 'show', sheet: 'nope' }] });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain('ch2');
+  });
 });
 
 describe('shapes 编辑面（08-27）：事后圈重点 + 贴身跟随', () => {

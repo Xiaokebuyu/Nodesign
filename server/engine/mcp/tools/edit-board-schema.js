@@ -54,6 +54,7 @@ export const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('transform_group'), tag: z.string().min(1).max(40), scale: z.number().min(0.3).max(3).optional(), rotate: z.number().min(-180).max(180).optional().describe('degrees clockwise') }),
   z.object({ op: z.literal('replan'), sheet: z.string().max(40).optional().describe('which sheet (default: the current one)'), plan: z.array(SLOT).min(1).max(24).describe('slots to ADD or RESIZE on an existing sheet (merged by name; slots you do not mention stay). Same local-pixel coordinates as open_sheet{plan}') }),
   z.object({ op: z.literal('chalk_edit'), on: z.boolean().describe('true = turn ON the user-side 改板书 toggle (notes become freely draggable/editable for the user); false = back to guarded mode') }),
+  z.object({ op: z.literal('show'), sheet: z.string().max(40).describe("Flip the user's view to this sheet. Sheets on one pile share the same ground and only the shown one is drawn, so a page the user asks for ('show me chapter 2') has to be turned up — this is that hand. Changes what they LOOK at, not the board.") }),
 ]);
 
 /**
@@ -100,7 +101,8 @@ ops (run in order; a failing op is reported, the rest still apply):
  seats/files/lines all kept, user or you can unroll anytime; the tidy way to end an act) ·
  unroll{tag} · feature{id} / unfeature (hero) ·
  chalk_edit{on} (flip the user's 改板书 toggle — turn it ON when the session leans on
- board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming).
+ board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming) ·
+ show{sheet} (turn the user's view to that page of its pile — for "show me chapter 2").
 Moves avoid collisions (nearest free cell). User-dragged items CAN be moved (the result
 says so when you do) — move them for a reason, and never tug-of-war: if the user drags
 it back, that placement is final.

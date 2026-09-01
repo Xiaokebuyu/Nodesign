@@ -32,6 +32,7 @@ import { applyFollows } from '../../../lib/board-follow.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
 import { placeBeside, placeAtOnSheet, overlapIds, currentSheet, isInk } from '../../../lib/board-sheets.js';
 import { makeEditPlacer } from './edit-board-place.js';
+import { applyUiOp } from './edit-board-ui-ops.js';
 import { applyReplan } from './sheet-replan.js';
 import { transformGroup } from '../../../lib/board-transform.js';
 import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
@@ -39,7 +40,6 @@ import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
 import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
-import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
 
 const MAX_OPS = 120;
 let seq = 0;
@@ -534,13 +534,11 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           sheetsPatch[r.sheetId] = r.entry;
           report.push(r.report);
           ok += 1;
-        } else if (o.op === 'chalk_edit') {
-          // 改板书开关（08-25 用户提：黑板 RP 这类板书密集会话该由 agent 帮忙打开）。
-          // 存 ui-config（重开页面还在），并广播给开着的前端当场生效。
-          const cfg = (await readUiConfigFile(sharedRoot)) || {};
-          await writeUiConfig(sharedRoot, { ...cfg, chalk_edit: !!o.on });
-          try { ctx?.emit?.({ type: 'ui.chalk_edit', sessionId: null, on: !!o.on }); } catch { /* */ }
-          report.push(`· 改板书开关 → ${o.on ? '开（用户现在可直接拖动/编辑板书）' : '关'}`);
+        } else if (o.op === 'show' || o.op === 'chalk_edit') {
+          // 不改板、只改看的人那一侧的两个动作 → edit-board-ui-ops.js
+          const r = await applyUiOp(o, { board, ctx, sharedRoot });
+          if (r.error) { fail(r.error); continue; }
+          report.push(r.report);
           ok += 1;
         }
       } catch (e) { fail(String(e?.message || e).slice(0, 120)); }

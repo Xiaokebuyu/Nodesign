@@ -95,6 +95,25 @@ export function flipTo(pile, picked, dir) {
   return next || cur;
 }
 
+/**
+ * 视口中心落在哪一摞里。都没落进就取**中心离它最近**的那一摞 ——
+ * 翻页器总得有个当前对象，让它在两摞之间的空地上变成空白是坏的。
+ */
+export function currentPileOf(piles, center) {
+  if (!piles?.length || !Number.isFinite(center?.x)) return null;
+  const inside = piles.find((p) => center.x >= p.x && center.x < p.x + p.w
+    && center.y >= p.y && center.y < p.y + p.h);
+  if (inside) return inside;
+  let best = null; let bestD = Infinity;
+  for (const p of piles) {
+    const dx = center.x - (p.x + p.w / 2);
+    const dy = center.y - (p.y + p.h / 2);
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  return best;
+}
+
 /** 左右换摞：到头返回 null */
 export function neighborPile(piles, name, dir) {
   const i = piles.findIndex((p) => p.name === name);
