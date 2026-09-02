@@ -218,8 +218,8 @@ const WEEK_MS = 7 * 24 * 3600 * 1000;
 function BoardNote({ projects, summary }) {
   const now = new Date();
   const touched = projects.filter((p) => {
-    const t = Date.parse(p.updatedAt);
-    return Number.isFinite(t) && now.getTime() - t < WEEK_MS;
+    const ts = Date.parse(p.updatedAt);
+    return Number.isFinite(ts) && now.getTime() - ts < WEEK_MS;
   }).length;
 
   // 日期：中文用汉字数字（楷体里比阿拉伯数字顺眼，跟登录墙一致），

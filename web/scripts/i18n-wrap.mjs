@@ -50,6 +50,23 @@ function textHasElementSiblings(p) {
   return kids.some((c) => c.type === 'JSXElement' || c.type === 'JSXFragment');
 }
 
+/**
+ * ⛔ **`t` 在这个位置被遮蔽了就不许包**（2026-09-02 补）。
+ *
+ * 08-26 那轮，这个脚本把 `'剥掉（非 Claude 用这个）'` 包进了
+ * `THINKING_MODES.map((t) => …)` 的回调里 —— 那里的 `t` 是回调参数，不是 i18n 的 t，
+ * 于是包出来的 `t('剥掉…')` 是拿字符串当函数调。`vite build` 不报，
+ * 设置页 models 为空时那一行压根不渲染，一路发到 npm 0.0.8：
+ * 用户点「加一行」直接白屏，BYOK 那条线上配不出模型来。
+ *
+ * 脚本改的代码没人逐行看，所以判据得在这儿。包不了的照样报出来，人去把局部变量改名。
+ * （另一头的守卫在 web/src/lib/i18n-shadow.lint.test.js —— 那条管全仓，这条管这把刀。）
+ */
+function tIsShadowed(p, tSpecNode) {
+  const b = p.scope.getBinding('t');
+  return !!b && b.path.node !== tSpecNode;
+}
+
 /** console.* 是开发日志不是界面文案 */
 function inConsole(p) {
   const call = p.findParent((x) => x.isCallExpression());
@@ -65,21 +82,26 @@ for (const rel of FILES) {
 
   const edits = [];      // { start, end, text }
   const skipped = [];
+  const shadowed = [];   // t 在那个位置被局部绑定遮住了，包了就是运行时崩
   let hasT = false;
+  let tSpec = null;      // i18n 那条 ImportSpecifier，用来认"这个 t 是不是 import 来的那个"
 
   traverse(ast, {
     ImportDeclaration(p) {
-      if (p.node.source.value.endsWith('lib/i18n.js')
-        && p.node.specifiers.some((s) => s.imported?.name === 't')) hasT = true;
+      if (!p.node.source.value.endsWith('lib/i18n.js')) return;
+      const spec = p.node.specifiers.find((s) => s.imported?.name === 't');
+      if (spec) { hasT = true; tSpec = spec; }
     },
     JSXAttribute(p) {
       const v = p.node.value;
       if (v?.type !== 'StringLiteral' || !CJK.test(v.value) || looksLikeCode(v.value)) return;
+      if (tIsShadowed(p, tSpec)) { shadowed.push(v.value); return; }
       edits.push({ start: v.start, end: v.end, text: `{t(${q(v.value)})}` });
     },
     JSXText(p) {
       const raw = p.node.value;
       if (!CJK.test(raw) || looksLikeCode(raw)) return;
+      if (tIsShadowed(p, tSpec)) { shadowed.push(raw.trim()); return; }
       if (textHasElementSiblings(p)) { skipped.push(raw.trim()); return; }
       if (CONT.test(raw.trim())) { skipped.push(raw.trim()); return; }
       const lead = raw.match(/^\s*/)[0];
@@ -93,6 +115,7 @@ for (const rel of FILES) {
       if (!CJK.test(v) || looksLikeCode(v)) return;
       if (p.parent.type === 'JSXAttribute' || p.parent.type === 'ImportDeclaration') return;
       if (inConsole(p)) return;
+      if (tIsShadowed(p, tSpec)) { shadowed.push(v); return; }
       if (CONT.test(v.trim())) { skipped.push(v); return; }
       // 已经在 t() 里了
       if (p.parent.type === 'CallExpression' && p.parent.callee?.name === 't') return;
@@ -115,7 +138,7 @@ for (const rel of FILES) {
     },
   });
 
-  if (!edits.length && !skipped.length) { console.log(`  —  ${rel}`); continue; }
+  if (!edits.length && !skipped.length && !shadowed.length) { console.log(`  —  ${rel}`); continue; }
 
   let out = src;
   for (const e of edits.sort((a, b) => b.start - a.start)) {
@@ -131,7 +154,7 @@ for (const rel of FILES) {
     void m;
   }
 
-  console.log(`  ${String(edits.length).padStart(3)} 包了  ${rel}${skipped.length ? `   ⛔ ${skipped.length} 条跳过（模块级表 / 句子碎片），要手改：${skipped.slice(0, 3).map(s => JSON.stringify(s)).join(' ')}` : ''}`);
+  console.log(`  ${String(edits.length).padStart(3)} 包了  ${rel}${skipped.length ? `   ⛔ ${skipped.length} 条跳过（模块级表 / 句子碎片），要手改：${skipped.slice(0, 3).map(s => JSON.stringify(s)).join(' ')}` : ''}${shadowed.length ? `   ⚠️ ${shadowed.length} 条那里的 t 被局部变量遮住了（包了就是 "t is not a function"），先给那个变量改名：${shadowed.slice(0, 3).map(s => JSON.stringify(s)).join(' ')}` : ''}`);
   totalWrapped += edits.length;
   if (WRITE && edits.length) writeFileSync(abs, out);
 }
