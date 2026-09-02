@@ -226,7 +226,8 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
                 <Fold title={t('高级')} desc={t('说明 / 思考参数 / 输出上限 / 图标 / 内部 id')}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 140px 200px 140px 160px', gap: GAP.sm, alignItems: 'end' }}>
                     <Field label={t('一句话说明（选择器里的灰字）')}><TextInput mono={false} value={m.desc || ''} onChange={(v) => setModel(i, { desc: v })} placeholder={t('可空')} /></Field>
-                    <Field label={t('thinking 参数')}><Select value={m.thinking || 'strip'} options={enums.THINKING_MODES.map((t) => ({ value: t, label: t === 'strip' ? t('剥掉（非 Claude 用这个）') : t }))} onChange={(v) => setModel(i, { thinking: v })} /></Field>
+                    {/* ⚠️ 回调参数不许叫 t：会遮蔽 i18n 的 t，于是 t('…') 变成拿字符串当函数调。见 lib/i18n-shadow.lint.test.js */}
+                    <Field label={t('thinking 参数')}><Select value={m.thinking || 'strip'} options={enums.THINKING_MODES.map((mode) => ({ value: mode, label: mode === 'strip' ? t('剥掉（非 Claude 用这个）') : mode }))} onChange={(v) => setModel(i, { thinking: v })} /></Field>
                     <Field label="reasoning_effort"><Select value={m.reasoningEffort || ''} options={[{ value: '', label: t('不传') }, ...enums.REASONING_EFFORTS]} onChange={(v) => setModel(i, { reasoningEffort: v || undefined })} /></Field>
                     <Field label={t('单轮最大输出')}><NumberPick value={m.maxOutput} presets={MAX_OUTPUT_PRESETS.map((v) => ({ value: v, label: v >= 1024 ? `${Math.round(v / 1024)}k` : String(v) }))} allowEmpty emptyLabel="默认" onChange={(v) => setModel(i, { maxOutput: v })} width={110} /></Field>
                     <Field label={t('图标')}><Select value={m.brand || 'custom'} options={enums.BRANDS} onChange={(v) => setModel(i, { brand: v })} /></Field>

@@ -64,24 +64,24 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
   }, [onClose]);
 
   const submit = () => {
-    const t = text.trim();
-    if (!t) return;
+    const body = text.trim();
+    if (!body) return;
     onClose();
-    onSubmit(t, { toMain: !!(roleTarget && toMain) });
+    onSubmit(body, { toMain: !!(roleTarget && toMain) });
   };
 
   const keep = () => {
-    const t = text.trim();
-    if (!t) return;
+    const body = text.trim();
+    if (!body) return;
     onClose();
-    onKeep?.(t);
+    onKeep?.(body);
   };
 
   const queue = () => {
-    const t = text.trim();
-    if (!t) return;
+    const body = text.trim();
+    if (!body) return;
     onClose();
-    onQueue?.(t);
+    onQueue?.(body);
   };
 
   return createPortal((
