@@ -55,17 +55,32 @@ function desk({ transform = 'none', opacity = '1' } = {}) {
 const red = (fill) => Number(fill.match(/rgba\((\d+),/)[1]);
 const green = (fill) => Number(fill.match(/rgba\(\d+,(\d+),/)[1]);
 const alpha = (fill) => Number(fill.match(/,([\d.]+)\)$/)[1]);
-const paint = () => { makeOccluders(500, 400).update(); return calls; };
+/**
+ * 画出来的每一笔按角色认出来（画的顺序是按高度排的，不能按表的顺序取下标）：
+ * 宽的是纸（720），窄的是签（64）；g=255 是松动的纸；两片真签里红得高的是选中那片。
+ */
+function paint() {
+  makeOccluders(500, 400).update();
+  const wide = (c) => Math.abs(c.rect[2]) > 100;
+  const r = {};
+  r.pad = calls.find((c) => wide(c) && green(c.fill) === 0);
+  r.peel = calls.find((c) => wide(c) && green(c.fill) === 255);
+  r.peelTab = calls.find((c) => !wide(c) && green(c.fill) === 255);
+  const tabs = calls.filter((c) => !wide(c) && green(c.fill) === 0).sort((a, b) => red(b.fill) - red(a.fill));
+  [r.on, r.off] = tabs;
+  return r;
+}
 
 it('复制品只画一次，不再被 .ndd-pad 那条重复收进来', () => {
   desk();
+  paint();
   // 叠、复制品、复制品的签、真签两片 = 5 笔；从前复制品被画两次是 6 笔
-  expect(paint()).toHaveLength(5);
+  expect(calls).toHaveLength(5);
 });
 
 it('起飞那一瞬复制品跟叠一样高，影子才不会先长一截', () => {
   desk({ transform: 'matrix(1, 0, 0, 1, 0, 0)' });
-  const [pad, peel] = paint();
+  const { pad, peel } = paint();
   expect(red(peel.fill)).toBe(red(pad.fill));
   expect(alpha(peel.fill)).toBe(1);
   expect(green(pad.fill)).toBe(0);
@@ -75,22 +90,22 @@ it('起飞那一瞬复制品跟叠一样高，影子才不会先长一截', () =
 it('转过去才抬高：转满 0.35 弧度抬到 2.5', () => {
   // 23° ≈ 0.40 弧度，超过 LIFT_AT，抬满
   desk({ transform: 'matrix(0.9205, 0.3907, -0.3907, 0.9205, 96, 168)' });
-  const [pad, peel] = paint();
+  const { pad, peel } = paint();
   // 同一个抖动系数下，2.5 / 2.2 = 1.136
   expect(red(peel.fill) / red(pad.fill)).toBeCloseTo(2.5 / 2.2, 2);   // 从前是 2.4/2.2=1.09，1 位小数分不开
 });
 
 it('淡出时影子跟着淡：alpha 写的是宿主的 opacity', () => {
   desk({ transform: 'matrix(0.9205, 0.3907, -0.3907, 0.9205, 96, 168)', opacity: '0.109' });
-  const fills = paint();
-  expect(alpha(fills[1].fill)).toBeCloseTo(0.109, 3);   // 复制品
-  expect(alpha(fills[2].fill)).toBeCloseTo(0.109, 3);   // 它自己那片签（opacity 挂在宿主上，读自己会读成 1）
-  expect(alpha(fills[0].fill)).toBe(1);                 // 叠不受影响
+  const { pad, peel, peelTab } = paint();
+  expect(alpha(peel.fill)).toBeCloseTo(0.109, 3);
+  expect(alpha(peelTab.fill)).toBeCloseTo(0.109, 3);   // 它自己那片签（opacity 挂在宿主上，读自己会读成 1）
+  expect(alpha(pad.fill)).toBe(1);                      // 叠不受影响
 });
 
 it('复制品那片签跟它同高同转角；真签两片照旧一高一矮、不淡', () => {
   desk({ transform: 'matrix(0.9205, 0.3907, -0.3907, 0.9205, 96, 168)', opacity: '0.5' });
-  const [, peel, peelTab, on, off] = paint();
+  const { peel, peelTab, on, off } = paint();
   expect(red(peelTab.fill)).toBe(red(peel.fill));
   expect(green(peelTab.fill)).toBe(255);
   expect(alpha(on.fill)).toBe(1);
@@ -110,4 +125,13 @@ it('复制品动一帧、淡一点，签名都得变，否则纹理不会重传'
   expect(v1).toBe(v0 + 1);                                    // 只淡了一点，矩形没动
   styles.set(peel, { transform: 'matrix(0.99, 0.14, -0.14, 0.99, 0, 0)', opacity: '0.6' });
   expect(o.update().version).toBe(v1 + 1);                    // 只转了一点
+});
+
+it('按高度从低到高画：没选中那片签叠在纸上沿的那 12px 归纸，不归签', () => {
+  desk();
+  paint();
+  const fills = calls.map((c) => ({ h: red(c.fill), wide: Math.abs(c.rect[2]) > 100 }));
+  for (let k = 1; k < fills.length; k++) expect(fills[k].h).toBeGreaterThanOrEqual(fills[k - 1].h);
+  // 最矮的那片签第一笔，纸在它后面 —— 叠在一起的那一条最后留下的是纸的高度
+  expect(fills[0].wide).toBe(false);
 });
