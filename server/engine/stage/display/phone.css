@@ -1,0 +1,64 @@
+/* ═══════════════════════════════════════════════════════════════
+   显示器 —— 手机层（2026-09-06，站主：「让这个显示器变得更"原生"」）
+
+   ≤760px 时整套壳按手机应用的样子重排，桌面 / 平板一个像素不动：
+     · 页签从顶栏搬到**底部页签条**（拇指区，fixed，吃安全区）
+     · 人物栏从左侧抽屉改成**底部抽屉（sheet）**：从下面滑上来、盖住 78vh、点纱或往下拖收起
+     · 选项横向滑动，一张卡 82% 宽（选项多时不再把正文顶到只剩三行）
+     · 正文宽度拖把 / 停左停右 / 收成一条 这些桌面才有意义的件不画
+     · 角色页单列；详情打开时不做 FLIP（pages.js 也按同一条 media 判）
+   ⚠️ 之前"故事页侧边人物栏打不开"的真因：材质层 `.cast{z-index:1}` 写在抽屉规则之后，把抽屉的 z 40 压回 1，
+      于是抽屉在纱（z 39）底下 —— 抽屉是开着的，只是被自己的纱盖住了。这层的 z 全部写在最后，压过材质层。
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width:760px){
+  /* ── 壳 ── */
+  .top{padding:0 8px;gap:6px}
+  .top-l b{max-width:44vw}
+  .pages{position:fixed;left:0;right:0;bottom:0;justify-content:flex-start;height:calc(50px + env(safe-area-inset-bottom));padding:0 4px env(safe-area-inset-bottom);display:flex;gap:0;overflow-x:auto;scrollbar-width:none;background:var(--chrome);background-image:var(--grain);border-top:1px solid var(--hair);box-shadow:0 -6px 18px rgba(43,33,23,.06);z-index:30}
+  .pages::-webkit-scrollbar{display:none}
+  .pages button{flex:1 0 auto;min-width:62px;height:50px;padding:0 10px;font-size:12px;letter-spacing:.08em;border-radius:0;display:flex;align-items:center;justify-content:center;border-top:2px solid transparent;color:var(--sub)}
+  .pages button:hover{background:transparent}
+  .pages button[aria-pressed="true"]{background:transparent;color:var(--ink);border-top-color:var(--accent);font-weight:700}
+  .main{padding-bottom:calc(50px + env(safe-area-inset-bottom))}
+
+  /* ── 人物栏：底部抽屉 ── */
+  .cast,:root[data-dock="right"] .cast,:root[data-cast="mini"] .cast{position:fixed;top:auto;left:0;right:0;bottom:0;width:auto;height:auto;max-height:78vh;margin:0;transform:translateY(104%);transition:transform .28s cubic-bezier(.2,.7,.3,1);border-radius:10px 10px 0 0;box-shadow:0 -14px 40px rgba(43,33,23,.25);padding-bottom:env(safe-area-inset-bottom);z-index:60}
+  :root[data-cast="drawer"] .cast{transform:none}
+  .cast::before{content:"";display:block;flex:none;width:36px;height:4px;border-radius:2px;background:var(--rule-md);margin:8px auto 2px}
+  .cast .cast-tools{display:none}               /* 停左停右 / 收成一条：手机上没有侧栏，没意义 */
+  .cast .portrait{max-height:34vh;max-width:min(62vw,240px);margin:6px auto 12px;object-fit:cover}
+  .cast .who{text-align:center}
+  .drawer-veil{inset:0;z-index:59;background:rgba(43,33,23,.35)}
+
+  /* ── 故事页 ── */
+  .grip,.grip-tip{display:none!important}
+  .beats{padding:10px 10px 6px}
+  .beats-inner{padding:18px 16px 22px}
+  .handles{padding:6px 10px 10px}
+  .panel-chips{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+  .options{display:flex;overflow-x:auto;gap:8px;scroll-snap-type:x mandatory;padding:2px 0 4px;scrollbar-width:none}
+  .options::-webkit-scrollbar{display:none}
+  .handle{flex:0 0 82%;scroll-snap-align:start;min-height:44px}
+  .handle:hover{transform:none}
+  #say{font-size:16px}                          /* iOS：小于 16px 的输入框聚焦会整页放大 */
+  #sayGo{min-height:44px}
+
+  /* ── 角色页 ── */
+  .page.scroll{padding:14px 12px 30px}
+  .page-inner{padding:0}
+  .castwrap .people,.castwrap[data-open="1"] .people{grid-template-columns:1fr}
+  .castwrap[data-open="1"] .card.detail{animation:none;margin-top:0}
+  .card.detail h3{position:sticky;top:-14px;z-index:2;background:var(--paper);background-image:var(--grain);padding:10px 0;margin:-10px 0 8px}
+  .card{padding:14px 14px}
+
+  /* ── 其他页 ── */
+  .row2{grid-template-columns:1fr}
+  .presets{grid-template-columns:1fr 1fr}
+  .statgrid{grid-template-columns:1fr 1fr}
+  .modgroups{grid-template-columns:1fr}
+  .rules{grid-template-columns:1fr 1fr}
+
+  /* ── 弹条：底部页签条之上，整行 ── */
+  .toasts,:root[data-dock="right"] .toasts{top:auto;bottom:calc(60px + env(safe-area-inset-bottom));left:12px;right:12px;max-width:none;align-items:stretch}
+  .toast{min-width:0}
+}

@@ -40,7 +40,7 @@
     },
     /* ── 正文宽度拖把：拖右侧竖杠改 --measure（两边一起动），双击复原 ── */
     grip() {
-      const inner = $('inner'); if (!inner || ND.EMBED || inner.querySelector('.grip')) return;
+      const inner = $('inner'); if (!inner || ND.EMBED || inner.querySelector('.grip') || matchMedia('(max-width:760px)').matches) return;   // 手机：没有拖把也没有它的提示
       const g = el('<div class="grip" title="拖动改正文宽度，双击复原"><span class="lbl">拖动调宽窄 · 双击复原</span></div>');
       inner.appendChild(g);
       const root = document.documentElement;

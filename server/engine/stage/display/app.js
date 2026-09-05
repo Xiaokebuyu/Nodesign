@@ -281,6 +281,7 @@
   ND.paintNav = function paintNav() {
     $('pageNav').innerHTML = ND.pages.map(p => `<button data-page="${esc(p.id)}"${p.panelId ? ' class="panel-tab"' : ''} aria-pressed="${String(p.id === store.page)}">${esc(p.label)}</button>`).join('');
     $('pageNav').querySelectorAll('button').forEach(b => { b.onclick = () => ND.show(b.dataset.page); });
+    if (matchMedia('(max-width:760px)').matches) $('pageNav')?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });   // 手机底部页签条：当前页签滑进视野
   };
   ND.boot = function boot() {
     applyDock();

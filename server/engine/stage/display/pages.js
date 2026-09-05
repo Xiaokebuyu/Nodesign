@@ -57,6 +57,7 @@
     },
     /** FLIP：先记每张卡在哪，改布局，再从旧位置动画到新位置（卡"丝滑地挪到最左侧 / 归位"） */
     flip(change) {
+      if (matchMedia('(max-width:760px)').matches) { change(); return; }   // 手机单列：卡不挪位，不做 FLIP（phone.css 同一条 media）
       const cards = [...this.root.querySelectorAll('.person')];
       const before = new Map(cards.map(c => [c, c.getBoundingClientRect()]));
       change();
