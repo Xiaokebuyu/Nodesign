@@ -240,7 +240,7 @@ float castShadow(vec2 p, float ar, float selfH) {
   // ⚠️ 采样点从 8 个加到 12 个。步长 = 总长 / 点数，点数不够的话长影子必然断成条带。
   for (int i = 0; i < 12; i++) {
     // d = 沿光线往回走了多远（uv）。走满 2.4 个「一张卡的高度」，
-    // 因为最高的那摞纸就是 2.4（见 home-occluders.js 的 OCCLUDERS）
+    // 因为最高的那摞纸就是 2.2，揭起来的那张最多抬到 2.5（见 home-occluders.js 的 OCCLUDERS）
     float d = thr * (0.12 + (float(i) + jit) * 0.195);
     // ⭐ 半影随距离张开：八个采样点排成一个**锥形**，近的挤在中轴上、远的甩开，
     //   这正是半影的形状。⚠️ 第一版这个系数小了两个数量级（横向只挪 0.5 像素），
@@ -257,7 +257,13 @@ float castShadow(vec2 p, float ar, float selfH) {
     vec2 off = -dir * d + nrm * (d * uSoft * (float(i) - 5.5) * 0.115);
     vec4 o = texture2D(uOccl, p + off / vec2(ar, 1.0));
     // 一块高 h 的纸，影子只能投出 h 那么远。o.r 存的是 h/4
-    float reach = o.r * 4.0 * thr;
+    // ⭐ o.g = 这是一张**松动的纸**（正被揭掉的复制品，见 home-occluders.js 的 LOOSE）：
+    //   它投到别的纸上的影子只按**抬起的那一截**算 —— 飞过输入纸时离纸面只有零点几
+    //   张纸高，影子该是贴着边缘的一道细线，按整个高度算是一整块黑板压在纸上。
+    //   ⛔ 桌上钉着的纸（o.g = 0）照旧按整个高度：邻居之间那点错高投出来的长影子
+    //   是有意的，深度全靠它，别顺手"修正"成物理量。
+    //   max(…, 1e-4)：reach 归零时 smoothstep 两个边相等是未定义行为。
+    float reach = max((o.r - selfH * o.g) * 4.0 * thr, 1e-4);
     // 尖端软收，别在 reach 那儿一刀切。⚠️ 收得比原来更长（1.15→0.30 而不是
     //   1.02→0.45）：影子一长，硬收尾就成了画面上一条笔直的边，很显眼。
     acc += o.a * smoothstep(reach * 1.15, reach * 0.30, d) * step(selfH + 0.03, o.r);
@@ -377,7 +383,9 @@ void main() {
   float sh = 0.0;
   if (uOver > 0.5) {
     vec4 self = texture2D(uOccl, vUv);
-    sh = castShadow(vUv, ar, self.a > 0.0 ? self.r : 0.0);
+    // ⚠️ 半透明的纸（松动的纸淡出到一半）不算"这儿有纸"：它底下的桌面照旧接影子，
+    //   否则一张快看不见的纸底下会空出一块没有影子的干净矩形。
+    sh = castShadow(vUv, ar, self.a > 0.5 ? self.r : 0.0);
   }
   // 影子的浓淡跟着光走：正午实、斜阳浅、夜里最深（屋里没有第二个光源去填亮它）
   // ⭐⭐⭐ 纸对纸的投影。**素色版里这是白天唯一看得见的光效**，也是整套机制里

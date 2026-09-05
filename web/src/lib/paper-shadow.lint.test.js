@@ -144,7 +144,8 @@ describe('⛔ 遮挡图和降档表必须对齐', () => {
 
   it('⭐ 进了遮挡图的选择器，CSS 里必须找得到', () => {
     // 选择器写错不会报错，只是那张纸从此不投影
-    const sels = [...OCCL.matchAll(/\['([^']+)',\s*[\d.]+\]/g)].map((m) => m[1]);
+    // 第三项是可选的选项对象（松动的纸），见 home-occluders.js 的 LOOSE
+    const sels = [...OCCL.matchAll(/\['([^']+)',\s*[\d.]+(?:,\s*[A-Za-z_]+)?\]/g)].map((m) => m[1]);
     expect(sels.length, '没解析出 OCCLUDERS').toBeGreaterThan(0);
     for (const sel of sels) {
       const cls = sel.match(/\.[a-z-]+/gi) || [];
