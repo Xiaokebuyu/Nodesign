@@ -102,6 +102,7 @@
     const url = store.cfg?.backdrop || store.backdrop;
     if (url) { b.style.backgroundImage = `url("${url}")`; b.classList.add('on'); } else b.classList.remove('on');
     document.documentElement.dataset.backdrop = url ? 'on' : 'off';   // 墙在有图时变薄纱（app.css 材质层）
+    const pb = $('peekBtn'); if (pb) pb.hidden = !url || EMBED;
   }
 
   /* ── 停靠：侧栏停左 / 停右 / 收成一条；窄屏是抽屉 ── */
@@ -280,6 +281,10 @@
     $('pageNav').querySelectorAll('button').forEach(b => { b.onclick = () => ND.show(b.dataset.page); });
     $('lineBtn').onclick = (ev) => { ev.stopPropagation(); lineMenu($('lineBtn')); };
     $('castToggle').onclick = () => ND.dock.drawer(document.documentElement.dataset.cast !== 'drawer');
+    const peek = (on) => { document.documentElement.dataset.peek = on ? 'on' : 'off'; $('peekBtn').classList.toggle('on', on); };
+    $('peekBtn').onclick = () => peek(document.documentElement.dataset.peek !== 'on');
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.documentElement.dataset.peek === 'on') peek(false); });
+    const veil = prefs.get('veil', null); if (veil) document.documentElement.style.setProperty('--veil-a', String(veil));
     $('drawerVeil').onclick = () => ND.dock.drawer(false);
     ND.panel?.init?.();
     ND.show(q.get('page') || 'story');

@@ -269,3 +269,13 @@ input.val,textarea.editor{border-color:var(--hair);border-radius:1px;background:
 table.kv td,table.kv th{border-bottom-color:var(--rule)}
 .pill{border-color:var(--hair);border-radius:1px;background:var(--paper)}
 .linebtn{border-color:var(--hair);border-radius:1px;background:var(--paper)}
+
+/* 看背景：把字收起来看图。字的容器淡出并不可点，墙上的纱揭掉；再点一下或 Esc 回来 */
+:root[data-peek="on"] .cast,:root[data-peek="on"] .main{opacity:0;pointer-events:none;transition:opacity .35s}
+:root[data-peek="on"] .app{background:transparent}
+:root[data-peek="on"] .app::after{opacity:0}
+:root[data-peek="on"] .backdrop{filter:none}
+#peekBtn.on{color:var(--accent);background:var(--rule)}
+/* 背景透出多少：外观页的滑杆写 --veil-a，纱的浓度跟着走 */
+:root[data-backdrop="on"] .app{background:rgba(var(--veil-rgb,255,254,246),var(--veil-a,.9))}
+:root[data-skin="night"]{--veil-rgb:21,23,27} :root[data-skin="jiangnan"]{--veil-rgb:237,241,240} :root[data-skin="terminal"]{--veil-rgb:13,16,14}

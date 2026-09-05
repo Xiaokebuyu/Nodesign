@@ -244,6 +244,8 @@
           <div class="row2">
             <div class="field"><span class="lbl">正文宽度 · <b id="mw">${measure ? `${measure}px` : '默认'}</b></span><input type="range" id="measure" min="480" max="1400" step="10" value="${measure || 680}"><span class="muted">故事页正文右侧那枚纸签也能拖；双击它复原。</span></div>
             <div class="field"><span class="lbl">人物栏</span><div><span class="seg" id="dockSide"><button data-v="left"${ND.dock.side === 'left' ? ' class="on"' : ''}>停左边</button><button data-v="right"${ND.dock.side === 'right' ? ' class="on"' : ''}>停右边</button></span></div><div><span class="seg" id="dockMode"><button data-v="open"${ND.dock.mode === 'open' ? ' class="on"' : ''}>展开</button><button data-v="mini"${ND.dock.mode === 'mini' ? ' class="on"' : ''}>收成一条</button></span></div></div>
+            <div class="field"><span class="lbl">背景图透出多少 · <b id="vv">${Math.round((ND.prefs.get('veil', 0.9)) * 100)}% 纱</b></span><input type="range" id="veil" min="50" max="100" step="2" value="${Math.round((ND.prefs.get('veil', 0.9)) * 100)}"><span class="muted">纱越薄图越清楚、字越难读。字本身在纸上，不受影响；顶栏的眼睛能把字整块收起来看图。</span>
+              <label class="tog"><input type="checkbox" id="autoBg" ${cfg.backdropsAuto === false ? '' : 'checked'}><span>换场时自动生背景图<small>这个故事的设置，所有人共用；地点变了才生，同一处换钟点不重生</small></span></label></div>
             <div class="field"><span class="lbl">选项</span><div><span class="seg" id="optsDef"><button data-v="1"${ND.prefs.get('opts', 1) ? ' class="on"' : ''}>默认展开</button><button data-v="0"${ND.prefs.get('opts', 1) ? '' : ' class="on"'}>默认收起</button></span></div></div>
           </div></section>
         <p class="muted">更多可自定义的项目以后加在这一页。</p></div>`;
@@ -253,6 +255,9 @@
       r.querySelector('#dockSide').querySelectorAll('button').forEach(b => { b.onclick = () => { if (b.dataset.v !== ND.dock.side) ND.dock.flip(); setTimeout(() => this.paint(), 600); }; });
       r.querySelector('#dockMode').querySelectorAll('button').forEach(b => { b.onclick = () => { if (b.dataset.v !== ND.dock.mode) ND.dock.toggle(); ND.dock.forPage('looks'); this.paint(); }; });
       r.querySelector('#optsDef').querySelectorAll('button').forEach(b => { b.onclick = () => { ND.prefs.set('opts', Number(b.dataset.v)); this.paint(); }; });
+      const veil = r.querySelector('#veil');
+      veil.oninput = () => { const a = Number(veil.value) / 100; document.documentElement.style.setProperty('--veil-a', String(a)); ND.prefs.set('veil', a); r.querySelector('#vv').textContent = `${veil.value}% 纱`; };
+      r.querySelector('#autoBg').onchange = (e) => api.config({ backdropsAuto: e.target.checked }).then(() => ND.flash(e.target.checked ? '换场会自动生背景' : '不再自动生背景')).catch(err => ND.flash(err.message, true));
     },
     update(what) { if (what.type === 'hello' || what.type === 'config') this.paint(); },
   });

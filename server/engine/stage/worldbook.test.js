@@ -39,3 +39,18 @@ describe('世界书触发', () => {
     expect(matchEntries(es, '过桥', { maxChars: 100000 }).length).toBe(4);
   });
 });
+
+import { sceneOf, normalizeScene, sceneKey } from './mechanics.js';
+describe('换场判据（09-06 exp 真机：模型 12 段一次 scene 都没给）', () => {
+  it('scene 字段优先；没有就从状态值的地点 + 时间推；没地点就 null', () => {
+    expect(sceneOf({ scene: '河边 · 傍晚' }, { 地点: '教室' })).toBe('河边 · 傍晚');
+    expect(sceneOf({}, { 地点: '教室', 时间: '08:00', 好感度: 3 })).toBe('教室 · 清晨');
+    expect(sceneOf({}, { 地点: '河边台阶', 时间: '傍晚放学后' })).toBe('河边台阶 · 傍晚放学后');
+    expect(sceneOf({}, { 好感度: 3 })).toBeNull();
+  });
+  it('键去掉日期钟点：同一个地方换钟点不算换场', () => {
+    expect(normalizeScene('教室 · 2022年3月1日 08:00')).toBe('教室');
+    expect(sceneKey('教室 · 08:05')).toBe(sceneKey('教室 · 2022年3月1日 08:00'));
+    expect(sceneKey('教室 · 清晨')).not.toBe(sceneKey('河边 · 清晨'));
+  });
+});

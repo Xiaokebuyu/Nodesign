@@ -47,7 +47,7 @@ import {
 } from './play.js';
 import { validateCondition } from './rules.js';
 import { composeStagePrompt, frozenHash } from './prompt.js';
-import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, fileUrl } from './mechanics.js';
+import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, sceneOf, fileUrl } from './mechanics.js';
 import { resolvePreset, normalizeSelection, defaultSelection, DEFAULT_PRESET } from './preset.js';
 import { loadWorldbook, matchEntries, loreNote, LORE_COOLDOWN_BEATS } from './worldbook.js';
 export { composeStagePrompt };
@@ -332,7 +332,7 @@ export async function startStage(pid, root) {
   // 当前状态与规则的"已达成"从磁盘接回来
   const scenes = await readScenes(rt.playAbs, { limit: 100000, rel: rt.scenesRel });
   rt.state = foldState(stored, scenes);
-  rt.lastScene = [...scenes].reverse().find(r => r.scene)?.scene || null;
+  rt.lastScene = [...scenes].reverse().find(r => r.scene)?.scene || sceneOf(null, rt.state);
   rt.seen = { earned: new Set((await readTrophies(rt.playAbs)).map(t => t.id)), fired: new Set(stored.firedTriggers || []) };
 
   rt.ctx = new AgentContext({ runId: '__stage_pending__', skillId: 'stage', workspaceRoot: rt.wsRoot, sessionId: rt.sdkSid, appModel: model });
@@ -530,7 +530,7 @@ export async function stageState(pid, root, { limit = 300 } = {}) {
     trophies: await readTrophies(rt.playAbs),
     rules: await readRules(rt.playAbs),
     live: rt.live, draft: rt.draft, thinking: rt.thinking,
-    backdrop: currentBackdrop(rt, cfg, [...scenes].reverse().find(r => r.scene)?.scene || null),
+    backdrop: currentBackdrop(rt, cfg, [...scenes].reverse().find(r => r.scene)?.scene || sceneOf(null, rt.state)),
     type: 'hello',
   };
 }
@@ -545,6 +545,7 @@ export async function patchStageConfig(pid, root, patch) {
   if (typeof patch.title === 'string' && patch.title.trim()) next.title = patch.title.trim().slice(0, 60);
   if (Array.isArray(patch.vitals)) next.vitals = patch.vitals;
   if (patch.backdrop !== undefined) next.backdrop = patch.backdrop ? String(patch.backdrop) : null;   // 用户手选的背景（故事相对路径）
+  if (typeof patch.backdropsAuto === 'boolean') next.backdropsAuto = patch.backdropsAuto;   // 换场自动生图的开关（外观页）
   if (patch.style && typeof patch.style === 'object') {
     const preset = await resolvePreset(rt.playAbs, patch.style.preset);
     next.style = { preset: preset ? String(patch.style.preset) : 'none', modules: preset ? normalizeSelection(preset, patch.style.modules) : null, by: 'player' };

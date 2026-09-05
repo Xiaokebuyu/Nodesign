@@ -71,9 +71,9 @@ export async function deleteMemory(pid, root, { name, who = null }) {
 export async function listStageImages(pid, root) {
   const rt = runtimeOf(pid, root);
   const out = [];
-  for (const d of [ASSETS_DIR, `${SCENES_DIR}/${BACKDROPS_DIR}`]) {
+  for (const d of ['', ASSETS_DIR, `${SCENES_DIR}/${BACKDROPS_DIR}`]) {
     for (const f of await fs.readdir(path.join(rt.playAbs, d)).catch(() => [])) {
-      if (/\.(png|jpe?g|webp|gif)$/i.test(f)) out.push({ rel: `${d}/${f}`, url: fileUrl(pid, `${root}/${d}/${f}`) });
+      if (/\.(png|jpe?g|webp|gif)$/i.test(f)) { const rel = d ? `${d}/${f}` : f; out.push({ rel, url: fileUrl(pid, `${root}/${rel}`) }); }
     }
   }
   return out;

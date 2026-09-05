@@ -71,8 +71,33 @@ export async function runRules(rt, cfg) {
 
 // ───────────────────────────── 背景图 ─────────────────────────────
 
+/** 场景键：去掉日期 / 钟点 / 标点再哈希 —— "教室 · 2022年3月1日 08:00" 和 "教室 · 08:05" 是同一个地方，别生两张 */
+export function normalizeScene(scene) {
+  return String(scene || '').replace(/\d{4}年\d{1,2}月\d{1,2}日|\d{1,2}[:：]\d{2}|\d+/g, '').replace(/[\s·,，。、;；:：\-—]+/g, ' ').trim();
+}
 export function sceneKey(scene) {
-  return crypto.createHash('sha1').update(String(scene).trim()).digest('hex').slice(0, 10);
+  return crypto.createHash('sha1').update(normalizeScene(scene)).digest('hex').slice(0, 10);
+}
+const PLACE_RE = /地点|场景|场所|地方|位置|location|place|scene/i;
+const TIME_RE = /^(时间|时刻|钟点|time)$/i;
+function timeOfDay(v) {
+  const m = /^(\d{1,2})[:：]\d{2}/.exec(String(v || '').trim());
+  if (!m) return String(v || '').trim().slice(0, 12);
+  const h = Number(m[1]);
+  return h < 6 ? '深夜' : h < 9 ? '清晨' : h < 12 ? '上午' : h < 14 ? '中午' : h < 17 ? '下午' : h < 19 ? '傍晚' : '夜里';
+}
+/**
+ * 这一段在哪：优先 write_scene 的 scene 字段；模型不给（09-06 exp 真机 12 段一次都没给）就从状态值推 ——
+ * 找叫"地点"那类的键，再拼上"时间"折成的时段。没有就 null（不生图）。
+ */
+export function sceneOf(row, state) {
+  if (row?.scene && String(row.scene).trim()) return String(row.scene).trim();
+  const S = state || {};
+  const placeKey = Object.keys(S).find(k => PLACE_RE.test(k));
+  if (!placeKey || !String(S[placeKey] || '').trim()) return null;
+  const timeKey = Object.keys(S).find(k => TIME_RE.test(k));
+  const tod = timeKey ? timeOfDay(S[timeKey]) : '';
+  return `${String(S[placeKey]).trim()}${tod ? ` · ${tod}` : ''}`;
 }
 
 async function worldBlurb(rt) {
@@ -109,8 +134,9 @@ async function recordBackdrop(rt, cfg, key, destRel) {
 
 /** 后台生一张（有上限、同键只生一次），生完推给显示器。 */
 function spawnBackdrop(rt, cfg, key, scene) {
-  if (!BACKDROPS_ON || rt.genBusy) return false;
+  if (!BACKDROPS_ON || cfg.backdropsAuto === false) return false;
   if (Object.keys(cfg.backdrops || {}).length >= BACKDROP_MAX) return false;
+  if (rt.genBusy) { rt.pendingBackdrop = { key, scene }; return false; }   // 正在生上一张：记着，生完接着生（之前是直接丢）
   rt.genBusy = true;
   rt.broadcast({ type: 'backdrop_pending', scene });
   (async () => {
@@ -121,7 +147,11 @@ function spawnBackdrop(rt, cfg, key, scene) {
     } catch (err) {
       console.warn(`[stage] ${rt.pid}/${rt.root} 背景图没生出来: ${err.message}`);
       rt.broadcast({ type: 'backdrop_failed', scene, error: err.message });
-    } finally { rt.genBusy = false; }
+    } finally {
+      rt.genBusy = false;
+      const next = rt.pendingBackdrop; rt.pendingBackdrop = null;
+      if (next) { const fresh = (await readPlayConfig(rt.playAbs)) || cfg; if (!fresh.backdrops?.[next.key]) spawnBackdrop(rt, fresh, next.key, next.scene); }
+    }
   })();
   return true;
 }
@@ -143,10 +173,11 @@ export function currentBackdrop(rt, cfg, scene) {
 }
 
 export async function maybeBackdrop(rt, row, cfg) {
-  const scene = String(row.scene || '').trim();
-  if (!scene || scene === rt.lastScene) return;
-  rt.lastScene = scene;
+  const scene = sceneOf(row, rt.state);
+  if (!scene) return;
   const key = sceneKey(scene);
+  if (rt.lastScene && sceneKey(rt.lastScene) === key) return;   // 同一个地方换了钟点不算换场
+  rt.lastScene = scene;
   const map = cfg.backdrops || {};
   if (map[key]) { rt.broadcast({ type: 'backdrop', scene, file: fileUrl(rt.pid, map[key]) }); return; }
   const firstScene = (rt.state?.['拍数'] || 0) <= 1;

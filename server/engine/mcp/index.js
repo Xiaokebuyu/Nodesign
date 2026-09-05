@@ -79,6 +79,7 @@ import { makeJotMemoryTool } from './tools/role-memory.js';
 import { makeRollDiceTool } from './tools/roll-dice.js';
 import { makeOpenStageTool } from './tools/open-stage.js';
 import { makeStageStatusTool } from './tools/stage-status.js';
+import { makeStageBackdropTool } from './tools/stage-backdrop.js';
 import { assertRoleToolsRegistered } from '../agent/cast.js';
 import { makePublishSiteTool } from './tools/publish-site.js';
 import { makeReportIssueTool } from './tools/report-issue.js';
@@ -238,6 +239,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // 也发生在设计项目里，而这条线要替代的正是"板书当 RP 载体"。
       makeOpenStageTool({ projectId }),
       makeStageStatusTool({ projectId }),
+      makeStageBackdropTool({ projectId }),
 
       // crystallize_skill — 把探索出来的方法论固化成用户自己的 skill + 作品进橱窗
       // （2026-07-30）。用户明确要求才调；写的是判断依据不是成品 HTML。
