@@ -38,10 +38,26 @@ import { InputQueue } from './input-queue.js';
  * （76 个原封不动）。黑名单同样限得住权，地基 15,392，一个 token 不涨。
  */
 export const STAGE_DENY = Object.freeze([
-  'Bash', 'Write', 'Edit', 'NotebookEdit',   // 台上的人碰不到工作区
-  'WebFetch', 'WebSearch',                   // 演戏不需要出网
-  'Agent', 'SendMessage',                    // 不派子代理：一人分饰多角是定案
+  // 安全边界：台上的人碰不到工作区，也不出网
+  'Bash', 'Write', 'Edit', 'NotebookEdit', 'WebFetch', 'WebSearch',
+  // 一人分饰多角是定案，不派子代理、不跨会话寄信
+  'Agent', 'SendMessage', 'ListAgents', 'TaskOutput', 'TaskStop', 'ReportFindings',
+  // 别的产线的件，演戏一个都用不上，留着只是每件一份 schema 的白账
+  'CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup', 'Monitor', 'RemoteTrigger',
+  'PushNotification', 'Workflow', 'DesignSync', 'EnterWorktree', 'ExitWorktree',
+  'ListMcpResourcesTool', 'ReadMcpResourceTool', 'ReadMcpResourceDirTool',
+  // 宿主机器上挂着的外部 MCP（Canva / Notion / …）—— 我们自己的 nodesign 服务器
+  // 走 mcpServers 显式挂，不受这条影响
+  'mcp__claude_ai_*', 'mcp__plugin_*', 'mcp__codex*', 'mcp__websearch*',
 ]);
+
+/**
+ * 砍剩下的（2026-09-05 实测）：Read / Glob / Grep / Skill / ToolSearch 五件，
+ * 地基 6,660 token。留 Skill 是为了 story-voice / story-craft 那两个包。
+ *
+ * 参照：08-29 实测 SDK 子代理的固定地基是 4300-4500 token。所以独立进程在
+ * **token 上只比子代理贵两千**，贵的自始至终只有内存（400MB 对 8MB）。
+ */
 
 /**
  * @param {object} opts
@@ -78,11 +94,11 @@ export class StageSession {
         cwd: o.cwd,
         ...(o.model ? { model: o.model } : {}),
         systemPrompt: o.systemPrompt,
-        // 'project' 一项都不能少 —— 台面规矩住在项目 CLAUDE.md 里，
-        // 传 [] 会连它一起关掉（SDK: "Must include 'project' to load CLAUDE.md"）。
-        // 不要 'user'：那会把宿主机器的 ~/CLAUDE.md 和使用者的私人记忆吃进戏里，
-        // 既是 7k token 的白账，也是不该有的越界。
-        settingSources: o.settingSources || ['project'],
+        // 一个都不加载（站主 2026-09-05 拍板）：RP 模式下项目 CLAUDE.md 是设计
+        // 工作台的东西，进了戏就是污染。演出要的设定全部写进 systemPrompt，
+        // 上一场的存档由 stage/progress.md 接回去。
+        // 顺带也挡掉了 'user'（宿主机器的 ~/CLAUDE.md 和使用者的私人记忆）。
+        settingSources: o.settingSources || [],
         disallowedTools: o.disallowedTools || STAGE_DENY,
         ...(o.mcpServers ? { mcpServers: o.mcpServers } : {}),
         ...(o.hooks ? { hooks: o.hooks } : {}),
