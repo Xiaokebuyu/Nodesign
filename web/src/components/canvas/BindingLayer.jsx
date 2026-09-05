@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { wrapLabel } from '../../lib/label-wrap.js';
 import { PAPER } from '../../lib/paper.js';
 import { FONT_SANS, FONT_SIZE } from '../../lib/theme.js';
 import {
@@ -186,23 +187,31 @@ export default function BindingLayer({
             ))}
             {/* 线上的字：手画的线常显（restLabel），悬停放大并补出处。
                 自动线仍是悬停才出 —— 弹幕化的教训写在上面。 */}
-            {shownLabel && (
-              <g transform={`translate(${mid.x} ${mid.y})`}>
-                <text
-                  textAnchor="middle" dominantBaseline="middle"
-                  style={{
-                    fontFamily: FONT_SANS,
-                    fontSize: hot ? FONT_SIZE.xs : FONT_SIZE.xxs,
-                    fill: hot ? PAPER.ink : PAPER.ink2,
-                    paintOrder: 'stroke',
-                    stroke: PAPER.paper, strokeWidth: 4, strokeLinejoin: 'round',
-                    transition: 'font-size 0.14s, fill 0.14s',
-                  }}
-                >
-                  {shownLabel}
-                </text>
-              </g>
-            )}
+            {shownLabel && (() => {
+              // 一句话折行（2026-09-05 线上的字从词变成句子）：平时最多三行，悬停不截
+              const rows = wrapLabel(shownLabel, { perLine: 14, lines: hot ? 0 : 3 });
+              const lh = hot ? 14 : 12;
+              const y0 = -((rows.length - 1) * lh) / 2;
+              return (
+                <g transform={`translate(${mid.x} ${mid.y})`}>
+                  <text
+                    textAnchor="middle" dominantBaseline="middle"
+                    style={{
+                      fontFamily: FONT_SANS,
+                      fontSize: hot ? FONT_SIZE.xs : FONT_SIZE.xxs,
+                      fill: hot ? PAPER.ink : PAPER.ink2,
+                      paintOrder: 'stroke',
+                      stroke: PAPER.paper, strokeWidth: 4, strokeLinejoin: 'round',
+                      transition: 'font-size 0.14s, fill 0.14s',
+                    }}
+                  >
+                    {rows.map((row, i) => (
+                      <tspan key={i} x={0} y={y0 + i * lh}>{row}</tspan>
+                    ))}
+                  </text>
+                </g>
+              );
+            })()}
           </g>
         );
       })}

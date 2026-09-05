@@ -163,6 +163,34 @@ describe('write_on_board 统一入口（件数判据）', () => {
     expect(line).toBeTruthy();
   });
 
+  it('⭐ say：话落在这条板书拉的线上（near 线优先，其次接楼线；都没有就报回来不静默丢）', async () => {
+    await patchBoard(pid, { objects: { 'assets/参考.png': { x: 70000, y: 70000, w: 200, h: 176 } } });
+    const r = await call({ text: '配色学它', near: 'assets/参考.png', relation: 'ref', say: '只拿了它的配色，字体没用' });
+    expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).toMatch(/Line says: 「只拿了它的配色，字体没用」/);
+    let board = await readBoard(pid);
+    const refLine = Object.values(board.bindings).find(b => b.type === 'ref' && b.to === 'assets/参考.png');
+    expect(refLine.label).toBe('只拿了它的配色，字体没用');
+    // 没有 near，只有 chain：话落在接楼线上
+    const a = await call({ text: '第一节', tag: 'say线' });
+    expect(a.isError).toBeUndefined();
+    const b = await call({ text: '第二节', tag: 'say线', chain: true, say: '接着上一节的伏笔' });
+    expect(b.isError).toBeUndefined();
+    board = await readBoard(pid);
+    const flow = Object.values(board.bindings).find(x => x.type === 'flow' && x.label === '接着上一节的伏笔');
+    expect(flow).toBeTruthy();
+    // 既没 near 也没 reply：话没线可落，返回点名，不静默丢
+    const c = await call({ text: '孤零零', say: '没人听' });
+    expect(c.isError).toBeUndefined();
+    expect(c.content[0].text).toMatch(/say 没有线可落/);
+    // 画图给 say：指路 edges[].label
+    const d = await call({ nodes: [{ id: 'p', text: '甲' }, { id: 'q', text: '乙' }], edges: [{ from: 'p', to: 'q', label: '甲推出乙' }], say: '整张图的话' });
+    expect(d.isError).toBeUndefined();
+    expect(d.content[0].text).toMatch(/edges\[\]\.label/);
+    board = await readBoard(pid);
+    expect(Object.values(board.bindings).some(x => x.label === '甲推出乙')).toBe(true);
+  });
+
   it('near 指向确实不存在的东西：仍拒，错误话术说清三种可能', async () => {
     const r = await call({ text: 'x', near: '虚空锚点' });
     expect(r.isError).toBe(true);

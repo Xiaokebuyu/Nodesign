@@ -52,9 +52,9 @@ export async function maybeFlowWrite({
     if (i === 0 && anchorId) {
       const type = args.relation || 'annotates';
       const [from, to] = type === 'flow' ? [anchorId, rel] : [rel, anchorId];
-      bindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}) };
+      bindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}), ...(args.say ? { label: args.say } : {}) };
     }
-    if (prevRel) bindings[`b:a${stamp()}`] = { type: 'flow', from: prevRel, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
+    if (prevRel) bindings[`b:a${stamp()}`] = { type: 'flow', from: prevRel, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}), ...(i === 0 && args.say && !anchorId ? { label: args.say } : {}) };
     live = { ...live, objects: { ...(live.objects || {}), [rel]: entry } };
     written.push({ rel, rect: { x: entry.x, y: entry.y, w: entry.w, h: entry.h } });
     prevRel = rel; prevRect = written[written.length - 1].rect;

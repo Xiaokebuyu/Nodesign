@@ -85,6 +85,8 @@ export const WRITE_SCHEMA = {
   near: z.string().max(300).optional()
     .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it and, unless place says otherwise, lands beside it'),
   reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it)`),
+  say: z.string().max(60).optional()
+    .describe("Your words ON THE LINE this note draws (the near line, else the reply/chain line): why they connect, in one short sentence — '只拿了它的配色，字体没用' / '比左边省 30%，但读不了'. The line type is the grammar; this is the sentence. Sketches put words on edges[].label instead"),
   text: z.string().min(1).max(8000).optional()
     .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
   width: z.enum(['narrow', 'normal', 'wide']).optional()

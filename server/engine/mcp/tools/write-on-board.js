@@ -72,6 +72,8 @@ Placement — relations only, never pixels (the machine solves the spot and neve
   line of thought; fork with {tag:"新名", open_lane:"<id>"}.
 - The return says where it landed in words (right of X / under Y / in view) and whether
   it had to go elsewhere. The box grows with the content — never pass sizes.
+- say = your words on the line this note draws (why it connects). Lines carry sentences,
+  not just a type word: the user reads the board by its lines.
 Node text carrying markdown marks defaults to format md (KaTeX $…$ and \`\`\`mermaid fences work).
 Readability: user reads at 75–100% zoom — body text md/lg; one sketch fits one screen.
 To change what is already on the board use edit_board — do not redraw.
@@ -106,7 +108,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       // ⚠️ extra 必须往下传：署名是从 extra 里的 toolUseId 查回来的，
       // 这条自递归漏了它的话，角色用 `nodes:[一件]` 写的板会静默署成 'agent'。
       return handler({
-        text: n.text, near: args.near, reply_to: args.reply_to, place: args.place,
+        text: n.text, near: args.near, reply_to: args.reply_to, place: args.place, say: args.say,
         relation: args.relation, chain: args.chain, tag: args.tag, size: n.size,
       }, extra);
     }
@@ -291,7 +293,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         if (anchorId) {
           const type = args.relation || 'annotates';
           const [from, to] = type === 'flow' ? [anchorId, hid] : [hid, anchorId];
-          hBindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}) };
+          hBindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}), ...(args.say ? { label: args.say } : {}) };
         }
         await patchBoard(projectId, { objects: hObjects, bindings: hBindings });
         const hRect = { x: Math.round(placed.x), y: Math.round(placed.y), w: box.w, h: box.h };
@@ -320,13 +322,20 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         zone, by, seat: 'agent', ...(args.tag ? { tag: args.tag } : {}),
       } };
       const bindings = {};
+      // 线上的话（2026-09-05 站主：线要能带 agent 自己的话，不只是「关联」「接着」）：
+      // say 落在 near 线上，没有 near 就落在接楼线上；两条都没有就报回去别静默丢。
+      let saySpent = false;
       if (anchorId) {
         const type = args.relation || (laneFrom ? 'flow' : 'annotates');
         // flow 是读序（旧 → 新）：锚在前板书在后；其余语义都是"这条说的是它"
         const [from, to] = type === 'flow' ? [anchorId, rel] : [rel, anchorId];
-        bindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}) };
+        bindings[`b:a${stamp()}`] = { type, from, to, by, ...(args.tag ? { tag: args.tag } : {}), ...(args.say ? { label: args.say } : {}) };
+        saySpent = !!args.say;
       }
-      if (parentId) bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}) };
+      if (parentId) {
+        bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: rel, by, material: 'pencil', ...(args.tag ? { tag: args.tag } : {}), ...(args.say && !saySpent ? { label: args.say } : {}) };
+        saySpent = saySpent || !!args.say;
+      }
       await patchBoard(projectId, {
         objects, bindings,
         // 线注册表照旧登记（read_board 的线清单/角色专线都靠它）：登记点 = 线头
@@ -348,6 +357,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         parentId, anchorId: placeId || anchorId, laneFrom, boardBefore: board, groupTag,
       });
       if (pl.groupMissing) lines.push(`（place.with:"${pl.groupMissing}" 那组还没有东西，所以这条按视口落位；它自己带了 tag 就是那组的第一条）`);
+      if (args.say && !saySpent) lines.push('⚠ say 没有线可落（这条既没 near 也没 reply_to/chain）—— 话没上板。给它一个 near，或者用 edit_board add_edge{label}。');
+      else if (args.say) lines.push(`Line says: 「${args.say}」`);
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
 
@@ -512,6 +523,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
     if (pl.groupMissing) lines.push(`（place.with:"${pl.groupMissing}" 那组还没有东西，所以按视口落位）`);
+    if (args.say) lines.push('⚠ say 只给单条板书（它拉的那根线）；一张图的线上的话写在 edges[].label 里 —— 这次的 say 没上板。');
     if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一屏（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。如果你是按**像素**想的坐标：nodes/shapes（含 path 的 d）全族单位是 24px 的格，数值除以 24 重画一版会正好；确实要这么大就拆成几张 tag 图用线连。`);
     // 零线大图提醒（08-27 用户报「草草一堆文字摊在那儿」）：软提醒不硬拒 ——
     // 但要说清楚这不是风格问题，是版面语言缺了一半
