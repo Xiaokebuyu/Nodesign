@@ -101,7 +101,7 @@ input,textarea,select{font:inherit;color:inherit}
 :root[data-dock="right"] .cast{border-right:0;border-left:1px solid var(--rule)}
 .cast-tools{display:flex;justify-content:flex-end;gap:2px;padding:6px 8px 0;flex:none}
 :root[data-dock="right"] .cast-tools{flex-direction:row-reverse}
-.cast-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-bottom:10px;scrollbar-width:thin}
+.cast-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding-bottom:10px;scrollbar-width:none}.cast-scroll::-webkit-scrollbar{display:none}
 .portrait{margin:8px 16px 12px;aspect-ratio:3/4;border-radius:2px;position:relative;background:linear-gradient(160deg,var(--panel-2),var(--panel));box-shadow:var(--shadow);display:grid;place-items:center;overflow:hidden;flex:none;border:1px solid var(--rule)}
 .portrait img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .4s}
 .portrait b{font-family:var(--kai);font-size:54px;font-weight:400;color:var(--dim)}
@@ -161,7 +161,7 @@ input,textarea,select{font:inherit;color:inherit}
 /* ── 主区 ── */
 .main{grid-area:main;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--veil);position:relative}
 .page{flex:1;min-height:0;display:flex;flex-direction:column}
-.page.scroll{overflow-y:auto;padding:22px 26px 40px;scrollbar-width:thin}
+.page.scroll{overflow-y:auto;padding:22px 26px 40px;scrollbar-width:none}.page.scroll::-webkit-scrollbar{display:none}
 .page-inner{max-width:54em;margin:0 auto;width:100%}
 .page h2{font-family:var(--kai);font-size:16px;font-weight:700;letter-spacing:.06em;margin:0 0 12px;color:var(--ink);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
 .page h2 small{font-size:11px;color:var(--sub);letter-spacing:.04em;font-weight:400}
@@ -209,3 +209,61 @@ input.val{font-size:12.5px;padding:5px 8px;border:1px solid var(--rule-md);borde
 /* ── 内嵌卡片态（画布上的预览） ── */
 body.embed .say,body.embed .note,body.embed .pages,body.embed .top-r,body.embed .cast-tools,body.embed .handles,body.embed .beat-actions{display:none}
 body.embed .opening .actions{display:none}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   材质层（2026-09-06，站主："参照我们现有的纸质纹理，看看前端怎么做的你就怎么做"）
+   照 web/src/lib/paper.js 那套物料：墙 #F0EADB 上打一道右上的暖光和左下的暗斑；每一块界面都是一张**浮着的纸**：
+   纸色 + 同一份颗粒 SVG（深的一层是纤维凹处、浅的一层是受光面）+ 直角 + 暖褐影子（不描边）。
+   影子梯照 PAPER_SHADOW 的 BAKED 六条（iframe 里没挂光源层，用兜底那份）：far 贴得平 / mid 一般 / near 刚被动过。
+   后面的规则盖前面的：这一段只换材质，不改布局。夜 / 终端两套外观没有纸，颗粒关掉、影子换冷墨。
+   ═══════════════════════════════════════════════════════════════ */
+:root{
+  --wall:#F0EADB; --chrome:#FBF7EC; --lit:rgba(255,247,225,.85); --lit-soft:rgba(255,246,218,.6); --dusk:rgba(122,96,56,.14);
+  --grain:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27180%27%20height%3D%27180%27%3E%3Cfilter%20id%3D%27d%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%270.9%27%20numOctaves%3D%273%27%20seed%3D%272%27%20stitchTiles%3D%27stitch%27%2F%3E%3CfeComponentTransfer%3E%3CfeFuncA%20type%3D%27linear%27%20slope%3D%271.8%27%20intercept%3D%27-0.42%27%2F%3E%3C%2FfeComponentTransfer%3E%3CfeColorMatrix%20values%3D%270%200%200%200%200.17%200%200%200%200%200.13%200%200%200%200%200.06%200%200%200%200.28%200%27%2F%3E%3C%2Ffilter%3E%3Cfilter%20id%3D%27l%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%271.1%27%20numOctaves%3D%272%27%20seed%3D%279%27%20stitchTiles%3D%27stitch%27%2F%3E%3CfeColorMatrix%20values%3D%270%200%200%200%201%200%200%200%200%200.99%200%200%200%200%200.93%200%200%200%200.26%200%27%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%27180%27%20height%3D%27180%27%20filter%3D%27url(%23d)%27%2F%3E%3Crect%20width%3D%27180%27%20height%3D%27180%27%20filter%3D%27url(%23l)%27%2F%3E%3C%2Fsvg%3E");
+  --sh-far:-1px 1px 2px rgba(93,74,44,.14),-1px 3px 5px rgba(93,74,44,.09);
+  --sh-mid:-1px 2px 3px rgba(93,74,44,.15),-3px 6px 12px rgba(93,74,44,.15);
+  --sh-near:-2px 3px 4px rgba(93,74,44,.18),-6px 13px 26px rgba(93,74,44,.22);
+  --hair:rgba(43,33,23,.22);
+}
+:root[data-skin="jiangnan"]{ --wall:#dfe6e4; --chrome:#eef2f1; --lit:rgba(246,250,248,.8); --lit-soft:rgba(240,246,244,.5); --dusk:rgba(60,80,76,.12); --hair:rgba(38,49,47,.22) }
+:root[data-skin="night"]{ --wall:#0f1114; --chrome:#181b20; --lit:rgba(60,64,72,.5); --lit-soft:rgba(50,54,60,.4); --dusk:rgba(0,0,0,.35); --grain:none; --hair:rgba(220,215,206,.2);
+  --sh-far:0 1px 2px rgba(0,0,0,.4),0 3px 6px rgba(0,0,0,.3); --sh-mid:0 2px 3px rgba(0,0,0,.45),0 8px 18px rgba(0,0,0,.35); --sh-near:0 3px 4px rgba(0,0,0,.5),0 14px 30px rgba(0,0,0,.45) }
+:root[data-skin="terminal"]{ --wall:#080a09; --chrome:#0f130f; --lit:rgba(40,60,44,.35); --lit-soft:rgba(30,46,34,.3); --dusk:rgba(0,0,0,.4); --grain:none; --hair:rgba(200,211,196,.2);
+  --sh-far:0 1px 2px rgba(0,0,0,.5),0 3px 6px rgba(0,0,0,.4); --sh-mid:0 2px 3px rgba(0,0,0,.5),0 8px 18px rgba(0,0,0,.4); --sh-near:0 3px 4px rgba(0,0,0,.6),0 14px 30px rgba(0,0,0,.5) }
+
+/* 墙：光斑 + 颗粒。铺了背景图时墙变成一层薄纱，让图透出来 */
+body{background:var(--wall)}
+.app{background:radial-gradient(ellipse 60% 55% at 82% 8%,var(--lit),transparent 70%),radial-gradient(ellipse 50% 40% at 30% 100%,var(--dusk),transparent 65%),var(--wall);background-attachment:fixed}
+.app::after{content:"";position:absolute;inset:0;background-image:var(--grain);opacity:.55;pointer-events:none;z-index:0}
+:root[data-backdrop="on"] .app{background:var(--veil)}
+:root[data-backdrop="on"] .app::after{opacity:.25}
+.top,.main{position:relative;z-index:1}.cast{z-index:1}   /* .cast 的 position 归布局层：窄屏它是 fixed 抽屉，这里别碰 */
+
+/* 顶栏：横线本那张纸（chrome）+ 一根发丝线 */
+.top{background:var(--chrome);background-image:var(--grain);backdrop-filter:none;border-bottom:1px solid var(--hair)}
+
+/* 侧栏：一张浮着的纸，离墙一档 */
+.cast{background:var(--paper);background-image:var(--grain);border:0;box-shadow:var(--sh-mid);margin:14px 0 14px 14px;backdrop-filter:none}
+:root[data-dock="right"] .cast{margin:14px 14px 14px 0;border:0}
+:root[data-cast="mini"] .cast{margin:14px 0 14px 10px}
+:root[data-cast="mini"][data-dock="right"] .cast{margin:14px 10px 14px 0}
+.cast .portrait{box-shadow:var(--sh-far);border:0;margin:6px 16px 12px}
+.cast .foot{border-top:1px solid var(--rule)}
+@media(max-width:760px){.cast,:root[data-dock="right"] .cast,:root[data-cast="mini"] .cast{margin:0;box-shadow:var(--sh-near)}}
+
+/* 主区透出墙；每一页的内容自己带纸 */
+.main{background:transparent;backdrop-filter:none}
+
+/* 纸的通用件：卡 / 菜单 / 对话框 / 弹条 —— 纸色 + 颗粒 + 直角 + 影子，不描边 */
+.card,.menu,.dlg,.toast.state{background:var(--paper);background-image:var(--grain);border:0;border-radius:1px}
+.card{box-shadow:var(--sh-mid);padding:16px 18px}
+.menu,.dlg{box-shadow:var(--sh-near)}
+.toast.state{box-shadow:var(--sh-near)}
+.btn{background:var(--paper);border-color:var(--hair);border-radius:1px}
+.btn.primary{border-color:var(--ink)}
+:root[data-skin="night"] .btn.primary,:root[data-skin="terminal"] .btn.primary{border-color:var(--accent)}
+input.val,textarea.editor{border-color:var(--hair);border-radius:1px;background:var(--paper)}
+table.kv td,table.kv th{border-bottom-color:var(--rule)}
+.pill{border-color:var(--hair);border-radius:1px;background:var(--paper)}
+.linebtn{border-color:var(--hair);border-radius:1px;background:var(--paper)}

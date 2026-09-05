@@ -62,7 +62,7 @@
   const store = {
     cfg: null, scenes: [], memories: [], trophies: [], rules: { achievements: [], triggers: [] }, castOptions: {},
     state: {}, status: { running: false, busy: false, queued: 0, error: null, usage: null },
-    live: '', draft: '', thinking: '', backdrop: null, sending: false, page: 'story',
+    live: '', draft: '', thinking: '', backdrop: null, sending: false, page: 'story', lore: [],
     activeSpeakers: [], activeScene: '',
   };
   ND.store = store;
@@ -101,6 +101,7 @@
     const b = $('backdrop');
     const url = store.cfg?.backdrop || store.backdrop;
     if (url) { b.style.backgroundImage = `url("${url}")`; b.classList.add('on'); } else b.classList.remove('on');
+    document.documentElement.dataset.backdrop = url ? 'on' : 'off';   // 墙在有图时变薄纱（app.css 材质层）
   }
 
   /* ── 停靠：侧栏停左 / 停右 / 收成一条；窄屏是抽屉 ── */
@@ -185,7 +186,8 @@
       case 'draft': store.draft = e.text; break;
       case 'text': store.live += e.text; break;
       case 'thinking': store.thinking += e.text; break;
-      case 'turn_end': store.live = ''; store.draft = ''; store.thinking = ''; if (e.usage) store.status.usage = e.usage; paintTop(); break;
+      case 'turn_end': store.live = ''; store.draft = ''; store.thinking = ''; store.lore = []; if (e.usage) store.status.usage = e.usage; paintTop(); break;
+      case 'lore': store.lore = e.titles || []; break;
       case 'status': store.status = { running: !!e.running, busy: !!e.busy, queued: e.queued || 0, error: e.error || null, usage: e.usage || store.status.usage }; if (e.state) store.state = e.state; paintTop(); tellParent(); break;
       case 'state': { const before = store.state; store.state = e.state || store.state; if (!EMBED) ND.stateToast(e.changed || e.state, before); e.before = before; break; }
       case 'config': store.cfg = e.config; paintTop(); paintBackdrop(); tellParent(); break;
@@ -253,6 +255,8 @@
   /* ── 起 ── */
   ND.boot = function boot() {
     applyDock();
+    const measure = prefs.get('measure', null);   // 正文宽度（故事页的拖把改的）
+    if (measure) document.documentElement.style.setProperty('--measure', `${measure}px`);
     $('pageNav').innerHTML = ND.pages.map(p => `<button data-page="${p.id}">${esc(p.label)}</button>`).join('');
     $('pageNav').querySelectorAll('button').forEach(b => { b.onclick = () => ND.show(b.dataset.page); });
     $('lineBtn').onclick = (ev) => { ev.stopPropagation(); lineMenu($('lineBtn')); };

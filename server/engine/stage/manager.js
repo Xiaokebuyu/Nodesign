@@ -48,7 +48,8 @@ import {
 import { validateCondition } from './rules.js';
 import { composeStagePrompt, frozenHash } from './prompt.js';
 import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, fileUrl } from './mechanics.js';
-import { resolvePreset, normalizeSelection, DEFAULT_PRESET } from './preset.js';
+import { resolvePreset, normalizeSelection, defaultSelection, DEFAULT_PRESET } from './preset.js';
+import { loadWorldbook, matchEntries, loreNote, LORE_COOLDOWN_BEATS } from './worldbook.js';
 export { composeStagePrompt };
 import { getProject } from '../../projects/store.js';
 import { getWorkspaceRoot } from '../../projects/workspace.js';
@@ -279,8 +280,13 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     updatedAt: new Date().toISOString(),
   };
   if (style?.preset) {
+    // agent 按用户的回答预选：on / off 是在默认勾选之上加减（modules 是老写法 = on）。开场页据 by:'agent' 提示"这是预选的，你可以改"
     const preset = await resolvePreset(playAbs, style.preset);
-    next.style = { preset: preset ? style.preset : 'none', modules: preset ? normalizeSelection(preset, style.modules) : null };
+    const sel = preset ? defaultSelection(preset) : {};
+    for (const id of [...(style.on || []), ...(Array.isArray(style.modules) ? style.modules : [])]) sel[id] = true;
+    for (const id of style.off || []) sel[id] = false;
+    if (style.modules && !Array.isArray(style.modules)) Object.assign(sel, style.modules);
+    next.style = { preset: preset ? style.preset : 'none', modules: preset ? normalizeSelection(preset, sel) : null, by: 'agent' };
   }
   delete next.systemPrompt;
   await writePlayConfig(playAbs, next);
@@ -458,11 +464,31 @@ export async function sayToStage(pid, root, text, { userId = null, row = null } 
   const saved = await appendUserLine(rt.playAbs, row?.text ?? text, { rel: rt.scenesRel, uuid, by: row?.by || 'user', extra: row?.extra || {} });
   rt.broadcast({ type: 'scene', row: saved });
   const notes = rt.pendingNotes.splice(0);
-  const about = [stateLine(rt.state), ...notes.map(n => `【场务纸条：${n}】`)].join('\n');
+  const lore = await pickLore(rt, text);
+  const about = [stateLine(rt.state), ...notes.map(n => `【场务纸条：${n}】`), ...(lore ? [lore] : [])].join('\n');
   const r = rt.session.say(text, { about, uuid });
   rt.touch();
   rt.broadcast(rt.status());
   return { ...r, runId: run.id, rowId: saved.id };
+}
+
+/**
+ * 世界书机械触发：拿玩家这句 + 上一段正文撞触发条目的 keys，命中的接在这句话尾巴上（worldbook.js）。
+ * 同一条三段内不重复带（rt.loreSeen 记着上次带它是第几段）。命中了给显示器报一声。
+ */
+async function pickLore(rt, text) {
+  let entries = [];
+  try { entries = await loadWorldbook(rt.playAbs); } catch { return ''; }
+  if (!entries.length) return '';
+  const beat = rt.state?.['拍数'] || 0;
+  rt.loreSeen = rt.loreSeen || new Map();
+  const skip = new Set([...rt.loreSeen].filter(([, at]) => beat - at < LORE_COOLDOWN_BEATS).map(([n]) => n));
+  const last = (await readScenes(rt.playAbs, { limit: 6, rel: rt.scenesRel })).reverse().find(r => r.by === 'stage')?.text || '';
+  const matched = matchEntries(entries, `${text}\n${last}`, { skip });
+  if (!matched.length) return '';
+  for (const m of matched) rt.loreSeen.set(m.name, beat);
+  rt.broadcast({ type: 'lore', titles: matched.map(m => m.name) });
+  return loreNote(matched);
 }
 
 export async function stopStage(pid, root, reason = 'user') {
@@ -520,7 +546,7 @@ export async function patchStageConfig(pid, root, patch) {
   if (patch.backdrop !== undefined) next.backdrop = patch.backdrop ? String(patch.backdrop) : null;   // 用户手选的背景（故事相对路径）
   if (patch.style && typeof patch.style === 'object') {
     const preset = await resolvePreset(rt.playAbs, patch.style.preset);
-    next.style = { preset: preset ? String(patch.style.preset) : 'none', modules: preset ? normalizeSelection(preset, patch.style.modules) : null };
+    next.style = { preset: preset ? String(patch.style.preset) : 'none', modules: preset ? normalizeSelection(preset, patch.style.modules) : null, by: 'player' };
   }
   if (patch.cardOptions && typeof patch.cardOptions === 'object') {
     next.cardOptions = Object.fromEntries(Object.entries(patch.cardOptions).filter(([k, v]) => typeof k === 'string' && k.length < 120 && typeof v === 'boolean'));

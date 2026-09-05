@@ -3,8 +3,13 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── 故事页：正文流 ── */
-.beats{flex:1;min-height:0;overflow-y:auto;padding:26px 22px 10px;scroll-behavior:auto;scrollbar-width:thin}
-.beats-inner{max-width:var(--measure);margin:0 auto}
+.beats{flex:1;min-height:0;overflow-y:auto;padding:26px 22px 10px;scroll-behavior:auto;scrollbar-width:none}.beats::-webkit-scrollbar{display:none}
+.beats-inner{max-width:var(--measure);margin:0 auto;position:relative}
+/* 正文宽度拖把：正文右侧悬停出一条竖杠，拖它改 --measure（记在本机），双击复原 */
+.grip{position:absolute;top:0;bottom:0;right:-22px;width:16px;cursor:ew-resize;opacity:0;transition:opacity .2s;display:flex;align-items:center;justify-content:center}
+.grip::after{content:"";width:3px;height:56px;border-radius:2px;background:var(--dim)}
+.beats:hover .grip,.grip.on{opacity:1} .grip.on::after{background:var(--accent)}
+.grip-tip{position:fixed;z-index:60;font-size:10.5px;color:var(--paper);background:var(--ink);padding:3px 7px;border-radius:2px;pointer-events:none;font-variant-numeric:tabular-nums}
 .more{display:block;margin:0 auto 26px;font-size:11.5px;color:var(--sub);padding:6px 14px;border:1px dashed var(--rule-md);border-radius:2px}
 .more:hover{color:var(--ink);border-color:var(--rule-hv)}
 .beat{position:relative;margin:0 0 34px;font-family:var(--kai);font-size:var(--size);line-height:var(--lead);letter-spacing:.012em;color:var(--ink)}
@@ -43,10 +48,11 @@
 .process .hd .n{font-variant-numeric:tabular-nums}
 .process .hd .chev{margin-left:auto;width:16px;height:16px;transition:transform .2s;color:var(--dim)}
 .process[data-open="1"] .hd .chev{transform:rotate(180deg)}
-.process .body{display:none;margin-top:8px;font-size:12.5px;color:var(--ink-3);line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:16em;overflow:auto;scrollbar-width:thin}
+.process .body{display:none;margin-top:8px;font-size:12.5px;color:var(--ink-3);line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:16em;overflow:auto;scrollbar-width:none}.process .body::-webkit-scrollbar{display:none}
 .process[data-open="1"] .body,.process.live[data-open="auto"] .body{display:block}
 .process .aside{margin-top:8px;padding:6px 10px;border-radius:2px;background:var(--rule);font-size:12px;color:var(--sub);line-height:1.6}
 .process .aside::before{content:"台下的话 · ";letter-spacing:.08em;font-size:10px}
+.process .lore{margin-top:6px;font-size:11px;color:var(--sub);letter-spacing:.04em}
 .process.live[data-open="auto"] .body{max-height:9em}
 
 /* ── 底部：选项 + 输入 ── */
@@ -85,7 +91,7 @@
 .dlg input.val{width:100%}
 
 /* ── 开场页 ── */
-.opening{flex:1;min-height:0;overflow-y:auto;padding:30px 26px 60px;scrollbar-width:thin}
+.opening{flex:1;min-height:0;overflow-y:auto;padding:30px 26px 60px;scrollbar-width:none}.opening::-webkit-scrollbar{display:none}
 .opening-inner{max-width:52em;margin:0 auto}
 .opening .kicker{font-size:10.5px;letter-spacing:.18em;color:var(--sub);margin-bottom:6px}
 .opening h1{font-family:var(--kai);font-size:30px;font-weight:700;margin:0 0 6px;letter-spacing:.04em;line-height:1.25}
@@ -166,3 +172,35 @@
 .skin.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .skin .sw{height:44px;display:flex} .skin .sw i{flex:1}
 .skin b{display:block;font-size:12px;padding:6px 9px;font-weight:400}
+
+
+/* ═══════════ 材质层：故事页 / 开场页 / 各页件（同 app.css 末尾那一段的口径） ═══════════ */
+/* 正文是一张摊开的稿纸：浮在墙上，四边留白，字写在纸里 */
+.beats{padding:18px 34px 10px}
+.beats-inner{background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-mid);padding:38px 46px 42px;margin:0 auto 26px;border-radius:1px}
+:root[data-skin="night"] .beats-inner,:root[data-skin="terminal"] .beats-inner{background:var(--panel)}
+.beats-inner .more{margin-top:-8px}
+.process{margin-left:0;margin-right:0;max-width:none}
+.process::before{background:var(--paper)}
+.beat-actions button{border:1px solid var(--hair);border-radius:1px}
+.grip{right:-30px}
+@media(max-width:760px){.beats{padding:12px 12px 8px}.beats-inner{padding:22px 18px 26px}}
+/* 底部：一条横线本纸，选项是贴在上面的小纸片 */
+.handles{background:var(--chrome);background-image:var(--grain);border-top:1px solid var(--hair);backdrop-filter:none;padding:10px 34px 16px}
+.handle{border:0;border-radius:1px;background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-far)}
+.handle:hover{box-shadow:var(--sh-mid);transform:translateY(-1px)}
+.say textarea{border-color:var(--hair);border-radius:1px;background:var(--paper)}
+.say button{border-radius:1px}
+/* 开场页与角色页的人物卡、预设卡、模块组：都是纸 */
+.person,.preset,.modgroup,.rule{background:var(--paper);background-image:var(--grain);border:0;border-radius:1px;box-shadow:var(--sh-far)}
+.person{box-shadow:var(--sh-mid)}
+.preset.on{box-shadow:var(--sh-mid),inset 3px 0 0 var(--accent);background:var(--paper)}
+.preset.upload{border:1px dashed var(--hair);box-shadow:none;background:transparent}
+.modgroup{margin-bottom:2px}
+.opening .world{border-left:2px solid var(--hair);background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-far);padding:18px 22px;border-radius:1px}
+.trig{border-left:2px solid var(--hair);background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-far);padding:8px 14px;border-radius:1px}
+.person .opts,.person .stats,.person .rel,.person .foot{border-top-color:var(--rule)}
+.memlist{background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-far);padding:4px 14px;border-radius:1px}
+.skin{border-color:var(--hair);border-radius:1px}
+:root[data-skin="night"] .person,:root[data-skin="night"] .preset,:root[data-skin="night"] .modgroup,:root[data-skin="night"] .rule,:root[data-skin="night"] .handle,:root[data-skin="night"] .card,:root[data-skin="night"] .opening .world,:root[data-skin="night"] .trig,:root[data-skin="night"] .memlist,
+:root[data-skin="terminal"] .person,:root[data-skin="terminal"] .preset,:root[data-skin="terminal"] .modgroup,:root[data-skin="terminal"] .rule,:root[data-skin="terminal"] .handle,:root[data-skin="terminal"] .card,:root[data-skin="terminal"] .opening .world,:root[data-skin="terminal"] .trig,:root[data-skin="terminal"] .memlist{background:var(--panel)}

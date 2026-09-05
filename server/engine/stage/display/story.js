@@ -37,6 +37,27 @@
       this.paintAll();
       this.observe();
     },
+    /* ── 正文宽度拖把：拖右侧竖杠改 --measure（两边一起动），双击复原 ── */
+    grip() {
+      const inner = $('inner'); if (!inner || ND.EMBED || inner.querySelector('.grip')) return;
+      const g = el('<div class="grip" title="拖动改正文宽度，双击复原"></div>');
+      inner.appendChild(g);
+      const root = document.documentElement;
+      let tip = null;
+      g.onpointerdown = (e) => {
+        e.preventDefault(); g.setPointerCapture(e.pointerId); g.classList.add('on');
+        const startX = e.clientX; const startW = inner.getBoundingClientRect().width;
+        tip = el('<div class="grip-tip"></div>'); document.body.appendChild(tip);
+        const move = (ev) => {
+          const w = Math.max(420, Math.min(window.innerWidth - 80, Math.round(startW + (ev.clientX - startX) * 2)));
+          root.style.setProperty('--measure', `${w}px`); ND.prefs.set('measure', w);
+          tip.textContent = `${w}px`; tip.style.left = `${ev.clientX + 12}px`; tip.style.top = `${ev.clientY - 28}px`;
+        };
+        const up = () => { g.classList.remove('on'); tip?.remove(); tip = null; g.removeEventListener('pointermove', move); g.removeEventListener('pointerup', up); };
+        g.addEventListener('pointermove', move); g.addEventListener('pointerup', up);
+      };
+      g.ondblclick = () => { root.style.removeProperty('--measure'); ND.prefs.set('measure', null); };
+    },
 
     /* ── 一行 → HTML ── */
     actions(r) {
@@ -65,6 +86,7 @@
         : more + rows.slice(from).map((r, k) => this.beatHtml(r, from + k)).join('');
       inner.appendChild(el('<div class="process" id="process" data-open="auto" hidden><div class="hd"><b></b><span class="n"></span>' + CHEV + '</div><div class="body"></div></div>'));
       inner.appendChild(el('<article class="beat draft" id="draft" hidden></article>'));
+      this.grip();
       $('process').querySelector('.hd').onclick = () => { const p = $('process'); p.dataset.open = p.dataset.open === '1' ? '0' : '1'; };
       this.paintProcess(); this.paintDraft(); this.paintHandles();
       this.scroll(true);
@@ -93,9 +115,9 @@
     /* ── 过程容器：思考 + 台下的话 ── */
     paintProcess() {
       const p = $('process'); if (!p) return;
-      const th = store.thinking || ''; const live = store.live || '';
+      const th = store.thinking || ''; const live = store.live || ''; const lore = store.lore || [];
       const busy = store.status.busy;
-      if (!th && !live) { p.hidden = true; return; }
+      if (!th && !live && !lore.length) { p.hidden = true; return; }
       p.hidden = false;
       p.classList.toggle('live', busy);
       const hd = p.querySelector('.hd b'); const n = p.querySelector('.hd .n');
@@ -103,7 +125,7 @@
       n.textContent = th ? `${th.length} 字` : '';
       const body = p.querySelector('.body');
       const tail = busy && p.dataset.open !== '1' ? th.slice(-900) : th;
-      const want = `${esc(tail)}${live ? `<div class="aside">${esc(live.slice(-400))}</div>` : ''}`;
+      const want = `${esc(tail)}${lore.length ? `<div class="lore">带上了设定：${esc(lore.join(' · '))}</div>` : ''}${live ? `<div class="aside">${esc(live.slice(-400))}</div>` : ''}`;
       if (body.innerHTML !== want) { body.innerHTML = want; if (busy) body.scrollTop = body.scrollHeight; }
       if (th) this.frozenThinking = th;
     },
@@ -137,7 +159,8 @@
       let list = (last && !spent) ? (last.choices || []) : [];
       if (!list.length && store.cfg && !spent && last) list = [{ label: '继续', prompt: '继续。' }];
       const dis = (!store.cfg || store.status.busy || store.sending) ? ' disabled' : '';
-      box.innerHTML = list.map((c) => `<button class="handle" data-p="${esc(c.prompt || c.label)}"${dis}><b>${esc(c.label)}</b>${c.hint ? `<span>${esc(c.hint)}</span>` : ''}</button>`).join('');
+      const CAT = /^[（(\[【]?\s*(推进主线|主线|人际|人际关系|意外|意想不到|合理但意想不到|剑走偏锋|支线|日常)\s*[）)\]】]?[。.]?$/;   // 类别词不是动作意图，不给玩家看（tools.js 同一条）
+      box.innerHTML = list.map((c) => { const hint = c.hint && !CAT.test(c.hint.trim()) ? c.hint : ''; return `<button class="handle" data-p="${esc(c.prompt || c.label)}"${dis}><b>${esc(c.label)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}</button>`; }).join('');
       $('optN').textContent = list.length ? `${list.length} 个` : (store.status.busy ? '等这一段写完' : '');
       $('optHd').style.display = list.length || store.status.busy ? '' : 'none';
       box.querySelectorAll('.handle').forEach((b) => { b.onclick = () => this.fire(b.dataset.p); });
@@ -219,7 +242,7 @@
       }
       if (what.type === 'scene') this.append(what.row);
       else if (what.type === 'draft') { this.paintDraft(); this.paintProcess(); }
-      else if (what.type === 'text' || what.type === 'thinking') this.paintProcess();
+      else if (what.type === 'text' || what.type === 'thinking' || what.type === 'lore') this.paintProcess();
       else if (what.type === 'turn_end') { this.paintDraft(); this.paintProcess(); this.paintHandles(); }
       else if (what.type === 'status') { this.paintHandles(); this.paintProcess(); }
       else if (what.type === 'error') this.note(`出错了：${what.error}`, true);

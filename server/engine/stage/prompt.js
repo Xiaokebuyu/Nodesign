@@ -90,11 +90,12 @@ export async function composeStagePrompt(wsRoot, root, stored) {
   for (const d of [WORLD_DIR, PRESET_DIR]) if (await exists(path.join(playAbs, d))) extra.push(`${root}/${d}/`);
   parts.push(
     '## 怎么把字写到台上\n'
-    + '每一段都用 write_scene 写到台上（正文 + 2-4 枚选项 + state：改了哪些状态值，没变就传空数组）。'
+    + '每一段都用 write_scene 写到台上（正文 + 2-4 枚选项 + state：改了哪些状态值，没变就传空数组）。**write_scene 一返回这一轮就结束**，所以要记的（remember）、要掷的（roll）都在它之前做。'
     + '不可逆的变化用 remember 记一条：某个人记得的事带 who 写进他的卡，这个故事的事不带。掷骰用 roll。'
     + '你的工具就这几件，不用 ToolSearch 去找别的。'
     + (extra.length ? `设定的细节在 ${extra.join(' 和 ')}，用到时 Grep / Read。` : '')
-    + '每句话末尾会带一行「此刻：…」是机器报的当前状态值；【场务纸条】是规则表到了阈值，照它说的推。\n\n'
+    + '每句话末尾会带一行「此刻：…」是机器报的当前状态值；【场务纸条】是规则表到了阈值，照它说的推；'
+    + '【世界书 · 某条】是机器按这句话和上一段里的关键词从世界书里挑出来的设定原文，写这一段时照它来，不用再去 Grep 同一条。\n\n'
     + '⛔ **write_scene 返回之后这一轮就结束了，不要再在工具之外说任何话。**工具之外的字观众看不见，'
     + '而且那些话里常常漏出数值（"好感度 +2""好感度 17"）—— 数值只走 state，绝不进正文，也绝不写在工具之外。'
     + '正文里同样不出现任何状态数字、不写括号里的舞台指令、不复述玩家刚说的话之外的东西。',

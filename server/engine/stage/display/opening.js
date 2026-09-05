@@ -113,6 +113,7 @@
         <div class="people" id="people"></div>
         <div class="kicker">写法</div>
         <p class="lede" style="margin-bottom:12px">对方按哪套规矩写。默认这套是从一份久经调试的中文预设拆出来的；也可以上传你自己的。展开每一组能看到具体条目。</p>
+        ${cfg.style?.by === 'agent' ? '<p class="source" style="color:var(--accent)">下面的勾选是 agent 按你开场前的回答预选的，不合意就改，改了以你的为准。</p>' : ''}
         <div id="picker"></div>
         <div class="actions"><button class="btn primary big" id="go">开始</button><div class="note" id="openNote"></div></div>
       </div></div>`;

@@ -55,7 +55,9 @@ const triggerSchema = z.object({
 });
 const styleSchema = z.object({
   preset: z.string().max(80).describe(`写法预设 id：${BUILTIN_IDS.map(x => `"${x}"`).join(' / ')}（内置），或 "user:<文件夹名>"（用户上传的酒馆预设 JSON，先放进 <故事>/预设/ 下），或 "none"`),
-  modules: z.array(z.string().max(60)).max(80).optional().describe('要启用的模块 id（在默认勾选之上加）。不知道 id 就不传，玩家自己在开场页勾'),
+  on: z.array(z.string().max(60)).max(80).optional().describe('按用户开场前的回答，在默认勾选之上**加开**的模块 id（表在 skill stage-setup 的 presets.md）。互斥组里开一个，机器会关掉同组默认那个'),
+  off: z.array(z.string().max(60)).max(80).optional().describe('按用户的回答**关掉**的模块 id。always 组（通用规矩）关不掉'),
+  modules: z.array(z.string().max(60)).max(80).optional().describe('老写法，等于 on'),
 });
 
 export function makeOpenStageTool({ projectId }) {
@@ -87,7 +89,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
       cast: z.array(castSchema).min(1).max(12).describe('在场者。每个都要先有角色卡；一人=显示器画立绘，多人=画名册'),
       vitals: z.array(vitalSchema).max(8).optional().describe('状态面板显示哪些字段（好感 / 时间 / 体力…）。不需要就别传'),
       skin: z.enum(SKINS).default('paper').describe('显示器外观。留默认 paper（跟平台一致）；玩家自己会换'),
-      style: styleSchema.optional().describe('写法预设。不传 = 玩家开场时自己挑（默认 Izumi）。用户交了自己的酒馆预设 JSON 才传 user:<名>'),
+      style: styleSchema.optional().describe('写法预设与预选。用户在开场问答里说了偏好（慢一点 / 多对白 / 第一人称 / 像轻小说 / 短一点…）就按 presets.md 的表翻成 on / off 传进来，开场页会标"agent 预选了这些，你可以改"；什么都没说就不传（默认 Izumi 全默认）。用户交了自己的酒馆预设 JSON 才传 preset: user:<名>'),
       achievements: z.array(achievementSchema).max(40).optional()
         .describe('奖杯。阈值按用户选的难度定（爽档 40 就给"她笑了"，严酷档要 80）。事件型的靠 state 里的标志位：牵手 == 1'),
       triggers: z.array(triggerSchema).max(20).optional()
@@ -101,7 +103,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
           const bad = validateCondition(r.when);
           if (bad) return fail(`规则「${r.id}」的条件不合法：${bad}`);
         }
-        const style = args.style ? { preset: args.style.preset, modules: Object.fromEntries((args.style.modules || []).map(id => [id, true])) } : null;
+        const style = args.style ? { preset: args.style.preset, on: [...(args.style.on || []), ...(args.style.modules || [])], off: args.style.off || [] } : null;
         const root = await createPlay(projectId, {
           title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin, style,
           rules: (args.achievements || args.triggers) ? { achievements: args.achievements || [], triggers: args.triggers || [] } : null,
@@ -114,7 +116,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
           content: [{
             type: 'text',
             text: `${wasRunning ? '换了设定，进程已停，下一句话到时重开' : '建好了'}：「${args.title}」→ 文件夹 ${root}/，在场 ${who}，设定 ${args.table.length} 字`
-              + `${args.achievements?.length ? `，${args.achievements.length} 枚奖杯` : ''}${args.triggers?.length ? `，${args.triggers.length} 条推进触发` : ''}${style ? `，写法预设 ${style.preset}` : '，写法由玩家开场时挑（默认 Izumi）'}。`
+              + `${args.achievements?.length ? `，${args.achievements.length} 枚奖杯` : ''}${args.triggers?.length ? `，${args.triggers.length} 条推进触发` : ''}${style ? `，写法预设 ${style.preset}（预选 +${style.on.length} −${style.off.length}，玩家开场页能改）` : '，写法由玩家开场时挑（默认 Izumi）'}。`
               + '\n这个故事的一切都在那个文件夹里（设定 / 角色卡 / 记忆 / 场景 / 规则 / 预设），画布上它是一张卡，用户双击进去先到开场页：'
               + '看世界与人物、挑写法、勾角色卡上的可选条目，点「开始」机器才起进程并发开场指令；之后他说的每句话直接进进程，不经过你。'
               + '\n你现在是场务：别在这里代演、别复述台上的剧情。用户回到这里跟你说话时才是在跟你说话（改设定 / 换玩法 / 问怎么用）。'

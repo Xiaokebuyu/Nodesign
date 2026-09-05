@@ -22,10 +22,13 @@ import { z } from 'zod';
 import { resolveCardPath, cardHome, rewriteCardMemoryIndex, CARD_MEMORY_DIR } from './card.js';
 import { SCENES_DIR, SCENES_FILE, MEMORY_DIR, MEM_INDEX } from './play.js';
 
+/** 小字只有类别词时视为没写（显示器那边同一条判据） */
+export const CATEGORY_HINT_RE = /^[（(\[【]?\s*(推进主线|主线|人际|人际关系|意外|意想不到|合理但意想不到|剑走偏锋|支线|日常)\s*[）)\]】]?[。.]?$/;
+
 /** 选项一枚：label 是按钮上的字，hint 是按钮下那行小字，prompt 是点下去发生什么。 */
 const choiceSchema = z.object({
-  label: z.string().min(1).max(20).describe('按钮上的字，四到六个字最好'),
-  hint: z.string().max(60).optional().describe('按钮下面那行小字，说清楚点下去是要做什么'),
+  label: z.string().min(1).max(20).describe('按钮上的字：玩家的角色要做的那个具体动作，四到八个字（"把橘子推过去一半"）'),
+  hint: z.string().max(60).optional().describe('按钮下面那行小字：说清楚点下去他具体会做什么、说什么，或者接下来会发生什么。⛔ 不许写类别词 —— "主线""人际""意外""推进剧情"这种字玩家看不懂也不想看，写了显示器会直接删掉'),
   prompt: z.string().min(1).max(500).describe('玩家点下这枚之后，等于他对你说了这句话'),
 });
 
@@ -52,8 +55,9 @@ export function createStageTools(ctx) {
   const writeScene = tool(
     'write_scene',
     '把这一拍写到台上。正文是完整的一段戏（环境、动作、所有人的对白都在里面），'
-    + '第三人称旁白，对白单独成段。choices 是留给玩家的把手 —— 两到四枚，'
-    + '一枚推进主线、一枚人际、一枚合理但意想不到的。**没有把手这一拍就没写完**。'
+    + '第三人称旁白，对白单独成段。choices 是留给玩家的选项 —— 两到四枚，'
+    + '你心里按"一枚推进主线、一枚人际、一枚合理但意想不到"来配，**但这三个词只是给你分类用的，不许出现在 label 或 hint 里**，'
+    + '每一枚都写玩家具体会做什么。**没有选项这一段就没写完**。'
     + 'state 每拍必填：这一拍改了哪些状态值就报哪些，什么都没变就传空数组 —— 空数组的意思是"我看过了，没变"。',
     {
       text: z.string().min(1).max(8000).describe('这一拍的正文'),
@@ -69,6 +73,9 @@ export function createStageTools(ctx) {
         .describe('这一拍改了的状态值，只传变了的键：[{"key":"好感","value":32}]。没变就传 []（必填，逼你每拍看一眼数值）'),
     },
     async ({ text, choices, scene, speakers, state }) => {
+      // 选项小字是类别词（"主线""人际""意外"）的机械剥掉：玩家看的是动作意图，不是你的分类（09-06 站主点名）
+      let stripped = 0;
+      choices = choices.map(c => (c.hint && CATEGORY_HINT_RE.test(c.hint.trim()) ? (stripped++, { ...c, hint: undefined }) : c));
       const stateObj = state?.length ? Object.fromEntries(state.map(kv => [kv.key, kv.value])) : null;
       const row = {
         id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'stage', text, choices,
@@ -78,7 +85,11 @@ export function createStageTools(ctx) {
       };
       await appendSceneRow(playAbs, row, scenesRel());
       const extra = await ctx.onScene?.(row);   // manager 可能回一句（成就 / 触发），带给它
-      return { content: [{ type: 'text', text: `这一拍已经在台上了（${text.length} 字，${choices.length} 枚把手${stateObj ? `，状态改了 ${Object.keys(stateObj).length} 项` : ''}）。${extra || ''}玩家点了哪一枚会当成他的话送回来，停在这里等他。` }] };
+      return {
+        // 结束回合的标记也盖在返回上（SDK 文档只说 "MCP tool using _meta['claude/endTurn']"，定义上和返回上各盖一份，哪边认都行）
+        _meta: { 'claude/endTurn': true },
+        content: [{ type: 'text', text: `这一段已经在台上了（${text.length} 字，${choices.length} 枚选项${stateObj ? `，状态改了 ${Object.keys(stateObj).length} 项` : ''}）。${extra || ''}${stripped ? `有 ${stripped} 枚选项的小字是类别词（主线 / 人际 / 意外那种），已经删掉 —— 下次小字写他具体会做什么。` : ''}玩家点了哪一枚会当成他的话送回来。这一轮到此结束，不用再说话。` }],
+      };
     },
   );
 
@@ -170,7 +181,10 @@ export function createStageTools(ctx) {
   // ⛔ 四件全部常驻（_meta alwaysLoad）：env 里带着 ENABLE_TOOL_SEARCH 时 MCP 工具默认延迟加载，
   // 模型看不见 write_scene，而提示词又叫它"不用 ToolSearch 去找别的"（09-05 真栽）。
   const always = (t) => ({ ...t, _meta: { ...(t._meta || {}), 'anthropic/alwaysLoad': true } });
-  return createSdkMcpServer({ name: 'stage', version: '1.1.0', tools: [writeScene, remember, forget, rollDice].map(always) });
+  // write_scene 一返回这一轮就结束（SDK 的 _meta['claude/endTurn']）：模型再想在工具之外说一句"这一拍写好了"也没机会 ——
+  // 09-05/06 两天的转录里每一轮都有这么一句，提示词禁不住，端口关掉最省事。remember / roll 要在 write_scene 之前调。
+  const endTurn = (t) => ({ ...t, _meta: { ...(t._meta || {}), 'claude/endTurn': true } });
+  return createSdkMcpServer({ name: 'stage', version: '1.2.0', tools: [endTurn(writeScene), remember, forget, rollDice].map(always) });
 }
 
 /**
