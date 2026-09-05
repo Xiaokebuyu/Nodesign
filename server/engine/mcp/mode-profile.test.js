@@ -70,10 +70,18 @@ const ALL_SKILLS = Object.keys(SKILL_MODES);
 describe('mode-profile —— skill 按模式筛', () => {
   it('设计会话拿不到演出侧的包（那是常驻描述的纯亏）', () => {
     const got = filterSkillsForMode(ALL_SKILLS, 'design');
-    expect(got).not.toContain('story-voice');
+    expect(got).not.toContain('stage-setup');
     expect(got).not.toContain('story-craft');
     expect(got).not.toContain('story-intimacy');
     expect(got).toContain('deskskill-engine-mini');
+  });
+
+  it('⭐ 标 stage 的技法包两种主会话都拿不到 —— 只有演出进程点名装', () => {
+    for (const mode of ['design', 'rp']) {
+      const got = filterSkillsForMode(ALL_SKILLS, mode);
+      expect(got, `${mode} 不该背 story-craft`).not.toContain('story-craft');
+      expect(got, `${mode} 不该背 story-intimacy`).not.toContain('story-intimacy');
+    }
   });
 
   it('⭐ 演出会话拿不到设计三件 —— 它们的工具在 RP 下本来就没注册', () => {
@@ -81,19 +89,18 @@ describe('mode-profile —— skill 按模式筛', () => {
     for (const n of ['deskskill-engine-mini', 'docx-craft', 'site-craft']) {
       expect(got, `${n} 的工具在 RP 下已 unregister，描述不该还在`).not.toContain(n);
     }
-    expect(got).toContain('story-voice');
+    expect(got).toContain('stage-setup');
   });
 
-  it('both 的两个包两边都在（轻度演故事发生在设计项目里，酒馆卡也常丢进设计项目）', () => {
+  it('both 的包两边都在（酒馆卡常丢进设计项目，agent 得会拆再建议切模式）', () => {
     for (const mode of ['design', 'rp']) {
       const got = filterSkillsForMode(ALL_SKILLS, mode);
-      expect(got, `${mode} 少了 blackboard-rp`).toContain('blackboard-rp');
       expect(got, `${mode} 少了 story-import`).toContain('story-import');
     }
   });
 
   it('⛔ 表里没有的名字一律放行 —— 用户自己装的 plugin 不归我们裁', () => {
-    const mine = ['story-voice', '用户装的-skill', 'someone-elses'];
+    const mine = ['stage-setup', '用户装的-skill', 'someone-elses'];
     expect(filterSkillsForMode(mine, 'design')).toEqual(['用户装的-skill', 'someone-elses']);
     expect(filterSkillsForMode(mine, 'rp')).toEqual(mine);
   });
@@ -104,6 +111,6 @@ describe('mode-profile —— skill 按模式筛', () => {
 
   it('对账：表里有没装上的 skill → 当场炸并点名', () => {
     expect(() => assertSkillModeNames(ALL_SKILLS)).not.toThrow();
-    expect(() => assertSkillModeNames(ALL_SKILLS.filter(n => n !== 'story-voice'))).toThrow(/story-voice/);
+    expect(() => assertSkillModeNames(ALL_SKILLS.filter(n => n !== 'story-craft'))).toThrow(/story-craft/);
   });
 });

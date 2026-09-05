@@ -53,7 +53,7 @@ export const STAGE_DENY = Object.freeze([
 
 /**
  * 砍剩下的（2026-09-05 实测）：Read / Glob / Grep / Skill / ToolSearch 五件，
- * 地基 6,660 token。留 Skill 是为了 story-voice / story-craft 那两个包。
+ * 地基 6,660 token。留 Skill 是为了 story-craft / story-intimacy 那两个包。
  *
  * 参照：08-29 实测 SDK 子代理的固定地基是 4300-4500 token。所以独立进程在
  * **token 上只比子代理贵两千**，贵的自始至终只有内存（400MB 对 8MB）。

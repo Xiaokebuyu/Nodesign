@@ -35,8 +35,8 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { CHALK_DIR, parseChalk } from './chalk.js';
 
-/** 状态表专用 tag。⚠️ 跟 blackboard-rp 的「状态板」组 tag 是两个东西：
- *  那个是一**组**卡（PC卡/场景/明骰表）的组名，这个专指承载键值表的那一条。 */
+/** 状态表专用 tag。⚠️ 跟旧黑板 RP 的「状态板」组 tag 是两个东西（那套版面协议 09-06 已退役）：
+ *  那个是一**组**卡的组名，这个专指承载键值表的那一条。 */
 export const STATE_TABLE_TAG = '状态表';
 
 /** 值的上限：一格里塞长文是把表当笔记本用，那是板书正文的活 */

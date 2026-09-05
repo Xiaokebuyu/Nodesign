@@ -68,7 +68,7 @@ import { getUserById } from '../../auth/users-store.js';
 
 const MAX_RUNNING = Number(process.env.NODESIGN_STAGE_MAX) || 2;
 const IDLE_MS = Number(process.env.NODESIGN_STAGE_IDLE_MS) || 30 * 60_000;
-const STAGE_SKILLS = ['story-voice', 'story-craft', 'story-intimacy'];
+const STAGE_SKILLS = ['story-craft', 'story-intimacy'];   // 文风归写法预设（09-06 story-voice 退役），技法两包按需 Skill 加载
 export const SKINS = ['paper', 'jiangnan', 'night', 'terminal'];
 export { TABLE_FILE };
 

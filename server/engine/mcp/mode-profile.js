@@ -86,17 +86,17 @@ export const SKILL_MODES = Object.freeze({
   'deskskill-engine-mini': 'design',
   'docx-craft': 'design',
   'site-craft': 'design',
-  // 演出侧
-  'story-voice': 'rp',
-  'story-craft': 'rp',
-  'story-intimacy': 'rp',
-  // 两边都要：轻度演故事发生在设计项目里（prelude 设计区明写这条路），
-  // 而酒馆卡也常常被丢进设计项目
-  'blackboard-rp': 'both',
+  // 演出侧：主 agent 在 rp 项目里只做开场前的准备（stage-setup）
+  'stage-setup': 'rp',
+  // 只给演出进程（manager.js STAGE_SKILLS 点名装），两种主会话都不背它们的描述：
+  // 09-06 起主 agent 不再自己写正文，这两包技法它用不上
+  'story-craft': 'stage',
+  'story-intimacy': 'stage',
+  // 两边都要：酒馆卡常常被丢进设计项目，agent 得会拆再建议切模式
   'story-import': 'both',
 });
 
-/** 按模式筛 skill 名单。表里没有的一律保留（用户装的不归我们裁）。 */
+/** 按模式筛 skill 名单。表里没有的一律保留（用户装的不归我们裁）；标 'stage' 的两种主会话都不给。 */
 export function filterSkillsForMode(names, mode) {
   const want = mode === 'rp' ? 'rp' : 'design';
   return (Array.isArray(names) ? names : []).filter((n) => {

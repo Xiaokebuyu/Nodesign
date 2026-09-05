@@ -7,7 +7,7 @@
  *
  * 归一口径（08-28）：**编排机械（台上广播 / 轮次机 / set_scene）只在 rp 模式活**；
  * 直投通道（say 私语、cue_role、SendMessage 召回）任何模式都通 —— design 项目里
- * 轻度 RP（blackboard-rp skill + cast_role）照样能跟角色说话，只是没有机器替它转。
+ * design 项目里照样能 cast_role + open_stage 开故事，只是没有机器替它转。
  */
 
 import { getProject } from '../../projects/store.js';
