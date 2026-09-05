@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, useMemo } from 'react';
 import { TERM } from '../../lib/theme.js';
 import { Image as ImageIcon } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_MONO, FONT_SIZE, CANVAS, alpha } from '../../lib/theme.js';
@@ -282,4 +282,13 @@ export function PhantomImageCard({ p, draggable = false, toWorld, onSeatChange }
       </div>
     </div>
   );
+}
+
+/**
+ * 幻影占地（给视点上报用，2026-09-05）：服务端落位要躲它，而它不落盘。
+ * 按签名 memo —— 签名不变引用不变，上报 hook 的 dep 才不会每帧抖。
+ */
+export function usePhantomOccupied(phantomsRef) {
+  const sig = phantomRects(phantomsRef).map((r) => `${r.x},${r.y}`).join(';');
+  return useMemo(() => phantomRects(phantomsRef), [sig]);   // eslint-disable-line react-hooks/exhaustive-deps
 }

@@ -29,9 +29,29 @@
  * 包络 chip（纯派生的一圈虚线）、连线（是线不是面）。
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import { layerOf } from './canvas-id.js';
 import { estimateSizeOn, zoneRects } from './board-kind-sizes.js';
 import { inflateSpriteSeats, rollCardRect } from './board-place.js';
+import { getViewpoint } from '../projects/viewpoint-store.js';
+
+/**
+ * 这个座位背后的文件还在磁盘上吗（2026-09-05）。
+ *
+ * 前端只画产物清单里真实存在的文件；board.json 里被删/改名的文件座位却还留着，
+ * 落位照旧绕着它走 —— 板上有一堵看不见的墙，东西被推得比该在的位置远。
+ * 画布原生件（kind: text/scribble）和 browse 单例没有文件本体，一律算在。
+ */
+function seatBacked(id, entry, sharedRoot) {
+  if (!sharedRoot) return true;
+  if (entry?.kind) return true;
+  const s = String(id || '');
+  if (s === 'browse') return true;
+  const bare = s.replace(/^(deck|site|docx|text|scribble):/, '');
+  if (!bare || bare.includes('..')) return true;
+  try { fs.accessSync(path.join(sharedRoot, bare)); return true; } catch { return false; }
+}
 
 /**
  * 一层的障碍集。
@@ -42,6 +62,8 @@ import { inflateSpriteSeats, rollCardRect } from './board-place.js';
  * @param {object} [opts.objects]  用哪份 objects（缺省 board.objects；edit_board
  *   要用带上本批改动的 live 副本，那份才是"这一刻"的板）
  * @param {Set|string[]} [opts.exclude]  排除的 id（主角自己、同组成员）
+ * @param {string} [opts.sharedRoot]  给了就剔掉磁盘上已不存在的座位（前端不画它们）
+ * @param {string} [opts.projectId]   给了就把浏览器上报的临时占地（生图幻影）算进来
  * @param {boolean} [opts.furniture=true]  含不含"常驻家具"（文件夹卡/卷卡）。
  *   **落位要（true），铺纸不要（false）**：纸不渲染，一张纸的矩形盖在文件夹上
  *   用户什么也看不见，而纸内落位本来就会避开文件夹；把家具算进铺纸避让，只换来
@@ -49,7 +71,7 @@ import { inflateSpriteSeats, rollCardRect } from './board-place.js';
  *   的端到端测试逮住：纸从 (0,0) 滑到 y=384 绕开一个文件夹）。
  * @returns {Array<{id,x,y,w,h}>}
  */
-export function obstaclesIn(board, zone = '', { objects = null, exclude = null, furniture = true } = {}) {
+export function obstaclesIn(board, zone = '', { objects = null, exclude = null, furniture = true, sharedRoot = null, projectId = null } = {}) {
   const objs = objects || board?.objects || {};
   const known = new Set(Object.keys(board?.zones || {}));
   const skip = exclude instanceof Set ? exclude : new Set(exclude || []);
@@ -57,7 +79,15 @@ export function obstaclesIn(board, zone = '', { objects = null, exclude = null, 
   for (const [id, e] of Object.entries(objs)) {
     if (skip.has(id) || !Number.isFinite(e?.x)) continue;
     if (layerOf(id, e, known) !== zone) continue;
+    if (!seatBacked(id, e, sharedRoot)) continue;
     rects.push({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) });
+  }
+  // 浏览器才知道的占地（生图幻影）：随视点上报，同一层才算
+  if (projectId) {
+    const vp = getViewpoint(projectId);
+    if (vp && (vp.layer || '') === (zone || '')) {
+      (vp.occupied || []).forEach((r, i) => rects.push({ id: `ph:${i + 1}`, ...r }));
+    }
   }
   // 每层还住着不在 objects 里的占面积物件：文件夹卡按**所在层**取
   //（子文件夹卡住在父层里，2026-08-30 跨层幻影案之前这儿把它们全当根层矩形，

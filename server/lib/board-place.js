@@ -62,7 +62,11 @@ export function inflateSpriteSeats(obstacles, objects, pad = 60) {
     : o));
 }
 
-/** 折起的组只剩一张小卡占地（几何按组左上角 + 标签宽） */
+/**
+ * 折起的组只剩一张小卡占地。几何镜像前端 RollLayer 那张卡：
+ * padding 14×2 + 图标 14 + 两个 gap 8 + 标签（14px 楷体）+ 「N 件 · 点开」（12px）。
+ * 2026-09-05 之前只算了标签，尾巴那句约 70px 没算，贴着卷卡右侧放东西会压到它。
+ */
 export function rollCardRect(board, tag) {
   const roll = board?.rolls?.[tag];
   if (!roll) return null;
@@ -72,7 +76,8 @@ export function rollCardRect(board, tag) {
   const y = Math.min(...members.map(([, e]) => e.y));
   const label = String(roll.label || tag);
   const em = [...label].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
-  return { x: Math.round(x), y: Math.round(y), w: Math.round(48 + em * 15), h: 40 };
+  const countText = 12 * 4.6 + String(members.length).length * 7;   // 「 件 · 点开」+ 数字
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(28 + 14 + 16 + em * 14 + countText), h: 40 };
 }
 
 /**

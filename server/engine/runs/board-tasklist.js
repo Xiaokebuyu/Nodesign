@@ -29,6 +29,7 @@ import { getViewpoint } from '../../projects/viewpoint-store.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
 import { textBox } from '../../lib/sketch-layout.js';
 import { solvePlace } from '../../lib/board-place.js';
+import { obstaclesIn } from '../../lib/board-obstacles.js';
 import { renderChalk, writeChalkFile, CHALK_DIR } from '../../lib/chalk.js';
 
 const TAG = '步骤';
@@ -103,10 +104,7 @@ async function upsert(st, projectId, session) {
     return;
   }
   // 首次落位（2026-09-05）：求解器 —— 用户视口的空地，没有视口就排在内容底下
-  const known = new Set(Object.keys(board.zones || {}));
-  const obstacles = Object.entries(board.objects || {})
-    .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === '')
-    .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
+  const obstacles = obstaclesIn(board, '', { projectId, sharedRoot });
   const vp = getViewpoint(projectId);
   const spot = solvePlace({ box, viewport: (vp?.camera && !vp.layer) ? vp.camera : null, obstacles });
   await patchBoard(projectId, {

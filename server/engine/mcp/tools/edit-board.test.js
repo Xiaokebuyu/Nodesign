@@ -117,6 +117,8 @@ describe('edit_board（吞四件 + 新能力）', () => {
   });
 
   it('⭐ move to:{by,side} 是意图不是命令：偏好侧被占就换到空位、不压任何东西、返回说明（2026-09-05）', async () => {
+    await fs.mkdir(path.join(sharedRoot, 'assets'), { recursive: true });
+    for (const f of ['a.png', 'b.png', 'c.png']) await fs.writeFile(path.join(sharedRoot, `assets/${f}`), 'x');   // 障碍要有文件本体
     await patchBoard(pid, { objects: {
       'assets/a.png': { x: 9000, y: 9000, w: 200, h: 176 },
       'assets/b.png': { x: 9224, y: 9000, w: 200, h: 176 },   // 正占着 a 的右侧

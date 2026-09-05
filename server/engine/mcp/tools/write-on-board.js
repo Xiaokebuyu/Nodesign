@@ -117,7 +117,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     let board = await readBoard(projectId);
     const known = new Set(Object.keys(board.zones || {}));
     // 这一层上谁占着地方（含文件夹卡/卷卡/精灵身位，见 lib/board-obstacles.js）
-    const obstaclesOf = (b, zone) => obstaclesIn(b, zone);
+    const obstaclesOf = (b, zone) => obstaclesIn(b, zone, { projectId, sharedRoot });
     const vp = getViewpoint(projectId);
     const fit = fitFor(vp);
     // 车道封顶（08-28）：触屏档一件不许超过一屏宽。**板书和草图两条路都要过它** ——

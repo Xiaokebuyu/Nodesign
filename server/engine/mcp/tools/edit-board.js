@@ -112,7 +112,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       const e = live[id]; return e ? { x: e.x, y: e.y, ...estimateSizeOn(board, id, e) } : null;
     };
     /** 压上判定的障碍集（同层，subject/组员除外；含文件夹卡/卷卡/精灵身位） */
-    const obstaclesNear = (zone, exclude = new Set()) => obstaclesIn(board, zone, { objects: live, exclude });
+    const obstaclesNear = (zone, exclude = new Set()) => obstaclesIn(board, zone, { objects: live, exclude, projectId, sharedRoot });
     const vp = getViewpoint(projectId);
     /**
      * 意图落位（2026-09-05）：to:{by,side?,with?} → 求解器。

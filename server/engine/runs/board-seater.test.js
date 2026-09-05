@@ -105,6 +105,8 @@ describe('临时座重解（2026-09-05：前端 packRow 抢先排的座只是"�
     await fs.mkdir(path.join(root2, 'assets'), { recursive: true });
     await fs.writeFile(path.join(root2, 'assets/新图.png'), 'x');
     await fs.writeFile(path.join(root2, 'assets/用户摆的.png'), 'x');
+    await fs.mkdir(path.join(root2, '稿'), { recursive: true });
+    await fs.writeFile(path.join(root2, '稿/index.html'), '<html></html>');   // 座位要有文件本体才算障碍
     // 桌面上已有一张 deck 占着 (24,0)-(664,388)；前端把新图临时排在了它身上
     await patchBoard(pid2, { objects: {
       'deck:稿/index.html': { x: 24, y: 0, w: 640, h: 388, seat: 'auto' },

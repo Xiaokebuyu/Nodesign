@@ -162,7 +162,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
           }
           const box = estimateSizeOn(boardNow, objectId, boardNow.objects?.[objectId] || null);
           const viewport = (vp?.camera && !(vp.layer || '')) ? vp.camera : null;
-          const obstacles = obstaclesIn(boardNow, '', { exclude: [objectId] });
+          const obstacles = obstaclesIn(boardNow, '', { exclude: [objectId], projectId, sharedRoot });
           const spot = solvePlace({ box, anchor, side: place.side || null, group, viewport, obstacles });
           const prev = boardNow.objects?.[objectId] || {};
           const nextPending = (boardNow.pending || []).filter(r => r !== objectId && `deck:${r}` !== objectId && `site:${r}` !== objectId);

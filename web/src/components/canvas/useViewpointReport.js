@@ -26,7 +26,7 @@ import { useDeviceEnv } from '../../lib/device-class.js';
 
 const MIN_INTERVAL_MS = 1200;
 
-export function useViewpointReport({ projectId, cam, viewport, layer = '', openWindow = null, selectedIds = [], enabled = true }) {
+export function useViewpointReport({ projectId, cam, viewport, layer = '', openWindow = null, selectedIds = [], occupied = [], enabled = true }) {
   const lastRef = useRef({ key: '', at: 0, timer: null });
   const device = useDeviceEnv();
   useEffect(() => {
@@ -40,10 +40,13 @@ export function useViewpointReport({ projectId, cam, viewport, layer = '', openW
       camera, zoom: Math.round(z * 100) / 100, layer: layer || '',
       openWindow: openWindow || null,
       selected: (selectedIds || []).slice(0, 24),
+      // 只有浏览器知道的占地（2026-09-05）：生图幻影 —— 服务端落位要躲它
+      occupied: (occupied || []).slice(0, 24).map((r) => ({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) })),
       device: { class: device.class, w: device.w, h: device.h, dpr: device.dpr, coarse: device.coarse },
     };
-    // 变化判据：相机挪超过 1/8 视口、缩放变、窗/选中变、换机器/转屏
-    const key = `${Math.round(camera.x / Math.max(1, camera.w / 8))}:${Math.round(camera.y / Math.max(1, camera.h / 8))}:${payload.zoom}:${payload.layer}:${payload.openWindow}:${payload.selected.join(',')}:${device.class}:${device.w}x${device.h}`;
+    const occKey = payload.occupied.map((r) => `${r.x},${r.y},${r.w},${r.h}`).join(';');
+    // 变化判据：相机挪超过 1/8 视口、缩放变、窗/选中变、换机器/转屏、幻影增减
+    const key = `${Math.round(camera.x / Math.max(1, camera.w / 8))}:${Math.round(camera.y / Math.max(1, camera.h / 8))}:${payload.zoom}:${payload.layer}:${payload.openWindow}:${payload.selected.join(',')}:${device.class}:${device.w}x${device.h}:${occKey}`;
     const st = lastRef.current;
     if (key === st.key) return undefined;
     const send = () => {
@@ -54,5 +57,5 @@ export function useViewpointReport({ projectId, cam, viewport, layer = '', openW
     if (st.timer) clearTimeout(st.timer);
     st.timer = setTimeout(send, wait);
     return () => { if (st.timer) { clearTimeout(st.timer); st.timer = null; } };
-  }, [enabled, projectId, cam?.x, cam?.y, cam?.z, viewport?.w, viewport?.h, layer, openWindow, selectedIds, device]);
+  }, [enabled, projectId, cam?.x, cam?.y, cam?.z, viewport?.w, viewport?.h, layer, openWindow, selectedIds, device, occupied]);
 }

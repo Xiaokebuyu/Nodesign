@@ -63,7 +63,7 @@ points — early beats will refuse loudly, that is normal.`,
         const box = { w: g.w, h: g.h + lb0.h + 4 };
         const vp = getViewpoint(projectId);
         const viewport = (vp?.camera && !(vp.layer || '')) ? vp.camera : null;
-        const obstacles = obstaclesIn(board, '');
+        const obstacles = obstaclesIn(board, '', { projectId, sharedRoot });
         let anchor = null; let side = 'below';
         const byRaw = args.place?.by && args.place.by !== 'view' ? args.place.by : (args.place ? null : s.rel);
         if (byRaw) {

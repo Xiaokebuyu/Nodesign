@@ -104,3 +104,43 @@ describe('端到端：文件夹卡是障碍，求解器绕开它', () => {
     expect(hits(board.objects[id])).toBe(false);
   });
 });
+
+describe('面积账三补（2026-09-05）', () => {
+  it('⭐ 磁盘上已不存在的座位不当障碍（前端不画它，服务端也别绕它）', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-obs-stale-'));
+    await fs.mkdir(path.join(root, 'assets'), { recursive: true });
+    await fs.writeFile(path.join(root, 'assets/在.png'), 'x');
+    const b = { objects: {
+      'assets/在.png': { x: 0, y: 0 },
+      'assets/没了.png': { x: 300, y: 0 },
+      'deck:稿/index.html': { x: 600, y: 0 },
+      'text:a1': { x: 900, y: 0, w: 100, h: 40, kind: 'text', data: { t: 'x' } },
+    }, zones: {}, rolls: {} };
+    const ids = obstaclesIn(b, '', { sharedRoot: root }).map(o => o.id);
+    expect(ids).toContain('assets/在.png');
+    expect(ids).toContain('text:a1');                 // 画布原生件没有文件本体，算在
+    expect(ids).not.toContain('assets/没了.png');
+    expect(ids).not.toContain('deck:稿/index.html');  // 前缀剥掉后按路径查，同样不在
+    // 不给 sharedRoot：老口径，全算（调用方没法查盘时别偷偷少算）
+    expect(obstaclesIn(b, '').map(o => o.id)).toContain('assets/没了.png');
+  });
+
+  it('⭐ 浏览器上报的临时占地（生图幻影）进障碍集，且只在同一层', async () => {
+    const { setViewpoint, _resetViewpoints } = await import('../projects/viewpoint-store.js');
+    _resetViewpoints();
+    setViewpoint('proj_obs_ph', { camera: { x: 0, y: 0, w: 1000, h: 800 }, layer: '', occupied: [{ x: 500, y: 500, w: 200, h: 176 }, { x: 'bad' }] });
+    const b = { objects: {}, zones: {}, rolls: {} };
+    const root = obstaclesIn(b, '', { projectId: 'proj_obs_ph' });
+    expect(root).toEqual([{ id: 'ph:1', x: 500, y: 500, w: 200, h: 176 }]);   // 坏矩形被 sanitize 丢掉
+    expect(obstaclesIn(b, '素材', { projectId: 'proj_obs_ph' })).toEqual([]);   // 别的层看不见
+    expect(obstaclesIn(b, '')).toEqual([]);                                     // 不给 projectId 不算
+    _resetViewpoints();
+  });
+
+  it('⭐ 卷卡宽度算上「N 件 · 点开」那句：比只算标签宽出一截', () => {
+    const b = { objects: { a: { x: 0, y: 0, tag: 'g' }, b: { x: 0, y: 100, tag: 'g' } }, zones: {}, rolls: { g: { label: '第一章' } } };
+    const r = obstaclesIn(b, '').find(o => o.id === 'roll:g');
+    expect(r.w).toBeGreaterThan(48 + 3 * 15 + 60);
+    expect(r.h).toBe(40);
+  });
+});

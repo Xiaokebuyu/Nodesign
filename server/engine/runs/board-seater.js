@@ -148,7 +148,7 @@ export async function seatArtifacts(projectId, rels) {
     }
 
     const zone = layerOf(id, live[id], known);
-    const obstacles = obstaclesIn(board, zone, { objects: live, exclude: [id] });
+    const obstacles = obstaclesIn(board, zone, { objects: live, exclude: [id], projectId, sharedRoot });
     // 落位（2026-09-05 求解器）：接楼 > 贴着锚 > 视口空地 > 内容底下。
     // 文件夹卡不在 objects 里，根层避让要把 zoneRects 一并算上。
     let placed = null;

@@ -132,7 +132,9 @@ describe('write_on_board 统一入口（件数判据）', () => {
     let [, e] = await noteByText(board, '落在他眼前');
     expect(e.x).toBeGreaterThanOrEqual(50000); expect(e.y).toBeGreaterThanOrEqual(50000);
     expect(e.x + e.w).toBeLessThanOrEqual(51400); expect(e.y + e.h).toBeLessThanOrEqual(50900);
-    // 贴锚：右侧被一堵墙占着 → 换到别的侧，不压墙，返回说清楚
+    // 贴锚：右侧被一堵墙占着 → 换到别的侧，不压墙，返回说清楚（障碍要有文件本体）
+    await fs.mkdir(path.join(sharedRoot, 'assets'), { recursive: true });
+    for (const f of ['锚.png', '墙.png']) await fs.writeFile(path.join(sharedRoot, `assets/${f}`), 'x');
     await patchBoard(pid, { objects: {
       'assets/锚.png': { x: 60000, y: 60000, w: 200, h: 176 },
       'assets/墙.png': { x: 60224, y: 59000, w: 800, h: 3000 },

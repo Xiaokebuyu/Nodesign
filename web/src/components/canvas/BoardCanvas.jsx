@@ -36,7 +36,7 @@ import { AmbientSpriteLayer, SpriteAskInput, useSpriteAmbient } from './SpriteSk
 import RoleSprites from './RoleSprites.jsx';
 import { useReadingNav } from './ReadingPager.jsx';
 import RoleTalkPanel from './RoleTalkPanel.jsx';
-import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards } from './PhantomLayer.jsx';
+import { usePhantoms, claimPhantomSeat, phantomRects, PhantomCards, usePhantomOccupied } from './PhantomLayer.jsx';
 import ShelfHint from './ShelfHint.jsx';
 import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
@@ -607,6 +607,7 @@ export default function BoardCanvas({
   // （认领时在 memo 里标 consumedBy —— movingRef 同款用法），state 由
   // usePhantoms 管（声明在 useStageState 之后，它要吃 stageCards）。
   const phantomsRef = useRef(new Map());
+  const phantomOccupied = usePhantomOccupied(phantomsRef);   // 幻影占地给视点上报用（服务端落位要躲它）
   const phantomObstaclesRef = useRef([]);
   const phantomBottomRef = useRef(0);
 
@@ -740,6 +741,7 @@ export default function BoardCanvas({
   // ⚠️ 08-31 起没人接它的返回值（开关下架），但这一句必须照旧调用：视点上报和镜头跟随都在里面
   useBlackboardWiring({
     projectId, cam, viewport: camera.viewport, winDir, openWindow, selectedIds,
+    occupied: phantomOccupied,   // 生图幻影：不落盘，服务端落位只能从视点上报里知道它
     camRef: camApiRef, positionedRef, focusRequest,
   });
 

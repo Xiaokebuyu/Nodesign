@@ -64,11 +64,11 @@ export function useBlackboardMode({ projectId, focusRequest, camRef }) {
  * 黑板三件一起挂（BoardCanvas 行数棘轮逼出来的收口，语义不变）：
  * 视点上报（眼睛模式不报）+ 眼睛模式 + 黑板模式开关/跟随。
  */
-export function useBlackboardWiring({ projectId, cam, viewport, winDir, openWindow, selectedIds, camRef, positionedRef, focusRequest }) {
+export function useBlackboardWiring({ projectId, cam, viewport, winDir, openWindow, selectedIds, occupied, camRef, positionedRef, focusRequest }) {
   const eye = eyeParams();
   useViewpointReport({
     projectId, cam, viewport, layer: winDir || '',
-    openWindow: winDir ? `folder:${winDir}` : openWindow, selectedIds, enabled: !eye,
+    openWindow: winDir ? `folder:${winDir}` : openWindow, selectedIds, occupied, enabled: !eye,
   });
   useEyeMode({ eye, camRef, positionedRef });
   return useBlackboardMode({ projectId, focusRequest, camRef });
