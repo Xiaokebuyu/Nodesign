@@ -25,16 +25,19 @@ export function makeStageBackdropTool({ projectId }) {
 Give a workspace-relative image path (e.g. what generate_image returned: assets/generated/gen-…-bg.png;
 prefer the PNG master, the display dims it anyway). mode "fixed" makes it the current backdrop right away;
 "scene" registers it for a place (\`scene\`, e.g. "河边台阶 · 傍晚") so the machine shows it whenever the
-story moves there; "clear" removes the fixed backdrop and goes back to following scenes.
+story moves there; "clear" removes the fixed backdrop and goes back to following scenes;
+"portrait" installs the image as a cast member's 立绘 (\`who\` = their name): it is copied into that
+character's folder (角色/<名>/立绘.png) and shows on the display's cast panel at once.
 The machine also generates backdrops itself when the place changes (from the 地点/时间 state values or
 write_scene's scene field); this tool is for when the user wants a specific picture.`,
     {
       image: z.string().max(400).optional().describe('工作区相对路径的图（png / jpg / webp）。mode=clear 时不用'),
-      mode: z.enum(['fixed', 'scene', 'clear']).default('fixed'),
+      mode: z.enum(['fixed', 'scene', 'clear', 'portrait']).default('fixed'),
+      who: z.string().max(30).optional().describe('mode=portrait 时：给哪个在场者装立绘（用 cast 里的名字）'),
       scene: z.string().max(80).optional().describe('mode=scene 时：这是哪个地方（加个时段更好，比如 "教室 · 清晨"）'),
       title: z.string().max(60).optional().describe('故事的文件夹名，项目里只有一个时可不传'),
     },
-    async ({ image, mode, scene, title }) => {
+    async ({ image, mode, scene, title, who }) => {
       const fail = (msg) => ({ content: [{ type: 'text', text: msg }], isError: true });
       if (!projectId) return fail('没有项目上下文。');
       const plays = await ensurePlays(projectId);
@@ -51,6 +54,20 @@ write_scene's scene field); this tool is for when the user wants a specific pict
       const src = path.join(ws, clean);
       try { await fs.access(src); } catch { return fail(`找不到 ${clean}。generate_image 返回的路径是相对工作区的，原样传进来。`); }
       const rt = runtimeOf(projectId, root);
+      if (mode === 'portrait') {
+        const cfg = (await readPlayConfig(rt.playAbs)) || {};
+        const member = (cfg.cast || []).find(c => c.name === String(who || '').trim());
+        if (!member) return fail(`portrait 要给 who，且得是在场的人：${(cfg.cast || []).map(c => c.name).join(' / ') || '没有'}`);
+        if (!member.card) return fail(`${member.name} 没有角色卡，立绘没地方放。`);
+        const home = path.dirname(member.card);
+        const rel = `${home}/立绘${path.extname(clean).toLowerCase()}`;
+        await fs.mkdir(path.join(ws, home), { recursive: true });
+        await fs.copyFile(src, path.join(ws, rel));
+        cfg.cast = cfg.cast.map(c => (c.name === member.name ? { ...c, portrait: rel } : c));
+        await writePlayConfig(rt.playAbs, cfg);
+        rt.broadcast({ type: 'reload' });
+        return { content: [{ type: 'text', text: `装上了：${member.name} 的立绘在 ${rel}，显示器人物栏已经换。` }] };
+      }
       const destDir = path.join(rt.playAbs, SCENES_DIR, BACKDROPS_DIR);
       await fs.mkdir(destDir, { recursive: true });
       const name = `${mode === 'scene' ? `stage-bg-${sceneKey(scene || clean)}` : `pick-${Date.now().toString(36)}`}${path.extname(clean).toLowerCase()}`;

@@ -31,6 +31,7 @@ import { listLines, rewindTo, forkAt, switchLine, renameLine, deleteLine } from 
 import { openStory, uploadPreset } from '../engine/stage/opening.js';
 import { listPresets } from '../engine/stage/preset.js';
 import { loadWorldbook } from '../engine/stage/worldbook.js';
+import { selectableModelsFor, defaultModelFor } from '../engine/agent/model-context.js';
 import { platform } from '../runtime/platform.js';
 
 const router = express.Router();
@@ -156,12 +157,14 @@ router.post('/:pid/stage/:play/start', express.json({ limit: '256kb' }), wrap(as
   return startStage(req.params.pid, root);
 }));
 router.post('/:pid/stage/:play/stop', wrap((req, play) => stopStage(req.params.pid, play, 'user')));
-router.patch('/:pid/stage/:play/config', express.json({ limit: '256kb' }), wrap((req, play) => patchStageConfig(req.params.pid, play, req.body || {})));
+router.patch('/:pid/stage/:play/config', express.json({ limit: '256kb' }), wrap((req, play) => patchStageConfig(req.params.pid, play, req.body || {}, { user: req.user || null })));
+/** 这个账号能给演出进程选的模型 + 当前用的（开场页 / 外观页的模型选择器） */
+router.get('/:pid/stage/:play/models', wrap(async (req, play) => { const st = await stageState(req.params.pid, play); return { options: selectableModelsFor(req.user), current: st.config?.model || defaultModelFor(req.user), default: defaultModelFor(req.user) }; }));
 /** 用户在状态页拨值：{ "好感": 60 } */
 router.post('/:pid/stage/:play/state', express.json({ limit: '16kb' }), wrap((req, play) => setUserState(req.params.pid, play, req.body || {})));
 
 // ── 开场 / 预设 ──
-router.post('/:pid/stage/:play/open', express.json({ limit: '64kb' }), wrap((req, play) => openStory(req.params.pid, play, { style: req.body?.style || null, lore: req.body?.lore || null, cardOptions: req.body?.cardOptions || null, userId: req.user?.id || null })));
+router.post('/:pid/stage/:play/open', express.json({ limit: '64kb' }), wrap((req, play) => openStory(req.params.pid, play, { style: req.body?.style || null, lore: req.body?.lore || null, images: typeof req.body?.images === 'boolean' ? req.body.images : null, model: typeof req.body?.model === 'string' ? req.body.model : null, cardOptions: req.body?.cardOptions || null, userId: req.user?.id || null })));
 /** 世界书的触发条目清单（名字 + 触发词），开场页 / 设定页画成开关；常驻条目不在这里（那些在设定里） */
 router.get('/:pid/stage/:play/lore', wrap(async (req, play) => ({ entries: (await loadWorldbook(runtimeOf(req.params.pid, play).playAbs)).map(({ name, rel, keys }) => ({ name, rel, keys })) })));
 router.get('/:pid/stage/:play/presets', wrap(async (req, play) => ({ presets: await listPresets(runtimeOf(req.params.pid, play).playAbs) })));

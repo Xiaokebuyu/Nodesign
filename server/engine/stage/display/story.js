@@ -75,6 +75,7 @@
       if (r.by === 'system') return `<div class="beat sys" data-id="${esc(r.id)}" data-i="${i}" tabindex="0"><span>${esc(r.text)}</span>${this.actions(r)}</div>`;
       if (r.by === 'user-state') return `<div class="beat sys" data-i="${i}"><span>你改了状态：${esc(Object.entries(r.state || {}).map(([k, v]) => `${ND.labelOf(k)} ${v}`).join(' · '))}</span></div>`;
       if (r.by === 'dice') return this.diceRow(r, i);
+      if (r.by === 'image') return `<figure class="beat image" data-id="${esc(r.id)}" data-i="${i}"><img src="${esc(r.url || '')}" alt="${esc(r.caption || '')}" loading="lazy">${r.caption ? `<figcaption>${esc(r.caption)}</figcaption>` : ''}</figure>`;
       const speakers = (r.speakers || []).join('|');
       return `<article class="beat" data-id="${esc(r.id)}" data-i="${i}" data-speakers="${esc(speakers)}"${r.scene ? ` data-scene="${esc(r.scene)}"` : ''}>${r.scene ? `<div class="scene-tag">${esc(r.scene)}</div>` : ''}${renderProse(r.text)}</article>`;
     },

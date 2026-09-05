@@ -12,6 +12,7 @@
  */
 
 import { runtimeOf, loadConfig, sayToStage, patchStageConfig } from './manager.js';
+import { getUserById } from '../../auth/users-store.js';
 import { readScenes } from './tools.js';
 import { pregenOpeningBackdrop } from './mechanics.js';
 import { resolvePreset, normalizeSelection, importTavernPreset, saveImportedPreset, DEFAULT_PRESET, PRESET_META } from './preset.js';
@@ -34,13 +35,13 @@ function kickoffText(cfg, { presetName, picked, castOptions, castNames }) {
  * 玩家点「开始」。style = {preset, modules}；cardOptions = {"<名>/<optId>": bool}。
  * 已经有记录的故事（改完写法再点）只存设置不再发开场指令。
  */
-export async function openStory(pid, root, { style = null, cardOptions = null, lore = null, userId = null } = {}) {
+export async function openStory(pid, root, { style = null, cardOptions = null, lore = null, images = null, model = null, userId = null } = {}) {
   const rt = runtimeOf(pid, root);
   const cfg = await loadConfig(rt);
   const presetId = style?.preset || cfg.style?.preset || DEFAULT_PRESET;
   const preset = await resolvePreset(rt.playAbs, presetId);
   const modules = preset ? normalizeSelection(preset, style?.modules ?? cfg.style?.modules) : null;
-  const pub = await patchStageConfig(pid, root, { style: { preset: preset ? presetId : 'none', modules }, cardOptions: cardOptions || cfg.cardOptions || {}, ...(lore ? { lore } : {}), opened: true });
+  const pub = await patchStageConfig(pid, root, { style: { preset: preset ? presetId : 'none', modules }, cardOptions: cardOptions || cfg.cardOptions || {}, ...(lore ? { lore } : {}), ...(typeof images === 'boolean' ? { images: { allow: images } } : {}), ...(model ? { model } : {}), opened: true }, { user: userId ? getUserById(userId) : null });
   const scenes = await readScenes(rt.playAbs, { limit: 5, rel: rt.scenesRel });
   if (scenes.length) return { ok: true, started: false, config: pub };
 

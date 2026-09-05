@@ -48,6 +48,7 @@
     images: () => api.json('GET', 'images'),
     presets: () => api.json('GET', 'presets'),
     lore: () => api.json('GET', 'lore'),
+    models: () => api.json('GET', 'models'),
     uploadPreset: (name, data) => api.json('POST', 'preset', { name, data }),
     open: (body) => api.json('POST', 'open', body),
     lines: () => api.json('GET', 'lines'),
@@ -216,6 +217,8 @@
       case 'backdrop': if (!store.cfg?.backdrop) { store.backdrop = e.file; paintBackdrop(); } break;
       case 'error': store.status.error = e.error; paintTop(); break;
       case 'reload': refreshHello(); return;
+      case 'image_pending': if (!ND.EMBED) ND.flash('对方在画一张插图，画好会出现在正文里'); return;
+      case 'image_failed': if (!ND.EMBED) ND.flash(`插图没画出来：${e.error || ''}`, true); return;
       default: break;
     }
     fanout(e);

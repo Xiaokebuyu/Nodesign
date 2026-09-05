@@ -17,6 +17,7 @@ import { TABLE_FILE, SCENES_DIR, BACKDROPS_DIR, readRules, readPlayConfig, write
 import { evaluateRules } from './rules.js';
 import { rollCheck, diceText } from './dice.js';
 import { appendSceneRow } from './tools.js';
+import { cardHome } from './card.js';
 import { makeGenerateImageTool } from '../mcp/tools/generate-image.js';
 
 const BACKDROPS_ON = process.env.NODESIGN_STAGE_BACKDROPS !== 'off';
@@ -107,24 +108,28 @@ async function worldBlurb(rt) {
   return (/##\s*世界\s*\n([\s\S]*?)(?=\n##\s|$)/.exec(table)?.[1] || table).trim().slice(0, 500).replace(/\s+/g, ' ');
 }
 
-/** 真生一张。成功返回故事相对路径；失败抛错。 */
-async function generateBackdrop(rt, key, scene) {
-  const world = await worldBlurb(rt);
-  const prompt = `A wide establishing shot of this scene, no people, no text: ${scene}. `
-    + `Setting: ${world}. Soft cinematic light, painterly illustration, muted palette suitable as a reading backdrop.`;
+/** 真生一张。成功返回故事相对路径；失败抛错。role 决定素材角色与落点目录。 */
+async function generateStageImage(rt, { prompt, outputName, destDir, destDirRel = null, role = 'background', aspectRatio = '16:9' }) {
   const gen = makeGenerateImageTool({ workspaceRoot: rt.wsRoot, ctx: rt.ctx });
-  const outputName = `stage-bg-${key}`;
-  const res = await gen.handler({ prompt, aspectRatio: '16:9', assetRole: 'background', outputName }, {});
+  const res = await gen.handler({ prompt, aspectRatio, assetRole: role, outputName }, {});
   if (res?.isError) throw new Error(res.content?.[0]?.text || 'generate failed');
   const genDir = path.join(rt.wsRoot, 'assets', 'generated');
   const made = (await fs.readdir(genDir).catch(() => [])).find(f => f.startsWith(outputName) && /\.(png|jpe?g|webp)$/i.test(f));
   if (!made) throw new Error('生成了但找不到文件');
-  const destRel = `${rt.root}/${SCENES_DIR}/${BACKDROPS_DIR}/${made}`;
+  const destRel = `${destDirRel || `${rt.root}/${SCENES_DIR}/${destDir}`}/${made}`;
   await fs.mkdir(path.dirname(path.join(rt.wsRoot, destRel)), { recursive: true });
   // 复制不搬：generate_image 生完还会异步给原文件做 webp/avif 变体，搬走它就报 ENOENT（09-06 真见）。原件两分钟后再删
   await fs.copyFile(path.join(genDir, made), path.join(rt.wsRoot, destRel));
-  setTimeout(() => { fs.rm(path.join(genDir, made), { force: true }).catch(() => {}); for (const ext of ['webp', 'avif']) fs.rm(path.join(genDir, made.replace(/\.(png|jpe?g|webp)$/i, `.${ext}`)), { force: true }).catch(() => {}); }, 120_000).unref?.();
+  setTimeout(() => { fs.rm(path.join(genDir, made), { force: true }).catch(() => {}); for (const ext of ['webp', 'avif']) fs.rm(path.join(genDir, made.replace(/\.(png|jpe?g|webp)$/i, `.${ext}`)), { force: true }).catch(() => {}); }, 120000);
   return destRel;
+}
+
+/** 机器按场景生背景：模板英文 + 设定「世界」节前 500 字 */
+async function generateBackdrop(rt, key, scene) {
+  const world = await worldBlurb(rt);
+  const prompt = `A wide establishing shot of this scene, no people, no text: ${scene}. `
+    + `Setting: ${world}. Soft cinematic light, painterly illustration, muted palette suitable as a reading backdrop.`;
+  return generateStageImage(rt, { prompt, outputName: `stage-bg-${key}`, destDir: BACKDROPS_DIR, role: 'background' });
 }
 
 async function recordBackdrop(rt, cfg, key, destRel) {
@@ -188,6 +193,7 @@ export async function maybeBackdrop(rt, row, cfg) {
     rt.broadcast({ type: 'backdrop', scene, file: fileUrl(rt.pid, map[OPENING_KEY]) });
     return;
   }
+  if (cfg.images?.allow) return;   // 玩家允许演出进程配图：换场背景由它用 illustrate kind=backdrop 画，机器的模板图不再生（开场那张仍是机器先生）
   spawnBackdrop(rt, cfg, key, scene);
 }
 
@@ -203,4 +209,66 @@ export async function rollForChoice(rt, check) {
   await appendSceneRow(rt.playAbs, row, rt.scenesRel);
   rt.broadcast({ type: 'scene', row });
   return `【判定】玩家这个动作机器已经掷过：${diceText(row)}。照这个结果写，别改判。`;
+}
+
+// ───────────────────────────── 演出进程配图 ─────────────────────────────
+
+export const ILLUST_DIR = '插图';
+export const ILLUST_GAP_BEATS = 3;
+export const ILLUST_MAX = 40;
+
+/**
+ * 演出进程的 illustrate：立刻返回、后台画，画好落一行 by:'image'（moment）或登记成当前场景的背景（backdrop）。
+ * 闸：玩家没允许不画；两张 moment 之间至少隔 ILLUST_GAP_BEATS 段；整个故事最多 ILLUST_MAX 张。
+ * 返回给进程的一句话（错了写在 error 里，不抛）。
+ */
+export async function stageIllustrate(rt, { prompt, kind = 'moment', caption = '', who = '' } = {}) {
+  const cfg = (await readPlayConfig(rt.playAbs)) || {};
+  if (!cfg.images?.allow) return { error: '玩家没有允许配图（开场页 / 外观页的开关关着），这一段别画。' };
+  const beat = rt.state?.['拍数'] || 0;
+  const count = cfg.imageCount || 0;
+  if (count >= ILLUST_MAX) return { error: `这个故事已经画了 ${count} 张，到上限了。` };
+  if (kind === 'moment' && rt.lastIllustBeat !== undefined && beat - rt.lastIllustBeat < ILLUST_GAP_BEATS) {
+    return { error: `上一张才画在 ${beat - rt.lastIllustBeat} 段前，至少隔 ${ILLUST_GAP_BEATS} 段再画。` };
+  }
+  if (rt.illustBusy) return { error: '上一张还在画，这一段别再要。' };
+  const text = String(prompt || '').trim();
+  if (text.length < 10) return { error: 'prompt 太短，写清画面：光线、构图、人物姿态与神情、环境。' };
+  const sceneNow = rt.lastScene || sceneOf(null, rt.state);
+  const member = kind === 'portrait' ? (cfg.cast || []).find(c => c.name === String(who || '').trim()) : null;
+  if (kind === 'portrait' && !member) return { error: `portrait 要给 who，且得是在场的人：${(cfg.cast || []).map(c => c.name).join('、') || '没有'}` };
+  if (kind === 'portrait' && !member.card) return { error: `${member.name} 没有角色卡，立绘没地方放。` };
+  const key = kind === 'backdrop' ? sceneKey(sceneNow) : `${kind === 'portrait' ? 'portrait' : 'ill'}-${crypto.randomUUID().slice(0, 6)}`;
+  if (kind === 'backdrop' && cfg.backdrops?.[key]) return { error: `「${normalizeScene(sceneNow)}」已经有背景了，不用再画。` };
+  rt.illustBusy = true;
+  if (kind === 'moment') rt.lastIllustBeat = beat;
+  rt.broadcast({ type: kind === 'backdrop' ? 'backdrop_pending' : 'image_pending', scene: sceneNow });
+  (async () => {
+    try {
+      const full = kind === 'backdrop'
+        ? `A wide establishing shot, no people, no text: ${text}. Soft cinematic light, painterly illustration, muted palette suitable as a reading backdrop.`
+        : kind === 'portrait'
+          ? `Character portrait, waist-up, single person, plain soft background, no text: ${text}. Painterly illustration, cinematic light.`
+          : `${text}. Painterly illustration, cinematic light, no text, no captions.`;
+      const destRel = await generateStageImage(rt, {
+        prompt: full, outputName: `stage-${kind === 'backdrop' ? 'bg' : kind}-${key}`,
+        destDir: kind === 'backdrop' ? BACKDROPS_DIR : ILLUST_DIR, ...(kind === 'portrait' ? { destDirRel: cardHome(member.card) } : {}),
+        role: kind === 'backdrop' ? 'background' : kind, aspectRatio: kind === 'backdrop' ? '16:9' : kind === 'portrait' ? '3:4' : '3:2',
+      });
+      const fresh = (await readPlayConfig(rt.playAbs)) || cfg;
+      fresh.imageCount = (fresh.imageCount || 0) + 1;
+      if (kind === 'portrait') { fresh.cast = (fresh.cast || []).map(c => (c.name === member.name ? { ...c, portrait: destRel } : c)); await writePlayConfig(rt.playAbs, fresh); rt.broadcast({ type: 'reload' }); }
+      else if (kind === 'backdrop') { fresh.backdrops = { ...(fresh.backdrops || {}), [key]: destRel }; await writePlayConfig(rt.playAbs, fresh); rt.broadcast({ type: 'backdrop', scene: sceneNow, file: fileUrl(rt.pid, destRel) }); }
+      else {
+        await writePlayConfig(rt.playAbs, fresh);
+        const row = { id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'image', file: destRel, url: fileUrl(rt.pid, destRel), caption: String(caption || '').slice(0, 40), prompt: text.slice(0, 300), beat };
+        await appendSceneRow(rt.playAbs, row, rt.scenesRel);
+        rt.broadcast({ type: 'scene', row });
+      }
+    } catch (err) {
+      console.warn(`[stage] ${rt.pid}/${rt.root} 配图没画出来: ${err.message}`);
+      rt.broadcast({ type: 'image_failed', error: err.message });
+    } finally { rt.illustBusy = false; }
+  })();
+  return { text: kind === 'backdrop' ? `在画「${normalizeScene(sceneNow)}」的背景了，画好自动换上。接着写这一段。` : kind === 'portrait' ? `在画 ${member.name} 的立绘了，画好会换到人物栏上。接着写这一段。` : `在画了（第 ${count + 1} 张），画好会出现在这一段下面。接着写这一段。` };
 }

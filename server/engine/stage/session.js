@@ -119,6 +119,8 @@ export class StageSession {
         settingSources: o.settingSources || [],
         disallowedTools: o.disallowedTools || STAGE_DENY,
         ...(o.mcpServers ? { mcpServers: o.mcpServers } : {}),
+        // 只认上面这份：宿主机 ~/.claude.json 里站主的 claude.ai 连接器（Notion / Canva / Gmail…）09-06 被发现挂进了演出进程
+        strictMcpConfig: true,
         // 技能包：只给演出侧那几个（manager 挑），设计产线的描述一个字不进这份地基
         ...(o.plugins ? { plugins: o.plugins } : {}),
         ...(o.skills ? { skills: o.skills } : {}),

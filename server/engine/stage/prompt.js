@@ -24,7 +24,7 @@ async function statRel(base, rel) {
 
 /** 写法 + 可选条目的指纹：这两样不在磁盘文件的 mtime 里，manager 拿它判断要不要重开 */
 export function frozenHash(cfg) {
-  return crypto.createHash('sha1').update(JSON.stringify({ style: cfg?.style || null, cardOptions: cfg?.cardOptions || null })).digest('hex').slice(0, 12);
+  return crypto.createHash('sha1').update(JSON.stringify({ style: cfg?.style || null, cardOptions: cfg?.cardOptions || null, images: !!cfg?.images?.allow })).digest('hex').slice(0, 12);
 }
 
 /** 卡上的可选条目 × 玩家的勾选 → 一句给模型看的话（没有可选条目返回 ''） */
@@ -93,6 +93,12 @@ export async function composeStagePrompt(wsRoot, root, stored) {
     parts.push('## 面板\n这个故事有这几块清单，数量账全在这里记、不进正文：\n'
       + panels.map(p => `- **${p.name}**（${KN[p.kind] || p.kind}${p.who ? `，${p.who} 的` : ''}${p.kind === 'equipment' ? `，槽位 ${(p.slots || []).join(' / ')}` : ''}${p.kind === 'shop' && p.currency ? `，用「${p.currency}」结账，买到的进 ${p.into || '背包'}` : ''}）`).join('\n')
       + '\n得到、用掉、穿上、标价、卖出，**先 update_panel 再 write_scene**（write_scene 一返回这一轮就结束）。玩家自己在显示器里买了、用了东西，会以【便条】告诉你，你在正文里接住就行。每句话末尾「面板：…」是机器报的现况。');
+  }
+  if (stored?.images?.allow) {
+    parts.push('## 配图\n'
+      + '玩家允许你给故事配图（illustrate）。每张要花玩家的钱和一分钟，所以**省着用**：只在关键转折、情感最重的一刻、或一个值得记住的画面上画，'
+      + '平常的段落一张都不画；两次配图之间至少隔三段（机器会拦）。prompt 用英文写画面本身：光线、构图、人物的姿态与神情、环境，不写剧情说明，不出现文字。'
+      + '换了地点就用 kind=backdrop 给新场景画一张无人的远景当背景（一个地点一张，机器按场景去重）；人物栏上没有立绘的在场者，第一次正式登场时可以用 kind=portrait 画一张半身像（一个人一张）。illustrate 立刻返回、图在后台画，所以在 write_scene 之前调，画好了会自己出现在这一段下面。');
   }
   const extra = [];
   for (const d of [WORLD_DIR, PRESET_DIR]) if (await exists(path.join(playAbs, d))) extra.push(`${root}/${d}/`);

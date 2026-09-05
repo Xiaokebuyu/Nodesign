@@ -18,6 +18,9 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
+import { getProject } from '../../../projects/store.js';
+import { getUserById } from '../../../auth/users-store.js';
+import { allowedModelsFor } from '../../agent/model-context.js';
 import { stopStage, getStageRuntime, createPlay, SKINS } from '../../stage/manager.js';
 import { validateCondition } from '../../stage/rules.js';
 import { BUILTIN_IDS, DEFAULT_PRESET } from '../../stage/preset.js';
@@ -102,6 +105,8 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
       skin: z.enum(SKINS).default('paper').describe('显示器外观。留默认 paper（跟平台一致）；玩家自己会换'),
       style: styleSchema.optional().describe('写法预设与预选。用户在开场问答里说了偏好（慢一点 / 多对白 / 第一人称 / 像轻小说 / 短一点…）就按 presets.md 的表翻成 on / off 传进来，开场页会标"agent 预选了这些，你可以改"；什么都没说就不传（默认 Izumi 全默认）。用户交了自己的酒馆预设 JSON 才传 preset: user:<名>'),
       opening: z.string().max(6000).optional().describe('开场参考：酒馆卡的 first_mes（开场白）和 scenario 原文贴这里，{{user}} 那类占位符不用改。机器在玩家点「开始」时把它交给演出进程当第一段的底：照它的地点、时刻、气氛和头几句写，不照抄，占位符换成玩家的角色。没有就不传，进程按设定自己开场'),
+      images: z.boolean().optional().describe('演出进程能不能自己配图（关键转折的插图 / 换场背景 / 立绘）。每张 $0.20 左右计入玩家每日额度、约一分钟。玩家在问答里明确说了才传；没说就不传，他在开场页自己开'),
+      model: z.string().max(80).optional().describe('演出进程用哪个模型。只在玩家点名要某个模型时传，且得是他账号当前能选的（选不了会当场退回）；不传用默认，他在开场页自己挑'),
       lore: z.object({ off: z.array(z.string().max(80)).max(500) }).optional().describe('按玩家开场前的回答**预先关掉**的世界书条目名（read_tavern_json 导出时给的名字）：他说不要某条支线 / 某类内容 / 某个人物线，对应条目名列在这里，开场页画成开关他还能改。没说就不传，全开'),
       panels: z.array(panelSchema).max(8).optional().describe('跑团 / 冒险类才要：背包、装备与穿着、商店、任务清单这类**清单状态**。声明了显示器就多出对应的页，演出进程用 update_panel 记账，玩家能在显示器里买 / 用 / 装上。恋爱日常那种不要硬加'),
       achievements: z.array(achievementSchema).max(40).optional()
@@ -117,9 +122,14 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
           const bad = validateCondition(r.when);
           if (bad) return fail(`规则「${r.id}」的条件不合法：${bad}`);
         }
+        if (args.model) {
+          const owner = getProject(projectId)?.ownerId ? getUserById(getProject(projectId).ownerId) : null;
+          const ok = owner ? allowedModelsFor(owner).map(m => m.id) : [];
+          if (!ok.includes(args.model)) return fail(`这个账号现在选不了 ${args.model}。能选的：${ok.join(' / ') || '（查不到账号）'}。不传 model 就用默认。`);
+        }
         const style = args.style ? { preset: args.style.preset, on: [...(args.style.on || []), ...(args.style.modules || [])], off: args.style.off || [] } : null;
         const root = await createPlay(projectId, {
-          title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin, style, panels: args.panels || null, opening: args.opening || null, lore: args.lore || null,
+          title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin, style, panels: args.panels || null, opening: args.opening || null, lore: args.lore || null, images: typeof args.images === 'boolean' ? args.images : undefined, model: args.model || null,
           rules: (args.achievements || args.triggers) ? { achievements: args.achievements || [], triggers: args.triggers || [] } : null,
         });
         const rt = getStageRuntime(projectId, root);

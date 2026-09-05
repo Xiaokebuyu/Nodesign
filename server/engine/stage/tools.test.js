@@ -29,7 +29,7 @@ describe('演出进程的 MCP 工具面', () => {
   const registered = server.instance?._registeredTools || {};
 
   it('五件工具都注册上了（09-06 加 update_panel）', () => {
-    expect(Object.keys(registered).sort()).toEqual(['forget', 'remember', 'roll', 'update_panel', 'write_scene']);
+    expect(Object.keys(registered).sort()).toEqual(['forget', 'remember', 'roll', 'update_panel', 'write_scene']);   // 没开配图：没有 illustrate
   });
 
   it('⛔ 工具 schema 里不许有 z.record（SDK 会静默丢掉整个服务器的工具）', () => {

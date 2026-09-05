@@ -192,6 +192,23 @@ export function createStageTools(ctx) {
     },
   );
 
+  const illustrate = tool(
+    'illustrate',
+    '给故事配一张图。每张花玩家的钱和一分钟，**只在关键转折、情感最重的一刻、值得记住的画面**上用，平常段落一张不画；两张之间至少隔三段。'
+    + '立刻返回、后台画，所以在 write_scene 之前调。kind=backdrop 是换了地点后给新场景画一张无人远景当背景（一个地点一张）。',
+    {
+      prompt: z.string().min(10).max(600).describe('英文写画面本身：光线、构图、人物姿态与神情、环境。不写剧情说明，不要文字'),
+      kind: z.enum(['moment', 'backdrop', 'portrait']).default('moment').describe('moment 这一刻的插图（出现在这一段下面）/ backdrop 新场景的背景（无人远景）/ portrait 某个在场者的立绘（半身，换到人物栏上；一个人一张，第一次见到他时或形象大变时）'),
+      who: z.string().max(30).optional().describe('kind=portrait 时：给谁画，用在场者的名字'),
+      caption: z.string().max(40).optional().describe('插图下面的一行小字，可不给'),
+    },
+    async (args) => {
+      const r = await ctx.onImage?.(args);
+      if (!r) return { content: [{ type: 'text', text: '这个故事没开配图。' }], isError: true };
+      return r.error ? { content: [{ type: 'text', text: r.error }], isError: true } : { content: [{ type: 'text', text: r.text }] };
+    },
+  );
+
   /**
    * 面板（背包 / 装备 / 商店…）的机械动作：数量账在这里记，正文里不出现数字。⚠️ 要在 write_scene 之前调 —— write_scene 一返回这一轮就结束。
    * 真正的加减在 panels.js applyOp；manager 负责落盘、推给显示器。
@@ -230,7 +247,7 @@ export function createStageTools(ctx) {
   // write_scene 一返回这一轮就结束（SDK 的 _meta['claude/endTurn']）：模型再想在工具之外说一句"这一段写好了"也没机会 ——
   // 09-05/06 两天的转录里每一轮都有这么一句，提示词禁不住，端口关掉最省事。remember / roll 要在 write_scene 之前调。
   const endTurn = (t) => ({ ...t, _meta: { ...(t._meta || {}), 'claude/endTurn': true } });
-  return createSdkMcpServer({ name: 'stage', version: '1.2.0', tools: [endTurn(writeScene), remember, forget, rollDice, updatePanel].map(always) });
+  return createSdkMcpServer({ name: 'stage', version: '1.2.0', tools: [endTurn(writeScene), remember, forget, rollDice, updatePanel, ...(ctx.images ? [illustrate] : [])].map(always) });
 }
 
 /**

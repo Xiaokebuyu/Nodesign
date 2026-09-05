@@ -304,3 +304,14 @@
 /* 世界书开关组（开场页 / 设定页共用 .modgroup） */
 .modgroup.lore .gbody{max-height:420px;overflow:auto}
 .lorerow{display:flex;gap:6px;margin:0 0 8px}
+
+/* 插图行（演出进程 illustrate kind=moment） */
+.beat.image{margin:6px auto 26px;max-width:var(--measure)}
+.beat.image img{display:block;width:100%;border-radius:3px;box-shadow:var(--shadow)}
+.beat.image figcaption{font-family:var(--sans);font-size:11.5px;color:var(--sub);text-align:center;margin-top:8px;letter-spacing:.04em}
+/* 模型选择器（复用预设卡） */
+.presets.models .preset b{display:flex;align-items:center;gap:6px}
+.presets.models .preset b svg{flex:none}
+.preset.locked{opacity:.55;cursor:not-allowed}
+.preset span em{display:block;font-style:normal;color:var(--ink-3);margin-top:4px;font-size:10.5px}
+.tog.images{margin-bottom:8px}

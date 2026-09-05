@@ -258,7 +258,12 @@
               <label class="tog"><input type="checkbox" id="autoBg" ${cfg.backdropsAuto === false ? '' : 'checked'}><span>换场时自动生背景图<small>这个故事的设置，所有人共用；地点变了才生，同一处换钟点不重生</small></span></label></div>
             <div class="field"><span class="lbl">选项</span><div><span class="seg" id="optsDef"><button data-v="1"${ND.prefs.get('opts', 1) ? ' class="on"' : ''}>默认展开</button><button data-v="0"${ND.prefs.get('opts', 1) ? '' : ' class="on"'}>默认收起</button></span></div></div>
           </div></section>
+        <section><h2>写故事的进程<small>配图权限与模型，这个故事的设置，所有人共用</small></h2>
+          <div id="images"></div>
+          <div class="field" style="margin-top:12px"><span class="lbl">模型 · 换了下一句话起生效</span><div id="models"><p class="muted">读取中…</p></div></div></section>
         <p class="muted">更多可自定义的项目以后加在这一页。</p></div>`;
+      ND.imagesToggle(r.querySelector('#images'), { allow: !!cfg.images?.allow, by: cfg.images?.by, onChange: (v) => api.config({ images: { allow: v } }).then(() => ND.flash(v ? '对方可以配图了，下一句话起生效' : '关掉了配图，背景图回到机器自动生')).catch(err => ND.flash(err.message, true)) });
+      api.models().then(m => { ND.modelPicker(r.querySelector('#models'), { options: m.options || [], current: m.current, onPick: (id) => api.config({ model: id }).then(() => ND.flash('换好了，下一句话起用新模型（记忆不丢）')).catch(err => ND.flash(err.message, true)) }); }).catch(err => { r.querySelector('#models').innerHTML = `<p class="muted">${esc(err.message)}</p>`; });
       r.querySelectorAll('[data-skin]').forEach(b => { b.onclick = () => api.config({ skin: b.dataset.skin }).catch(err => ND.flash(err.message, true)); });
       const range = r.querySelector('#measure');
       range.oninput = () => { const w = Number(range.value); document.documentElement.style.setProperty('--measure', `${w}px`); ND.prefs.set('measure', w); r.querySelector('#mw').textContent = `${w}px`; };

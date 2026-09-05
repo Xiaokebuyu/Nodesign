@@ -118,6 +118,25 @@
     paint();
   };
 
+  /**
+   * 模型选择器（开场页 / 外观页共用）。options 是 /models 回的清单（含 locked 的订阅行：看得见选不了），
+   * current 是这个故事现在用的。选中即 onPick(id)。样式复用预设卡。
+   */
+  ND.modelPicker = function modelPicker(container, { options, current, onPick }) {
+    const paint = () => {
+      container.innerHTML = `<div class="presets models">${options.map(o => `<button class="preset model${o.id === current ? ' on' : ''}${o.locked ? ' locked' : ''}" data-m="${esc(o.id)}" ${o.locked ? `disabled title="${esc(o.lockReason || '这个账号选不了')}"` : ''}><b>${ND.markSvg ? ND.markSvg(o.brand, 14) : ''}${esc(o.label)}</b><span>${esc(o.desc || '')}${o.locked ? `<em>${esc(o.lockReason || '选不了')}</em>` : ''}</span></button>`).join('')}</div>`;
+      container.querySelectorAll('.preset.model:not([disabled])').forEach(b => { b.onclick = () => { if (b.dataset.m === current) return; current = b.dataset.m; paint(); onPick(current); }; });
+    };
+    paint();
+    return { set(id) { current = id; paint(); } };
+  };
+
+  /** 配图开关（开场页 / 外观页共用）：说清代价 */
+  ND.imagesToggle = function imagesToggle(container, { allow, by, onChange }) {
+    container.innerHTML = `<label class="tog images"><input type="checkbox" id="allowImg" ${allow ? 'checked' : ''}><span>让对方给故事配图<small>关键转折的插图、换场景的背景、人物的立绘由写故事的进程自己画。每张约 $0.20、一分钟，计入你的每日额度；它被要求省着用，两张之间至少隔三段。关着的话背景图仍由机器按地点自动生。</small>${by === 'agent' ? '<small style="color:var(--accent)">这是 agent 按你开场前的回答预选的，不合意就改。</small>' : ''}</span></label>`;
+    container.querySelector('#allowImg').onchange = (e) => onChange(e.target.checked);
+  };
+
   /* ── 开场页 ── */
   ND.opening = {
     async mount(root) {
@@ -131,6 +150,11 @@
         <div class="kicker">在场的人</div>
         <div class="people" id="people"></div>
         <div id="lore"></div>
+        <div class="kicker">配图</div>
+        <div id="images"></div>
+        <div class="kicker">写故事的模型</div>
+        <p class="lede" style="margin-bottom:12px">只列你的账号现在能用的。之后在「外观」页还能换，换了下一句话起生效。</p>
+        <div id="models"><p class="muted">读取中…</p></div>
         <div class="kicker">写法</div>
         <p class="lede" style="margin-bottom:12px">对方按哪套规矩写。默认这套是从一份久经调试的中文预设拆出来的；也可以上传你自己的。展开每一组能看到具体条目。</p>
         ${cfg.style?.by === 'agent' ? '<p class="source" style="color:var(--accent)">下面的勾选是 agent 按你开场前的回答预选的，不合意就改，改了以你的为准。</p>' : ''}
@@ -157,6 +181,11 @@
       // 世界书开关（有触发条目才出现）
       const loreOff = new Set(cfg.lore?.off || []);
       try { const { entries } = await api.lore(); ND.lorePicker(root.querySelector('#lore'), { entries, off: loreOff, by: cfg.lore?.by, onChange: () => {} }); } catch { /* 没有世界书 */ }
+      // 配图 + 模型
+      let allowImages = !!cfg.images?.allow; let model = cfg.model || null;
+      ND.imagesToggle(root.querySelector('#images'), { allow: allowImages, by: cfg.images?.by, onChange: (v) => { allowImages = v; } });
+      try { const m = await api.models(); model = m.current || model; ND.modelPicker(root.querySelector('#models'), { options: m.options || [], current: model, onPick: (id) => { model = id; } }); }
+      catch (err) { root.querySelector('#models').innerHTML = `<p class="muted">${esc(err.message)}</p>`; }
       // 写法
       let presets = [];
       try { presets = (await api.presets()).presets; } catch { presets = []; }
@@ -166,7 +195,7 @@
       const go = root.querySelector('#go'); const note = root.querySelector('#openNote');
       go.onclick = async () => {
         go.disabled = true; note.textContent = '正在起进程、写开场…（第一段要等十几秒）'; note.className = 'note';
-        try { await api.open({ style, cardOptions, lore: { off: [...loreOff] } }); }
+        try { await api.open({ style, cardOptions, lore: { off: [...loreOff] }, images: allowImages, ...(model ? { model } : {}) }); }
         catch (err) { note.textContent = `没开起来：${err.message}`; note.className = 'note err'; go.disabled = false; }
       };
     },

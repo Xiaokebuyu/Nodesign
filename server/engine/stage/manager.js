@@ -47,9 +47,10 @@ import {
 } from './play.js';
 import { validateCondition } from './rules.js';
 import { composeStagePrompt, frozenHash } from './prompt.js';
-import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, sceneOf, fileUrl, rollForChoice } from './mechanics.js';
+import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, sceneOf, fileUrl, rollForChoice, stageIllustrate } from './mechanics.js';
+import { allowedModelsFor } from '../agent/model-context.js';
 import { resolvePreset, normalizeSelection, defaultSelection, DEFAULT_PRESET } from './preset.js';
-import { loadWorldbook, matchEntries, loreNote, LORE_COOLDOWN_BEATS } from './worldbook.js';
+import { pickLore } from './worldbook.js';
 import { readPanels, writePanels, declarePanels, applyOp as applyPanelOp, digest as panelDigest } from './panels.js';
 export { composeStagePrompt };
 import { getProject } from '../../projects/store.js';
@@ -191,6 +192,7 @@ function publicConfig(rt, cfg) {
     ...pub, cast, backdrops, backdrop: url(cfg.backdrop), root: rt.root,
     lines: linesOf(cfg).map(({ sdkSid, ...l }) => ({ ...l, hasMemory: !!sdkSid })), currentLine: currentLine(cfg).id,
     style: cfg.style || { preset: DEFAULT_PRESET, modules: null }, cardOptions: cfg.cardOptions || {}, opened: !!cfg.opened,
+    model: cfg.model || defaultModel(), images: cfg.images || { allow: false },
     brand: brandOfModel(cfg.model || defaultModel()) || 'custom',   // 显示器画身份标：服务端声明的 brand，前端不猜
     promptChars: rt.promptChars || cfg.promptChars || 0, sources: rt.sources.length ? rt.sources.map(s => s.rel) : (cfg.promptSources || []), styleNames: rt.styleNames?.length ? rt.styleNames : (cfg.styleNames || []),
   };
@@ -211,7 +213,7 @@ async function sourcesChanged(rt) {
  * 同名的已存在 = 换设定重开（设定 / 规则重写，卡 / 场景 / 记忆都留着）。返回文件夹名。
  * **不起进程**：进程在玩家点「开始」或说第一句话时才起（09-06 起，之前 open_stage 一调就先烧 400MB）。
  */
-export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style, panels, opening, lore } = {}) {
+export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style, panels, opening, lore, images } = {}) {
   const ws = getWorkspaceRoot(pid);
   await ensurePlays(pid);
   const root = playFolderName(title);
@@ -253,7 +255,8 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     skin: SKINS.includes(skin) ? skin : (stored.skin || 'paper'),
     model: model || stored.model || null,
     ...(opening ? { opening: String(opening).slice(0, 6000) } : {}),   // 酒馆卡的开场白 / 场景，开场指令带给进程当底
-    ...(lore?.off?.length ? { lore: { off: lore.off.map(String).slice(0, 500), by: 'agent' } } : {}),   // agent 按玩家回答预先关掉的世界书条目（开场页能改）
+    ...(lore?.off?.length ? { lore: { off: lore.off.map(String).slice(0, 500), by: 'agent' } } : {}),
+    ...(typeof images === 'boolean' ? { images: { allow: images, by: 'agent' } } : {}),   // 演出进程能不能配图（玩家开场页还能改）   // agent 按玩家回答预先关掉的世界书条目（开场页能改）
     lines: linesOf(stored),
     currentLine: currentLine(stored).id,
     startedAt: stored.startedAt || new Date().toISOString(),
@@ -333,6 +336,7 @@ export async function startStage(pid, root) {
       if (src) src.mtimeMs = await statRel(rt.wsRoot, rel);
     },
     onPanel: (op) => panelOp(pid, root, op, { by: 'stage' }),
+    images: !!stored.images?.allow, onImage: (a) => stageIllustrate(rt, a),
   });
 
   rt.session = new StageSession({
@@ -455,26 +459,6 @@ export async function sayToStage(pid, root, text, { userId = null, row = null, c
 }
 
 /**
- * 世界书机械触发：拿玩家这句 + 上一段正文撞触发条目的 keys，命中的接在这句话尾巴上（worldbook.js）。
- * 同一条三段内不重复带（rt.loreSeen 记着上次带它是第几段）。命中了给显示器报一声。
- */
-async function pickLore(rt, text) {
-  let entries = [];
-  try { entries = await loadWorldbook(rt.playAbs); } catch { return ''; }
-  if (!entries.length) return '';
-  const beat = rt.state?.['拍数'] || 0;
-  rt.loreSeen = rt.loreSeen || new Map();
-  const skip = new Set([...rt.loreSeen].filter(([, at]) => beat - at < LORE_COOLDOWN_BEATS).map(([n]) => n));
-  for (const n of (await readPlayConfig(rt.playAbs))?.lore?.off || []) skip.add(n);   // 玩家关掉的条目不送
-  const last = (await readScenes(rt.playAbs, { limit: 6, rel: rt.scenesRel })).reverse().find(r => r.by === 'stage')?.text || '';
-  const matched = matchEntries(entries, `${text}\n${last}`, { skip });
-  if (!matched.length) return '';
-  for (const m of matched) rt.loreSeen.set(m.name, beat);
-  rt.broadcast({ type: 'lore', titles: matched.map(m => m.name) });
-  return loreNote(matched);
-}
-
-/**
  * 面板的一步动作（演出进程的 update_panel 和玩家在显示器点"买 / 用 / 装上"都走这儿）。
  * 玩家改的进程还不知道 → 记一条纸条随下一句话带过去；买东西扣的钱走状态那条路（拨值 + 跑规则）。
  */
@@ -538,7 +522,7 @@ export async function stageState(pid, root, { limit = 300 } = {}) {
 }
 
 /** 显示器改配置：外观 / 标题 / 状态面板 / 手选背景 / 写法与可选条目。写法改了下一句话到时进程自己重开。 */
-export async function patchStageConfig(pid, root, patch) {
+export async function patchStageConfig(pid, root, patch, { user = null } = {}) {
   const rt = runtimeOf(pid, root);
   const cfg = await readPlayConfig(rt.playAbs);
   if (!cfg) throw Object.assign(new Error('还没有这个故事'), { status: 404 });
@@ -556,8 +540,16 @@ export async function patchStageConfig(pid, root, patch) {
     next.cardOptions = Object.fromEntries(Object.entries(patch.cardOptions).filter(([k, v]) => typeof k === 'string' && k.length < 120 && typeof v === 'boolean'));
   }
   if (patch.lore && typeof patch.lore === 'object') next.lore = { off: (Array.isArray(patch.lore.off) ? patch.lore.off : []).filter(s => typeof s === 'string').slice(0, 500), by: 'player' };
+  if (patch.images && typeof patch.images === 'object' && typeof patch.images.allow === 'boolean') next.images = { allow: patch.images.allow, by: patch.images.by === 'agent' ? 'agent' : 'player' };
+  let modelChanged = false;
+  if (typeof patch.model === 'string' && patch.model && patch.model !== cfg.model) {
+    // 只能选这个账号当前能用的（locked 的订阅行不算）；没给 user 的调用方（工具侧）自己先校验过
+    if (user && !allowedModelsFor(user).some(m => m.id === patch.model)) throw Object.assign(new Error(`这个账号现在选不了 ${patch.model}`), { status: 403 });
+    next.model = patch.model; modelChanged = true;
+  }
   if (patch.opened === true) { next.opened = true; next.openedAt = next.openedAt || new Date().toISOString(); }
   await writePlayConfig(rt.playAbs, next);
+  if (modelChanged && rt.running) await stopStage(pid, root, 'model-changed');   // 下一句话到时按新模型 resume 起来（记忆不丢）
   const pub = publicConfig(rt, next);
   rt.broadcast({ type: 'config', config: pub });
   getProjectBus(pid).publish({ type: 'stage.changed', root, running: rt.running });

@@ -12,7 +12,8 @@
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import { WORLD_DIR } from './play.js';
+import { WORLD_DIR, readPlayConfig } from './play.js';
+import { readScenes } from './tools.js';
 
 export const LORE_MAX_ENTRIES = 4;
 export const LORE_MAX_CHARS = 3000;
@@ -81,4 +82,24 @@ export function matchEntries(entries, text, { skip = new Set(), max = LORE_MAX_E
 export function loreNote(matched) {
   if (!matched?.length) return '';
   return matched.map(m => `【世界书 · ${m.name}】\n${m.text}`).join('\n\n');
+}
+
+/**
+ * 每句话到时：拿玩家这句 + 上一段正文撞触发条目，命中的接在这句话尾巴上。
+ * 同一条三段内不重复带（rt.loreSeen 记着上次带它是第几段）；玩家在开场页 / 设定页关掉的（config.lore.off）不送。命中了给显示器报一声。
+ */
+export async function pickLore(rt, text) {
+  let entries = [];
+  try { entries = await loadWorldbook(rt.playAbs); } catch { return ''; }
+  if (!entries.length) return '';
+  const beat = rt.state?.['拍数'] || 0;
+  rt.loreSeen = rt.loreSeen || new Map();
+  const skip = new Set([...rt.loreSeen].filter(([, at]) => beat - at < LORE_COOLDOWN_BEATS).map(([n]) => n));
+  for (const n of (await readPlayConfig(rt.playAbs))?.lore?.off || []) skip.add(n);
+  const last = (await readScenes(rt.playAbs, { limit: 6, rel: rt.scenesRel })).reverse().find(r => r.by === 'stage')?.text || '';
+  const matched = matchEntries(entries, `${text}\n${last}`, { skip });
+  if (!matched.length) return '';
+  for (const m of matched) rt.loreSeen.set(m.name, beat);
+  rt.broadcast({ type: 'lore', titles: matched.map(m => m.name) });
+  return loreNote(matched);
 }
