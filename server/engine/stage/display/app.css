@@ -219,14 +219,14 @@ body.embed .opening .actions{display:none}
    后面的规则盖前面的：这一段只换材质，不改布局。夜 / 终端两套外观没有纸，颗粒关掉、影子换冷墨。
    ═══════════════════════════════════════════════════════════════ */
 :root{
-  --wall:#F0EADB; --chrome:#FBF7EC; --lit:rgba(255,247,225,.85); --lit-soft:rgba(255,246,218,.6); --dusk:rgba(122,96,56,.14);
+  --wall:#F0EADB; --chrome:#FBF7EC; --aged:#FAF2DC; --lit:rgba(255,247,225,.85); --lit-soft:rgba(255,246,218,.6); --dusk:rgba(122,96,56,.14);
   --grain:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27180%27%20height%3D%27180%27%3E%3Cfilter%20id%3D%27d%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%270.9%27%20numOctaves%3D%273%27%20seed%3D%272%27%20stitchTiles%3D%27stitch%27%2F%3E%3CfeComponentTransfer%3E%3CfeFuncA%20type%3D%27linear%27%20slope%3D%271.8%27%20intercept%3D%27-0.42%27%2F%3E%3C%2FfeComponentTransfer%3E%3CfeColorMatrix%20values%3D%270%200%200%200%200.17%200%200%200%200%200.13%200%200%200%200%200.06%200%200%200%200.28%200%27%2F%3E%3C%2Ffilter%3E%3Cfilter%20id%3D%27l%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%271.1%27%20numOctaves%3D%272%27%20seed%3D%279%27%20stitchTiles%3D%27stitch%27%2F%3E%3CfeColorMatrix%20values%3D%270%200%200%200%201%200%200%200%200%200.99%200%200%200%200%200.93%200%200%200%200.26%200%27%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%27180%27%20height%3D%27180%27%20filter%3D%27url(%23d)%27%2F%3E%3Crect%20width%3D%27180%27%20height%3D%27180%27%20filter%3D%27url(%23l)%27%2F%3E%3C%2Fsvg%3E");
   --sh-far:-1px 1px 2px rgba(93,74,44,.14),-1px 3px 5px rgba(93,74,44,.09);
   --sh-mid:-1px 2px 3px rgba(93,74,44,.15),-3px 6px 12px rgba(93,74,44,.15);
   --sh-near:-2px 3px 4px rgba(93,74,44,.18),-6px 13px 26px rgba(93,74,44,.22);
   --hair:rgba(43,33,23,.22);
 }
-:root[data-skin="jiangnan"]{ --wall:#dfe6e4; --chrome:#eef2f1; --lit:rgba(246,250,248,.8); --lit-soft:rgba(240,246,244,.5); --dusk:rgba(60,80,76,.12); --hair:rgba(38,49,47,.22); --grain:none }   /* 颗粒是为暖纸调的，铺在青灰上像灰尘（09-06 在画布上看过） */
+:root[data-skin="jiangnan"]{ --wall:#dfe6e4; --chrome:#eef2f1; --aged:#e6ecea; --lit:rgba(246,250,248,.8); --lit-soft:rgba(240,246,244,.5); --dusk:rgba(60,80,76,.12); --hair:rgba(38,49,47,.22); --grain:none }   /* 颗粒是为暖纸调的，铺在青灰上像灰尘（09-06 在画布上看过） */
 :root[data-skin="night"]{ --wall:#0f1114; --chrome:#181b20; --lit:rgba(60,64,72,.5); --lit-soft:rgba(50,54,60,.4); --dusk:rgba(0,0,0,.35); --grain:none; --hair:rgba(220,215,206,.2);
   --sh-far:0 1px 2px rgba(0,0,0,.4),0 3px 6px rgba(0,0,0,.3); --sh-mid:0 2px 3px rgba(0,0,0,.45),0 8px 18px rgba(0,0,0,.35); --sh-near:0 3px 4px rgba(0,0,0,.5),0 14px 30px rgba(0,0,0,.45) }
 :root[data-skin="terminal"]{ --wall:#080a09; --chrome:#0f130f; --lit:rgba(40,60,44,.35); --lit-soft:rgba(30,46,34,.3); --dusk:rgba(0,0,0,.4); --grain:none; --hair:rgba(200,211,196,.2);

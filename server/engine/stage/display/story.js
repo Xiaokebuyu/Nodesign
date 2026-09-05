@@ -89,7 +89,7 @@
       inner.innerHTML = (!rows.length && !store.draft && !store.thinking)
         ? `<div class="empty">${store.cfg ? '还是空的。说一句话，故事就开始了。' : '这里还没有故事。'}</div>`
         : more + rows.slice(from).map((r, k) => this.beatHtml(r, from + k)).join('');
-      inner.appendChild(el('<div class="process" id="process" data-open="auto" hidden><div class="hd"><b></b><span class="n"></span>' + CHEV + '</div><div class="body"></div></div>'));
+      inner.appendChild(el('<div class="process" id="process" data-open="auto" hidden><div class="hd">' + ND.markSvg(store.cfg?.brand, 15) + '<b></b><span class="n"></span>' + CHEV + '</div><div class="body"></div></div>'));
       inner.appendChild(el('<article class="beat draft" id="draft" hidden></article>'));
       this.grip();
       $('process').querySelector('.hd').onclick = () => { const p = $('process'); p.dataset.open = p.dataset.open === '1' ? '0' : '1'; };
@@ -104,7 +104,7 @@
       const proc = $('process'); const draft = $('draft');
       if (r.by === 'stage' && this.frozenThinking) {
         const n = this.frozenThinking.length;
-        const f = el(`<div class="process" data-open="0"><div class="hd"><b>想了 ${n} 字</b>${CHEV}</div><div class="body">${esc(this.frozenThinking)}</div></div>`);
+        const f = el(`<div class="process" data-open="0"><div class="hd">${ND.markSvg(store.cfg?.brand, 15)}<b>想了 ${n} 字</b>${CHEV}</div><div class="body">${esc(this.frozenThinking)}</div></div>`);
         f.querySelector('.hd').onclick = () => { f.dataset.open = f.dataset.open === '1' ? '0' : '1'; };
         inner.insertBefore(f, proc);
         this.frozenThinking = '';

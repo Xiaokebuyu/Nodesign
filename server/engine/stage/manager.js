@@ -57,6 +57,7 @@ import { jsonlExistsForSession } from '../../projects/session-jsonl.js';
 import { getProjectBus } from '../../ws/broker.js';
 import { getBuiltinPluginsRoot } from '../agent/plugin-loader.js';
 import { defaultModel } from '../agent/session-model.js';
+import { brandOfModel } from '../agent/model-context.js';
 import { resolveModelRoute, resolveSdkSpoofModel, pickThinkingConfig } from '../agent/model-context.js';
 import { getOrStartIngress, registerIngressSession, unregisterIngressSession } from '../../lib/model-ingress.js';
 import { AgentContext, freshTurnCounters } from '../agent/context.js';
@@ -190,6 +191,7 @@ function publicConfig(rt, cfg) {
     ...pub, cast, backdrops, backdrop: url(cfg.backdrop), root: rt.root,
     lines: linesOf(cfg).map(({ sdkSid, ...l }) => ({ ...l, hasMemory: !!sdkSid })), currentLine: currentLine(cfg).id,
     style: cfg.style || { preset: DEFAULT_PRESET, modules: null }, cardOptions: cfg.cardOptions || {}, opened: !!cfg.opened,
+    brand: brandOfModel(cfg.model || defaultModel()) || 'custom',   // 显示器画身份标：服务端声明的 brand，前端不猜
     promptChars: rt.promptChars || cfg.promptChars || 0, sources: rt.sources.length ? rt.sources.map(s => s.rel) : (cfg.promptSources || []), styleNames: rt.styleNames?.length ? rt.styleNames : (cfg.styleNames || []),
   };
 }

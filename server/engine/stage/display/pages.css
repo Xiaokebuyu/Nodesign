@@ -21,9 +21,11 @@
 .beat code{font-family:var(--mono);font-size:.86em;background:var(--rule);padding:1.5px 5px;border-radius:2px;letter-spacing:0}
 .beat .scene-tag{font-family:var(--sans);font-size:10.5px;letter-spacing:.16em;color:var(--sub);margin:0 0 14px;display:flex;align-items:center;gap:10px}
 .beat .scene-tag::before,.beat .scene-tag::after{content:"";flex:1;height:1px;background:var(--rule-md)}
-.beat.me{padding:2px 0 2px 16px;font-size:calc(var(--size) - 1.5px);color:var(--ink-2)}
-.beat.me::before{content:"";position:absolute;left:0;top:.35em;bottom:.35em;width:2px;background:var(--accent);opacity:.6;border-radius:1px}
-.beat .tagline{font-family:var(--sans);font-size:10px;letter-spacing:.16em;color:var(--accent);margin-bottom:.45em;display:flex;align-items:center;gap:10px}
+/* 你说的话：一张贴在稿纸上的旧纸便签（站主 09-06：别用那道强调竖线） */
+.beat.me{padding:10px 14px 11px;margin:0 0 30px 26px;font-size:calc(var(--size) - 1.5px);color:var(--ink-2);background:var(--aged);background-image:var(--grain);box-shadow:var(--sh-far);border-radius:1px;line-height:1.8}
+.beat.me p{margin:0 0 .6em} .beat.me p:last-child{margin:0}
+:root[data-skin="night"] .beat.me,:root[data-skin="terminal"] .beat.me{background:var(--panel-2)}
+.beat .tagline{font-family:var(--sans);font-size:10px;letter-spacing:.16em;color:var(--sub);margin-bottom:.4em;display:flex;align-items:center;gap:10px}
 .beat .tagline time{color:var(--sub);letter-spacing:.04em;font-variant-numeric:tabular-nums}
 .beat.sys{font-family:var(--sans);font-size:11.5px;color:var(--sub);text-align:center;margin:8px 0 30px;display:flex;align-items:center;gap:12px;letter-spacing:.04em}
 .beat.sys::before,.beat.sys::after{content:"";flex:1;height:1px;background:var(--rule-md)}
@@ -39,10 +41,13 @@
 @media(hover:none){.beat-actions{opacity:.7}}
 
 /* ── 思考 / 过程容器（参考侧边栏的 Timeline 节点：一枚小图标 + 一行状态 + 可展开的正文） ── */
-.process{max-width:var(--measure);margin:0 auto 22px;font-family:var(--sans);border-left:2px solid var(--rule-md);padding:2px 0 2px 14px;position:relative}
-.process::before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--paper);border:2px solid var(--sub);box-sizing:border-box}
-.process.live::before{border-color:var(--accent);animation:pulse 1.2s infinite}
-@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(138,106,58,.35)}50%{box-shadow:0 0 0 5px rgba(138,106,58,0)}}
+/* 过程容器：不画时间轴了，左上是这场戏跑的模型的身份标（marks.js，跟侧边栏 ModelMark 同一份矢量）；在想的时候标在呼吸 */
+.process{max-width:var(--measure);margin:0 auto 22px;font-family:var(--sans);padding:2px 0 2px 2px;position:relative}
+.process .hd .mark{flex:none;margin-right:2px;opacity:.85}
+.process.live .hd .mark{animation:breathe 1.6s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.45;transform:scale(.94)}50%{opacity:1;transform:scale(1)}}
+.process .body{margin-left:23px}
+.process .aside,.process .lore{margin-left:23px}
 .process .hd{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--sub);cursor:pointer;user-select:none;letter-spacing:.04em;min-height:20px}
 .process .hd b{font-weight:400;color:var(--ink-3)}
 .process .hd .n{font-variant-numeric:tabular-nums}
@@ -181,7 +186,6 @@
 :root[data-skin="night"] .beats-inner,:root[data-skin="terminal"] .beats-inner{background:var(--panel)}
 .beats-inner .more{margin-top:-8px}
 .process{margin-left:0;margin-right:0;max-width:none}
-.process::before{background:var(--paper)}
 .beat-actions button{border:1px solid var(--hair);border-radius:1px}
 .grip{right:-30px}
 @media(max-width:760px){.beats{padding:12px 12px 8px}.beats-inner{padding:22px 18px 26px}}
