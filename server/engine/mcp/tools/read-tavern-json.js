@@ -107,13 +107,15 @@ point path at the .png, no conversion needed.
 
 mode "export_book" is the one writing mode: dumps every enabled lorebook entry to
 workspace files in one call (triggered entries one file each with trigger keys in
-frontmatter → grep them before writing a chapter; constant entries under 常驻/ for
-you to curate into CLAUDE.md). Use it for big world cards — hundreds of entries
-must not flow through your context. Judgment stays yours: what goes to CLAUDE.md,
+frontmatter — on the stage route the machine matches those keys against every line
+and hands hits to the stage process itself; constant entries under 常驻/ for you to
+curate, ten at most, into the story's table (open_stage.table 「世界」; CLAUDE.md
+only when you act the scene yourself). Use it for big world cards — hundreds of
+entries must not flow through your context. Judgment stays yours: what is真常驻,
 and dropping 酒馆 engine machinery (MVU variables / HTML status bars / CoT
-frameworks / regex_scripts — this platform has its own 状态板/明骰/记忆). Markers
-are filled by 酒馆 at runtime and have no place here; jailbreak sections are
-pointless on this platform.`,
+frameworks / regex_scripts — this platform has its own: vitals + panels for state,
+roll for dice, remember for memory). Markers are filled by 酒馆 at runtime and have
+no place here; jailbreak sections are pointless on this platform.`,
     {
       path: z.string().describe(
         'Path to the .json. Relative paths resolve against the session workspace, '
