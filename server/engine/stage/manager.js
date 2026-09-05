@@ -1,34 +1,32 @@
 /**
- * engine/stage/manager.js —— 演出进程的起停、直投、计量、广播（2026-09-05；当晚改成一场戏一个文件夹）
+ * engine/stage/manager.js —— 演出进程的起停、直投、计量、广播（2026-09-05；09-06 拆出 mechanics / lines / opening）
  *
- * 一场戏 = 工作区根下的一个文件夹（布局见 play.js），一个项目可以有几场。这里攥着每场的
- * StageRuntime：进程本体、SSE 订户、计量上下文、空闲计时、当前状态、规则表的"已达成"。
+ * 一个故事 = 工作区根下的一个文件夹（布局见 play.js），一个项目可以有几个。这里攥着每个故事的
+ * StageRuntime：进程本体、SSE 订户、计量上下文、空闲计时、当前状态、规则表的"已达成"、当前线路。
  *
  * ## 这条路上没有主 agent
  *
- * 用户在显示器里点一枚把手 / 说一句话 → api/stage.js → sayToStage → 进程队列。
- * 主 agent 只在开戏时出场一次（open_stage：写台面 + 规则、把在场者的卡搬进文件夹），之后退到场务位。
- * 台上写出来的每一拍由 write_scene 落盘（场景/scenes.jsonl），这里顺手推给所有订户。
+ * 用户在显示器里点一枚选项 / 说一句话 → api/stage.js → sayToStage → 进程队列。
+ * 主 agent 只在开场前出场一次（open_stage：写设定 + 规则、把在场者的卡搬进文件夹），之后退到场务位。
+ * 台上写出来的每一段由 write_scene 落盘（场景/*.jsonl），这里顺手推给所有订户。
  *
  * ## 系统提示词从文件拼（prompt.js）
  *
- * 台面（<戏>/台面.md）+ 每张在场者的卡（人写正文 + 机器块里的记忆索引）+ 这场戏的记忆索引 + 几句工具提醒。
- * 拼的时候记下每份来源文件的 mtime；用户改了卡或台面，下一句话到时先重开再说（那一句慢十秒）。
+ * 设定 + 每张在场者的卡 + 这个故事的记忆索引 + 玩家挑的写法预设 + 几句工具提醒。
+ * 拼的时候记下每份来源文件的 mtime 和写法 / 可选条目的指纹；用户改了任何一样，下一句话到时先重开再说。
  * 进程自己重写卡上的索引块**不算改**（onCardTouched 把 mtime 跟上），否则每记一条下一句就重开、缓存整份重付。
  *
- * ## 机械层（不是编排）
+ * ## 重开 = resume（09-06）
  *
- *   - 状态：每拍 write_scene 的 state 折进当前值（开场值来自状态面板的 initial），加一个机器补的 拍数。
- *     下一句话的尾巴带一行当前值，模型每拍都看得见自己上一拍改了什么。
- *   - 规则：状态一变就跑一遍 <戏>/规则.json（rules.js 只做比较）。成就达成 → 成就.jsonl + 弹奖杯；
- *     触发成立 → 场务纸条接在工具返回里（模型下一拍就知道阈值到了）。
- *   - 背景：write_scene 带了新的 scene（换场）→ 后台按地点时间 + 台面里的世界描述生一张背景图，
- *     生完推给显示器。同一场景只生一次，一场戏有上限。判据是机械的（scene 字段变了），不是模型决定。
+ * 每条线路记着自己的 SDK 会话 id。空闲自停、改设定重开、回退、分叉之后再起进程，一律 `resume` 那个 id，
+ * 模型才记得前文 —— 09-05 那版每次重开都是新会话，模型除了记忆索引什么都不记得，玩家感知是"她忘了刚说的话"。
+ *
+ * ## 机械层在 mechanics.js（状态折叠 / 规则 / 背景图），线路在 lines.js，开场在 opening.js。
  *
  * ## 进程是贵的，所以三条纪律
  *
- *   1. 同时在跑的场数封顶（NODESIGN_STAGE_MAX，默认 2）：一个 SDK 子进程 300-500MB。满了报 503。
- *   2. 空闲自停（NODESIGN_STAGE_IDLE_MS，默认 30 分钟）；下一句话到了自动再起，用户感知"第一句慢一点"。
+ *   1. 同时在跑的故事数封顶（NODESIGN_STAGE_MAX，默认 2）：一个 SDK 子进程 300-500MB。满了报 503。
+ *   2. 空闲自停（NODESIGN_STAGE_IDLE_MS，默认 30 分钟）；下一句话到了自动再起（resume），用户感知"第一句慢一点"。
  *   3. 每一句一条 run：createRun(skillId:'stage') → absorbResult 差分 → runs + run_model_usage（日限闸门读它）。
  *
  * ## 通路跟主循环同一张表
@@ -37,21 +35,24 @@
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import crypto, { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { parse as parsePartialJson, Allow } from 'partial-json';
 import { StageSession } from './session.js';
 import { createStageTools, readMemoryIndex, readScenes, appendUserLine, appendSceneRow, listMemories } from './tools.js';
-import { resolveCardPath, cardHome, ROLES_DIR, CARD_FILE } from './card.js';
+import { resolveCardPath, cardHome, readCardForStage, ROLES_DIR, CARD_FILE } from './card.js';
 import {
-  TABLE_FILE, SCENES_DIR, BACKDROPS_DIR,
-  isPlayDir, playFolderName, listPlays, readPlayConfig, writePlayConfig, readRules, writeRules, readTrophies, appendTrophy,
-  migrateLegacyPlay, exists,
+  TABLE_FILE, MAIN_LINE,
+  isPlayDir, playFolderName, listPlays, readPlayConfig, writePlayConfig, readRules, writeRules, readTrophies,
+  migrateLegacyPlay, exists, linesOf, currentLine, sceneFileOf,
 } from './play.js';
-import { evaluateRules, validateCondition } from './rules.js';
-import { composeStagePrompt } from './prompt.js';
+import { validateCondition } from './rules.js';
+import { composeStagePrompt, frozenHash } from './prompt.js';
+import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, fileUrl } from './mechanics.js';
+import { resolvePreset, normalizeSelection, DEFAULT_PRESET } from './preset.js';
 export { composeStagePrompt };
 import { getProject } from '../../projects/store.js';
 import { getWorkspaceRoot } from '../../projects/workspace.js';
+import { jsonlExistsForSession } from '../../projects/session-jsonl.js';
 import { getProjectBus } from '../../ws/broker.js';
 import { getBuiltinPluginsRoot } from '../agent/plugin-loader.js';
 import { defaultModel } from '../agent/session-model.js';
@@ -62,12 +63,9 @@ import { createRun, markRunStarted, markRunSucceeded, markRunFailed, setRunMetri
 import { can } from '../../auth/tier.js';
 import { getUserById } from '../../auth/users-store.js';
 import { platform } from '../../runtime/platform.js';
-import { makeGenerateImageTool } from '../mcp/tools/generate-image.js';
 
 const MAX_RUNNING = Number(process.env.NODESIGN_STAGE_MAX) || 2;
 const IDLE_MS = Number(process.env.NODESIGN_STAGE_IDLE_MS) || 30 * 60_000;
-const BACKDROPS_ON = process.env.NODESIGN_STAGE_BACKDROPS !== 'off';
-const BACKDROP_MAX = Number(process.env.NODESIGN_STAGE_BACKDROP_MAX) || 12;
 const STAGE_SKILLS = ['story-voice', 'story-craft', 'story-intimacy'];
 export const SKINS = ['paper', 'jiangnan', 'night', 'terminal'];
 export { TABLE_FILE };
@@ -89,20 +87,24 @@ class StageRuntime {
     this.pendingRuns = [];
     this.subscribers = new Set();
     this.idleTimer = null;
-    this.live = '';            // 工具之外流出来的字（观众当旁白看）
-    this.thinking = '';        // 这一拍的思考流
+    this.live = '';            // 工具之外流出来的字（显示器收进"台下"，不进正文）
+    this.thinking = '';        // 这一段的思考流
     this.blocks = new Map();   // 流中的工具块 index → { name, json }
     this.draft = '';           // write_scene 正在写的正文（partial-json 解出来的）
     this.error = null;
     this.startedAt = null;
     this.sources = [];         // 进了系统提示词的文件 [{rel, mtimeMs}]
+    this.frozen = null;        // 写法 + 可选条目的指纹（prompt.js frozenHash）
     this.promptChars = 0;
+    this.styleNames = [];
     this.state = {};           // 折好的当前状态
     this.seen = { earned: new Set(), fired: new Set() };
     this.pendingNotes = [];    // 用户拨状态触发的纸条，随下一句话带过去
     this.lastUsage = null;
     this.lastScene = null;
     this.genBusy = false;
+    this.line = MAIN_LINE;     // 当前线路
+    this.scenesRel = sceneFileOf(MAIN_LINE);
   }
 
   get running() { return !!this.session?.running; }
@@ -117,7 +119,7 @@ class StageRuntime {
 
   status() {
     return {
-      type: 'status', root: this.root,
+      type: 'status', root: this.root, line: this.line,
       running: this.running, busy: this.busy, queued: this.session?.queued || 0,
       error: this.error, startedAt: this.startedAt, usage: this.lastUsage, state: this.state,
     };
@@ -143,14 +145,11 @@ export function runtimeOf(pid, root) {
 export function getStageRuntime(pid, root) { return runtimes.get(keyOf(pid, root)) || null; }
 export function runningStages() { return [...runtimes.values()].filter(r => r.running).length; }
 
-function fileUrl(pid, rel) {
-  return `/api/projects/${pid}/artifact-file/${String(rel).split('/').map(encodeURIComponent).join('/')}`;
-}
 export async function statRel(base, rel) {
   try { return (await fs.stat(path.join(base, rel))).mtimeMs; } catch { return null; }
 }
 
-/** 老形状收进文件夹（幂等）。返回这个项目所有戏的文件夹名。 */
+/** 老形状收进文件夹（幂等）。返回这个项目所有故事的文件夹名。 */
 export async function ensurePlays(pid) {
   const ws = getWorkspaceRoot(pid);
   const migrated = await migrateLegacyPlay(ws);
@@ -161,107 +160,44 @@ export async function ensurePlays(pid) {
   return listPlays(ws);
 }
 
-// ───────────────────────────── 状态 / 规则 ─────────────────────────────
+/** 读配置并把当前线路对到 runtime 上（不跑时 runtime 只是个壳，线路要每次从配置对） */
+export async function loadConfig(rt) {
+  const cfg = (await readPlayConfig(rt.playAbs)) || { title: rt.root, cast: [], vitals: [], skin: 'paper' };
+  const line = currentLine(cfg);
+  rt.line = line.id;
+  rt.scenesRel = sceneFileOf(line.id);
+  return cfg;
+}
 
-function foldState(cfg, scenes) {
-  const s = {};
-  for (const v of cfg?.vitals || []) if (v?.key && v.initial !== undefined) s[v.key] = v.initial;
-  let beats = 0;
-  for (const r of scenes) {
-    if (r.by === 'stage') beats += 1;
-    if (r.state && typeof r.state === 'object') Object.assign(s, r.state);
+/** 每张卡上的「可选」条目（开场页画开关用）：{名: [{id,label,desc,default}]}。进程没起也要能读，所以直接读卡 */
+async function cardOptionsOf(rt, cfg) {
+  const out = {};
+  for (const c of cfg.cast || []) {
+    if (!c.card) continue;
+    try { const card = await readCardForStage(rt.wsRoot, c.card); if (card.options?.length) out[c.name] = card.options; } catch { /* 卡读不到就没有开关 */ }
   }
-  s['拍数'] = beats;
-  return s;
+  return out;
 }
 
-function stateLine(state) {
-  const pairs = Object.entries(state || {}).filter(([k]) => k !== '拍数').map(([k, v]) => `${k} ${v}`);
-  return pairs.length ? `此刻：${pairs.join(' · ')}（第 ${state['拍数'] || 0} 拍）` : `此刻：第 ${state['拍数'] || 0} 拍`;
-}
-
-/** 状态变了 → 跑规则。返回给模型看的那句（成就 / 纸条），没有就空串。 */
-async function runRules(rt, cfg) {
-  const rules = await readRules(rt.playAbs);
-  if (!rules.achievements.length && !rules.triggers.length) return '';
-  const { trophies, notes } = evaluateRules(rules, rt.state, rt.seen);
-  const parts = [];
-  for (const t of trophies) {
-    rt.seen.earned.add(t.id);
-    const row = { ...t, at: new Date().toISOString(), beat: rt.state['拍数'] || 0 };
-    await appendTrophy(rt.playAbs, row);
-    rt.broadcast({ type: 'trophy', trophy: row });
-    parts.push(`成就达成「${t.title}」`);
-  }
-  if (notes.length) {
-    const fired = new Set(cfg.firedTriggers || []);
-    for (const n of notes) { rt.seen.fired.add(n.id); fired.add(n.id); }
-    cfg.firedTriggers = [...fired];
-    await writePlayConfig(rt.playAbs, cfg);
-    parts.push(...notes.map(n => `场务纸条：${n.note}`));
-  }
-  return parts.length ? `【${parts.join('；')}】` : '';
-}
-
-// ───────────────────────────── 背景图 ─────────────────────────────
-
-function sceneKey(scene) {
-  return crypto.createHash('sha1').update(String(scene).trim()).digest('hex').slice(0, 10);
-}
-
-/** 换场了：有现成的背景就推，没有就后台生一张（有上限、同场景只生一次） */
-async function maybeBackdrop(rt, row, cfg) {
-  const scene = String(row.scene || '').trim();
-  if (!scene || scene === rt.lastScene) return;
-  rt.lastScene = scene;
-  const key = sceneKey(scene);
-  const map = cfg.backdrops || {};
-  if (map[key]) { rt.broadcast({ type: 'backdrop', scene, file: fileUrl(rt.pid, map[key]) }); return; }
-  if (!BACKDROPS_ON || rt.genBusy || Object.keys(map).length >= BACKDROP_MAX) return;
-  rt.genBusy = true;
-  rt.broadcast({ type: 'backdrop_pending', scene });
-  (async () => {
-    try {
-      const table = await fs.readFile(path.join(rt.playAbs, TABLE_FILE), 'utf8').catch(() => '');
-      const world = (/##\s*世界\s*\n([\s\S]*?)(?=\n##\s|$)/.exec(table)?.[1] || table).trim().slice(0, 500);
-      const prompt = `A wide establishing shot of this scene, no people, no text: ${scene}. `
-        + `Setting: ${world.replace(/\s+/g, ' ')}. Soft cinematic light, painterly illustration, muted palette suitable as a reading backdrop.`;
-      const gen = makeGenerateImageTool({ workspaceRoot: rt.wsRoot, ctx: rt.ctx });
-      const outputName = `stage-bg-${key}`;
-      const res = await gen.handler({ prompt, aspectRatio: '16:9', assetRole: 'background', outputName }, {});
-      if (res?.isError) throw new Error(res.content?.[0]?.text || 'generate failed');
-      const genDir = path.join(rt.wsRoot, 'assets', 'generated');
-      const made = (await fs.readdir(genDir).catch(() => [])).find(f => f.startsWith(outputName) && /\.(png|jpe?g|webp)$/i.test(f));
-      if (!made) throw new Error('生成了但找不到文件');
-      const destRel = `${rt.root}/${SCENES_DIR}/${BACKDROPS_DIR}/${made}`;
-      await fs.mkdir(path.dirname(path.join(rt.wsRoot, destRel)), { recursive: true });
-      await fs.rename(path.join(genDir, made), path.join(rt.wsRoot, destRel)).catch(async () => {
-        await fs.copyFile(path.join(genDir, made), path.join(rt.wsRoot, destRel));
-      });
-      const fresh = (await readPlayConfig(rt.playAbs)) || cfg;
-      fresh.backdrops = { ...(fresh.backdrops || {}), [key]: destRel };
-      await writePlayConfig(rt.playAbs, fresh);
-      rt.broadcast({ type: 'backdrop', scene, file: fileUrl(rt.pid, destRel) });
-    } catch (err) {
-      console.warn(`[stage] ${rt.pid}/${rt.root} 背景图没生出来: ${err.message}`);
-      rt.broadcast({ type: 'backdrop_failed', scene, error: err.message });
-    } finally { rt.genBusy = false; }
-  })();
-}
-
-// ───────────────────────────── 提示词（拼法在 prompt.js；这里只盯来源有没有变） ─────────────────────────────
-
-/** 给显示器看的配置：立绘 / 背景换成能加载的 URL */
+/** 给显示器看的配置：立绘 / 背景换成能加载的 URL；线路表、写法、可选条目原样带上 */
 function publicConfig(rt, cfg) {
   const url = (rel) => (rel && !/^(https?:)?\//.test(rel) ? fileUrl(rt.pid, rel) : (rel || null));
   const cast = (cfg.cast || []).map(c => ({ ...c, portrait: url(c.portrait) }));
   const backdrops = Object.fromEntries(Object.entries(cfg.backdrops || {}).map(([k, v]) => [k, url(v)]));
   const { systemPrompt, ...pub } = cfg;
-  return { ...pub, cast, backdrops, backdrop: url(cfg.backdrop), root: rt.root, promptChars: rt.promptChars || 0, sources: rt.sources.map(s => s.rel) };
+  return {
+    ...pub, cast, backdrops, backdrop: url(cfg.backdrop), root: rt.root,
+    lines: linesOf(cfg).map(({ sdkSid, ...l }) => ({ ...l, hasMemory: !!sdkSid })), currentLine: currentLine(cfg).id,
+    style: cfg.style || { preset: DEFAULT_PRESET, modules: null }, cardOptions: cfg.cardOptions || {}, opened: !!cfg.opened,
+    promptChars: rt.promptChars || 0, sources: rt.sources.map(s => s.rel), styleNames: rt.styleNames || [],
+  };
 }
 
+/** 设定文件的 mtime 或写法 / 可选条目的指纹变了 → 返回变的那一样 */
 async function sourcesChanged(rt) {
   for (const s of rt.sources) if ((await statRel(rt.wsRoot, s.rel)) !== s.mtimeMs) return s.rel;
+  const cfg = await readPlayConfig(rt.playAbs);
+  if (cfg && rt.frozen && frozenHash(cfg) !== rt.frozen) return '写法 / 可选条目';
   return null;
 }
 
@@ -282,7 +218,7 @@ async function buildEnv(rt, model, owner) {
     if (route.fastModel) env.ANTHROPIC_SMALL_FAST_MODEL = route.fastModel;
     if (route.window) env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(route.window);
   } else {
-    if (!can(owner, 'subscription')) throw Object.assign(new Error('这个账号没有订阅通路资格，演出进程起不来'), { status: 403 });
+    if (!can(owner, 'subscription')) throw Object.assign(new Error('这个账号没有订阅通路资格，故事进程起不来'), { status: 403 });
     if (process.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL;
     if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY; else delete env.ANTHROPIC_API_KEY;
     if (process.env.NODESIGN_FAST_MODEL) env.ANTHROPIC_SMALL_FAST_MODEL = process.env.NODESIGN_FAST_MODEL;
@@ -290,13 +226,14 @@ async function buildEnv(rt, model, owner) {
   return env;
 }
 
-// ───────────────────────────── 开戏 ─────────────────────────────
+// ───────────────────────────── 建故事 ─────────────────────────────
 
 /**
- * 建一场戏（open_stage 那条路）：写 台面.md / 规则.json / 戏.json，把在场者的卡搬进文件夹。
- * 同名的戏已存在 = 换设定重开（台面 / 规则重写，卡 / 场景 / 记忆都留着）。返回文件夹名。
+ * 建一个故事（open_stage 那条路）：写 台面.md / 规则.json / 戏.json，把在场者的卡搬进文件夹。
+ * 同名的已存在 = 换设定重开（设定 / 规则重写，卡 / 场景 / 记忆都留着）。返回文件夹名。
+ * **不起进程**：进程在玩家点「开始」或说第一句话时才起（09-06 起，之前 open_stage 一调就先烧 400MB）。
  */
-export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model } = {}) {
+export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style } = {}) {
   const ws = getWorkspaceRoot(pid);
   await ensurePlays(pid);
   const root = playFolderName(title);
@@ -316,8 +253,8 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     const name = String(c?.name || c || '').trim();
     if (!name) continue;
     let rel = await resolveCardPath(ws, name, { playRoot: root });
-    if (!rel) throw Object.assign(new Error(`没有「${name}」的角色卡（${ROLES_DIR}/${name}/${CARD_FILE}）：先用 cast_role 写卡再开戏`), { status: 409 });
-    // 卡在根上的 角色/ 里 → 整个家搬进戏的文件夹（卡 / 记忆 / 立绘一起），文件夹才自成一体
+    if (!rel) throw Object.assign(new Error(`没有「${name}」的角色卡（${ROLES_DIR}/${name}/${CARD_FILE}）：先用 cast_role 写卡再开`), { status: 409 });
+    // 卡在根上的 角色/ 里 → 整个家搬进故事的文件夹（卡 / 记忆 / 立绘一起），文件夹才自成一体
     if (!rel.startsWith(`${root}/`)) {
       const home = cardHome(rel);
       const dest = path.join(root, ROLES_DIR, path.basename(home));
@@ -336,45 +273,64 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     vitals: Array.isArray(vitals) ? vitals : (stored.vitals || []),
     skin: SKINS.includes(skin) ? skin : (stored.skin || 'paper'),
     model: model || stored.model || null,
+    lines: linesOf(stored),
+    currentLine: currentLine(stored).id,
     startedAt: stored.startedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
+  if (style?.preset) {
+    const preset = await resolvePreset(playAbs, style.preset);
+    next.style = { preset: preset ? style.preset : 'none', modules: preset ? normalizeSelection(preset, style.modules) : null };
+  }
   delete next.systemPrompt;
   await writePlayConfig(playAbs, next);
   getProjectBus(pid).publish({ type: 'stage.changed', root, running: false });
   return root;
 }
 
+// ───────────────────────────── 起进程 ─────────────────────────────
+
 export async function startStage(pid, root) {
   const project = getProject(pid);
   if (!project) throw Object.assign(new Error('project not found'), { status: 404 });
   const rt = runtimeOf(pid, root);
   if (rt.running) return { ...rt.status(), promptChars: rt.promptChars };
-  if (!(await isPlayDir(rt.playAbs))) throw Object.assign(new Error(`没有这场戏（${root}/）：先让 agent 用 open_stage 开戏`), { status: 404 });
-  let stored = (await readPlayConfig(rt.playAbs)) || { title: root, cast: [], vitals: [], skin: 'paper' };
-  if (runningStages() >= MAX_RUNNING) throw Object.assign(new Error(`同时在演的场数已满（${MAX_RUNNING}），等一场散了再开`), { status: 503 });
+  if (!(await isPlayDir(rt.playAbs))) throw Object.assign(new Error(`没有这个故事（${root}/）：先让 agent 用 open_stage 建一个`), { status: 404 });
+  let stored = await loadConfig(rt);
+  if (runningStages() >= MAX_RUNNING) throw Object.assign(new Error(`同时在进行的故事已满（${MAX_RUNNING}），等一个停下再开`), { status: 503 });
 
   const model = stored.model || defaultModel();
   const owner = project.ownerId ? getUserById(project.ownerId) : null;
-  rt.sdkSid = randomUUID();
+  // 这条线路有转录就 resume（模型记得前文）；没有就新开一个 id 并记到线路上
+  const line = currentLine(stored);
+  let resume = null;
+  if (line.sdkSid && await jsonlExistsForSession(rt.wsRoot, line.sdkSid)) { resume = line.sdkSid; rt.sdkSid = line.sdkSid; }
+  else {
+    rt.sdkSid = randomUUID();
+    stored = { ...stored, lines: linesOf(stored).map(l => (l.id === line.id ? { ...l, sdkSid: rt.sdkSid } : l)), currentLine: line.id };
+    await writePlayConfig(rt.playAbs, stored);
+  }
   rt.error = null; rt.live = ''; rt.draft = ''; rt.thinking = ''; rt.blocks.clear();
   const env = await buildEnv(rt, model, owner);
   const composed = await composeStagePrompt(rt.wsRoot, root, stored);
   rt.sources = composed.sources;
+  rt.frozen = composed.hash;
   rt.promptChars = composed.text.length;
-  if (JSON.stringify(composed.cast) !== JSON.stringify(stored.cast)) {
-    stored = { ...stored, cast: composed.cast };
+  rt.styleNames = composed.styleNames;
+  const castPublic = composed.cast.map(({ options, ...c }) => c);
+  if (JSON.stringify(castPublic) !== JSON.stringify(stored.cast)) {
+    stored = { ...stored, cast: castPublic };
     await writePlayConfig(rt.playAbs, stored);
   }
   // 当前状态与规则的"已达成"从磁盘接回来
-  const scenes = await readScenes(rt.playAbs, { limit: 100000 });
+  const scenes = await readScenes(rt.playAbs, { limit: 100000, rel: rt.scenesRel });
   rt.state = foldState(stored, scenes);
   rt.lastScene = [...scenes].reverse().find(r => r.scene)?.scene || null;
   rt.seen = { earned: new Set((await readTrophies(rt.playAbs)).map(t => t.id)), fired: new Set(stored.firedTriggers || []) };
 
   rt.ctx = new AgentContext({ runId: '__stage_pending__', skillId: 'stage', workspaceRoot: rt.wsRoot, sessionId: rt.sdkSid, appModel: model });
   const tools = createStageTools({
-    workspaceRoot: rt.wsRoot, playRoot: root,
+    workspaceRoot: rt.wsRoot, playRoot: root, scenesRel: () => rt.scenesRel,
     onScene: async (row) => {
       rt.live = ''; rt.draft = '';
       rt.broadcast({ type: 'scene', row });
@@ -382,7 +338,7 @@ export async function startStage(pid, root) {
       const cfg = (await readPlayConfig(rt.playAbs)) || stored;
       if (row.state) Object.assign(rt.state, row.state);
       rt.state['拍数'] = (rt.state['拍数'] || 0) + 1;
-      rt.broadcast({ type: 'state', state: rt.state });
+      rt.broadcast({ type: 'state', state: rt.state, changed: row.state || null });
       const note = await runRules(rt, cfg);
       maybeBackdrop(rt, row, cfg).catch(() => {});
       return note;
@@ -394,7 +350,7 @@ export async function startStage(pid, root) {
   });
 
   rt.session = new StageSession({
-    cwd: rt.wsRoot, model: resolveSdkSpoofModel(model), env, sessionId: rt.sdkSid,
+    cwd: rt.wsRoot, model: resolveSdkSpoofModel(model), env, sessionId: rt.sdkSid, resume,
     systemPrompt: composed.text, mcpServers: { stage: tools },
     plugins: [{ type: 'local', path: path.join(getBuiltinPluginsRoot(), 'nodesign') }], skills: STAGE_SKILLS,
     thinking: pickThinkingConfig(model),
@@ -405,7 +361,7 @@ export async function startStage(pid, root) {
   rt.touch();
   rt.broadcast(rt.status());
   getProjectBus(pid).publish({ type: 'stage.changed', root, running: true });
-  console.log(`[stage] ${pid}/${root} 开演 model=${model} sid=${rt.sdkSid.slice(0, 8)} prompt=${composed.text.length}c sources=${rt.sources.map(x => x.rel).join(',')}`);
+  console.log(`[stage] ${pid}/${root} 起 model=${model} sid=${rt.sdkSid.slice(0, 8)}${resume ? '(resume)' : ''} line=${rt.line} prompt=${composed.text.length}c sources=${rt.sources.map(x => x.rel).join(',')}`);
   return { ...rt.status(), promptChars: composed.text.length };
 }
 
@@ -414,10 +370,10 @@ function onSessionEvent(rt, e) {
     case 'init': {
       const have = (e.tools || []).filter(n => /^mcp__stage__/.test(n));
       if (have.length < 4) {
-        rt.error = `演出进程的工具面不齐（只见到 ${have.join(', ') || '无'}），台上写不了字 —— 这是服务端的问题，不是你的`;
+        rt.error = `故事进程的工具面不齐（只见到 ${have.join(', ') || '无'}），台上写不了字 —— 这是服务端的问题，不是你的`;
         console.error(`[stage] ${rt.pid}/${rt.root} ${rt.error}`);
         rt.broadcast({ type: 'error', error: rt.error }); rt.broadcast(rt.status());
-      } else console.log(`[stage] ${rt.pid}/${rt.root} 台面就位 ${have.length} 件，model=${e.model}`);
+      } else console.log(`[stage] ${rt.pid}/${rt.root} 工具就位 ${have.length} 件，model=${e.model}`);
       return;
     }
     case 'thinking':
@@ -455,7 +411,7 @@ function onSessionEvent(rt, e) {
       rt.error = e.error;
       for (const id of rt.pendingRuns.splice(0)) { try { markRunFailed(id, e.error); } catch { /* */ } }
       rt.broadcast({ type: 'error', error: e.error }); rt.broadcast(rt.status());
-      console.error(`[stage] ${rt.pid}/${rt.root} 演出进程出错: ${e.error}`);
+      console.error(`[stage] ${rt.pid}/${rt.root} 故事进程出错: ${e.error}`);
       return;
     default:
   }
@@ -482,26 +438,31 @@ function settleRun(rt, e) {
 
 // ───────────────────────────── 直投 ─────────────────────────────
 
-export async function sayToStage(pid, root, text, { userId = null } = {}) {
+/**
+ * 用户对台上说一句。row 可换成机器发的那一行（开场：by:'system'），模型收到的仍是 text。
+ * 每句都盖一个 uuid：它同时是转录里那条 user 记录的 uuid（回退 / 分叉按它切）。
+ */
+export async function sayToStage(pid, root, text, { userId = null, row = null } = {}) {
   const rt = runtimeOf(pid, root);
   if (rt.running && !rt.busy && !rt.session?.queued) {
     const changed = await sourcesChanged(rt);
-    if (changed) { console.log(`[stage] ${pid}/${root} 设定文件改了（${changed}），重开`); await stopStage(pid, root, 'setup-changed'); }
+    if (changed) { console.log(`[stage] ${pid}/${root} 设定改了（${changed}），重开`); await stopStage(pid, root, 'setup-changed'); }
   }
   if (!rt.running) await startStage(pid, root);
   const project = getProject(pid);
-  const run = createRun({ skillId: 'stage', brief: text.slice(0, 200), projectId: pid, userId: userId || project?.ownerId || null, sessionId: rt.sdkSid, metadata: { stage: true, play: root } });
+  const run = createRun({ skillId: 'stage', brief: text.slice(0, 200), projectId: pid, userId: userId || project?.ownerId || null, sessionId: rt.sdkSid, metadata: { stage: true, play: root, line: rt.line } });
   markRunStarted(run.id);
   rt.pendingRuns.push(run.id);
   rt.ctx.runId = run.id;
-  const row = await appendUserLine(rt.playAbs, text);
-  rt.broadcast({ type: 'scene', row });
+  const uuid = randomUUID();
+  const saved = await appendUserLine(rt.playAbs, row?.text ?? text, { rel: rt.scenesRel, uuid, by: row?.by || 'user', extra: row?.extra || {} });
+  rt.broadcast({ type: 'scene', row: saved });
   const notes = rt.pendingNotes.splice(0);
   const about = [stateLine(rt.state), ...notes.map(n => `【场务纸条：${n}】`)].join('\n');
-  const r = rt.session.say(text, { about });
+  const r = rt.session.say(text, { about, uuid });
   rt.touch();
   rt.broadcast(rt.status());
-  return { ...r, runId: run.id };
+  return { ...r, runId: run.id, rowId: saved.id };
 }
 
 export async function stopStage(pid, root, reason = 'user') {
@@ -515,7 +476,7 @@ export async function stopStage(pid, root, reason = 'user') {
   rt.live = ''; rt.draft = ''; rt.thinking = '';
   rt.broadcast({ ...rt.status(), running: false, busy: false, stoppedFor: reason });
   getProjectBus(pid).publish({ type: 'stage.changed', root, running: false });
-  console.log(`[stage] ${pid}/${root} 散场（${reason}）`);
+  console.log(`[stage] ${pid}/${root} 停（${reason}）`);
   return { running: false };
 }
 
@@ -528,32 +489,43 @@ export async function stopAllStages(reason = 'shutdown') {
 export async function stageState(pid, root, { limit = 300 } = {}) {
   const rt = runtimeOf(pid, root);
   if (!(await isPlayDir(rt.playAbs))) return null;
-  const cfg = (await readPlayConfig(rt.playAbs)) || { title: root, cast: [], vitals: [], skin: 'paper' };
-  const scenes = await readScenes(rt.playAbs, { limit });
-  if (!rt.running) rt.state = foldState(cfg, await readScenes(rt.playAbs, { limit: 100000 }));
+  const cfg = await loadConfig(rt);
+  const scenes = await readScenes(rt.playAbs, { limit, rel: rt.scenesRel });
+  if (!rt.running) rt.state = foldState(cfg, await readScenes(rt.playAbs, { limit: 100000, rel: rt.scenesRel }));
   return {
     ...rt.status(),   // ⚠️ 先铺 status，再盖 type —— status() 自带 type:'status'，放后面会把 hello 顶掉（09-05 晚栽过：显示器收到的是空 status）
     root,
     config: publicConfig(rt, cfg),
+    castOptions: await cardOptionsOf(rt, cfg),
     scenes,
     memoryIndex: await readMemoryIndex(rt.playAbs),
     memories: await listMemories(rt.playAbs),
     trophies: await readTrophies(rt.playAbs),
     rules: await readRules(rt.playAbs),
     live: rt.live, draft: rt.draft, thinking: rt.thinking,
+    backdrop: currentBackdrop(rt, cfg, [...scenes].reverse().find(r => r.scene)?.scene || null),
     type: 'hello',
   };
 }
 
+/** 显示器改配置：外观 / 标题 / 状态面板 / 手选背景 / 写法与可选条目。写法改了下一句话到时进程自己重开。 */
 export async function patchStageConfig(pid, root, patch) {
   const rt = runtimeOf(pid, root);
   const cfg = await readPlayConfig(rt.playAbs);
-  if (!cfg) throw Object.assign(new Error('还没有这场戏'), { status: 404 });
+  if (!cfg) throw Object.assign(new Error('还没有这个故事'), { status: 404 });
   const next = { ...cfg, updatedAt: new Date().toISOString() };
   if (patch.skin !== undefined) next.skin = SKINS.includes(patch.skin) ? patch.skin : cfg.skin;
   if (typeof patch.title === 'string' && patch.title.trim()) next.title = patch.title.trim().slice(0, 60);
   if (Array.isArray(patch.vitals)) next.vitals = patch.vitals;
-  if (patch.backdrop !== undefined) next.backdrop = patch.backdrop ? String(patch.backdrop) : null;   // 用户手选的背景（戏相对路径）
+  if (patch.backdrop !== undefined) next.backdrop = patch.backdrop ? String(patch.backdrop) : null;   // 用户手选的背景（故事相对路径）
+  if (patch.style && typeof patch.style === 'object') {
+    const preset = await resolvePreset(rt.playAbs, patch.style.preset);
+    next.style = { preset: preset ? String(patch.style.preset) : 'none', modules: preset ? normalizeSelection(preset, patch.style.modules) : null };
+  }
+  if (patch.cardOptions && typeof patch.cardOptions === 'object') {
+    next.cardOptions = Object.fromEntries(Object.entries(patch.cardOptions).filter(([k, v]) => typeof k === 'string' && k.length < 120 && typeof v === 'boolean'));
+  }
+  if (patch.opened === true) { next.opened = true; next.openedAt = next.openedAt || new Date().toISOString(); }
   await writePlayConfig(rt.playAbs, next);
   const pub = publicConfig(rt, next);
   rt.broadcast({ type: 'config', config: pub });
@@ -564,17 +536,17 @@ export async function patchStageConfig(pid, root, patch) {
 /** 用户在状态页拨数值：落一行 by:'user-state' 的 state，跑规则；纸条随下一句话带过去 */
 export async function setUserState(pid, root, patch) {
   const rt = runtimeOf(pid, root);
-  const cfg = await readPlayConfig(rt.playAbs);
-  if (!cfg) throw Object.assign(new Error('还没有这场戏'), { status: 404 });
+  const cfg = await loadConfig(rt);
+  if (!(await isPlayDir(rt.playAbs))) throw Object.assign(new Error('还没有这个故事'), { status: 404 });
   const clean = {};
   for (const [k, v] of Object.entries(patch || {})) if (typeof k === 'string' && k && k !== '拍数' && (typeof v === 'string' || typeof v === 'number')) clean[k] = typeof v === 'string' ? v.slice(0, 60) : v;
   if (!Object.keys(clean).length) throw Object.assign(new Error('没有可改的键'), { status: 400 });
   const row = { id: randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'user-state', state: clean };
-  await appendSceneRow(rt.playAbs, row);
-  if (!rt.running) rt.state = foldState(cfg, await readScenes(rt.playAbs, { limit: 100000 }));
+  await appendSceneRow(rt.playAbs, row, rt.scenesRel);
+  if (!rt.running) rt.state = foldState(cfg, await readScenes(rt.playAbs, { limit: 100000, rel: rt.scenesRel }));
   else Object.assign(rt.state, clean);
   rt.broadcast({ type: 'scene', row });
-  rt.broadcast({ type: 'state', state: rt.state });
+  rt.broadcast({ type: 'state', state: rt.state, changed: clean });
   if (!rt.seen.earned.size && !rt.seen.fired.size) rt.seen = { earned: new Set((await readTrophies(rt.playAbs)).map(t => t.id)), fired: new Set(cfg.firedTriggers || []) };
   const note = await runRules(rt, cfg);
   if (note) rt.pendingNotes.push(note.replace(/^【|】$/g, ''));

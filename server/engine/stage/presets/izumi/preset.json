@@ -1,0 +1,543 @@
+{
+ "id": "izumi",
+ "name": "Izumi（泉此方预设）",
+ "source": "拆解自 Izumi 0828（作者：泉此方，类脑社区免费发布）。这里只保留写作规矩，去掉了酒馆引擎件、破甲话术和作者人设；措辞按本平台改写。",
+ "intro": "一套久经调试的中文 RP 写作规矩：通用行文禁令、人物塑造原则、二十多种可选文风、动笔前的思考清单。",
+ "groups": [
+  {
+   "id": "core",
+   "name": "通用规矩",
+   "hint": "这一档总是开着",
+   "always": true
+  },
+  {
+   "id": "plot",
+   "name": "叙事"
+  },
+  {
+   "id": "twist",
+   "name": "转折",
+   "exclusive": true
+  },
+  {
+   "id": "pace",
+   "name": "节奏",
+   "exclusive": true
+  },
+  {
+   "id": "input",
+   "name": "怎么接你的话",
+   "exclusive": true
+  },
+  {
+   "id": "person",
+   "name": "人称",
+   "exclusive": true
+  },
+  {
+   "id": "dialogue",
+   "name": "对白占比",
+   "exclusive": true
+  },
+  {
+   "id": "char",
+   "name": "人物"
+  },
+  {
+   "id": "length",
+   "name": "每段篇幅",
+   "exclusive": true
+  },
+  {
+   "id": "voice",
+   "name": "文风（只选一种）",
+   "exclusive": true
+  },
+  {
+   "id": "think",
+   "name": "动笔前先想什么",
+   "exclusive": true
+  },
+  {
+   "id": "extra",
+   "name": "附加"
+  }
+ ],
+ "modules": [
+  {
+   "id": "core-persona",
+   "group": "core",
+   "name": "有限视角与常识",
+   "file": "人物-有限视角与常识.md",
+   "default": true
+  },
+  {
+   "id": "core-writing",
+   "group": "core",
+   "name": "行文通用规矩与禁词",
+   "file": "行文-通用规矩.md",
+   "default": true
+  },
+  {
+   "id": "plot-surprise",
+   "group": "plot",
+   "name": "反直觉",
+   "hint": "无聊时多写合理又好玩的展开",
+   "file": "叙事-反直觉.md",
+   "default": true
+  },
+  {
+   "id": "plot-cutaway",
+   "group": "plot",
+   "name": "镜头可切走",
+   "hint": "你这边没事时去写别人那边",
+   "file": "叙事-镜头可切走.md",
+   "default": true
+  },
+  {
+   "id": "plot-objective",
+   "group": "plot",
+   "name": "客观叙事",
+   "hint": "纯冰山写作，不插主观评论",
+   "file": "叙事-客观叙事.md",
+   "default": false
+  },
+  {
+   "id": "plot-no-godlike",
+   "group": "plot",
+   "name": "你不是世界中心",
+   "hint": "其他角色不一定给你面子",
+   "file": "叙事-玩家不是世界中心.md",
+   "default": false
+  },
+  {
+   "id": "plot-bright",
+   "group": "plot",
+   "name": "角色不阴暗",
+   "hint": "和谐有爱的基调",
+   "file": "叙事-角色不阴暗.md",
+   "default": false
+  },
+  {
+   "id": "plot-expand-input",
+   "group": "plot",
+   "name": "扩写你的输入",
+   "hint": "改动最少地把你的话写通顺",
+   "file": "叙事-扩写输入.md",
+   "default": true
+  },
+  {
+   "id": "twist-steady",
+   "group": "twist",
+   "name": "稳推",
+   "hint": "不突然转折，不加新角色",
+   "file": "转折-稳推.md",
+   "default": false
+  },
+  {
+   "id": "twist-allow",
+   "group": "twist",
+   "name": "允许转折",
+   "hint": "合乎逻辑时可以不完全听话",
+   "file": "转折-允许.md",
+   "default": false
+  },
+  {
+   "id": "twist-wild",
+   "group": "twist",
+   "name": "放飞",
+   "hint": "逻辑成立就多离谱都行",
+   "file": "转折-放飞.md",
+   "default": false
+  },
+  {
+   "id": "pace-slow",
+   "group": "pace",
+   "name": "慢推",
+   "hint": "节奏贴近现实，重互动",
+   "file": "节奏-慢推.md",
+   "default": false
+  },
+  {
+   "id": "pace-skip",
+   "group": "pace",
+   "name": "跳过无聊",
+   "hint": "无聊处直接跳时间",
+   "file": "节奏-跳过无聊.md",
+   "default": true
+  },
+  {
+   "id": "input-retell",
+   "group": "input",
+   "name": "转述",
+   "hint": "把你的话当作将要发生的事写出过程",
+   "file": "接输入-转述.md",
+   "default": true
+  },
+  {
+   "id": "input-continue",
+   "group": "input",
+   "name": "直接续写",
+   "hint": "把你的话当已发生，从末尾往下写",
+   "file": "接输入-直接续写.md",
+   "default": false
+  },
+  {
+   "id": "person-3",
+   "group": "person",
+   "name": "第三人称",
+   "file": "人称-第三人称.md",
+   "default": true
+  },
+  {
+   "id": "person-2",
+   "group": "person",
+   "name": "第二人称",
+   "file": "人称-第二人称.md",
+   "default": false
+  },
+  {
+   "id": "person-1-you",
+   "group": "person",
+   "name": "你的第一人称",
+   "file": "人称-玩家第一人称.md",
+   "default": false
+  },
+  {
+   "id": "person-1-char",
+   "group": "person",
+   "name": "对方的第一人称",
+   "file": "人称-角色第一人称.md",
+   "default": false
+  },
+  {
+   "id": "dlg-low",
+   "group": "dialogue",
+   "name": "少",
+   "hint": "两成以上",
+   "file": "对白量-少.md",
+   "default": false
+  },
+  {
+   "id": "dlg-mid",
+   "group": "dialogue",
+   "name": "中",
+   "hint": "四成以上",
+   "file": "对白量-中.md",
+   "default": false
+  },
+  {
+   "id": "dlg-high",
+   "group": "dialogue",
+   "name": "多",
+   "hint": "七成以上",
+   "file": "对白量-多.md",
+   "default": false
+  },
+  {
+   "id": "dlg-only",
+   "group": "dialogue",
+   "name": "纯对白",
+   "file": "对白量-纯对白.md",
+   "default": false
+  },
+  {
+   "id": "char-no-tone",
+   "group": "char",
+   "name": "不写语气",
+   "hint": "对白前后不跟声音描写",
+   "file": "人物-不写语气.md",
+   "default": true
+  },
+  {
+   "id": "char-lean-action",
+   "group": "char",
+   "name": "防过度描写",
+   "hint": "动作只写白描",
+   "file": "人物-防过度描写.md",
+   "default": false
+  },
+  {
+   "id": "char-strict",
+   "group": "char",
+   "name": "只按设定塑造",
+   "hint": "不揣测、不夸张人设",
+   "file": "人物-只按设定塑造.md",
+   "default": false
+  },
+  {
+   "id": "char-psych-italic",
+   "group": "char",
+   "name": "心理描写用斜体",
+   "file": "心理-斜体.md",
+   "default": true
+  },
+  {
+   "id": "len-short",
+   "group": "length",
+   "name": "短",
+   "hint": "400 字上下",
+   "file": "字数-短.md",
+   "default": false
+  },
+  {
+   "id": "len-mid",
+   "group": "length",
+   "name": "中",
+   "hint": "700 字上下",
+   "file": "字数-中.md",
+   "default": true
+  },
+  {
+   "id": "len-long",
+   "group": "length",
+   "name": "长",
+   "hint": "1200 字上下",
+   "file": "字数-长.md",
+   "default": false
+  },
+  {
+   "id": "think-fluent",
+   "group": "think",
+   "name": "注重流畅",
+   "hint": "先理清楚谁知道什么",
+   "file": "思考-流畅.md",
+   "default": true
+  },
+  {
+   "id": "think-persona",
+   "group": "think",
+   "name": "注重人设",
+   "file": "思考-人设.md",
+   "default": false
+  },
+  {
+   "id": "think-plot",
+   "group": "think",
+   "name": "注重剧情",
+   "file": "思考-剧情.md",
+   "default": false
+  },
+  {
+   "id": "think-brief",
+   "group": "think",
+   "name": "简洁",
+   "file": "思考-简洁.md",
+   "default": false
+  },
+  {
+   "id": "extra-parallel",
+   "group": "extra",
+   "name": "平行事件",
+   "hint": "每段末尾附一两件你视角外正在发生的事",
+   "file": "附加-平行事件.md",
+   "default": false
+  },
+  {
+   "id": "extra-jp",
+   "group": "extra",
+   "name": "日语双语对白",
+   "file": "附加-日语双语.md",
+   "default": false
+  },
+  {
+   "id": "extra-female",
+   "group": "extra",
+   "name": "女性向适配",
+   "file": "附加-女性向.md",
+   "default": false
+  },
+  {
+   "id": "voice-smooth",
+   "group": "voice",
+   "name": "顺眼舒服",
+   "hint": "通用、切换丝滑：生活化直白，剧情实质推进",
+   "file": "文风-顺眼舒服.md",
+   "default": true
+  },
+  {
+   "id": "voice-adaptive",
+   "group": "voice",
+   "name": "自适应叙事",
+   "hint": "把正文当电影拍：平淡处纯白描，有趣处加主观情感",
+   "file": "文风-自适应叙事.md",
+   "default": false
+  },
+  {
+   "id": "voice-kamishibai",
+   "group": "voice",
+   "name": "纸芝居口述",
+   "hint": "全知叙事者绘声绘色讲故事，口语为底",
+   "file": "文风-纸芝居.md",
+   "default": false
+  },
+  {
+   "id": "voice-lightnovel",
+   "group": "voice",
+   "name": "日轻小说",
+   "hint": "恋爱拉扯，自由间接文体，对白单独成段用「」",
+   "file": "文风-日轻小说.md",
+   "default": false
+  },
+  {
+   "id": "voice-zero",
+   "group": "voice",
+   "name": "零度写作与自由间接引语",
+   "hint": "客观呈现事实，强烈情绪时切入角色第一人称",
+   "file": "文风-说故事.md",
+   "default": false
+  },
+  {
+   "id": "voice-wuxia",
+   "group": "voice",
+   "name": "武侠",
+   "hint": "古风含蓄，战斗凌厉",
+   "file": "文风-武侠.md",
+   "default": false
+  },
+  {
+   "id": "voice-deadpan",
+   "group": "voice",
+   "name": "英式冷面幽默",
+   "hint": "克制的文字写骨感的现实，明褒暗贬",
+   "file": "文风-英式幽默.md",
+   "default": false
+  },
+  {
+   "id": "voice-minguo",
+   "group": "voice",
+   "name": "民国物哀",
+   "hint": "张爱玲式颓废物哀，半文半白，租界摩登",
+   "file": "文风-民国物哀.md",
+   "default": false
+  },
+  {
+   "id": "voice-webnovel",
+   "group": "voice",
+   "name": "中文网文",
+   "hint": "简单口语长段落，只写重点，每段结尾吊胃口",
+   "file": "文风-网文.md",
+   "default": false
+  },
+  {
+   "id": "voice-stream",
+   "group": "voice",
+   "name": "意识流（冷意识）",
+   "hint": "思维的实时记录，独白承载一切",
+   "file": "文风-意识流.md",
+   "default": false
+  },
+  {
+   "id": "voice-tempo",
+   "group": "voice",
+   "name": "节奏大师（四阶段）",
+   "hint": "平推处零度写作，爆点才火力全开",
+   "file": "文风-节奏大师.md",
+   "default": false
+  },
+  {
+   "id": "voice-theatre",
+   "group": "voice",
+   "name": "舞台剧",
+   "hint": "对白驱动一切，只记录动作与现象",
+   "file": "文风-舞台剧.md",
+   "default": false
+  },
+  {
+   "id": "voice-luxun",
+   "group": "voice",
+   "name": "鲁迅式冷峻白描",
+   "hint": "白描是尖刀，讽刺是显影液",
+   "file": "文风-鲁迅.md",
+   "default": false
+  },
+  {
+   "id": "voice-wangxiaobo",
+   "group": "voice",
+   "name": "王小波式黑色幽默",
+   "hint": "逻辑是骨架，幽默是血肉",
+   "file": "文风-王小波.md",
+   "default": false
+  },
+  {
+   "id": "voice-jiangnan",
+   "group": "voice",
+   "name": "江南",
+   "hint": "多人称，抒情与克制并存",
+   "file": "文风-江南.md",
+   "default": false
+  },
+  {
+   "id": "voice-iruma",
+   "group": "voice",
+   "name": "入间人间",
+   "hint": "第一人称，日常里的错位与冷感",
+   "file": "文风-入间人间.md",
+   "default": false
+  },
+  {
+   "id": "voice-fushimi",
+   "group": "voice",
+   "name": "伏见司",
+   "hint": "第一人称轻小说节奏",
+   "file": "文风-伏见司.md",
+   "default": false
+  },
+  {
+   "id": "voice-jinyong",
+   "group": "voice",
+   "name": "金庸",
+   "hint": "古典白话，招式写动线",
+   "file": "文风-金庸.md",
+   "default": false
+  },
+  {
+   "id": "voice-gulong",
+   "group": "voice",
+   "name": "古龙",
+   "hint": "短句、留白，气氛先于招式",
+   "file": "文风-古龙.md",
+   "default": false
+  },
+  {
+   "id": "voice-kawabata",
+   "group": "voice",
+   "name": "川端康成（物哀）",
+   "hint": "感觉先于情节，留白与暗示",
+   "file": "文风-川端康成.md",
+   "default": false
+  },
+  {
+   "id": "voice-maeda",
+   "group": "voice",
+   "name": "麻枝准（Key 社）",
+   "hint": "日常与非日常的情感反差",
+   "file": "文风-麻枝准.md",
+   "default": false
+  },
+  {
+   "id": "voice-kamachi",
+   "group": "voice",
+   "name": "镰池和马（战斗）",
+   "hint": "高密度战斗与设定",
+   "file": "文风-镰池和马.md",
+   "default": false
+  },
+  {
+   "id": "voice-radio",
+   "group": "voice",
+   "name": "广播剧",
+   "hint": "以声音和对白为核心",
+   "file": "文风-广播剧.md",
+   "default": false
+  },
+  {
+   "id": "voice-akira",
+   "group": "voice",
+   "name": "日日日",
+   "hint": "轻小说，跳脱与冷感",
+   "file": "文风-日日日.md",
+   "default": false
+  }
+ ]
+}

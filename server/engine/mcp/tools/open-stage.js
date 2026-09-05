@@ -1,22 +1,26 @@
 /**
- * mcp/tools/open-stage.js —— open_stage：把一场戏交给演出进程（2026-09-05）
+ * mcp/tools/open-stage.js —— open_stage：把一个故事交给演出进程（2026-09-05；09-06 加写法预设、不再自动起进程）
  *
  * 主 agent 在 RP 里的位置从此是**场务**：问清楚用户想怎么玩、把世界/人物/规矩编成一份
- * 系统提示词（skill `stage-setup` 教怎么写），然后调这一件把它交出去。之后台上每一拍
+ * 设定（skill `stage-setup` 教怎么写），然后调这一件把它交出去。之后台上每一段
  * 由演出进程写，用户的话直接进它的队列，主 agent 不再转述、不再代演。
  *
  * 为什么是独立进程不是子代理：子代理没法不吃项目 CLAUDE.md（SDK 强制注入），而 RP 模式
  * 下那份档案是污染；独立会话 settingSources:[] 一刀切干净。细账在 engine/stage/session.js。
  *
- * 一场戏一个文件夹（按标题起名，见 engine/stage/play.js）。同名再调一次 = 换设定重开：
- * 重写台面 / 规则、停掉在跑的进程再起，场景和记忆**不清** —— 上一场记住的事照样接回去。
+ * 一个故事一个文件夹（按标题起名，见 engine/stage/play.js）。同名再调一次 = 换设定重开：
+ * 重写设定 / 规则、停掉在跑的进程，场景和记忆**不清** —— 上一场记住的事照样接回去。
  * 用户要"从头再来"时让他自己删那个文件夹（画布上那张卡），别替他删。
+ *
+ * 09-06 起 open_stage **不起进程**：玩家双击卡进显示器，在开场页挑写法预设、勾角色卡上的可选条目，
+ * 点「开始」才起（之前一调就先烧 400MB，玩家还没进来）。
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { startStage, stopStage, getStageRuntime, createPlay, SKINS } from '../../stage/manager.js';
+import { stopStage, getStageRuntime, createPlay, SKINS } from '../../stage/manager.js';
 import { validateCondition } from '../../stage/rules.js';
+import { BUILTIN_IDS, DEFAULT_PRESET } from '../../stage/preset.js';
 
 const castSchema = z.object({
   name: z.string().min(1).max(30).describe('在场者的名字，必须已经有角色卡（cast_role 写的 角色/<名>/角色卡.md）'),
@@ -24,7 +28,7 @@ const castSchema = z.object({
 });
 
 const vitalSchema = z.object({
-  key: z.string().min(1).max(30).describe('状态键，演出进程在 write_scene 的 state 里按这个键更新'),
+  key: z.string().min(1).max(30).describe('状态键，演出进程在 write_scene 的 state 里按这个键更新。⛔ 键名要跟你在设定里、规则里写的一字不差（09-05 有一场 vitals 用英文键、进程报中文键，面板永远是 0）'),
   label: z.string().max(20).optional().describe('面板上显示的名字，不给就用 key'),
   as: z.enum(['bar', 'chips', 'num', 'text']).default('text')
     .describe('bar=进度条（配 max）/ chips=几个格子里亮一个（配 options）/ num=数字（配 unit）/ text=一行字'),
@@ -32,6 +36,7 @@ const vitalSchema = z.object({
   unit: z.string().max(10).optional(),
   options: z.array(z.string().max(20)).max(8).optional(),
   initial: z.union([z.string().max(60), z.number()]).optional().describe('开场时的值'),
+  who: z.string().max(30).optional().describe('这个值属于哪个在场者（比如"好感度"属于她）。给了显示器的角色页会把它挂在这个人身上；世界性的（时间 / 天气）不给'),
 });
 
 const achievementSchema = z.object({
@@ -45,38 +50,48 @@ const achievementSchema = z.object({
 const triggerSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/),
   when: z.string().min(3).max(200).describe('条件写法同成就'),
-  note: z.string().min(1).max(300).describe('阈值到了要递给演出进程的场务纸条，比如 "好感过 60，按卡上的分阶段人设进熟稔期，这一拍起可以让她主动开口"'),
+  note: z.string().min(1).max(300).describe('阈值到了要递给演出进程的场务纸条，比如 "好感过 60，按卡上的分阶段人设进熟稔期，这一段起可以让她主动开口"'),
   once: z.boolean().default(true).describe('只触发一次（默认）还是每次成立都递'),
+});
+const styleSchema = z.object({
+  preset: z.string().max(80).describe(`写法预设 id：${BUILTIN_IDS.map(x => `"${x}"`).join(' / ')}（内置），或 "user:<文件夹名>"（用户上传的酒馆预设 JSON，先放进 <故事>/预设/ 下），或 "none"`),
+  modules: z.array(z.string().max(60)).max(80).optional().describe('要启用的模块 id（在默认勾选之上加）。不知道 id 就不传，玩家自己在开场页勾'),
 });
 
 export function makeOpenStageTool({ projectId }) {
   return tool(
     'open_stage',
-    `Hand a play to the stage process and step back to stage-manager duty.
+    `Hand a story to the stage process and step back to stage-manager duty.
 
-Two kinds of files make a play (load skill \`stage-setup\` first):
-  - the TABLE (\`table\` here → written to stage/台面.md): world, difficulty, how much you
-    ghost-write, prose rules, how to act. Everything that belongs to THIS play, not to a person.
-  - the CARDS (角色/<名>/角色卡.md, written earlier with cast_role): who each person is, how
+Two kinds of files make a story (load skill \`stage-setup\` first):
+  - the TABLE (\`table\` here → written to <story>/台面.md): world, difficulty, how much you
+    ghost-write, prose rules, how to act. Everything that belongs to THIS story, not to a person.
+  - the CARDS (<story>/角色/<名>/角色卡.md, written earlier with cast_role): who each person is, how
     they talk, what they never do, plus their own memory index. Everything that belongs to a PERSON.
-The stage process gets table + every cast member's card verbatim as its system prompt, and
-nothing else: no project CLAUDE.md, no memory of yours. The user can edit both files on the
-canvas; the stage reopens itself on the next line after an edit.
+    A card may carry a \`## 可选\` section (one \`- [ ] item — why\` per line): the player toggles those
+    on the opening screen, so put "does the player want this subplot / trait?" items there.
+The stage process gets table + every cast member's card verbatim as its system prompt, plus the
+prose preset the player picks on the opening screen (default: ${DEFAULT_PRESET}), and nothing else:
+no project CLAUDE.md, no memory of yours.
 
+This does NOT start the process. The player opens the card, picks a prose preset and card options
+on the opening screen, and presses 开始; the machine then writes the opening instruction itself.
+Leave \`skin\` at its default (matches the platform); the player can change looks in the display.
 Call this once. From here on the user talks to the stage directly through the display card;
-you do not relay, narrate, or act. Calling again rewrites the table and restarts, keeping
-scenes and memories. To wipe a play, the user deletes the stage/ folder themselves.`,
+you do not relay, narrate, or act. Calling again rewrites the table and stops the running process,
+keeping scenes and memories. To wipe a story, the user deletes its folder themselves.`,
     {
-      title: z.string().min(1).max(60).describe('这场戏的名字，卡上和显示器顶栏都显示它'),
+      title: z.string().min(1).max(60).describe('这个故事的名字，卡上和显示器顶栏都显示它'),
       table: z.string().min(100).max(40000)
-        .describe('台面全文（世界 / 台面规矩 / 怎么演），写进 stage/台面.md。这是冻结区：只放整场不变的东西，人物不在这里 —— 人物在各自的卡上'),
+        .describe('设定全文（世界 / 规矩 / 怎么演），写进 <故事>/台面.md。这是冻结区：只放整场不变的东西，人物不在这里 —— 人物在各自的卡上'),
       cast: z.array(castSchema).min(1).max(12).describe('在场者。每个都要先有角色卡；一人=显示器画立绘，多人=画名册'),
       vitals: z.array(vitalSchema).max(8).optional().describe('状态面板显示哪些字段（好感 / 时间 / 体力…）。不需要就别传'),
-      skin: z.enum(SKINS).default('paper').describe('显示器皮肤：paper 纸 / jiangnan 江南 / night 夜 / terminal 终端'),
+      skin: z.enum(SKINS).default('paper').describe('显示器外观。留默认 paper（跟平台一致）；玩家自己会换'),
+      style: styleSchema.optional().describe('写法预设。不传 = 玩家开场时自己挑（默认 Izumi）。用户交了自己的酒馆预设 JSON 才传 user:<名>'),
       achievements: z.array(achievementSchema).max(40).optional()
         .describe('奖杯。阈值按用户选的难度定（爽档 40 就给"她笑了"，严酷档要 80）。事件型的靠 state 里的标志位：牵手 == 1'),
       triggers: z.array(triggerSchema).max(20).optional()
-        .describe('剧情推进：从酒馆卡的分阶段规则翻过来 —— 关键数值到了阈值，机器递纸条给演出进程，它这一拍照着推'),
+        .describe('剧情推进：从酒馆卡的分阶段规则翻过来 —— 关键数值到了阈值，机器递纸条给演出进程，它这一段照着推'),
     },
     async (args) => {
       const fail = (msg) => ({ content: [{ type: 'text', text: msg }], isError: true });
@@ -86,27 +101,28 @@ scenes and memories. To wipe a play, the user deletes the stage/ folder themselv
           const bad = validateCondition(r.when);
           if (bad) return fail(`规则「${r.id}」的条件不合法：${bad}`);
         }
+        const style = args.style ? { preset: args.style.preset, modules: Object.fromEntries((args.style.modules || []).map(id => [id, true])) } : null;
         const root = await createPlay(projectId, {
-          title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin,
+          title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin, style,
           rules: (args.achievements || args.triggers) ? { achievements: args.achievements || [], triggers: args.triggers || [] } : null,
         });
         const rt = getStageRuntime(projectId, root);
         const wasRunning = !!rt?.running;
         if (wasRunning) await stopStage(projectId, root, 'reopen');
-        const st = await startStage(projectId, root);
         const who = args.cast.map(c => c.name).join(' / ');
         return {
           content: [{
             type: 'text',
-            text: `${wasRunning ? '换了台面重开' : '开演了'}：「${args.title}」→ 文件夹 ${root}/，在场 ${who}，台面 ${args.table.length} 字，系统提示词共 ${st.promptChars || '?'} 字（台面 + 角色卡 + 记忆索引）`
-              + `${args.achievements?.length ? `，${args.achievements.length} 枚奖杯` : ''}${args.triggers?.length ? `，${args.triggers.length} 条推进触发` : ''}。`
-              + '\n这场戏的一切都在那个文件夹里（台面 / 角色卡 / 记忆 / 场景 / 规则），画布上它是一张演出卡，用户双击就进显示器；他在那里说的每句话直接进演出进程，不经过你。'
+            text: `${wasRunning ? '换了设定，进程已停，下一句话到时重开' : '建好了'}：「${args.title}」→ 文件夹 ${root}/，在场 ${who}，设定 ${args.table.length} 字`
+              + `${args.achievements?.length ? `，${args.achievements.length} 枚奖杯` : ''}${args.triggers?.length ? `，${args.triggers.length} 条推进触发` : ''}${style ? `，写法预设 ${style.preset}` : '，写法由玩家开场时挑（默认 Izumi）'}。`
+              + '\n这个故事的一切都在那个文件夹里（设定 / 角色卡 / 记忆 / 场景 / 规则 / 预设），画布上它是一张卡，用户双击进去先到开场页：'
+              + '看世界与人物、挑写法、勾角色卡上的可选条目，点「开始」机器才起进程并发开场指令；之后他说的每句话直接进进程，不经过你。'
               + '\n你现在是场务：别在这里代演、别复述台上的剧情。用户回到这里跟你说话时才是在跟你说话（改设定 / 换玩法 / 问怎么用）。'
-              + '\n改人设 = 改角色卡（cast_role 重登或用户在显示器里改）；改规矩 = 再调 open_stage 或用户在显示器里改台面。改完下一句话到时进程自动重开，场景和记忆都留着。',
+              + '\n改人设 = 改角色卡（cast_role 重登或用户在显示器里改）；改规矩 = 再调 open_stage 或用户在显示器里改设定。改完下一句话到时进程自动重开（resume 转录，前文不丢），场景和记忆都留着。',
           }],
         };
       } catch (err) {
-        return fail(`开不了戏：${err.message}`);
+        return fail(`建不了：${err.message}`);
       }
     },
   );

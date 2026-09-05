@@ -94,6 +94,34 @@ export function replaceMemoryBlock(raw, indexBody) {
   return `${text.replace(/\s*$/, '')}\n\n${block}`;
 }
 
+/**
+ * 卡上的「可选」条目（2026-09-06）：酒馆卡常有"由玩家决定是否启用"的设定（某条支线、某个癖好、
+ * 某段前史）。写卡的人把它们放在一节 `## 可选` 下，一条一行：
+ *   - [ ] 有个弟弟 — 家里还有个初中的弟弟，周末要接他
+ *   - [x] 会抽烟 — 默认开
+ * 显示器开场页把它们画成开关，玩家勾完机器记进 戏.json 的 cardOptions，随卡一起进系统提示词
+ * （"玩家开场时选的：启用 A，不启用 B"）。没有这一节的卡就没有开关。
+ */
+export function parseCardOptions(body) {
+  const text = String(body || '');
+  // 一节到下一个标题或文件末尾为止（⚠️ 带 m 标志时 $ 是行尾，用"后面没字了"代替）
+  const sec = /^#{2,3}[ \t]*可选[^\n]*\n([\s\S]*?)(?=\n#{1,3}[ \t]|(?![\s\S]))/m.exec(text);
+  if (!sec) return [];
+  const out = [];
+  let n = 0;
+  for (const raw of sec[1].split('\n')) {
+    const m = /^\s*[-*]\s*(?:\[( |x|X|✓|√)\]\s*)?(.+)$/.exec(raw);
+    if (!m) continue;
+    const on = !!(m[1] && m[1].trim());
+    const [label, ...rest] = m[2].split(/\s+[—–:：-]\s+|\s+—\s*|\s*：\s*/);
+    const lab = String(label || '').trim();
+    if (!lab) continue;
+    n += 1;
+    out.push({ id: `opt${n}`, label: lab.slice(0, 40), desc: rest.join(' ').trim().slice(0, 200), default: on });
+  }
+  return out;
+}
+
 /** 渲一张新卡（cast_role 用）。机器块先立一个空的，让人一眼知道那块不归他。 */
 export function renderCard({ name, slug = null, note = null, portrait = null, persona }) {
   const fm = ['---', `name: ${name}`];
@@ -101,15 +129,15 @@ export function renderCard({ name, slug = null, note = null, portrait = null, pe
   if (note) fm.push(`note: ${note}`);
   if (portrait) fm.push(`portrait: ${portrait}`);
   fm.push('---');
+  const body = String(persona || '').trim();
   const head = [
-    `# ${name}`,
-    '',
+    ...(/^#\s/.test(body) ? [] : [`# ${name}`, '']),   // persona 自带大标题就不再加一个（09-05 的卡顶上叠了两个「# 晴可」）
     `<!-- ${slug ? `${slug} · ` : ''}cast_role 登记。`,
     '     正文是这个人的人设：他是谁、怎么说话、绝不做什么，加两三句语气样本。',
     '     开戏时整份进演出进程的系统提示词；改了正文，下一句话到时进程自动重开。',
     '     下面 nd:memory 那一块是机器维护的记忆索引，别手改 —— 正文在 记忆/ 目录里。 -->',
     '',
-    String(persona || '').trim(),
+    body,
     '',
   ].join('\n');
   return replaceMemoryBlock(`${fm.join('\n')}\n${head}`, '## 记住的事\n（还没有）');
@@ -163,6 +191,7 @@ export async function readCardForStage(workspaceRoot, cardRel) {
     slug: c.fm.slug,
     note: c.fm.note || '',
     portrait: c.fm.portrait || null,
+    options: parseCardOptions(c.body),
     text: memory
       ? `${c.body}\n\n${memory}\n（索引里的正文在 ${cardHome(cardRel)}/${CARD_MEMORY_DIR}/ 下，要用自己 Read）`
       : c.body,

@@ -23,7 +23,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import {
-  PLAY_CONFIG, SCENES_DIR, SCENES_FILE, LEGACY_DIR, isPlayDir, readPlayConfig, exists,
+  PLAY_CONFIG, SCENES_DIR, SCENES_FILE, LEGACY_DIR, isPlayDir, readPlayConfig, exists, currentLine, sceneFileOf,
 } from '../../engine/stage/play.js';
 
 export { PLAY_CONFIG, SCENES_FILE };
@@ -78,7 +78,9 @@ export default {
     let cfg = null;
     if (inst.legacy) { try { cfg = JSON.parse(await fs.readFile(path.join(playAbs, 'stage.json'), 'utf8')); } catch { cfg = null; } }
     else cfg = await readPlayConfig(playAbs);
+    // 段数按当前线路的记录数（分支各有各的文件）；入口文件名固定是主线的，别让 ENTRY_FILE 跟着线路漂
     const scenesRel = inst.legacy ? 'scenes.jsonl' : `${SCENES_DIR}/${SCENES_FILE}`;
+    const countRel = inst.legacy ? scenesRel : sceneFileOf(currentLine(cfg || {}).id);
     const fallbackTitle = root ? path.basename(root) : path.basename(taskDir);
     return {
       kind: 'stage',
@@ -94,7 +96,7 @@ export default {
       stage: {
         cast: Array.isArray(cfg?.cast) ? cfg.cast.map(c => ({ name: c.name, note: c.note || '' })) : [],
         skin: cfg?.skin || 'paper',
-        beats: await countScenes(path.join(playAbs, scenesRel)),
+        beats: await countScenes(path.join(playAbs, countRel)),
         startedAt: cfg?.startedAt || null,
         legacy: !!inst.legacy,
       },
@@ -104,6 +106,6 @@ export default {
   async describe(_taskDir, artifact) {
     const n = artifact.stage?.beats || 0;
     const who = (artifact.stage?.cast || []).map(c => c.name).slice(0, 4).join(' / ');
-    return `演出「${artifact.title}」（文件夹 ${artifact.root || '.'}/）· ${n} 拍${who ? ` · 在场：${who}` : ''}（台上的字由演出进程写，用户直接对它说话，不经过你）`;
+    return `故事「${artifact.title}」（文件夹 ${artifact.root || '.'}/）· ${n} 段${who ? ` · 在场：${who}` : ''}（台上的字由演出进程写，用户直接对它说话，不经过你）`;
   },
 };

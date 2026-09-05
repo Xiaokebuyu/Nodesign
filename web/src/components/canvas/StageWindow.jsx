@@ -4,18 +4,20 @@ import ArtifactWindow from './ArtifactWindow.jsx';
 import { Stage } from '../../lib/api.js';
 
 /**
- * StageWindow —— 演出（RP 显示器）的最大化窗（2026-09-05；当晚随"一场戏一个文件夹"重写）
+ * StageWindow —— 演出（RP 显示器）的最大化窗（2026-09-05；09-06 随显示器重写改文案与页面表）
  *
  * 跟 SiteWindow 走同一副外壳（ArtifactWindow），内容层就是一个 iframe 装服务端那条
- * `/stage/<戏>/view`。**卡上和这里装的是同一个页面**：显示器自己订着 SSE、自己画每一拍、
- * 自己 POST 用户说的话、自己改台面和角色卡 —— 这扇窗不再另开一条数据流，只做三件事：
+ * `/stage/<故事>/view`。**卡上和这里装的是同一个页面**：显示器自己订着 SSE、自己画每一段、
+ * 自己 POST 用户说的话、自己改设定和角色卡 —— 这扇窗不再另开一条数据流，只做三件事：
  *
- *   1. 把工具栏换成 RP 专用那条：开演 / 散场、五个页面（舞台 / 人物 / 记忆 / 上下文 / 状态）、皮肤、重载
- *   2. 从 iframe 的 postMessage 里拿状态（在等你 / 正在写 / 散场了）画在顶栏小字上
- *   3. 切页、换皮肤都 postMessage 给显示器，它自己去改（皮肤再 PATCH 服务端那份）
+ *   1. 把工具栏换成 RP 专用那条：开始 / 停止、五个页面（故事 / 角色 / 记忆 / 设定 / 状态）、外观、重载
+ *   2. 从 iframe 的 postMessage 里拿状态（等你 / 正在回复 / 已停下）画在顶栏小字上
+ *   3. 切页、换外观都 postMessage 给显示器，它自己去改（外观再 PATCH 服务端那份）
  *
  * 为什么状态走 postMessage 不再开一条 SSE：浏览器对同源 HTTP/1.1 连接数有上限（6），
- * 画布上每张演出卡的预览 iframe 已经各占一条流。
+ * 画布上每张卡的预览 iframe 已经各占一条流。
+ *
+ * ⛔ 文案不用"戏 / 台面 / 把手 / 拍"这类圈内话（站主 09-06 点名）：用户看到的是故事、设定、选项、段。
  */
 
 const SKINS = [
@@ -25,17 +27,17 @@ const SKINS = [
   { id: 'terminal', label: '终端' },
 ];
 const PAGES = [
-  { id: 'stage', label: '舞台' },
-  { id: 'cast', label: '人物' },
+  { id: 'story', label: '故事' },
+  { id: 'cast', label: '角色' },
   { id: 'memory', label: '记忆' },
-  { id: 'context', label: '上下文' },
+  { id: 'context', label: '设定' },
   { id: 'status', label: '状态' },
 ];
 
 export default function StageWindow({ projectId, root, title, onClose, onToolbarGroups }) {
   const [status, setStatus] = useState({ running: false, busy: false, queued: 0 });
   const [skin, setSkin] = useState('paper');
-  const [page, setPage] = useState('stage');
+  const [page, setPage] = useState('story');
   const [liveTitle, setLiveTitle] = useState(title || '');
   const [reloadKey, setReloadKey] = useState(0);
   const [pending, setPending] = useState(false);
@@ -45,7 +47,7 @@ export default function StageWindow({ projectId, root, title, onClose, onToolbar
   useEffect(() => {
     const onMsg = (e) => {
       if (e.origin !== window.location.origin || !e.data || e.data.nd !== 'stage') return;
-      if (e.data.root && e.data.root !== root) return;   // 画布上别的演出卡的预览也在报，只认自己这场
+      if (e.data.root && e.data.root !== root) return;   // 画布上别的故事卡的预览也在报，只认自己这个
       setStatus({ running: !!e.data.running, busy: !!e.data.busy, queued: e.data.queued || 0 });
       if (e.data.skin) setSkin(e.data.skin);
       if (e.data.title) setLiveTitle(e.data.title);
@@ -65,7 +67,7 @@ export default function StageWindow({ projectId, root, title, onClose, onToolbar
       if (status.running) await Stage.stop(projectId, root);
       else await Stage.start(projectId, root);
     } catch (err) {
-      setNote(err?.message || '没起来');   // 名额满 / 没资格 / 还没开过戏：如实写在顶栏
+      setNote(err?.message || '没起来');   // 名额满 / 没资格 / 还没建：如实写在顶栏
     } finally { setPending(false); }
   }, [projectId, root, status.running]);
 
@@ -83,24 +85,24 @@ export default function StageWindow({ projectId, root, title, onClose, onToolbar
       id: 'run',
       items: [
         {
-          id: 'toggle', icon: status.running ? Square : Play, label: status.running ? '散场' : '开演', disabled: pending,
-          title: status.running ? '停掉演出进程（设定和记忆都留着，再开就接上）' : '把演出进程起回来。直接在台上说一句话也会自动开',
+          id: 'toggle', icon: status.running ? Square : Play, label: status.running ? '停止' : '开始', disabled: pending,
+          title: status.running ? '停掉对方的进程（设定和记忆都留着，再开就接上前文）' : '把对方的进程起回来。直接在故事里说一句话也会自动起',
           onClick: toggleRun,
         },
         { id: 'reload', icon: RotateCw, title: '重载显示器', onClick: reload },
       ],
     },
     { id: 'page', type: 'mode', value: page, onChange: changePage, items: PAGES.map(p => ({ id: p.id, label: p.label, title: p.label })) },
-    { id: 'skin', type: 'mode', value: skin, onChange: changeSkin, items: SKINS.map(s => ({ id: s.id, label: s.label, title: `皮肤 · ${s.label}` })) },
+    { id: 'skin', type: 'mode', value: skin, onChange: changeSkin, items: SKINS.map(s => ({ id: s.id, label: s.label, title: `外观 · ${s.label}` })) },
   ], [status.running, pending, toggleRun, reload, page, changePage, skin, changeSkin]);
 
   const subtitle = note
     || (status.running
-      ? (status.busy ? '台上正在写' : (status.queued ? `排着 ${status.queued} 句` : '台上在等你'))
-      : '散场了 · 说一句就再开');
+      ? (status.busy ? '正在回复' : (status.queued ? `排着 ${status.queued} 句` : '等你'))
+      : '已停下 · 说一句就接上');
 
   return (
-    <ArtifactWindow kind="stage" title={liveTitle || title || '演出'} subtitle={subtitle} onClose={onClose} groups={groups} onToolbarGroups={onToolbarGroups}>
+    <ArtifactWindow kind="stage" title={liveTitle || title || '故事'} subtitle={subtitle} onClose={onClose} groups={groups} onToolbarGroups={onToolbarGroups}>
       <iframe
         key={reloadKey}
         ref={iframeRef}

@@ -1,0 +1,70 @@
+{
+ "id": "literary",
+ "name": "文学派（专家预设）",
+ "source": "一位 RP 写手的私人预设，经站主授权收录；只做了排版整理，规则原文未改。",
+ "intro": "更偏文学质地的一套：严格的文学逻辑与句法（禁明喻、禁否定式转折、禁破折号、长句为主），三种写法选一种，外加一个自主运转的世界。",
+ "groups": [
+  {
+   "id": "core",
+   "name": "文学逻辑与句法",
+   "always": true
+  },
+  {
+   "id": "style",
+   "name": "写法（只选一种）",
+   "exclusive": true
+  },
+  {
+   "id": "world",
+   "name": "世界"
+  }
+ ],
+ "modules": [
+  {
+   "id": "logic",
+   "group": "core",
+   "name": "文学逻辑",
+   "file": "文学逻辑.md",
+   "default": true
+  },
+  {
+   "id": "sentence",
+   "group": "core",
+   "name": "句法",
+   "file": "句法.md",
+   "default": true
+  },
+  {
+   "id": "emergent",
+   "group": "style",
+   "name": "涌现式叙事",
+   "hint": "具体、不吝笔墨，多感官，发声必写台词",
+   "file": "写法-涌现式叙事.md",
+   "default": true
+  },
+  {
+   "id": "exhaustive",
+   "group": "style",
+   "name": "事无巨细",
+   "hint": "不概括、不压缩，时间连续",
+   "file": "写法-事无巨细.md",
+   "default": false
+  },
+  {
+   "id": "lively",
+   "group": "style",
+   "name": "活泼通俗",
+   "hint": "口语为底，吐槽跳脱，禁文艺腔",
+   "file": "写法-活泼通俗.md",
+   "default": false
+  },
+  {
+   "id": "live-world",
+   "group": "world",
+   "name": "活的世界",
+   "hint": "环境与他人不因你而冻结",
+   "file": "活的世界.md",
+   "default": true
+  }
+ ]
+}

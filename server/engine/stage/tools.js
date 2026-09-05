@@ -29,8 +29,11 @@ const choiceSchema = z.object({
   prompt: z.string().min(1).max(500).describe('玩家点下这枚之后，等于他对你说了这句话'),
 });
 
-export async function appendSceneRow(playAbs, row) {
-  const p = path.join(playAbs, SCENES_DIR, SCENES_FILE);
+/** 记录文件默认是主线的；别的线路由调用方给 rel（play.js 的 sceneFileOf） */
+export const MAIN_SCENES_REL = `${SCENES_DIR}/${SCENES_FILE}`;
+
+export async function appendSceneRow(playAbs, row, rel = MAIN_SCENES_REL) {
+  const p = path.join(playAbs, rel);
   await fs.mkdir(path.dirname(p), { recursive: true });
   await fs.appendFile(p, JSON.stringify(row) + '\n', 'utf8');
   return row;
@@ -44,6 +47,7 @@ export function createStageTools(ctx) {
   const workspaceRoot = ctx.workspaceRoot || ctx.dir;
   const playRoot = ctx.playRoot || '';
   const playAbs = playRoot ? path.join(workspaceRoot, playRoot) : workspaceRoot;
+  const scenesRel = () => (typeof ctx.scenesRel === 'function' ? ctx.scenesRel() : (ctx.scenesRel || MAIN_SCENES_REL));   // 当前线路的记录文件（切线后会变）
 
   const writeScene = tool(
     'write_scene',
@@ -72,7 +76,7 @@ export function createStageTools(ctx) {
         ...(speakers?.length ? { speakers } : {}),
         ...(stateObj ? { state: stateObj } : {}),
       };
-      await appendSceneRow(playAbs, row);
+      await appendSceneRow(playAbs, row, scenesRel());
       const extra = await ctx.onScene?.(row);   // manager 可能回一句（成就 / 触发），带给它
       return { content: [{ type: 'text', text: `这一拍已经在台上了（${text.length} 字，${choices.length} 枚把手${stateObj ? `，状态改了 ${Object.keys(stateObj).length} 项` : ''}）。${extra || ''}玩家点了哪一枚会当成他的话送回来，停在这里等他。` }] };
     },
@@ -157,7 +161,7 @@ export function createStageTools(ctx) {
       const rolls = Array.from({ length: count }, () => crypto.randomInt(1, sides + 1));
       const total = rolls.reduce((a, b) => a + b, 0);
       const row = { id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'dice', reason, sides, rolls, total };
-      await appendSceneRow(playAbs, row);
+      await appendSceneRow(playAbs, row, scenesRel());
       await ctx.onScene?.(row);
       return { content: [{ type: 'text', text: `d${sides}×${count} = ${rolls.join(', ')}（合计 ${total}）· ${reason}` }] };
     },
@@ -189,9 +193,12 @@ export async function rewriteIndex(dirAbs) {
   return rows.length;
 }
 
-/** 用户那一侧也落在流上：显示器要画"你"的那一栏。 */
-export async function appendUserLine(playAbs, text) {
-  return appendSceneRow(playAbs, { id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'user', text });
+/**
+ * 用户那一侧也落在流上：显示器要画"你"的那一栏。
+ * uuid 是这句话在 SDK 转录里的 uuid（回退 / 分叉按它切转录）；by 可换成 'system'（开场那一行是机器发的）。
+ */
+export async function appendUserLine(playAbs, text, { rel = MAIN_SCENES_REL, uuid = null, by = 'user', extra = {} } = {}) {
+  return appendSceneRow(playAbs, { id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by, text, ...(uuid ? { uuid } : {}), ...extra }, rel);
 }
 
 /** 开戏时把索引整份接回系统提示词（正文不贴，让它按需 Read）。 */
@@ -211,9 +218,9 @@ export async function listMemories(playAbs) {
   }
   return out;
 }
-export async function readScenes(playAbs, { limit = 300 } = {}) {
+export async function readScenes(playAbs, { limit = 300, rel = MAIN_SCENES_REL } = {}) {
   try {
-    const raw = await fs.readFile(path.join(playAbs, SCENES_DIR, SCENES_FILE), 'utf8');
+    const raw = await fs.readFile(path.join(playAbs, rel), 'utf8');
     const rows = raw.split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
     return rows.slice(-limit);
   } catch { return []; }

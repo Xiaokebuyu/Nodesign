@@ -80,6 +80,7 @@ export class StageSession {
   #busy = false;
   #pump = null;
   #sdkSessionId = null;
+  #lastUuid = null;
 
   constructor(opts) {
     this.#opts = opts;
@@ -93,6 +94,8 @@ export class StageSession {
   get sdkSessionId() { return this.#sdkSessionId; }
   /** 排着还没轮到的话 */
   get queued() { return this.#inbox.depth; }
+  /** 转录链上最后一条的 uuid（assistant / tool_result 都算）—— 分叉要从这里切 */
+  get lastUuid() { return this.#lastUuid; }
 
   start() {
     if (this.#running) return;
@@ -103,7 +106,9 @@ export class StageSession {
         cwd: o.cwd,
         ...(o.model ? { model: o.model } : {}),
         ...(o.env ? { env: o.env } : {}),
-        ...(o.sessionId ? { sessionId: o.sessionId } : {}),
+        // 续上旧转录（resume）时不能再给 sessionId（SDK 不许两者同给）；新开才指定 id。
+        // resume 是让"空闲自停再起"和"回退 / 分叉"之后模型还记得前文的唯一办法（09-06）。
+        ...(o.resume ? { resume: o.resume } : (o.sessionId ? { sessionId: o.sessionId } : {})),
         ...(o.maxBudgetUsd ? { maxBudgetUsd: o.maxBudgetUsd } : {}),
         ...(o.thinking ? { thinking: o.thinking } : {}),
         systemPrompt: o.systemPrompt,
@@ -127,13 +132,18 @@ export class StageSession {
     this.#pump = this.#consume();
   }
 
-  /** 用户对台上说一句 —— 这条路上没有主 agent。 */
-  say(text, { about = null } = {}) {
+  /**
+   * 用户对台上说一句 —— 这条路上没有主 agent。
+   * uuid 盖到 SDKUserMessage 上、CLI 原样写进转录：回退（truncateJsonlAtMessage）和分叉（upToMessageId）认的就是它。
+   * about 由调用方拼好整句（含「此刻：」），这里只括起来 —— 09-05 两边各写一次"此刻"，用户收到"此刻：此刻："。
+   */
+  say(text, { about = null, uuid = null } = {}) {
     if (!this.#running) throw new Error('stage not started');
-    const content = about ? `${text}\n\n（此刻：${about}）` : text;
+    const content = about ? `${text}\n\n（${about}）` : text;
     this.#inbox.push({
       type: 'user',
       parent_tool_use_id: null,
+      ...(uuid ? { uuid } : {}),
       message: { role: 'user', content },
     });
     return { queued: this.#inbox.depth, busy: this.#busy };
@@ -167,9 +177,15 @@ export class StageSession {
         }
         if (m.type === 'assistant') {
           this.#busy = true;
+          if (m.uuid) this.#lastUuid = m.uuid;
           for (const b of m.message?.content || []) {
             if (b.type === 'tool_use') this.#onEvent({ type: 'tool', name: b.name, input: b.input });
           }
+          continue;
+        }
+        if (m.type === 'user') {
+          // 回显的用户消息与 tool_result 都顶着 type='user'，它们也在转录链上
+          if (m.uuid) this.#lastUuid = m.uuid;
           continue;
         }
         if (m.type === 'result') {
@@ -178,6 +194,7 @@ export class StageSession {
             type: 'turn_end',
             usage: m.usage || null,
             costUsd: m.total_cost_usd ?? null,
+            lastUuid: this.#lastUuid,
             error: m.subtype !== 'success' ? m.subtype : (m.is_error ? 'api_error' : null),
             // 整条 result 交出去：计量要拿 modelUsage 做差分（AgentContext.absorbResult 那套），
             // 这里不替它挑字段 —— 挑了就是第二份口径

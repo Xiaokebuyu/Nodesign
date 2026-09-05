@@ -1,36 +1,47 @@
 <!doctype html>
-<html lang="zh-CN" data-skin="paper">
+<html lang="zh-CN" data-skin="paper" data-dock="left" data-cast="open">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>演出</title>
+<title>故事</title>
 <link rel="stylesheet" href="../ui/app.css">
+<link rel="stylesheet" href="../ui/pages.css">
 </head>
 <body>
 <!--
-  RP 显示器（2026-09-05 晚重写）
-  骨架：顶栏（题 / 场景 / 上下文 / 状态）· 左栏在场者槽 · 主区（按页切）· 底部把手区（舞台页才有）
-  页面在 app.js 的 pages 注册表里：舞台 / 人物 / 记忆 / 上下文 / 状态。加一页 = 注册一个对象。
+  RP 显示器（2026-09-06 重写）
+  骨架：顶栏（题 / 场景 / 页面 / 上下文 / 状态 / 线路）· 侧栏（人物与状态，停左停右都行）· 主区（按页切）
+  页面在 ND.pages 注册表里：故事 / 角色 / 记忆 / 设定 / 状态；故事还没开始时故事页让位给开场页。
   数据全部来自同目录的 state / events（api/stage.js），本页不存任何真相。
 -->
 <div class="backdrop" id="backdrop"></div>
 <div class="app">
   <header class="top">
     <div class="top-l">
+      <button class="icon-btn" id="castToggle" title="人物与状态" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg></button>
       <span class="dot" id="statusDot"></span>
-      <b id="title">演出</b>
+      <b id="title">故事</b>
       <span class="scene" id="sceneText"></span>
     </div>
     <nav class="pages" id="pageNav"></nav>
     <div class="top-r">
-      <span class="pill" id="ctxPill" title="上一轮的上下文长度（输入 + 缓存读 + 缓存写）"></span>
+      <button class="linebtn" id="lineBtn" hidden></button>
+      <span class="pill" id="ctxPill"></span>
       <span class="pill status" id="statusText"></span>
     </div>
   </header>
   <aside class="cast" id="cast"></aside>
   <main class="main" id="main"></main>
 </div>
+<div class="drawer-veil" id="drawerVeil"></div>
 <div class="toasts" id="toasts"></div>
+<style>@media(max-width:760px){#castToggle{display:grid!important}}</style>
+<script src="../ui/render.js"></script>
 <script src="../ui/app.js"></script>
+<script src="../ui/panel.js"></script>
+<script src="../ui/story.js"></script>
+<script src="../ui/opening.js"></script>
+<script src="../ui/pages.js"></script>
+<script>window.ND.boot();</script>
 </body>
 </html>

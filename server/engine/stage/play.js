@@ -84,6 +84,37 @@ export async function writeRules(playAbs, rules) {
   await fs.writeFile(path.join(playAbs, RULES_FILE), JSON.stringify(rules, null, 2), 'utf8');
 }
 
+// ───────────────────────────── 线路（分支）─────────────────────────────
+//
+// 一个故事可以有几条线：主线的记录在 场景/scenes.jsonl，别的线在 场景/线-<id>.jsonl。
+// 戏.json 里 `lines: [{id, name, sdkSid, createdAt, forkedFrom:{line, rowId}}]`、`currentLine`。
+// sdkSid 是这条线在 SDK 那边的会话 id（转录在 CLAUDE_CONFIG_DIR 下）：重开时 resume 它，模型才记得前文；
+// 回退 = 截转录 + 截记录文件；分叉 = forkSession 出一个新 sdkSid + 复制记录前半段。
+// 老配置没有 lines → 视作只有主线，第一次写配置时补上。
+
+export const MAIN_LINE = 'main';
+
+/** 配置里的线路表（老配置补一条主线） */
+export function linesOf(cfg) {
+  const lines = Array.isArray(cfg?.lines) && cfg.lines.length ? cfg.lines : [{ id: MAIN_LINE, name: '主线', sdkSid: cfg?.sdkSid || null, createdAt: cfg?.startedAt || null }];
+  return lines;
+}
+export function currentLineId(cfg) {
+  const lines = linesOf(cfg);
+  return lines.some(l => l.id === cfg?.currentLine) ? cfg.currentLine : lines[0].id;
+}
+export function currentLine(cfg) {
+  const id = currentLineId(cfg);
+  return linesOf(cfg).find(l => l.id === id);
+}
+/** 某条线的记录文件（故事文件夹相对） */
+export function sceneFileOf(lineId) {
+  return (!lineId || lineId === MAIN_LINE) ? `${SCENES_DIR}/${SCENES_FILE}` : `${SCENES_DIR}/线-${String(lineId).replace(/[^a-z0-9-]/gi, '')}.jsonl`;
+}
+export function newLineId() {
+  return `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+}
+
 export async function readTrophies(playAbs) {
   try {
     return (await fs.readFile(path.join(playAbs, TROPHIES_FILE), 'utf8')).split('\n').filter(Boolean)
