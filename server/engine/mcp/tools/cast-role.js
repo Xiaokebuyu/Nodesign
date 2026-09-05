@@ -25,7 +25,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { ROLE_PREFIX, ROLE_SLOT, isSlotType, isValidRoleSlug } from '../../agent/cast.js';
 import { readCastRegistry } from '../../agent/role-card.js';
-import { renderCard } from '../../stage/card.js';
+import { renderCard, rolesDirFor } from '../../stage/card.js';
 
 /** 角色 id（不含 rp- 前缀）：ASCII、能当文件名、能当 SendMessage 收件人名。
  *  ⚠️ 这是 cast.js `ROLE_SLUG_RE` 的**收紧子集**（这边只许小写、≥2 字符）——
@@ -102,9 +102,11 @@ rewriting it.`,
       // 卡落盘：角色/<名>/角色卡.md（文件夹范式：这个文件夹就是该角色的家，
       // 之后的记忆/日记等件都住这里；用户随时可改，改动对"下次派发/唤醒后重读卡"生效）
       const folder = folderNameFor(displayName, slug);
-      const dir = path.join(workspaceRoot, ROLES_DIR, folder);
+      // 工作区里只有一场戏时卡直接写进它的文件夹（戏自成一体）；否则写根上的 角色/，open_stage 开戏时搬
+      const rolesRel = await rolesDirFor(workspaceRoot);
+      const dir = path.join(workspaceRoot, rolesRel, folder);
       const file = path.join(dir, '角色卡.md');
-      if (!path.resolve(file).startsWith(path.resolve(workspaceRoot, ROLES_DIR) + path.sep)) {
+      if (!path.resolve(file).startsWith(path.resolve(workspaceRoot, rolesRel) + path.sep)) {
         return fail('角色卡路径异常，拒绝写入。');
       }
       // 一个家只住一个角色（2026-08-28 对账发现）：文件夹按展示名取，两个不同的
@@ -114,7 +116,7 @@ rewriting it.`,
       // 同一个 slug 重登（改卡）不受影响 —— 那本来就是同一个人。
       const claimedBy = Object.entries((await readCastRegistry(workspaceRoot)).roles || {})
         .find(([s2, e2]) => s2 !== slug && typeof e2?.card === 'string'
-          && e2.card.split('/').slice(0, 2).join('/') === `${ROLES_DIR}/${folder}`);
+          && e2.card.replace(/\/角色卡\.md$/, '') === `${rolesRel}/${folder}`);
       if (claimedBy) {
         return fail(`「${displayName}」这个家已经是 ${claimedBy[0]} 的了（角色/${folder}/）。`
           + `同名两个角色会共用角色卡和记忆件 —— 换个展示名，`
@@ -146,7 +148,7 @@ rewriting it.`,
       await fs.writeFile(file, cardText, 'utf8');
 
       // 登记表：板书署名与名册 API 的展示名来源（fail-soft：登记坏了不拦上场）
-      const cardRel = path.join(ROLES_DIR, folder, '角色卡.md');
+      const cardRel = path.join(rolesRel, folder, '角色卡.md');
       try {
         const reg = await readCastRegistry(workspaceRoot);
         reg.roles[slug] = { name: displayName, duty: oneLine(args.duty, 400), card: cardRel };

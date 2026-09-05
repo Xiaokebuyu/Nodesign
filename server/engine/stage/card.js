@@ -31,6 +31,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { readCastRegistry } from '../agent/role-card.js';
+import { listPlays } from './play.js';
 
 export const ROLES_DIR = '角色';
 export const CARD_FILE = '角色卡.md';
@@ -115,20 +116,37 @@ export function renderCard({ name, slug = null, note = null, portrait = null, pe
 }
 
 /**
- * 名字 / slug → 卡的工作区相对路径。先查登记表（cast_role 写的），再按文件夹直找。
- * 找不到返回 null（调用方决定报什么错）。
+ * 角色卡该写在哪个 角色/ 目录下（cast_role 用）。
+ * 戏的文件夹自成一体，所以工作区里**只有一场戏**时卡直接写进它；没有戏或有多场（不知道给谁）
+ * 时写根上的 角色/，open_stage 开戏时会把在场者的卡搬进戏的文件夹。
  */
-export async function resolveCardPath(workspaceRoot, nameOrSlug) {
+export async function rolesDirFor(workspaceRoot) {
+  const plays = await listPlays(workspaceRoot);
+  return plays.length === 1 ? `${plays[0]}/${ROLES_DIR}` : ROLES_DIR;
+}
+
+/**
+ * 名字 / slug → 卡的工作区相对路径。查序：戏的文件夹里（给了 playRoot）→ 登记表（cast_role 写的）
+ * → 根上的 角色/<名>/。找不到返回 null（调用方决定报什么错）。
+ */
+export async function resolveCardPath(workspaceRoot, nameOrSlug, { playRoot = null } = {}) {
   const key = String(nameOrSlug || '').trim();
   if (!key) return null;
+  const tryRel = async (rel) => { try { await fs.access(path.join(workspaceRoot, rel)); return rel; } catch { return null; } };
+  if (playRoot) {
+    const hit = await tryRel(path.join(playRoot, ROLES_DIR, folderNameFor(key), CARD_FILE));
+    if (hit) return hit;
+  }
   const reg = await readCastRegistry(workspaceRoot);
   for (const [slug, e] of Object.entries(reg.roles || {})) {
     if ((slug === key || slug === `rp-${key}` || e?.name === key) && typeof e?.card === 'string') {
-      try { await fs.access(path.join(workspaceRoot, e.card)); return e.card; } catch { /* 登记表指的卡没了，往下按文件夹找 */ }
+      const hit = await tryRel(e.card);
+      if (hit) return hit;
+      // 登记表还指着根上的路径、卡已经搬进戏的文件夹（open_stage 搬的）
+      if (playRoot) { const moved = await tryRel(path.join(playRoot, e.card)); if (moved) return moved; }
     }
   }
-  const rel = path.join(ROLES_DIR, folderNameFor(key), CARD_FILE);
-  try { await fs.access(path.join(workspaceRoot, rel)); return rel; } catch { return null; }
+  return tryRel(path.join(ROLES_DIR, folderNameFor(key), CARD_FILE));
 }
 
 /** 卡所在文件夹（工作区相对） */

@@ -24,6 +24,7 @@ import { reconcileAutoRefsThrottled } from '../lib/auto-relations.js';
 import { taskManifest, ENTRY_FILE, KIND_SITE, docxClaimedFiles, isDirArtifact } from '../lib/artifact-target.js';
 import { RESERVED_DIRS, HARD_IGNORE_DIRS, DRAFTS_DIR, isReservedFile, loadIgnore } from '../lib/task-scan.js';
 import { OUTPUT_DIRS } from '../lib/kinds/site.js';
+import { ensurePlays } from '../engine/stage/manager.js';
 import { listReferences } from '../lib/reference-assets.js';
 import { resolveArtifactFile, isServablePath } from '../lib/artifact-file-path.js';
 import { USER_UPLOAD_DIR, ensureUploadDir, uploadRefPath, listUploadedAssets, deleteUploadedAsset } from '../lib/user-uploads.js';
@@ -236,6 +237,8 @@ router.get('/:pid/artifacts', async (req, res, next) => {
     await reconcileBoardRenames(req.params.pid).catch(
       (err) => console.warn('[board] 改名对账失败:', err.message));
     await pruneDanglingBindings(req.params.pid).catch(() => {});   // 悬空线 30s 节流清扫（理由见 board-store）
+    // 演出的老形状（根上的 stage/ + 角色/ …）收进一场戏的文件夹（09-05 晚；幂等，三次 stat 的事）
+    await ensurePlays(req.params.pid).catch((err) => console.warn('[stage] 迁移失败:', err.message));
 
     const assetsDir = path.join(getSharedDir(req.params.pid), 'assets');
     const artifacts = [];

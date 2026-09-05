@@ -310,18 +310,22 @@ export const Assets = {
     `/api/projects/${pid}/browse/preview${at ? `?at=${encodeURIComponent(at)}` : ''}`,
 };
 
-// ── Stage（RP 显示器，2026-09-05）──
-// 显示器是服务端一条路由现渲染的页面（卡上和窗里装同一个 URL）；用户在里面说的话
-// 由页面自己 POST say —— 这里只有窗的工具栏要用的那几件（起停 / 皮肤 / 状态）。
+// ── Stage（RP 显示器，2026-09-05；当晚改成一场戏一个文件夹）──
+// 显示器是服务端一条路由现渲染的页面（卡上和窗里装同一个 URL）；用户在里面说的话、改的文件
+// 都由页面自己发 —— 这里只有窗的工具栏要用的那几件（起停 / 皮肤 / 切页）。`root` 是戏的文件夹名。
+const playSeg = (root) => encodeURIComponent(String(root || ''));
 export const Stage = {
-  viewUrl: (pid, { embed = false } = {}) => `/api/projects/${pid}/stage/view${embed ? '?embed=1' : ''}`,
-  state: (pid) => jsonRequest('GET', `/api/projects/${pid}/stage/state`),
-  say: (pid, text) => jsonRequest('POST', `/api/projects/${pid}/stage/say`, { text }),
-  start: (pid) => jsonRequest('POST', `/api/projects/${pid}/stage/start`, {}),
-  stop: (pid) => jsonRequest('POST', `/api/projects/${pid}/stage/stop`),
-  patchConfig: (pid, patch) => jsonRequest('PATCH', `/api/projects/${pid}/stage/config`, patch),
-  /** 台面 / 角色卡的编辑保存（只收这两种路径；角色卡的记忆索引块服务端保住） */
-  putFile: (pid, path, text) => jsonRequest('PUT', `/api/projects/${pid}/stage/file`, { path, text }),
+  viewUrl: (pid, root, { embed = false, page = null } = {}) => {
+    const qs = new URLSearchParams(); if (embed) qs.set('embed', '1'); if (page) qs.set('page', page);
+    const q = qs.toString();
+    return `/api/projects/${pid}/stage/${playSeg(root)}/view${q ? `?${q}` : ''}`;   // path-compose-ok：playSeg 是编码过的文件夹名、永不为空
+  },
+  plays: (pid) => jsonRequest('GET', `/api/projects/${pid}/stage/plays`),
+  state: (pid, root) => jsonRequest('GET', `/api/projects/${pid}/stage/${playSeg(root)}/state`),   // path-compose-ok：playSeg 是编码过的文件夹名、永不为空
+  say: (pid, root, text) => jsonRequest('POST', `/api/projects/${pid}/stage/${playSeg(root)}/say`, { text }),   // path-compose-ok：playSeg 是编码过的文件夹名、永不为空
+  start: (pid, root) => jsonRequest('POST', `/api/projects/${pid}/stage/${playSeg(root)}/start`, {}),   // path-compose-ok：playSeg 是编码过的文件夹名、永不为空
+  stop: (pid, root) => jsonRequest('POST', `/api/projects/${pid}/stage/${playSeg(root)}/stop`),   // path-compose-ok：playSeg 是编码过的文件夹名、永不为空
+  patchConfig: (pid, root, patch) => jsonRequest('PATCH', `/api/projects/${pid}/stage/${playSeg(root)}/config`, patch),   // path-compose-ok：playSeg 是编码过的文件夹名、永不为空
 };
 
 // ── Exports ── 2026-08-19 迁去 ./api-exports.js（收 blob 不收 JSON，自成一族）

@@ -68,7 +68,8 @@ export const STAGE_DENY = Object.freeze([
  *   sessionId                  SDK 会话 id（manager 给一个新 UUID；ingress 按它路由）
  *   maxBudgetUsd               这一场的封顶（可选）
  *   mcpServers / plugins / skills / hooks 交给调用方拼，这里不猜
- *   onEvent({type,...})        init / text / tool / turn_end / error
+ *   thinking                   SDK 的 thinking 配置（pickThinkingConfig 给的），要看思考流就传
+ *   onEvent({type,...})        init / tool_start / tool_delta / block_stop / text / thinking / tool / turn_end / error
  */
 export class StageSession {
   #q = null;
@@ -104,6 +105,7 @@ export class StageSession {
         ...(o.env ? { env: o.env } : {}),
         ...(o.sessionId ? { sessionId: o.sessionId } : {}),
         ...(o.maxBudgetUsd ? { maxBudgetUsd: o.maxBudgetUsd } : {}),
+        ...(o.thinking ? { thinking: o.thinking } : {}),
         systemPrompt: o.systemPrompt,
         // 一个都不加载（站主 2026-09-05 拍板）：RP 模式下项目 CLAUDE.md 是设计
         // 工作台的东西，进了戏就是污染。演出要的设定全部写进 systemPrompt，
@@ -146,8 +148,21 @@ export class StageSession {
           continue;
         }
         if (m.type === 'stream_event') {
-          const d = m.event?.delta;
-          if (d?.type === 'text_delta' && d.text) this.#onEvent({ type: 'text', text: d.text });
+          const ev = m.event || {};
+          const d = ev.delta;
+          // 工具入参也是逐字流的：write_scene 的正文在 input_json_delta 里一段段到，
+          // manager 用 partial-json 边到边解，显示器就能看着这一拍被写出来（不用等十几秒整段落地）
+          if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
+            this.#onEvent({ type: 'tool_start', name: ev.content_block.name, index: ev.index });
+          } else if (d?.type === 'input_json_delta' && d.partial_json) {
+            this.#onEvent({ type: 'tool_delta', partial: d.partial_json, index: ev.index });
+          } else if (d?.type === 'text_delta' && d.text) {
+            this.#onEvent({ type: 'text', text: d.text });
+          } else if (d?.type === 'thinking_delta' && d.thinking) {
+            this.#onEvent({ type: 'thinking', text: d.thinking });
+          } else if (ev.type === 'content_block_stop') {
+            this.#onEvent({ type: 'block_stop', index: ev.index });
+          }
           continue;
         }
         if (m.type === 'assistant') {

@@ -227,7 +227,7 @@ export const ARTIFACT_FACES = {
    */
   stage: {
     icon: Drama,
-    tip: '双击进显示器 —— 在那里对台上说话',
+    tip: '双击进显示器 —— 在那里对台上说话',   // 卡即这场戏的文件夹（台面 / 角色卡 / 记忆 / 场景都在里面）
     summary: (o) => {
       const s = o.stage || {};
       const who = (s.cast || []).map(c => c.name).slice(0, 3).join(' / ');
@@ -242,7 +242,7 @@ export const ARTIFACT_FACES = {
           title={`stage-${o.id}`}
           frameRef={frameRef}
           onActive={onActive}
-          src={Stage.viewUrl(projectId, { embed: true })}
+          src={Stage.viewUrl(projectId, o.root, { embed: true })}
           style={{
             width: W, height: Math.round(box.h / scale), border: 0,
             transform: `scale(${scale})`, transformOrigin: '0 0',

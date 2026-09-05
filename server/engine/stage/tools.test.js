@@ -25,7 +25,7 @@ function walk(schema, seen = new Set()) {
 }
 
 describe('演出进程的 MCP 工具面', () => {
-  const server = createStageTools({ dir: '/nonexistent', onScene: () => {} });
+  const server = createStageTools({ workspaceRoot: '/nonexistent', playRoot: 'x', onScene: () => {} });
   const registered = server.instance?._registeredTools || {};
 
   it('四件工具都注册上了', () => {
@@ -50,6 +50,7 @@ describe('演出进程的 MCP 工具面', () => {
     const so = registered.write_scene.inputSchema;
     const shape = so.shape || so;   // ZodObject 有 .shape；裸 shape 就是它自己
     expect(shape.choices.isOptional()).toBe(false);
-    expect(shape.state.isOptional()).toBe(true);
+    // state 也必填（可空数组）：逼它每拍对数值表态，而不是靠它记得（09-05 晚站主点的）
+    expect(shape.state.isOptional()).toBe(false);
   });
 });

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN" data-skin="paper">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>演出</title>
+<link rel="stylesheet" href="../ui/app.css">
+</head>
+<body>
+<!--
+  RP 显示器（2026-09-05 晚重写）
+  骨架：顶栏（题 / 场景 / 上下文 / 状态）· 左栏在场者槽 · 主区（按页切）· 底部把手区（舞台页才有）
+  页面在 app.js 的 pages 注册表里：舞台 / 人物 / 记忆 / 上下文 / 状态。加一页 = 注册一个对象。
+  数据全部来自同目录的 state / events（api/stage.js），本页不存任何真相。
+-->
+<div class="backdrop" id="backdrop"></div>
+<div class="app">
+  <header class="top">
+    <div class="top-l">
+      <span class="dot" id="statusDot"></span>
+      <b id="title">演出</b>
+      <span class="scene" id="sceneText"></span>
+    </div>
+    <nav class="pages" id="pageNav"></nav>
+    <div class="top-r">
+      <span class="pill" id="ctxPill" title="上一轮的上下文长度（输入 + 缓存读 + 缓存写）"></span>
+      <span class="pill status" id="statusText"></span>
+    </div>
+  </header>
+  <aside class="cast" id="cast"></aside>
+  <main class="main" id="main"></main>
+</div>
+<div class="toasts" id="toasts"></div>
+<script src="../ui/app.js"></script>
+</body>
+</html>
