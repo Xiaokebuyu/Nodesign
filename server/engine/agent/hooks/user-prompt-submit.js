@@ -23,6 +23,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { getProject } from '../../../projects/store.js';
 import { readUiConfigFile, withUiDefaults } from '../../../projects/ui-config.js';
 import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
@@ -34,7 +35,6 @@ import { parseTriggers, evalTriggers, readLatch, writeLatch } from '../../../lib
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
 import { stageStatus } from '../stage-status.js';
-import { resetBeat } from '../beat-state.js';
 import { roleLabel } from '../../mcp/actor.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -220,7 +220,9 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
   // ⛔ 「解析不出来」必须出声。collectSections 的房规是"采不到就不出现"，对普通节
   // 是对的，对这一节就是坑：表被 set_text / 用户手改写坏之后会静默消失，而写口闸
   // 只守得住 set_vars 那一路（另外两路是合法的写入方）。所以 broken 一律推一节。
-  try {
+  // 09-06：rp 项目里 set_vars 已下架（状态归显示器的 vitals），这一节不推 —— 推了等于教一件不存在的工具
+  const isRp = (() => { try { return getProject(projectId)?.mode === 'rp'; } catch { return false; } })();
+  if (!isRp) try {
     const st = await readStateVars(workspaceRoot);
     if (st.state === 'ok' && st.rows.length) {
       const table = st.rows.map(r => `  ${r.key} = ${r.value}`).join('\n');
@@ -354,8 +356,6 @@ export function renderTurnState(sections, prev) {
 
 export function makeUserPromptSubmitHandler({ ctx: _ctx, workspaceRoot, sessionId, projectId }) {
   return async (_input, _toolUseId, _options) => {
-    // 新的一轮：收尾闸重新记账（判的是「这一轮」，见 beat-state.js）
-    resetBeat(sessionId);
     try {
       if (!workspaceRoot) return {};
       const sections = await collectSections({ workspaceRoot, sessionId, projectId });

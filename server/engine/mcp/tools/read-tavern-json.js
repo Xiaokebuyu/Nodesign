@@ -31,7 +31,7 @@ function 渲染世界书(条目, 标题) {
   if (compact) {
     L.push(`启用 ${常驻.length + 触发.length}（常驻 ${常驻.length} / 触发 ${触发.length}）· 停用 ${停用数}`);
     L.push('');
-    L.push(`常驻条目（每轮在场的候选 —— 逐条人工过：内容进 CLAUDE.md，引擎件不搬）：`);
+    L.push(`常驻条目（每轮在场的候选 —— 逐条人工过：真世界观挑十条以内进 open_stage.table 的「世界」节，引擎件不搬）：`);
     for (const e of 常驻) L.push(`- ${e.名字}  ${e.字数}字`);
     L.push('');
     L.push(`触发条目 ${触发.length} 条（名字｜触发词）——别逐条 fetch，用 mode="export_book" 一步落成 世界书/ 文件：`);
@@ -109,8 +109,8 @@ mode "export_book" is the one writing mode: dumps every enabled lorebook entry t
 workspace files in one call (triggered entries one file each with trigger keys in
 frontmatter — on the stage route the machine matches those keys against every line
 and hands hits to the stage process itself; constant entries under 常驻/ for you to
-curate, ten at most, into the story's table (open_stage.table 「世界」; CLAUDE.md
-only when you act the scene yourself). Use it for big world cards — hundreds of
+curate, ten at most, into the story's table (open_stage.table 「世界」). Use it for
+big world cards — hundreds of
 entries must not flow through your context. Judgment stays yours: what is真常驻,
 and dropping 酒馆 engine machinery (MVU variables / HTML status bars / CoT
 frameworks / regex_scripts — this platform has its own: vitals + panels for state,
@@ -199,9 +199,9 @@ no place here; jailbreak sections are pointless on this platform.`,
           }
           return { content: [{ type: 'text', text:
             `Exported ${live.length} entries → ${dirRel}/：触发 ${触发数} 条（一条一文件，frontmatter 带 keys —— `
-            + `每章动笔前拿本章的人名/地名/物件 grep 这个目录，命中就 Read）；常驻 ${常驻数} 条在 ${dirRel}/常驻/`
-            + `（逐条人工过：世界观内容挑十条以内进 CLAUDE.md，MVU/状态栏/CoT/回复格式这类酒馆引擎件不搬 —— `
-            + `平台有自己的状态板/明骰/记忆）。停用条目已跳过。` }] };
+            + `机器按关键词自动送给演出进程，玩家在开场页能逐条关，他在问答里说不要的用 open_stage.lore.off 预关）；常驻 ${常驻数} 条在 ${dirRel}/常驻/`
+            + `（逐条人工过：真世界观挑十条以内进 open_stage.table 的「世界」节，MVU/状态栏/CoT/回复格式这类酒馆引擎件不搬 —— `
+            + `平台有自己的对应物：vitals / panels 记状态，roll 掷骰，remember 记事）。停用条目已跳过。` }] };
         }
 
         return { content: [{ type: 'text', text: 渲染摘要(digest(doc), path.basename(abs)) }] };

@@ -69,7 +69,6 @@ import { makePreToolUseUnknownParamsProbe } from './hooks/pre-unknown-params.js'
 import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.js';
 import { createRoleRoster } from './cast.js';
 import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './hooks/resident-role-lifecycle.js';
-import { makePostToolUseBeatWrite, makePostToolUseBeatHandoff, makeStopBeatGate } from './hooks/beat-gate.js';
 import { makePostToolUseSlotAliasHandler } from './hooks/slot-alias.js';
 import { makePreToolUsePerformanceLogGuard } from './hooks/pre-performance-log-guard.js';
 import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-guard.js';
@@ -251,10 +250,9 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     }],
 
     // Stop —— agent 准备结束 query 时触发，发自检事件给前端。
-    // 第二个是演出模式的收尾闸：这一拍既没给按钮也没交给角色就不许收工
-    // （08-28 真会话的头号病：写完两千字正文玩家没有任何把手）。
+    // （08-29 起的演出收尾闸「没给按钮不许收工」09-06 退役：故事在显示器上演，选项归演出进程的 write_scene。）
     Stop: [{
-      hooks: [makeStopReflectionHandler({ ctx, workspaceRoot }), makeStopBeatGate({ sessionId, projectId })],
+      hooks: [makeStopReflectionHandler({ ctx, workspaceRoot })],
     }],
 
     // PostCompact —— compact 后把摘要写入 spec.json 长期记忆
@@ -284,12 +282,7 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // 收件箱、板书署名、退场标记全靠这张表把 rp-actor 解析回具体角色。
       {
         matcher: 'Task|Agent|SendMessage',
-        hooks: [makePostToolUseSlotAliasHandler(), makePostToolUseBeatHandoff({ sessionId, projectId })],
-      },
-      // 收尾闸的另一半：主持人往画布上写了什么、带没带按钮（见 hooks/beat-gate.js）
-      {
-        matcher: 'mcp__nodesign__write_on_board|mcp__nodesign__board_batch',
-        hooks: [makePostToolUseBeatWrite({ sessionId, projectId })],
+        hooks: [makePostToolUseSlotAliasHandler()],
       },
       // Edit/Write 后干掉 tool_response.originalFile：FileEditOutput/FileWriteOutput
       // 默认含完整原文件（sdk-tools.d.ts:2270, 2328），这是上下文累积大头。

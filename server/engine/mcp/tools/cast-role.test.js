@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { makeCastRoleTool, ID_RE } from './cast-role.js';
 import { readCastRegistry, listRoleNames } from '../../agent/role-card.js';
-import { ROLE_SLUG_RE, ROLE_SLOT } from '../../agent/cast.js';
+import { ROLE_SLUG_RE } from '../../agent/cast.js';
 
 const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-cast-'));
 const call = (args) => makeCastRoleTool({ workspaceRoot: ws, ctx: { emit() {} } }).handler(args, {});
@@ -50,27 +50,29 @@ describe('角色卡落盘（文件夹范式：角色/<名>/角色卡.md）', () 
   });
 });
 
-// 08-30 角色子代理停用：返回文案从「立即可派」翻面成「不要派、自己读卡演」。
+// 09-06 故事在显示器上演：返回文案只说卡进演出进程、玩家能改、别在对话里代演。
 // ⭐ 这段话和工具 description 是同一条教义的两个读者 —— 断言两头都钉住，
-//    免得再出现「改了 description 忘了返回文案」那种半边改（fable 评审抓到过一次）。
-describe('返回话术：明令不派 + 指向读卡', () => {
-  it('⭐ 说了不要派子代理，点名两条被停的路，并指向 Read 角色卡', async () => {
+//    免得再出现「改了 description 忘了返回文案」那种半边改（08-30 与 09-06 各栽一次）。
+describe('返回话术：卡进演出进程 + 不代演', () => {
+  it('⭐ 指向 open_stage 的 cast、说明玩家能在显示器改卡、明令不在对话里替他说话', async () => {
     const a = text(await call(ok));
-    expect(a).toContain('不要派子代理');
-    expect(a).toContain(`subagent_type: "${ROLE_SLOT}"`);   // 点名被停的那条路
-    expect(a, '停用令要连 SendMessage 那条路一起点名').toMatch(/SendMessage/);
-    expect(a, '要指向卡路径，那是代演时找回腔调的正事').toContain('角色卡.md');
-    expect(a, '⛔ 旧教义不许残留').not.toContain('现在就可以派');
+    expect(a).toContain('角色卡.md');
+    expect(a).toContain('open_stage');
+    expect(a).toContain('演出进程');
+    expect(a).toMatch(/别在对话里替他说话/);
+    for (const stale of ['不要派子代理', 'subagent_type', 'SendMessage', '先 Read 一遍', '由你自己演', '现在就可以派']) {
+      expect(a, `⛔ 旧教义不许残留：${stale}`).not.toContain(stale);
+    }
   });
   it('⛔ 没有第二个位可选：pen 这类旧参数传了也不影响落点（schema 已收）', async () => {
     // ⚠️ 展示名跟别的用例错开：家按展示名取，共用工作区里同名会撞「一个家一个角色」那道闸
-    expect(text(await call({ ...ok, id: 'moli2', name: '墨璃二', pen: 'narrator' }))).toContain(ROLE_SLOT);
+    expect(text(await call({ ...ok, id: 'moli2', name: '墨璃二', pen: 'narrator' }))).toContain('角色/墨璃二/角色卡.md');
   });
   it('改写已有的卡要说清「改卡不改在场的它」', async () => {
     await call({ ...ok, id: 'twice', name: '重写君' });
     const r2 = text(await call({ ...ok, id: 'twice', name: '重写君', persona: '第二版人设' }));
     expect(r2).toMatch(/改写/);
-    expect(r2, '改完卡要提醒重新 Read —— 上下文里那份是旧的').toMatch(/重新 Read|不会改变/);
+    expect(r2, '改完卡要说清进程会带新卡自动重开').toMatch(/自动重开/);
     expect(fs.readFileSync(path.join(ws, '角色', '重写君', '角色卡.md'), 'utf8')).toContain('第二版人设');
   });
 });
@@ -103,7 +105,7 @@ describe('一个家只住一个角色', () => {
   });
 });
 
-describe('id 校验：它要当 SendMessage 收件人名', () => {
+describe('id 校验：它是登记名和文件名', () => {
   it('⭐ 坏 id 一个都不许落盘', async () => {
     for (const id of ['A', '墨璃', 'a b', 'x', 'a/..', '']) {
       const r = await call({ ...ok, id });

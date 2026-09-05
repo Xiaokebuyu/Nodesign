@@ -23,7 +23,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { ROLE_PREFIX, ROLE_SLOT, isSlotType, isValidRoleSlug } from '../../agent/cast.js';
+import { ROLE_PREFIX, isSlotType, isValidRoleSlug } from '../../agent/cast.js';
 import { readCastRegistry } from '../../agent/role-card.js';
 import { renderCard, rolesDirFor } from '../../stage/card.js';
 
@@ -58,29 +58,28 @@ export function makeCastRoleTool({ workspaceRoot, sessionId = null, ctx, roster 
     `Register a character card so this person has a fixed identity to act from.
 
 Writes the card to ${ROLES_DIR}/<name>/角色卡.md (user-visible, user-editable) and records
-the display name. The card is DATA, and in this build it is a reference for YOU:
-character subagents are disabled, so you write everyone on stage yourself.
+the display name. The card is DATA: the stage process reads it, you do not act from it.
 
 Use it for anyone who has a name, will show up again, and whom the user may want to talk
 to. **The card is what open_stage puts on stage**: when you hand a play to the stage
 process, each cast member's card (persona + their own memory index) goes into its system
-prompt verbatim — so write the persona for that reader. When you act a character yourself
-instead, re-read the card right before writing their lines. A walk-on with one line needs no card.
+prompt verbatim — so write the persona for that reader. The player can also edit the card on the
+display's 角色 page; any change reopens the process with the new card on the next line.
+A walk-on with one line needs no card.
 Anything the PLAYER should decide whether to enable (a subplot, a habit, a piece of backstory,
 an NSFW tendency from a tavern card) goes in a \`## 可选\` section, one \`- [ ] item — why\` per line
 (\`[x]\` = on by default): the display's opening screen turns those into toggles. Never decide those
 for the player and never bake them into the body.
 
-⛔ Do NOT dispatch a role subagent after this: no Agent(subagent_type: "${ROLE_SLOT}"),
-no SendMessage to a character. That path is being debugged; the cards you write now will
-plug straight back in once it returns.
+⛔ Do not act the character yourself in the conversation after this — the story plays on the
+display. Writing the card is the whole job; open_stage puts it on stage.
 When the user hands you a ready-made character card, prefer copying it in verbatim over
 rewriting it.`,
     {
-      id: z.string().describe('ASCII slug, no prefix: lowercase letters/digits/_/- , 2-41 chars. Becomes the address (rp-<id>).'),
+      id: z.string().describe('ASCII slug, no prefix: lowercase letters/digits/_/- , 2-41 chars. Used as the registry key (rp-<id>); the Chinese name goes in `name`.'),
       name: z.string().min(1).max(40).describe('Display name, any language — what this character is actually called. Board signatures use it.'),
       duty: z.string().min(1).max(400).describe('One line: who this is and when you would talk to them.'),
-      persona: z.string().min(1).describe("The card itself: who this person is, how they speak, what they would never do, plus two or three short samples of their voice. You read this back before writing their lines, so write it for that use — no meta rules about who writes what."),
+      persona: z.string().min(1).describe("The card itself: who this person is, how they speak, what they would never do, plus two or three short samples of their voice. The stage process reads it verbatim as part of its system prompt, so write it for that use — no meta rules about who writes what."),
     },
     async (args) => {
       const fail = (msg) => ({ content: [{ type: 'text', text: msg }], isError: true });
@@ -89,7 +88,7 @@ rewriting it.`,
       const id = String(args.id || '').trim();
       if (!ID_RE.test(id)) {
         return fail(`角色 id「${id}」不合法：只能用小写字母、数字、下划线、连字符，2-41 个字符，首字符是字母或数字。`
-          + `（这个 id 要当 SendMessage 的收件人名，收件人名不收中文和空格 —— 中文名字放 name 参数。）`);
+          + `（id 是登记名和文件名，只收 ASCII —— 中文名字放 name 参数。）`);
       }
       const slug = `${ROLE_PREFIX}${id}`;
       if (!isValidRoleSlug(slug) || isSlotType(slug)) return fail(`角色名「${slug}」过不了名册校验（演员位的名字不能当角色名）。`);
@@ -163,20 +162,17 @@ rewriting it.`,
       try { ctx?.emit?.({ type: 'run.role_cast', slug, name: displayName }); } catch { /* 事件失败不挡正事 */ }
 
       // ⚠️ 这段话和工具 description 是**同一条教义的两个读者**，改一头必须改另一头 ——
-      // 08-30 停用子代理那一刀只改了 description，这里还留着「现在就可以派它上场」，
-      // 而返回文案离模型的下一个动作更近，等于白改（fable 评审当场抓到）。
+      // 返回文案离模型的下一个动作更近（08-30 只改 description 那次等于白改；09-06 站主又在这里抓到
+      // 「不要派子代理 / 先 Read 一遍卡再由你写」的残留）。
       const lines = [
         `${existed ? '改写' : '写好'}了角色卡「${displayName}」→ ${cardRel}（登记为 ${slug}）`,
         '',
-        `⛔ **不要派子代理**：这一版角色由你自己演，`
-        + `Agent(subagent_type: "${ROLE_SLOT}") 和 SendMessage 给角色这两条路正在调试。`,
-        `轮到「${displayName}」说话时，**先 Read 一遍 ${cardRel}** 把腔调找回来，再由你写他这一段。`,
-        `几个人同场就一个个来，每人开口前各读各的卡 —— 这是防止全场一个腔的正事。`,
-        `要开一场正式的故事：把设定（世界 / 规矩）写好后调 open_stage，cast 里报「${displayName}」，这张卡就整份进演出进程。`,
+        `这张卡会整份进演出进程的系统提示词；玩家在显示器「角色」页也能改它。`,
+        existed
+          ? `正在演的故事下一句话到时会带着新卡自动重开，你不用再做什么；还没开故事就照旧在 open_stage 的 cast 里报他。`
+          : `还没开故事就接着写别的人，然后 open_stage 的 cast 里报「${displayName}」；故事已经开着就再调一次 open_stage 把他加进 cast。`,
+        `⛔ 别在对话里替他说话 —— 他的话由演出进程写。`,
       ];
-      if (existed) {
-        lines.push('', '⚠️ 卡改了，下次写他的话之前重新 Read 一遍 —— 你上下文里那份是旧的。');
-      }
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     },
   );
