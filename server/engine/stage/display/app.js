@@ -47,6 +47,7 @@
     deleteMemory: (name, who) => api.json('DELETE', `memory?name=${encodeURIComponent(name)}${who ? `&who=${encodeURIComponent(who)}` : ''}`),
     images: () => api.json('GET', 'images'),
     presets: () => api.json('GET', 'presets'),
+    lore: () => api.json('GET', 'lore'),
     uploadPreset: (name, data) => api.json('POST', 'preset', { name, data }),
     open: (body) => api.json('POST', 'open', body),
     lines: () => api.json('GET', 'lines'),

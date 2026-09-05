@@ -61,8 +61,8 @@ describe('卡的可选条目', () => {
 });
 
 describe('拼系统提示词', () => {
-  it('台面 + 卡 + 玩家的可选勾选 + 写法一节 + 工具规矩；指纹随写法 / 勾选变', async () => {
-    const d = await ws({ '故事/台面.md': '## 世界\n江南。\n\n## 台面规矩\n写实。', '故事/角色/晴可/角色卡.md': CARD });
+  it('设定 + 卡 + 玩家的可选勾选 + 写法一节 + 工具规矩；指纹随写法 / 勾选变', async () => {
+    const d = await ws({ '故事/台面.md': '## 世界\n江南。\n\n## 规矩\n写实。', '故事/角色/晴可/角色卡.md': CARD });
     const cfg = { cast: [{ name: '晴可', card: '故事/角色/晴可/角色卡.md' }], style: { preset: 'literary' }, cardOptions: { '晴可/opt1': true, '晴可/opt2': false } };
     const r = await composeStagePrompt(d, '故事', cfg);
     expect(r.text).toContain('## 世界');

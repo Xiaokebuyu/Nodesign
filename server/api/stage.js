@@ -9,6 +9,7 @@
  *   /stage/:play/file(GET/PUT)|files|memory(DELETE)|images
  *   /stage/:play/open                引导开场：写法 + 可选条目 → 起进程 → 发开场指令
  *   /stage/:play/presets|preset      写法预设清单 / 上传一份
+ *   /stage/:play/lore                世界书触发条目清单（开关在 config.lore.off）
  *   /stage/:play/lines|rewind|fork|line   线路：清单 / 回到某句之前 / 从某句分叉 / 切线（POST）改名（PATCH）删（DELETE）
  *
  * **这条路上没有主 agent**：显示器直接 POST say 进演出进程的队列，台上每一段经 SSE 推回来。
@@ -29,6 +30,7 @@ import { saveStageFile, readStageFile, listStageFiles, deleteMemory, listStageIm
 import { listLines, rewindTo, forkAt, switchLine, renameLine, deleteLine } from '../engine/stage/lines.js';
 import { openStory, uploadPreset } from '../engine/stage/opening.js';
 import { listPresets } from '../engine/stage/preset.js';
+import { loadWorldbook } from '../engine/stage/worldbook.js';
 import { platform } from '../runtime/platform.js';
 
 const router = express.Router();
@@ -159,7 +161,9 @@ router.patch('/:pid/stage/:play/config', express.json({ limit: '256kb' }), wrap(
 router.post('/:pid/stage/:play/state', express.json({ limit: '16kb' }), wrap((req, play) => setUserState(req.params.pid, play, req.body || {})));
 
 // ── 开场 / 预设 ──
-router.post('/:pid/stage/:play/open', express.json({ limit: '64kb' }), wrap((req, play) => openStory(req.params.pid, play, { style: req.body?.style || null, cardOptions: req.body?.cardOptions || null, userId: req.user?.id || null })));
+router.post('/:pid/stage/:play/open', express.json({ limit: '64kb' }), wrap((req, play) => openStory(req.params.pid, play, { style: req.body?.style || null, lore: req.body?.lore || null, cardOptions: req.body?.cardOptions || null, userId: req.user?.id || null })));
+/** 世界书的触发条目清单（名字 + 触发词），开场页 / 设定页画成开关；常驻条目不在这里（那些在设定里） */
+router.get('/:pid/stage/:play/lore', wrap(async (req, play) => ({ entries: (await loadWorldbook(runtimeOf(req.params.pid, play).playAbs)).map(({ name, rel, keys }) => ({ name, rel, keys })) })));
 router.get('/:pid/stage/:play/presets', wrap(async (req, play) => ({ presets: await listPresets(runtimeOf(req.params.pid, play).playAbs) })));
 router.post('/:pid/stage/:play/preset', express.json({ limit: '8mb' }), wrap((req, play) => uploadPreset(req.params.pid, play, { name: req.body?.name, data: req.body?.data })));
 

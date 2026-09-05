@@ -166,6 +166,7 @@
           <table class="kv">${(cfg.sources || []).map(s => `<tr><td>${esc(relOf(s) || s)}</td><td class="num"><button class="btn sm" data-open="${esc(relOf(s) || s)}">编辑</button></td></tr>`).join('') || '<tr><td colspan="2" class="muted">进程还没起过，起了才知道拼了哪些文件</td></tr>'}${cfg.styleNames?.length ? `<tr><td>写法 · ${esc(cfg.styleNames.join(' / '))}</td><td class="num"><span class="muted">下面改</span></td></tr>` : ''}</table>
           <p class="muted">设定文件（世界 / 规矩 / 怎么演）+ 每个人的卡（人设 + 他记得的事）+ 这个故事的记忆索引 + 你挑的写法。没有别的。</p></section>
         <section><h2>写法<small>换了之后下一句话到时对方按新的来</small></h2><div id="picker"><p class="muted">读取中…</p></div></section>
+        <section id="loreSec" hidden><h2>世界书<small>关掉的条目机器不再送给对方</small></h2><div id="lore"></div></section>
         <section><h2>成就<small>${earned.size} / ${rules.achievements.length}</small></h2>
           <div class="rules">${rules.achievements.map(a => { const e = earned.get(a.id); const hide = a.hidden && !e; return `<div class="rule ${e ? '' : 'locked'}"><span class="cupbox">${cupSvg(a.tier)}</span><div><b>${hide ? '？？？' : esc(a.title)}</b><span>${hide ? '隐藏成就 · 达成后揭晓' : esc(a.desc || '')}</span><div class="cond">${e ? `<span class="muted">第 ${e.beat} 段达成 · ${esc(CUP[a.tier] || '铜')}</span>` : condHtml(a.when)}</div></div></div>`; }).join('') || '<p class="muted">这个故事没设成就。</p>'}</div></section>
         <section><h2>剧情推进<small>条件一到，机器递张纸条给对方，怎么写还是它写</small></h2>
@@ -187,6 +188,10 @@
         let timer = null;
         ND.stylePicker(r.querySelector('#picker'), { presets, state, onUpload: true, onChange: (s) => { clearTimeout(timer); timer = setTimeout(() => api.config({ style: { preset: s.preset, modules: s.modules } }).then(() => ND.flash('写法已改，下一句话到时生效')).catch(err => ND.flash(err.message, true)), 500); } });
       } catch (err) { r.querySelector('#picker').innerHTML = `<p class="muted">${esc(err.message)}</p>`; }
+      try {
+        const { entries } = await api.lore();
+        if (entries.length) { r.querySelector('#loreSec').hidden = false; const off = new Set(cfg.lore?.off || []); let lt = null; ND.lorePicker(r.querySelector('#lore'), { entries, off, by: cfg.lore?.by, onChange: (o) => { clearTimeout(lt); lt = setTimeout(() => api.config({ lore: { off: [...o] } }).then(() => ND.flash('世界书开关已改')).catch(e => ND.flash(e.message, true)), 500); } }); }
+      } catch { /* 没有世界书 */ }
       try {
         const { files } = await api.files();
         const fl = r.querySelector('#fileList'); fl.className = '';

@@ -1,12 +1,12 @@
 /**
  * engine/stage/tools.js —— 演出进程的工具面（MCP）。
  *
- * 台上的人只需要四件事：把这一拍写出来、给玩家把手、掷骰、在关键点存档。
+ * 台上的人只需要四件事：把这一段写出来、给玩家把手、掷骰、在关键点存档。
  * 内置工具那边只留了 Read/Glob/Grep/Skill（读角色卡和世界书、加载 story-* 技能包），
  * Write 和 Bash 是挡掉的 —— 所以落盘一律走这里，路径由服务端拼，模型给不了绝对路径。
  *
- * 落点全在**这场戏的文件夹**里（engine/stage/play.js 的布局）：
- *   场景/scenes.jsonl   一拍一行     记忆/*.md + INDEX.md   这场戏的记忆
+ * 落点全在**这个故事的文件夹**里（engine/stage/play.js 的布局）：
+ *   场景/scenes.jsonl   一段一行     记忆/*.md + INDEX.md   这个故事的记忆
  *   角色/<名>/记忆/     某个人的记忆（索引写回他的卡）
  *
  * ⚠️ 参数名和枚举值一律 ASCII：中文参数名会让 agent 静默结束回合（老账）。
@@ -43,7 +43,7 @@ export async function appendSceneRow(playAbs, row, rel = MAIN_SCENES_REL) {
 }
 
 /**
- * @param {object} ctx  workspaceRoot / playRoot（戏的文件夹，工作区相对）/ onScene（写完一拍的回调，推给显示器）
+ * @param {object} ctx  workspaceRoot / playRoot（故事的文件夹，工作区相对）/ onScene（写完一段的回调，推给显示器）
  *                      / onCardTouched（进程自己改了某张卡的索引块）
  */
 export function createStageTools(ctx) {
@@ -54,23 +54,23 @@ export function createStageTools(ctx) {
 
   const writeScene = tool(
     'write_scene',
-    '把这一拍写到台上。正文是完整的一段戏（环境、动作、所有人的对白都在里面），'
+    '把这一段写到台上。正文是完整的一段（环境、动作、所有人的对白都在里面），'
     + '第三人称旁白，对白单独成段。choices 是留给玩家的选项 —— 两到四枚，'
     + '你心里按"一枚推进主线、一枚人际、一枚合理但意想不到"来配，**但这三个词只是给你分类用的，不许出现在 label 或 hint 里**，'
     + '每一枚都写玩家具体会做什么。**没有选项这一段就没写完**。'
-    + 'state 每拍必填：这一拍改了哪些状态值就报哪些，什么都没变就传空数组 —— 空数组的意思是"我看过了，没变"。',
+    + 'state 每段必填：这一段改了哪些状态值就报哪些，什么都没变就传空数组 —— 空数组的意思是"我看过了，没变"。',
     {
-      text: z.string().min(1).max(8000).describe('这一拍的正文'),
+      text: z.string().min(1).max(8000).describe('这一段的正文'),
       choices: z.array(choiceSchema).min(1).max(5).describe('留给玩家的把手，两到四枚'),
       scene: z.string().max(60).optional().describe('换场景时给一句地点时间，不换就别传。换了场显示器会换背景'),
       speakers: z.array(z.string().max(30)).max(12).optional()
-        .describe('这一拍开过口的人（用在场者的名字）。显示器靠它点亮名册，多人场面才用得上'),
+        .describe('这一段开过口的人（用在场者的名字）。显示器靠它点亮名册，多人场面才用得上'),
       // ⛔⛔ 这里不能用 z.record（SDK 会静默丢掉整个 stage 服务器的工具）。键值对数组落盘时折成对象。
       state: z.array(z.object({
-        key: z.string().min(1).max(30).describe('状态键，跟开戏时状态面板声明的 key 一致'),
+        key: z.string().min(1).max(30).describe('状态键，跟开始时状态面板声明的 key 一致'),
         value: z.union([z.string().max(60), z.number()]).describe('新值'),
       })).max(12)
-        .describe('这一拍改了的状态值，只传变了的键：[{"key":"好感","value":32}]。没变就传 []（必填，逼你每拍看一眼数值）'),
+        .describe('这一段改了的状态值，只传变了的键：[{"key":"好感","value":32}]。没变就传 []（必填，逼你每段看一眼数值）'),
     },
     async ({ text, choices, scene, speakers, state }) => {
       // 选项小字是类别词（"主线""人际""意外"）的机械剥掉：玩家看的是动作意图，不是你的分类（09-06 站主点名）
@@ -99,7 +99,7 @@ export function createStageTools(ctx) {
 
   /**
    * 记忆分两个家：带 who 是**某个人**记得的事 → 他的卡（角色/<名>/记忆/ + 卡末尾的索引块）；
-   * 不带 who 是这场戏的事（演到哪 / 伏笔 / 世界新事实）→ 记忆/，索引进 INDEX.md。
+   * 不带 who 是这个故事的事（演到哪 / 伏笔 / 世界新事实）→ 记忆/，索引进 INDEX.md。
    * 形状照搬 harness 那套 auto-memory：一事一文件、frontmatter、索引常驻正文按需 Read。
    */
   const remember = tool(
@@ -107,8 +107,8 @@ export function createStageTools(ctx) {
     '记住一件事。一件事一份，别把两件事塞进一份。存之前先看索引里有没有已经在写这件事的，'
     + '有就用同一个 name 覆盖它，别新建第二份。'
     + '**是某个人记得的事（他的态度、他知道的秘密、他跟谁的关系）就带 who** —— 那会写进他的角色卡，'
-    + '跟着他走；演到哪了、伏笔、世界里确立的新事实不带 who，那是这场戏的。'
-    + '⛔ 别记这一拍刚发生的流水账 —— 正文本身就在台上，记忆是给**之后还会用到**的东西准备的：'
+    + '跟着他走；演到哪了、伏笔、世界里确立的新事实不带 who，那是这个故事的。'
+    + '⛔ 别记这一段刚发生的流水账 —— 正文本身就在台上，记忆是给**之后还会用到**的东西准备的：'
     + '关系变了、伏笔埋下、世界里确立了一个新事实、玩家做了回不了头的选择。',
     {
       name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/).describe('文件名，小写英文加连字符，比如 qingke-attitude'),
@@ -116,7 +116,7 @@ export function createStageTools(ctx) {
         .describe('progress=演到哪了 / character=某个人的态度与他记得的事（要带 who）/ thread=伏笔 / world=演出中确立的设定'),
       who: z.string().max(40).optional().describe('这是谁记得的事：在场者的名字（角色卡上的 name）。给了就写进他的卡'),
       description: z.string().min(1).max(80).describe('一行摘要，进索引，也是之后判断"这条现在用不用得上"的依据'),
-      content: z.string().min(1).max(8000).describe('正文 markdown。写事实，别写这一拍的散文'),
+      content: z.string().min(1).max(8000).describe('正文 markdown。写事实，别写这一段的散文'),
     },
     async ({ name, type, who, description, content }) => {
       if (type === 'character' && !who) {
@@ -131,13 +131,13 @@ export function createStageTools(ctx) {
         await fs.writeFile(path.join(memDir, `${name}.md`), head + content, 'utf8');
         const n = await rewriteCardMemoryIndex(workspaceRoot, cardRel);
         await ctx.onCardTouched?.(cardRel);
-        return { content: [{ type: 'text', text: `记进「${who}」的卡了：${name}（${type}）。他的索引现在 ${n} 条，下次开戏随卡进系统提示词。` }] };
+        return { content: [{ type: 'text', text: `记进「${who}」的卡了：${name}（${type}）。他的索引现在 ${n} 条，下次开始随卡进系统提示词。` }] };
       }
       const dirAbs = path.join(playAbs, MEMORY_DIR);
       await fs.mkdir(dirAbs, { recursive: true });
       await fs.writeFile(path.join(dirAbs, `${name}.md`), head + content, 'utf8');
       const n = await rewriteIndex(dirAbs);
-      return { content: [{ type: 'text', text: `记住了：${name}（${type}）。这场戏的索引现在 ${n} 条，下次开戏整份进你的系统提示词。` }] };
+      return { content: [{ type: 'text', text: `记住了：${name}（${type}）。这个故事的索引现在 ${n} 条，下次开始整份进你的系统提示词。` }] };
     },
   );
 
@@ -146,7 +146,7 @@ export function createStageTools(ctx) {
     '删掉一条记错了或者已经作废的记忆。剧情推翻了旧设定时用，别留着两份打架的。记在某个人卡上的要带 who。',
     {
       name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/).describe('要删的那份的 name'),
-      who: z.string().max(40).optional().describe('这条记在谁的卡上；这场戏的记忆不带'),
+      who: z.string().max(40).optional().describe('这条记在谁的卡上；这个故事的记忆不带'),
     },
     async ({ name, who }) => {
       if (who) {
@@ -217,7 +217,7 @@ export function createStageTools(ctx) {
   // ⛔ 全部常驻（_meta alwaysLoad）：env 里带着 ENABLE_TOOL_SEARCH 时 MCP 工具默认延迟加载，
   // 模型看不见 write_scene，而提示词又叫它"不用 ToolSearch 去找别的"（09-05 真栽）。
   const always = (t) => ({ ...t, _meta: { ...(t._meta || {}), 'anthropic/alwaysLoad': true } });
-  // write_scene 一返回这一轮就结束（SDK 的 _meta['claude/endTurn']）：模型再想在工具之外说一句"这一拍写好了"也没机会 ——
+  // write_scene 一返回这一轮就结束（SDK 的 _meta['claude/endTurn']）：模型再想在工具之外说一句"这一段写好了"也没机会 ——
   // 09-05/06 两天的转录里每一轮都有这么一句，提示词禁不住，端口关掉最省事。remember / roll 要在 write_scene 之前调。
   const endTurn = (t) => ({ ...t, _meta: { ...(t._meta || {}), 'claude/endTurn': true } });
   return createSdkMcpServer({ name: 'stage', version: '1.2.0', tools: [endTurn(writeScene), remember, forget, rollDice, updatePanel].map(always) });
@@ -239,7 +239,7 @@ export async function rewriteIndex(dirAbs) {
   rows.sort();
   await fs.mkdir(dirAbs, { recursive: true });
   await fs.writeFile(path.join(dirAbs, MEM_INDEX),
-    `# 这场戏记住的事\n\n一行一条，正文在各自的文件里，要用再 Read。\n\n${rows.join('\n')}\n`, 'utf8');
+    `# 这个故事记住的事\n\n一行一条，正文在各自的文件里，要用再 Read。\n\n${rows.join('\n')}\n`, 'utf8');
   return rows.length;
 }
 
@@ -251,11 +251,11 @@ export async function appendUserLine(playAbs, text, { rel = MAIN_SCENES_REL, uui
   return appendSceneRow(playAbs, { id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by, text, ...(uuid ? { uuid } : {}), ...extra }, rel);
 }
 
-/** 开戏时把索引整份接回系统提示词（正文不贴，让它按需 Read）。 */
+/** 开始时把索引整份接回系统提示词（正文不贴，让它按需 Read）。 */
 export async function readMemoryIndex(playAbs) {
   try { return await fs.readFile(path.join(playAbs, MEMORY_DIR, MEM_INDEX), 'utf8'); } catch { return null; }
 }
-/** 这场戏记忆的清单（显示器的记忆页） */
+/** 这个故事记忆的清单（显示器的记忆页） */
 export async function listMemories(playAbs) {
   const dir = path.join(playAbs, MEMORY_DIR);
   const files = (await fs.readdir(dir).catch(() => [])).filter(f => f.endsWith('.md') && f !== MEM_INDEX).sort();

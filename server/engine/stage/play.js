@@ -1,8 +1,8 @@
 /**
- * engine/stage/play.js —— 一场戏一个文件夹（2026-09-05 晚，站主提议目录重构）
+ * engine/stage/play.js —— 一个故事一个文件夹（2026-09-05 晚，站主提议目录重构）
  *
- * 此前一场戏的东西散在工作区根上六个地方（stage/、角色/、世界书/、预设/、记忆/、用户内容/），
- * CLAUDE.md 里还抄了一遍台面规矩。现在**一场戏 = 工作区根下的一个文件夹**，里面自成一体：
+ * 此前一个故事的东西散在工作区根上六个地方（stage/、角色/、世界书/、预设/、记忆/、用户内容/），
+ * CLAUDE.md 里还抄了一遍规矩。现在**一个故事 = 工作区根下的一个文件夹**，里面自成一体：
  *
  *   晴可同桌/                 ← 画布上那张演出卡就是这个文件夹
  *     戏.json                 标题 / 在场者 / 状态面板 / 皮肤（原 stage.json）
@@ -10,12 +10,12 @@
  *     规则.json               成就与触发（主 agent 按酒馆卡和难度写，机械层只做比较）
  *     成就.jsonl              达成记录，一行一枚
  *     角色/<名>/角色卡.md      人 + 他的记忆索引；同目录 记忆/、立绘.png
- *     记忆/ INDEX.md          这场戏的记忆（演到哪 / 伏笔 / 世界新事实）
- *     场景/scenes.jsonl       一拍一行；场景/背景/ 换场时生的背景图
+ *     记忆/ INDEX.md          这个故事的记忆（演到哪 / 伏笔 / 世界新事实）
+ *     场景/scenes.jsonl       一段一行；场景/背景/ 换场时生的背景图
  *     世界书/ 预设/            导入的酒馆料，进程按需 grep
  *     素材/                   用户丢进来的图
  *
- * 一个文件夹就是一份能整个搬走的存档，比酒馆卡多带了记忆和剧情。一个项目可以放几场戏。
+ * 一个文件夹就是一份能整个搬走的存档，比酒馆卡多带了记忆和剧情。一个项目可以放几个故事。
  * `CLAUDE.md` 刻意**不**进来：那是主 agent 那一侧的档案，SDK 只从工作区根读它。
  *
  * 老形状（根上的 stage/ + 根上的 角色/ 等）由 migrateLegacyPlay 一次性收进文件夹。
@@ -42,7 +42,7 @@ export const LEGACY_DIR = 'stage';
 
 export async function exists(p) { try { await fs.access(p); return true; } catch { return false; } }
 
-/** 这个目录是不是一场戏（有 戏.json 或 台面.md） */
+/** 这个目录是不是一个故事（有 戏.json 或 台面.md） */
 export async function isPlayDir(abs) {
   return (await exists(path.join(abs, PLAY_CONFIG))) || (await exists(path.join(abs, TABLE_FILE)));
 }
@@ -53,7 +53,7 @@ export function playFolderName(title, fallback = '演出') {
   return cleaned || fallback;
 }
 
-/** 工作区根下所有戏的文件夹名（一级） */
+/** 工作区根下所有故事的文件夹名（一级） */
 export async function listPlays(workspaceRoot) {
   let entries = [];
   try { entries = await fs.readdir(workspaceRoot, { withFileTypes: true }); } catch { return []; }
@@ -144,8 +144,8 @@ async function moveIfExists(from, to) {
 
 /**
  * 把 09-05 下午那一版的散件收进一个文件夹：
- *   stage/stage.json → <戏>/戏.json；stage/台面.md → <戏>/台面.md；stage/scenes.jsonl → <戏>/场景/；
- *   stage/memory → <戏>/记忆；根上的 角色/ 世界书/ 预设/ 用户内容/ → <戏>/ 下同名（用户内容 → 素材）。
+ *   stage/stage.json → <故事>/戏.json；stage/台面.md → <故事>/台面.md；stage/scenes.jsonl → <故事>/场景/；
+ *   stage/memory → <故事>/记忆；根上的 角色/ 世界书/ 预设/ 用户内容/ → <故事>/ 下同名（用户内容 → 素材）。
  * 只在根上有 stage/stage.json 且还没有任何戏文件夹时做；做完 stage/ 删掉。返回新文件夹名或 null。
  */
 export async function migrateLegacyPlay(workspaceRoot) {
@@ -162,7 +162,7 @@ export async function migrateLegacyPlay(workspaceRoot) {
   await moveIfExists(path.join(legacy, 'memory'), path.join(play, MEMORY_DIR));
   for (const d of [ROLES_DIR, WORLD_DIR, PRESET_DIR]) await moveIfExists(path.join(workspaceRoot, d), path.join(play, d));
   await moveIfExists(path.join(workspaceRoot, '用户内容'), path.join(play, ASSETS_DIR));
-  // cast 里的卡路径从 角色/… 改成 <戏>/角色/…；立绘同理
+  // cast 里的卡路径从 角色/… 改成 <故事>/角色/…；立绘同理
   const fix = (p) => (typeof p === 'string' && (p.startsWith(`${ROLES_DIR}/`) || p.startsWith('用户内容/'))
     ? `${name}/${p.replace(/^用户内容\//, `${ASSETS_DIR}/`)}` : p);
   const next = {

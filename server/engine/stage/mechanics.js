@@ -4,7 +4,7 @@
  * 这里没有编排，只有三件机械活：
  *   - 状态：把每一段 write_scene 报的 state 折成当前值（开场值来自状态面板的 initial），加一个机器补的 拍数。
  *   - 规则：状态一变就跑一遍 <故事>/规则.json（rules.js 只做比较）。成就达成 → 成就.jsonl + 弹奖杯；
- *     触发成立 → 场务纸条接在工具返回里。
+ *     触发成立 → 便条接在工具返回里。
  *   - 背景：换场（write_scene 带了新的 scene）→ 后台按地点时间 + 设定里的世界描述生一张背景图。
  *     同一场景只生一次，一个故事有上限；开场那张在玩家点「开始」时就先生（opening 键），
  *     第一段到了直接顶上，之后再换场才另生。判据全是机械的（scene 字段变了），不是模型决定。
@@ -64,7 +64,7 @@ export async function runRules(rt, cfg) {
     for (const n of notes) { rt.seen.fired.add(n.id); fired.add(n.id); }
     cfg.firedTriggers = [...fired];
     await writePlayConfig(rt.playAbs, cfg);
-    parts.push(...notes.map(n => `场务纸条：${n.note}`));
+    parts.push(...notes.map(n => `便条：${n.note}`));
   }
   return parts.length ? `【${parts.join('；')}】` : '';
 }

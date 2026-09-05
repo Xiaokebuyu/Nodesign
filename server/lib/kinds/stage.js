@@ -1,20 +1,20 @@
 /**
- * kinds/stage.js — 演出形态（RP 显示器，2026-09-05；当晚改成"一场戏一个文件夹"）
+ * kinds/stage.js — 演出形态（RP 显示器，2026-09-05；当晚改成"一个故事一个文件夹"）
  *
- * 一场戏在磁盘上就是工作区根下的一个文件夹（布局见 engine/stage/play.js）：
- *   <戏>/戏.json 台面.md 规则.json 角色/ 记忆/ 场景/scenes.jsonl 世界书/ 预设/ 素材/
- * 有 `戏.json` 或 `台面.md` 的文件夹就是一场戏。
+ * 一个故事在磁盘上就是工作区根下的一个文件夹（布局见 engine/stage/play.js）：
+ *   <故事>/戏.json 台面.md 规则.json 角色/ 记忆/ 场景/scenes.jsonl 世界书/ 预设/ 素材/
+ * 有 `戏.json` 或 `台面.md` 的文件夹就是一个故事。
  *
  * 它是第四种一等产物，跟站点走同一条路（画布上一张卡、双击开最大化窗），差别在：
  *   - **不是 html 文件**，所以既不 browsable 也不 renderable。显示器是服务端一条路由
- *     （api/stage.js 的 /stage/<戏>/view）现渲染的页面，感知工具按能力位问、问不到它。
+ *     （api/stage.js 的 /stage/<故事>/view）现渲染的页面，感知工具按能力位问、问不到它。
  *   - **目录型**（卡即文件夹）：整个文件夹被产物认领，里面的卡 / 世界书 / jsonl 不当散文件上墙 ——
  *     它们都在显示器里看和改。
  *   - 没有导出格式。要留档就是文件夹本身（一个文件夹 = 一份能整个搬走的存档）。
  *
  * 实例发现跟站点同款：任务目录本身是戏 → root ''；否则一级子目录里是戏的各算一个实例
  * （从父目录的视角认领它，assets.js 的 collect 才不会再把它当文件夹递归）。
- * 老形状 `stage/stage.json`（09-05 下午那版）还认，标 legacy，manager 开戏时迁移。
+ * 老形状 `stage/stage.json`（09-05 下午那版）还认，标 legacy，manager 开始时迁移。
  *
  * 入口文件取 scenes.jsonl 而不是 戏.json：ENTRY_FILE 的扩展名会进 artifact-target 的
  * ENTRY_EXTS，`.json` 进去会让 agent 随手写的任何 json 都被记成"当前产物"。
@@ -64,7 +64,7 @@ export default {
   injectFit: false,
   exportFormats: [],
   referenceDoc: null,
-  directory: () => true,     // 卡即文件夹：整场戏的文件夹整段认领
+  directory: () => true,     // 卡即文件夹：整个故事的文件夹整段认领
   discoverInstances,
 
   async artifactRoot(taskDir) {

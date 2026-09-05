@@ -99,6 +99,25 @@
     return { paint };
   };
 
+  /**
+   * 世界书开关。entries = /lore 回的触发条目；off = Set(关掉的名字)；每次变动调 onChange(off)。
+   * 条目多（跑团卡几百条）就折起来只露数量，展开后一条一行：名字 + 触发词。
+   */
+  ND.lorePicker = function lorePicker(container, { entries, off, onChange, by }) {
+    if (!entries?.length) { container.innerHTML = ''; return; }
+    const paint = () => {
+      const on = entries.filter(e => !off.has(e.name)).length;
+      const open = ND.prefs.get('grp:lore', entries.length <= 12 ? 1 : 0);
+      container.innerHTML = `<div class="modgroup lore" data-open="${open}"><div class="ghd"><b>世界书</b><span class="muted">对方写到相关的词时机器把这条送给它；关掉的不送</span><span class="n">${on} / ${entries.length}</span>${CHEV}</div>
+        <div class="gbody">${by === 'agent' ? '<p class="source" style="color:var(--accent);margin:0 0 6px">有几条是 agent 按你开场前的回答关掉的，不合意就改。</p>' : ''}<div class="lorerow"><button class="btn sm" data-all="1">全开</button><button class="btn sm" data-all="0">全关</button></div>
+        ${entries.map(e => `<label class="tog"><input type="checkbox" data-n="${esc(e.name)}" ${off.has(e.name) ? '' : 'checked'}><span>${esc(e.name)}<small>${esc(e.keys.slice(0, 8).join(' · '))}${e.keys.length > 8 ? ' …' : ''}</small></span></label>`).join('')}</div></div>`;
+      container.querySelector('.ghd').onclick = () => { const g = container.firstElementChild; const v = g.dataset.open === '1' ? 0 : 1; g.dataset.open = String(v); ND.prefs.set('grp:lore', v); };
+      container.querySelectorAll('input[data-n]').forEach(i => { i.onchange = () => { if (i.checked) off.delete(i.dataset.n); else off.add(i.dataset.n); container.querySelector('.n').textContent = `${entries.filter(e => !off.has(e.name)).length} / ${entries.length}`; onChange(off); }; });
+      container.querySelectorAll('[data-all]').forEach(b => { b.onclick = () => { off.clear(); if (b.dataset.all === '0') for (const e of entries) off.add(e.name); paint(); onChange(off); }; });
+    };
+    paint();
+  };
+
   /* ── 开场页 ── */
   ND.opening = {
     async mount(root) {
@@ -111,6 +130,7 @@
         <div class="world md" id="world"><p class="muted">读取中…</p></div>
         <div class="kicker">在场的人</div>
         <div class="people" id="people"></div>
+        <div id="lore"></div>
         <div class="kicker">写法</div>
         <p class="lede" style="margin-bottom:12px">对方按哪套规矩写。默认这套是从一份久经调试的中文预设拆出来的；也可以上传你自己的。展开每一组能看到具体条目。</p>
         ${cfg.style?.by === 'agent' ? '<p class="source" style="color:var(--accent)">下面的勾选是 agent 按你开场前的回答预选的，不合意就改，改了以你的为准。</p>' : ''}
@@ -134,6 +154,9 @@
         const world = (mdSection(text, '世界') || text.slice(0, 1200)).replace(/\{\{user\}\}/gi, '你').replace(/\{\{char\}\}/gi, '对方');   // 酒馆卡里的占位符别原样露给玩家
         root.querySelector('#world').innerHTML = renderMd(world) || '<p class="muted">设定里还没写世界。</p>';
       } catch { root.querySelector('#world').innerHTML = '<p class="muted">读不到设定。</p>'; }
+      // 世界书开关（有触发条目才出现）
+      const loreOff = new Set(cfg.lore?.off || []);
+      try { const { entries } = await api.lore(); ND.lorePicker(root.querySelector('#lore'), { entries, off: loreOff, by: cfg.lore?.by, onChange: () => {} }); } catch { /* 没有世界书 */ }
       // 写法
       let presets = [];
       try { presets = (await api.presets()).presets; } catch { presets = []; }
@@ -143,7 +166,7 @@
       const go = root.querySelector('#go'); const note = root.querySelector('#openNote');
       go.onclick = async () => {
         go.disabled = true; note.textContent = '正在起进程、写开场…（第一段要等十几秒）'; note.className = 'note';
-        try { await api.open({ style, cardOptions }); }
+        try { await api.open({ style, cardOptions, lore: { off: [...loreOff] } }); }
         catch (err) { note.textContent = `没开起来：${err.message}`; note.className = 'note err'; go.disabled = false; }
       };
     },

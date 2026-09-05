@@ -7,7 +7,7 @@
  * ## 这条路上没有主 agent
  *
  * 用户在显示器里点一枚选项 / 说一句话 → api/stage.js → sayToStage → 进程队列。
- * 主 agent 只在开场前出场一次（open_stage：写设定 + 规则、把在场者的卡搬进文件夹），之后退到场务位。
+ * 主 agent 只在开场前出场一次（open_stage：写设定 + 规则、把在场者的卡搬进文件夹），之后退到后台。
  * 台上写出来的每一段由 write_scene 落盘（场景/*.jsonl），这里顺手推给所有订户。
  *
  * ## 系统提示词从文件拼（prompt.js）
@@ -211,7 +211,7 @@ async function sourcesChanged(rt) {
  * 同名的已存在 = 换设定重开（设定 / 规则重写，卡 / 场景 / 记忆都留着）。返回文件夹名。
  * **不起进程**：进程在玩家点「开始」或说第一句话时才起（09-06 起，之前 open_stage 一调就先烧 400MB）。
  */
-export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style, panels, opening } = {}) {
+export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style, panels, opening, lore } = {}) {
   const ws = getWorkspaceRoot(pid);
   await ensurePlays(pid);
   const root = playFolderName(title);
@@ -253,6 +253,7 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     skin: SKINS.includes(skin) ? skin : (stored.skin || 'paper'),
     model: model || stored.model || null,
     ...(opening ? { opening: String(opening).slice(0, 6000) } : {}),   // 酒馆卡的开场白 / 场景，开场指令带给进程当底
+    ...(lore?.off?.length ? { lore: { off: lore.off.map(String).slice(0, 500), by: 'agent' } } : {}),   // agent 按玩家回答预先关掉的世界书条目（开场页能改）
     lines: linesOf(stored),
     currentLine: currentLine(stored).id,
     startedAt: stored.startedAt || new Date().toISOString(),
@@ -445,7 +446,7 @@ export async function sayToStage(pid, root, text, { userId = null, row = null } 
   const notes = rt.pendingNotes.splice(0);
   const lore = await pickLore(rt, text);
   const pd = panelDigest(await readPanels(rt.playAbs));
-  const about = [stateLine(rt.state), ...(pd ? [`面板：${pd}`] : []), ...notes.map(n => `【场务纸条：${n}】`), ...(lore ? [lore] : [])].join('\n');
+  const about = [stateLine(rt.state), ...(pd ? [`面板：${pd}`] : []), ...notes.map(n => `【便条：${n}】`), ...(lore ? [lore] : [])].join('\n');
   const r = rt.session.say(text, { about, uuid });
   rt.touch();
   rt.broadcast(rt.status());
@@ -463,6 +464,7 @@ async function pickLore(rt, text) {
   const beat = rt.state?.['拍数'] || 0;
   rt.loreSeen = rt.loreSeen || new Map();
   const skip = new Set([...rt.loreSeen].filter(([, at]) => beat - at < LORE_COOLDOWN_BEATS).map(([n]) => n));
+  for (const n of (await readPlayConfig(rt.playAbs))?.lore?.off || []) skip.add(n);   // 玩家关掉的条目不送
   const last = (await readScenes(rt.playAbs, { limit: 6, rel: rt.scenesRel })).reverse().find(r => r.by === 'stage')?.text || '';
   const matched = matchEntries(entries, `${text}\n${last}`, { skip });
   if (!matched.length) return '';
@@ -552,6 +554,7 @@ export async function patchStageConfig(pid, root, patch) {
   if (patch.cardOptions && typeof patch.cardOptions === 'object') {
     next.cardOptions = Object.fromEntries(Object.entries(patch.cardOptions).filter(([k, v]) => typeof k === 'string' && k.length < 120 && typeof v === 'boolean'));
   }
+  if (patch.lore && typeof patch.lore === 'object') next.lore = { off: (Array.isArray(patch.lore.off) ? patch.lore.off : []).filter(s => typeof s === 'string').slice(0, 500), by: 'player' };
   if (patch.opened === true) { next.opened = true; next.openedAt = next.openedAt || new Date().toISOString(); }
   await writePlayConfig(rt.playAbs, next);
   const pub = publicConfig(rt, next);

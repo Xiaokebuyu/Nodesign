@@ -6,7 +6,7 @@
  * 顺手记下每份来源文件的 mtime（manager 盯着它决定要不要重开）和卡上读到的名字 / 小字 / 立绘 / 可选条目。
  * 纯读，不写盘。老形状（戏.json 里直接存 systemPrompt、没有台面文件）还认。
  *
- * 整份都是冻结区：每轮原样重发、命中缓存几乎不要钱。每轮会变的（当前状态值、场务纸条）走消息体。
+ * 整份都是冻结区：每轮原样重发、命中缓存几乎不要钱。每轮会变的（当前状态值、便条）走消息体。
  */
 
 import path from 'node:path';
@@ -45,7 +45,7 @@ export async function composeStagePrompt(wsRoot, root, stored) {
   const sources = [];
   const parts = [];
   let table = null;
-  try { table = (await fs.readFile(path.join(playAbs, TABLE_FILE), 'utf8')).trim(); } catch { /* 没有台面文件 */ }
+  try { table = (await fs.readFile(path.join(playAbs, TABLE_FILE), 'utf8')).trim(); } catch { /* 没有设定文件 */ }
   if (table) {
     sources.push({ rel: `${root}/${TABLE_FILE}`, mtimeMs: await statRel(wsRoot, `${root}/${TABLE_FILE}`) });
     parts.push(table);
@@ -92,7 +92,7 @@ export async function composeStagePrompt(wsRoot, root, stored) {
     const KN = { inventory: '背包', equipment: '装备', shop: '商店', list: '清单' };
     parts.push('## 面板\n这个故事有这几块清单，数量账全在这里记、不进正文：\n'
       + panels.map(p => `- **${p.name}**（${KN[p.kind] || p.kind}${p.who ? `，${p.who} 的` : ''}${p.kind === 'equipment' ? `，槽位 ${(p.slots || []).join(' / ')}` : ''}${p.kind === 'shop' && p.currency ? `，用「${p.currency}」结账，买到的进 ${p.into || '背包'}` : ''}）`).join('\n')
-      + '\n得到、用掉、穿上、标价、卖出，**先 update_panel 再 write_scene**（write_scene 一返回这一轮就结束）。玩家自己在显示器里买了、用了东西，会以【场务纸条】告诉你，你在正文里接住就行。每句话末尾「面板：…」是机器报的现况。');
+      + '\n得到、用掉、穿上、标价、卖出，**先 update_panel 再 write_scene**（write_scene 一返回这一轮就结束）。玩家自己在显示器里买了、用了东西，会以【便条】告诉你，你在正文里接住就行。每句话末尾「面板：…」是机器报的现况。');
   }
   const extra = [];
   for (const d of [WORLD_DIR, PRESET_DIR]) if (await exists(path.join(playAbs, d))) extra.push(`${root}/${d}/`);
@@ -102,7 +102,7 @@ export async function composeStagePrompt(wsRoot, root, stored) {
     + '不可逆的变化用 remember 记一条：某个人记得的事带 who 写进他的卡，这个故事的事不带。掷骰用 roll。'
     + '你的工具就这几件，不用 ToolSearch 去找别的。'
     + (extra.length ? `设定的细节在 ${extra.join(' 和 ')}，用到时 Grep / Read。` : '')
-    + '每句话末尾会带一行「此刻：…」是机器报的当前状态值；【场务纸条】是规则表到了阈值，照它说的推；'
+    + '每句话末尾会带一行「此刻：…」是机器报的当前状态值；【便条】是规则表到了阈值，照它说的推；'
     + '【世界书 · 某条】是机器按这句话和上一段里的关键词从世界书里挑出来的设定原文，写这一段时照它来，不用再去 Grep 同一条。\n\n'
     + '⛔ **write_scene 返回之后这一轮就结束了，不要再在工具之外说任何话。**工具之外的字观众看不见，'
     + '而且那些话里常常漏出数值（"好感度 +2""好感度 17"）—— 数值只走 state，绝不进正文，也绝不写在工具之外。'

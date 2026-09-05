@@ -293,3 +293,7 @@
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--rule);margin:2px 0 12px}
 .tabs button{font-size:12.5px;padding:6px 12px;color:var(--sub);border-bottom:2px solid transparent;margin-bottom:-1px}
 .tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+
+/* 世界书开关组（开场页 / 设定页共用 .modgroup） */
+.modgroup.lore .gbody{max-height:420px;overflow:auto}
+.lorerow{display:flex;gap:6px;margin:0 0 8px}

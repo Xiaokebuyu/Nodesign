@@ -16,7 +16,7 @@
  * 写完**当回合就能派**：Agent(subagent_type: 演员位, name: "rp-<id>", prompt: 卡)。
  *
  * 登记不是上场的前置（不登记直接派也行），它换来的是：板上署名是「程晚」不是
- * slug、重启后按卡重新开演有据可查、用户能在角色文件夹里改人设。
+ * slug、重启后按卡重新开始有据可查、用户能在角色文件夹里改人设。
  */
 
 import path from 'node:path';
@@ -106,7 +106,7 @@ rewriting it.`,
       // 卡落盘：角色/<名>/角色卡.md（文件夹范式：这个文件夹就是该角色的家，
       // 之后的记忆/日记等件都住这里；用户随时可改，改动对"下次派发/唤醒后重读卡"生效）
       const folder = folderNameFor(displayName, slug);
-      // 工作区里只有一场戏时卡直接写进它的文件夹（戏自成一体）；否则写根上的 角色/，open_stage 开戏时搬
+      // 工作区里只有一个故事时卡直接写进它的文件夹（故事自成一体）；否则写根上的 角色/，open_stage 开始时搬
       const rolesRel = await rolesDirFor(workspaceRoot);
       const dir = path.join(workspaceRoot, rolesRel, folder);
       const file = path.join(dir, '角色卡.md');
@@ -172,7 +172,7 @@ rewriting it.`,
         + `Agent(subagent_type: "${ROLE_SLOT}") 和 SendMessage 给角色这两条路正在调试。`,
         `轮到「${displayName}」说话时，**先 Read 一遍 ${cardRel}** 把腔调找回来，再由你写他这一段。`,
         `几个人同场就一个个来，每人开口前各读各的卡 —— 这是防止全场一个腔的正事。`,
-        `要开一场正式的戏：把台面（世界 / 规矩）写好后调 open_stage，cast 里报「${displayName}」，这张卡就整份进演出进程。`,
+        `要开一场正式的故事：把设定（世界 / 规矩）写好后调 open_stage，cast 里报「${displayName}」，这张卡就整份进演出进程。`,
       ];
       if (existed) {
         lines.push('', '⚠️ 卡改了，下次写他的话之前重新 Read 一遍 —— 你上下文里那份是旧的。');

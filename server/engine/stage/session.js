@@ -15,13 +15,13 @@
  *
  * ## 一人分饰多角，不做调度
  *
- * 台上所有人由这一个会话写。机器**不**决定这一拍轮到谁开口 —— 那是 2026-08-29
- * 删掉的 scene.js 干的事，结论是"谁接这一拍"归 agent 当场判断。这里只做两件：
+ * 台上所有人由这一个会话写。机器**不**决定这一段轮到谁开口 —— 那是 2026-08-29
+ * 删掉的 scene.js 干的事，结论是"谁接这一段"归 agent 当场判断。这里只做两件：
  * 把用户的话送进去，把它写出来的东西送出来。
  *
  * ## 冷热分区是成本纪律，不是编排
  *
- * 系统层放不变的东西（演出教义 + 台面规矩），每轮变的走消息体。这不是为了调度，
+ * 系统层放不变的东西（演出教义 + 规矩），每轮变的走消息体。这不是为了调度，
  * 是为了让前缀能复用 —— 酒馆四方世界卡实测 75k/95k 输入、缓存读恒为 0，根因是
  * 世界书按 order 插进上下文中部让后续整体位移，一回合约 $1。冻错一样就全吐回去。
  */
@@ -62,7 +62,7 @@ export const STAGE_DENY = Object.freeze([
 /**
  * @param {object} opts
  *   projectId / cwd            工作区
- *   systemPrompt               冻结区：演出教义 + 台面规矩（不放每轮会变的东西）
+ *   systemPrompt               冻结区：演出教义 + 规矩（不放每轮会变的东西）
  *   model                      不传走默认（调用方给的应当是 SDK 视角的名字，见 resolveSdkSpoofModel）
  *   env                        交给 SDK 子进程的环境（通路 / 凭据目录由 manager 按模型表拼，这里不猜）
  *   sessionId                  SDK 会话 id（manager 给一个新 UUID；ingress 按它路由）
@@ -88,7 +88,7 @@ export class StageSession {
   }
 
   get running() { return this.#running; }
-  /** 正在写这一拍（用来拦"上一拍还没写完又来一句"，以及给前端显示状态） */
+  /** 正在写这一段（用来拦"上一段还没写完又来一句"，以及给前端显示状态） */
   get busy() { return this.#busy; }
   /** SDK 自报的 session_id（system/init 之后才有） */
   get sdkSessionId() { return this.#sdkSessionId; }
@@ -161,7 +161,7 @@ export class StageSession {
           const ev = m.event || {};
           const d = ev.delta;
           // 工具入参也是逐字流的：write_scene 的正文在 input_json_delta 里一段段到，
-          // manager 用 partial-json 边到边解，显示器就能看着这一拍被写出来（不用等十几秒整段落地）
+          // manager 用 partial-json 边到边解，显示器就能看着这一段被写出来（不用等十几秒整段落地）
           if (ev.type === 'content_block_start' && ev.content_block?.type === 'tool_use') {
             this.#onEvent({ type: 'tool_start', name: ev.content_block.name, index: ev.index });
           } else if (d?.type === 'input_json_delta' && d.partial_json) {

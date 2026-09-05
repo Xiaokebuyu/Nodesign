@@ -1,9 +1,9 @@
 /**
  * engine/stage/rules.js —— 成就与触发的机械层（2026-09-05 晚）
  *
- * 一张规则表（<戏>/规则.json），两列：
+ * 一张规则表（<故事>/规则.json），两列：
  *   achievements: [{ id, title, desc, when, hidden?, tier? }]   达成一次，弹奖杯，记进 成就.jsonl
- *   triggers:     [{ id, when, once?, note }]                   条件成立就把 note 当场务纸条接在下一句话后面
+ *   triggers:     [{ id, when, once?, note }]                   条件成立就把 note 当便条接在下一句话后面
  *
  * `when` 只许比较：`好感 >= 60 and 表白状态 == 1`、`拍数 > 30 or 时间 == 放学`。
  * 比较符 >= <= > < == !=；连接词 and / or / && / || / 且 / 或；and 比 or 优先；不支持括号。
