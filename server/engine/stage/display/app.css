@@ -279,3 +279,5 @@ table.kv td,table.kv th{border-bottom-color:var(--rule)}
 /* 背景透出多少：外观页的滑杆写 --veil-a，纱的浓度跟着走 */
 :root[data-backdrop="on"] .app{background:rgba(var(--veil-rgb,255,254,246),var(--veil-a,.9))}
 :root[data-skin="night"]{--veil-rgb:21,23,27} :root[data-skin="jiangnan"]{--veil-rgb:237,241,240} :root[data-skin="terminal"]{--veil-rgb:13,16,14}
+
+@media(max-width:480px){.top-l b{max-width:26vw}.pages button{padding:5px 6px}}   /* 手机整屏窗（390 宽）：标题再让一点给页签 */

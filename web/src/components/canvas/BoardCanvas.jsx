@@ -10,7 +10,7 @@ import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, alpha } fr
 import { PAPER, PAPER_SHADOW, paperCard } from '../../lib/paper.js';
 // ⚠️ EASE / POP_IN / packRow / ROW_GAP 2026-08-31 一并从这行摘掉：grep 全文件只剩
 // 这一行和注释里的名字，四个都是早年搬走代码时留下的死引用（不是这次删「整理」造成的）。
-import { DESKTOP_W, FOLDER_CARD, newStackedZoneRect } from '../../lib/board-geometry.js';
+import { DESKTOP_W, FOLDER_CARD, newStackedZoneRect, hitsAt } from '../../lib/board-geometry.js';
 import { useLiveChalkSpots } from './use-live-chalk-spots.js';
 import { useObjectClick } from './useObjectClick.js';
 import {
@@ -42,6 +42,7 @@ import { useBoardMoves } from './useBoardMoves.js';
 import { buildBoardMenu } from './canvas-menus.js';
 import { zoneOfObjectId, resolveObjectId } from '../../lib/stage.js';
 import { onChrome, onObject } from '../../lib/board-hit.js';
+import { phoneTapOpen } from './phone-tap-open.js';
 import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../lib/text-fonts.js';
 import { splitNoteFaces, faceParts } from '../../lib/note-faces.js';
 import BindingLayer from './BindingLayer.jsx';
@@ -107,7 +108,6 @@ const FOLDER_LABEL = {
 
 // SCRIBBLE_INK 随卡体搬去 cards/BoardObject.jsx（只有那边用；
 // 它跟服务端 sanitizeCanvasData 的白名单是一对，断言在 board-kinds.test.js）
-
 
 export default function BoardCanvas({
   projectId, currentSessionId, listVersion, fileVersions, boardVersion, onAddToContext, onFocusDeck,
@@ -630,7 +630,6 @@ export default function BoardCanvas({
   // 全目录树的物件（不止桌面这一层）—— 文件夹窗里的右键要按 id 找得到它们
   objectsRef.current = objects;
 
-
   /**
    * 首次落点落盘。
    *
@@ -693,7 +692,6 @@ export default function BoardCanvas({
   //
   // 新建文件夹的落点：右键处（openContextMenu 里现算），或者 newStackedZoneRect
   // 给的栈底空位（agent 建的那种，用户不在场时总得有个不重叠的地方）。
-
 
   /**
    * 可见性 2026-08-13 起**不再是一件事** —— `positioned` 和 `folderView` 本来
@@ -1731,6 +1729,7 @@ export default function BoardCanvas({
           if (endMarquee()) return;
           const panned = camera.onPointerUp(e);
           onPointerUp(e);
+          if (phoneTapOpen(e, { phone: deviceEnv.class === 'phone', panned, dragged: wasDrag(), onChrome, hitAt: (x, y) => hitsAt(positionedRef.current, sizeOf, camera.toWorld(x, y))[0], positioned: positionedRef.current, primaryOpen, openFolder, cancel: cancelPendingClick })) return;   // 手机：点一下就开（phone-tap-open.js）
           // 几何点选（08-27）：真点击（没平移没拖没框选）落在被 board-hit
           // 当成空地的东西上 —— 闲置板书就是这类 —— 也要选得中。物件自己的点选
           // 走拖拽钩子（它有指针捕获），这里只接"空地"那半边。

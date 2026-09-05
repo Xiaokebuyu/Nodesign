@@ -1,5 +1,7 @@
 import { useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
+import { useDeviceClass } from '../../lib/device-class.js';
 import { PAPER, PAPER_SHADOW, GRAIN, INK_SURFACE, pinFill } from '../../lib/paper.js';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE, RADIUS } from '../../lib/theme.js';
 import { POP_IN } from '../../lib/board-geometry.js';
@@ -65,6 +67,49 @@ export const ARTIFACT_WINDOW_Z = 500;
 
 /** 顶栏高度。只装身份和关闭，越窄越好 —— 内容才是主角 */
 const CHROME_H = 30;
+/**
+ * 手机（2026-09-06）：窗不再钉在画布 section 里，**portal 到 body、整屏、盖过一切**（顶条 / 对话抽屉 / 工具栏）。
+ * 理由：手机上画布只是一根纸筒，窗要是还留在 section 里，8/10 的 inset 和 z=500 会让它被 MobileShell 的抽屉（z 120）
+ * 和 AppShell 顶栏压住、四边还漏着一圈画布。站主：「让其在最外层打开，浮于所有内容上方」。板书退役为主要载体之后，
+ * 手机上那套限制（不开产物）的前提也没了。顶条 44 高、关闭钮 40 命中（08-21：触屏按钮不缩），吃安全区。
+ */
+const PHONE_CHROME_H = 44;
+const PHONE_Z = 2000;
+
+/**
+ * 手机上这扇窗自己的工具条：一条钉在底边、横向可滑的按钮带（外层那条常驻 FloatingToolbar 被盖在窗底下了）。
+ * 不浮：浮着会压住窗里自己的输入框（09-06 演出显示器上真撞过）。演出显示器（kind=stage）不画 —— 它的页签 / 皮肤 / 开始
+ * 显示器顶栏里本来就有，再画一遍是重复。
+ */
+function PhoneToolBar({ groups }) {
+  const gs = (groups || []).filter(g => g && (g.node || g.items?.length));
+  if (!gs.length) return null;
+  return (
+    <div data-phone-toolbar style={{
+      flexShrink: 0, display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `6px ${GAP.sm}px`,
+      borderTop: `1px solid ${PAPER.hair}`, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch',
+    }}>
+      {gs.map((g, gi) => (
+        <div key={g.id || gi} style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, paddingRight: GAP.sm, borderRight: gi < gs.length - 1 ? `1px solid ${PAPER.hair}` : 'none' }}>
+          {g.node ? g.node : g.items.map((it, i) => {
+            const Icon = it.icon;
+            return (
+              <button key={it.id || i} title={it.title || it.label} disabled={it.disabled} onClick={it.onClick}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 36, padding: `0 ${Icon && it.label ? 10 : 12}px`,
+                  border: 'none', borderRadius: RADIUS.sm, cursor: it.disabled ? 'default' : 'pointer', flexShrink: 0,
+                  background: it.active ? 'rgba(43,33,23,0.10)' : 'transparent', color: it.disabled ? COLOR.sub : COLOR.text,
+                  fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, whiteSpace: 'nowrap',
+                }}>
+                {Icon ? <Icon size={15} /> : null}{it.label ? <span>{it.label}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function ArtifactWindow({
   /** 'deck' | 'site' —— 决定工具条位置存在哪个槽位 */
@@ -101,11 +146,13 @@ export default function ArtifactWindow({
   contentStyle,
 }) {
   const contentRef = useRef(null);
+  const phone = useDeviceClass() === 'phone';
 
-  // 工具组交给外层那条常驻工具栏；窗一关就撤回（否则关了窗还留着这扇窗的工具）
+  // 工具组交给外层那条常驻工具栏；窗一关就撤回（否则关了窗还留着这扇窗的工具）。
+  // 手机上窗在 body 里、外层工具栏被盖在底下 → 不上报，工具组由这扇窗自己在底边画一条（见下）。
   useEffect(() => {
-    onToolbarGroups?.(groups);
-  }, [groups, onToolbarGroups]);
+    onToolbarGroups?.(phone ? null : groups);
+  }, [groups, onToolbarGroups, phone]);
 
   /**
    * 撤销上报**只在窗真的没了的时候**做（依赖里刻意没有 `groups`）。
@@ -132,10 +179,13 @@ export default function ArtifactWindow({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, escToClose]);
 
-  return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: ARTIFACT_WINDOW_Z }}>
+  const chromeH = phone ? PHONE_CHROME_H : CHROME_H;
+  const tree = (
+    <div style={phone
+      ? { position: 'fixed', inset: 0, zIndex: PHONE_Z, overscrollBehavior: 'contain' }
+      : { position: 'absolute', inset: 0, zIndex: ARTIFACT_WINDOW_Z }}>
       <style>{'@keyframes ndDimIn{from{opacity:0}to{opacity:1}}'}</style>
-      <div
+      {!phone && <div
         onClick={onClose}
         title="点击回到工作台"
         style={{
@@ -143,20 +193,21 @@ export default function ArtifactWindow({
           background: 'rgba(32, 26, 14, 0.4)',
           animation: 'ndDimIn 200ms ease',
         }}
-      />
+      />}
 
-      {/* 窗 = 一张钉在板上的大纸（物料同首页项目卡：纸色 + 颗粒 + 直角） */}
+      {/* 窗 = 一张钉在板上的大纸（物料同首页项目卡：纸色 + 颗粒 + 直角）；手机上铺满整屏 */}
       <div style={{
-        position: 'absolute', inset: '8px 10px',
+        position: 'absolute', inset: phone ? 0 : '8px 10px',
         background: PAPER.paper, backgroundImage: GRAIN,
         borderRadius: 0, overflow: 'hidden',
-        boxShadow: PAPER_SHADOW.near,
+        boxShadow: phone ? 'none' : PAPER_SHADOW.near,
         display: 'flex', flexDirection: 'column',
-        animation: POP_IN,
+        animation: phone ? 'ndDimIn 160ms ease' : POP_IN,
+        ...(phone ? { paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' } : {}),
       }}>
         {/* 顶栏：钉纽扣 · 这是什么 · 关闭。只有这三样，越窄越好。 */}
         <div style={{
-          height: CHROME_H, flexShrink: 0, position: 'relative',
+          height: chromeH, flexShrink: 0, position: 'relative',
           display: 'flex', alignItems: 'center', gap: GAP.sm,
           padding: `0 ${GAP.xs}px 0 ${GAP.md}px`,
           borderBottom: `1px solid ${PAPER.hair}`,
@@ -189,15 +240,17 @@ export default function ArtifactWindow({
           <button
             onClick={onClose}
             title="关闭（Esc）"
+            data-artifact-close
             style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 24, height: 24, borderRadius: RADIUS.sm, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+              width: phone ? 'auto' : 24, height: phone ? 40 : 24, padding: phone ? '0 12px' : 0,
+              fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, borderRadius: RADIUS.sm, flexShrink: 0,
               border: 'none', background: 'transparent', color: COLOR.sub, cursor: 'pointer',
             }}
             onMouseEnter={e => { e.currentTarget.style.background = 'rgba(43,33,23,0.06)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
           >
-            <X size={14} />
+            <X size={phone ? 16 : 14} />{phone ? '关闭' : null}
           </button>
         </div>
 
@@ -211,9 +264,12 @@ export default function ArtifactWindow({
           {children}
 
         </div>
+        {/* 手机：这扇窗的工具组自己画在底边（外层那条常驻工具栏被盖在下面了）；演出显示器有自己的顶栏，不画 */}
+        {phone && kind !== 'stage' && <PhoneToolBar groups={groups} />}
       </div>
     </div>
   );
+  return phone && typeof document !== 'undefined' ? createPortal(tree, document.body) : tree;
 }
 
 /**
