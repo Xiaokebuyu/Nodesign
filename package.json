@@ -41,7 +41,7 @@
     "prepack": "npm run build:web"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.251",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.252",
     "async-mutex-lite": "^1.0.0",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",

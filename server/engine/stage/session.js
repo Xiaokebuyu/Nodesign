@@ -96,7 +96,7 @@ export class StageSession {
         systemPrompt: o.systemPrompt,
         // 一个都不加载（站主 2026-09-05 拍板）：RP 模式下项目 CLAUDE.md 是设计
         // 工作台的东西，进了戏就是污染。演出要的设定全部写进 systemPrompt，
-        // 上一场的存档由 stage/progress.md 接回去。
+        // 上一场记住的事由 stage/memory/INDEX.md 接回去。
         // 顺带也挡掉了 'user'（宿主机器的 ~/CLAUDE.md 和使用者的私人记忆）。
         settingSources: o.settingSources || [],
         disallowedTools: o.disallowedTools || STAGE_DENY,

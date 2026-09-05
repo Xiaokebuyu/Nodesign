@@ -28,7 +28,7 @@ description: 开一场戏之前，把世界、人物、规矩编排成演出进�
 难度档、代笔档、文风铁律、有没有骰子。用户在开场问答里选的东西全落这儿。
 
 ## 怎么演
-每一拍走 write_scene；不可逆的变化用 save_progress；掷骰用 roll。
+每一拍走 write_scene；不可逆的变化用 remember 记一条；掷骰用 roll。
 一拍别超过一屏。
 ```
 
