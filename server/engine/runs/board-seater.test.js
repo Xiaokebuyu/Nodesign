@@ -96,3 +96,32 @@ describe('board-seater（入座下沉服务端）', () => {
     expect(events.some(e => /入了座/.test(e.summary))).toBe(true);
   });
 });
+
+describe('临时座重解（2026-09-05：前端 packRow 抢先排的座只是"先别闪"）', () => {
+  it('⭐ provisional 且 seat:auto 的座被服务端按障碍重解并清标；用户拖过的不动', async () => {
+    const pid2 = 'proj_seater_provisional';
+    await ensureProjectWorkspace(pid2);
+    const root2 = getSharedDir(pid2);
+    await fs.mkdir(path.join(root2, 'assets'), { recursive: true });
+    await fs.writeFile(path.join(root2, 'assets/新图.png'), 'x');
+    await fs.writeFile(path.join(root2, 'assets/用户摆的.png'), 'x');
+    // 桌面上已有一张 deck 占着 (24,0)-(664,388)；前端把新图临时排在了它身上
+    await patchBoard(pid2, { objects: {
+      'deck:稿/index.html': { x: 24, y: 0, w: 640, h: 388, seat: 'auto' },
+      'assets/新图.png': { x: 48, y: 40, seat: 'auto', provisional: true },
+      'assets/用户摆的.png': { x: 60, y: 60, seat: 'user', provisional: true },
+    } });
+    const before = await readBoard(pid2);
+    expect(before.objects['assets/新图.png'].provisional).toBe(true);
+    expect(before.objects['assets/用户摆的.png'].provisional).toBeUndefined();   // sanitizer：user 座不临时
+    const r = await seatArtifacts(pid2, ['assets/新图.png', 'assets/用户摆的.png']);
+    expect(r.seated).toBe(1);
+    const b = await readBoard(pid2);
+    const e = b.objects['assets/新图.png'];
+    expect(e.provisional).toBeUndefined();
+    const deck = { x: 24, y: 0, w: 640, h: 388 };
+    const overlap = !(e.x + e.w <= deck.x || deck.x + deck.w <= e.x || e.y + e.h <= deck.y || deck.y + deck.h <= e.y);
+    expect(overlap).toBe(false);
+    expect(b.objects['assets/用户摆的.png']).toMatchObject({ x: 60, y: 60, seat: 'user' });
+  });
+});

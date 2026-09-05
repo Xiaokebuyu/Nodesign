@@ -76,3 +76,20 @@ export function heroSize(id) {
     h: ARTIFACT_HEADER_H + Math.round(ARTIFACT_PREVIEW_H[m[1]] * HERO_SCALE),
   };
 }
+
+/**
+ * 给这件东西拉一根手画线之后，它会不会变成主角（2026-09-05）。
+ *
+ * 真案 proj_mtobiuk5_1b11：deck 和 site 并列 3 分没有主角，板书按 640 宽贴在 site
+ * 右侧；板书自己那根 annotates 线落下去 site 变成 3.5 分成了主角，前端放大到 960，
+ * 把刚贴好的板书压在身下。贴着谁写，就得按「写完之后它多大」算 —— 这条线是这次
+ * 写入自己带来的，落位前就该算进去。
+ *
+ * @returns {boolean}  加了这根线之后 id 是主角（现在不是）
+ */
+export function heroAfterLine(board, id, by = 'agent') {
+  if (!TYPE_RE.test(String(id || ''))) return false;
+  if (boardHeroId(board) === id) return false;   // 已经是主角：尺寸本来就按主角算
+  const sim = { ...board, bindings: { ...(board?.bindings || {}), '__probe__': { type: 'annotates', from: '__probe__', to: id, by: by || 'agent' } } };
+  return boardHeroId(sim) === id;
+}

@@ -191,6 +191,25 @@ describe('write_on_board 统一入口（件数判据）', () => {
     expect(Object.values(board.bindings).some(x => x.label === '甲推出乙')).toBe(true);
   });
 
+  it('⭐ 贴着会因这根线变成主角的产物写：按放大后的身位贴，不被它压住（真案 proj_mtobiuk5_1b11）', async () => {
+    _resetViewpoints();
+    // 两张产物卡并列 3 分没有主角；板书 near 其中一张 → 那张变主角、前端放大 1.5 倍
+    await patchBoard(pid, { objects: {
+      'deck:并列/index.html': { x: 80000, y: 80000 },
+      'site:并列站': { x: 80000, y: 81000 },
+    } });
+    const r = await call({ text: '这个站的配色', near: 'site:并列站', place: { side: 'right' } });
+    expect(r.isError).toBeUndefined();
+    const board = await readBoard(pid);
+    const [, e] = await noteByText(board, '这个站的配色');
+    const { boardHeroId, heroSize } = await import('../../../lib/board-hero.js');
+    expect(boardHeroId(board)).toBe('site:并列站');           // 这根线把它推成了主角
+    const hero = { x: 80000, y: 81000, ...heroSize('site:并列站') };   // 前端会按这个身位画
+    const overlap = !(e.x + e.w <= hero.x || hero.x + hero.w <= e.x || e.y + e.h <= hero.y || hero.y + hero.h <= e.y);
+    expect(overlap).toBe(false);
+    expect(e.x).toBeGreaterThanOrEqual(hero.x + hero.w);       // 真在放大后的右侧
+  });
+
   it('near 指向确实不存在的东西：仍拒，错误话术说清三种可能', async () => {
     const r = await call({ text: 'x', near: '虚空锚点' });
     expect(r.isError).toBe(true);

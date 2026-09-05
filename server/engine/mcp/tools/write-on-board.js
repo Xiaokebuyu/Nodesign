@@ -32,6 +32,7 @@ import { UNIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fi
 import { CARD_MAX_H } from '../../../lib/screen.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { lastOfGroup } from '../../../lib/board-place.js';
+import { heroAfterLine, heroSize } from '../../../lib/board-hero.js';
 import { makePlacer } from './write-on-board-place.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
 import { makeAnchorResolver } from '../../../lib/board-anchor.js';
@@ -247,6 +248,9 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         }
         if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; if (a.board) b2 = a.board; }
       }
+      // 这条板书自己那根线会不会把锚推成主角（放大 1.5 倍）？会的话按放大后的身位贴
+      // （真案见 lib/board-hero.js heroAfterLine 头注）
+      if (anchorId && anchorRect && heroAfterLine(b2, anchorId, by)) anchorRect = { x: anchorRect.x, y: anchorRect.y, ...heroSize(anchorId) };
       // place：落位锚可以跟画线锚不同（near 说「这条关于谁」，place.by 说「放在谁旁边」）
       let placeRect = anchorRect; let placeId = anchorId; let groupRect = null; let groupTag = null;
       const pl = await resolvePlace(b2, args.place);

@@ -5,7 +5,7 @@ import RollLayer, { useRollActions } from './RollLayer.jsx';
 import { Assets, Canvas, SessionConfig } from '../../lib/api.js';
 import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
-import { computeDesktopSeating } from '../../lib/board-seating.js';
+import { computeDesktopSeating, applySizeFixes } from '../../lib/board-seating.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, alpha } from '../../lib/theme.js';
 import { PAPER, PAPER_SHADOW, paperCard } from '../../lib/paper.js';
 // ⚠️ EASE / POP_IN / packRow / ROW_GAP 2026-08-31 一并从这行摘掉：grep 全文件只剩
@@ -613,7 +613,7 @@ export default function BoardCanvas({
   // 入座算法本体 2026-08-14 抽进 lib/board-seating.js（配单测）——语义没动，
   // 两个 ref 型依赖参数化：movingIds（搬家中不落盘）、claimSeat（幻影座位过户，
   // 认领即在 memo 里标记，ref 用法同 movingRef 有先例）。
-  const { positioned, folderView, contentBottom, seatFixes, noteFixes } = useMemo(() => (
+  const { positioned, folderView, contentBottom, seatFixes, noteFixes, sizeFixes } = useMemo(() => (
     computeDesktopSeating({
       dirIndex, zonesEff, layout, bindings, lineageOpen, boardHero, folderCardOf, shelf,
       movingIds: movingRef.current,
@@ -639,7 +639,7 @@ export default function BoardCanvas({
   useEffect(() => {
     const ids = Object.keys(seatFixes || {});
     const nIds = Object.keys(noteFixes || {});
-    if (!ids.length && !nIds.length) return;
+    if (!ids.length && !nIds.length && !Object.keys(sizeFixes || {}).length) return;
     /**
      * ⚠️ 有东西正在改身份（搬家 / 改名）时**一律不落位**。
      *
@@ -671,10 +671,11 @@ export default function BoardCanvas({
         dirtyRef.current.objects.add(id);
         touched = true;
       }
+      for (const id of applySizeFixes(prev, next, sizeFixes)) { dirtyRef.current.objects.add(id); touched = true; }   // 产物卡真身尺寸回写
       if (touched) scheduleSave();
       return touched ? next : prev;
     });
-  }, [seatFixes, noteFixes, scheduleSave]);
+  }, [seatFixes, noteFixes, sizeFixes, scheduleSave]);
 
   // ⚠️ 这里曾有「遮盖修正落盘」：区内避让把卡推开之后，把新坐标写回 board.json。
   // 区内避让 2026-08-07 起其实就没在跑了（`resolveZoneAvoidance` 是死导入、

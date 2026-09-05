@@ -24,6 +24,9 @@ import { lineageFolds } from './lineage.js';
 import { pickHero } from './hero.js';
 import { orderWithGroups } from './relation-order.js';
 
+/** 尺寸要回写给服务端的形态（产物卡：主角档会变大，服务端估不准） */
+const ARTIFACT_TYPES = new Set(['deck', 'site', 'docx', 'browse']);
+
 /**
  * @param {object} deps
  * @param {{ subsOf: Map, byDir: Map }} deps.dirIndex 目录索引（BoardCanvas 的 memo）
@@ -169,7 +172,21 @@ export function computeDesktopSeating({
   const seatFixes = {};
   for (const it of [...visFresh, ...adopted]) {
     if (movingIds?.has(it.id)) continue;   // 正在搬家，别给旧 id 排座
-    seatFixes[it.id] = { x: it.pos.x, y: it.pos.y, ...(it.pos.seat === 'shelf' ? { seat: 'shelf' } : {}) };
+    // provisional（2026-09-05）：packRow 不认障碍（真案：deck 压在文件夹卡上、site 压在
+    // deck 上）。这个座只是"先别闪"，服务端入座器会按障碍重解并清标；服务端为准。
+    seatFixes[it.id] = { x: it.pos.x, y: it.pos.y, ...(it.pos.seat === 'shelf' ? { seat: 'shelf' } : { provisional: true }) };
+  }
+  // 尺寸回写（2026-09-05）：产物卡的真身大小只有渲染层知道（主角 1.5 倍、形态表），
+  // 服务端落位却要拿它当障碍 —— 存下来，服务端先读存的（estimateSizeOn 同口径）。
+  // 只管产物卡；板书/涂鸦的尺寸另有出处（写入端估 + 用户拖手柄）。
+  const sizeFixes = {};
+  for (const it of visItems) {
+    if (!ARTIFACT_TYPES.has(it.type)) continue;
+    const sz = sizeOf(it);
+    const st = layout[it.id];
+    if (st && st.w === sz.w && st.h === sz.h) continue;
+    if (movingIds?.has(it.id)) continue;
+    sizeFixes[it.id] = { w: sz.w, h: sz.h };
   }
   // 批注文字跟着目标搬家（北极星二程）：目标这一趟被重新落座时，贴着它说话
   // 的手写字跟过去。落点 = 首目标所在**行**的右端空白（不是目标右侧 +24 ——
@@ -197,5 +214,16 @@ export function computeDesktopSeating({
       };
     }
   }
-  return { positioned: visItems, folderView: folders, contentBottom: bottom, seatFixes, noteFixes };
+  return { positioned: visItems, folderView: folders, contentBottom: bottom, seatFixes, noteFixes, sizeFixes };
+}
+
+/** 尺寸回写并进 layout 的下一态；返回改动了的 id（调用方标脏）。x 都没有的不写。 */
+export function applySizeFixes(prev, next, sizeFixes) {
+  const touched = [];
+  for (const [id, sz] of Object.entries(sizeFixes || {})) {
+    const cur = next[id] || prev[id];
+    if (!cur || !Number.isFinite(cur.x) || (cur.w === sz.w && cur.h === sz.h)) continue;
+    next[id] = { ...cur, w: sz.w, h: sz.h }; touched.push(id);
+  }
+  return touched;
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
-import { boardHeroId, heroSize, pickHero } from './board-hero.js';
+import { boardHeroId, heroSize, pickHero, heroAfterLine } from './board-hero.js';
 
 const slice = (src) => {
   const a = src.indexOf('const ELIGIBLE');
@@ -22,5 +22,17 @@ describe('board-hero 镜像', () => {
     expect(boardHeroId(two)).toBeNull();
     expect(boardHeroId({ ...two, hero: 'site:b' })).toBe('site:b');
     expect(pickHero([], {})).toBeNull();
+  });
+});
+
+describe('heroAfterLine（2026-09-05）', () => {
+  it('⭐ 并列无主角时，给其中一张拉一根手画线 → 它会成主角；已是主角的报 false；非产物报 false', () => {
+    const board = { objects: { 'deck:a/index.html': { x: 0, y: 0 }, 'site:b': { x: 0, y: 900 }, 'assets/c.png': { x: 0, y: 0 } }, bindings: {}, zones: {} };
+    expect(boardHeroId(board)).toBeNull();
+    expect(heroAfterLine(board, 'site:b', 'agent')).toBe(true);
+    expect(heroAfterLine(board, 'assets/c.png', 'agent')).toBe(false);
+    const withLine = { ...board, bindings: { l: { type: 'annotates', from: 'x', to: 'site:b', by: 'agent' } } };
+    expect(boardHeroId(withLine)).toBe('site:b');
+    expect(heroAfterLine(withLine, 'site:b', 'agent')).toBe(false);
   });
 });

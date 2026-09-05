@@ -157,3 +157,21 @@ describe('暂存架模式（2026-08-30）', () => {
     expect(r.seatFixes['n.png'].seat).toBeUndefined();
   });
 });
+
+describe('临时座与尺寸回写（2026-09-05：服务端求解器为准）', () => {
+  it('⭐ 新客的座标 provisional（packRow 不认障碍，服务端会重解）；架上的座不标', () => {
+    const r = seat({ dirIndex: dirIndexOf([{ id: 'n.png', type: 'image' }]) });
+    expect(r.seatFixes['n.png'].provisional).toBe(true);
+  });
+  it('⭐ 产物卡把渲染尺寸回写（主角 1.5 倍那份服务端估不准）；存的一致就不写；图片不管', () => {
+    const items = [{ id: 'site:x', type: 'site' }, { id: 'deck:y', type: 'deck' }, { id: 'p.png', type: 'image' }];
+    const layout = { 'site:x': { x: 0, y: 0 }, 'deck:y': { x: 0, y: 900, w: 640, h: 388 }, 'p.png': { x: 0, y: 2000 } };
+    const r = seat({ dirIndex: dirIndexOf(items), layout, boardHero: 'site:x' });
+    const hero = r.positioned.find(it => it.id === 'site:x');
+    expect(hero.tier).toBe('hero');
+    expect(r.sizeFixes['site:x']).toEqual(sizeOf(hero));       // 主角尺寸回写
+    expect(r.sizeFixes['site:x'].w).toBeGreaterThan(640);
+    expect(r.sizeFixes['deck:y']).toBeUndefined();              // 存的跟渲染一致，不写
+    expect(r.sizeFixes['p.png']).toBeUndefined();               // 图片不回写
+  });
+});

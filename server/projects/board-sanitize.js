@@ -190,6 +190,9 @@ export function sanitizeObject(o, size) {
     //   shelf = 暂存架上等安置（2026-08-30）—— 机器到货默认座。pin_to_board /
     //           edit_board move / 用户拖拽一改写 seat 就自然离架（lib/board-shelf.js）
     ...(o.seat === 'user' || o.seat === 'auto' || o.seat === 'agent' || o.seat === 'shelf' ? { seat: o.seat } : {}),
+    // 临时座（2026-09-05）：前端为了不闪先给新客排了个座，服务端入座器会按障碍重解并
+    // 清掉这个标。只对 seat:'auto' 成立 —— 用户一拖（seat:'user'）它就不再是临时的。
+    ...(o.provisional && o.seat === 'auto' ? { provisional: true } : {}),
     // 尺寸出处（2026-08-28）：'user' = 这块板书的宽高是用户亲手拖出来的。
     // 两个用途：① 重排/估算别拿内容宽度盖掉他调过的宽 ② 写入端拿它当**学习票源**
     // 推断"他喜欢多宽的板书"（lib/chalk-size-pref.js）。跟 seat 是两件事 ——

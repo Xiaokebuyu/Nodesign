@@ -109,7 +109,12 @@ export async function seatArtifacts(projectId, rels) {
   for (const rel of uniq) {
     const id = canvasIdForRel({ objects: live, zones: board.zones }, rel);
     if (!id) continue;
-    if (live[id] && Number.isFinite(live[id].x)) continue;   // 已有座位
+    // 已有座位就不动 —— 除非那是前端抢先排的临时座（provisional，见 board-sanitize）：
+    // 前端 packRow 不认障碍（真案：deck 压在文件夹卡上、site 压在 deck 上），服务端按
+    // 障碍重解一次，写回时清标。用户拖过的（seat:'user'）不算临时。
+    const prev0 = live[id];
+    const provisional = !!(prev0 && Number.isFinite(prev0.x) && prev0.provisional && prev0.seat === 'auto');
+    if (prev0 && Number.isFinite(prev0.x) && !provisional) continue;
     // 封顶截流：没轮到的留在队列里下批再来（暂存架永远有地方，这是唯一的排队原因）
     if (seated >= MAX_SEATS_PER_RUN) { stillPending.push(rel); continue; }
     // 文件还在才入座（本轮建又删的别复活）
@@ -153,7 +158,7 @@ export async function seatArtifacts(projectId, rels) {
     const entry = {
       x: Math.round(placed.x), y: Math.round(placed.y), z: 1,
       w: Math.round(box.w), h: Math.round(box.h),
-      zone, seat: 'auto',
+      zone, seat: 'auto', provisional: false,
       ...(by ? { by } : {}), ...(tag ? { tag } : {}),
     };
     objects[id] = entry; live[id] = entry;
