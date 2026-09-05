@@ -188,11 +188,17 @@ export function createStageTools(ctx) {
    */
   const updatePanel = tool(
     'update_panel',
-    '改一个面板（背包 / 装备 / 商店…这类清单）。得到了东西 add、用掉了 remove、穿上 equip、脱下 unequip、改数量或备注 set、铺子标价 price、清空 clear。'
-    + '**在 write_scene 之前调**，正文里只写"她把绳子塞进包里"，数量归这里。面板名要跟开场声明的一致（系统提示词里有清单）。',
+    '改一个面板（背包 / 装备 / 商店…这类清单）。得到了东西 add、用掉了 remove、穿上 equip、脱下 unequip、改数量或备注 set、铺子标价 price、清空 clear；'
+    + '故事里出现了新的铺子 / 新的包 / 新的人的装备栏就 open 一块（给 kind，商店给 currency），离开不会再回来的店可以 close。'
+    + '**在 write_scene 之前调**，正文里只写"她把绳子塞进包里"，数量归这里。面板名跟开场声明的一致（系统提示词里有清单），open 的用你起的名。',
     {
       panel: z.string().min(1).max(20).describe('面板名，比如 背包 / 装备 / 杂货铺'),
-      op: z.enum(['add', 'remove', 'set', 'equip', 'unequip', 'clear', 'price']),
+      op: z.enum(['add', 'remove', 'set', 'equip', 'unequip', 'clear', 'price', 'open', 'close']),
+      kind: z.enum(['inventory', 'equipment', 'shop', 'list']).optional().describe('open 用：背包 / 装备 / 商店 / 清单'),
+      who: z.string().max(30).optional().describe('open 装备面板用：这是谁的'),
+      currency: z.string().max(20).optional().describe('open 商店用：哪个状态键当钱'),
+      into: z.string().max(20).optional().describe('open 商店用：买到的进哪个面板'),
+      items: z.array(z.object({ name: z.string().min(1).max(40), qty: z.number().int().min(0).max(9999).optional(), note: z.string().max(120).optional(), price: z.number().min(0).optional(), slot: z.string().max(12).optional() })).max(40).optional().describe('open 用：一开始就摆着的东西'),
       item: z.string().max(40).optional().describe('条目名（clear 不用）'),
       qty: z.number().int().min(0).max(9999).optional().describe('数量：add 默认 1；remove 不给就整条拿掉；set 是改成这个数'),
       note: z.string().max(120).optional().describe('一句备注（来历 / 效果）'),

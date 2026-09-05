@@ -479,7 +479,7 @@ export async function panelOp(pid, root, op, { by = 'player' } = {}) {
   const cfg = await loadConfig(rt);
   if (!rt.running) rt.state = foldState(cfg, await readScenes(rt.playAbs, { limit: 100000, rel: rt.scenesRel }));
   const panels = await readPanels(rt.playAbs);
-  if (!Object.keys(panels).length) return null;
+  if (!Object.keys(panels).length && op.op !== 'open') return null;
   const r = applyPanelOp(panels, op, rt.state);
   if (r.error) return r;
   await writePanels(rt.playAbs, r.panels);

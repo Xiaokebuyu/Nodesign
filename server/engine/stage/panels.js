@@ -80,7 +80,20 @@ function normItem(it) {
  */
 export function applyOp(panels, op, state = {}) {
   const P = { ...panels };
-  const p = P[String(op.panel || '').trim()];
+  const pid = String(op.panel || '').trim();
+  // 演出进程中途开一块新面板（走进铁匠铺 / 捡到一个包）或收掉一块（离开了那家店）
+  if (op.op === 'open') {
+    if (!pid) return { panels, error: 'open 要给 panel（面板名）' };
+    if (P[pid]) return { panels, error: `已经有「${pid}」了，直接往里 add` };
+    const next = declarePanels(P, [{ id: pid, name: op.name || pid, kind: op.kind || 'list', who: op.who, slots: op.slots, currency: op.currency, into: op.into, items: op.items }]);
+    return { panels: next, change: `开了一块面板「${next[pid].name}」（${KIND_NAME[next[pid].kind]}${next[pid].who ? `，${next[pid].who} 的` : ''}）` };
+  }
+  if (op.op === 'close') {
+    if (!P[pid]) return { panels, error: `没有叫「${pid}」的面板` };
+    const { [pid]: gone, ...rest } = P;
+    return { panels: rest, change: `收掉了面板「${gone.name}」` };
+  }
+  const p = P[pid];
   if (!p) return { panels, error: `没有叫「${op.panel}」的面板；有的是：${Object.keys(P).join('、') || '一个都没有'}` };
   const items = p.items.map(x => ({ ...x }));
   const find = () => items.findIndex(x => x.name === String(op.item || '').trim());

@@ -81,6 +81,12 @@
 
   ND.onEvent((e) => {
     if (e.type === 'hello') { store.panels = e.panels || {}; ND.registerPanelPages(); }
-    else if (e.type === 'panel') { store.panels = e.panels || store.panels; if (e.by === 'stage' && e.change && !ND.EMBED) ND.flash(e.change); }
+    else if (e.type === 'panel') {
+      store.panels = e.panels || store.panels;
+      ND.registerPanelPages();   // 进程中途 open 的新面板要出页签
+      const gone = [...registered].filter(id => !store.panels[id.slice(6)]);
+      if (gone.length) { for (const id of gone) { registered.delete(id); const i = ND.pages.findIndex(p => p.id === id); if (i >= 0) ND.pages.splice(i, 1); } ND.paintNav(); if (gone.includes(`panel:${ND.current()?.panelId}`)) ND.show('story'); }
+      if (e.by === 'stage' && e.change && !ND.EMBED) ND.flash(e.change);
+    }
   });
 })();

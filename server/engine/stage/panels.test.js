@@ -52,3 +52,15 @@ describe('面板', () => {
     expect(digest(declarePanels({}, [{ id: 'b', name: '背包', kind: 'inventory' }]))).toBe('背包：空');
   });
 });
+
+describe('演出进程中途开 / 收面板', () => {
+  it('open 建一块带初始条目的商店；重复 open 报错；close 收掉', () => {
+    let r = applyOp({}, { panel: '铁匠铺', op: 'open', kind: 'shop', currency: '金钱', items: [{ name: '短剑', price: 30 }] });
+    expect(r.change).toMatch(/开了一块面板「铁匠铺」（商店）/);
+    expect(r.panels['铁匠铺'].items[0]).toMatchObject({ name: '短剑', price: 30, qty: 1 });
+    expect(applyOp(r.panels, { panel: '铁匠铺', op: 'open', kind: 'shop' }).error).toMatch(/已经有/);
+    r = applyOp(r.panels, { panel: '铁匠铺', op: 'close' });
+    expect(r.panels['铁匠铺']).toBeUndefined();
+    expect(applyOp({}, { panel: 'x', op: 'close' }).error).toMatch(/没有叫/);
+  });
+});
