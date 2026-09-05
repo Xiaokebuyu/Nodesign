@@ -288,7 +288,7 @@
     const peek = (on) => { document.documentElement.dataset.peek = on ? 'on' : 'off'; $('peekBtn').classList.toggle('on', on); };
     $('peekBtn').onclick = () => peek(document.documentElement.dataset.peek !== 'on');
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.documentElement.dataset.peek === 'on') peek(false); });
-    const veil = prefs.get('veil', null); if (veil) document.documentElement.style.setProperty('--veil-a', String(veil));
+    const veil = prefs.get('veil', null); if (veil !== null && veil !== undefined) document.documentElement.style.setProperty('--veil-a', String(veil));   // 0 也算（完全透明）
     $('drawerVeil').onclick = () => ND.dock.drawer(false);
     ND.panel?.init?.();
     ND.show(q.get('page') || 'story');
