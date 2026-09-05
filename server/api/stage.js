@@ -23,7 +23,7 @@ import { guardProject } from './_guard.js';
 import { echoUserChalk } from '../engine/runs/user-chalk-echo.js';
 import { getProjectBus } from '../ws/broker.js';
 import {
-  stageState, startStage, stopStage, sayToStage, patchStageConfig, subscribeStage, setUserState, ensurePlays, createPlay, runtimeOf,
+  stageState, startStage, stopStage, sayToStage, patchStageConfig, subscribeStage, setUserState, ensurePlays, createPlay, runtimeOf, panelOp,
 } from '../engine/stage/manager.js';
 import { saveStageFile, readStageFile, listStageFiles, deleteMemory, listStageImages } from '../engine/stage/files.js';
 import { listLines, rewindTo, forkAt, switchLine, renameLine, deleteLine } from '../engine/stage/lines.js';
@@ -162,6 +162,14 @@ router.post('/:pid/stage/:play/state', express.json({ limit: '16kb' }), wrap((re
 router.post('/:pid/stage/:play/open', express.json({ limit: '64kb' }), wrap((req, play) => openStory(req.params.pid, play, { style: req.body?.style || null, cardOptions: req.body?.cardOptions || null, userId: req.user?.id || null })));
 router.get('/:pid/stage/:play/presets', wrap(async (req, play) => ({ presets: await listPresets(runtimeOf(req.params.pid, play).playAbs) })));
 router.post('/:pid/stage/:play/preset', express.json({ limit: '8mb' }), wrap((req, play) => uploadPreset(req.params.pid, play, { name: req.body?.name, data: req.body?.data })));
+
+// ── 面板：玩家在显示器里买 / 用 / 装上（跟演出进程的 update_panel 同一条账）──
+router.post('/:pid/stage/:play/panel', express.json({ limit: '16kb' }), wrap(async (req, play) => {
+  const r = await panelOp(req.params.pid, play, req.body || {}, { by: 'player' });
+  if (!r) throw Object.assign(new Error('这个故事没有面板'), { status: 404 });
+  if (r.error) throw Object.assign(new Error(r.error), { status: 400 });
+  return { ok: true, change: r.change, panels: r.panels };
+}));
 
 // ── 线路 ──
 router.get('/:pid/stage/:play/lines', wrap(async (req, play) => ({ lines: await listLines(req.params.pid, play) })));

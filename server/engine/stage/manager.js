@@ -50,6 +50,7 @@ import { composeStagePrompt, frozenHash } from './prompt.js';
 import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, sceneOf, fileUrl } from './mechanics.js';
 import { resolvePreset, normalizeSelection, defaultSelection, DEFAULT_PRESET } from './preset.js';
 import { loadWorldbook, matchEntries, loreNote, LORE_COOLDOWN_BEATS } from './worldbook.js';
+import { readPanels, writePanels, declarePanels, applyOp as applyPanelOp, digest as panelDigest } from './panels.js';
 export { composeStagePrompt };
 import { getProject } from '../../projects/store.js';
 import { getWorkspaceRoot } from '../../projects/workspace.js';
@@ -58,13 +59,12 @@ import { getProjectBus } from '../../ws/broker.js';
 import { getBuiltinPluginsRoot } from '../agent/plugin-loader.js';
 import { defaultModel } from '../agent/session-model.js';
 import { brandOfModel } from '../agent/model-context.js';
-import { resolveModelRoute, resolveSdkSpoofModel, pickThinkingConfig } from '../agent/model-context.js';
-import { getOrStartIngress, registerIngressSession, unregisterIngressSession } from '../../lib/model-ingress.js';
+import { resolveSdkSpoofModel, pickThinkingConfig } from '../agent/model-context.js';
+import { buildEnv } from './env.js';
+import { unregisterIngressSession } from '../../lib/model-ingress.js';
 import { AgentContext, freshTurnCounters } from '../agent/context.js';
 import { createRun, markRunStarted, markRunSucceeded, markRunFailed, setRunMetrics, setRunModelUsage } from '../runs/store.js';
-import { can } from '../../auth/tier.js';
 import { getUserById } from '../../auth/users-store.js';
-import { platform } from '../../runtime/platform.js';
 
 const MAX_RUNNING = Number(process.env.NODESIGN_STAGE_MAX) || 2;
 const IDLE_MS = Number(process.env.NODESIGN_STAGE_IDLE_MS) || 30 * 60_000;
@@ -204,31 +204,6 @@ async function sourcesChanged(rt) {
   return null;
 }
 
-// ───────────────────────────── 通路 ─────────────────────────────
-
-async function buildEnv(rt, model, owner) {
-  const { NODE_ENV: _a, npm_config_production: _b, npm_config_omit: _c, OLDPWD: _d, ...inherited } = process.env;
-  const env = { ...inherited, PWD: rt.wsRoot, CLAUDE_AGENT_SDK_CLIENT_APP: 'nodesign-stage/0.0.1', CLAUDE_CONFIG_DIR: platform.claudeConfigDir };
-  // 不开工具延迟加载：四件 MCP 工具已 alwaysLoad，开了反而让模型找不到 write_scene（09-05 真栽）
-  delete env.ENABLE_TOOL_SEARCH;
-  const route = resolveModelRoute(model);
-  if (route.mode === 'api') {
-    const ingress = await getOrStartIngress();
-    env.ANTHROPIC_BASE_URL = `${ingress.baseUrl}/__nd/${encodeURIComponent(rt.sdkSid)}`;
-    env.ANTHROPIC_API_KEY = 'nd-ingress-managed';
-    registerIngressSession(rt.sdkSid, model);
-    rt.ingressRegistered = true;
-    if (route.fastModel) env.ANTHROPIC_SMALL_FAST_MODEL = route.fastModel;
-    if (route.window) env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(route.window);
-  } else {
-    if (!can(owner, 'subscription')) throw Object.assign(new Error('这个账号没有订阅通路资格，故事进程起不来'), { status: 403 });
-    if (process.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL;
-    if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY; else delete env.ANTHROPIC_API_KEY;
-    if (process.env.NODESIGN_FAST_MODEL) env.ANTHROPIC_SMALL_FAST_MODEL = process.env.NODESIGN_FAST_MODEL;
-  }
-  return env;
-}
-
 // ───────────────────────────── 建故事 ─────────────────────────────
 
 /**
@@ -236,7 +211,7 @@ async function buildEnv(rt, model, owner) {
  * 同名的已存在 = 换设定重开（设定 / 规则重写，卡 / 场景 / 记忆都留着）。返回文件夹名。
  * **不起进程**：进程在玩家点「开始」或说第一句话时才起（09-06 起，之前 open_stage 一调就先烧 400MB）。
  */
-export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style } = {}) {
+export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style, panels } = {}) {
   const ws = getWorkspaceRoot(pid);
   await ensurePlays(pid);
   const root = playFolderName(title);
@@ -251,6 +226,7 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     await writeRules(playAbs, { achievements: rules.achievements || [], triggers: rules.triggers || [] });
   }
   const stored = (await readPlayConfig(playAbs)) || {};
+  if (Array.isArray(panels) && panels.length) await writePanels(playAbs, declarePanels(await readPanels(playAbs), panels));
   const castOut = [];
   for (const c of cast || []) {
     const name = String(c?.name || c || '').trim();
@@ -354,6 +330,7 @@ export async function startStage(pid, root) {
       const src = rt.sources.find(x => x.rel === rel);
       if (src) src.mtimeMs = await statRel(rt.wsRoot, rel);
     },
+    onPanel: (op) => panelOp(pid, root, op, { by: 'stage' }),
   });
 
   rt.session = new StageSession({
@@ -466,7 +443,8 @@ export async function sayToStage(pid, root, text, { userId = null, row = null } 
   rt.broadcast({ type: 'scene', row: saved });
   const notes = rt.pendingNotes.splice(0);
   const lore = await pickLore(rt, text);
-  const about = [stateLine(rt.state), ...notes.map(n => `【场务纸条：${n}】`), ...(lore ? [lore] : [])].join('\n');
+  const pd = panelDigest(await readPanels(rt.playAbs));
+  const about = [stateLine(rt.state), ...(pd ? [`面板：${pd}`] : []), ...notes.map(n => `【场务纸条：${n}】`), ...(lore ? [lore] : [])].join('\n');
   const r = rt.session.say(text, { about, uuid });
   rt.touch();
   rt.broadcast(rt.status());
@@ -490,6 +468,25 @@ async function pickLore(rt, text) {
   for (const m of matched) rt.loreSeen.set(m.name, beat);
   rt.broadcast({ type: 'lore', titles: matched.map(m => m.name) });
   return loreNote(matched);
+}
+
+/**
+ * 面板的一步动作（演出进程的 update_panel 和玩家在显示器点"买 / 用 / 装上"都走这儿）。
+ * 玩家改的进程还不知道 → 记一条纸条随下一句话带过去；买东西扣的钱走状态那条路（拨值 + 跑规则）。
+ */
+export async function panelOp(pid, root, op, { by = 'player' } = {}) {
+  const rt = runtimeOf(pid, root);
+  const cfg = await loadConfig(rt);
+  if (!rt.running) rt.state = foldState(cfg, await readScenes(rt.playAbs, { limit: 100000, rel: rt.scenesRel }));
+  const panels = await readPanels(rt.playAbs);
+  if (!Object.keys(panels).length) return null;
+  const r = applyPanelOp(panels, op, rt.state);
+  if (r.error) return r;
+  await writePanels(rt.playAbs, r.panels);
+  rt.broadcast({ type: 'panel', panels: r.panels, change: r.change, by });
+  if (r.stateChange) await setUserState(pid, root, r.stateChange).catch(() => {});
+  if (by === 'player') rt.pendingNotes.push(`玩家自己动了面板：${r.change}`);
+  return { ...r, digest: panelDigest(r.panels) };
 }
 
 export async function stopStage(pid, root, reason = 'user') {
@@ -530,6 +527,7 @@ export async function stageState(pid, root, { limit = 300 } = {}) {
     trophies: await readTrophies(rt.playAbs),
     rules: await readRules(rt.playAbs),
     live: rt.live, draft: rt.draft, thinking: rt.thinking,
+    panels: await readPanels(rt.playAbs),
     backdrop: currentBackdrop(rt, cfg, [...scenes].reverse().find(r => r.scene)?.scene || sceneOf(null, rt.state)),
     type: 'hello',
   };

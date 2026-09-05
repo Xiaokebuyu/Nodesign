@@ -264,3 +264,32 @@
 .seg button{font-size:12px;padding:5px 12px;color:var(--ink-3);background:var(--paper)}
 .seg button.on{background:var(--ink);color:var(--paper)}
 :root[data-skin="night"] .seg button.on,:root[data-skin="terminal"] .seg button.on{background:var(--accent)}
+
+/* ── 面板页：条目卡 / 装备槽 / 快捷入口 / 详情分栏 ── */
+.items{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.item{background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-far);border-radius:1px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;position:relative}
+.item.on{box-shadow:var(--sh-mid),inset 0 0 0 2px var(--accent)}
+.item .it-hd{display:flex;align-items:baseline;gap:8px}
+.item .it-hd b{font-family:var(--kai);font-size:14px;flex:1;min-width:0}
+.item .qty{font-variant-numeric:tabular-nums;color:var(--ink-3);font-size:12px}
+.item .price{font-variant-numeric:tabular-nums;color:var(--accent);font-size:12px;font-weight:700}
+.item p{margin:0;font-size:11.5px;color:var(--sub);line-height:1.55}
+.item .slot{position:absolute;right:10px;top:8px;font-size:10px;color:var(--sub);border:1px solid var(--rule-md);padding:1px 5px;border-radius:2px}
+.item .it-act{display:flex;gap:6px;margin-top:auto}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.slotbox{border:1px dashed var(--hair);border-radius:1px;padding:10px 12px;min-height:72px;display:flex;flex-direction:column;gap:4px}
+.slotbox.on{border-style:solid;background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-far)}
+.slotbox .lbl{font-size:10.5px;letter-spacing:.12em;color:var(--sub)}
+.slotbox b{font-family:var(--kai);font-size:14px}
+.slotbox p{margin:0;font-size:11.5px;color:var(--sub);line-height:1.5}
+.slotbox .btn{align-self:flex-start;margin-top:4px}
+:root[data-skin="night"] .item,:root[data-skin="terminal"] .item,:root[data-skin="night"] .slotbox.on,:root[data-skin="terminal"] .slotbox.on{background:var(--panel)}
+.panel-chips{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:2px}
+.chip-btn{font-size:11.5px;padding:4px 10px;border:1px solid var(--hair);border-radius:12px;background:var(--paper);color:var(--ink-3);display:inline-flex;gap:6px;align-items:center}
+.chip-btn:hover{border-color:var(--accent);color:var(--ink)}
+.chip-btn .k{font-size:9.5px;letter-spacing:.1em;color:var(--sub)}
+.pages .panel-tab{color:var(--accent)}
+.panelpage h2 [data-back]{margin-right:4px}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--rule);margin:2px 0 12px}
+.tabs button{font-size:12.5px;padding:6px 12px;color:var(--sub);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}

@@ -16,6 +16,7 @@ import { readMemoryIndex } from './tools.js';
 import { resolveCardPath, readCardForStage, cardHome } from './card.js';
 import { TABLE_FILE, MEMORY_DIR, WORLD_DIR, PRESET_DIR, exists } from './play.js';
 import { renderStyle } from './preset.js';
+import { readPanels } from './panels.js';
 
 async function statRel(base, rel) {
   try { return (await fs.stat(path.join(base, rel))).mtimeMs; } catch { return null; }
@@ -86,6 +87,13 @@ export async function composeStagePrompt(wsRoot, root, stored) {
   const style = await renderStyle(playAbs, stored?.style);
   if (style.text) parts.push(style.text);
 
+  const panels = Object.values(await readPanels(playAbs));
+  if (panels.length) {
+    const KN = { inventory: '背包', equipment: '装备', shop: '商店', list: '清单' };
+    parts.push('## 面板\n这个故事有这几块清单，数量账全在这里记、不进正文：\n'
+      + panels.map(p => `- **${p.name}**（${KN[p.kind] || p.kind}${p.who ? `，${p.who} 的` : ''}${p.kind === 'equipment' ? `，槽位 ${(p.slots || []).join(' / ')}` : ''}${p.kind === 'shop' && p.currency ? `，用「${p.currency}」结账，买到的进 ${p.into || '背包'}` : ''}）`).join('\n')
+      + '\n得到、用掉、穿上、标价、卖出，**先 update_panel 再 write_scene**（write_scene 一返回这一轮就结束）。玩家自己在显示器里买了、用了东西，会以【场务纸条】告诉你，你在正文里接住就行。每句话末尾「面板：…」是机器报的现况。');
+  }
   const extra = [];
   for (const d of [WORLD_DIR, PRESET_DIR]) if (await exists(path.join(playAbs, d))) extra.push(`${root}/${d}/`);
   parts.push(

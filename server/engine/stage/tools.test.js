@@ -28,8 +28,8 @@ describe('演出进程的 MCP 工具面', () => {
   const server = createStageTools({ workspaceRoot: '/nonexistent', playRoot: 'x', onScene: () => {} });
   const registered = server.instance?._registeredTools || {};
 
-  it('四件工具都注册上了', () => {
-    expect(Object.keys(registered).sort()).toEqual(['forget', 'remember', 'roll', 'write_scene']);
+  it('五件工具都注册上了（09-06 加 update_panel）', () => {
+    expect(Object.keys(registered).sort()).toEqual(['forget', 'remember', 'roll', 'update_panel', 'write_scene']);
   });
 
   it('⛔ 工具 schema 里不许有 z.record（SDK 会静默丢掉整个服务器的工具）', () => {

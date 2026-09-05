@@ -53,6 +53,17 @@ const triggerSchema = z.object({
   note: z.string().min(1).max(300).describe('阈值到了要递给演出进程的场务纸条，比如 "好感过 60，按卡上的分阶段人设进熟稔期，这一段起可以让她主动开口"'),
   once: z.boolean().default(true).describe('只触发一次（默认）还是每次成立都递'),
 });
+const panelItemSchema = z.object({ name: z.string().min(1).max(40), qty: z.number().int().min(0).max(9999).optional(), note: z.string().max(120).optional(), price: z.number().min(0).optional(), slot: z.string().max(12).optional(), tags: z.array(z.string().max(12)).max(6).optional() });
+const panelSchema = z.object({
+  id: z.string().min(1).max(20).describe('面板名，演出进程 update_panel 按它指；显示器顶栏按它加一页。中文就行：背包 / 装备 / 杂货铺'),
+  name: z.string().max(20).optional().describe('显示名，不给就用 id'),
+  kind: z.enum(['inventory', 'equipment', 'shop', 'list']).describe('inventory 背包 / equipment 装备与穿着（带槽位，挂在某个人身上）/ shop 商店（条目带价，玩家能在显示器里点买）/ list 泛清单（任务、线索…）'),
+  who: z.string().max(30).optional().describe('equipment 用：这是谁的装备'),
+  slots: z.array(z.string().max(12)).max(12).optional().describe('equipment 用：槽位，默认 头 / 身 / 手 / 脚 / 饰品'),
+  currency: z.string().max(20).optional().describe('shop 用：用哪个状态键当钱（要在 vitals 里声明过，比如 金钱）'),
+  into: z.string().max(20).optional().describe('shop 用：买到的东西进哪个面板，默认第一个 inventory'),
+  items: z.array(panelItemSchema).max(60).optional().describe('开场就有的条目'),
+});
 const styleSchema = z.object({
   preset: z.string().max(80).describe(`写法预设 id：${BUILTIN_IDS.map(x => `"${x}"`).join(' / ')}（内置），或 "user:<文件夹名>"（用户上传的酒馆预设 JSON，先放进 <故事>/预设/ 下），或 "none"`),
   on: z.array(z.string().max(60)).max(80).optional().describe('按用户开场前的回答，在默认勾选之上**加开**的模块 id（表在 skill stage-setup 的 presets.md）。互斥组里开一个，机器会关掉同组默认那个'),
@@ -90,6 +101,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
       vitals: z.array(vitalSchema).max(8).optional().describe('状态面板显示哪些字段（好感 / 时间 / 体力…）。不需要就别传'),
       skin: z.enum(SKINS).default('paper').describe('显示器外观。留默认 paper（跟平台一致）；玩家自己会换'),
       style: styleSchema.optional().describe('写法预设与预选。用户在开场问答里说了偏好（慢一点 / 多对白 / 第一人称 / 像轻小说 / 短一点…）就按 presets.md 的表翻成 on / off 传进来，开场页会标"agent 预选了这些，你可以改"；什么都没说就不传（默认 Izumi 全默认）。用户交了自己的酒馆预设 JSON 才传 preset: user:<名>'),
+      panels: z.array(panelSchema).max(8).optional().describe('跑团 / 冒险类才要：背包、装备与穿着、商店、任务清单这类**清单状态**。声明了显示器就多出对应的页，演出进程用 update_panel 记账，玩家能在显示器里买 / 用 / 装上。恋爱日常那种不要硬加'),
       achievements: z.array(achievementSchema).max(40).optional()
         .describe('奖杯。阈值按用户选的难度定（爽档 40 就给"她笑了"，严酷档要 80）。事件型的靠 state 里的标志位：牵手 == 1'),
       triggers: z.array(triggerSchema).max(20).optional()
@@ -105,7 +117,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
         }
         const style = args.style ? { preset: args.style.preset, on: [...(args.style.on || []), ...(args.style.modules || [])], off: args.style.off || [] } : null;
         const root = await createPlay(projectId, {
-          title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin, style,
+          title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin, style, panels: args.panels || null,
           rules: (args.achievements || args.triggers) ? { achievements: args.achievements || [], triggers: args.triggers || [] } : null,
         });
         const rt = getStageRuntime(projectId, root);
@@ -116,7 +128,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
           content: [{
             type: 'text',
             text: `${wasRunning ? '换了设定，进程已停，下一句话到时重开' : '建好了'}：「${args.title}」→ 文件夹 ${root}/，在场 ${who}，设定 ${args.table.length} 字`
-              + `${args.achievements?.length ? `，${args.achievements.length} 枚奖杯` : ''}${args.triggers?.length ? `，${args.triggers.length} 条推进触发` : ''}${style ? `，写法预设 ${style.preset}（预选 +${style.on.length} −${style.off.length}，玩家开场页能改）` : '，写法由玩家开场时挑（默认 Izumi）'}。`
+              + `${args.achievements?.length ? `，${args.achievements.length} 枚奖杯` : ''}${args.triggers?.length ? `，${args.triggers.length} 条推进触发` : ''}${args.panels?.length ? `，${args.panels.length} 块面板（${args.panels.map(p => p.name || p.id).join(' / ')}）` : ''}${style ? `，写法预设 ${style.preset}（预选 +${style.on.length} −${style.off.length}，玩家开场页能改）` : '，写法由玩家开场时挑（默认 Izumi）'}。`
               + '\n这个故事的一切都在那个文件夹里（设定 / 角色卡 / 记忆 / 场景 / 规则 / 预设），画布上它是一张卡，用户双击进去先到开场页：'
               + '看世界与人物、挑写法、勾角色卡上的可选条目，点「开始」机器才起进程并发开场指令；之后他说的每句话直接进进程，不经过你。'
               + '\n你现在是场务：别在这里代演、别复述台上的剧情。用户回到这里跟你说话时才是在跟你说话（改设定 / 换玩法 / 问怎么用）。'

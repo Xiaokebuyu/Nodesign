@@ -62,7 +62,7 @@
   const store = {
     cfg: null, scenes: [], memories: [], trophies: [], rules: { achievements: [], triggers: [] }, castOptions: {},
     state: {}, status: { running: false, busy: false, queued: 0, error: null, usage: null },
-    live: '', draft: '', thinking: '', backdrop: null, sending: false, page: 'story', lore: [],
+    live: '', draft: '', thinking: '', backdrop: null, sending: false, page: 'story', lore: [], panels: {},
     activeSpeakers: [], activeScene: '',
   };
   ND.store = store;
@@ -273,12 +273,16 @@
   ND.flash = (text, err) => { const n = el(`<div class="toast state"><div class="kv"><span class="kicker">${err ? '没成' : '好了'}</span><span${err ? ' style="color:var(--red)"' : ''}>${esc(text)}</span></div></div>`); toast(n, 3600); };
 
   /* ── 起 ── */
+  /** 顶栏页签（面板页是 hello 之后才注册的，所以要能重画） */
+  ND.paintNav = function paintNav() {
+    $('pageNav').innerHTML = ND.pages.map(p => `<button data-page="${esc(p.id)}"${p.panelId ? ' class="panel-tab"' : ''} aria-pressed="${String(p.id === store.page)}">${esc(p.label)}</button>`).join('');
+    $('pageNav').querySelectorAll('button').forEach(b => { b.onclick = () => ND.show(b.dataset.page); });
+  };
   ND.boot = function boot() {
     applyDock();
     const measure = prefs.get('measure', null);   // 正文宽度（故事页的拖把改的）
     if (measure) document.documentElement.style.setProperty('--measure', `${measure}px`);
-    $('pageNav').innerHTML = ND.pages.map(p => `<button data-page="${p.id}">${esc(p.label)}</button>`).join('');
-    $('pageNav').querySelectorAll('button').forEach(b => { b.onclick = () => ND.show(b.dataset.page); });
+    ND.paintNav();
     $('lineBtn').onclick = (ev) => { ev.stopPropagation(); lineMenu($('lineBtn')); };
     $('castToggle').onclick = () => ND.dock.drawer(document.documentElement.dataset.cast !== 'drawer');
     const peek = (on) => { document.documentElement.dataset.peek = on ? 'on' : 'off'; $('peekBtn').classList.toggle('on', on); };

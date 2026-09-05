@@ -182,13 +182,39 @@ export function createStageTools(ctx) {
     },
   );
 
-  // ⛔ 四件全部常驻（_meta alwaysLoad）：env 里带着 ENABLE_TOOL_SEARCH 时 MCP 工具默认延迟加载，
+  /**
+   * 面板（背包 / 装备 / 商店…）的机械动作：数量账在这里记，正文里不出现数字。⚠️ 要在 write_scene 之前调 —— write_scene 一返回这一轮就结束。
+   * 真正的加减在 panels.js applyOp；manager 负责落盘、推给显示器。
+   */
+  const updatePanel = tool(
+    'update_panel',
+    '改一个面板（背包 / 装备 / 商店…这类清单）。得到了东西 add、用掉了 remove、穿上 equip、脱下 unequip、改数量或备注 set、铺子标价 price、清空 clear。'
+    + '**在 write_scene 之前调**，正文里只写"她把绳子塞进包里"，数量归这里。面板名要跟开场声明的一致（系统提示词里有清单）。',
+    {
+      panel: z.string().min(1).max(20).describe('面板名，比如 背包 / 装备 / 杂货铺'),
+      op: z.enum(['add', 'remove', 'set', 'equip', 'unequip', 'clear', 'price']),
+      item: z.string().max(40).optional().describe('条目名（clear 不用）'),
+      qty: z.number().int().min(0).max(9999).optional().describe('数量：add 默认 1；remove 不给就整条拿掉；set 是改成这个数'),
+      note: z.string().max(120).optional().describe('一句备注（来历 / 效果）'),
+      price: z.number().min(0).optional().describe('商店条目的价'),
+      slot: z.string().max(12).optional().describe('装备槽位：头 / 身 / 手 / 脚 / 饰品…（equip 用）'),
+      tags: z.array(z.string().max(12)).max(6).optional(),
+    },
+    async (args) => {
+      const r = await ctx.onPanel?.(args);
+      if (!r) return { content: [{ type: 'text', text: '这个故事没开面板功能。' }], isError: true };
+      if (r.error) return { content: [{ type: 'text', text: r.error }], isError: true };
+      return { content: [{ type: 'text', text: `记下了：${r.change}。${r.digest ? `现在：${r.digest}` : ''}` }] };
+    },
+  );
+
+  // ⛔ 全部常驻（_meta alwaysLoad）：env 里带着 ENABLE_TOOL_SEARCH 时 MCP 工具默认延迟加载，
   // 模型看不见 write_scene，而提示词又叫它"不用 ToolSearch 去找别的"（09-05 真栽）。
   const always = (t) => ({ ...t, _meta: { ...(t._meta || {}), 'anthropic/alwaysLoad': true } });
   // write_scene 一返回这一轮就结束（SDK 的 _meta['claude/endTurn']）：模型再想在工具之外说一句"这一拍写好了"也没机会 ——
   // 09-05/06 两天的转录里每一轮都有这么一句，提示词禁不住，端口关掉最省事。remember / roll 要在 write_scene 之前调。
   const endTurn = (t) => ({ ...t, _meta: { ...(t._meta || {}), 'claude/endTurn': true } });
-  return createSdkMcpServer({ name: 'stage', version: '1.2.0', tools: [endTurn(writeScene), remember, forget, rollDice].map(always) });
+  return createSdkMcpServer({ name: 'stage', version: '1.2.0', tools: [endTurn(writeScene), remember, forget, rollDice, updatePanel].map(always) });
 }
 
 /**

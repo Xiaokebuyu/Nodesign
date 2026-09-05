@@ -89,10 +89,15 @@
       const box = this.root.querySelector('#detail');
       if (!wasOpen) this.flip(() => { const w = this.root.querySelector('#castwrap'); if (w) w.dataset.open = '1'; });
       const rel = relOf(m.card);
+      const gear = Object.values(store.panels || {}).filter(pn => pn.kind === 'equipment' && pn.who === m.name);
+      const wearing = (cfg => (cfg.vitals || []).filter(v => v.who === m.name && v.as === 'text' && /穿|着|装|饰/.test(v.label || v.key)))(store.cfg || {});
       box.innerHTML = `<div class="card detail"><h3>${esc(m.name)}<small>${esc(rel || '没有卡')}</small><span class="tools"><button class="btn sm" data-act="edit">编辑设定</button><button class="btn sm" data-back>收起</button></span></h3>
-        <div class="md body">读取中…</div>
-        <div class="section-hd" style="padding:14px 0 6px">${esc(m.name)}记得的事</div><div class="memlist" id="pmem"><p class="muted">读取中…</p></div></div>`;
+        <div class="tabs" id="dtabs"><button class="on" data-t="card">设定</button><button data-t="gear">装备与穿着</button><button data-t="mem">记得的事</button></div>
+        <div class="tab" data-t="card"><div class="md body">读取中…</div></div>
+        <div class="tab" data-t="gear" hidden>${gear.length ? gear.map(pn => `<div class="section-hd" style="padding:6px 0 8px">${esc(pn.name)}</div><div class="slots">${(pn.slots || []).map(sl => { const w = pn.items.find(x => x.equipped && x.slot === sl); return `<div class="slotbox${w ? ' on' : ''}"><span class="lbl">${esc(sl)}</span>${w ? `<b>${esc(w.name)}</b>${w.note ? `<p>${esc(w.note)}</p>` : ''}` : '<span class="muted">空</span>'}</div>`; }).join('')}</div><p class="muted" style="margin-top:8px">要换装去顶栏「${esc(pn.name)}」那一页。</p>`).join('') : ''}${wearing.length ? `<div class="section-hd" style="padding:6px 0 8px">此刻</div>${wearing.map(v => `<p class="md" style="margin:0 0 6px"><b>${esc(v.label || v.key)}</b>：${esc((store.state || {})[v.key] ?? v.initial ?? '')}</p>`).join('')}` : ''}${!gear.length && !wearing.length ? '<p class="muted">这个故事没给这个人开装备面板。要的话让 agent 在 open_stage 里加一块 kind=equipment、who 是这个人的面板，或加一个叫「穿着」的文字状态值。</p>' : ''}</div>
+        <div class="tab" data-t="mem" hidden><div class="memlist" id="pmem"><p class="muted">读取中…</p></div></div></div>`;
       box.querySelector('[data-back]').onclick = () => this.close();
+      box.querySelectorAll('#dtabs button').forEach(t => { t.onclick = () => { box.querySelectorAll('#dtabs button').forEach(x => x.classList.toggle('on', x === t)); box.querySelectorAll('.tab').forEach(x => { x.hidden = x.dataset.t !== t.dataset.t; }); }; });
       box.scrollTop = 0;
       const card = box.firstElementChild; const body = card.querySelector('.body');
       if (!rel) { body.textContent = '这个人没有卡'; return; }
@@ -110,7 +115,7 @@
       const T = { progress: '进展', character: '态度', thread: '伏笔', world: '设定' };
       list.innerHTML = items.map(i => `<details><summary><span class="t">${esc(T[i.type] || i.type || '')}</span><span class="d">${esc(i.description || i.name)}</span></summary><div class="md">${renderMd(i.content)}</div></details>`).join('');
     },
-    update(what) { if (what.type === 'hello' || what.type === 'config' || what.type === 'state') this.paint(); },
+    update(what) { if (what.type === 'hello' || what.type === 'config' || what.type === 'state' || what.type === 'panel') this.paint(); },
   });
 
   /* ── 记忆 ── */

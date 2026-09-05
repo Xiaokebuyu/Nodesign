@@ -23,6 +23,7 @@
       this.openingShown = false;
       root.innerHTML = `<div class="beats" id="beats"><div class="beats-inner" id="inner"></div></div>
         <div class="handles" id="handles" data-open="${ND.prefs.get('opts', 1)}"><div class="handles-inner">
+          <div id="chips"></div>
           <div class="opt-hd" id="optHd">${CHEV}<span>选项</span><span class="n" id="optN"></span></div>
           <div class="options" id="options"></div>
           <div class="say"><textarea id="say" rows="1" placeholder="${window.innerWidth < 640 ? '说你要做什么、要说什么' : '说你要做什么、要说什么（Enter 发送，Shift+Enter 换行）'}"></textarea><button id="sayGo">发送</button></div>
@@ -171,6 +172,7 @@
         return `<button class="handle" data-p="${esc(c.prompt || c.label)}"${dis}><b>${esc(label)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}</button>`;
       }).join('');
       $('optN').textContent = list.length ? `${list.length} 个` : (store.status.busy ? '等这一段写完' : '');
+      const chips = $('chips'); if (chips) { chips.innerHTML = ND.panelChips ? ND.panelChips() : ''; chips.querySelectorAll('[data-page]').forEach(b => { b.onclick = () => ND.show(b.dataset.page); }); }
       $('optHd').style.display = list.length || store.status.busy ? '' : 'none';
       box.querySelectorAll('.handle').forEach((b) => { b.onclick = () => this.fire(b.dataset.p); });
       const ta = $('say'); const go = $('sayGo');
@@ -253,7 +255,7 @@
       else if (what.type === 'draft') { this.paintDraft(); this.paintProcess(); }
       else if (what.type === 'text' || what.type === 'thinking' || what.type === 'lore') this.paintProcess();
       else if (what.type === 'turn_end') { this.paintDraft(); this.paintProcess(); this.paintHandles(); }
-      else if (what.type === 'status') { this.paintHandles(); this.paintProcess(); }
+      else if (what.type === 'status' || what.type === 'panel') { this.paintHandles(); this.paintProcess(); }
       else if (what.type === 'error') this.note(`出错了：${what.error}`, true);
       else if (what.type === 'hello' || what.type === 'config') { if (ND.needsOpening()) this.mount(this.root); else this.paintAll(); }
     },
