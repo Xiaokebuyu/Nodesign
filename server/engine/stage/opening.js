@@ -26,6 +26,7 @@ function kickoffText(cfg, { presetName, picked, castOptions, castNames }) {
     '3. 结尾停在别人的一个动作或一句话上，把接下来怎么办留给玩家；不写总结，不抒情，不替玩家的角色做任何决定。',
     `4. write_scene 里带上 scene（一句话的地点和时间）、speakers、state（开场值${vitals ? `：${vitals}` : '照设定'}），choices 两到四枚。`,
     `玩家开场时选的：写法预设「${presetName}」${picked?.length ? `（${picked.join(' / ')}）` : ''}${opts.length ? `；角色卡可选条目启用了：${opts.join('、')}` : ''}${castNames?.length ? `。在场：${castNames.join('、')}` : ''}。`,
+    ...(cfg.opening ? [`开场参考（原卡的开场白 / 场景，照它的地点、时刻、气氛和头几句来写，不照抄；{{user}} 之类的占位符是玩家的角色）：\n${String(cfg.opening).slice(0, 6000)}`] : []),
   ].join('\n');
 }
 

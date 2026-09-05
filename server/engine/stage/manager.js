@@ -211,7 +211,7 @@ async function sourcesChanged(rt) {
  * 同名的已存在 = 换设定重开（设定 / 规则重写，卡 / 场景 / 记忆都留着）。返回文件夹名。
  * **不起进程**：进程在玩家点「开始」或说第一句话时才起（09-06 起，之前 open_stage 一调就先烧 400MB）。
  */
-export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style, panels } = {}) {
+export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style, panels, opening } = {}) {
   const ws = getWorkspaceRoot(pid);
   await ensurePlays(pid);
   const root = playFolderName(title);
@@ -252,6 +252,7 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     vitals: Array.isArray(vitals) ? vitals : (stored.vitals || []),
     skin: SKINS.includes(skin) ? skin : (stored.skin || 'paper'),
     model: model || stored.model || null,
+    ...(opening ? { opening: String(opening).slice(0, 6000) } : {}),   // 酒馆卡的开场白 / 场景，开场指令带给进程当底
     lines: linesOf(stored),
     currentLine: currentLine(stored).id,
     startedAt: stored.startedAt || new Date().toISOString(),

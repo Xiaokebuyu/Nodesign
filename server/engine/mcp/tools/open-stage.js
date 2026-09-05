@@ -101,6 +101,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
       vitals: z.array(vitalSchema).max(8).optional().describe('状态面板显示哪些字段（好感 / 时间 / 体力…）。不需要就别传'),
       skin: z.enum(SKINS).default('paper').describe('显示器外观。留默认 paper（跟平台一致）；玩家自己会换'),
       style: styleSchema.optional().describe('写法预设与预选。用户在开场问答里说了偏好（慢一点 / 多对白 / 第一人称 / 像轻小说 / 短一点…）就按 presets.md 的表翻成 on / off 传进来，开场页会标"agent 预选了这些，你可以改"；什么都没说就不传（默认 Izumi 全默认）。用户交了自己的酒馆预设 JSON 才传 preset: user:<名>'),
+      opening: z.string().max(6000).optional().describe('开场参考：酒馆卡的 first_mes（开场白）和 scenario 原文贴这里，{{user}} 那类占位符不用改。机器在玩家点「开始」时把它交给演出进程当第一段的底：照它的地点、时刻、气氛和头几句写，不照抄，占位符换成玩家的角色。没有就不传，进程按设定自己开场'),
       panels: z.array(panelSchema).max(8).optional().describe('跑团 / 冒险类才要：背包、装备与穿着、商店、任务清单这类**清单状态**。声明了显示器就多出对应的页，演出进程用 update_panel 记账，玩家能在显示器里买 / 用 / 装上。恋爱日常那种不要硬加'),
       achievements: z.array(achievementSchema).max(40).optional()
         .describe('奖杯。阈值按用户选的难度定（爽档 40 就给"她笑了"，严酷档要 80）。事件型的靠 state 里的标志位：牵手 == 1'),
@@ -117,7 +118,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
         }
         const style = args.style ? { preset: args.style.preset, on: [...(args.style.on || []), ...(args.style.modules || [])], off: args.style.off || [] } : null;
         const root = await createPlay(projectId, {
-          title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin, style, panels: args.panels || null,
+          title: args.title, table: args.table, cast: args.cast, vitals: args.vitals || [], skin: args.skin, style, panels: args.panels || null, opening: args.opening || null,
           rules: (args.achievements || args.triggers) ? { achievements: args.achievements || [], triggers: args.triggers || [] } : null,
         });
         const rt = getStageRuntime(projectId, root);
