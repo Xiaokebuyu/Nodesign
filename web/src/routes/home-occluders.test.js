@@ -103,14 +103,17 @@ it('淡出时影子跟着淡：alpha 写的是宿主的 opacity', () => {
   expect(alpha(pad.fill)).toBe(1);                      // 叠不受影响
 });
 
-it('复制品那片签跟它同高同转角；真签两片照旧一高一矮、不淡', () => {
+it('复制品那片签跟它同高同转角；真签两片跟纸同高、不淡', () => {
   desk({ transform: 'matrix(0.9205, 0.3907, -0.3907, 0.9205, 96, 168)', opacity: '0.5' });
-  const { peel, peelTab, on, off } = paint();
+  const { pad, peel, peelTab, on, off } = paint();
   expect(red(peelTab.fill)).toBe(red(peel.fill));
   expect(green(peelTab.fill)).toBe(255);
   expect(alpha(on.fill)).toBe(1);
   expect(alpha(off.fill)).toBe(1);
-  expect(red(on.fill)).toBeGreaterThan(red(off.fill));
+  // 两片都跟纸同高：纸投不到它们身上（夜里灯的落脚点就在纸上沿边上，矮一截的那片会接到
+  // 纸往上甩的影子）。一高一矮的观感归 CSS 的受光层。
+  expect(red(on.fill)).toBe(red(pad.fill));
+  expect(red(off.fill)).toBe(red(pad.fill));
   expect(green(on.fill)).toBe(0);
 });
 
@@ -132,6 +135,15 @@ it('按高度从低到高画：没选中那片签叠在纸上沿的那 12px 归�
   paint();
   const fills = calls.map((c) => ({ h: red(c.fill), wide: Math.abs(c.rect[2]) > 100 }));
   for (let k = 1; k < fills.length; k++) expect(fills[k].h).toBeGreaterThanOrEqual(fills[k - 1].h);
-  // 最矮的那片签第一笔，纸在它后面 —— 叠在一起的那一条最后留下的是纸的高度
-  expect(fills[0].wide).toBe(false);
+});
+
+it('比纸矮的东西叠在纸里的那一条归纸：矮的先画', () => {
+  desk();
+  // 造一片比纸矮的签（表里现在没有矮的了，用一条临时低高度验证画序本身）
+  const low = box('ndd-card', { width: 300, height: 200, left: 120, top: 120 });
+  const a = box('', { parent: low, tag: 'a', width: 300, height: 200, left: 120, top: 120 });
+  void a;
+  paint();
+  const fills = calls.map((c) => ({ h: red(c.fill), wide: Math.abs(c.rect[2]) > 100 }));
+  expect(fills[0].h).toBeLessThan(fills[fills.length - 1].h);   // 卡片（1.0）第一笔，纸（2.2）在后
 });
