@@ -64,13 +64,19 @@ ${DESK_CSS}
   /* 下缘那 12px 藏在纸后面（= 条的 margin-bottom 那个数），露出来的只有上面这截 */
   padding: 5px 15px 16px; border-radius: 3px 3px 0 0;
   background: var(--kraft); color: ${P('tabInk',0.8)};
-  /* 被前面那张纸压着 = 整片压暗一层 */
-  box-shadow: inset 0 0 0 999px rgba(93,74,44,0.07);
+  /* ⭐⭐ 压在后面那片矮一截，所以它接到的光少。
+     ⚠️ 这一层从前是写死的 0.07，跟光没关系 —— 于是太阳转过去、天黑下来，
+     两片签的关系一动不动。现在它跟着 --nd-lit 走（那是光源层发布的"光有多强"，
+     跟影子读同一份光）：光越足，高低两片的差别越明显；夜里灯下差别收窄。 */
+  box-shadow: inset 0 0 0 999px rgba(93,74,44, calc(0.035 + 0.075 * var(--nd-lit, 0.6)));
   position: relative; z-index: 1;
   transition: color 0.26s, background-color 0.26s, box-shadow 0.26s; }
 /* 相邻两片横向压着一点：谁在上面一眼看得出（纯静态，不是位移） */
 .nd-tabs > * + * { margin-left: -6px; }
 /* 选中那片 = 最上面这张纸的签：跟纸读同一个 --sheet，压在旁边那片上面 */
+/* ⛔ 选中那片**不加任何自己的光影**：它跟纸是同一张纸，材质必须一模一样。
+   09-02 试过给它一道顶边高光，站主的判词是「看起来是被贴上去的」——
+   一体的东西之间不该有边界，高光就是边界。受光的差别只体现在**另一片**上。 */
 .nd-tabs > *.on { background-color: var(--sheet); background-image: var(--grain);
   color: var(--red); box-shadow: none; z-index: 2; }
 /* 摸上去只提亮，不动位置 */
@@ -137,7 +143,10 @@ ${DESK_CSS}
      露出来那一线米黄就是在预告"底下压着另一种纸"，也是切换动画的落点。
      用 box-shadow 画而不是加两个 div：纸的高度是内容撑的，影子自动跟着长。
      顺序 = 从前到后：顶上这张的接触影 → 第二张的纸边 → 它的影 → 第三张 → 它的影，
-     最后一层（整叠落在桌上的环境影）写在 box-shadow 里，聚焦时只换那一层。 */
+     最后一层（整叠落在桌上的环境影）写在 box-shadow 里，聚焦时只换那一层。
+     ⭐ 2026-09-01：**只有最后那一层跟着太阳走**（PAPER_SHADOW.stack）。--stack 里
+     那几层画的是底下几张纸的**边**和它们之间的接触影 —— 纸叠得偏左下是摞纸的
+     手法，不是光造成的，太阳转过去它们不该跟着转。 */
   --stack:
     -1px 2px 3px rgba(93,74,44,0.15),
     -3px 4px 0 -1px var(--sheet-under),
@@ -146,7 +155,7 @@ ${DESK_CSS}
     -6px 8px 3px -2px rgba(93,74,44,0.15),
     -9px 12px 0 -3px var(--sheet-under),
     -9px 12px 4px -3px rgba(93,74,44,0.13);
-  box-shadow: var(--stack), -3px 6px 12px rgba(93,74,44,0.15);
+  box-shadow: var(--stack), ${PAPER_SHADOW.stack};
   /* 2026-08-20：模型下拉被下面的项目卡盖住。项目卡的图钉/菜单（.pin/.last/.more/
      .ndd-menu，z 6~9）直接参与 .ndd-in 的层叠、DOM 又在纸后面，于是压过来。
      整叠（.ndd-stack）拿一个高于 9 的层级 —— 纸和卡片在空间上不重叠，只有菜单
@@ -199,7 +208,7 @@ ${DESK_CSS}
    太吃力。聚焦时纸抬起来一档、横线加深、红边线变实 —— 三样一起动，看不错。 */
 /* 聚焦只换整叠落在桌上那一层影，纸堆本身（--stack）原样 —— 抬起来的是整叠，
    不是最上面那张自己飘起来 */
-.ndd-pad:focus-within { box-shadow: var(--stack), -6px 13px 26px rgba(93,74,44,0.22); }
+.ndd-pad:focus-within { box-shadow: var(--stack), ${PAPER_SHADOW.stackHigh}; }
 .ndd-pad:focus-within textarea { background-image: var(--rules-on); }
 /* ===== 揭掉最外层那一张（2026-08-28）=====
 
@@ -304,17 +313,17 @@ ${DESK_CSS}
    而不是靠一枚徽记去说"这个是演出的" */
 .ndd-card > a { display: block; position: relative; padding: 15px 14px 12px;
   background-color: var(--sheet); background-image: var(--grain);
-  box-shadow: ${PAPER_SHADOW.mid};
+  box-shadow: ${PAPER_SHADOW.sheet};
   text-decoration: none; color: inherit;
   transform: rotate(var(--rot, 0deg)); transform-origin: 50% 7px;
   transition: transform 0.28s cubic-bezier(0.25,1,0.5,1), box-shadow 0.28s; }
 /* 挂在最上面那张贴得没那么平 */
-.ndd-card.top > a { box-shadow: ${PAPER_SHADOW.near}; }
+.ndd-card.top > a { box-shadow: ${PAPER_SHADOW.sheetHigh}; }
 /* hover = 从桌上拿起来看：转正、抬起、影子摊开。
    触发点挂在整张卡上而不是 <a> 上 —— ⋯ 按钮是 <a> 的兄弟节点，鼠标移到它上面
    就不在 <a> 里了，纸会当场掉回去 */
 .ndd-card:hover > a { transform: rotate(0deg) translateY(-5px);
-  box-shadow: ${PAPER_SHADOW.near}; }
+  box-shadow: ${PAPER_SHADOW.sheetHigh}; }
 
 /* 封面 = 贴在纸上的印样，自己有一层薄影 */
 .ndd-shot { position: relative; width: 100%; overflow: hidden; background: ${PAPER.shot};
@@ -352,7 +361,7 @@ ${DESK_CSS}
 .ndd-card .last { position: absolute; top: -10px; right: -7px; z-index: 7;
   padding: 2px 9px; font: 11.5px var(--kai); color: var(--red);
   background-color: var(--sticky); background-image: var(--grain);
-  box-shadow: -1px 2px 3px rgba(93,74,44,0.22);
+  box-shadow: ${PAPER_SHADOW.tag};
   transform: rotate(4deg); pointer-events: none; }
 .ndd-card .more { position: absolute; top: 9px; right: 9px; z-index: 8;
   width: 26px; height: 26px; border-radius: 50%;

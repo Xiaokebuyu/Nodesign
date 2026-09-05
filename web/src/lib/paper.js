@@ -9,7 +9,9 @@
  *   const CSS = `.myroot { ${PAPER_VARS} ... }`;
  * 楷体的 @font-face 在 styles/globals.css，全局声明一次（顶栏也要用）。
  *
- * 光向全站统一：右上打光 → 影子一律偏左下（-x, +y）。三档影子见 PAPER_SHADOW。
+ * 光向全站统一 —— 但 2026-09-01 起它**不再是一个常数**：影子跟着太阳走
+ * （见下面的 PAPER_SHADOW 和 lib/daylight.js）。统一的是「同一时刻全站只有一个
+ * 光向」，不再是「永远从右上打光」。光源层没挂的地方落回下午那一档。
  */
 
 import { FONT_KAI, alpha } from './theme.js';
@@ -223,14 +225,121 @@ export const PAPER_VARS = `
 `;
 
 /**
- * 阴影三档 —— 层次全靠它，且只有一个光向。
- * near 用在"刚被动过、摆在最上面"的那张；far 用在贴得最平的。
+ * 阴影 —— 层次全靠它。near 用在「刚被动过、摆在最上面」的那张，far 用在贴得最平的。
+ *
+ * ## ⭐⭐ 2026-09-01：影子不再是烤死的字符串，它跟着太阳走
+ *
+ * 到这一天为止这里是六条写死的偏移，光向永远是右上，因为它们在模块加载时就被
+ * 插进了 CSS 字符串。lib/daylight.js 里那条「方位角故意不绕过头顶」的教义，
+ * 根就在这儿：太阳能动而影子不能动，两者必然打架。
+ *
+ * 现在每一档写成 `var(--nd-lift-x, 兜底)`：
+ *
+ *   **兜底就是从前那六条，一个字节没改。** 光源层没挂的地方（登录墙、没跑
+ *   JS 的那一帧、单元测试）拿到的还是原来那副样子，逐像素守门线不用重立。
+ *   ⛔ 兜底不能省成一个「差不多」的值：站点上真有整页不挂光源层的地方，
+ *     省掉的话那些页面会一张影子都没有，而且不报错。
+ *
+ *   变量由 home-light.jsx 按 castAt() 算出来写在 <html> 上。所以同一份光既
+ *   照着树影（着色器），也投出纸的影子（CSS）—— 一个光源，两个后果。
+ *
+ * ⚠️ 这几个值同时用在 CSS 字符串和 React 的 inline style 里。var() 的兜底里
+ * 带逗号是合法的（第一个逗号之后整段都算兜底），两条路都验过。
  */
-export const PAPER_SHADOW = {
+
+/**
+ * 每一档由几层影子叠成。`d` 是落差长度（px），`b` 是模糊，`a` 是浓度。
+ * **这里没有方向** —— 方向是光的事，见 daylight.js 的 castAt()。
+ *
+ * d 就是原来那六条偏移的长度（比如 near 的 -6px 13px，长度 14.32）。
+ */
+export const LIFT = {
+  far:  [[1.41, 2, 0.14], [3.16, 5, 0.09]],
+  mid:  [[2.24, 3, 0.15], [6.71, 12, 0.15]],
+  near: [[3.61, 4, 0.18], [14.32, 26, 0.22]],
+  // 纸堆（首页那张输入纸）自己用 --stack 画底下几张纸的边和接触影，
+  // 只有「整叠落在桌上」那一层归光管，所以单独两档。
+  stack:     [[6.71, 12, 0.15]],
+  stackHigh: [[14.32, 26, 0.22]],
+  /** 贴在纸上的小签（「上次停在这」那一枚）：贴得很平，但压得实 */
+  tag: [[2.24, 3, 0.22]],
+  /**
+   * ⭐ 桌上那张卡自己的影子。数值跟 mid / near 一模一样，**分出来是为了能单独降档**：
+   * 光源层真渲染开着的时候，这两档要降成接触影，长影子交给着色器去投
+   * （见 home-light.jsx 的 SHEET_TIERS）。而 mid / near 还有弹窗浮层在用，
+   * 那些东西着色器不认识，降了就没影子了。
+   */
+  sheet: [[2.24, 3, 0.15], [6.71, 12, 0.15]],
+  sheetHigh: [[3.61, 4, 0.18], [14.32, 26, 0.22]],
+};
+
+/** 影子的墨：暖褐。夜里往冷里揉（台灯底下的影子里没有第二个光源去填亮它）。 */
+const SHADOW_INK = [93, 74, 44];
+const SHADOW_COOL = [16, 21, 40];
+
+/** 从前那六条，逐字节保留 —— 它同时是兜底和「光源层没挂时该长什么样」的定义 */
+const BAKED = {
   far:  '-1px 1px 2px rgba(93,74,44,0.14), -1px 3px 5px rgba(93,74,44,0.09)',
   mid:  '-1px 2px 3px rgba(93,74,44,0.15), -3px 6px 12px rgba(93,74,44,0.15)',
   near: '-2px 3px 4px rgba(93,74,44,0.18), -6px 13px 26px rgba(93,74,44,0.22)',
+  stack:     '-3px 6px 12px rgba(93,74,44,0.15)',
+  stackHigh: '-6px 13px 26px rgba(93,74,44,0.22)',
+  tag:       '-1px 2px 3px rgba(93,74,44,0.22)',
+  sheet:     '-1px 2px 3px rgba(93,74,44,0.15), -3px 6px 12px rgba(93,74,44,0.15)',
+  sheetHigh: '-2px 3px 4px rgba(93,74,44,0.18), -6px 13px 26px rgba(93,74,44,0.22)',
 };
+
+/** 变量名。写的人是 home-light.jsx，读的人是这里 —— 一处定义，两处引用。 */
+export const LIFT_VAR = {
+  far: '--nd-lift-far',
+  mid: '--nd-lift-mid',
+  near: '--nd-lift-near',
+  stack: '--nd-lift-stack',
+  stackHigh: '--nd-lift-stack-high',
+  tag: '--nd-lift-tag',
+  sheet: '--nd-lift-sheet',
+  sheetHigh: '--nd-lift-sheet-high',
+};
+
+export const PAPER_SHADOW = Object.fromEntries(
+  Object.keys(BAKED).map((k) => [k, `var(${LIFT_VAR[k]}, ${BAKED[k]})`]),
+);
+
+const round = (v) => Math.round(v * 100) / 100;
+
+/**
+ * ⭐ 接触影：只留贴着纸边那一线，长的那层不画。
+ *
+ * 用在**着色器已经把长影子真投出来了**的元素上（见 home-occluders.js 的 OCCLUDERS）。
+ * 不降的话一张纸有两个影子：一个是 CSS 按固定偏移画的，一个是按几何投出来的，
+ * 两个方向对得上也是两层，一深一浅并排着，比只有一层假得多。
+ *
+ * 留一线是必要的：真实的接触影是纸和桌面之间那条几乎没有光进得去的缝，
+ * 它跟投影不是一回事，投影再准也代替不了它。
+ */
+export function contactCss(cast, tier) {
+  const [d, b, a] = (LIFT[tier] || LIFT.mid)[0];
+  const len = d * 0.5;
+  const c = SHADOW_INK.map((v, i) => Math.round(v + (SHADOW_COOL[i] - v) * (cast.cool || 0)));
+  return `${round(cast.x * len)}px ${round(cast.y * len)}px ${round(b * 0.55)}px `
+    + `rgba(${c[0]},${c[1]},${c[2]},${round(a * 1.25)})`;
+}
+
+/**
+ * 把一份光（daylight.js 的 castAt()）拼成这一档的 box-shadow。
+ *
+ * ⭐ 只有这一个函数知道影子是什么颜色。几何在 daylight.js，颜色在这儿 ——
+ * 那一层管「几点了」，这一层管「东西是什么做的」。
+ */
+export function castCss(cast, tier) {
+  const layers = LIFT[tier] || LIFT.mid;
+  const c = SHADOW_INK.map((v, i) => Math.round(v + (SHADOW_COOL[i] - v) * (cast.cool || 0)));
+  return layers.map(([d, b, a]) => {
+    const len = d * cast.len;
+    return `${round(cast.x * len)}px ${round(cast.y * len)}px ${round(b * cast.blur)}px `
+      + `rgba(${c[0]},${c[1]},${c[2]},${round(a * cast.alpha)})`;
+  }).join(', ');
+}
 
 /**
  * 卡片 = 纸。给写 inline style 的组件用：

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Trash2, Check } from 'lucide-react';
-import { COLOR, GAP, RADIUS, FONT_SANS, FONT_SIZE, alpha } from '../../lib/theme.js';
-import { PAPER_SHADOW, PAPER } from '../../lib/paper.js';
+import { COLOR, GAP, RADIUS, SHADOW, FONT_SANS, FONT_SIZE, alpha } from '../../lib/theme.js';
+import { PAPER } from '../../lib/paper.js';
 import { BINDING_STYLES, BINDING_MATERIALS } from '../../lib/board-bindings.js';
 import { isImeEnter } from '../../lib/helpers.js';
 
@@ -88,7 +88,7 @@ export default function LinkPopover({
         width: POP_W, zIndex: 9000,
         background: COLOR.bg,
         borderRadius: RADIUS.lg,
-        boxShadow: PAPER_SHADOW.high,
+        boxShadow: SHADOW.menu,
         padding: GAP.base,
         fontFamily: FONT_SANS,
         animation: 'ndPopIn 120ms cubic-bezier(0.32, 0.72, 0, 1)',

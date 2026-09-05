@@ -6,8 +6,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  sunAt, lightAt, hourOf, nextMode, readMode, writeMode,
-  DAY_MODES, SUN_HOURS, SUN_FROM, LAMP_AT,
+  sunAt, lightAt, hourOf, nextMode, readMode, writeMode, sunFrom, castAt,
+  DAY_MODES, SUN_HOURS, SUN_ARC, SUN_FROM, LAMP_AT,
 } from './daylight.js';
 
 const at = (h, m = 0, month = 9) => new Date(2026, month - 1, 15, h, m, 0);
@@ -66,14 +66,135 @@ describe('太阳的高度曲线', () => {
   });
 });
 
-describe('⛔ 光向只有一边', () => {
-  it('太阳和台灯都在右半边', () => {
-    // 全站影子一律偏左下（PAPER_SHADOW），光源跑到左边就会跟满屏的纸打架。
-    // 这一层表达时间靠的是**高度**（光斑的长短软硬），不是换边。
-    expect(SUN_FROM[0]).toBeGreaterThan(0.5);
-    expect(LAMP_AT[0]).toBeGreaterThan(0.5);
+/**
+ * 2026-09-01：太阳开始走了。
+ *
+ * 这一组替换掉从前那条「太阳和台灯都在右半边」—— 那条守的是「影子是烤死的，
+ * 所以光不许换边」，而影子现在是这一层驱动的。守的东西换了，判据也得换：
+ * 不再是「光在哪一边」，而是**光和影是不是同一个光源的两个后果**。
+ */
+describe('太阳一天里真的走过去', () => {
+  const arcAt = (h, month) => {
+    const l = lightAt('auto', at(h, 0, month));
+    return { l, from: sunFrom(l), cast: castAt(l) };
+  };
+
+  it('从右边（东）升起，往左边（西）落下，中间不回头', () => {
+    // ⭐ 屏幕上"东"在右边，因为这张桌子**朝北**（09-02 站主拍板）：
+    //   坐北朝北，日出的东边就在你的右手边。这是个选择不是天文，理由写在
+    //   daylight.js 的 sunFrom() 里。要改朝向就改那一行，然后改这里。
+    //   ⚠️ 真正不能坏的是下面两条：**单调不回头**、**两头分处两个半边**。
+    let prev = 2;
+    for (let m = 7 * 60; m <= 17 * 60; m += 15) {
+      const l = lightAt('auto', at(Math.floor(m / 60), m % 60));
+      const x = sunFrom(l)[0];
+      expect(x, `${(m / 60).toFixed(2)} 点太阳往回走了`).toBeLessThanOrEqual(prev + 1e-9);
+      prev = x;
+    }
+    // 一天两头分别落在两个半边 —— 不越过中线就谈不上"走过去"
+    expect(arcAt(7, 9).from[0]).toBeGreaterThan(0.5);
+    expect(arcAt(17, 9).from[0]).toBeLessThan(0.5);
   });
-  it('台灯比太阳低 —— 灯照的是纸，不是天花板', () => {
+
+  it('正午最高（屏上最靠顶），而且夏天的正午比冬天高', () => {
+    expect(arcAt(12, 9).from[1]).toBeLessThan(arcAt(8, 9).from[1]);
+    expect(arcAt(12, 6).from[1]).toBeLessThan(arcAt(12, 12).from[1]);
+  });
+
+  it('⭐ 冬天的太阳不往两边跑（横向摆幅比夏天小）', () => {
+    // ⚠️ 取**绝对值**。第一版用带符号的跨度，09-02 桌子改朝北（太阳右→左）
+    //   之后跨度全变成负数，判据当场作废 —— 而它要守的本来就是"摆得宽不宽"，
+    //   跟朝哪边无关。这么写它对朝向免疫。
+    const span = (mo) => Math.abs(arcAt(16, mo).from[0] - arcAt(9, mo).from[0]);
+    expect(span(12)).toBeLessThan(span(6));
+    expect(SUN_ARC.winter.swing).toBeLessThan(SUN_ARC.summer.swing);
+  });
+});
+
+describe('⛔ 影子的契约', () => {
+  it('⛔ 光永远在纸的上方：影子的 y 恒为正（逐分钟扫四季）', () => {
+    // 这一条一破，纸就不是摊在桌上而是立起来了。它是这一层唯一还钉死的方向。
+    // ⚠️ 扫一万多个点，但**只断言一次**：expect() 比这里的算术贵几个数量级，
+    //   逐点断言会让这条测试在满负载的机器上跑到超时（真踩过：单跑 1s，
+    //   全套并发时 23s，5s 就判超时 —— 一条会看天吃饭的判据比没有还糟）。
+    let worst = { y: Infinity };
+    for (const mo of [3, 6, 9, 12]) {
+      for (let m = 0; m < 24 * 60; m += 3) {
+        const c = castAt(lightAt('auto', at(Math.floor(m / 60), m % 60, mo)));
+        if (c.y < worst.y) worst = { y: c.y, where: `${mo} 月 ${Math.floor(m / 60)}:${m % 60}` };
+      }
+    }
+    expect(worst.y, `${worst.where} 影子朝上了`).toBeGreaterThan(0.3);
+  });
+
+  it('方向是单位向量 —— 长短只许 len 一个数管', () => {
+    for (let h = 0; h < 24; h += 3) {
+      const c = castAt(lightAt('auto', at(h)));
+      expect(Math.hypot(c.x, c.y)).toBeCloseTo(1, 9);
+    }
+  });
+
+  it('⭐ 影子背着太阳：太阳偏右影子就偏左，反过来也一样', () => {
+    for (const h of [7, 9, 11, 13, 15, 17]) {
+      const l = lightAt('auto', at(h));
+      const sx = sunFrom(l)[0];
+      const c = castAt(l);
+      if (Math.abs(sx - 0.5) < 0.02) continue;          // 正上方，左右都不算错
+      expect(Math.sign(c.x), `${h} 点影子跟太阳同一边`).toBe(-Math.sign(sx - 0.5));
+    }
+  });
+
+  it('太阳越低，影子越长、越虚、越淡', () => {
+    const noon = castAt(lightAt('auto', at(12)));
+    const low = castAt(lightAt('auto', at(17)));
+    expect(low.len).toBeGreaterThan(noon.len);
+    expect(low.blur).toBeGreaterThan(noon.blur);
+    expect(low.alpha).toBeLessThan(noon.alpha);
+  });
+
+  it('⭐⭐ 冬天正午的影子比夏天正午长（alt 分不出这件事，elev 才行）', () => {
+    // 正弦那条曲线每一季的正午都是 1.0。要是拿 alt 去算影子长度，四季的正午
+    // 会长得一模一样 —— 而冬天的太阳正午也低低地挂在南边，影子一整天都是长的。
+    const noonLen = (mo) => castAt(lightAt('auto', at(12, 0, mo))).len;
+    expect(noonLen(12)).toBeGreaterThan(noonLen(6) * 1.5);
+    expect(noonLen(9)).toBeGreaterThan(noonLen(6));
+  });
+
+  it('⭐ 夜里影子归台灯：钟点不再影响它，方向偏左下，而且偏冷', () => {
+    const a = castAt(lightAt('auto', at(22)));
+    const b = castAt(lightAt('auto', at(2)));
+    for (const k of ['x', 'y', 'len', 'blur', 'alpha', 'cool']) expect(a[k]).toBeCloseTo(b[k], 9);
+    // 灯钉在右上角那个位置，所以影子朝左下
+    expect(a.x).toBeLessThan(0);
+    expect(a.cool).toBeGreaterThan(0.4);
+    expect(castAt(lightAt('auto', at(12))).cool).toBe(0);
+  });
+
+  it('⛔ 一整天连续，跨黄昏也不许跳（逐分钟扫十二个月）', () => {
+    // 真正的风险不在今天这张表，在于哪天有人给夜里那一档换个常量、或者让
+    // sunFrom 在 u 越界时折返 —— 那些坏法都是**某一分钟影子忽然甩到另一边**，
+    // 页面上看是一屏的纸同时抖一下，而且不报错。
+    // ⚠️ 同上：一分钟一格扫十二个月，但只断言一次。
+    let worst = { d: 0 };
+    for (let mo = 1; mo <= 12; mo++) {
+      let prev = null;
+      for (let m = 0; m < 24 * 60; m += 1) {
+        const c = castAt(lightAt('auto', at(Math.floor(m / 60), m % 60, mo)));
+        if (prev) {
+          for (const k of ['x', 'y', 'len', 'blur', 'alpha', 'cool']) {
+            const d = Math.abs(c[k] - prev[k]);
+            if (d > worst.d) worst = { d, where: `${mo} 月 ${Math.floor(m / 60)}:${m % 60} 的 ${k}` };
+          }
+        }
+        prev = c;
+      }
+    }
+    expect(worst.d, `${worst.where} 跳了`).toBeLessThan(0.05);
+  });
+});
+
+describe('台灯', () => {
+  it('比太阳的兜底位置低一点 —— 灯照的是纸，不是天花板', () => {
     expect(LAMP_AT[1]).toBeGreaterThan(SUN_FROM[1]);
   });
 });
@@ -127,7 +248,9 @@ describe('⛔ 这一层只报「几点了」，不发颜色', () => {
     for (const [k, x] of Object.entries(v)) {
       expect(typeof x === 'string' && /^#|rgba?\(/.test(x), `${k} 看着像个色值`).toBe(false);
     }
-    expect(Object.keys(v).sort()).toEqual(['alt', 'hour', 'mode', 'night', 'phase', 'season', 'warm']);
+    expect(Object.keys(v).sort()).toEqual(
+      ['alt', 'elev', 'gain', 'hour', 'mode', 'night', 'phase', 'season', 'u', 'warm'],
+    );
   });
 });
 

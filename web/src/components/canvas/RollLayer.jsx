@@ -57,7 +57,7 @@ export default function RollLayer({ rolls, layout, onUnroll }) {
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '8px 14px', cursor: 'pointer',
         background: PAPER.bg, border: `1.5px solid ${alpha(PAPER.ink, 0.35)}`,
-        borderRadius: 10, boxShadow: PAPER_SHADOW,
+        borderRadius: 10, boxShadow: PAPER_SHADOW.mid,
         transform: 'rotate(-0.6deg)',
         fontFamily: TEXT_FONT_CSS.kai, fontSize: 14, color: PAPER.ink,
         whiteSpace: 'nowrap', userSelect: 'none',

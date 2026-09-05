@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { COLOR, GAP, RADIUS, FONT_SANS, FONT_SIZE, alpha } from '../../lib/theme.js';
-import { PAPER_SHADOW } from '../../lib/paper.js';
+import { COLOR, GAP, RADIUS, SHADOW, FONT_SANS, FONT_SIZE, alpha } from '../../lib/theme.js';
 
 /**
  * ContextMenu —— 画布的右键菜单（2026-08-08）。
@@ -75,7 +74,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
         width: MENU_W, zIndex: 9000,
         background: COLOR.bg,
         borderRadius: RADIUS.lg,
-        boxShadow: PAPER_SHADOW.high,
+        boxShadow: SHADOW.menu,
         padding: `${GAP.xs}px`,
         fontFamily: FONT_SANS,
         animation: 'ndPopIn 120ms cubic-bezier(0.32, 0.72, 0, 1)',
