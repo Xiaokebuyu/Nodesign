@@ -25,57 +25,63 @@
   const relOf = (wsRel) => (wsRel ? wsRel.replace(new RegExp(`^${(store.cfg?.root || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/`), '') : null);
   const condHtml = (when) => humanCondition(when).split(/，(且|或)\s*/).map(s => (s === '且' || s === '或' ? `<span class="and">${s}</span>` : `<i>${esc(s)}</i>`)).join('');
 
-  /* ── 角色 ── */
+  /* ── 角色：一格一人，点开才看详情（站主 09-06：别一开始就全展开）── */
   ND.page({
     id: 'cast', label: '角色',
-    mount(root) { root.className = 'page scroll'; this.root = root; this.paint(); },
+    mount(root) { root.className = 'page scroll'; this.root = root; this.open = null; this.paint(); },
     async paint() {
       const cfg = store.cfg || {}; const cast = cfg.cast || []; const S = store.state || {};
       const r = this.root;
-      r.innerHTML = `<div class="page-inner"><h2>登场的人<small>${cast.length} 位 · 状态、关系与记忆</small></h2><div class="people wide" id="people"></div>
-        <section id="cards"><h2>人物设定<small>改完下一句话到时对方按新的来</small></h2><div id="cardList"></div></section></div>`;
+      r.innerHTML = `<div class="page-inner"><h2>登场的人<small>${cast.length} 位 · 点一位看设定与记忆</small></h2><div class="people wide" id="people"></div><div id="detail"></div></div>`;
       const people = r.querySelector('#people');
-      if (!cast.length) { people.innerHTML = '<p class="muted">还没有人。让 agent 用 cast_role 写卡、open_stage 建故事。</p>'; }
+      if (!cast.length) { people.innerHTML = '<p class="muted">还没有人。让 agent 用 cast_role 写卡、open_stage 建故事。</p>'; return; }
       let files = [];
       try { files = (await api.files()).files; } catch { files = []; }
+      this.files = files;
       for (const m of cast) {
         const mine = (cfg.vitals || []).filter(v => v.who === m.name);
         const home = relOf(m.card)?.replace(/\/角色卡\.md$/, '');
         const memCount = home ? files.filter(f => f.rel.startsWith(`${home}/记忆/`)).length : 0;
-        const spoke = [...store.scenes].reverse().find(s => s.by === 'stage' && (s.speakers || []).includes(m.name));
-        const spokeIdx = spoke ? store.scenes.filter(s => s.by === 'stage').indexOf(spoke) + 1 : 0;
+        const spoke = [...store.scenes].reverse().find(x => x.by === 'stage' && (x.speakers || []).includes(m.name));
+        const spokeIdx = spoke ? store.scenes.filter(x => x.by === 'stage').indexOf(spoke) + 1 : 0;
         const talking = store.activeSpeakers.includes(m.name);
-        const card = el(`<div class="person" data-who="${esc(m.name)}"><div class="pic">${m.portrait ? `<img alt="" src="${esc(m.portrait)}">` : `<b>${esc(String(m.name || '').slice(0, 1))}</b>`}${talking ? '<span class="talk">正在说话</span>' : ''}</div>
+        const card = el(`<button class="person${this.open === m.name ? ' on' : ''}" data-who="${esc(m.name)}"><div class="pic">${m.portrait ? `<img alt="" src="${esc(m.portrait)}">` : `<b>${esc(String(m.name || '').slice(0, 1))}</b>`}${talking ? '<span class="talk">正在说话</span>' : ''}</div>
           <div class="txt"><h3>${esc(m.name)}</h3><p>${esc(m.note || '')}</p></div>
           ${mine.length ? `<div class="stats">${mine.map(v => { const val = S[v.key] ?? v.initial ?? ''; const pct = v.as === 'bar' ? Math.max(0, Math.min(100, (parseFloat(val) / (v.max || 100)) * 100)) || 0 : null; return `<div class="vital"><div class="row"><span>${esc(v.label || v.key)}</span><b>${esc(val)}${v.as === 'bar' ? `<small>/ ${esc(v.max || 100)}</small>` : ''}</b></div>${pct !== null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>`; }).join('')}</div>` : ''}
-          <div class="rel" data-rel>读取中…</div>
-          <div class="foot"><span>${spokeIdx ? `最近开口：第 ${spokeIdx} 段` : '还没开口'}</span><span>记忆 ${memCount} 条</span><span class="tools"><button class="btn sm" data-act="card">看设定</button></span></div></div>`);
+          <div class="foot"><span>${spokeIdx ? `最近开口：第 ${spokeIdx} 段` : '还没开口'}</span><span>记忆 ${memCount} 条</span><span class="tools muted">看详情 ›</span></div></button>`);
         people.appendChild(card);
-        card.querySelector('[data-act=card]').onclick = () => { r.querySelector(`#cards [data-card="${m.name.replace(/"/g, '\\"')}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
-        const relBox = card.querySelector('[data-rel]');
-        try {
-          const rel = relOf(m.card);
-          const { text } = rel ? await api.readFile(rel) : { text: '' };
-          const sec = ND.r.mdSection(text, '(关系|与.*的关系|人际)');
-          const stage = /^##\s*现在这个阶段[^\n]*/m.exec(text)?.[0]?.replace(/^##\s*/, '') || '';
-          relBox.innerHTML = `${stage ? `<span class="lbl">阶段</span>${esc(stage)}<br>` : ''}${sec ? `<span class="lbl">关系</span>${esc(sec.split('\n').filter(Boolean).slice(0, 3).join(' '))}` : (stage ? '' : '<span class="muted">卡上没写关系一节。</span>')}`;
-        } catch { relBox.innerHTML = ''; }
+        card.onclick = () => this.show(m);
       }
-      const list = r.querySelector('#cardList');
-      for (const m of cast) {
-        const rel = relOf(m.card);
-        const card = el(`<div class="card" data-card="${esc(m.name)}"><h3>${esc(m.name)}<small>${esc(rel || '没有卡')}</small><span class="tools"><button class="btn sm" data-act="edit">编辑</button></span></h3><div class="md body">读取中…</div></div>`);
-        list.appendChild(card);
-        const body = card.querySelector('.body');
-        if (!rel) { body.textContent = '这个人没有卡'; continue; }
-        try {
-          const { text } = await api.readFile(rel);
-          body.innerHTML = renderMd(text);
-          card.querySelector('[data-act=edit]').onclick = () => editor(card, rel, text, (t) => { body.innerHTML = renderMd(t); });
-        } catch (err) { body.textContent = `读不到：${err.message}`; }
-      }
+      if (this.open) { const m = cast.find(x => x.name === this.open); if (m) this.show(m); }
     },
-    update(what) { if (what.type === 'hello' || what.type === 'config') this.paint(); else if (what.type === 'state') this.paint(); },
+    /** 详情：设定卡全文（可编辑）+ 这个人记得的事。上面有回去的路 */
+    async show(m) {
+      this.open = m.name;
+      this.root.querySelectorAll('.person').forEach(p => p.classList.toggle('on', p.dataset.who === m.name));
+      const box = this.root.querySelector('#detail');
+      const rel = relOf(m.card);
+      box.innerHTML = `<div class="card detail"><h3><button class="btn sm" data-back>‹ 全部人物</button>${esc(m.name)}<small>${esc(rel || '没有卡')}</small><span class="tools"><button class="btn sm" data-act="edit">编辑设定</button></span></h3>
+        <div class="md body">读取中…</div>
+        <div class="section-hd" style="padding:14px 0 6px">${esc(m.name)}记得的事</div><div class="memlist" id="pmem"><p class="muted">读取中…</p></div></div>`;
+      box.querySelector('[data-back]').onclick = () => { this.open = null; box.innerHTML = ''; this.root.querySelectorAll('.person').forEach(p => p.classList.remove('on')); this.root.querySelector('#people').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const card = box.firstElementChild; const body = card.querySelector('.body');
+      if (!rel) { body.textContent = '这个人没有卡'; return; }
+      try {
+        const { text } = await api.readFile(rel);
+        const dedupe = (t) => t.replace(/^(# [^\n]+)\n+(?:<!--[\s\S]*?-->\n+)?\1\n/m, '$1\n');   // 09-05 之前的卡顶上叠着两个同名大标题
+        body.innerHTML = renderMd(dedupe(text));
+        card.querySelector('[data-act=edit]').onclick = () => editor(card, rel, text, (t) => { body.innerHTML = renderMd(dedupe(t)); });
+      } catch (err) { body.textContent = `读不到：${err.message}`; }
+      const home = rel.replace(/\/角色卡\.md$/, '');
+      const mine = (this.files || []).filter(f => f.rel.startsWith(`${home}/记忆/`));
+      const list = box.querySelector('#pmem');
+      if (!mine.length) { list.innerHTML = '<p class="muted">还没有。她记住了什么，对方会自己写进来。</p>'; return; }
+      const items = await Promise.all(mine.map(async (f) => { const { text } = await api.readFile(f.rel); const fm = /^---\n([\s\S]*?)\n---\n?/.exec(text); const get = (k) => new RegExp(`^${k}:\\s*(.+)$`, 'm').exec(fm?.[1] || '')?.[1] || ''; return { name: f.rel.split('/').pop().replace(/\.md$/, ''), type: get('type'), description: get('description'), content: fm ? text.slice(fm[0].length).trim() : text }; }));
+      const T = { progress: '进展', character: '态度', thread: '伏笔', world: '设定' };
+      list.innerHTML = items.map(i => `<details><summary><span class="t">${esc(T[i.type] || i.type || '')}</span><span class="d">${esc(i.description || i.name)}</span></summary><div class="md">${renderMd(i.content)}</div></details>`).join('');
+    },
+    update(what) { if (what.type === 'hello' || what.type === 'config' || what.type === 'state') this.paint(); },
   });
 
   /* ── 记忆 ── */

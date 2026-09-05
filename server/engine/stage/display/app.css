@@ -18,7 +18,7 @@
   --kai:"LXGW WenKai ND","LXGW WenKai","Kaiti SC","STKaiti","KaiTi","Songti SC",serif;
   --sans:var(--kai);
   --mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
-  --measure:38em; --lead:1.95; --size:17px;
+  --measure:40em; --lead:1.95; --size:17px;
   --veil:rgba(255,254,246,.9); --cast-w:264px;
 }
 :root[data-skin="night"]{ --paper:#15171b; --bg:#101216; --panel:#1b1e23; --panel-2:#22262c;
@@ -226,7 +226,7 @@ body.embed .opening .actions{display:none}
   --sh-near:-2px 3px 4px rgba(93,74,44,.18),-6px 13px 26px rgba(93,74,44,.22);
   --hair:rgba(43,33,23,.22);
 }
-:root[data-skin="jiangnan"]{ --wall:#dfe6e4; --chrome:#eef2f1; --lit:rgba(246,250,248,.8); --lit-soft:rgba(240,246,244,.5); --dusk:rgba(60,80,76,.12); --hair:rgba(38,49,47,.22) }
+:root[data-skin="jiangnan"]{ --wall:#dfe6e4; --chrome:#eef2f1; --lit:rgba(246,250,248,.8); --lit-soft:rgba(240,246,244,.5); --dusk:rgba(60,80,76,.12); --hair:rgba(38,49,47,.22); --grain:none }   /* 颗粒是为暖纸调的，铺在青灰上像灰尘（09-06 在画布上看过） */
 :root[data-skin="night"]{ --wall:#0f1114; --chrome:#181b20; --lit:rgba(60,64,72,.5); --lit-soft:rgba(50,54,60,.4); --dusk:rgba(0,0,0,.35); --grain:none; --hair:rgba(220,215,206,.2);
   --sh-far:0 1px 2px rgba(0,0,0,.4),0 3px 6px rgba(0,0,0,.3); --sh-mid:0 2px 3px rgba(0,0,0,.45),0 8px 18px rgba(0,0,0,.35); --sh-near:0 3px 4px rgba(0,0,0,.5),0 14px 30px rgba(0,0,0,.45) }
 :root[data-skin="terminal"]{ --wall:#080a09; --chrome:#0f130f; --lit:rgba(40,60,44,.35); --lit-soft:rgba(30,46,34,.3); --dusk:rgba(0,0,0,.4); --grain:none; --hair:rgba(200,211,196,.2);
@@ -235,7 +235,7 @@ body.embed .opening .actions{display:none}
 /* 墙：光斑 + 颗粒。铺了背景图时墙变成一层薄纱，让图透出来 */
 body{background:var(--wall)}
 .app{background:radial-gradient(ellipse 60% 55% at 82% 8%,var(--lit),transparent 70%),radial-gradient(ellipse 50% 40% at 30% 100%,var(--dusk),transparent 65%),var(--wall);background-attachment:fixed}
-.app::after{content:"";position:absolute;inset:0;background-image:var(--grain);opacity:.55;pointer-events:none;z-index:0}
+.app::after{content:"";position:absolute;inset:0;background-image:var(--grain);opacity:.32;pointer-events:none;z-index:0}   /* 墙上淡一档：纸和墙各一层颗粒叠起来太脏 */
 :root[data-backdrop="on"] .app{background:var(--veil)}
 :root[data-backdrop="on"] .app::after{opacity:.25}
 .top,.main{position:relative;z-index:1}.cast{z-index:1}   /* .cast 的 position 归布局层：窄屏它是 fixed 抽屉，这里别碰 */

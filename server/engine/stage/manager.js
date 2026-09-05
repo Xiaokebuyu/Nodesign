@@ -190,7 +190,7 @@ function publicConfig(rt, cfg) {
     ...pub, cast, backdrops, backdrop: url(cfg.backdrop), root: rt.root,
     lines: linesOf(cfg).map(({ sdkSid, ...l }) => ({ ...l, hasMemory: !!sdkSid })), currentLine: currentLine(cfg).id,
     style: cfg.style || { preset: DEFAULT_PRESET, modules: null }, cardOptions: cfg.cardOptions || {}, opened: !!cfg.opened,
-    promptChars: rt.promptChars || 0, sources: rt.sources.map(s => s.rel), styleNames: rt.styleNames || [],
+    promptChars: rt.promptChars || cfg.promptChars || 0, sources: rt.sources.length ? rt.sources.map(s => s.rel) : (cfg.promptSources || []), styleNames: rt.styleNames?.length ? rt.styleNames : (cfg.styleNames || []),
   };
 }
 
@@ -324,10 +324,9 @@ export async function startStage(pid, root) {
   rt.promptChars = composed.text.length;
   rt.styleNames = composed.styleNames;
   const castPublic = composed.cast.map(({ options, ...c }) => c);
-  if (JSON.stringify(castPublic) !== JSON.stringify(stored.cast)) {
-    stored = { ...stored, cast: castPublic };
-    await writePlayConfig(rt.playAbs, stored);
-  }
+  // 系统提示词的字数和来源也落进配置：进程停着时设定页照样有数（09-06 画布上看到"0 字 · 进程还没起过"）
+  stored = { ...stored, cast: castPublic, promptChars: composed.text.length, promptSources: rt.sources.map(x => x.rel), styleNames: composed.styleNames };
+  await writePlayConfig(rt.playAbs, stored);
   // 当前状态与规则的"已达成"从磁盘接回来
   const scenes = await readScenes(rt.playAbs, { limit: 100000, rel: rt.scenesRel });
   rt.state = foldState(stored, scenes);

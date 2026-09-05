@@ -160,7 +160,11 @@
       if (!list.length && store.cfg && !spent && last) list = [{ label: '继续', prompt: '继续。' }];
       const dis = (!store.cfg || store.status.busy || store.sending) ? ' disabled' : '';
       const CAT = /^[（(\[【]?\s*(推进主线|主线|人际|人际关系|意外|意想不到|合理但意想不到|剑走偏锋|支线|日常)\s*[）)\]】]?[。.]?$/;   // 类别词不是动作意图，不给玩家看（tools.js 同一条）
-      box.innerHTML = list.map((c) => { const hint = c.hint && !CAT.test(c.hint.trim()) ? c.hint : ''; return `<button class="handle" data-p="${esc(c.prompt || c.label)}"${dis}><b>${esc(c.label)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}</button>`; }).join('');
+      box.innerHTML = list.map((c) => {
+        let label = c.label || ''; let hint = c.hint && !CAT.test(c.hint.trim()) ? c.hint : '';
+        if (CAT.test(label.trim()) && hint) { label = hint; hint = ''; }   // 老记录里按钮写的是"主线"、小字才是动作：换过来
+        return `<button class="handle" data-p="${esc(c.prompt || c.label)}"${dis}><b>${esc(label)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}</button>`;
+      }).join('');
       $('optN').textContent = list.length ? `${list.length} 个` : (store.status.busy ? '等这一段写完' : '');
       $('optHd').style.display = list.length || store.status.busy ? '' : 'none';
       box.querySelectorAll('.handle').forEach((b) => { b.onclick = () => this.fire(b.dataset.p); });

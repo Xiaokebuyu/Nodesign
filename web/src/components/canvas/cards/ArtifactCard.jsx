@@ -227,11 +227,11 @@ export const ARTIFACT_FACES = {
    */
   stage: {
     icon: Drama,
-    tip: '双击进显示器 —— 在那里对台上说话',   // 卡即这场戏的文件夹（台面 / 角色卡 / 记忆 / 场景都在里面）
+    tip: '双击进显示器 · 在那里读故事、说话',   // 卡即这个故事的文件夹（设定 / 角色卡 / 记忆 / 场景都在里面）
     summary: (o) => {
       const s = o.stage || {};
       const who = (s.cast || []).map(c => c.name).slice(0, 3).join(' / ');
-      return `演出 · ${s.beats || 0} 拍${who ? ` · ${who}` : ''}`;
+      return `故事 · ${s.beats || 0} 段${who ? ` · ${who}` : ''}`;
     },
     wheel: 'iframe',
     Preview: ({ o, projectId, box, frameRef, onActive }) => {

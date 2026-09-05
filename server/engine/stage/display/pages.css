@@ -204,3 +204,10 @@
 .skin{border-color:var(--hair);border-radius:1px}
 :root[data-skin="night"] .person,:root[data-skin="night"] .preset,:root[data-skin="night"] .modgroup,:root[data-skin="night"] .rule,:root[data-skin="night"] .handle,:root[data-skin="night"] .card,:root[data-skin="night"] .opening .world,:root[data-skin="night"] .trig,:root[data-skin="night"] .memlist,
 :root[data-skin="terminal"] .person,:root[data-skin="terminal"] .preset,:root[data-skin="terminal"] .modgroup,:root[data-skin="terminal"] .rule,:root[data-skin="terminal"] .handle,:root[data-skin="terminal"] .card,:root[data-skin="terminal"] .opening .world,:root[data-skin="terminal"] .trig,:root[data-skin="terminal"] .memlist{background:var(--panel)}
+
+/* 角色页：格子是按钮，点一位下面展开详情；选中的那格压一道墨边 */
+.person{cursor:pointer;text-align:left;padding:0;color:inherit;font:inherit;transition:transform .15s,box-shadow .15s}
+.person:hover{transform:translateY(-2px);box-shadow:var(--sh-near)}
+.person.on{box-shadow:var(--sh-mid),inset 0 0 0 2px var(--accent)}
+.card.detail{margin-top:18px}
+.card.detail h3 [data-back]{margin-right:4px}

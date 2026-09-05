@@ -75,7 +75,11 @@ export function createStageTools(ctx) {
     async ({ text, choices, scene, speakers, state }) => {
       // 选项小字是类别词（"主线""人际""意外"）的机械剥掉：玩家看的是动作意图，不是你的分类（09-06 站主点名）
       let stripped = 0;
-      choices = choices.map(c => (c.hint && CATEGORY_HINT_RE.test(c.hint.trim()) ? (stripped++, { ...c, hint: undefined }) : c));
+      choices = choices.map(c => {
+        if (CATEGORY_HINT_RE.test(String(c.label || '').trim()) && c.hint && !CATEGORY_HINT_RE.test(c.hint.trim())) { stripped++; return { ...c, label: c.hint.slice(0, 20), hint: undefined }; }   // 按钮上写了"主线"、小字才是动作：换过来
+        if (c.hint && CATEGORY_HINT_RE.test(c.hint.trim())) { stripped++; return { ...c, hint: undefined }; }
+        return c;
+      });
       const stateObj = state?.length ? Object.fromEntries(state.map(kv => [kv.key, kv.value])) : null;
       const row = {
         id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'stage', text, choices,
@@ -88,7 +92,7 @@ export function createStageTools(ctx) {
       return {
         // 结束回合的标记也盖在返回上（SDK 文档只说 "MCP tool using _meta['claude/endTurn']"，定义上和返回上各盖一份，哪边认都行）
         _meta: { 'claude/endTurn': true },
-        content: [{ type: 'text', text: `这一段已经在台上了（${text.length} 字，${choices.length} 枚选项${stateObj ? `，状态改了 ${Object.keys(stateObj).length} 项` : ''}）。${extra || ''}${stripped ? `有 ${stripped} 枚选项的小字是类别词（主线 / 人际 / 意外那种），已经删掉 —— 下次小字写他具体会做什么。` : ''}玩家点了哪一枚会当成他的话送回来。这一轮到此结束，不用再说话。` }],
+        content: [{ type: 'text', text: `这一段已经在台上了（${text.length} 字，${choices.length} 枚选项${stateObj ? `，状态改了 ${Object.keys(stateObj).length} 项` : ''}）。${extra || ''}${stripped ? `有 ${stripped} 枚选项写了类别词（主线 / 人际 / 意外那种），已经改掉 —— 按钮上和小字里都只写他具体会做什么。` : ''}玩家点了哪一枚会当成他的话送回来。这一轮到此结束，不用再说话。` }],
       };
     },
   );
