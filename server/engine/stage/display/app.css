@@ -68,7 +68,7 @@ input,textarea,select{font:inherit;color:inherit}
 .dot.on{background:var(--green)} .dot.busy{background:var(--accent);animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.35}}
 .pages{display:flex;gap:2px}
-.pages button{color:var(--sub);font-size:12.5px;padding:5px 10px;border-radius:2px;letter-spacing:.06em}
+.pages button{color:var(--sub);font-size:12.5px;padding:5px 10px;border-radius:2px;letter-spacing:.06em;white-space:nowrap;flex:none}
 .pages button:hover{background:var(--rule)}
 .pages button[aria-pressed="true"]{color:var(--ink);background:var(--rule-md)}
 .top-r{display:flex;gap:8px;align-items:center;flex:1;justify-content:flex-end;min-width:0}
