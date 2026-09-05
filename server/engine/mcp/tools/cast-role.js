@@ -25,6 +25,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { ROLE_PREFIX, ROLE_SLOT, isSlotType, isValidRoleSlug } from '../../agent/cast.js';
 import { readCastRegistry } from '../../agent/role-card.js';
+import { renderCard } from '../../stage/card.js';
 
 /** 角色 id（不含 rp- 前缀）：ASCII、能当文件名、能当 SendMessage 收件人名。
  *  ⚠️ 这是 cast.js `ROLE_SLUG_RE` 的**收紧子集**（这边只许小写、≥2 字符）——
@@ -61,8 +62,10 @@ the display name. The card is DATA, and in this build it is a reference for YOU:
 character subagents are disabled, so you write everyone on stage yourself.
 
 Use it for anyone who has a name, will show up again, and whom the user may want to talk
-to. Re-read the card right before you write that person's lines — that is the thing that
-keeps several characters from all sounding like you. A walk-on with one line needs no card.
+to. **The card is what open_stage puts on stage**: when you hand a play to the stage
+process, each cast member's card (persona + their own memory index) goes into its system
+prompt verbatim — so write the persona for that reader. When you act a character yourself
+instead, re-read the card right before writing their lines. A walk-on with one line needs no card.
 
 ⛔ Do NOT dispatch a role subagent after this: no Agent(subagent_type: "${ROLE_SLOT}"),
 no SendMessage to a character. That path is being debugged; the cards you write now will
@@ -125,16 +128,22 @@ rewriting it.`,
       try { await fs.access(memFile); } catch {
         await fs.writeFile(memFile, `# 记忆\n\n<!-- ${slug} 的记忆：角色自己 jot_memory 追加，用户和 GM 可整理改写。还是空的。 -->\n`, 'utf8');
       }
-      await fs.writeFile(file, [
-        `# ${displayName}`,
-        '',
-        `<!-- ${slug} · cast_role 登记。`,
-        '     正文就是角色的人设，派发时全文随 prompt 进入角色 —— 想改人设直接改这里，',
-        '     对已在场的角色用 SendMessage 告知，对下次开演自动生效。 -->',
-        '',
-        persona,
-        '',
-      ].join('\n'), 'utf8');
+      // 卡的格式收在 engine/stage/card.js（2026-09-05）：frontmatter（name/slug/note）+ 人设正文 +
+      // 机器维护的记忆索引块。open_stage 按名字找到这张卡整份进演出进程的系统提示词。
+      // 重登（改卡）时保住机器块：人设由这次的 persona 替换，索引块以磁盘上的为准
+      let keepMemory = null;
+      if (existed) {
+        try {
+          const { parseCard } = await import('../../stage/card.js');
+          keepMemory = parseCard(await fs.readFile(file, 'utf8')).memory || null;
+        } catch { /* 读不动就当新卡 */ }
+      }
+      let cardText = renderCard({ name: displayName, slug, note: oneLine(args.duty, 60), persona });
+      if (keepMemory) {
+        const { replaceMemoryBlock } = await import('../../stage/card.js');
+        cardText = replaceMemoryBlock(cardText, keepMemory);
+      }
+      await fs.writeFile(file, cardText, 'utf8');
 
       // 登记表：板书署名与名册 API 的展示名来源（fail-soft：登记坏了不拦上场）
       const cardRel = path.join(ROLES_DIR, folder, '角色卡.md');
@@ -157,6 +166,7 @@ rewriting it.`,
         + `Agent(subagent_type: "${ROLE_SLOT}") 和 SendMessage 给角色这两条路正在调试。`,
         `轮到「${displayName}」说话时，**先 Read 一遍 ${cardRel}** 把腔调找回来，再由你写他这一段。`,
         `几个人同场就一个个来，每人开口前各读各的卡 —— 这是防止全场一个腔的正事。`,
+        `要开一场正式的戏：把台面（世界 / 规矩）写好后调 open_stage，cast 里报「${displayName}」，这张卡就整份进演出进程。`,
       ];
       if (existed) {
         lines.push('', '⚠️ 卡改了，下次写他的话之前重新 Read 一遍 —— 你上下文里那份是旧的。');

@@ -1,7 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Play, Square, RotateCw } from 'lucide-react';
+import { Play, Square, RotateCw, ScrollText } from 'lucide-react';
 import ArtifactWindow from './ArtifactWindow.jsx';
-import { Stage } from '../../lib/api.js';
+import { MarkdownViewerOverlay } from './BoardOverlays.jsx';
+import { Stage, Assets } from '../../lib/api.js';
+
+const TABLE_PATH = 'stage/台面.md';
 
 /**
  * StageWindow —— 演出（RP 显示器）的最大化窗（2026-09-05）
@@ -66,6 +69,17 @@ export default function StageWindow({ projectId, root, title, onClose, onToolbar
 
   const reload = useCallback(() => setReloadKey(k => k + 1), []);
 
+  // 台面（世界 / 规矩）住 stage/台面.md，stage/ 整段被演出卡认领、画布上没有它的文件卡，
+  // 所以从这里开阅读器（编辑态走 PUT /stage/file）。角色卡在 角色/ 文件夹里，双击卡就能改。
+  const [viewer, setViewer] = useState(null);
+  const openTable = useCallback(async () => {
+    try {
+      const res = await fetch(Assets.artifactFileUrl(projectId, TABLE_PATH));
+      const raw = res.ok ? await res.text() : '';
+      setViewer({ title: '台面', content: raw || '（这场戏还没有台面文件 —— 让 agent 用 open_stage 开戏时会写一份）', editKind: res.ok ? 'stagefile' : null, editPath: TABLE_PATH });
+    } catch (err) { setNote(err?.message || '读不到台面'); }
+  }, [projectId]);
+
   const groups = useMemo(() => [
     {
       id: 'run',
@@ -81,6 +95,7 @@ export default function StageWindow({ projectId, root, title, onClose, onToolbar
           onClick: toggleRun,
         },
         { id: 'reload', icon: RotateCw, title: '重载显示器', onClick: reload },
+        { id: 'table', icon: ScrollText, label: '台面', title: '看 / 改这场戏的世界与规矩（stage/台面.md）。改完下一句话到时进程自动重开', onClick: openTable },
       ],
     },
     {
@@ -90,7 +105,7 @@ export default function StageWindow({ projectId, root, title, onClose, onToolbar
       onChange: changeSkin,
       items: SKINS.map(s => ({ id: s.id, label: s.label, title: `皮肤 · ${s.label}` })),
     },
-  ], [status.running, pending, toggleRun, reload, skin, changeSkin]);
+  ], [status.running, pending, toggleRun, reload, openTable, skin, changeSkin]);
 
   const subtitle = note
     || (status.running
@@ -114,6 +129,14 @@ export default function StageWindow({ projectId, root, title, onClose, onToolbar
         sandbox="allow-scripts allow-same-origin allow-forms"
         style={{ flex: 1, minHeight: 0, width: '100%', border: 0, background: 'transparent' }}
       />
+      {viewer && (
+        <MarkdownViewerOverlay
+          projectId={projectId}
+          viewer={viewer}
+          onClose={() => setViewer(null)}
+          onSaved={(draft) => setViewer(v => (v ? { ...v, content: draft } : v))}
+        />
+      )}
     </ArtifactWindow>
   );
 }

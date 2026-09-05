@@ -18,9 +18,8 @@ import { z } from 'zod';
 import { startStage, stopStage, getStageRuntime, SKINS } from '../../stage/manager.js';
 
 const castSchema = z.object({
-  name: z.string().min(1).max(30).describe('在场者的名字，跟系统提示词"人物"节里写的一致（显示器按它点亮名册）'),
-  note: z.string().max(60).optional().describe('名字下面那行小字：身份 / 一句话印象'),
-  portrait: z.string().max(300).optional().describe('立绘或头像的图片 URL（工作区里的图给相对路径），没有就留空显示首字'),
+  name: z.string().min(1).max(30).describe('在场者的名字，必须已经有角色卡（cast_role 写的 角色/<名>/角色卡.md）'),
+  note: z.string().max(60).optional().describe('名字下面那行小字。不给就用卡 frontmatter 里的 note'),
 });
 
 const vitalSchema = z.object({
@@ -39,20 +38,23 @@ export function makeOpenStageTool({ projectId }) {
     'open_stage',
     `Hand a play to the stage process and step back to stage-manager duty.
 
-You write the system prompt (load skill \`stage-setup\` first — four sections: world / people /
-table rules / how to act; freeze only what never changes). Everything the stage needs to know
-goes in that prompt: the stage process loads NO project CLAUDE.md, no memory of yours, no
-files unless it Reads them. Then call this once. From here on the user talks to the stage
-directly through the display card on the canvas; you do not relay, narrate, or act.
+Two kinds of files make a play (load skill \`stage-setup\` first):
+  - the TABLE (\`table\` here → written to stage/台面.md): world, difficulty, how much you
+    ghost-write, prose rules, how to act. Everything that belongs to THIS play, not to a person.
+  - the CARDS (角色/<名>/角色卡.md, written earlier with cast_role): who each person is, how
+    they talk, what they never do, plus their own memory index. Everything that belongs to a PERSON.
+The stage process gets table + every cast member's card verbatim as its system prompt, and
+nothing else: no project CLAUDE.md, no memory of yours. The user can edit both files on the
+canvas; the stage reopens itself on the next line after an edit.
 
-Calling again replaces the setup (new prompt, restart) but keeps scenes and the stage's own
-memory — that is how "change the rules mid-play" works. To wipe a play, the user deletes the
-stage/ folder themselves.`,
+Call this once. From here on the user talks to the stage directly through the display card;
+you do not relay, narrate, or act. Calling again rewrites the table and restarts, keeping
+scenes and memories. To wipe a play, the user deletes the stage/ folder themselves.`,
     {
       title: z.string().min(1).max(60).describe('这场戏的名字，卡上和显示器顶栏都显示它'),
-      system_prompt: z.string().min(200).max(60000)
-        .describe('演出进程的系统提示词全文（stage-setup 的四节骨架）。这是冻结区：每轮原样重发，命中缓存几乎不要钱，所以只放整场不变的东西'),
-      cast: z.array(castSchema).min(1).max(12).describe('在场者。一人=显示器画立绘；多人=画名册'),
+      table: z.string().min(100).max(40000)
+        .describe('台面全文（世界 / 台面规矩 / 怎么演），写进 stage/台面.md。这是冻结区：只放整场不变的东西，人物不在这里 —— 人物在各自的卡上'),
+      cast: z.array(castSchema).min(1).max(12).describe('在场者。每个都要先有角色卡；一人=显示器画立绘，多人=画名册'),
       vitals: z.array(vitalSchema).max(8).optional().describe('状态面板显示哪些字段（好感 / 时间 / 体力…）。不需要就别传'),
       skin: z.enum(SKINS).default('paper').describe('显示器皮肤：paper 纸 / jiangnan 江南 / night 夜 / terminal 终端'),
     },
@@ -63,9 +65,9 @@ stage/ folder themselves.`,
         const rt = getStageRuntime(projectId);
         const wasRunning = !!rt?.running;
         if (wasRunning) await stopStage(projectId, 'reopen');
-        await startStage(projectId, {
+        const st = await startStage(projectId, {
           title: args.title,
-          systemPrompt: args.system_prompt,
+          table: args.table,
           cast: args.cast,
           vitals: args.vitals || [],
           skin: args.skin,
@@ -74,10 +76,10 @@ stage/ folder themselves.`,
         return {
           content: [{
             type: 'text',
-            text: `${wasRunning ? '换了设定重开' : '开演了'}：「${args.title}」，在场 ${who}，提示词 ${args.system_prompt.length} 字。`
+            text: `${wasRunning ? '换了台面重开' : '开演了'}：「${args.title}」，在场 ${who}，台面 ${args.table.length} 字，系统提示词共 ${st.promptChars || '?'} 字（台面 + 角色卡 + 记忆索引）。`
               + '\n画布上多了一张演出卡，用户双击就进显示器；他在那里说的每句话直接进演出进程，不经过你。'
               + '\n你现在是场务：别在这里代演、别复述台上的剧情。用户回到这里跟你说话时才是在跟你说话（改设定 / 换玩法 / 问怎么用）。'
-              + '\n改人设 = 再调一次 open_stage（scenes 和记忆都留着）。',
+              + '\n改人设 = 改角色卡（cast_role 重登或用户在画布上改）；改规矩 = 再调 open_stage 或用户改 stage/台面.md。改完下一句话到时进程自动重开，scenes 和记忆都留着。',
           }],
         };
       } catch (err) {

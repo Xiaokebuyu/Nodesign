@@ -320,6 +320,8 @@ export const Stage = {
   start: (pid) => jsonRequest('POST', `/api/projects/${pid}/stage/start`, {}),
   stop: (pid) => jsonRequest('POST', `/api/projects/${pid}/stage/stop`),
   patchConfig: (pid, patch) => jsonRequest('PATCH', `/api/projects/${pid}/stage/config`, patch),
+  /** 台面 / 角色卡的编辑保存（只收这两种路径；角色卡的记忆索引块服务端保住） */
+  putFile: (pid, path, text) => jsonRequest('PUT', `/api/projects/${pid}/stage/file`, { path, text }),
 };
 
 // ── Exports ── 2026-08-19 迁去 ./api-exports.js（收 blob 不收 JSON，自成一族）

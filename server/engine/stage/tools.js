@@ -14,6 +14,7 @@ import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
+import { resolveCardPath, cardHome, rewriteCardMemoryIndex, CARD_MEMORY_DIR } from './card.js';
 
 export const STAGE_DIR = 'stage';
 const SCENES = 'scenes.jsonl';       // 一拍一行，显示器顺着读
@@ -35,7 +36,7 @@ async function appendScene(dir, row) {
 }
 
 /**
- * @param {object} ctx  dir（项目工作区）/ onScene（写完一拍的回调，用来推给显示器）
+ * @param {object} ctx  dir（项目工作区）/ onScene（写完一拍的回调，用来推给显示器）/ onCardTouched（进程自己改了某张卡的索引块）
  */
 export function createStageTools(ctx) {
   const dir = ctx.dir;
@@ -82,34 +83,68 @@ export function createStageTools(ctx) {
    * 写和索引本来就只是提示词约定，自己做就行；召回那层先用"索引全量贴回"顶着 ——
    * 召回会漏，全量不会，等一场戏长到索引都贴不下再说。
    */
+  /**
+   * 记忆分两个家（2026-09-05 角色卡重用）：
+   *   - 带 who：这是**某个人**记得的事 → `角色/<名>/记忆/<name>.md`，索引写回他的角色卡（机器块）。
+   *     卡是这个人的全部，能跟着人跨项目搬；开戏时卡连索引整份进系统提示词。
+   *   - 不带 who：这场戏的事（演到哪 / 伏笔 / 世界新事实）→ `stage/memory/`，索引进 INDEX.md。
+   */
   const remember = tool(
     'remember',
     '记住一件事。一件事一份，别把两件事塞进一份。存之前先看索引里有没有已经在写这件事的，'
     + '有就用同一个 name 覆盖它，别新建第二份。'
+    + '**是某个人记得的事（他的态度、他知道的秘密、他跟谁的关系）就带 who** —— 那会写进他的角色卡，'
+    + '跟着他走；演到哪了、伏笔、世界里确立的新事实不带 who，那是这场戏的。'
     + '⛔ 别记这一拍刚发生的流水账 —— 正文本身就在台上，记忆是给**之后还会用到**的东西准备的：'
     + '关系变了、伏笔埋下、世界里确立了一个新事实、玩家做了回不了头的选择。',
     {
       name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/).describe('文件名，小写英文加连字符，比如 qingke-attitude'),
       type: z.enum(['progress', 'character', 'thread', 'world'])
-        .describe('progress=演到哪了 / character=某个人的态度与他记得的事 / thread=伏笔 / world=演出中确立的设定'),
+        .describe('progress=演到哪了 / character=某个人的态度与他记得的事（要带 who）/ thread=伏笔 / world=演出中确立的设定'),
+      who: z.string().max(40).optional().describe('这是谁记得的事：在场者的名字（角色卡上的 name）。给了就写进他的卡'),
       description: z.string().min(1).max(80).describe('一行摘要，进索引，也是之后判断"这条现在用不用得上"的依据'),
       content: z.string().min(1).max(8000).describe('正文 markdown。写事实，别写这一拍的散文'),
     },
-    async ({ name, type, description, content }) => {
+    async ({ name, type, who, description, content }) => {
+      if (type === 'character' && !who) {
+        return { content: [{ type: 'text', text: 'character 类的记忆要带 who（这是谁记得的事），不然没法写进他的卡。' }], isError: true };
+      }
+      const head = `---\nname: ${name}\ntype: ${type}\ndescription: ${description.replace(/\n/g, ' ')}\nat: ${new Date().toISOString()}\n---\n\n`;
+      if (who) {
+        const cardRel = await resolveCardPath(dir, who);
+        if (!cardRel) return { content: [{ type: 'text', text: `没有叫「${who}」的角色卡（角色/<名>/角色卡.md），写不进他的记忆。名字要跟在场者一致。` }], isError: true };
+        const memDir = path.join(dir, cardHome(cardRel), CARD_MEMORY_DIR);
+        await fs.mkdir(memDir, { recursive: true });
+        await fs.writeFile(path.join(memDir, `${name}.md`), head + content, 'utf8');
+        const n = await rewriteCardMemoryIndex(dir, cardRel);
+        // 机器自己改了卡（索引块）不算"设定改了"，否则每记一条下一句就重开一次、缓存整份重付
+        await ctx.onCardTouched?.(cardRel);
+        return { content: [{ type: 'text', text: `记进「${who}」的卡了：${name}（${type}）。他的索引现在 ${n} 条，下次开戏随卡进系统提示词。` }] };
+      }
       const dirAbs = path.join(dir, STAGE_DIR, MEM);
       await fs.mkdir(dirAbs, { recursive: true });
-      const head = `---\nname: ${name}\ntype: ${type}\ndescription: ${description.replace(/\n/g, ' ')}\nat: ${new Date().toISOString()}\n---\n\n`;
       await fs.writeFile(path.join(dirAbs, `${name}.md`), head + content, 'utf8');
       const n = await rewriteIndex(dirAbs);
-      return { content: [{ type: 'text', text: `记住了：${name}（${type}）。索引现在 ${n} 条，下次开戏整份进你的系统提示词。` }] };
+      return { content: [{ type: 'text', text: `记住了：${name}（${type}）。这场戏的索引现在 ${n} 条，下次开戏整份进你的系统提示词。` }] };
     },
   );
 
   const forget = tool(
     'forget',
-    '删掉一条记错了或者已经作废的记忆。剧情推翻了旧设定时用，别留着两份打架的。',
-    { name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/).describe('要删的那份的 name') },
-    async ({ name }) => {
+    '删掉一条记错了或者已经作废的记忆。剧情推翻了旧设定时用，别留着两份打架的。记在某个人卡上的要带 who。',
+    {
+      name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/).describe('要删的那份的 name'),
+      who: z.string().max(40).optional().describe('这条记在谁的卡上；这场戏的记忆不带'),
+    },
+    async ({ name, who }) => {
+      if (who) {
+        const cardRel = await resolveCardPath(dir, who);
+        if (!cardRel) return { content: [{ type: 'text', text: `没有叫「${who}」的角色卡。` }], isError: true };
+        try { await fs.unlink(path.join(dir, cardHome(cardRel), CARD_MEMORY_DIR, `${name}.md`)); } catch { return { content: [{ type: 'text', text: `「${who}」的卡上没有叫 ${name} 的记忆，没动。` }] }; }
+        const n = await rewriteCardMemoryIndex(dir, cardRel);
+        await ctx.onCardTouched?.(cardRel);
+        return { content: [{ type: 'text', text: `删了「${who}」的 ${name}，他的索引剩 ${n} 条。` }] };
+      }
       const dirAbs = path.join(dir, STAGE_DIR, MEM);
       try { await fs.unlink(path.join(dirAbs, `${name}.md`)); } catch { return { content: [{ type: 'text', text: `没有叫 ${name} 的记忆，索引没动。` }] }; }
       const n = await rewriteIndex(dirAbs);

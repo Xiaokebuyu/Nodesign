@@ -25,7 +25,7 @@ import { guardProject } from './_guard.js';
 import { echoUserChalk } from '../engine/runs/user-chalk-echo.js';
 import { getProjectBus } from '../ws/broker.js';
 import {
-  stageState, startStage, stopStage, sayToStage, patchStageConfig, subscribeStage,
+  stageState, startStage, stopStage, sayToStage, patchStageConfig, subscribeStage, saveStageFile,
 } from '../engine/stage/manager.js';
 
 const router = express.Router();
@@ -111,10 +111,26 @@ router.post('/:pid/stage/say', express.json({ limit: '64kb' }), async (req, res)
 router.post('/:pid/stage/start', express.json({ limit: '256kb' }), async (req, res) => {
   if (!guardProject(req, res)) return;
   const b = req.body || {};
-  const cfg = b.systemPrompt ? {
-    title: b.title, systemPrompt: String(b.systemPrompt), cast: b.cast, vitals: b.vitals, skin: b.skin, model: b.model,
+  const cfg = (b.table || b.systemPrompt) ? {
+    title: b.title, table: b.table ? String(b.table) : undefined,
+    systemPrompt: b.systemPrompt ? String(b.systemPrompt) : undefined,   // 09-05 之前的形状，还认
+    cast: b.cast, vitals: b.vitals, skin: b.skin, model: b.model,
   } : null;
   try { res.json(await startStage(req.params.pid, cfg)); } catch (err) { sendErr(res, err); }
+});
+
+/**
+ * 用户在画布上改台面 / 角色卡（md 阅读器的编辑态）。只收这两种路径；角色卡的机器块
+ * （记忆索引）以磁盘为准接回去，用户改不坏它。改完进程不立刻重开 —— 下一句话到时 manager
+ * 看 mtime 自己重开（用户感知：那一句慢十秒）。
+ */
+router.put('/:pid/stage/file', express.json({ limit: '256kb' }), async (req, res) => {
+  if (!guardProject(req, res)) return;
+  const rel = String(req.body?.path || '');
+  const text = String(req.body?.text ?? '');
+  try {
+    res.json(await saveStageFile(req.params.pid, rel, text));
+  } catch (err) { sendErr(res, err); }
 });
 
 router.post('/:pid/stage/stop', async (req, res) => {

@@ -19,7 +19,7 @@ import { useState } from 'react';
 import MarkdownMath from '../ui/MarkdownMath.jsx';
 import JsonInk from './cards/JsonInk.jsx';
 import { Plus, ExternalLink, X, BookOpen, PencilLine } from 'lucide-react';
-import { Assets, Instruction } from '../../lib/api.js';
+import { Assets, Instruction, Stage } from '../../lib/api.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, MODAL } from '../../lib/theme.js';
 import { POP_IN } from '../../lib/board-geometry.js';
 import { readerOf } from '../../lib/board-kinds.js';
@@ -54,8 +54,10 @@ export function makeBoardReaders({ projectId, setViewer, roleNames = {} }) {
       // MEMORY.md 是索引不给编）和根 CLAUDE.md（项目档案，走 Instruction API）。
       // editKind 是保存分支的判据 —— 别再让"能不能编辑"寄生在"是不是便签"上。
       const p = String(o.path || '');
+      // 演出的两种设定文件（09-05 角色卡重用）：角色卡与台面走 PUT /stage/file，角色卡的机器块服务端保住
       const editKind = (p.startsWith('记忆/') && !p.includes('/', 3) && o.name !== 'MEMORY.md') ? 'memory'
-        : (p === 'CLAUDE.md') ? 'instruction' : null;
+        : (p === 'CLAUDE.md') ? 'instruction'
+          : (/^角色\/[^/]+\/角色卡\.md$/.test(p) || p === 'stage/台面.md') ? 'stagefile' : null;
       try {
         const res = await fetch(Assets.artifactFileUrl(projectId, o.path));
         const raw = await res.text();
@@ -65,7 +67,7 @@ export function makeBoardReaders({ projectId, setViewer, roleNames = {} }) {
           const head = /^---\n[\s\S]{0,1200}?\n---\n?/.exec(raw)?.[0] || '';
           setViewer({ title, content: raw.slice(head.length), head, editKind, editName: o.name });
         } else {
-          setViewer({ title, content: raw, editKind, editName: o.name });
+          setViewer({ title, content: raw, editKind, editName: o.name, editPath: p });
         }
       } catch {
         setViewer({ title, content: o.preview || '(读不出来)' });
@@ -155,6 +157,7 @@ export function MarkdownViewerOverlay({ projectId, viewer, onClose, onSaved }) {
                   else if (viewer.editKind === 'tasknote') await Assets.putTaskNote(projectId, o.name, draft);
                   else if (viewer.editKind === 'memory') await Assets.putMemoryNote(projectId, viewer.editName, draft);
                   else if (viewer.editKind === 'instruction') await Instruction.write(projectId, draft);
+                  else if (viewer.editKind === 'stagefile') await Stage.putFile(projectId, viewer.editPath, draft);
                   onSaved(draft);
                   setDraft(null);
                 } catch (err) { console.warn('[board] save failed:', err.message); }
