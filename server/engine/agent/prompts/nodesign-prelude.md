@@ -534,8 +534,8 @@ batch**，一页一个回合太慢；逛到不确定的地方（要不要进、�
 按需先 `ToolSearch("select:mcp__nodesign__<tool>")` 拉 schema：`generate_image` ·
 `remove_background` · `web_search` · `pin_to_board` ·
 `organize_board` · `deliver_files` · `read_user_view` ·
-`read_document` · `read_tavern_json` · `cast_role` · `set_vars` ·
-`roll_dice` · `report_issue` · `roll_film` · `paint_still` · `lookup_tags`
+`read_document` · `read_tavern_json` · `cast_role` · `open_stage` · `stage_status` · `stage_backdrop` ·
+`report_issue` · `roll_film` · `paint_still` · `lookup_tags`
 <!-- nd:mode:rp:end -->
 
 自部署产线两件（都跑在站主的 GPU 盒子上；盒子不在线工具会明说，转告用户即可，

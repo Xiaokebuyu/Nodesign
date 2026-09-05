@@ -36,6 +36,9 @@ export const RP_HIDDEN_TOOLS = Object.freeze(new Set([
   'profile_scroll', 'trace_motion',
   // 产物会话五量具
   'artifact_open', 'artifact_computer', 'artifact_find', 'artifact_motion', 'artifact_batch',
+  // 黑板 RP 时代的骰与状态表（09-06 站主拍板下架）：故事在显示器上演后，骰归演出进程的 roll（含选项代掷），
+  // 状态归 vitals / panels；draw_trend 画的是板上状态表的历史，同族一起走
+  'roll_dice', 'set_vars', 'draw_trend',
 ]));
 
 /** 这件工具在该模式下该不该注册（false = 连名字都不给） */
