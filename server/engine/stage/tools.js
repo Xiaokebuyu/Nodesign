@@ -17,7 +17,8 @@ import { z } from 'zod';
 
 export const STAGE_DIR = 'stage';
 const SCENES = 'scenes.jsonl';       // 一拍一行，显示器顺着读
-const PROGRESS = 'progress.md';      // 存档：剧情进度与角色记忆
+const MEM = 'memory';                // 一事一文件，照搬 harness 那套 auto-memory 的形状
+const MEM_INDEX = 'INDEX.md';        // 索引：每次开戏进系统提示词，正文按需 Read
 
 /** 选项一枚：label 是按钮上的字，hint 是按钮下那行小字，prompt 是点下去发生什么。 */
 const choiceSchema = z.object({
@@ -57,21 +58,46 @@ export function createStageTools(ctx) {
     },
   );
 
-  const saveProgress = tool(
-    'save_progress',
-    '在剧情关键点存档：进度推到哪了、谁对玩家改观了、埋了什么伏笔。'
-    + '整份覆盖写，所以要把还有效的旧内容一起带上。别每拍都存，'
-    + '**只在真的发生了不可逆的事情时存**（关系变了、地点变了、伏笔埋下或收回）。',
+  /**
+   * 记忆 —— 形状照搬 harness 自己那套 auto-memory：一事一文件、带 frontmatter、
+   * 索引常驻正文按需读。**没有走 claude_code preset**：那样确实能白拿 SDK 的
+   * recall supervisor，但 2026-09-05 实测它要多付 7,028 token 的地基，还会把
+   * Claude Code 整套编码教义（TodoWrite、任务管理、代码规范）搬进演出会话。
+   * 写和索引本来就只是提示词约定，自己做就行；召回那层先用"索引全量贴回"顶着 ——
+   * 召回会漏，全量不会，等一场戏长到索引都贴不下再说。
+   */
+  const remember = tool(
+    'remember',
+    '记住一件事。一件事一份，别把两件事塞进一份。存之前先看索引里有没有已经在写这件事的，'
+    + '有就用同一个 name 覆盖它，别新建第二份。'
+    + '⛔ 别记这一拍刚发生的流水账 —— 正文本身就在台上，记忆是给**之后还会用到**的东西准备的：'
+    + '关系变了、伏笔埋下、世界里确立了一个新事实、玩家做了回不了头的选择。',
     {
-      content: z.string().min(1).max(20000).describe('整份进度的 markdown 全文'),
-      note: z.string().max(80).optional().describe('这次为什么存，一句话'),
+      name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/).describe('文件名，小写英文加连字符，比如 qingke-attitude'),
+      type: z.enum(['progress', 'character', 'thread', 'world'])
+        .describe('progress=演到哪了 / character=某个人的态度与他记得的事 / thread=伏笔 / world=演出中确立的设定'),
+      description: z.string().min(1).max(80).describe('一行摘要，进索引，也是之后判断"这条现在用不用得上"的依据'),
+      content: z.string().min(1).max(8000).describe('正文 markdown。写事实，别写这一拍的散文'),
     },
-    async ({ content, note }) => {
-      const p = path.join(dir, STAGE_DIR, PROGRESS);
-      await fs.mkdir(path.dirname(p), { recursive: true });
-      const head = `<!-- 存于 ${new Date().toISOString()}${note ? ` · ${note}` : ''} -->\n`;
-      await fs.writeFile(p, head + content, 'utf8');
-      return { content: [{ type: 'text', text: `存档已更新（${content.length} 字）。下次开戏这份会进你的系统提示词。` }] };
+    async ({ name, type, description, content }) => {
+      const dirAbs = path.join(dir, STAGE_DIR, MEM);
+      await fs.mkdir(dirAbs, { recursive: true });
+      const head = `---\nname: ${name}\ntype: ${type}\ndescription: ${description.replace(/\n/g, ' ')}\nat: ${new Date().toISOString()}\n---\n\n`;
+      await fs.writeFile(path.join(dirAbs, `${name}.md`), head + content, 'utf8');
+      const n = await rewriteIndex(dirAbs);
+      return { content: [{ type: 'text', text: `记住了：${name}（${type}）。索引现在 ${n} 条，下次开戏整份进你的系统提示词。` }] };
+    },
+  );
+
+  const forget = tool(
+    'forget',
+    '删掉一条记错了或者已经作废的记忆。剧情推翻了旧设定时用，别留着两份打架的。',
+    { name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/).describe('要删的那份的 name') },
+    async ({ name }) => {
+      const dirAbs = path.join(dir, STAGE_DIR, MEM);
+      try { await fs.unlink(path.join(dirAbs, `${name}.md`)); } catch { return { content: [{ type: 'text', text: `没有叫 ${name} 的记忆，索引没动。` }] }; }
+      const n = await rewriteIndex(dirAbs);
+      return { content: [{ type: 'text', text: `删了 ${name}，索引剩 ${n} 条。` }] };
     },
   );
 
@@ -93,12 +119,32 @@ export function createStageTools(ctx) {
     },
   );
 
-  return createSdkMcpServer({ name: 'stage', version: '1.0.0', tools: [writeScene, saveProgress, rollDice] });
+  return createSdkMcpServer({ name: 'stage', version: '1.0.0', tools: [writeScene, remember, forget, rollDice] });
 }
 
-/** 显示器那边读这两份；开戏时也用它把上次的存档接回系统提示词。 */
-export async function readProgress(dir) {
-  try { return await fs.readFile(path.join(dir, STAGE_DIR, PROGRESS), 'utf8'); } catch { return null; }
+/**
+ * 索引重建 —— 每次写/删之后从磁盘上的文件重扫一遍。
+ * ⭐ 不是增量维护：增量的索引会跟正文对不上（改了正文忘了改索引就是第二个真相源），
+ * 重扫慢一点但索引永远等于磁盘上真实有的东西。
+ */
+async function rewriteIndex(dirAbs) {
+  const files = (await fs.readdir(dirAbs).catch(() => [])).filter(f => f.endsWith('.md') && f !== MEM_INDEX);
+  const rows = [];
+  for (const f of files) {
+    const raw = await fs.readFile(path.join(dirAbs, f), 'utf8').catch(() => '');
+    const d = /^description:\s*(.+)$/m.exec(raw)?.[1]?.trim() || '';
+    const t = /^type:\s*(.+)$/m.exec(raw)?.[1]?.trim() || '';
+    rows.push(`- [${f.replace(/\.md$/, '')}](${f})${t ? ` \`${t}\`` : ''} — ${d}`);
+  }
+  rows.sort();
+  await fs.writeFile(path.join(dirAbs, MEM_INDEX),
+    `# 这场戏记住的事\n\n一行一条，正文在各自的文件里，要用再 Read。\n\n${rows.join('\n')}\n`, 'utf8');
+  return rows.length;
+}
+
+/** 开戏时把索引整份接回系统提示词（正文不贴，让它按需 Read）。 */
+export async function readMemoryIndex(dir) {
+  try { return await fs.readFile(path.join(dir, STAGE_DIR, MEM, MEM_INDEX), 'utf8'); } catch { return null; }
 }
 export async function readScenes(dir, { limit = 200 } = {}) {
   try {
