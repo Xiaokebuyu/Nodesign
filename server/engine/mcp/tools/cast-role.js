@@ -66,6 +66,10 @@ to. **The card is what open_stage puts on stage**: when you hand a play to the s
 process, each cast member's card (persona + their own memory index) goes into its system
 prompt verbatim — so write the persona for that reader. When you act a character yourself
 instead, re-read the card right before writing their lines. A walk-on with one line needs no card.
+Anything the PLAYER should decide whether to enable (a subplot, a habit, a piece of backstory,
+an NSFW tendency from a tavern card) goes in a \`## 可选\` section, one \`- [ ] item — why\` per line
+(\`[x]\` = on by default): the display's opening screen turns those into toggles. Never decide those
+for the player and never bake them into the body.
 
 ⛔ Do NOT dispatch a role subagent after this: no Agent(subagent_type: "${ROLE_SLOT}"),
 no SendMessage to a character. That path is being debugged; the cards you write now will
