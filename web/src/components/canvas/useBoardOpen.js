@@ -107,6 +107,11 @@ export function useBoardOpen({
       onFocusDeck?.({ kind: 'browse', url: o.url || null });
       return;
     }
+    // 演出（2026-09-05）：开的是显示器那扇窗，内容跟卡上是同一个页面，只是工具栏换成 RP 那条
+    if (o.type === 'stage') {
+      onFocusDeck?.({ kind: 'stage', root: o.root, title: o.title, cardId: o.id, stage: o.stage || null });
+      return;
+    }
     if (o.type === 'site') {
       // 站点：开的是"整站"，不是某一个文件 —— 当前看哪一页是窗口内部状态。
       // 试作卡开同一扇窗，但 entry 指向 _drafts/ 里那一份。

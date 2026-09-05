@@ -76,6 +76,18 @@ export function deriveBoardObjects({ tasks = [], artifacts = [], layout = {}, br
             title: a.title || t.title,
             mtime: t.mtime,
           });
+        } else if (a.kind === 'stage') {
+          // 演出（2026-09-05）：卡即 stage/ 文件夹，卡面要的只有标题 / 在场者 / 拍数 / 皮肤
+          out.push({
+            id: cardIdOf(t.id, a),
+            type: 'stage',
+            task: t.id,
+            root: a.root || '',
+            stage: a.stage || null,
+            exports: a.exports,
+            title: a.title || t.title,
+            mtime: t.mtime,
+          });
         } else {
           // ⚠️ type 跟着形态走，别写死 'deck' —— 写死的话新形态（word）的卡会
           // 顶着 deck 的身份进画布：拿 deck 的脸去渲、双击开 deck 的窗、

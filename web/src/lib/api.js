@@ -310,6 +310,18 @@ export const Assets = {
     `/api/projects/${pid}/browse/preview${at ? `?at=${encodeURIComponent(at)}` : ''}`,
 };
 
+// ── Stage（RP 显示器，2026-09-05）──
+// 显示器是服务端一条路由现渲染的页面（卡上和窗里装同一个 URL）；用户在里面说的话
+// 由页面自己 POST say —— 这里只有窗的工具栏要用的那几件（起停 / 皮肤 / 状态）。
+export const Stage = {
+  viewUrl: (pid, { embed = false } = {}) => `/api/projects/${pid}/stage/view${embed ? '?embed=1' : ''}`,
+  state: (pid) => jsonRequest('GET', `/api/projects/${pid}/stage/state`),
+  say: (pid, text) => jsonRequest('POST', `/api/projects/${pid}/stage/say`, { text }),
+  start: (pid) => jsonRequest('POST', `/api/projects/${pid}/stage/start`, {}),
+  stop: (pid) => jsonRequest('POST', `/api/projects/${pid}/stage/stop`),
+  patchConfig: (pid, patch) => jsonRequest('PATCH', `/api/projects/${pid}/stage/config`, patch),
+};
+
 // ── Exports ── 2026-08-19 迁去 ./api-exports.js（收 blob 不收 JSON，自成一族）
 export { Exports } from './api-exports.js';
 

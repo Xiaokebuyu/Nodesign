@@ -698,7 +698,7 @@ export default function ProjectWorkspace() {
     }
 
     // ── 3. 旁路副作用族（跳页/高亮/toast，lib/aux-events.js）──
-    if (handleAuxEvent(evt, { isStale, showToast })) return;
+    if (handleAuxEvent(evt, { isStale, showToast, bumpList: bumpListSoon })) return;
 
     // ── 4. 其余：协议帧 / run 生命周期 ──
     switch (evt.type) {

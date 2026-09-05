@@ -27,8 +27,9 @@ import fs from 'node:fs/promises';
 import deck from './deck.js';
 import site from './site.js';
 import docx from './docx.js';
+import stage from './stage.js';
 
-export const KINDS = Object.freeze({ [deck.id]: deck, [site.id]: site, [docx.id]: docx });
+export const KINDS = Object.freeze({ [deck.id]: deck, [site.id]: site, [docx.id]: docx, [stage.id]: stage });
 
 import { readTaskMarker } from '../task-scan.js';
 
@@ -106,6 +107,11 @@ export async function taskManifest(taskDir) {
   for (const i of await docx.discoverInstances(taskDir, marker)) {
     artifacts.push(decorate(docx)(await docx.instanceManifest(taskDir, marker, i)));
   }
+  // 演出（2026-09-05）最后：它不参与形态判定的偏好序（一个任务里同时有站点和一场戏时，
+  // 任务"是"站点），但照样出卡 —— 跟 docx 同一条「不当判定依据 ≠ 不显示」。
+  for (const i of await stage.discoverInstances(taskDir, marker)) {
+    artifacts.push(decorate(stage)(await stage.instanceManifest(taskDir, marker, i)));
+  }
 
   const kind = artifacts[0]?.kind || (KINDS[marker?.kind] ? marker.kind : null);
   if (!kind) return null;
@@ -165,6 +171,9 @@ export function cardIdOf(taskId, a) {
   if (!a) return null;
   // 站点：单页产物的地址是入口文件，目录站的地址是产物根
   if (a.kind === 'site') return `site:${a.single ? a.entryRel : (a.root || taskId)}`;
+  // 演出：地址 = 任务里那个 stage/ 文件夹（任务相对 root 拼上任务路径 —— 前端 cardIdOf
+  // 吃的是 /artifacts 已 under() 过的工作区相对 root，两边要拼出同一个字符串）
+  if (a.kind === 'stage') return `stage:${taskId ? `${taskId}/${a.root}` : a.root}`;
   // 其余目录型（word 文件夹）：卡即文件夹，地址 = 文件夹路径
   if (isDirArtifact(a)) return `${a.kind}:${a.root || taskId}`;
   // 单文件产物（deck 的 .html、散放的单份 .docx）：前缀 = 形态名，地址 = 文件

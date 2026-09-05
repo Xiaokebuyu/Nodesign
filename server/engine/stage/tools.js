@@ -49,9 +49,25 @@ export function createStageTools(ctx) {
       text: z.string().min(1).max(8000).describe('这一拍的正文'),
       choices: z.array(choiceSchema).min(1).max(5).describe('留给玩家的把手，两到四枚'),
       scene: z.string().max(60).optional().describe('换场景时给一句地点时间，不换就别传'),
+      speakers: z.array(z.string().max(30)).max(12).optional()
+        .describe('这一拍开过口的人（用在场者的名字）。显示器靠它点亮名册，多人场面才用得上'),
+      // ⛔⛔ 这里不能用 z.record：2026-09-05 实测 SDK 会因为它**静默丢掉整个 stage 服务器的工具**
+      // （init 里 mcp_servers 报 stage:connected，tools 里一件 mcp__stage__ 都没有，模型只好把整拍
+      // 写成纯文本）。键值对数组落盘时再折成对象，显示器吃的还是 {键: 值}。
+      state: z.array(z.object({
+        key: z.string().min(1).max(30).describe('状态键，跟开戏时状态面板声明的 key 一致'),
+        value: z.union([z.string().max(60), z.number()]).describe('新值'),
+      })).max(12).optional()
+        .describe('这一拍改了的状态值，只传变了的键：[{"key":"好感","value":32},{"key":"时间","value":"傍晚"}]'),
     },
-    async ({ text, choices, scene }) => {
-      const row = { id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'stage', text, choices, ...(scene ? { scene } : {}) };
+    async ({ text, choices, scene, speakers, state }) => {
+      const stateObj = state?.length ? Object.fromEntries(state.map(kv => [kv.key, kv.value])) : null;
+      const row = {
+        id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'stage', text, choices,
+        ...(scene ? { scene } : {}),
+        ...(speakers?.length ? { speakers } : {}),
+        ...(stateObj ? { state: stateObj } : {}),
+      };
       await appendScene(dir, row);
       ctx.onScene?.(row);
       return { content: [{ type: 'text', text: `这一拍已经在台上了（${text.length} 字，${choices.length} 枚把手）。玩家点了哪一枚会当成他的话送回来，停在这里等他。` }] };
@@ -119,7 +135,11 @@ export function createStageTools(ctx) {
     },
   );
 
-  return createSdkMcpServer({ name: 'stage', version: '1.0.0', tools: [writeScene, remember, forget, rollDice] });
+  // ⛔ 四件全部常驻（_meta alwaysLoad）。2026-09-05 真跑逮到：env 里带着 ENABLE_TOOL_SEARCH
+  // 时 MCP 工具默认延迟加载，模型看不见 write_scene，而提示词又叫它"不用 ToolSearch 去找
+  // 别的" —— 于是它把整拍连把手写成了纯文本，台上一个字都没落。这四件加起来不到 2k，常驻。
+  const always = (t) => ({ ...t, _meta: { ...(t._meta || {}), 'anthropic/alwaysLoad': true } });
+  return createSdkMcpServer({ name: 'stage', version: '1.0.0', tools: [writeScene, remember, forget, rollDice].map(always) });
 }
 
 /**
@@ -140,6 +160,17 @@ async function rewriteIndex(dirAbs) {
   await fs.writeFile(path.join(dirAbs, MEM_INDEX),
     `# 这场戏记住的事\n\n一行一条，正文在各自的文件里，要用再 Read。\n\n${rows.join('\n')}\n`, 'utf8');
   return rows.length;
+}
+
+/**
+ * 用户那一侧也落在流上（2026-09-05）：原型页对着两场真会话数据发现用户的话一条都
+ * 不在板书流里 —— 那条对话线只有台上单方面的半边声道。显示器要画"你"的那一栏，
+ * 所以 say 进队列的同时在这儿记一行。
+ */
+export async function appendUserLine(dir, text) {
+  const row = { id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'user', text };
+  await appendScene(dir, row);
+  return row;
 }
 
 /** 开戏时把索引整份接回系统提示词（正文不贴，让它按需 Read）。 */

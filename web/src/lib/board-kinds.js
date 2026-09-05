@@ -16,7 +16,7 @@ const artifactCard = (previewH) => ({ w: DECK_EMBED_W, h: ARTIFACT_HEADER_H + pr
 
 /** 各形态的预览区高度：deck 是 16:9 设计稿，站点取一屏，世界要摊开地图 */
 // browse 是 1366×768 视口按 640 宽等比缩 = 360（08-21 视口随 browser_computer 改 16:9，坐标 1:1）
-export const ARTIFACT_PREVIEW_H = { deck: 360, site: 400, docx: 420, browse: 360 };  // docx 是竖版 A4，给高一点
+export const ARTIFACT_PREVIEW_H = { deck: 360, site: 400, docx: 420, browse: 360, stage: 400 };  // docx 是竖版 A4，给高一点；stage 取一屏戏
 /** 主角档放大倍数（北极星路线1）：预览区放大、顶栏不变 —— sizeOf 与
  *  ArtifactCard 的画框都从这儿算，两处必须同源否则命中区和视觉错位 */
 export const HERO_SCALE = 1.5;
@@ -191,6 +191,28 @@ export const KINDS = {
     primary: 'open',
     actions: [],
     legacyBucket: 'art',
+  },
+
+  /**
+   * 演出（RP 显示器，2026-09-05）。真相是任务目录下的 `stage/`（stage.json 设定 +
+   * scenes.jsonl 一拍一行 + memory/），所以是 file backing、目录型（卡即文件夹）。
+   *
+   * 卡上和窗里装的是**同一个页面**（服务端 /stage/view 现渲染，SSE 推每一拍），
+   * 差别只在 `?embed=1` 少了输入框。工具栏切成 RP 专用那条（StageWindow）。
+   * 没有导出：要留档就是那个文件夹本身。
+   */
+  stage: {
+    label: '演出',
+    category: 'work',
+    backing: 'file',
+    chrome: 'card',
+    card: 'artifact',
+    size: artifactCard(ARTIFACT_PREVIEW_H.stage),
+    reader: null,
+    primary: 'open',
+    actions: [],
+    legacyBucket: 'art',
+    directory: () => true,
   },
 
   image: {
@@ -519,6 +541,8 @@ function byOfNative(o) {
 export function cardIdOf(taskId, a) {
   // site 是目录型产物：地址是产物根，不是某个文件
   if (a.kind === 'site') return `site:${a.single ? a.entryRel : (a.root || taskId)}`;
+  // 演出：地址 = 那个 stage/ 文件夹（/artifacts 已把 root 拼成工作区相对路径）
+  if (a.kind === 'stage') return `stage:${a.root}`;
   // word 文件夹（带成员表）也是目录型：卡即文件夹，地址 = 文件夹路径。
   // 根层散放的单份 .docx 没有 members，走下面的单文件规则
   if (a.kind === 'docx' && a.members) return `docx:${a.root}`;

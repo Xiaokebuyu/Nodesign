@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Presentation, Globe, Map as MapIcon, FileText, Compass } from 'lucide-react';
+import { Presentation, Globe, Map as MapIcon, FileText, Compass, Drama } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../../../lib/theme.js';
 import { PAPER } from '../../../lib/paper.js';
 import { SITE_VIEWPORTS, DECK_EMBED_W } from '../../../lib/board-geometry.js';
 import { ARTIFACT_HEADER_H, ARTIFACT_PREVIEW_H, HERO_SCALE } from '../../../lib/board-kinds.js';
 import { versionOfFile, versionOfSitePage } from '../../../lib/file-versions.js';
 import { formatClock } from '../../../lib/helpers.js';
-import { Assets } from '../../../lib/api.js';
+import { Assets, Stage } from '../../../lib/api.js';
 import { joinRel } from '../../../lib/paths.js';
 import { freezeWin, thawWin } from '../../../lib/frame-freeze.js';
 import LiveFrame from '../LiveFrame.jsx';
@@ -216,6 +216,41 @@ export const ARTIFACT_FACES = {
         )}
       />
     ),
+  },
+
+  /**
+   * 演出（RP 显示器，2026-09-05）—— 卡上装的是**跟窗里同一个页面**（服务端 /stage/view，
+   * `?embed=1` 只是少了输入框）。它自己订着 SSE，台上写一拍卡面就跟一拍，不靠 ?v= 换代。
+   *
+   * 按 960 宽渲染再等比缩进 640 的框：显示器 860 以下会折成手机版式（在场者躺成一条），
+   * 卡上想看到的是桌面那个样子。字缩到 11px 左右仍能辨认是哪一拍。
+   */
+  stage: {
+    icon: Drama,
+    tip: '双击进显示器 —— 在那里对台上说话',
+    summary: (o) => {
+      const s = o.stage || {};
+      const who = (s.cast || []).map(c => c.name).slice(0, 3).join(' / ');
+      return `演出 · ${s.beats || 0} 拍${who ? ` · ${who}` : ''}`;
+    },
+    wheel: 'iframe',
+    Preview: ({ o, projectId, box, frameRef, onActive }) => {
+      const W = 960;
+      const scale = box.w / W;
+      return (
+        <LiveFrame
+          title={`stage-${o.id}`}
+          frameRef={frameRef}
+          onActive={onActive}
+          src={Stage.viewUrl(projectId, { embed: true })}
+          style={{
+            width: W, height: Math.round(box.h / scale), border: 0,
+            transform: `scale(${scale})`, transformOrigin: '0 0',
+            pointerEvents: 'none',
+          }}
+        />
+      );
+    },
   },
 
 };

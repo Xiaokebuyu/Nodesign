@@ -153,7 +153,10 @@ describe('lint：权限判断只走 auth/tier.js', () => {
     const re = /import\s*\{[^}]*\bquery\b[^}]*\}\s*from\s*['"]@anthropic-ai\/claude-agent-sdk['"]|import\s*\*\s*as\s+\w+\s*from\s*['"]@anthropic-ai\/claude-agent-sdk['"]|(?:await|=)\s*import\(\s*['"]@anthropic-ai\/claude-agent-sdk['"]\s*\)/;
     // 08-30：回退那块从 api/sessions.js 拆去了 api/sessions-rewind.js（行数棘轮），
     // 持有 query 的换成了它 —— 白名单是**换**不是加，sessions.js 现在够不到 SDK。
-    expect(fileHits(re, ['engine/agent/session-loop.js', 'api/sessions-rewind.js'])).toEqual([]);
+    // 09-05：演出进程（engine/stage/session.js）是第三个入口 —— 它自己不做资格判断，
+    // 起它的 manager.buildEnv 走的是同一道闸（订阅路 `can(owner, 'subscription')`，没资格不起），
+    // 跟 session-loop 的 route 分支一字不差。这里是加不是换：主循环那两个照旧。
+    expect(fileHits(re, ['engine/agent/session-loop.js', 'api/sessions-rewind.js', 'engine/stage/session.js'])).toEqual([]);
   });
 });
 

@@ -24,6 +24,7 @@ import { originAllowed } from './auth/origin-guard.js';
 import { setupWS } from './ws/index.js';
 import { primeOwnAddresses } from './lib/ssrf-guard.js';
 import { stopIngress } from './lib/model-ingress.js';
+import { stopAllStages } from './engine/stage/manager.js';
 import { startRembgService, stopRembgService } from './services/rembg-launcher.js';
 import projectsRouter from './api/projects.js';
 import canvasRouter from './api/canvas.js';
@@ -221,6 +222,8 @@ function shutdown(signal, exitCode = 0) {
   console.log(`[server] ${signal} received, shutting down...`);
   // 关闭 model-ingress（API 通路会话会启的本地通用入口）。
   // 不阻塞 httpServer close —— close fail 也不影响主流程。
+  // 台上的人先送走：演出进程是独立 SDK 子进程，不跟着主进程死，不停就是孤儿（各 300-500MB）
+  stopAllStages(signal || 'shutdown').catch((err) => console.error('[server] stage close error:', err.message));
   stopIngress().catch((err) => console.error('[server] ingress close error:', err.message));
   // 关闭 rembg-service 常驻 python 进程（SIGTERM；兜底 3s 后 SIGKILL）。
   stopRembgService();

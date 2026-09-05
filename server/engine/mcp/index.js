@@ -77,6 +77,7 @@ import { makeSetVarsTool } from './tools/set-vars.js';
 import { makeDrawTrendTool } from './tools/draw-trend.js';
 import { makeJotMemoryTool } from './tools/role-memory.js';
 import { makeRollDiceTool } from './tools/roll-dice.js';
+import { makeOpenStageTool } from './tools/open-stage.js';
 import { assertRoleToolsRegistered } from '../agent/cast.js';
 import { makePublishSiteTool } from './tools/publish-site.js';
 import { makeReportIssueTool } from './tools/report-issue.js';
@@ -231,6 +232,10 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // roll_dice — 服务端真随机骰（08-28 沉浸感机制刀①）：模型编的骰运不可信，
       // 这把走 crypto + run.dice 事件直达用户屏幕。GM only（不进角色白名单）。
       makeRollDiceTool({ projectId, ctx }),
+      // open_stage — 把一场戏交给演出进程（2026-09-05 RP 显示器）。主 agent 编好系统
+      // 提示词调一次，之后用户直接对台上说话，不经过它。两种模式都注册：轻度演故事
+      // 也发生在设计项目里，而这条线要替代的正是"板书当 RP 载体"。
+      makeOpenStageTool({ projectId }),
 
       // crystallize_skill — 把探索出来的方法论固化成用户自己的 skill + 作品进橱窗
       // （2026-07-30）。用户明确要求才调；写的是判断依据不是成品 HTML。

@@ -13,6 +13,7 @@ import { t } from '../../lib/i18n.js';
 const DeckWindow = lazy(() => import('./DeckWindow.jsx'));
 const SiteWindow = lazy(() => import('./SiteWindow.jsx'));
 const DocxWindow = lazy(() => import('./DocxWindow.jsx'));
+const StageWindow = lazy(() => import('./StageWindow.jsx'));
 const BrowserWindow = lazy(() => import('./BrowserWindow.jsx'));
 
 /**
@@ -100,6 +101,7 @@ export default function CanvasFrame({
   // 世界是地图 + 世界书。同一时刻只开一扇。
   const [siteSrc, setSiteSrc] = useState(null);
   const [docxSrc, setDocxSrc] = useState(null);
+  const [stageSrc, setStageSrc] = useState(null);   // 演出显示器（09-05）：{ kind:'stage', root, title }
 
   // BoardCanvas ✏️ 入口：
   //   { kind:'session' } | { kind:'task', task, file, title }
@@ -113,18 +115,25 @@ export default function CanvasFrame({
     }
     if (desc?.kind === 'site') {
       setSiteSrc(desc);
-      setDocxSrc(null);
+      setDocxSrc(null); setStageSrc(null);
       setDeckOpen(false);
       return;
     }
     if (desc?.kind === 'docx') {
       setDocxSrc(desc);
-      setSiteSrc(null);
+      setSiteSrc(null); setStageSrc(null);
+      setDeckOpen(false);
+      return;
+    }
+    if (desc?.kind === 'stage') {
+      setStageSrc(desc);
+      setSiteSrc(null); setDocxSrc(null);
       setDeckOpen(false);
       return;
     }
     setDocxSrc(null);
     setSiteSrc(null);
+    setStageSrc(null);
     setDeckTaskSrc(desc?.kind === 'task' ? desc : null);
     setDeckTab('edit');
     setDeckOpen(true);
@@ -215,7 +224,7 @@ export default function CanvasFrame({
   }, []);
 
   // 有窗开着 = 屏幕被一件产物占满，外层据此收掉顶栏的浮现
-  const windowOpen = (deckOpen && (sessionId || deckTaskSrc)) || !!siteSrc || !!docxSrc || !!browseWin;
+  const windowOpen = (deckOpen && (sessionId || deckTaskSrc)) || !!siteSrc || !!docxSrc || !!stageSrc || !!browseWin;
   /**
    * 关掉当前这扇窗，不管它是哪一种（2026-08-29 移动端外壳第三刀）。
    *
@@ -226,7 +235,7 @@ export default function CanvasFrame({
    */
   const closeWindow = useCallback(() => {
     setDeckOpen(false); setDeckTaskSrc(null);
-    setSiteSrc(null); setDocxSrc(null);
+    setSiteSrc(null); setDocxSrc(null); setStageSrc(null);
     closeBrowse();
   }, [closeBrowse]);
   useEffect(() => { onWindowOpenChange?.(!!windowOpen, closeWindow); }, [windowOpen, onWindowOpenChange, closeWindow]);
@@ -249,6 +258,8 @@ export default function CanvasFrame({
       target = { kind: 'object', id: `site:${siteSrc.base || siteSrc.task || ''}`, path: siteSrc.entry || siteSrc.base || siteSrc.task, title: siteSrc.title || t('站点'), typeLabel: t('站点') };
     } else if (docxSrc) {
       target = { kind: 'object', id: docxSrc.cardId || `docx:${docxSrc.file || ''}`, path: docxSrc.file, title: docxSrc.title || t('文稿'), typeLabel: t('文稿') };
+    } else if (stageSrc) {
+      target = { kind: 'object', id: stageSrc.cardId || `stage:${stageSrc.root || ''}`, path: stageSrc.root || null, title: stageSrc.title || t('演出'), typeLabel: t('演出') };
     } else if (browseWin) {
       target = { kind: 'object', id: 'browse', path: browseWin.url || null, title: t('浏览器画面'), typeLabel: t('浏览器') };
     }
@@ -259,7 +270,7 @@ export default function CanvasFrame({
       y: Math.round(r ? r.bottom - 56 : window.innerHeight - 120),
       target,
     });
-  }, [deckOpen, sessionId, deckTaskSrc, deckRelPath, siteSrc, docxSrc, browseWin, project?.name]);
+  }, [deckOpen, sessionId, deckTaskSrc, deckRelPath, siteSrc, docxSrc, stageSrc, browseWin, project?.name]);
 
   const toolbarGroups = useMemo(() => {
     if (!winGroups) return boardGroups;
@@ -309,7 +320,8 @@ export default function CanvasFrame({
             (deckOpen && (sessionId || deckTaskSrc)) ? `deck:${deckRelPath}`
               : siteSrc ? `site:${siteSrc.base || siteSrc.task || siteSrc.entry || ''}`
                 : docxSrc ? `docx:${docxSrc.file || docxSrc.task || ''}`
-                  : browseWin ? 'browse' : null
+                  : stageSrc ? `stage:${stageSrc.root || ''}`
+                    : browseWin ? 'browse' : null
           }
         />
 
@@ -409,6 +421,18 @@ export default function CanvasFrame({
               // 圈选评论（页图版）：path/docxPage 由窗内部补（当前成员、当前页只有它知道）
               onRegionComment={onRegionComment}
               onClose={() => setDocxSrc(null)}
+              onToolbarGroups={reportWinGroups}
+            />
+          </Suspense>
+        )}
+
+        {stageSrc && (
+          <Suspense fallback={null}>
+            <StageWindow
+              projectId={projectId}
+              root={stageSrc.root}
+              title={stageSrc.title}
+              onClose={() => setStageSrc(null)}
               onToolbarGroups={reportWinGroups}
             />
           </Suspense>

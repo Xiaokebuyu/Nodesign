@@ -420,6 +420,8 @@ router.get('/:pid/artifacts', async (req, res, next) => {
             // 其余形态没有这个字段，前端按 kind 分支取用。
             nodes: a.nodes,
             truncated: a.truncated,   // 撞深度上限被截断的目录，要让人看见
+            // 演出（09-05）：卡面要的在场者 / 拍数 / 皮肤（kinds/stage.js instanceManifest 给的）
+            ...(a.stage ? { stage: a.stage } : {}),
           })),
         });
       }

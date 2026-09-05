@@ -239,9 +239,9 @@ describe('两条轴', () => {
 });
 
 describe('派生判定', () => {
-  it('走统一方卡的就是那几种（三种产物 + 浏览器）', () => {
+  it('走统一方卡的就是那几种（四种产物 + 浏览器）', () => {
     const artifacts = Object.keys(KINDS).filter(k => cardOf({ type: k }) === 'artifact');
-    expect(artifacts.sort()).toEqual(['browse', 'deck', 'docx', 'site']);
+    expect(artifacts.sort()).toEqual(['browse', 'deck', 'docx', 'site', 'stage']);
   });
 
   /**

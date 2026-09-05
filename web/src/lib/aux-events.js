@@ -11,8 +11,13 @@
  */
 import { scrollToPage, pulseHighlight } from './canvas-iframe-ops.js';
 
-export function handleAuxEvent(evt, { isStale, showToast }) {
+export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
   switch (evt?.type) {
+    // 演出开了 / 散了 / 改了设定（09-05 RP 显示器）：产物清单重拉，卡才出现 / 卡面才跟上。
+    // 不套 stale guard —— 演出进程不是某个 run 的事，它是项目级状态
+    case 'stage.changed':
+      bumpList?.();
+      return true;
     // C6: agent 的 navigate_to_page / highlight（实现在 canvas-iframe-ops.js）
     case 'run.canvas_navigate':
       if (!isStale) scrollToPage(evt.page);
