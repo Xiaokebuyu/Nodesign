@@ -124,14 +124,14 @@
 .preset span{display:block;font-size:11px;color:var(--sub);line-height:1.55;margin-top:3px}
 .preset.upload{border-style:dashed;color:var(--sub)}
 .preset.upload:hover{color:var(--ink);border-color:var(--rule-hv)}
-.modgroups{display:flex;flex-direction:column;gap:6px;margin-bottom:22px}
+.modgroups{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:8px;margin-bottom:22px;align-items:start}   /* 09-06 站主：改成两列或更多 */
 .modgroup{border:1px solid var(--rule);border-radius:3px;background:var(--paper)}
 .modgroup .ghd{display:flex;align-items:center;gap:10px;padding:9px 13px;cursor:pointer;user-select:none;font-size:12.5px}
 .modgroup .ghd b{font-weight:700}
 .modgroup .ghd .n{color:var(--sub);font-size:11px;margin-left:auto}
 .modgroup .ghd .chev{width:14px;height:14px;color:var(--dim);transition:transform .2s}
 .modgroup[data-open="1"] .ghd .chev{transform:rotate(180deg)}
-.modgroup .gbody{display:none;padding:2px 13px 12px;display:none;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 18px}
+.modgroup .gbody{padding:2px 13px 12px;display:none;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px 16px}
 .modgroup[data-open="1"] .gbody{display:grid}
 .modgroup .gbody .tog{padding:4px 0}
 .opening .actions{display:flex;align-items:center;gap:14px;padding-top:8px;border-top:1px solid var(--rule)}
@@ -246,3 +246,21 @@
 /* 详情收起：先淡出再让卡片归位 */
 .card.detail.closing{opacity:0;transform:translateX(10px);transition:opacity .18s,transform .18s}
 .castwrap .people{transition:gap .3s}
+
+/* 状态页：状态值一格一项，多列 */
+.statgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:10px}
+.stat{background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-far);border-radius:1px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.stat .lbl{font-size:11px;color:var(--sub);letter-spacing:.06em;display:flex;justify-content:space-between;gap:6px}
+.stat .lbl .k{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.stat input.val{width:100%}
+.stat .ro{font-size:13px;color:var(--ink-3);padding:5px 0}
+:root[data-skin="night"] .stat,:root[data-skin="terminal"] .stat{background:var(--panel)}
+/* 外观页 */
+.looks .row2{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.looks .field{display:flex;flex-direction:column;gap:8px}
+.looks .field .lbl{font-size:11px;color:var(--sub);letter-spacing:.08em}
+.looks input[type=range]{width:100%;accent-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--hair);border-radius:1px;overflow:hidden}
+.seg button{font-size:12px;padding:5px 12px;color:var(--ink-3);background:var(--paper)}
+.seg button.on{background:var(--ink);color:var(--paper)}
+:root[data-skin="night"] .seg button.on,:root[data-skin="terminal"] .seg button.on{background:var(--accent)}

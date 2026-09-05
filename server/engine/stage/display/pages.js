@@ -208,18 +208,15 @@
       const cfg = store.cfg || {}; const S = store.state || {};
       const keys = [...new Set([...(cfg.vitals || []).map(v => v.key), ...Object.keys(S)])];
       const r = this.root;
-      const SK = [['paper', '纸', ['#FFFEF6', '#F4EFE3', '#2B2117']], ['jiangnan', '江南', ['#edf1f0', '#dbe1e0', '#26312f']], ['night', '夜', ['#15171b', '#22262c', '#dcd7ce']], ['terminal', '终端', ['#0d100e', '#171c14', '#7fd08a']]];
       r.innerHTML = `<div class="page-inner">
         <section><h2>状态值<small>每段由对方报；这里能手改，改了下一句话会带给它</small></h2>
-          <table class="kv">${keys.map(k => { const v = ND.vitalOf(k); return `<tr><th>${esc(v?.label || k)}${v?.who ? `<span class="muted"> · ${esc(v.who)}</span>` : ''}${v && v.label && v.label !== k ? `<span class="muted mono" style="font-size:10px"> ${esc(k)}</span>` : ''}</th><td>${k === '拍数' ? `<span class="muted">${esc(S[k] ?? 0)}</span>` : `<input class="val" data-key="${esc(k)}" value="${esc(S[k] ?? '')}">`}</td></tr>`; }).join('')}</table>
-          <p style="margin-top:8px"><button class="btn primary" id="applyState">应用改动</button> <span class="muted" id="stateNote"></span></p></section>
-        <section><h2>背景<small>换场时机器生的图；也可以自己选一张，或放进这个故事的 素材/ 文件夹</small></h2><div class="grid-imgs" id="imgs">读取中…</div><p style="margin-top:8px"><button class="btn sm" id="clearBg">跟着场景走</button></p></section>
-        <section><h2>外观<small>只影响这块显示器</small></h2><div class="skins">${SK.map(([id, name, c]) => `<button class="skin${cfg.skin === id ? ' on' : ''}" data-skin="${id}"><span class="sw"><i style="background:${c[0]}"></i><i style="background:${c[1]}"></i><i style="background:${c[2]}"></i></span><b>${name}</b></button>`).join('')}</div></section></div>`;
+          <div class="statgrid">${keys.map(k => { const v = ND.vitalOf(k); return `<div class="stat"><div class="lbl"><span>${esc(v?.label || k)}${v?.who ? ` · ${esc(v.who)}` : ''}</span>${v && v.label && v.label !== k ? `<span class="k">${esc(k)}</span>` : ''}</div>${k === '拍数' ? `<div class="ro">${esc(S[k] ?? 0)}</div>` : `<input class="val" data-key="${esc(k)}" value="${esc(S[k] ?? '')}">`}</div>`; }).join('')}</div>
+          <p><button class="btn primary" id="applyState">应用改动</button> <span class="muted" id="stateNote"></span></p></section>
+        <section><h2>背景<small>换场时机器生的图；也可以自己选一张，或放进这个故事的 素材/ 文件夹</small></h2><div class="grid-imgs" id="imgs">读取中…</div><p style="margin-top:8px"><button class="btn sm" id="clearBg">跟着场景走</button></p></section></div>`;
       r.querySelector('#applyState').onclick = async () => {
         const patch = {}; r.querySelectorAll('input.val').forEach(i => { const v = i.value.trim(); if (v === '') return; const n = Number(v); patch[i.dataset.key] = Number.isFinite(n) && /^-?\d+(\.\d+)?$/.test(v) ? n : v; });
         try { const res = await api.setState(patch); r.querySelector('#stateNote').textContent = res.note ? res.note.replace(/^【|】$/g, '') : '已记下，下一句话带给它'; } catch (err) { r.querySelector('#stateNote').textContent = err.message; }
       };
-      r.querySelectorAll('[data-skin]').forEach(b => { b.onclick = () => api.config({ skin: b.dataset.skin }).catch(() => {}); });
       r.querySelector('#clearBg').onclick = () => api.config({ backdrop: null }).catch(() => {});
       try {
         const { images } = await api.images();
@@ -229,5 +226,34 @@
       } catch (err) { r.querySelector('#imgs').textContent = err.message; }
     },
     update(what) { if (['hello', 'state', 'config', 'turn_end', 'backdrop'].includes(what.type)) this.paint(); },
+  });
+
+  /* ── 外观：单开一页（09-06 站主：以后还会加自定义项，现在先皮肤 + 正文宽度 + 侧栏） ── */
+  ND.page({
+    id: 'looks', label: '外观',
+    mount(root) { root.className = 'page scroll'; this.root = root; this.paint(); },
+    paint() {
+      const cfg = store.cfg || {};
+      const SK = [['paper', '纸', '跟平台一样的暖纸', ['#FFFEF6', '#F4EFE3', '#2B2117']], ['jiangnan', '江南', '青灰的水乡调子', ['#edf1f0', '#dbe1e0', '#26312f']], ['night', '夜', '深底金字', ['#15171b', '#22262c', '#dcd7ce']], ['terminal', '终端', '等宽字的墨绿屏', ['#0d100e', '#171c14', '#7fd08a']]];
+      const measure = ND.prefs.get('measure', null);
+      const r = this.root;
+      r.innerHTML = `<div class="page-inner looks">
+        <section><h2>皮肤<small>这个故事的外观，所有打开它的人都看到同一套</small></h2>
+          <div class="skins">${SK.map(([id, name, hint, c]) => `<button class="skin${cfg.skin === id ? ' on' : ''}" data-skin="${id}" title="${esc(hint)}"><span class="sw"><i style="background:${c[0]}"></i><i style="background:${c[1]}"></i><i style="background:${c[2]}"></i></span><b>${name}</b></button>`).join('')}</div></section>
+        <section><h2>这台机器上的偏好<small>只记在这个浏览器里</small></h2>
+          <div class="row2">
+            <div class="field"><span class="lbl">正文宽度 · <b id="mw">${measure ? `${measure}px` : '默认'}</b></span><input type="range" id="measure" min="480" max="1400" step="10" value="${measure || 680}"><span class="muted">故事页正文右侧那枚纸签也能拖；双击它复原。</span></div>
+            <div class="field"><span class="lbl">人物栏</span><div><span class="seg" id="dockSide"><button data-v="left"${ND.dock.side === 'left' ? ' class="on"' : ''}>停左边</button><button data-v="right"${ND.dock.side === 'right' ? ' class="on"' : ''}>停右边</button></span></div><div><span class="seg" id="dockMode"><button data-v="open"${ND.dock.mode === 'open' ? ' class="on"' : ''}>展开</button><button data-v="mini"${ND.dock.mode === 'mini' ? ' class="on"' : ''}>收成一条</button></span></div></div>
+            <div class="field"><span class="lbl">选项</span><div><span class="seg" id="optsDef"><button data-v="1"${ND.prefs.get('opts', 1) ? ' class="on"' : ''}>默认展开</button><button data-v="0"${ND.prefs.get('opts', 1) ? '' : ' class="on"'}>默认收起</button></span></div></div>
+          </div></section>
+        <p class="muted">更多可自定义的项目以后加在这一页。</p></div>`;
+      r.querySelectorAll('[data-skin]').forEach(b => { b.onclick = () => api.config({ skin: b.dataset.skin }).catch(err => ND.flash(err.message, true)); });
+      const range = r.querySelector('#measure');
+      range.oninput = () => { const w = Number(range.value); document.documentElement.style.setProperty('--measure', `${w}px`); ND.prefs.set('measure', w); r.querySelector('#mw').textContent = `${w}px`; };
+      r.querySelector('#dockSide').querySelectorAll('button').forEach(b => { b.onclick = () => { if (b.dataset.v !== ND.dock.side) ND.dock.flip(); setTimeout(() => this.paint(), 600); }; });
+      r.querySelector('#dockMode').querySelectorAll('button').forEach(b => { b.onclick = () => { if (b.dataset.v !== ND.dock.mode) ND.dock.toggle(); ND.dock.forPage('looks'); this.paint(); }; });
+      r.querySelector('#optsDef').querySelectorAll('button').forEach(b => { b.onclick = () => { ND.prefs.set('opts', Number(b.dataset.v)); this.paint(); }; });
+    },
+    update(what) { if (what.type === 'hello' || what.type === 'config') this.paint(); },
   });
 })();

@@ -117,8 +117,10 @@
       dock.side = from === 'right' ? 'left' : 'right'; prefs.set('dock', dock.side);
       if (!cast) { applyDock(); return; }
       cast.classList.add(from === 'right' ? 'slide-right' : 'slide-left');
+      const app = document.querySelector('.app'); app?.classList.add('flipping');   // 轨道顺序换了不能插值，否则正文宽度乱跳
       setTimeout(() => {
         applyDock();
+        setTimeout(() => app?.classList.remove('flipping'), 50);
         cast.classList.remove('slide-left', 'slide-right');
         cast.classList.add('no-anim', dock.side === 'right' ? 'slide-right' : 'slide-left');
         void cast.offsetWidth;   // 先站到新那边的屏外，再放开动画滑进来

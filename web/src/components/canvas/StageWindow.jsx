@@ -32,6 +32,7 @@ const PAGES = [
   { id: 'memory', label: '记忆' },
   { id: 'context', label: '设定' },
   { id: 'status', label: '状态' },
+  { id: 'looks', label: '外观' },
 ];
 
 export default function StageWindow({ projectId, root, title, onClose, onToolbarGroups }) {
