@@ -24,7 +24,7 @@ import { reconcileAutoRefsThrottled } from '../lib/auto-relations.js';
 import { taskManifest, ENTRY_FILE, KIND_SITE, docxClaimedFiles, isDirArtifact } from '../lib/artifact-target.js';
 import { RESERVED_DIRS, HARD_IGNORE_DIRS, DRAFTS_DIR, isReservedFile, loadIgnore } from '../lib/task-scan.js';
 import { OUTPUT_DIRS } from '../lib/kinds/site.js';
-import { ensurePlays } from '../engine/stage/manager.js';
+import { ensurePlays, dropStage } from '../engine/stage/manager.js';
 import { listReferences } from '../lib/reference-assets.js';
 import { resolveArtifactFile, isServablePath } from '../lib/artifact-file-path.js';
 import { USER_UPLOAD_DIR, ensureUploadDir, uploadRefPath, listUploadedAssets, deleteUploadedAsset } from '../lib/user-uploads.js';
@@ -746,6 +746,8 @@ router.delete('/:pid/folders/*subPath', async (req, res, next) => {
     const st = await fs.stat(dir).catch(() => null);
     if (!st?.isDirectory()) return res.status(404).json({ error: 'folder not found' });
 
+    // 是个正在演的故事就先停进程、摘运行时（09-06）：不然文件夹没了它还活着，下一句话把 场景/ 重新长出来
+    try { if (await dropStage(req.params.pid, rel, 'folder-deleted')) console.log(`[assets] ${req.params.pid}/${rel} 删除：演出进程已停`); } catch { /* 不是故事 */ }
     await fs.rm(dir, { recursive: true, force: true });
 
     // board.json 跟着剪：这个文件夹自己的那行，以及住在它里面的全部物件。

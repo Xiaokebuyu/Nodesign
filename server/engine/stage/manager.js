@@ -434,6 +434,7 @@ function settleRun(rt, e) {
  */
 export async function sayToStage(pid, root, text, { userId = null, row = null, check = null } = {}) {
   const rt = runtimeOf(pid, root);
+  if (!(await isPlayDir(rt.playAbs))) { await dropStage(pid, root, 'play-missing'); throw Object.assign(new Error(`没有这个故事（${root}/）：文件夹已经不在了`), { status: 404 }); }
   if (rt.running && !rt.busy && !rt.session?.queued) {
     const changed = await sourcesChanged(rt);
     if (changed) { console.log(`[stage] ${pid}/${root} 设定改了（${changed}），重开`); await stopStage(pid, root, 'setup-changed'); }
@@ -494,6 +495,16 @@ export async function stopStage(pid, root, reason = 'user') {
 
 export async function stopAllStages(reason = 'shutdown') {
   await Promise.all([...runtimes.values()].map(rt => stopStage(rt.pid, rt.root, reason).catch(() => {})));
+}
+
+export async function dropStage(pid, root, reason = 'deleted') {   // 故事文件夹被删了：停进程 + 摘运行时（不摘它会把 场景/ 重新长出来）
+  const key = keyOf(pid, root); if (!runtimes.has(key)) return false;
+  await stopStage(pid, root, reason).catch(() => {}); runtimes.delete(key); return true;
+}
+export async function stopStagesForProject(pid, reason = 'project-deleted') {   // 项目被删了：全部演出进程一起停并摘掉
+  const mine = [...runtimes.values()].filter(rt => rt.pid === pid);
+  for (const rt of mine) await dropStage(pid, rt.root, reason);
+  return mine.length;
 }
 
 // ───────────────────────────── 读 / 改 ─────────────────────────────

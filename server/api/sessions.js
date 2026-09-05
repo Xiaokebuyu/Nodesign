@@ -418,6 +418,9 @@ router.delete('/:pid/sessions/:sid', async (req, res, next) => {
 
     const sessionRoot = getSessionWorkspace(req.params.pid, req.params.sid);
 
+    // 0. 还活着的 query 先关（09-06 站主：「不能会话都没了进程还在跑」）—— 不关就要等 30 分钟空闲扫描
+    if (hasActiveQuerySession(req.params.sid)) closeQuerySession(req.params.sid, 'session_deleted');
+
     // 1. SDK delete jsonl（从全局 CLAUDE_CONFIG_DIR 删除）
     try {
       await withConfigDir(GLOBAL_CLAUDE_CONFIG_DIR, () =>

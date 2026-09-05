@@ -25,6 +25,9 @@ import { ensureProjectWorkspace, removeProjectWorkspace, getSharedDir, validateS
 import { removeEntriesForProject } from '../lib/showcase-store.js';
 import { disposeProjectBus, getProjectBus } from '../ws/broker.js';
 import { Events } from '../engine/agent/events.js';
+import { stopStagesForProject } from '../engine/stage/manager.js';
+import { closeQuerySession, hasActiveQuerySession } from '../engine/runs/active-runs.js';
+import { listSessionsForProject } from './sessions.js';
 
 const router = express.Router();
 
@@ -214,6 +217,9 @@ router.delete('/:pid', async (req, res, next) => {
       const { closeFor } = await import('../engine/browse/registry.js');
       await closeFor(req.params.pid, 'project deleted');
     } catch { /* 没起过浏览器不该挡住删项目 */ }
+    // 进程先停（09-06）：演出进程指着这个工作区，会话的 query 也还活着；不停就是删完文件后台还在写
+    try { const n = await stopStagesForProject(req.params.pid, 'project-deleted'); if (n) console.log(`[projects] ${req.params.pid} 删除：停了 ${n} 个演出进程`); } catch { /* 没有演出进程 */ }
+    try { for (const sid of listSessionsForProject(req.params.pid)) if (hasActiveQuerySession(sid)) closeQuerySession(sid, 'project_deleted'); } catch { /* 列不出会话就算 */ }
     // 级联：先清 workspace 文件，再删 DB row（DB row 删了找不到，先文件后 DB 顺序保险）
     try { await removeProjectWorkspace(req.params.pid); } catch (err) {
       console.warn(`[projects] removeWorkspace failed for ${req.params.pid}:`, err.message);
