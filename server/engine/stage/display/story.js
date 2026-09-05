@@ -40,9 +40,14 @@
     /* ── 正文宽度拖把：拖右侧竖杠改 --measure（两边一起动），双击复原 ── */
     grip() {
       const inner = $('inner'); if (!inner || ND.EMBED || inner.querySelector('.grip')) return;
-      const g = el('<div class="grip" title="拖动改正文宽度，双击复原"></div>');
+      const g = el('<div class="grip" title="拖动改正文宽度，双击复原"><span class="lbl">拖动调宽窄 · 双击复原</span></div>');
       inner.appendChild(g);
       const root = document.documentElement;
+      // 纸比屏高，把手要跟着可视区居中，不然它在纸的正中、多半在屏外（站主：根本没看见）
+      const beats = $('beats');
+      const place = () => { g.style.top = `${Math.max(0, beats.scrollTop + beats.clientHeight * 0.5 - inner.offsetTop - 32)}px`; };
+      beats.addEventListener('scroll', place); window.addEventListener('resize', place); place();
+      if (!ND.prefs.get('gripHint', false)) { ND.prefs.set('gripHint', true); setTimeout(() => ND.flash('正文右边那枚小纸签能拖：拖宽拖窄，双击复原'), 1500); }
       let tip = null;
       g.onpointerdown = (e) => {
         e.preventDefault(); g.setPointerCapture(e.pointerId); g.classList.add('on');

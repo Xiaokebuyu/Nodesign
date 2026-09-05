@@ -113,6 +113,8 @@
   ND.dock = {
     flip() { dock.side = dock.side === 'right' ? 'left' : 'right'; prefs.set('dock', dock.side); applyDock(); },
     toggle() { dock.mode = dock.mode === 'mini' ? 'open' : 'mini'; prefs.set('cast', dock.mode); applyDock(); },
+    /** 非故事页侧栏没必要撑开：临时收成一条，回故事页恢复用户自己的偏好（不写偏好） */
+    forPage(id) { document.documentElement.dataset.cast = id === 'story' ? dock.mode : 'mini'; },
     drawer(open) { document.documentElement.dataset.cast = open ? 'drawer' : dock.mode; },
     get side() { return dock.side; }, get mode() { return dock.mode; },
   };
@@ -150,6 +152,7 @@
     const main = $('main'); main.innerHTML = '';
     const root = document.createElement('div'); root.className = 'page'; main.appendChild(root);
     current = def; def.mount(root);
+    ND.dock.forPage(def.id);
     $('pageNav').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.page === def.id)));
     tellParent();
   };

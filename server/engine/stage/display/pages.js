@@ -32,7 +32,8 @@
     async paint() {
       const cfg = store.cfg || {}; const cast = cfg.cast || []; const S = store.state || {};
       const r = this.root;
-      r.innerHTML = `<div class="page-inner"><h2>登场的人<small>${cast.length} 位 · 点一位看设定与记忆</small></h2><div class="people wide" id="people"></div><div id="detail"></div></div>`;
+      r.innerHTML = `<div class="page-inner castwrap" id="castwrap" data-open="${this.open ? 1 : 0}"><h2>登场的人<small>${cast.length} 位 · 点一位看设定与记忆</small><span class="tools"><button class="btn sm" id="castFold" ${this.open ? '' : 'hidden'}>收起详情</button></span></h2><div class="castcols"><div class="people wide" id="people"></div><div id="detail" class="detail-col"></div></div></div>`;
+      r.querySelector('#castFold').onclick = () => this.close();
       const people = r.querySelector('#people');
       if (!cast.length) { people.innerHTML = '<p class="muted">还没有人。让 agent 用 cast_role 写卡、open_stage 建故事。</p>'; return; }
       let files = [];
@@ -54,17 +55,26 @@
       }
       if (this.open) { const m = cast.find(x => x.name === this.open); if (m) this.show(m); }
     },
-    /** 详情：设定卡全文（可编辑）+ 这个人记得的事。上面有回去的路 */
+    close() {
+      this.open = null;
+      const w = this.root.querySelector('#castwrap'); if (w) w.dataset.open = '0';
+      const f = this.root.querySelector('#castFold'); if (f) f.hidden = true;
+      const box = this.root.querySelector('#detail'); if (box) box.innerHTML = '';
+      this.root.querySelectorAll('.person').forEach(p => p.classList.remove('on'));
+    },
+    /** 详情：卡片全部挪到左列、右侧展开一页可滚的详情（设定卡全文可编辑 + 这个人记得的事）。顶上「收起详情」回格子 */
     async show(m) {
       this.open = m.name;
+      const w = this.root.querySelector('#castwrap'); if (w) w.dataset.open = '1';
+      const fold = this.root.querySelector('#castFold'); if (fold) fold.hidden = false;
       this.root.querySelectorAll('.person').forEach(p => p.classList.toggle('on', p.dataset.who === m.name));
       const box = this.root.querySelector('#detail');
       const rel = relOf(m.card);
-      box.innerHTML = `<div class="card detail"><h3><button class="btn sm" data-back>‹ 全部人物</button>${esc(m.name)}<small>${esc(rel || '没有卡')}</small><span class="tools"><button class="btn sm" data-act="edit">编辑设定</button></span></h3>
+      box.innerHTML = `<div class="card detail"><h3>${esc(m.name)}<small>${esc(rel || '没有卡')}</small><span class="tools"><button class="btn sm" data-act="edit">编辑设定</button><button class="btn sm" data-back>收起</button></span></h3>
         <div class="md body">读取中…</div>
         <div class="section-hd" style="padding:14px 0 6px">${esc(m.name)}记得的事</div><div class="memlist" id="pmem"><p class="muted">读取中…</p></div></div>`;
-      box.querySelector('[data-back]').onclick = () => { this.open = null; box.innerHTML = ''; this.root.querySelectorAll('.person').forEach(p => p.classList.remove('on')); this.root.querySelector('#people').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
-      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      box.querySelector('[data-back]').onclick = () => this.close();
+      box.scrollTop = 0;
       const card = box.firstElementChild; const body = card.querySelector('.body');
       if (!rel) { body.textContent = '这个人没有卡'; return; }
       try {

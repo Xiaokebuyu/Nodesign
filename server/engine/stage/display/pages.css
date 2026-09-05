@@ -211,3 +211,30 @@
 .person.on{box-shadow:var(--sh-mid),inset 0 0 0 2px var(--accent)}
 .card.detail{margin-top:18px}
 .card.detail h3 [data-back]{margin-right:4px}
+
+/* 角色页两态：格子 ↔ 左列卡片 + 右侧可滚详情（站主 09-06："点击之后直接向右展开一个可滑动的显示页，头像卡移到左侧"） */
+.castcols{display:block}
+.castwrap[data-open="1"] .castcols{display:grid;grid-template-columns:240px minmax(0,1fr);gap:18px;align-items:start}
+.castwrap[data-open="1"] .people{grid-template-columns:1fr;gap:10px}
+.castwrap[data-open="1"] .person .pic{aspect-ratio:16/9}
+.castwrap[data-open="1"] .person .stats,.castwrap[data-open="1"] .person .foot span:not(.tools){display:none}
+.castwrap[data-open="1"] .person .foot{justify-content:flex-end}
+.castwrap[data-open="1"] .detail-col{position:sticky;top:0;max-height:calc(100vh - 44px - 100px);overflow-y:auto;scrollbar-width:none}
+.castwrap[data-open="1"] .detail-col::-webkit-scrollbar{display:none}
+.castwrap[data-open="1"] .card.detail{margin-top:0;animation:slidein .25s cubic-bezier(.2,.7,.3,1) both}
+@keyframes slidein{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.castwrap h2 .tools{margin-left:auto}
+@media(max-width:760px){.castwrap[data-open="1"] .castcols{grid-template-columns:1fr}.castwrap[data-open="1"] .people{display:none}.castwrap[data-open="1"] .detail-col{position:static;max-height:none}}
+/* 底部输入区：一条有边界的纸片，宽度跟正文一样，不再横贯整个主区压到侧栏 */
+.handles{background:transparent;background-image:none;border-top:0;padding:0 34px 16px}
+.handles-inner{background:var(--chrome);background-image:var(--grain);box-shadow:var(--sh-mid);padding:10px 14px 12px;border-radius:1px}
+:root[data-skin="night"] .handles-inner,:root[data-skin="terminal"] .handles-inner{background:var(--panel)}
+@media(max-width:760px){.handles{padding:0 10px 10px}}
+/* 宽度把手：一枚看得见的小纸签，贴在正文右沿、跟着可视区居中；悬停亮起并出字 */
+.grip{position:absolute;right:-26px;top:0;width:18px;height:64px;opacity:.75;display:flex;align-items:center;justify-content:center;cursor:ew-resize;background:var(--paper);background-image:var(--grain);box-shadow:var(--sh-far);border-radius:1px;transition:opacity .15s,box-shadow .15s}
+.grip::after{content:"";width:2px;height:26px;border-left:2px dotted var(--sub);border-right:2px dotted var(--sub);background:none;border-radius:0}
+.grip:hover,.grip.on{opacity:1;box-shadow:var(--sh-mid)}
+.grip:hover::after,.grip.on::after{border-color:var(--accent)}
+.grip .lbl{position:absolute;left:24px;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:10.5px;color:var(--paper);background:var(--ink);padding:3px 7px;border-radius:2px;opacity:0;pointer-events:none;transition:opacity .15s;font-family:var(--sans)}
+.grip:hover .lbl{opacity:1}
+.beats:hover .grip{opacity:1}
