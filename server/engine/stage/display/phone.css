@@ -11,8 +11,13 @@
       于是抽屉在纱（z 39）底下 —— 抽屉是开着的，只是被自己的纱盖住了。这层的 z 全部写在最后，压过材质层。
    ═══════════════════════════════════════════════════════════════ */
 @media (max-width:760px){
-  /* ── 壳 ── */
-  .top{padding:0 8px;gap:6px}
+  /* ── 壳 ──
+     层级：.app 在桌面是一个层叠上下文（z1），它里面的 .cast / .pages 不管写多大都出不去，跟 body 级的纱（z59）比永远输；
+     .main（z1）又排在 .top 之后，于是 .top 里 fixed 的页签条被 .main 的底部留白盖住 —— 站主实机：底栏点不动、开了「看背景」
+     （字都收起来）才点得动；抽屉打开后里面碰不到（碰到的是纱）。手机上把 .app 的上下文拆掉，让 top / main / cast / veil 在 body 级各归各位。 */
+  .app{z-index:auto}
+  .top{padding:0 8px;gap:6px;z-index:3}
+  .main{z-index:1}
   .top-l b{max-width:44vw}
   .pages{position:fixed;left:0;right:0;bottom:0;justify-content:flex-start;height:calc(50px + env(safe-area-inset-bottom));padding:0 4px env(safe-area-inset-bottom);display:flex;gap:0;overflow-x:auto;scrollbar-width:none;background:var(--chrome);background-image:var(--grain);border-top:1px solid var(--hair);box-shadow:0 -6px 18px rgba(43,33,23,.06);z-index:30}
   .pages::-webkit-scrollbar{display:none}
