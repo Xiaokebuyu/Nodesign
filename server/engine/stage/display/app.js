@@ -111,7 +111,21 @@
     document.documentElement.dataset.cast = dock.mode;
   }
   ND.dock = {
-    flip() { dock.side = dock.side === 'right' ? 'left' : 'right'; prefs.set('dock', dock.side); applyDock(); },
+    /** 换边：先朝当前那边滑出去，换了边再从新的那边滑进来（直接换 grid 区域会硬跳） */
+    flip() {
+      const cast = $('cast'); const from = dock.side;
+      dock.side = from === 'right' ? 'left' : 'right'; prefs.set('dock', dock.side);
+      if (!cast) { applyDock(); return; }
+      cast.classList.add(from === 'right' ? 'slide-right' : 'slide-left');
+      setTimeout(() => {
+        applyDock();
+        cast.classList.remove('slide-left', 'slide-right');
+        cast.classList.add('no-anim', dock.side === 'right' ? 'slide-right' : 'slide-left');
+        void cast.offsetWidth;   // 先站到新那边的屏外，再放开动画滑进来
+        cast.classList.remove('no-anim');
+        setTimeout(() => cast.classList.remove('slide-left', 'slide-right'), 20);
+      }, 240);
+    },
     toggle() { dock.mode = dock.mode === 'mini' ? 'open' : 'mini'; prefs.set('cast', dock.mode); applyDock(); },
     /** 非故事页侧栏没必要撑开：临时收成一条，回故事页恢复用户自己的偏好（不写偏好） */
     forPage(id) { document.documentElement.dataset.cast = id === 'story' ? dock.mode : 'mini'; },

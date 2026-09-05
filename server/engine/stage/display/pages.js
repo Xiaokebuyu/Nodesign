@@ -51,24 +51,43 @@
           ${mine.length ? `<div class="stats">${mine.map(v => { const val = S[v.key] ?? v.initial ?? ''; const pct = v.as === 'bar' ? Math.max(0, Math.min(100, (parseFloat(val) / (v.max || 100)) * 100)) || 0 : null; return `<div class="vital"><div class="row"><span>${esc(v.label || v.key)}</span><b>${esc(val)}${v.as === 'bar' ? `<small>/ ${esc(v.max || 100)}</small>` : ''}</b></div>${pct !== null ? `<div class="bar"><i style="width:${pct}%"></i></div>` : ''}</div>`; }).join('')}</div>` : ''}
           <div class="foot"><span>${spokeIdx ? `最近开口：第 ${spokeIdx} 段` : '还没开口'}</span><span>记忆 ${memCount} 条</span><span class="tools muted">看详情 ›</span></div></button>`);
         people.appendChild(card);
-        card.onclick = () => this.show(m);
+        card.onclick = () => (this.open === m.name ? this.close() : this.show(m));   // 再点一下选中的卡 = 收起
       }
       if (this.open) { const m = cast.find(x => x.name === this.open); if (m) this.show(m); }
     },
+    /** FLIP：先记每张卡在哪，改布局，再从旧位置动画到新位置（卡"丝滑地挪到最左侧 / 归位"） */
+    flip(change) {
+      const cards = [...this.root.querySelectorAll('.person')];
+      const before = new Map(cards.map(c => [c, c.getBoundingClientRect()]));
+      change();
+      for (const c of cards) {
+        const a = before.get(c); const b = c.getBoundingClientRect();
+        if (!a || !b.width) continue;
+        const dx = a.left - b.left; const dy = a.top - b.top; const sx = a.width / b.width;
+        if (!dx && !dy && Math.abs(sx - 1) < 0.01) continue;
+        c.style.transition = 'none'; c.style.transformOrigin = 'top left'; c.style.transform = `translate(${dx}px,${dy}px) scale(${sx})`;
+        void c.offsetWidth;
+        c.style.transition = 'transform .38s cubic-bezier(.2,.7,.3,1)'; c.style.transform = '';
+        c.addEventListener('transitionend', () => { c.style.transition = ''; c.style.transformOrigin = ''; }, { once: true });
+      }
+    },
     close() {
       this.open = null;
-      const w = this.root.querySelector('#castwrap'); if (w) w.dataset.open = '0';
+      const box = this.root.querySelector('#detail');
       const f = this.root.querySelector('#castFold'); if (f) f.hidden = true;
-      const box = this.root.querySelector('#detail'); if (box) box.innerHTML = '';
       this.root.querySelectorAll('.person').forEach(p => p.classList.remove('on'));
+      const finish = () => this.flip(() => { const w = this.root.querySelector('#castwrap'); if (w) w.dataset.open = '0'; if (box) box.innerHTML = ''; });
+      const d = box?.querySelector('.card.detail');
+      if (d) { d.classList.add('closing'); setTimeout(finish, 180); } else finish();
     },
     /** 详情：卡片全部挪到左列、右侧展开一页可滚的详情（设定卡全文可编辑 + 这个人记得的事）。顶上「收起详情」回格子 */
     async show(m) {
+      const wasOpen = !!this.open;
       this.open = m.name;
-      const w = this.root.querySelector('#castwrap'); if (w) w.dataset.open = '1';
       const fold = this.root.querySelector('#castFold'); if (fold) fold.hidden = false;
       this.root.querySelectorAll('.person').forEach(p => p.classList.toggle('on', p.dataset.who === m.name));
       const box = this.root.querySelector('#detail');
+      if (!wasOpen) this.flip(() => { const w = this.root.querySelector('#castwrap'); if (w) w.dataset.open = '1'; });
       const rel = relOf(m.card);
       box.innerHTML = `<div class="card detail"><h3>${esc(m.name)}<small>${esc(rel || '没有卡')}</small><span class="tools"><button class="btn sm" data-act="edit">编辑设定</button><button class="btn sm" data-back>收起</button></span></h3>
         <div class="md body">读取中…</div>

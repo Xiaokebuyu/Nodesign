@@ -242,3 +242,7 @@
 .grip .lbl{position:absolute;left:24px;top:50%;transform:translateY(-50%);white-space:nowrap;font-size:10.5px;color:var(--paper);background:var(--ink);padding:3px 7px;border-radius:2px;opacity:0;pointer-events:none;transition:opacity .15s;font-family:var(--sans)}
 .grip:hover .lbl{opacity:1}
 .beats:hover .grip{opacity:1}
+
+/* 详情收起：先淡出再让卡片归位 */
+.card.detail.closing{opacity:0;transform:translateX(10px);transition:opacity .18s,transform .18s}
+.castwrap .people{transition:gap .3s}
