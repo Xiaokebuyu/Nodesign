@@ -27,9 +27,7 @@ import { readUiConfigFile, withUiDefaults } from '../../../projects/ui-config.js
 import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
 import { getViewpoint, describeViewpoint } from '../../../projects/viewpoint-store.js';
-import { sheetSummaries, latestSheetId, currentSheet, sheetOfPoint } from '../../../lib/board-sheets.js';
-import { currentSheetIdOf } from '../../../lib/sheet-state.js';
-import { dirtyEvents, describeDirty, splitDirtyByCharge } from '../../../lib/board-dirty.js';
+import { dirtyEvents, describeDirty } from '../../../lib/board-dirty.js';
 import { fitFor } from '../../../lib/sketch-layout.js';
 import { readStateVars } from '../../../lib/state-table.js';
 import { parseTriggers, evalTriggers, readLatch, writeLatch } from '../../../lib/state-triggers.js';
@@ -41,7 +39,6 @@ import { roleLabel } from '../../mcp/actor.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf } from '../../../lib/canvas-id.js';
-import { shelfItems } from '../../../lib/board-shelf.js';
 import {
   getActiveArtifact, listWorkspaceArtifacts, taskManifest, kindDef,
   KIND_DECK, KIND_SITE, ENTRY_FILE,
@@ -116,38 +113,12 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
         w: vp.camera.w, h: vp.camera.h,
       } } : vp;
       const line = describeViewpoint(q, rects);
-      // 纸（2026-08-29 纸范式）：报当前有哪些纸、剩多少地 —— 空位建议/走向学习
-      // 那套启发式随落位引擎一起退役，agent 的空间账本现在是纸的清单。
+      // 到货还没上墙的（入座器封顶截流）：点名即可，位置是关系不是坐标
       let spot = null;
-      // 暂存架（2026-08-30）：机器到货的默认座。点名 + 三个安置动词，agent 不动它们就一直在。
-      // ⚠️ 判据只有 lib/board-shelf.js shelfItems 一份（2026-08-31）——这儿和 read_board
-      // 原来各抄了一遍 `!e.zone`，而那条判据本身是错的（幽灵点名，见 shelfItems 头注）
-      const shelfSeats = shelfItems(board);
       const pendingSeats = Array.isArray(board.pending) ? board.pending : [];
-      try {
-        const ss = sheetSummaries(board);
-        // 「最新」按登记时间取（latestSheetId 一份算法）—— 不是数组末项那张最下面的
-        const latest = latestSheetId(board);
-        const cur = ss.find(s => s.id === latest) || ss[ss.length - 1];
-        if (cur) {
-          // 报「还能装下什么」不是裸数字（2026-08-30 容量线）：行数是模型真正用来
-          // 决策的量纲 —— 顺手教它超过余量别赌一发，flow 会替它拆
-          const slots = cur.slots?.length
-            ? `；版位 ${cur.slots.map(s => `${s.name} 剩 ~${s.freeLines} 行`).join('、')}`
-            : '；这张没规划版位';
-          spot = `板上 ${ss.length} 张纸；当前 ${cur.id}${cur.title ? `（${cur.title}）` : ''} 还剩 ~${cur.freeH}px 高的空地${slots}`
-            + '（内容眼看要超余量就别赌一发 —— 自己多切几个空位分段填（plan/replan 省掉 at 即竖排接放），'
-            + '或兜底 flow:true；写满**不会**自动翻页，自己 open_sheet 规划下一页；新话题也是 open_sheet）';
-        } else {
-          spot = '板上还没铺过纸 —— 第一笔 write_on_board 会自动铺一张在他视口下，或先 open_sheet';
-        }
-        const unplaced = [...shelfSeats, ...pendingSeats];
-        if (unplaced.length) {
-          spot += `；📦 ${unplaced.length} 件在暂存架等你安置（${unplaced.slice(0, 3).map(r => r.split('/').pop()).join('、')}${unplaced.length > 3 ? '…' : ''}）`
-            + ' —— 给它们规划的地：open_sheet{plan:[…{for:"artifacts"}]} 或逐件 pin_to_board{path,slot} / edit_board move。'
-            + '架不是版面，东西留在架上就是没摆';
-        }
-      } catch { /* 纸读不出就不占字 */ }
+      if (pendingSeats.length) {
+        spot = `📦 ${pendingSeats.length} 件到货还没上墙（${pendingSeats.slice(0, 3).map(r => r.split('/').pop()).join('、')}${pendingSeats.length > 3 ? '…' : ''}）—— pin_to_board{path, place:{by:"<它说明的那件>"}} 请上来`;
+      }
       const dirs = null;
       /**
        * 手机档的版式（2026-08-28 移动端第二轮，用户拍板「一件 = 一屏，纵向单列」；
@@ -169,7 +140,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
           + `接着写就往**正下方**接，别用 side:'right'/'left' 并排 —— 并排的第二件在他屏幕外。`
           + `宁可多拆几件竖着排，也别把一件写宽。`
         : '';
-      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；写板走纸（at = 纸内坐标）。要看画面细节才调 read_user_view。` });
+      if (line) sections.push({ key: 'viewpoint', title: '用户视点', text: `用户此刻在画布上：${line}。${spot ? `${spot}。` : ''}${dirs ? `${dirs}。` : ''}${laneLine}他说「这个/这里/这张」多半指选中的 > 开着的窗 > 视口里的东西；上板的位置只说关系（place:{by,side,with}，缺省落他视口的空地）。要看画面细节才调 read_user_view。` });
     }
   } catch { /* 视点读不到就沉默 */ }
   // 板上动静（2026-08-29 纸范式刀 4）：用户拖动/搬家/擦组此前完全静默，agent 只能
@@ -179,29 +150,9 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
     const evts = dirtyEvents(projectId, 0);
     if (evts.length) {
       const line = describeDirty(evts, { limit: 6 });
-      // 有限负责制（刀⑤ 2026-08-30）：动静按纸分拣 —— 挪进你当前纸的要接手处理，
-      // 挪去别处的是用户自留地，只报不催（板整个是用户随便动，别拔河）。
-      let charge = '';
-      try {
-        const b = await readBoard(projectId);
-        const curId = currentSheet(b, currentSheetIdOf(sessionId))?.id || null;
-        const sheetOf = (id) => {
-          const e = b.objects?.[id];
-          if (!e || !Number.isFinite(e.x)) return null;
-          const sz = estimateSizeOn(b, id, e);
-          return sheetOfPoint(b, { x: e.x + sz.w / 2, y: e.y + sz.h / 2 })?.id || null;
-        };
-        const { inMine, elsewhere } = splitDirtyByCharge(evts, { sheetOf, currentSheetId: curId });
-        if (inMine.length) {
-          charge = `\n⚠️ 其中 ${inMine.slice(0, 4).join('、')}${inMine.length > 4 ? ` 等 ${inMine.length} 件` : ''} 现在落在**你正在写的纸（${curId}）**上：`
-            + '这块工作区的版面归你管 —— 若它挡了你的版位/内容，用 edit_board 给它挪个合适的位置（挪要挪得讲理，别甩出用户视野）；用户明说过要放那儿的除外。';
-        }
-        if (elsewhere.length && inMine.length) {
-          charge += `\n其余 ${elsewhere.length} 件在你的纸外 —— 那是用户自留地，不要去动。`;
-        } else if (elsewhere.length) {
-          charge = '\n这些都在你当前的纸外 —— 用户自留地，看在眼里就好，不要去动。';
-        }
-      } catch { /* 分拣失败就退回不分拣的报法 */ }
+      // 用户亲手摆过的位置是他的决定（2026-09-05：纸退役后不再按纸分拣）——
+      // 看在眼里、别搬回去；要贴着它写就 place:{by:那件}。
+      const charge = '\n这些位置以他为准 —— 不要搬回去；要接着它说，就 place:{by:那件}。';
       sections.push({ key: 'boardDirty', title: '板上动静', text:
         `用户最近亲手动过板面：${line}。这些位置以现状为准 —— 摆放前先 read_board，别按你记忆里的旧位置来。${charge}` });
     }
@@ -342,11 +293,11 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
     const cfg = withUiDefaults(await readUiConfigFile(workspaceRoot));
     if (cfg.blackboard_mode === true) {
       sections.push({ key: 'blackboard', title: '黑板模式', text:
-        '【黑板模式：开】用户此刻在画布上专注思考。这一轮默认这么做：先有纸再动笔（新话题 open_sheet）；'
+        '【黑板模式：开】用户此刻在画布上专注思考。这一轮默认这么做：贴着他在看的东西写（place:{by:…}，缺省落他视口）；'
         + '想事情就画成图（write_on_board 给 nodes/edges，小改动用 edit_board 原地改别重画）；'
         + '做完一件东西在它旁边写一条板书（near= 连线说明它说的是谁）；'
         + '用户标注了板上的东西就接在那条下面回（reply_to=）。侧栏照常回复，但板上已经写的别大段重复。'
-        + '尺寸守规范（一张纸 = 一屏、正文 md 起、一条板书说一件事）；画完 look_at_board 看一眼再收。' });
+        + '尺寸守规范（一张图一屏、正文 md 起、一条板书说一件事）；画完 look_at_board 看一眼再收。' });
     }
   } catch { /* 读失败：不注入 */ }
 

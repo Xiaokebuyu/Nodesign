@@ -229,7 +229,7 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     }, {
       // 板上动静（2026-08-29 纸范式刀 4）：用户回合中途拖动/搬家/擦组，agent 下一次
       // 摸板前插话（按会话恰好一次，台账在 lib/board-dirty.js）。
-      matcher: 'mcp__nodesign__(write_on_board|edit_board|read_board|board_batch|open_sheet|organize_board|look_at_board)',
+      matcher: 'mcp__nodesign__(write_on_board|edit_board|read_board|board_batch|organize_board|look_at_board)',
       hooks: [makePreToolUseBoardDirtyInjector({ projectId, sessionId })],
     }, {
       // 未知参数探针（2026-08-30）：zod 把 schema 里没有的键静默 strip 掉，工具自己

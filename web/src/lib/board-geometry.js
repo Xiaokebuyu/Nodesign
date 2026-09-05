@@ -36,125 +36,59 @@ export const DECK_EMBED_W = 640;          // deck 内嵌渲染宽度（1920 → 
  */
 export const CARD_MAX_H = 384;
 
-/**
- * 纸的版心边距（真身 `server/lib/board-sheets.js` 的 SHEET_MARGIN，parity 钉着）。
- * 前端要它是因为流式板书要把 agent 给的**纸内局部坐标**换算成世界坐标 —— 字才
- * 能流到它真正要去的地方（2026-08-29 占位契约刀 C）。
- */
-export const SHEET_MARGIN = 24;
-/** 版位内两件之间的间距（服务端 nextSpotInSlot 的 gap，同为 UNIT） */
+/** 两件之间的间距（服务端 lib/board-place.js 的 UNIT，同为 24） */
 const SLOT_GAP = 24;
+/** 板书宽度三档 → 像素（服务端 write-on-board-schema.js 的 WIDTH_UNITS，parity 钉着） */
+export const CHALK_WIDTH_PX = Object.freeze({ narrow: 10 * 24, normal: 14 * 24, wide: 18 * 24 });
 
 /**
- * 纸内局部坐标 → 世界坐标。
+ * 流式板书的直播落点（2026-09-05 意图层）。
  *
- * `sheet` 没点名时回落到"登记时间最新的那张"—— 跟服务端 currentSheet 的回落逻辑
- * 一致（服务端还多一层会话指针，那是前端够不着的；模型点名了 sheet 就没有分歧）。
- * 算不出来返回 null，调用方退回原来的"视口里一块空地"。
+ * 服务端随正文第一拍抽出来的是**关系**（place.by / near / reply_to / chain），不是
+ * 像素。这里只做一件事：把关系换成一个"大概在那儿"的世界坐标，让字先流到锚旁边，
+ * 真位置由服务端求解器落盘后接棒（差的只是避碰后的那一小段位移）。
+ * 算不出来返回 null，调用方退回"视口里一块空地"。
  *
- * @param {object} sheets  board.sheets
- * @param {{at?:{x,y}, sheet?:string}} spot  流式入参里抽出来的位置字段
+ * @param {object} _sheets  已退役（保留形参位，调用方还没改签名）
+ * @param {{place?:{by?:string,side?:string,with?:string}, near?:string, reply_to?:string, chain?:boolean, width?:string}} spot
+ * @param {object} layout  board.objects 的本地态（有 x/y/w/h 的才算得上）
  */
-export function sheetSpotToWorld(sheets, spot, layout = null) {
-  const table = sheets || {};
-  let s = spot?.sheet ? table[spot.sheet] : null;
-  if (!s) {
-    for (const v of Object.values(table)) {
-      if (!Number.isFinite(v?.x)) continue;
-      if (!s || String(v.at || '') > String(s.at || '')) s = v;
-    }
+export function sheetSpotToWorld(_sheets, spot, layout = null) {
+  if (!spot) return null;
+  const table = layout || {};
+  const rectOf = (id) => {
+    const e = id ? table[id] : null;
+    return (e && Number.isFinite(e.x) && Number.isFinite(e.y)) ? { x: e.x, y: e.y, w: e.w || 0, h: e.h || 0 } : null;
+  };
+  const w = CHALK_WIDTH_PX[spot.width] || null;
+  // 接楼：被回应那条的正下方，左缘对齐它（服务端 placeBelow 同规则）
+  if (spot.reply_to) {
+    const parent = rectOf(spot.reply_to);
+    return parent ? { x: Math.round(parent.x), y: Math.round(parent.y + parent.h + SLOT_GAP), w } : null;
   }
-
-  // 新纸预告（2026-08-30 刀④）：batch 里这条 write 排在一个 open_sheet 后面 ——
-  // 流式时那张纸**还不存在**（batch 的入参全部流完才开始执行）。没有这一支，
-  // 回落逻辑会拿「最新那张纸」当目标：预览画在上一张纸上，偏一整屏，落盘再跳
-  //（站主看到的「都集中在一处流式」正是它）。预测规则跟服务端同款：新纸铺在
-  // 最新纸的内容底 + 沟（翻页裁纸后的位置），版位矩形直接用流进来的 plan。
-  if (spot?.freshSheet && s && Number.isFinite(s.x)) {
-    let bot = s.y + SHEET_MARGIN;
-    for (const e of Object.values(layout || {})) {
-      if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y) || !Number.isFinite(e?.h)) continue;
-      const cx = e.x + (e.w || 0) / 2; const cy = e.y + (e.h || 0) / 2;
-      if (cx < s.x || cx >= s.x + s.w || cy < s.y || cy >= s.y + s.h) continue;
-      bot = Math.max(bot, e.y + e.h);
+  // chain 接的是"同 tag 里你自己最新那条"，前端不知道是哪条；批内第二条起同理
+  if (spot.chain) return null;
+  if (Number.isFinite(spot.batchIdx) && spot.batchIdx > 0) return null;
+  // 续组：同 tag 最靠下那件的正下方
+  if (spot.place?.with) {
+    let last = null;
+    for (const [, e] of Object.entries(table)) {
+      if (e?.tag !== spot.place.with || !Number.isFinite(e?.x)) continue;
+      if (!last || e.y + (e.h || 0) > last.y + (last.h || 0)) last = e;
     }
-    const trimmedH = Math.max(240, Math.ceil((bot + SHEET_MARGIN - s.y) / 24) * 24);
-    const origin = { x: s.x, y: s.y + Math.min(s.h, trimmedH) + 48 };
-    if (spot.planSlot) {
-      return {
-        x: Math.round(origin.x + SHEET_MARGIN + spot.planSlot.x),
-        y: Math.round(origin.y + SHEET_MARGIN + spot.planSlot.y),
-        w: spot.planSlot.w,
-      };
-    }
-    if (spot.at && Number.isFinite(spot.at.x) && Number.isFinite(spot.at.y)) {
-      return { x: Math.round(origin.x + SHEET_MARGIN + spot.at.x), y: Math.round(origin.y + SHEET_MARGIN + spot.at.y) };
-    }
-    return { x: Math.round(origin.x + SHEET_MARGIN), y: Math.round(origin.y + SHEET_MARGIN) };
+    return last ? { x: Math.round(last.x), y: Math.round(last.y + (last.h || 0) + SLOT_GAP), w } : null;
   }
-
-  if (!s || !Number.isFinite(s.x)) return null;
-
-  // 版位优先（2026-08-29 刀 E）：agent 规划过的块。落点跟服务端 nextSpotInSlot
-  // 同一条规则 —— 接在这块地里最低那件下面。**两处算同一件事**是有意的：服务端
-  // 是权威（落盘的那个数），这里只是让流式预览落在同一个地方，写完不跳。
-  // 规则只有"往下接"一条，简单到不值得为它开一条前后端通信。
-  const sl = spot?.slot ? s.slots?.[spot.slot] : null;
-  if (sl) {
-    const rect = { x: s.x + SHEET_MARGIN + sl.x, y: s.y + SHEET_MARGIN + sl.y, w: sl.w, h: sl.h };
-    let bottom = rect.y - SLOT_GAP;
-    for (const e of Object.values(layout || {})) {
-      if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y)) continue;
-      const cx = e.x + (e.w || 0) / 2; const cy = e.y + (e.h || 0) / 2;
-      if (cx >= rect.x && cx < rect.x + rect.w && cy >= rect.y && cy < rect.y + rect.h) {
-        bottom = Math.max(bottom, e.y + (e.h || 0));
-      }
-    }
-    return { x: Math.round(rect.x), y: Math.round(bottom + SLOT_GAP), w: sl.w };
-  }
-
-  // agent 点名了纸内坐标
-  if (spot?.at && Number.isFinite(spot.at.x) && Number.isFinite(spot.at.y)) {
-    return { x: Math.round(s.x + SHEET_MARGIN + spot.at.x), y: Math.round(s.y + SHEET_MARGIN + spot.at.y) };
-  }
-
-  // 下面三种算不准，宁可退回临时空地也不画错地方：
-  //  · 贴放（near+side）要先解析锚点
-  //  · chain 接的是"同 tag 里你自己最新那条"，前端不知道是哪条
-  //  · 批内第二条起（batchIdx>0）：一批里所有条的入参都在任何一条落盘**之前**
-  //    就流完了，顺排预测只会把它们全算到同一个位置上
-  if (spot?.near && spot?.side) return null;
-  if (spot?.chain) return null;
-  if (Number.isFinite(spot?.batchIdx) && spot.batchIdx > 0 && !spot?.slot && !spot?.at) return null;
-
-  const inner = { x: s.x + SHEET_MARGIN, y: s.y + SHEET_MARGIN, w: s.w - SHEET_MARGIN * 2, h: s.h - SHEET_MARGIN * 2 };
-  const bottomOf = (e) => e.y + (e.h || 0);
-
-  // 接楼（reply_to）：被回应那条的正下方，左缘对齐它（服务端 placeThread 同规则）
-  if (spot?.reply_to) {
-    const parent = (layout || {})[spot.reply_to];
-    if (parent && Number.isFinite(parent.x)) {
-      return { x: Math.round(parent.x), y: Math.round(bottomOf(parent) + SLOT_GAP) };
-    }
-    return null;
-  }
-
-  // 什么都没给 = 纸内顺排（服务端 nextSpotInSheet 同规则：接最低那件往下）。
-  // ⚠️ 这一支是最常见的调用形态 —— 没有它，agent 每次不点名位置，字就只能先画在
-  // 视口一块空地上、写完再跳到真位置（站主看到的"流式完毕之后再移动"）。
-  // 只用 layout 里带 w/h 的条目：没量过的物件算不进最低点，宁可少算也不错算。
-  let bottom = inner.y - SLOT_GAP;
-  let seen = 0;
-  for (const e of Object.values(layout || {})) {
-    if (!Number.isFinite(e?.x) || !Number.isFinite(e?.y) || !Number.isFinite(e?.h)) continue;
-    const cx = e.x + (e.w || 0) / 2; const cy = e.y + (e.h || 0) / 2;
-    if (cx < inner.x || cx >= inner.x + inner.w || cy < inner.y || cy >= inner.y + inner.h) continue;
-    bottom = Math.max(bottom, bottomOf(e)); seen += 1;
-  }
-  const y = Math.round(bottom + SLOT_GAP);
-  // 这张纸已经排到底了 → 服务端会翻到新纸，那张纸还不存在，前端算不出来
-  if (y >= inner.y + inner.h) return null;
-  return { x: Math.round(inner.x), y, flow: true, membersSeen: seen };
+  // 贴锚：place.by > near；side 缺省右侧（服务端也是右侧起搜）
+  const by = (spot.place?.by && spot.place.by !== 'view' && spot.place.by !== 'user') ? spot.place.by : (spot.near || null);
+  const a = rectOf(by);
+  if (!a) return null;
+  const side = spot.place?.side || 'right';
+  const bw = w || 14 * 24; const bh = 120;
+  const p = side === 'right' ? { x: a.x + a.w + SLOT_GAP, y: a.y }
+    : side === 'left' ? { x: a.x - SLOT_GAP - bw, y: a.y }
+      : side === 'below' ? { x: a.x, y: a.y + a.h + SLOT_GAP }
+        : { x: a.x, y: a.y - SLOT_GAP - bh };
+  return { x: Math.round(p.x), y: Math.round(p.y), w };
 }
 export const STAGE_CARD_W = 560;          // 舞台卡宽度（板内坐标系）
 

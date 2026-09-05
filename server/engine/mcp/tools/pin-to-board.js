@@ -32,9 +32,13 @@ import { promises as fs } from 'fs';
 import { pinToZone, readBoard, patchBoard } from '../../../projects/board-store.js';
 import { layerOf, bareTag } from '../../../lib/canvas-id.js';
 import { applyFollows } from '../../../lib/board-follow.js';
-import { currentSheet, slotRectOf, nextSpotInSlot, placeAtOnSheet } from '../../../lib/board-sheets.js';
+import { solvePlace, lastOfGroup, describePlacement } from '../../../lib/board-place.js';
+import { obstaclesIn } from '../../../lib/board-obstacles.js';
+import { getViewpoint } from '../../../projects/viewpoint-store.js';
+import { makeAnchorResolver } from '../../../lib/board-anchor.js';
+import { seatArtifacts } from '../../runs/board-seater.js';
+import { PLACE } from './write-on-board-schema.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
-import { currentSheetIdOf } from '../../../lib/sheet-state.js';
 import { cardIdForPath, KIND_PREFIX_RE } from '../../../lib/kinds/index.js';
 
 // （folderOfObjectId 08-24 拆除：它按 dirname 硬算，会给 assets/generated 这类
@@ -54,9 +58,8 @@ folder it lives in. The canvas is their desktop: whatever you write appears
 there automatically — you do NOT need this tool for your own outputs.
 Use it only to deliberately surface something:
 
-- Place a staged arrival: new files land on the staging shelf (the vertical
-  strip of unplaced cards the status block names) — pin_to_board{path, slot}
-  moves one into a block you planned
+- Put a produced file where it belongs: pin_to_board{path, place:{by:"<the note it
+  illustrates>", side:"right"}} — relations only, the machine solves the spot
 - Pull a reference (an uploaded asset, a memory note, an older image) into view
 - Restore something the user dragged off-screen, when they ask for it back
 
@@ -73,16 +76,11 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         .min(1)
         .max(300)
         .describe('Item to surface — see accepted forms in the tool description'),
-      slot: z.string().max(40).optional()
-        .describe('Drop it into a planned block on the current sheet (names from open_sheet / read_board). This is how a produced file lands where you planned it instead of wherever there was room.'),
-      at: z.object({ x: z.number(), y: z.number() }).optional()
-        .describe('Exact spot on the sheet, pixels from its top-left writable corner. Use slot unless this one file needs a precise place.'),
-      sheet: z.string().max(40).optional()
-        .describe('Which sheet (default: the one you are working on)'),
+      place: PLACE.optional(),
       tag: z.string().max(40).optional()
         .describe('Put it in a group. Produced files (images, sites, docx) are never created by you, so this is the one place they can get a tag at all — and a tag is what follow{group_tag,target_tag} matches on, on both ends.'),
     },
-    async ({ path: rawPath, slot, at, sheet, tag }) => {
+    async ({ path: rawPath, place, tag }) => {
       try {
         if (!projectId) {
           return { content: [{ type: 'text', text: 'No project bound; cannot pin.' }], isError: true };
@@ -139,54 +137,33 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
          * 同一套几何。这是「产物也由 agent 规划位置」的那只手 —— 暂存架上的东西，
          * agent 规划出地方之后就用它请下来（seat 改写成 agent，自然离架）。
          */
-        if (slot || at) {
-          const sh = (sheet && boardNow.sheets?.[sheet])
-            ? { id: sheet, ...boardNow.sheets[sheet] }
-            : currentSheet(boardNow, currentSheetIdOf(sessionId));   // 会话正写的那张优先
-          if (!sh) {
-            return { content: [{ type: 'text', text: 'No sheet yet — open_sheet first (plan the page, then place things into its blocks).' }], isError: true };
+        if (place) {
+          /**
+           * 意图落位（2026-09-05）：place:{by,side?,with?} → 求解器，跟 write_on_board
+           * 同一套。产物钉到桌面上就是「把它拎到桌面上摆着」（zone 写 ''，跟用户从
+           * 文件夹里拖一张卡出来同一件事）。
+           */
+          const known = new Set(Object.keys(boardNow.zones || {}));
+          const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
+          const vp = getViewpoint(projectId);
+          let anchor = null; let anchorId = null; let group = null; let groupTag = null;
+          if (place.with) {
+            const g = lastOfGroup(boardNow, place.with, (id, e) => estimateSizeOn(boardNow, id, e));
+            if (!g) return { content: [{ type: 'text', text: `#${place.with} 里还没有东西，接不上（先 set_tag 或写第一条）` }], isError: true };
+            group = g; groupTag = place.with;
+          }
+          const by0 = typeof place.by === 'string' ? place.by.trim() : '';
+          if (by0 && by0 !== 'view') {
+            const raw = by0 === 'user' ? (vp?.selected?.[0] || null) : by0;
+            if (!raw) return { content: [{ type: 'text', text: "place.by:'user' 但用户此刻没有选中任何东西 —— 用 'view' 或点名一件" }], isError: true };
+            const a = await resolveAnchor(raw, boardNow);
+            if (!a) return { content: [{ type: 'text', text: `place.by ${raw} 不在板上（read_board 看一眼现在都有谁）。` }], isError: true };
+            anchor = a.rect; anchorId = a.anchorId;
           }
           const box = estimateSizeOn(boardNow, objectId, boardNow.objects?.[objectId] || null);
-          let spot = null; let where = '';
-          if (slot) {
-            const rect = slotRectOf(sh, slot);
-            if (!rect) {
-              const names = Object.keys(sh.slots || {});
-              return { content: [{ type: 'text', text: names.length
-                ? `Sheet ${sh.id} has no slot "${slot}". It has: ${names.join(', ')}.`
-                : `Sheet ${sh.id} has no slots planned. Plan the page first: open_sheet{plan:[{slot,at,w,h,about}…]}.` }], isError: true };
-            }
-            const p = nextSpotInSlot(boardNow, rect, box);
-            if (p.tooWide) {
-              return { content: [{ type: 'text', text: `⛔ Slot "${slot}" on sheet ${sh.id} is only ${p.freeW}px wide — ${objectId} is a ${p.needW}px-wide card and would spill ${p.needW - p.freeW}px into whatever is next to it. `
-                + 'Nothing moved. Re-plan that block wider (replan it by name, omit at — it resizes in place), or point it at another slot.' }], isError: true };
-            }
-            if (p.full) {
-              return { content: [{ type: 'text', text: `⛔ Slot "${slot}" on sheet ${sh.id} is full — ${objectId} needs ${box.h}px, ~${p.freeH}px left. `
-                + 'Nothing moved. Re-plan the page with a taller block, or point it at another slot.' }], isError: true };
-            }
-            spot = p; where = ` in slot "${slot}"`;
-          } else {
-            const p = placeAtOnSheet(sh, at, box);
-            spot = p; where = p.clamped ? ' (clamped into the sheet)' : '';
-          }
-          /**
-           * ⛔ 摆到纸上 = 摆到**根层**，zone 必须写 ''（不是文件所在的文件夹层）。
-           *
-           * spot 是 nextSpotInSlot 在根层纸矩形里算出来的**世界坐标**；zone 写成
-           * 文件夹层的话，这两个字段当场互相矛盾：前端 dirOf 按 zone 把它渲染进
-           * 那个文件夹里（世界坐标在那儿是没意义的局部坐标），根层画布上根本
-           * 看不见它 —— 而工具还报了「Placed on sheet p3 in slot refs at (24,2941)」。
-           *
-           * 更实的后果：rootObjects 只收根层，membersInRect 跟着看不见它，于是
-           * **下一件 pin 进同一个版位的东西算出来还是同一个坐标**。真案
-           * proj_mtg61or1 19:18 连 pin 五张官方参考图，后四张全落 (24,3405)，
-           * 工具四次都报 success。对照组（同样五张放根层）落点正常且装不下时
-           * 如实报「版位满」。
-           *
-           * 把文件夹里的文件 pin 到纸上，语义就是把它拎到桌面上摆着 —— 跟用户
-           * 从文件夹里拖一张卡出来是同一件事（前端注释：拖出来的写 ''）。
-           */
+          const viewport = (vp?.camera && !(vp.layer || '')) ? vp.camera : null;
+          const obstacles = obstaclesIn(boardNow, '', { exclude: [objectId] });
+          const spot = solvePlace({ box, anchor, side: place.side || null, group, viewport, obstacles });
           const prev = boardNow.objects?.[objectId] || {};
           const nextPending = (boardNow.pending || []).filter(r => r !== objectId && `deck:${r}` !== objectId && `site:${r}` !== objectId);
           await patchBoard(projectId, {
@@ -196,16 +173,15 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
             } },
             ...(nextPending.length !== (boardNow.pending || []).length ? { pending: nextPending } : {}),
           });
-          // 产物也能当跟随目标（2026-08-31）：带 tag 落板 = 这个 tag 有新成员，
-          // 跟 write_on_board 写一条带 tag 的板书是同一件事。fail-soft。
+          // 产物也能当跟随目标（2026-08-31）：带 tag 落板 = 这个 tag 有新成员。fail-soft。
           if (tag) { try { await applyFollows(projectId, { tag: bareTag(tag), newId: objectId }); } catch { /* */ } }
+          const where = describePlacement(spot, { anchorId, groupTag });
           try {
-            ctx?.emit?.({ type: 'board.updated', sessionId: null, objectId, zoneId: '', summary: `已把 ${objectId} 摆到 ${sh.id}${where}` });
+            ctx?.emit?.({ type: 'board.updated', sessionId: null, objectId, zoneId: '', summary: `已把 ${objectId} 摆到桌面上` });
           } catch { /* emit fail-safe */ }
-          return { content: [{ type: 'text', text: `Placed ${objectId} on sheet ${sh.id}${where} at (${Math.round(spot.x)}, ${Math.round(spot.y)}).`
+          return { content: [{ type: 'text', text: `Placed ${objectId} — ${where}.`
             + (nextPending.length !== (boardNow.pending || []).length ? ` It is no longer waiting for a spot (${nextPending.length} still are).` : '') }] };
         }
-
         const { zone: placedZone, placed } = await pinToZone(projectId, { objectId, zoneId });
 
         try {
@@ -222,7 +198,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         return {
           content: [{
             type: 'text',
-            text: `Surfaced ${objectId} ${where} at (${placed.x}, ${placed.y}). The user's canvas updates live.`,
+            text: `Surfaced ${objectId} ${where} at a free spot. The user's canvas updates live.`,
           }],
         };
       } catch (err) {

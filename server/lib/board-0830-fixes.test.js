@@ -19,7 +19,6 @@ process.env.PROJECTS_DATA_DIR = path.join(tmp, 'projects-data');
 process.env.DB_PATH = path.join(tmp, 'test.db');
 
 const { bareTag, tagEnvelope } = await import('./canvas-id.js');
-const { latestSheetId, currentSheet } = await import('./board-sheets.js');
 const { applyFollows } = await import('./board-follow.js');
 const { readBoard, patchBoard } = await import('../projects/board-store.js');
 const { ensureProjectWorkspace } = await import('../projects/workspace.js');
@@ -41,29 +40,6 @@ describe('① #tag 查询侧统一剥井号', () => {
   });
   it('bareTag 只剥前导 #，中间的井号是名字的一部分', () => {
     expect(bareTag('#a#b')).toBe('a#b');
-  });
-});
-
-describe('④ 「最新那张纸」只有一套算法', () => {
-  // 这块板刻意让"按 at 最新"和"按 y 最下"分叉：p2 是新开的，但铺在 p1 上方
-  // （open_sheet{where:'viewport'} 在用户往上滚之后就是这个形状）
-  const board = {
-    sheets: {
-      p1: { x: 0, y: 1000, w: 800, h: 600, at: '2026-08-30T01:00:00Z' },
-      p2: { x: 0, y: 0, w: 800, h: 600, at: '2026-08-30T02:00:00Z' },
-    },
-  };
-  it('⭐⭐ 按登记时间取，不是按 y 取最下面那张', () => {
-    expect(latestSheetId(board)).toBe('p2');
-    expect(currentSheet(board).id).toBe('p2');
-  });
-  it('会话钉过的那张优先（钉子还在就认它）', () => {
-    expect(currentSheet(board, 'p1').id).toBe('p1');
-    expect(currentSheet(board, '早撕了').id).toBe('p2');   // 钉子失效回落到最新
-  });
-  it('一张纸都没有 → null', () => {
-    expect(latestSheetId({ sheets: {} })).toBeNull();
-    expect(currentSheet({})).toBeNull();
   });
 });
 
@@ -124,25 +100,26 @@ describe('③ 文件夹卡进摆位系统', () => {
     edit = (a) => makeEditBoardTool({ projectId: pid, sharedRoot: tmp, sessionId: 's', ctx: { emit() {} } }).handler(a, {});
     await patchBoard(pid, {
       zones: { 素材: { x: 10, y: 10 } },
-      sheets: { p1: { x: 0, y: 0, w: 1200, h: 900, at: '2026-08-30T01:00:00Z', by: 'agent' } },
+      objects: { 'assets/锚.png': { x: 1000, y: 1000, w: 200, h: 176 } },
     });
   });
 
-  it('⭐⭐ move 认文件夹 id，落到纸内坐标（在此之前一律报"不在板上"）', async () => {
-    const r = await edit({ ops: [{ op: 'move', id: '素材', to: { x: 300, y: 200 } }] });
+  it('⭐⭐ move 认文件夹 id，按关系落位（在此之前一律报"不在板上"）', async () => {
+    const r = await edit({ ops: [{ op: 'move', id: '素材', to: { by: 'assets/锚.png', side: 'right' } }] });
     expect(r.isError).toBeFalsy();
     expect(r.content[0].text).toContain('move 文件夹');
-    // 纸内 (300,200) + 版心边距 24 = 世界 (324,224)
-    expect((await readBoard(pid)).zones.素材).toEqual({ x: 324, y: 224 });
+    expect((await readBoard(pid)).zones.素材).toEqual({ x: 1224, y: 1000 });
   });
 
-  it('⭐ 位移写法也认', async () => {
-    await edit({ ops: [{ op: 'move', id: '素材', to: { dx: 10, dy: -4 } }] });
-    expect((await readBoard(pid)).zones.素材).toEqual({ x: 334, y: 220 });
+  it('⭐ 旧方言 ref 也认（垫片，不是静默丢）', async () => {
+    await edit({ ops: [{ op: 'move', id: '素材', to: { ref: 'assets/锚.png', side: 'below' } }] });
+    const z = (await readBoard(pid)).zones.素材;
+    expect(z.x).toBe(1000);
+    expect(z.y).toBeGreaterThanOrEqual(1000 + 176 + 24);   // 卡高按 estimateSizeOn（含卡头）算
   });
 
   it('对照：不存在的文件夹还是报不在板上（断言不是恒真的）', async () => {
-    const r = await edit({ ops: [{ op: 'move', id: '没这个文件夹', to: { x: 0, y: 0 } }] });
+    const r = await edit({ ops: [{ op: 'move', id: '没这个文件夹', to: { by: 'assets/锚.png' } }] });
     expect(r.isError).toBeTruthy();
     expect(r.content[0].text).toContain('不在板上');
   });
@@ -171,7 +148,7 @@ describe('⑤ 未知参数探针：查的是真注册表，不是手塞的表', 
     expect(t).toContain('write_on_board 收的是');   // 顺带告诉它真参数有哪些
   });
   it('⭐ 干净调用一声不吭（不响也是判据：会误报的探针没人会理）', async () => {
-    expect(await ctxOf('mcp__nodesign__write_on_board', { text: 'x', tag: '章节', slot: 'main' })).toBeNull();
+    expect(await ctxOf('mcp__nodesign__write_on_board', { text: 'x', tag: '章节', place: { by: 'view' } })).toBeNull();
     expect(await ctxOf('mcp__nodesign__board_batch', { actions: [{ name: 'edit_board', input: { ops: [] } }], screenshotAfter: true })).toBeNull();
   });
   it('⭐ batch 里逐步查，裸名也认', async () => {

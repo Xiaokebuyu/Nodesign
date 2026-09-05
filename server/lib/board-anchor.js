@@ -10,7 +10,7 @@
  */
 
 import { layerOf, normalizeCanvasId, tagEnvelope } from './canvas-id.js';
-import { estimateSizeOn } from './board-kind-sizes.js';
+import { estimateSizeOn, FOLDER_CARD } from './board-kind-sizes.js';
 
 /**
  * @param {object} deps
@@ -23,6 +23,12 @@ import { estimateSizeOn } from './board-kind-sizes.js';
 export function makeAnchorResolver({ projectId, known, readBoard, seatArtifacts }) {
   const sizeOf = (b) => (id, e) => estimateSizeOn(b, id, e);
   return async function resolveAnchor(raw, b) {
+    // 文件夹卡也是锚（2026-09-05 意图层：place.by:"素材" 是很自然的写法）
+    const zname = typeof raw === 'string' ? raw.trim().replace(/^#/, '') : '';
+    const z = zname && b.zones?.[zname];
+    if (z && Number.isFinite(z.x) && Number.isFinite(z.y)) {
+      return { anchorId: zname, zone: '', rect: { x: z.x, y: z.y, ...FOLDER_CARD }, board: b, folder: true };
+    }
     const nid = normalizeCanvasId(raw);
     const e = nid ? b.objects?.[nid] : null;
     if (e && Number.isFinite(e.x)) {

@@ -15,7 +15,6 @@ process.env.PROJECTS_DATA_DIR = path.join(tmp, 'projects-data');
 process.env.DB_PATH = path.join(tmp, 'test.db');
 
 const { obstaclesIn } = await import('./board-obstacles.js');
-const { sheetMembers, nextSpotInSheet } = await import('./board-sheets.js');
 const { FOLDER_CARD } = await import('./board-kind-sizes.js');
 
 describe('obstaclesIn —— 一层上谁占着地方', () => {
@@ -64,63 +63,44 @@ describe('obstaclesIn —— 一层上谁占着地方', () => {
   });
 });
 
-describe('纸的成员含文件夹', () => {
-  const board = {
-    sheets: { p1: { x: 0, y: 0, w: 1000, h: 800, at: '2026-08-29T00:00:00Z' } },
-    objects: {},
-    zones: { 角色: { x: 100, y: 100 } },   // 中心 (244,220) 落在 p1 里
-    rolls: {},
-  };
-
-  it('⭐ 文件夹在纸内 → 算纸的成员', () => {
-    expect(sheetMembers(board, 'p1').map(m => m.id)).toEqual(['角色']);
-  });
-
-  it('⭐ 往下接排从文件夹底下起，不再排进它身体里', () => {
-    const spot = nextSpotInSheet(board, 'p1', { w: 300, h: 100 });
-    // 文件夹占到 y=100+240=340，接排要在它下面（含 gap）
-    expect(spot.y).toBeGreaterThanOrEqual(100 + FOLDER_CARD.h);
-  });
-
-  it('纸外的文件夹不算成员', () => {
-    const b = { ...board, zones: { 角色: { x: 5000, y: 5000 } } };
-    expect(sheetMembers(b, 'p1')).toEqual([]);
-  });
-});
-
-describe('端到端：板书压在文件夹上要如实报', () => {
+describe('端到端：文件夹卡是障碍，求解器绕开它', () => {
   const pid = 'proj_obstacles_e2e';
-  let write1; let open1;
+  let write1; let readBoard;
+  const FOLDER = { x: 100, y: 100, w: FOLDER_CARD.w, h: FOLDER_CARD.h };
+  const hits = (e) => !(e.x + e.w <= FOLDER.x || FOLDER.x + FOLDER.w <= e.x || e.y + e.h <= FOLDER.y || FOLDER.y + FOLDER.h <= e.y);
 
   beforeAll(async () => {
     const { makeWriteOnBoardTool } = await import('../engine/mcp/tools/write-on-board.js');
-    const { makeOpenSheetTool } = await import('../engine/mcp/tools/open-sheet.js');
     const { getSharedDir, ensureProjectWorkspace } = await import('../projects/workspace.js');
     const { patchBoard } = await import('../projects/board-store.js');
     const { setViewpoint, _resetViewpoints } = await import('../projects/viewpoint-store.js');
-    const { _resetSheetState } = await import('./sheet-state.js');
+    ({ readBoard } = await import('../projects/board-store.js'));
     await ensureProjectWorkspace(pid);
-    _resetViewpoints(); _resetSheetState();
+    _resetViewpoints();
     setViewpoint(pid, { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     // 桌面上摆一个文件夹：世界 (100,100)，占到 (388,340)
     await patchBoard(pid, { zones: { 素材: { x: 100, y: 100 } } });
     const ctx = { emit() {} };
     const sharedRoot = getSharedDir(pid);
-    open1 = (args = {}) => makeOpenSheetTool({ projectId: pid, sessionId: 'e2e', ctx }).handler(args, {});
     write1 = (args) => makeWriteOnBoardTool({ projectId: pid, sharedRoot, sessionId: 'e2e', ctx }).handler(args, {});
-    await open1({ title: '压测' });   // 纸对准视口 → 原点 (0,0)，版心从 (24,24) 起
   });
 
-  it('⭐ 写在文件夹身上 → 返回文案点名压住了它', async () => {
-    // 纸内局部 (76,76) = 世界 (100,100) = 文件夹左上角
-    const r = await write1({ text: '正压在文件夹上', at: { x: 76, y: 76 } });
+  it('⭐ 落视口：第一块空地不是文件夹身上', async () => {
+    const r = await write1({ text: '落在视口里' });
     expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toMatch(/overlaps[^;]*素材/);
+    expect(r.content[0].text).not.toMatch(/overlaps/);
+    const board = await readBoard(pid);
+    const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/')).sort().pop();
+    expect(hits(board.objects[id])).toBe(false);
   });
 
-  it('⭐ 反向：挪开就不许再报压（防止闸装成"永远报 overlaps"）', async () => {
-    const r = await write1({ text: '离得远远的', at: { x: 700, y: 600 } });
+  it('⭐ 贴着文件夹写：真在它右侧，且返回点名它', async () => {
+    const r = await write1({ text: '这个文件夹里是素材', place: { by: '素材', side: 'right' } });
     expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).not.toMatch(/overlaps[^;]*素材/);
+    expect(r.content[0].text).toMatch(/right of 素材/);
+    const board = await readBoard(pid);
+    const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/')).sort().pop();
+    expect(board.objects[id].x).toBeGreaterThanOrEqual(FOLDER.x + FOLDER.w);
+    expect(hits(board.objects[id])).toBe(false);
   });
 });

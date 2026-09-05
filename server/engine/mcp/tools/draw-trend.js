@@ -16,8 +16,10 @@ import { removeByTag } from '../../../projects/board-tags.js';
 import { trendSeries, trendGeometry } from '../../../lib/state-trend.js';
 import { roughFreePath, textBox } from '../../../lib/sketch-layout.js';
 import { KEY_MAX } from '../../../lib/state-table.js';
-import { currentSheet, toWorld } from '../../../lib/board-sheets.js';
-import { currentSheetIdOf } from '../../../lib/sheet-state.js';
+import { solvePlace } from '../../../lib/board-place.js';
+import { obstaclesIn } from '../../../lib/board-obstacles.js';
+import { getViewpoint } from '../../../projects/viewpoint-store.js';
+import { normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { Events } from '../../agent/events.js';
 
@@ -35,8 +37,10 @@ chart redraws IN PLACE (position kept, even if the user dragged it). Needs ≥2 
 points — early beats will refuse loudly, that is normal.`,
     {
       key: z.string().min(1).max(KEY_MAX).describe('Which state-table key to chart (must hold numbers — 8/10 counts as 8)'),
-      at: z.object({ x: z.number().min(0).max(12000), y: z.number().min(0).max(12000) }).optional()
-        .describe('Sheet-local pixels for first placement. Omit it: lands under the state-table card (or where the previous chart of this key sits)'),
+      place: z.object({
+        by: z.string().max(300).optional().describe("Next to THIS canvas id / #tag ('view' = free ground in the user's view)"),
+        side: z.enum(['right', 'left', 'below', 'above']).optional().describe('Preferred side of `by`'),
+      }).optional().describe('WHERE, in relations. Omit it: lands under the state-table card (or where the previous chart of this key sits)'),
     },
     async (args) => {
       const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
@@ -48,23 +52,32 @@ points — early beats will refuse loudly, that is normal.`,
       const tag = `trend-${args.key}`.slice(0, 40);
       const board = await readBoard(projectId);
 
-      // 落点：旧图原位 > at（纸内像素） > 状态表卡正下方
+      // 落点：旧图原位 > place（关系） > 状态表卡正下方（同一个求解器：by 状态表、below）
       let origin = null;
       const prev = Object.entries(board.objects || {}).filter(([, e]) => e?.tag === tag && Number.isFinite(e?.x));
       if (prev.length) {
         origin = { x: Math.min(...prev.map(([, e]) => e.x)), y: Math.min(...prev.map(([, e]) => e.y)) };
         await removeByTag(projectId, tag);
-      } else if (args.at) {
-        const sheet = currentSheet(board, currentSheetIdOf(sessionId));
-        if (!sheet) return err('还没有纸 —— 先 open_sheet，或者省掉 at 让它落在状态表卡下面。');
-        origin = toWorld(sheet, args.at);
       } else {
-        const e = board.objects?.[s.rel];
-        if (!e || !Number.isFinite(e.x)) {
-          return err(`状态表那条板书（${s.rel}）不在板上（没有座位）—— 传 at:{x,y}（纸内像素）指个位置。`);
+        const lb0 = textBox(`${args.key}  ${s.points[0]} → ${s.points[s.points.length - 1]}（${s.points.length} 拍，${g.min}~${g.max}）`, 'sm');
+        const box = { w: g.w, h: g.h + lb0.h + 4 };
+        const vp = getViewpoint(projectId);
+        const viewport = (vp?.camera && !(vp.layer || '')) ? vp.camera : null;
+        const obstacles = obstaclesIn(board, '');
+        let anchor = null; let side = 'below';
+        const byRaw = args.place?.by && args.place.by !== 'view' ? args.place.by : (args.place ? null : s.rel);
+        if (byRaw) {
+          const id = normalizeCanvasId(byRaw) || byRaw;
+          const e = board.objects?.[id];
+          if (!e || !Number.isFinite(e.x)) {
+            return err(byRaw === s.rel
+              ? `状态表那条板书（${s.rel}）不在板上（没有座位）—— 给 place:{by:"<板上某件>"} 指个位置。`
+              : `place.by ${byRaw} 不在板上（read_board 看一眼现在都有谁）。`);
+          }
+          anchor = { x: e.x, y: e.y, ...estimateSizeOn(board, id, e) };
+          side = args.place?.side || 'below';
         }
-        const sz = estimateSizeOn(board, s.rel, e);
-        origin = { x: e.x, y: e.y + sz.h + 16 };
+        origin = solvePlace({ box, anchor, side, viewport, obstacles });
       }
 
       // 标签在图上方一行；曲线 ink、基线 pencil、现值小圈 red —— 全过同一支抖动笔

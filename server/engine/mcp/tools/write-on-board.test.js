@@ -11,10 +11,19 @@ process.env.DB_PATH = path.join(tmp, 'test.db');
 const { makeWriteOnBoardTool } = await import('./write-on-board.js');
 const { readBoard, patchBoard } = await import('../../../projects/board-store.js');
 const { getSharedDir, ensureProjectWorkspace } = await import('../../../projects/workspace.js');
+const { setViewpoint, _resetViewpoints } = await import('../../../projects/viewpoint-store.js');
 
 const pid = 'proj_writeboard_test';
 let sharedRoot;
 let call;
+/** 按正文找那条板书（文件名是秒级时间戳，同秒多条时 sort().pop() 会取错） */
+async function noteByText(board, text) {
+  for (const id of Object.keys(board.objects)) {
+    if (!id.startsWith('notes/板书/')) continue;
+    try { if ((await fs.readFile(path.join(sharedRoot, id), 'utf8')).includes(text)) return [id, board.objects[id]]; } catch { /* */ }
+  }
+  return [null, null];
+}
 
 beforeAll(async () => {
   await ensureProjectWorkspace(pid);
@@ -51,13 +60,13 @@ describe('write_on_board 统一入口（件数判据）', () => {
 
   it('side:left：板书落在锚点左侧（08-24 信箱「没有左边」案）', async () => {
     await patchBoard(pid, { objects: { 'assets/嫌疑人.png': { x: 3000, y: 3000, w: 200, h: 176 } } });
-    const r = await call({ text: '讯问记录：不在场证明存疑', near: 'assets/嫌疑人.png', side: 'left' });
+    const r = await call({ text: '讯问记录：不在场证明存疑', near: 'assets/嫌疑人.png', place: { side: 'left' } });
     expect(r.isError).toBeUndefined();
     const board = await readBoard(pid);
     const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/')).sort().pop();
     const e = board.objects[id];
     expect(e.x + e.w).toBeLessThanOrEqual(3000);
-    expect(r.content[0].text).toContain('left of the anchor');
+    expect(r.content[0].text).toContain('left of assets/嫌疑人.png');
   });
 
   it('chain:true：自动接在同 tag 最新板书下面（章节线程免抄路径）', async () => {
@@ -111,22 +120,35 @@ describe('write_on_board 统一入口（件数判据）', () => {
     expect(r.content[0].text).toContain('y');
   });
 
-  it('at = 纸内坐标（2026-08-29 纸范式）：自动铺纸；越界钳进版心并如实报', async () => {
-    const r = await call({ text: '纸上定点', at: { x: 48, y: 48 } });
+  it('⭐ place（2026-09-05 意图层）：缺省落用户视口的空地；贴锚偏好侧被占就换侧并说明；返回不报像素', async () => {
+    _resetViewpoints();
+    setViewpoint(pid, { camera: { x: 50000, y: 50000, w: 1400, h: 900 }, zoom: 1 });
+    const r = await call({ text: '落在他眼前' });
     expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toMatch(/on sheet /);
-    const board = await readBoard(pid);
-    expect(Object.keys(board.sheets || {}).length).toBeGreaterThanOrEqual(1);
-    // 垂直装不下（08-29 刀 C 的换纸判据）：光说"钳住了"没用 —— 那条会被压到贴着
-    // 纸底跟上一条挤一起，而 agent 不知道该翻页。报文要点名"这张纸没地方了"并给出路
-    const r2 = await call({ text: '越界的话', at: { x: 11999, y: 11999 } });
+    expect(r.content[0].text).toMatch(/in the user's current view/);
+    expect(r.content[0].text).toMatch(/Visible in the user's viewport: yes/);
+    expect(r.content[0].text).not.toMatch(/at \(\d+,\d+\)/);
+    let board = await readBoard(pid);
+    let [, e] = await noteByText(board, '落在他眼前');
+    expect(e.x).toBeGreaterThanOrEqual(50000); expect(e.y).toBeGreaterThanOrEqual(50000);
+    expect(e.x + e.w).toBeLessThanOrEqual(51400); expect(e.y + e.h).toBeLessThanOrEqual(50900);
+    // 贴锚：右侧被一堵墙占着 → 换到别的侧，不压墙，返回说清楚
+    await patchBoard(pid, { objects: {
+      'assets/锚.png': { x: 60000, y: 60000, w: 200, h: 176 },
+      'assets/墙.png': { x: 60224, y: 59000, w: 800, h: 3000 },
+    } });
+    const r2 = await call({ text: '想贴右边', place: { by: 'assets/锚.png', side: 'right' } });
     expect(r2.isError).toBeUndefined();
-    expect(r2.content[0].text).toContain('RAN OUT');
-    expect(r2.content[0].text).toMatch(/open_sheet/);
-    // 只在水平方向越界（纸下面还有地方）→ 仍然只是钳住，不该谎报"没地方了"
-    const r3 = await call({ text: '只是太靠右', at: { x: 11999, y: 60 } });
-    expect(r3.content[0].text).toContain('CLAMPED');
-    expect(r3.content[0].text).not.toContain('RAN OUT');
+    expect(r2.content[0].text).toMatch(/no room right/);
+    board = await readBoard(pid);
+    [, e] = await noteByText(board, '想贴右边');
+    const wall = board.objects['assets/墙.png'];
+    expect(!(e.x + e.w <= wall.x || wall.x + wall.w <= e.x || e.y + e.h <= wall.y || wall.y + wall.h <= e.y)).toBe(false);
+    // place.by 指向不存在的东西：拒并指路
+    const r3 = await call({ text: 'x', place: { by: '虚空' } });
+    expect(r3.isError).toBe(true);
+    expect(r3.content[0].text).toMatch(/place\.by/);
+    _resetViewpoints();
   });
 
   it('near 指向没座位但真实存在的文件：救援入座后照锚（「还没有座位」失败类收口）', async () => {
@@ -161,7 +183,6 @@ describe('open_lane：开新线（08-27 空间规划）', () => {
     expect(r.isError).toBeUndefined();
     expect(r.content[0].text).toMatch(/Opened lane #lane甲/);
     const board = await readBoard(pid);
-    expect(board.sheets['lane甲']).toBeTruthy();          // 一条线 = 它自己的一叠纸
     const lane = board.lanes['lane甲'];
     expect(lane).toBeTruthy();
     expect(lane.parent).toBe('assets/起点.png');
@@ -200,12 +221,12 @@ describe('open_lane：开新线（08-27 空间规划）', () => {
     expect(r.content[0].text).toMatch(/互斥/);
   });
 
-  it('fresh：全新话题另铺一张纸', async () => {
+  it('fresh：全新话题落用户视口（没有视口就落内容底下），线头登记', async () => {
     const r = await call({ text: '全新话题', tag: 'lane乙', open_lane: 'fresh' });
     expect(r.isError).toBeUndefined();
     const board = await readBoard(pid);
     expect(board.lanes['lane乙'].parent).toBeUndefined();
-    expect(board.sheets['lane乙']).toBeTruthy();
+    expect(board.lanes['lane乙'].x).toBeTypeOf('number');
   });
 });
 

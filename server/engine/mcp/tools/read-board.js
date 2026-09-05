@@ -17,12 +17,11 @@ import { z } from 'zod';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, bareTag } from '../../../lib/canvas-id.js';
-import { shelfItems } from '../../../lib/board-shelf.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
 import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
-import { sheetSummaries, rollCardRect, slotRectOf, nextSpotInSlot, freeColumnsInSheet, latestSheetId } from '../../../lib/board-sheets.js';
+import { rollCardRect } from '../../../lib/board-place.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -64,8 +63,10 @@ export function makeReadBoardTool({ projectId, sharedRoot = null }) {
 sharing a #tag), then loose items row by row, then relation lines.
 
 Use this BEFORE moving things (edit_board) or writing/sketching (write_on_board) —
-placement without looking is guessing. Coordinates are world pixels. Only seated items
-appear (files you just wrote are seated automatically within a couple of seconds).
+placement without looking is guessing. Positions are reported as world pixels for
+reading only — when you place or move things you speak in RELATIONS (place:{by,side,with}),
+never pixels. Only seated items appear (files you just wrote are seated automatically
+within a couple of seconds).
 Items marked 〔草稿〕 are still staging (yours from this turn, half-transparent until
 edit_board commit / end of turn). The user's current viewport (if known) is drawn as a box
 on the minimap and listed with what is inside it.`,
@@ -194,55 +195,11 @@ on the minimap and listed with what is inside it.`,
       }
       if (board.hero && !tag) lines.push('', `★ 显式主角：${board.hero}（edit_board 的 feature/unfeature 管它）`);
 
-      // 纸的清单（2026-08-29 纸范式）：agent 的空间账本 —— 每张纸的名字/位置/件数/
-      // 剩余空地。at 坐标以当前纸版心左上为原点，这一节就是坐标系的地图。
+      // 还没入座的到货（入座器一轮封顶截流的那几件）：点名即可，位置由 pin_to_board{place} 定
       if (!want && !tag) {
-        try {
-          const ss = sheetSummaries(board);
-          if (ss.length) {
-            const latest = latestSheetId(board);
-            lines.push('', '纸（sheet）：at:{x,y} 写的是纸内像素（版心左上为原点）。'
-              + '**写满不会自动翻页** —— 排不下时写入被拒收，下一页由你自己 open_sheet 规划：');
-            for (const s of ss) {
-              // 剩多少地方按**字**报（08-29 刀 D）：agent 手里的东西是字，
-              // 只给像素等于让它每次落笔前做一道做不准的算术
-              const cap = capacityOf(DEFAULT_CHALK_W, s.freeH);
-              lines.push(`  ${s.id}${s.id === latest ? '（当前）' : ''}${s.title ? `（${s.title}）` : ''}：世界 (${s.x},${s.y}) ${s.w}x${s.h}，${s.count} 件，剩 ~${s.freeH}px 高（≈${cap.lines} 行 / ${cap.cjk} 字）${s.lastId ? `，最新 ${s.lastId}` : ''}`);
-              // 规划过的块各剩多少（08-29 刀 E）：填到一半要知道还有哪块地是空的，
-              // 不然只能靠猜 —— 猜错的下场是写入被拒收，白跑一趟
-              // 这张纸还剩哪些空地（08-29 刀 F）：只报"最后一件下面剩多少"是不够的 ——
-              // 那一列到底了不等于这张纸满了，右边可能整片空着，而 agent 要靠这个
-              // 判断"还放不放得下、要不要开新一页"
-              const free = freeColumnsInSheet(board, s.id);
-              if (free.length > 1) {
-                const cells = free.map((f) => `x=${f.x} 剩 ${capacityOf(DEFAULT_CHALK_W, f.freeH).lines} 行`);
-                lines.push(`    空地：${cells.join(' / ')}`);
-              }
-              const sheet = board.sheets?.[s.id];
-              for (const [nm, sl] of Object.entries(sheet?.slots || {})) {
-                const r = slotRectOf({ ...sheet, id: s.id }, nm);
-                const spot = nextSpotInSlot(board, r, { w: 1, h: 1 });
-                const freeH = spot.full ? 0 : Math.max(0, r.y + r.h - spot.y);
-                const c = capacityOf(r.w, freeH);
-                lines.push(`    · ${nm}${sl.about ? `（${sl.about}）` : ''}${sl.for === 'artifacts' ? '【收产物】' : ''}：块内 (${sl.x},${sl.y}) ${sl.w}x${sl.h}，剩 ≈${c.lines} 行 / ${c.cjk} 字`);
-              }
-            }
-          }
-          // 暂存架（2026-08-30）：机器到货的默认座 —— 上了墙但还没进版面，等 agent 安置。
-          // 判据一份：lib/board-shelf.js shelfItems（2026-08-31 收编，见那儿的两条修正）
-          const shelf = shelfItems(board);
-          const pend = Array.isArray(board.pending) ? board.pending : [];
-          const unplaced = [...shelf, ...pend];
-          if (unplaced.length) {
-            lines.push('', `📦 暂存架上 ${unplaced.length} 件等安置（机器只码在架上，版面归你）：`);
-            for (const r of unplaced.slice(0, 8)) lines.push(`  ${r}`);
-            if (unplaced.length > 8) lines.push(`  …还有 ${unplaced.length - 8} 件`);
-            lines.push('  安置的手：open_sheet{plan:[{slot:"图",at:{…},w,h,for:"artifacts"}…]} 规划产物地，'
-              + '或逐件 pin_to_board{path,slot} / edit_board{ops:[{op:"move",…}]}。');
-          }
-        } catch { /* 纸读不出不挡座次 */ }
+        const pend = Array.isArray(board.pending) ? board.pending : [];
+        if (pend.length) lines.push('', `📦 ${pend.length} 件到货还没上墙：${pend.slice(0, 6).join('、')}${pend.length > 6 ? '…' : ''} —— pin_to_board{path, place:{by:…}} 请它们上来。`);
       }
-
       // 版图（2026-08-27 空间规划）：线 = 同 tag 的纵列。这是 agent 的符号地图 ——
       // 摆放按关系（续哪条线/岔自哪条）声明，几何机器排，别按坐标猜。
       if (!tag) {

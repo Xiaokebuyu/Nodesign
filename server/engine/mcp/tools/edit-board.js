@@ -15,8 +15,8 @@
  *   remove            对 agent 自己写的板书放行（连文件带座位带线一起清）
  *   move              有避让了（原 placeRel 裸落点，是六套引擎里唯一不避让的）
  *
- * 位置永远是相对表达（{ref,side,gap} 或位移 {dx,dy}），落到哪一格由服务端解析。
- * 距离单位一律像素（08-29；此前是格，见下面 GAP/PX_DELTA 那段的账）。
+ * 位置永远是关系（to:{by,side?,with?}），像素由 lib/board-place.js 解（2026-09-05 起
+ * 绝对坐标与位移两种写法退役：agent 报不准像素，见那个文件的头注）。
  */
 
 import path from 'node:path';
@@ -30,12 +30,11 @@ import { estimateSizeOn, FOLDER_CARD } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/canvas-id.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
-import { placeBeside, placeAtOnSheet, overlapIds, currentSheet } from '../../../lib/board-sheets.js';
-import { applyReplan } from './sheet-replan.js';
+import { placeBeside, overlapIds, solvePlace, lastOfGroup, describePlacement } from '../../../lib/board-place.js';
 import { transformGroup } from '../../../lib/board-transform.js';
 import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
-import { currentSheetIdOf } from '../../../lib/sheet-state.js';
+import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
 import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
@@ -44,19 +43,6 @@ const MAX_OPS = 120;
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 
-/**
- * 距离一律**像素**（2026-08-29 改口径）。原来 gap/dx/dy 是格（1 格 24px），配了一层
- * 「大于上限的按像素收编」的垫片 —— 于是同一个字段小数当格、大数当像素，中间那段
- * 静默错 24 倍：真会话里 agent 想左移 120px 写了 dx:-120，实际挪了 2880px，再写
- * dx:7000（这次按像素算）往回捞，四发才收敛（proj_mtdr2xpa 03:09）。
- *
- * agent 读到的每一个位置都是像素（read_board / look_at_board / 落位回执全是），
- * 让它写位移时换算成格，是给一件没有收益的事发一张必错的许可证。格只留在起草图
- * （write_on_board 的 nodes[].at）那种「从零排版面」的场合。
- *
- * 超范围的值**钳住不拒收**（08-27 那条教训留着）：schema 校验是整单拒，一个越界的
- * gap 会陪葬同批全部合法 op —— 代价远大于把它按到上限。
- */
 
 export function makeEditBoardTool({ projectId, sharedRoot, sessionId = null, ctx }) {
   const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
@@ -127,25 +113,37 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
     };
     /** 压上判定的障碍集（同层，subject/组员除外；含文件夹卡/卷卡/精灵身位） */
     const obstaclesNear = (zone, exclude = new Set()) => obstaclesIn(board, zone, { objects: live, exclude });
-    /** 相对落位 = 精确贴放（2026-08-29：环搜退役 —— 压上如实报，不代找洞） */
-    const placeRel = (subjectId, box, rel) => {
-      const refId = rid(rel.ref);
-      const r = rectOf(refId);
-      if (!r) return null;
-      const zone = layerOf(refId, live[refId], known);
-      const p = placeBeside(r, box, rel.side, rel.gap ?? UNIT);
-      const pressed = overlapIds({ x: p.x, y: p.y, w: box.w, h: box.h }, obstaclesNear(zone, new Set([subjectId])));
-      return { ...p, pressed };
+    const vp = getViewpoint(projectId);
+    /**
+     * 意图落位（2026-09-05）：to:{by,side?,with?} → 求解器。
+     * @param {Set<string>} exclude  主体自己（和组员）不算障碍
+     * @returns {{x,y,how,side,nudged,wanted,pressed,anchorId,groupTag,zone}|{error:string}}
+     */
+    const placeTo = (to, box, exclude = new Set()) => {
+      let anchor = null; let anchorId = null; let zone = null; let group = null; let groupTag = null;
+      if (to.with) {
+        const g = lastOfGroup({ objects: live }, bareTag(to.with), (id, e) => estimateSizeOn(board, id, e));
+        if (!g) return { error: `#${to.with} 里还没有东西，接不上（先 set_tag 或写第一条）` };
+        group = g; groupTag = bareTag(to.with); zone = layerOf(g.id, live[g.id], known);
+      }
+      const by0 = typeof to.by === 'string' ? to.by.trim() : (typeof to.ref === 'string' ? to.ref.trim() : '');
+      if (by0 && by0 !== 'view') {
+        const raw = by0 === 'user' ? (vp?.selected?.[0] || null) : by0;
+        if (!raw) return { error: "by:'user' 但用户此刻没有选中任何东西 —— 用 'view' 或点名一件" };
+        const refId = rid(raw);
+        const r = rectOf(refId);
+        if (!r) return { error: `参照 ${raw} 不在板上` };
+        anchor = r; anchorId = refId; zone = layerOf(refId, live[refId], known);
+      }
+      if (zone === null) zone = vp?.layer || '';
+      const viewport = (vp?.camera && (vp.layer || '') === zone) ? vp.camera : null;
+      const obstacles = obstaclesNear(zone, exclude);
+      const p = solvePlace({ box, anchor, side: to.side || null, group, viewport, obstacles });
+      const pressed = overlapIds({ x: p.x, y: p.y, w: box.w, h: box.h }, obstacles);
+      return { ...p, x: Math.round(p.x), y: Math.round(p.y), pressed, anchorId, groupTag, zone };
     };
-    /** 纸内绝对坐标 → 世界（sheet 缺省当前纸；钳进版心，钳了如实报） */
-    const placeAbs = (to, box) => {
-      const s = to.sheet && board.sheets?.[to.sheet]
-        ? { id: to.sheet, ...board.sheets[to.sheet] }
-        : currentSheet(board, currentSheetIdOf(sessionId));
-      if (!s) return null;
-      const p = placeAtOnSheet(s, { x: to.x, y: to.y }, box);
-      return { ...p, sheetId: s.id };
-    };
+    const sayWhere = (p) => describePlacement(p, { anchorId: p.anchorId, groupTag: p.groupTag })
+      + (p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : '');
     const report = []; let ok = 0;
     const tagTouched = [];                         // set_tag 这一趟碰过的 [id, tag]（落盘后触发跟随）
     const untag = [];                              // set_tag{tag:''} 要摘的（合并语义表达不了删键，走专用路）
@@ -161,7 +159,6 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
      */
     const liveZones = { ...(board.zones || {}) };
     const zonesPatch = {};
-    const sheetsPatch = {};                        // replan：纸的版位增改
     const isZone = (id) => Object.prototype.hasOwnProperty.call(liveZones, id);
     const setZone = (id, z) => { liveZones[id] = z; zonesPatch[id] = z; };
     /** 贴身记号跟随（08-27 shapes 编辑面）：挪一件东西时，圈着它的涂鸦一起走。
@@ -212,13 +209,11 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           // 文件夹卡走自己的分支：它只有坐标，没有 by/seat/tag 那一套（刀 G）
           if (!e && id && isZone(id)) {
             const box = rectOf(id);
-            let p = null;
-            if ('ref' in o.to) { p = placeRel(id, box, o.to); if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; } }
-            else if ('x' in o.to) { p = placeAbs(o.to, box); if (!p) { fail(o.to.sheet ? `纸 ${o.to.sheet} 不存在（read_board 看纸的清单）` : '还没有铺过纸 —— 先 open_sheet，或用 {dx,dy}/{ref,side}'); continue; } }
-            else { p = { x: box.x + (o.to.dx || 0), y: box.y + (o.to.dy || 0) }; }
-            setZone(id, { x: Math.round(p.x), y: Math.round(p.y) });
+            const p = placeTo(o.to, box, new Set([id]));
+            if (p.error) { fail(p.error); continue; }
+            setZone(id, { x: p.x, y: p.y });
             ok += 1;
-            report.push(`· #${i + 1} move 文件夹「${id}」→ (${Math.round(p.x)},${Math.round(p.y)})${p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : ''}`);
+            report.push(`· #${i + 1} move 文件夹「${id}」→ ${sayWhere(p)}`);
             continue;
           }
           if (!e) { fail(`${o.id} 不在板上`); continue; }
@@ -228,24 +223,11 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           // 挪的是他亲手摆的东西，agent 得心里有数、他不认可拖回去就是。
           const wasUser = e.seat === 'user' ? '（原是用户亲手摆的，已挪 —— 他不认可会拖回去）' : '';
           const box = rectOf(id);
-          if ('ref' in o.to) {
-            const p = placeRel(id, box, o.to);
-            if (!p) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
-            setObj(id, { ...e, x: Math.round(p.x), y: Math.round(p.y), seat: 'agent' });
-            moveHuggers(id, Math.round(p.x) - e.x, Math.round(p.y) - e.y);
-            report.push(`· #${i + 1} move → (${Math.round(p.x)},${Math.round(p.y)})${p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : ''}${wasUser}`);
-          } else if ('x' in o.to) {
-            const p = placeAbs(o.to, box);
-            if (!p) { fail(o.to.sheet ? `纸 ${o.to.sheet} 不存在（read_board 看纸的清单）` : '还没有铺过纸 —— 先 open_sheet，或用 {dx,dy}/{ref,side}'); continue; }
-            setObj(id, { ...e, x: p.x, y: p.y, seat: 'agent' });
-            moveHuggers(id, p.x - e.x, p.y - e.y);
-            report.push(`· #${i + 1} move → 纸 ${p.sheetId} (${p.x},${p.y})${p.clamped ? '（越界，钳进了版心）' : ''}${wasUser}`);
-          } else {
-            const nx = Math.round(e.x + o.to.dx); const ny = Math.round(e.y + o.to.dy);
-            setObj(id, { ...e, x: nx, y: ny, seat: 'agent' });
-            moveHuggers(id, nx - e.x, ny - e.y);
-            report.push(`· #${i + 1} move → (${nx},${ny})${wasUser}`);
-          }
+          const p = placeTo(o.to, box, new Set([id]));
+          if (p.error) { fail(p.error); continue; }
+          setObj(id, { ...e, x: p.x, y: p.y, seat: 'agent' });
+          moveHuggers(id, p.x - e.x, p.y - e.y);
+          report.push(`· #${i + 1} move → ${sayWhere(p)}${wasUser}`);
           ok += 1;
         } else if (o.op === 'move_group') {
           const members = Object.entries(live).filter(([, e]) => e.tag === bareTag(o.tag) && Number.isFinite(e?.x));
@@ -253,22 +235,9 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           const bb = { x: Math.min(...members.map(([, e]) => e.x)), y: Math.min(...members.map(([, e]) => e.y)) };
           const rects = members.map(([id]) => rectOf(id));
           const w = Math.max(...rects.map(r => r.x + r.w)) - bb.x; const h = Math.max(...rects.map(r => r.y + r.h)) - bb.y;
-          let p; let pressed = [];
-          if ('ref' in o.to) {
-            const refId = rid(o.to.ref);
-            const r = rectOf(refId);
-            if (!r) { fail(`参照 ${o.to.ref} 不在板上`); continue; }
-            const zone = layerOf(refId, live[refId], known);
-            const memberIds = new Set(members.map(([id]) => id));
-            p = placeBeside(r, { w, h }, o.to.side, o.to.gap ?? UNIT);
-            pressed = overlapIds({ x: p.x, y: p.y, w, h }, obstaclesNear(zone, memberIds));
-          } else if ('x' in o.to) {
-            const pa = placeAbs(o.to, { w, h });
-            if (!pa) { fail(o.to.sheet ? `纸 ${o.to.sheet} 不存在` : '还没有铺过纸 —— 先 open_sheet，或用 {dx,dy}/{ref,side}'); continue; }
-            p = pa;
-          } else {
-            p = { x: bb.x + o.to.dx, y: bb.y + o.to.dy };
-          }
+          const memberIds = new Set(members.map(([id]) => id));
+          const p = placeTo(o.to, { w, h }, memberIds);
+          if (p.error) { fail(p.error); continue; }
           const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
           // 08-28 放开：user 座随组平移（相对格局原样保留，学 follow 平移跟随的先例）
           // —— 旧行为跳过用户件会把组撕开留一半在原地，那才是最丑的结果。如实报件数。
@@ -277,7 +246,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           for (const [id, e] of members) setObj(id, { ...e, x: e.x + dx, y: e.y + dy, ...(e.seat === 'user' ? {} : { seat: 'agent' }) });
           for (const [id] of members) moveHuggers(id, dx, dy, movedSet);
           if (userSeated.length) report.push(`· #${i + 1} move_group: 含用户亲手摆的 ${userSeated.length} 件（随组平移，相对格局保留）`);
-          report.push(`· #${i + 1} move_group #${o.tag} → 组左上 (${Math.round(p.x)},${Math.round(p.y)})${pressed.length ? `（⚠ 压住了 ${pressed.slice(0, 3).join('、')}）` : ''}${p.clamped ? '（越界，钳进了版心）' : ''}`);
+          report.push(`· #${i + 1} move_group #${o.tag} → ${sayWhere(p)}`);
           ok += 1;
         } else if (o.op === 'remove') {
           const id = rid(o.id); const e = id && live[id];
@@ -297,19 +266,19 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         } else if (o.op === 'add_node') {
           const size = (o.size === 'sm' && o.text.length > 40) ? 'md' : (o.size || 'md');
           const box = textBox(o.text, size, { md: o.format === 'md' });
-          const p = placeRel(null, box, o.at);
-          if (!p) { fail(`参照 ${o.at.ref} 不在板上`); continue; }
-          const refId = rid(o.at.ref);
-          const zone = layerOf(refId, live[refId], known);
+          const p = placeTo(o.at, box);
+          if (p.error) { fail(p.error); continue; }
+          const refId = p.anchorId;
+          const zone = p.zone;
           const id = `text:a${stamp()}`;
-          const tag = o.tag || defaultTag || live[refId]?.tag || null;
+          const tag = o.tag || defaultTag || (refId ? live[refId]?.tag : null) || p.groupTag || null;
           setObj(id, {
             x: Math.round(p.x), y: Math.round(p.y), z: 1, w: box.w, h: box.h, kind: 'text',
             data: { t: o.text, ...(o.format === 'md' ? { format: 'md' } : {}), font: TEXT_FONTS.includes(o.font) ? o.font : 'pen', size, color: o.color || 'ink', ...(o.id ? { lid: o.id } : {}) },
             zone, by, seat: 'agent', ...(tag ? { tag } : {}),
           });
           if (o.id) local.set(o.id, id);
-          report.push(`+ node ${o.id ? `${o.id}=` : ''}${id}`); ok += 1;
+          report.push(`+ node ${o.id ? `${o.id}=` : ''}${id} — ${sayWhere(p)}`); ok += 1;
         } else if (o.op === 'add_shape') {
           // 事后圈重点（08-27 shapes 编辑面）：给**已在板上**的东西补一个手画记号。
           // hug 让它跟着目标走 —— 之前画完的圈是死的，目标一挪就散架。
@@ -541,13 +510,6 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           for (const [id, e] of Object.entries(r.patch)) setObj(id, e);
           report.push(`· transform_group #${o.tag}：绕组心 (${r.center.x},${r.center.y}) ${o.scale ? `缩放 ${o.scale}×` : ''}${o.rotate ? ` 旋转 ${o.rotate}°` : ''} —— ${r.inked} 件涂鸦真变形${r.seated ? `，${r.seated} 件（文字/卡）只挪了位没变形` : ''}`);
           ok += 1;
-        } else if (o.op === 'replan') {
-          // 补版位/调版位（刀⑧ 2026-08-30，拆件见 sheet-replan.js）
-          const r = applyReplan({ board, sheetsPatch, sessionId, op: o });
-          if (r.error) { fail(r.error); continue; }
-          sheetsPatch[r.sheetId] = r.entry;
-          report.push(r.report);
-          ok += 1;
         } else if (o.op === 'chalk_edit') {
           // 改板书开关（08-25 用户提：黑板 RP 这类板书密集会话该由 agent 帮忙打开）。
           // 存 ui-config（重开页面还在），并广播给开着的前端当场生效。
@@ -560,11 +522,10 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       } catch (e) { fail(String(e?.message || e).slice(0, 120)); }
     }
     if (!ok) return err(`没有一条操作成功：\n${report.join('\n')}`);
-    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length || Object.keys(sheetsPatch).length || heroPatch !== undefined) {
+    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length || heroPatch !== undefined) {
       await patchBoard(projectId, {
         objects, bindings,
         ...(Object.keys(zonesPatch).length ? { zones: zonesPatch } : {}),
-        ...(Object.keys(sheetsPatch).length ? { sheets: sheetsPatch } : {}),
         ...(Object.keys(rolls).length ? { rolls } : {}),
         ...(Object.keys(follows).length ? { follows } : {}),
         ...(heroPatch !== undefined ? { hero: heroPatch } : {}),

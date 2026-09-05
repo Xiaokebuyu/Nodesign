@@ -12,8 +12,8 @@
  * 步骤便签的尸体。站主拍板改成**项目单例**：
  *   - run.todo.updated → 全项目共用一张 `notes/板书/<stamp>-步骤.md`（tag=步骤），
  *     内容原地重写；内存台账丢了就按 tag 从板上**认领旧的**，不再新建
- *   - 首次落位上暂存架（seat:'shelf'，机器的手只够得到架）；agent/用户挪过之后
- *     位置跨轮保留 —— 它就是一块可以被 edit_board move 经营的版面组件
+ *   - 首次落位走求解器（用户视口的空地，没有视口就排在内容底下）；agent/用户
+ *     挪过之后位置跨轮保留 —— 它就是一块可以被 edit_board move 经营的版面组件
  *   - run.file_changed（有"正在"的步骤时）→ 便签到那件产物的 annotates 线，
  *     label「第 N 步」，by:'auto'
  *   - run.done/cancelled/error → **拆掉这一轮拉出去的 auto 步骤线**（线说的是
@@ -28,7 +28,7 @@ import { estimateSizeOn } from '../../lib/board-kind-sizes.js';
 import { getViewpoint } from '../../projects/viewpoint-store.js';
 import { layerOf, normalizeCanvasId } from '../../lib/canvas-id.js';
 import { textBox } from '../../lib/sketch-layout.js';
-import { resolveShelfOrigin, nextShelfSpot } from '../../lib/board-shelf.js';
+import { solvePlace } from '../../lib/board-place.js';
 import { renderChalk, writeChalkFile, CHALK_DIR } from '../../lib/chalk.js';
 
 const TAG = '步骤';
@@ -102,17 +102,15 @@ async function upsert(st, projectId, session) {
     await patchBoard(projectId, { objects: { [st.rel]: { ...prev, h: box.h, tag: TAG } } });
     return;
   }
-  // 首次落位（2026-08-30 暂存架）：机器的手只够得到架
+  // 首次落位（2026-09-05）：求解器 —— 用户视口的空地，没有视口就排在内容底下
   const known = new Set(Object.keys(board.zones || {}));
   const obstacles = Object.entries(board.objects || {})
     .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === '')
-    .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
+    .map(([id, e]) => ({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
   const vp = getViewpoint(projectId);
-  const origin = resolveShelfOrigin(board, (vp?.camera && !vp.layer) ? vp.camera : null);
-  const spot = nextShelfSpot(origin, obstacles);
+  const spot = solvePlace({ box, viewport: (vp?.camera && !vp.layer) ? vp.camera : null, obstacles });
   await patchBoard(projectId, {
-    objects: { [st.rel]: { x: spot.x, y: spot.y, z: 1, w: box.w, h: box.h, by: 'agent', seat: 'shelf', tag: TAG } },
-    ...(origin.changed ? { shelf: { x: origin.x, y: origin.y } } : {}),
+    objects: { [st.rel]: { x: spot.x, y: spot.y, z: 1, w: box.w, h: box.h, by: 'agent', seat: 'auto', tag: TAG } },
   });
 }
 

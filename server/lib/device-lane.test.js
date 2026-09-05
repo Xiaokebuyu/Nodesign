@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 import { setViewpoint, getViewpoint, describeDevice, _resetViewpoints } from '../projects/viewpoint-store.js';
 import { fitFor, SKETCH_FIT, resolveTemplate, layoutNodes, textBox, UNIT } from './sketch-layout.js';
-import { placeThread, nextSpotInSheet } from './board-sheets.js';
+import { placeBelow, solvePlace } from './board-place.js';
 
 const vpOf = (device) => ({
   camera: { x: 0, y: 0, w: 1600, h: 950 }, zoom: 1, ...(device ? { device } : {}),
@@ -119,7 +119,7 @@ describe('单列落位（2026-08-29 纸范式：竖排是结构保证不是启�
 
   it('线程接楼永远正下方（没有横接档 —— replyDir/挑侧启发式已随落位引擎退役）', () => {
     const replyTo = { x: 0, y: 0, w: 342, h: 200 };
-    const r = placeThread({ sheets: {} }, replyTo, box, { obstacles: [{ ...replyTo }] });
+    const r = placeBelow(replyTo, box, [{ ...replyTo }]);
     expect(r.y).toBeGreaterThanOrEqual(replyTo.y + replyTo.h);
     expect(r.x).toBe(replyTo.x);
   });
@@ -127,16 +127,16 @@ describe('单列落位（2026-08-29 纸范式：竖排是结构保证不是启�
   it('接楼压住别人就跳到那件底下接着排（只往下，不换侧）', () => {
     const replyTo = { x: 0, y: 0, w: 342, h: 200 };
     const blocker = { x: 0, y: 224, w: 342, h: 300 };
-    const r = placeThread({ sheets: {} }, replyTo, box, { obstacles: [replyTo, blocker] });
+    const r = placeBelow(replyTo, box, [replyTo, blocker]);
     expect(r.x).toBe(0);
     expect(r.y).toBeGreaterThanOrEqual(blocker.y + blocker.h);
   });
 
-  it('纸内顺排只往下（手机纸窄 = 天然单列，比纸宽的进不了纸）', () => {
-    const b = { sheets: { p1: { x: 0, y: 0, w: 342 + 48, h: 1062 } }, objects: {} };
-    const first = nextSpotInSheet(b, 'p1', box);
-    expect(first).toBeTruthy();
-    expect(nextSpotInSheet(b, 'p1', { w: 600, h: 100 })).toBeNull();   // 比手机纸宽 → 拒
+  it('手机档贴锚只许上下：偏好 right 也落成 below/above（求解器 column 档）', () => {
+    const anchor = { x: 0, y: 0, w: 342, h: 200 };
+    const r = solvePlace({ box, anchor, side: 'right', obstacles: [anchor], column: true });
+    expect(['below', 'above']).toContain(r.side);
+    expect(r.x).toBe(0);
   });
 });
 

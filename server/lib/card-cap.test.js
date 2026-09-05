@@ -1,12 +1,11 @@
 /**
- * 一块卡的高度上限（2026-08-29 占位契约刀 B→E）。
+ * 一块卡的高度上限（2026-08-29 占位契约刀 B→E；2026-09-05 意图层改口径）。
  *
- * ⚠️ 范式换过一次：先做成"渲染层折叠 + 估算封顶"，站主否掉 ——「收起展开没必要，
- * 应当提示 agent 让她分块内容、重新布置」。上限的执行点因此从渲染层挪到**工具层**：
- * 写不下就拒收，什么都不落盘，把还剩多少报回去。折叠/裁切都是替它把问题藏起来，
- * 而它下一条还会照写不误。
+ * 08-29 的口径是工具层拒收。09-05 板书定位收窄成解释以后，硬拒是拿一整轮换一个
+ * 教训：内容照写、卡高封顶、超出的折在卡里，返回里如实报并教「一条板书说一件事，
+ * 真内容进产物」。
  *
- * 判据成对：拒了 + 说清楚还剩多少 / 装得下的照写不误 / 拒收时板上件数没变。
+ * 判据成对：封顶了 + 如实报 / 短的照写不提 / 件数 +1。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs/promises';
@@ -39,45 +38,43 @@ describe('textBox 报真实高度（不再封顶）', () => {
   });
 });
 
-describe('工具层拒收超长（没规划版面时）', () => {
+describe('工具层封顶折叠（2026-09-05：不再拒收，板书说一件事这句话在返回里教）', () => {
   const pid = 'proj_cardcap_e2e';
   let write1; let readBoard;
   const countObjects = async () => Object.keys((await readBoard(pid)).objects || {}).length;
 
   beforeAll(async () => {
     const { makeWriteOnBoardTool } = await import('../engine/mcp/tools/write-on-board.js');
-    const { makeOpenSheetTool } = await import('../engine/mcp/tools/open-sheet.js');
     const { getSharedDir, ensureProjectWorkspace } = await import('../projects/workspace.js');
     const { setViewpoint, _resetViewpoints } = await import('../projects/viewpoint-store.js');
-    const { _resetSheetState } = await import('./sheet-state.js');
     ({ readBoard } = await import('../projects/board-store.js'));
     await ensureProjectWorkspace(pid);
-    _resetViewpoints(); _resetSheetState();
+    _resetViewpoints();
     setViewpoint(pid, { camera: { x: 0, y: 0, w: 1400, h: 900 }, zoom: 1 });
     const ctx = { emit() {} };
     const sharedRoot = getSharedDir(pid);
     write1 = (a) => makeWriteOnBoardTool({ projectId: pid, sharedRoot, sessionId: 'cap', ctx }).handler(a, {});
-    await makeOpenSheetTool({ projectId: pid, sessionId: 'cap', ctx }).handler({}, {});
   });
 
-  it('⭐ 写一整章 → 拒收，报清楚一块卡能装多少、给出两条出路', async () => {
+  it('⭐ 写一整章 → 照写，卡高封顶在 CARD_MAX_H，返回如实报折叠并教「一条板书说一件事」', async () => {
     const before = await countObjects();
     const r = await write1({ text: long });
-    expect(r.isError).toBe(true);
+    expect(r.isError).toBeUndefined();
     const txt = r.content[0].text;
-    expect(txt).toMatch(/Too long for one card/);
-    expect(txt).toMatch(new RegExp(`${CARD_MAX_H}px`));
-    expect(txt).toMatch(/CJK chars/);
-    expect(txt).toMatch(/chain:true/);          // 出路①：拆成几条串起来
-    expect(txt).toMatch(/open_sheet\{plan\}/);   // 出路②：先规划版面
-    // ⭐ 什么都没写 —— 拒收不能是"半写"
-    expect(await countObjects()).toBe(before);
+    expect(txt).toMatch(/Long for one card/);
+    expect(txt).toMatch(/folded/);
+    expect(txt).toMatch(/artifact/);
+    expect(await countObjects()).toBe(before + 1);
+    const board = await readBoard(pid);
+    const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/')).sort().pop();
+    expect(board.objects[id].h).toBe(CARD_MAX_H);
   });
 
-  it('⭐ 反向：短板书照写不误（防止把拒收写成永远拒）', async () => {
+  it('⭐ 反向：短板书照写、不提折叠', async () => {
     const before = await countObjects();
     const r = await write1({ text: short });
     expect(r.isError).toBeUndefined();
+    expect(r.content[0].text).not.toMatch(/folded/);
     expect(await countObjects()).toBe(before + 1);
   });
 });

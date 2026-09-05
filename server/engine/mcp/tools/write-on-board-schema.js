@@ -17,16 +17,6 @@ const MAX_EDGES = 400;
 const LOCAL_ID = z.string().regex(/^[A-Za-z0-9_-]{1,48}$/, 'local id: letters/digits/_/-');
 const GRID_PT = z.object({ x: z.number().min(-2000).max(2000), y: z.number().min(-2000).max(2000) });
 export const WORLD_PT = z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6) });
-/**
- * 纸内坐标（2026-08-29 纸范式）：以当前纸版心左上角为原点的像素。越界**钳住不拒收**
- * （schema 整单拒是最贵的失败模式；钳过在返回里如实报）。preprocess 在给模型看的
- * JSON schema 里隐形 —— 文档照旧严格，垫片只当安全网。
- */
-const clampN = (lo, hi) => (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : v);
-export const SHEET_PT = z.object({
-  x: z.preprocess(clampN(0, 12000), z.number().min(0).max(12000)),
-  y: z.preprocess(clampN(0, 12000), z.number().min(0).max(12000)),
-});
 
 export const NODES = z.array(z.object({
   id: LOCAL_ID.describe('Local id to reference from edges/shapes'),
@@ -76,37 +66,37 @@ export const EDGES = z.array(z.object({
 })).max(MAX_EDGES);
 
 /**
- * ⚠️ 字段顺序有意义（2026-08-29 占位契约刀 C）：模型是按 schema 声明顺序生成
- * JSON 的，而入参是**流式**到达前端的 —— 位置字段排在 text 前面，画布才能在
- * 第一个字到达时就把框立在真位置上，让正文流进去（排在后面的话，字已经流完了
- * 位置才到，只能先画在一块空地上再跳过去 —— 那正是这一刀要治的）。
- * 抽取规则在 agent-shared.js 的 TOOL_INPUT_STREAM_FIELDS.spot。
+ * ⚠️ 字段顺序有意义：模型按 schema 声明顺序生成 JSON，入参是**流式**到达前端的 ——
+ * 关系字段（place/near/reply_to）排在 text 前面，前端在第一个字到达时就知道这条
+ * 贴着谁，能先把框立在锚旁边再让正文流进去。抽取规则在 tool-input-stream.js。
  */
+/** 落位意图（2026-09-05）：只说关系，像素由 lib/board-place.js 解 */
+export const PLACE = z.object({
+  by: z.string().max(300).optional()
+    .describe("Put it next to THIS: a canvas id / #tag / board-note path, 'user' = what the user has selected, 'view' = free ground in the user's current view (the default when nothing is given)"),
+  side: z.enum(['right', 'left', 'below', 'above']).optional()
+    .describe('Preferred side of `by`. A preference, not an order: if that side is taken it goes to the nearest free side and the return says so'),
+  with: z.string().regex(TAG_RE).optional()
+    .describe('Continue THIS group: lands right under the last note of that #tag (a running thread grows downward)'),
+}).describe('WHERE, in relations — no pixels. Omit it to land in the user\'s view');
+
 export const WRITE_SCHEMA = {
-  slot: z.string().regex(TAG_RE).optional()
-    .describe('Drop this into a PLANNED BLOCK of the current sheet (names come from open_sheet{plan}). The block decides the width and where it lands; notes stack downward inside it. If it does not fit, the write is REFUSED with how much room is left — split the content or re-plan. Prefer this over at: plan the page first, then fill it.'),
-  at: SHEET_PT.optional()
-    .describe("Where on the CURRENT SHEET, in pixels from its top-left writable corner (x→right, y→down). Clamped into the sheet — the return says if it was. Omit it to flow top-to-bottom"),
-  sheet: z.string().regex(TAG_RE).optional()
-    .describe('Write on this sheet instead of the current one (names from open_sheet / read_board)'),
-  width: z.number().min(8).max(60).optional().describe('Single note width in grid units (24px). Default: the width the user last dragged chalk blocks to, else by content. Omit it unless this one block needs a different measure - the default already follows the user.'),
+  place: PLACE.optional(),
   near: z.string().max(300).optional()
-    .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it. Placement itself is by sheet (at / flow), not by near'),
-  side: z.enum(['right', 'left', 'above', 'below']).optional()
-    .describe('ONLY with near, when the SEMANTICS demand a side (e.g. a caption must sit above): exact placement beside the anchor. Normally omit — sheets flow downward'),
-  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; a full sheet turns the page)`),
+    .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it and, unless place says otherwise, lands beside it'),
+  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it)`),
   text: z.string().min(1).max(8000).optional()
     .describe('The one-note shorthand: a short Markdown note (= a 1-piece board write). Give text OR nodes/shapes, not both'),
+  width: z.enum(['narrow', 'normal', 'wide']).optional()
+    .describe('Measure of a single note: narrow (~12 CJK chars/line, a caption or a label), normal (~18 chars/line, the default), wide (~26 chars/line, a table or a list). The box grows with the content — never pass a height'),
   flow: z.boolean().optional()
-    .describe('Lazy FALLBACK for a ready-made long text: the machine splits it at paragraph breaks into a chain of card-sized notes, packs them as far as they fit, and returns the rest untouched (never squeezed, dropped, or auto-paged). PREFER carving slots yourself (open_sheet{plan}/replan, omit at to stack) and filling them one note each — you keep control of where each part breaks.'),
-  h: z.number().min(24).max(2000).optional()
-    .describe('Reserve this HEIGHT in pixels for the note box, placed before the text settles (plan the box, then fill it). Shorter content keeps the box; longer content overrides it. Ignored with flow.'),
+    .describe('For a ready-made long text: the machine splits it at paragraph breaks into a chain of card-sized notes threaded downward. Prefer writing several short notes yourself — a board note explains one thing'),
   relation: z.enum(BINDING_TYPE_IDS).optional()
     .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
   chain: z.boolean().optional()
     .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights)'),
   open_lane: z.string().max(300).optional()
-    .describe("Open a NEW thread line named by tag: lays a fresh sheet for it and lands this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it), or 'fresh' for a brand-new topic. Requires tag; continue with {tag, chain:true}."),
+    .describe("Open a NEW thread line named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it, lands beside it), or 'fresh' for a brand-new topic (lands in the user's view). Requires tag; continue with {tag, chain:true}."),
   tag: z.string().regex(TAG_RE).optional()
     .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
   ink: z.enum(['chalk', 'hand']).optional()
@@ -123,3 +113,6 @@ export const WRITE_SCHEMA = {
   shapes: SHAPES.optional(),
   edges: EDGES.optional(),
 };
+
+/** width 三档 → 格数（1 格 = 24px）。判据是每行汉字数：字 16px，行内边距吃掉约 1 格 */
+export const WIDTH_UNITS = Object.freeze({ narrow: 10, normal: 14, wide: 18 });

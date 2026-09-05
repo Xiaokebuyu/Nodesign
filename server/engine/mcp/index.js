@@ -65,7 +65,6 @@ import { makePinToBoardTool } from './tools/pin-to-board.js';
 import { makeEditBoardTool } from './tools/edit-board.js';
 import { makeReadBoardTool } from './tools/read-board.js';
 import { makeWriteOnBoardTool } from './tools/write-on-board.js';
-import { makeOpenSheetTool } from './tools/open-sheet.js';
 import { makeLookAtBoardTool } from './tools/look-at-board.js';
 import { makeReadUserViewTool } from './tools/read-user-view.js';
 import { makeOrganizeBoardTool } from './tools/organize-board.js';
@@ -140,9 +139,6 @@ const ALWAYS_LOAD_TOOLS = new Set([
   // read_user_view 不进：视口已经每回合自动进状态块，它降级成"看画面细节"的按需件。
   // board_batch 2026-08-30 暂停（见下面注册处的注释），常驻表同步摘牌。
   'write_on_board', 'edit_board', 'read_board', 'look_at_board',
-  // 纸范式（2026-08-29）：铺纸是板面工作的起手式，卖点全在描述里（当前纸/坐标原点/
-  // 排不下就拒收、翻页归 agent），必须常驻。
-  'open_sheet',
 ]);
 
 /**
@@ -174,7 +170,6 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   const resolveTool = (n) => wrappedByName.get(n);
   const writeOnBoard = makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx });
   const boardBatchable = [
-    makeOpenSheetTool({ projectId, sessionId, ctx }),
     writeOnBoard,
     makeEditBoardTool({ projectId, sharedRoot, sessionId, ctx }),
     makeReadBoardTool({ projectId, sharedRoot }),

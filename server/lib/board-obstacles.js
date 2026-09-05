@@ -31,7 +31,7 @@
 
 import { layerOf } from './canvas-id.js';
 import { estimateSizeOn, zoneRects } from './board-kind-sizes.js';
-import { inflateSpriteSeats, rollCardRect } from './board-sheets.js';
+import { inflateSpriteSeats, rollCardRect } from './board-place.js';
 
 /**
  * 一层的障碍集。
