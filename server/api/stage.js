@@ -142,7 +142,7 @@ router.post('/:pid/stage/:play/say', express.json({ limit: '64kb' }), async (req
   const text = String(req.body?.text || '').trim();
   if (!text) return res.status(400).json({ error: 'text required' });
   if (text.length > 8000) return res.status(400).json({ error: 'text too long' });
-  try { res.json({ ok: true, ...(await sayToStage(req.params.pid, play, text, { userId: req.user?.id || null })) }); } catch (err) { sendErr(res, err); }
+  try { res.json({ ok: true, ...(await sayToStage(req.params.pid, play, text, { userId: req.user?.id || null, check: req.body?.check && typeof req.body.check === 'object' ? req.body.check : null })) }); } catch (err) { sendErr(res, err); }
 });
 
 /**

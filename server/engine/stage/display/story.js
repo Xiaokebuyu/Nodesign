@@ -74,7 +74,7 @@
       if (r.by === 'user') return `<article class="beat me" data-id="${esc(r.id)}" data-i="${i}" tabindex="0"><div class="tagline">你<time>${fmtTime(r.at)}</time></div>${renderProse(r.text)}${this.actions(r)}</article>`;
       if (r.by === 'system') return `<div class="beat sys" data-id="${esc(r.id)}" data-i="${i}" tabindex="0"><span>${esc(r.text)}</span>${this.actions(r)}</div>`;
       if (r.by === 'user-state') return `<div class="beat sys" data-i="${i}"><span>你改了状态：${esc(Object.entries(r.state || {}).map(([k, v]) => `${ND.labelOf(k)} ${v}`).join(' · '))}</span></div>`;
-      if (r.by === 'dice') return `<div class="beat dice" data-i="${i}">${esc(r.reason || '')} · d${r.sides}×${(r.rolls || []).length} → [${(r.rolls || []).join(', ')}] = <b>${r.total}</b></div>`;
+      if (r.by === 'dice') return this.diceRow(r, i);
       const speakers = (r.speakers || []).join('|');
       return `<article class="beat" data-id="${esc(r.id)}" data-i="${i}" data-speakers="${esc(speakers)}"${r.scene ? ` data-scene="${esc(r.scene)}"` : ''}>${r.scene ? `<div class="scene-tag">${esc(r.scene)}</div>` : ''}${renderProse(r.text)}</article>`;
     },
@@ -157,6 +157,16 @@
       if (force || this.stick) setTimeout(() => { b.scrollTop = b.scrollHeight; }, 0);   // 不用 rAF：卡片预览里 rAF 被冻住
     },
 
+    /** 判定行：名目 · 骰式 = 点数（+修正）vs 难度 → 成败 */
+    diceRow(r, i) {
+      const OUT = { crit: '大成功', success: '成功', fail: '失败', fumble: '大失败' };
+      const mod = r.modifier ? (r.modifier > 0 ? ` +${r.modifier}` : ` ${r.modifier}`) : '';
+      const faces = (r.rolls || []).length > 1 ? `[${(r.rolls || []).join(', ')}]` : String((r.rolls || [])[0] ?? '');
+      const dice = `d${r.sides}${r.count > 1 ? `×${r.count}` : ''}${r.advantage === 'adv' ? '（优势）' : r.advantage === 'dis' ? '（劣势）' : ''}`;
+      const vs = r.dc !== null && r.dc !== undefined ? ` <span class="vs">vs 难度 ${esc(r.dc)}</span> <em class="${esc(r.outcome || '')}">${OUT[r.outcome] || ''}</em>` : '';
+      return `<div class="beat dice ${esc(r.outcome || '')}" data-i="${i}"><span class="why">${esc(r.reason || '')}</span> · ${esc(dice)} = ${esc(faces)}${mod ? esc(mod) : ''}${(r.rolls || []).length > 1 || mod ? ` = <b>${esc(r.total)}</b>` : ''}${vs}</div>`;
+    },
+
     /* ── 选项 + 输入 ── */
     paintHandles() {
       const box = $('options'); if (!box) return;
@@ -169,12 +179,13 @@
       box.innerHTML = list.map((c) => {
         let label = c.label || ''; let hint = c.hint && !CAT.test(c.hint.trim()) ? c.hint : '';
         if (CAT.test(label.trim()) && hint) { label = hint; hint = ''; }   // 老记录里按钮写的是"主线"、小字才是动作：换过来
-        return `<button class="handle" data-p="${esc(c.prompt || c.label)}"${dis}><b>${esc(label)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}</button>`;
+        const chk = c.check && c.check.dc ? `<i class="chk" title="点下去机器代掷，成败随这句话一起告诉对方"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="16" cy="8" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="8" cy="16" r="1.4" fill="currentColor"/><circle cx="16" cy="16" r="1.4" fill="currentColor"/></svg>${esc(c.check.label || '判定')} · d${esc(c.check.sides || 20)}${c.check.modifier ? (c.check.modifier > 0 ? ` +${esc(c.check.modifier)}` : ` ${esc(c.check.modifier)}`) : ''} vs ${esc(c.check.dc)}</i>` : '';
+        return `<button class="handle${chk ? ' checked' : ''}" data-p="${esc(c.prompt || c.label)}"${chk ? ` data-check="${esc(JSON.stringify(c.check))}"` : ''}${dis}><b>${esc(label)}</b>${hint ? `<span>${esc(hint)}</span>` : ''}${chk}</button>`;
       }).join('');
       $('optN').textContent = list.length ? `${list.length} 个` : (store.status.busy ? '等这一段写完' : '');
       const chips = $('chips'); if (chips) { chips.innerHTML = ND.panelChips ? ND.panelChips() : ''; chips.querySelectorAll('[data-page]').forEach(b => { b.onclick = () => ND.show(b.dataset.page); }); }
       $('optHd').style.display = list.length || store.status.busy ? '' : 'none';
-      box.querySelectorAll('.handle').forEach((b) => { b.onclick = () => this.fire(b.dataset.p); });
+      box.querySelectorAll('.handle').forEach((b) => { b.onclick = () => { let chk = null; try { chk = b.dataset.check ? JSON.parse(b.dataset.check) : null; } catch { chk = null; } this.fire(b.dataset.p, chk); }; });
       const ta = $('say'); const go = $('sayGo');
       go.disabled = !store.cfg || store.sending; ta.disabled = !store.cfg;
       const send = () => { const v = ta.value.trim(); if (v) { this.fire(v); ta.value = ''; ta.style.height = 'auto'; } };
@@ -183,10 +194,10 @@
       ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; };
       $('hint').textContent = store.status.busy ? '正在回复，你说的会排在后面' : (store.status.running ? '' : (store.scenes.length ? '进程已停下，说一句就接上（第一句慢一点）' : ''));
     },
-    async fire(text) {
+    async fire(text, check = null) {
       if (!text || store.sending || ND.EMBED) return;
       store.sending = true; this.note(''); this.paintHandles();
-      try { await api.say(text); } catch (err) { this.note(`没送出去：${err.message}`, true); }
+      try { await api.say(text, check); } catch (err) { this.note(`没送出去：${err.message}`, true); }
       finally { store.sending = false; this.paintHandles(); }
     },
     note(t, err) { const n = $('note'); if (n) { n.textContent = t || ''; n.className = 'note' + (err ? ' err' : ''); } },

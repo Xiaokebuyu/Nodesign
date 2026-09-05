@@ -15,6 +15,8 @@ import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import { TABLE_FILE, SCENES_DIR, BACKDROPS_DIR, readRules, readPlayConfig, writePlayConfig, appendTrophy } from './play.js';
 import { evaluateRules } from './rules.js';
+import { rollCheck, diceText } from './dice.js';
+import { appendSceneRow } from './tools.js';
 import { makeGenerateImageTool } from '../mcp/tools/generate-image.js';
 
 const BACKDROPS_ON = process.env.NODESIGN_STAGE_BACKDROPS !== 'off';
@@ -187,4 +189,18 @@ export async function maybeBackdrop(rt, row, cfg) {
     return;
   }
   spawnBackdrop(rt, cfg, key, scene);
+}
+
+// ───────────────────────────── 判定 ─────────────────────────────
+
+/**
+ * 玩家点了一枚带 check 的选项：机器代掷，落一行 dice 记录、推给显示器，返回给进程的便条。
+ * 进程照结果写这一段（成败已定，它不能再改）。
+ */
+export async function rollForChoice(rt, check) {
+  if (!check || typeof check !== 'object') return '';
+  const row = rollCheck({ ...check, reason: check.label || check.reason });
+  await appendSceneRow(rt.playAbs, row, rt.scenesRel);
+  rt.broadcast({ type: 'scene', row });
+  return `【判定】玩家这个动作机器已经掷过：${diceText(row)}。照这个结果写，别改判。`;
 }

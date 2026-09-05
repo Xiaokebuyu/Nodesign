@@ -21,6 +21,7 @@ import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { resolveCardPath, cardHome, rewriteCardMemoryIndex, CARD_MEMORY_DIR } from './card.js';
 import { SCENES_DIR, SCENES_FILE, MEMORY_DIR, MEM_INDEX } from './play.js';
+import { rollCheck, diceText } from './dice.js';
 
 /** 小字只有类别词时视为没写（显示器那边同一条判据） */
 export const CATEGORY_HINT_RE = /^[（(\[【]?\s*(推进主线|主线|人际|人际关系|意外|意想不到|合理但意想不到|剑走偏锋|支线|日常)\s*[）)\]】]?[。.]?$/;
@@ -30,6 +31,13 @@ const choiceSchema = z.object({
   label: z.string().min(1).max(20).describe('按钮上的字：玩家的角色要做的那个具体动作，四到八个字（"把橘子推过去一半"）'),
   hint: z.string().max(60).optional().describe('按钮下面那行小字：说清楚点下去他具体会做什么、说什么，或者接下来会发生什么。⛔ 不许写类别词 —— "主线""人际""意外""推进剧情"这种字玩家看不懂也不想看，写了显示器会直接删掉'),
   prompt: z.string().min(1).max(500).describe('玩家点下这枚之后，等于他对你说了这句话'),
+  check: z.object({
+    label: z.string().min(1).max(20).describe('判定的名目，显示在选项上（"敏捷" / "说服" / "潜行"）'),
+    dc: z.number().int().min(1).max(1000).describe('难度：总点数 ≥ 它算成功'),
+    sides: z.number().int().min(2).max(1000).optional().describe('骰面，默认 20'),
+    modifier: z.number().int().min(-100).max(100).optional().describe('玩家角色在这项上的修正，默认 0'),
+    advantage: z.enum(['none', 'adv', 'dis']).optional().describe('优势 / 劣势：掷两颗取高 / 取低'),
+  }).optional().describe('这枚选项带一次判定：结果不确定且有代价的行动才带（翻墙、说服、潜行、出手）。玩家点下去机器先掷，成败随他这句话一起告诉你，你照结果写。日常动作别带'),
 });
 
 /** 记录文件默认是主线的；别的线路由调用方给 rel（play.js 的 sceneFileOf） */
@@ -166,19 +174,21 @@ export function createStageTools(ctx) {
 
   const rollDice = tool(
     'roll',
-    '掷骰。服务端真随机，⛔ 永远别自己编点数 —— 编的会塌掉整桌的信任。',
+    '判定骰。服务端真随机，⛔ 永远别自己编点数 —— 编的会塌掉整桌的信任。给了 dc 机器直接报成败（单颗 d20 及以上天然 20 / 1 是大成功 / 大失败）；'
+    + '什么时候掷：结果不确定且有代价的行动，玩家明确宣告了冒险的动作。日常琐事不掷。失败买信息或代价，成功带来新问题，永远不是白板一场。',
     {
-      sides: z.number().int().min(2).max(1000).describe('骰面数，常用 20 或 100'),
-      count: z.number().int().min(1).max(10).default(1).describe('掷几颗'),
-      reason: z.string().max(60).describe('为什么掷，会显示给玩家看'),
+      reason: z.string().max(60).describe('判定什么，会显示给玩家看（"翻墙 · 敏捷"）'),
+      sides: z.number().int().min(2).max(1000).default(20).describe('骰面数，常用 20 或 100'),
+      count: z.number().int().min(1).max(10).default(1).describe('掷几颗（优势 / 劣势时只能一颗）'),
+      modifier: z.number().int().min(-100).max(100).default(0).describe('加在总点上的修正'),
+      dc: z.number().int().min(1).max(1000).optional().describe('难度：总点 ≥ 它算成功。不给就只是掷个数'),
+      advantage: z.enum(['none', 'adv', 'dis']).default('none').describe('adv 掷两颗取高，dis 取低'),
     },
-    async ({ sides, count, reason }) => {
-      const rolls = Array.from({ length: count }, () => crypto.randomInt(1, sides + 1));
-      const total = rolls.reduce((a, b) => a + b, 0);
-      const row = { id: crypto.randomUUID().slice(0, 8), at: new Date().toISOString(), by: 'dice', reason, sides, rolls, total };
+    async (args) => {
+      const row = rollCheck(args);
       await appendSceneRow(playAbs, row, scenesRel());
       await ctx.onScene?.(row);
-      return { content: [{ type: 'text', text: `d${sides}×${count} = ${rolls.join(', ')}（合计 ${total}）· ${reason}` }] };
+      return { content: [{ type: 'text', text: diceText(row) }] };
     },
   );
 

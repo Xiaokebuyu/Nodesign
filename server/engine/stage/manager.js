@@ -47,7 +47,7 @@ import {
 } from './play.js';
 import { validateCondition } from './rules.js';
 import { composeStagePrompt, frozenHash } from './prompt.js';
-import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, sceneOf, fileUrl } from './mechanics.js';
+import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, sceneOf, fileUrl, rollForChoice } from './mechanics.js';
 import { resolvePreset, normalizeSelection, defaultSelection, DEFAULT_PRESET } from './preset.js';
 import { loadWorldbook, matchEntries, loreNote, LORE_COOLDOWN_BEATS } from './worldbook.js';
 import { readPanels, writePanels, declarePanels, applyOp as applyPanelOp, digest as panelDigest } from './panels.js';
@@ -428,7 +428,7 @@ function settleRun(rt, e) {
  * 用户对台上说一句。row 可换成机器发的那一行（开场：by:'system'），模型收到的仍是 text。
  * 每句都盖一个 uuid：它同时是转录里那条 user 记录的 uuid（回退 / 分叉按它切）。
  */
-export async function sayToStage(pid, root, text, { userId = null, row = null } = {}) {
+export async function sayToStage(pid, root, text, { userId = null, row = null, check = null } = {}) {
   const rt = runtimeOf(pid, root);
   if (rt.running && !rt.busy && !rt.session?.queued) {
     const changed = await sourcesChanged(rt);
@@ -444,9 +444,10 @@ export async function sayToStage(pid, root, text, { userId = null, row = null } 
   const saved = await appendUserLine(rt.playAbs, row?.text ?? text, { rel: rt.scenesRel, uuid, by: row?.by || 'user', extra: row?.extra || {} });
   rt.broadcast({ type: 'scene', row: saved });
   const notes = rt.pendingNotes.splice(0);
+  const dice = await rollForChoice(rt, check);   // 玩家点了带判定的选项：机器代掷，成败作便条
   const lore = await pickLore(rt, text);
   const pd = panelDigest(await readPanels(rt.playAbs));
-  const about = [stateLine(rt.state), ...(pd ? [`面板：${pd}`] : []), ...notes.map(n => `【便条：${n}】`), ...(lore ? [lore] : [])].join('\n');
+  const about = [stateLine(rt.state), ...(pd ? [`面板：${pd}`] : []), ...notes.map(n => `【便条：${n}】`), ...(dice ? [dice] : []), ...(lore ? [lore] : [])].join('\n');
   const r = rt.session.say(text, { about, uuid });
   rt.touch();
   rt.broadcast(rt.status());

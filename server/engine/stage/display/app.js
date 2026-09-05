@@ -36,7 +36,7 @@
       if (!res.ok) throw new Error(data?.error || res.statusText);
       return data;
     },
-    say: (text) => api.json('POST', 'say', { text }),
+    say: (text, check) => api.json('POST', 'say', check ? { text, check } : { text }),
     start: () => api.json('POST', 'start', {}),
     stop: () => api.json('POST', 'stop'),
     config: (patch) => api.json('PATCH', 'config', patch),

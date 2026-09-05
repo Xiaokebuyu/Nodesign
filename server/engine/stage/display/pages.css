@@ -31,6 +31,13 @@
 .beat.sys::before,.beat.sys::after{content:"";flex:1;height:1px;background:var(--rule-md)}
 .beat.dice{font-family:var(--sans);font-size:12.5px;color:var(--ink-3);margin-bottom:22px;padding:8px 12px;border:1px dashed var(--rule-md);border-radius:2px;display:inline-block}
 .beat.dice b{color:var(--accent);font-variant-numeric:tabular-nums}
+.beat.dice .why{color:var(--ink);font-weight:600}
+.beat.dice .vs{color:var(--sub)}
+.beat.dice em{font-style:normal;font-weight:700;margin-left:4px}
+.beat.dice em.success,.beat.dice em.crit{color:var(--accent)} .beat.dice em.fail,.beat.dice em.fumble{color:var(--ink-3)}
+.beat.dice.crit,.beat.dice.fumble{border-style:solid}
+.handle .chk{display:inline-block;margin-top:5px;font-style:normal;font-size:10.5px;letter-spacing:.02em;color:var(--accent);border:1px dashed var(--accent);border-radius:2px;padding:1px 6px;font-variant-numeric:tabular-nums}
+.handle .chk svg{vertical-align:-1px;margin-right:4px}
 .beat.draft{color:var(--ink-2)}
 .beat.draft p:last-child::after{content:"▍";color:var(--accent);animation:blink .9s infinite;margin-left:1px}
 /* 行上的动作：悬停才出（回到这句之前 / 从这里分叉） */
