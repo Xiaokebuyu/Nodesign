@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
@@ -15,6 +15,7 @@ import { useMedia, NARROW } from '../lib/use-media.js';
 import { useHoverReveal } from '../lib/use-hover-reveal.js';
 import dHand from '../assets/login-wall/doodles/hand.webp';
 import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
+import Popover from '../components/ui/Popover.jsx';
 import { t, getLocale } from '../lib/i18n.js';
 import { sheetClassOf } from './home-sheets.js';
 import { DayToggle } from './home-light.jsx';
@@ -346,8 +347,10 @@ function RecentQuickRow({ session: s, isFirst, onDelete }) {
 
 function ProjectCard({ project, stat, newest }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const cardRef = useRef(null);
+  const moreRef = useRef(null);
   // 鼠标移开时顺手把菜单关掉（触屏上 hoverProps 是空的，菜单靠点别处关）
-  const { revealed, hoverProps } = useHoverReveal({ onLeave: () => setMenuOpen(false) });
+  const { revealed, hoverProps, dismiss } = useHoverReveal({ onLeave: () => setMenuOpen(false) });
   const updateProject = useProjectStore(s => s.updateProject);
   const deleteProject = useProjectStore(s => s.deleteProject);
   const duplicateProject = useProjectStore(s => s.duplicateProject);
@@ -406,6 +409,7 @@ function ProjectCard({ project, stat, newest }) {
       // 卡片就是那个项目的那张纸：演出项目是稿纸（米黄 + 红格线），设计是横格本。
       // 跟输入栏读同一份配方，所以桌上摆的和手里写的是同一个世界的纸。
       className={`ndd-card ${sheetClassOf(project.mode)}${newest ? ' top' : ''}`}
+      ref={cardRef}
       {...hoverProps}
     >
       <Link to={`/projects/${project.id}/work`} style={{ '--rot': tilt(project.id) }}>
@@ -422,6 +426,7 @@ function ProjectCard({ project, stat, newest }) {
       {revealed && (
         <button
           className="more"
+          ref={moreRef}
           onMouseDown={(e) => { e.stopPropagation(); }}
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setMenuOpen(v => !v); }}
         >
@@ -429,13 +434,16 @@ function ProjectCard({ project, stat, newest }) {
         </button>
       )}
 
-      {menuOpen && (
-        <div className="ndd-menu" onMouseDown={e => e.stopPropagation()}>
+      {/* 菜单 portal 到 .ndd 下（要吃它的纸色变量），落在光源层之上：夜里也是一张亮着的纸 */}
+      <Popover open={menuOpen} anchorRef={moreRef} onClose={() => setMenuOpen(false)} placement="down" align="right" offset={4}
+        container={typeof document !== 'undefined' ? document.querySelector('.ndd') : null}>
+        <div className="ndd-menu ndd-menu--float" onMouseDown={e => e.stopPropagation()}
+          onMouseLeave={(e) => { if (!cardRef.current?.contains(e.relatedTarget)) { setMenuOpen(false); dismiss(); } }}>
           <button onClick={handleRename}><Edit2 size={12} /> {t('重命名')}</button>
           <button onClick={handleDuplicate}><Copy size={12} /> {t('复制')}</button>
           <button className="danger" onClick={handleDelete}><Trash2 size={12} /> {t('删除')}</button>
         </div>
-      )}
+      </Popover>
     </div>
   );
 }

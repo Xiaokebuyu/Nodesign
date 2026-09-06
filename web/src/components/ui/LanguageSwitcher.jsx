@@ -10,11 +10,12 @@
  *
  * 没登录时账号那层写不进去是**正常路径不是错误**，不弹 toast、不禁用控件。
  */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Languages, Check } from 'lucide-react';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { LOCALES, getLocale } from '../../lib/i18n.js';
 import { COLOR, FONT_SANS } from '../../lib/theme.js';
+import Popover from './Popover.jsx';
 
 /**
  * @param {'wall'|'chrome'} variant 门外用 wall（纸上的一枚小签），站内用 chrome（跟其他图标钮一排）
@@ -27,14 +28,8 @@ export default function LanguageSwitcher({ variant = 'chrome' }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
 
-  useEffect(() => {
-    if (!open) return;
-    const away = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', away);
-    document.addEventListener('keydown', esc);
-    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
-  }, [open]);
+  // 关外点击 / Escape 归 Popover 管（菜单 portal 到首页光源层之上，夜里才读得清）
+  const close = useCallback(() => setOpen(false), []);
 
   const pick = (id) => {
     setOpen(false);
@@ -75,11 +70,10 @@ export default function LanguageSwitcher({ variant = 'chrome' }) {
         {label}
       </button>
 
-      {open && (
+      <Popover open={open} anchorRef={boxRef} onClose={close} placement="down" align="right">
         <ul
           role="listbox"
           style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 60,
             margin: 0, padding: 4, listStyle: 'none', minWidth: 132,
             background: COLOR.bgModal, borderRadius: 10,
             boxShadow: '0 8px 32px rgba(43,33,23,0.14), 0 2px 8px rgba(43,33,23,0.08)',
@@ -106,7 +100,7 @@ export default function LanguageSwitcher({ variant = 'chrome' }) {
             </li>
           ))}
         </ul>
-      )}
+      </Popover>
     </div>
   );
 }

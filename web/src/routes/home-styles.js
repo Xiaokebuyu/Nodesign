@@ -378,6 +378,8 @@ ${DESK_CSS}
 .ndd-menu button:hover { background: rgba(43,33,23,0.055); color: var(--ink); }
 .ndd-menu button.danger { color: var(--red); }
 .ndd-menu button.danger:hover { background: ${P('red',0.08)}; }
+/* portal 出去之后由 Popover 定位（fixed），自己别再摆位置 */
+.ndd-menu--float { position: static; top: auto; right: auto; }
 
 /* ===== 最近对话（老式闪聊会话，没有就整块不出现）===== */
 .ndd-rows { background-color: var(--paper); background-image: var(--grain);

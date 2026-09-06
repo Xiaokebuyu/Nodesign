@@ -5,6 +5,7 @@ import { useGlobalStore } from '../../stores/globalStore.js';
 import { Sessions, Me } from '../../lib/api.js';
 import { FALLBACK_MODELS, isModelPrefStale } from '../../lib/models.js';
 import ModelMark from '../ui/ModelMark.jsx';
+import Popover from '../ui/Popover.jsx';
 import { t } from '../../lib/i18n.js';
 
 /**
@@ -113,14 +114,8 @@ export default function ModelPicker({
 
   const hasSession = !!(projectId && sessionId);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('mousedown', onClick);
-    window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('mousedown', onClick); window.removeEventListener('keydown', onKey); };
-  }, [open]);
+  // 关外点击 / Escape 归 Popover 管（它 portal 到光源层之上，不再是 ref 的后代）
+  const close = useCallback(() => setOpen(false), []);
 
   /**
    * 会话变了就重新问一次服务端。切走时先清掉，免得把上一场的模型显示成这一场的。
@@ -266,18 +261,13 @@ export default function ModelPicker({
         {label}
       </button>
 
-      {open && (
+      <Popover open={open} anchorRef={ref} onClose={close} placement={menuPlacement === 'down' ? 'down' : 'up'} align="left" role="listbox">
         <div style={{
-          position: 'absolute', left: 0,
-          ...(menuPlacement === 'down'
-            ? { top: 'calc(100% + 6px)' }
-            : { bottom: 'calc(100% + 6px)' }),
           minWidth: 240,
           background: COLOR.bgWhite,
           borderRadius: 2,
           boxShadow: SHADOW.pop,
           padding: GAP.xs,
-          zIndex: 60,
         }}>
           {none && (
             <div style={{ padding: `${GAP.sm}px ${GAP.md}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text3, lineHeight: 1.6 }}>
@@ -308,7 +298,7 @@ export default function ModelPicker({
               : t('这条只影响接下来新建的会话')}
           </div>
         </div>
-      )}
+      </Popover>
     </div>
   );
 }

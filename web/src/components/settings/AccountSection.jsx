@@ -1,20 +1,51 @@
-// 设置 → 账户：本地版 = 站点账号（登录 / 档位 / 额度 / 设备 / 退出）；hosted = 当前账号 + 设备页 + 登出
+// 设置 → 账户：本地版 = 站点账号（身份卡 / 档位 / 今日额度 / 这台设备 / 退出）；hosted = 当前账号 + 设备页 + 登出
 import { useState } from 'react';
-import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../../lib/theme.js';
+import { COLOR, GAP, FONT_SIZE, FONT_KAI } from '../../lib/theme.js';
 import { Local } from '../../lib/api.js';
-import { Card, Btn, Err, Dot, TextInput, Hint } from '../local/primitives.jsx';
+import { Panel, Row, Block, Badge, Button, Progress, Mono, Note } from './ui.jsx';
+import { TextInput } from '../local/primitives.jsx';
 import { t } from '../../lib/i18n.js';
 
-const Row = ({ k, v }) => [
-  <span key={k + 'k'} style={{ color: COLOR.sub }}>{k}</span>,
-  <span key={k + 'v'} style={{ color: COLOR.text }}>{v}</span>,
-];
-const grid = { display: 'grid', gridTemplateColumns: '96px 1fr', gap: `${GAP.xs}px ${GAP.lg}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm };
+const TIER_LABEL = { basic: 'Basic', pro: 'Pro', trial: 'Trial', admin: 'Admin' };
 
-function quotaText(q) {
-  if (!q) return '—';
-  if (q.kind === 'unlimited') return t('不限额');
-  return `$${Number(q.used || 0).toFixed(2)} / $${Number(q.limit || 0).toFixed(2)}${q.kind === 'lifetime' ? ` · ${t('试用总额')}` : ` · ${t('今日')}`}`;
+/** 身份卡：首字头像 + 用户名 + 档位标签 + 右侧动作 */
+function Identity({ name, tier, sub, actions }) {
+  const initial = (name || '?').trim().slice(0, 1).toUpperCase();
+  return (
+    <Block first>
+      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.xl }}>
+        <div aria-hidden="true" style={{ width: 48, height: 48, borderRadius: '50%', background: COLOR.btn, color: COLOR.btnText, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT_KAI, fontSize: 20, flexShrink: 0 }}>{initial}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md }}>
+            <span style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.h2, fontWeight: 600, color: COLOR.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+            {tier && <Badge tone={tier === 'pro' ? 'ink' : 'neutral'}>{TIER_LABEL[tier] || tier}</Badge>}
+          </div>
+          {sub && <div style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, color: COLOR.text4, marginTop: 2 }}>{sub}</div>}
+        </div>
+        <div style={{ display: 'flex', gap: GAP.sm, flexShrink: 0 }}>{actions}</div>
+      </div>
+    </Block>
+  );
+}
+
+/** 额度行：进度条 + 「$1.37 / $5.00 · 今日」 */
+function QuotaRow({ quota }) {
+  if (!quota) return <Row label={t('额度')}><Note>—</Note></Row>;
+  if (quota.kind === 'unlimited') return <Row label={t('额度')} desc={t('这个档位不限额')}><Badge tone="ok">{t('不限额')}</Badge></Row>;
+  const used = Number(quota.used || 0); const limit = Number(quota.limit || 0);
+  const ratio = limit > 0 ? used / limit : 0;
+  const period = quota.kind === 'lifetime' ? t('试用总额') : t('今日');
+  return (
+    <Row label={t('额度')} desc={quota.kind === 'lifetime' ? t('试用额度用完后需要升级档位') : t('每天按北京时间零点重置')}>
+      <div style={{ width: 260 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, color: COLOR.text2, marginBottom: 4 }}>
+          <span>${used.toFixed(2)} / ${limit.toFixed(2)}</span>
+          <span style={{ color: COLOR.text4 }}>{period}</span>
+        </div>
+        <Progress value={used} max={limit} tone={ratio >= 0.95 ? 'bad' : ratio >= 0.75 ? 'warn' : 'ink'} />
+      </div>
+    </Row>
+  );
 }
 
 export function LocalAccount({ relay, onChange, showToast }) {
@@ -22,32 +53,34 @@ export function LocalAccount({ relay, onChange, showToast }) {
     try { await Local.relayLogout(); window.location.href = '/'; }
     catch (e) { showToast?.(e.message, 'error'); }
   };
+  const refresh = async () => { try { const r = await Local.relayRefresh(); onChange?.(r); showToast?.(t('已刷新'), 'info'); } catch (e) { showToast?.(e.message, 'error'); } };
+
   if (!relay?.configured) {
     return (
-      <Card>
-        <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2, marginBottom: GAP.md }}>{t('没有登录站点账号。登录后这台电脑就能用站点提供的模型和额度。')}</div>
-        <RelayLoginForm relay={relay} onDone={onChange} showToast={showToast} />
-      </Card>
+      <Panel title={t('登录站点账号')} desc={t('登录后这台电脑就能用站点提供的模型和额度。')}>
+        <Block first><RelayLoginForm relay={relay} onDone={onChange} showToast={showToast} /></Block>
+      </Panel>
     );
   }
   const w = relay.whoami || {};
+  const name = w.username || (relay.ok ? '?' : t('连不上站点'));
   return (
-    <Card>
-      <div style={grid}>
-        <Row k={t('账号')} v={w.username || (relay.ok ? '?' : t('连不上站点'))} />
-        <Row k={t('档位')} v={w.tier || '—'} />
-        <Row k={t('额度')} v={quotaText(w.quota)} />
-        <Row k={t('这台设备')} v={w.device ? `${w.device.label || t('未命名')} · ${w.device.id}` : '—'} />
-        <Row k={t('站点')} v={<span style={{ fontFamily: FONT_MONO }}>{relay.url}</span>} />
-      </div>
-      {!relay.ok && <Err>{t('连不上：{err}', { err: relay.error || '' })}</Err>}
-      <div style={{ display: 'flex', gap: GAP.sm, marginTop: GAP.md }}>
-        <Btn small onClick={() => window.open(`${relay.url}/devices`, '_blank')}>{t('管理设备')}</Btn>
-        <Btn small onClick={async () => { try { const r = await Local.relayRefresh(); onChange?.(r); } catch (e) { showToast?.(e.message, 'error'); } }}>{t('刷新')}</Btn>
-        <span style={{ flex: 1 }} />
-        <Btn small danger onClick={logout}>{t('退出登录')}</Btn>
-      </div>
-    </Card>
+    <>
+      <Panel>
+        <Identity name={name} tier={w.tier} sub={relay.ok ? t('已登录') : t('连不上站点，显示的是上次拉到的信息')}
+          actions={<>
+            <Button size="sm" onClick={refresh}>{t('刷新')}</Button>
+            <Button size="sm" variant="danger" onClick={logout}>{t('退出登录')}</Button>
+          </>} />
+        {!relay.ok && <Block><Note tone="bad">{t('连不上：{err}', { err: relay.error || '' })}</Note></Block>}
+        <QuotaRow quota={w.quota} />
+        <Row label={t('这台设备')} desc={w.device?.id ? t('设备 ID {id}', { id: w.device.id }) : t('登录时给这台电脑发的设备令牌')}>
+          <span style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.base, color: COLOR.text2 }}>{w.device ? (w.device.label || t('未命名')) : '—'}</span>
+          <Button size="sm" variant="ghost" onClick={() => window.open(`${relay.url}/devices`, '_blank')}>{t('管理设备')}</Button>
+        </Row>
+        <Row label={t('站点')} desc={t('这台电脑连的是哪个站')}><Mono>{relay.url}</Mono></Row>
+      </Panel>
+    </>
   );
 }
 
@@ -67,35 +100,30 @@ export function RelayLoginForm({ relay, onDone, showToast }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.sm }}>
-      <div style={{ display: 'flex', gap: GAP.sm, flexWrap: 'wrap', alignItems: 'center' }}>
-        <TextInput value={username} onChange={setUsername} placeholder={t('用户名')} mono={false} width={160} />
-        <TextInput value={password} onChange={setPassword} placeholder={t('密码')} type="password" mono={false} width={160} />
-        <TextInput value={url} onChange={setUrl} placeholder={t('站点地址（可选，默认官方站）')} width={260} />
-        <Btn primary small onClick={submit} disabled={busy}>{busy ? t('登录中…') : t('登录')}</Btn>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.md, maxWidth: 420 }}>
+      <TextInput value={username} onChange={setUsername} placeholder={t('用户名')} mono={false} />
+      <TextInput value={password} onChange={setPassword} placeholder={t('密码')} type="password" mono={false} />
+      <TextInput value={url} onChange={setUrl} placeholder={t('站点地址（可选，默认官方站）')} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md }}>
+        <Button variant="primary" onClick={submit} disabled={busy}>{busy ? t('登录中…') : t('登录')}</Button>
+        <Note>{t('没有账号？')} <a href={relay?.url || '#'} target="_blank" rel="noreferrer" style={{ color: COLOR.text }}>{t('去站点注册')}</a></Note>
       </div>
-      {err && <Err>{err}</Err>}
-      <Hint>{t('没有账号？')} <a href={relay?.url || '#'} target="_blank" rel="noreferrer">{t('去站点注册')}</a></Hint>
+      {err && <Note tone="bad">{err}</Note>}
     </div>
   );
 }
 
 export function HostedAccount({ authUser, usage }) {
   const logout = async () => { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* */ } window.location.reload(); };
+  const quota = usage ? (usage.capped ? { kind: 'daily', used: usage.used ?? usage.usedToday ?? 0, limit: usage.limit || 0 } : { kind: 'unlimited' }) : null;
   return (
-    <Card>
-      <div style={grid}>
-        <Row k={t('账号')} v={authUser?.username || '—'} />
-        <Row k={t('档位')} v={usage?.tier || '—'} />
-        <Row k={t('额度')} v={usage ? (usage.capped ? `$${Number(usage.used ?? usage.usedToday ?? 0).toFixed(2)} / $${Number(usage.limit || 0).toFixed(2)}` : t('不限额')) : '—'} />
-      </div>
-      <div style={{ display: 'flex', gap: GAP.sm, marginTop: GAP.md }}>
-        <Btn small onClick={() => { window.location.href = '/devices'; }}>{t('桌面版设备')}</Btn>
-        <span style={{ flex: 1 }} />
-        <Btn small danger onClick={logout}>{t('登出')}</Btn>
-      </div>
-    </Card>
+    <Panel>
+      <Identity name={authUser?.username || '—'} tier={usage?.tier}
+        actions={<Button size="sm" variant="danger" onClick={logout}>{t('登出')}</Button>} />
+      <QuotaRow quota={quota} />
+      <Row label={t('桌面版设备')} desc={t('在别的电脑上装了桌面版，用这个账号登录过的设备都在这')}>
+        <Button size="sm" variant="ghost" onClick={() => { window.location.href = '/devices'; }}>{t('管理设备')}</Button>
+      </Row>
+    </Panel>
   );
 }
-
-export { Dot };

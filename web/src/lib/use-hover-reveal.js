@@ -42,11 +42,18 @@ export function useHoverReveal({ onLeave } = {}) {
   const coarse = useMedia(COARSE);
   const [hover, setHover] = useState(false);
   const enter = useCallback(() => setHover(true), []);
-  const leave = useCallback(() => { setHover(false); onLeave?.(); }, [onLeave]);
+  // 鼠标是移进了这张卡 portal 出去的菜单（ui/Popover.jsx，DOM 上不是卡的后代）→ 不算离开；
+  // 菜单那头再离开时由调用方拿 dismiss 收尾
+  const leave = useCallback((e) => {
+    if (e?.relatedTarget?.closest?.('[data-nd-popover]')) return;
+    setHover(false); onLeave?.();
+  }, [onLeave]);
   return {
     revealed: coarse || hover,
     hover: hover && !coarse,
     coarse,
     hoverProps: coarse ? {} : { onMouseEnter: enter, onMouseLeave: leave },
+    /** 从外面（比如 portal 出去的菜单）收掉悬停态 */
+    dismiss: leave,
   };
 }

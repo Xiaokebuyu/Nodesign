@@ -23,7 +23,7 @@
  *    asar 是只读虚拟包，这几件事在里面全是坑。少一层压缩换掉一整类问题。
  */
 
-import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, screen } from 'electron';
+import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, screen, ipcMain } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +46,8 @@ const HOST = '127.0.0.1';
 
 let win = null;
 let splash = null;
+/** 数据目录（页面桥 nd:open-path 只放行它之内的路径） */
+let dataDirPath = null;
 let tray = null;
 let sup = null;
 let appUrl = null;
@@ -81,6 +83,7 @@ async function boot() {
   // 服务端输出写进数据目录的日志文件（Electron 窗口进程没有控制台，inherit 等于丢掉）。
   // 用户报问题时让他把这个文件发过来；文件超过 5MB 起动时滚一份 .old
   const dataDir = env.NODESIGN_DATA_DIR || path.join(app.getPath('home'), '.nodesign');
+  dataDirPath = dataDir;
   openDesktopLog(dataDir);
   windowStatePath = path.join(dataDir, 'window.json');
   const logFd = openServerLog(dataDir);
@@ -161,9 +164,11 @@ function createMainWindow() {
     show: false, backgroundColor: '#faf8f4',
     webPreferences: {
       // 页面是 http://127.0.0.1 上的普通网页，保持默认的浏览器安全模型：
-      // 不开 nodeIntegration，不关 contextIsolation。它要的能力全走服务端 HTTP。
+      // 不开 nodeIntegration，不关 contextIsolation。它要的能力全走服务端 HTTP，
+      // 只有「检查更新 / 打开文件夹」这两件壳才做得了的事走 preload 的桥（09-07）。
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(here, 'preload.cjs'),
     },
   });
 
@@ -275,6 +280,35 @@ function checkForUpdates({ silent }) {
     dialog.showMessageBox(win, { type: 'info', message: updateCheckMessage(r, app.getVersion()) });
   }).catch((e) => { if (!silent) dialog.showMessageBox(win, { type: 'error', message: `检查更新失败：${e.message}` }); });
 }
+
+/* ── 页面桥（preload.cjs）：设置页「关于」的三个动词 ───────────────────── */
+
+ipcMain.handle('nd:check-updates', async () => {
+  if (!updater) {
+    return { available: false, message: updaterState === 'dev' ? '开发模式下不检查更新。' : updaterState === 'init' ? '更新模块还没加载完，稍等再点。' : `更新模块没起来：${updaterState}` };
+  }
+  const r = await updater.checkForUpdates();
+  log(`[updater] 设置页检查：已发布最新 ${r?.updateInfo?.version ?? '?'}，本机 ${app.getVersion()}，${r?.isUpdateAvailable ? '有更新' : '无更新'}`);
+  return { available: !!r?.isUpdateAvailable, latest: r?.updateInfo?.version ?? null, message: updateCheckMessage(r, app.getVersion()) };
+});
+
+// 只开数据目录之内的路径：桥暴露给的是 http 页面，别让它变成"打开任意文件夹"
+ipcMain.handle('nd:open-path', async (_e, p) => {
+  if (!dataDirPath) throw new Error('数据目录还没定下来');
+  const root = path.resolve(dataDirPath);
+  const target = path.resolve(String(p || ''));
+  if (target !== root && !target.startsWith(root + path.sep)) throw new Error('只能打开数据目录里的文件夹');
+  const err = await shell.openPath(target);
+  if (err) throw new Error(err);
+  return true;
+});
+
+ipcMain.handle('nd:open-external', async (_e, url) => {
+  const u = String(url || '');
+  if (!/^https?:\/\//.test(u)) throw new Error('只能打开 http(s) 链接');
+  await shell.openExternal(u);
+  return true;
+});
 
 // 装更新之前必须先把服务端停干净：sqlite 还开着的时候换文件，轻则更新失败重则库损坏
 async function quitAndInstall() {

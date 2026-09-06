@@ -1,39 +1,30 @@
 // 设置 → 外观：语言、字体、缩放。全在浏览器本地，改了立刻生效。
 import { useState } from 'react';
-import { COLOR, GAP, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
-import { Card } from '../local/primitives.jsx';
-import LanguageSwitcher from '../ui/LanguageSwitcher.jsx';
+import { Panel, Row, Segmented } from './ui.jsx';
+import { useGlobalStore } from '../../stores/globalStore.js';
 import { loadUiPrefs, saveUiPrefs, FONTS, ZOOMS } from '../../lib/ui-prefs.js';
-import { t } from '../../lib/i18n.js';
-
-const row = { display: 'grid', gridTemplateColumns: '96px 1fr', gap: `${GAP.md}px ${GAP.lg}px`, alignItems: 'center', fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm };
+import { LOCALES, getLocale, t } from '../../lib/i18n.js';
 
 export default function AppearanceSection() {
   const [prefs, setPrefs] = useState(loadUiPrefs());
   const set = (patch) => setPrefs(saveUiPrefs(patch));
+  useGlobalStore((s) => s.locale);   // 订阅只为重渲染；真值读 getLocale()
+  const setLocale = useGlobalStore((s) => s.setLocale);
+  const pickLocale = (id) => {
+    setLocale(id);
+    fetch('/api/auth/locale', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locale: id }) }).catch(() => {});
+  };
   return (
-    <Card>
-      <div style={row}>
-        <span style={{ color: COLOR.sub }}>{t('语言')}</span>
-        <div><LanguageSwitcher variant="chrome" /></div>
-        <span style={{ color: COLOR.sub }}>{t('字体')}</span>
-        <div style={{ display: 'flex', gap: GAP.sm }}>
-          {FONTS.map((f) => <Pill key={f.id} on={prefs.font === f.id} onClick={() => set({ font: f.id })}>{t(f.label)}</Pill>)}
-        </div>
-        <span style={{ color: COLOR.sub }}>{t('缩放')}</span>
-        <div style={{ display: 'flex', gap: GAP.sm }}>
-          {ZOOMS.map((z) => <Pill key={z} on={prefs.zoom === z} onClick={() => set({ zoom: z })}>{z}%</Pill>)}
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function Pill({ on, onClick, children }) {
-  return (
-    <button onClick={onClick} style={{
-      padding: `3px ${GAP.md}px`, borderRadius: 999, cursor: 'pointer', fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-      border: `1px solid ${on ? COLOR.text : COLOR.borderLt}`, background: on ? COLOR.text : 'transparent', color: on ? COLOR.bgWhite : COLOR.text2,
-    }}>{children}</button>
+    <Panel>
+      <Row first label={t('语言')} desc={t('界面语言。产物用什么语言写，跟着你的要求走，不受这里影响')}>
+        <Segmented value={getLocale()} onChange={pickLocale} options={LOCALES.map((l) => ({ value: l.id, label: l.label }))} />
+      </Row>
+      <Row label={t('字体')} desc={t('界面文字用楷体还是系统无衬线')}>
+        <Segmented value={prefs.font} onChange={(v) => set({ font: v })} options={FONTS.map((f) => ({ value: f.id, label: t(f.label) }))} />
+      </Row>
+      <Row label={t('缩放')} desc={t('整个界面的大小。高分辨率屏幕上字太小就调大一档')}>
+        <Segmented value={prefs.zoom} onChange={(v) => set({ zoom: v })} options={ZOOMS.map((z) => ({ value: z, label: `${z}%` }))} />
+      </Row>
+    </Panel>
   );
 }

@@ -2,10 +2,11 @@
 // 组件清单和进度都从服务端来（/api/local/components，runtime/components.js）；这一页只负责列出来、点安装、轮询。
 // 「稍后再说」写 prefs.setupDone，以后在设置 → 组件 里补装。
 import { useEffect, useState, useCallback } from 'react';
-import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_KAI, FONT_MONO, RADIUS } from '../lib/theme.js';
+import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_KAI, RADIUS } from '../lib/theme.js';
 import { Local } from '../lib/api.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { Btn, Err } from '../components/local/primitives.jsx';
+import { Badge, Button, Progress, Note } from '../components/settings/ui.jsx';
 import { t } from '../lib/i18n.js';
 
 const ACTIVE = new Set(['probing', 'downloading', 'verifying', 'extracting', 'installing']);
@@ -32,31 +33,36 @@ export function useComponents() {
 
 export function ComponentRows({ data, install, uninstall, compact = false }) {
   const rows = (data?.components || []).filter((c) => c.supported);
+  const size = (mb) => (mb >= 1000 ? `${(mb / 1000).toFixed(1)} GB` : `${Math.round(mb)} MB`);
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: `${GAP.md}px ${GAP.lg}px`, alignItems: 'center', fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm }}>
-      {rows.map((c) => {
+    <div>
+      {rows.map((c, i) => {
         const job = c.job; const active = ACTIVE.has(job?.status);
-        return [
-          <div key={c.id + 'a'}>
-            <span style={{ color: COLOR.text, fontWeight: 600 }}>{c.label}</span>
-            {c.required && <span style={{ marginLeft: GAP.sm, fontSize: FONT_SIZE.xs, color: COLOR.warn }}>{t('必需')}</span>}
-            {c.sizeMb != null && <span style={{ marginLeft: GAP.sm, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{c.sizeMb >= 1000 ? `${(c.sizeMb / 1000).toFixed(1)} GB` : `${Math.round(c.sizeMb)} MB`}</span>}
-            <div style={{ fontSize: FONT_SIZE.xs, color: COLOR.text4 }}>{c.uses}</div>
-            {active && (
-              <div style={{ marginTop: 4, height: 4, background: COLOR.borderLt, borderRadius: 2, overflow: 'hidden', maxWidth: 420 }}>
-                <div style={{ width: `${Math.round((job.progress || 0) * 100)}%`, height: '100%', background: COLOR.btn, transition: 'width .3s' }} />
+        return (
+          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: GAP.xl, padding: `${GAP.lg}px ${compact ? GAP.lg : GAP.xxl}px`, borderTop: i === 0 ? 0 : '1px solid rgba(43,33,23,0.08)' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, color: COLOR.text }}>{c.label}</span>
+                {c.required && <Badge tone="warn">{t('必需')}</Badge>}
+                {c.sizeMb != null && <span style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.sm, color: COLOR.text4 }}>{size(c.sizeMb)}</span>}
               </div>
-            )}
-            {active && <div style={{ fontSize: FONT_SIZE.xs, color: COLOR.sub, marginTop: 2 }}>{stageLabel(job)}</div>}
-            {job?.status === 'error' && <Err>{job.error}</Err>}
-          </div>,
-          <div key={c.id + 'b'} style={{ display: 'flex', gap: GAP.sm }}>
-            {c.installed && !active && <span style={{ fontSize: FONT_SIZE.xs, color: COLOR.success }}>{t('已安装')}{c.installedVersion ? ` · ${c.installedVersion}` : ''}</span>}
-            {!c.installed && !active && <Btn small primary onClick={() => install(c.id)}>{t('安装')}</Btn>}
-            {c.installed && !active && !compact && uninstall && <Btn small onClick={() => uninstall(c.id)}>{t('卸载')}</Btn>}
-            {job?.status === 'error' && <Btn small onClick={() => install(c.id)}>{t('重试')}</Btn>}
-          </div>,
-        ];
+              <div style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, color: COLOR.text4, marginTop: 2, lineHeight: 1.6 }}>{c.uses}</div>
+              {active && (
+                <div style={{ marginTop: GAP.sm, maxWidth: 420 }}>
+                  <Progress value={job.progress || 0} height={4} />
+                  <div style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.sm, color: COLOR.text4, marginTop: 4 }}>{stageLabel(job)}</div>
+                </div>
+              )}
+              {job?.status === 'error' && <div style={{ marginTop: GAP.xs }}><Note tone="bad">{job.error}</Note></div>}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, flexShrink: 0 }}>
+              {c.installed && !active && <Badge tone="ok">{t('已安装')}{c.installedVersion ? ` · ${c.installedVersion}` : ''}</Badge>}
+              {!c.installed && !active && job?.status !== 'error' && <Button size="sm" variant="primary" onClick={() => install(c.id)}>{t('安装')}</Button>}
+              {c.installed && !active && !compact && uninstall && <Button size="sm" variant="ghost" onClick={() => uninstall(c.id)}>{t('卸载')}</Button>}
+              {job?.status === 'error' && <Button size="sm" onClick={() => install(c.id)}>{t('重试')}</Button>}
+            </div>
+          </div>
+        );
       })}
     </div>
   );
