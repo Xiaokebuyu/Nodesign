@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>NoDesign</title>
+<style>
+  /* 冷启动要建库、探能力，能到十几秒。这一屏的作用只有一个：让用户知道点上了。 */
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: #faf8f4;
+    color: #3a352e;
+    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    -webkit-user-select: none; user-select: none;
+    -webkit-app-region: drag;
+  }
+  .name { font-size: 22px; letter-spacing: .18em; font-weight: 500; }
+  .hint { font-size: 12px; color: #8a8175; }
+  .bar { width: 168px; height: 2px; background: #e8e2d8; border-radius: 2px; overflow: hidden; }
+  .bar i { display: block; width: 40%; height: 100%; background: #c8783c; border-radius: 2px;
+           animation: slide 1.25s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+  @media (prefers-reduced-motion: reduce) { .bar i { animation: none; width: 100%; } }
+</style>
+<div class="name">NoDesign</div>
+<div class="bar"><i></i></div>
+<div class="hint">正在启动本地服务</div>

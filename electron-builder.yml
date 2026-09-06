@@ -1,0 +1,92 @@
+# electron-builder.yml — Windows 桌面版打包配置
+#
+# 用法：npm run desktop:dist（在 Windows 上跑，见下面"为什么不在这台机器上打包"）
+#
+# ## asar: false
+# 服务端要 spawn 自己、要加载原生模块（better-sqlite3 / sharp）、要读写用户工作区。
+# asar 是只读虚拟包，这三件事在里面全是坑。少一层压缩换掉一整类问题。
+#
+# ## npmRebuild: true
+# better-sqlite3 不是 N-API，ABI 锁在运行时版本上。服务端子进程用的是 Electron 可执行
+# 文件的 node 模式（ELECTRON_RUN_AS_NODE=1），所以它必须按 Electron 的 ABI 编译，
+# 不是按系统 node 的。这一行就是干这个的。sharp 是 N-API，不受影响。
+#
+# ## 为什么不在这台 Linux 机器上打包
+# 三个 win32 产物都得是真的 Windows 二进制：SDK 的 claude.exe（平台包
+# @anthropic-ai/claude-agent-sdk-win32-x64）、better-sqlite3 的 win32 预编译、
+# sharp 的 @img/sharp-win32-x64。在 arm64 Linux 上让 npm 装另一个平台的包要一路
+# --os/--cpu 覆盖，装出来还没法跑起来验。在 Windows 机器或 GitHub Actions 的
+# windows-latest 上打包，这些是默认行为，不用任何特殊处理。
+
+# 只往打包产物的 package.json 里注入 main。源码 package.json 不写这个字段：
+# npm 会无视 files 黑名单强制把 main 指向的文件打进 npm 包（实测：desktop/main.js
+# 就是这么漏进去的）。这也是为什么"哪些文件不发出去"不能只靠黑名单。
+extraMetadata:
+  main: desktop/main.js
+
+appId: com.xiaobuyu.nodesign
+productName: NoDesign
+copyright: Copyright © 2026 Xiaokebuyu
+
+asar: false
+npmRebuild: true
+
+directories:
+  output: dist-desktop
+  buildResources: desktop/build
+
+# 进安装包的东西。跟 package.json 的 files（那是 npm 包的）各管各的：
+# npm 包不发 desktop/，桌面包不发测试和实验目录。
+files:
+  - bin/**/*
+  - desktop/**/*
+  - server/**/*
+  - web/dist/**/*
+  - package.json
+  - LICENSE
+  - README.md
+  - "!server/**/*.test.js"
+  - "!server/**/_probe-*"
+  - "!server/**/_*-check.mjs"
+  - "!server/**/_smoke.js"
+  - "!server/db/**"
+  - "!server/runs/**"
+  - "!server/projects-data/**"
+  - "!server/scripts/**"
+  - "!server/skills/installed/**"
+  - "!server/lib/docx/lab/**"
+  - "!server/lib/ssrf-lab/**"
+  - "!web/dist/mock/**"
+
+# 随包分发的组件（chromium / LibreOffice / ffmpeg / poppler / rembg 环境）。
+# 这些不在仓库里，由 desktop/fetch-components.mjs 在打包前抓进 desktop/components/，
+# 装机后解到应用目录，capabilities.js 的探测能在那里找到它们。
+# ⚠️ 还没接上，见 desktop/README.md 的"组件"一节。
+extraResources: []
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: desktop/build/icon.ico
+  # 没有代码签名证书时这两行留空即可，代价是首次运行会被 SmartScreen 拦一道
+  # "未知发布者"，用户要点两次。买了 OV/EV 证书再填。
+  # certificateFile:
+  # certificatePassword:
+
+nsis:
+  oneClick: false                          # 给用户选安装目录的机会，别一键装到 C 盘就完事
+  perMachine: false                        # 装到用户目录，不要求管理员权限
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: NoDesign
+  # 卸载时不动 ~/.nodesign：那里面是用户的项目和产物，卸载软件不该删作品
+  deleteAppDataOnUninstall: false
+
+# 更新源。electron-updater 从这个地址读 latest.yml；有 blockmap 对得上就下差分，
+# 对不上就退回下整包 —— 完整包更新和差分更新是同一套配置的两条路径，不是两套。
+publish:
+  - provider: generic
+    url: https://REPLACE-ME.example.com/desktop/
+    channel: latest

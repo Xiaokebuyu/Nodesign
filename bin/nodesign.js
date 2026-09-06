@@ -2,9 +2,10 @@
 /**
  * bin/nodesign.js — 本地分发版入口（`npx nodesign` / `nodesign`）。
  *
- * 它是一个很薄的 supervisor：把 profile 钉成 local、把命令行参数翻译成 env、拉起 server/index.js 子进程、
- * health 通了开一次浏览器；子进程以 RESTART_EXIT_CODE（75，见 server/api/local.js）退出就重新拉起——
- * 配置页「保存并重启」走的就是这条路。所有真正的决策都在 server/runtime/profile.js，这里不复制一份。
+ * 它是一个很薄的壳：把 profile 钉成 local、把命令行参数翻译成 env、交给 bin/supervisor.js
+ * 拉起 server/index.js，health 通了开一次浏览器。进程生命周期（重启码 75、挑端口、等 health、
+ * 跑 SDK 自带的 claude）全在 supervisor 里，桌面版（desktop/main.js）用的是同一份，
+ * 所有真正的配置决策则在 server/runtime/profile.js —— 这里两份都不复制。
  *
  *   nodesign                      # 数据在 ~/.nodesign，http://127.0.0.1:4001
  *   nodesign --port 5000          # 换端口
@@ -17,23 +18,24 @@
  */
 
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
-import http from 'node:http';
-import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const RESTART_EXIT_CODE = 75;
-const serverEntry = path.join(path.dirname(fileURLToPath(import.meta.url)), '../server/index.js');
+import {
+  PortBusyError,
+  createSupervisor,
+  pickPort,
+  runBundledClaude,
+  waitHealth,
+} from './supervisor.js';
 
+const serverEntry = path.join(path.dirname(fileURLToPath(import.meta.url)), '../server/index.js');
 const args = process.argv.slice(2);
 
 // 子命令：`nodesign login` / `logout` / `auth status` —— 转发给 SDK 自带的 Claude CLI（用户不用再全局装一份 claude）。
-// 配置目录与服务端同一个（server/runtime/platform.js 的 claudeConfigDir：NODESIGN_CONFIG_DIR 或 ~/.claude），
-// 登录态落在那里，服务端的 claudeAuthPresent() 才看得见。
 if (['login', 'logout', 'auth'].includes(args[0])) {
   const sub = args[0] === 'auth' ? args.slice(1) : [args[0], ...args.slice(1)];
-  const code = await runBundledClaude(['auth', ...sub]);
+  const code = await runBundledClaude(['auth', ...sub], { onError: (m) => console.error(`[nodesign] ${m}`) });
   process.exit(code);
 }
 
@@ -72,86 +74,34 @@ if (flags['data-dir']) env.NODESIGN_DATA_DIR = flags['data-dir'];
 if (flags.host) env.NODESIGN_HOST = flags.host;
 
 const host = env.NODESIGN_HOST || '127.0.0.1';
-// 端口：用户指定了（--port / PORT）就用它，被占就报错退出；没指定则从 4001 往上找第一个空的
-// （4001 在别人机器上常有主——Cursor、QQ 都见过——让用户自己换端口不如自己让一步）
-const port = await pickPort(env.PORT ? Number(env.PORT) : null);
+let port;
+try {
+  port = await pickPort({ host, wanted: env.PORT ? Number(env.PORT) : null });
+} catch (e) {
+  if (!(e instanceof PortBusyError)) throw e;
+  console.error(`[nodesign] ${e.message}${e.wanted ? '' : '，用 --port 指定一个'}`);
+  process.exit(1);
+}
+if (!env.PORT && port !== 4001) console.log(`[nodesign] 4001 被占用，改用端口 ${port}`);
 env.PORT = String(port);
 const url = `http://${host}:${port}/`;
 
-async function pickPort(wanted) {
-  const free = (p) => new Promise((resolve) => {
-    const srv = net.createServer();
-    srv.once('error', () => resolve(false));
-    srv.listen(p, host, () => srv.close(() => resolve(true)));
-  });
-  if (wanted) {
-    if (await free(wanted)) return wanted;
-    console.error(`[nodesign] 端口 ${wanted} 已被占用（查占用：${process.platform === 'win32' ? `netstat -ano | findstr :${wanted}` : `lsof -i :${wanted}`}）`);
-    process.exit(1);
-  }
-  for (let p = 4001; p < 4001 + 50; p++) {
-    if (await free(p)) {
-      if (p !== 4001) console.log(`[nodesign] 4001 被占用，改用端口 ${p}`);
-      return p;
-    }
-  }
-  console.error('[nodesign] 4001～4050 全被占用，用 --port 指定一个');
-  process.exit(1);
-}
 let opened = false;
-let child = null;
-let stopping = false;
-
-/** SDK 平台包里的 claude 可执行：@anthropic-ai/claude-agent-sdk-<platform>-<arch>[-musl]/claude[.exe] */
-function bundledClaudePath() {
-  const require = createRequire(import.meta.url);
-  const musl = process.platform === 'linux' && (() => { try { return require('node:fs').readFileSync('/usr/bin/ldd', 'utf8').includes('musl'); } catch { return false; } })();
-  const pkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}${musl ? '-musl' : ''}`;
-  const dir = path.dirname(require.resolve(`${pkg}/package.json`));
-  return path.join(dir, process.platform === 'win32' ? 'claude.exe' : 'claude');
-}
-function runBundledClaude(cliArgs) {
-  return new Promise((resolve) => {
-    let bin;
-    try { bin = bundledClaudePath(); } catch (e) { console.error(`[nodesign] 找不到 SDK 自带的 claude 可执行：${e.message}`); resolve(1); return; }
-    const cfgDir = process.env.NODESIGN_CONFIG_DIR || path.join(process.env.HOME || process.env.USERPROFILE || '', '.claude');
-    const p = spawn(bin, cliArgs, { stdio: 'inherit', env: { ...process.env, CLAUDE_CONFIG_DIR: cfgDir } });
-    p.on('error', (e) => { console.error(`[nodesign] 起不来 claude：${e.message}`); resolve(1); });
-    p.on('exit', (c) => resolve(c ?? 1));
-  });
-}
-
-function start() {
-  child = spawn(process.execPath, [serverEntry], { env, stdio: 'inherit' });
-  child.on('exit', (code, signal) => {
-    child = null;
-    if (stopping) process.exit(code ?? 0);
-    if (code === RESTART_EXIT_CODE) {
-      console.log('[nodesign] 服务端请求重启，重新拉起…');
-      start();
-      return;
-    }
-    process.exit(code ?? (signal ? 1 : 0));
-  });
-  if (!opened && !flags.noOpen && env.NODESIGN_OPEN !== '0') waitHealthThenOpen();
-}
-
-// 等 /api/health 通了再开浏览器（开早了是一页「无法连接」）。只开一次：重启后页面自己会刷新
-function waitHealthThenOpen() {
-  const deadline = Date.now() + 20_000;
-  const tick = () => {
-    if (opened || !child) return;
-    const req = http.get(`${url}api/health`, (res) => {
-      res.resume();
-      if (res.statusCode === 200) { opened = true; openBrowser(url); return; }
-      retry();
+const sup = createSupervisor({
+  serverEntry,
+  env,
+  onRestart: () => console.log('[nodesign] 服务端请求重启，重新拉起…'),
+  onExit: (code) => process.exit(code),
+  onSpawn: () => {
+    // 只开一次浏览器：重启后页面自己会刷新
+    if (opened || flags.noOpen || env.NODESIGN_OPEN === '0') return;
+    waitHealth(url, { alive: () => sup.running }).then((ok) => {
+      if (!ok || opened) return;
+      opened = true;
+      openBrowser(url);
     });
-    req.on('error', retry);
-    req.setTimeout(1000, () => { req.destroy(); });
-  };
-  const retry = () => { if (Date.now() < deadline) setTimeout(tick, 300).unref(); };
-  tick();
-}
+  },
+});
 
 function openBrowser(target) {
   const cmd = process.platform === 'darwin' ? ['open', [target]]
@@ -167,10 +117,7 @@ function openBrowser(target) {
 }
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    stopping = true;
-    if (child) child.kill(sig); else process.exit(0);
-  });
+  process.on(sig, () => { sup.stop({ signal: sig }).then(() => process.exit(0)); });
 }
 
-start();
+sup.start();

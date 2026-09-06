@@ -26,7 +26,10 @@
     "!server/lib/docx/lab/",
     "!server/lib/ssrf-lab/",
     "!server/scripts/",
-    "!web/dist/mock/"
+    "!web/dist/mock/",
+    "!desktop/",
+    "!electron-builder.yml",
+    "!dist-desktop/"
   ],
   "scripts": {
     "postinstall": "node server/ops/fix-sdk-musl.mjs",
@@ -38,13 +41,17 @@
     "test": "npm run test:server && cd web && nice -n 15 npx vitest run",
     "local": "node bin/nodesign.js --no-open",
     "build:web": "cd web && npx vite build",
-    "prepack": "npm run build:web"
+    "prepack": "npm run build:web",
+    "desktop:dev": "electron desktop/main.js",
+    "desktop:pack": "electron-builder --win --dir",
+    "desktop:dist": "electron-builder --win"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.263",
     "async-mutex-lite": "^1.0.0",
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",
+    "electron-updater": "^6.8.9",
     "esbuild": "^0.28.0",
     "express": "^5.1.0",
     "fflate": "^0.8.3",
@@ -79,6 +86,8 @@
     "sharp@0.34.5": true
   },
   "devDependencies": {
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
     "happy-dom": "^20.11.2",
     "vitest": "^4.1.10"
   },
