@@ -1,6 +1,6 @@
 {
   "name": "@xiaobuyu/nodesign",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "type": "module",
   "description": "NoDesign: an infinite canvas workbench for independent creators. An agent builds sites, decks, documents, images and video as real files, on your machine, with your own model key.",

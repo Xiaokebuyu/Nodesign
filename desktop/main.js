@@ -78,7 +78,9 @@ async function boot() {
 
   // 服务端输出写进数据目录的日志文件（Electron 窗口进程没有控制台，inherit 等于丢掉）。
   // 用户报问题时让他把这个文件发过来；文件超过 5MB 起动时滚一份 .old
-  const logFd = openServerLog(env.NODESIGN_DATA_DIR || path.join(app.getPath('home'), '.nodesign'));
+  const dataDir = env.NODESIGN_DATA_DIR || path.join(app.getPath('home'), '.nodesign');
+  openDesktopLog(dataDir);
+  const logFd = openServerLog(dataDir);
   sup = createSupervisor({
     serverEntry,
     env,
@@ -202,10 +204,17 @@ let updater = null;
  *
  * 开发态没有 latest.yml 可查，直接不装 —— 否则每次起都报一条查不到更新的错。
  */
+let updaterState = 'init';   // 'init' | 'dev' | 'ready' | 'failed: …'
 function setupUpdater() {
-  if (!app.isPackaged) return;
-  import('electron-updater').then(({ autoUpdater }) => {
+  if (!app.isPackaged) { updaterState = 'dev'; return; }
+  import('electron-updater').then((mod) => {
+    // ⛔ electron-updater 是 CJS，autoUpdater 是 Object.defineProperty 的 getter 导出：ESM 动态 import 后
+    // 具名解构拿到 undefined（09-06 站主装 0.0.11 点「检查更新」看到的就是这一下）。从 default 上取。
+    const autoUpdater = mod.default?.autoUpdater ?? mod.autoUpdater;
+    if (!autoUpdater) throw new Error('electron-updater 没导出 autoUpdater（keys: ' + Object.keys(mod).join(',') + '）');
     updater = autoUpdater;
+    updaterState = 'ready';
+    updater.logger = { info: (m) => log(`[updater] ${m}`), warn: (m) => log(`[updater] ⚠ ${m}`), error: (m) => log(`[updater] ✗ ${m}`), debug: () => {} };
     updater.autoDownload = true;          // 后台下，别打断用户
     updater.autoInstallOnAppQuit = true;  // 用户不点也会在下次退出时装上
 
@@ -223,12 +232,15 @@ function setupUpdater() {
 
     checkForUpdates({ silent: true });
     setInterval(() => checkForUpdates({ silent: true }), 6 * 60 * 60 * 1000).unref?.();
-  }).catch((e) => log(`更新模块加载失败：${e.message}`));
+  }).catch((e) => { updaterState = `failed: ${e.message}`; log(`更新模块加载失败：${e.stack || e.message}`); });
 }
 
 function checkForUpdates({ silent }) {
   if (!updater) {
-    if (!silent) dialog.showMessageBox(win, { type: 'info', message: '开发模式下不检查更新。' });
+    if (!silent) {
+      const why = updaterState === 'dev' ? '开发模式下不检查更新。' : updaterState === 'init' ? '更新模块还没加载完，稍等再点。' : `更新模块没起来：${updaterState}\n\n日志在 ${logPath || '数据目录/logs/'}`;
+      dialog.showMessageBox(win, { type: updaterState.startsWith('failed') ? 'error' : 'info', message: why });
+    }
     return;
   }
   updater.checkForUpdates().then((r) => {
@@ -257,7 +269,22 @@ app.on('before-quit', (e) => {
 
 app.on('window-all-closed', () => { /* 托盘常驻，不在这里退出 */ });
 
-function log(msg) { console.log(`[nodesign-desktop] ${msg}`); }
+let logFile = null; let logPath = null;
+/** 主进程日志：控制台一份（开发态看得见），文件一份（<数据目录>/logs/desktop.log，装好的应用没有控制台） */
+function log(msg) {
+  const line = `${new Date().toISOString()} [nodesign-desktop] ${msg}`;
+  console.log(line);
+  try { if (logFile != null) fs.writeSync(logFile, line + '\n'); } catch { /* 日志写不进不能影响正事 */ }
+}
+function openDesktopLog(dataDir) {
+  try {
+    const dir = path.join(dataDir, 'logs'); fs.mkdirSync(dir, { recursive: true });
+    logPath = path.join(dir, 'desktop.log');
+    try { if (fs.statSync(logPath).size > 2 * 1024 * 1024) fs.renameSync(logPath, `${logPath}.old`); } catch { /* */ }
+    logFile = fs.openSync(logPath, 'a');
+    log(`NoDesign ${app.getVersion()} 启动，packaged=${app.isPackaged}`);
+  } catch (err) { console.log(`[nodesign-desktop] 打不开主进程日志：${err.message}`); }
+}
 
 let fatalShown = false;
 function fatal(err) {
