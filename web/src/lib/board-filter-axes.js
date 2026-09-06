@@ -61,7 +61,8 @@ export function categoryOf(o) {
 export function sourceOf(o) {
   if (kindOf(o).category === 'tool') return 'tool';
   const p = String(o?.path || o?.rel || '');
-  if (p.startsWith('assets/references/')) return 'tool';    // 浏览器采集 / 搜索下载
+  if (p.startsWith('assets/references/')) return 'tool';    // 浏览器采集
+  if (p.startsWith('参考图/')) return 'tool';                 // 搜索下载（09-07 起落根上的真文件夹）
   if (p.startsWith('assets/generated/')) return 'tool';     // 生图产线
   if (o?.kind === 'generated') return 'tool';
   if (p.startsWith('用户内容/')) return 'user';           // 上传落点（2026-08-28），路径是最硬的证据

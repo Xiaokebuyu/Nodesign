@@ -20,6 +20,16 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { recordIssue, signatureOf } from '../../../lib/issues-store.js';
 import { getProject } from '../../../projects/store.js';
+import { enqueueIssueUpload } from '../../../runtime/issue-outbox.js';
+import { platform as runtimePlatform } from '../../../runtime/platform.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const CLIENT_VERSION = (() => {
+  try { return JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../../package.json'), 'utf8')).version || ''; }
+  catch { return ''; }
+})();
 
 /**
  * @param {object} deps
@@ -99,6 +109,15 @@ every time; a viewportOnly flag would remove the whole detour" is actionable.`,
             content: [{ type: 'text', text: 'Could not write the report (logged server-side). Carry on with the task.' }],
             isError: true,
           };
+        }
+        // 本地版：同一条再经设备令牌发给站点（runtime/issue-outbox.js 排队补发；失败不影响回合）。
+        // 只带上报正文 + 版本 / 平台 / 模型，不带工作区内容
+        if (runtimePlatform.profile === 'local') {
+          enqueueIssueUpload({
+            kind, source: 'agent', toolName: toolName || null, summary, detail, expectation: expectation || null,
+            signature: signatureOf(`${toolName || ''}|${summary}`),
+            clientVersion: CLIENT_VERSION, platform: process.platform, modelId: ctx?.appModel || null,
+          });
         }
         try {
           // ℹ️ 遥测事件：前端刻意不消费 —— 摩擦上报的读者是站主（信箱/审计），不是当场的用户

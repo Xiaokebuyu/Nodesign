@@ -109,7 +109,8 @@ often return stale results without it.
 
 # include_images mode
 
-Downloads the top-N image hits into <workspace>/assets/references/ref-<hash>.<ext>
+Downloads the top-N image hits into <workspace>/参考图/ref-<hash>.<ext> (a real folder on
+the user's desktop — they see the same pictures you see)
 and returns each one as an inline image content block (same numbered order as the
 markdown), so you vision-check them in this turn without calling Read. Each entry
 carries a 'local_path' — that is what goes into generate_image referenceImages[]
@@ -134,7 +135,7 @@ the session, so keep it to 2-3 image queries per turn; count is fine at 5-10.`,
       include_images: z
         .boolean()
         .optional()
-        .describe('Returns top-N reference images downloaded into assets/references/ for use as generate_image referenceImages. Auto-routes CJK→baidu / EN→tavily (exa fallback). CJK queries on tavily/exa are auto-translated to English for richer descriptions. zhipu rejected. Default false.'),
+        .describe('Returns top-N reference images downloaded into 参考图/ (visible to the user) for use as generate_image referenceImages. Auto-routes CJK→baidu / EN→tavily (exa fallback). CJK queries on tavily/exa are auto-translated to English for richer descriptions. zhipu rejected. Default false.'),
     },
     async ({ query, provider = 'auto', count = 5, include_images = false }) => {
       try {

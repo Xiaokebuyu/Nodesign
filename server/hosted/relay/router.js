@@ -42,6 +42,7 @@ import { priceTokens, resolveModelRoute, hasSubscriptionAccess, selectableModels
 import { checkQuota } from '../../lib/quota.js';
 import { tierOf } from '../../auth/tier.js';
 import { mountRelayTools, relayToolsFor } from './tools.js';
+import { mountRelayIssues } from './issues.js';
 
 const BODY_MAX = 64 * 1024 * 1024;   // 带图的 Messages body 能到十几 MB；站内入口本来没有上限
 
@@ -124,6 +125,8 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
 
   // 工具中继（搜索 / 生图）：tools.js
   mountRelayTools(router, { sendError, readRawBody, ...tools });
+  // 客户端上报（report_issue / 桌面壳事件）落站点 issues 表：issues.js
+  mountRelayIssues(router, { sendError, readRawBody });
 
   // 目录：客户端拿着同一张 model-table，只需要知道"哪些行这个账号能用、哪些锁着"。两个选择器面（canvas / stage）
   // 的并集，面的过滤客户端自己做。字段只给 id / locked / lockReason，标签和描述客户端表里有。

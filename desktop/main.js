@@ -257,11 +257,11 @@ function setupUpdater() {
         detail: '重启大约几秒钟，正在跑的会话会被中断。',
       }).then(({ response }) => { if (response === 0) quitAndInstall(); });
     });
-    updater.on('error', (e) => log(`更新检查失败：${e?.message || e}`));
+    updater.on('error', (e) => { log(`更新检查失败：${e?.message || e}`); reportShellIssue('bug', `更新失败：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e)); });
 
     checkForUpdates({ silent: true });
     setInterval(() => checkForUpdates({ silent: true }), 6 * 60 * 60 * 1000).unref?.();
-  }).catch((e) => { updaterState = `failed: ${e.message}`; log(`更新模块加载失败：${e.stack || e.message}`); });
+  }).catch((e) => { updaterState = `failed: ${e.message}`; log(`更新模块加载失败：${e.stack || e.message}`); reportShellIssue('bug', `更新模块加载失败：${String(e.message).slice(0, 120)}`, String(e.stack || e.message)); });
 }
 
 function checkForUpdates({ silent }) {
@@ -279,6 +279,17 @@ function checkForUpdates({ silent }) {
     // 原来只在"版本号相等"时弹"已是最新"，服务器版本比本机旧那条路什么都不说。
     dialog.showMessageBox(win, { type: 'info', message: updateCheckMessage(r, app.getVersion()) });
   }).catch((e) => { if (!silent) dialog.showMessageBox(win, { type: 'error', message: `检查更新失败：${e.message}` }); });
+}
+
+/* ── 壳自己的上报（09-07）：写进数据目录的 issue-outbox.jsonl，服务端起来时经设备令牌发给站点 ──
+ *   （server/runtime/issue-outbox.js 是同一个文件的另一头）。服务端起不来的时候正是最该上报的时候，
+ *   所以这里不走 HTTP，直接写文件。只带版本 / 平台 / 错误正文，不带任何用户内容。 */
+function reportShellIssue(kind, summary, detail) {
+  try {
+    if (!dataDirPath) return;
+    const line = JSON.stringify({ kind, source: 'desktop', summary, detail: String(detail || '').slice(0, 3000), clientVersion: app.getVersion(), platform: process.platform, at: new Date().toISOString() });
+    fs.appendFileSync(path.join(dataDirPath, 'issue-outbox.jsonl'), line + '\n');
+  } catch { /* 上报本身不能再出事 */ }
 }
 
 /* ── 页面桥（preload.cjs）：设置页「关于」的三个动词 ───────────────────── */
@@ -351,6 +362,7 @@ function fatal(err) {
   // 同一次失败会从两条路到这里（health 超时 + 子进程 onExit），只弹一次
   if (fatalShown) return;
   fatalShown = true;
+  reportShellIssue('bug', `桌面版启动失败：${String(err?.message || err).slice(0, 120)}`, String(err?.stack || err));
   splash?.destroy(); splash = null;
   dialog.showErrorBox('NoDesign 启动失败', String(err?.message || err));
   quitting = true;

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { AlertTriangle, Bot, Wrench, Check, EyeOff, Trash2, RotateCcw, Bug, Lightbulb } from 'lucide-react';
+import { AlertTriangle, Bot, Wrench, Check, EyeOff, Trash2, RotateCcw, Bug, Lightbulb, Monitor } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
 import { Admin } from '../lib/api-admin.js';
@@ -21,6 +21,9 @@ import { PAPER_SHADOW } from '../lib/paper.js';
 const SOURCE_META = {
   auto: { label: '自动', icon: Wrench, color: COLOR.sub },
   agent: { label: 'agent 上报', icon: Bot, color: COLOR.brown },
+  // 09-07 客户端中继（hosted/relay/issues.js）：桌面版 agent 的上报与桌面壳自己的事件
+  client: { label: '桌面版 agent', icon: Bot, color: COLOR.blue },
+  desktop: { label: '桌面壳', icon: Monitor, color: COLOR.blue },
 };
 
 // kind 轴（08-02 上报扩容）：bug=行为错了 / friction=能用但绕路 / idea=改进想法
@@ -111,7 +114,7 @@ export function IssuesPanel() {
             ['open', '待处理'], ['ack', '已知'], ['ignored', '忽略'], ['closed', '已修'], ['all', '全部'],
           ]} />
           <Segmented value={source} onChange={setSource} options={[
-            ['all', '全部来源'], ['auto', '自动'], ['agent', 'agent 上报'],
+            ['all', '全部来源'], ['auto', '自动'], ['agent', 'agent 上报'], ['client', '桌面版 agent'], ['desktop', '桌面壳'],
           ]} />
           <Segmented value={kind} onChange={setKind} options={[
             ['all', '全部类型'], ['bug', '故障'], ['friction', '摩擦'], ['idea', '想法'],

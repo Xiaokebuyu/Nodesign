@@ -21,6 +21,8 @@ assets/generated/
 # 共 205 文件 / 76MB references 全被 track 进了 per-project git（.git 最大 95M）。
 # 这条只管新写入；存量要清得手动 git rm --cached（没做，列进欠账）。
 assets/references/
+# 搜图落点（09-07 起在根上，用户看得见）：同样大、可再取
+参考图/
 # 画布布局 —— 属于"你怎么摆的"，不属于"你做出了什么"。
 # 进历史的坏处是具体的：每拖一次卡就弄脏工作区，而且 revertWorkspace
 # 会连着把画布布局一起回退（卡片弹回旧位置、清掉的死 id 复活）。

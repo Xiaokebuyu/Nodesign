@@ -48,6 +48,7 @@ import meRouter from './api/me.js';
 import localRouter, { RESTART_EXIT_CODE } from './api/local.js';
 import { platform } from './runtime/platform.js';
 import { refreshRelayCatalog } from './runtime/relay-client.js';
+import { startIssueOutbox } from './runtime/issue-outbox.js';
 import { probeCapabilities, summarizeCapabilities } from './runtime/capabilities.js';
 import { applyComponentEnv } from './runtime/components.js';
 
@@ -61,6 +62,8 @@ if (platform.isLocal) applyComponentEnv();
 // 站主 relay 的目录（配了令牌才拉；没配 / 拉不到都不阻止起动，选择器就只剩本机钥匙的行）。
 // ⚠️ 在能力探测之前：联网搜索 / 生图两位要看"网关给不给"（relay-tools.js），目录没拉就探成"没有"
 const relay = platform.isLocal ? await refreshRelayCatalog() : null;
+// 客户端上报发件箱：启动补发积压（含桌面壳写的），之后定时（本地版才有；hosted 里是空操作）
+startIssueOutbox();
 await probeCapabilities();
 console.log(summarizeCapabilities());
 

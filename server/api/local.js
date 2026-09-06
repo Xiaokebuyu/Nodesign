@@ -29,6 +29,8 @@ import { loadPrefs, savePrefs, prefsPath } from '../runtime/local-prefs.js';
 import { listComponents, installComponent, uninstallComponent, applyComponentEnv } from '../runtime/components.js';
 import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
+import { recordIssue, signatureOf } from '../lib/issues-store.js';
+import { enqueueIssueUpload, flushIssueOutbox } from '../runtime/issue-outbox.js';
 
 export const RESTART_EXIT_CODE = 75;
 
@@ -205,6 +207,23 @@ function relayView() {
     models: c.models,
   };
 }
+
+// ── 上报（桌面壳 / 设置页用）：本机落表 + 排进发件箱发给站点 ──
+router.post('/issues', (req, res) => {
+  const b = req.body || {};
+  const kind = ['bug', 'friction', 'idea'].includes(b.kind) ? b.kind : 'bug';
+  const summary = typeof b.summary === 'string' ? b.summary.trim().slice(0, 200) : '';
+  if (summary.length < 8) return res.status(400).json({ error: 'summary 太短' });
+  const detail = typeof b.detail === 'string' ? b.detail.slice(0, 3000) : '';
+  const source = b.source === 'desktop' ? 'desktop' : 'agent';
+  const signature = signatureOf(`${source}|${summary}`);
+  recordIssue({ source, kind, summary, detail, signature, userId: null });
+  enqueueIssueUpload({ kind, source, summary, detail, signature, clientVersion: pkg.version, platform: process.platform });
+  res.status(201).json({ ok: true });
+});
+router.post('/issues/flush', async (_req, res) => {
+  res.json(await flushIssueOutbox());
+});
 
 router.post('/restart', (_req, res) => {
   res.json({ ok: true, note: '正在重启，几秒后刷新页面' });

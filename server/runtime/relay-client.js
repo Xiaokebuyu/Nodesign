@@ -158,3 +158,8 @@ export function relayTools() {
 export async function relayToolCall(name, body, { timeoutMs = 60_000 } = {}) {
   return call(`/tools/${encodeURIComponent(name)}`, { method: 'POST', body, timeoutMs });
 }
+
+/** 上报一条到站点 issues 表（hosted/relay/issues.js）。调用方是 runtime/issue-outbox.js，失败它自己排队 */
+export async function relayReportIssue(item) {
+  return call('/issues', { method: 'POST', body: item, timeoutMs: 15_000 });
+}

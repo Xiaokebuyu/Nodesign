@@ -11,6 +11,15 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 
+/**
+ * 搜图落点（2026-09-07 站主拍板：搜到的图要在桌面上看得见）。
+ * 此前落 assets/references/ —— 那是画布扫描的盲区：入座器给它排座、状态块催 agent 去 pin、
+ * pin_to_board 又拒收，三处判据各说各话。工作区根上的一个真文件夹是三处都认的形状：
+ * 扫描把它当文件夹卡，入座器按文件夹里的座位排，organize_board / 用户拖拽都能挪。
+ * browser_capture 采回来的调色板/截图仍在 assets/references/web/（给 agent 看的，走「参考素材」抽屉）。
+ */
+export const REFERENCE_IMAGE_DIR = '参考图';
+
 // ── reference image download ──
 
 const DL_TIMEOUT_MS = 10_000;
@@ -58,7 +67,7 @@ async function downloadOneImage(url, refsDir) {
     if (!exists) await fs.writeFile(absPath, buf);
 
     return {
-      relPath: path.posix.join('assets', 'references', fileName),
+      relPath: path.posix.join(REFERENCE_IMAGE_DIR, fileName),
       absPath,
       sizeBytes: buf.length,
       mimeType: mime,
@@ -79,7 +88,7 @@ async function downloadOneImage(url, refsDir) {
 export async function downloadReferenceImages(images, { workspaceRoot, sharedRoot, stopAfter = Infinity }) {
   const baseRoot = sharedRoot || workspaceRoot;
   if (!baseRoot) return [];
-  const refsDir = path.join(baseRoot, 'assets', 'references');
+  const refsDir = path.join(baseRoot, REFERENCE_IMAGE_DIR);
   await fs.mkdir(refsDir, { recursive: true });
 
   // ⚠️ **够了就停**（2026-08-18）。原来是把候选全并发下完再 slice，于是多下的那些

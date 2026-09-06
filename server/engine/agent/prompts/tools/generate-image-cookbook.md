@@ -45,14 +45,14 @@
 |---|---|---|
 | 用户上传素材（`用户内容/*.png\|jpg`，老项目在 `assets/`）| 直接用 | 把路径喂 `referenceImages[]` |
 | 模型脑里有的著名实体（Apple Park / Wong Kar-wai 风 / 艺术流派）| 不必 reference | prompt 直接点名 |
-| **真实存在但模型不熟**（最新发布产品 / 小众品牌 / 用户自有 IP / 特定型号设备）| **`web_search { include_images:true }`** | 工具自动翻英文 + 下载到 `assets/references/`；选 1-2 张最切题的 `local_path` 喂 `referenceImages[]` |
+| **真实存在但模型不熟**（最新发布产品 / 小众品牌 / 用户自有 IP / 特定型号设备）| **`web_search { include_images:true }`** | 工具自动翻英文 + 下载到根上的 `参考图/`（用户桌面上看得见的文件夹）；选 1-2 张最切题的 `local_path` 喂 `referenceImages[]` |
 | 抽象概念 / 装饰 / 隐喻 | 不需要 reference | 直接 prompt |
 
 ### `include_images=true` 用法
 
 **使用时机**：用户主题确定后、`generate_image` 之前，当生图主体是**真实存在的物体/品牌/场景**（产品照、地标、设备、车型、食物、自然风光等）。模型脑里有的东西不必搜；**最近发布的产品 / 小众品牌 / 用户自有 IP** 必搜。
 
-路由、落点（`assets/references/ref-<hash>.<ext>`）、内嵌图和 `local_path` 契约在 `web_search`
+路由、落点（`参考图/ref-<hash>.<ext>`）、内嵌图和 `local_path` 契约在 `web_search`
 自己的 description 里，这里不重复。
 
 **`count` 不用抠**（默认 5，上限 10）。挑参考图本来就得看得够多才挑得准 —— 主体关键时
