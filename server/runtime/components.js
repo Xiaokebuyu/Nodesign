@@ -7,7 +7,11 @@
  *
  * 装一个组件 = 下载（流式，边下边算 sha256，进度按 content-length）→ 校验 → 解压（fflate 流式，400MB 的
  * LibreOffice 也不进内存）→ 按清单把 bin 目录算成绝对路径写进 <id>.json → 把目录挂进 PATH → 重探能力表。
- * chromium 特殊：交给 playwright 自己的安装器（PLAYWRIGHT_BROWSERS_PATH 指进组件目录）。
+ * chromium 也走同一条管道（09-07 起）：部件表（chromium / headless shell / ffmpeg / winldd）问 playwright 自己的
+ * registry 要，按它的目录规则落进 <components>/chromium/，装完写 INSTALLATION_COMPLETE 标记，运行时只需
+ * PLAYWRIGHT_BROWSERS_PATH 指过去。⛔ 不再调 `playwright install`：它的官方源现在跳 storage.googleapis.com
+ * （国内不通），而 PLAYWRIGHT_DOWNLOAD_HOST 只能换主机不能换路径，npmmirror 上 chrome-for-testing 的路径跟它
+ * 要的 builds/cft/… 对不上，两头都死 —— 站主 09-06 在 Windows 引导页上撞的"退出码 1"就是这个。
  *
  * 状态全在内存里一张表（前端轮询 GET /api/local/components），进程重启后按磁盘上的 <id>.json 认"装了没"。
  * 只在 local profile 有意义；hosted 下 listComponents 返回空。
@@ -18,7 +22,6 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { Writable } from 'node:stream';
-import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { Unzip, UnzipInflate, UnzipPassThrough } from 'fflate';
 import { profile } from './profile.js';
@@ -118,16 +121,51 @@ export async function probeSource(url, { bytes = PROBE_BYTES, timeoutMs = PROBE_
  * 选源：所有候选并行测速。官方能通、且吞吐不低于最快镜像的 OFFICIAL_KEEP_RATIO 就用官方（永远最新）；
  * 否则最快的那个能通的镜像；一个都不通就还是官方（让下载那步报真实的错）。
  */
-export async function pickSource(def, manifest) {
-  const sources = sourcesFor(def, manifest);
+export async function pickSource(sourcesOrDef, manifest) {
+  const sources = Array.isArray(sourcesOrDef) ? sourcesOrDef : sourcesFor(sourcesOrDef, manifest);
   const results = await Promise.all(sources.map(async (s) => ({ ...s, probe: await probeSource(s.url) })));
-  const official = results[0];
-  const mirrorsOk = results.slice(1).filter((r) => r.probe.ok).sort((a, b) => b.probe.bytesPerSec - a.probe.bytesPerSec);
+  const officials = results.filter((r) => r.kind === 'official' && r.probe.ok).sort((a, b) => b.probe.bytesPerSec - a.probe.bytesPerSec);
+  const mirrorsOk = results.filter((r) => r.kind !== 'official' && r.probe.ok).sort((a, b) => b.probe.bytesPerSec - a.probe.bytesPerSec);
+  const official = officials[0] || null;
   const best = mirrorsOk[0] || null;
   let chosen;
-  if (official.probe.ok && (!best || official.probe.bytesPerSec >= best.probe.bytesPerSec * OFFICIAL_KEEP_RATIO)) chosen = official;
-  else chosen = best || official;
+  if (official && (!best || official.probe.bytesPerSec >= best.probe.bytesPerSec * OFFICIAL_KEEP_RATIO)) chosen = official;
+  else chosen = best || results[0];
   return { chosen, results };
+}
+
+/**
+ * 下载到文件：流式、边下边算 sha256、按 content-length 报进度。
+ * ⚠️ 报错要带地址和状态码 —— 装失败时用户看到的就是这一句，别再发生"退出码 1"那种什么都没说的报错。
+ */
+export async function downloadFile(url, dest, { onProgress = null, timeoutMs = 6 * 60 * 60 * 1000 } = {}) {
+  let res;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    throw new Error(`下载 ${url} 失败：${err.cause?.message || err.message}`);
+  }
+  if (!res.ok || !res.body) throw new Error(`下载 ${url} 失败：HTTP ${res.status}`);
+  const total = Number(res.headers.get('content-length')) || null;
+  const hash = crypto.createHash('sha256');
+  let bytes = 0;
+  const out = fs.createWriteStream(dest);
+  const meter = new Writable({
+    write(chunk, _enc, cb) {
+      hash.update(chunk); bytes += chunk.length;
+      onProgress?.(bytes, total);
+      out.write(chunk, cb);
+    },
+    final(cb) { out.end(cb); },
+  });
+  try {
+    await pipeline(res.body, meter);
+  } catch (err) {
+    fs.rmSync(dest, { force: true });
+    throw new Error(`下载 ${url} 中断在 ${Math.round(bytes / 1048576)}MB${total ? ` / ${Math.round(total / 1048576)}MB` : ''}：${err.cause?.message || err.message}`);
+  }
+  if (total && bytes !== total) { fs.rmSync(dest, { force: true }); throw new Error(`下载 ${url} 不完整：${bytes} / ${total} 字节`); }
+  return { sha256: hash.digest('hex'), bytes, total };
 }
 
 /** 测试用 */
@@ -184,7 +222,8 @@ export async function listComponents() {
     const installed = readInstalled(id);
     const job = jobs.get(id) || null;
     return {
-      id, label: def.label || id, uses: def.uses || '', sizeMb: def.sizeMb || null, required: !!def.required, kind: def.kind || 'zip',
+      id, label: def.label || id, uses: def.uses || '', required: !!def.required, kind: def.kind || 'zip',
+      sizeMb: def.kind === 'playwright' ? PLAYWRIGHT_BUNDLE_MB : (def.sizeMb || null),
       supported: !def.platform || def.platform === platformKey,
       installed: !!installed, installedVersion: installed?.version || null,
       job,
@@ -218,7 +257,10 @@ export async function installComponent(id) {
     } catch (err) {
       console.error(`[components] 装 ${id} 失败：${err.message}`);
       setJob(id, { status: 'error', error: err.message });
-      try { fs.rmSync(dirOf(id), { recursive: true, force: true }); } catch { /* */ }
+      try {
+        fs.rmSync(dirOf(id), { recursive: true, force: true });
+        for (const f of fs.readdirSync(componentsRoot)) if (f.startsWith(`${id}.`) && f.endsWith('.download')) fs.rmSync(path.join(componentsRoot, f), { force: true });
+      } catch { /* */ }
     }
   })();
   return jobs.get(id);
@@ -232,26 +274,12 @@ async function installZip(id, def) {
 
   // 选源（官方 vs 镜像测速），然后下载 + sha256
   setJob(id, { status: 'probing' });
-  const { chosen, results } = await pickSource(def, manifestCache.manifest);
-  console.log(`[components] ${id} 选源 ${chosen.kind} ${chosen.url}（${results.map((r) => `${r.kind}:${r.probe.ok ? Math.round(r.probe.bytesPerSec / 1024) + 'KB/s' : '✗'}`).join(' ')}）`);
+  const { chosen, results } = await pickSource(sourcesFor(def, manifestCache.manifest));
+  console.log(`[components] ${id} 选源 ${chosen.kind} ${chosen.url}（${results.map((r) => `${r.kind}:${r.probe.ok ? Math.round(r.probe.bytesPerSec / 1024) + 'KB/s' : '✗ ' + r.probe.error}`).join(' ')}）`);
   setJob(id, { status: 'downloading', source: chosen.kind, sourceUrl: chosen.url });
-  const res = await fetch(chosen.url, { signal: AbortSignal.timeout(6 * 60 * 60 * 1000) });
-  if (!res.ok || !res.body) throw new Error(`下载 ${chosen.url} 失败：HTTP ${res.status}`);
-  const total = Number(res.headers.get('content-length')) || null;
-  setJob(id, { total });
-  const hash = crypto.createHash('sha256');
-  let bytes = 0;
-  const out = fs.createWriteStream(tmp);
-  const meter = new Writable({
-    write(chunk, _enc, cb) {
-      hash.update(chunk); bytes += chunk.length;
-      setJob(id, { bytes, progress: total ? Math.min(0.85, (bytes / total) * 0.85) : 0.3 });
-      out.write(chunk, cb);
-    },
-    final(cb) { out.end(cb); },
+  const { sha256: digest } = await downloadFile(chosen.url, tmp, {
+    onProgress: (bytes, total) => setJob(id, { bytes, total, progress: total ? Math.min(0.85, (bytes / total) * 0.85) : 0.3 }),
   });
-  await pipeline(res.body, meter);
-  const digest = hash.digest('hex');
   setJob(id, { status: 'verifying' });
   if (def.sha256 && digest !== String(def.sha256).toLowerCase()) {
     fs.rmSync(tmp, { force: true });
@@ -272,46 +300,97 @@ async function installZip(id, def) {
   fs.writeFileSync(installedPath(id), JSON.stringify(rec, null, 2));
 }
 
+// ── chromium：按 playwright 的目录规则落盘，下载走上面同一条管道 ──
+
+/** npmmirror 的二进制镜像根；playwright 的 builds/ 整目录和 chrome-for-testing 都在这底下 */
+export const PLAYWRIGHT_MIRROR = process.env.NODESIGN_PLAYWRIGHT_MIRROR || 'https://registry.npmmirror.com/-/binary';
+
 /**
- * playwright 自带安装器的路径。⛔ 不能 require.resolve('playwright/cli.js')：它的 package.json 用 exports 把
- * 子路径锁死了，只放行 "." 和 "./package.json"（09-06 站主在 Windows 引导页上第一个撞到的就是这条：
- * ERR_PACKAGE_PATH_NOT_EXPORTED）。从 package.json 反推目录再拼 cli.js。
+ * 官方地址 → npmmirror 上对应的地址。两种形状：
+ *   …/builds/cft/<chrome 版本>/<平台>/<文件>  →  <镜像根>/chrome-for-testing/<版本>/<平台>/<文件>
+ *   …/builds/<其余>                         →  <镜像根>/playwright/builds/<其余>
+ * （npmmirror 的 playwright/builds/cft/ 目录不全，chrome-for-testing/ 才是按 Google 原样同步的那份。）
  */
-export function playwrightCliPath() {
-  const require = createRequire(import.meta.url);
-  const cli = path.join(path.dirname(require.resolve('playwright/package.json')), 'cli.js');
-  if (!fs.existsSync(cli)) throw new Error(`playwright 的安装器不在预期位置：${cli}`);
-  return cli;
+export function playwrightMirrorUrl(officialUrl, base = PLAYWRIGHT_MIRROR) {
+  let pathname;
+  try { pathname = new URL(officialUrl).pathname; } catch { return null; }
+  let m = /\/builds\/cft\/([^/]+)\/(.+)$/.exec(pathname);
+  if (m) return `${base}/chrome-for-testing/${m[1]}/${m[2]}`;
+  m = /\/builds\/(.+)$/.exec(pathname);
+  if (m) return `${base}/playwright/builds/${m[1]}`;
+  return null;
 }
+
+/** `playwright install chromium` 会装的那几样：浏览器本体、headless shell、录像用的 ffmpeg，Windows 上多一个查 DLL 的 winldd */
+export function playwrightPartNames(platform = process.platform) {
+  return ['chromium', 'chromium-headless-shell', 'ffmpeg', ...(platform === 'win32' ? ['winldd'] : [])];
+}
+
+/**
+ * 部件表：{ name, revision, dir, exe, sources }[]。dir 用 playwright 自己算的目录名（chromium-1217 /
+ * chromium_headless_shell-1217 …）换个根；exe 是相对 dir 的可执行路径，装完用它验"真解出来了"。
+ * registry 是 playwright-core 公开导出的那份（lib/server 的 registry），downloadURLs 已按当前平台算好。
+ */
+export function playwrightParts(browsersPath, { platform = process.platform, registry = null } = {}) {
+  const require = createRequire(import.meta.url);
+  const reg = registry || require('playwright-core/lib/server').registry;
+  return playwrightPartNames(platform).map((name) => {
+    const e = reg.findExecutable(name);
+    if (!e || !e.directory) throw new Error(`playwright 的 registry 里没有 ${name}`);
+    const urls = e.downloadURLs || [];
+    if (!urls.length) throw new Error(`playwright 没有 ${name} 在 ${platform}-${process.arch} 的下载地址`);
+    const exeAbs = e.executablePath?.();
+    const exe = exeAbs ? path.relative(e.directory, exeAbs) : null;
+    // 官方那几条（cdn.playwright.dev 的几个别名）在前，镜像按第一条官方地址推
+    const mirror = playwrightMirrorUrl(urls[0]);
+    const sources = [...urls.map((url) => ({ kind: 'official', url })), ...(mirror ? [{ kind: 'mirror', url: mirror }] : [])];
+    return { name, revision: e.revision, dir: path.join(browsersPath, path.basename(e.directory)), exe, sources };
+  });
+}
+
+/** 进度权重：headless shell 跟本体差不多大，其余两个加起来不到 2MB */
+const PW_PART_WEIGHT = { chromium: 0.6, 'chromium-headless-shell': 0.37 };
+/** 四个部件 win64 合计（147.0.7727.15：188 + 117 + 1.4 + 0.1）。体积随应用里的 playwright 走，清单说了不算，列表里用这个 */
+export const PLAYWRIGHT_BUNDLE_MB = 310;
 
 async function installPlaywright(id, def) {
   const dir = dirOf(id);
+  fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
-  const cli = playwrightCliPath();
-  // playwright 从自己的 CDN 下浏览器；探不通就切 npmmirror 的镜像（PLAYWRIGHT_DOWNLOAD_HOST 是它认的开关）
-  setJob(id, { status: 'probing', progress: 0.02 });
-  const officialHost = 'https://playwright.azureedge.net';
-  const mirrorHost = def.mirrorHost || 'https://npmmirror.com/mirrors/playwright';
-  const probe = await probeSource(`${officialHost}/builds/`, { bytes: 1, timeoutMs: 6000 });
-  const downloadHost = process.env.PLAYWRIGHT_DOWNLOAD_HOST || (probe.ok ? null : mirrorHost);
-  console.log(`[components] ${id} playwright 下载源 ${downloadHost || officialHost}（官方 ${probe.ok ? '通' : '不通：' + probe.error}）`);
-  setJob(id, { status: 'installing', progress: 0.05, source: downloadHost ? 'mirror' : 'official', sourceUrl: downloadHost || officialHost });
-  await new Promise((resolve, reject) => {
-    const p = spawn(process.execPath, [cli, 'install', def.browser || 'chromium'], {
-      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: dir, ...(downloadHost ? { PLAYWRIGHT_DOWNLOAD_HOST: downloadHost } : {}) },
-      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+  // 清单可以显式给 parts（{name, dir 相对 browsersPath, exe, sources}），不给就问 playwright 的 registry
+  const parts = Array.isArray(def.parts)
+    ? def.parts.map((p) => ({ ...p, dir: path.join(dir, p.dir) }))
+    : playwrightParts(dir);
+  const weights = parts.map((p) => PW_PART_WEIGHT[p.name] ?? 0.015);
+  const wsum = weights.reduce((a, b) => a + b, 0);
+  let done = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const w = weights[i] / wsum;
+    const base = done;
+    setJob(id, { status: 'probing', part: part.name, progress: base });
+    const tmp = path.join(componentsRoot, `${id}.${part.name}.download`);
+    const { chosen, results } = await pickSource(part.sources);
+    console.log(`[components] ${id}/${part.name} 选源 ${chosen.kind} ${chosen.url}（${results.map((r) => `${r.kind}:${r.probe.ok ? Math.round(r.probe.bytesPerSec / 1024) + 'KB/s' : '✗ ' + r.probe.error}`).join(' ')}）`);
+    setJob(id, { status: 'downloading', source: chosen.kind, sourceUrl: chosen.url });
+    await downloadFile(chosen.url, tmp, {
+      onProgress: (bytes, total) => setJob(id, { bytes, total, progress: base + (total ? (bytes / total) * 0.9 : 0.3) * w }),
     });
-    let tail = '';
-    const onData = (c) => {
-      const s = c.toString(); tail = (tail + s).slice(-2000);
-      const m = /(\d{1,3})%/.exec(s);
-      if (m) setJob(id, { progress: 0.05 + (Number(m[1]) / 100) * 0.9 });
-    };
-    p.stdout.on('data', onData); p.stderr.on('data', onData);
-    p.on('error', reject);
-    p.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`playwright install 退出码 ${code}：${tail.trim().split('\n').pop() || ''}`))));
-  });
-  const rec = { id, version: def.version || 'playwright', dir, binDirs: [], browsersPath: dir, installedAt: new Date().toISOString() };
+    setJob(id, { status: 'extracting', progress: base + 0.92 * w });
+    fs.mkdirSync(part.dir, { recursive: true });
+    await extractZip(tmp, part.dir, 0);
+    fs.rmSync(tmp, { force: true });
+    if (part.exe && !fs.existsSync(path.join(part.dir, part.exe))) throw new Error(`${part.name} 解压完没有 ${part.exe}（包的目录结构跟 playwright 期望的不一样）`);
+    // playwright 认这个标记文件才算"装了"（registry 的 browserDirectoryToMarkerFilePath）
+    fs.writeFileSync(path.join(part.dir, 'INSTALLATION_COMPLETE'), '');
+    done = base + w;
+  }
+  setJob(id, { status: 'installing', progress: 0.99, part: null });
+  const rec = {
+    id, version: def.version || 'playwright', dir, binDirs: [], browsersPath: dir,
+    parts: Object.fromEntries(parts.map((p) => [p.name, { revision: p.revision ?? null, dir: p.dir, exe: p.exe ? path.join(p.dir, p.exe) : null }])),
+    installedAt: new Date().toISOString(),
+  };
   fs.writeFileSync(installedPath(id), JSON.stringify(rec, null, 2));
 }
 
@@ -341,8 +420,57 @@ function resolveGlobDir(root, pattern) {
   return fs.existsSync(cur) ? cur : null;
 }
 
+/**
+ * 读 zip 中央目录里的 unix 权限位：文件名 → mode。fflate 的流式解析只看局部文件头，权限位只在中央目录
+ * （外部属性高 16 位，且只有 version-made-by 的高字节 = 3（unix）那套才算数），所以自己从文件尾部读一遍。
+ * 认 zip64（LibreOffice 那种上万条目的包）。解析不了返回空表 —— 权限位只是锦上添花，别让它拦下安装。
+ */
+export function readZipModes(zipPath) {
+  const modes = new Map();
+  const fd = fs.openSync(zipPath, 'r');
+  try {
+    const size = fs.fstatSync(fd).size;
+    const tailLen = Math.min(size, 0xffff + 22 + 20);
+    const tail = Buffer.alloc(tailLen);
+    fs.readSync(fd, tail, 0, tailLen, size - tailLen);
+    let eocd = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+    if (eocd < 0) return modes;
+    let cdSize = tail.readUInt32LE(eocd + 12);
+    let cdOff = tail.readUInt32LE(eocd + 16);
+    if (cdSize === 0xffffffff || cdOff === 0xffffffff || tail.readUInt16LE(eocd + 10) === 0xffff) {
+      const loc = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x06, 0x07]), eocd);   // zip64 EOCD locator
+      if (loc < 0) return modes;
+      const z64Off = Number(tail.readBigUInt64LE(loc + 8));
+      const z64 = Buffer.alloc(56);
+      fs.readSync(fd, z64, 0, 56, z64Off);
+      if (z64.readUInt32LE(0) !== 0x06064b50) return modes;
+      cdSize = Number(z64.readBigUInt64LE(40));
+      cdOff = Number(z64.readBigUInt64LE(48));
+    }
+    const cd = Buffer.alloc(cdSize);
+    fs.readSync(fd, cd, 0, cdSize, cdOff);
+    let i = 0;
+    while (i + 46 <= cd.length && cd.readUInt32LE(i) === 0x02014b50) {
+      const os = cd[i + 5];
+      const nameLen = cd.readUInt16LE(i + 28), extraLen = cd.readUInt16LE(i + 30), commentLen = cd.readUInt16LE(i + 32);
+      const attrs = cd.readUInt32LE(i + 38);
+      const name = cd.toString('utf8', i + 46, i + 46 + nameLen);
+      const mode = os === 3 ? (attrs >>> 16) & 0o7777 : 0;
+      if (mode) modes.set(name, mode);
+      i += 46 + nameLen + extraLen + commentLen;
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return modes;
+}
+
 /** 流式解压 zip 到 dest；strip = 剥掉前几层目录（上游 zip 常带一层 name-version/） */
-export function extractZip(zipPath, dest, strip = 0) {
+export async function extractZip(zipPath, dest, strip = 0) {
+  let modes = null;
+  if (process.platform !== 'win32') {
+    try { modes = readZipModes(zipPath); } catch (err) { console.warn(`[components] 读不到 ${path.basename(zipPath)} 的权限位：${err.message}`); }
+  }
   return new Promise((resolve, reject) => {
     const unzip = new Unzip();
     unzip.register(UnzipInflate);
@@ -359,7 +487,16 @@ export function extractZip(zipPath, dest, strip = 0) {
       if (file.name.endsWith('/')) { fs.mkdirSync(target, { recursive: true }); return; }
       fs.mkdirSync(path.dirname(target), { recursive: true });
       const ws = fs.createWriteStream(target);
-      const p = new Promise((res, rej) => { ws.on('finish', res); ws.on('error', rej); });
+      // unix 权限位在 zip 的外部属性高 16 位（os=3 才是 unix 那套）。不带出来的话 chrome 旁边的
+      // chrome_crashpad_handler / chrome_sandbox 全没 +x，浏览器一起就死（09-07 在 arm64 上对照 playwright 自己解的那份逮到的）
+      const mode = modes?.get(file.name) || 0;
+      const p = new Promise((res, rej) => {
+        ws.on('finish', () => {
+          if (mode && process.platform !== 'win32') { try { fs.chmodSync(target, mode); } catch { /* */ } }
+          res();
+        });
+        ws.on('error', rej);
+      });
       pending.add(p);
       file.ondata = (err, chunk, final) => {
         if (err) { ws.destroy(err); fail(err); return; }

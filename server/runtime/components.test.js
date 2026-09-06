@@ -38,6 +38,14 @@ const srv = http.createServer((req, res) => {
       mirrored: { label: 'Mirrored', url: `${base}/official/tool.zip`, sha256: sha, bin: ['tool-*/bin'], platform: platformKey, version: '1.2' },
       bad: { label: 'Bad', url: `${base}/tool.zip`, sha256: 'deadbeef', bin: [], platform: platformKey },
       other: { label: 'Other', url: `${base}/tool.zip`, platform: 'plan9-mips' },
+      browser: { label: 'Browser', kind: 'playwright', platform: platformKey, version: 'pw-test', parts: [
+        { name: 'chromium', revision: 9, dir: 'chromium-9', exe: 'tool-1.2/bin/hello.exe', sources: [{ kind: 'official', url: `${base}/official/tool.zip` }, { kind: 'mirror', url: `${base}/mirror/tool.zip` }] },
+        { name: 'ffmpeg', revision: 9, dir: 'ffmpeg-9', exe: 'tool-1.2/py/python.exe', sources: [{ kind: 'official', url: `${base}/tool.zip` }] },
+      ] },
+      'browser-bad': { label: 'Browser', kind: 'playwright', platform: platformKey, parts: [
+        { name: 'chromium', revision: 9, dir: 'chromium-9', exe: 'tool-1.2/bin/hello.exe', sources: [{ kind: 'official', url: `${base}/tool.zip` }] },
+        { name: 'ffmpeg', revision: 9, dir: 'ffmpeg-9', exe: 'ffmpeg.exe', sources: [{ kind: 'official', url: `${base}/tool.zip` }] },
+      ] },
     }, mirrors: [`${base}/mirror`] }));
     return;
   }
@@ -67,7 +75,7 @@ describe('components', () => {
   it('清单读得到；不支持的平台标 supported:false', async () => {
     const { components, manifestError } = await c.listComponents();
     expect(manifestError).toBeNull();
-    expect(components.map((x) => x.id).sort()).toEqual(['bad', 'mirrored', 'other', 'tool']);
+    expect(components.map((x) => x.id).sort()).toEqual(['bad', 'browser', 'browser-bad', 'mirrored', 'other', 'tool']);
     expect(components.find((x) => x.id === 'other').supported).toBe(false);
     expect(components.find((x) => x.id === 'tool').installed).toBe(false);
   });
@@ -108,10 +116,67 @@ describe('components', () => {
     expect(c.readInstalled('tool')).toBeNull();
     expect(fs.existsSync(path.join(dataDir, 'components', 'tool'))).toBe(false);
   });
-  it('playwright 安装器的路径能解析到（它的 exports 不放行 playwright/cli.js，得从 package.json 反推）', () => {
-    const cli = c.playwrightCliPath();
-    expect(cli.endsWith(path.join('playwright', 'cli.js'))).toBe(true);
-    expect(fs.existsSync(cli)).toBe(true);
+  it('chromium：官方地址 → npmmirror 地址（cft 走 chrome-for-testing，其余走 playwright/builds）', () => {
+    // 这两条就是 09-06 站主机器上要下的东西：官方跳 storage.googleapis.com，镜像那条实测 206
+    expect(c.playwrightMirrorUrl('https://cdn.playwright.dev/builds/cft/147.0.7727.15/win64/chrome-win64.zip'))
+      .toBe('https://registry.npmmirror.com/-/binary/chrome-for-testing/147.0.7727.15/win64/chrome-win64.zip');
+    expect(c.playwrightMirrorUrl('https://cdn.playwright.dev/dbazure/download/playwright/builds/ffmpeg/1011/ffmpeg-win64.zip'))
+      .toBe('https://registry.npmmirror.com/-/binary/playwright/builds/ffmpeg/1011/ffmpeg-win64.zip');
+    expect(c.playwrightMirrorUrl('https://cdn.playwright.dev/builds/winldd/1007/winldd-win64.zip', 'http://m/x'))
+      .toBe('http://m/x/playwright/builds/winldd/1007/winldd-win64.zip');
+    expect(c.playwrightMirrorUrl('https://example.com/other.zip')).toBeNull();
+    expect(c.playwrightMirrorUrl('not a url')).toBeNull();
+  });
+  it('chromium：部件表从 playwright 的 registry 拿得到（目录名按它的规则、exe 相对路径、官方+镜像两种源）', () => {
+    // 贵的分支至少要验入口能解析（09-06 playwright/cli.js 那课）—— 这条跑在真 playwright-core 上
+    const parts = c.playwrightParts('/x/browsers');
+    expect(parts.map((p) => p.name)).toEqual(c.playwrightPartNames());
+    const chromium = parts.find((p) => p.name === 'chromium');
+    expect(chromium.dir).toBe(path.join('/x/browsers', `chromium-${chromium.revision}`));
+    expect(String(chromium.revision)).toMatch(/^\d+$/);
+    expect(chromium.exe).toBeTruthy();
+    expect(path.isAbsolute(chromium.exe)).toBe(false);
+    expect(chromium.sources.filter((s) => s.kind === 'official').length).toBeGreaterThan(0);
+    expect(chromium.sources.at(-1).kind).toBe('mirror');
+    expect(chromium.sources.at(-1).url.startsWith(c.PLAYWRIGHT_MIRROR)).toBe(true);
+    const shell = parts.find((p) => p.name === 'chromium-headless-shell');
+    expect(path.basename(shell.dir)).toBe(`chromium_headless_shell-${shell.revision}`);   // 横线换下划线是它的规矩
+    expect(c.playwrightPartNames('win32')).toContain('winldd');
+    expect(c.playwrightPartNames('linux')).not.toContain('winldd');
+  });
+  it('chromium：按部件逐个下载解压，每个目录写 INSTALLATION_COMPLETE，exe 不在就报出是哪个部件', async () => {
+    await c.installComponent('browser');
+    const job = await waitJob('browser');
+    expect(job.status, job.error).toBe('done');
+    const rec = c.readInstalled('browser');
+    const root = path.join(dataDir, 'components', 'browser');
+    expect(rec.browsersPath).toBe(root);
+    expect(fs.existsSync(path.join(root, 'chromium-9', 'INSTALLATION_COMPLETE'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'ffmpeg-9', 'INSTALLATION_COMPLETE'))).toBe(true);
+    expect(fs.readFileSync(path.join(root, 'chromium-9', 'tool-1.2', 'bin', 'hello.exe'), 'utf8')).toBe('MZ hello');
+    expect(rec.parts.chromium.exe).toBe(path.join(root, 'chromium-9', 'tool-1.2', 'bin', 'hello.exe'));
+    expect(c.applyComponentEnv().env.PLAYWRIGHT_BROWSERS_PATH).toBe(root);
+    // 半路一个部件的 exe 对不上 → 整个组件 error，目录清掉，临时下载文件也清掉
+    await c.installComponent('browser-bad');
+    const bad = await waitJob('browser-bad');
+    expect(bad.status).toBe('error');
+    expect(bad.error).toContain('ffmpeg');
+    expect(fs.existsSync(path.join(dataDir, 'components', 'browser-bad'))).toBe(false);
+    expect(fs.readdirSync(path.join(dataDir, 'components')).filter((f) => f.endsWith('.download'))).toEqual([]);
+  });
+  it('下载报错带地址和状态码（不是"退出码 1"）', async () => {
+    await expect(c.downloadFile(`${base}/nope.zip`, path.join(dataDir, 'nope'))).rejects.toThrow(/nope\.zip 失败：HTTP 404/);
+    await expect(c.downloadFile('http://127.0.0.1:1/x.zip', path.join(dataDir, 'nope'))).rejects.toThrow(/x\.zip 失败：/);
+  });
+  it('extractZip 带出 unix 权限位（chrome 旁边的辅助程序没 +x 浏览器起不来）', async () => {
+    if (process.platform === 'win32') return;
+    const z = Buffer.from(zipSync({ 'bin/run.sh': [strToU8('#!/bin/sh'), { os: 3, attrs: 0o755 << 16 }], 'data.txt': [strToU8('x'), { os: 3, attrs: 0o644 << 16 }], 'noattr.txt': strToU8('y') }));
+    const zp = path.join(dataDir, 'modes.zip'); fs.writeFileSync(zp, z);
+    const dest = path.join(dataDir, 'modes-out'); fs.mkdirSync(dest, { recursive: true });
+    await c.extractZip(zp, dest);
+    expect(fs.statSync(path.join(dest, 'bin', 'run.sh')).mode & 0o777).toBe(0o755);
+    expect(fs.statSync(path.join(dest, 'data.txt')).mode & 0o777).toBe(0o644);
+    expect(fs.existsSync(path.join(dest, 'noattr.txt'))).toBe(true);
   });
   it('extractZip 拒绝越界路径', async () => {
     const evil = Buffer.from(zipSync({ '../escape.txt': strToU8('x'), 'ok.txt': strToU8('y') }));

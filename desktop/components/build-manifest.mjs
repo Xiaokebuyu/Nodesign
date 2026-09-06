@@ -33,8 +33,9 @@ for (const [id, t] of Object.entries(TABLE)) {
     bin: t.bin, ...(t.python ? { python: t.python } : {}), ...(t.modelsDir ? { modelsDir: t.modelsDir } : {}),
   };
 }
-// chromium 走 playwright 自己的安装器（版本跟随应用里的 playwright 包）
-components.chromium = { label: 'Chromium', uses: '截图自检 / 页面感知 / 浏览器工具 / PDF·PPTX 导出 / 封面', kind: 'playwright', browser: 'chromium', platform: 'win32-x64', version: `playwright ${pw}`, sizeMb: 160 };
+// chromium：客户端按自己那份 playwright 的 registry 算部件与地址（server/runtime/components.js playwrightParts），
+// 这里只是列表里的一行；版本跟随应用里的 playwright 包，sizeMb 是四个部件（本体+headless shell+ffmpeg+winldd）合计
+components.chromium = { label: 'Chromium', uses: '截图自检 / 页面感知 / 浏览器工具 / PDF·PPTX 导出 / 封面', kind: 'playwright', browser: 'chromium', platform: 'win32-x64', version: `playwright ${pw}`, sizeMb: 310 };
 
 // 镜像目录（站主站点的 /dl/，server/scripts/sync-components-mirror.sh 同步过去）。客户端还叠加自己的 env 与内置默认
 const mirrors = (process.env.COMPONENT_MIRRORS || 'https://nodesign.xiaobuyu.trade/dl/components-win64').split(',').map((x) => x.trim()).filter(Boolean);
