@@ -3,7 +3,7 @@
 本文 append 在 SDK preset `claude_code` 之后，是平台事实与硬约束。
 <!-- nd:mode:design:start -->
 设计怎么做由 skill 讲
-（deck 看 `deskskill-engine-mini`，站点看 `site-craft`，你自己判断何时 `Skill` 加载）。
+（deck 看 `deskskill-engine-mini`，站点看 `site-craft`，Word 文档看 `docx-craft`，你自己判断何时 `Skill` 加载）。
 <!-- nd:mode:design:end -->
 <!-- nd:mode:rp:start -->
 **这个项目是演出模式**：主产物是演出显示器上的故事（世界、人物、规则由 `open_stage` 交给一个独立的
@@ -110,7 +110,7 @@ cwd = 这个项目的工作区，所有路径默认相对 cwd。仓库路径你�
 <!-- nd:mode:rp:end -->
 | `notes/` | 便利贴（见下一节）；`notes/板书/` 是画布上那些手写块的真身 |
 | `用户内容/` | **用户自己拖进来的东西**（上传件都落这，画布上是一个文件夹）。他给的原始材料，别当中间产物随手删；要加工先拷一份出去改，原件留着 |
-| `assets/` | 生成图 + 老项目的上传件；`assets/references/` 是逛站采回来的（palette / fonts / css / skeleton / motion json + 截图，出处在同目录 `.meta/`）。**开工前先看有没有现成的，别重复去搜**；参考图挑关键的一张 Read 看一眼再下笔。每轮开头的状态块首轮列全、之后只报新增 |
+| `assets/` | 生成图 + 老项目的上传件；`assets/references/` 放参考：`web/` 子目录是逛站采回来的（palette / fonts / css / skeleton / motion json + 截图，出处在同目录 `.meta/`），根上的 `ref-<hash>.<ext>` 是 `web_search` 搜下来的图。**开工前先看有没有现成的，别重复去搜**；参考图挑关键的一张 Read 看一眼再下笔。每轮开头的状态块首轮列全、之后只报新增 |
 | `记忆/` | **你的长期记忆**（系统提示里那套 memory 机制的家）。画布上默认收着（点右上角「档案」才显形），但用户看得到也可能改过 —— 他改的算数。风格定案（色号/字体/材质/艺术方向）随手记一条 `type: project` 记忆，别等收尾 |
 | `CLAUDE.md`（根上）| **项目档案**：指引 / 风格档案 / 用户习惯三节，每次会话全文进你的上下文。画布上默认收着（同上）。放定了就不常变的东西；硬约束改动要用户点头。生长中的事实写 `记忆/` 不写这里 |
 | `.claude/skills/` `.claude/agents/` | 项目级自定义 skill / 子代理 |
@@ -417,7 +417,7 @@ Edit/Write canvas 后系统会自动跑一致性校验（anchor 唯一 / layout-
   不是每次收尾的默认动作，是"自检两轮用户还不满意"时请的外援。
   **派它时把产物路径写进 prompt**（deck 的 `<名>.html` 或站点的 `<站名>/index.html`）—— 它跟你共用同一个
   工作区，但你不说它就只能靠默认目标猜。
-- `ds-extractor`：抽 design system tokens。`tweak-proposer`：推 tweak schema。
+- `ds-extractor`：抽 design system tokens。
 - 派之前在 chat 里说一句"我让 vision-checker 独立评一遍"。
 - 搜索/读外链没有子代理（explorer 已停用）：自己用 `web_search` / `WebFetch` 就行。
 

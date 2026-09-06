@@ -52,31 +52,18 @@
 
 **使用时机**：用户主题确定后、`generate_image` 之前，当生图主体是**真实存在的物体/品牌/场景**（产品照、地标、设备、车型、食物、自然风光等）。模型脑里有的东西不必搜；**最近发布的产品 / 小众品牌 / 用户自有 IP** 必搜。
 
-**Provider 路由（auto）**：
-- CJK query → **baidu**（母语图搜，不翻英；image 条目 + web 条目附图都收）
-- 英文 query → **tavily**（描述质量最高，几乎条条有详细 caption）
-- exa fallback（页面代表图 + 页面内 imageLinks）
-- ⚠️ zhipu **不支持**图搜，include_images 模式下被拒
-
-**输入 / 输出契约**：
-```
-mcp__nodesign__web_search { query: "新能源汽车 充电桩 产品", include_images: true, count: 5 }
-↓ 下载 top-N 到 <workspace>/assets/references/ref-<hash>.<ext>
-↓ 返回值：
-   • 1 个 text block：markdown，含 hits + "## Reference images (downloaded, N)"
-     每条带 description / local_path / size / source / url
-   • N 个 image content block：每张下载到的 reference 图内嵌，
-     **当 turn 你直接 vision-check 即可，不必再调 Read**
-```
+路由、落点（`assets/references/ref-<hash>.<ext>`）、内嵌图和 `local_path` 契约在 `web_search`
+自己的 description 里，这里不重复。
 
 **`count` 不用抠**（默认 5，上限 10）。挑参考图本来就得看得够多才挑得准 —— 主体关键时
 开到 8-10 完全可以，宁可多看几张选对，也别为省几张图选错了锚。真正要控的是**查询次数**：
 每张图作为 inline image block 回传且不释放，所以同一回合别跑超过 2-3 次查询，那才是上下文
 膨胀的主因。
 
-**搜图是为了锚定具体对象，不是为了理解风格**：风格名（Bauhaus / 拼贴 / risograph）模型
-自己就懂，搜它纯属白烧。要搜的是**模型不认识的具体东西** —— 用户点名的 IP、角色、真人、
-某个产品型号、小众品牌。
+**搜图有两种用途，喂法不同**：锚定**具体对象**（用户点名的 IP、角色、真人、产品型号、
+小众品牌）搜到的图喂 `referenceImages`，模型照着它画主体；为**看懂一个风格**搜来的图
+主要是给你自己看的，要喂也只喂 1 张当风格参考并在 prompt 里说明它是风格不是主体 ——
+主体锚和风格锚别混在一起塞进去，会互相稀释。
 
 **vision-check → 选图 → 喂 generate_image**：拿到结果后扫一眼内嵌的图，按视觉切题度选 1-2 张最好的（光线/构图/主体清晰度），把对应条目里的 `local_path` 塞进 `referenceImages[]`。靠 description 文字盲选会踩坑（描述准确度参差）。
 

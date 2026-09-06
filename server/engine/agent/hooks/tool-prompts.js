@@ -1,7 +1,7 @@
 /**
  * 工具 prompt lazy 注入文件加载（首调即缓存）。仿 agents/index.js loadPrompt 模式。
  *
- * 用途：cookbook / tweaks-syntax / vision-checker-dispatch 这些 reference 文档
+ * 用途：cookbook / vision-checker-dispatch 这些 reference 文档
  * 不放系统 prompt 恒驻（每 turn 拖累），改由 PreToolUse hook 在 agent 首次调对应工具时
  * 通过 additionalContext 注入。文件存 prompts/tools/*.md，模块加载时一次性读完缓存到 map。
  *

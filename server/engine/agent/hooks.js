@@ -56,7 +56,6 @@ import {
   makePreToolUseRollFilmCookbookInjector,
   makePreToolUseGenerateImageCookbookInjector,
   makePreToolUseGenerateImageReadPageReminder,
-  makePreToolUseExposeTweaksSyntaxInjector,
   makePreToolUseTaskVisionCheckerDispatchInjector,
 } from './hooks/pre-injectors.js';
 import {
@@ -217,10 +216,6 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       matcher: 'AskUserQuestion',
       hooks: [makePreToolUseAskUserQuestionProtocolInjector()],
     }, {
-      // expose_tweaks 首次调用时注入完整语法
-      matcher: 'mcp__nodesign__expose_tweaks',
-      hooks: [makePreToolUseExposeTweaksSyntaxInjector()],
-    }, {
       // 关系线邻域（2026-08-14 切片③）：agent 摸某个文件时，把连着它的线注进来。
       // UserPromptSubmit 的全图摘要截断后，这里做精确补充。每个文件一个会话只注一次。
       matcher: 'Read|Edit|Write',
@@ -228,7 +223,7 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     }, {
       // 板上动静（2026-08-29 纸范式刀 4）：用户回合中途拖动/搬家/擦组，agent 下一次
       // 摸板前插话（按会话恰好一次，台账在 lib/board-dirty.js）。
-      matcher: 'mcp__nodesign__(write_on_board|edit_board|read_board|board_batch|organize_board|look_at_board)',
+      matcher: 'mcp__nodesign__(write_on_board|edit_board|read_board|organize_board|look_at_board)',
       hooks: [makePreToolUseBoardDirtyInjector({ projectId, sessionId })],
     }, {
       // 未知参数探针（2026-08-30）：zod 把 schema 里没有的键静默 strip 掉，工具自己

@@ -129,7 +129,7 @@ const MIME_BY_EXT = {
   // PDF：NB2 支持文档输入（generateContent inline_data application/pdf）。
   // spike 实测 NoDesk + DMXAPI 透传通，且 NB2 真读 PDF 文本生成准确数据
   // 可视化（Q3 sales report PDF → 4 stat card 信息图，数字一一对上）。
-  // 用例详见 cookbook § K Document-to-visual。
+  // 当前 codex 后端不吃 PDF；这一行是 gateway 时代的旧口径，留着等 Gemini 回来。
   '.pdf': 'application/pdf',
 };
 
@@ -222,6 +222,15 @@ PDF referenceImages are NOT supported (images only). One call produces exactly
 ONE image; there is no "3 variations in one prompt". Expect ~45-60s per image —
 prefer one good anchor shot over many speculative variants.
 
+BEFORE YOU CALL — is the subject a real, specific thing? A named IP / character
+/ real person / product model / niche brand / recently released product: run
+web_search { include_images: true } FIRST and pass 1-2 of the downloaded
+local_path values in referenceImages. Without a reference the model draws its
+guess of that thing. A style you are working in (a movement, a print tradition,
+an era) is also worth one search to see real examples before writing the
+prompt. Famous entities the model already knows and abstract / decorative
+subjects need no search.
+
 Saves the image to assets/generated/<name>.png inside the workspace (visible
 across sessions via the shared/ softlink). Returns the image as an inline
 content block so you can vision-check it immediately.
@@ -313,15 +322,25 @@ memory (记忆/, type: project) so later sessions inherit it.`,
         .enum(ASPECT_RATIOS)
         .optional()
         .describe('Output aspect ratio; default 16:9. See doc for use-case mapping.'),
+      // ── 下面五个是 Gemini gateway（Nano Banana）时代的旋钮，当前 codex 后端静默忽略。
+      //    参数留在 schema 里等网关回来；给模型看的描述只留一句"现在没用"，
+      //    原来那套用法收在这段注释里（09-07 站主：死参数留着，机械用法先注释掉）：
+      //    imageSize        分辨率档 512/1K/2K/4K；默认 1K，只有印刷级细节才上 4K
+      //    thinkingLevel    Gemini 思考预算；minimal 低延迟，high 给复杂构图
+      //    responseModalities 默认 ["IMAGE"]；加 "TEXT" 让模型顺带给一句评注
+      //    model            flash（默认，gemini-3.1-flash-image-preview）/ pro（gemini-3-pro-image-preview，
+      //                     慢且贵 2-3×，只给会当 referenceImages 种子的锚图：封面 hero / 角色设定图 / 品牌样机）
+      //    useGrounding     Google 图搜 grounding，给真实地标/产品/品牌；多 60-90s；人物类会被 Google 自动跳过；
+      //                     来源存 <name>.grounding.json sidecar
       imageSize: z
         .enum(IMAGE_SIZES)
         .optional()
-        .describe('Resolution tier; default 1K. 4K only when print-grade detail required.'),
+        .describe('Gemini-gateway-only; ignored on the current backend.'),
       referenceImages: z
         .array(z.string().min(1))
         .max(14)
         .optional()
-        .describe('Workspace-relative paths to references (png/jpg/webp/gif image OR .pdf document). Max 14 (≤4 character + ≤10 object). Use for style transfer / character consistency / inpainting / document-to-visual (cookbook § E + § K).'),
+        .describe('Workspace-relative paths to reference images (png/jpg/jpeg/webp/gif). Pass the 1-2 most on-point ones and label each one\'s role in the prompt. Use for subject anchoring / style transfer / character consistency / iterating on a previous output.'),
       assetRole: z
         .enum(ASSET_ROLES)
         .optional()
@@ -334,21 +353,21 @@ memory (记忆/, type: project) so later sessions inherit it.`,
       thinkingLevel: z
         .enum(['minimal', 'high'])
         .optional()
-        .describe('Gemini thinking budget; "minimal" (default) for low latency, "high" for complex composition.'),
+        .describe('Gemini-gateway-only; ignored on the current backend.'),
       responseModalities: z
         .array(z.enum(RESPONSE_MODALITIES))
         .min(1)
         .max(2)
         .optional()
-        .describe('Output modalities; default ["IMAGE"]. Add "TEXT" if you want the model\'s commentary alongside the image.'),
+        .describe('Gemini-gateway-only; ignored on the current backend.'),
       model: z
         .enum(['flash', 'pro'])
         .optional()
-        .describe('NB2 model tier; "flash" (default, gemini-3.1-flash-image-preview) for most images. "pro" (gemini-3-pro-image-preview, ~2-3× slower & costlier) only for anchor shots that become referenceImages seeds for downstream pages — cover hero / character bible identity sheet / brand mockup hero. See cookbook § H model routing.'),
+        .describe('Gemini-gateway-only; ignored on the current backend.'),
       useGrounding: z
         .boolean()
         .optional()
-        .describe('Enable Google Image Search grounding for real-world subjects (landmarks / cities / products / nature / specific brands). Default false. When true, model can pull real images from web during generation to anchor visual fidelity. Adds ~60-90s latency. Model auto-skips for people/character queries (Google guardrail). Sources saved to <name>.grounding.json sidecar. See cookbook § L.'),
+        .describe('Gemini-gateway-only; ignored on the current backend.'),
     },
     async ({
       prompt,
@@ -562,9 +581,7 @@ memory (记忆/, type: project) so later sessions inherit it.`,
       const captionParts = [
         `Generated ${fileName}`,
         `at ${agentRelPath}`,
-        provider === 'codex'
-          ? `(${aspectRatio}, codex-imagegen, ${(imgBuf.length / 1024).toFixed(1)} KB)`
-          : `(${aspectRatio}, ${imageSize}, ${model}, ${(imgBuf.length / 1024).toFixed(1)} KB)`,
+        `(${aspectRatio}, ${provider === 'codex' ? 'codex-imagegen' : provider}, ${(imgBuf.length / 1024).toFixed(1)} KB)`,
       ];
       if (webp) {
         captionParts.push(`— 页面里引 ${webp.rel}（${(webp.bytes / 1024).toFixed(0)} KB，`
@@ -578,8 +595,15 @@ memory (记忆/, type: project) so later sessions inherit it.`,
       if (groundingPath) {
         captionParts.push(`grounded with ${groundingSourceCount} source${groundingSourceCount > 1 ? 's' : ''}`);
       } else if (useGrounding) {
-        captionParts.push('(grounding requested but model didn\'t fire — likely person/character query, see cookbook § L)');
+        captionParts.push('(grounding requested but model didn\'t fire — likely person/character query)');
       }
+      // 下一步写在返回文里：cookbook 只在首张注入一次，第 N 张时模型手里只有这段 caption
+      captionParts.push(
+        '\nNext: look at the inline image for technical defects only (duplicated figures, broken limbs, '
+        + 'stray text or watermark, all-black / all-white, mush) and regenerate silently if you see one; '
+        + 'taste and direction stay with the user. Then reference the file from the page and screenshot to check '
+        + 'it in place. If this image will seed other pages via referenceImages, let the user confirm it first.',
+      );
       const caption = captionParts.join(' ');
 
       const content = [{ type: 'text', text: caption }];

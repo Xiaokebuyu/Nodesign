@@ -214,41 +214,11 @@ export function makePreToolUseGenerateImageReadPageReminder() {
         permissionDecision: 'allow',
         additionalContext:
           '<system-reminder>\n[generate_image 目标页提醒]\n\n'
-        + '即将生成图片。如果还没看过目标页（deck 里对应的 <section data-page="N"> / 站点的那一页），建议先 Read 一下：\n'
-        + '  - 页面尺寸（多少行 / 多大留给图）\n'
-        + '  - 主色（design-tokens 里的 --bg / --accent / --hero）\n'
-        + '  - 已有视觉风格（hybrid 范式有无 React 组件 / 已有图片调性）\n\n'
-        + '多数情况下第一张图会被当 referenceImages 种子用于全 deck，看一眼能避免后续违和（暖色页塞冷调插图这类）。本提醒每 session 只触发一次。\n'
-        + '</system-reminder>',
-      },
-    };
-  };
-}
-
-/**
- * PreToolUse(expose_tweaks) — 第一次调用时注 完整控件 schema 语法。
- *
- * SKILL.md 已有"何时暴露 / 暴露什么"哲学（5-8 个核心维度即可）；本 hook 注入完整
- * 控件类型 / target_var vs target_class_on / target_scope / Tailwind 桥接 / 常坑
- * 等参考语法，让 agent 写 controls JSON 时一次到位。
- *
- * 触发：本 session 第 1 次调 expose_tweaks；后续不再注入。
- * 文件源：prompts/tools/tweaks-syntax.md（模块加载时缓存）。
- */
-export function makePreToolUseExposeTweaksSyntaxInjector() {
-  let alreadyInjected = false;
-  return async (_input, _toolUseId, _options) => {
-    if (alreadyInjected) return {};
-    alreadyInjected = true;
-    const syntax = loadToolPrompt('tweaks-syntax');
-    return {
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: 'allow',
-        additionalContext:
-          '<system-reminder>\n[expose_tweaks 完整语法 — 首次注入]\n\n'
-        + syntax
-        + '\n\n本语法每 session 只注入一次。\n'
+        + '即将生成图片。如果还没看过这张图要落的那一页（deck 的 <section data-page="N"> / 站点的那个 html / 文档的那一节），建议先 Read 一下：\n'
+        + '  - 留给图的位置有多大、什么比例\n'
+        + '  - 主色和底色（:root 里的 token，或样式表里实际用的色值）\n'
+        + '  - 已有的视觉调性（已有图片的光线冷暖、插画还是实拍、装饰密度）\n\n'
+        + '第一张图常被当 referenceImages 种子用于整套产物，看一眼能避免后续违和（暖色页塞冷调插图这类）。本提醒每 session 只触发一次。\n'
         + '</system-reminder>',
       },
     };

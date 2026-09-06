@@ -98,7 +98,6 @@ export const SUBAGENT_ICONS = {
   'explorer': Compass,                          // 罗盘 = 研究员探索
   'vision-checker': ScanEye,                    // 扫描眼 = 视觉评审
   'ds-extractor': Palette,                      // 调色板 = 抽 design system
-  'tweak-proposer': Sliders,                    // 滑块 = 推 tweak schema
 };
 
 // SDK 的子代理工具名：老版 'Task'，新版 'Agent'（2026-07-30 真机确认两名并存期）

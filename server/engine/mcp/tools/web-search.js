@@ -13,12 +13,10 @@
  * 返回 markdown（top N 条 title + source + snippet + url），让 agent 直接消费，
  * 不暴露 raw JSON 避免 context 灌满。
  *
- * # 调用上限（agent 应自律，SKILL.md 强约束）
- * - baidu 中文：≤2 次 / turn（snippet 即正文，单次通常够）
- * - tavily：≤3-4 次（摘要浅 100-200 字，需多 query 三角验证）
- * - exa：≤1-2 次（content 字段 2000+ 字完整正文，3 次以上爆 context）
- * - zhipu：≤1 次（包配额稀缺）
- * - baidu 英文：禁用（实测严重跑题）
+ * # 调用上限（没有硬闸，全靠 description 里那句"一回合 2-3 次"）
+ * 各家的经验值：baidu 中文 snippet 即正文，单次通常够；tavily 摘要浅（100-200 字）要多 query
+ * 三角验证；exa 的 content 字段 2000+ 字，3 次以上爆 context；zhipu 包配额稀缺；baidu 英文实测
+ * 严重跑题。⚠️ 这些数字**没有**写在任何 SKILL.md 里（09-07 核过），别在别处声称"SKILL 强约束"。
  */
 
 import { downloadReferenceImages } from './helpers/reference-download.js';
@@ -45,6 +43,14 @@ function formatMarkdown(query, provider, hits, { images = [] } = {}) {
       if (h.url) lines.push(`   ${h.url}`);
       lines.push('');
     });
+    if (images.length === 0) {
+      lines.push(
+        '> Snippets carry no layout, type or colour. For anything visual, browser_navigate the promising '
+        + 'URLs and browse their inner pages; for text, WebFetch the URL. To see pictures of a subject or a '
+        + 'style, re-run with include_images: true.',
+        '',
+      );
+    }
   }
 
   if (images.length > 0) {
@@ -86,8 +92,8 @@ queries prefer baidu, English queries prefer tavily.
 Use this tool when:
 - You need current information (latest design trends, library docs, recent events)
 - You need to verify a fact or find a citation
-- You need to find a URL to then GO LOOK AT: for anything visual, follow up with browser_navigate and browse the site's inner pages — snippets carry no layout, type or colour. (Or web_fetch for text.)
-- You need REFERENCE IMAGES for generate_image (set include_images=true; see below)
+- You need to find a URL to then GO LOOK AT: for anything visual, follow up with browser_navigate and browse the site's inner pages — snippets carry no layout, type or colour. (Or WebFetch for text.)
+- You need to SEE something: set include_images=true (see below). Two cases — a real, specific subject you are about to draw with generate_image (named IP / character / person / product model / niche brand), and a style or creative tradition you want to look at before designing in it.
 
 DO NOT:
 - Run more than 2-3 queries per turn (context bloat)
@@ -95,44 +101,23 @@ DO NOT:
 - Re-issue the same query to retry — change the wording instead
 
 For Chinese queries baidu's snippet field already contains 500-3000 chars of body text;
-you usually don't need to web_fetch the URL afterwards. Tavily snippets are short (100-200
+you usually don't need to WebFetch the URL afterwards. Tavily snippets are short (100-200
 chars) and may need a follow-up fetch.
 
 Add a year hint (e.g., "2025 2026") to the query — search engines especially Chinese ones
 often return stale results without it.
 
-# include_images mode (reference imagery for generate_image)
+# include_images mode
 
-When you need real-world subject anchor before generate_image (product shots, scenes,
-iconic landmarks, brand visuals, etc.), pass include_images=true. Behavior:
-  - Auto-routes by language (excluding zhipu, which has no image support):
-      CJK query → baidu (native CJK image search; no translation)
-      EN query  → tavily (richest image descriptions, ~100% covered)
-      fallback  → exa (page-representative image + page-internal imageLinks)
-    You can override with provider='tavily'|'exa'|'baidu'.
-  - When provider lands on tavily/exa AND query is CJK, the tool auto-translates
-    the query to English first (Tavily/Exa image descriptions are dramatically
-    richer in English; baidu doesn't need translation).
-  - Top-N image hits are downloaded into <workspace>/assets/references/ref-<hash>.<ext>
-    and listed in the markdown output as "Reference images (downloaded, N)".
-  - The CallToolResult also returns each downloaded image as an inline image
-    content block (in the same numbered order as the markdown), so you can
-    vision-check the candidates immediately without calling Read.
-  - Each entry has a 'local_path' field — pass that path directly into
-    mcp__nodesign__generate_image referenceImages[] (NOT the http url; the gen tool
-    only accepts workspace-relative paths).
-  - Filtered: 5KB ≤ size ≤ 8MB, only png/jpg/webp/gif content-types accepted.
-  - Per-provider quirks:
-      tavily: top-level images[] — clean, on-topic, every image has a description
-      exa:    page-rep image + extras.imageLinks — many small/decorative URLs
-              survive the size filter, expect more variance
-      baidu:  native CJK + image size/ratio/format filter via search_filter (we
-              don't expose those yet); image entries lack descriptions, we use
-              the parent reference title as fallback caption
-
-Suggested flow for image-led pages:
-  1. user picks theme → 2. web_search(query, include_images=true) → 3. pick the
-  best-matching local_path → 4. generate_image(prompt, referenceImages=[that path])`,
+Downloads the top-N image hits into <workspace>/assets/references/ref-<hash>.<ext>
+and returns each one as an inline image content block (same numbered order as the
+markdown), so you vision-check them in this turn without calling Read. Each entry
+carries a 'local_path' — that is what goes into generate_image referenceImages[]
+(never the http url). Auto-routes CJK → baidu (native image search), EN → tavily
+(best image descriptions), exa as fallback; zhipu has no image search and is rejected.
+CJK queries sent to tavily/exa are auto-translated to English first. Filter: 5KB ≤ size
+≤ 8MB, png/jpg/webp/gif only. Every returned image stays in context for the rest of
+the session, so keep it to 2-3 image queries per turn; count is fine at 5-10.`,
     {
       query: z.string().min(2).max(500).describe('Search query. Add year hints (2025/2026) for time-sensitive results. Baidu truncates content to 72 chars — keep CJK queries short.'),
       provider: z

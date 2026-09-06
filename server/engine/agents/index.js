@@ -1,12 +1,12 @@
 /**
  * server/engine/agents/index.js — subagent 定义集合
  *
- * 通过 SDK 的 query options.agents 字段挂载 4 个子代理：
+ * 通过 SDK 的 query options.agents 字段挂载子代理：
  *
  *   explorer          — ⏸ 停用中（2026-08-14）。研究员（搜索 + 读资料 + 验证事实）
  *   vision-checker    — 截图 + a11y / 视觉合理性评审（C14 真实 prompt 在 vision-checker.md）
  *   ds-extractor      — 抽 design system tokens（C15 真实 prompt + design-system.json schema）
- *   tweak-proposer    — 推可调 slider schema（C16 真实 prompt + tweak-schema.json schema）
+ *   tweak-proposer    — ⛔ 已埋（2026-09-07）：唯一写口 expose_tweaks 08-24 退役后它交不了活
  *
  * 调用：main agent 用 Task 工具调（SDK 自动暴露）。
  * **注意**：'Task' 必须在主 agent 的 toolAllowlist 里（session-loop.js DEFAULT_TOOL_ALLOWLIST）
@@ -83,7 +83,7 @@ export function resolveDefaultFastModel(mainModel) {
 /**
  * 按 role 决定子代理 model。
  *
- * - **structural / search 类**（explorer / ds-extractor / tweak-proposer）→ subModel
+ * - **structural / search 类**（explorer / ds-extractor）→ subModel
  *   功能是搜外链 / 抽 token / 推 slider，capability 不需跟主同级，走 fast model 省成本。
  *
  * - **judgment 类**（vision-checker）→ sdkSpoofMain
@@ -205,25 +205,6 @@ export function createAgents({ mainModel, sdkModel, fastModel } = {}) {
         'mcp__nodesign__list_pages',
         'mcp__nodesign__read_page',
         'mcp__nodesign__get_computed_styles',
-      ],
-    },
-
-    'tweak-proposer': {
-      description:
-        'Propose 4–10 tweakable dimensions of the current canvas (e.g., heading '
-        + 'scale, spacing density, accent color, corner style). Returns JSON '
-        + 'conformant to schemas/tweak-schema.json — the frontend renders each '
-        + 'tweak as slider / select / color picker / toggle. Use this when the '
-        + 'user wants to fine-tune without rewriting.',
-      prompt: loadPrompt('tweak-proposer'),
-      // 同 ds-extractor：SDK 不支持 per-agent outputFormat，schema 内嵌 prompt
-      // structural 类（schema 推导），走 fast model
-      model: pickAgentModel('tweak-proposer', { sdkSpoofMain, subModel }),
-      tools: [
-        'Read', 'Glob',
-        'mcp__nodesign__list_pages',
-        'mcp__nodesign__read_page',
-        'mcp__nodesign__expose_tweaks',
       ],
     },
   };

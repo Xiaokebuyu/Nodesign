@@ -136,8 +136,8 @@ export function makePostToolUseGenerateImageRegenWatchdog() {
             hookEventName: 'PostToolUse',
             additionalContext:
               `<system-reminder>\n[image-feedback-nudge] 这是本组（base="${base}"）第 1 张图。\n\n`
-            + `如果是 cover / portrait / 跨页 anchor 这类高代价节点（会被当 referenceImages 种子用于全 deck），可以在 chat 里自然邀请用户确认一下方向（"这个 cover 当全 deck 视觉锚 OK 吗？"），收到反馈再做后续；section-divider / decoration / icon 这类单张可直接继续，工具 caption 已自动在 chat 显示。\n\n`
-            + `判断诀窍：错了会不会导致全 deck 重生？会 → 邀请反馈；不会 → 继续。\n`
+            + `如果是 cover / portrait / 跨页 anchor 这类高代价节点（会被当 referenceImages 种子用于整套产物），可以在 chat 里自然邀请用户确认一下方向（"这张当整套的视觉锚 OK 吗？"），收到反馈再做后续；section-divider / decoration / icon 这类单张可直接继续，工具 caption 已自动在 chat 显示。\n\n`
+            + `判断诀窍：错了会不会导致整套重生？会 → 邀请反馈；不会 → 继续。\n`
             + `</system-reminder>`,
           },
         };
