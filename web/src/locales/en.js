@@ -101,7 +101,6 @@ export default {
   '桌面版设备': 'Desktop devices',
   'Claude 官方': 'Claude (official)',
   '已配（API Key）': 'Configured (API key)',
-  '已配（本机 claude login 登录态）': 'Configured (local claude login session)',
   '未配': 'Not set up',
   '已配 {n} 个模型': { one: '{n} model configured', other: '{n} models configured' },
   '写进 {path}/.env，钥匙类保存即生效': 'Written to {path}/.env. Key changes take effect on save.',

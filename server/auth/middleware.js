@@ -15,6 +15,7 @@ import express from 'express';
 import { authEnabled, requestUser, cookieClear } from './session.js';
 import { openRegistrationEnabled, updateUser } from './users-store.js';
 import { relayCatalog, relayConfig, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
+import { loadPrefs } from '../runtime/local-prefs.js';
 import { LOCALES, isLocale } from '../shared/locales.js';
 import { platform } from '../runtime/platform.js';
 import { msg } from '../shared/messages.js';
@@ -31,6 +32,7 @@ function desktopLoginState() {
     error: c.error,
     url: process.env.NODESIGN_RELAY_URL || DEFAULT_RELAY_URL,
     user: c.whoami?.user ? { username: c.whoami.user.username, tier: c.whoami.user.tier } : null,
+    setupDone: loadPrefs().setupDone,   // 首启引导页走过没（AuthGate 登录之后据此去 /setup）
   };
 }
 

@@ -316,17 +316,23 @@ def cleanup_socket(socket_path: str):
 
 
 def main():
+    import uvicorn
+    providers_label = ','.join(PROVIDERS) if PROVIDERS else '<ort-default>'
+    print(f'[rembg-service] providers={providers_label}', file=sys.stderr, flush=True)
+
+    # Windows 没有 AF_UNIX：launcher 给了 NODESIGN_REMBG_PORT 就 bind 127.0.0.1 上的端口（只听环回）
+    port = os.environ.get('NODESIGN_REMBG_PORT')
+    if port:
+        print(f'[rembg-service] listening on 127.0.0.1:{port}', file=sys.stderr, flush=True)
+        # log_level=warning 静音 uvicorn access logs（每次请求一行很吵）
+        uvicorn.run(app, host='127.0.0.1', port=int(port), log_level='warning', access_log=False)
+        return
+
     socket_path = os.environ.get('NODESIGN_REMBG_SOCKET', '/tmp/nodesign-rembg.sock')
     # bind 前清掉旧 socket（上次没干净退出会留残骸；SIGKILL 不走 atexit）
     cleanup_socket(socket_path)
     atexit.register(cleanup_socket, socket_path)
-
-    providers_label = ','.join(PROVIDERS) if PROVIDERS else '<ort-default>'
-    print(f'[rembg-service] providers={providers_label}', file=sys.stderr, flush=True)
     print(f'[rembg-service] listening on {socket_path}', file=sys.stderr, flush=True)
-
-    import uvicorn
-    # log_level=warning 静音 uvicorn access logs（每次请求一行很吵）
     uvicorn.run(app, uds=socket_path, log_level='warning', access_log=False)
 
 

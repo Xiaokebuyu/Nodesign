@@ -16,6 +16,7 @@ export const prefsPath = profile.isLocal ? path.join(profile.dataRoot, 'prefs.js
 const DEFAULTS = Object.freeze({
   hiddenModels: [],     // 选择器里不列的行（appModel id）；设置页「模型」的开关
   defaultModel: null,   // 新会话默认模型（null = 表的默认）
+  setupDone: false,     // 首启引导页走过了（装完或点了「稍后」）
 });
 
 let cache = null;
@@ -33,6 +34,7 @@ function sanitize(raw) {
   const out = { ...DEFAULTS };
   if (Array.isArray(raw?.hiddenModels)) out.hiddenModels = [...new Set(raw.hiddenModels.filter((x) => typeof x === 'string' && x))];
   if (typeof raw?.defaultModel === 'string' && raw.defaultModel) out.defaultModel = raw.defaultModel;
+  if (raw?.setupDone === true) out.setupDone = true;
   return out;
 }
 

@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import http from 'node:http';
 import { promises as fs, readFileSync, writeFileSync } from 'node:fs';
-import { REMBG_VENV_PYTHON, REMBG_SETUP_HINT, resolveRembgSocket } from '../engine/mcp/tools/helpers/rembg.js';
+import { REMBG_VENV_PYTHON, REMBG_SETUP_HINT, resolveRembgSocket, rembgTransport } from '../engine/mcp/tools/helpers/rembg.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // services/ 在 server/services/，server root 上溯 1 层
@@ -61,9 +61,8 @@ let recycling = false;
 
 /** 问 service 的 /health（走 Unix socket）。拿不到就返 null，看门狗这轮跳过 */
 function probeHealth(timeoutMs = 3000) {
-  const socketPath = process.env.NODESIGN_REMBG_SOCKET || DEFAULT_SOCKET;
   return new Promise((resolve) => {
-    const req = http.request({ socketPath, path: '/health', method: 'GET', timeout: timeoutMs }, (res) => {
+    const req = http.request({ ...rembgTransport(), path: '/health', method: 'GET', timeout: timeoutMs }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (c) => { body += c; });
@@ -250,6 +249,8 @@ function spawnService(py, script, preload) {
         // 显式写进子进程 env：killStaleServices 靠读 /proc/<pid>/environ
         // 判断某个 service 是不是"自己这一份"，不写的话认不出来
         NODESIGN_REMBG_SOCKET: process.env.NODESIGN_REMBG_SOCKET || DEFAULT_SOCKET,
+        // Windows 走 TCP（rembg-service.py 看到 NODESIGN_REMBG_PORT 就 bind 端口而不是 socket 文件）
+        ...(rembgTransport().port ? { NODESIGN_REMBG_PORT: String(rembgTransport().port) } : {}),
       },
       // detached:false → child 跟父 share 进程组，父收 SIGINT 时 shell 也会
       // 转给 child（双保险）；显式 SIGTERM 仍走 stopRembgService()

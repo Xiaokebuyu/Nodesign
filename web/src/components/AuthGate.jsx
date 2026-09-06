@@ -61,6 +61,7 @@ export default function AuthGate({ children }) {
       setDesktop(s.desktop || null);
       useGlobalStore.getState().setAuthUser?.(s.user || null);
       // 登录是必经的（站主 09-06 定的）：没令牌就是这道门，没有绕开的路。BYOK 是登录之后设置页里的事
+      if (s.desktop?.loggedIn && !s.desktop.setupDone && location.pathname !== '/setup') { location.replace('/setup'); return; }
       setPhase(s.desktop?.loggedIn ? 'ok' : 'login');
       return;
     }
@@ -128,7 +129,7 @@ export default function AuthGate({ children }) {
           body: JSON.stringify({ username, password, ...(siteUrl.trim() ? { url: siteUrl.trim() } : {}) }),
         });
         const data = await res.json().catch(() => ({}));
-        if (res.ok) setPhase('ok');
+        if (res.ok) { if (!desktop.setupDone) { location.replace('/setup'); return; } setPhase('ok'); }
         else setError(data.error || t('登录失败 ({status})', { status: res.status }));
       } catch {
         setError(t('网络错误，请重试'));

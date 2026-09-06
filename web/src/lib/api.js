@@ -93,6 +93,10 @@ export const Local = {
   relayRefresh: () => jsonRequest('POST', '/api/local/relay/refresh'),
   relayLogin: (body) => jsonRequest('POST', '/api/local/relay/login', body),
   prefs: () => jsonRequest('GET', '/api/local/prefs'),
+  components: () => jsonRequest('GET', '/api/local/components'),
+  installComponent: (id) => jsonRequest('POST', `/api/local/components/${encodeURIComponent(id)}/install`),
+  uninstallComponent: (id) => jsonRequest('DELETE', `/api/local/components/${encodeURIComponent(id)}`),
+  componentsReprobe: () => jsonRequest('POST', '/api/local/components/reprobe'),
   savePrefs: (patch) => jsonRequest('PUT', '/api/local/prefs', patch),
   relayLogout: () => jsonRequest('POST', '/api/local/relay/logout'),
 };

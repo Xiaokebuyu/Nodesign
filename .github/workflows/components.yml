@@ -1,0 +1,92 @@
+# Windows 桌面版的组件包（git / ffmpeg / poppler / LibreOffice / rembg 环境）→ GitHub Release `components-win64`。
+# 应用起动时读这个 release 里的 manifest.json（server/runtime/components.js），换组件版本只要重跑这个工作流。
+#
+# 触发：Actions → components → Run workflow（工作流在默认分支上时），或推一个 components-build-* tag。版本在下面 env 里钉死。
+name: components
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['components-build-*']   # workflow_dispatch 要工作流在默认分支上；分支上先用 tag 触发
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: components-win64
+  GIT_VER: 2.55.0.5
+  GIT_TAG: v2.55.0.windows.5
+  FFMPEG_TAG: autobuild-2026-09-06-13-06
+  FFMPEG_FILE: ffmpeg-n8.1.2-50-g1a748fe2cd-win64-gpl-8.1.zip
+  FFMPEG_VER: 8.1.2
+  POPPLER_TAG: v26.07.0-0
+  POPPLER_FILE: Release-26.07.0-0.zip
+  POPPLER_VER: 26.07.0
+  LO_VER: 26.8.0
+  PY_VER: 3.12.10
+
+jobs:
+  win64:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: 装依赖（要 playwright 的版本号）
+        run: npm ci --omit=dev
+
+      - name: 上游拿现成的（git / ffmpeg / poppler）
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Invoke-WebRequest "https://github.com/git-for-windows/git/releases/download/$env:GIT_TAG/MinGit-$env:GIT_VER-64-bit.zip" -OutFile out/git.zip
+          Invoke-WebRequest "https://github.com/BtbN/FFmpeg-Builds/releases/download/$env:FFMPEG_TAG/$env:FFMPEG_FILE" -OutFile out/ffmpeg.zip
+          Invoke-WebRequest "https://github.com/oschwartz10612/poppler-windows/releases/download/$env:POPPLER_TAG/$env:POPPLER_FILE" -OutFile out/poppler.zip
+          Get-ChildItem out
+
+      # msiexec /a = 管理安装：只把 MSI 里的文件铺到目录，不真装、不要管理员。铺出来 soffice.exe 的上一级就是根
+      - name: LibreOffice（管理安装抽文件）
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://download.documentfoundation.org/libreoffice/stable/$env:LO_VER/win/x86_64/LibreOffice_${env:LO_VER}_Win_x86-64.msi" -OutFile lo.msi
+          Start-Process msiexec -ArgumentList '/a', "$PWD\lo.msi", '/qn', "TARGETDIR=$PWD\lo-extract" -Wait
+          $soffice = Get-ChildItem lo-extract -Recurse -Filter soffice.exe | Select-Object -First 1
+          if (-not $soffice) { throw 'soffice.exe not found after admin install' }
+          $root = $soffice.Directory.Parent.FullName
+          Write-Host "LibreOffice root: $root"
+          7z a -tzip -mx=5 "$PWD\out\libreoffice.zip" "$root\*" | Out-Null
+
+      # 嵌入式 Python + pip + rembg(cpu) + 模型：让 rembg 自己把两个模型下到 U2NET_HOME，文件名由它定
+      - name: rembg 环境
+        shell: pwsh
+        run: |
+          Invoke-WebRequest "https://www.python.org/ftp/python/$env:PY_VER/python-$env:PY_VER-embed-amd64.zip" -OutFile py.zip
+          Expand-Archive py.zip -DestinationPath rembg-env
+          $pth = Get-ChildItem rembg-env -Filter 'python*._pth' | Select-Object -First 1
+          (Get-Content $pth.FullName) -replace '^#import site', 'import site' | Set-Content $pth.FullName
+          Invoke-WebRequest https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
+          & rembg-env\python.exe get-pip.py --no-warn-script-location
+          & rembg-env\python.exe -m pip install --no-warn-script-location "rembg[cpu]" fastapi uvicorn
+          New-Item -ItemType Directory -Force rembg-env\models | Out-Null
+          $env:U2NET_HOME = "$PWD\rembg-env\models"
+          & rembg-env\python.exe -c "from rembg import new_session; new_session('isnet-general-use'); new_session('birefnet-general-lite'); print('models ok')"
+          Get-ChildItem rembg-env\models
+          7z a -tzip -mx=5 "$PWD\out\rembg.zip" "$PWD\rembg-env\*" | Out-Null
+
+      - name: 版本表 + manifest.json
+        shell: pwsh
+        run: |
+          @{ git = $env:GIT_VER; ffmpeg = $env:FFMPEG_VER; poppler = $env:POPPLER_VER; libreoffice = $env:LO_VER; rembg = "py$env:PY_VER" } | ConvertTo-Json | Set-Content out/versions.json
+          node desktop/components/build-manifest.mjs out $env:RELEASE_TAG
+          Get-Content out/manifest.json
+
+      - name: 传到 release（不存在就建；已有的资产覆盖）
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view $env:RELEASE_TAG 2>$null
+          if ($LASTEXITCODE -ne 0) { gh release create $env:RELEASE_TAG --title "Windows 组件包" --notes "NoDesign 桌面版按需下载的外部程序。由 .github/workflows/components.yml 生成，应用读 manifest.json。" }
+          gh release upload $env:RELEASE_TAG out/git.zip out/ffmpeg.zip out/poppler.zip out/libreoffice.zip out/rembg.zip out/manifest.json --clobber

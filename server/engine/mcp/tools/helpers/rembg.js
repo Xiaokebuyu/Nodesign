@@ -50,6 +50,18 @@ function resolveHelper() { return process.env.NODESIGN_REMBG_HELPER || DEFAULT_H
 export function resolveRembgSocket() {
   return process.env.NODESIGN_REMBG_SOCKET || `/tmp/nodesign-rembg-${process.env.PORT || '4001'}.sock`;
 }
+/**
+ * Windows 没有 Unix socket（Python 的 socket 模块在 Windows 上没有 AF_UNIX），走 127.0.0.1 上的一个端口。
+ * 端口同样按实例端口派生；NODESIGN_REMBG_PORT 可覆盖。Linux/mac 仍走 socket 文件（不动生产的既定形状）。
+ * 这是 http.request 的连接参数：{ socketPath } 或 { host, port }，四处请求都从这里拿。
+ */
+export function rembgTransport() {
+  const port = Number(process.env.NODESIGN_REMBG_PORT);
+  if (IS_WIN || Number.isFinite(port) && port > 0) {
+    return { host: '127.0.0.1', port: Number.isFinite(port) && port > 0 ? port : 47000 + ((Number(process.env.PORT) || 4001) % 1000) };
+  }
+  return { socketPath: resolveRembgSocket() };
+}
 function resolveSocket() { return resolveRembgSocket(); }
 
 // service health check 缓存（避免每次 request 都探一遍 /health）
@@ -64,17 +76,19 @@ async function isServiceHealthy() {
   if (now - serviceHealthCache.checkedAt < HEALTH_CACHE_MS) {
     return serviceHealthCache.ok;
   }
-  const socketPath = resolveSocket();
-  // 先 stat 文件存在再 connect，省一次 ECONNREFUSED 的 noise
-  try {
-    await fs.access(socketPath);
-  } catch {
-    serviceHealthCache = { ok: false, checkedAt: now };
-    return false;
+  const transport = rembgTransport();
+  // socket 文件的路：先 stat 文件存在再 connect，省一次 ECONNREFUSED 的 noise（TCP 没这一步）
+  if (transport.socketPath) {
+    try {
+      await fs.access(transport.socketPath);
+    } catch {
+      serviceHealthCache = { ok: false, checkedAt: now };
+      return false;
+    }
   }
   const ok = await new Promise((resolve) => {
     const req = http.request({
-      socketPath,
+      ...transport,
       path: '/health',
       method: 'GET',
       timeout: 2000,
@@ -95,14 +109,14 @@ async function isServiceHealthy() {
  * @returns {Promise<Buffer | null>}
  */
 async function removeViaService(inputBuf, opts) {
-  const socketPath = resolveSocket();
+  const transport = rembgTransport();
   const model = opts.model || 'birefnet-general-lite';
   const alphaMatting = opts.alphaMatting !== false;
   const timeoutMs = opts.timeoutMs || 180_000;
 
   return new Promise((resolve) => {
     const req = http.request({
-      socketPath,
+      ...transport,
       path: '/remove',
       method: 'POST',
       timeout: timeoutMs,

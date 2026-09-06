@@ -26,6 +26,7 @@ import { probeModel } from '../lib/ingress/slot-probe.js';
 import os from 'node:os';
 import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, normalizeRelayUrl, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 import { loadPrefs, savePrefs, prefsPath } from '../runtime/local-prefs.js';
+import { listComponents, installComponent, uninstallComponent, applyComponentEnv } from '../runtime/components.js';
 import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 
@@ -115,6 +116,30 @@ router.post('/models/:id/probe', async (req, res) => {
   }
 });
 
+// ── 组件（<dataRoot>/components/，runtime/components.js）：清单 + 已装状态 + 安装任务 ──
+router.get('/components', async (_req, res) => {
+  res.json(await listComponents());
+});
+router.post('/components/:id/install', async (req, res) => {
+  try {
+    const job = await installComponent(req.params.id);
+    res.status(202).json({ ok: true, job });
+  } catch (err) {
+    res.status(err.code === 'UNKNOWN_COMPONENT' ? 404 : 400).json({ error: err.message, code: err.code || 'INSTALL_FAILED' });
+  }
+});
+router.delete('/components/:id', async (req, res) => {
+  uninstallComponent(req.params.id);
+  await probeCapabilities({ force: true });
+  res.json({ ok: true, capabilities: capabilitySnapshot() });
+});
+// 装完重探能力表（前端看到 job.done 之后调一次；也给"重探"按钮用）
+router.post('/components/reprobe', async (_req, res) => {
+  applyComponentEnv();
+  await probeCapabilities({ force: true });
+  res.json({ ok: true, capabilities: capabilitySnapshot() });
+});
+
 // ── 偏好（<dataRoot>/prefs.json）：选择器里藏哪些行、默认模型 ──
 router.get('/prefs', (_req, res) => {
   res.json({ prefs: loadPrefs(), path: prefsPath });
@@ -128,6 +153,7 @@ router.put('/prefs', (req, res) => {
   const patch = {};
   if ('hiddenModels' in body) patch.hiddenModels = Array.isArray(body.hiddenModels) ? body.hiddenModels.filter((id) => known.has(id)) : [];
   if ('defaultModel' in body) patch.defaultModel = body.defaultModel || null;
+  if ('setupDone' in body) patch.setupDone = !!body.setupDone;
   res.json({ ok: true, prefs: savePrefs(patch) });
 });
 

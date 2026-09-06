@@ -16,10 +16,11 @@ const another = mc.SELECTABLE_MODELS.find((m) => m.id !== apiRow.id && mc.resolv
 
 describe('local-prefs', () => {
   it('没文件 → 默认；写了再读回；不认识的键丢掉', () => {
-    expect(prefs.loadPrefs()).toEqual({ hiddenModels: [], defaultModel: null });
-    expect(prefs.savePrefs({ hiddenModels: ['a', 'a', 3, ''], defaultModel: 'x', junk: 1 })).toEqual({ hiddenModels: ['a'], defaultModel: 'x' });
+    expect(prefs.loadPrefs()).toEqual({ hiddenModels: [], defaultModel: null, setupDone: false });
+    expect(prefs.savePrefs({ hiddenModels: ['a', 'a', 3, ''], defaultModel: 'x', junk: 1, setupDone: 'yes' })).toEqual({ hiddenModels: ['a'], defaultModel: 'x', setupDone: false });
     prefs._resetPrefsCache();
-    expect(prefs.loadPrefs()).toEqual({ hiddenModels: ['a'], defaultModel: 'x' });
+    expect(prefs.loadPrefs()).toEqual({ hiddenModels: ['a'], defaultModel: 'x', setupDone: false });
+    expect(prefs.savePrefs({ setupDone: true }).setupDone).toBe(true);
     expect(JSON.parse(fs.readFileSync(prefs.prefsPath, 'utf8')).junk).toBeUndefined();
   });
   it('藏起来的行带 hidden 标仍在清单里；默认模型按偏好，藏了就退回可见的第一个', () => {
