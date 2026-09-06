@@ -64,12 +64,11 @@ GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions �
 
 ## 还没做的
 
-- **随包组件**。`electron-builder.yml` 的 `extraResources` 现在是空的。要装进安装包的：
-  chromium（约 150MB）、LibreOffice（约 350MB）、ffmpeg、poppler、rembg 的 Python 环境
-  加 u2net 模型（约 250MB）。做法是打包前用一个脚本抓进 `desktop/components/`，装机后解到
-  应用目录，再让 `server/runtime/capabilities.js` 的探测认得那个目录
-  （`whichBinary` 已经支持 `extraDirs`，加一个安装目录进去即可，不用改探测逻辑）。
-  LibreOffice 是 MPL 2.0，随包分发允许，但要带上许可文件。
+- **组件**：按需下载，不进安装包（站主 09-06 定的）。清单在 GitHub Release `components-win64` 的
+  `manifest.json`，由 `.github/workflows/components.yml` 生成（git / ffmpeg / poppler 拿上游现成 zip，
+  LibreOffice 走 `msiexec /a` 抽文件，rembg 是嵌入式 Python + rembg[cpu] + 两个模型；chromium 交给
+  playwright 自己装）。首启引导页（`/setup`）和设置 → 组件都走 `server/runtime/components.js`。
+  ⏸ 六个组件在 Windows 上一个都没真跑过（本机只验了下载 / 校验 / 解压 / 目录形状）；换版本改工作流 env 再跑一次。
 - **图标只是占位**。`desktop/build/icon.png` 和 `desktop/assets/tray.png` 是站点 favicon 那个
   深底 N 字（sharp 渲的），能用，想换就换掉这两个文件。
 - **在 Windows 上一次都没跑过**。CI 打出来的包（Releases 草稿 v0.0.10，231MB）本机拆开看过：
@@ -78,6 +77,7 @@ GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions �
   没部署之前桌面版能用的只有 BYOK（设置页填 Claude API Key 或自定义插槽）。想对着 exp 试，
   设置页「站点地址」填 exp 的地址。
 - **relay 只转推理**。生图和搜索走站主服务那两条（任务式请求）没做，桌面版这两样现在只能 BYOK。
+- **设置页的「用量」要站点那半也部署了才有站点账本那条**（GET /api/relay/usage/daily）。
 - **代码签名**。`electron-builder.yml` 里的 `certificateFile` 留空。没有证书的话，
   安装包首次运行会被 SmartScreen 拦一道"未知发布者"，用户要点两次才能装。
 
