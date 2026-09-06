@@ -75,7 +75,6 @@ import { makeCrystallizeSkillTool } from './tools/crystallize-skill.js';
 import { makeCastRoleTool } from './tools/cast-role.js';
 import { makeSetVarsTool } from './tools/set-vars.js';
 import { makeDrawTrendTool } from './tools/draw-trend.js';
-import { makeJotMemoryTool } from './tools/role-memory.js';
 import { makeRollDiceTool } from './tools/roll-dice.js';
 import { makeOpenStageTool } from './tools/open-stage.js';
 import { makeStageStatusTool } from './tools/stage-status.js';
@@ -230,7 +229,8 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       makeCastRoleTool({ workspaceRoot, sessionId, ctx, roster: roleRoster }),
       makeSetVarsTool({ projectId, sharedRoot: workspaceRoot || sharedRoot }),
       makeDrawTrendTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
-      makeJotMemoryTool({ workspaceRoot }),
+      // jot_memory 09-07 摘牌：它只给常驻角色写 角色/<名>/记忆.md，而角色子代理线已退役、
+      // 那份文件全仓也没有读者（演出线对账 C3）。源码留在 tools/role-memory.js
       // roll_dice — 服务端真随机骰（08-28 沉浸感机制刀①）：模型编的骰运不可信，
       // 这把走 crypto + run.dice 事件直达用户屏幕。GM only（不进角色白名单）。
       makeRollDiceTool({ projectId, ctx }),

@@ -144,7 +144,9 @@ describe('agent 的预选（open_stage.style → 戏.json）', () => {
     expect(r.modules['core-writing']).toBe(true);   // always 组关不掉
     const bogus = await resolveAgentStyle(d, { preset: 'izumi', on: ['no-such-module'] });
     expect(bogus.by).toBe('default');   // 全是假 id = 什么都没动
-    expect((await resolveAgentStyle(d, { preset: 'nope' })).preset).toBe('none');
+    // 09-07：点了名对不上要抛（D2：此前静默落 none，open_stage 还报「写法预设 nope」成功）
+    await expect(resolveAgentStyle(d, { preset: 'nope' })).rejects.toMatchObject({ status: 409 });
+    expect((await resolveAgentStyle(d, { preset: 'none' })).preset).toBe('none');
   });
   it('agent 刚拷进 预设/<名>.json 就直接指 user:<名>：resolvePreset 自己补拆，不静默落回 none', async () => {
     const tavern = { prompts: [{ identifier: 'a', name: '文风-甲', content: '甲的规矩'.repeat(4) }, { identifier: 'b', name: '规则乙', content: '乙的规矩'.repeat(4) }], prompt_order: [{ character_id: 100001, order: [{ identifier: 'a', enabled: true }, { identifier: 'b', enabled: false }] }] };

@@ -19,7 +19,9 @@ function fileUrl(pid, rel) {
   return `/api/projects/${pid}/artifact-file/${String(rel).split('/').map(encodeURIComponent).join('/')}`;
 }
 
-const EDITABLE_RE = /^(台面\.md|规则\.json|角色\/[^/]+\/角色卡\.md|(世界书|预设)\/[^/]+(\/[^/]+)?\.md|记忆\/[a-z0-9-]+\.md|角色\/[^/]+\/记忆\/[a-z0-9-]+\.md)$/;
+// 09-07：导入/<名>/*.md（酒馆卡拆解的落点对账、未启用条目）也进显示器 —— story-import 说「用户随时取用、随时改」，
+// 此前画布不渲染故事文件夹内部、白名单又不收，那句话两头都不成立（演出线对账 A6）
+const EDITABLE_RE = /^(台面\.md|规则\.json|角色\/[^/]+\/角色卡\.md|(世界书|预设|导入)\/[^/]+(\/[^/]+)?\.md|记忆\/[a-z0-9-]+\.md|角色\/[^/]+\/记忆\/[a-z0-9-]+\.md)$/;
 
 /** 用户在显示器里改文件（路径相对戏的文件夹）。角色卡的机器块以磁盘为准接回去。 */
 export async function saveStageFile(pid, root, rel, text) {

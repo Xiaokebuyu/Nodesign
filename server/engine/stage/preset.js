@@ -79,7 +79,13 @@ async function splitTavernJson(playAbs, folder) {
  */
 export async function resolveAgentStyle(playAbs, style) {
   const preset = await resolvePreset(playAbs, style.preset);
-  if (!preset) return { preset: 'none', modules: null, by: 'default' };
+  if (!preset) {
+    // 点了名却对不上（user:<名> 的 <名> 跟文件夹名不一致最常见）：抛出去，别静默落 none 还让 open_stage 报成功（09-07 演出线对账 D2）
+    if (style.preset && style.preset !== 'none') {
+      throw Object.assign(new Error(`写法预设「${style.preset}」找不到：内置的是 ${BUILTIN_IDS.join(' / ')}；自定义的要先落在 <故事>/${PRESET_DIR}/<名>.json，然后传 user:<名>（<名> 是文件名不是故事标题）`), { status: 409 });
+    }
+    return { preset: 'none', modules: null, by: 'default' };
+  }
   const known = new Set(preset.modules.map(m => m.id));
   const on = [...(style.on || []), ...(Array.isArray(style.modules) ? style.modules : [])].map(String).filter(id => known.has(id));
   const off = (style.off || []).map(String).filter(id => known.has(id));

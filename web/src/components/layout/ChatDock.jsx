@@ -143,7 +143,7 @@ export default function ChatDock({
    * 右半边（真机量到：卡从 x=422 起，工具栏占 113-697）。桌面屏够宽不犯，
    * 所以让不让位由调用方按设备档决定，这儿只负责把数报准。
    */
-  useEffect(() => { onOpenChange?.(open, open ? width : 0); }, [open, width, onOpenChange]);
+  useEffect(() => { onOpenChange?.(open, open ? width : 0, cfg.side); }, [open, width, cfg.side, onOpenChange]);
 
   // ── 程序化唤出：就地标注/圈选发送（openChatDock）、要把光标放进输入框
   //   （focusComposer —— 对着收起的卡聚焦是空操作，所以它隐含"先出来"）。

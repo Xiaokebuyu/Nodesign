@@ -14,17 +14,16 @@
  */
 import { promises as fs } from 'fs';
 import path from 'path';
-import { ROLE_SLOT, RETIRED_SLOTS, slotAgentFile } from '../engine/agent/cast.js';
-import { MCP_SERVER_NAME } from '../engine/mcp/server-name.js';
+import { ROLE_SLOT, RETIRED_SLOTS } from '../engine/agent/cast.js';
 
+/**
+ * 2026-09-07 站主拍板「已经退役了那就丢了」：角色子代理整条线 08-30 停用、演出 09-05 起由独立进程写，
+ * 这个位铺出去只会教一套退役协议（往板书写剧情），跟 prelude / stage-setup 正面冲突（演出线对账 C4）。
+ * 现在铺装 = **收走**：rp-role 与两个旧位的文件都删；判据（isSlotType）继续认名字，只为拒绝把它们当角色名。
+ */
 export async function ensureActorSlots(root) {
   const dir = path.join(root, '.claude', 'agents');
-  const file = path.join(dir, `${ROLE_SLOT}.md`);
-  const want = slotAgentFile(MCP_SERVER_NAME);
-  let have = null;
-  try { have = await fs.readFile(file, 'utf8'); } catch { /* 还没有 */ }
-  if (have !== want) await fs.writeFile(file, want, 'utf8');
-  for (const old of RETIRED_SLOTS) {
+  for (const old of [ROLE_SLOT, ...RETIRED_SLOTS]) {
     try { await fs.unlink(path.join(dir, `${old}.md`)); } catch { /* 本来就没有 */ }
   }
 }

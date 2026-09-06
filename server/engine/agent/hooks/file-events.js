@@ -11,6 +11,8 @@
  * 产物属于项目，不属于任何一次对话。）
  */
 import { Events } from '../events.js';
+import { walkTaskFiles } from '../../../lib/task-scan.js';
+import { promises as fs } from 'node:fs';
 import { toWorkspaceRel } from '../../../lib/workspace-path.js';
 import { setActiveArtifact } from '../../../lib/artifact-target.js';
 
@@ -71,5 +73,37 @@ export function makePostToolUseFileChangedEmitter({ ctx, workspaceRoot, sharedRo
       console.warn('[hooks/PostToolUse:file-changed] emit failed:', err.message);
     }
     return {};
+  };
+}
+
+/**
+ * Bash 写盘嗅探（2026-09-07 设计线对账 B1）：cp / npm run build / curl -L -o 落的文件从来不发
+ * run.file_changed —— 上面那条只读 Write/Edit 的 file_path。prelude 说「你写盘的文件几秒内自动排进
+ * 版面」，对 Bash 一直是假话（站点技术参考教的正是 cp 图进 <站名>/assets/）。
+ * 做法：PreToolUse 记下这次 Bash 的起始时间，PostToolUse 走一遍工作区（task-scan 的同一套排除件，
+ * node_modules / 隐藏目录不进），mtime 晚于起点的都发一次。上限 48 条，超了不发（构建产物成百上千，
+ * 入座器那边也有封顶）。
+ */
+export function makeBashWriteSniffer({ ctx, workspaceRoot, maxEmit = 48 }) {
+  const started = new Map();   // toolUseId → ms
+  return {
+    pre: async (_input, toolUseId) => { started.set(String(toolUseId), Date.now() - 1500); return {}; },
+    post: async (_input, toolUseId) => {
+      const since = started.get(String(toolUseId));
+      started.delete(String(toolUseId));
+      if (!since || !workspaceRoot || !ctx?.emit) return {};
+      try {
+        const files = await walkTaskFiles(workspaceRoot, { maxDepth: 4 });
+        let n = 0;
+        for (const f of files) {
+          let st;
+          try { st = await fs.stat(f.abs); } catch { continue; }
+          if (st.mtimeMs < since) continue;
+          if (n++ >= maxEmit) break;
+          try { ctx.emit(Events.fileChanged(f.rel, 'change')); } catch { /* */ }
+        }
+      } catch (err) { console.warn('[hooks/bash-write-sniffer]', err.message); }
+      return {};
+    },
   };
 }

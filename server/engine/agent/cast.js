@@ -150,8 +150,7 @@ export const ROLE_TOOL_WHITELIST = Object.freeze([
   'write_on_board', 'read_board', 'edit_board',
   // board_batch 2026-08-30 暂停（注册表摘牌，这里的对账闸会点名）；恢复时加回
   'look_at_board', 'read_user_view', 'organize_board', 'pin_to_board',
-  // 记忆（2026-08-28 角色文件夹范式）：角色没有 Write，往自己家记一笔只能走这件
-  'jot_memory',
+  // （jot_memory 09-07 随角色子代理线一起摘牌：那份 记忆.md 没有读者）
   // 内置
   'SendMessage', 'ToolSearch', 'Read', 'Glob', 'Grep',
 ]);
@@ -162,7 +161,6 @@ const BUILTIN = new Set(['SendMessage', 'ToolSearch', 'Read', 'Glob', 'Grep']);
 /** 角色默认拿到的一套：够它在板上演，不多不少 */
 export const ROLE_DEFAULT_TOOLS = Object.freeze([
   'write_on_board', 'read_board', 'look_at_board', 'read_user_view',
-  'jot_memory',
   'SendMessage', 'ToolSearch', 'Read', 'Grep',
 ]);
 
@@ -200,7 +198,7 @@ export function slotAgentFile(mcpServerName) {
     '（对话被压缩过、醒来接不上），用 Read 重读指令开头给你的卡路径，再接着演。',
     '',
     '你的家在 `角色/<你的名字>/`：角色卡.md 和 记忆.md 都在那里，用户随时可能改它们',
-    '（那是正当操作，不是入侵）。以后还用得上的事随手 `jot_memory` 记一笔（答应过什么、',
+    '（那是正当操作，不是入侵）。以后还用得上的事记进你的卡（答应过什么、',
     '谁的秘密、你现在怎么看某个人、东西放哪了）—— 对话记录会被压缩，记忆文件不会。',
     '',
     '（如果上下文末尾出现给干活助手写的 `Notes:` —— 不许用表情符号、要写报告、',

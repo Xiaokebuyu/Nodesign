@@ -24,6 +24,9 @@ import { allowedModelsFor } from '../../agent/model-context.js';
 import { stopStage, getStageRuntime, createPlay, SKINS } from '../../stage/manager.js';
 import { validateCondition } from '../../stage/rules.js';
 import { BUILTIN_IDS, DEFAULT_PRESET } from '../../stage/preset.js';
+import { readPlayConfig } from '../../stage/play.js';
+import { getSharedDir } from '../../../projects/workspace.js';
+import path from 'node:path';
 
 const castSchema = z.object({
   name: z.string().min(1).max(30).describe('在场者的名字，必须已经有角色卡（cast_role 写的 角色/<名>/角色卡.md）'),
@@ -134,13 +137,21 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
         });
         const rt = getStageRuntime(projectId, root);
         const wasRunning = !!rt?.running;
+        // 预选报**落盘后**的数（09-07 D1）：拼错的模块 id 会被静默过滤，返回文案原来报的是传进来的原始长度
+        let styleNote = '，写法由玩家开场时挑（默认 Izumi）';
+        if (style) {
+          const cfg = await readPlayConfig(path.join(getSharedDir(projectId), root)).catch(() => null);
+          const applied = cfg?.style?.agent || { on: [], off: [] };
+          const dropped = [...style.on, ...style.off].filter((id) => !applied.on.includes(id) && !applied.off.includes(id));
+          styleNote = `，写法预设 ${cfg?.style?.preset || style.preset}（预选 +${applied.on.length} −${applied.off.length}，玩家开场页能改${dropped.length ? `；⚠️ ${dropped.length} 个模块 id 这个预设里没有、已丢：${dropped.join(' / ')}` : ''}）`;
+        }
         if (wasRunning) await stopStage(projectId, root, 'reopen');
         const who = args.cast.map(c => c.name).join(' / ');
         return {
           content: [{
             type: 'text',
             text: `${wasRunning ? '换了设定，进程已停，下一句话到时重开' : '建好了'}：「${args.title}」→ 文件夹 ${root}/，在场 ${who}，设定 ${args.table.length} 字`
-              + `${args.achievements?.length ? `，${args.achievements.length} 枚奖杯` : ''}${args.triggers?.length ? `，${args.triggers.length} 条推进触发` : ''}${args.panels?.length ? `，${args.panels.length} 块面板（${args.panels.map(p => p.name || p.id).join(' / ')}）` : ''}${style ? `，写法预设 ${style.preset}（预选 +${style.on.length} −${style.off.length}，玩家开场页能改）` : '，写法由玩家开场时挑（默认 Izumi）'}。`
+              + `${args.achievements?.length ? `，${args.achievements.length} 枚奖杯` : ''}${args.triggers?.length ? `，${args.triggers.length} 条推进触发` : ''}${args.panels?.length ? `，${args.panels.length} 块面板（${args.panels.map(p => p.name || p.id).join(' / ')}）` : ''}${styleNote}。`
               + '\n这个故事的一切都在那个文件夹里（设定 / 角色卡 / 记忆 / 场景 / 规则 / 预设），画布上它是一张卡，用户双击进去先到开场页：'
               + '看世界与人物、挑写法、勾角色卡上的可选条目，点「开始」机器才起进程并发开场指令；之后他说的每句话直接进进程，不经过你。'
               + '\n你现在在后台：别在这里代演、别复述显示器上的剧情。用户回到这里跟你说话时才是在跟你说话（改设定 / 换玩法 / 问怎么用）。'

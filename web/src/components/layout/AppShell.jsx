@@ -58,6 +58,8 @@ export default function AppShell({
   topSuppressed = false,
   /** 右上角有别人的关闭钮：感应带在那一段让路（顶栏本身照旧可用） */
   topRightSafe = false,
+  /** 顶栏给某一侧的浮窗让路：{ left?: px, right?: px }。横条缩进去、那一段的感应带也不算（09-07 聊天卡固定时导出入口消失案） */
+  topInset = null,
   /** 触屏档那颗 ‹ 的动作。给了就盖过「面包屑上一级」（调用方知道哪一层在最里面） */
   onBack = null,
 }) {
@@ -109,7 +111,9 @@ export default function AppShell({
      * 所以这一条同时管住了"菜单开着别把顶栏收走"。
      */
     const overTopBar = (t) => !!t?.closest?.('[data-top-bar]');
-    const inSafeCorner = (e) => topRightSafe && e.clientX >= window.innerWidth - CORNER_SAFE_W;
+    const inSafeCorner = (e) => (topRightSafe && e.clientX >= window.innerWidth - CORNER_SAFE_W)
+      || (topInset?.right > 0 && e.clientX >= window.innerWidth - topInset.right)
+      || (topInset?.left > 0 && e.clientX <= topInset.left);
     const onMove = (e) => {
       // 手就在顶栏上：清掉计时器。少这一条的话，鼠标停在顶栏上不动满 600ms，
       // 它会被计时器从手底下收走 —— 原来那版的判据只有 clientY<=10，
@@ -140,7 +144,7 @@ export default function AppShell({
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('focusin', onFocusIn);
     };
-  }, [overlayTop, topSuppressed, topRightSafe, touch]);
+  }, [overlayTop, topSuppressed, topRightSafe, touch, topInset?.left, topInset?.right]);
 
   if (!overlayTop) {
     /*
@@ -209,7 +213,7 @@ export default function AppShell({
         data-top-bar
         onPointerEnter={() => setRevealed(true)}
         style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
+          position: 'absolute', top: 0, left: topInset?.left || 0, right: topInset?.right || 0,
           // 顶栏之上还有浮窗层（聊天栏 z≈120）；顶栏要压得住它，
           // 否则唤出来的顶栏被聊天栏盖掉一半
           zIndex: 900,

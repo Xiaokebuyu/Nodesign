@@ -195,31 +195,31 @@ persona 里写：他是谁、怎么说话、绝不做什么，**带两三句语�
 
 | 他大概会说 | 动作 |
 |---|---|
-| 别切镜头 / 只写我这边 | `off: ["plot-cutaway"]` |
-| 别加评论 / 冷一点 | `on: ["plot-objective"]` |
-| 别都围着我转 | `on: ["plot-no-godlike"]` |
-| 轻松一点 / 别阴暗 | `on: ["plot-bright"]` |
-| 别乱转折 / 按我说的走 / 别加新角色 | `on: ["twist-steady"]` |
-| 可以不听我的 / 来点意外 | `on: ["twist-allow"]` |
-| 越离谱越好 / 放飞 | `on: ["twist-wild"]` |
-| 慢一点 / 多写日常 / 别急着推 | `on: ["pace-slow"]` |
+| 别切镜头 / 只写我这边 | `{ preset: "izumi", off: ["plot-cutaway"] }` |
+| 别加评论 / 冷一点 | `{ preset: "izumi", on: ["plot-objective"] }` |
+| 别都围着我转 | `{ preset: "izumi", on: ["plot-no-godlike"] }` |
+| 轻松一点 / 别阴暗 | `{ preset: "izumi", on: ["plot-bright"] }` |
+| 别乱转折 / 按我说的走 / 别加新角色 | `{ preset: "izumi", on: ["twist-steady"] }` |
+| 可以不听我的 / 来点意外 | `{ preset: "izumi", on: ["twist-allow"] }` |
+| 越离谱越好 / 放飞 | `{ preset: "izumi", on: ["twist-wild"] }` |
+| 慢一点 / 多写日常 / 别急着推 | `{ preset: "izumi", on: ["pace-slow"] }` |
 | 快点 / 无聊的跳过 | `pace-skip` 默认已开，不用传 |
-| 我说的就是已经发生了，接着往下写 | `on: ["input-continue"]` |
-| 第二人称 / 用「你」叫我 | `on: ["person-2"]` |
-| 第一人称 / 用「我」 | `on: ["person-1-you"]` |
-| 从她（他）的视角写 | `on: ["person-1-char"]` |
-| 少点对白 / 多点描写 | `on: ["dlg-low"]` |
-| 多点对白 / 少点描写 | `on: ["dlg-high"]` |
-| 只要对白 | `on: ["dlg-only"]` |
-| 不要斜体心理描写 | `off: ["char-psych-italic"]` |
-| 短一点 / 几百字就行 | `on: ["len-short"]` |
-| 长一点 / 写细一点 | `on: ["len-long"]` |
-| 想快点 / 别想太多 | `on: ["think-brief"]` |
-| 顺便写写别处在发生什么 | `on: ["extra-parallel"]` |
-| 日语对白 / 双语 | `on: ["extra-jp"]` |
-| 女性向 | `on: ["extra-female"]` |
-| 一点都别省 / 事无巨细 | `on: ["exhaustive"]`（预设 `literary`） |
-| 轻松通俗 / 别文艺腔 | `on: ["lively"]`（预设 `literary`） |
+| 我说的就是已经发生了，接着往下写 | `{ preset: "izumi", on: ["input-continue"] }` |
+| 第二人称 / 用「你」叫我 | `{ preset: "izumi", on: ["person-2"] }` |
+| 第一人称 / 用「我」 | `{ preset: "izumi", on: ["person-1-you"] }` |
+| 从她（他）的视角写 | `{ preset: "izumi", on: ["person-1-char"] }` |
+| 少点对白 / 多点描写 | `{ preset: "izumi", on: ["dlg-low"] }` |
+| 多点对白 / 少点描写 | `{ preset: "izumi", on: ["dlg-high"] }` |
+| 只要对白 | `{ preset: "izumi", on: ["dlg-only"] }` |
+| 不要斜体心理描写 | `{ preset: "izumi", off: ["char-psych-italic"] }` |
+| 短一点 / 几百字就行 | `{ preset: "izumi", on: ["len-short"] }` |
+| 长一点 / 写细一点 | `{ preset: "izumi", on: ["len-long"] }` |
+| 想快点 / 别想太多 | `{ preset: "izumi", on: ["think-brief"] }` |
+| 顺便写写别处在发生什么 | `{ preset: "izumi", on: ["extra-parallel"] }` |
+| 日语对白 / 双语 | `{ preset: "izumi", on: ["extra-jp"] }` |
+| 女性向 | `{ preset: "izumi", on: ["extra-female"] }` |
+| 一点都别省 / 事无巨细 | `{ preset: "literary", on: ["exhaustive"] }`（预设 `literary`） |
+| 轻松通俗 / 别文艺腔 | `{ preset: "literary", on: ["lively"] }`（预设 `literary`） |
 | 像轻小说 / 像武侠 / 像网文 / 像金庸 / 像广播剧… | `on: ["voice-<id>"]`，文风组里挑最像的一个（见下表），只开一个 |
 | 想要更文学的质地 / 长句 / 不要比喻 | `preset: "literary"`（文学派整套换掉 Izumi） |
 | 他交了自己的酒馆预设 JSON | 文件放 `<故事>/预设/<名>.json`，`preset: "user:<名>"`，⛔ 别传 on/off（条目 id 拆出来才有） |

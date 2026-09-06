@@ -176,7 +176,7 @@
         <section><h2>上一句的开销<small>${u ? `${esc(u.model || '')} · ${(u.durationMs / 1000).toFixed(1)}s` : '还没有'}</small></h2>
           ${u ? `<table class="kv"><tr><th>上下文长度</th><td class="num">${fmtK(u.context)}</td></tr><tr><th>缓存命中</th><td class="num">${fmtK(u.cacheRead)}（${u.context ? Math.round((u.cacheRead / u.context) * 100) : 0}%）</td></tr><tr><th>新写入缓存</th><td class="num">${fmtK(u.cacheCreate)}</td></tr><tr><th>输出</th><td class="num">${fmtK(u.output)}</td></tr><tr><th>花费</th><td class="num">$${(u.costUsd || 0).toFixed(4)}</td></tr></table>` : '<p class="muted">说一句话之后这里就有数了。</p>'}
         </section>
-        <section><h2>这个故事的文件<small>世界书 / 预设 / 记忆正文，对方用到时自己读</small></h2><div id="fileList" class="muted">读取中…</div></section>
+        <section><h2>这个故事的文件<small>世界书 / 拆开的预设 / 导入对账 / 记忆正文，对方用到时自己读</small></h2><div id="fileList" class="muted">读取中…</div></section>
         <section id="editorSlot"></section></div>`;
       r.querySelectorAll('[data-open]').forEach(b => { b.onclick = () => this.open(b.dataset.open); });
       r.querySelector('#editRules').onclick = () => {

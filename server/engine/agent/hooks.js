@@ -76,6 +76,7 @@ import { makeUserPromptSubmitHandler } from './hooks/user-prompt-submit.js';
 import {
   makeFileChangedHandler,
   makePostToolUseFileChangedEmitter,
+  makeBashWriteSniffer,
 } from './hooks/file-events.js';
 import {
   makeSessionStartHandler,
@@ -105,7 +106,9 @@ import { makePostToolUseSubagentReportRecovery } from './hooks/post-subagent-rep
  * @param {string} [deps.projectId]
  * @returns {Partial<Record<string, Array<{ matcher?: string, hooks: Function[], timeout?: number }>>>}
  */
-export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, projectId, roleRoster: injected = null } = {}) {
+export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, projectId, roleRoster: injected = null, projectMode = 'design' } = {}) {
+  // Bash 写盘嗅探（09-07）：pre 记时、post 扫 mtime 发 file_changed，两半共用一份状态
+  const bashSniffer = makeBashWriteSniffer({ ctx, workspaceRoot });
   // 常驻角色名册：**一个会话一份**（闭包级，不是全局表）。派发时登记、收件人闸按它放行。
   // 两个 handler 必须拿同一个引用 —— 各建各的等于闸永远看到空名册，症状是所有角色
   // 都寄不出信（fail-closed，至少不静默漏）。见 cast.js createRoleRoster 的头注释。
@@ -188,12 +191,12 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     }, {
       // 兜底：agent 没走 Skill 直接 cp canvas.template.html → 现场补拷
       matcher: 'Bash',
-      hooks: [makePreToolUseBashStarterFilesFallback({ workspaceRoot })],
+      hooks: [makePreToolUseBashStarterFilesFallback({ workspaceRoot }), bashSniffer.pre],
     }, {
       // get_pending_changes 首次调用时注入 DirectEdit 逐 kind 处理协议全文
       // （prelude 只留流程骨架，~90 行细则挪到 prompts/tools/direct-edit-protocol.md）
       matcher: 'mcp__nodesign__get_pending_changes',
-      hooks: [makePreToolUseGetPendingChangesProtocolInjector()],
+      hooks: [makePreToolUseGetPendingChangesProtocolInjector({ mode: projectMode })],
     }, {
       // generate_image 两个 hook 串：先目标页提醒（已有），再首次注 cookbook 完整版
       matcher: 'mcp__nodesign__generate_image',
@@ -302,6 +305,8 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
         matcher: 'Write|Edit|MultiEdit|NotebookEdit',
         hooks: [makePostToolUseFileChangedEmitter({ ctx, workspaceRoot, sharedRoot, sessionId })],
       },
+      // Bash 落的文件（cp / build / curl）也要进画布与入座器（09-07 设计线对账 B1）
+      { matcher: 'Bash', hooks: [bashSniffer.post] },
       // （曾有 Bash mkdir 认领任务钩子，08-08 扁平化随任务模型一起拆除。当时删了
       // hooks 数组却留下 `{ matcher: 'Bash' }` 空壳 —— SDK initialize 的大 try 被
       // 它的 TypeError 打穿，全部程序化钩子 + 全部 in-process MCP server 无声蒸发，

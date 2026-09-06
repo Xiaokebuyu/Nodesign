@@ -65,6 +65,26 @@ describe('board-seater（入座下沉服务端）', () => {
     expect(Number.isFinite(e.x)).toBe(true);
   });
 
+  it('文件夹站按注册表入座成 site:<夹>（09-07 站点卡没有碰撞面积案）：一张卡、桌面层、多文件只排一次', async () => {
+    await fs.mkdir(path.join(root, '第二站'), { recursive: true });
+    await fs.writeFile(path.join(root, '第二站/index.html'), '<!doctype html><html><body><h1>二</h1></body></html>', 'utf8');
+    await fs.writeFile(path.join(root, '第二站/style.css'), 'body{}', 'utf8');
+    const { seated } = await seatArtifacts(pid, ['第二站/index.html', '第二站/style.css']);
+    expect(seated).toBe(1);
+    const board = await readBoard(pid);
+    expect(board.objects['deck:第二站/index.html']).toBeUndefined();   // 以前排的是这个幻影
+    const e = board.objects['site:第二站'];
+    expect(e).toBeTruthy();
+    expect(e.zone ?? '').toBe('');
+    expect(e.w).toBe(640);
+    // 它现在是障碍：下一件东西不会压在它身上
+    await fs.writeFile(path.join(root, '再来一张.png'), Buffer.alloc(10), 'utf8');
+    await seatArtifacts(pid, ['再来一张.png']);
+    const img = (await readBoard(pid)).objects['再来一张.png'];
+    const overlap = !(img.x + 200 <= e.x || img.x >= e.x + e.w || img.y + 176 <= e.y || img.y >= e.y + e.h);
+    expect(overlap).toBe(false);
+  });
+
   it('幂等：已有座位不动', async () => {
     const before = (await readBoard(pid)).objects['小说/第一章.md'];
     const { seated } = await seatArtifacts(pid, ['小说/第一章.md']);

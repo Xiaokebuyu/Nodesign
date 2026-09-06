@@ -128,11 +128,7 @@ rewriting it.`,
       let existed = false;
       try { await fs.access(file); existed = true; } catch { /* 新角色 */ }
       await fs.mkdir(dir, { recursive: true });
-      // 记忆件骨架（只在不存在时铺）：角色 jot_memory 追加，用户/GM 可整理
-      const memFile = path.join(dir, '记忆.md');
-      try { await fs.access(memFile); } catch {
-        await fs.writeFile(memFile, `# 记忆\n\n<!-- ${slug} 的记忆：角色自己 jot_memory 追加，用户和 GM 可整理改写。还是空的。 -->\n`, 'utf8');
-      }
+      // （09-07 起不再铺 记忆.md：角色记忆的家是 记忆/ 目录，remember who= 写、card.js 建索引；那份文件没有读者）
       // 卡的格式收在 engine/stage/card.js（2026-09-05）：frontmatter（name/slug/note）+ 人设正文 +
       // 机器维护的记忆索引块。open_stage 按名字找到这张卡整份进演出进程的系统提示词。
       // 重登（改卡）时保住机器块：人设由这次的 persona 替换，索引块以磁盘上的为准

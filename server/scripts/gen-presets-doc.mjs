@@ -26,7 +26,8 @@ const readMeta = (id) => JSON.parse(fs.readFileSync(path.join(PRESETS_DIR, id, '
 function cueRow(m, presetId) {
   const off = /^（关）/.test(m.cue); const dflt = /^（默认）/.test(m.cue);
   const say = m.cue.replace(/^（关）|^（默认）/, '');
-  const act = dflt ? `\`${m.id}\` 默认已开，不用传` : off ? `\`off: ["${m.id}"]\`` : `\`on: ["${m.id}"]\``;
+  // 每行都带 preset：style.preset 是必填，照抄单元格就能过 zod（09-07 演出线对账 A3）
+  const act = dflt ? `\`${m.id}\` 默认已开，不用传` : off ? `\`{ preset: "${presetId}", off: ["${m.id}"] }\`` : `\`{ preset: "${presetId}", on: ["${m.id}"] }\``;
   return `| ${say} | ${act}${presetId === 'izumi' ? '' : `（预设 \`${presetId}\`）`} |`;
 }
 

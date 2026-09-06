@@ -41,6 +41,7 @@ import { parseChalk, CHALK_DIR } from '../../lib/chalk.js';
 import { isReservedFile, HARD_IGNORE_DIRS, RESERVED_DIRS, DRAFTS_DIR } from '../../lib/task-scan.js';
 import { applyFollows } from '../../lib/board-follow.js';
 import { canvasIdForRel } from './board-tasklist.js';
+import { cardIdForPath } from '../../lib/kinds/index.js';
 
 const MAX_SEATS_PER_RUN = 24;   // 一轮生成几百个文件的（构建产物漏网）也别刷爆板
 
@@ -83,7 +84,11 @@ export async function seatArtifacts(projectId, rels) {
   // 待摆队列先并进来（刀 G）：上一批排不下的，这一批 agent 可能已经规划出地方了。
   // 排在新来的前面 —— 等得久的先落。
   const queued = Array.isArray(board.pending) ? board.pending : [];
-  const uniq = [...new Set([...queued, ...rels])].filter(seatable).slice(0, MAX_SEATS_PER_RUN * 2);
+  const all = [...new Set([...queued, ...rels])].filter(seatable);
+  // 这一批只处理前 2×上限；再往后的**进待摆队列**而不是静默丢（09-07 设计线对账 B1：
+  // 原来 slice 掉的第 49 件起既不入座也不排队，构建产物一多就悄悄少东西）
+  const uniq = all.slice(0, MAX_SEATS_PER_RUN * 2);
+  const overflow = all.slice(MAX_SEATS_PER_RUN * 2);
   if (!uniq.length) return { seated: 0, lines: 0, pending: 0 };
   const known = new Set(Object.keys(board.zones || {}));
   const vp = getViewpoint(projectId);
@@ -120,9 +125,20 @@ export async function seatArtifacts(projectId, rels) {
     known.add(top);   // 这批的文件按新文件夹归层（跟前端 homeOf 同判）
   }
 
+  const seenIds = new Set();
   for (const rel of uniq) {
-    const id = canvasIdForRel({ objects: live, zones: board.zones }, rel);
+    let id = canvasIdForRel({ objects: live, zones: board.zones }, rel);
     if (!id) continue;
+    // 还没上墙的产物**问注册表**要正字法 id（09-07 站主：站点卡「没有碰撞面积」案）：
+    // canvasIdForRel 对没见过的 html 一律猜 deck:<路径>，于是 `第二站/index.html` 被排成
+    // 「第二站」层里的一张 deck 幻影，而画布上真正的卡是桌面层的 `site:第二站` —— 它从此
+    // 没有服务端座位、也不在任何障碍集合里，后来的东西全压在它身上。pin_to_board 早就走
+    // cardIdForPath 了，这里同口径。一个站的多个文件归一张卡，只排一次。
+    if (!live[id]) {
+      try { const canon = await cardIdForPath(sharedRoot, rel); if (canon) id = canon; } catch { /* 按猜的来 */ }
+    }
+    if (seenIds.has(id)) continue;
+    seenIds.add(id);
     // 已有座位就不动 —— 除非那是前端抢先排的临时座（provisional，见 board-sanitize）：
     // 前端 packRow 不认障碍（真案：deck 压在文件夹卡上、site 压在 deck 上），服务端按
     // 障碍重解一次，写回时清标。用户拖过的（seat:'user'）不算临时。
@@ -183,6 +199,7 @@ export async function seatArtifacts(projectId, rels) {
 
   // 队列整表写回：**必须无条件写**，哪怕这一批一件都没坐下 ——
   // 队列清空也是一次状态变化（旧 pending 这一轮上了架，队列该空）。
+  stillPending.push(...overflow);
   const pendingChanged = JSON.stringify(queued) !== JSON.stringify(stillPending);
   const zoned = Object.keys(zonesPatch).length;
   if (seated || pendingChanged || zoned) {

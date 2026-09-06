@@ -17,12 +17,15 @@ import { loadToolPrompt } from './tool-prompts.js';
  * constraint anchor 表）。prelude 常驻部分只留流程骨架 + 语义底线三条，
  * ~90 行细则在 agent 真的要处理 pending changes 时才进 context。
  */
-export function makePreToolUseGetPendingChangesProtocolInjector() {
+export function makePreToolUseGetPendingChangesProtocolInjector({ mode = 'design' } = {}) {
   let alreadyInjected = false;
   return async (_input, _toolUseId, _options) => {
     if (alreadyInjected) return {};
     alreadyInjected = true;
-    const protocol = loadToolPrompt('direct-edit-protocol');
+    let protocol = loadToolPrompt('direct-edit-protocol');
+    // 演出模式没有 deck / 站点：pending-move / pending-style / pending-delete / reactMount 那一大段是
+    // 产物拖拽的处理法，prelude 在 rp 下恰好把同一段剥掉了（09-07 演出线对账 D8）—— 这里同样剥，只留 comment / edit / region-comment
+    if (mode === 'rp') protocol = protocol.replace(/^- \*\*pending-move[\s\S]*?(?=^## )/m, '');
     return {
       hookSpecificOutput: {
         hookEventName: 'PreToolUse',

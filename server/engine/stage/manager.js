@@ -274,7 +274,7 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     startedAt: stored.startedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  if (style?.preset) next.style = await resolveAgentStyle(playAbs, style);   // agent 的预选：差量存 style.agent，开场页逐个标出来
+  if (style?.preset) next.style = await resolveAgentStyle(playAbs, style);   // agent 的预选：差量存 style.agent，开场页逐个标出来；预设对不上会抛 409（09-07 D2）
   delete next.systemPrompt;
   await writePlayConfig(playAbs, next);
   getProjectBus(pid).publish({ type: 'stage.changed', root, running: false });

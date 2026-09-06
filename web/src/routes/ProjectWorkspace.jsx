@@ -236,6 +236,7 @@ export default function ProjectWorkspace() {
   const closeWindowRef = useRef(null);
   // 聊天卡开着 = 右缘那一整条被它占着，顶栏不浮现（issue #1 第 1、4 条）
   const [chatDockOpen, setChatDockOpen] = useState(false);
+  const [chatDockSide, setChatDockSide] = useState('right');
   /**
    * 聊天卡占了多宽（平板上画布区要让出这么多，2026-08-29 外壳第四刀）。
    * ⭐ 让位不是挪工具栏，是**收窄画布容器** —— 工具栏/翻页器/小地图都往这个
@@ -1975,11 +1976,12 @@ export default function ProjectWorkspace() {
       // 横带越少越好。**浮起来而不是收起高度**——顶栏一参与布局，收展就会
       // 改画布容器高度，相机可视区跟着变、contain 重算，画面会跳。
       overlayTop
-      // 顶栏不浮现的两种处境：产物窗开着（屏幕被一件产物占满，08-13）、聊天卡
-      // 开着（卡贴右缘从屏顶铺到屏底，顶栏一浮出来就压住它顶沿那排按钮）。
-      // 两层界面轮流占屏不叠着抢 —— 08-17 拍板，配套把卡的出厂默认从「固定
-      // 展开」翻成「不固定」，否则顶栏等于没了。
-      topSuppressed={artifactWindowOpen || chatDockOpen}
+      // 顶栏不浮现：产物窗开着（屏幕被一件产物占满，08-13）。
+      // 聊天卡开着**不再整条不浮现**（09-07 站主：桌面版找不到导出 —— 他把卡固定住了，
+      // 08-17「两层轮流占屏」那条让顶栏跟着导出/设置一起消失）。改成顶栏给卡让出它那一侧：
+      // 感应带和横条都缩到卡之外，卡顶沿那排按钮不被压。
+      topSuppressed={artifactWindowOpen}
+      topInset={chatDockOpen ? { [chatDockSide]: chatDockW + 8 } : null}
       // ‹ 先退最里面那一层：有窗开着就关窗，否则交给面包屑上一级（MobileTopBar 兜）
       onBack={artifactWindowOpen ? () => closeWindowRef.current?.() : null}
       /**
@@ -2211,7 +2213,7 @@ export default function ProjectWorkspace() {
         {/* 对话 —— 悬浮 AI 卡（2026-08-13）：关着零遮挡，鼠标贴屏缘唤出，
             图钉固定。放在 canvas section **之外**、视口容器之内：它跟画布
             内容不共用坐标系，画布怎么滚它都待在屏幕原处（这就是「跟随镜头」）。 */}
-        <ChatDock title={currentSessionTitle || '对话'} onOpenChange={(o, w) => { setChatDockOpen(o); setChatDockW(w || 0); }}>
+        <ChatDock title={currentSessionTitle || '对话'} onOpenChange={(o, w, side) => { setChatDockOpen(o); setChatDockW(w || 0); if (side) setChatDockSide(side); }}>
           {({ collapse, pinned, onTogglePin }) => (
           <ChatPanel
             onCollapse={collapse}

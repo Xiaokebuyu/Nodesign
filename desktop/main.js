@@ -23,7 +23,7 @@
  *    asar 是只读虚拟包，这几件事在里面全是坑。少一层压缩换掉一整类问题。
  */
 
-import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, screen, ipcMain } from 'electron';
+import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, screen, ipcMain, Notification } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -181,6 +181,33 @@ function createMainWindow() {
   const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveWindowState, 400); };
   win.on('resize', scheduleSave); win.on('move', scheduleSave);
   win.on('maximize', scheduleSave); win.on('unmaximize', scheduleSave);
+
+  // 导出 / 交付（09-07 站主：「桌面版的导出没有做」）：页面用 blob URL + <a download> 触发下载，
+  // Electron 没人接的话就弹一个系统另存为对话框，还常被主窗挡在后面看不见。这里接过来：
+  // 直接落进系统「下载」文件夹（重名加序号），完成后弹一条通知，点它在文件管理器里定位。
+  win.webContents.session.on('will-download', (_e, item) => {
+    try {
+      const dir = app.getPath('downloads');
+      const base = item.getFilename() || '导出';
+      const ext = path.extname(base); const stem = base.slice(0, base.length - ext.length);
+      let target = path.join(dir, base);
+      for (let i = 2; fs.existsSync(target); i++) target = path.join(dir, `${stem} (${i})${ext}`);
+      item.setSavePath(target);
+      item.once('done', (_ev, state) => {
+        if (state === 'completed') {
+          log(`[download] 已保存 ${target}`);
+          if (Notification.isSupported()) {
+            const n = new Notification({ title: '已导出', body: `${path.basename(target)} 已保存到「下载」，点击定位` });
+            n.on('click', () => shell.showItemInFolder(target));
+            n.show();
+          }
+        } else {
+          log(`[download] 失败：${state} ${base}`);
+          reportShellIssue('bug', `导出下载失败：${state}`, `文件 ${base} 目标 ${target}`);
+        }
+      });
+    } catch (err) { log(`[download] 接管失败：${err.message}`); }
+  });
 
   // 站外链接（用户产物里的外链、文档链接）交给系统浏览器，别在应用里开一扇没有地址栏的窗
   win.webContents.setWindowOpenHandler(({ url }) => {

@@ -576,7 +576,7 @@ export async function runSession({
 
     // projectId 要传：PostToolUseFailure 记问题库时用它标归属（漏传的话
     // issues 行的 project_id 全是 null，事后追不回是哪个项目踩的）
-    hooks: createHooks({ ctx: sharedCtx, workspaceRoot: wsRoot, sharedRoot, sessionId, projectId, roleRoster }),
+    hooks: createHooks({ ctx: sharedCtx, workspaceRoot: wsRoot, sharedRoot, sessionId, projectId, roleRoster, projectMode }),
 
     mcpServers: {
       // 键名 = 模型眼里的 `mcp__<名>__<工具>` 前缀，也是 isolation.js 那条
