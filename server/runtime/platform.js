@@ -51,8 +51,16 @@ const claudeConfigDir = process.env.NODESIGN_CONFIG_DIR
  * 只是「像是配过」的判据，不是验资格 —— 真假由第一次会话说了算；没配时 picker 空着、
  * 设置页指路，比让用户点一个必失败的 Claude 行强。hosted 不走这条（订阅行按档位放）。
  */
+/**
+ * ⏸ 站主 09-06：本地版**暂时不认** `claude login` 的订阅登录态 —— 用户机器上的 Claude 订阅骑进来，
+ * 计量、外审、封号都够不着，先关掉；只认填进设置页的 ANTHROPIC_API_KEY。要重新打开就把这个翻成 true
+ * （bin/nodesign.js 的 login 子命令跟着这一个开关）。hosted 不受影响（服务器自己的登录态照认）。
+ */
+export const LOCAL_CLAUDE_LOGIN_ENABLED = false;
+
 export function claudeAuthPresent() {
   if (process.env.ANTHROPIC_API_KEY) return 'api_key';
+  if (profile.isLocal && !LOCAL_CLAUDE_LOGIN_ENABLED) return null;
   if (fs.existsSync(path.join(claudeConfigDir, '.credentials.json'))) return 'login';
   for (const f of [path.join(claudeConfigDir, '.claude.json'), path.join(process.env.HOME || os.homedir(), '.claude.json')]) {
     try { if (JSON.parse(fs.readFileSync(f, 'utf8'))?.oauthAccount) return 'login'; } catch { /* 没这个文件或不是 JSON */ }
@@ -329,6 +337,7 @@ export const platform = {
   repoRoot,
   claudeConfigDir,
   claudeAuthPresent,
+  LOCAL_CLAUDE_LOGIN_ENABLED,
   sandboxEnabled,
   permissionModeDefault,
   autoModeEnabled,

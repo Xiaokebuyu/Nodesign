@@ -147,9 +147,11 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     const withKey = run({ ANTHROPIC_API_KEY: 'sk-x' });
     expect(withKey.via).toBe('api_key');
     expect(withKey.ids).toContain('claude-sonnet-5[1m]');
+    // ⏸ 站主 09-06：本地版暂不认 claude login 的登录态（platform.LOCAL_CLAUDE_LOGIN_ENABLED=false）。
+    // 凭据文件在也当没配 —— 用户机器上的订阅骑进来计量外审都够不着。开关翻回去时把这两条断言换回 'login'
     writeFileSync(path.join(cfgDir, '.credentials.json'), '{}');  // claude login 落盘的样子
     const loggedIn = run({});
-    expect(loggedIn.via).toBe('login');
-    expect(loggedIn.ids).toContain('claude-opus-5[1m]');
+    expect(loggedIn.via).toBe(null);
+    expect(loggedIn.ids).toEqual([]);
   });
 });

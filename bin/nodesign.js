@@ -11,9 +11,8 @@
  *   nodesign --port 5000          # 换端口
  *   nodesign --data-dir ./mydata  # 换数据目录（.env / config.json / 数据库 / 项目都在里面）
  *   nodesign --no-open            # 不自动开浏览器
- *   nodesign login                # 用 Claude 订阅：登录一次（转发给 SDK 自带的 claude auth login）
  *
- * 钥匙放 <数据目录>/.env：ANTHROPIC_API_KEY=...（或者本机 `claude login` 过，什么都不用填）；
+ * 钥匙放 <数据目录>/.env：ANTHROPIC_API_KEY=...；
  * 自己的模型插槽放 <数据目录>/config.json（形状见 server/runtime/local-config.js）。
  */
 
@@ -34,6 +33,13 @@ const args = process.argv.slice(2);
 
 // 子命令：`nodesign login` / `logout` / `auth status` —— 转发给 SDK 自带的 Claude CLI（用户不用再全局装一份 claude）。
 if (['login', 'logout', 'auth'].includes(args[0])) {
+  // ⏸ 站主 09-06：本地版暂不认 claude login 的订阅登录态（server/runtime/platform.js LOCAL_CLAUDE_LOGIN_ENABLED）。
+  // 开关翻回去之前这几个子命令不放行 —— 登录成功但选择器里什么都不多，比不让登更让人困惑。
+  const { LOCAL_CLAUDE_LOGIN_ENABLED } = await import('../server/runtime/platform.js');
+  if (!LOCAL_CLAUDE_LOGIN_ENABLED) {
+    console.error('[nodesign] 本地版暂不支持用 Claude 订阅登录；到设置页「模型 → 使用自己的 API Key」填 ANTHROPIC_API_KEY。');
+    process.exit(2);
+  }
   const sub = args[0] === 'auth' ? args.slice(1) : [args[0], ...args.slice(1)];
   const code = await runBundledClaude(['auth', ...sub], { onError: (m) => console.error(`[nodesign] ${m}`) });
   process.exit(code);
@@ -62,8 +68,7 @@ if (flags.help) {
   --data-dir DIR  数据目录：.env / config.json / 数据库 / 项目 / 缓存（默认 ~/.nodesign；env NODESIGN_DATA_DIR）
   --host H        监听地址（默认 127.0.0.1；没有登录墙，别改成 0.0.0.0）
   --no-open       启动后不自动打开浏览器
-  login / logout / auth status   Claude 订阅登录态（不用另装 claude CLI）
-钥匙：<数据目录>/.env 里写 ANTHROPIC_API_KEY=...；或本机已 \`claude login\` 则不用填。`);
+钥匙：<数据目录>/.env 里写 ANTHROPIC_API_KEY=...；或者起来之后登录站点账号。`);
   process.exit(0);
 }
 

@@ -57,7 +57,7 @@ export default function ModelsSection({ status, cfg, draft, setDraft, save, savi
             <span style={{ fontSize: FONT_SIZE.md, fontWeight: 600, color: COLOR.text }}>{t('Claude 官方')}</span>
             <span style={{ fontSize: FONT_SIZE.xs, color: status?.claudeAuth ? COLOR.success : COLOR.sub }}>
               <Dot ok={!!status?.claudeAuth} />
-              {status?.claudeAuth === 'api_key' ? t('已配（API Key）') : status?.claudeAuth === 'login' ? t('已配（本机 claude login 登录态）') : t('未配')}
+              {status?.claudeAuth ? t('已配（API Key）') : t('未配')}
             </span>
           </div>
           <EnvKeys only={['模型']} bare showToast={showToast} onSaved={onStatus} />
