@@ -153,9 +153,3 @@ export function authGuard(req, res, next) {
   }
   res.status(401).json({ error: 'unauthorized', code: 'AUTH_REQUIRED' });
 }
-
-/** admin 专属路由守卫（挂在 authGuard 之后） */
-export function adminGuard(req, res, next) {
-  if (req.user?.role === 'admin') return next();
-  res.status(403).json({ error: 'admin only', code: 'FORBIDDEN' });
-}

@@ -29,7 +29,8 @@
     "!web/dist/mock/",
     "!desktop/",
     "!electron-builder.yml",
-    "!dist-desktop/"
+    "!dist-desktop/",
+    "!server/hosted/"
   ],
   "scripts": {
     "postinstall": "node server/ops/fix-sdk-musl.mjs",
@@ -38,14 +39,16 @@
     "smoke:engine": "node --env-file-if-exists=.env server/engine/_smoke.js",
     "smoke:agent": "node --env-file-if-exists=.env server/engine/agent/_smoke.js",
     "test:server": "nice -n 15 vitest run -c vitest.server.config.js",
-    "test": "npm run test:server && cd web && nice -n 15 npx vitest run",
+    "test": "npm run check:boundary && npm run test:server && cd web && nice -n 15 npx vitest run",
     "local": "node bin/nodesign.js --no-open",
     "build:web": "cd web && npx vite build",
     "prepack": "npm run build:web",
     "desktop:dev": "electron desktop/main.js",
     "desktop:pack": "electron-builder --win --dir",
     "desktop:dist": "electron-builder --win",
-    "desktop:deps": "electron-builder install-app-deps"
+    "desktop:deps": "electron-builder install-app-deps",
+    "check:boundary": "node server/scripts/check-client-boundary.mjs",
+    "prepublishOnly": "node server/scripts/check-client-boundary.mjs --pack"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.263",

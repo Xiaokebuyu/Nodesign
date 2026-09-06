@@ -8,7 +8,7 @@
  * 中文原文说「太快了，歇几秒再发」，英文就是 "Too fast. Give it a few seconds."
  */
 export default {
-  // ── 登录 / 注册（auth/middleware.js）──
+  // ── 登录 / 注册（hosted/middleware.js）──
   // 英文用户的第一站。这几条说不对，后面做得再好也没机会被看到。
   '用户名或密码错误': 'Incorrect username or password',
   '尝试次数过多，{waitMin} 分钟后再试': 'Too many attempts. Try again in {waitMin} minutes.',

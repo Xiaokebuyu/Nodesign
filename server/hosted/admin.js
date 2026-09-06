@@ -16,7 +16,6 @@
  */
 
 import express from 'express';
-import { adminGuard } from '../auth/middleware.js';
 import { createInvite, listInvites, getInvite, updateInvite, listUsers, getUserById, updateUser } from '../auth/users-store.js';
 import { modeStats } from '../projects/store.js';
 import { tierOf, PLANS } from '../auth/tier.js';
@@ -26,6 +25,13 @@ import { createNotice, listNotices, getActiveNotice, retireNotice, retireAllNoti
 import { flagCounts, listFlags, removeFlag, levelForKnob, LEVELS } from '../lib/moderation.js';
 
 const router = express.Router();
+// admin 专属守卫。原来住在 auth/middleware.js，那是内核文件；这里是它唯一的使用者，
+// 跟着搬过来 hosted/ 之后，内核就不必为一个只有管理台用的判决保留代码。
+function adminGuard(req, res, next) {
+  if (req.user?.role === 'admin') return next();
+  res.status(403).json({ error: 'admin only', code: 'FORBIDDEN' });
+}
+
 router.use(adminGuard);
 
 router.post('/invites', (req, res) => {

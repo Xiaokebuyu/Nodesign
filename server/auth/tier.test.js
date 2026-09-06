@@ -176,7 +176,7 @@ describe('lint：用户可见文案不许再引导去要邀请码', () => {
   }
   const BAD = /找站主|找我要码|找管理员开通|要邀请码|邀请码账号|邀请码注册的账号|换正式邀请码|拿到邀请码/;
   it('server（非 admin/users-store/测试/探针）', () => {
-    const allow = ['api/admin.js', 'auth/users-store.js'];
+    const allow = ['hosted/admin.js', 'auth/users-store.js'];
     expect(hits(BAD, allow)).toEqual([]);
   });
   it('web/src（admin 目录除外；AdminConsole.jsx 的邀请码 UI 除外）', () => {

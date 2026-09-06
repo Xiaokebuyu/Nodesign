@@ -46,7 +46,6 @@ import { authRouter, authGuard } from './auth/middleware.js';
 import { authEnabled } from './auth/session.js';
 import { bootstrapAuth } from './auth/users-store.js';
 import { sweepOrphanRuns } from './engine/runs/store.js';
-import adminRouter from './api/admin.js';
 import meRouter from './api/me.js';
 import localRouter, { RESTART_EXIT_CODE } from './api/local.js';
 import { platform } from './runtime/platform.js';
@@ -104,7 +103,12 @@ if (platform.isLocal) {
 app.use('/api/auth', authRouter);
 app.use('/api', authGuard);
 // admin 管理接口 + 当前用户自视图（都在 authGuard 之后，req.user 已挂）
-app.use('/api/admin', adminRouter);
+// 管理台只在 hosted 起，而且是**动态** import：本地分发版的包里根本没有 server/hosted/
+// （见 server/scripts/check-client-boundary.mjs），顶部静态 import 会让客户端崩在解析阶段。
+if (!platform.isLocal) {
+  const { default: adminRouter } = await import('./hosted/admin.js');
+  app.use('/api/admin', adminRouter);
+}
 app.use('/api/me', meRouter);
 // 本地分发版专用（配置文件 / 状态 / 重启）。hosted 下不挂：这组接口假设请求者就是机器的主人
 if (platform.isLocal) app.use('/api/local', localRouter);
