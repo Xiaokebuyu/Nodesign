@@ -50,6 +50,49 @@ export function dayStartUtcSql(now = Date.now()) {
   return new Date(startLocal).toISOString().slice(0, 19).replace('T', ' ');
 }
 
+/**
+ * ── 额外用量来源（2026-09-06，桌面版 relay）──
+ *
+ * 下面两个查询的口径是「服务器上这个用户的 runs」。桌面版把 agent 循环搬到了用户
+ * 自己机器上，runs 落在他自己的库里，服务器一条也看不到 —— 于是 usedCostToday 恒为 0，
+ * 额度闸永远不触发。走 relay 的那些请求必须由服务器自己记一本账。
+ *
+ * 那本账住在 hosted/（只在服务器上），而这个文件是内核，不许 import hosted
+ * （方向见 server/scripts/check-client-boundary.mjs）。所以反过来：hosted 在挂载时
+ * 把自己的账本注册进来。
+ *
+ * ⭐ 两本账**相加**，不是各算各的。同一个人在网页端和桌面版花的是同一份预算，
+ *    分成两个额度等于给每个人悄悄翻倍。
+ */
+const usageSources = [];
+
+/**
+ * @param {{ today: (userId: string, now: number) => number, total: (userId: string) => number }} source
+ */
+export function registerUsageSource(source) {
+  if (typeof source?.today !== 'function' || typeof source?.total !== 'function') {
+    throw new Error('registerUsageSource: 需要 { today, total } 两个函数');
+  }
+  usageSources.push(source);
+}
+
+/** 测试用：摘掉所有注册进来的账本 */
+export function _resetUsageSources() { usageSources.length = 0; }
+
+/** 求和时单个来源出错不能让整个闸挂掉 —— 但要吵，静默算少等于放行 */
+function sumSources(pick) {
+  let extra = 0;
+  for (const src of usageSources) {
+    try {
+      const v = pick(src);
+      if (Number.isFinite(v)) extra += v;
+    } catch (err) {
+      console.error(`[quota] 用量来源读取失败（按 0 计，额度会偏松）：${err.message}`);
+    }
+  }
+  return extra;
+}
+
 /** 当天已花的美元（闸门真口径）。数据源见文件头：run_model_usage.cost_usd */
 export function usedCostToday(userId, now = Date.now()) {
   const row = db.prepare(
@@ -57,7 +100,7 @@ export function usedCostToday(userId, now = Date.now()) {
      FROM run_model_usage m JOIN runs r ON r.id = m.run_id
      WHERE r.user_id = ? AND r.created_at >= ?`,
   ).get(userId, dayStartUtcSql(now));
-  return row.used;
+  return row.used + sumSources((s) => s.today(userId, now));
 }
 
 /** 全史花费（终身额度口径）。同一数据源同一公式，只是不设日界 */
@@ -67,7 +110,7 @@ export function usedCostTotal(userId) {
      FROM run_model_usage m JOIN runs r ON r.id = m.run_id
      WHERE r.user_id = ?`,
   ).get(userId);
-  return row.used;
+  return row.used + sumSources((s) => s.total(userId));
 }
 
 /**
