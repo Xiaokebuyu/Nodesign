@@ -45,6 +45,7 @@ files:
   - LICENSE
   - README.md
   - "!server/**/*.test.js"
+  - "!desktop/**/*.test.js"
   - "!server/**/_probe-*"
   - "!server/**/_*-check.mjs"
   - "!server/**/_smoke.js"

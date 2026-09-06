@@ -27,6 +27,7 @@ import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage } from 'elec
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { updateCheckMessage } from './update-message.js';
 
 import {
   PortBusyError,
@@ -244,10 +245,11 @@ function checkForUpdates({ silent }) {
     return;
   }
   updater.checkForUpdates().then((r) => {
+    log(`[updater] 检查结果：已发布最新 ${r?.updateInfo?.version ?? '?'}，本机 ${app.getVersion()}，${r?.isUpdateAvailable ? '有更新' : '无更新'}`);
     if (silent) return;
-    if (!r?.updateInfo || r.updateInfo.version === app.getVersion()) {
-      dialog.showMessageBox(win, { type: 'info', message: `已经是最新版本（${app.getVersion()}）。` });
-    }
+    // ⛔ 三种结果都要说话。09-07 站主装着比已发布版本新的草稿包点「检查更新」，没有任何反应 ——
+    // 原来只在"版本号相等"时弹"已是最新"，服务器版本比本机旧那条路什么都不说。
+    dialog.showMessageBox(win, { type: 'info', message: updateCheckMessage(r, app.getVersion()) });
   }).catch((e) => { if (!silent) dialog.showMessageBox(win, { type: 'error', message: `检查更新失败：${e.message}` }); });
 }
 
