@@ -61,11 +61,10 @@ export function isModelPrefStale(pref, serverOptions) {
 
 /** 服务端拿不到时的兜底清单（离线 / 接口挂了也别让按钮变成死的） */
 export const FALLBACK_MODELS = [
-  // ⚠️ 这两条是**同一个模型的两条线**（服务端 model-table 里同模型同价，差别只有厂商）：
-  //    设计 = 图不限张数；演出 = 每步更快但整场最多 8 张图。label 第二段是它俩唯一的区分，
-  //    ⛔ 跟服务端表里的 select.label 必须逐字一致（compactLabel 靠撞名决定按钮上印长名还是短名）。
+  // ⚠️ 这条在服务端 model-table 里有个孪生（`glm-5.3-flash-rp`「· 演出」：同模型同价、厂商换成 particle），
+  //    09-06 起那条 `only: 'stage'` **只在演出显示器的选择器里出现**，首页 / 画布这份清单不列它。
+  //    ⛔ label / desc 跟服务端表里的 select 必须逐字一致（compactLabel 靠撞名决定按钮上印长名还是短名）。
   { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · 设计', desc: '有视觉 · 图不限张数 · 1M 上下文 · 极便宜', brand: DEFAULT_BRAND },
-  { id: 'glm-5.3-flash-rp', label: 'GLM-5.3-Flash · 演出', desc: '每步更快 · 但整场最多 8 张图 · 1M 上下文 · 极便宜', brand: 'glm' },
   { id: 'minimax-m3', label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久', brand: 'minimax' },
   { id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '快 · 日常改稿和铺页够用', brand: 'claude' },
   { id: 'claude-opus-5[1m]', label: 'Opus 5', desc: '前端与审美更强 · 烧订阅额度快得多，重活再开', brand: 'claude' },

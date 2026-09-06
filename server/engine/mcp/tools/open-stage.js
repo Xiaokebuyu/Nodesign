@@ -124,7 +124,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
         }
         if (args.model) {
           const owner = getProject(projectId)?.ownerId ? getUserById(getProject(projectId).ownerId) : null;
-          const ok = owner ? allowedModelsFor(owner).map(m => m.id) : [];
+          const ok = owner ? allowedModelsFor(owner, { scope: 'stage' }).map(m => m.id) : [];
           if (!ok.includes(args.model)) return fail(`这个账号现在选不了 ${args.model}。能选的：${ok.join(' / ') || '（查不到账号）'}。不传 model 就用默认。`);
         }
         const style = args.style ? { preset: args.style.preset, on: [...(args.style.on || []), ...(args.style.modules || [])], off: args.style.off || [] } : null;

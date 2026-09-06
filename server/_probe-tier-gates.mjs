@@ -28,8 +28,9 @@ check('默认模型=glm-5.3-flash-merge（08-30 从耗尽的 glm-5.3-flash-zai �
 check('Sonnet/Opus 在清单里且 locked', opts.filter(o => /claude-/.test(o.id)).length === 2 && opts.filter(o => /claude-/.test(o.id)).every(o => o.locked), JSON.stringify(opts.map(o => [o.id, !!o.locked])));
 check('minimax-m3 在清单里且不 locked', opts.some(o => o.id === 'minimax-m3' && !o.locked), '');
 check('glm-5.3-flash-merge 在清单里且不 locked（付费行也对公开号开，靠 $5/天日限管）', opts.some(o => o.id === 'glm-5.3-flash-merge' && !o.locked), '');
-// 08-30 深夜拆出的第二条线（同模型同价，只是厂商不同）—— 它跟上面那条一样对全员开，不带闸
-check('glm-5.3-flash-rp（演出线）在清单里且不 locked', opts.some(o => o.id === 'glm-5.3-flash-rp' && !o.locked), JSON.stringify(opts.map(o => o.id)));
+// 08-30 深夜拆出的第二条线（同模型同价，只是厂商不同）—— 09-06 起它**只在演出显示器的选择器里出现**（select.only:'stage'），
+// 首页 / 画布这份清单不许列它（画布上选它只会在第 9 张图上 400）
+check('glm-5.3-flash-rp（演出线）不在首页清单里（只在演出面出现）', !opts.some(o => o.id === 'glm-5.3-flash-rp'), JSON.stringify(opts.map(o => o.id)));
 const proj = await call('POST', '/api/projects', { name: `gateprobe ${tag}` }, cookie);
 const pid = proj.j?.project?.id || proj.j?.id;
 check('建项目', proj.status < 300 && !!pid, `${proj.status} ${pid}`);

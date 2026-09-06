@@ -24,11 +24,12 @@ export function upstreamErrorHint(raw, wire) {
   if (cap) {
     const n = cap[1];
     // 只有"演出"那条线（点死 particle）才该建议换线；默认那条线不该撞到这条闸，
+    // 09-06 起演出行只在演出显示器里选得到（画布选择器不列它），所以指路指到显示器的外观页，
     // 真撞到了说明是别的原因，别把人往一条同样会挂的线上引。
     const onlyParticle = Array.isArray(wire?.bodyExtra?.vendors)
       && wire.bodyExtra.vendors.length === 1 && wire.bodyExtra.vendors[0] === 'particle';
     const hint = onlyParticle
-      ? `「演出」这条线整场最多带 ${n} 张图，这一轮超了。在模型菜单里换成「GLM-5.3-Flash · 设计」就没有这个限制 —— 同一个模型、同样的价钱，只是每一步稍慢一点。`
+      ? `「演出」这条线整场最多带 ${n} 张图，这一轮超了。在显示器「外观」页的模型里换成「GLM-5.3-Flash · 设计」就没有这个限制 —— 同一个模型、同样的价钱，只是每一步稍慢一点。`
       : `这一轮带的图超过了上游的 ${n} 张上限。少发几张、或者开一个新会话再继续。`;
     return `${hint}（上游原文：${text.slice(0, 200).replace(/\s+/g, ' ')}）`;
   }

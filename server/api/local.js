@@ -94,7 +94,7 @@ router.put('/env', async (req, res) => {
 const probing = new Set();
 router.post('/models/:id/probe', async (req, res) => {
   const id = req.params.id;
-  if (!selectableModelsFor(req.user).some((m) => m.id === id)) return res.status(404).json({ error: msg(req, '模型 {id} 不在可选清单里（没配钥匙的行不体检）', { id }) });
+  if (!selectableModelsFor(req.user, { scope: 'stage' }).some((m) => m.id === id))   // 体检面最宽：只在演出面出现的行也能体检 return res.status(404).json({ error: msg(req, '模型 {id} 不在可选清单里（没配钥匙的行不体检）', { id }) });
   if (probing.has(id)) return res.status(409).json({ error: msg(req, '这一行正在体检，等它完') });
   probing.add(id);
   try {

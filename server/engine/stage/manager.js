@@ -48,7 +48,7 @@ import {
 import { validateCondition } from './rules.js';
 import { composeStagePrompt, frozenHash } from './prompt.js';
 import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, sceneOf, fileUrl, rollForChoice, stageIllustrate } from './mechanics.js';
-import { allowedModelsFor } from '../agent/model-context.js';
+import { allowedModelsFor, defaultModelFor } from '../agent/model-context.js';
 import { resolvePreset, normalizeSelection, resolveAgentStyle, DEFAULT_PRESET } from './preset.js';
 import { pickLore } from './worldbook.js';
 import { readPanels, writePanels, declarePanels, applyOp as applyPanelOp, digest as panelDigest } from './panels.js';
@@ -182,8 +182,19 @@ async function cardOptionsOf(rt, cfg) {
   return out;
 }
 
+/**
+ * 戏里没记模型时演出用哪条：按**项目 owner 在演出面的默认**（没订阅资格 = 演出行），不是画布那条全局默认。
+ * 09-06 之前这里是 `defaultModel()`（NODESIGN_MODEL 的订阅行）：basic 用户开场页看到的"当前"是一条 locked 的
+ * Sonnet，点开始就吃 403 —— 显示器读到的默认必须是这个账号真选得到的那条。查不到 owner 才退回全局默认。
+ */
+export function stageDefaultModel(pid) {
+  const owner = getProject(pid)?.ownerId ? getUserById(getProject(pid).ownerId) : null;
+  return (owner && defaultModelFor(owner, { scope: 'stage' })) || defaultModel();
+}
+
 /** 给显示器看的配置：立绘 / 背景换成能加载的 URL；线路表、写法、可选条目原样带上 */
 function publicConfig(rt, cfg) {
+  const model = cfg.model || stageDefaultModel(rt.pid);
   const url = (rel) => (rel && !/^(https?:)?\//.test(rel) ? fileUrl(rt.pid, rel) : (rel || null));
   const cast = (cfg.cast || []).map(c => ({ ...c, portrait: url(c.portrait) }));
   const backdrops = Object.fromEntries(Object.entries(cfg.backdrops || {}).map(([k, v]) => [k, url(v)]));
@@ -192,8 +203,8 @@ function publicConfig(rt, cfg) {
     ...pub, cast, backdrops, backdrop: url(cfg.backdrop), root: rt.root,
     lines: linesOf(cfg).map(({ sdkSid, ...l }) => ({ ...l, hasMemory: !!sdkSid })), currentLine: currentLine(cfg).id,
     style: cfg.style || { preset: DEFAULT_PRESET, modules: null }, cardOptions: cfg.cardOptions || {}, opened: !!cfg.opened,
-    model: cfg.model || defaultModel(), images: cfg.images || { allow: false },
-    brand: brandOfModel(cfg.model || defaultModel()) || 'custom',   // 显示器画身份标：服务端声明的 brand，前端不猜
+    model, images: cfg.images || { allow: false },
+    brand: brandOfModel(model) || 'custom',   // 显示器画身份标：服务端声明的 brand，前端不猜
     promptChars: rt.promptChars || cfg.promptChars || 0, sources: rt.sources.length ? rt.sources.map(s => s.rel) : (cfg.promptSources || []), styleNames: rt.styleNames?.length ? rt.styleNames : (cfg.styleNames || []),
   };
 }
@@ -280,7 +291,7 @@ export async function startStage(pid, root) {
   let stored = await loadConfig(rt);
   if (runningStages() >= MAX_RUNNING) throw Object.assign(new Error(`同时在进行的故事已满（${MAX_RUNNING}），等一个停下再开`), { status: 503 });
 
-  const model = stored.model || defaultModel();
+  const model = stored.model || stageDefaultModel(pid);
   const owner = project.ownerId ? getUserById(project.ownerId) : null;
   // 这条线路有转录就 resume（模型记得前文）；没有就新开一个 id 并记到线路上
   const line = currentLine(stored);
@@ -547,7 +558,7 @@ export async function patchStageConfig(pid, root, patch, { user = null } = {}) {
   let modelChanged = false;
   if (typeof patch.model === 'string' && patch.model && patch.model !== cfg.model) {
     // 只能选这个账号当前能用的（locked 的订阅行不算）；没给 user 的调用方（工具侧）自己先校验过
-    if (user && !allowedModelsFor(user).some(m => m.id === patch.model)) throw Object.assign(new Error(`这个账号现在选不了 ${patch.model}`), { status: 403 });
+    if (user && !allowedModelsFor(user, { scope: 'stage' }).some(m => m.id === patch.model)) throw Object.assign(new Error(`这个账号现在选不了 ${patch.model}`), { status: 403 });
     next.model = patch.model; modelChanged = true;
   }
   if (patch.opened === true) { next.opened = true; next.openedAt = next.openedAt || new Date().toISOString(); }

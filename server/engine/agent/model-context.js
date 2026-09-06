@@ -157,16 +157,33 @@ export function brandOfModel(appModel) {
  */
 export const SUBSCRIPTION_LOCK_REASON = DENIAL.subscription;
 
+/**
+ * 选择器分两个面（09-06，用户拍板）：首页 / 画布的选择器是 `canvas`，演出显示器里「设置循环」那块是 `stage`。
+ * 表里 `select.only: 'stage'` 的行**只在演出面出现**（演出行点死 particle、整场最多 8 张图，画布上
+ * 选它只会在第 9 张图上莫名其妙 400，所以画布干脆不列）；没写 only 的行两个面都有。
+ * ⚠️ 校验（allowedModelsFor / defaultModelFor）跟清单走同一个 scope：画布的 turn / PUT model 校验
+ * 看不见演出行，等于画布上钉着演出行的老会话会被 403 —— 下架时要连带迁移会话钉子（scripts/migrate-canvas-model.mjs）。
+ */
+export const PICKER_SCOPES = Object.freeze(['canvas', 'stage']);
+const scopeOf = (opts) => {
+  const scope = opts?.scope || 'canvas';
+  if (!PICKER_SCOPES.includes(scope)) throw new Error(`选择器面只认 ${PICKER_SCOPES.join(' / ')}，拿到 ${scope}`);
+  return scope;
+};
+const inScope = (m, scope) => !m.only || m.only === scope;
+
 export function hasSubscriptionAccess(user) {   // 订阅 Claude 资格 = 档位能力（auth/tier.js）；薄封装只为调用点读着顺
   return can(user, 'subscription');
 }
 
 const upstreamKeyPresent = (row) => { if (!row.api) return !!platform.claudeAuthPresent(); const up = UPSTREAMS[row.api.upstream]; return !up || up.authStyle === 'none' || !!up.key || !!(up.keyEnv && process.env[up.keyEnv]); };   // 无 api = 内置 Claude 行：本地版看本机凭据
-export function selectableModelsFor(user) {
+export function selectableModelsFor(user, opts) {
+  const scope = scopeOf(opts);
   const approved = localGenApproved(user);   // 档位 + 逐人批准，同 paint_still / roll_film / 演出端点一把尺
   const subscribed = hasSubscriptionAccess(user);
   const out = [];
   for (const m of SELECTABLE_MODELS) {
+    if (!inScope(m, scope)) continue;   // 只在演出面出现的行，画布面看不见也选不了
     if (platform.isLocal && !upstreamKeyPresent(BY_ID.get(m.id))) continue;   // 本地版藏没配钥匙的行（含没登录/没 key 时的内置 Claude 行）；hosted 不过滤（缺钥匙让请求 502 fail-loud）
     if (m.gate === 'localGen') { if (approved) out.push(m); continue; }
     if (m.gate === 'subscription' && !subscribed) { out.push({ ...m, locked: true, lockReason: SUBSCRIPTION_LOCK_REASON }); continue; }
@@ -176,21 +193,28 @@ export function selectableModelsFor(user) {
 }
 
 /** 真能请求的（不含 locked）。PUT /model 与 turn.js 校验用这份 */
-export function allowedModelsFor(user) {
-  return selectableModelsFor(user).filter((m) => !m.locked);
+export function allowedModelsFor(user, opts) {
+  return selectableModelsFor(user, opts).filter((m) => !m.locked);
 }
 
 /** 这个模型对这个用户是「看得见选不了」吗（在清单里且 locked）。turn 拒绝时据此回 403 而不是 400 */
-export function isModelLockedFor(user, appModel) {
-  return selectableModelsFor(user).some((m) => m.id === appModel && m.locked);
+export function isModelLockedFor(user, appModel, opts) {
+  return selectableModelsFor(user, opts).some((m) => m.id === appModel && m.locked);
 }
 
 /**
  * 这个用户没选过时用哪个：表里标 `default: true` 的行（08-26 起 = minimax-m3），它对该用户
  * 不可选时退到第一个可选的。前端 picker 与新会话的兜底都问这条，不再各自硬编码。
  */
-export function defaultModelFor(user) {
-  const allowed = allowedModelsFor(user);
+export function defaultModelFor(user, opts) {
+  const scope = scopeOf(opts);
+  const allowed = allowedModelsFor(user, { scope });
+  // 演出面：没有订阅资格的账号（basic / 公开注册号）默认落在 `stageDefault` 的行（演出行，每步更快）；
+  // 有订阅资格的账号默认不变（他们本来就会自己挑 sonnet / opus 演）。
+  if (scope === 'stage' && !hasSubscriptionAccess(user)) {
+    const stageRow = allowed.find((m) => m.stageDefault);
+    if (stageRow) return stageRow.id;
+  }
   return (allowed.find((m) => m.default) || allowed[0])?.id || null;
 }
 

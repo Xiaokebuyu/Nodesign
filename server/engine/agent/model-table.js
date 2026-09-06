@@ -481,9 +481,13 @@ export const MODELS_BUILTIN = Object.freeze([
     //   一个都没到过 8；design 模式 25 个里有 7 个超过 8（9/9/10/11/21/31/51）。
     // ⚠️ 但最高那个 6 离 8 只差两张，所以撞线是迟早的事：转换层把那条 400 翻译成了
     //   「换到设计那条线」的人话（lib/ingress/upstream-error-hints.js），别把它删了。
-    // ⛔ 不设 default —— 默认永远是上面那条（图不限张数的那条兜得住所有人）。
+    // ⛔ 不设 default —— 画布的默认永远是上面那条（图不限张数的那条兜得住所有人）。
+    // ⭐ 09-06 用户拍板：**这行只在演出显示器的选择器里出现**（`only: 'stage'`），首页 / 画布的选择器
+    //   不再分设计 / 演出；并且它是**没有订阅资格的账号在演出面的默认行**（`stageDefault`），
+    //   有订阅资格的账号在演出面照旧走全局默认。两个字段的读者都在 model-context.js（scope 过滤 / 演出默认）。
+    //   下架画布面时生产有 8 个画布会话钉着它 → server/scripts/migrate-canvas-model.mjs 改钉到 merge。
     id: 'glm-5.3-flash-rp', window: 1_000_000, brand: 'glm',
-    select: { label: 'GLM-5.3-Flash · 演出', desc: '每步更快 · 但整场最多 8 张图 · 1M 上下文 · 极便宜' },
+    select: { label: 'GLM-5.3-Flash · 演出', desc: '每步更快 · 但整场最多 8 张图 · 1M 上下文 · 极便宜', only: 'stage', stageDefault: true },
     api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['particle'] } },
   },
   // ── GMI Cloud · MiniMax（08-25）── 两行都是 GMI 标 `is_free` 的免费部署；账户无余额，付费行 402，

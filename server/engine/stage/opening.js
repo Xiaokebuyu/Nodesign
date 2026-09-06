@@ -11,7 +11,7 @@
  * 时刻切入，让人物带着自己的事出现，结尾停在别人的动作或一句话上，把下一步留给玩家，不总结不抒情。
  */
 
-import { runtimeOf, loadConfig, sayToStage, patchStageConfig } from './manager.js';
+import { runtimeOf, loadConfig, sayToStage, patchStageConfig, stageDefaultModel } from './manager.js';
 import { getUserById } from '../../auth/users-store.js';
 import { readScenes } from './tools.js';
 import { pregenOpeningBackdrop } from './mechanics.js';
@@ -41,7 +41,10 @@ export async function openStory(pid, root, { style = null, cardOptions = null, l
   const presetId = style?.preset || cfg.style?.preset || DEFAULT_PRESET;
   const preset = await resolvePreset(rt.playAbs, presetId);
   const modules = preset ? normalizeSelection(preset, style?.modules ?? cfg.style?.modules) : null;
-  const pub = await patchStageConfig(pid, root, { style: { preset: preset ? presetId : 'none', modules }, cardOptions: cardOptions || cfg.cardOptions || {}, ...(lore ? { lore } : {}), ...(typeof images === 'boolean' ? { images: { allow: images } } : {}), ...(model ? { model } : {}), opened: true }, { user: userId ? getUserById(userId) : null });
+  const user = userId ? getUserById(userId) : null;
+  // 开场没点模型、戏里也没记过 → 记下 owner 在演出面的默认（没订阅资格 = 演出行），跟显示器和进程用的同一条
+  const pickedModel = model || (!cfg.model ? stageDefaultModel(pid) : null);
+  const pub = await patchStageConfig(pid, root, { style: { preset: preset ? presetId : 'none', modules }, cardOptions: cardOptions || cfg.cardOptions || {}, ...(lore ? { lore } : {}), ...(typeof images === 'boolean' ? { images: { allow: images } } : {}), ...(pickedModel ? { model: pickedModel } : {}), opened: true }, { user });
   const scenes = await readScenes(rt.playAbs, { limit: 5, rel: rt.scenesRel });
   if (scenes.length) return { ok: true, started: false, config: pub };
 

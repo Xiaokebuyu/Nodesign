@@ -580,7 +580,47 @@ describe('前端兜底清单 ↔ 服务端表（08-30 拆出「演出」行时�
       expect([f.label, f.desc, f.brand], `${f.id} 两边对不上`).toEqual([row.select?.label, row.select?.desc, row.brand]);
     }
     // 判据先验一遍：真去比了内容，不是只比了条数
-    expect(MODELS_BUILTIN.find((m) => m.id === 'glm-5.3-flash-rp').select.label).toBe('GLM-5.3-Flash · 演出');
-    expect(FALLBACK_MODELS.some((f) => f.id === 'glm-5.3-flash-rp'), '演出行没进兜底清单').toBe(true);
+    expect(MODELS_BUILTIN.find((m) => m.id === 'glm-5.3-flash-merge').select.label).toBe('GLM-5.3-Flash · 设计');
+    expect(FALLBACK_MODELS.some((f) => f.id === 'glm-5.3-flash-merge'), '设计行没进兜底清单').toBe(true);
+    // 09-06 起演出行只在演出面出现：兜底清单是首页 / 画布那颗按钮用的，不许再列它
+    expect(FALLBACK_MODELS.some((f) => f.id === 'glm-5.3-flash-rp'), '演出行进了画布的兜底清单').toBe(false);
+    // 兜底清单里也不许混进任何只在演出面出现的行（别只盯着这一条 id）
+    for (const f of FALLBACK_MODELS) expect(MODELS_BUILTIN.find((m) => m.id === f.id).select.only, `${f.id} 只在演出面出现却进了画布兜底`).toBeUndefined();
+  });
+});
+
+describe('选择器两个面：画布 / 演出（09-06 用户拍板「首页不再分设计 / 演出」）', () => {
+  const pub = { role: 'user', plan: 'basic' };
+  const sub = { role: 'user', plan: 'pro' };
+  const admin = { role: 'admin' };
+
+  it('演出行只在演出面出现：画布面看不见也选不了，演出面看得见选得到', () => {
+    for (const u of [pub, sub, admin, null]) {
+      expect(selectableModelsFor(u).some((m) => m.id === 'glm-5.3-flash-rp'), '画布清单列了演出行').toBe(false);
+      expect(allowedModelsFor(u).some((m) => m.id === 'glm-5.3-flash-rp'), '画布校验放行了演出行').toBe(false);
+      expect(selectableModelsFor(u, { scope: 'canvas' }).map((m) => m.id)).toEqual(selectableModelsFor(u).map((m) => m.id));
+      expect(selectableModelsFor(u, { scope: 'stage' }).some((m) => m.id === 'glm-5.3-flash-rp'), '演出清单没有演出行').toBe(true);
+      expect(allowedModelsFor(u, { scope: 'stage' }).some((m) => m.id === 'glm-5.3-flash-rp'), '演出校验拒了演出行').toBe(true);
+      // 设计行两个面都在（演出里图多了要换回来，那句 400 翻译指的就是它）
+      expect(selectableModelsFor(u, { scope: 'stage' }).some((m) => m.id === 'glm-5.3-flash-merge')).toBe(true);
+    }
+    // 演出面 = 画布面 + 只在演出面出现的行，别的一条不多不少
+    const stageOnly = SELECTABLE_MODELS.filter((m) => m.only === 'stage').map((m) => m.id);
+    expect(stageOnly).toEqual(['glm-5.3-flash-rp']);
+    expect(selectableModelsFor(admin, { scope: 'stage' }).map((m) => m.id).filter((id) => !stageOnly.includes(id)))
+      .toEqual(selectableModelsFor(admin).map((m) => m.id));
+    expect(() => selectableModelsFor(admin, { scope: 'canva' })).toThrow(/选择器面/);
+  });
+
+  it('⭐ 演出面的默认：没有订阅资格的账号落在演出行，有订阅资格的照旧全局默认；画布面的默认一个都不变', () => {
+    expect(defaultModelFor(pub, { scope: 'stage' })).toBe('glm-5.3-flash-rp');
+    expect(defaultModelFor(null, { scope: 'stage' })).toBe('glm-5.3-flash-rp');
+    expect(defaultModelFor(sub, { scope: 'stage' })).toBe('glm-5.3-flash-merge');
+    expect(defaultModelFor(admin, { scope: 'stage' })).toBe('glm-5.3-flash-merge');
+    for (const u of [pub, sub, admin, null]) expect(defaultModelFor(u)).toBe('glm-5.3-flash-merge');
+    // 判据先验：stageDefault 只标在演出行上，且它确实不是画布默认
+    const row = MODELS_BUILTIN.find((m) => m.id === 'glm-5.3-flash-rp');
+    expect([row.select.only, row.select.stageDefault, row.select.default]).toEqual(['stage', true, undefined]);
+    expect(MODELS_BUILTIN.filter((m) => m.select?.stageDefault).map((m) => m.id)).toEqual(['glm-5.3-flash-rp']);
   });
 });

@@ -159,7 +159,9 @@ router.post('/:pid/stage/:play/start', express.json({ limit: '256kb' }), wrap(as
 router.post('/:pid/stage/:play/stop', wrap((req, play) => stopStage(req.params.pid, play, 'user')));
 router.patch('/:pid/stage/:play/config', express.json({ limit: '256kb' }), wrap((req, play) => patchStageConfig(req.params.pid, play, req.body || {}, { user: req.user || null })));
 /** 这个账号能给演出进程选的模型 + 当前用的（开场页 / 外观页的模型选择器） */
-router.get('/:pid/stage/:play/models', wrap(async (req, play) => { const st = await stageState(req.params.pid, play); return { options: selectableModelsFor(req.user), current: st.config?.model || defaultModelFor(req.user), default: defaultModelFor(req.user) }; }));
+// 演出面的清单（scope:'stage'）：比画布多一条只在这里出现的演出行，而且没有订阅资格的账号默认就落在它上面
+// ⚠️ current 读的是显示器配置里的 model（戏里没记时 manager 已按 owner 的演出面默认填过），default 按请求者算
+router.get('/:pid/stage/:play/models', wrap(async (req, play) => { const st = await stageState(req.params.pid, play); const dflt = defaultModelFor(req.user, { scope: 'stage' }); return { options: selectableModelsFor(req.user, { scope: 'stage' }), current: st?.config?.model || dflt, default: dflt }; }));
 /** 用户在状态页拨值：{ "好感": 60 } */
 router.post('/:pid/stage/:play/state', express.json({ limit: '16kb' }), wrap((req, play) => setUserState(req.params.pid, play, req.body || {})));
 
