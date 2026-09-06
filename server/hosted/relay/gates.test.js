@@ -46,13 +46,13 @@ describe('newUserText：只取这一发新出现的用户原创内容', () => {
 
 describe('闸 1：档位', () => {
   it('basic 档走订阅模型 → 403', async () => {
-    const r = await decideRelay({ user: makeUser({ plan: 'basic' }), body: SUBSCRIPTION_BODY }, { moderate: pass });
+    const r = await decideRelay({ user: makeUser({ plan: 'basic' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate: pass });
     expect(r.ok).toBe(false);
     expect(r.status).toBe(403);
     expect(r.code).toBe('SUBSCRIPTION_REQUIRED');
   });
   it('pro 档过得去这一闸', async () => {
-    const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY }, { moderate: pass });
+    const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate: pass });
     expect(r.ok).toBe(true);
   });
 });
@@ -61,14 +61,14 @@ describe('闸 2：额度', () => {
   it('总额度用完 → 402，且不打外审（顺序：贵的闸在后）', async () => {
     const moderate = vi.fn(pass);
     const user = makeUser({ plan: 'pro', lifetime: 0 });
-    const r = await decideRelay({ user, body: SUBSCRIPTION_BODY }, { moderate });
+    const r = await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
     expect(r.ok).toBe(false);
     expect(r.status).toBe(402);
     expect(r.code).toBe('QUOTA_EXCEEDED');
     expect(moderate).not.toHaveBeenCalled();
   });
   it('admin 不受额度限制', async () => {
-    const r = await decideRelay({ user: makeUser({ role: 'admin', lifetime: 0 }), body: SUBSCRIPTION_BODY }, { moderate: pass });
+    const r = await decideRelay({ user: makeUser({ role: 'admin', lifetime: 0 }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate: pass });
     expect(r.ok).toBe(true);
   });
 });
@@ -81,7 +81,7 @@ describe('闸 3：外审', () => {
 
   it('判定拦截 → 403 CONTENT_BLOCKED（认的是 ok:false，不是 blocked）', async () => {
     const moderate = async () => ({ ok: false, level: 'strict', category: 'weapons', severity: 'normal', reason: '不行' });
-    const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY }, { moderate });
+    const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
     expect(r.ok).toBe(false);
     expect(r.status).toBe(403);
     expect(r.code).toBe('CONTENT_BLOCKED');
@@ -91,36 +91,36 @@ describe('闸 3：外审', () => {
   it('同一段文本第二次不再打外审（去重）', async () => {
     const moderate = vi.fn(pass);
     const user = makeUser({ plan: 'pro' });
-    await decideRelay({ user, body: SUBSCRIPTION_BODY }, { moderate });
-    await decideRelay({ user, body: SUBSCRIPTION_BODY }, { moderate });
+    await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
     expect(moderate).toHaveBeenCalledTimes(1);
   });
 
   it('去重按人分：换个人要重新审', async () => {
     const moderate = vi.fn(pass);
-    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY }, { moderate });
-    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY }, { moderate });
+    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
     expect(moderate).toHaveBeenCalledTimes(2);
   });
 
   it('fail-open 那一发放行，但不记指纹：服务恢复后要重新审', async () => {
     const moderate = vi.fn(async () => ({ ok: true, level: 'strict', failedOpen: true }));
     const user = makeUser({ plan: 'pro' });
-    expect((await decideRelay({ user, body: SUBSCRIPTION_BODY }, { moderate })).ok).toBe(true);
-    await decideRelay({ user, body: SUBSCRIPTION_BODY }, { moderate });
+    expect((await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate })).ok).toBe(true);
+    await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
     expect(moderate).toHaveBeenCalledTimes(2);   // 没被去重表挡住
   });
 
   it('admin 的外审默认档是 off，压根不打', async () => {
     const moderate = vi.fn(pass);
-    await decideRelay({ user: makeUser({ role: 'admin' }), body: SUBSCRIPTION_BODY }, { moderate });
+    await decideRelay({ user: makeUser({ role: 'admin' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
     expect(moderate).not.toHaveBeenCalled();
   });
 
   it('没配 OPENAI_API_KEY 时整道外审安静地不存在（既定 fail-open，但值得知道）', async () => {
     delete process.env.OPENAI_API_KEY;
     const moderate = vi.fn(pass);
-    const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY }, { moderate });
+    const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
     expect(r.ok).toBe(true);
     expect(r.moderated).toBe(false);
     expect(moderate).not.toHaveBeenCalled();
@@ -129,7 +129,7 @@ describe('闸 3：外审', () => {
   it('总闸 NODESIGN_MODERATION=off 时也不审', async () => {
     process.env.NODESIGN_MODERATION = 'off';
     const moderate = vi.fn(pass);
-    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY }, { moderate });
+    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
     expect(moderate).not.toHaveBeenCalled();
     delete process.env.NODESIGN_MODERATION;
   });

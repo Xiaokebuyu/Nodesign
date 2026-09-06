@@ -69,6 +69,11 @@ app.use(cors((req, cb) => cb(null, {
   origin: originAllowed(req) ? (req.headers.origin || true) : false,
   credentials: true,
 })));
+// hosted 外环（relay / 管理台）只在 hosted 起，而且是**动态** import：本地分发版的包里根本没有
+// server/hosted/（见 server/scripts/check-client-boundary.mjs），顶部静态 import 会让客户端崩在解析阶段。
+// relay 必须挂在 express.json 之前（它要原始 body），所以在这儿就得把模块拿到手。
+const hosted = platform.isLocal ? null : await import('./hosted/mount.js');
+hosted?.mountHostedEarly(app);
 app.use(express.json({ limit: '4mb' }));
 
 // ── Health ──
@@ -103,12 +108,7 @@ if (platform.isLocal) {
 app.use('/api/auth', authRouter);
 app.use('/api', authGuard);
 // admin 管理接口 + 当前用户自视图（都在 authGuard 之后，req.user 已挂）
-// 管理台只在 hosted 起，而且是**动态** import：本地分发版的包里根本没有 server/hosted/
-// （见 server/scripts/check-client-boundary.mjs），顶部静态 import 会让客户端崩在解析阶段。
-if (!platform.isLocal) {
-  const { default: adminRouter } = await import('./hosted/admin.js');
-  app.use('/api/admin', adminRouter);
-}
+if (hosted) await hosted.mountHostedLate(app);
 app.use('/api/me', meRouter);
 // 本地分发版专用（配置文件 / 状态 / 重启）。hosted 下不挂：这组接口假设请求者就是机器的主人
 if (platform.isLocal) app.use('/api/local', localRouter);

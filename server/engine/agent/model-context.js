@@ -415,6 +415,29 @@ export function resolveWireModel(bodyModel) {
 }
 
 /**
+ * 按行内 prices 给一笔 token 用量定价（美元）。行没填 prices → null（调用方自己决定
+ * 兜底：reprice 沿用 SDK 虚价，relay 记 0 并告警 —— 假数比没有更坏，这里不编）。
+ *
+ * 这是**全仓唯一**的价目算式：repriceUsageDeltas（会话结账）和 relay 账本都走它。
+ * 两处各抄一份的话，改一处漏一处，两本账就对不上了。
+ *
+ * @param {string} appModel
+ * @param {{ input?: number, output?: number, cacheRead?: number, cacheCreate?: number }} tokens
+ * @returns {number|null}
+ */
+export function priceTokens(appModel, tokens = {}) {
+  const p = BY_ID.get(appModel)?.api?.prices;
+  if (!p) return null;
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  return (
+    n(tokens.input) * p.input
+    + n(tokens.output) * p.output
+    + n(tokens.cacheRead) * (p.cacheRead || 0)
+    + n(tokens.cacheCreate) * (p.cacheWrite || 0)
+  ) / 1e6;
+}
+
+/**
  * usage 差分 reprice：key 从 SDK alias 还原成 appModel，按行内 prices 重算
  * costUsd。多个 key 归并到同一 appModel 时逐字段相加。context.js 的
  * absorbResult 在差分之后调这一步。
@@ -444,16 +467,8 @@ export function repriceUsageDeltas(deltas, sessionAppModel) {
   for (const [key, d] of Object.entries(deltas)) {
     const row = (sessionNames.has(key) ? sessionRow : WIRE_LOOKUP.get(key)) || fastRow;
     const appKey = row ? row.id : key;
-    const p = row?.api?.prices;
-    const repriced = p ? {
-      ...d,
-      costUsd: (
-        d.inputTokens * p.input
-        + d.outputTokens * p.output
-        + d.cacheReadTokens * (p.cacheRead || 0)
-        + d.cacheCreateTokens * (p.cacheWrite || 0)
-      ) / 1e6,
-    } : { ...d };
+    const priced = row ? priceTokens(row.id, { input: d.inputTokens, output: d.outputTokens, cacheRead: d.cacheReadTokens, cacheCreate: d.cacheCreateTokens }) : null;
+    const repriced = priced != null ? { ...d, costUsd: priced } : { ...d };
     const prev = out[appKey];
     out[appKey] = prev ? {
       inputTokens: prev.inputTokens + repriced.inputTokens,

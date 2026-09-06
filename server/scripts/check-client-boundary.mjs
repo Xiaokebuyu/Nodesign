@@ -64,7 +64,7 @@ const DYNAMIC_RE = /\bimport\s*\(\s*['"]([^'"]+)['"]/g;
  * 自己往上挂。
  */
 const SEAMS = new Set([
-  'server/index.js\u0000./hosted/admin.js',
+  'server/index.js\u0000./hosted/mount.js',
 ]);
 
 function checkDirection() {

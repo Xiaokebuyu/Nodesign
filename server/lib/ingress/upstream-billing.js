@@ -65,3 +65,17 @@ export class UpstreamBilling {
 export const upstreamBilling = new UpstreamBilling();
 export const noteUpstreamBilling = (sid, appModel, info) => upstreamBilling.note(sid, appModel, info);
 export const takeUpstreamBilling = (sid) => upstreamBilling.take(sid);
+
+/**
+ * OpenAI usage → 统一 token 口径（relay 账本用，model-ingress 的 onBilling 回调走它）。
+ * OpenAI 的 prompt_tokens **含**缓存命中，Anthropic 的 input_tokens **不含**（cache_read 单列）；
+ * 账本按 Anthropic 口径存，所以把缓存从 prompt 里减出来。
+ * 没有 usage → null（上游只报了 cost 没报 token 的情况，Zen 的 [DONE] 尾包就是这样）。
+ */
+export function openaiTokens(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+  const prompt = n(usage.prompt_tokens);
+  const cached = Math.min(prompt, n(usage.prompt_tokens_details?.cached_tokens));
+  return { input: prompt - cached, output: n(usage.completion_tokens), cacheRead: cached, cacheCreate: 0 };
+}

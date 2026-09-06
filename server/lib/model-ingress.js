@@ -40,9 +40,10 @@ import { resolveSessionWire, fallbackLogged } from './ingress/session-routes.js'
 import { forwardOpenAIChat } from './ingress/forward-openai-chat.js';
 import { failStreaks, exhaustedErrorBody } from './ingress/upstream-fail-streak.js';
 import { armIdleWatchdog } from './ingress/stream-watchdog.js';
-import { noteUpstreamBilling } from './ingress/upstream-billing.js';
+import { noteUpstreamBilling, openaiTokens } from './ingress/upstream-billing.js';
 import { noteUpstreamTruncation } from './ingress/upstream-truncation.js';
 import { noticeSession } from './ingress/session-notice.js';
+import { tapAnthropicUsage } from './ingress/anthropic-usage.js';
 
 // ── 出站连接池 ──
 // ⛔ 08-20 生产真踩：本地盒子（authStyle 'none' = 环回 SSH 隧道）走 Node 默认
@@ -122,7 +123,26 @@ export async function stopIngress() {
   _instance = null;
 }
 
-async function handleRequest(req, res, bodyBuf) {
+/**
+ * 一发请求的完整流水线（路由 → 修补 → 换钥匙 → 转发）。getOrStartIngress 的本地入口
+ * 和 hosted 的 relay（server/hosted/relay/router.js）都走这一个函数 —— relay 就是这个
+ * 入口搬到服务器上，多的只是门口那几道闸和记账，转发本身不许有第二份。
+ *
+ * @param {object} req      http.IncomingMessage 或 express req（只读 method / url / headers）
+ * @param {object} res
+ * @param {Buffer} bodyBuf  已读完的原始 body
+ * @param {object} [opts]
+ * @param {(info: { appModel: string, protocol: string, costUsd: number|null,
+ *                  tokens: { input, output, cacheRead, cacheCreate }|null }) => void} [opts.onBilling]
+ *   每一发上游响应的用量回调。**不传**就是站内行为：openai-chat 腿记进 upstream-billing
+ *   （session-loop 结账时取走），Anthropic 透传腿什么都不看（账由 SDK 的 modelUsage 差分算）。
+ *   **传了**就两条腿都回给它，且不再往 upstream-billing 里记 —— relay 的会话在别人机器上，
+ *   没有谁会来 take 那笔账，记进去只是内存泄漏。
+ *   ⚠️ costUsd 是上游**自报**的（Zen / Merge 网关才有），没报就是 null；定价是调用方的事
+ *   （model-context.priceTokens），入口不编数。
+ */
+export async function handleRequest(req, res, bodyBuf, opts = {}) {
+  const customBilling = typeof opts.onBilling === 'function' ? opts.onBilling : null;
   // 剥 /__nd/<sessionId> 前缀（日志归属用）
   let sessionTag = null;
   let origPath = req.url;
@@ -237,7 +257,9 @@ async function handleRequest(req, res, bodyBuf) {
     const wireFwd = routed.role === 'helper' && wire.helperReasoningEffort ? { ...wire, reasoningEffort: wire.helperReasoningEffort } : wire;
     forwardOpenAIChat({ parsed, wire: wireFwd, key, res, sidShort, sessionTag, target, path: joinPath(target.pathname, '/chat/completions'), agent: agentFor(wire, target.protocol === 'https:'), onOutcome: noteOutcome,
       // 上游自报费用按会话 × appModel 累加（helper 请求记到 helper 行头上），session-loop 结账时取走
-      onBilling: (info) => noteUpstreamBilling(sessionTag, wireFwd.appModel, info),
+      onBilling: customBilling
+        ? (info) => customBilling({ appModel: wireFwd.appModel, protocol: 'openai-chat', costUsd: info.costUsd ?? null, tokens: openaiTokens(info.usage) })
+        : (info) => noteUpstreamBilling(sessionTag, wireFwd.appModel, info),
       // 「说到一半被掐」标记：session-loop 收到 result 时取走，有标记就自动续接一轮（upstream-truncation.js）。
       // ⚠️ helper 一律不报（连"收得完整"也不报）：它就一句话的活不值得续接，而报 null 会把主行刚记下的
       // 标记清掉（标题/摘要那发常常紧跟在主回合后面）。
@@ -304,6 +326,11 @@ async function handleRequest(req, res, bodyBuf) {
         noteOutcome(false, 'stream idle');
         try { proxyRes.destroy(new Error('ingress stream idle watchdog')); } catch { /* 已经死了就算了 */ }
       } });
+    }
+    // 记账旁听只在有人要账时挂（relay）。站内会话不挂：它们的账走 SDK modelUsage 差分，
+    // 这里再报一份就是同一笔钱两个来源。count_tokens 不是推理，不记。
+    if (customBilling && !isCountTokens) {
+      tapAnthropicUsage(proxyRes, { onUsage: (tokens) => customBilling({ appModel: wire.appModel, protocol: 'anthropic', costUsd: null, tokens }) });
     }
     proxyRes.pipe(res);
   });

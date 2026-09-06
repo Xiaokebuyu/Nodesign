@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { UpstreamBilling, upstreamCostOf } from './upstream-billing.js';
+import { UpstreamBilling, upstreamCostOf, openaiTokens } from './upstream-billing.js';
 
 describe('UpstreamBilling', () => {
   it('按会话×模型累加 cost 与 usage；take 取走清零；没报 cost 且没 usage 不记', () => {
@@ -27,5 +27,16 @@ describe('upstreamCostOf', () => {
     expect(upstreamCostOf({ usage: { prompt_tokens: 9 } })).toBeNull();            // 只有 usage 没 cost
     expect(upstreamCostOf({ cost: 'free' })).toBeNull();                           // 非数不许当 0：假数据比没有更坏
     expect(upstreamCostOf(null)).toBeNull();
+  });
+});
+
+describe('openaiTokens：OpenAI usage → Anthropic 口径', () => {
+  it('缓存命中从 prompt 里减出来单列', () => {
+    expect(openaiTokens({ prompt_tokens: 1000, completion_tokens: 50, prompt_tokens_details: { cached_tokens: 300 } }))
+      .toEqual({ input: 700, output: 50, cacheRead: 300, cacheCreate: 0 });
+  });
+  it('没有 usage → null；cached 超过 prompt 时封顶不出负数', () => {
+    expect(openaiTokens(null)).toBeNull();
+    expect(openaiTokens({ prompt_tokens: 10, completion_tokens: 1, prompt_tokens_details: { cached_tokens: 99 } }).input).toBe(0);
   });
 });

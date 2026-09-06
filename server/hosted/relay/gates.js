@@ -82,11 +82,16 @@ const deny = (status, code, message, extra = {}) => ({ ok: false, status, code, 
  * @param {object}  args
  * @param {object}  args.user       设备令牌校验出来的用户（调用方保证非空）
  * @param {object}  args.body       解析过的请求体（Anthropic Messages 形状）
+ * @param {string}  args.appModel   **会话登记的**模型（sessions.js），不是 body.model。
+ *   body.model 是 SDK 的 spoof 别名或 helper 的默认 Claude 名，按它判通路会把所有 API 会话
+ *   都判成订阅（别名不在 BY_ID 里 → resolveModelRoute 落到 subscription）。通路、外审档位、
+ *   订阅资格全按登记的那一行算。
  * @param {object} [deps]           注入点，只为测试：默认就是真的外审
  * @returns {Promise<{ok:true, route:object, moderated:boolean} | {ok:false, status:number, code:string, message:string}>}
  */
-export async function decideRelay({ user, body }, { moderate = moderateText } = {}) {
-  const model = body?.model;
+export async function decideRelay({ user, body, appModel }, { moderate = moderateText } = {}) {
+  if (typeof appModel !== 'string' || !appModel) throw new Error('decideRelay: appModel 必填（来自会话登记，不是 body.model）');
+  const model = appModel;
   const route = resolveModelRoute(model);
 
   // ── 闸 1：档位。订阅通路骑的是站主账号，basic 档不给（auth/tier.js 的能力表） ──

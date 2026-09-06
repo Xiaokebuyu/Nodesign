@@ -70,5 +70,26 @@ ABI 编译，不是按系统 node 的。`electron-builder.yml` 里的 `npmRebuil
 - **代码签名**。`electron-builder.yml` 里的 `certificateFile` 留空。没有证书的话，
   安装包首次运行会被 SmartScreen 拦一道"未知发布者"，用户要点两次才能装。
 - **更新地址**。`publish.url` 现在是 `https://REPLACE-ME.example.com/desktop/`。
-- **钥匙来源**。首启选"用服务器提供的 API"还是"自己带钥匙"，以及 relay 端点本身。
-  见网关那条线。
+- **钥匙来源（客户端半）**。首启选"用服务器提供的 API"还是"自己带钥匙"。服务器那半
+  （`server/hosted/relay/`，见下）已经在了；客户端还没有人把 SDK 的 base URL 指过去。
+  要做的是在 `server/runtime/local-env.js` 的 `ENV_KEYS` 那张白名单表上加第三种来源
+  （站点地址 + 设备令牌），然后 session-loop 在起 query 前 `POST /api/relay/sessions`，
+  finally 里 `DELETE`；`ANTHROPIC_BASE_URL=<站点>/api/relay/__nd/<sid>`、
+  `ANTHROPIC_AUTH_TOKEN=<设备令牌>`。设备令牌的签发界面（用户登录站点后铸一枚）也还没有。
+
+## relay（服务器那半，已在）
+
+hosted 起动时挂在 `/api/relay`（`server/hosted/mount.js`），本地版不挂。一发推理请求的路：
+
+    设备令牌 → 用户          server/hosted/relay/devices.js（Bearer ndk_…）
+    sid → 会话登记           sessions.js（起 query 前 POST /sessions {sid, appModel}）
+    判决                      gates.js（档位 / 额度 / 外审，按**登记的** appModel，不按 body.model）
+    转发                      订阅腿 subscription-leg.js（站主 OAuth）｜API 腿 = lib/model-ingress.handleRequest
+    记账                      usage.js（每一发上游响应一笔；上游自报的钱优先，否则表价 priceTokens）
+
+已知缺口：
+- **订阅腿一次没打过真 Anthropic**。头的处理（换 Bearer、补 oauth beta）是按 SDK 的行为写的，
+  没验过；token 过期不会自己刷新（refreshToken 在同一个文件里，先没做），日志会提示站主 `claude login`。
+- **订阅用量记 0**。订阅行没有 prices，账本记 token 不记钱；pro 档走 relay 的订阅用量不进日额度。
+- **API 腿的外审默认是关的**：`auth/tier.js` 三档的 `moderationDefaultApi` 都是 `'off'`（08-30 拍板的
+  两栏口径），除非在管理台给用户钉 `moderation_level_api`。relay 不改这条纪律，只是照着执行。
