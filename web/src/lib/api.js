@@ -91,6 +91,8 @@ export const Local = {
   probe: (id, { vision = true } = {}) => jsonRequest('POST', `/api/local/models/${encodeURIComponent(id)}/probe?vision=${vision ? 1 : 0}`),
   restart: () => jsonRequest('POST', '/api/local/restart'),
   relayRefresh: () => jsonRequest('POST', '/api/local/relay/refresh'),
+  relayLogin: (body) => jsonRequest('POST', '/api/local/relay/login', body),
+  relayLogout: () => jsonRequest('POST', '/api/local/relay/logout'),
 };
 
 // ── Publish（站点一键上线 Cloudflare Pages，task 级）──

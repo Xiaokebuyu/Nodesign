@@ -19,6 +19,15 @@ const fake = http.createServer((req, res) => {
     });
     return;
   }
+  if (req.method === 'POST' && req.url === '/api/relay/login') {
+    let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => {
+      const j = JSON.parse(b);
+      if (j.password !== 'good') { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: '用户名或密码错误' }, code: 'BAD_CREDENTIALS' })); return; }
+      res.writeHead(201, { 'content-type': 'application/json' }); res.end(JSON.stringify({ token: 'ndk_new.secret', device: { id: 'new', label: j.label }, user: { username: j.username, tier: 'basic' } }));
+    });
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/relay/logout') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"ok":true}'); return; }
   if (req.method === 'DELETE') { res.writeHead(204); res.end(); return; }
   res.writeHead(404); res.end();
 });
@@ -91,5 +100,27 @@ describe('openRelaySession / closeRelaySession', () => {
   it('close 失败不抛', async () => {
     mode = 'html';
     await expect(rc.closeRelaySession('sid-abcdefgh')).resolves.toBeUndefined();
+  });
+});
+
+describe('relayLogin / relayLogout', () => {
+  it('登录不带令牌（没令牌也能登），成功拿到令牌和身份', async () => {
+    const t = process.env.NODESIGN_RELAY_TOKEN;
+    delete process.env.NODESIGN_RELAY_TOKEN;
+    const r = await rc.relayLogin({ username: 'alice', password: 'good', label: 'pc' });
+    expect(r.token).toBe('ndk_new.secret');
+    expect(seen.at(-1).auth).toBeUndefined();
+    process.env.NODESIGN_RELAY_TOKEN = t;
+  });
+  it('错密码 → 抛错带 BAD_CREDENTIALS 和服务器原话', async () => {
+    await expect(rc.relayLogin({ username: 'alice', password: 'bad' })).rejects.toMatchObject({ code: 'BAD_CREDENTIALS', status: 401, message: '用户名或密码错误' });
+  });
+  it('指定站点地址时打到那个地址（尾斜杠剥掉）', async () => {
+    const r = await rc.relayLogin({ url: process.env.NODESIGN_RELAY_URL, username: 'a', password: 'good' });
+    expect(r.token).toBeTruthy();
+  });
+  it('退出：吊销失败不抛', async () => {
+    mode = 'html';
+    expect(await rc.relayLogout()).toBe(false);
   });
 });

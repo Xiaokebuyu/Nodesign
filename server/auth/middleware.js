@@ -14,6 +14,7 @@
 import express from 'express';
 import { authEnabled, requestUser, cookieClear } from './session.js';
 import { openRegistrationEnabled, updateUser } from './users-store.js';
+import { relayCatalog, relayConfig, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 import { LOCALES, isLocale } from '../shared/locales.js';
 import { platform } from '../runtime/platform.js';
 import { msg } from '../shared/messages.js';
@@ -21,12 +22,28 @@ import { msg } from '../shared/messages.js';
 // locale：界面语言偏好，null = 没表过态（前端这时落浏览器语言，见 lib/i18n.js detect）
 export const publicUser = (u) => (u ? { id: u.id, username: u.username, role: u.role, locale: u.locale ?? null } : null);
 
+/** 本地版：站点账号登录态（AuthGate 据此决定首启是不是先要登录）。loggedIn = .env 里有令牌；whoami 拉到了才有身份 */
+function desktopLoginState() {
+  const c = relayCatalog();
+  return {
+    loggedIn: !!relayConfig(),
+    catalogOk: c.ok,
+    error: c.error,
+    url: process.env.NODESIGN_RELAY_URL || DEFAULT_RELAY_URL,
+    user: c.whoami?.user ? { username: c.whoami.user.username, tier: c.whoami.user.tier } : null,
+  };
+}
+
 export const authRouter = express.Router();
 
 authRouter.get('/status', (req, res) => {
   const user = requestUser(req);
   // profile：前端据此藏 SaaS 那套界面（账号徽记 / 额度横幅 / 管理入口）。local = 本地单租户分发版
-  res.json({ required: authEnabled(), authed: !!user, user: publicUser(user), openRegistration: openRegistrationEnabled(), profile: platform.profile });
+  res.json({
+    required: authEnabled(), authed: !!user, user: publicUser(user), openRegistration: openRegistrationEnabled(), profile: platform.profile,
+    // 本地分发版首启那道门：站点账号登没登（= relay 令牌配没配）。hosted 下没有这一项
+    ...(platform.isLocal ? { desktop: desktopLoginState() } : {}),
+  });
 });
 
 /**

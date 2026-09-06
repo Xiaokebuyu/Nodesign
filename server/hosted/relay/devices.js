@@ -43,6 +43,8 @@ db.exec(`
 `);
 
 const PREFIX = 'ndk_';
+/** 每人同时在用的设备上限（网页签发与桌面登录两条路共用这一个数） */
+export const MAX_DEVICES = 10;
 /** last_seen_at 的写入节流：每请求写一次库太热，5 分钟内不重复写 */
 const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 

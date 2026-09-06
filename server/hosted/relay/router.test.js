@@ -46,6 +46,7 @@ process.env.OPENAI_API_KEY = 'test-key-外审被注入替换了';
 
 const db = (await import('../../engine/runs/store.js')).default;
 const { mintDevice } = await import('./devices.js');
+const { hashPassword } = await import('../users-write.js');
 const { createRelayRouter } = await import('./router.js');
 const { _resetRelaySessions } = await import('./sessions.js');
 const { _resetSeen } = await import('./gates.js');
@@ -116,6 +117,33 @@ describe('门口', () => {
     const r = await api(token, '/nope');
     expect(r.status).toBe(404);
     expect((await r.json()).code).toBe('NOT_FOUND');
+  });
+});
+
+describe('登录换令牌 / 退出', () => {
+  const login = (body) => fetch(base + '/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  it('对的账号密码 → 201 带令牌，令牌立刻能用；错密码 401 不带令牌', async () => {
+    const user = makeUser({ plan: 'basic' });
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword('pw-right-1'), user.id);
+    const bad = await login({ username: user.username, password: 'nope' });
+    expect(bad.status).toBe(401);
+    expect((await bad.json()).code).toBe('BAD_CREDENTIALS');
+    const r = await login({ username: user.username, password: 'pw-right-1', label: '  台式机 ' });
+    expect(r.status).toBe(201);
+    const j = await r.json();
+    expect(j.token.startsWith('ndk_')).toBe(true);
+    expect(j.device.label).toBe('台式机');
+    expect(j.user.tier).toBe('basic');
+    const who = await api(j.token, '/whoami');
+    expect(who.status).toBe(200);
+    // 退出 = 吊销这一枚
+    expect((await api(j.token, '/logout', { method: 'POST' })).status).toBe(200);
+    expect((await api(j.token, '/whoami')).status).toBe(401);
+  });
+  it('停用的账号登不进', async () => {
+    const user = makeUser();
+    db.prepare('UPDATE users SET password_hash = ?, disabled = 1 WHERE id = ?').run(hashPassword('pw-right-2'), user.id);
+    expect((await login({ username: user.username, password: 'pw-right-2' })).status).toBe(401);
   });
 });
 

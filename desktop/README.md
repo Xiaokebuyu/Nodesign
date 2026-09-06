@@ -77,16 +77,17 @@ GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions �
 - **站点那半要先部署**。桌面版默认走 relay，而 relay 在这条分支的 hosted 代码里，线上还没有。
   没部署之前桌面版能用的只有 BYOK（设置页填 Claude API Key 或自定义插槽）。想对着 exp 试，
   设置页「站点地址」填 exp 的地址。
-- **设备令牌还是手动粘贴**。像 Cursor 那样点"登录"跳浏览器、批准后自动回填（device code 流程）没做。
 - **relay 只转推理**。生图和搜索走站主服务那两条（任务式请求）没做，桌面版这两样现在只能 BYOK。
 - **代码签名**。`electron-builder.yml` 里的 `certificateFile` 留空。没有证书的话，
   安装包首次运行会被 SmartScreen 拦一道"未知发布者"，用户要点两次才能装。
-- **钥匙来源（客户端半）**。首启选"用服务器提供的 API"还是"自己带钥匙"。服务器那半
-  （`server/hosted/relay/`，见下）已经在了；客户端还没有人把 SDK 的 base URL 指过去。
-  要做的是在 `server/runtime/local-env.js` 的 `ENV_KEYS` 那张白名单表上加第三种来源
-  （站点地址 + 设备令牌），然后 session-loop 在起 query 前 `POST /api/relay/sessions`，
-  finally 里 `DELETE`；`ANTHROPIC_BASE_URL=<站点>/api/relay/__nd/<sid>`、
-  `ANTHROPIC_AUTH_TOKEN=<设备令牌>`。设备令牌的签发界面（用户登录站点后铸一枚）也还没有。
+
+## 登录
+
+首启是一道登录门（AuthGate 在 local 档位下的桌面模式）：账号密码交给本地服务端
+`POST /api/local/relay/login`，它去站点 `POST /api/relay/login` 换一枚设备令牌写进
+`<数据目录>/.env`，之后这台机器就走站点的模型和额度。门旁一行小字"我自己带钥匙"可以跳过
+（记在浏览器 localStorage），设置页「NoDesign 服务」里随时能登录 / 退出登录（退出会吊销那枚令牌）。
+站点「桌面版设备」页也能手动签令牌粘进去，或者吊销某台机器。
 
 ## relay（服务器那半，已在）
 

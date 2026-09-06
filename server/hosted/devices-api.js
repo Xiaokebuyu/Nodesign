@@ -9,9 +9,7 @@
  */
 
 import express from 'express';
-import { mintDevice, listDevices, getDevice, revokeDevice } from './relay/devices.js';
-
-const MAX_DEVICES = 10;
+import { mintDevice, listDevices, getDevice, revokeDevice, MAX_DEVICES } from './relay/devices.js';
 const router = express.Router();
 
 router.get('/', (req, res) => {

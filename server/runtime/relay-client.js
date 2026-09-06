@@ -42,15 +42,22 @@ export function relayBaseUrlFor(sid) {
   return cfg ? `${cfg.url}/api/relay/__nd/${encodeURIComponent(sid)}` : null;
 }
 
-async function call(pathname, { method = 'GET', body = null, timeoutMs = FETCH_TIMEOUT_MS } = {}) {
+/** 站点地址归一（剥尾斜杠；空 = 官方站） */
+export function normalizeRelayUrl(url) {
+  return String(url || DEFAULT_RELAY_URL).trim().replace(/\/+$/, '') || DEFAULT_RELAY_URL;
+}
+
+async function call(pathname, { method = 'GET', body = null, timeoutMs = FETCH_TIMEOUT_MS, auth = true, url = null } = {}) {
   const cfg = relayConfig();
-  if (!cfg) throw Object.assign(new Error('relay 没配（缺 NODESIGN_RELAY_TOKEN）'), { code: 'RELAY_NOT_CONFIGURED' });
+  if (auth && !cfg) throw Object.assign(new Error('relay 没配（缺 NODESIGN_RELAY_TOKEN）'), { code: 'RELAY_NOT_CONFIGURED' });
+  // 没令牌的路（首启登录）cfg 是 null：地址按 传入 > .env > 官方站 取
+  const base = normalizeRelayUrl(url || cfg?.url || process.env.NODESIGN_RELAY_URL);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`${cfg.url}/api/relay${pathname}`, {
+    const res = await fetch(`${base}/api/relay${pathname}`, {
       method,
-      headers: { authorization: `Bearer ${cfg.token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
+      headers: { ...(auth ? { authorization: `Bearer ${cfg.token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
@@ -63,7 +70,7 @@ async function call(pathname, { method = 'GET', body = null, timeoutMs = FETCH_T
     }
     return json;
   } catch (err) {
-    if (err.name === 'AbortError') throw Object.assign(new Error(`relay ${cfg.url} ${timeoutMs / 1000}s 没响应`), { code: 'RELAY_TIMEOUT' });
+    if (err.name === 'AbortError') throw Object.assign(new Error(`relay ${base} ${timeoutMs / 1000}s 没响应`), { code: 'RELAY_TIMEOUT' });
     throw err;
   } finally {
     clearTimeout(timer);
@@ -113,4 +120,21 @@ export async function openRelaySession(sid, appModel) {
 export async function closeRelaySession(sid) {
   try { await call(`/sessions/${encodeURIComponent(sid)}`, { method: 'DELETE' }); }
   catch (err) { console.warn(`[relay-client] 注销会话 ${String(sid).slice(0, 8)} 失败：${err.message}`); }
+}
+
+// ── 登录 / 退出（桌面版首启那道门；账号密码只经手一次，换回来的是设备令牌） ──
+
+/**
+ * 账号密码换设备令牌。不需要已有令牌（auth:false）；站点地址可指定（默认官方站）。
+ * 只做网络这一步：写 .env、刷目录是 api/local.js 的事。失败抛错带 code（BAD_CREDENTIALS / RATE_LIMITED / TOO_MANY_DEVICES / RELAY_TIMEOUT）。
+ * @returns {Promise<{ token: string, device: object, user: object }>}
+ */
+export async function relayLogin({ url = null, username, password, label }) {
+  return call('/login', { method: 'POST', auth: false, url, body: { username, password, label } });
+}
+
+/** 吊销当前这枚令牌。失败只记日志：令牌本地反正要清，服务器那头留着一枚吊不掉的也只是列表里多一行 */
+export async function relayLogout() {
+  try { await call('/logout', { method: 'POST' }); return true; }
+  catch (err) { console.warn(`[relay-client] 退出登录时吊销令牌失败：${err.message}`); return false; }
 }

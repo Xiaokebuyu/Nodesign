@@ -52,28 +52,36 @@ function recordFail(ip) {
   failures.set(ip, next);
 }
 
+/**
+ * 账号密码核验 + 按 IP 的爆破锁。网页登录（下面）和桌面版换设备令牌（relay/router.js 的 /login）共用，
+ * 两条路一本账 —— 换个入口爆破不该换来一份新的失败额度。
+ * @returns {{ ok: true, userId: string } | { ok: false, status: number, message: string }}
+ */
+export function checkPassword(req, username, password) {
+  const ip = clientIp(req);
+  const waitMin = locked(ip);
+  if (waitMin) return { ok: false, status: 429, message: msg(req, '尝试次数过多，{waitMin} 分钟后再试', { waitMin }) };
+  const cred = typeof username === 'string' ? getCredential(username.trim()) : null;
+  // cred 不存在也照走 verify（恒定时间语义靠 scrypt 本身的成本；不提前泄漏"用户不存在"）
+  const good = cred && !cred.disabled
+    && verifyPassword(typeof password === 'string' ? password : '', cred.passwordHash);
+  if (!good) {
+    recordFail(ip);
+    return { ok: false, status: 401, message: msg(req, '用户名或密码错误') };
+  }
+  failures.delete(ip);
+  return { ok: true, userId: cred.id };
+}
+
 export const hostedAuthRouter = express.Router();
 
 hostedAuthRouter.post('/login', (req, res) => {
   if (!authEnabled()) return res.json({ ok: true, note: 'auth disabled' });
-
-  const ip = clientIp(req);
-  const waitMin = locked(ip);
-  if (waitMin) return res.status(429).json({ error: msg(req, '尝试次数过多，{waitMin} 分钟后再试', { waitMin }) });
-
   const { username, password } = req.body || {};
-  const cred = typeof username === 'string' ? getCredential(username.trim()) : null;
-  // cred 不存在也照走 verify（恒定时间语义靠 scrypt 本身的成本；不提前泄漏"用户不存在"）
-  const ok = cred && !cred.disabled
-    && verifyPassword(typeof password === 'string' ? password : '', cred.passwordHash);
-  if (!ok) {
-    recordFail(ip);
-    return res.status(401).json({ error: msg(req, '用户名或密码错误') });
-  }
-
-  failures.delete(ip);
-  res.setHeader('Set-Cookie', cookieSerialize(mintToken(cred.id), req));
-  res.json({ ok: true, user: publicUser(getUserById(cred.id)) });
+  const r = checkPassword(req, username, password);
+  if (!r.ok) return res.status(r.status).json({ error: r.message });
+  res.setHeader('Set-Cookie', cookieSerialize(mintToken(r.userId), req));
+  res.json({ ok: true, user: publicUser(getUserById(r.userId)) });
 });
 
 hostedAuthRouter.post('/register', (req, res) => {

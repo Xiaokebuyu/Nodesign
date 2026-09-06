@@ -11,6 +11,7 @@ export default {
   // ── 登录 / 注册（auth/middleware.js）──
   // 英文用户的第一站。这几条说不对，后面做得再好也没机会被看到。
   '用户名或密码错误': 'Incorrect username or password',
+  '用户名和密码都要填': 'Both username and password are required',
   '尝试次数过多，{waitMin} 分钟后再试': 'Too many attempts. Try again in {waitMin} minutes.',
   '这个网络今天开的号太多了，明天再来': 'Too many accounts created from this network today. Try again tomorrow.',
   '没登录，语言只记在这台机器上': 'Not signed in. The language is only remembered on this device.',

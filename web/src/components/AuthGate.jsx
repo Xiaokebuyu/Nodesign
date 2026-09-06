@@ -47,11 +47,21 @@ export default function AuthGate({ children }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [narrow, setNarrow] = useState(false);
+  // 本地分发版（桌面版 / npx）的首启门：站点账号没登录就先登录。账号密码交给本地服务端，它去站点换
+  // 设备令牌（/api/local/relay/login），从此这台机器走站点的模型和额度。"我自己带钥匙"是那道门旁的小门。
+  const [desktop, setDesktop] = useState(null);   // /api/auth/status 的 desktop 字段（只有 local 档位有）
   const rootRef = useRef(null);
 
   const applyStatus = (s) => {
     setOpenReg(!!s.openRegistration);
     useGlobalStore.getState().setAuthProfile?.(s.profile);
+    if (s.profile === 'local') {
+      setDesktop(s.desktop || null);
+      useGlobalStore.getState().setAuthUser?.(s.user || null);
+      const skipped = (() => { try { return localStorage.getItem('nd.desktop.byok') === '1'; } catch { return false; } })();
+      setPhase(s.desktop?.loggedIn || skipped ? 'ok' : 'login');
+      return;
+    }
     // 账号上记的界面语言回填（2026-08-26 i18n）。explicit:false —— 这不是用户
     // 此刻的表态，只是把账号偏好搬过来，**不能盖掉本机已有的显式选择**：
     // 一个人在这台机器上切成英文，就该是英文，哪怕账号上记的是中文。
@@ -109,6 +119,21 @@ export default function AuthGate({ children }) {
     if (mode === 'register' && !inviteCode && !openReg) return;
     setBusy(true);
     setError('');
+    if (desktop) {
+      try {
+        const res = await fetch('/api/local/relay/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) setPhase('ok');
+        else setError(data.error || t('登录失败 ({status})', { status: res.status }));
+      } catch {
+        setError(t('网络错误，请重试'));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     try {
       const res = await fetch(`/api/auth/${mode}`, {
         method: 'POST',
@@ -140,7 +165,37 @@ export default function AuthGate({ children }) {
 
   const isRegister = mode === 'register';
 
-  const form = (
+  const skipToByok = () => {
+    try { localStorage.setItem('nd.desktop.byok', '1'); } catch { /* 存不上就只管这一次 */ }
+    setPhase('ok');
+  };
+  const siteUrl = desktop?.url || '';
+
+  const form = desktop ? (
+    <>
+      <h2>{t('登录 NoDesign')}</h2>
+      <div className="m">{t('用站点账号登录，这台电脑就能用站点提供的模型和额度')}</div>
+      <div className="ndw-field">
+        <label htmlFor="ndw-u">{t('用户名 · USERNAME')}</label>
+        <input id="ndw-u" value={username} placeholder={t('写下用户名')} autoFocus
+          autoComplete="username" onChange={(e) => setUsername(e.target.value)} />
+      </div>
+      <div className="ndw-field">
+        <label htmlFor="ndw-p">{t('密码 · PASSWORD')}</label>
+        <input id="ndw-p" type="password" value={password} placeholder={t('写下密码')}
+          autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} />
+      </div>
+      <p className="ndw-err">{error || (desktop.error ? t('连不上站点：{err}', { err: desktop.error }) : '')}</p>
+      <button className="go" type="submit" disabled={busy}>
+        {busy ? t('核 对 中') : t('进 门')}
+      </button>
+      <p className="foot">
+        <a href={siteUrl} target="_blank" rel="noreferrer">{t('没有账号？去站点注册')}</a>
+        {' · '}
+        <a href="#byok" onClick={(e) => { e.preventDefault(); skipToByok(); }}>{t('我自己带钥匙')}</a>
+      </p>
+    </>
+  ) : (
     <>
       <h2>{t('来访登记')}</h2>
       <div className="m">{openReg ? t('免费开放中 · 邀请码可解锁 Claude') : t('小范围内测中')}</div>
@@ -229,7 +284,7 @@ export default function AuthGate({ children }) {
           {/* 跨场景不变的锚（二）：线索的终点，门 */}
           <form className="ndw-card" onSubmit={submit}>
             <span className="pin" />
-            <div className="ndw-stamp">{t('凭邀请')}</div>
+            <div className="ndw-stamp">{desktop ? t('桌面版') : t('凭邀请')}</div>
             {form}
           </form>
         </div>

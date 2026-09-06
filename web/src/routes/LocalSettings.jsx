@@ -7,7 +7,7 @@ import AppShell from '../components/layout/AppShell.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../lib/theme.js';
 import { Local } from '../lib/api.js';
 import { useGlobalStore } from '../stores/globalStore.js';
-import { Section, Card, Btn, Err, Dot } from '../components/local/primitives.jsx';
+import { Section, Card, Btn, Err, Dot, TextInput } from '../components/local/primitives.jsx';
 import CapabilityTable from '../components/local/CapabilityTable.jsx';
 import EnvKeys from '../components/local/EnvKeys.jsx';
 import SlotEditor from '../components/local/SlotEditor.jsx';
@@ -57,6 +57,10 @@ export default function LocalSettings() {
 
   const crumbs = [{ label: t('设置') }];
 
+  const relayLogout = async () => {
+    try { const r = await Local.relayLogout(); setStatus((s) => (s ? { ...s, relay: r.relay } : s)); showToast?.(t('已退出登录'), 'info'); }
+    catch (e) { showToast?.(e.message, 'error'); }
+  };
   const refreshRelay = async () => {
     try { const r = await Local.relayRefresh(); setStatus((s) => (s ? { ...s, relay: r.relay } : s)); }
     catch (e) { showToast?.(e.message, 'error'); }
@@ -98,10 +102,12 @@ export default function LocalSettings() {
               <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{t('用站点账号的模型和额度。登录站点 → 头像菜单「桌面版设备」签一枚令牌贴到这里')}</span>
               <span style={{ flex: 1 }} />
               <RelayStatus relay={status?.relay} />
-              <Btn small onClick={refreshRelay} disabled={!status?.relay?.configured}>{t('刷新')}</Btn>
+              {status?.relay?.configured && <Btn small onClick={refreshRelay}>{t('刷新')}</Btn>}
+              {status?.relay?.configured && <Btn small danger onClick={relayLogout}>{t('退出登录')}</Btn>}
             </div>
-            <EnvKeys only={['NoDesign 服务']} bare showToast={showToast} onSaved={(r) => setStatus((s) => (s && r?.relay ? { ...s, relay: r.relay } : s))}
-              onCapabilities={(caps) => setStatus((s) => (s ? { ...s, capabilities: caps.map((c) => ({ ...c, tools: s.capabilities.find((x) => x.id === c.id)?.tools || [] })) } : s))} />
+            {status?.relay?.configured
+              ? <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{t('已登录。令牌存在 {path}/.env，站点「桌面版设备」页能看到这台机器、也能从那边吊销', { path: status?.dataRoot || '~/.nodesign' })}</span>
+              : <RelayLoginForm relay={status?.relay} onDone={(r) => setStatus((s) => (s ? { ...s, relay: r.relay } : s))} showToast={showToast} />}
           </Card>
           <Card style={{ marginBottom: GAP.md }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: GAP.md, marginBottom: GAP.sm }}>
@@ -157,5 +163,36 @@ function RelayStatus({ relay }) {
     <span style={{ ...style, color: COLOR.success }}>
       <Dot ok />{w.username || '?'} · {w.tier || '?'}{quota ? ` · ${quota}` : ''} · {t('{n} 个模型', { n: relay.models?.length || 0, count: relay.models?.length || 0 })}
     </span>
+  );
+}
+
+/** 设置页里的登录表单：账号密码交给本地服务端去站点换设备令牌。站点地址是给自建实例 / exp 用的，默认官方站 */
+function RelayLoginForm({ relay, onDone, showToast }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async () => {
+    if (!username.trim() || !password) { setErr(t('用户名和密码都要填')); return; }
+    setBusy(true); setErr('');
+    try {
+      const r = await Local.relayLogin({ username: username.trim(), password, ...(url.trim() ? { url: url.trim() } : {}) });
+      onDone?.(r); setPassword(''); showToast?.(t('已登录'), 'info');
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.sm }}>
+      <div style={{ display: 'flex', gap: GAP.sm, flexWrap: 'wrap', alignItems: 'center' }}>
+        <TextInput value={username} onChange={setUsername} placeholder={t('用户名')} mono={false} width={160} />
+        <TextInput value={password} onChange={setPassword} placeholder={t('密码')} type="password" mono={false} width={160} />
+        <TextInput value={url} onChange={setUrl} placeholder={t('站点地址（可选，默认官方站）')} width={260} />
+        <Btn primary small onClick={submit} disabled={busy}>{busy ? t('登录中…') : t('登录')}</Btn>
+      </div>
+      {err && <Err>{err}</Err>}
+      <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>
+        {t('没有账号？')} <a href={relay?.url || '#'} target="_blank" rel="noreferrer">{t('去站点注册')}</a>
+      </span>
+    </div>
   );
 }

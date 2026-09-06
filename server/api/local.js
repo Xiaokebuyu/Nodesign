@@ -23,7 +23,8 @@ import { TOOL_CAPABILITIES } from '../engine/mcp/capability-gate.js';
 import { probeCapabilities } from '../runtime/capabilities.js';
 import { envView, setEnvValues, envPath } from '../runtime/local-env.js';
 import { probeModel } from '../lib/ingress/slot-probe.js';
-import { relayCatalog, refreshRelayCatalog, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
+import os from 'node:os';
+import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, normalizeRelayUrl, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 
@@ -111,6 +112,32 @@ router.post('/models/:id/probe', async (req, res) => {
   } finally {
     probing.delete(id);
   }
+});
+
+// ── 站主 relay：登录 / 退出（桌面版首启那道门 + 设置页） ──
+// 账号密码经本地服务端转一手去站点换设备令牌，令牌落 .env。密码不落盘、不进日志。
+router.post('/relay/login', async (req, res) => {
+  const { username, password, url } = req.body || {};
+  if (typeof username !== 'string' || !username.trim() || typeof password !== 'string' || !password) {
+    return res.status(400).json({ error: msg(req, '用户名和密码都要填') });
+  }
+  try {
+    const r = await relayLogin({ url: url || process.env.NODESIGN_RELAY_URL || null, username: username.trim(), password, label: os.hostname() });
+    // 只在用户填了站点地址时才动它：没填 = 沿用 .env 里已有的（可能是 exp），不是清掉
+    setEnvValues({ NODESIGN_RELAY_TOKEN: r.token, ...(url ? { NODESIGN_RELAY_URL: normalizeRelayUrl(url) } : {}) });
+    await refreshRelayCatalog();
+    res.json({ ok: true, relay: relayView(), keys: envView() });
+  } catch (err) {
+    const status = err.status === 401 ? 401 : err.status === 429 ? 429 : err.status === 409 ? 409 : 502;
+    res.status(status).json({ error: err.message, code: err.code || 'RELAY_LOGIN_FAILED' });
+  }
+});
+
+router.post('/relay/logout', async (_req, res) => {
+  await relayLogout();
+  setEnvValues({ NODESIGN_RELAY_TOKEN: null });
+  await refreshRelayCatalog();
+  res.json({ ok: true, relay: relayView(), keys: envView() });
 });
 
 // ── 站主 relay：重拉目录（设置页「刷新」按钮；令牌不变但站点那边档位/额度变了的时候用） ──

@@ -14,6 +14,8 @@
  *
  * ## 端点
  *
+ *   POST   /login                  { username, password, label } → 账号密码换一枚设备令牌（桌面版登录；不需要令牌）
+ *   POST   /logout                 吊销当前这枚令牌（桌面版退出登录）
  *   GET    /whoami                 令牌对应的用户、档位、额度快照（客户端设置页用）
  *   GET    /models                 这个账号在这台服务器上能选的行（两个面的并集；客户端选择器按它过滤）
  *   POST   /sessions               { sid, appModel } → 201；档位不够当场 403（省得起了 SDK 才知道）
@@ -26,7 +28,9 @@
  */
 
 import express from 'express';
-import { verifyDeviceToken, tokenFromRequest } from './devices.js';
+import { verifyDeviceToken, tokenFromRequest, mintDevice, revokeDevice, listDevices, MAX_DEVICES } from './devices.js';
+import { checkPassword } from '../auth-routes.js';
+import { getUserById } from '../../auth/users-store.js';
 import { openRelaySession, closeRelaySession, lookupRelaySession, startRelaySessionSweeper } from './sessions.js';
 import { decideRelay } from './gates.js';
 import { recordRelayUsage, installRelayUsageSource } from './usage.js';
@@ -71,7 +75,30 @@ function deviceAuth(req, res, next) {
 
 export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub = forwardSubscription, moderate = undefined } = {}) {
   const router = express.Router();
+
+  // 桌面版登录：账号密码 → 设备令牌。跟网页登录同一套核验和爆破锁（hosted/auth-routes.checkPassword）。
+  // 在 deviceAuth 之前：这是唯一一条不带令牌就能走的路。
+  router.post('/login', async (req, res) => {
+    let body;
+    try { body = JSON.parse((await readRawBody(req, 64 * 1024)).toString('utf8') || '{}'); }
+    catch { return sendError(res, 400, 'BAD_JSON', '请求体不是 JSON'); }
+    const { username, password } = body || {};
+    const r = checkPassword(req, username, password);
+    if (!r.ok) return sendError(res, r.status, r.status === 429 ? 'RATE_LIMITED' : 'BAD_CREDENTIALS', r.message);
+    const user = getUserById(r.userId);
+    const label = typeof body.label === 'string' ? body.label.trim().slice(0, 60) : '';
+    const active = listDevices(user.id).filter((d) => !d.revoked);
+    if (active.length >= MAX_DEVICES) return sendError(res, 409, 'TOO_MANY_DEVICES', `最多 ${MAX_DEVICES} 台在用的设备，到站点「桌面版设备」吊销一台`);
+    const { device, token } = mintDevice({ userId: user.id, label: label || null });
+    res.status(201).json({ token, device: { id: device.id, label: device.label }, user: { id: user.id, username: user.username, tier: tierOf(user) } });
+  });
+
   router.use(deviceAuth);
+
+  router.post('/logout', (req, res) => {
+    revokeDevice(req.relayDevice.id);
+    res.json({ ok: true });
+  });
 
   router.get('/whoami', (req, res) => {
     const user = req.relayUser;
