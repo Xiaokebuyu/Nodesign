@@ -6,10 +6,12 @@
 # 服务端要 spawn 自己、要加载原生模块（better-sqlite3 / sharp）、要读写用户工作区。
 # asar 是只读虚拟包，这三件事在里面全是坑。少一层压缩换掉一整类问题。
 #
-# ## npmRebuild: true
-# better-sqlite3 不是 N-API，ABI 锁在运行时版本上。服务端子进程用的是 Electron 可执行
-# 文件的 node 模式（ELECTRON_RUN_AS_NODE=1），所以它必须按 Electron 的 ABI 编译，
-# 不是按系统 node 的。这一行就是干这个的。sharp 是 N-API，不受影响。
+# ## npmRebuild: false + 随包带一份 node.exe
+# better-sqlite3 不是 N-API，ABI 锁在运行时版本上。第一版让服务端子进程用 Electron 可执行文件的
+# node 模式跑、再按 Electron ABI 重编它 —— 09-06 CI 实测：Electron 44 的 V8 改了 API，
+# better-sqlite3 12.9 源码编不过，也没有预编译。所以改成：安装包里带一份真的 node.exe
+# （desktop.yml 在 windows-latest 上抓跟 npm ci 同一个大版本的），服务端子进程用它跑，原生模块
+# 保持 npm 装出来的 Node ABI 预编译。Electron 只当窗口壳，跟服务端的运行时彻底解耦。
 #
 # ## 为什么不在这台 Linux 机器上打包
 # 三个 win32 产物都得是真的 Windows 二进制：SDK 的 claude.exe（平台包
@@ -29,7 +31,7 @@ productName: NoDesign
 copyright: Copyright © 2026 Xiaokebuyu
 
 asar: false
-npmRebuild: true
+npmRebuild: false
 
 directories:
   output: dist-desktop
@@ -59,11 +61,13 @@ files:
   - "!server/lib/ssrf-lab/**"
   - "!web/dist/mock/**"
 
-# 随包分发的组件（chromium / LibreOffice / ffmpeg / poppler / rembg 环境）。
-# 这些不在仓库里，由 desktop/fetch-components.mjs 在打包前抓进 desktop/components/，
-# 装机后解到应用目录，capabilities.js 的探测能在那里找到它们。
-# ⚠️ 还没接上，见 desktop/README.md 的"组件"一节。
-extraResources: []
+# 随包分发的组件。现在只有 node.exe（服务端的运行时，见上）；chromium / LibreOffice / ffmpeg /
+# poppler / rembg 环境还没接（见 desktop/README.md 的"组件"一节），接的时候同样抓进
+# desktop/components/<name>/ 再在这里加一条。装机后落在 <安装目录>/resources/<to>/。
+extraResources:
+  - from: desktop/components/node
+    to: node
+    filter: ['node.exe']
 
 win:
   target:

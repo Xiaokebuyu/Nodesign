@@ -11,9 +11,7 @@
  * server/runtime/profile.js，调用方把 env 备好传进来即可。
  *
  * ⚠️ 与命令行版的一个区别：Electron 里 process.execPath 是 Electron 可执行文件而不是 node，
- * 所以桌面版要传 runtime.env.ELECTRON_RUN_AS_NODE='1'，让同一个可执行文件以 node 模式跑
- * server/index.js。随之而来的是原生模块（better-sqlite3 不是 N-API，ABI 锁运行时版本）必须
- * 按 Electron 的 ABI 编译，那件事在打包配置里办（electron-builder 的 npmRebuild）。
+ * 桌面版传的 runtime 是安装包里带的 node.exe（desktop/main.js serverRuntime），不是 process.execPath。
  */
 
 import { spawn } from 'node:child_process';

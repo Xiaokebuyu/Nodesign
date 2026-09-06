@@ -13,16 +13,13 @@
 
 ```
 npm install
-npm run desktop:deps       # 必跑一次，见下
 npm run build:web
-npm run desktop:dev        # electron desktop/main.js
+npm run desktop:dev        # electron desktop/main.js；服务端子进程用 PATH 里的 node（NODESIGN_NODE 可指定）
 ```
 
-`desktop:deps`（`electron-builder install-app-deps`）把原生模块按 Electron 的 ABI 重编。
-不跑它的话，服务端子进程一加载 `better-sqlite3` 就报
-`NODE_MODULE_VERSION ... was compiled against a different Node.js version`。
-原因是 `npm install` 按系统 node 的 ABI 编，而子进程跑的是 Electron 可执行文件的
-node 模式（`ELECTRON_RUN_AS_NODE=1`）。换过 Electron 版本之后要再跑一次。
+服务端子进程**不用 Electron 的 node 模式**，用一份真的 node：打包后是安装包里带的
+`resources/node/node.exe`，开发态是 PATH 里的 node。所以原生模块（`better-sqlite3`、`sharp`）
+就是 `npm install` 装出来的那份，不需要按 Electron ABI 重编。
 
 ## 打包
 
@@ -37,10 +34,10 @@ win32 二进制：SDK 的 `claude.exe`（平台包 `@anthropic-ai/claude-agent-s
 装另一个平台的包要一路 `--os/--cpu` 覆盖，装出来还没法跑起来验。在 Windows 上这些是
 默认行为，不用任何特殊处理。
 
-`better-sqlite3` 还有一层：它不是 N-API，ABI 锁在运行时版本上。服务端子进程跑的是
-Electron 可执行文件的 node 模式（`ELECTRON_RUN_AS_NODE=1`），所以它必须按 Electron 的
-ABI 编译，不是按系统 node 的。`electron-builder.yml` 里的 `npmRebuild: true` 负责这件事。
-`sharp` 是 N-API，不受影响。
+`better-sqlite3` 不是 N-API，ABI 锁在运行时版本上。第一版让子进程跑 Electron 的 node 模式
+再按 Electron ABI 重编它，09-06 CI 实测 Electron 44 的 V8 改了 API，它源码编不过、也没有
+预编译。所以安装包里带一份 node.exe（工作流在 `windows-latest` 上抓的，跟 `npm ci` 同一个
+大版本 = 同一个 ABI），`npmRebuild: false`，Electron 只当窗口壳。`sharp` 是 N-API，本来就不受影响。
 
 ## 发布与更新
 

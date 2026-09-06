@@ -46,7 +46,6 @@
     "desktop:dev": "electron desktop/main.js",
     "desktop:pack": "electron-builder --win --dir",
     "desktop:dist": "electron-builder --win",
-    "desktop:deps": "electron-builder install-app-deps",
     "check:boundary": "node server/scripts/check-client-boundary.mjs",
     "prepublishOnly": "node server/scripts/check-client-boundary.mjs --pack"
   },

@@ -11,10 +11,11 @@
  *    "保存并重启"（退出码 75）正常地反复重启。分开之后重启对窗口是透明的：页面自己重连，
  *    窗口不闪。代价是多一个进程，值。
  *
- * 2. **子进程用 Electron 自己的可执行文件跑 node 模式**（ELECTRON_RUN_AS_NODE=1），
- *    不另外装一份 node。随之而来的约束：better-sqlite3 不是 N-API，ABI 锁在运行时版本上，
- *    必须按 Electron 的 ABI 编译（electron-builder 的 npmRebuild 负责）。sharp 是 N-API，
- *    不受影响。
+ * 2. **子进程用安装包里带的 node.exe 跑，不用 Electron 的 node 模式。** 第一版用的是
+ *    ELECTRON_RUN_AS_NODE=1，于是 better-sqlite3（不是 N-API，ABI 锁运行时）得按 Electron ABI
+ *    重编 —— 09-06 CI 实测 Electron 44 的 V8 改了 API，它编不过也没预编译。带一份真 node
+ *    （resources/node/node.exe，desktop.yml 抓的，跟 npm ci 同一个大版本）之后原生模块保持
+ *    npm 装出来的预编译，Electron 只当窗口壳。开发态没有那份 node.exe，用 PATH 里的 node。
  *
  * 3. **数据目录跟 npx 版共用同一个 ~/.nodesign。** 同一个人可能今天用命令行、明天装桌面版，
  *    项目和产物应该是同一份，不该因为换了外壳就看不见自己的东西。
@@ -64,7 +65,6 @@ async function boot() {
   env.NODESIGN_PROFILE = env.NODESIGN_PROFILE || 'local';
   env.NODESIGN_HOST = HOST;
   env.NODESIGN_OPEN = '0';            // 浏览器由我们开，服务端别自己开
-  env.ELECTRON_RUN_AS_NODE = '1';     // 让 Electron 可执行文件以 node 模式跑服务端
 
   let port;
   try {
@@ -79,7 +79,7 @@ async function boot() {
   sup = createSupervisor({
     serverEntry,
     env,
-    runtime: process.execPath,
+    runtime: serverRuntime(),
     stdio: ['ignore', 'inherit', 'inherit'],
     onRestart: () => log('服务端请求重启，重新拉起…'),
     onExit: (code, _signal, err) => {
@@ -96,6 +96,12 @@ async function boot() {
   createMainWindow();
   createTray();
   setupUpdater();
+}
+
+/** 服务端的运行时：打包后是 resources/node/node.exe；开发态用 PATH 里的 node（NODESIGN_NODE 可指定） */
+function serverRuntime() {
+  if (app.isPackaged) return path.join(process.resourcesPath, 'node', process.platform === 'win32' ? 'node.exe' : 'node');
+  return process.env.NODESIGN_NODE || 'node';
 }
 
 /* ── 窗口 ─────────────────────────────────────────────────────────── */

@@ -45,6 +45,17 @@ jobs:
       - name: 构建前端（进安装包的是 web/dist）
         run: npm run build:web
 
+      # 服务端的运行时：跟上面 npm ci 用的是同一个 node（同一个 ABI），原生模块的预编译直接能用
+      - name: 抓一份 node.exe 进安装包
+        shell: pwsh
+        run: |
+          $v = node -p "process.version"
+          Invoke-WebRequest "https://nodejs.org/dist/$v/node-$v-win-x64.zip" -OutFile node.zip
+          Expand-Archive node.zip -DestinationPath node-dist
+          New-Item -ItemType Directory -Force desktop/components/node | Out-Null
+          Copy-Item "node-dist/node-$v-win-x64/node.exe" desktop/components/node/node.exe
+          & desktop/components/node/node.exe -p "'bundled ' + process.version + ' abi ' + process.versions.modules"
+
       - name: 打包并传到 GitHub Releases（草稿）
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
