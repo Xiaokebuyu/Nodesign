@@ -282,7 +282,21 @@ function setupUpdater() {
         title: '有新版本',
         message: `NoDesign ${info.version} 已下载完成。`,
         detail: '重启大约几秒钟，正在跑的会话会被中断。',
-      }).then(({ response }) => { if (response === 0) quitAndInstall(); });
+      }).then(async ({ response }) => {
+        if (response !== 0) return;
+        // 装之前再问一次远端（09-07 站主：半小时发了三版，下好的那份可能已经过期）。
+        // 远端更新了就不装这份：autoDownload 开着，这次 check 会自己把新的下下来，再弹一次上面的框
+        try {
+          const r = await updater.checkForUpdates();
+          const remote = r?.updateInfo?.version;
+          if (remote && remote !== info.version && r?.isUpdateAvailable) {
+            log(`[updater] 下好的是 ${info.version}，远端已是 ${remote}，改下新的`);
+            dialog.showMessageBox(win, { type: 'info', message: `刚下好的 ${info.version} 已经过期，远端是 ${remote}，正在改下那一版，下好再提醒你。` });
+            return;
+          }
+        } catch (e) { log(`[updater] 装前复查失败，按下好的装：${e?.message || e}`); }
+        quitAndInstall();
+      });
     });
     updater.on('error', (e) => { log(`更新检查失败：${e?.message || e}`); reportShellIssue('bug', `更新失败：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e)); });
 
