@@ -56,6 +56,17 @@ jobs:
           Copy-Item "node-dist/node-$v-win-x64/node.exe" desktop/components/node/node.exe
           & desktop/components/node/node.exe -p "'bundled ' + process.version + ' abi ' + process.versions.modules"
 
+      # electron-builder 的老毛病：release 还不存在时几个上传并发各建一个草稿，exe 和 blockmap 分家（09-06 实测）。
+      # 先把草稿建好，它就只会往里传。
+      - name: 预建草稿 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $v = node -p "require('./package.json').version"
+          gh release view "v$v" --json isDraft 2>$null
+          if ($LASTEXITCODE -ne 0) { gh release create "v$v" --draft --title "$v" --notes "NoDesign Windows 桌面版 $v" }
+
       - name: 打包并传到 GitHub Releases（草稿）
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

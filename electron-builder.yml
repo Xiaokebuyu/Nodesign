@@ -56,6 +56,7 @@ files:
   - "!server/projects-data/**"
   - "!server/scripts/**"
   - "!server/hosted/**"                    # 服务端外环（relay / 管理台），客户端不带；跟 package.json 的 files 一致
+  - "!desktop/components/**"               # 随包组件走 extraResources 进 resources/，别再往 app/ 里复制一份
   - "!server/skills/installed/**"
   - "!server/lib/docx/lab/**"
   - "!server/lib/ssrf-lab/**"
