@@ -188,7 +188,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
           await patchBoard(projectId, {
             objects: { [objectId]: {
               ...prev, x: Math.round(spot.x), y: Math.round(spot.y), w: Math.round(box.w), h: Math.round(box.h),
-              zone: '', seat: 'agent', ...(tag ? { tag: bareTag(tag) } : {}),
+              seat: 'agent', ...(tag ? { tag: bareTag(tag) } : {}),
             } },
             ...(nextPending.length !== (boardNow.pending || []).length ? { pending: nextPending } : {}),
           });

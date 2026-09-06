@@ -188,7 +188,7 @@ export async function seatArtifacts(projectId, rels) {
     const entry = {
       x: Math.round(placed.x), y: Math.round(placed.y), z: 1,
       w: Math.round(box.w), h: Math.round(box.h),
-      zone, seat: 'auto', provisional: false,
+      seat: 'auto', provisional: false,   // 不写 zone：归属由路径回答（09-07，见 layerOf）
       ...(by ? { by } : {}), ...(tag ? { tag } : {}),
     };
     objects[id] = entry; live[id] = entry;

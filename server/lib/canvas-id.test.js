@@ -32,12 +32,17 @@ describe('normalizeCanvasId', () => {
 
 describe('layerOf', () => {
   const folders = new Set(['稿件', '稿件/初稿']);
-  it('显式 zone 字段优先 —— 但只认真实存在的层（08-24：错标签落回按路径推）', () => {
-    // folders 里没有「素材」这个层 → 忽略错标签，按路径推（assets 不是层 → 根）
+  it('带路径的物件不认显式 zone（09-07：归属由路径回答，存量脏字段自愈）', () => {
     expect(layerOf('assets/a.png', { zone: '素材' }, folders)).toBe('');
-    // 真实存在的层照常优先
-    expect(layerOf('assets/a.png', { zone: [...folders][0] }, folders)).toBe([...folders][0]);
-    expect(layerOf('稿件/x.png', { zone: '' }, folders)).toBe('');
+    // 入座器写过 zone:'' 的卡被搬进文件夹：路径说了算
+    expect(layerOf('稿件/x.png', { zone: '' }, folders)).toBe('稿件');
+    // 反向：从文件夹搬回根，旧的 zone 也钉不住它
+    expect(layerOf('x.png', { zone: '稿件' }, folders)).toBe('');
+  });
+  it('画布原生物件（带 kind）才认显式 zone，且只认真实存在的层', () => {
+    expect(layerOf('text:abc', { kind: 'text', zone: '稿件' }, folders)).toBe('稿件');
+    expect(layerOf('text:abc', { kind: 'text', zone: '素材' }, folders)).toBe('');
+    expect(layerOf('text:abc', { kind: 'text', zone: '' }, folders)).toBe('');
   });
   it('沿路径找第一个已知文件夹；找不到归根', () => {
     expect(layerOf('deck:稿件/初稿/主稿.html', null, folders)).toBe('稿件/初稿');

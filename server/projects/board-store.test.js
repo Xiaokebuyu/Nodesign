@@ -143,3 +143,41 @@ describe('sheets 注册表（2026-08-29 纸范式）：合并语义同 lanes', (
     expect(b.sheets.p9).toMatchObject({ x: 10, y: 10 });
   });
 });
+
+describe('renameBoardPaths：搬进文件夹后显式 zone 字段不能留在旧层（09-07 参考图归纳案）', () => {
+  // 真案：organize_board 把 assets/generated/*.webp 搬进 参考图/，磁盘全归位，
+  // 画布上那排卡却还散在桌面根 —— 入座器给每张卡写过 zone:''，改名只换了键，
+  // 那个 '' 还在，前端 dirOf 显式字段优先，于是卡"没跟着走"。刷新也不会好，字段在盘上。
+  it('物件搬进已知文件夹：zone 字段跟着路径走，layerOf 判到新层', async () => {
+    const { renameBoardPaths } = await import('./board-store.js');
+    const { layerOf } = await import('../lib/canvas-id.js');
+    const p2 = 'proj_boardstore_rename';
+    ensureProjectWorkspace(p2);
+    await patchBoard(p2, {
+      zones: { '参考图': { x: 10, y: 10 } },
+      objects: { 'assets/generated/a.webp': { x: 400, y: 300, zone: '', seat: 'auto' } },
+    });
+    const { board } = await renameBoardPaths(p2, [['assets/generated/a.webp', '参考图/a.webp']]);
+    const e = board.objects['参考图/a.webp'];
+    expect(e).toBeTruthy();
+    expect(board.objects['assets/generated/a.webp']).toBeUndefined();
+    expect('zone' in e).toBe(false);   // 盘上也别留一份跟路径打架的字
+    expect(layerOf('参考图/a.webp', e, new Set(Object.keys(board.zones)))).toBe('参考图');
+    // 落盘的也一样（前端开项目读的是盘）
+    const again = await readBoard(p2);
+    expect(layerOf('参考图/a.webp', again.objects['参考图/a.webp'], new Set(Object.keys(again.zones)))).toBe('参考图');
+  });
+
+  it('物件从文件夹搬回根：旧的 zone:"参考图" 不能把它钉在文件夹里', async () => {
+    const { renameBoardPaths } = await import('./board-store.js');
+    const { layerOf } = await import('../lib/canvas-id.js');
+    const p2 = 'proj_boardstore_rename2';
+    ensureProjectWorkspace(p2);
+    await patchBoard(p2, {
+      zones: { '参考图': { x: 10, y: 10 } },
+      objects: { '参考图/b.webp': { x: 40, y: 30, zone: '参考图', seat: 'auto' } },
+    });
+    const { board } = await renameBoardPaths(p2, [['参考图/b.webp', 'b.webp']]);
+    expect(layerOf('b.webp', board.objects['b.webp'], new Set(Object.keys(board.zones)))).toBe('');
+  });
+});

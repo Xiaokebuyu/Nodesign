@@ -390,6 +390,9 @@ export function renameBoardPaths(pid, pairs) {
       const n = mapId(o.zone);
       if (n !== o.zone) { o.zone = n; touchedField = true; }
     }
+    // 带路径的物件搬了家：身上的 zone（入座器 08-25 起写过）就是旧层标签。读的
+    // 那头 09-07 起不认它（layerOf / 前端 dirOf），这里擦掉是别让盘上留一份跟路径打架的字。
+    for (const [, n] of applied) { const o = board.objects[n]; if (o && !o.kind && 'zone' in o) { delete o.zone; touchedField = true; } }
 
     // 关系线端点。**这里改了也要算数** —— board.objects 是稀疏的，一条线完全
     // 可以指向一个没有坐标条目的产物，那种情况下 applied 是空的，可对账位点
@@ -401,13 +404,10 @@ export function renameBoardPaths(pid, pairs) {
       if (from !== b.from || to !== b.to) { b.from = from; b.to = to; touchedBinding = true; }
     }
 
-    if (applied.length || touchedField || touchedBinding) {
-      await writeBoard(pid, board);
-    }
-    // 转发表**永远**记裸路径对，不只记 applied：applied 是画布条目的改名
-    //（deck 带 `deck:` 前缀、没上画布的文件根本不在里面），而 artifact-file
-    // 的改名转发（#4）查的是文件路径 —— 只记 applied 的话，改一个 deck 或者
-    // 一个没有画布条目的文件，开着的窗照样 404。
+    if (applied.length || touchedField || touchedBinding) await writeBoard(pid, board);
+    // 转发表**永远**记裸路径对，不只记 applied（那是画布条目的改名：deck 带前缀、没上
+    // 画布的文件不在里面），而 artifact-file 的改名转发（#4）查的是文件路径 —— 只记
+    // applied 的话，改一个 deck 或一个没有画布条目的文件，开着的窗照样 404。
     noteRenames(pid, [...clean, ...applied], now);
     return { board, renamed: applied.length };
   });

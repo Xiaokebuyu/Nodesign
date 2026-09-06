@@ -519,10 +519,11 @@ export default function BoardCanvas({
       while (d && !knownFolders.has(d)) d = parentOf(d);
       return d || '';
     };
-    // 显式归属字段仍然优先（拖出来的写 ''）—— 它的去留见任务 #13
+    // 显式 zone 只给画布原生物件（没有路径）用；带路径的一律按路径推 —— 09-07
+    // 参考图案：入座器写过 zone:''，搬进文件夹后改名只换键，显式优先就把卡钉在根。
+    // 服务端 layerOf 同一条规则；两头都不认了，存量脏字段自愈。
     const dirOf = (o) => {
       const stored = layout[o.id];
-      if (stored && stored.zone !== undefined) return stored.zone || '';
       if (o.native) return stored?.zone || '';        // 画布原生物件跟着字段走
       if (typeof o.id !== 'string') return '';
       const c = o.id.indexOf(':');

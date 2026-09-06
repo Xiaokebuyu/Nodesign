@@ -55,16 +55,23 @@ export function tagEnvelope(board, rawTag, sizeOf) {
 }
 
 /**
- * 它住在哪一层（服务端近似版）：显式 zone 字段优先，其次沿路径往上找第一个
- * 已知文件夹。已知集 = board.zones 的 key —— 比前端少了"服务端扫出来的任务
- * 目录"这一路，没摆过的深层目录会归到根。read_board 的输出里写明这是近似。
+ * 它住在哪一层（服务端近似版）：**路径回答**，沿路径往上找第一个已知文件夹。
+ * 已知集 = board.zones 的 key —— 比前端少了"服务端扫出来的任务目录"这一路，
+ * 没摆过的深层目录会归到根。read_board 的输出里写明这是近似。
+ *
+ * 显式 `zone` 字段只给**画布原生物件**（带 kind 的板书 / 涂鸦，没有路径）用。
+ * 带路径的物件一律不认它 —— 09-07 参考图归纳案：入座器给每张卡写过 zone:''，
+ * organize_board 搬进 参考图/ 后改名只换了键，那个 '' 还在，服务端和前端都
+ * 显式字段优先，于是卡"没跟着文件走"，刷新也不好（字段在盘上）。id = 路径
+ * 之后归属本来就该由路径回答（08-13 pinToZone 头注释早写了不再写这个字段），
+ * 读的这头不认，存量脏字段当场自愈，不用迁移。
  */
 export function layerOf(id, entry, knownFolders) {
   // 显式 zone 只认**真实存在的层**（'' 或 zones 里有的文件夹）。历史上
   // pin_to_board 往 zone 里写过 'assets/generated' 这类前端根本不当层渲染的
   // 路径（iss_mt5t487g：pin 上来的图被判在"assets 层"，arrange 跟根层的草图
   // 节点一比就拒）——错标签直接落回按路径推，存量脏数据顺带自愈。
-  if (entry && typeof entry.zone === 'string'
+  if (entry?.kind && typeof entry.zone === 'string'
     && (entry.zone === '' || knownFolders?.has?.(entry.zone))) return entry.zone;
   const s = String(id);
   const c = s.indexOf(':');
