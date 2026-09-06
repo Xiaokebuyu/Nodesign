@@ -24,6 +24,7 @@
  */
 
 import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage } from 'electron';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -75,11 +76,14 @@ async function boot() {
   env.PORT = String(port);
   appUrl = `http://${HOST}:${port}/`;
 
+  // 服务端输出写进数据目录的日志文件（Electron 窗口进程没有控制台，inherit 等于丢掉）。
+  // 用户报问题时让他把这个文件发过来；文件超过 5MB 起动时滚一份 .old
+  const logFd = openServerLog(env.NODESIGN_DATA_DIR || path.join(app.getPath('home'), '.nodesign'));
   sup = createSupervisor({
     serverEntry,
     env,
     runtime: serverRuntime(),
-    stdio: ['ignore', 'inherit', 'inherit'],
+    stdio: ['ignore', logFd, logFd],
     onRestart: () => log('服务端请求重启，重新拉起…'),
     onExit: (code, _signal, err) => {
       // 正常退出（我们主动停的）不弹窗；异常退出要让用户知道，别留一扇空白窗
@@ -95,6 +99,22 @@ async function boot() {
   createMainWindow();
   createTray();
   setupUpdater();
+}
+
+/** <数据目录>/logs/server.log 的文件描述符，给子进程当 stdout/stderr。开不了就退回 'ignore'（别因为日志起不来） */
+function openServerLog(dataDir) {
+  try {
+    const dir = path.join(dataDir, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'server.log');
+    try { if (fs.statSync(file).size > 5 * 1024 * 1024) fs.renameSync(file, `${file}.old`); } catch { /* 没有就没有 */ }
+    const fd = fs.openSync(file, 'a');
+    fs.writeSync(fd, `\n===== NoDesign ${app.getVersion()} 启动 ${new Date().toISOString()} =====\n`);
+    return fd;
+  } catch (err) {
+    log(`打不开服务端日志文件：${err.message}`);
+    return 'ignore';
+  }
 }
 
 /** 服务端的运行时：打包后是 resources/node/node.exe；开发态用 PATH 里的 node（NODESIGN_NODE 可指定） */

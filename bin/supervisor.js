@@ -114,7 +114,9 @@ export function createSupervisor({
   let stopping = false;
 
   function start() {
-    child = spawn(runtime, [...runtimeArgs, serverEntry], { env, stdio });
+    // windowsHide：node.exe 是控制台程序，从没有控制台的 Electron 窗口进程里 spawn 出来，Windows 会给它
+    // 单独开一个黑窗口（09-06 站主装草稿包第一眼看到的就是它）。命令行版本来就在终端里，这个选项无害。
+    child = spawn(runtime, [...runtimeArgs, serverEntry], { env, stdio, windowsHide: true });
     onSpawn?.(child);
     // spawn 本身失败（可执行文件不在 / 没权限）只发 'error' 不发 'exit'；不接住就是未捕获异常，
     // 命令行版直接崩栈、桌面版一个通用崩溃框什么都不说。当成"真的结束"报给调用方。
