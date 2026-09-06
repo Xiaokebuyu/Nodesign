@@ -90,7 +90,7 @@
     "sharp@0.34.5": true
   },
   "devDependencies": {
-    "electron": "^44.2.0",
+    "electron": "44.2.0",
     "electron-builder": "^26.15.3",
     "happy-dom": "^20.11.2",
     "vitest": "^4.1.10"
