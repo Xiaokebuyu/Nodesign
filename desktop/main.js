@@ -11,11 +11,10 @@
  *    "保存并重启"（退出码 75）正常地反复重启。分开之后重启对窗口是透明的：页面自己重连，
  *    窗口不闪。代价是多一个进程，值。
  *
- * 2. **子进程用安装包里带的 node.exe 跑，不用 Electron 的 node 模式。** 第一版用的是
- *    ELECTRON_RUN_AS_NODE=1，于是 better-sqlite3（不是 N-API，ABI 锁运行时）得按 Electron ABI
- *    重编 —— 09-06 CI 实测 Electron 44 的 V8 改了 API，它编不过也没预编译。带一份真 node
- *    （resources/node/node.exe，desktop.yml 抓的，跟 npm ci 同一个大版本）之后原生模块保持
- *    npm 装出来的预编译，Electron 只当窗口壳。开发态没有那份 node.exe，用 PATH 里的 node。
+ * 2. **子进程用安装包里带的 node.exe 跑，不用 Electron 的 node 模式。** Electron 的 Node 版本
+ *    跟着 Electron 走，服务端要的是一个确定的 Node（node:sqlite 要 ≥ 22.13）；带一份真 node
+ *    （resources/node/node.exe，desktop.yml 抓的）之后两边彻底解耦，Electron 升级不牵连服务端。
+ *    开发态没有那份 node.exe，用 PATH 里的 node。
  *
  * 3. **数据目录跟 npx 版共用同一个 ~/.nodesign。** 同一个人可能今天用命令行、明天装桌面版，
  *    项目和产物应该是同一份，不该因为换了外壳就看不见自己的东西。

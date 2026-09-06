@@ -5,7 +5,7 @@
  * 才有，本地分发版（单租户，请求者恒为 LOCAL_OWNER）根本没有"注册"这回事，客户端包里也不带 hosted/。
  * 09-06 拆的；拆之前这一个文件两边都装，客户端跟着带走了整套注册和邀请码逻辑。
  *
- * 复用 engine/runs/store.js 的 better-sqlite3 连接（与 projects/runs 同一个 nodesign.db）。
+ * 复用 engine/runs/store.js 的 node:sqlite 连接（与 projects/runs 同一个 nodesign.db）。
  * 建表走仓里的既有范式：import 副作用式幂等 DDL。密码存储格式 scrypt$<N>$<saltHex>$<hashHex>
  * （算法在写侧；这里只知道有这么一列）。
  */

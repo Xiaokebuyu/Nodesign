@@ -18,8 +18,7 @@ npm run desktop:dev        # electron desktop/main.js；服务端子进程用 PA
 ```
 
 服务端子进程**不用 Electron 的 node 模式**，用一份真的 node：打包后是安装包里带的
-`resources/node/node.exe`，开发态是 PATH 里的 node。所以原生模块（`better-sqlite3`、`sharp`）
-就是 `npm install` 装出来的那份，不需要按 Electron ABI 重编。
+`resources/node/node.exe`，开发态是 PATH 里的 node（要 ≥ 22.13，`node:sqlite`）。
 
 ## 打包
 
@@ -28,16 +27,15 @@ npm run desktop:pack       # 只解包到 dist-desktop/，起得快，用来验�
 npm run desktop:dist       # 出 NSIS 安装包
 ```
 
-**必须在 Windows 上跑**（或者 GitHub Actions 的 `windows-latest`）。三个产物得是真的
-win32 二进制：SDK 的 `claude.exe`（平台包 `@anthropic-ai/claude-agent-sdk-win32-x64`）、
-`better-sqlite3` 的 win32 预编译、`sharp` 的 `@img/sharp-win32-x64`。在 Linux 上让 npm
+**必须在 Windows 上跑**（或者 GitHub Actions 的 `windows-latest`）。两个产物得是真的
+win32 二进制：SDK 的 `claude.exe`（平台包 `@anthropic-ai/claude-agent-sdk-win32-x64`）和
+`sharp` 的 `@img/sharp-win32-x64`。在 Linux 上让 npm
 装另一个平台的包要一路 `--os/--cpu` 覆盖，装出来还没法跑起来验。在 Windows 上这些是
 默认行为，不用任何特殊处理。
 
-`better-sqlite3` 不是 N-API，ABI 锁在运行时版本上。第一版让子进程跑 Electron 的 node 模式
-再按 Electron ABI 重编它，09-06 CI 实测 Electron 44 的 V8 改了 API，它源码编不过、也没有
-预编译。所以安装包里带一份 node.exe（工作流在 `windows-latest` 上抓的，跟 `npm ci` 同一个
-大版本 = 同一个 ABI），`npmRebuild: false`，Electron 只当窗口壳。`sharp` 是 N-API，本来就不受影响。
+数据库是 Node 自带的 `node:sqlite`（09-06 从 better-sqlite3 换过来的），仓库里不再有需要按运行时
+编译的原生模块；`sharp` 是 N-API 按平台分包，也不用编。安装包里带的 node.exe 是工作流在
+`windows-latest` 上抓的 Node 24，`npmRebuild: false`，Electron 只当窗口壳。
 
 ## 发布与更新
 
@@ -75,8 +73,7 @@ GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions �
 - **图标只是占位**。`desktop/build/icon.png` 和 `desktop/assets/tray.png` 是站点 favicon 那个
   深底 N 字（sharp 渲的），能用，想换就换掉这两个文件。
 - **在 Windows 上一次都没跑过**。CI 打出来的包（Releases 草稿 v0.0.10，231MB）本机拆开看过：
-  `resources/node/node.exe`、`resources/app/{server,web/dist,bin,desktop}`、better-sqlite3 的 Node ABI
-  预编译、SDK 的 claude.exe 都在，hosted/ 和测试没带；但双击装、起服务端、开窗口这三步没验过。
+  `resources/node/node.exe`、`resources/app/{server,web/dist,bin,desktop}`、SDK 的 claude.exe 都在，hosted/ 和测试没带；但双击装、起服务端、开窗口这三步没验过。
 - **站点那半要先部署**。桌面版默认走 relay，而 relay 在这条分支的 hosted 代码里，线上还没有。
   没部署之前桌面版能用的只有 BYOK（设置页填 Claude API Key 或自定义插槽）。想对着 exp 试，
   设置页「站点地址」填 exp 的地址。

@@ -31,7 +31,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24   # node:sqlite 在 24 上已稳定（22 会打实验警告，且缺 timeout 选项）
           cache: npm
           cache-dependency-path: |
             package-lock.json

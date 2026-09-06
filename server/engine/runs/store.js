@@ -1,5 +1,5 @@
 /**
- * engine/runs/store.js — Run 数据库层（SQLite + better-sqlite3）
+ * engine/runs/store.js — Run 数据库层（SQLite，Node 自带的 node:sqlite）
  *
  * Run 是 engine 的最小工作单元：一次 brief 触发，agent 自驱跑完 deskskill-engine 这类
  * skill，输出产物（deck.html）。每条 run 在 DB 里一行 + 在文件系统里一个 workspace 目录。
@@ -10,7 +10,9 @@
  *                    ↘ cancelled
  *
  * 设计选择：
- *  - sync API：better-sqlite3 是有意 sync，社区共识是直接用，不假装 async
+ *  - sync API：node:sqlite 的 DatabaseSync 是有意 sync，直接用，不假装 async
+ *  - 09-06 从 better-sqlite3 换过来：那是原生模块，ABI 锁运行时，桌面版打包为它折腾了一整轮；
+ *    node:sqlite 是运行时自带的，Node ≥ 22.13 不用编译。两处口径差异在下面的薄壳里抹平
  *  - DB 路径：DB_PATH env > server/db/nodesign.db；目录不存在自动 mkdir
  *  - metadata 字段是 JSON TEXT：保留扩展空间（token usage / round / tool 摘要 / 关键日志），
  *    不强行落字段，等真实数据形态稳定后再 promote 成列
@@ -18,7 +20,7 @@
  *  - id 形如 `run_<timestamp36>_<rand4>`：天然 sortable，方便 listRuns 默认逆序
  */
 
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
@@ -39,9 +41,48 @@ const DB_PATH = process.env.DB_PATH ? resolve(process.env.DB_PATH) : DEFAULT_DB_
 // 自动 mkdir 父目录（干净部署首次启动不 ENOENT）
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+// timeout = 忙等待（毫秒）。better-sqlite3 默认 5 秒；node:sqlite 默认 0 —— 生产上演出进程跟主进程共用
+// 同一个库文件，不等就是 SQLITE_BUSY 直接炸。
+const raw = new DatabaseSync(DB_PATH, { timeout: 5000 });
+raw.exec('PRAGMA journal_mode = WAL');
+raw.exec('PRAGMA foreign_keys = ON');
+
+/**
+ * 薄壳：对外还是 better-sqlite3 那套用法（db.prepare().get/all/run、db.exec、db.transaction），
+ * 全仓几十个调用点一行不改。抹平的两处差异：
+ *   1. 参数里的 undefined。better-sqlite3 当 NULL 绑，node:sqlite 抛 TypeError。可选字段传 undefined
+ *      的调用点到处都是（label、metadata?.x……），靠测试盖不全，在这里统一归成 null。
+ *      布尔和普通对象两边都抛，不动 —— 那是调用方的 bug，别替它藏。
+ *   2. transaction：node:sqlite 没有这个助手，BEGIN / COMMIT / ROLLBACK 手写。不支持嵌套（全仓只有一处用）。
+ */
+const nullify = (v) => (v === undefined ? null : v);
+const normArgs = (args) => args.map((a) => {
+  if (a === undefined) return null;
+  if (a && typeof a === 'object' && Object.getPrototypeOf(a) === Object.prototype) {
+    return Object.fromEntries(Object.entries(a).map(([k, v]) => [k, nullify(v)]));   // 具名参数 { name: v }
+  }
+  return a;
+});
+class Statement {
+  constructor(stmt) { this.stmt = stmt; }
+  get(...args) { return this.stmt.get(...normArgs(args)); }
+  all(...args) { return this.stmt.all(...normArgs(args)); }
+  run(...args) { return this.stmt.run(...normArgs(args)); }
+  iterate(...args) { return this.stmt.iterate(...normArgs(args)); }
+}
+const db = {
+  prepare: (sql) => new Statement(raw.prepare(sql)),
+  exec: (sql) => raw.exec(sql),
+  transaction(fn) {
+    return (...args) => {
+      raw.exec('BEGIN');
+      try { const out = fn(...args); raw.exec('COMMIT'); return out; }
+      catch (err) { try { raw.exec('ROLLBACK'); } catch { /* 已经不在事务里 */ } throw err; }
+    };
+  },
+  /** 底下那个 DatabaseSync，只给脚本和测试 */
+  raw,
+};
 
 // ── Schema ──
 db.exec(`

@@ -3,20 +3,17 @@
 # 用法：npm run desktop:dist（在 Windows 上跑，见下面"为什么不在这台机器上打包"）
 #
 # ## asar: false
-# 服务端要 spawn 自己、要加载原生模块（better-sqlite3 / sharp）、要读写用户工作区。
+# 服务端要 spawn 自己、要加载原生模块（sharp）、要读写用户工作区。
 # asar 是只读虚拟包，这三件事在里面全是坑。少一层压缩换掉一整类问题。
 #
-# ## npmRebuild: false + 随包带一份 node.exe
-# better-sqlite3 不是 N-API，ABI 锁在运行时版本上。第一版让服务端子进程用 Electron 可执行文件的
-# node 模式跑、再按 Electron ABI 重编它 —— 09-06 CI 实测：Electron 44 的 V8 改了 API，
-# better-sqlite3 12.9 源码编不过，也没有预编译。所以改成：安装包里带一份真的 node.exe
-# （desktop.yml 在 windows-latest 上抓跟 npm ci 同一个大版本的），服务端子进程用它跑，原生模块
-# 保持 npm 装出来的 Node ABI 预编译。Electron 只当窗口壳，跟服务端的运行时彻底解耦。
+# ## 随包带一份 node.exe，npmRebuild: false
+# 服务端子进程用安装包里的 node.exe 跑（desktop.yml 在 windows-latest 上抓的，Node 24），Electron 只当窗口壳。
+# 09-06 把 better-sqlite3 换成 Node 自带的 node:sqlite 之后仓库里没有需要按运行时编译的原生模块了
+# （sharp 是 N-API，预编译按平台分包），这一行是"别去碰 node_modules"。
 #
 # ## 为什么不在这台 Linux 机器上打包
-# 三个 win32 产物都得是真的 Windows 二进制：SDK 的 claude.exe（平台包
-# @anthropic-ai/claude-agent-sdk-win32-x64）、better-sqlite3 的 win32 预编译、
-# sharp 的 @img/sharp-win32-x64。在 arm64 Linux 上让 npm 装另一个平台的包要一路
+# 两个 win32 产物都得是真的 Windows 二进制：SDK 的 claude.exe（平台包
+# @anthropic-ai/claude-agent-sdk-win32-x64）和 sharp 的 @img/sharp-win32-x64。在 arm64 Linux 上让 npm 装另一个平台的包要一路
 # --os/--cpu 覆盖，装出来还没法跑起来验。在 Windows 机器或 GitHub Actions 的
 # windows-latest 上打包，这些是默认行为，不用任何特殊处理。
 

@@ -8,7 +8,7 @@
  *
  * 跑：node server/engine/_smoke.js
  *
- * 不依赖 KIMI_API_KEY、不依赖 npm install playwright（只需要 better-sqlite3）。
+ * 不依赖 KIMI_API_KEY、不依赖 npm install playwright（只需要 Node 自带的 node:sqlite）。
  */
 
 import {

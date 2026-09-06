@@ -23,7 +23,7 @@
  * 不带 --apply 只报告。
  */
 
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getSharedDir } from '../projects/workspace.js';
@@ -33,7 +33,7 @@ const APPLY = process.argv.includes('--apply');
 const dbPath = process.env.DB_PATH
   ? path.resolve(process.env.DB_PATH)
   : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../db/nodesign.db');
-const db = new Database(dbPath);
+const db = new DatabaseSync(dbPath, { timeout: 5000 });
 
 const rows = db.prepare('SELECT * FROM published_sites').all();
 let moved = 0, skipped = 0;

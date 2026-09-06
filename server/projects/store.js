@@ -1,7 +1,7 @@
 /**
  * server/projects/store.js — Project DB（SQLite）
  *
- * 跟 runs/store.js 共享同一个 better-sqlite3 connection（import 即拿 db 实例）。
+ * 跟 runs/store.js 共享同一个 node:sqlite 连接（import 即拿 db 实例）。
  *
  * 表 projects：
  *   id                  proj_<base36-ts>_<rand4>
