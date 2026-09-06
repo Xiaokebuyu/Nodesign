@@ -194,11 +194,22 @@ async function installZip(id, def) {
   fs.writeFileSync(installedPath(id), JSON.stringify(rec, null, 2));
 }
 
+/**
+ * playwright 自带安装器的路径。⛔ 不能 require.resolve('playwright/cli.js')：它的 package.json 用 exports 把
+ * 子路径锁死了，只放行 "." 和 "./package.json"（09-06 站主在 Windows 引导页上第一个撞到的就是这条：
+ * ERR_PACKAGE_PATH_NOT_EXPORTED）。从 package.json 反推目录再拼 cli.js。
+ */
+export function playwrightCliPath() {
+  const require = createRequire(import.meta.url);
+  const cli = path.join(path.dirname(require.resolve('playwright/package.json')), 'cli.js');
+  if (!fs.existsSync(cli)) throw new Error(`playwright 的安装器不在预期位置：${cli}`);
+  return cli;
+}
+
 async function installPlaywright(id, def) {
   const dir = dirOf(id);
   fs.mkdirSync(dir, { recursive: true });
-  const require = createRequire(import.meta.url);
-  const cli = require.resolve('playwright/cli.js');
+  const cli = playwrightCliPath();
   setJob(id, { status: 'installing', progress: 0.05 });
   await new Promise((resolve, reject) => {
     const p = spawn(process.execPath, [cli, 'install', def.browser || 'chromium'], {

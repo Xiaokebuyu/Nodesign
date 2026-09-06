@@ -93,6 +93,11 @@ describe('components', () => {
     expect(c.readInstalled('tool')).toBeNull();
     expect(fs.existsSync(path.join(dataDir, 'components', 'tool'))).toBe(false);
   });
+  it('playwright 安装器的路径能解析到（它的 exports 不放行 playwright/cli.js，得从 package.json 反推）', () => {
+    const cli = c.playwrightCliPath();
+    expect(cli.endsWith(path.join('playwright', 'cli.js'))).toBe(true);
+    expect(fs.existsSync(cli)).toBe(true);
+  });
   it('extractZip 拒绝越界路径', async () => {
     const evil = Buffer.from(zipSync({ '../escape.txt': strToU8('x'), 'ok.txt': strToU8('y') }));
     const zp = path.join(dataDir, 'evil.zip'); fs.writeFileSync(zp, evil);
