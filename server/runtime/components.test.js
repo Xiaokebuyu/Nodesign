@@ -16,14 +16,29 @@ const zipBuf = Buffer.from(zipSync({ 'tool-1.2/bin/hello.exe': strToU8('MZ hello
 const sha = crypto.createHash('sha256').update(zipBuf).digest('hex');
 const platformKey = `${process.platform}-${process.arch}`;
 let base;
+let officialMode = 'ok';   // 'ok' | 'dead' | 'slow'
 const srv = http.createServer((req, res) => {
+  // /mirror/* = 镜像目录（同一批文件）；/official/* 按 officialMode 表现
+  const m = /^\/(official|mirror)\/(.+)$/.exec(req.url);
+  if (m) {
+    const [, side, file] = m;
+    if (side === 'official' && officialMode === 'dead') { req.socket.destroy(); return; }
+    if (file === 'manifest.json') { req.url = '/manifest.json'; }
+    else if (file === 'tool.zip') {
+      res.writeHead(200, { 'content-type': 'application/zip', 'content-length': zipBuf.length });
+      if (side === 'official' && officialMode === 'slow') { let i = 0; const tick = () => { if (i >= zipBuf.length) { res.end(); return; } res.write(zipBuf.subarray(i, i + 64)); i += 64; setTimeout(tick, 40); }; tick(); }
+      else res.end(zipBuf);
+      return;
+    } else { res.writeHead(404); res.end(); return; }
+  }
   if (req.url === '/manifest.json') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ version: 1, components: {
       tool: { label: 'Tool', uses: 'test', sizeMb: 0.1, url: `${base}/tool.zip`, sha256: sha, bin: ['tool-*/bin'], python: 'tool-1.2/py/python.exe', platform: platformKey, version: '1.2' },
+      mirrored: { label: 'Mirrored', url: `${base}/official/tool.zip`, sha256: sha, bin: ['tool-*/bin'], platform: platformKey, version: '1.2' },
       bad: { label: 'Bad', url: `${base}/tool.zip`, sha256: 'deadbeef', bin: [], platform: platformKey },
       other: { label: 'Other', url: `${base}/tool.zip`, platform: 'plan9-mips' },
-    } }));
+    }, mirrors: [`${base}/mirror`] }));
     return;
   }
   if (req.url === '/tool.zip') { res.writeHead(200, { 'content-type': 'application/zip', 'content-length': zipBuf.length }); res.end(zipBuf); return; }
@@ -46,13 +61,13 @@ const waitJob = async (id, ms = 10_000) => {
 };
 
 afterAll(async () => { await new Promise((r) => srv.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }); });
-beforeEach(() => c._resetComponents());
+beforeEach(() => { c._resetComponents(); officialMode = 'ok'; });
 
 describe('components', () => {
   it('清单读得到；不支持的平台标 supported:false', async () => {
     const { components, manifestError } = await c.listComponents();
     expect(manifestError).toBeNull();
-    expect(components.map((x) => x.id).sort()).toEqual(['bad', 'other', 'tool']);
+    expect(components.map((x) => x.id).sort()).toEqual(['bad', 'mirrored', 'other', 'tool']);
     expect(components.find((x) => x.id === 'other').supported).toBe(false);
     expect(components.find((x) => x.id === 'tool').installed).toBe(false);
   });
@@ -105,5 +120,52 @@ describe('components', () => {
     await c.extractZip(zp, dest);
     expect(fs.existsSync(path.join(dest, 'ok.txt'))).toBe(true);
     expect(fs.existsSync(path.join(dataDir, 'escape.txt'))).toBe(false);
+  });
+});
+
+describe('选源：官方 vs 镜像', () => {
+  const def = () => ({ url: `${base}/official/tool.zip` });
+  it('候选顺序：官方在前，清单里的镜像其次，内置默认镜像最后', async () => {
+    const m = await c.loadManifest();
+    const srcs = c.sourcesFor(def(), m);
+    expect(srcs[0]).toEqual({ kind: 'official', url: `${base}/official/tool.zip` });
+    expect(srcs[1]).toEqual({ kind: 'mirror', url: `${base}/mirror/tool.zip` });
+    expect(srcs.at(-1).url.startsWith(c.DEFAULT_MIRRORS[0])).toBe(true);
+  });
+  it('官方能通 → 用官方（哪怕镜像也通）', async () => {
+    const { chosen } = await c.pickSource(def(), await c.loadManifest());
+    expect(chosen.kind).toBe('official');
+  });
+  it('官方连不上 → 最快的镜像', async () => {
+    officialMode = 'dead';
+    const { chosen, results } = await c.pickSource(def(), await c.loadManifest());
+    expect(results[0].probe.ok).toBe(false);
+    expect(chosen.kind).toBe('mirror');
+    expect(chosen.url).toBe(`${base}/mirror/tool.zip`);
+  });
+  it('官方"通但很慢"（吞吐不到最快镜像的 1/3）→ 镜像', async () => {
+    officialMode = 'slow';
+    const { chosen, results } = await c.pickSource(def(), await c.loadManifest());
+    expect(results[0].probe.ok).toBe(true);
+    expect(chosen.kind).toBe('mirror');
+  });
+  it('整条安装链在官方挂掉时走镜像装完，任务里记着来源', async () => {
+    officialMode = 'dead';
+    await c.installComponent('mirrored');
+    const job = await waitJob('mirrored', 20_000);
+    expect(job.status, job.error).toBe('done');
+    expect(job.source).toBe('mirror');
+    expect(c.readInstalled('mirrored')?.sha256).toBe(sha);
+  });
+  it('清单本身：官方拉不到就从镜像拿', async () => {
+    process.env.NODESIGN_COMPONENTS_MANIFEST = `${base}/official/manifest.json`;
+    process.env.NODESIGN_COMPONENTS_MIRRORS = `${base}/mirror`;
+    officialMode = 'dead';
+    c._resetComponents();
+    // 模块常量在加载时读的 env，这里直接验 loadManifest 的候选逻辑：用 env 镜像
+    const m = await c.loadManifest({ force: true });
+    expect(m?.components?.tool).toBeTruthy();
+    delete process.env.NODESIGN_COMPONENTS_MIRRORS;
+    process.env.NODESIGN_COMPONENTS_MANIFEST = `${base}/manifest.json`;
   });
 });

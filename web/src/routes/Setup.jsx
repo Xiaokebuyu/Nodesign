@@ -8,7 +8,7 @@ import { useGlobalStore } from '../stores/globalStore.js';
 import { Btn, Err } from '../components/local/primitives.jsx';
 import { t } from '../lib/i18n.js';
 
-const ACTIVE = new Set(['downloading', 'verifying', 'extracting', 'installing']);
+const ACTIVE = new Set(['probing', 'downloading', 'verifying', 'extracting', 'installing']);
 
 export function useComponents() {
   const [data, setData] = useState(null);
@@ -65,7 +65,9 @@ export function ComponentRows({ data, install, uninstall, compact = false }) {
 function stageLabel(job) {
   const pct = Math.round((job.progress || 0) * 100);
   const mb = (n) => `${(n / 1048576).toFixed(0)} MB`;
-  if (job.status === 'downloading') return `${t('下载中')} ${pct}%${job.total ? ` · ${mb(job.bytes || 0)} / ${mb(job.total)}` : ''}`;
+  if (job.status === 'probing') return t('在测哪个下载源快…');
+  const src = job.source === 'mirror' ? ` · ${t('镜像')}` : job.source === 'official' ? ` · ${t('官方源')}` : '';
+  if (job.status === 'downloading') return `${t('下载中')} ${pct}%${job.total ? ` · ${mb(job.bytes || 0)} / ${mb(job.total)}` : ''}${src}`;
   if (job.status === 'verifying') return t('校验中');
   if (job.status === 'extracting') return t('解压中');
   return `${t('安装中')} ${pct}%`;

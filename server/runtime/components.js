@@ -25,35 +25,109 @@ import { profile } from './profile.js';
 
 export const COMPONENTS_MANIFEST_URL = process.env.NODESIGN_COMPONENTS_MANIFEST
   || 'https://github.com/Xiaokebuyu/Nodesign/releases/download/components-win64/manifest.json';
+/**
+ * 镜像（站主 09-06：GitHub 在国内经常"通但只有几十 KB/s"）。每个镜像是一个目录前缀，里面按文件名放同一批资产
+ * （manifest.json 和各个 zip），server/scripts/sync-components-mirror.sh 从 release 同步过去。
+ * 清单自己的 mirrors 字段优先，其次 env NODESIGN_COMPONENTS_MIRRORS（逗号分隔），最后这份内置默认。
+ */
+export const DEFAULT_MIRRORS = ['https://nodesign.xiaobuyu.trade/dl/components-win64'];
 const MANIFEST_TTL_MS = 60 * 60 * 1000;
+const PROBE_BYTES = 512 * 1024;
+const PROBE_TIMEOUT_MS = 8000;
+/** 官方能通且吞吐不低于最快镜像的这个比例就用官方（官方永远是最新版，镜像可能落后） */
+const OFFICIAL_KEEP_RATIO = 1 / 3;
 
 export const componentsRoot = profile.isLocal ? path.join(profile.dataRoot, 'components') : null;
 const platformKey = `${process.platform}-${process.arch}`;
 
 let manifestCache = { at: 0, manifest: null, error: null };
-/** id → { status: 'idle'|'downloading'|'verifying'|'extracting'|'installing'|'done'|'error', progress, bytes, total, error } */
+/** id → { status: 'idle'|'probing'|'downloading'|'verifying'|'extracting'|'installing'|'done'|'error', progress, bytes, total, error, source, sourceUrl } */
 const jobs = new Map();
 
 // ── 清单 ──
 
+function envMirrors() {
+  return (process.env.NODESIGN_COMPONENTS_MIRRORS || '').split(',').map((x) => x.trim().replace(/\/+$/, '')).filter(Boolean);
+}
+
+/** 清单：官方地址不通就挨个试镜像里的 manifest.json（镜像可能落后一版，所以官方先） */
 export async function loadManifest({ force = false } = {}) {
   if (!force && manifestCache.manifest && Date.now() - manifestCache.at < MANIFEST_TTL_MS) return manifestCache.manifest;
-  try {
-    let manifest;
-    if (/^https?:/.test(COMPONENTS_MANIFEST_URL)) {
-      const res = await fetch(COMPONENTS_MANIFEST_URL, { signal: AbortSignal.timeout(15_000) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      manifest = await res.json();
-    } else {
-      manifest = JSON.parse(fs.readFileSync(COMPONENTS_MANIFEST_URL, 'utf8'));
+  const candidates = /^https?:/.test(COMPONENTS_MANIFEST_URL)
+    ? [COMPONENTS_MANIFEST_URL, ...[...envMirrors(), ...(process.env.NODESIGN_COMPONENTS_MANIFEST ? [] : DEFAULT_MIRRORS)].map((m) => `${m}/manifest.json`)]
+    : [COMPONENTS_MANIFEST_URL];
+  const errors = [];
+  for (const url of candidates) {
+    try {
+      let manifest;
+      if (/^https?:/.test(url)) {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        manifest = await res.json();
+      } else {
+        manifest = JSON.parse(fs.readFileSync(url, 'utf8'));
+      }
+      if (!manifest?.components || typeof manifest.components !== 'object') throw new Error('manifest 没有 components');
+      manifestCache = { at: Date.now(), manifest, error: null, from: url };
+      return manifest;
+    } catch (err) {
+      errors.push(`${url}: ${err.message}`);
     }
-    if (!manifest?.components || typeof manifest.components !== 'object') throw new Error('manifest 没有 components');
-    manifestCache = { at: Date.now(), manifest, error: null };
-  } catch (err) {
-    manifestCache = { ...manifestCache, error: err.message };
-    if (!manifestCache.manifest) console.warn(`[components] 清单拉不到（${COMPONENTS_MANIFEST_URL}）：${err.message}`);
   }
+  manifestCache = { ...manifestCache, error: errors.join('；') };
+  if (!manifestCache.manifest) console.warn(`[components] 清单拉不到：${errors.join('；')}`);
   return manifestCache.manifest;
+}
+
+/** 这个资产所有可下的地址：官方在前，镜像按清单 → env → 内置的顺序 */
+export function sourcesFor(def, manifest) {
+  const file = def.url.split('/').pop();
+  const mirrors = [...(Array.isArray(manifest?.mirrors) ? manifest.mirrors : []), ...envMirrors(), ...DEFAULT_MIRRORS]
+    .map((m) => String(m).replace(/\/+$/, ''));
+  const out = [{ kind: 'official', url: def.url }];
+  for (const m of [...new Set(mirrors)]) out.push({ kind: 'mirror', url: `${m}/${file}` });
+  return out;
+}
+
+/** 拉前 512KB 测吞吐（Range）。不通 / 超时 → ok:false。不支持 Range 的源会把整个文件发过来，读够就断 */
+export async function probeSource(url, { bytes = PROBE_BYTES, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const t0 = Date.now();
+  try {
+    const res = await fetch(url, { headers: { range: `bytes=0-${bytes - 1}` }, signal: ctrl.signal });
+    if (!res.ok || !res.body) return { ok: false, error: `HTTP ${res.status}` };
+    const reader = res.body.getReader();
+    let got = 0;
+    while (got < bytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      got += value.length;
+    }
+    try { await reader.cancel(); } catch { /* */ }
+    const ms = Math.max(1, Date.now() - t0);
+    return { ok: got > 0, bytes: got, ms, bytesPerSec: Math.round((got / ms) * 1000) };
+  } catch (err) {
+    return { ok: false, error: err.name === 'AbortError' ? `${timeoutMs / 1000}s 没响应` : err.message };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * 选源：所有候选并行测速。官方能通、且吞吐不低于最快镜像的 OFFICIAL_KEEP_RATIO 就用官方（永远最新）；
+ * 否则最快的那个能通的镜像；一个都不通就还是官方（让下载那步报真实的错）。
+ */
+export async function pickSource(def, manifest) {
+  const sources = sourcesFor(def, manifest);
+  const results = await Promise.all(sources.map(async (s) => ({ ...s, probe: await probeSource(s.url) })));
+  const official = results[0];
+  const mirrorsOk = results.slice(1).filter((r) => r.probe.ok).sort((a, b) => b.probe.bytesPerSec - a.probe.bytesPerSec);
+  const best = mirrorsOk[0] || null;
+  let chosen;
+  if (official.probe.ok && (!best || official.probe.bytesPerSec >= best.probe.bytesPerSec * OFFICIAL_KEEP_RATIO)) chosen = official;
+  else chosen = best || official;
+  return { chosen, results };
 }
 
 /** 测试用 */
@@ -131,7 +205,7 @@ export async function installComponent(id) {
   if (!def) throw Object.assign(new Error(`清单里没有组件 ${id}`), { code: 'UNKNOWN_COMPONENT' });
   if (def.platform && def.platform !== platformKey) throw Object.assign(new Error(`组件 ${id} 只有 ${def.platform} 的包，这台是 ${platformKey}`), { code: 'UNSUPPORTED_PLATFORM' });
   const cur = jobs.get(id);
-  if (cur && ['downloading', 'verifying', 'extracting', 'installing'].includes(cur.status)) return cur;
+  if (cur && ['probing', 'downloading', 'verifying', 'extracting', 'installing'].includes(cur.status)) return cur;
   fs.mkdirSync(componentsRoot, { recursive: true });
   setJob(id, { status: 'downloading', progress: 0, bytes: 0, total: null, error: null });
   // 不 await：调用方拿任务状态轮询
@@ -156,9 +230,13 @@ async function installZip(id, def) {
   fs.mkdirSync(dir, { recursive: true });
   const tmp = path.join(componentsRoot, `${id}.download`);
 
-  // 下载 + sha256
-  const res = await fetch(def.url, { signal: AbortSignal.timeout(6 * 60 * 60 * 1000) });
-  if (!res.ok || !res.body) throw new Error(`下载 ${def.url} 失败：HTTP ${res.status}`);
+  // 选源（官方 vs 镜像测速），然后下载 + sha256
+  setJob(id, { status: 'probing' });
+  const { chosen, results } = await pickSource(def, manifestCache.manifest);
+  console.log(`[components] ${id} 选源 ${chosen.kind} ${chosen.url}（${results.map((r) => `${r.kind}:${r.probe.ok ? Math.round(r.probe.bytesPerSec / 1024) + 'KB/s' : '✗'}`).join(' ')}）`);
+  setJob(id, { status: 'downloading', source: chosen.kind, sourceUrl: chosen.url });
+  const res = await fetch(chosen.url, { signal: AbortSignal.timeout(6 * 60 * 60 * 1000) });
+  if (!res.ok || !res.body) throw new Error(`下载 ${chosen.url} 失败：HTTP ${res.status}`);
   const total = Number(res.headers.get('content-length')) || null;
   setJob(id, { total });
   const hash = crypto.createHash('sha256');
@@ -210,10 +288,18 @@ async function installPlaywright(id, def) {
   const dir = dirOf(id);
   fs.mkdirSync(dir, { recursive: true });
   const cli = playwrightCliPath();
-  setJob(id, { status: 'installing', progress: 0.05 });
+  // playwright 从自己的 CDN 下浏览器；探不通就切 npmmirror 的镜像（PLAYWRIGHT_DOWNLOAD_HOST 是它认的开关）
+  setJob(id, { status: 'probing', progress: 0.02 });
+  const officialHost = 'https://playwright.azureedge.net';
+  const mirrorHost = def.mirrorHost || 'https://npmmirror.com/mirrors/playwright';
+  const probe = await probeSource(`${officialHost}/builds/`, { bytes: 1, timeoutMs: 6000 });
+  const downloadHost = process.env.PLAYWRIGHT_DOWNLOAD_HOST || (probe.ok ? null : mirrorHost);
+  console.log(`[components] ${id} playwright 下载源 ${downloadHost || officialHost}（官方 ${probe.ok ? '通' : '不通：' + probe.error}）`);
+  setJob(id, { status: 'installing', progress: 0.05, source: downloadHost ? 'mirror' : 'official', sourceUrl: downloadHost || officialHost });
   await new Promise((resolve, reject) => {
     const p = spawn(process.execPath, [cli, 'install', def.browser || 'chromium'], {
-      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: dir }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: dir, ...(downloadHost ? { PLAYWRIGHT_DOWNLOAD_HOST: downloadHost } : {}) },
+      stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
     });
     let tail = '';
     const onData = (c) => {

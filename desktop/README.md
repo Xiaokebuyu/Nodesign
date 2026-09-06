@@ -48,7 +48,8 @@ GitHub Releases。发一版：
 git tag desktop-v0.0.10 && git push origin desktop-v0.0.10
 ```
 
-⚠️ **每次发版先涨版本号**（`npm version patch --no-git-tag-version`，提交）。electron-updater 只认比自己大的版本，
+版本号从 0.1.0 起按 `0.1.N` 涨（站主 09-06：修复会很多，第三段一直涨；semver 不认 `0.1.001` 这种带前导零的，
+所以是 0.1.1、0.1.2 …… 0.1.999 都行）。⚠️ **每次发版先涨版本号**（`npm version patch --no-git-tag-version`，提交）。electron-updater 只认比自己大的版本，
 同一个版本号重打的包用户端当没更新；草稿也不算发布 —— 站主试过点 **Publish release** 才推给用户。
 之后用户端起动时和每 6 小时查一次，下完弹一次提示，差分能对上就只下变化的部分。
 
@@ -73,6 +74,9 @@ GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions �
   LibreOffice 走 `msiexec /a` 抽文件，rembg 是嵌入式 Python + rembg[cpu] + 两个模型；chromium 交给
   playwright 自己装）。首启引导页（`/setup`）和设置 → 组件都走 `server/runtime/components.js`。
   ⏸ 六个组件在 Windows 上一个都没真跑过（本机只验了下载 / 校验 / 解压 / 目录形状）；换版本改工作流 env 再跑一次。
+  **镜像**：清单里 `mirrors` 指站点的 `/dl/components-win64/`（`server/scripts/sync-components-mirror.sh` 从 release 同步，
+  nginx 加一个 `/dl/` 的 location）；下载前官方与镜像各测 512KB，官方通且不比最快镜像慢太多用官方，否则用镜像。
+  Chromium 走 playwright 自己的 CDN，探不通切 npmmirror。
 - **图标只是占位**。`desktop/build/icon.png` 和 `desktop/assets/tray.png` 是站点 favicon 那个
   深底 N 字（sharp 渲的），能用，想换就换掉这两个文件。
 - **在 Windows 上一次都没跑过**。CI 打出来的包（Releases 草稿 v0.0.10，231MB）本机拆开看过：
