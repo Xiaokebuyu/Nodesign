@@ -41,6 +41,7 @@ import { can, localGenApproved, DENIAL } from '../../auth/tier.js';
 import { platform } from '../../runtime/platform.js';
 import { UPSTREAMS_BUILTIN, MODELS_BUILTIN, BRANDS, SHARED_SDK_ALIAS } from './model-table.js';
 import { loadLocalConfig } from '../../runtime/local-config.js';
+import { relayModelEntry } from '../../runtime/relay-client.js';
 
 export { BRANDS, SHARED_SDK_ALIAS };
 
@@ -177,6 +178,24 @@ export function hasSubscriptionAccess(user) {   // 订阅 Claude 资格 = 档位
 }
 
 const upstreamKeyPresent = (row) => { if (!row.api) return !!platform.claudeAuthPresent(); const up = UPSTREAMS[row.api.upstream]; return !up || up.authStyle === 'none' || !!up.key || !!(up.keyEnv && process.env[up.keyEnv]); };   // 无 api = 内置 Claude 行：本地版看本机凭据
+
+/**
+ * 这一行的请求从哪走（本地分发版的核心分岔，09-06）：
+ *   'local'  本机有钥匙（Claude 行 claude login 过 / API Key；外部插槽填了 key；内置行 env 里有 keyEnv）→ 进程内 ingress 或直连
+ *   'relay'  本机没钥匙但站主 relay 的目录里有这一行 → 请求发到站主服务器（runtime/relay-client.js）
+ *   null     两边都没有 → 选择器不列
+ * hosted 恒为 'local'（服务器自己有钥匙，缺了让请求 502 fail-loud，跟以前一样）。
+ * ⭐ 本机优先：用户自己配了钥匙就是明确想用自己的，不该被 relay 悄悄接管。
+ */
+export function modelSourceFor(appModel) {
+  const row = BY_ID.get(appModel);
+  if (!row) return null;
+  if (!platform.isLocal) return 'local';
+  if (upstreamKeyPresent(row)) return 'local';
+  const entry = relayModelEntry(appModel);
+  return entry ? 'relay' : null;
+}
+
 export function selectableModelsFor(user, opts) {
   const scope = scopeOf(opts);
   const approved = localGenApproved(user);   // 档位 + 逐人批准，同 paint_still / roll_film / 演出端点一把尺
@@ -184,7 +203,14 @@ export function selectableModelsFor(user, opts) {
   const out = [];
   for (const m of SELECTABLE_MODELS) {
     if (!inScope(m, scope)) continue;   // 只在演出面出现的行，画布面看不见也选不了
-    if (platform.isLocal && !upstreamKeyPresent(BY_ID.get(m.id))) continue;   // 本地版藏没配钥匙的行（含没登录/没 key 时的内置 Claude 行）；hosted 不过滤（缺钥匙让请求 502 fail-loud）
+    const source = modelSourceFor(m.id);
+    if (!source) continue;   // 本地版：本机没钥匙、relay 也没有 → 藏起来；hosted 永远 'local'
+    if (source === 'relay') {
+      // relay 那头按站主那边的档位判过了（锁/不锁、原因），本地的 user 是 LOCAL_OWNER（admin），本地档位判断在这一行不适用
+      const entry = relayModelEntry(m.id);
+      out.push(entry.locked ? { ...m, locked: true, lockReason: entry.lockReason || SUBSCRIPTION_LOCK_REASON, source } : { ...m, source });
+      continue;
+    }
     if (m.gate === 'localGen') { if (approved) out.push(m); continue; }
     if (m.gate === 'subscription' && !subscribed) { out.push({ ...m, locked: true, lockReason: SUBSCRIPTION_LOCK_REASON }); continue; }
     out.push(m);

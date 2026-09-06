@@ -100,8 +100,10 @@ export default {
   '保存失败：{err}': 'Save failed: {err}',
   '这一页只在本地分发版（NODESIGN_PROFILE=local）可用；线上多用户站没有 /api/local。':
     'This page is only available in the local build (NODESIGN_PROFILE=local). The hosted multi-user site has no /api/local.',
-  '两种接入方式并列，配好任一种，模型选择器里就有可选项':
-    'Two ways to connect, side by side. Set up either one and the model picker will have options.',
+  '默认走 NoDesign 站点提供的模型；自己有钥匙的话下面两种接入也行，同一行本机有钥匙就优先走本机':
+    'Models from the NoDesign site by default. Your own keys work too via the two options below; a local key always wins for that model.',
+  'NoDesign 服务': 'NoDesign service',
+  '桌面版设备': 'Desktop devices',
   'Claude 官方': 'Claude (official)',
   'Anthropic 的 Sonnet / Opus。填 API Key，或在终端 claude login 用订阅':
     "Anthropic's Sonnet / Opus. Add an API key, or run claude login in a terminal to use your subscription.",

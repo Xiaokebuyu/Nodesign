@@ -57,6 +57,11 @@ export default function LocalSettings() {
 
   const crumbs = [{ label: t('设置') }];
 
+  const refreshRelay = async () => {
+    try { const r = await Local.relayRefresh(); setStatus((s) => (s ? { ...s, relay: r.relay } : s)); }
+    catch (e) { showToast?.(e.message, 'error'); }
+  };
+
   if (loadErr) {
     return (
       <AppShell breadcrumb={crumbs}>
@@ -86,7 +91,18 @@ export default function LocalSettings() {
           </Card>
         </Section>
 
-        <Section title={t('模型')} desc={t('两种接入方式并列，配好任一种，模型选择器里就有可选项')}>
+        <Section title={t('模型')} desc={t('默认走 NoDesign 站点提供的模型；自己有钥匙的话下面两种接入也行，同一行本机有钥匙就优先走本机')}>
+          <Card style={{ marginBottom: GAP.md }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: GAP.md, marginBottom: GAP.sm }}>
+              <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.md, fontWeight: 600, color: COLOR.text }}>{t('NoDesign 服务')}</span>
+              <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{t('用站点账号的模型和额度。登录站点 → 头像菜单「桌面版设备」签一枚令牌贴到这里')}</span>
+              <span style={{ flex: 1 }} />
+              <RelayStatus relay={status?.relay} />
+              <Btn small onClick={refreshRelay} disabled={!status?.relay?.configured}>{t('刷新')}</Btn>
+            </div>
+            <EnvKeys only={['NoDesign 服务']} bare showToast={showToast} onSaved={(r) => setStatus((s) => (s && r?.relay ? { ...s, relay: r.relay } : s))}
+              onCapabilities={(caps) => setStatus((s) => (s ? { ...s, capabilities: caps.map((c) => ({ ...c, tools: s.capabilities.find((x) => x.id === c.id)?.tools || [] })) } : s))} />
+          </Card>
           <Card style={{ marginBottom: GAP.md }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: GAP.md, marginBottom: GAP.sm }}>
               <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.md, fontWeight: 600, color: COLOR.text }}>{t('Claude 官方')}</span>
@@ -97,7 +113,7 @@ export default function LocalSettings() {
                 {status?.claudeAuth === 'api_key' ? t('已配（API Key）') : status?.claudeAuth === 'login' ? t('已配（本机 claude login 登录态）') : t('未配')}
               </span>
             </div>
-            <EnvKeys only={[t('模型')]} bare showToast={showToast} onSaved={() => Local.status().then(setStatus).catch(() => {})}
+            <EnvKeys only={['模型']} bare showToast={showToast} onSaved={() => Local.status().then(setStatus).catch(() => {})}
               onCapabilities={(caps) => setStatus((s) => (s ? { ...s, capabilities: caps.map((c) => ({ ...c, tools: s.capabilities.find((x) => x.id === c.id)?.tools || [] })) } : s))} />
           </Card>
           <Card>
@@ -122,9 +138,24 @@ export default function LocalSettings() {
         </Section>
 
         <Section title={t('其他钥匙与开关')} desc={t('写进 {path}/.env，钥匙类保存即生效', { path: status?.dataRoot || '~/.nodesign' })}>
-          <EnvKeys exclude={[t('模型')]} showToast={showToast} onCapabilities={(caps) => setStatus((s) => (s ? { ...s, capabilities: caps.map((c) => ({ ...c, tools: s.capabilities.find((x) => x.id === c.id)?.tools || [] })) } : s))} />
+          <EnvKeys exclude={['模型', 'NoDesign 服务']} showToast={showToast} onCapabilities={(caps) => setStatus((s) => (s ? { ...s, capabilities: caps.map((c) => ({ ...c, tools: s.capabilities.find((x) => x.id === c.id)?.tools || [] })) } : s))} />
         </Section>
       </div>
     </AppShell>
+  );
+}
+
+/** 「NoDesign 服务」那行的状态：没配 / 拉不到（带原因）/ 已连（谁、什么档、今天用了多少） */
+function RelayStatus({ relay }) {
+  const style = { fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs };
+  if (!relay || !relay.configured) return <span style={{ ...style, color: COLOR.sub }}><Dot ok={false} />{t('未配')}</span>;
+  if (!relay.ok) return <span style={{ ...style, color: COLOR.error }} title={relay.error || ''}><Dot ok={false} />{t('连不上：{err}', { err: relay.error || '' })}</span>;
+  const w = relay.whoami || {};
+  const q = w.quota || {};
+  const quota = q.kind === 'unlimited' ? t('不限额') : q.limit != null ? `$${Number(q.used || 0).toFixed(2)} / $${Number(q.limit).toFixed(2)}` : '';
+  return (
+    <span style={{ ...style, color: COLOR.success }}>
+      <Dot ok />{w.username || '?'} · {w.tier || '?'}{quota ? ` · ${quota}` : ''} · {t('{n} 个模型', { n: relay.models?.length || 0, count: relay.models?.length || 0 })}
+    </span>
   );
 }

@@ -23,6 +23,7 @@ import { TOOL_CAPABILITIES } from '../engine/mcp/capability-gate.js';
 import { probeCapabilities } from '../runtime/capabilities.js';
 import { envView, setEnvValues, envPath } from '../runtime/local-env.js';
 import { probeModel } from '../lib/ingress/slot-probe.js';
+import { relayCatalog, refreshRelayCatalog, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 
@@ -47,6 +48,8 @@ router.get('/status', (_req, res) => {
     externalSdkAlias: SHARED_SDK_ALIAS,
     // 内置 Claude 行现在能不能选：'api_key' | 'login' | null（设置页「模型」那块的状态行）
     claudeAuth: platform.claudeAuthPresent(),
+    // 站主 relay 的目录快照（设置页「NoDesign 服务」那块的状态行）；whoami 只报身份/档位/额度，不报令牌
+    relay: relayView(),
     // 内置上游（只报名字和是否配了钥匙，不报钥匙）：配置页提示「这些名字被占了」
     builtinUpstreams: Object.fromEntries(Object.entries(UPSTREAMS_BUILTIN).map(([id, u]) => [id, { label: u.label, keyPresent: u.authStyle === 'none' || !!(u.keyEnv && process.env[u.keyEnv]) }])),
   });
@@ -84,7 +87,9 @@ router.put('/env', async (req, res) => {
     const r = setEnvValues(values);
     // 钥匙变了能力表要重探（钥匙类即时生效；二进制类不变），新会话的工具闸就按新结果
     await probeCapabilities({ force: true });
-    res.json({ ok: true, changed: r.changed, keys: envView(), capabilities: capabilitySnapshot() });
+    // relay 的令牌或地址变了就重拉目录（选择器同步读快照，这里不拉它永远是旧的）
+    if (r.changed.some((k) => k.startsWith('NODESIGN_RELAY_'))) await refreshRelayCatalog();
+    res.json({ ok: true, changed: r.changed, keys: envView(), capabilities: capabilitySnapshot(), relay: relayView() });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -107,6 +112,25 @@ router.post('/models/:id/probe', async (req, res) => {
     probing.delete(id);
   }
 });
+
+// ── 站主 relay：重拉目录（设置页「刷新」按钮；令牌不变但站点那边档位/额度变了的时候用） ──
+router.post('/relay/refresh', async (_req, res) => {
+  await refreshRelayCatalog();
+  res.json({ ok: true, relay: relayView() });
+});
+
+function relayView() {
+  const c = relayCatalog();
+  return {
+    configured: c.configured,
+    ok: c.ok,
+    at: c.at,
+    error: c.error,
+    url: process.env.NODESIGN_RELAY_URL || DEFAULT_RELAY_URL,
+    whoami: c.whoami ? { username: c.whoami.user?.username, tier: c.whoami.user?.tier, quota: c.whoami.quota, device: c.whoami.device } : null,
+    models: c.models,
+  };
+}
 
 router.post('/restart', (_req, res) => {
   res.json({ ok: true, note: '正在重启，几秒后刷新页面' });

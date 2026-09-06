@@ -74,6 +74,10 @@ export const Me = {
   showcase: () => jsonRequest('GET', '/api/me/showcase'),
   showcaseCoverUrl: (id) => `/api/me/showcase/${id}/cover`,
   removeShowcase: (id) => jsonRequest('DELETE', `/api/me/showcase/${id}`),
+  // 桌面版 / npx 版的设备令牌（hosted 才有这组路由；本地版没有账号这回事）
+  devices: () => jsonRequest('GET', '/api/me/devices'),
+  createDevice: (label) => jsonRequest('POST', '/api/me/devices', { label }),
+  revokeDevice: (id) => jsonRequest('DELETE', `/api/me/devices/${encodeURIComponent(id)}`),
 };
 
 
@@ -86,6 +90,7 @@ export const Local = {
   saveEnv: (values) => jsonRequest('PUT', '/api/local/env', { values }),
   probe: (id, { vision = true } = {}) => jsonRequest('POST', `/api/local/models/${encodeURIComponent(id)}/probe?vision=${vision ? 1 : 0}`),
   restart: () => jsonRequest('POST', '/api/local/restart'),
+  relayRefresh: () => jsonRequest('POST', '/api/local/relay/refresh'),
 };
 
 // ── Publish（站点一键上线 Cloudflare Pages，task 级）──

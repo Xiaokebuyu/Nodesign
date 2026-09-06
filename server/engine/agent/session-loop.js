@@ -62,13 +62,14 @@ import { MCP_SERVER_NAME } from '../mcp/server-name.js';
 import { assertInitContract } from './init-contract.js';
 import { clearSessionFlights } from './subagent-flight.js'; import { clearStageStatus } from './stage-status.js';
 import { createRoleRoster } from './cast.js';
-import { createAgents, resolveDefaultFastModel } from '../agents/index.js';
-import { resolveSdkSpoofModel, pickThinkingConfig, resolveModelRoute, isUncensoredModel } from './model-context.js';
+import { createAgents } from '../agents/index.js';
+import { resolveSdkSpoofModel, pickThinkingConfig, isUncensoredModel } from './model-context.js';
+import { bindSessionUpstream, unbindSessionFromRelay } from './session-binding.js';
 import { resolveSessionModel } from './session-model.js';
-import { getOrStartIngress, registerIngressSession, unregisterIngressSession } from '../../lib/model-ingress.js';
+import { unregisterIngressSession } from '../../lib/model-ingress.js';
 import { takeUpstreamBilling } from '../../lib/ingress/upstream-billing.js';
 import { takeUpstreamTruncation } from '../../lib/ingress/upstream-truncation.js';
-import { registerSessionNotice, unregisterSessionNotice } from '../../lib/ingress/session-notice.js';
+import { unregisterSessionNotice } from '../../lib/ingress/session-notice.js';
 import { clampFirstClause } from '../../lib/quick-summary.js';
 import { AsyncQueue } from '../../lib/async-queue.js';
 import { platform } from '../../runtime/platform.js';
@@ -87,7 +88,7 @@ import { commitTaskWorkspace, commitWorkspace, PROJECTS_DATA_ROOT } from '../../
 import { commitStaging } from '../../projects/board-tags.js';
 import { taskManifest } from '../../lib/artifact-target.js';
 import { getUserById } from '../../auth/users-store.js';
-import { can, defaultModerationLevel } from '../../auth/tier.js';
+import { defaultModerationLevel } from '../../auth/tier.js';
 
 /**
  * 半截续接时替 agent 说的那句话（见 maybeContinueTruncated）。写成"系统提示"而不是装成用户说话：
@@ -228,6 +229,7 @@ export async function runSession({
   // 前端完全零反馈（丢状态路径 P5）。现在失败时补 run.error + markRunFailed。
   let wsRoot, baseUrlForBinary, apiKeyForBinary, fastModel, compactWindow, isResume, installed;
   let noticeHandler = null;   // ingress → 会话的通知回调（注销时按身份比对，别误删新会话的）
+  let relaySid = null;        // 在站主 relay 上登记过的 sid（finally 配对注销）
   try {
     wsRoot = await sharedCtx.workspace.ensure();
 
@@ -235,50 +237,9 @@ export async function runSession({
     // 挪到 hooks.js 的 PreToolUse(Skill/Bash)：agent 真的开始 deck 工作
     // （加载 deskskill / cp 模板）才拷。非 deck 会话（便签 / 整理画布）cwd 干净。
 
-    // ── 通路由模型表决定（2026-08-19 重建，前身是全局 NODESIGN_GATEWAY_URL 开关）──
-    // 订阅模型：什么都不注入（ANTHROPIC_API_KEY 一出现 binary 就弃 OAuth）。
-    // API 模型：BASE_URL 指进程内通用入口（model-ingress），入口按请求 body.model
-    // 查表换上游换钥匙；binary 侧的 API_KEY 只是"逼它进 API 模式"的占位符。
-    // helper（title 总结 / auto-compact / promptSuggestions）与 subagent 因此
-    // 天然全通：它们的请求同样进入口、同样被反查路由 —— 不再依赖旧版那个
-    // 跨会话互写的 NODESIGN_CURRENT_APP_MODEL 进程全局 env。
-    const route = resolveModelRoute(model);
-    if (route.mode === 'api') {
-      const ingress = await getOrStartIngress();   // 起不来就让 init 失败，别静默直连
-      baseUrlForBinary = `${ingress.baseUrl}/__nd/${encodeURIComponent(sessionId)}`;
-      apiKeyForBinary = 'nd-ingress-managed';
-      // SDK 内部 helper 可能用不在表里的 Claude 名发请求（config 目录默认模型），
-      // 注册会话 fast 兜底路由让它们改道而不是 502。finally 配对注销。
-      registerIngressSession(sessionId, model);
-      // 上游抖的时候（Zen 一次 503 能挂 50~140 秒）会话里什么都不动，用户只看到一个转不停的绿点。
-      // 给 ingress 一条推消息的通道，让它把"正在重试"说出来。节流在 session-notice.js，finally 配对注销。
-      noticeHandler = ({ key, text, priority }) => {
-        try { sharedCtx.emit(Events.notification(key || 'upstream_retry', text, priority || 'warn')); } catch { /* 通知不该弄死会话 */ }
-      };
-      registerSessionNotice(sessionId, noticeHandler);
-      // API 路的 fast model 必须同表可路由（订阅 haiku 在 API 模式会 404），
-      // 所以 env 覆盖在这条路上不生效 —— 表是唯一真相。
-      fastModel = route.fastModel;
-      // 把**真实**上下文窗口钉给 SDK。不设的话 SDK 只能按 spoof alias 猜，而
-      // alias 的容量和上游真实 n_ctx 基本对不上：猜小了白扔容量，猜大了会一路
-      // 涨到超过上游 n_ctx 再炸。实测规律见 resolveModelRoute 注释。
-      compactWindow = route.window;
-    } else {
-      // ⭐ 订阅通路的资格断言就放在做 OAuth 决策的这一行（08-21 晚）。API 边界（turn.js /
-      // sessions.js 的 allowedModelsFor）是第一道闸；这里是第二道：runSession 以前不认识
-      // 用户，只看会话模型决定走不走 ~/.claude 的 OAuth —— quick-summary 那次泄漏（写死
-      // haiku 起独立 SDK 会话，08-19 拆）正是这个形状。现在 owner 没资格就 init 失败，
-      // 而不是静默烧站主的订阅。owner 为空（无主项目；生产 08-21 实查 0 个）也 fail-closed。
-      const owner = ownerId ? getUserById(ownerId) : null;
-      if (!can(owner, 'subscription')) {
-        throw new Error(`订阅通路资格不足：项目 owner=${ownerId || '(无)'} 档位不含 subscription，模型=${model}`);
-      }
-      baseUrlForBinary = process.env.ANTHROPIC_BASE_URL;
-      apiKeyForBinary = process.env.ANTHROPIC_API_KEY;
-      fastModel = process.env.NODESIGN_FAST_MODEL || resolveDefaultFastModel(model);
-      // 订阅模型的真名 SDK 自己认得，别去覆盖它已知正确的默认值
-      compactWindow = null;
-    }
+    // ── 通路由模型表决定：订阅直连 / 进程内 ingress / 站主 relay，全在 session-binding.js ──
+    ({ baseUrl: baseUrlForBinary, apiKey: apiKeyForBinary, fastModel, compactWindow, noticeHandler, relaySid } =
+      await bindSessionUpstream({ sessionId, model, ownerId, emit: (ev) => sharedCtx.emit(ev) }));
 
     // 检测 jsonl 是否已存在 —— 决定走 resume（已存在）还是 sessionId（新建）
     // 之前的 bug：session-loop 永远传 sessionId，但如果用户 close session 后又
@@ -310,10 +271,11 @@ export async function runSession({
       try { markRunFailed(initialRunId, `init: ${err.message || 'unknown'}`); } catch { /* */ }
     }
     sharedCtx.emit(Events.error(`会话初始化失败：${err.message}`, 'INIT_FAILED', err.stack));
-    // registerIngressSession 在本 try 内、其后还有可抛的 await —— 这里配对注销，
+    // registerIngressSession（session-binding.js 里）在本 try 内、其后还有可抛的 await —— 这里配对注销，
     // 否则 init 失败的 API 会话在 ingress 的 sessionRoutes 里残留（2026-08-19 评审抓的洞）。
     // 主路径的注销在下方大 try 的 finally；两处都是幂等 delete，不怕重复。
     unregisterIngressSession(sessionId);
+    if (relaySid) { unbindSessionFromRelay(relaySid); relaySid = null; }   // 登记成功后在别的 await 上倒下的，也要注销
     unregisterSessionNotice(sessionId, noticeHandler);
     takeUpstreamTruncation(sessionId);   // 别留标记给下一个同 sid 的会话
     unregisterQuerySession(sessionId, sessionToken);
@@ -1001,6 +963,7 @@ export async function runSession({
   } finally {
     clearInterval(idleScanTimer);
     unregisterIngressSession(sessionId);   // API 会话的 fast 兜底路由配对注销（订阅会话 noop）
+    if (relaySid) unbindSessionFromRelay(relaySid);   // relay 上的登记配对注销
     unregisterSessionNotice(sessionId, noticeHandler);   // ingress → 会话的通知通道配对注销（按身份，别删掉新会话的）
     takeUpstreamTruncation(sessionId);     // 半截标记跟会话同生命周期，别留
     clearSessionFlights(sessionId); clearStageStatus(projectId);   // 在飞台账 + 台上一览，都跟会话同寿命

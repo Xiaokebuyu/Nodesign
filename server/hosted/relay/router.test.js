@@ -119,6 +119,25 @@ describe('门口', () => {
   });
 });
 
+describe('目录', () => {
+  it('basic 拿到假行（不锁）和订阅行（锁着带原因），只报 id/locked/lockReason', async () => {
+    const user = makeUser({ plan: 'basic' });
+    const { token } = mintDevice({ userId: user.id });
+    const j = await (await api(token, '/models')).json();
+    const fake = j.models.find((m) => m.id === 'fake-anthro');
+    expect(fake).toEqual({ id: 'fake-anthro', locked: false });
+    const sonnet = j.models.find((m) => m.id === 'claude-sonnet-5[1m]');
+    expect(sonnet.locked).toBe(true);
+    expect(typeof sonnet.lockReason).toBe('string');
+  });
+  it('pro：订阅行不锁', async () => {
+    const user = makeUser({ plan: 'pro' });
+    const { token } = mintDevice({ userId: user.id });
+    const j = await (await api(token, '/models')).json();
+    expect(j.models.find((m) => m.id === 'claude-sonnet-5[1m]').locked).toBe(false);
+  });
+});
+
 describe('会话登记', () => {
   it('basic 登记订阅模型 → 403 当场拒', async () => {
     const user = makeUser({ plan: 'basic' });

@@ -15,6 +15,7 @@
  * ## 端点
  *
  *   GET    /whoami                 令牌对应的用户、档位、额度快照（客户端设置页用）
+ *   GET    /models                 这个账号在这台服务器上能选的行（两个面的并集；客户端选择器按它过滤）
  *   POST   /sessions               { sid, appModel } → 201；档位不够当场 403（省得起了 SDK 才知道）
  *   DELETE /sessions/:sid
  *   POST   /__nd/:sid/v1/messages  推理（SDK 的 ANTHROPIC_BASE_URL = <site>/api/relay/__nd/<sid>）
@@ -31,7 +32,7 @@ import { decideRelay } from './gates.js';
 import { recordRelayUsage, installRelayUsageSource } from './usage.js';
 import { forwardSubscription } from './subscription-leg.js';
 import { handleRequest as forwardViaIngress } from '../../lib/model-ingress.js';
-import { priceTokens, resolveModelRoute, hasSubscriptionAccess } from '../../engine/agent/model-context.js';
+import { priceTokens, resolveModelRoute, hasSubscriptionAccess, selectableModelsFor, PICKER_SCOPES } from '../../engine/agent/model-context.js';
 import { checkQuota } from '../../lib/quota.js';
 import { tierOf } from '../../auth/tier.js';
 
@@ -81,6 +82,18 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
       capabilities: { subscription: hasSubscriptionAccess(user) },
       quota: { kind: quota.kind, used: quota.used, limit: quota.limit },
     });
+  });
+
+  // 目录：客户端拿着同一张 model-table，只需要知道"哪些行这个账号能用、哪些锁着"。两个选择器面（canvas / stage）
+  // 的并集，面的过滤客户端自己做。字段只给 id / locked / lockReason，标签和描述客户端表里有。
+  router.get('/models', (req, res) => {
+    const byId = new Map();
+    for (const scope of PICKER_SCOPES) {
+      for (const m of selectableModelsFor(req.relayUser, { scope })) {
+        if (!byId.has(m.id)) byId.set(m.id, { id: m.id, locked: !!m.locked, ...(m.lockReason ? { lockReason: m.lockReason } : {}) });
+      }
+    }
+    res.json({ models: [...byId.values()] });
   });
 
   router.post('/sessions', async (req, res) => {

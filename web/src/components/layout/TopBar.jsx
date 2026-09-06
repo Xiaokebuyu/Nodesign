@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Settings } from 'lucide-react';
+import { LogOut, LayoutDashboard, Settings, Monitor } from 'lucide-react';
 import { COLOR, CHROME, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, FONT_KAI } from '../../lib/theme.js';
 import { GRAIN } from '../../lib/paper.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
@@ -141,6 +141,9 @@ function UserBadge() {
               <LayoutDashboard size={12} /> 控制台
             </Link>
           )}
+          <Link to="/devices" onClick={() => setOpen(false)} style={menuItem}>
+            <Monitor size={12} /> 桌面版设备
+          </Link>
           <button
             onClick={async () => {
               try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* */ }

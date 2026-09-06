@@ -19,5 +19,7 @@ export function mountHostedEarly(app) {
 
 export async function mountHostedLate(app) {
   const { default: adminRouter } = await import('./admin.js');
+  const { default: devicesRouter } = await import('./devices-api.js');
   app.use('/api/admin', adminRouter);
+  app.use('/api/me/devices', devicesRouter);   // 跟内核的 /api/me 各管各的前缀，先后无所谓
 }

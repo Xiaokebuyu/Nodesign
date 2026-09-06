@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../../lib/theme.js';
 import { Local } from '../../lib/api.js';
+import { t } from '../../lib/i18n.js';
 import { Card, TextInput, Select, Hint, Err, Btn, Dot } from './primitives.jsx';
 
 /**
@@ -39,7 +40,7 @@ export default function EnvKeys({ onCapabilities, showToast, onSaved, only, excl
     <Wrap>
       {groups.map((g) => (
         <div key={g} style={{ marginBottom: GAP.lg }}>
-          {groups.length > 1 && <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text4, marginBottom: GAP.sm, letterSpacing: 1 }}>{g}</div>}
+          {groups.length > 1 && <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text4, marginBottom: GAP.sm, letterSpacing: 1 }}>{t(g)}</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 220px) 1fr', gap: `${GAP.sm}px ${GAP.lg}px`, alignItems: 'start' }}>
             {keys.filter((k) => k.group === g).filter((k) => {
               // showIf：{ 某键: 值 } —— 那个键的当前值（正在编辑的优先，其次已存的，再次默认值）等于它才显示

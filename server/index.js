@@ -49,6 +49,7 @@ import { sweepOrphanRuns } from './engine/runs/store.js';
 import meRouter from './api/me.js';
 import localRouter, { RESTART_EXIT_CODE } from './api/local.js';
 import { platform } from './runtime/platform.js';
+import { refreshRelayCatalog } from './runtime/relay-client.js';
 import { probeCapabilities, summarizeCapabilities } from './runtime/capabilities.js';
 
 // 启动时 dump 平台决策（让运维一眼看到 OS / HOME / claudeConfigDir / sandbox / preflight）
@@ -99,6 +100,9 @@ if (platform.isLocal) {
   // 本地分发版：单租户，登录墙钉死关闭（auth/users-store.js authEnabled），请求者恒为 LOCAL_OWNER。
   // 不跑 bootstrapAuth：它会按 NODESIGN_AUTH_PASSWORD 建 admin、回填项目归属 —— 那是多用户站的事。
   console.log(`[profile] local：单租户模式，数据目录 ${platform.dataRoot}，只监听 ${platform.listenHost}`);
+  // 站主 relay 的目录（配了令牌才拉；没配 / 拉不到都不阻止起动，选择器就只剩本机钥匙的行）
+  const relay = await refreshRelayCatalog();
+  if (relay.configured) console.log(relay.ok ? `[relay-client] ${relay.whoami?.user?.username}（${relay.whoami?.user?.tier}）· 站点提供 ${relay.models.length} 个模型` : `[relay-client] ⚠️ 站点目录拉不到：${relay.error}`);
 } else {
   bootstrapAuth();
   if (!authEnabled()) {
