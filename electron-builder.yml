@@ -69,7 +69,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: desktop/build/icon.ico
+  icon: desktop/build/icon.png          # 1024² PNG，electron-builder 自己转 .ico（多尺寸）
   # 没有代码签名证书时这两行留空即可，代价是首次运行会被 SmartScreen 拦一道
   # "未知发布者"，用户要点两次。买了 OV/EV 证书再填。
   # certificateFile:
@@ -85,9 +85,14 @@ nsis:
   # 卸载时不动 ~/.nodesign：那里面是用户的项目和产物，卸载软件不该删作品
   deleteAppDataOnUninstall: false
 
-# 更新源。electron-updater 从这个地址读 latest.yml；有 blockmap 对得上就下差分，
-# 对不上就退回下整包 —— 完整包更新和差分更新是同一套配置的两条路径，不是两套。
+# 更新源 = GitHub Releases（仓库是公开的，electron-updater 不用 token 就能读 latest.yml）。
+# 打包在 GitHub Actions 的 windows-latest 上做（.github/workflows/desktop.yml），产物直接传进
+# Release：安装包 .exe、.blockmap、latest.yml。有 blockmap 对得上就下差分，对不上就退回下整包 ——
+# 完整包更新和差分更新是同一套配置的两条路径，不是两套。
+# releaseType: draft —— 打出来的是**草稿**，站主在 GitHub 上点 Publish 之后用户端才会看到更新；
+# 草稿本身站主自己能下载来试。想跳过这一步改成 release。
 publish:
-  - provider: generic
-    url: https://REPLACE-ME.example.com/desktop/
-    channel: latest
+  - provider: github
+    owner: Xiaokebuyu
+    repo: Nodesign
+    releaseType: draft

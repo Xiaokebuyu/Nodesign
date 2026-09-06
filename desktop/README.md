@@ -42,17 +42,27 @@ Electron 可执行文件的 node 模式（`ELECTRON_RUN_AS_NODE=1`），所以�
 ABI 编译，不是按系统 node 的。`electron-builder.yml` 里的 `npmRebuild: true` 负责这件事。
 `sharp` 是 N-API，不受影响。
 
-## 更新
+## 发布与更新
 
-`electron-updater`，更新源在 `electron-builder.yml` 的 `publish`（generic provider，
-一个静态文件地址就够，放 R2 或 Pages 都行）。
+打包在 GitHub Actions 上做（`.github/workflows/desktop.yml`，`windows-latest`），产物直接进
+GitHub Releases。发一版：
+
+```
+# 方式一：Actions 页面 → "desktop" → Run workflow
+# 方式二：
+git tag desktop-v0.0.10 && git push origin desktop-v0.0.10
+```
+
+跑完 Releases 里多一份**草稿** `v<package.json 的 version>`，里面是
+`NoDesign-Setup-<v>.exe`、`.blockmap`、`latest.yml`。草稿只有仓库成员看得到 —— 自己先下来试；
+试过了点 **Publish release**，装了旧版的用户端才会看到这次更新（`electron-updater` 读的是
+GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions 的 artifact 里也留了一份。
 
 有 blockmap 对得上就下差分，对不上（比如跨了 Electron 大版本）自动退回下整包。
 **完整包更新和差分更新不是两套配置，是同一套的两条路径。**
 
-发布一版 = 跑 `desktop:dist`，把 `dist-desktop/` 里的 `latest.yml`、`.exe`、`.blockmap`
-一起传到那个地址。客户端启动时查一次，之后每 6 小时查一次，下完弹一次提示，
-用户点"立即重启更新"就装上；不点的话下次退出应用时自动装。
+客户端启动时查一次，之后每 6 小时查一次，下完弹一次提示，用户点"立即重启更新"就装上；
+不点的话下次退出应用时自动装。
 
 装更新之前主进程会先把服务端子进程停干净（`sup.stop()`）。sqlite 还开着的时候换文件，
 轻则更新失败重则库损坏。
@@ -65,11 +75,10 @@ ABI 编译，不是按系统 node 的。`electron-builder.yml` 里的 `npmRebuil
   应用目录，再让 `server/runtime/capabilities.js` 的探测认得那个目录
   （`whichBinary` 已经支持 `extraDirs`，加一个安装目录进去即可，不用改探测逻辑）。
   LibreOffice 是 MPL 2.0，随包分发允许，但要带上许可文件。
-- **图标**。`desktop/build/icon.ico` 还没有，`desktop/assets/tray.png` 也没有
-  （没有时托盘会用一个空图标，不崩但不好看）。
+- **图标只是占位**。`desktop/build/icon.png` 和 `desktop/assets/tray.png` 是站点 favicon 那个
+  深底 N 字（sharp 渲的），能用，想换就换掉这两个文件。
 - **代码签名**。`electron-builder.yml` 里的 `certificateFile` 留空。没有证书的话，
   安装包首次运行会被 SmartScreen 拦一道"未知发布者"，用户要点两次才能装。
-- **更新地址**。`publish.url` 现在是 `https://REPLACE-ME.example.com/desktop/`。
 - **钥匙来源（客户端半）**。首启选"用服务器提供的 API"还是"自己带钥匙"。服务器那半
   （`server/hosted/relay/`，见下）已经在了；客户端还没有人把 SDK 的 base URL 指过去。
   要做的是在 `server/runtime/local-env.js` 的 `ENV_KEYS` 那张白名单表上加第三种来源

@@ -1,0 +1,63 @@
+# Windows 桌面版打包（见 desktop/README.md）。
+#
+# 为什么在这里打而不在开发机上：三个 win32 产物（SDK 的 claude.exe、better-sqlite3 的 Electron ABI
+# 预编译、sharp 的 win32 包）在 Windows 上都是 npm 的默认行为；在 Linux 上交叉装要一路覆盖还没法跑起来验。
+#
+# 触发：
+#   - 手动：Actions 页面 → "desktop" → Run workflow（分支任选）
+#   - 打 tag：git tag desktop-v0.0.10 && git push origin desktop-v0.0.10
+# 产物：GitHub Releases 里一份**草稿**（v<package.json 的 version>），含 NoDesign-Setup-<v>.exe、
+# .blockmap、latest.yml。草稿只有仓库成员看得到；点 Publish 之后 electron-updater 才会把它当更新。
+name: desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['desktop-v*']
+
+permissions:
+  contents: write   # 往 Releases 传产物
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - name: 装依赖（根 + web）
+        run: |
+          npm ci
+          npm ci --prefix web
+
+      - name: 构建前端（进安装包的是 web/dist）
+        run: npm run build:web
+
+      - name: 打包并传到 GitHub Releases（草稿）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 没证书：electron-builder 会警告一次，装的时候 SmartScreen 拦一道"未知发布者"
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --win --publish always
+
+      - name: 产物也留一份在 Actions 里（不想动 Releases 时从这里下）
+        uses: actions/upload-artifact@v4
+        with:
+          name: nodesign-desktop-windows
+          path: |
+            dist-desktop/*.exe
+            dist-desktop/*.blockmap
+            dist-desktop/latest.yml
+          if-no-files-found: error
