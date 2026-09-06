@@ -99,7 +99,7 @@ export function runBundledClaude(cliArgs, { stdio = 'inherit', onError = null } 
  *   sup.start();            // 拉起；以 RESTART_EXIT_CODE 退出会自动再拉起
  *   await sup.stop();       // 停（先 SIGTERM，超时 SIGKILL）
  *
- * onExit(code, signal) 只在**真的结束**时调一次（重启不算结束）。
+ * onExit(code, signal, err?) 只在**真的结束**时调一次（重启不算结束）。spawn 失败也算结束，err 带原因。
  */
 export function createSupervisor({
   serverEntry,
@@ -118,6 +118,13 @@ export function createSupervisor({
   function start() {
     child = spawn(runtime, [...runtimeArgs, serverEntry], { env, stdio });
     onSpawn?.(child);
+    // spawn 本身失败（可执行文件不在 / 没权限）只发 'error' 不发 'exit'；不接住就是未捕获异常，
+    // 命令行版直接崩栈、桌面版一个通用崩溃框什么都不说。当成"真的结束"报给调用方。
+    child.on('error', (err) => {
+      if (!child) return;   // exit 已经处理过（比如 kill 失败那种 error）
+      child = null;
+      onExit?.(1, null, err);
+    });
     child.on('exit', (code, signal) => {
       child = null;
       if (stopping) { onExit?.(code ?? 0, signal); return; }

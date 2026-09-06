@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 export default defineConfig({
   test: {
-    include: ['server/**/*.test.js'],
+    include: ['server/**/*.test.js', 'bin/**/*.test.js'],
     environment: 'node',
     // ⭐ 测试必须有自己的库。engine/runs/store.js 的 DB_PATH 默认指
     // server/db/nodesign.db —— 那是**生产库**。而测试会真的走到写库路径

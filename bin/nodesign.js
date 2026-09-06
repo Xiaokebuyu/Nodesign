@@ -91,7 +91,10 @@ const sup = createSupervisor({
   serverEntry,
   env,
   onRestart: () => console.log('[nodesign] 服务端请求重启，重新拉起…'),
-  onExit: (code) => process.exit(code),
+  onExit: (code, _signal, err) => {
+    if (err) console.error(`[nodesign] 服务端起不来：${err.message}`);
+    process.exit(code);
+  },
   onSpawn: () => {
     // 只开一次浏览器：重启后页面自己会刷新
     if (opened || flags.noOpen || env.NODESIGN_OPEN === '0') return;

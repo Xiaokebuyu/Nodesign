@@ -82,10 +82,10 @@ async function boot() {
     runtime: process.execPath,
     stdio: ['ignore', 'inherit', 'inherit'],
     onRestart: () => log('服务端请求重启，重新拉起…'),
-    onExit: (code) => {
+    onExit: (code, _signal, err) => {
       // 正常退出（我们主动停的）不弹窗；异常退出要让用户知道，别留一扇空白窗
       if (quitting) return;
-      fatal(new Error(`服务端意外退出（退出码 ${code}）。`));
+      fatal(new Error(err ? `服务端起不来：${err.message}` : `服务端意外退出（退出码 ${code}）。`));
     },
   });
   sup.start();
@@ -234,10 +234,16 @@ app.on('window-all-closed', () => { /* 托盘常驻，不在这里退出 */ });
 
 function log(msg) { console.log(`[nodesign-desktop] ${msg}`); }
 
+let fatalShown = false;
 function fatal(err) {
   log(`启动失败：${err?.stack || err}`);
+  // 同一次失败会从两条路到这里（health 超时 + 子进程 onExit），只弹一次
+  if (fatalShown) return;
+  fatalShown = true;
   splash?.destroy(); splash = null;
   dialog.showErrorBox('NoDesign 启动失败', String(err?.message || err));
   quitting = true;
-  sup?.stop().finally(() => app.exit(1));
+  // ⚠️ 不能写 sup?.stop().finally(...)：sup 为空时可选链把整条表达式短路成 undefined，
+  // finally 根本不会调，app.exit 也不会 —— 端口被占那条路就是 sup 还没建的时候来的。
+  (sup ? sup.stop() : Promise.resolve()).finally(() => app.exit(1));
 }
