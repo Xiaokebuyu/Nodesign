@@ -178,3 +178,17 @@ export async function migrateLegacyPlay(workspaceRoot) {
   await fs.rm(legacy, { recursive: true, force: true }).catch(() => {});
   return name;
 }
+
+/**
+ * 根上的 世界书/ 与 预设/ 随开戏搬进故事文件夹（09-07 演出线对账 B1/C1）。
+ * 先导入后开场的顺序会把 export_book 的产物落在根上，而机器只扫 <故事>/ 里的那一份（worldbook.js）。
+ * 目标已存在就不动（不覆盖玩家改过的）；搬不动就留在根上，开场照常。
+ */
+export async function adoptRootDirs(workspaceRoot, playRel) {
+  for (const dir of [WORLD_DIR, PRESET_DIR]) {
+    const src = path.join(workspaceRoot, dir); const dest = path.join(workspaceRoot, playRel, dir);
+    if (await exists(src) && !(await exists(dest))) {
+      try { await fs.mkdir(path.dirname(dest), { recursive: true }); await fs.rename(src, dest); } catch { /* 留在根上 */ }
+    }
+  }
+}

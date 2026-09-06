@@ -57,7 +57,8 @@ export function isSitePagePath(workspaceRoot, fp) {
   if (!fp || !/\.html?$/i.test(fp)) return false;
   const rel = path.relative(workspaceRoot, path.resolve(workspaceRoot, fp)).split(path.sep).join('/');
   if (!rel || rel.startsWith('..') || !rel.includes('/')) return false;
-  if (/^(exports|node_modules|_drafts|\.)/.test(rel)) return false;   // _drafts/ 是独立单页，不是站点页
+  // _drafts/ 里的试作也按站点页 lint：site-craft 方法论第一步就写它，嗅探器也把它当站点注入技术参考（09-07 C1）
+  if (/^(exports|node_modules|\.)/.test(rel)) return false;   // _drafts/ 里的试作也按站点页 lint（09-07 C1：方法论第一步就写它）
   return true;
 }
 

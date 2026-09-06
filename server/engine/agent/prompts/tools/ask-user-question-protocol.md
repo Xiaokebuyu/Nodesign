@@ -39,7 +39,7 @@
 |---|---|---|
 | `data:image/...;base64,XXX` | `<img>` 直接显 | 多变体并排选 cover/portrait（先 generate_image 出图再当 preview） |
 | `https://...` / `/api/.../assets/...` 以 .png/.jpg 结尾 | `<img>` 直接显 | 已有 asset path 直接当 preview |
-| `assets/generated/x.jpg` 相对路径 | `<img>` 直接显（fallback） | 同上简写 |
+| `assets/generated/x.jpg` 这类工作区相对路径 | ⛔ 碎图（前端路由下解析不到） | 别用；要贴已有的图就转成 base64 data URI |
 | 含 `<...>` 像 HTML | sandbox iframe srcDoc | 视觉方向 / 配色 / 字体 / 排版（约束见下） |
 | 纯文本 | mono 字 fallback | 兜底 |
 

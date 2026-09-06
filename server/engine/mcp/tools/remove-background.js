@@ -149,7 +149,6 @@ function safeBaseName(s) {
  * @param {object} [deps.ctx]
  */
 export function makeRemoveBackgroundTool({ workspaceRoot, sharedRoot = null, projectId = null, ctx } = {}) {
-  void ctx; // currently no event emit; sharing pattern w/ other tools
 
   return tool(
     'remove_background',
@@ -364,6 +363,9 @@ Returns: text caption with output path + image content block (preview the result
         for (let i = 3; i < data.length; i += info.channels) if (data[i] > 128) solid++;
         fgNote = ` foreground=${((solid / total) * 100).toFixed(0)}% of frame`;
       } catch { /* 量不出来就不报，别因为一个诊断数字挡住抠图 */ }
+
+      // 落盘了就发 file_changed：入座器靠它排座，前端素材抽屉靠它刷新（09-07 B1：此前是生图族里唯一不发的）
+      try { ctx?.emit?.({ type: 'run.file_changed', filePath: agentRelPath, event: 'add' }); } catch { /* */ }
 
       // 8. 返 caption + image content block 让 agent 直接 vision 看
       const caption = [

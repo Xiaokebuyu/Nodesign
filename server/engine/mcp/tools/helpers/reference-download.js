@@ -64,7 +64,7 @@ async function downloadOneImage(url, refsDir) {
     // 去重：同 url → 同 hash → 同文件名 → 已存在就跳写
     let exists = false;
     try { await fs.access(absPath); exists = true; } catch { /* not exists */ }
-    if (!exists) await fs.writeFile(absPath, buf);
+    if (!exists) { await fs.mkdir(refsDir, { recursive: true }); await fs.writeFile(absPath, buf); }
 
     return {
       relPath: path.posix.join(REFERENCE_IMAGE_DIR, fileName),
@@ -89,7 +89,7 @@ export async function downloadReferenceImages(images, { workspaceRoot, sharedRoo
   const baseRoot = sharedRoot || workspaceRoot;
   if (!baseRoot) return [];
   const refsDir = path.join(baseRoot, REFERENCE_IMAGE_DIR);
-  await fs.mkdir(refsDir, { recursive: true });
+  // 目录在第一次真写文件时才建：一张都没下下来的搜图不该给用户桌面留一个空文件夹卡（09-07 D4）
 
   // ⚠️ **够了就停**（2026-08-18）。原来是把候选全并发下完再 slice，于是多下的那些
   // 留在磁盘上、agent 不知道它们存在、却照样占空间和进导出包。候选多给是为了容错

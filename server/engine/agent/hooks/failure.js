@@ -99,7 +99,7 @@ export function makePostToolUseFailureHandler({ ctx, projectId, sessionId }) {
       } else if (/no parts|no image|safety|blocked|policy/.test(errLower)) {
         cause = '模型拒生（安全过滤 / 内容策略）→ 调 prompt：换更具体的视觉词（流派 / 镜头 / 灯光），去掉可能触发安全过滤的人物 / 暴力 / 品牌侵权描述，重试';
       } else if (/http 400|invalid|bad request/.test(errLower)) {
-        cause = 'Prompt 或参数问题（400）→ 检查：去掉否定描述（"no cars" → "empty street"）/ 加风格锚（"Saul Bass minimalist" / "Fujifilm color science"）/ aspectRatio + imageSize 组合是否合法，重试';
+        cause = 'Prompt 或参数问题（400）→ 检查：去掉否定描述（"no cars" → "empty street"）/ 加风格锚（"Saul Bass minimalist" / "Fujifilm color science"）/ 参考图张数（1-2 张最稳），重试';
       } else if (/path|reference|enoent|not.?found/.test(errLower)) {
         cause = 'referenceImages 路径错 → 用 Glob 确认文件存在；只接 workspace 相对路径（assets/...），不接 http url；选 1-2 张最切题的不要全 14 张';
       } else if (/quota|budget|limit/.test(errLower)) {

@@ -44,15 +44,29 @@ import { canvasIdForRel } from './board-tasklist.js';
 
 const MAX_SEATS_PER_RUN = 24;   // 一轮生成几百个文件的（构建产物漏网）也别刷爆板
 
-/** 会渲染成卡的才配座位：跟 /artifacts 扫描同一套排除精神 */
+/**
+ * 会渲染成卡的才配座位：跟 api/assets.js 的扫描面**同一形状**（09-07 设计线对账 A2/C3）。
+ * 此前这里只抄了 task-scan 的排除件，于是两面不对称：assets/references/**、exports/** 有座位却
+ * 不渲染（read_board 报一批用户看不见的东西、状态块催 agent 去 pin 而 pin 拒收）；
+ * _drafts/<名>.html 渲染成卡却永远没座位（near / place.by 全失败）。现在按扫描口逐条对齐：
+ *   - 根上的 _drafts/<名>.html 是正式产物（kinds/site.js single 实例）→ 入座；_drafts 更深的不算
+ *   - assets/ 只有三个口上墙：顶层文件、generated/<文件>、notes/<文件>
+ *   - notes/ 顶层便利贴 + notes/板书/ 板书；exports / node_modules / agent-memory 整段不上墙
+ */
 export function seatable(rel) {
   if (typeof rel !== 'string' || !rel || rel.length > 300) return false;
   if (rel.startsWith('/') || rel.includes('\\') || rel.includes('\0')) return false;
   const segs = rel.split('/');
-  if (segs.some(s => s === '..' || s === DRAFTS_DIR || HARD_IGNORE_DIRS.has(s))) return false;
+  if (segs.some(s => s === '..' || HARD_IGNORE_DIRS.has(s))) return false;
   // 点开头的段（.nd/.claude/.thumbnails…）整条不渲染
   if (segs.some(s => s.startsWith('.'))) return false;
   if (isReservedFile(segs[segs.length - 1])) return false;
+  const [top] = segs;
+  if (top === DRAFTS_DIR) return segs.length === 2 && /\.html?$/i.test(segs[1]);
+  if (segs.includes(DRAFTS_DIR)) return false;
+  if (top === 'assets') return segs.length === 2 || (segs.length === 3 && (segs[1] === 'generated' || segs[1] === 'notes'));
+  if (top === 'notes') return segs.length === 2 || (segs.length === 3 && `${segs[0]}/${segs[1]}` === CHALK_DIR);
+  if (RESERVED_DIRS.has(top)) return false;
   return true;
 }
 

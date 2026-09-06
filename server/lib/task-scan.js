@@ -64,7 +64,7 @@ export function isArchivePath(rel) {
  * 规则只认 html/css 的话它会当成一张产物卡上墙。
  */
 export function isReservedFile(name) {
-  return /\.template\.(html?|css|jsx?|mjs)$/i.test(name) || RESERVED_FILES.has(name);
+  return /\.template\.(html?|css|jsx?|mjs|json)$/i.test(name) || RESERVED_FILES.has(name);
 }
 
 /**

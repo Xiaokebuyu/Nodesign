@@ -31,9 +31,26 @@ describe('board-seater（入座下沉服务端）', () => {
     expect(seatable('board.json')).toBe(false);
     expect(seatable('.nd/board-sync.json')).toBe(false);
     expect(seatable('site/node_modules/a.js')).toBe(false);
-    expect(seatable('_drafts/x.html')).toBe(false);
     expect(seatable('/etc/passwd')).toBe(false);
     expect(seatable('a/../b.md')).toBe(false);
+  });
+
+  it('seatable 跟画布扫描面同一形状（09-07）：渲染的才有座位，不渲染的不占座', () => {
+    // 渲染成卡的
+    expect(seatable('_drafts/试作.html')).toBe(true);        // 根上的单页是正式产物
+    expect(seatable('assets/photo.jpg')).toBe(true);          // assets 顶层
+    expect(seatable('assets/notes/a.md')).toBe(true);
+    expect(seatable('notes/灵感.md')).toBe(true);
+    expect(seatable('notes/板书/x.md')).toBe(true);
+    expect(seatable('参考图/ref-abc.jpg')).toBe(true);        // 搜图落根上的真文件夹
+    // 不渲染的：有座位等于 read_board 里一堆用户看不见的东西
+    expect(seatable('_drafts/deep/x.html')).toBe(false);
+    expect(seatable('站点/_drafts/x.html')).toBe(false);
+    expect(seatable('assets/references/ref-abc.jpg')).toBe(false);
+    expect(seatable('assets/references/web/site/a.palette.json')).toBe(false);
+    expect(seatable('assets/generated/.thumbnails/a.thumb.webp')).toBe(false);
+    expect(seatable('exports/handoff-1.zip')).toBe(false);
+    expect(seatable('notes/深/一层.md')).toBe(false);
   });
 
   it('agent 写盘的文件回合末入座（26 秒没座位的病）', async () => {

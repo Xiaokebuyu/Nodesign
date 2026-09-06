@@ -27,7 +27,7 @@ describe('site-validate lint', () => {
     expect(isSitePagePath(W, '观察日志/about.html')).toBe(true);
     expect(isSitePagePath(W, '/ws/deck.html')).toBe(false);
     expect(isSitePagePath(W, '/ws/exports/site/index.html')).toBe(false);
-    expect(isSitePagePath(W, '/ws/_drafts/单页.html')).toBe(false);
+    expect(isSitePagePath(W, '/ws/_drafts/单页.html')).toBe(true);   // 09-07：试作也吃两条硬规则（方法论第一步就写它，嗅探器也当站点注入技术参考）
     expect(isSitePagePath(W, '/ws/观察日志/style.css')).toBe(false);
     expect(isSitePagePath(W, '/elsewhere/x/index.html')).toBe(false);
   });

@@ -14,6 +14,7 @@ import fs from 'node:fs/promises';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { detectKind, digest, fetchEntries, extractCardFromPng, listBookEntries } from '../../../lib/tavern-json.js';
+import { listPlays, WORLD_DIR } from '../../stage/play.js';
 
 const MAX_FETCH_CHARS = 24_000;
 
@@ -180,7 +181,11 @@ no place here; jailbreak sections are pointless on this platform.`,
           const live = all.filter(e => !e.停用 && e.正文.trim());
           if (!live.length) return fail('这份文件里没有启用且有正文的世界书条目。');
           const root = sharedRoot || workspaceRoot;
-          const dirRel = String(out || '世界书').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+          // 落点默认跟着戏走（09-07 演出线对账 B1）：机器只扫 <故事>/世界书/（worldbook.js），根上的那份
+          // 谁都不读。工作区里只有一场戏就直接写进它；没有戏（先导入后开场）才落根上，open_stage 开戏时搬进去
+          let defaultOut = WORLD_DIR;
+          try { const plays = await listPlays(root); if (plays.length === 1) defaultOut = `${plays[0]}/${WORLD_DIR}`; } catch { /* 没有戏 */ }
+          const dirRel = String(out || defaultOut).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
           if (!dirRel || dirRel.split('/').some(s2 => s2 === '..' || s2.startsWith('.'))) return fail('out 目录不合法。');
           const slug = (t) => String(t).replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'entry';
           const used = new Set();
@@ -192,6 +197,9 @@ no place here; jailbreak sections are pointless on this platform.`,
             for (let i = 2; used.has(`${sub}/${name}`); i += 1) name = `${slug(e.名字)}-${i}`;
             used.add(`${sub}/${name}`);
             const fm = ['---', 'nd: lore',
+              // 原名进 frontmatter（09-07 D3）：文件名是 slug，而 agent 手里只有 digest 给的原名，
+              // open_stage.lore.off 按名字关条目要能对上（worldbook.js 优先读 name）
+              `name: ${JSON.stringify(String(e.名字 || name))}`,
               `keys: ${JSON.stringify(e.触发)}`,
               `constant: ${e.常驻}`, `source: ${path.basename(abs)}`, '---', '', e.正文.trim(), ''];
             await fs.writeFile(path.join(root, sub, `${name}.md`), fm.join('\n'), 'utf8');

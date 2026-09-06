@@ -43,7 +43,7 @@ import { resolveCardPath, cardHome, readCardForStage, ROLES_DIR, CARD_FILE } fro
 import {
   TABLE_FILE, MAIN_LINE,
   isPlayDir, playFolderName, listPlays, readPlayConfig, writePlayConfig, readRules, writeRules, readTrophies,
-  migrateLegacyPlay, exists, linesOf, currentLine, sceneFileOf,
+  migrateLegacyPlay, exists, linesOf, currentLine, sceneFileOf, adoptRootDirs,
 } from './play.js';
 import { validateCondition } from './rules.js';
 import { composeStagePrompt, frozenHash } from './prompt.js';
@@ -258,6 +258,7 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     }
     castOut.push({ name, card: rel, ...(c?.note ? { note: String(c.note).slice(0, 60) } : {}) });
   }
+  await adoptRootDirs(ws, root);   // 根上的 世界书/ 预设/ 随开戏搬进故事文件夹（09-07 B1/C1）
   const next = {
     ...stored,
     title: String(title || stored.title || root).slice(0, 60),

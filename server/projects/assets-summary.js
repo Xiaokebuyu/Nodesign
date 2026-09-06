@@ -10,6 +10,7 @@
  */
 
 import path from 'node:path';
+import { REFERENCE_IMAGE_DIR } from '../engine/mcp/tools/helpers/reference-download.js';
 import fs from 'node:fs/promises';
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg']);
@@ -26,9 +27,11 @@ export async function readAssetsSummary(sessionRoot) {
   try {
     const assetsLink = path.join(sessionRoot, 'assets');
     const stat = await fs.stat(assetsLink).catch(() => null);
-    if (!stat) return { count: 0, summary: '', hasBinaryDocs: false };
+    // 搜图落点 09-07 挪到根上的 参考图/（用户看得见的真文件夹）：assets/ 不在也要往下走，
+    // 否则那一夹图对下个会话隐形 —— 正是这一节存在的理由（09-07 设计线对账 B2）
+    if (!stat && !(await fs.stat(path.join(sessionRoot, REFERENCE_IMAGE_DIR)).catch(() => null))) return { count: 0, summary: '', hasBinaryDocs: false, paths: [], allPaths: [] };
 
-    const entries = await fs.readdir(assetsLink, { withFileTypes: true }).catch(() => []);
+    const entries = stat ? await fs.readdir(assetsLink, { withFileTypes: true }).catch(() => []) : [];
     const files = entries.filter((e) => !e.name.startsWith('.') && (e.isFile() || e.isSymbolicLink()));
     // ⚠️ 别在这儿提前 return：顶层一个文件都没有、但 assets/references/ 下有一堆
     // 采集素材是**常见情形**（agent 逛过站但用户没上传过东西）。提前 return 会让
@@ -85,10 +88,16 @@ export async function readAssetsSummary(sessionRoot) {
       };
       await walk(refRoot, 'assets/references', 2);
     } catch { /* 没有这个目录就没有 */ }
+    // 搜下来的图（根上的 参考图/，只扫一层）：跟上面同一个清单，跨会话别重复搜
+    try {
+      for (const e of await fs.readdir(path.join(sessionRoot, REFERENCE_IMAGE_DIR), { withFileTypes: true })) {
+        if (!e.name.startsWith('.') && e.isFile()) refs.push(`${REFERENCE_IMAGE_DIR}/${e.name}`);
+      }
+    } catch { /* 没搜过图 */ }
 
     const refLine = refs.length
-      ? `另有 ${refs.length} 件参考素材在 assets/references/ 下（${refs.slice(0, 3).map(r => r.split('/').pop()).join('、')}`
-        + `${refs.length > 3 ? ' 等' : ''}）—— 逛站采回来的调色板/字体/结构/动效清单 json 就在这儿，`
+      ? `另有 ${refs.length} 件参考素材（${refs.slice(0, 3).map(r => r.split('/').pop()).join('、')}`
+        + `${refs.length > 3 ? ' 等' : ''}）—— 搜下来的图在根上的 参考图/（用户桌面上看得见），逛站采回来的调色板/字体/结构/动效清单 json 在 assets/references/web/，`
         + '出处记在同目录的 .meta/<同名>.json 里。**先看有没有现成的，别重复去搜。**'
       : '';
 
@@ -101,7 +110,7 @@ export async function readAssetsSummary(sessionRoot) {
     const overflow = refs.length - refPaths.length;
     if (overflow > 0) {
       // 别只是截断了不说 —— 「静默截断」读起来就是"全都在这儿了"
-      refPaths.push(`（另有 ${overflow} 件在 assets/references/ 下，名字和出处见同目录 .meta/）`);
+      refPaths.push(`（另有 ${overflow} 件参考素材，在 参考图/ 与 assets/references/web/ 下）`);
     }
     return {
       count: files.length + refs.length,
