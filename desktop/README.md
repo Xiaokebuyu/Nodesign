@@ -74,6 +74,14 @@ GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions �
   LibreOffice 是 MPL 2.0，随包分发允许，但要带上许可文件。
 - **图标只是占位**。`desktop/build/icon.png` 和 `desktop/assets/tray.png` 是站点 favicon 那个
   深底 N 字（sharp 渲的），能用，想换就换掉这两个文件。
+- **在 Windows 上一次都没跑过**。CI 打出来的包（Releases 草稿 v0.0.10，231MB）本机拆开看过：
+  `resources/node/node.exe`、`resources/app/{server,web/dist,bin,desktop}`、better-sqlite3 的 Node ABI
+  预编译、SDK 的 claude.exe 都在，hosted/ 和测试没带；但双击装、起服务端、开窗口这三步没验过。
+- **站点那半要先部署**。桌面版默认走 relay，而 relay 在这条分支的 hosted 代码里，线上还没有。
+  没部署之前桌面版能用的只有 BYOK（设置页填 Claude API Key 或自定义插槽）。想对着 exp 试，
+  设置页「站点地址」填 exp 的地址。
+- **设备令牌还是手动粘贴**。像 Cursor 那样点"登录"跳浏览器、批准后自动回填（device code 流程）没做。
+- **relay 只转推理**。生图和搜索走站主服务那两条（任务式请求）没做，桌面版这两样现在只能 BYOK。
 - **代码签名**。`electron-builder.yml` 里的 `certificateFile` 留空。没有证书的话，
   安装包首次运行会被 SmartScreen 拦一道"未知发布者"，用户要点两次才能装。
 - **钥匙来源（客户端半）**。首启选"用服务器提供的 API"还是"自己带钥匙"。服务器那半
