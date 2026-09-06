@@ -20,26 +20,13 @@ import { isAvailable as rembgAvailable, REMBG_SETUP_HINT } from '../engine/mcp/t
 // 盒子开没开机只有一个判据 —— h3box-ssh.localBoxEnabled。这里曾经自己写了一遍
 // `=== 'on'`，跟那边 `!== 'off'`（默认开）的默认值正好相反，同一个变量两套读法。
 import { localBoxEnabled } from '../engine/mcp/tools/h3box-ssh.js';
+import { searchRoute, imageRoute } from '../engine/mcp/tools/relay-tools.js';
+import { whichBinary } from './which.js';
+export { whichBinary };
 
 const isWin = process.platform === 'win32';
 
 /** 跨平台 which：PATH（Windows 连 PATHEXT）+ 调用方给的额外目录。找不到返回 null */
-export function whichBinary(name, extraDirs = []) {
-  if (!name) return null;
-  if (path.isAbsolute(name)) return fs.existsSync(name) ? name : null;
-  const dirs = [...(process.env.PATH || '').split(path.delimiter).filter(Boolean), ...extraDirs];
-  const exts = isWin ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';').map((e) => e.toLowerCase()) : [''];
-  for (const dir of dirs) {
-    for (const ext of exts) {
-      const candidate = path.join(dir, isWin && !name.toLowerCase().endsWith(ext) ? name + ext : name);
-      try {
-        const st = fs.statSync(candidate);
-        if (st.isFile()) return candidate;
-      } catch { /* 下一个 */ }
-    }
-  }
-  return null;
-}
 
 const home = os.homedir();
 const LO_DIRS = isWin
@@ -79,16 +66,23 @@ export const CAPABILITY_DEFS = Object.freeze([
     fix: `${REMBG_SETUP_HINT}（见 server/services/rembg-launcher.js）`,
     probe: async () => { const r = await rembgAvailable(); return { available: r.available, detail: r.available ? `mode=${r.mode}` : r.reason }; } },
   { id: 'imageGen', kind: 'service', level: 'feature', label: '生图通道', uses: 'generate_image',
-    fix: '默认走 codex CLI：npm i -g @openai/codex && codex login；或 NODESIGN_IMAGE_PROVIDER=gateway + NODESIGN_GATEWAY_KEY',
+    fix: '桌面版：登录站点即可（网关代出图）；自己搭：npm i -g @openai/codex && codex login，或 NODESIGN_IMAGE_PROVIDER=gateway + NODESIGN_GATEWAY_KEY',
+    // 选路跟工具本体同一个函数（mcp/tools/relay-tools.js）：这里说"可用"跟 generate_image 真能跑是同一个判断
     probe: () => {
-      const provider = (process.env.NODESIGN_IMAGE_PROVIDER || 'codex').toLowerCase();
-      if (provider === 'gateway') return { available: !!process.env.NODESIGN_GATEWAY_KEY, detail: process.env.NODESIGN_GATEWAY_KEY ? 'gateway（NODESIGN_GATEWAY_KEY 已配）' : 'NODESIGN_GATEWAY_KEY 为空' };
-      const r = bin(process.env.NODESIGN_CODEX_BIN || 'codex');
-      return { ...r, detail: r.available ? `codex：${r.detail}（是否已 codex login 这里探不到）` : `codex CLI 不在 PATH（${r.detail}）` };
+      const route = imageRoute();
+      if (route === 'relay') return { available: true, detail: '站点网关代出图（按账号记 $/张）' };
+      if (route === 'gateway') return { available: true, detail: 'gateway（NODESIGN_GATEWAY_KEY 已配）' };
+      if (route === 'codex') return { available: true, detail: `codex：${whichBinary(process.env.NODESIGN_CODEX_BIN || 'codex')}（是否已 codex login 这里探不到）` };
+      return { available: false, detail: (process.env.NODESIGN_IMAGE_PROVIDER || '').toLowerCase() === 'gateway' ? 'NODESIGN_GATEWAY_KEY 为空' : 'codex CLI 不在 PATH，也没登录站点' };
     } },
-  { id: 'webSearch', kind: 'key', level: 'feature', label: '联网搜索钥匙', uses: 'web_search',
-    fix: '.env 里配 NODESIGN_TAVILY_KEY / NODESIGN_EXA_KEY / NODESIGN_BAIDU_QIANFAN_KEY / NODESIGN_ZHIPU_KEY 任一',
-    probe: () => anyEnv(['NODESIGN_TAVILY_KEY', 'NODESIGN_EXA_KEY', 'NODESIGN_BAIDU_QIANFAN_KEY', 'NODESIGN_ZHIPU_KEY']) },
+  { id: 'webSearch', kind: 'key', level: 'feature', label: '联网搜索', uses: 'web_search',
+    fix: '桌面版：登录站点即可（网关代搜）；自己搭：.env 里配 NODESIGN_TAVILY_KEY / NODESIGN_EXA_KEY / NODESIGN_BAIDU_QIANFAN_KEY / NODESIGN_ZHIPU_KEY 任一',
+    probe: () => {
+      const route = searchRoute();
+      if (route === 'local') return { available: true, detail: '本机 key' };
+      if (route === 'relay') return { available: true, detail: '站点网关代搜（按账号计次）' };
+      return { available: false, detail: '没配搜索 key，也没登录站点' };
+    } },
   { id: 'publish', kind: 'key', level: 'feature', label: 'Cloudflare Pages 发布', uses: 'publish_site（一键上线四级域名）',
     fix: '.env 里配 CLOUDFLARE_API_TOKEN + NODESIGN_PUBLISH_DOMAIN（+ NODESIGN_CF_ACCOUNT_ID），并装 wrangler（npm i -g wrangler）',
     probe: () => {
@@ -107,10 +101,6 @@ export const CAPABILITY_DEFS = Object.freeze([
 function bin(name, extra = []) {
   const p = whichBinary(name, extra);
   return p ? { available: true, detail: p, path: p } : { available: false, detail: `${name} 不在 PATH${extra.length ? '（也不在常见安装位置）' : ''}` };
-}
-function anyEnv(names) {
-  const hit = names.find((n) => !!process.env[n]);
-  return hit ? { available: true, detail: `${hit} 已配` } : { available: false, detail: `${names.join(' / ')} 都为空` };
 }
 
 /** id → { id, kind, level, label, uses, fix, available, detail, path? }。probeCapabilities 之前是空的 */

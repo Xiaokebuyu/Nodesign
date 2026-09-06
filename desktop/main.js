@@ -23,11 +23,12 @@
  *    asar 是只读虚拟包，这几件事在里面全是坑。少一层压缩换掉一整类问题。
  */
 
-import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage } from 'electron';
+import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, screen } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { updateCheckMessage } from './update-message.js';
+import { resolveWindowBounds, MIN_SIZE } from './window-state.js';
 
 import {
   PortBusyError,
@@ -81,6 +82,7 @@ async function boot() {
   // 用户报问题时让他把这个文件发过来；文件超过 5MB 起动时滚一份 .old
   const dataDir = env.NODESIGN_DATA_DIR || path.join(app.getPath('home'), '.nodesign');
   openDesktopLog(dataDir);
+  windowStatePath = path.join(dataDir, 'window.json');
   const logFd = openServerLog(dataDir);
   sup = createSupervisor({
     serverEntry,
@@ -138,9 +140,24 @@ function createSplash() {
   splash.loadFile(path.join(here, 'splash.html'));
 }
 
+// 窗口大小 / 位置记在数据目录（window.json）。⛔ 别写死 1440×900：Electron 不按屏幕裁，笔记本上底下一截会落在屏幕外
+let windowStatePath = null;
+function readWindowState() {
+  try { return JSON.parse(fs.readFileSync(windowStatePath, 'utf8')); } catch { return null; }
+}
+function saveWindowState() {
+  if (!win || !windowStatePath) return;
+  try {
+    const b = win.getNormalBounds();   // 最大化时是还原后的那个框
+    fs.writeFileSync(windowStatePath, JSON.stringify({ ...b, maximized: win.isMaximized() }));
+  } catch (e) { log(`记不下窗口位置：${e.message}`); }
+}
+
 function createMainWindow() {
+  const bounds = resolveWindowBounds(readWindowState(), [screen.getPrimaryDisplay(), ...screen.getAllDisplays().filter((d) => d.id !== screen.getPrimaryDisplay().id)].map((d) => d.workArea));
   win = new BrowserWindow({
-    width: 1440, height: 900, minWidth: 960, minHeight: 600,
+    width: bounds.width, height: bounds.height, minWidth: MIN_SIZE.width, minHeight: MIN_SIZE.height,
+    ...(bounds.x != null ? { x: bounds.x, y: bounds.y } : { center: true }),
     show: false, backgroundColor: '#faf8f4',
     webPreferences: {
       // 页面是 http://127.0.0.1 上的普通网页，保持默认的浏览器安全模型：
@@ -152,8 +169,13 @@ function createMainWindow() {
 
   win.once('ready-to-show', () => {
     splash?.destroy(); splash = null;
+    if (bounds.maximized) win.maximize();
     win.show();
   });
+  let saveTimer = null;
+  const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveWindowState, 400); };
+  win.on('resize', scheduleSave); win.on('move', scheduleSave);
+  win.on('maximize', scheduleSave); win.on('unmaximize', scheduleSave);
 
   // 站外链接（用户产物里的外链、文档链接）交给系统浏览器，别在应用里开一扇没有地址栏的窗
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -163,6 +185,7 @@ function createMainWindow() {
 
   // 关窗不退出：托盘还在，符合 Windows 上常驻应用的习惯。真退出走托盘菜单或 app.quit()
   win.on('close', (e) => {
+    saveWindowState();
     if (quitting) return;
     e.preventDefault();
     win.hide();

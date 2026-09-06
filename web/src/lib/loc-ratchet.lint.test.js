@@ -51,7 +51,7 @@ const GRANDFATHERED = {
   // 整块迁去 exports/handoff.js —— 圈起来是为了退役时整份删，不用在大文件里挑
   'server/api/exports.js': 690,
   'server/engine/runs/active-runs.js': 912,
-  'server/engine/mcp/tools/generate-image.js': 842,
+  'server/engine/mcp/tools/generate-image.js': 625,   // 09-07 出图那步拆去 image-produce.js（relay 也要跑）：842 → 621
   'web/src/components/canvas/SiteWindow.jsx': 841,
   'web/src/routes/AdminConsole.jsx': 830,
   'web/src/lib/drag-intent.js': 819,
@@ -65,7 +65,7 @@ const GRANDFATHERED = {
   // 迁去 lib/api-exports.js（520），仍走通用上限，没进表
   // 08-31 按标签整组操作（commitStaging/clearTags/removeByTag）迁去 board-tags.js：640 → 583
   'server/projects/board-store.js': 583,
-  'server/engine/mcp/tools/web-search.js': 548,
+  'server/engine/mcp/tools/web-search.js': 256,   // 09-07 四家适配器拆去 web-search-providers.js（relay 也要跑）：548 → 252
 };
 
 // 运行时用户数据（gitignored）：agent 替用户写的站点代码也会长出 .js 文件，

@@ -88,10 +88,11 @@ router.put('/env', async (req, res) => {
   if (!values || typeof values !== 'object' || Array.isArray(values)) return res.status(400).json({ error: 'body 要是 { values: { KEY: "v" | null } }' });
   try {
     const r = setEnvValues(values);
-    // 钥匙变了能力表要重探（钥匙类即时生效；二进制类不变），新会话的工具闸就按新结果
-    await probeCapabilities({ force: true });
     // relay 的令牌或地址变了就重拉目录（选择器同步读快照，这里不拉它永远是旧的）
     if (r.changed.some((k) => k.startsWith('NODESIGN_RELAY_'))) await refreshRelayCatalog();
+    // 钥匙变了能力表要重探（钥匙类即时生效；二进制类不变），新会话的工具闸就按新结果。
+    // ⚠️ 要在目录之后：webSearch / imageGen 两位现在也看"网关给不给"（relay-tools.js）
+    await probeCapabilities({ force: true });
     res.json({ ok: true, changed: r.changed, keys: envView(), capabilities: capabilitySnapshot(), relay: relayView() });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -169,7 +170,8 @@ router.post('/relay/login', async (req, res) => {
     // 只在用户填了站点地址时才动它：没填 = 沿用 .env 里已有的（可能是 exp），不是清掉
     setEnvValues({ NODESIGN_RELAY_TOKEN: r.token, ...(url ? { NODESIGN_RELAY_URL: normalizeRelayUrl(url) } : {}) });
     await refreshRelayCatalog();
-    res.json({ ok: true, relay: relayView(), keys: envView() });
+    await probeCapabilities({ force: true });   // 登录后网关代跑的搜索 / 生图就"可用"了，引导页和工具闸都按这个
+    res.json({ ok: true, relay: relayView(), keys: envView(), capabilities: capabilitySnapshot() });
   } catch (err) {
     const status = err.status === 401 ? 401 : err.status === 429 ? 429 : err.status === 409 ? 409 : 502;
     res.status(status).json({ error: err.message, code: err.code || 'RELAY_LOGIN_FAILED' });
@@ -180,13 +182,15 @@ router.post('/relay/logout', async (_req, res) => {
   await relayLogout();
   setEnvValues({ NODESIGN_RELAY_TOKEN: null });
   await refreshRelayCatalog();
-  res.json({ ok: true, relay: relayView(), keys: envView() });
+  await probeCapabilities({ force: true });
+  res.json({ ok: true, relay: relayView(), keys: envView(), capabilities: capabilitySnapshot() });
 });
 
 // ── 站主 relay：重拉目录（设置页「刷新」按钮；令牌不变但站点那边档位/额度变了的时候用） ──
 router.post('/relay/refresh', async (_req, res) => {
   await refreshRelayCatalog();
-  res.json({ ok: true, relay: relayView() });
+  await probeCapabilities({ force: true });
+  res.json({ ok: true, relay: relayView(), capabilities: capabilitySnapshot() });
 });
 
 function relayView() {

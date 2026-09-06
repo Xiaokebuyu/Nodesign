@@ -143,3 +143,18 @@ export async function relayLogout() {
 export async function relayUsageDaily(days = 30) {
   return call(`/usage/daily?days=${encodeURIComponent(days)}`);
 }
+
+// ── 工具中继（09-07）：桌面版没有站主的钥匙，联网搜索 / 生图这类调用交给网关用站主的钥匙跑 ──
+
+/** 目录里 /whoami 报的"网关替你跑的工具"：{ web_search: bool, generate_image: bool }；目录没拉到 = 全 false */
+export function relayTools() {
+  return catalog.ok && catalog.whoami?.tools && typeof catalog.whoami.tools === 'object' ? catalog.whoami.tools : {};
+}
+
+/**
+ * 调网关上的一件工具。失败抛错带 code（TIER_DENIED / QUOTA_EXCEEDED / RELAY_TIMEOUT …），
+ * 调用方把 message 原样给 agent。生图要等几十秒，超时单独给。
+ */
+export async function relayToolCall(name, body, { timeoutMs = 60_000 } = {}) {
+  return call(`/tools/${encodeURIComponent(name)}`, { method: 'POST', body, timeoutMs });
+}

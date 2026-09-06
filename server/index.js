@@ -58,6 +58,9 @@ platform.dump();
 // GET /api/local/status 都读它。探测是异步的（playwright 要 import），在 listen 之前等它
 // 本地分发版：先把装好的组件目录挂进 PATH（runtime/components.js），能力表才探得到它们
 if (platform.isLocal) applyComponentEnv();
+// 站主 relay 的目录（配了令牌才拉；没配 / 拉不到都不阻止起动，选择器就只剩本机钥匙的行）。
+// ⚠️ 在能力探测之前：联网搜索 / 生图两位要看"网关给不给"（relay-tools.js），目录没拉就探成"没有"
+const relay = platform.isLocal ? await refreshRelayCatalog() : null;
 await probeCapabilities();
 console.log(summarizeCapabilities());
 
@@ -100,8 +103,6 @@ if (platform.isLocal) {
   // 本地分发版：单租户，登录墙钉死关闭（auth/users-store.js authEnabled），请求者恒为 LOCAL_OWNER。
   // 不跑 bootstrapAuth：它会按 NODESIGN_AUTH_PASSWORD 建 admin、回填项目归属 —— 那是多用户站的事。
   console.log(`[profile] local：单租户模式，数据目录 ${platform.dataRoot}，只监听 ${platform.listenHost}`);
-  // 站主 relay 的目录（配了令牌才拉；没配 / 拉不到都不阻止起动，选择器就只剩本机钥匙的行）
-  const relay = await refreshRelayCatalog();
   if (relay.configured) console.log(relay.ok ? `[relay-client] ${relay.whoami?.user?.username}（${relay.whoami?.user?.tier}）· 站点提供 ${relay.models.length} 个模型` : `[relay-client] ⚠️ 站点目录拉不到：${relay.error}`);
 } else {
   hosted.mountHostedAuth(app);   // 登录 / 注册 + 多用户 bootstrap（hosted/mount.js）

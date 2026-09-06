@@ -22,6 +22,8 @@
  *   DELETE /sessions/:sid
  *   POST   /__nd/:sid/v1/messages  推理（SDK 的 ANTHROPIC_BASE_URL = <site>/api/relay/__nd/<sid>）
  *   POST   /__nd/:sid/v1/messages/count_tokens
+ *   POST   /tools/web_search       网关替桌面版搜（站主的 key；basic 档日上限）        tools.js
+ *   POST   /tools/generate_image   网关替桌面版出图（站主的通道；$0.20/张进账本）      tools.js
  *
  * 拒绝一律回 Anthropic 错误形状 {type:'error', error:{type, message}} 外加我们自己的 code：
  * SDK 认得前者能把话显示给用户，客户端认得后者能做对应的引导（换模型 / 明天再来）。
@@ -39,6 +41,7 @@ import { handleRequest as forwardViaIngress } from '../../lib/model-ingress.js';
 import { priceTokens, resolveModelRoute, hasSubscriptionAccess, selectableModelsFor, PICKER_SCOPES } from '../../engine/agent/model-context.js';
 import { checkQuota } from '../../lib/quota.js';
 import { tierOf } from '../../auth/tier.js';
+import { mountRelayTools, relayToolsFor } from './tools.js';
 
 const BODY_MAX = 64 * 1024 * 1024;   // 带图的 Messages body 能到十几 MB；站内入口本来没有上限
 
@@ -73,7 +76,7 @@ function deviceAuth(req, res, next) {
   next();
 }
 
-export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub = forwardSubscription, moderate = undefined } = {}) {
+export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub = forwardSubscription, moderate = undefined, tools = {} } = {}) {
   const router = express.Router();
 
   // 桌面版登录：账号密码 → 设备令牌。跟网页登录同一套核验和爆破锁（hosted/auth-routes.checkPassword）。
@@ -113,9 +116,14 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
       user: { id: user.id, username: user.username, tier: tierOf(user) },
       device: { id: req.relayDevice.id, label: req.relayDevice.label },
       capabilities: { subscription: hasSubscriptionAccess(user) },
+      // 网关替这个账号跑的工具（桌面版没有钥匙的那几件）：客户端的能力位和工具选路都按这张表
+      tools: relayToolsFor(user),
       quota: { kind: quota.kind, used: quota.used, limit: quota.limit },
     });
   });
+
+  // 工具中继（搜索 / 生图）：tools.js
+  mountRelayTools(router, { sendError, readRawBody, ...tools });
 
   // 目录：客户端拿着同一张 model-table，只需要知道"哪些行这个账号能用、哪些锁着"。两个选择器面（canvas / stage）
   // 的并集，面的过滤客户端自己做。字段只给 id / locked / lockReason，标签和描述客户端表里有。

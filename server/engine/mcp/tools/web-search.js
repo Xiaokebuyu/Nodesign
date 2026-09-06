@@ -5,11 +5,8 @@
  * Provider 优先级按 query 语言自动路由：CJK → baidu 优先；非 CJK → tavily 优先；
  * zhipu 配额稀缺永远最后。zero 外部依赖（仅 Node 内置 fetch + URL）。
  *
- * key 配置（.env，至少配一个）：
- *   NODESIGN_BAIDU_QIANFAN_KEY=bce-v3/...
- *   NODESIGN_TAVILY_KEY=tvly-...
- *   NODESIGN_EXA_KEY=...
- *   NODESIGN_ZHIPU_KEY=...
+ * key 配置（.env，至少配一个）：见 web-search-providers.js（四家适配器与选家 09-07 拆去那里，
+ * 因为 hosted relay 也要跑同一段：桌面版没 key 时由网关替它搜，见 relay-tools.js）。
  *
  * agent 视角的工具名：mcp__nodesign__web_search
  *
@@ -24,245 +21,12 @@
  * - baidu 英文：禁用（实测严重跑题）
  */
 
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import crypto from 'node:crypto';
 import { downloadReferenceImages } from './helpers/reference-download.js';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
+import { PROVIDERS, ProviderError, domainOf, runWebSearch } from './web-search-providers.js';
+import { searchRoute, relayWebSearch } from './relay-tools.js';
 
-const PROVIDERS = {
-  tavily: { keyEnv: 'NODESIGN_TAVILY_KEY' },
-  exa:    { keyEnv: 'NODESIGN_EXA_KEY' },
-  baidu:  { keyEnv: 'NODESIGN_BAIDU_QIANFAN_KEY' },
-  zhipu:  { keyEnv: 'NODESIGN_ZHIPU_KEY' },
-};
-
-const PRIORITY_CJK = ['baidu', 'tavily', 'exa', 'zhipu'];
-const PRIORITY_NON_CJK = ['tavily', 'exa', 'baidu', 'zhipu'];
-
-function looksChinese(text) {
-  // U+4E00-U+9FFF Unified CJK
-  return /[一-鿿]/.test(text || '');
-}
-
-function getKey(providerId) {
-  const env = PROVIDERS[providerId]?.keyEnv;
-  return env ? (process.env[env] || '') : '';
-}
-
-function autoSelectProvider(query) {
-  const order = looksChinese(query) ? PRIORITY_CJK : PRIORITY_NON_CJK;
-  for (const id of order) if (getKey(id)) return id;
-  return null;
-}
-
-function domainOf(url) {
-  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; }
-}
-
-// ── adapters ──
-
-async function searchTavily(query, key, n, { includeImages = false } = {}) {
-  const body = {
-    query,
-    search_depth: includeImages ? 'advanced' : 'basic',
-    topic: 'general',
-    max_results: n,
-    include_answer: false,
-    include_raw_content: false,
-  };
-  if (includeImages) {
-    body.include_images = true;
-    body.include_image_descriptions = true;
-    body.include_favicon = true;
-  }
-  const res = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new ProviderError('tavily', res.status, await res.text());
-  const raw = await res.json();
-  const hits = (raw.results || []).map(r => ({
-    title: r.title || '',
-    url: r.url || '',
-    snippet: r.content || '',
-    source: domainOf(r.url || ''),
-    publishedAt: r.published_date || '',
-  }));
-  const images = includeImages
-    ? (raw.images || [])
-        .filter(i => i?.url)
-        .map(i => ({
-          url: i.url,
-          description: i.description || '',
-          title: i.title || '',
-        }))
-    : [];
-  return { hits, images };
-}
-
-async function searchExa(query, key, n, { includeImages = false } = {}) {
-  // Exa 顶层是 camelCase（numResults / maxCharacters / imageLinks），
-  // 旧字段 num_results 仍兼容，新功能用官方约定的 camelCase。
-  const contents = {
-    highlights: { maxCharacters: 4000 },
-  };
-  if (includeImages) {
-    contents.extras = { imageLinks: Math.max(3, n) };
-  }
-  const res = await fetch('https://api.exa.ai/search', {
-    method: 'POST',
-    headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      query,
-      type: 'auto',
-      numResults: n,
-      contents,
-    }),
-  });
-  if (!res.ok) throw new ProviderError('exa', res.status, await res.text());
-  const raw = await res.json();
-  const hits = (raw.results || []).map(r => {
-    const highlights = r.highlights || [];
-    return {
-      title: r.title || '',
-      url: r.url || '',
-      snippet: highlights[0] || r.text || '',
-      source: domainOf(r.url || ''),
-      publishedAt: r.publishedDate || '',
-    };
-  });
-  // images: results[].image（页面代表图）+ results[].extras.imageLinks（页面内抽图），dedupe by url
-  const images = [];
-  if (includeImages) {
-    const seen = new Set();
-    for (const r of (raw.results || [])) {
-      const parentTitle = r.title || '';
-      // 1) 页面代表图（每条最多 1 张）
-      if (r.image && !seen.has(r.image)) {
-        seen.add(r.image);
-        images.push({ url: r.image, description: parentTitle, title: parentTitle });
-      }
-      // 2) 页面内抽到的图片链接（无描述，用 parent title 兜底）
-      const links = r.extras?.imageLinks || [];
-      for (const link of links) {
-        if (!link || seen.has(link)) continue;
-        seen.add(link);
-        images.push({ url: link, description: parentTitle, title: parentTitle });
-      }
-    }
-  }
-  return { hits, images };
-}
-
-async function searchBaidu(query, key, n, { includeImages = false } = {}) {
-  // Baidu Qianfan content 字段硬上限 72 字符
-  const truncated = query.length > 72 ? query.slice(0, 72) : query;
-  const body = {
-    messages: [{ role: 'user', content: truncated }],
-  };
-  if (includeImages) {
-    // 默认 image.top_k=0；必须显式声明才返图。同时保留 web 模态拿 hits。
-    body.search_source = 'baidu_search_v2';
-    body.resource_type_filter = [
-      { type: 'web', top_k: n },
-      { type: 'image', top_k: Math.min(30, Math.max(n, 10)) },
-    ];
-  }
-  const res = await fetch('https://qianfan.baidubce.com/v2/ai_search/web_search', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new ProviderError('baidu', res.status, await res.text());
-  const raw = await res.json();
-  let results = raw.search_results || raw.results || [];
-  if (!Array.isArray(results) || results.length === 0) {
-    results = raw.references || [];
-  }
-  // 把 web 与 image 两类拆开：image 模态是 type==='image'
-  const webRefs = results.filter(r => (r?.type || 'web') !== 'image');
-  const imageRefs = results.filter(r => r?.type === 'image');
-
-  const hits = webRefs.slice(0, n).map(r => ({
-    title: r.title || '',
-    url: r.url || r.link || '',
-    snippet: r.content || r.abstract || r.segment_text || '',
-    source: r.source || domainOf(r.url || r.link || ''),
-    publishedAt: r.publish_time || '',
-  }));
-
-  const images = [];
-  if (includeImages) {
-    const seen = new Set();
-    // 1) 图片模态条目
-    for (const r of imageRefs) {
-      const u = r.image?.url || r.url;
-      if (!u || seen.has(u)) continue;
-      seen.add(u);
-      images.push({
-        url: u,
-        description: r.title || '',
-        title: r.title || '',
-      });
-    }
-    // 2) 网页条目里夹带的相关图（web_extensions.images）
-    for (const r of webRefs) {
-      const arr = r.web_extensions?.images || [];
-      for (const img of arr) {
-        const u = img?.url;
-        if (!u || seen.has(u)) continue;
-        seen.add(u);
-        images.push({
-          url: u,
-          description: r.title || '',
-          title: r.title || '',
-        });
-      }
-    }
-  }
-  return { hits, images };
-}
-
-async function searchZhipu(query, key, n) {
-  // 用 dedicated tools/web_search endpoint（比 chat completions 路径更直接）
-  const res = await fetch('https://open.bigmodel.cn/api/paas/v4/tools/web_search', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      search_engine: 'search_pro',
-      search_query: query,
-      count: n,
-    }),
-  });
-  if (!res.ok) throw new ProviderError('zhipu', res.status, await res.text());
-  const raw = await res.json();
-  const hits = (raw.search_result || []).slice(0, n).map(r => ({
-    title: r.title || '',
-    url: r.link || r.url || '',
-    snippet: r.content || '',
-    source: r.media || domainOf(r.link || r.url || ''),
-    publishedAt: '',
-  }));
-  return { hits, images: [] };
-}
-
-const ADAPTERS = {
-  tavily: searchTavily,
-  exa: searchExa,
-  baidu: searchBaidu,
-  zhipu: searchZhipu,
-};
-
-class ProviderError extends Error {
-  constructor(provider, code, body) {
-    super(`[${provider}] HTTP ${code}: ${String(body || '').slice(0, 300)}`);
-    this.provider = provider;
-    this.code = code;
-  }
-}
 
 function formatMarkdown(query, provider, hits, { images = [] } = {}) {
   const lines = [`## Search results (${provider}, ${hits.length} hits)`, '', `> Query: ${query}`, ''];
@@ -389,81 +153,19 @@ Suggested flow for image-led pages:
     },
     async ({ query, provider = 'auto', count = 5, include_images = false }) => {
       try {
-        // 1) Provider 选择
-        //    - 普通模式：tavily/exa/baidu/zhipu auto-route by language（CJK→baidu, EN→tavily）
-        //    - include_images：zhipu 不支持图，从候选中剔除；其余按语言 auto-route
-        let providerId;
-        let providerNote = '';
-        if (include_images) {
-          if (provider === 'zhipu') {
-            return {
-              content: [{
-                type: 'text',
-                text: 'web_search failed: provider "zhipu" does not support image search. Use tavily / exa / baidu, or omit provider for auto-routing.',
-              }],
-              isError: true,
-            };
-          }
-          if (provider === 'auto') {
-            const order = (looksChinese(query) ? PRIORITY_CJK : PRIORITY_NON_CJK)
-              .filter(id => id !== 'zhipu');
-            providerId = order.find(id => getKey(id)) || null;
-            if (!providerId) {
-              return {
-                content: [{
-                  type: 'text',
-                  text: 'web_search failed (include_images=true): no image-capable provider configured. Set at least one of '
-                    + ['tavily', 'exa', 'baidu'].map(id => PROVIDERS[id].keyEnv).join(' / '),
-                }],
-                isError: true,
-              };
-            }
-          } else {
-            // 点名的 provider 没配 key：换配了的顶上别硬失败（结果>供应商身份，iss_mt5z4s8j）
-            providerId = provider;
-            if (!getKey(providerId)) {
-              const alt = ((looksChinese(query) ? PRIORITY_CJK : PRIORITY_NON_CJK).filter(id => id !== 'zhipu')).find(id => getKey(id)) || null;
-              if (!alt) return { content: [{ type: 'text', text: `web_search failed: ${PROVIDERS[providerId].keyEnv} not set, and no other image-capable provider configured.` }], isError: true };
-              providerNote = `（provider "${provider}" 没配 key，已换用 ${alt}）`;
-              providerId = alt;
-            }
-          }
-        } else {
-          providerId = provider === 'auto' ? autoSelectProvider(query) : provider;
-          if (!providerId) {
-            return {
-              content: [{
-                type: 'text',
-                text: 'web_search failed: no provider configured. Set at least one of '
-                  + Object.values(PROVIDERS).map(p => p.keyEnv).join(' / ')
-                  + ' in NoDesign .env.',
-              }],
-              isError: true,
-            };
-          }
-          if (!getKey(providerId)) {
-            const alt = autoSelectProvider(query);   // 只挑配了 key 的
-            if (!alt || !getKey(alt)) return { content: [{ type: 'text', text: `web_search failed: ${PROVIDERS[providerId].keyEnv} not set, and no other provider configured.` }], isError: true };
-            providerNote = `（provider "${providerId}" 没配 key，已换用 ${alt}）`;
-            providerId = alt;
-          }
+        // 1) 选路：本机有 key 就本机搜；没有但登录了站点（桌面版）就让网关用站主的 key 搜（按账号计次）；
+        //    都没有 → 同一句"没配 provider"
+        const route = searchRoute();
+        if (!route) {
+          return { content: [{ type: 'text', text: `web_search failed: no provider configured. Set at least one of ${Object.values(PROVIDERS).map(p => p.keyEnv).join(' / ')} in NoDesign .env.` }], isError: true };
         }
-
-        const key = getKey(providerId);
-
-        // 2) CJK query 翻英文再搜图这一步已移除（2026-07-31）。
-        //    它唯一的实现走 NoDesk 网关，网关 07-27 永久退役后函数直接 return null，
-        //    于是这段代码一直在跑但从来没生效过 —— 中文 query 搜图拿到的
-        //    images[].description 约一半是 null，而日志里什么都看不出来。
-        //    静默失效比不存在更坏：读代码的人会以为这个能力还在。
-        //    要恢复的话得先给它一个活着的 provider（见 lib/openai 那套 key），
-        //    不是把这几行搬回来就完事。
+        // 2) 搜（选家 + 调适配器；relay 那边跑的是同一个 runWebSearch）
+        const result = route === 'relay'
+          ? await relayWebSearch({ query, provider, count, includeImages: include_images })
+          : await runWebSearch({ query, provider, count, includeImages: include_images });
+        if (result.error) return { content: [{ type: 'text', text: result.error }], isError: true };
+        const { providerId, providerNote } = result;
         const effectiveQuery = query;
-
-        // 3) Provider call —— tavily/exa/baidu 都接 includeImages opts；zhipu 不传
-        const adapter = ADAPTERS[providerId];
-        const adapterOpts = providerId === 'zhipu' ? undefined : { includeImages: include_images };
-        const result = await adapter(effectiveQuery, key, count, adapterOpts);
         const hits = result.hits || [];
         const rawImages = result.images || [];
 

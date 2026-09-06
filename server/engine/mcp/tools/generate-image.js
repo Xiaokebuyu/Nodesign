@@ -48,9 +48,9 @@ import sharp from 'sharp';
 import {
   THUMBNAIL_MAX_DIM, THUMBNAIL_QUALITY, writeWebpSibling,   // 预热由 writeWebpSibling 顺带做
 } from '../../../lib/image-variant.js';
-import {
-  buildCodexBridgePrompt, runCodexImageGen, buildVariationPrompt, PRESERVE_KEYS,
-} from './helpers/codex-imagegen.js';
+import { buildVariationPrompt, PRESERVE_KEYS } from './helpers/codex-imagegen.js';
+import { produceImage, extForMime } from './image-produce.js';
+import { imageRoute, relayGenerateImage } from './relay-tools.js';
 
 // Thumbnail 配置（env 可调）。**原图不动**——保留 Gemini 输出的全分辨率（通常
 // 1080×1920+ PNG，6-8MB）让用户最终交付不损失质量。仅生成低清 thumbnail 给
@@ -99,11 +99,11 @@ async function makeThumbnail(rawBuf) {
 // Pro 比 Flash 慢 + 贵 ~2-3×，但质量提升对"会被复用为 referenceImages 种子"
 // 的图值得——种子错了下游全漂、整个 deck 返工成本更高。
 // spike 实测 NoDesk + DMXAPI 两个 model id 都通。
-const MODELS = {
+export const MODELS = {
   flash: 'gemini-3.1-flash-image-preview',
   pro: 'gemini-3-pro-image-preview',
 };
-const DEFAULT_MODEL = 'flash';
+export const DEFAULT_MODEL = 'flash';
 
 // 14 种官方比例（Gemini 3.1 Flash Image Preview 文档）
 const ASPECT_RATIOS = [
@@ -133,18 +133,6 @@ const MIME_BY_EXT = {
   '.pdf': 'application/pdf',
 };
 
-const DEFAULT_NODESK_URL = 'https://llm-gateway-api.nodesk.tech';
-const DEFAULT_DMXAPI_BASE = 'https://www.dmxapi.cn';
-const DEFAULT_CHANNEL = 'DMX';
-
-// ── codex 生图桥（2026-07-27：NoDesk 网关退役，codex 成为默认 provider）──
-// 桥的 prompt 组装 + 子进程执行 + 变体模式骨架都在 helpers/codex-imagegen.js
-// （2026-08-24 迁出）。这里只留 provider 分流开关。
-const IMAGE_PROVIDER = () => (process.env.NODESIGN_IMAGE_PROVIDER || 'codex').toLowerCase();
-
-const PASSTHROUGH_PATH = '/default/passthrough';
-// model id 在 callGateway 时动态拼，因为支持 flash / pro 路由
-const generateContentPathFor = (modelId) => `/v1beta/models/${modelId}:generateContent`;
 
 /**
  * 把 referenceImages 路径解析到 sharedRoot/workspaceRoot 之一。防止 traversal。
@@ -195,81 +183,6 @@ async function resolveReferenceImage(relPath, workspaceRoot, sharedRoot) {
   return { abs: absResolved, mimeType, baseUsed };
 }
 
-/**
- * 调网关返回 Gemini 响应 body（已 parse）。
- *
- * @returns {Promise<object>} parsed JSON
- * @throws {Error} 401/HTTP 错误 / 网络错误
- */
-async function callGateway(payload, { gatewayUrl, gatewayKey, channel, channelBase, modelId, signal }) {
-  const passthroughUrl = gatewayUrl.replace(/\/$/, '') + PASSTHROUGH_PATH;
-  const channelUrl = channelBase.replace(/\/$/, '') + generateContentPathFor(modelId);
-
-  const wrapped = {
-    channel,
-    channel_url: channelUrl,
-    ...payload,
-  };
-
-  const res = await fetch(passthroughUrl, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${gatewayKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(wrapped),
-    signal,
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    const snippet = text.slice(0, 400);
-    const hint =
-      res.status === 401 || res.status === 403
-        ? ' (auth failed — check NODESIGN_GATEWAY_KEY)'
-        : res.status === 429
-          ? ' (rate limit / quota — try again later)'
-          : '';
-    throw new Error(`gateway HTTP ${res.status}${hint}: ${snippet}`);
-  }
-  return await res.json();
-}
-
-/**
- * 从 Gemini 响应里提第一张图（base64 PNG）。多张时只取第一。
- * 有些响应 model 会在 thought 阶段产中间图（thought:true）—— 跳掉那些，
- * 取 final（无 thought 标记的）image part。
- *
- * @returns {{ base64: string, mimeType: string, accompanyText: string }}
- * @throws {Error} 无 image part
- */
-function extractFinalImage(response) {
-  const parts = response?.candidates?.[0]?.content?.parts || [];
-  if (!Array.isArray(parts) || parts.length === 0) {
-    throw new Error('Gemini response has no parts');
-  }
-  let lastImage = null;
-  let firstFinalImage = null;
-  const accompanyTexts = [];
-  for (const p of parts) {
-    if (p.inlineData?.data) {
-      lastImage = p.inlineData;
-      if (!p.thought && !firstFinalImage) firstFinalImage = p.inlineData;
-    } else if (p.inline_data?.data) {
-      lastImage = p.inline_data;
-      if (!p.thought && !firstFinalImage) firstFinalImage = p.inline_data;
-    } else if (p.text && !p.thought) {
-      accompanyTexts.push(p.text);
-    }
-  }
-  const chosen = firstFinalImage || lastImage;
-  if (!chosen) throw new Error('Gemini response has no image data');
-  return {
-    base64: chosen.data,
-    mimeType: chosen.mimeType || chosen.mime_type || 'image/png',
-    accompanyText: accompanyTexts.join('\n').trim(),
-  };
-}
 
 function safeBaseName(s) {
   return String(s || '')
@@ -475,9 +388,11 @@ memory (记忆/, type: project) so later sessions inherit it.`,
         prompt = buildVariationPrompt({ change, preserve, extra: prompt });
         referenceImages = [variationOf, ...(referenceImages || [])];
       }
-      // 1. provider 分流（2026-07-27：NoDesk 网关退役，默认 codex 订阅生图；
-      //    gateway 分支保留给显式 NODESIGN_IMAGE_PROVIDER=gateway 的场景）
-      const provider = IMAGE_PROVIDER();
+      // 1. 选路：本机 codex / gateway，都没有但登录了站点（桌面版）就让网关替它出图（按账号记 $0.20/张）
+      const route = imageRoute();
+      if (!route) {
+        return { content: [{ type: 'text', text: 'generate_image failed: no image provider configured（codex CLI / NODESIGN_IMAGE_PROVIDER=gateway，或桌面版登录站点）.' }], isError: true };
+      }
 
       // 输出命名 + 目录提前定：codex 分支需要先有确定的目标路径让 codex 落盘
       const finalName = buildOutputName(outputName, assetRole);
@@ -489,8 +404,7 @@ memory (记忆/, type: project) so later sessions inherit it.`,
       );
       await fs.mkdir(outDir, { recursive: true });
 
-      // 2. 解析 referenceImages（fail-fast；两个 provider 共用解析，消费方式不同：
-      //    codex 用 abs 路径走 -i 附件，gateway 读文件转 base64 inline parts）
+      // 2. 解析 referenceImages（fail-fast；codex 用 abs 路径走 -i 附件，gateway 读文件转 base64，relay 上传 base64）
       const resolvedRefs = [];
       if (referenceImages && referenceImages.length > 0) {
         for (const rel of referenceImages) {
@@ -508,149 +422,34 @@ memory (记忆/, type: project) so later sessions inherit it.`,
         }
       }
 
-      let imgBuf;
-      let outMime = 'image/png';
-      let accompanyText = null;
-      let response = null;   // gateway 分支才有（grounding metadata 从这取）
-      let fileName;
-      let absOut;
-
-      if (provider === 'codex') {
-        const pdfRef = resolvedRefs.find((r) => r.mimeType === 'application/pdf');
-        if (pdfRef) {
-          return {
-            content: [{
-              type: 'text',
-              text: 'generate_image failed: codex provider 不支持 PDF reference（-i 只收图片）。先把 PDF 内容转述进 prompt，或截图后当图片 reference。',
-            }],
-            isError: true,
-          };
-        }
-        fileName = `${finalName}.png`;
-        absOut = path.join(outDir, fileName);
-        const bridgePrompt = buildCodexBridgePrompt({
-          prompt, aspectRatio, absOut, refCount: resolvedRefs.length, variation: isVariation,
-        });
-        try {
-          await runCodexImageGen({
-            bridgePrompt,
-            refPaths: resolvedRefs.map((r) => r.abs),
-            cwd: outDir,
-            signal: ctx?.abortController?.signal,
-            expectFile: absOut,
-          });
-        } catch (err) {
-          return {
-            content: [{
-              type: 'text',
-              text: `generate_image codex error: ${err?.message || String(err)}`,
-            }],
-            isError: true,
-          };
-        }
-        imgBuf = await fs.readFile(absOut);
-      } else {
-        // ── gateway 分支（显式 opt-in）──
-        const gatewayUrl = process.env.NODESIGN_GATEWAY_URL || DEFAULT_NODESK_URL;
-        const gatewayKey = process.env.NODESIGN_GATEWAY_KEY;
-        if (!gatewayKey) {
-          return {
-            content: [{
-              type: 'text',
-              text: 'generate_image failed: NODESIGN_IMAGE_PROVIDER=gateway 但 NODESIGN_GATEWAY_KEY 未设。',
-            }],
-            isError: true,
-          };
-        }
-        const channel = process.env.NODESIGN_GATEWAY_CHANNEL || DEFAULT_CHANNEL;
-        const channelBase =
-          process.env.NODESIGN_GATEWAY_CHANNEL_URL_BASE || DEFAULT_DMXAPI_BASE;
-
-        const inlineImageParts = [];
-        for (const resolved of resolvedRefs) {
-          const buf = await fs.readFile(resolved.abs);
-          inlineImageParts.push({
-            inline_data: {
-              mime_type: resolved.mimeType,
-              data: buf.toString('base64'),
-            },
-          });
-        }
-
-        // Gemini generateContent payload
-        const parts = [{ text: prompt }, ...inlineImageParts];
-        const payload = {
-          contents: [{ parts }],
-          generationConfig: {
-            responseModalities,
-            imageConfig: {
-              aspectRatio,
-              imageSize,
-            },
-            thinkingConfig: {
-              thinkingLevel: thinkingLevel === 'high' ? 'High' : 'Minimal',
-              includeThoughts: false,
-            },
-          },
-          // Image Search Grounding：opt-in。NB2 自决要不要真用（人物 query
-          // 模型自动跳过，Google guardrail；地标/产品/真实场景才会触发）。
-          ...(useGrounding ? { tools: [{ googleSearch: {} }] } : {}),
+      // 3. 出图（image-produce.js；relay 那边跑的是同一个 produceImage）
+      let produced;
+      let provider = route;   // 元数据 / 说明里报真正出图的那家；relay 回报它那边用的是 codex 还是 gateway
+      if (route === 'relay') {
+        const refs = [];
+        for (const r of resolvedRefs) refs.push({ mimeType: r.mimeType, base64: (await fs.readFile(r.abs)).toString('base64') });
+        const r = await relayGenerateImage({ prompt, aspectRatio, imageSize, thinkingLevel, responseModalities, useGrounding, model, isVariation, refs });
+        if (r.error) return { content: [{ type: 'text', text: r.error }], isError: true };
+        provider = r.provider || 'relay';
+        produced = {
+          imgBuf: Buffer.from(r.base64 || '', 'base64'), outMime: r.mimeType || 'image/png', accompanyText: r.accompanyText || null,
+          response: r.grounding ? { candidates: [{ groundingMetadata: r.grounding }] } : null,
         };
-
+      } else {
         try {
-          response = await callGateway(payload, {
-            gatewayUrl,
-            gatewayKey,
-            channel,
-            channelBase,
-            modelId,
-            signal: ctx?.abortController?.signal,
+          produced = await produceImage({
+            route, prompt, aspectRatio, imageSize, thinkingLevel, responseModalities, useGrounding, modelId, refs: resolvedRefs,
+            isVariation, codexOutAbs: path.join(outDir, `${finalName}.png`), signal: ctx?.abortController?.signal,
           });
         } catch (err) {
-          return {
-            content: [{
-              type: 'text',
-              text: `generate_image gateway error: ${err?.message || String(err)}`,
-            }],
-            isError: true,
-          };
+          return { content: [{ type: 'text', text: `generate_image ${err.stage === 'extract' ? 'failed' : `${err.stage || route} error`}: ${err.message}` }], isError: true };
         }
-
-        let extracted;
-        try {
-          extracted = extractFinalImage(response);
-        } catch (err) {
-          return {
-            content: [{
-              type: 'text',
-              text:
-                `generate_image failed: ${err.message}. `
-                + `Response keys: ${Object.keys(response || {}).join(', ')}. `
-                + `Try refining the prompt or check gateway logs.`,
-            }],
-            isError: true,
-          };
-        }
-
-        // 扩展名跟 Gemini 返回的 mimeType 走（实测 Gemini 3.1 Flash Image
-        // 经常返 image/jpeg 而不是 png，硬写 .png 会让文件名和真实编码不一致）
-        const ext = (() => {
-          switch ((extracted.mimeType || '').toLowerCase()) {
-            case 'image/jpeg': case 'image/jpg': return '.jpg';
-            case 'image/webp': return '.webp';
-            case 'image/gif':  return '.gif';
-            case 'image/png':
-            default:           return '.png';
-          }
-        })();
-        imgBuf = Buffer.from(extracted.base64, 'base64');
-        outMime = extracted.mimeType || 'image/png';
-        accompanyText = extracted.accompanyText || null;
-        fileName = `${finalName}${ext}`;
-        absOut = path.join(outDir, fileName);
-        // 原图不压缩——保留全分辨率给最终交付（导出 / iframe 引用）
-        await fs.writeFile(absOut, imgBuf);
       }
+      const { imgBuf, outMime, accompanyText, response } = produced;   // response：gateway 分支才有（grounding metadata 从这取）
+      const fileName = `${finalName}${extForMime(outMime)}`;
+      const absOut = path.join(outDir, fileName);
+      // 原图不压缩——保留全分辨率给最终交付（导出 / iframe 引用）。codex 已自己落在这个路径上
+      if (route !== 'codex') await fs.writeFile(absOut, imgBuf);
 
       // 额外生成 thumbnail（仅给 chat 缩略图 / WS 推送用，原图保留）
       // 落到 .thumbnails/ 子目录，agent 通常不引用（隐藏目录命名暗示），但能被
