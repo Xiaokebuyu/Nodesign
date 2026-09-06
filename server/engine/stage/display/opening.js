@@ -31,8 +31,9 @@
    * 写法选择器。state = { preset: id, modules: {id: bool} }，每次变动调 onChange(state)。
    * presets 是 /presets 回的清单（没有正文）。上传的预设走 onUpload。
    */
-  ND.stylePicker = function stylePicker(container, { presets, state, onChange, onUpload }) {
+  ND.stylePicker = function stylePicker(container, { presets, state, onChange, onUpload, marks }) {
     const cur = () => presets.find(p => p.id === state.preset) || null;
+    const mark = (id) => (marks?.has(id) ? '<i class="agentmark">agent 预选</i>' : '');   // agent 按开场问答动过的开关，逐个标出来
     function paint() {
       const p = cur();
       container.innerHTML = `
@@ -62,8 +63,8 @@
         const mods = byGroup.get(g.id);
         const on = mods.filter(m => sel[m.id]).length;
         const open = ND.prefs.get(`grp:${p.id}:${g.id}`, g.exclusive ? 0 : 0);
-        return `<div class="modgroup" data-g="${esc(g.id)}" data-open="${open}"><div class="ghd"><b>${esc(g.name)}</b>${g.hint ? `<span class="muted">${esc(g.hint)}</span>` : ''}<span class="n">${g.always ? '总是开' : (g.exclusive ? (mods.find(m => sel[m.id])?.name || '不选') : `${on} / ${mods.length}`)}</span>${CHEV}</div>
-          <div class="gbody">${mods.map(m => `<label class="tog${g.always ? ' disabled' : ''}"><input type="${g.exclusive ? 'radio' : 'checkbox'}" name="g-${esc(g.id)}" data-m="${esc(m.id)}" ${sel[m.id] ? 'checked' : ''} ${g.always ? 'disabled' : ''}><span>${esc(m.name)}${m.hint ? `<small>${esc(m.hint)}</small>` : ''}</span></label>`).join('')}${g.exclusive && !g.always ? `<label class="tog"><input type="radio" name="g-${esc(g.id)}" data-none="1" ${on ? '' : 'checked'}><span>不选<small>这一组一条都不用</small></span></label>` : ''}</div></div>`;
+        return `<div class="modgroup" data-g="${esc(g.id)}" data-open="${open}"><div class="ghd"><b>${esc(g.name)}</b>${g.hint ? `<span class="muted">${esc(g.hint)}</span>` : ''}${mods.some(m => marks?.has(m.id)) ? '<i class="agentmark">agent 预选</i>' : ''}<span class="n">${g.always ? '总是开' : (g.exclusive ? (mods.find(m => sel[m.id])?.name || '不选') : `${on} / ${mods.length}`)}</span>${CHEV}</div>
+          <div class="gbody">${mods.map(m => `<label class="tog${g.always ? ' disabled' : ''}"><input type="${g.exclusive ? 'radio' : 'checkbox'}" name="g-${esc(g.id)}" data-m="${esc(m.id)}" ${sel[m.id] ? 'checked' : ''} ${g.always ? 'disabled' : ''}><span>${esc(m.name)}${mark(m.id)}${m.hint ? `<small>${esc(m.hint)}</small>` : ''}</span></label>`).join('')}${g.exclusive && !g.always ? `<label class="tog"><input type="radio" name="g-${esc(g.id)}" data-none="1" ${on ? '' : 'checked'}><span>不选<small>这一组一条都不用</small></span></label>` : ''}</div></div>`;
       }).join('');
       box.querySelectorAll('.ghd').forEach(h => { h.onclick = () => { const g = h.parentElement; const v = g.dataset.open === '1' ? 0 : 1; g.dataset.open = String(v); ND.prefs.set(`grp:${p.id}:${g.dataset.g}`, v); }; });
       box.querySelectorAll('input').forEach(i => {
@@ -105,12 +106,13 @@
    */
   ND.lorePicker = function lorePicker(container, { entries, off, onChange, by }) {
     if (!entries?.length) { container.innerHTML = ''; return; }
+    const agentOff = new Set(by === 'agent' ? off : []);   // 进页时关着的就是 agent 关的；玩家之后改的不算
     const paint = () => {
       const on = entries.filter(e => !off.has(e.name)).length;
       const open = ND.prefs.get('grp:lore', entries.length <= 12 ? 1 : 0);
       container.innerHTML = `<div class="modgroup lore" data-open="${open}"><div class="ghd"><b>世界书</b><span class="muted">对方写到相关的词时机器把这条送给它；关掉的不送</span><span class="n">${on} / ${entries.length}</span>${CHEV}</div>
-        <div class="gbody">${by === 'agent' ? '<p class="source" style="color:var(--accent);margin:0 0 6px">有几条是 agent 按你开场前的回答关掉的，不合意就改。</p>' : ''}<div class="lorerow"><button class="btn sm" data-all="1">全开</button><button class="btn sm" data-all="0">全关</button></div>
-        ${entries.map(e => `<label class="tog"><input type="checkbox" data-n="${esc(e.name)}" ${off.has(e.name) ? '' : 'checked'}><span>${esc(e.name)}<small>${esc(e.keys.slice(0, 8).join(' · '))}${e.keys.length > 8 ? ' …' : ''}</small></span></label>`).join('')}</div></div>`;
+        <div class="gbody">${by === 'agent' ? '<p class="source" style="color:var(--accent);margin:0 0 6px">标着的几条是 agent 按你开场前的回答关掉的，不合意就改。</p>' : ''}<div class="lorerow"><button class="btn sm" data-all="1">全开</button><button class="btn sm" data-all="0">全关</button></div>
+        ${entries.map(e => `<label class="tog"><input type="checkbox" data-n="${esc(e.name)}" ${off.has(e.name) ? '' : 'checked'}><span>${esc(e.name)}${agentOff.has(e.name) ? '<i class="agentmark">agent 关的</i>' : ''}<small>${esc(e.keys.slice(0, 8).join(' · '))}${e.keys.length > 8 ? ' …' : ''}</small></span></label>`).join('')}</div></div>`;
       container.querySelector('.ghd').onclick = () => { const g = container.firstElementChild; const v = g.dataset.open === '1' ? 0 : 1; g.dataset.open = String(v); ND.prefs.set('grp:lore', v); };
       container.querySelectorAll('input[data-n]').forEach(i => { i.onchange = () => { if (i.checked) off.delete(i.dataset.n); else off.add(i.dataset.n); container.querySelector('.n').textContent = `${entries.filter(e => !off.has(e.name)).length} / ${entries.length}`; onChange(off); }; });
       container.querySelectorAll('[data-all]').forEach(b => { b.onclick = () => { off.clear(); if (b.dataset.all === '0') for (const e of entries) off.add(e.name); paint(); onChange(off); }; });
@@ -137,6 +139,9 @@
     container.querySelector('#allowImg').onchange = (e) => onChange(e.target.checked);
   };
 
+  /** agent 在 open_stage 里动过的模块 id（戏.json 的 style.agent）；玩家改过写法后 by 变成 player，标记就不画了 */
+  ND.agentMarks = (cfg) => new Set(cfg?.style?.by === 'agent' ? [...(cfg.style.agent?.on || []), ...(cfg.style.agent?.off || [])] : []);
+
   /* ── 开场页 ── */
   ND.opening = {
     async mount(root) {
@@ -147,6 +152,7 @@
         <h1>${esc(cfg.title || '故事')}</h1>
         <p class="lede">看一眼这个世界和会遇到的人，挑一种写法，然后开始。写法和角色的可选条目之后在「设定」页还能改。</p>
         <div class="world md" id="world"><p class="muted">读取中…</p></div>
+        <div id="rulesBlock" hidden><div class="kicker">你们定下的规矩</div><p class="lede" style="margin-bottom:8px">开场前跟 agent 聊定的：跟谁演、难度、代笔到哪一步。要改回对话里说。</p><div class="world md" id="rules"></div></div>
         <div class="kicker">在场的人</div>
         <div class="people" id="people"></div>
         <div id="lore"></div>
@@ -157,7 +163,7 @@
         <div id="models"><p class="muted">读取中…</p></div>
         <div class="kicker">写法</div>
         <p class="lede" style="margin-bottom:12px">对方按哪套规矩写。默认这套是从一份久经调试的中文预设拆出来的；也可以上传你自己的。展开每一组能看到具体条目。</p>
-        ${cfg.style?.by === 'agent' ? '<p class="source" style="color:var(--accent)">下面的勾选是 agent 按你开场前的回答预选的，不合意就改，改了以你的为准。</p>' : ''}
+        ${cfg.style?.by === 'agent' ? '<p class="source" style="color:var(--accent)">标着「agent 预选」的开关是 agent 按你开场前的回答动过的，不合意就改，改了以你的为准。</p>' : ''}
         <div id="picker"></div>
         <div class="actions"><button class="btn primary big" id="go">开始</button><div class="note" id="openNote"></div></div>
       </div></div>`;
@@ -175,8 +181,10 @@
       // 世界
       try {
         const { text } = await api.readFile('台面.md');
-        const world = (mdSection(text, '世界') || text.slice(0, 1200)).replace(/\{\{user\}\}/gi, '你').replace(/\{\{char\}\}/gi, '对方');   // 酒馆卡里的占位符别原样露给玩家
-        root.querySelector('#world').innerHTML = renderMd(world) || '<p class="muted">设定里还没写世界。</p>';
+        const tidy = (t) => String(t || '').replace(/\{\{user\}\}/gi, '你').replace(/\{\{char\}\}/gi, '对方');   // 酒馆卡里的占位符别原样露给玩家
+        root.querySelector('#world').innerHTML = renderMd(tidy(mdSection(text, '世界') || text.slice(0, 1200))) || '<p class="muted">设定里还没写世界。</p>';
+        const rules = mdSection(text, '规矩');   // agent 按开场问答写的：对象 / 难度 / 代笔档 —— 玩家在这儿能看到自己说过的话落成了什么
+        if (rules) { root.querySelector('#rules').innerHTML = renderMd(tidy(rules)); root.querySelector('#rulesBlock').hidden = false; }
       } catch { root.querySelector('#world').innerHTML = '<p class="muted">读不到设定。</p>'; }
       // 世界书开关（有触发条目才出现）
       const loreOff = new Set(cfg.lore?.off || []);
@@ -190,7 +198,8 @@
       let presets = [];
       try { presets = (await api.presets()).presets; } catch { presets = []; }
       const picker = root.querySelector('#picker');
-      if (picker) ND.stylePicker(picker, { presets, state: style, onChange: () => {}, onUpload: true });
+      const marks = ND.agentMarks(cfg);
+      if (picker) ND.stylePicker(picker, { presets, state: style, onChange: () => {}, onUpload: true, marks });
       // 开始
       const go = root.querySelector('#go'); const note = root.querySelector('#openNote');
       go.onclick = async () => {

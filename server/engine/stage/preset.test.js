@@ -4,7 +4,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import {
   loadPreset, resolvePreset, listPresets, defaultSelection, normalizeSelection, renderStyle,
-  expandMacros, importTavernPreset, saveImportedPreset, BUILTIN_DIR, BUILTIN_IDS,
+  expandMacros, importTavernPreset, saveImportedPreset, resolveAgentStyle, BUILTIN_DIR, BUILTIN_IDS,
 } from './preset.js';
 
 /**
@@ -126,5 +126,32 @@ describe('酒馆预设导入', () => {
     const r = await renderStyle(d, { preset: 'user:丢进来的' });
     expect(r.text).toContain('生活化直白');
     expect(r.text).not.toContain('刀光剑影');
+  });
+});
+
+describe('agent 的预选（open_stage.style → 戏.json）', () => {
+  it('on / off 差量另存 style.agent，by 只在真动过时是 agent；不存在的 id 丢掉', async () => {
+    const d = await play();
+    const plain = await resolveAgentStyle(d, { preset: 'izumi' });
+    expect(plain.by).toBe('default'); expect(plain.agent).toBeUndefined();
+    expect(plain.modules['voice-smooth']).toBe(true);
+    const r = await resolveAgentStyle(d, { preset: 'izumi', on: ['pace-slow', 'voice-wuxia', 'no-such-module'], off: ['char-psych-italic'] });
+    expect(r.by).toBe('agent');
+    expect(r.agent).toEqual({ on: ['pace-slow', 'voice-wuxia'], off: ['char-psych-italic'] });
+    expect(r.modules['pace-slow']).toBe(true); expect(r.modules['pace-skip']).toBe(false);   // 互斥组：开一个关掉默认那个
+    expect(r.modules['voice-wuxia']).toBe(true); expect(r.modules['voice-smooth']).toBe(false);
+    expect(r.modules['char-psych-italic']).toBe(false);
+    expect(r.modules['core-writing']).toBe(true);   // always 组关不掉
+    const bogus = await resolveAgentStyle(d, { preset: 'izumi', on: ['no-such-module'] });
+    expect(bogus.by).toBe('default');   // 全是假 id = 什么都没动
+    expect((await resolveAgentStyle(d, { preset: 'nope' })).preset).toBe('none');
+  });
+  it('agent 刚拷进 预设/<名>.json 就直接指 user:<名>：resolvePreset 自己补拆，不静默落回 none', async () => {
+    const tavern = { prompts: [{ identifier: 'a', name: '文风-甲', content: '甲的规矩'.repeat(4) }, { identifier: 'b', name: '规则乙', content: '乙的规矩'.repeat(4) }], prompt_order: [{ character_id: 100001, order: [{ identifier: 'a', enabled: true }, { identifier: 'b', enabled: false }] }] };
+    const d = await play({ '预设/我的.json': JSON.stringify(tavern) });
+    const r = await resolveAgentStyle(d, { preset: 'user:我的' });
+    expect(r.preset).toBe('user:我的'); expect(r.by).toBe('default');
+    expect(Object.keys(r.modules).length).toBe(2);
+    expect(r.modules.m0).toBe(true); expect(r.modules.m1).toBe(false);   // 启用状态照搬
   });
 });

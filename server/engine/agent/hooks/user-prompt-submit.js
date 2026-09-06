@@ -34,7 +34,7 @@ import { readStateVars } from '../../../lib/state-table.js';
 import { parseTriggers, evalTriggers, readLatch, writeLatch } from '../../../lib/state-triggers.js';
 import { recentChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { listRoleNames } from '../role-card.js';
-import { stageStatus } from '../stage-status.js';
+import { listPlays } from '../../stage/play.js';
 import { roleLabel } from '../../mcp/actor.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -268,27 +268,15 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
     }
   } catch { /* 状态表这一节自己不能变成故障源 */ }
 
-  // 台上（2026-08-29）：角色现在的状态。判据全是 harness 盖的章（SubagentStart/Stop，
-  // 见 stage-status.js）—— 此前主持人对这件事是半盲的：只在角色**结束**时收到一条
-  // 通知，中间既不知道谁在写，也不知道谁写完在等它接。08-28 真会话里用户替它问出了
-  // 这个洞（「说书人是不是要重启一下？」），而主持人手上没有任何工具能回答。
-  try {
-    const st = stageStatus(projectId);
-    if (st.length) {
-      const names = await listRoleNames(workspaceRoot);
-      const mins = (ms) => Math.round(ms / 60000);
-      const lines = st.map((r) => {
-        const who = roleLabel(r.slug, names.get(r.slug));
-        if (r.writing) return `  ${who}（${r.slug}）正在写`;
-        const idle = r.idleMs > 90000 ? `，${mins(r.idleMs)} 分钟没动了` : '';
-        return `  ${who}（${r.slug}）写完了这一段${idle}${r.lastLine ? `，收笔时说：「${r.lastLine}」` : ''}`;
-      });
-      sections.push({ key: 'stage', title: '台上', text:
-        `这场故事里的角色：\n${lines.join('\n')}\n`
-        + `写完的角色这一轮已经结束了 —— 要它接着演，SendMessage 寄给它的名字（当场醒，记得之前所有事）；`
-        + `不用重新派（重派会新起一个失忆的同名角色顶掉它）。` });
-    }
-  } catch { /* 台上读不到就沉默 */ }
+  // 演出项目（09-06）：主 agent 在这儿只做开场前的准备和中途帮忙，流程全在 stage-setup skill 里。
+  // 这一节按工作区里有没有故事文件夹说话（机械判据，不猜用户意图）：还没有 → 提醒先加载 skill 再问；
+  // 有了 → 点名文件夹，回来找它先 stage_status。旧的「台上」一节（角色子代理的写/停状态）随子代理停用一起退役。
+  if (isRp) try {
+    const plays = await listPlays(workspaceRoot);
+    sections.push({ key: 'stage', title: '演出', text: plays.length
+      ? `这个演出项目里的故事：${plays.map(p => `${p}/`).join('、')}。他回来找你（改人设 / 换玩法 / 问进度 / 要图）先 \`stage_status\` 看演到哪，再按 \`stage-setup\` 里「中途」那张表走；⛔ 不在对话里代演。`
+      : '这个演出项目里还没有故事。他要开场（"想玩个 RP""用这张卡演"、丢来酒馆卡 / 预设）时**先 `Skill` 加载 `stage-setup`**再动手：两轮问卷、酒馆东西的落点、卡怎么写、open_stage 交什么都在那儿，⛔ 别凭记忆问、别在对话里开演。' });
+  } catch { /* 读不到就沉默 */ }
 
   // 黑板模式（2026-08-23；08-24 起默认开 —— 没写过这个键的按开算，显式 false 才算关）
   try {

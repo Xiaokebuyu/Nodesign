@@ -52,9 +52,50 @@ export async function resolvePreset(playAbs, presetId) {
   if (id === 'none') return null;
   if (id.startsWith('user:')) {
     const folder = id.slice(5).replace(/[\/\\]/g, '');
-    return folder ? loadPreset(path.join(playAbs, PRESET_DIR, folder), { id }) : null;
+    if (!folder) return null;
+    await splitTavernJson(playAbs, folder);   // agent 刚拷进来的 <名>.json 还没拆就直接 open_stage 指它：这里补拆，不然静默落回 none
+    return loadPreset(path.join(playAbs, PRESET_DIR, folder), { id });
   }
   return loadBuiltin(id);
+}
+
+/** 预设/<名>.json 还没拆成 预设/<名>/ 的，拆一次落盘。拆不动只 warn（listPresets 与 resolvePreset 共用） */
+async function splitTavernJson(playAbs, folder) {
+  const dir = path.join(playAbs, PRESET_DIR);
+  if (await exists(path.join(dir, folder, PRESET_META))) return;
+  const jsonPath = path.join(dir, `${folder}.json`);
+  if (!(await exists(jsonPath))) return;
+  try {
+    const imported = importTavernPreset(JSON.parse(await fs.readFile(jsonPath, 'utf8')), { name: folder });
+    if (imported) await saveImportedPreset(playAbs, folder, imported);
+  } catch (err) { console.warn(`[stage] 预设 ${folder}.json 拆不动: ${err.message}`); }
+}
+
+/**
+ * agent 在 open_stage 里传的 style → 存进 戏.json 的形状（09-06）。
+ * on / off 是在默认勾选之上加减（modules 是老写法 = on）。差量另存一份 `agent: {on, off}`（只留真存在的模块 id），
+ * 开场页据它把 agent 动过的每个开关标出来；`by` 只在差量非空时是 'agent' —— 之前 preset 一传就写 'agent'，
+ * 横幅常年挂着等于没说。
+ */
+export async function resolveAgentStyle(playAbs, style) {
+  const preset = await resolvePreset(playAbs, style.preset);
+  if (!preset) return { preset: 'none', modules: null, by: 'default' };
+  const known = new Set(preset.modules.map(m => m.id));
+  const on = [...(style.on || []), ...(Array.isArray(style.modules) ? style.modules : [])].map(String).filter(id => known.has(id));
+  const off = (style.off || []).map(String).filter(id => known.has(id));
+  const sel = defaultSelection(preset);
+  const groupOf = new Map(preset.modules.map(m => [m.id, m.group]));
+  const exclusive = new Set((preset.groups || []).filter(g => g.exclusive).map(g => g.id));
+  for (const id of on) {
+    // 互斥组：开这个就先把同组的全关掉。normalizeSelection 是"先到先得"，默认那个排在前面时它会赢 ——
+    // 老写法（只把 on 置 true）在这儿栽过：agent 预选 voice-wuxia，落下来仍是 voice-smooth
+    if (exclusive.has(groupOf.get(id))) for (const m of preset.modules) if (m.group === groupOf.get(id)) sel[m.id] = false;
+    sel[id] = true;
+  }
+  for (const id of off) sel[id] = false;
+  if (style.modules && !Array.isArray(style.modules)) Object.assign(sel, style.modules);
+  const delta = on.length || off.length;
+  return { preset: style.preset, modules: normalizeSelection(preset, sel), by: delta ? 'agent' : 'default', ...(delta ? { agent: { on, off } } : {}) };
 }
 
 /**
@@ -69,18 +110,7 @@ export async function listPresets(playAbs) {
   }
   const dir = path.join(playAbs, PRESET_DIR);
   const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
-  for (const e of entries) {
-    if (e.isFile() && /\.json$/i.test(e.name)) {
-      const folder = e.name.replace(/\.json$/i, '');
-      if (!(await exists(path.join(dir, folder, PRESET_META)))) {
-        try {
-          const json = JSON.parse(await fs.readFile(path.join(dir, e.name), 'utf8'));
-          const imported = importTavernPreset(json, { name: folder });
-          if (imported) await saveImportedPreset(playAbs, folder, imported);
-        } catch (err) { console.warn(`[stage] 预设 ${e.name} 拆不动: ${err.message}`); }
-      }
-    }
-  }
+  for (const e of entries) if (e.isFile() && /\.json$/i.test(e.name)) await splitTavernJson(playAbs, e.name.replace(/\.json$/i, ''));
   for (const e of await fs.readdir(dir, { withFileTypes: true }).catch(() => [])) {
     if (!e.isDirectory()) continue;
     const p = await loadPreset(path.join(dir, e.name), { id: `user:${e.name}` });

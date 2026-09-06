@@ -49,7 +49,7 @@ import { validateCondition } from './rules.js';
 import { composeStagePrompt, frozenHash } from './prompt.js';
 import { foldState, stateLine, runRules, maybeBackdrop, currentBackdrop, sceneOf, fileUrl, rollForChoice, stageIllustrate } from './mechanics.js';
 import { allowedModelsFor } from '../agent/model-context.js';
-import { resolvePreset, normalizeSelection, defaultSelection, DEFAULT_PRESET } from './preset.js';
+import { resolvePreset, normalizeSelection, resolveAgentStyle, DEFAULT_PRESET } from './preset.js';
 import { pickLore } from './worldbook.js';
 import { readPanels, writePanels, declarePanels, applyOp as applyPanelOp, digest as panelDigest } from './panels.js';
 export { composeStagePrompt };
@@ -262,15 +262,7 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     startedAt: stored.startedAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  if (style?.preset) {
-    // agent 按用户的回答预选：on / off 是在默认勾选之上加减（modules 是老写法 = on）。开场页据 by:'agent' 提示"这是预选的，你可以改"
-    const preset = await resolvePreset(playAbs, style.preset);
-    const sel = preset ? defaultSelection(preset) : {};
-    for (const id of [...(style.on || []), ...(Array.isArray(style.modules) ? style.modules : [])]) sel[id] = true;
-    for (const id of style.off || []) sel[id] = false;
-    if (style.modules && !Array.isArray(style.modules)) Object.assign(sel, style.modules);
-    next.style = { preset: preset ? style.preset : 'none', modules: preset ? normalizeSelection(preset, sel) : null, by: 'agent' };
-  }
+  if (style?.preset) next.style = await resolveAgentStyle(playAbs, style);   // agent 的预选：差量存 style.agent，开场页逐个标出来
   delete next.systemPrompt;
   await writePlayConfig(playAbs, next);
   getProjectBus(pid).publish({ type: 'stage.changed', root, running: false });

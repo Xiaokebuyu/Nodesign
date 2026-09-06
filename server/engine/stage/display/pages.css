@@ -123,6 +123,8 @@
 .tog{display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-size:12.5px;line-height:1.5}
 .tog input{margin:4px 0 0;accent-color:var(--accent);flex:none}
 .tog span small{display:block;color:var(--sub);font-size:11px;line-height:1.5}
+.agentmark{display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;font-size:10px;line-height:15px;font-style:normal;font-weight:600;letter-spacing:.02em;color:var(--accent);border:1px solid var(--accent);vertical-align:1px;white-space:nowrap}
+.modgroup .ghd .agentmark{margin-left:0}
 .tog.disabled{opacity:.6;cursor:default}
 .presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-bottom:14px}
 .preset{text-align:left;padding:11px 13px;border:1px solid var(--rule-md);border-radius:2px;background:var(--paper);transition:border-color .15s}

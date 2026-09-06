@@ -172,7 +172,7 @@
     paintHandles() {
       const box = $('options'); if (!box) return;
       const last = ND.lastStage(); const lastRow = store.scenes[store.scenes.length - 1];
-      const spent = lastRow && (lastRow.by === 'user' || lastRow.by === 'system');
+      const spent = lastRow && lastRow.by !== 'stage';   // 玩家说了话 / 系统便条 / 机器代掷的骰子之后，上一段的选项就作废了（之前漏了 dice 行：点带判定的选项后旧选项会回来）
       let list = (last && !spent) ? (last.choices || []) : [];
       if (!list.length && store.cfg && !spent && last) list = [{ label: '继续', prompt: '继续。' }];
       const dis = (!store.cfg || store.status.busy || store.sending) ? ' disabled' : '';

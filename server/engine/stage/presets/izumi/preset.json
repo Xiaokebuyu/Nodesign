@@ -69,14 +69,16 @@
    "group": "core",
    "name": "有限视角与常识",
    "file": "人物-有限视角与常识.md",
-   "default": true
+   "default": true,
+   "hint": "角色只知道自己该知道的；设定没提的性格不猜；对白不水、不重复解释"
   },
   {
    "id": "core-writing",
    "group": "core",
    "name": "行文通用规矩与禁词",
    "file": "行文-通用规矩.md",
-   "default": true
+   "default": true,
+   "hint": "少比喻、砍「不是…而是…」转折句、不用括号解释、少破折号、写出时间的流动"
   },
   {
    "id": "plot-surprise",
@@ -92,7 +94,8 @@
    "name": "镜头可切走",
    "hint": "你这边没事时去写别人那边",
    "file": "叙事-镜头可切走.md",
-   "default": true
+   "default": true,
+   "cue": "（关）别切镜头 / 只写我这边"
   },
   {
    "id": "plot-objective",
@@ -100,7 +103,8 @@
    "name": "客观叙事",
    "hint": "纯冰山写作，不插主观评论",
    "file": "叙事-客观叙事.md",
-   "default": false
+   "default": false,
+   "cue": "别加评论 / 冷一点"
   },
   {
    "id": "plot-no-godlike",
@@ -108,7 +112,8 @@
    "name": "你不是世界中心",
    "hint": "其他角色不一定给你面子",
    "file": "叙事-玩家不是世界中心.md",
-   "default": false
+   "default": false,
+   "cue": "别都围着我转"
   },
   {
    "id": "plot-bright",
@@ -116,7 +121,8 @@
    "name": "角色不阴暗",
    "hint": "和谐有爱的基调",
    "file": "叙事-角色不阴暗.md",
-   "default": false
+   "default": false,
+   "cue": "轻松一点 / 别阴暗"
   },
   {
    "id": "plot-expand-input",
@@ -132,7 +138,8 @@
    "name": "稳推",
    "hint": "不突然转折，不加新角色",
    "file": "转折-稳推.md",
-   "default": false
+   "default": false,
+   "cue": "别乱转折 / 按我说的走 / 别加新角色"
   },
   {
    "id": "twist-allow",
@@ -140,7 +147,8 @@
    "name": "允许转折",
    "hint": "合乎逻辑时可以不完全听话",
    "file": "转折-允许.md",
-   "default": false
+   "default": false,
+   "cue": "可以不听我的 / 来点意外"
   },
   {
    "id": "twist-wild",
@@ -148,7 +156,8 @@
    "name": "放飞",
    "hint": "逻辑成立就多离谱都行",
    "file": "转折-放飞.md",
-   "default": false
+   "default": false,
+   "cue": "越离谱越好 / 放飞"
   },
   {
    "id": "pace-slow",
@@ -156,7 +165,8 @@
    "name": "慢推",
    "hint": "节奏贴近现实，重互动",
    "file": "节奏-慢推.md",
-   "default": false
+   "default": false,
+   "cue": "慢一点 / 多写日常 / 别急着推"
   },
   {
    "id": "pace-skip",
@@ -164,7 +174,8 @@
    "name": "跳过无聊",
    "hint": "无聊处直接跳时间",
    "file": "节奏-跳过无聊.md",
-   "default": true
+   "default": true,
+   "cue": "（默认）快点 / 无聊的跳过"
   },
   {
    "id": "input-retell",
@@ -180,35 +191,43 @@
    "name": "直接续写",
    "hint": "把你的话当已发生，从末尾往下写",
    "file": "接输入-直接续写.md",
-   "default": false
+   "default": false,
+   "cue": "我说的就是已经发生了，接着往下写"
   },
   {
    "id": "person-3",
    "group": "person",
    "name": "第三人称",
    "file": "人称-第三人称.md",
-   "default": true
+   "default": true,
+   "hint": "旁白用第三人称"
   },
   {
    "id": "person-2",
    "group": "person",
    "name": "第二人称",
    "file": "人称-第二人称.md",
-   "default": false
+   "default": false,
+   "hint": "旁白用「你」称呼玩家的角色",
+   "cue": "第二人称 / 用「你」叫我"
   },
   {
    "id": "person-1-you",
    "group": "person",
    "name": "你的第一人称",
    "file": "人称-玩家第一人称.md",
-   "default": false
+   "default": false,
+   "hint": "玩家角色的第一人称限知视角，用「我」",
+   "cue": "第一人称 / 用「我」"
   },
   {
    "id": "person-1-char",
    "group": "person",
    "name": "对方的第一人称",
    "file": "人称-角色第一人称.md",
-   "default": false
+   "default": false,
+   "hint": "对方（玩家以外的主角）的第一人称限知视角",
+   "cue": "从她（他）的视角写"
   },
   {
    "id": "dlg-low",
@@ -216,7 +235,8 @@
    "name": "少",
    "hint": "两成以上",
    "file": "对白量-少.md",
-   "default": false
+   "default": false,
+   "cue": "少点对白 / 多点描写"
   },
   {
    "id": "dlg-mid",
@@ -232,14 +252,17 @@
    "name": "多",
    "hint": "七成以上",
    "file": "对白量-多.md",
-   "default": false
+   "default": false,
+   "cue": "多点对白 / 少点描写"
   },
   {
    "id": "dlg-only",
    "group": "dialogue",
    "name": "纯对白",
    "file": "对白量-纯对白.md",
-   "default": false
+   "default": false,
+   "hint": "只写对白，没有任何叙述",
+   "cue": "只要对白"
   },
   {
    "id": "char-no-tone",
@@ -270,7 +293,9 @@
    "group": "char",
    "name": "心理描写用斜体",
    "file": "心理-斜体.md",
-   "default": true
+   "default": true,
+   "hint": "心理描写用 *斜体* 跟叙述分开",
+   "cue": "（关）不要斜体心理描写"
   },
   {
    "id": "len-short",
@@ -278,7 +303,8 @@
    "name": "短",
    "hint": "400 字上下",
    "file": "字数-短.md",
-   "default": false
+   "default": false,
+   "cue": "短一点 / 几百字就行"
   },
   {
    "id": "len-mid",
@@ -294,7 +320,8 @@
    "name": "长",
    "hint": "1200 字上下",
    "file": "字数-长.md",
-   "default": false
+   "default": false,
+   "cue": "长一点 / 写细一点"
   },
   {
    "id": "think-fluent",
@@ -309,21 +336,25 @@
    "group": "think",
    "name": "注重人设",
    "file": "思考-人设.md",
-   "default": false
+   "default": false,
+   "hint": "动笔前的清单偏人物：性格特质怎么联动、反应怎么不 OOC"
   },
   {
    "id": "think-plot",
    "group": "think",
    "name": "注重剧情",
    "file": "思考-剧情.md",
-   "default": false
+   "default": false,
+   "hint": "动笔前的清单偏剧情：主线暗线、动机与信息差、避开公式化展开"
   },
   {
    "id": "think-brief",
    "group": "think",
    "name": "简洁",
    "file": "思考-简洁.md",
-   "default": false
+   "default": false,
+   "hint": "动笔前的清单压到 1500 字以内，分点过一遍",
+   "cue": "想快点 / 别想太多"
   },
   {
    "id": "extra-parallel",
@@ -331,21 +362,26 @@
    "name": "平行事件",
    "hint": "每段末尾附一两件你视角外正在发生的事",
    "file": "附加-平行事件.md",
-   "default": false
+   "default": false,
+   "cue": "顺便写写别处在发生什么"
   },
   {
    "id": "extra-jp",
    "group": "extra",
    "name": "日语双语对白",
    "file": "附加-日语双语.md",
-   "default": false
+   "default": false,
+   "hint": "故事通用语是日语，对白按「日文」{中文} 双语输出",
+   "cue": "日语对白 / 双语"
   },
   {
    "id": "extra-female",
    "group": "extra",
    "name": "女性向适配",
    "file": "附加-女性向.md",
-   "default": false
+   "default": false,
+   "hint": "女性向：角色清爽有边界，去掉男性凝视式的描写",
+   "cue": "女性向"
   },
   {
    "id": "voice-smooth",

@@ -187,7 +187,7 @@
         const presets = (await api.presets()).presets;
         const state = { preset: cfg.style?.preset || 'izumi', modules: cfg.style?.modules || null };
         let timer = null;
-        ND.stylePicker(r.querySelector('#picker'), { presets, state, onUpload: true, onChange: (s) => { clearTimeout(timer); timer = setTimeout(() => api.config({ style: { preset: s.preset, modules: s.modules } }).then(() => ND.flash('写法已改，下一句话到时生效')).catch(err => ND.flash(err.message, true)), 500); } });
+        ND.stylePicker(r.querySelector('#picker'), { presets, state, onUpload: true, marks: ND.agentMarks(cfg), onChange: (s) => { clearTimeout(timer); timer = setTimeout(() => api.config({ style: { preset: s.preset, modules: s.modules } }).then(() => ND.flash('写法已改，下一句话到时生效')).catch(err => ND.flash(err.message, true)), 500); } });
       } catch (err) { r.querySelector('#picker').innerHTML = `<p class="muted">${esc(err.message)}</p>`; }
       try {
         const { entries } = await api.lore();

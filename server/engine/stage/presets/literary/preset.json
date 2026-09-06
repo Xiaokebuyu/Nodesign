@@ -25,14 +25,16 @@
    "group": "core",
    "name": "文学逻辑",
    "file": "文学逻辑.md",
-   "default": true
+   "default": true,
+   "hint": "禁「像是 / 仿佛 / 似乎」引出的从句、极少明喻、不拿数字代替细节、砍掉属性堆叠的修饰"
   },
   {
    "id": "sentence",
    "group": "core",
    "name": "句法",
    "file": "句法.md",
-   "default": true
+   "default": true,
+   "hint": "长句为主，每句至少八个字；不把一个动作拆成碎短句；不用碎片修饰语代替描写"
   },
   {
    "id": "emergent",
@@ -48,7 +50,8 @@
    "name": "事无巨细",
    "hint": "不概括、不压缩，时间连续",
    "file": "写法-事无巨细.md",
-   "default": false
+   "default": false,
+   "cue": "一点都别省 / 事无巨细"
   },
   {
    "id": "lively",
@@ -56,7 +59,8 @@
    "name": "活泼通俗",
    "hint": "口语为底，吐槽跳脱，禁文艺腔",
    "file": "写法-活泼通俗.md",
-   "default": false
+   "default": false,
+   "cue": "轻松通俗 / 别文艺腔"
   },
   {
    "id": "live-world",

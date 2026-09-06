@@ -163,7 +163,7 @@ const RP_ONLY = [
   '别替他开场',                       // ⛔ 玩家点开始之前的任何"第一句"都是越位
   'stage_status',                     // 中途回来先看演到哪
   '不在对话里代演',                   // ⛔ 停用令
-  '先 `read_tavern_json` 走 digest',  // 酒馆卡三条里最贵的一条
+  '全在 `stage-setup` 里',            // 09-06 流程从系统提示搬进 skill，这里只留判决 + 指路
   '板的眼睛是 `look_at_board`',       // rp 工具清单切换段的特征串
 ];
 const MODE_ALWAYS = [
