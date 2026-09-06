@@ -48,6 +48,10 @@ GitHub Releases。发一版：
 git tag desktop-v0.0.10 && git push origin desktop-v0.0.10
 ```
 
+⚠️ **每次发版先涨版本号**（`npm version patch --no-git-tag-version`，提交）。electron-updater 只认比自己大的版本，
+同一个版本号重打的包用户端当没更新；草稿也不算发布 —— 站主试过点 **Publish release** 才推给用户。
+之后用户端起动时和每 6 小时查一次，下完弹一次提示，差分能对上就只下变化的部分。
+
 跑完 Releases 里多一份**草稿** `v<package.json 的 version>`，里面是
 `NoDesign-Setup-<v>.exe`、`.blockmap`、`latest.yml`。草稿只有仓库成员看得到 —— 自己先下来试；
 试过了点 **Publish release**，装了旧版的用户端才会看到这次更新（`electron-updater` 读的是
