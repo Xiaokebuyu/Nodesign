@@ -33,7 +33,7 @@ import { checkPassword } from '../auth-routes.js';
 import { getUserById } from '../../auth/users-store.js';
 import { openRelaySession, closeRelaySession, lookupRelaySession, startRelaySessionSweeper } from './sessions.js';
 import { decideRelay } from './gates.js';
-import { recordRelayUsage, installRelayUsageSource } from './usage.js';
+import { recordRelayUsage, installRelayUsageSource, relayDailySeries } from './usage.js';
 import { forwardSubscription } from './subscription-leg.js';
 import { handleRequest as forwardViaIngress } from '../../lib/model-ingress.js';
 import { priceTokens, resolveModelRoute, hasSubscriptionAccess, selectableModelsFor, PICKER_SCOPES } from '../../engine/agent/model-context.js';
@@ -94,6 +94,12 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
   });
 
   router.use(deviceAuth);
+
+  // 用量曲线（桌面版设置页「用量」）：这个账号在站点账本里近 N 天每日每模型的花费
+  router.get('/usage/daily', (req, res) => {
+    const days = Number(req.query.days) || 30;
+    res.json({ days, series: relayDailySeries(req.relayUser.id, days) });
+  });
 
   router.post('/logout', (req, res) => {
     revokeDevice(req.relayDevice.id);

@@ -127,7 +127,10 @@ export const FONT_EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Em
 // 按需分片的全量字库，**不兜的话就直接掉到系统宋体**，一行里楷体宋体混排。
 // ⚠️ Screen 是另一刀：实测墨量比 Regular 重 20%（跟 Bold 一个量级），所以只当最后
 // 一道网，不当主力；界面文案要留在 ND 里（font-subset.lint.test.js 钉着覆盖率）。
-export const FONT_KAI = `'LXGW WenKai ND', 'LXGW WenKai', '霞鹜文楷', 'LXGW WenKai Screen', ${FONT_EMOJI}, serif`;
+// 09-06 起指向 CSS 变量：设置页「外观」能把全站字体切成系统无衬线，切的是 globals.css 里 --nd-font-ui 一处，
+// 不用动这 300 处调用点。真正的楷体字体栈在 globals.css :root 里（FONT_KAI_STACK 留给需要裸字体串的地方）。
+export const FONT_KAI_STACK = `'LXGW WenKai ND', 'LXGW WenKai', '霞鹜文楷', 'LXGW WenKai Screen', ${FONT_EMOJI}, serif`;
+export const FONT_KAI = 'var(--nd-font-ui)';
 // 阅读体（08-27）：屏幕优化版文楷，**全量字库**按需分片加载 —— 板书/长文正文用它；
 // 门面字（标题/UI）仍走 FONT_KAI（52KB 子集秒显）。
 export const FONT_READ = `'LXGW WenKai Screen', 'LXGW WenKai ND', '霞鹜文楷', ${FONT_EMOJI}, serif`;

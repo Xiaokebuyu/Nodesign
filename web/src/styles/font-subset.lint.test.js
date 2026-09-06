@@ -71,8 +71,10 @@ describe('楷体字集不许再漏字', () => {
   });
 
   it('⭐ 字体栈里必须留一张全覆盖的网，排在 serif 之前', () => {
-    const kai = (THEME.match(/export const FONT_KAI = `([^`]*)`/) || [])[1];
-    expect(kai, '找不到 FONT_KAI').toBeTruthy();
+    // 09-06 起真栈在 globals.css 的 --nd-font-ui（设置页「外观」按 data-font 切），theme 的 FONT_KAI 只是 var()
+    expect(THEME, 'FONT_KAI 必须指向 CSS 变量，字体切换靠它').toMatch(/export const FONT_KAI = 'var\(--nd-font-ui\)'/);
+    const kai = (CSS.match(/:root\s*\{[^}]*--nd-font-ui:\s*([^;]+);/) || [])[1];
+    expect(kai, '找不到 globals.css 里 :root 的 --nd-font-ui').toBeTruthy();
     expect(kai.indexOf("'LXGW WenKai ND'"), 'ND 必须排第一').toBe(0);
     // 用户自己打的字（项目名/文件名）超出全站字集时，接住它的是 Screen 那份全量字库；
     // 没有这一档就直接掉到 serif = 系统宋体。

@@ -25,6 +25,7 @@ import { envView, setEnvValues, envPath } from '../runtime/local-env.js';
 import { probeModel } from '../lib/ingress/slot-probe.js';
 import os from 'node:os';
 import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, normalizeRelayUrl, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
+import { loadPrefs, savePrefs, prefsPath } from '../runtime/local-prefs.js';
 import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 
@@ -112,6 +113,22 @@ router.post('/models/:id/probe', async (req, res) => {
   } finally {
     probing.delete(id);
   }
+});
+
+// ── 偏好（<dataRoot>/prefs.json）：选择器里藏哪些行、默认模型 ──
+router.get('/prefs', (_req, res) => {
+  res.json({ prefs: loadPrefs(), path: prefsPath });
+});
+router.put('/prefs', (req, res) => {
+  const body = req.body || {};
+  const known = new Set(selectableModelsFor(req.user, { scope: 'stage' }).map((m) => m.id).concat(selectableModelsFor(req.user).map((m) => m.id)));
+  if (body.defaultModel != null && body.defaultModel !== '' && !known.has(body.defaultModel)) {
+    return res.status(400).json({ error: msg(req, '模型 {id} 不在可选清单里', { id: body.defaultModel }) });
+  }
+  const patch = {};
+  if ('hiddenModels' in body) patch.hiddenModels = Array.isArray(body.hiddenModels) ? body.hiddenModels.filter((id) => known.has(id)) : [];
+  if ('defaultModel' in body) patch.defaultModel = body.defaultModel || null;
+  res.json({ ok: true, prefs: savePrefs(patch) });
 });
 
 // ── 站主 relay：登录 / 退出（桌面版首启那道门 + 设置页） ──

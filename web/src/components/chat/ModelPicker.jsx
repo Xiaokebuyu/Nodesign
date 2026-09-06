@@ -139,7 +139,8 @@ export default function ModelPicker({
   }, [hasSession, projectId, sessionId]);
 
   // 服务端**答了**就信它（空清单也是答案：本地版没配钥匙时就是空）；只有没答上来（还在等 / 接口挂了）才吃兜底常量
-  const options = remote ? (remote.options || []) : FALLBACK_MODELS;
+  // 设置页藏起来的行（本地版 prefs.hiddenModels）不列：藏 ≠ 禁，正在用它的会话照常
+  const options = remote ? (remote.options || []).filter((o) => !o.hidden) : FALLBACK_MODELS;
   const none = !!remote && options.length === 0;
   const isLocalProfile = useGlobalStore(s => s.authProfile) === 'local';
 
@@ -282,7 +283,7 @@ export default function ModelPicker({
             <div style={{ padding: `${GAP.sm}px ${GAP.md}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text3, lineHeight: 1.6 }}>
               {t('还没有可用的模型。')}
               {isLocalProfile
-                ? <>到 <a href="/settings" style={{ color: COLOR.text, textDecoration: 'underline' }}>{t('设置')}</a> 填 API Key（或在终端 <span style={{ fontFamily: FONT_MONO }}>claude login</span>），要接别家接口就配一个模型插槽。</>
+                ? <>到 <a href="/settings#account" style={{ color: COLOR.text, textDecoration: 'underline' }}>{t('设置')}</a> 登录站点账号，或在「模型」里填自己的 API Key。</>
                 : t('请联系站主。')}
             </div>
           )}

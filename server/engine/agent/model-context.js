@@ -42,6 +42,7 @@ import { platform } from '../../runtime/platform.js';
 import { UPSTREAMS_BUILTIN, MODELS_BUILTIN, BRANDS, SHARED_SDK_ALIAS } from './model-table.js';
 import { loadLocalConfig } from '../../runtime/local-config.js';
 import { relayModelEntry } from '../../runtime/relay-client.js';
+import { loadPrefs } from '../../runtime/local-prefs.js';
 
 export { BRANDS, SHARED_SDK_ALIAS };
 
@@ -205,15 +206,17 @@ export function selectableModelsFor(user, opts) {
     if (!inScope(m, scope)) continue;   // 只在演出面出现的行，画布面看不见也选不了
     const source = modelSourceFor(m.id);
     if (!source) continue;   // 本地版：本机没钥匙、relay 也没有 → 藏起来；hosted 永远 'local'
+    // 本地版：用户在设置页藏起来的行带 hidden 标（选择器不列，设置页要列出来给他再打开；不影响能不能用）
+    const hidden = platform.isLocal && loadPrefs().hiddenModels.includes(m.id) ? { hidden: true } : {};
     if (source === 'relay') {
       // relay 那头按站主那边的档位判过了（锁/不锁、原因），本地的 user 是 LOCAL_OWNER（admin），本地档位判断在这一行不适用
       const entry = relayModelEntry(m.id);
-      out.push(entry.locked ? { ...m, locked: true, lockReason: entry.lockReason || SUBSCRIPTION_LOCK_REASON, source } : { ...m, source });
+      out.push(entry.locked ? { ...m, locked: true, lockReason: entry.lockReason || SUBSCRIPTION_LOCK_REASON, source, ...hidden } : { ...m, source, ...hidden });
       continue;
     }
-    if (m.gate === 'localGen') { if (approved) out.push(m); continue; }
-    if (m.gate === 'subscription' && !subscribed) { out.push({ ...m, locked: true, lockReason: SUBSCRIPTION_LOCK_REASON }); continue; }
-    out.push(m);
+    if (m.gate === 'localGen') { if (approved) out.push({ ...m, ...hidden }); continue; }
+    if (m.gate === 'subscription' && !subscribed) { out.push({ ...m, locked: true, lockReason: SUBSCRIPTION_LOCK_REASON, ...hidden }); continue; }
+    out.push({ ...m, ...hidden });
   }
   return out;
 }
@@ -241,7 +244,14 @@ export function defaultModelFor(user, opts) {
     const stageRow = allowed.find((m) => m.stageDefault);
     if (stageRow) return stageRow.id;
   }
-  return (allowed.find((m) => m.default) || allowed[0])?.id || null;
+  // 本地版：设置页选的默认模型优先（得还在可选清单里且没藏；否则当没设）
+  if (platform.isLocal) {
+    const want = loadPrefs().defaultModel;
+    const row = want ? allowed.find((m) => m.id === want && !m.hidden) : null;
+    if (row) return row.id;
+  }
+  const visible = allowed.filter((m) => !m.hidden);
+  return (visible.find((m) => m.default) || visible[0] || allowed[0])?.id || null;
 }
 
 /**

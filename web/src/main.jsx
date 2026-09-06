@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { applyUiPrefs } from './lib/ui-prefs.js';
 import App from './App.jsx';
 import AuthGate from './components/AuthGate.jsx';
 import { useGlobalStore } from './stores/globalStore.js';
@@ -71,6 +72,7 @@ function Root() {
   );
 }
 
+applyUiPrefs();   // 字体 / 缩放偏好：首帧之前就应用，别闪一下再换
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <Root />

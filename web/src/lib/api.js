@@ -92,6 +92,8 @@ export const Local = {
   restart: () => jsonRequest('POST', '/api/local/restart'),
   relayRefresh: () => jsonRequest('POST', '/api/local/relay/refresh'),
   relayLogin: (body) => jsonRequest('POST', '/api/local/relay/login', body),
+  prefs: () => jsonRequest('GET', '/api/local/prefs'),
+  savePrefs: (patch) => jsonRequest('PUT', '/api/local/prefs', patch),
   relayLogout: () => jsonRequest('POST', '/api/local/relay/logout'),
 };
 

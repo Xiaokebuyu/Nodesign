@@ -5,7 +5,7 @@ import SkillList from './routes/SkillList.jsx';
 import Showcase from './routes/Showcase.jsx';
 import Issues from './routes/Issues.jsx';
 import AdminConsole from './routes/AdminConsole.jsx';
-import LocalSettings from './routes/LocalSettings.jsx';
+import Settings from './routes/Settings.jsx';
 import Devices from './routes/Devices.jsx';
 import ToastContainer from './components/ui/ToastContainer.jsx';
 import GlobalDialogs from './components/ui/GlobalDialogs.jsx';
@@ -31,7 +31,7 @@ const router = createBrowserRouter([
   // 问题库独立页保留 —— 老链接不 404，控制台里也有同一份（tab）
   { path: '/admin/issues', element: <Issues /> },
   // 本地分发版设置（08-22）：钥匙 / 模型插槽 / 本机能力 / 重启。hosted 下后端没有 /api/local，页面只会看到空态
-  { path: '/settings', element: <LocalSettings /> },
+  { path: '/settings', element: <Settings /> },
   { path: '/devices', element: <Devices /> },          // hosted：桌面版设备令牌（本地版没有账号，这页 404 也无妨）
 ]);
 

@@ -12,13 +12,15 @@
  */
 
 import express from 'express';
-import { checkQuota, usedTodayByFamily, usedTokensToday, familyLabel } from '../lib/quota.js';
+import { checkQuota, usedTodayByFamily, usedTokensToday, familyLabel, dailyCostSeries } from '../lib/quota.js';
+import { platform } from '../runtime/platform.js';
+import { relayConfig, relayUsageDaily } from '../runtime/relay-client.js';
 import { getActiveNotice } from '../lib/notice-store.js';
 import { listEntries, getEntry, removeEntry } from '../lib/showcase-store.js';
 import { getArtifactCover } from '../lib/cover.js';
 import { getSharedDir } from '../projects/workspace.js';
 import { getProject } from '../projects/store.js';
-import { selectableModelsFor, defaultModelFor } from '../engine/agent/model-context.js';
+import { selectableModelsFor, defaultModelFor, modelSourceFor } from '../engine/agent/model-context.js';
 import { tierOf } from '../auth/tier.js';
 
 const router = express.Router();
@@ -35,6 +37,26 @@ const router = express.Router();
  */
 router.get('/models', (req, res) => {
   res.json({ options: selectableModelsFor(req.user), default: defaultModelFor(req.user) });
+});
+
+/**
+ * 近 N 天每日每模型的花费（设置页「用量」曲线）。两个来源分开报，前端叠着画：
+ *   local  这台机器自己库里的账（hosted = 站点上跑的回合；本地版 = 本机 BYOK 的回合，走 relay 的回合
+ *          本地也会按 SDK 估价记一笔，但那不是真账，按模型来源剔掉）
+ *   site   本地版登录了站点账号时，站点账本里这个账号的账（真账，额度按它判）
+ */
+router.get('/usage/daily', async (req, res) => {
+  const days = Math.max(1, Math.min(366, Number(req.query.days) || 30));
+  let local = dailyCostSeries(req.user.id, days);
+  let site = null;
+  if (platform.isLocal) {
+    local = local.filter((r) => modelSourceFor(r.model) !== 'relay');
+    if (relayConfig()) {
+      try { site = (await relayUsageDaily(days)).series; }
+      catch (err) { site = { error: err.message }; }
+    }
+  }
+  res.json({ days, local, site });
 });
 
 /**

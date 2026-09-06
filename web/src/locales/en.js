@@ -90,7 +90,6 @@ export default {
   '配置文件': 'Config file',
   '插槽问题': 'Slot problems',
   '无': 'None',
-  '重启': 'Restart',
   '重启中…': 'Restarting…',
   '读取中…': 'Loading…',
   '重启超时，手动刷新看看': 'Restart timed out. Try refreshing manually.',
@@ -98,25 +97,13 @@ export default {
   '已保存，但有 {n} 处问题（见红字），对应行不会生效':
     'Saved, but {n} problems remain (shown in red). Those rows will not take effect.',
   '保存失败：{err}': 'Save failed: {err}',
-  '这一页只在本地分发版（NODESIGN_PROFILE=local）可用；线上多用户站没有 /api/local。':
-    'This page is only available in the local build (NODESIGN_PROFILE=local). The hosted multi-user site has no /api/local.',
-  '默认走 NoDesign 站点提供的模型；自己有钥匙的话下面两种接入也行，同一行本机有钥匙就优先走本机':
-    'Models from the NoDesign site by default. Your own keys work too via the two options below; a local key always wins for that model.',
   'NoDesign 服务': 'NoDesign service',
   '桌面版设备': 'Desktop devices',
   'Claude 官方': 'Claude (official)',
-  'Anthropic 的 Sonnet / Opus。填 API Key，或在终端 claude login 用订阅':
-    "Anthropic's Sonnet / Opus. Add an API key, or run claude login in a terminal to use your subscription.",
-  '自定义接入': 'Bring your own provider',
-  '任何服务商：DeepSeek、OpenAI、智谱、通义、OpenRouter、中转站、本机 Ollama…（OpenAI 格式或 Anthropic 格式都行）':
-    'Any provider: DeepSeek, OpenAI, Zhipu, Qwen, OpenRouter, a relay, a local Ollama… (OpenAI or Anthropic wire format, either works)',
   '已配（API Key）': 'Configured (API key)',
   '已配（本机 claude login 登录态）': 'Configured (local claude login session)',
   '未配': 'Not set up',
   '已配 {n} 个模型': { one: '{n} model configured', other: '{n} models configured' },
-  '本机能力': 'What this machine can do',
-  '启动时探的；装好东西后「重启」重探': 'Detected at startup. Install something, then hit Restart to check again.',
-  '其他钥匙与开关': 'Other keys and switches',
   '写进 {path}/.env，钥匙类保存即生效': 'Written to {path}/.env. Key changes take effect on save.',
   // ── 首页（routes/Home.jsx）──
   // 带 {n} 的那批是 <Counted> 用的：整句进词表、按占位符切开，因为中英词序不同

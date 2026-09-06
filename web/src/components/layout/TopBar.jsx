@@ -20,7 +20,7 @@ import { useMedia, NARROW } from '../../lib/use-media.js';
 /** 本地分发版：账号徽记的位置换成设置入口（钥匙 / 模型插槽 / 本机能力） */
 function LocalSettingsEntry() {
   return (
-    <Link to="/settings" title="设置：钥匙 · 模型插槽 · 本机能力" style={{
+    <Link to="/settings" title="设置" style={{
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
       borderRadius: RADIUS.pill, color: CHROME.ink2, textDecoration: 'none',
     }}
@@ -141,6 +141,9 @@ function UserBadge() {
               <LayoutDashboard size={12} /> 控制台
             </Link>
           )}
+          <Link to="/settings" onClick={() => setOpen(false)} style={menuItem}>
+            <Settings size={12} /> 设置
+          </Link>
           <Link to="/devices" onClick={() => setOpen(false)} style={menuItem}>
             <Monitor size={12} /> 桌面版设备
           </Link>

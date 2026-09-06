@@ -76,6 +76,16 @@ export function relayCostTotal(userId) {
     .get(userId).used;
 }
 
+/** 近 N 天每日每模型（口径同 quota.dailyCostSeries；+08:00 日界） */
+export function relayDailySeries(userId, days = 30, now = Date.now()) {
+  const n = Math.max(1, Math.min(366, Math.floor(days) || 30));
+  const since = dayStartUtcSql(now - (n - 1) * 24 * 60 * 60 * 1000);
+  return db.prepare(
+    `SELECT substr(datetime(created_at, '+8 hours'), 1, 10) AS day, model, COALESCE(SUM(cost_usd), 0) AS cost
+       FROM relay_usage WHERE user_id = ? AND created_at >= ? GROUP BY day, model`,
+  ).all(userId, since).map((r) => ({ day: r.day, model: r.model, costUsd: r.cost }));
+}
+
 let installed = false;
 
 /**
@@ -84,7 +94,7 @@ let installed = false;
  */
 export function installRelayUsageSource() {
   if (installed) return false;
-  registerUsageSource({ today: relayCostToday, total: relayCostTotal });
+  registerUsageSource({ today: relayCostToday, total: relayCostTotal, daily: relayDailySeries });
   installed = true;
   return true;
 }

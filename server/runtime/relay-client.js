@@ -138,3 +138,8 @@ export async function relayLogout() {
   try { await call('/logout', { method: 'POST' }); return true; }
   catch (err) { console.warn(`[relay-client] 退出登录时吊销令牌失败：${err.message}`); return false; }
 }
+
+/** 站点账本里这个账号近 N 天的日序列（设置页「用量」）。失败抛错，调用方自己决定怎么显示 */
+export async function relayUsageDaily(days = 30) {
+  return call(`/usage/daily?days=${encodeURIComponent(days)}`);
+}

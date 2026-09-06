@@ -76,6 +76,28 @@ export function registerUsageSource(source) {
   usageSources.push(source);
 }
 
+/**
+ * 近 N 天每日每模型的花费（设置页「用量」曲线）。日界跟闸门同一个 +08:00。
+ * 本地库那份 + 注册进来的账本（源提供 daily 才算，可选）。
+ * @returns {Array<{ day: string, model: string, costUsd: number }>} day = 'YYYY-MM-DD'
+ */
+export function dailyCostSeries(userId, days = 30, now = Date.now()) {
+  const n = Math.max(1, Math.min(366, Math.floor(days) || 30));
+  const since = dayStartUtcSql(now - (n - 1) * DAY_MS);
+  const rows = db.prepare(
+    `SELECT substr(datetime(m.created_at, '+8 hours'), 1, 10) AS day, m.model AS model, COALESCE(SUM(m.cost_usd), 0) AS cost
+       FROM run_model_usage m JOIN runs r ON r.id = m.run_id
+      WHERE r.user_id = ? AND m.created_at >= ?
+      GROUP BY day, m.model`,
+  ).all(userId, since).map((r) => ({ day: r.day, model: r.model, costUsd: r.cost }));
+  for (const src of usageSources) {
+    if (typeof src.daily !== 'function') continue;
+    try { for (const r of src.daily(userId, n, now) || []) rows.push({ day: r.day, model: r.model, costUsd: Number(r.costUsd) || 0 }); }
+    catch (err) { console.error(`[quota] 用量来源的日序列读取失败（跳过）：${err.message}`); }
+  }
+  return rows;
+}
+
 /** 测试用：摘掉所有注册进来的账本 */
 export function _resetUsageSources() { usageSources.length = 0; }
 
