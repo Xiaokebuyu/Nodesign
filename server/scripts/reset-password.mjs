@@ -9,7 +9,8 @@
  */
 
 import db from '../engine/runs/store.js';
-import { hashPassword, getUserByUsername } from '../auth/users-store.js';
+import { getUserByUsername } from '../auth/users-store.js';
+import { hashPassword } from '../hosted/users-write.js';   // 站主的运维脚本，只在服务器上跑（npm 包不带 scripts/）
 
 const username = process.argv[2];
 const password = process.env.NEW_PASSWORD;

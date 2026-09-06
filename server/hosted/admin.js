@@ -16,7 +16,8 @@
  */
 
 import express from 'express';
-import { createInvite, listInvites, getInvite, updateInvite, listUsers, getUserById, updateUser } from '../auth/users-store.js';
+import { createInvite, listInvites, getInvite, updateInvite } from './users-write.js';
+import { getUserById, listUsers, updateUser } from '../auth/users-store.js';
 import { modeStats } from '../projects/store.js';
 import { tierOf, PLANS } from '../auth/tier.js';
 import { usedCostToday, usedCostTotal, usedTokensToday, limitFor } from '../lib/quota.js';

@@ -3,8 +3,9 @@
  * 库走 vitest.server.config 里的 DB_PATH（临时库），不碰生产。
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { registerUser, createInvite, getUserById, updateUser, openRegistrationEnabled, defaultInviteDailyUsd } from './users-store.js';
-import { tierOf, can } from './tier.js';
+import { registerUser, createInvite, defaultInviteDailyUsd } from './users-write.js';
+import { getUserById, updateUser, openRegistrationEnabled } from '../auth/users-store.js';
+import { tierOf, can } from '../auth/tier.js';
 
 const uniq = (p) => `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 let savedFlag;

@@ -35,6 +35,9 @@ const hostedRoot = path.join(serverRoot, 'hosted');
 const SKIP_DIRS = new Set([
   'node_modules', 'projects-data', 'runs', 'db', '.cache', 'skills', 'ops',
   '.venv-rembg', 'lab', 'ssrf-lab',
+  // scripts/ 是站主的运维脚本（发邀请码 / 重置密码 / 量尺），package.json 的 files 和 electron-builder 的 files
+  // 都不带它 —— 它本来就站在线的 hosted 那一侧，引 hosted 是应该的
+  'scripts',
 ]);
 
 function walk(dir, out = []) {

@@ -11,7 +11,7 @@
  *   node server/scripts/invite.mjs --list          列出全部邀请码与用量
  */
 
-import { createInvite, listInvites } from '../auth/users-store.js';
+import { createInvite, listInvites } from '../hosted/users-write.js';   // 站主的运维脚本，只在服务器上跑（npm 包不带 scripts/）
 
 const args = process.argv.slice(2);
 const flag = (name) => {

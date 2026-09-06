@@ -43,8 +43,6 @@ import chataiRouter from './api/chatai.js';
 import recentRouter from './api/recent.js';
 import { userPluginsRouter, projectPluginsRouter } from './api/plugins.js';
 import { authRouter, authGuard } from './auth/middleware.js';
-import { authEnabled } from './auth/session.js';
-import { bootstrapAuth } from './auth/users-store.js';
 import { sweepOrphanRuns } from './engine/runs/store.js';
 import meRouter from './api/me.js';
 import localRouter, { RESTART_EXIT_CODE } from './api/local.js';
@@ -88,8 +86,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ── 登录墙（health 之后、业务路由之前）──
-// 多用户 bootstrap（幂等）：users 空时用 NODESIGN_AUTH_PASSWORD 建 admin +
-// 回填存量项目归属。必须在 authEnabled() 判断之前跑
+// 多用户 bootstrap 在 hosted/mount.js 的 mountHostedAuth 里（users 空时建 admin + 回填存量项目归属）
 // 僵尸 run 清扫：只有 server 启动时才知道"上个进程已经死了"这个前提成立。
 // 2026-07-31 从 store.js 的模块加载副作用挪到这里 —— 挂在 import 上时，任何
 // 碰到 store 的脚本（invite.mjs / notice.mjs / 临时排查）都会把线上正在跑的
@@ -104,10 +101,7 @@ if (platform.isLocal) {
   const relay = await refreshRelayCatalog();
   if (relay.configured) console.log(relay.ok ? `[relay-client] ${relay.whoami?.user?.username}（${relay.whoami?.user?.tier}）· 站点提供 ${relay.models.length} 个模型` : `[relay-client] ⚠️ 站点目录拉不到：${relay.error}`);
 } else {
-  bootstrapAuth();
-  if (!authEnabled()) {
-    console.warn('[auth] ⚠️ 无用户且未设 NODESIGN_AUTH_PASSWORD — 登录墙关闭，切勿公网暴露！');
-  }
+  hosted.mountHostedAuth(app);   // 登录 / 注册 + 多用户 bootstrap（hosted/mount.js）
 }
 app.use('/api/auth', authRouter);
 app.use('/api', authGuard);
