@@ -13,8 +13,16 @@
 
 ```
 npm install
+npm run desktop:deps       # 必跑一次，见下
+npm run build:web
 npm run desktop:dev        # electron desktop/main.js
 ```
+
+`desktop:deps`（`electron-builder install-app-deps`）把原生模块按 Electron 的 ABI 重编。
+不跑它的话，服务端子进程一加载 `better-sqlite3` 就报
+`NODE_MODULE_VERSION ... was compiled against a different Node.js version`。
+原因是 `npm install` 按系统 node 的 ABI 编，而子进程跑的是 Electron 可执行文件的
+node 模式（`ELECTRON_RUN_AS_NODE=1`）。换过 Electron 版本之后要再跑一次。
 
 ## 打包
 
