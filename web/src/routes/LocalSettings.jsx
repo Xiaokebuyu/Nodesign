@@ -58,7 +58,8 @@ export default function LocalSettings() {
   const crumbs = [{ label: t('设置') }];
 
   const relayLogout = async () => {
-    try { const r = await Local.relayLogout(); setStatus((s) => (s ? { ...s, relay: r.relay } : s)); showToast?.(t('已退出登录'), 'info'); }
+    // 退出 = 回到登录门（AuthGate 只在挂载时问一次 /api/auth/status，所以整页重载）
+    try { await Local.relayLogout(); window.location.href = '/'; }
     catch (e) { showToast?.(e.message, 'error'); }
   };
   const refreshRelay = async () => {

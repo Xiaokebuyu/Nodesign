@@ -50,6 +50,8 @@ export default function AuthGate({ children }) {
   // 本地分发版（桌面版 / npx）的首启门：站点账号没登录就先登录。账号密码交给本地服务端，它去站点换
   // 设备令牌（/api/local/relay/login），从此这台机器走站点的模型和额度。"我自己带钥匙"是那道门旁的小门。
   const [desktop, setDesktop] = useState(null);   // /api/auth/status 的 desktop 字段（只有 local 档位有）
+  const [siteUrl, setSiteUrl] = useState('');       // 桌面登录：站点地址（空 = 官方站；自建实例 / exp 才填）
+  const [showSite, setShowSite] = useState(false);
   const rootRef = useRef(null);
 
   const applyStatus = (s) => {
@@ -58,8 +60,8 @@ export default function AuthGate({ children }) {
     if (s.profile === 'local') {
       setDesktop(s.desktop || null);
       useGlobalStore.getState().setAuthUser?.(s.user || null);
-      const skipped = (() => { try { return localStorage.getItem('nd.desktop.byok') === '1'; } catch { return false; } })();
-      setPhase(s.desktop?.loggedIn || skipped ? 'ok' : 'login');
+      // 登录是必经的（站主 09-06 定的）：没令牌就是这道门，没有绕开的路。BYOK 是登录之后设置页里的事
+      setPhase(s.desktop?.loggedIn ? 'ok' : 'login');
       return;
     }
     // 账号上记的界面语言回填（2026-08-26 i18n）。explicit:false —— 这不是用户
@@ -122,7 +124,8 @@ export default function AuthGate({ children }) {
     if (desktop) {
       try {
         const res = await fetch('/api/local/relay/login', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }),
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, ...(siteUrl.trim() ? { url: siteUrl.trim() } : {}) }),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) setPhase('ok');
@@ -165,11 +168,6 @@ export default function AuthGate({ children }) {
 
   const isRegister = mode === 'register';
 
-  const skipToByok = () => {
-    try { localStorage.setItem('nd.desktop.byok', '1'); } catch { /* 存不上就只管这一次 */ }
-    setPhase('ok');
-  };
-  const siteUrl = desktop?.url || '';
 
   const form = desktop ? (
     <>
@@ -185,14 +183,21 @@ export default function AuthGate({ children }) {
         <input id="ndw-p" type="password" value={password} placeholder={t('写下密码')}
           autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} />
       </div>
+      {showSite && (
+        <div className="ndw-field">
+          <label htmlFor="ndw-s">{t('站点地址 · SITE')}</label>
+          <input id="ndw-s" value={siteUrl} placeholder={desktop.url || ''}
+            onChange={(e) => setSiteUrl(e.target.value)} />
+        </div>
+      )}
       <p className="ndw-err">{error || (desktop.error ? t('连不上站点：{err}', { err: desktop.error }) : '')}</p>
       <button className="go" type="submit" disabled={busy}>
         {busy ? t('核 对 中') : t('进 门')}
       </button>
       <p className="foot">
-        <a href={siteUrl} target="_blank" rel="noreferrer">{t('没有账号？去站点注册')}</a>
+        <a href={siteUrl.trim() || desktop.url || '#'} target="_blank" rel="noreferrer">{t('没有账号？去站点注册')}</a>
         {' · '}
-        <a href="#byok" onClick={(e) => { e.preventDefault(); skipToByok(); }}>{t('我自己带钥匙')}</a>
+        <a href="#site" onClick={(e) => { e.preventDefault(); setShowSite((v) => !v); }}>{showSite ? t('用官方站') : t('换个站点')}</a>
       </p>
     </>
   ) : (
