@@ -40,8 +40,8 @@ Layout is deliberately not preserved. You are being asked what the document
 Long files are cut at ${MAX_CHARS} characters and the result says so.`,
     {
       path: z.string().describe(
-        'Path to the file. Relative paths resolve against the session workspace, '
-        + 'then against the shared project dir (e.g. "assets/需求.docx").',
+        'Workspace-relative path to the file. Files the user uploaded live in 用户内容/ '
+        + '(e.g. "用户内容/需求.docx"); older projects may have them under assets/.',
       ),
     },
     async ({ path: rel }) => {

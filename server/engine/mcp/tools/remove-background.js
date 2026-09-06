@@ -211,7 +211,7 @@ Returns: text caption with output path + image content block (preview the result
       inputPath: z
         .string()
         .min(1)
-        .describe('Workspace-relative path to the source image. Must be inside the workspace or shared assets dir (e.g., "assets/user-photo.jpg", "assets/generated/coffee.png"). Supported formats: png/jpg/jpeg/webp/gif/bmp/tiff.'),
+        .describe('Workspace-relative path to the source image (e.g. "assets/generated/coffee.png", "用户内容/photo.jpg"). Supported formats: png/jpg/jpeg/webp/gif/bmp/tiff.'),
       outputName: z
         .string()
         .max(64)

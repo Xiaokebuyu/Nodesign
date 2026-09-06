@@ -1,42 +1,13 @@
 /**
  * mcp/tools/generate-image.js — generate_image MCP tool
  *
- * 调用 Gemini 3.1 Flash Image Preview（Nano Banana 2）通过 NoDesk passthrough
- * 网关 → DMXAPI 落点。给主 agent 的"画图"能力，让 deck/landing 类产物里
- * 能塞 hero / cover / bg / icon / decoration / portrait / illustration
- * / quote-backdrop / section-divider / pattern。
+ * 出图走 image-produce.js（09-07 拆出去）：本机有 codex 就 codex + gpt-image-2，
+ * 桌面版没钥匙就交给站主 relay（relay-tools.js）。Gemini gateway 那条线（NoDesk
+ * passthrough → DMXAPI）只剩 image-produce 里的 'gateway' 路由和这里五个静默忽略的
+ * 参数；那套旧文件头 09-07 删了，要看去 git 历史。
  *
- * 调用约定（agent 端）：
- *   mcp__nodesign__generate_image
- *     prompt: string                自然描述场景（不堆关键词）
- *     aspectRatio?: enum            14 种官方比例，default '16:9'
- *     imageSize?: '512'|'1K'|'2K'|'4K'  default '1K'
- *     referenceImages?: string[]    workspace 相对路径，max 14
- *                                   （Gemini 3.1 Flash 文档：人物 ≤4、物体 ≤10）
- *     assetRole?: enum              落档语义类，影响 default 命名 + emit 字段
- *     outputName?: string           不带后缀；default `gen-${ts}-${role}`
- *     thinkingLevel?: 'minimal'|'high'  default 'minimal'（latency 优先）
- *     responseModalities?: array    default ['IMAGE']
- *
- * 返回 CallToolResult：
- *   content: [
- *     { type: 'text', text: 'Generated <name>.png at assets/generated/<name>.png ...' },
- *     { type: 'image', data: <base64>, mimeType: 'image/png' },
- *   ]
- *
- * 落地：
- *   优先 <sharedRoot>/assets/generated/<name>.png（跨 session 复用 + 软链让
- *   sessions/<sid>/assets/ 直接看见），fallback <workspaceRoot>/assets/generated/。
- *   从 sessions/<sid>/canvas.html 引用即 `assets/generated/<name>.png`。
- *
- * 网关：
- *   POST <NODESIGN_GATEWAY_URL>/default/passthrough
- *   Authorization: Bearer <NODESIGN_GATEWAY_KEY>
- *   body 顶层注入 channel="DMX" + channel_url=<DMXAPI base>/v1beta/models/<model>:generateContent
- *   剩下字段是 Gemini 标准 generateContent 协议（contents / generationConfig）
- *
- *   不复用 binary-fixup-proxy：那个只接 /v1/messages（Anthropic 协议），
- *   Gemini 走 /v1beta/...。MCP tool 在 server 进程内跑，直接 fetch 最干净。
+ * 落地：<workspaceRoot>/assets/generated/<name>.png + .webp 兄弟（页面引 webp）。
+ * 返回 text caption + image content block（缩略图 base64，原图走 HTTP 按需拉）。
  */
 
 import path from 'node:path';
@@ -212,7 +183,8 @@ export function makeGenerateImageTool({ workspaceRoot, sharedRoot = null, ctx } 
     'generate_image',
     `Generate a high-quality image.
 Use this to add hero / cover / background / frame / icon / decoration / portrait
-/ illustration / quote-backdrop / section-divider / pattern visuals to canvas.html.
+/ illustration / quote-backdrop / section-divider / pattern visuals to a deck,
+a site page or a document.
 
 BACKEND: codex-imagegen (subscription) -> gpt-image-2. What actually works is
 prompt + aspectRatio + referenceImages (+ assetRole / outputName for naming).
@@ -231,9 +203,13 @@ an era) is also worth one search to see real examples before writing the
 prompt. Famous entities the model already knows and abstract / decorative
 subjects need no search.
 
-Saves the image to assets/generated/<name>.png inside the workspace (visible
-across sessions via the shared/ softlink). Returns the image as an inline
-content block so you can vision-check it immediately.
+Saves the image to assets/generated/<name>.png at the WORKSPACE ROOT (plus a
+.webp sibling to use in pages; the PNG is the master). A deck at the root
+references it as assets/generated/<name>.webp. A site lives in its own folder,
+so copy the webp into <site>/assets/ and reference assets/<name>.webp from the
+page (or reference ../assets/generated/<name>.webp; the exporter rewrites it).
+Returns the image as an inline content block so you can vision-check it
+immediately.
 
 PROMPT WRITING:
   - Picture the finished frame first, then describe what you see, in order.

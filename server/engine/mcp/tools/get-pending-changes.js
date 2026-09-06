@@ -83,7 +83,7 @@ Each item has:
                         — e.g. lift baked inline left/top into the stylesheet —
                         but only if asked or clearly beneficial.)
 - path (optional): which file the change belongs to (workspace-relative, e.g. about.html or 稿件/about.html).
-  Absent = the current session's canvas.html.
+  Absent = the artifact you are currently working on.
 - anchor: stable element reference (dataId / path / textHint / bbox)
 - aiContext: element role, page info, outerHTML, computed styles, siblings,
              plus targetContainerTag / alignmentHints for moves

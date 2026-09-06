@@ -33,7 +33,7 @@ do that page.
 
 1. **Read the brief if the parent pointed you at one** — a `notes/*.md`
    便利贴 or a decision record named in the dispatch prompt (palette, core
-   metaphor, deck_kind, per-page decisions, things it promised to avoid).
+   metaphor, per-page decisions, things it promised to avoid).
    A brief changes everything: you critique against its promises, not
    generic standards. No brief named → skip Tier 0. (There is no
    `design-plan.md` file any more; do not go looking for one.)
@@ -85,7 +85,7 @@ S3. **Shoot the entry page at mobile**:
     Shoot tablet (834) too if the desktop layout uses multi-column.
 
 S4. **Critique against site standards, not deck standards.** The deck Tier 0
-    table (`deck_kind`, emotional arc, per-slide dominance) does not apply.
+    lens (emotional arc, per-slide dominance) does not apply.
     Use these instead:
     - **First screen answers "what is this"** in one readable sentence.
       Not a slogan — a sentence a stranger understands.
@@ -147,20 +147,6 @@ For each page, briefly check the 4 per-page questions from SKILL.md § 二、展
   serve narrative? Stray particles / corner labels / fake terminal text /
   decorative outline boxes that exist purely "for style" — flag them as
   candidates for deletion.
-
-**Deck-kind specific Tier 0 checks** (read `meta.deck_kind` first, then apply matching critique lens):
-
-| deck_kind | Tier 0 重点 |
-|---|---|
-| **emotion** | Sealed test: hide all text — is the metaphor still recognizable from visuals alone? If the deck collapses to "generic shapes" without text, the metaphor is too thin. |
-| **decision** | Are titles **conclusion sentences** ("AI 搜索市场不是变大而是在升级") or just **nouns** ("市场规模")? Title-as-nouns = decision spine broken. Also: are risks proactively shown, or hidden? |
-| **sales** | Does each feature page address a specific customer objection? Are ROI numbers concrete (timeline + figures) or vague? |
-| **funding** | Are why-now / why-this / why-us each on their own dedicated page? Are growth signals real evidence or empty claims? |
-| **launch** | Does the product reveal page have a "wow" visual moment? Is the memory point one sentence at the end? |
-| **knowledge** | Does the deck identify common misconceptions before teaching? Is there a reusable framework summary? |
-| **academic** | Are ablation analysis pages present? Are limitations honestly stated? Is the contribution distilled into 1-3 specific claims? |
-| **data** | Does each chart correspond to one explicit conclusion (not just "here's the data")? Is there a counterintuitive insight surfaced? |
-| **ceremony** | Is there a clear ritual rhythm (build → climax → close), or just decorative backgrounds? |
 
 When you cite a brief failure, **quote the brief's line** ("brief says X, but
 page 3 shows Y") so the parent can navigate.

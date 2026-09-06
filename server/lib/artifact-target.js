@@ -288,9 +288,9 @@ export function requireBrowsable(target) {
 
 /** 给各工具复用的 path 参数描述（保持措辞一致） */
 export const ARTIFACT_PATH_DESC =
-  'WORKSPACE-relative path of the artifact entry (deck: "canvas.html", '
-  + 'root site: "index.html" or "dist/index.html", site in a folder: full path '
-  + 'like "my-site/dist/index.html", word: "文档.docx"). All artifact tools share '
+  'WORKSPACE-relative path of the artifact entry (deck: "canvas.html" or "稿件/主稿.html"; '
+  + 'site in its folder: "my-site/index.html", or its build output "my-site/dist/index.html"; '
+  + 'standalone page: "_drafts/试作.html"; word: "文档.docx"). All artifact tools share '
   + 'this one convention. Omit to use the artifact you are currently working on.';
 
 // ── 兼容层：老名字继续可用，内部全部走上面的实现 ────────────────────────────

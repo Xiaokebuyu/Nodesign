@@ -52,9 +52,9 @@
 **典型 HTML preview 范例**（240×140 配色 + 字体方向，全 inline style）：
 
 ```html
-<div style="background: #f9f8f6; padding: 12px; font-family: 'Lyon Display', 'Songti SC', 'Noto Serif SC', serif; color: #2d2418;">
-  <h1 style="font-size: 28px; font-weight: 600; margin: 0 0 8px; letter-spacing: -0.02em;">Cover</h1>
-  <p style="font-size: 11px; color: #c45c3f; margin: 0;">warm cream + cherry accent + serif</p>
+<div style="background: #0b1220; padding: 12px; font-family: 'JetBrains Mono', 'SF Mono', 'PingFang SC', 'Noto Sans SC', monospace; color: #d7e0ea;">
+  <h1 style="font-size: 26px; font-weight: 500; margin: 0 0 8px; letter-spacing: 0.04em; border-left: 3px solid #39ff88; padding-left: 8px;">COVER_01</h1>
+  <p style="font-size: 11px; color: #39ff88; margin: 0;">deep navy + single neon + mono</p>
 </div>
 ```
 

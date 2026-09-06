@@ -67,6 +67,14 @@ const POLICY_BLOCK = /<!-- nd:policy:(full|min):start -->\n([\s\S]*?)<!-- nd:pol
  */
 const MODE_BLOCK = /<!-- nd:mode:(design|rp):start -->\n([\s\S]*?)<!-- nd:mode:\1:end -->\n/g;
 
+/**
+ * 能力分区（2026-09-07）：只在某个本机能力在场时才该教的段落框在 `nd:cap:<能力id>` 块里。
+ * 今天只有 `localBox`（站主的 GPU 盒子：paint_still / roll_film）—— 盒子关着时这两件
+ * 连名字都不注册（capability-gate.js 的 unregister 档），prelude 却照教一整段并指路
+ * ToolSearch 去拉一个不存在的 schema。纪律跟 shouldRegisterTool 一样：**没探过就留**。
+ */
+const CAP_BLOCK = /<!-- nd:cap:(localBox):start -->\n([\s\S]*?)<!-- nd:cap:\1:end -->\n/g;
+
 // 加载期断言：两份都必须在。少一份说明有人编辑 prelude 时把标记删了，那时候
 // 正则会静默退化成"一份都不删"（uncensored 路径拿到完整底线）或"整节消失"。
 {
@@ -81,6 +89,10 @@ const MODE_BLOCK = /<!-- nd:mode:(design|rp):start -->\n([\s\S]*?)<!-- nd:mode:\
     if (NODESIGN_PRELUDE && !modes.includes(want)) {
       throw new Error(`[system-prompts] nodesign-prelude.md 缺少 nd:mode:${want} 标记块 —— 模式分区渲染会静默失效`);
     }
+  }
+  const caps = [...NODESIGN_PRELUDE.matchAll(CAP_BLOCK)].map((m) => m[1]);
+  if (NODESIGN_PRELUDE && !caps.includes('localBox')) {
+    throw new Error('[system-prompts] nodesign-prelude.md 缺少 nd:cap:localBox 标记块 —— 盒子关机时会照教一段用不了的工具');
   }
 }
 
@@ -112,15 +124,20 @@ const MODE_BLOCK = /<!-- nd:mode:(design|rp):start -->\n([\s\S]*?)<!-- nd:mode:\
  *
  *   `mode`：项目模式（projects.mode）。'design'（默认）留设计道分区，'rp' 留
  *   演出分区。认不出的值落 design —— 存量项目全是 design，猜错方向宁可多给不少给。
+ *
+ *   `caps`：本机能力位 `{ localBox: true|false }`。**只有明确 false 才剥**那段 ——
+ *   没传 / null（没探过、单测）按在场算，跟工具注册那层同一条纪律。
  */
 export function renderPrelude(level = 'loose', opts = {}) {
   const keep = opts.uncensored === true ? 'min' : 'full';
   const keepMode = opts.mode === 'rp' ? 'rp' : 'design';
+  const capOff = new Set(Object.entries(opts.caps || {}).filter(([, v]) => v === false).map(([k]) => k));
   // 认不出的 locale 落中文：这个产品是中文优先的，拿不准时给中文不给英文。
   const localeName = UI_LOCALE_NAME[opts.locale] || UI_LOCALE_NAME[DEFAULT_LOCALE];
   return NODESIGN_PRELUDE
     .replace(POLICY_BLOCK, (_all, which, body) => (which === keep ? body : ''))
     .replace(MODE_BLOCK, (_all, which, body) => (which === keepMode ? body : ''))
+    .replace(CAP_BLOCK, (_all, which, body) => (capOff.has(which) ? '' : body))
     .replace('{{ADULT_POLICY}}', ADULT_POLICY[level] || ADULT_POLICY.loose)
     .replace('{{UI_LOCALE}}', localeName)
     .trim();

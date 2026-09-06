@@ -23,6 +23,7 @@
  *   非 thread-safe（SDK stream 串行处理 message，OK）。
  */
 
+import { capabilityState } from '../../runtime/capabilities.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { query } from '@anthropic-ai/claude-agent-sdk';
@@ -404,6 +405,9 @@ export async function runSession({
           locale: owner?.locale || undefined,
           // 项目模式分区（nd:mode 标记块）—— 跟工具面用的是同一次读数，两面不会岔开
           mode: projectMode,
+          // 能力分区（nd:cap 标记块）：盒子关机时 paint_still / roll_film 那段不教。
+          // capabilityState 没探过返回 null → 不剥，跟 shouldRegisterTool 同纪律
+          caps: { localBox: capabilityState('localBox')?.available ?? null },
         });
       })(),
     },

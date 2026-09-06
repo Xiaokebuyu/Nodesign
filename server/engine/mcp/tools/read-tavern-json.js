@@ -118,8 +118,8 @@ roll for dice, remember for memory). Markers are filled by 酒馆 at runtime and
 no place here; jailbreak sections are pointless on this platform.`,
     {
       path: z.string().describe(
-        'Path to the .json. Relative paths resolve against the session workspace, '
-        + 'then the shared project dir (e.g. "assets/Izumi 0814.json").',
+        'Workspace-relative path to the .json. Uploads live in 用户内容/ '
+        + '(e.g. "用户内容/Izumi 0814.json").',
       ),
       // ⚠️ 参数名和枚举值一律 ASCII —— 工具 schema 是模型要照着填的东西，
       // 中文键名在这条路上不可靠（全仓其他工具也都是 ASCII，别开这个头）

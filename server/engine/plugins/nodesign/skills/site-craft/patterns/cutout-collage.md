@@ -8,7 +8,7 @@
 1. `generate_image` 出主体（prompt 里要求简洁背景、主体完整、边缘清晰 ——
    纯色底的图抠得最干净）
 2. `mcp__nodesign__remove_background({ inputPath })` → RGBA PNG
-3. `cp` 进任务本地 `assets/`，站内相对路径引用
+3. `cp` 进站点文件夹自己的 `assets/`，站内写相对路径 `assets/x.png` 引用
 
 薄透元素（玻璃 / 烟雾 / 飘发 / 半透明纱）抠不干净是 ML 抠图的物理极限，
 这类主体生图时就避开，或者接受边缘软。

@@ -15,7 +15,7 @@ fit script 由系统在导出时注入，模板不带。
   importmap：全家桶（agent import 哪个，浏览器才下哪个）
   Tailwind Play CDN + tailwind.config（只配 fontFamily，颜色走 CSS var）
   Babel Standalone：浏览器内编译 TSX
-  <style id="design-tokens">：CSS variables（Tweaks 的暴露目标，风格锚写这里）
+  <style id="design-tokens">：CSS variables（风格锚写这里）
   <style id="base">：section[data-page] 由 wrap data-deck-aspect 锁 W/H，保持原样
 </head>
 

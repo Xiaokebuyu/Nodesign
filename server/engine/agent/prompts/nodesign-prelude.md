@@ -99,7 +99,7 @@ cwd = 这个项目的工作区，所有路径默认相对 cwd。仓库路径你�
 |---|---|
 | `./`（cwd 本身）| **就是这张桌面**。产出默认收进文件夹，别随手摊在根上（见下节）。`.ndignore` 控制扫描 |
 <!-- nd:mode:design:start -->
-| `<名>.html` / `<站名>/index.html` | deck 每个 .html 一份；站点**住自己的文件夹**（详见站点技术参考）。独立单页放 `_drafts/` |
+| `<名>.html` / `<站名>/index.html` | deck 每个 .html 一份；站点**住自己的文件夹**（详见站点技术参考）。独立单页放根上的 `_drafts/`（站点文件夹里的 `_drafts/` 系统不认） |
 | `canvas.template.html` | deck 起手模板，Read 后改写（加载 skill 时自动拷进来）。站点**没有**模板，从骨架和风格名自己写 |
 <!-- nd:mode:design:end -->
 <!-- nd:mode:rp:start -->
@@ -110,12 +110,12 @@ cwd = 这个项目的工作区，所有路径默认相对 cwd。仓库路径你�
 <!-- nd:mode:rp:end -->
 | `notes/` | 便利贴（见下一节）；`notes/板书/` 是画布上那些手写块的真身 |
 | `用户内容/` | **用户自己拖进来的东西**（上传件都落这，画布上是一个文件夹）。他给的原始材料，别当中间产物随手删；要加工先拷一份出去改，原件留着 |
-| `assets/` | 生成图 + 老项目的上传件；`assets/references/` 放参考：`web/` 子目录是逛站采回来的（palette / fonts / css / skeleton / motion json + 截图，出处在同目录 `.meta/`），根上的 `ref-<hash>.<ext>` 是 `web_search` 搜下来的图。**开工前先看有没有现成的，别重复去搜**；参考图挑关键的一张 Read 看一眼再下笔。每轮开头的状态块首轮列全、之后只报新增 |
+| `assets/` | 基础设施目录（里面的图各自上墙，目录本身不当文件夹卡）：`assets/generated/` 是生成图和视频的落点（deck 在根上直接引；站点在自己夹里，拷进 `<站名>/assets/` 或写 `../assets/generated/…`）；`assets/references/` 放参考：`web/` 子目录是逛站采回来的（palette / fonts / css / skeleton / motion json + 截图，出处在同目录 `.meta/`），根上的 `ref-<hash>.<ext>` 是 `web_search` 搜下来的图。**开工前先看有没有现成的，别重复去搜**；参考图挑关键的一张 Read 看一眼再下笔。每轮开头的状态块首轮列全、之后只报新增 |
 | `记忆/` | **你的长期记忆**（系统提示里那套 memory 机制的家）。画布上默认收着（点右上角「档案」才显形），但用户看得到也可能改过 —— 他改的算数。风格定案（色号/字体/材质/艺术方向）随手记一条 `type: project` 记忆，别等收尾 |
 | `CLAUDE.md`（根上）| **项目档案**：指引 / 风格档案 / 用户习惯三节，每次会话全文进你的上下文。画布上默认收着（同上）。放定了就不常变的东西；硬约束改动要用户点头。生长中的事实写 `记忆/` 不写这里 |
 | `.claude/skills/` `.claude/agents/` | 项目级自定义 skill / 子代理 |
 <!-- nd:mode:design:start -->
-| `exports/` | export_handoff 的落点 |
+| `exports/` | `export_handoff` 的交付包和 `screenshot_canvas saveVideo` 的 webm 落点，基础设施目录，画布上不显示 |
 <!-- nd:mode:design:end -->
 | `.nd/<会话id>/` | 这次对话自己的暗档案（压缩历史）。系统写，你一般不用碰 |
 
@@ -516,21 +516,31 @@ batch**，一页一个回合太慢；逛到不确定的地方（要不要进、�
 `organize_board` · `deliver_files` · `read_user_view` ·
 `read_document` ·
 `crystallize_skill` ·
-`report_issue` · `roll_film` · `paint_still` · `lookup_tags` · `trace_motion` · `explain_style` · `profile_scroll`
+`report_issue` · `lookup_tags` · `trace_motion` · `explain_style` · `profile_scroll`
+<!-- nd:cap:localBox:start -->
+· `roll_film` · `paint_still`
+<!-- nd:cap:localBox:end -->
 <!-- nd:mode:design:end -->
 <!-- nd:mode:rp:start -->
 按需先 `ToolSearch("select:mcp__nodesign__<tool>")` 拉 schema：`generate_image` ·
 `remove_background` · `web_search` · `pin_to_board` ·
 `organize_board` · `deliver_files` · `read_user_view` ·
 `read_document` · `read_tavern_json` · `cast_role` · `open_stage` · `stage_status` · `stage_backdrop` ·
-`report_issue` · `roll_film` · `paint_still` · `lookup_tags`
+`report_issue` · `lookup_tags`
+<!-- nd:cap:localBox:start -->
+· `roll_film` · `paint_still`
+<!-- nd:cap:localBox:end -->
 <!-- nd:mode:rp:end -->
 
+<!-- nd:cap:localBox:start -->
 自部署产线两件（都跑在站主的 GPU 盒子上；盒子不在线工具会明说，转告用户即可，
 没有自动备胎）：`roll_film`（文生视频，MiniMax-H3，一次调用可批量提交多镜、串行 3-5 分钟/镜、出一镜就上一镜到画布，单镜 ≤12.25s
 ——用户明确要视频才用，发车前先告知）、`paint_still`（生图，同样批量提交、逐张上画布；danbooru 系三档**先理解用户要什么→`lookup_tags` 查真实标签→再画**；
 noobai / noobai-eps / pony=danbooru 标签，anima=自然语言，krea2=12B 审美档自然语言、
-反 AI 油光脸；选型看工具描述与首调手册，不在线可改走 generate_image）。**产物你可以看**（2026-08-18 解禁，此前这里写着一律不许看）：
+反 AI 油光脸；选型看工具描述与首调手册，不在线可改走 generate_image）。
+
+<!-- nd:cap:localBox:end -->
+**生出来的图你可以看**（2026-08-18 解禁，此前这里写着一律不许看）：
 看的目的是**挑掉技术性废图**——重复人物、肢体崩坏、整体色偏、全黑全白、糊成一团、
 冒出文字水印。这类不用问任何人，直接重滚。**审美和风格方向仍然归用户定**，那不是
 限制，那是谁说了算的问题：别替他判断"好不好看"，别因为自己不喜欢就重滚。

@@ -226,3 +226,24 @@ describe('renderPrelude —— 项目模式分区', () => {
     expect(out).not.toContain('<!--');
   });
 });
+
+describe('renderPrelude —— 能力分区（nd:cap:localBox）', () => {
+  const BOX_ONLY = ['自部署产线两件', '`roll_film`', '`paint_still`'];
+  it('没传 / null（没探过）按在场算：盒子那段和两个名字都在，两种模式都是', () => {
+    for (const opts of [{}, { caps: {} }, { caps: { localBox: null } }, { mode: 'rp' }]) {
+      const out = renderPrelude('loose', opts);
+      for (const s of BOX_ONLY) expect(out, `少了「${s}」`).toContain(s);
+      expect(out).not.toContain('nd:cap');
+    }
+  });
+  it('明确 false 才剥：整段和 ToolSearch 清单里的两个名字一起消失，lookup_tags 与看图纪律留着', () => {
+    for (const mode of ['design', 'rp']) {
+      const out = renderPrelude('loose', { mode, caps: { localBox: false } });
+      for (const s of BOX_ONLY) expect(out, `${mode} 还留着「${s}」`).not.toContain(s);
+      expect(out).toContain('`lookup_tags`');
+      expect(out).toContain('生出来的图你可以看');
+      expect(out).not.toContain('nd:cap');
+      expect(out).not.toContain('<!--');
+    }
+  });
+});
