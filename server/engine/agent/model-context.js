@@ -434,6 +434,7 @@ export function resolveWireModel(bodyModel) {
     // 主 agent 想多少是主行的事，helper 一句话的活不该跟着 high/max 想几分钟
     helperReasoningEffort: row.api.helperReasoningEffort || (row.api.reasoningEffort ? 'low' : null),
     maxOutput: row.api.maxOutput || null,
+    maxImages: row.api.maxImages || null,   // 一次 prompt 最多带几张图（ingress/image-cap.js 裁最早的）；不填 = 不裁
     // 「只想了没说」的就地重发额度（lib/ingress/forward-openai-chat.js）。**按行配**而不是全局：
     // 这是某个模型的体质问题不是协议的 —— 08-21 深夜实测当天 4 次全在 Ox 两个主行上（它吐第一个字前
     // 要想很久，深想档一发约 45 秒，Zen 掐流的窗口就长），所以那两行放宽到 6 次 / 360 秒，别的行走

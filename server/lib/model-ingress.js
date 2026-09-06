@@ -44,6 +44,7 @@ import { noteUpstreamBilling, openaiTokens } from './ingress/upstream-billing.js
 import { noteUpstreamTruncation } from './ingress/upstream-truncation.js';
 import { noticeSession } from './ingress/session-notice.js';
 import { tapAnthropicUsage } from './ingress/anthropic-usage.js';
+import { capImages } from './ingress/image-cap.js';
 
 // ── 出站连接池 ──
 // ⛔ 08-20 生产真踩：本地盒子（authStyle 'none' = 环回 SSH 隧道）走 Node 默认
@@ -396,6 +397,9 @@ export async function transformForUpstream(parsed, wire) {
     const allowed = wire.upstream?.imageFormats || null;
     if (await normalizeImages(parsed.messages, VISION_MAX_DIM, allowed)) mutated = true;
   }
+
+  // 一次 prompt 的图片张数上限（行内 maxImages；DeepSeek V4 Flash Vision 是 4）：多的最早的换占位文字（ingress/image-cap.js）
+  if (wire.maxImages && capImages(parsed.messages, wire.maxImages) > 0) mutated = true;
 
   // 上游要的额外顶层字段（merge 的 vendor 点名）。放在这里是 **Anthropic 透传腿的读者** ——
   // 那条腿直接 JSON.stringify(parsed)。openai-chat 腿另有一个读者，见 toOpenAIChatRequest

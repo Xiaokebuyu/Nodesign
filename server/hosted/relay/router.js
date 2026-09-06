@@ -183,8 +183,9 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     if (!verdict.ok) return sendError(res, verdict.status, verdict.code, verdict.message, verdict.quota ? { quota: verdict.quota } : {});
 
     const book = ({ appModel, costUsd, tokens }) => {
-      // 上游自报的钱优先（Zen / Merge 网关那种），没有就按表价；都没有 → usage.js 记 0 并告警
-      const cost = costUsd != null ? costUsd : (tokens ? priceTokens(appModel, tokens) : null);
+      // 上游自报的钱 **>0 才算数**（Zen Go 额度内报 0、余额不扣 —— 站内 context.applyUpstreamBilling 同一口径：
+      // 09-07 站主桌面版 21 发 DeepSeek 账本全是 0 就是把 0 当真数记了）；否则按表价；都没有 → usage.js 记 0 并告警
+      const cost = costUsd != null && costUsd > 0 ? costUsd : (tokens ? priceTokens(appModel, tokens) : null);
       try {
         recordRelayUsage({ userId: user.id, deviceId: device.id, model: appModel, costUsd: cost,
           inputTokens: tokens?.input ?? null, outputTokens: tokens?.output ?? null,

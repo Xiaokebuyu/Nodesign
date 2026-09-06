@@ -54,6 +54,25 @@ describe('transformForUpstream（Gemini 路：rename + strip thinking + lift）'
     expect(last.source.data).toBe(IMG.source.data);
   });
 
+  it('⭐DeepSeek V4 Flash Vision 行 maxImages=4：第 5 张起最早的换占位文字（09-07 桌面版实撞 Console Go 的 400）', async () => {
+    const wire = resolveWireModel('deepseek-v4-flash-vision');
+    expect(wire.maxImages).toBe(4);
+    const mk = (n) => ({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMG.source.data } });
+    const body = { model: 'deepseek-v4-flash-vision', messages: [
+      { role: 'user', content: [mk(1), mk(2)] }, { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+      { role: 'user', content: [mk(3), mk(4), mk(5), { type: 'text', text: 'q' }] },
+    ] };
+    await transformForUpstream(body, wire);
+    const all = body.messages.flatMap((m) => m.content);
+    expect(all.filter((b) => b.type === 'image')).toHaveLength(4);
+    expect(body.messages[0].content[0].type).toBe('text');
+    expect(body.messages[0].content[0].text).toContain('最多带 4 张');
+    // 没配 maxImages 的行一张不裁
+    const body2 = { model: 'claude-opus-4-6', messages: [{ role: 'user', content: [mk(1), mk(2), mk(3), mk(4), mk(5)] }] };
+    await transformForUpstream(body2, resolveWireModel('claude-opus-4-6'));
+    expect(body2.messages[0].content.filter((b) => b.type === 'image')).toHaveLength(5);
+  });
+
   it('enabled8k 档（原 Kimi 路，kimi 行 08-21 深夜删了，逻辑留着）：adaptive 改写成 enabled+budget，已是 enabled 的不动', async () => {
     // 表里已无 enabled8k 的行，直接喂一个字面 wire 钉住流水线行为
     const wire = { appModel: 'fake-kimi', wireModel: 'fake-kimi-wire', upstreamId: 'lament', upstream: UPSTREAMS.lament, thinking: 'enabled8k', liftImages: false };

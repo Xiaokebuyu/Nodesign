@@ -288,3 +288,31 @@ describe('订阅腿', () => {
     expect(upstreamSeen).toHaveLength(0);
   });
 });
+
+describe('记账：上游自报 0 元不算数（Zen Go 额度内报 0）', () => {
+  it('costUsd=0 → 按表价记；costUsd>0 → 以上游为准', async () => {
+    const fakeForward = vi.fn(async (_req, res, _buf, opts) => {
+      opts.onBilling({ appModel: 'fake-anthro', protocol: 'openai-chat', costUsd: fakeForward.cost, tokens: { input: 1_000_000, output: 0, cacheRead: 0, cacheCreate: 0 } });
+      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{}');
+    });
+    const app2 = express();
+    app2.use('/api/relay', createRelayRouter({ moderate, forwardApi: fakeForward }));
+    const srv2 = http.createServer(app2);
+    await new Promise((r) => srv2.listen(0, '127.0.0.1', r));
+    const base2 = `http://127.0.0.1:${srv2.address().port}/api/relay`;
+    try {
+      const user = makeUser({ plan: 'basic', daily: 50 });
+      const { token } = mintDevice({ userId: user.id });
+      const sid = 'sid-zero';
+      await fetch(base2 + '/sessions', { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ sid, appModel: 'fake-anthro' }) });
+      const send = () => fetch(`${base2}/__nd/${sid}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(BODY) });
+      fakeForward.cost = 0;
+      expect((await send()).status).toBe(200);
+      fakeForward.cost = 0.37;
+      expect((await send()).status).toBe(200);
+      expect(usageRows(user.id).map((r) => r.cost_usd)).toEqual([1, 0.37]);   // 表价 input $1/M；上游报了真数就用真数
+    } finally {
+      await new Promise((r) => srv2.close(r));
+    }
+  });
+});
