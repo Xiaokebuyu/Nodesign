@@ -20,6 +20,7 @@
  */
 import http from 'node:http';
 import https from 'node:https';
+import { randomUUID } from 'node:crypto';
 import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAIToAnthropicSSE, truncationOfChatResponse } from './openai-chat.js';
 import { upstreamCostOf } from './upstream-billing.js';
 import { upstreamErrorHint } from './upstream-error-hints.js';
@@ -53,20 +54,41 @@ export function retryBudgetMs(env = process.env) {
  *   onTruncated(reason|null)  这次往返是不是「说到一半被掐」→ session-loop 续接
  *   onNotice(text)  想让用户看见的一句话（就地重发时说一声，别让人对着不动的绿点干等）
  */
-export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, target, path, agent, onOutcome = () => {}, onBilling = () => {}, onTruncated = () => {}, onNotice = () => {} }) {
+/**
+ * 没带会话前缀的请求（探针 / 体检 / 手打 curl）用的会话 ID：一个进程一个，稳定但不冒充任何真会话。
+ * 上游要的是「一个会话一个稳定 ID」，随机到每发都不同等于没给。
+ */
+const UNTAGGED_SESSION_ID = `nd-untagged-${randomUUID()}`;
+
+/**
+ * 发往上游的请求头。⚠️ 不转发 binary 带来的任何请求头（见 forwardOpenAIChat 头上）。
+ *
+ * `x-opencode-session`（09-06）：OpenCode 来信说我们这个 UA 的请求缺这个头，「一个会话一个稳定 ID」，
+ * 09-06 起缺了可能直接报错。ID 用的就是 ingress 的会话前缀（= SDK 会话 id：一场对话一个，resume 不变；
+ * 主行和 helper 那发同属一场对话，所以同一个值）。头名挂在 UPSTREAMS 条目的 `sessionHeader` 上——
+ * 按服务商挂、不按协议挂，别的 openai-chat 上游（NVIDIA 等）没这条就不发。
+ */
+export function upstreamHeaders({ wire, key, wantStream, target, bodyLength, sessionTag }) {
+  const headers = {
+    host: target.hostname,
+    'content-type': 'application/json',
+    'content-length': String(bodyLength),
+    accept: wantStream ? 'text/event-stream' : 'application/json',
+    'user-agent': 'NoDesign-ingress/1 (+https://nodesign.xiaobuyu.trade)',
+    authorization: `Bearer ${key}`,
+  };
+  const sessionHeader = wire.upstream?.sessionHeader;
+  if (sessionHeader) headers[sessionHeader] = sessionTag || UNTAGGED_SESSION_ID;
+  return headers;
+}
+
+export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag = null, target, path, agent, onOutcome = () => {}, onBilling = () => {}, onTruncated = () => {}, onNotice = () => {} }) {
   const wantStream = !!parsed.stream;
   const label = wire.upstream?.label || wire.upstreamId;
   const body = toOpenAIChatRequest(parsed, { reasoningEffort: wire.reasoningEffort, maxOutput: wire.maxOutput, bodyExtra: wire.bodyExtra });
   const outBody = Buffer.from(JSON.stringify(body), 'utf8');
   const useHttps = target.protocol === 'https:';
-  const headers = {
-    host: target.hostname,
-    'content-type': 'application/json',
-    'content-length': String(outBody.length),
-    accept: wantStream ? 'text/event-stream' : 'application/json',
-    'user-agent': 'NoDesign-ingress/1 (+https://nodesign.xiaobuyu.trade)',
-    authorization: `Bearer ${key}`,
-  };
+  const headers = upstreamHeaders({ wire, key, wantStream, target, bodyLength: outBody.length, sessionTag });
   const t0 = Date.now();
 
   /**

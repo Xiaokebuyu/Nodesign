@@ -55,7 +55,7 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     // 生产 .env 里不设 → 真地址。
     baseUrl: process.env.NODESIGN_UPSTREAM_ZEN_URL || 'https://opencode.ai/zen/v1',
     keyEnv: 'NODESIGN_UPSTREAM_ZEN_KEY',
-    authStyle: 'bearer',
+    authStyle: 'bearer', sessionHeader: 'x-opencode-session',   // 09-06 OpenCode 来信：每发要带「一个会话一个稳定 ID」，缺了会报错；读者在 ingress/forward-openai-chat.js
     protocol: 'openai-chat',
     countTokens: false,   // 08-21 探针：404
   }),
@@ -96,7 +96,7 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     label: 'OpenCode Zen Go',
     baseUrl: process.env.NODESIGN_UPSTREAM_ZEN_GO_URL || 'https://opencode.ai/zen/go/v1',   // 探针覆盖，同上
     keyEnv: 'NODESIGN_UPSTREAM_ZEN_KEY',
-    authStyle: 'bearer',
+    authStyle: 'bearer', sessionHeader: 'x-opencode-session',   // 同 zen（同一家，同一封信）
     protocol: 'openai-chat',
     countTokens: false,
   }),

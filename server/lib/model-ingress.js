@@ -235,7 +235,7 @@ async function handleRequest(req, res, bodyBuf) {
     const target = new URL(wire.upstream.baseUrl);
     // helper 请求降档：主行想多少归主行，helper 一句话的活用 helperReasoningEffort（默认 low）
     const wireFwd = routed.role === 'helper' && wire.helperReasoningEffort ? { ...wire, reasoningEffort: wire.helperReasoningEffort } : wire;
-    forwardOpenAIChat({ parsed, wire: wireFwd, key, res, sidShort, target, path: joinPath(target.pathname, '/chat/completions'), agent: agentFor(wire, target.protocol === 'https:'), onOutcome: noteOutcome,
+    forwardOpenAIChat({ parsed, wire: wireFwd, key, res, sidShort, sessionTag, target, path: joinPath(target.pathname, '/chat/completions'), agent: agentFor(wire, target.protocol === 'https:'), onOutcome: noteOutcome,
       // 上游自报费用按会话 × appModel 累加（helper 请求记到 helper 行头上），session-loop 结账时取走
       onBilling: (info) => noteUpstreamBilling(sessionTag, wireFwd.appModel, info),
       // 「说到一半被掐」标记：session-loop 收到 result 时取走，有标记就自动续接一轮（upstream-truncation.js）。
