@@ -92,8 +92,8 @@ nsis:
 # 打包在 GitHub Actions 的 windows-latest 上做（.github/workflows/desktop.yml），产物直接传进
 # Release：安装包 .exe、.blockmap、latest.yml。有 blockmap 对得上就下差分，对不上就退回下整包 ——
 # 完整包更新和差分更新是同一套配置的两条路径，不是两套。
-# releaseType: draft —— 打出来的是**草稿**，站主在 GitHub 上点 Publish 之后用户端才会看到更新；
-# 草稿本身站主自己能下载来试。想跳过这一步改成 release。
+# releaseType: draft —— electron-builder 往工作流预建的草稿里传资产（三个都传完之前客户端看不见），
+# 传完由工作流最后一步 `gh release edit --draft=false` 发布（09-07 站主：调试期直接发，不再手点 Publish）。
 publish:
   - provider: github
     owner: Xiaokebuyu

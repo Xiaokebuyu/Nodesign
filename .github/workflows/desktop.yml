@@ -74,6 +74,16 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --win --publish always
 
+      # 三个资产（exe / blockmap / latest.yml）都传完才发布：先发布再传的话，这几分钟里客户端拉 latest.yml 是 404。
+      # 站主 09-07：现在只有他一台机器在用、在调试，每版点 Publish 是纯麻烦 —— 直接发。有外部用户后想恢复"先验再推"，删掉这一步即可。
+      - name: 发布（草稿 → 正式，成为 latest；装了的机器下次启动自动更新）
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $v = node -p "require('./package.json').version"
+          gh release edit "v$v" --draft=false --latest
+
       - name: 产物也留一份在 Actions 里（不想动 Releases 时从这里下）
         uses: actions/upload-artifact@v4
         with:
