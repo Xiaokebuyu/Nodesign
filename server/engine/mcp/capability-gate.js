@@ -35,6 +35,11 @@ export const TOOL_CAPABILITIES = Object.freeze({
   // 通用生图仍有 generate_image 顶着，不存在能力真空。
   paint_still: { cap: 'localBox', mode: 'unregister' },
   roll_film: { cap: 'localBox', mode: 'unregister' },
+  // 进程卡（本地版且沙盒关才有）：托管版不该知道有这四件
+  start_process: { cap: 'processes', mode: 'unregister' },
+  read_process_log: { cap: 'processes', mode: 'unregister' },
+  stop_process: { cap: 'processes', mode: 'unregister' },
+  list_processes: { cap: 'processes', mode: 'unregister' },
 });
 
 export function unavailableMessage(c) {

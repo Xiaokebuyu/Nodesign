@@ -22,6 +22,7 @@ import { attachPageDiagnostics, runBeforeShot, normalizeShot, FIDELITY_LAUNCH_AR
 import { checkUrl, attachSsrfGuard } from '../../../lib/ssrf-guard.js';
 import { denyText } from './browse.js';
 import { startBrowseProxy } from '../../../lib/browse-proxy.js';
+import { isRegisteredLoopback } from '../../process/registry.js';
 
 const RASTER_SCALE = 0.6;
 const DEVICE_VIEWPORTS = {
@@ -50,6 +51,8 @@ function validateUrl(raw) {
   // ⚠️ 这里**只做词法预筛**。真判据是 checkUrl（解析 DNS 按 IP 判）+ 页面上挂的
   // CDP 闸（拦跳转与子资源）。留着这道是因为它便宜、能在解析之前挡掉最常见的字面量。
   const host = u.hostname.toLowerCase();
+  // 进程卡起的 dev server（登记表里在跑的端口）是唯一放行的本机地址
+  if (u.port && isRegisteredLoopback(host, u.port)) return { ok: true, url: u };
   if (PRIVATE_HOST_RE.test(host) || host.endsWith('.local')) {
     return { ok: false, message: `refusing to screenshot private/internal address: ${host}` };
   }

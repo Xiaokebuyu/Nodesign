@@ -46,6 +46,8 @@ import { authRouter, authGuard } from './auth/middleware.js';
 import { sweepOrphanRuns } from './engine/runs/store.js';
 import meRouter from './api/me.js';
 import localRouter, { RESTART_EXIT_CODE } from './api/local.js';
+import processesRouter from './api/processes.js';
+import { stopAllProcesses } from './engine/process/registry.js';
 import { platform } from './runtime/platform.js';
 import { refreshRelayCatalog } from './runtime/relay-client.js';
 import { startIssueOutbox } from './runtime/issue-outbox.js';
@@ -117,6 +119,7 @@ if (hosted) await hosted.mountHostedLate(app);
 app.use('/api/me', meRouter);
 // 本地分发版专用（配置文件 / 状态 / 重启）。hosted 下不挂：这组接口假设请求者就是机器的主人
 if (platform.isLocal) app.use('/api/local', localRouter);
+if (platform.isLocal) app.use('/api/projects', processesRouter);   // 进程卡（2026-09-07）：只有本地版起用户进程
 
 // ── 业务路由 ──
 // projects router 挂在 /api/projects（CRUD）
@@ -233,6 +236,8 @@ function shutdown(signal, exitCode = 0) {
   // 不阻塞 httpServer close —— close fail 也不影响主流程。
   // 台上的人先送走：演出进程是独立 SDK 子进程，不跟着主进程死，不停就是孤儿（各 300-500MB）
   stopAllStages(signal || 'shutdown').catch((err) => console.error('[server] stage close error:', err.message));
+  // 进程卡起的 dev server / 后端随服务端死（不做跨会话存活），不停就是用户机器上的孤儿
+  stopAllProcesses(signal || 'shutdown').catch((err) => console.error('[server] process close error:', err.message));
   stopIngress().catch((err) => console.error('[server] ingress close error:', err.message));
   // 关闭 rembg-service 常驻 python 进程（SIGTERM；兜底 3s 后 SIGKILL）。
   stopRembgService();

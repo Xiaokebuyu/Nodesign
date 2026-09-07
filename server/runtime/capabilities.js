@@ -22,6 +22,7 @@ import { isAvailable as rembgAvailable, REMBG_SETUP_HINT } from '../engine/mcp/t
 import { localBoxEnabled } from '../engine/mcp/tools/h3box-ssh.js';
 import { searchRoute, imageRoute } from '../engine/mcp/tools/relay-tools.js';
 import { whichBinary } from './which.js';
+import { platform } from './platform.js';
 export { whichBinary };
 
 const isWin = process.platform === 'win32';
@@ -91,6 +92,13 @@ export const CAPABILITY_DEFS = Object.freeze([
       const w = bin('wrangler', [path.dirname(process.execPath)]);
       return w.available ? { available: true, detail: `wrangler：${w.detail}`, path: w.path } : { available: false, detail: 'wrangler 不在 PATH 也不在 node 同目录' };
     } },
+  // 进程卡（2026-09-07 桌面端·缝三）：agent 在用户机器上起 dev server / 后端。托管版是多租户
+  // 共享机器，不给；沙盒开着时 allowLocalBinding=false 连端口都绑不上，也不给（isolation.js）。
+  { id: 'processes', kind: 'service', level: 'feature', label: '长驻进程（start_process 等）', uses: 'agent 起 dev server / 后端 / watcher 并读它的日志',
+    fix: '只在本地版（npx / 桌面版）且 NODESIGN_SANDBOX 关着时可用',
+    probe: () => (platform.isLocal && !platform.sandboxEnabled
+      ? { available: true, detail: '本地版，沙盒关' }
+      : { available: false, detail: !platform.isLocal ? '托管版不起用户进程' : '沙盒开着（allowLocalBinding=false）' }) },
   { id: 'localBox', kind: 'service', level: 'feature', label: '本地 GPU 盒子（paint_still / roll_film）', uses: '自部署生图 / 文生视频',
     fix: 'NODESIGN_LOCAL_BOX=on + NODESIGN_H3BOX_SSH（站主自己的 5090 盒子；一般用户用不上）',
     probe: () => (localBoxEnabled() && process.env.NODESIGN_H3BOX_SSH

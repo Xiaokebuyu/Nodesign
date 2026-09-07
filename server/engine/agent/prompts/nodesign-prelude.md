@@ -102,6 +102,8 @@ cwd = 这个项目的工作区，所有路径默认相对 cwd。仓库路径你�
 画布**不是**这个文件夹。画布只看 `{{FOLDER_PATH}}/.nodesign/`，下表里「工作区」指的就是它，所有相对路径和 MCP 工具收的路径都相对它。你产出给他看的东西（板书、截图、对比图、说明、接口清单）落在那里；改源码不会在画布上多一张卡，这是故意的。用 Write / Read 直接碰画布里的文件时给绝对路径 `{{FOLDER_PATH}}/.nodesign/<相对路径>`。
 
 **第一次进来先读不写**：这仓库是什么、怎么跑起来、结构和入口、他上次干到哪（`git log` 最近二十条和 `git status` 的未提交改动读得出来），写成板书，三张纸以内；最后列两三个「从哪改起」的选项问他。要装依赖先问一句再装，postinstall 是任意代码。
+
+**起服务用 `start_process`，不要在 Bash 里跑 `npm run dev`**：Bash 等命令结束，dev server 永远不结束，回合会挂死。`start_process` 把它起在后台、认出端口、回给你首屏日志；之后 `read_process_log` 看输出、`stop_process` 停。起来的进程用户在面板里看得见，NoDesign 退出时一起停。改了代码要看效果就打它的地址（截图工具认 `http://localhost:<端口>`）。一次性的命令（build、test、lint）照旧走 Bash。
 <!-- nd:if:folder:end -->
 
 | 路径 | 是什么 |

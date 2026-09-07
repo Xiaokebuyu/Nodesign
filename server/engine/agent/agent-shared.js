@@ -62,6 +62,10 @@ export const DEFAULT_TOOL_ALLOWLIST = [
   'WebFetch',
   'Task',
   'TaskOutput',
+  // Bash run_in_background 的另外两半（2026-09-07，调查报告 C-4-1）：没有这两件，agent 能把命令
+  // 丢后台却读不到输出也杀不掉 —— 比不能跑更坏。演出进程另有 STAGE_DENY 显式拦 Monitor，不受这里影响。
+  'Monitor',
+  'TaskStop',
   // 常驻角色（rp-*，见 cast.js）的唯一叫醒方式。SendMessage 是 **deferred 工具**：
   // 列在这里只是进了可见集，模型还得先 ToolSearch('select:SendMessage') 取 schema
   // 才能调（2026-08-26 探针实测，主代理和子代理都会自己去取，不用教）。

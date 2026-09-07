@@ -40,6 +40,7 @@
 import os from 'node:os';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { isRegisteredLoopback } from '../engine/process/registry.js';
 
 /** IPv4 段（CIDR），含各类保留段 —— 不只私网，元数据和 CGNAT 也在里面 */
 const V4_BLOCKS = [
@@ -311,6 +312,10 @@ export async function checkUrl(raw, { timeoutMs = 4000 } = {}) {
   }
 
   const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  // 进程卡（2026-09-07 桌面端·缝三）：agent 自己起的 dev server 就在本机，端口在登记表里的
+  // loopback 放行。只认 localhost / 127.0.0.1 / ::1 三个写法 + 登记表里在跑的端口；
+  // 别的本机地址（内网 IP、公网 IP 打自己）照旧拒 —— 这条口子只开给自己起的进程。
+  if (u.port && isRegisteredLoopback(host, u.port)) return { ok: true, ips: ['127.0.0.1'] };
   // 字面量 IP 不用解析（也别交给 DNS —— 有些解析器会对畸形量做意外的事）
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(':')) {
     const why = blockReason(host);

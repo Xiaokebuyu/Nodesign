@@ -82,6 +82,7 @@ import { makeStageBackdropTool } from './tools/stage-backdrop.js';
 import { assertRoleToolsRegistered } from '../agent/cast.js';
 import { makePublishSiteTool } from './tools/publish-site.js';
 import { makeReportIssueTool } from './tools/report-issue.js';
+import { makeStartProcessTool, makeReadProcessLogTool, makeStopProcessTool, makeListProcessesTool } from './tools/processes.js';
 import { makeRollFilmTool } from './tools/roll-film.js';
 import { makePaintStillTool } from './tools/paint-still.js';
 import { makeLookupTagsTool } from './tools/lookup-tags.js';
@@ -270,6 +271,13 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // bug / friction / idea 三类走同一张 issues 表。跟 PostToolUseFailure 的
       // 自动记录分工：自动层记"发生了什么"，这层补"为什么难受、期望怎样"。
       makeReportIssueTool({ projectId, sessionId, ctx }),
+
+      // 进程卡四件（2026-09-07 桌面端·缝三）：起 / 看 / 停 / 列。capability `processes`
+      // 是 unregister 档 —— 托管版和开着沙盒的 exp 连名字都不给，那边「绝不起 dev server」照旧。
+      makeStartProcessTool({ projectId }),
+      makeReadProcessLogTool({ projectId }),
+      makeStopProcessTool({ projectId }),
+      makeListProcessesTool({ projectId }),
 
       // web_search — 4 provider 联网搜索（baidu/tavily/exa/zhipu，CJK auto route to baidu）
       // 移植自 ~/.deskclaw/skills/deskclaw-search-pro/scripts/search.py，0 外部依赖。

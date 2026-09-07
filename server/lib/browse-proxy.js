@@ -37,6 +37,7 @@ import http from 'node:http';
 import net from 'node:net';
 import dns from 'node:dns/promises';
 import { blockReason } from './ssrf-guard.js';
+import { isRegisteredLoopback } from '../engine/process/registry.js';
 
 /** 允许连的端口。80/443 之外的公网端口极少是设计参考站，而放开等于多一片攻击面。 */
 const ALLOWED_PORTS = new Set([80, 443, 8080, 8443]);
@@ -57,6 +58,8 @@ function note(target, reason) {
  * @returns {Promise<{ip: string, family: number} | {deny: string}>}
  */
 async function resolveAllowed(host, portNum) {
+  // 进程卡（2026-09-07）：agent 自己起的 dev server 在本机，登记表里在跑的端口放行，pin 到 127.0.0.1
+  if (isRegisteredLoopback(host, portNum)) return { ip: '127.0.0.1', family: 4 };
   if (!ALLOWED_PORTS.has(portNum)) {
     return { deny: `port ${portNum} is not allowed (only ${[...ALLOWED_PORTS].join('/')})` };
   }
