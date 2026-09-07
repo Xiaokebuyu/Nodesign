@@ -272,19 +272,41 @@ async function contrastMode() {
     const { width: W, channels: CH } = S1.info;
     const rows = [];
     for (const b of boxes) {
-      const glyph = [], paper = [];
+      const glyph = [];
+      // ⭐⭐⭐ 纸只取**笔画自己那一圈**，不是整个元素框。
+      //
+      // ⛔ 09-07 栽在这儿：设置页夜里量出标题 1.86:1、说明行 1.51:1，看着像"暗得
+      //   没法读"，我差点照着这个数去调配色。逐像素重量（同一行上取笔画芯和字缝里的底）
+      //   真值是 4.03 和 3.93 —— **判据错了，不是页面错了**。
+      //   病根：元素框是**整条**（h1 占满一栏 700px），而字只有 44px 宽；背景又带着
+      //   台灯的梯度，于是"整框的中位数"取到的是右边那片亮区，跟字底下那块底没关系。
+      //   ⭐ 元素越宽、背景越不匀，它偏得越狠 —— 而"夜里"恰好同时满足这两条。
+      let gx0 = Infinity, gy0 = Infinity, gx1 = -1, gy1 = -1;
       for (let y = b.y; y < b.y + b.h; y++) {
         for (let x = b.x; x < b.x + b.w; x++) {
           const i = (y * W + x) * CH;
-          const l1 = lum(S1.data[i], S1.data[i + 1], S1.data[i + 2]);
-          const l2 = lum(S2.data[i], S2.data[i + 1], S2.data[i + 2]);
-          paper.push(l2);
           const d = Math.abs(S1.data[i] - S2.data[i]) + Math.abs(S1.data[i + 1] - S2.data[i + 1]) + Math.abs(S1.data[i + 2] - S2.data[i + 2]);
-          if (d > 24) glyph.push(l1);      // 这一格因为"字没了"而变了 → 它是笔画
+          if (d > 24) {                    // 这一格因为"字没了"而变了 → 它是笔画
+            glyph.push(lum(S1.data[i], S1.data[i + 1], S1.data[i + 2]));
+            if (x < gx0) gx0 = x; if (x > gx1) gx1 = x;
+            if (y < gy0) gy0 = y; if (y > gy1) gy1 = y;
+          }
+        }
+      }
+      const paper = [];
+      if (gx1 >= gx0) {
+        // 往外放 2 像素：字缝和紧挨着笔画的那一圈底，才是"读这个字时眼睛看到的底"
+        const px0 = Math.max(b.x, gx0 - 2), px1 = Math.min(b.x + b.w - 1, gx1 + 2);
+        const py0 = Math.max(b.y, gy0 - 2), py1 = Math.min(b.y + b.h - 1, gy1 + 2);
+        for (let y = py0; y <= py1; y++) {
+          for (let x = px0; x <= px1; x++) {
+            const i = (y * W + x) * CH;
+            paper.push(lum(S2.data[i], S2.data[i + 1], S2.data[i + 2]));
+          }
         }
       }
       // 笔画太少说明这块根本没字（或者字没被那条 CSS 命中），不算数
-      if (glyph.length < 25) continue;
+      if (glyph.length < 25 || !paper.length) continue;
       glyph.sort((p, q) => p - q); paper.sort((p, q) => p - q);
       const bg = paper[Math.floor(paper.length * 0.5)];
       /*
@@ -314,6 +336,10 @@ async function contrastMode() {
     // ⚠️ 这个数只在**和白天并排**的时候有意义。单看一个夜里的数字判断不了
     // 「是压暗压过头了」还是「这块字本来就是浅色的」（元信息那行天生是铅笔灰）。
     console.log('⚠️ 判断要跟白天并排看：node web/scripts/lens.mjs contrast --at=13:00');
+    // ⚠️⚠️ 09-07 改过口径（纸只取笔画那一圈，见上面那段）：**这之前记下来的数普遍偏低
+    //   0.8-1.0**，浅字压在暗底上偏得最狠。跟旧注释 / 旧记忆里的数字对不上是正常的，
+    //   别当成"这一版把对比度改好了"。要比就现在重新量一遍两边。
+    console.log('⚠️ 09-07 换过口径：跟这之前记下的数不可比（那时普遍偏低 0.8-1.0）');
   } finally { await lens.close(); }
 }
 
