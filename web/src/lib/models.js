@@ -64,8 +64,8 @@ export const FALLBACK_MODELS = [
   // ⚠️ 这条在服务端 model-table 里有个孪生（`glm-5.3-flash-rp`「· 演出」：同模型同价、厂商换成 particle），
   //    09-06 起那条 `only: 'stage'` **只在演出显示器的选择器里出现**，首页 / 画布这份清单不列它。
   //    ⛔ label / desc 跟服务端表里的 select 必须逐字一致（compactLabel 靠撞名决定按钮上印长名还是短名）。
-  { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · 设计', desc: '有视觉 · 图不限张数 · 1M 上下文 · 极便宜', brand: DEFAULT_BRAND },
-  { id: 'minimax-m3', label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久', brand: 'minimax' },
-  { id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '快 · 日常改稿和铺页够用', brand: 'claude' },
-  { id: 'claude-opus-5[1m]', label: 'Opus 5', desc: '前端与审美更强 · 烧订阅额度快得多，重活再开', brand: 'claude' },
+  { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · 设计', desc: '支持视觉 · 图片不限张数 · 1M 上下文 · 成本极低', brand: DEFAULT_BRAND },
+  { id: 'minimax-m3', label: 'MiniMax M3（免费）', desc: '免费 · 支持视觉 · 272k 上下文 · 思考时长自适应', brand: 'minimax' },
+  { id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '响应快 · 适合日常改稿与排版', brand: 'claude' },
+  { id: 'claude-opus-5[1m]', label: 'Opus 5', desc: '前端与审美能力更强 · 订阅额度消耗较快，建议用于重要任务', brand: 'claude' },
 ];

@@ -61,7 +61,7 @@ export default function EnvKeys({ onCapabilities, showToast, onSaved, only, excl
                 <div key={k.key + '-v'}>
                   {k.options
                     ? <Select width={220} value={curVal} options={k.options} onChange={(v) => setEdits({ ...edits, [k.key]: v })} />
-                    : <TextInput type={k.secret ? 'password' : 'text'} value={editing ? edits[k.key] : ''} placeholder={k.set ? `已配 ${k.preview}（留空不改；要清除请输入 - ）` : '未配'}
+                    : <TextInput type={k.secret ? 'password' : 'text'} value={editing ? edits[k.key] : ''} placeholder={k.set ? `已配置 ${k.preview}（留空表示不修改；如需清除请输入 - ）` : '未配置'}
                       onChange={(v) => setEdits({ ...edits, [k.key]: v })} />}
                   {k.hint && <Hint>{k.hint}</Hint>}
                   {k.optionHints?.[curVal] && <Hint>{k.optionHints[curVal]}</Hint>}
@@ -76,8 +76,8 @@ export default function EnvKeys({ onCapabilities, showToast, onSaved, only, excl
           // 约定：输入单个 "-" = 清除这个键
           const values = Object.fromEntries(Object.entries(edits).map(([k, v]) => [k, v === '-' ? null : v]));
           save(values);
-        }}>{busy ? '保存中…' : '保存钥匙'}</Btn>
-        {dirty && <Btn onClick={() => setEdits({})}>放弃改动</Btn>}
+        }}>{busy ? '保存中…' : '保存密钥'}</Btn>
+        {dirty && <Btn onClick={() => setEdits({})}>放弃修改</Btn>}
         <Err>{err}</Err>
       </div>
     </Wrap>

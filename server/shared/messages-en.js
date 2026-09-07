@@ -11,7 +11,7 @@ export default {
   // ── 登录 / 注册（auth/middleware.js）──
   // 英文用户的第一站。这几条说不对，后面做得再好也没机会被看到。
   '用户名或密码错误': 'Incorrect username or password',
-  '用户名和密码都要填': 'Both username and password are required',
+  '请填写用户名和密码': 'Both username and password are required',
   '模型 {id} 不在可选清单里': 'Model {id} is not in the available list',
   '尝试次数过多，{waitMin} 分钟后再试': 'Too many attempts. Try again in {waitMin} minutes.',
   '这个网络今天开的号太多了，明天再来': 'Too many accounts created from this network today. Try again tomorrow.',
@@ -19,9 +19,9 @@ export default {
   'locale 需为 {allowed} 或 null': 'locale must be one of {allowed}, or null',
 
   // ── 模型与配额（turn.js / sessions.js / turn-model-switch.js / chatai.js）──
-  '这个模型仅限 Pro 档，暂未对外开放': 'This model is Pro-only and not yet publicly available',
-  '这个模型（{model}）仅限 Pro 档，暂未对外开放。换成免费模型继续':
-    'This model ({model}) is Pro-only and not yet publicly available. Switch to a free model to continue.',
+  '该模型仅限 Pro 档，当前不对外开放': 'This model is Pro tier only and is not currently open to the public',
+  '该模型（{model}）仅限 Pro 档，当前不对外开放。请更换为免费模型后继续':
+    'This model ({model}) is Pro tier only and is not currently open to the public. Please switch to a free model to continue.',
   '这个会话指向的模型（{model}）现在不可用，请在模型选择器里换一个':
     'The model this session points to ({model}) is unavailable. Pick another one in the model selector.',
   '还没有可用的模型：到「设置」填 API Key（或本机 claude login），或者配一个模型插槽':
@@ -33,8 +33,8 @@ export default {
   '试用额度': 'Trial credit',
   '今日额度': "Today's credit",
   '这场演出正有一轮在跑，等它回完': 'This session already has a turn running. Wait for it to finish.',
-  '演出模式仅限 Pro 档，暂未对外开放；当前档位请用设计会话':
-    'Roleplay mode is Pro-only and not yet publicly available. Use a design session on your current plan.',
+  '演出模式仅限 Pro 档，当前不对外开放；当前档位请使用设计会话':
+    'Roleplay mode is Pro tier only and is not currently open to the public. Please use a design session on your current plan.',
   '演出通路尚未对这个账号开放': 'Roleplay mode is not enabled for this account',
   'input 是空的': 'Input is empty',
   'input 超长（上限 {max} 字符）': 'Input too long (limit {max} characters)',
@@ -42,10 +42,10 @@ export default {
   // ── 本地 / BYOK 配置（local.js）。npx 本地版是国际化的主战场，这几条要准 ──
   '配置必须是一个对象 { upstreams, models }': 'Config must be an object: { upstreams, models }',
   '写配置失败：{err}': 'Failed to write config: {err}',
-  '模型 {id} 不在可选清单里（没配钥匙的行不体检）':
-    'Model {id} is not in the available list (rows without a key are not checked)',
-  '这一行正在体检，等它完': 'This row is already being checked. Wait for it to finish.',
-  '体检出错：{err}': 'Check failed: {err}',
+  '模型 {id} 不在可选清单中（未配置 API Key 的行不参与检测）':
+    'Model {id} is not in the available list (rows without an API key are not checked)',
+  '该模型正在检测中，请稍候': 'This model is already being checked. Please wait for it to finish.',
+  '检测失败：{err}': 'Check failed: {err}',
 
   // ── 文档渲染（assets/docx-page.js）──
   // ⚠️ assets.js 的五条（新建/改名/重名）**没做**：那个文件正好卡在行数棘轮的

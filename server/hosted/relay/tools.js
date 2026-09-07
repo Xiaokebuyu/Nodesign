@@ -65,7 +65,7 @@ export function mountRelayTools(router, { sendError, readRawBody, produce = prod
       res.json(r);
     } catch (err) {
       const msg = err instanceof ProviderError
-        ? err.message + (err.code === 401 || err.code === 403 ? '（站点这边的搜索钥匙失效，请告诉站主）' : err.code === 429 ? '（搜索额度用完，换一家或稍后再试）' : '')
+        ? err.message + (err.code === 401 || err.code === 403 ? '（本服务的搜索密钥已失效，请联系服务方）' : err.code === 429 ? '（搜索额度已用完，请更换服务商或稍后重试）' : '')
         : `web_search error: ${err?.message || String(err)}`;
       sendError(res, 502, 'SEARCH_FAILED', msg);
     }
@@ -80,7 +80,7 @@ export function mountRelayTools(router, { sendError, readRawBody, produce = prod
     const q = checkQuota(user);
     if (!q.ok) return sendError(res, 429, 'QUOTA_EXCEEDED', `generate_image denied: ${DENIAL.imageQuota}`, { quota: { kind: q.kind, used: q.used, limit: q.limit } });
     const route = imageRouteOf();
-    if (!route) return sendError(res, 503, 'IMAGE_UNAVAILABLE', '站点这边现在没有生图通道，请告诉站主。');
+    if (!route) return sendError(res, 503, 'IMAGE_UNAVAILABLE', '本服务当前没有可用的图像生成通道，请联系服务方。');
     const {
       prompt, aspectRatio = '16:9', imageSize = '1K', thinkingLevel = 'minimal', responseModalities = ['IMAGE'],
       useGrounding = false, model = DEFAULT_MODEL, isVariation = false, refs = [],

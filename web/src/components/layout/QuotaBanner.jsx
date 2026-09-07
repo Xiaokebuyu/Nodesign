@@ -89,7 +89,7 @@ export default function QuotaBanner() {
           kind: 'quota',
           bg: tier >= 90 ? LEVEL_BG.alert : LEVEL_BG.warn,
           text: tier >= 100
-            ? (trial ? '试用额度已用完，感谢体验！想继续用可以联系站主' : '今日额度已用完，明天零点自动刷新')
+            ? (trial ? '试用额度已用完，如需继续使用请联系服务方' : '今日额度已用完，明天零点自动刷新')
             : `${trial ? '试用' : '今日'}额度已用 ${Math.min(100, Math.round(u.pct))}%`,
           sticky: tier >= 100,
         });

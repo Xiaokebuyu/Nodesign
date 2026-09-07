@@ -170,7 +170,7 @@ export default function ModelPicker({
     if (lockedOpt) {
       await confirmDialog({
         title: t('这个模型仅限 Pro 档'),
-        message: `${lockedOpt.label} 跑在站主的 Claude 订阅上，属于 Pro 档，暂未对外开放。当前档位可用的模型都在列表里，不带锁的随便选。`,
+        message: `${lockedOpt.label} 属于 Pro 档，当前不对外开放。选择器中未加锁的模型均为您当前档位可用的模型。`,
         confirmLabel: t('知道了'), cancelLabel: t('关闭'),
       });
       return;
@@ -184,10 +184,10 @@ export default function ModelPicker({
     if (contextTokens >= WARN_FROM_TOKENS) {
       const est = contextTokens * COLD_START_USD_PER_TOKEN;
       const okToSwitch = window.confirm(
-        `切换模型会让这个会话的缓存失效。\n\n`
-        + `当前上下文 ${(contextTokens / 1000).toFixed(0)}k tokens，下一轮要重新读一遍，`
-        + `大约多花 $${est.toFixed(2)}（之后恢复正常）。\n\n`
-        + `对话和画布都不会丢。要切吗？`,
+        `切换模型将使当前会话的缓存失效。\n\n`
+        + `当前上下文 ${(contextTokens / 1000).toFixed(0)}k tokens，下一轮需重新读取，`
+        + `预计额外产生约 $${est.toFixed(2)} 费用（之后恢复正常）。\n\n`
+        + `对话与画布不会丢失。是否继续？`,
       );
       if (!okToSwitch) return;
     }
@@ -202,7 +202,7 @@ export default function ModelPicker({
       setModelPref(id);
     } catch (err) {
       setRemote(prev);
-      showToast(`切模型失败：${err.message}`, 'error');
+      showToast(`切换模型失败：${err.message}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -233,11 +233,11 @@ export default function ModelPicker({
         onClick={() => !busy && setOpen(v => !v)}
         disabled={busy}
         title={
-          disabled ? t('这一轮跑完再切（切换从下一条消息生效）')
+          disabled ? t('请等本轮结束后再切换（切换从下一条消息生效）')
             : none ? t('还没有可用的模型')
             : hasSession
-              ? `这个会话跑在 ${effective}。切换从下一条消息生效，对话不丢`
-              : `新会话将用 ${label}`
+              ? `当前会话使用 ${effective}。切换将从下一条消息生效，对话内容保留`
+              : `新建会话将使用 ${label}`
         }
         style={{
           display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
@@ -273,8 +273,8 @@ export default function ModelPicker({
             <div style={{ padding: `${GAP.sm}px ${GAP.md}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text3, lineHeight: 1.6 }}>
               {t('还没有可用的模型。')}
               {isLocalProfile
-                ? <>到 <a href="/settings#account" style={{ color: COLOR.text, textDecoration: 'underline' }}>{t('设置')}</a> 登录站点账号，或在「模型」里填自己的 API Key。</>
-                : t('请联系站主。')}
+                ? <>请前往 <a href="/settings#account" style={{ color: COLOR.text, textDecoration: 'underline' }}>{t('设置')}</a> 登录站点账号，或在「模型」中填写您的 API Key。</>
+                : t('请联系服务方。')}
             </div>
           )}
           {options.map((o) => (
@@ -293,8 +293,8 @@ export default function ModelPicker({
           }}>
             {hasSession
               ? (contextTokens >= WARN_FROM_TOKENS
-                ? `从下一条消息生效，对话与画布不丢。当前上下文 ${(contextTokens / 1000).toFixed(0)}k，换模型要重读一遍缓存，额外花约 $${(contextTokens * COLD_START_USD_PER_TOKEN).toFixed(2)}`
-                : t('从下一条消息生效，对话与画布不丢'))
+                ? `从下一条消息生效，对话与画布均会保留。当前上下文 ${(contextTokens / 1000).toFixed(0)}k，切换模型需重新读取缓存，预计额外产生约 $${(contextTokens * COLD_START_USD_PER_TOKEN).toFixed(2)} 费用`
+                : t('从下一条消息生效，对话与画布均会保留'))
               : t('这条只影响接下来新建的会话')}
           </div>
         </div>

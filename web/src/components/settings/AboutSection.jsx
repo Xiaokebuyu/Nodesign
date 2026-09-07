@@ -26,29 +26,29 @@ export default function AboutSection({ status, onStatus, restart, restarting, sh
   return (
     <>
       <Panel>
-        <Row first label={t('版本')} desc={updateNote || (d ? t('桌面版会自己检查更新，装好后重开生效') : t('浏览器里打开的本地版，更新走 npm'))}>
+        <Row first label={t('版本')} desc={updateNote || (d ? t('桌面版会自动检查更新，安装完成后重新启动生效') : t('浏览器中打开的本地版，请通过 npm 更新'))}>
           <Mono>{`NoDesign ${status.version}`}</Mono>
           {d && <Button size="sm" onClick={checkUpdates} disabled={checking}>{checking ? t('检查中…') : t('检查更新')}</Button>}
         </Row>
-        <Row label={t('数据目录')} desc={t('项目、生成的图、对话记录都在这。换电脑把整个目录拷走即可')} stack>
+        <Row label={t('数据目录')} desc={t('项目、生成的图片与对话记录均存放于此。更换电脑时复制整个目录即可')} stack>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Mono copy>{status.dataRoot}</Mono>
             {d && <Button size="sm" variant="ghost" onClick={() => openDir(status.dataRoot)}>{t('打开文件夹')}</Button>}
           </div>
         </Row>
-        <Row label={t('日志')} desc={t('出问题反馈时把这个文件发来')} stack>
+        <Row label={t('日志')} desc={t('反馈问题时请附上该文件')} stack>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Mono copy>{logPath}</Mono>
             {d && <Button size="sm" variant="ghost" onClick={() => openDir(`${status.dataRoot}/logs`)}>{t('打开文件夹')}</Button>}
           </div>
         </Row>
-        <Row label={t('重启服务端')} desc={t('改了自定义服务商或卡住不动时用。正在跑的会话会断')}>
+        <Row label={t('重启服务端')} desc={t('修改自定义服务商后或服务无响应时使用。正在进行的会话将中断')}>
           <Button size="sm" onClick={restart} disabled={restarting}>{restarting ? t('重启中…') : t('重启')}</Button>
         </Row>
       </Panel>
 
-      <Panel title={t('开发者选项')} desc={t('联网搜索、发布、沙盒这些钥匙和开关。一般用不着动。')}>
-        <Disclosure title={t('钥匙与开关')} desc={t('写进 {path}/.env，钥匙类保存即生效', { path: status.dataRoot })}>
+      <Panel title={t('开发者选项')} desc={t('联网搜索、发布、沙盒等密钥与开关。通常无需修改。')}>
+        <Disclosure title={t('密钥与开关')} desc={t('写入 {path}/.env，密钥类保存后立即生效', { path: status.dataRoot })}>
           <EnvKeys exclude={['模型', 'NoDesign 服务']} bare showToast={showToast} onCapabilities={(caps) => onStatus?.({ capabilities: caps })} />
         </Disclosure>
         <Disclosure title={t('诊断')} desc={status.modelConfigErrors?.length ? t('{n} 处问题', { n: status.modelConfigErrors.length, count: status.modelConfigErrors.length }) : t('正常')}>

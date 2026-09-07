@@ -26,9 +26,8 @@ export default {
   '选一个…': 'Pick one…',
   '接口地址（OpenAI 格式，带 /v1）': 'Endpoint (OpenAI format, include /v1)',
   '接口地址（Anthropic 格式，不带 /v1）': 'Endpoint (Anthropic format, no /v1)',
-  '钥匙': 'Key',
   '从 env {env} 取': 'Taken from env {env}',
-  '本机服务不用钥匙': 'Local service, no key needed',
+  '本机服务无需 API Key': 'Local service, no API key needed',
   '高级': 'Advanced',
   '协议 / 鉴权方式 / 内部名': 'Protocol / auth style / internal name',
   '接口格式': 'API format',
@@ -39,27 +38,27 @@ export default {
   '内部名（模型行引用它）': 'Internal name (model rows reference it)',
   '字母数字': 'Letters and digits',
 
-  '① 服务商（接口地址 + 钥匙）': '① Providers (endpoint + key)',
+  '① 服务商（接口地址 + API Key）': '① Providers (endpoint + API key)',
   '② 模型（每一行 = 模型选择器里的一项）': '② Models (each row = one entry in the model picker)',
   '加一个': 'Add one',
   '加一行': 'Add a row',
-  '先加一个服务商：从预设里挑（DeepSeek / OpenAI / 中转站…），填上钥匙；然后在 ② 里加模型。':
-    'Add a provider first: pick a preset (DeepSeek / OpenAI / a relay…) and fill in the key. Then add models under ②.',
-  '模型名（发给服务商的 model，一字不差）': 'Model name (sent to the provider verbatim)',
+  '请先添加服务商：从预设中选择（DeepSeek / OpenAI / 中转服务…）并填写 API Key，然后在 ② 中添加模型。':
+    'Please add a provider first: choose a preset (DeepSeek / OpenAI / a relay service…) and fill in its API key, then add models under ②.',
+  '模型名（发送给服务商的 model，需完全一致）': 'Model name (sent to the provider verbatim)',
   '如 deepseek-chat': 'e.g. deepseek-chat',
   '显示名（选择器里的名字）': 'Display name (what shows in the picker)',
   '如 DeepSeek V3': 'e.g. DeepSeek V3',
   '上下文窗口': 'Context window',
   '● 生效中': '● Live',
   '○ 未生效（保存并重启）': '○ Not live (save and restart)',
-  '体检': 'Check',
-  '体检中…': 'Checking…',
-  '体检失败：{err}': 'Check failed: {err}',
+  '检测': 'Check',
+  '检测中…': 'Checking…',
+  '检测失败：{err}': 'Check failed: {err}',
   '说明 / 思考参数 / 输出上限 / 图标 / 内部 id': 'Description / thinking / max output / icon / internal id',
   '一句话说明（选择器里的灰字）': 'One-line description (the grey text in the picker)',
   '可空': 'Optional',
   'thinking 参数': 'Thinking parameter',
-  '剥掉（非 Claude 用这个）': 'Strip it (use this for non-Claude)',
+  '剥离（非 Claude 模型使用）': 'Strip it (for non-Claude models)',
   '不传': "Don't send",
   '单轮最大输出': 'Max output per turn',
   '默认': 'Default',
@@ -67,8 +66,8 @@ export default {
   '内部 id': 'Internal id',
   '自动': 'Auto',
   '数字': 'Number',
-  '窗口填服务商标称的上下文长度（填大了撑满时对方 400，填小了白扔容量）。价目 / 重试 / liftImages / fastModel 这些少用字段在 JSON 模式里填，字段名同内置表。':
-    'Set the context window to the length the provider advertises: too large and the provider returns a 400 once it fills, too small and you throw capacity away. Rarer fields (pricing, retry, liftImages, fastModel) go in JSON mode, with the same field names as the built-in table.',
+  '窗口请填写服务商标称的上下文长度（填得过大会在写满时被对方返回 400，填得过小则浪费可用容量）。价目 / 重试 / liftImages / fastModel 等少用字段在 JSON 模式中填写，字段名与内置表一致。':
+    'Set the context window to the length the provider advertises: too large and the provider returns a 400 once it fills, too small and you waste available capacity. Rarer fields (pricing, retry, liftImages, fastModel) go in JSON mode, with the same field names as the built-in table.',
   '（参考）': '(reference)',
 
   '保存插槽': 'Save slots',
@@ -92,7 +91,7 @@ export default {
   '无': 'None',
   '重启中…': 'Restarting…',
   '读取中…': 'Loading…',
-  '重启超时，手动刷新看看': 'Restart timed out. Try refreshing manually.',
+  '重启超时，请手动刷新页面': 'Restart timed out. Please refresh the page manually.',
   '已保存，重启后生效': 'Saved. Takes effect after restart.',
   '已保存，但有 {n} 处问题（见红字），对应行不会生效':
     'Saved, but {n} problems remain (shown in red). Those rows will not take effect.',
@@ -102,7 +101,7 @@ export default {
   'Claude 官方': 'Claude (official)',
   '未配': 'Not set up',
   '已配 {n} 个模型': { one: '{n} model configured', other: '{n} models configured' },
-  '写进 {path}/.env，钥匙类保存即生效': 'Written to {path}/.env. Key changes take effect on save.',
+  '写入 {path}/.env，密钥类保存后立即生效': 'Written to {path}/.env. Key changes take effect on save.',
   // ── 首页（routes/Home.jsx）──
   // 带 {n} 的那批是 <Counted> 用的：整句进词表、按占位符切开，因为中英词序不同
   // （「手上 3 件」↔「3 in progress」）。复数走 { one, other }。
@@ -259,13 +258,13 @@ export default {
   '知道了': 'Got it',
   '关闭': 'Close',
   '未配置模型': 'No model configured',
-  '这一轮跑完再切（切换从下一条消息生效）':
-    'Wait for this turn to finish. A switch takes effect from the next message.',
+  '请等本轮结束后再切换（切换从下一条消息生效）':
+    'Please wait for this turn to finish. A switch takes effect from the next message.',
   '还没有可用的模型': 'No models available yet',
   '还没有可用的模型。': 'No models available yet.',
-  '请联系站主。': 'Ask the site owner.',
+  '请联系服务方。': 'Please contact the service provider.',
   '仅限 Pro 档': 'Pro tier only',
-  '从下一条消息生效，对话与画布不丢': 'Takes effect from the next message. Your chat and canvas stay put.',
+  '从下一条消息生效，对话与画布均会保留': 'Takes effect from the next message. Your chat and canvas are preserved.',
   '这条只影响接下来新建的会话': 'This only affects sessions you start from now on',
 
   // ── 对话消息（components/chat/UserMessage.jsx · RewindDialog.jsx）──

@@ -95,7 +95,7 @@ export function forwardSubscription(req, res, bodyBuf, { onUsage = null, token =
   const bearer = token === undefined ? ownerOauthToken() : token;
   if (!bearer) {
     res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end('relay/subscription: 服务器上没有站主的 Claude 凭据（<claudeConfigDir>/.credentials.json）');
+    res.end('relay/subscription: 服务端未配置 Claude 凭据（<claudeConfigDir>/.credentials.json）');
     console.warn(`[relay/subscription] sid=${sidShort} 没有凭据可转，502`);
     return;
   }

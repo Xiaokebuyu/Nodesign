@@ -31,12 +31,12 @@ function Identity({ name, tier, sub, actions }) {
 /** 额度行：进度条 + 「$1.37 / $5.00 · 今日」 */
 function QuotaRow({ quota }) {
   if (!quota) return <Row label={t('额度')}><Note>—</Note></Row>;
-  if (quota.kind === 'unlimited') return <Row label={t('额度')} desc={t('这个档位不限额')}><Badge tone="ok">{t('不限额')}</Badge></Row>;
+  if (quota.kind === 'unlimited') return <Row label={t('额度')} desc={t('当前档位不限额度')}><Badge tone="ok">{t('不限额')}</Badge></Row>;
   const used = Number(quota.used || 0); const limit = Number(quota.limit || 0);
   const ratio = limit > 0 ? used / limit : 0;
   const period = quota.kind === 'lifetime' ? t('试用总额') : t('今日');
   return (
-    <Row label={t('额度')} desc={quota.kind === 'lifetime' ? t('试用额度用完后需要升级档位') : t('每天按北京时间零点重置')}>
+    <Row label={t('额度')} desc={quota.kind === 'lifetime' ? t('试用额度用完后需升级档位') : t('每天按北京时间零点重置')}>
       <div style={{ width: 260 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, color: COLOR.text2, marginBottom: 4 }}>
           <span>${used.toFixed(2)} / ${limit.toFixed(2)}</span>
@@ -57,28 +57,28 @@ export function LocalAccount({ relay, onChange, showToast }) {
 
   if (!relay?.configured) {
     return (
-      <Panel title={t('登录站点账号')} desc={t('登录后这台电脑就能用站点提供的模型和额度。')}>
+      <Panel title={t('登录站点账号')} desc={t('登录后，本机即可使用站点提供的模型与额度。')}>
         <Block first><RelayLoginForm relay={relay} onDone={onChange} showToast={showToast} /></Block>
       </Panel>
     );
   }
   const w = relay.whoami || {};
-  const name = w.username || (relay.ok ? '?' : t('连不上站点'));
+  const name = w.username || (relay.ok ? '?' : t('无法连接站点'));
   return (
     <>
       <Panel>
-        <Identity name={name} tier={w.tier} sub={relay.ok ? t('已登录') : t('连不上站点，显示的是上次拉到的信息')}
+        <Identity name={name} tier={w.tier} sub={relay.ok ? t('已登录') : t('无法连接站点，以下为上次获取的信息')}
           actions={<>
             <Button size="sm" onClick={refresh}>{t('刷新')}</Button>
             <Button size="sm" variant="danger" onClick={logout}>{t('退出登录')}</Button>
           </>} />
-        {!relay.ok && <Block><Note tone="bad">{t('连不上：{err}', { err: relay.error || '' })}</Note></Block>}
+        {!relay.ok && <Block><Note tone="bad">{t('连接失败：{err}', { err: relay.error || '' })}</Note></Block>}
         <QuotaRow quota={w.quota} />
-        <Row label={t('这台设备')} desc={w.device?.id ? t('设备 ID {id}', { id: w.device.id }) : t('登录时给这台电脑发的设备令牌')}>
+        <Row label={t('这台设备')} desc={w.device?.id ? t('设备 ID {id}', { id: w.device.id }) : t('登录时为本机签发的设备令牌')}>
           <span style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.base, color: COLOR.text2 }}>{w.device ? (w.device.label || t('未命名')) : '—'}</span>
           <Button size="sm" variant="ghost" onClick={() => window.open(`${relay.url}/devices`, '_blank')}>{t('管理设备')}</Button>
         </Row>
-        <Row label={t('站点')} desc={t('这台电脑连的是哪个站')}><Mono>{relay.url}</Mono></Row>
+        <Row label={t('站点')} desc={t('本机连接的站点地址')}><Mono>{relay.url}</Mono></Row>
       </Panel>
     </>
   );
@@ -92,7 +92,7 @@ export function RelayLoginForm({ relay, onDone, showToast }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const submit = async () => {
-    if (!username.trim() || !password) { setErr(t('用户名和密码都要填')); return; }
+    if (!username.trim() || !password) { setErr(t('请填写用户名和密码')); return; }
     setBusy(true); setErr('');
     try {
       const r = await Local.relayLogin({ username: username.trim(), password, ...(url.trim() ? { url: url.trim() } : {}) });
@@ -103,7 +103,7 @@ export function RelayLoginForm({ relay, onDone, showToast }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.md, maxWidth: 420 }}>
       <TextInput value={username} onChange={setUsername} placeholder={t('用户名')} mono={false} />
       <TextInput value={password} onChange={setPassword} placeholder={t('密码')} type="password" mono={false} />
-      <TextInput value={url} onChange={setUrl} placeholder={t('站点地址（可选，默认官方站）')} />
+      <TextInput value={url} onChange={setUrl} placeholder={t('站点地址（可选，默认为官方站点）')} />
       <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md }}>
         <Button variant="primary" onClick={submit} disabled={busy}>{busy ? t('登录中…') : t('登录')}</Button>
         <Note>{t('没有账号？')} <a href={relay?.url || '#'} target="_blank" rel="noreferrer" style={{ color: COLOR.text }}>{t('去站点注册')}</a></Note>
@@ -121,7 +121,7 @@ export function HostedAccount({ authUser, usage }) {
       <Identity name={authUser?.username || '—'} tier={usage?.tier}
         actions={<Button size="sm" variant="danger" onClick={logout}>{t('登出')}</Button>} />
       <QuotaRow quota={quota} />
-      <Row label={t('桌面版设备')} desc={t('在别的电脑上装了桌面版，用这个账号登录过的设备都在这')}>
+      <Row label={t('桌面版设备')} desc={t('此处列出使用本账号登录过桌面版的设备')}>
         <Button size="sm" variant="ghost" onClick={() => { window.location.href = '/devices'; }}>{t('管理设备')}</Button>
       </Row>
     </Panel>

@@ -235,7 +235,7 @@ router.put('/:pid/sessions/:sid/model', async (req, res, next) => {
     // 查不到，两处都不报错，事后只能从"怎么变慢了"倒推
     const modelUser = modelUserFor(req, project);   // 资格按项目 owner 算（_guard.js）
     if (raw !== null && isModelLockedFor(modelUser, raw)) {
-      return res.status(403).json({ error: '这个模型仅限 Pro 档，暂未对外开放', code: 'MODEL_LOCKED', model: raw });
+      return res.status(403).json({ error: '该模型仅限 Pro 档，当前不对外开放', code: 'MODEL_LOCKED', model: raw });
     }
     if (typeof raw === 'string' && !allowedModelsFor(modelUser).some((m) => m.id === raw)) {
       return res.status(400).json({ error: `unknown model: ${raw}`, code: 'UNKNOWN_MODEL' });

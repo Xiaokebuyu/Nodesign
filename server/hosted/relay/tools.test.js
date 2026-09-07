@@ -73,7 +73,7 @@ describe('POST /tools/web_search', () => {
     expect(r.status).toBe(502);
     const j = await r.json();
     expect(j.code).toBe('SEARCH_FAILED');
-    expect(j.error.message).toContain('换一家');
+    expect(j.error.message).toContain('更换服务商');
   });
   it('站点这边没配任何 key（runWebSearch 回 error）→ 503', async () => {
     const { token } = mintDevice({ userId: makeUser().id });

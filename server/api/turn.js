@@ -190,7 +190,7 @@ router.post('/:pid/turn', async (req, res, next) => {
     // 解析出来的模型一律过白名单（不只 body.model）：旧覆盖/资格收回/无 select 裸名都在此拦（fable P0）
     if (isModelLockedFor(modelUser, turnModel)) {
       return res.status(403).json({
-        error: msg(req, '这个模型（{model}）仅限 Pro 档，暂未对外开放。换成免费模型继续', { model: turnModel }),
+        error: msg(req, '该模型（{model}）仅限 Pro 档，当前不对外开放。请更换为免费模型后继续', { model: turnModel }),
         code: 'MODEL_LOCKED', model: turnModel,
       });
     }

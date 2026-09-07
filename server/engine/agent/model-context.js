@@ -268,7 +268,7 @@ export function crossLaneSwitchReason(fromModel, toModel) {
   const to = resolveWireModel(toModel);
   if (from?.protocol === 'openai-chat' && to?.protocol !== 'openai-chat') {
     const fromLabel = BY_ID.get(from.appModel)?.select?.label || from.appModel;
-    return `这个会话是在 ${fromLabel} 上开的，它的思考记录换到别的模型会被拒收。想换模型请新开一个会话`;
+    return `本会话在 ${fromLabel} 上创建，其思考记录切换到其他模型后会被拒收。如需更换模型，请新建一个会话`;
   }
   return null;
 }
@@ -296,8 +296,8 @@ export function hotSwitchLaneReason(fromModel, toModel) {
   const to = resolveModelRoute(toModel).mode;
   if (from === to) return null;
   return to === 'api'
-    ? '这一轮是用订阅模型开的，跑到一半换不成 API 模型 —— 网关地址和钥匙在起这一轮时就定死了，硬切会拿订阅额度去跑。等这轮跑完再换，或者新开一个会话'
-    : '这一轮是用 API 模型开的，跑到一半换不回订阅模型 —— 同样是网关地址起这一轮时就定死了。等这轮跑完再换，或者新开一个会话';
+    ? '本轮会话由订阅模型启动，运行中无法切换到 API 模型：网关地址与密钥在本轮启动时已确定，强行切换会占用订阅额度。请在本轮结束后再切换，或新建一个会话'
+    : '本轮会话由 API 模型启动，运行中无法切换回订阅模型：网关地址同样在本轮启动时已确定。请在本轮结束后再切换，或新建一个会话';
 }
 
 /**

@@ -115,7 +115,7 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
   const runProbe = async (id) => {
     setProbe((p) => ({ ...p, [id]: { busy: true } }));
     try { const r = await Local.probe(id); setProbe((p) => ({ ...p, [id]: { result: r } })); }
-    catch (e) { setProbe((p) => ({ ...p, [id]: { result: { error: e.message } } })); showToast?.(t('体检失败：{err}', { err: e.message }), 'error'); }
+    catch (e) { setProbe((p) => ({ ...p, [id]: { result: { error: e.message } } })); showToast?.(t('检测失败：{err}', { err: e.message }), 'error'); }
   };
 
   if (jsonMode) {
@@ -147,10 +147,10 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
       {/* 第一步：上游 */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md, marginBottom: GAP.sm }}>
-          <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2 }}>{t('① 服务商（接口地址 + 钥匙）')}</span>
+          <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2 }}>{t('① 服务商（接口地址 + API Key）')}</span>
           <Btn small onClick={addUpstream}><Plus size={12} /> {t('加一个')}</Btn>
         </div>
-        {Object.keys(upstreams).length === 0 && <Hint>{t('先加一个服务商：从预设里挑（DeepSeek / OpenAI / 中转站…），填上钥匙；然后在 ② 里加模型。')}</Hint>}
+        {Object.keys(upstreams).length === 0 && <Hint>{t('请先添加服务商：从预设中选择（DeepSeek / OpenAI / 中转服务…）并填写 API Key，然后在 ② 中添加模型。')}</Hint>}
         <div style={{ display: 'grid', gap: GAP.md }}>
           {Object.entries(upstreams).map(([id, u]) => {
             const preset = presetByBaseUrl(u.baseUrl);
@@ -164,7 +164,7 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
                     <TextInput value={u.baseUrl} onChange={(v) => setUp(id, { baseUrl: v })} placeholder={(u.protocol || 'openai-chat') === 'openai-chat' ? 'https://api.example.com/v1' : 'https://relay.example.com'} />
                   </Field>
                   <Field label="API Key">
-                    <TextInput type="password" value={u.key || ''} onChange={(v) => setUp(id, { key: v })} placeholder={u.keyEnv ? t('从 env {env} 取', { env: u.keyEnv }) : (u.authStyle === 'none' ? t('本机服务不用钥匙') : t('钥匙'))} />
+                    <TextInput type="password" value={u.key || ''} onChange={(v) => setUp(id, { key: v })} placeholder={u.keyEnv ? t('从 env {env} 取', { env: u.keyEnv }) : (u.authStyle === 'none' ? t('本机服务无需 API Key') : 'API Key')} />
                   </Field>
                   <button onClick={() => delUp(id)} title="删除" style={{ border: 0, background: 'transparent', color: COLOR.sub, cursor: 'pointer', paddingBottom: 8 }}><Trash2 size={14} /></button>
                 </div>
@@ -208,7 +208,7 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
                     <Select value={m.upstream || ''} options={[{ value: '', label: t('选一个…') }, ...Object.keys(upstreams).map((k) => ({ value: k, label: upstreams[k].label || k }))]}
                       onChange={(v) => { const p = presetByBaseUrl(upstreams[v]?.baseUrl); setModel(i, { upstream: v, ...(p?.brand && (!m.brand || m.brand === 'custom') ? { brand: p.brand } : {}) }); }} />
                   </Field>
-                  <Field label={t('模型名（发给服务商的 model，一字不差）')}>
+                  <Field label={t('模型名（发送给服务商的 model，需完全一致）')}>
                     <TextInput value={m.wireModel} onChange={(v) => setModel(i, { wireModel: v, ...(idAuto ? { id: idFromWire(v) } : {}), ...(!m.label || m.label === m.wireModel ? { label: v } : {}) })} placeholder={preset?.example || t('如 deepseek-chat')} />
                   </Field>
                   <Field label={t('显示名（选择器里的名字）')}>
@@ -221,19 +221,19 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
                 </div>
                 <div style={{ display: 'flex', gap: GAP.sm, alignItems: 'center', justifyContent: 'flex-end', marginTop: GAP.sm }}>
                   <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: isActive ? COLOR.success : COLOR.sub }}>{isActive ? t('● 生效中') : t('○ 未生效（保存并重启）')}</span>
-                  <Btn small disabled={!isActive || pr?.busy} onClick={() => runProbe(m.id)}>{pr?.busy ? t('体检中…') : t('体检')}</Btn>
+                  <Btn small disabled={!isActive || pr?.busy} onClick={() => runProbe(m.id)}>{pr?.busy ? t('检测中…') : t('检测')}</Btn>
                 </div>
                 <Fold title={t('高级')} desc={t('说明 / 思考参数 / 输出上限 / 图标 / 内部 id')}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 140px 200px 140px 160px', gap: GAP.sm, alignItems: 'end' }}>
                     <Field label={t('一句话说明（选择器里的灰字）')}><TextInput mono={false} value={m.desc || ''} onChange={(v) => setModel(i, { desc: v })} placeholder={t('可空')} /></Field>
                     {/* ⚠️ 回调参数不许叫 t：会遮蔽 i18n 的 t，于是 t('…') 变成拿字符串当函数调。见 lib/i18n-shadow.lint.test.js */}
-                    <Field label={t('thinking 参数')}><Select value={m.thinking || 'strip'} options={enums.THINKING_MODES.map((mode) => ({ value: mode, label: mode === 'strip' ? t('剥掉（非 Claude 用这个）') : mode }))} onChange={(v) => setModel(i, { thinking: v })} /></Field>
+                    <Field label={t('thinking 参数')}><Select value={m.thinking || 'strip'} options={enums.THINKING_MODES.map((mode) => ({ value: mode, label: mode === 'strip' ? t('剥离（非 Claude 模型使用）') : mode }))} onChange={(v) => setModel(i, { thinking: v })} /></Field>
                     <Field label="reasoning_effort"><Select value={m.reasoningEffort || ''} options={[{ value: '', label: t('不传') }, ...enums.REASONING_EFFORTS]} onChange={(v) => setModel(i, { reasoningEffort: v || undefined })} /></Field>
                     <Field label={t('单轮最大输出')}><NumberPick value={m.maxOutput} presets={MAX_OUTPUT_PRESETS.map((v) => ({ value: v, label: v >= 1024 ? `${Math.round(v / 1024)}k` : String(v) }))} allowEmpty emptyLabel="默认" onChange={(v) => setModel(i, { maxOutput: v })} width={110} /></Field>
                     <Field label={t('图标')}><Select value={m.brand || 'custom'} options={enums.BRANDS} onChange={(v) => setModel(i, { brand: v })} /></Field>
                     <Field label={t('内部 id')}><TextInput value={m.id} onChange={(v) => setModel(i, { id: v })} placeholder={t('自动')} /></Field>
                   </div>
-                  <Hint>{t('窗口填服务商标称的上下文长度（填大了撑满时对方 400，填小了白扔容量）。价目 / 重试 / liftImages / fastModel 这些少用字段在 JSON 模式里填，字段名同内置表。')}</Hint>
+                  <Hint>{t('窗口请填写服务商标称的上下文长度（填得过大会在写满时被对方返回 400，填得过小则浪费可用容量）。价目 / 重试 / liftImages / fastModel 等少用字段在 JSON 模式中填写，字段名与内置表一致。')}</Hint>
                 </Fold>
                 <Err>{errorsFor(errors, new RegExp(`^models(\\[${i}\\]| \\(${esc(m.id)}\\))`))}</Err>
                 {pr?.result && <ProbeResult r={pr.result} />}

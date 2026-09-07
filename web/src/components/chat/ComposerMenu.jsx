@@ -125,7 +125,7 @@ export default function ComposerMenu({
                   marginTop: GAP.xs,
                   fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
                 }}>
-                  当前没有活跃会话 · 这是最后一轮的数字
+                  当前没有进行中的会话 · 显示的是最后一轮的数据
                 </div>
               )}
             </div>
@@ -134,7 +134,7 @@ export default function ComposerMenu({
               padding: `${GAP.xs}px ${GAP.md}px ${GAP.sm}px`,
               fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
             }}>
-              还没开始对话 · 发一条消息后这里会有数字
+              尚未开始对话 · 发送一条消息后此处会显示数据
             </div>
           )}
 
@@ -142,7 +142,7 @@ export default function ComposerMenu({
             <MenuItem
               icon={<FoldVertical size={13} strokeWidth={1.75} />}
               label="压缩对话"
-              hint={isStreaming ? 'agent 跑完再压缩' : (usage ? '把历史换成摘要，腾出空间' : '对话开始后可用')}
+              hint={isStreaming ? '请等待 agent 运行结束后再压缩' : (usage ? '将历史对话替换为摘要，释放上下文空间' : '对话开始后可用')}
               disabled={isStreaming || !usage}
               onClick={() => { setOpen(false); onCompact(); }}
             />

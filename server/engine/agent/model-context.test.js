@@ -88,16 +88,16 @@ describe('派生导出（旧签名不变）', () => {
     expect(modelIsFree('claude-sonnet-5[1m]')).toBe(false);
     expect(modelIsFree('gemini-3.7-flash')).toBe(false);
     // 会话中途 openai-chat → 别的通路要拦（转换层合成的 thinking 块没 signature，回传会 400）；其它方向放行
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-sonnet-5[1m]')).toMatch(/新开一个会话/);
+    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-sonnet-5[1m]')).toMatch(/新建一个会话/);
     expect(crossLaneSwitchReason('claude-sonnet-5[1m]', 'glm-5.3-flash-merge')).toBeNull();
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'glm-5.3-flash-merge')).toBeNull();
     // 08-25：MiniMax 是 Anthropic 原生透传，从 openai-chat 行切过去同样要拦；反向放行
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'minimax-m3')).toMatch(/新开一个会话/);
+    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'minimax-m3')).toMatch(/新建一个会话/);
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'minimax-m3')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
     expect(crossLaneSwitchReason('minimax-m3', 'glm-5.3-flash-merge')).toBeNull();
     // 同为 openai-chat 的两行互切不算跨线（原先钉在 Ox 高/深想两行上，08-26 换成 glm ↔ deepseek 视觉）
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
-    expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新开一个会话/);
+    expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
     // ⭐⭐ Merge 网关上那**两条** GLM 行的厂商（08-28 建，08-30 深夜拆成两行）。
     //   同一个模型、同一个网关、同样的价钱，**差别只有厂商**：
@@ -135,9 +135,9 @@ describe('派生导出（旧签名不变）', () => {
   it('⛔ hotSwitchLaneReason：运行中订阅 ↔ API 一律拒（env 在起 query 那刻定死，硬切会拿订阅额度跑 API 模型）', () => {
     // 订阅 → API：binary 没有 ingress 地址，会拿 OAuth 把 alias（真实 Claude 名）打到 anthropic.com = 花真钱
     expect(hotSwitchLaneReason('claude-sonnet-5[1m]', 'glm-5.3-flash-merge')).toMatch(/订阅额度/);
-    expect(hotSwitchLaneReason('claude-opus-5[1m]', 'minimax-m3')).toMatch(/新开一个会话/);
+    expect(hotSwitchLaneReason('claude-opus-5[1m]', 'minimax-m3')).toMatch(/新建一个会话/);
     // API → 订阅：那个名字进了入口反查不到，兜底到本会话 fast 行 = 切了没生效
-    expect(hotSwitchLaneReason('minimax-m3', 'claude-sonnet-5[1m]')).toMatch(/换不回订阅模型/);
+    expect(hotSwitchLaneReason('minimax-m3', 'claude-sonnet-5[1m]')).toMatch(/无法切换回订阅模型/);
     // 同通路内互切这条闸不管（协议那条闸另外管，两条正交）
     expect(hotSwitchLaneReason('minimax-m3', 'glm-5.3-flash-merge')).toBeNull();
     expect(hotSwitchLaneReason('claude-sonnet-5[1m]', 'claude-opus-5[1m]')).toBeNull();
@@ -314,8 +314,8 @@ describe('repriceUsageDeltas', () => {
 
 describe('modelSwitchRejection：三条写模型的路共用的那一个判断（08-25 收口）', () => {
   it('协议闸：跑过的 openai-chat 会话换到别的通路要拦；同通路、反向、同模型放行', () => {
-    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]' })).toMatch(/新开一个会话/);
-    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'minimax-m3' })).toMatch(/新开一个会话/);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]' })).toMatch(/新建一个会话/);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'minimax-m3' })).toMatch(/新建一个会话/);
     expect(modelSwitchRejection({ from: 'minimax-m3', to: 'glm-5.3-flash-merge' })).toBe(null);
     expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'glm-5.3-flash-merge' })).toBe(null);
   });
@@ -323,7 +323,7 @@ describe('modelSwitchRejection：三条写模型的路共用的那一个判断�
   it('⭐没跑过的会话不拦：这条闸防的是历史里没 signature 的 thinking 块，没历史就没这回事', () => {
     expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]', hasHistory: false })).toBe(null);
     // 但通路闸跟历史无关（env 定死在起 query 那一刻），running 时照拦
-    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]', hasHistory: false, running: true })).toMatch(/换不回订阅模型/);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]', hasHistory: false, running: true })).toMatch(/无法切换回订阅模型/);
   });
 
   it('通路闸只在 running 时加判：空闲切会重启 query（换的是新 env），不该拦', () => {

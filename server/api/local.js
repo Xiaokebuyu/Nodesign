@@ -105,15 +105,15 @@ router.put('/env', async (req, res) => {
 const probing = new Set();
 router.post('/models/:id/probe', async (req, res) => {
   const id = req.params.id;
-  if (!selectableModelsFor(req.user, { scope: 'stage' }).some((m) => m.id === id))   // 体检面最宽：只在演出面出现的行也能体检 return res.status(404).json({ error: msg(req, '模型 {id} 不在可选清单里（没配钥匙的行不体检）', { id }) });
-  if (probing.has(id)) return res.status(409).json({ error: msg(req, '这一行正在体检，等它完') });
+  if (!selectableModelsFor(req.user, { scope: 'stage' }).some((m) => m.id === id))   // 体检面最宽：只在演出面出现的行也能体检 return res.status(404).json({ error: msg(req, '模型 {id} 不在可选清单中（未配置 API Key 的行不参与检测）', { id }) });
+  if (probing.has(id)) return res.status(409).json({ error: msg(req, '该模型正在检测中，请稍候') });
   probing.add(id);
   try {
     const vision = req.query.vision !== '0';
     const timeoutMs = Math.min(120_000, Math.max(5_000, Number(req.query.timeoutMs) || 45_000));
     res.json(await probeModel(id, { vision, timeoutMs }));
   } catch (err) {
-    res.status(500).json({ error: msg(req, '体检出错：{err}', { err: err.message }) });
+    res.status(500).json({ error: msg(req, '检测失败：{err}', { err: err.message }) });
   } finally {
     probing.delete(id);
   }
@@ -165,7 +165,7 @@ router.put('/prefs', (req, res) => {
 router.post('/relay/login', async (req, res) => {
   const { username, password, url } = req.body || {};
   if (typeof username !== 'string' || !username.trim() || typeof password !== 'string' || !password) {
-    return res.status(400).json({ error: msg(req, '用户名和密码都要填') });
+    return res.status(400).json({ error: msg(req, '请填写用户名和密码') });
   }
   try {
     const r = await relayLogin({ url: url || process.env.NODESIGN_RELAY_URL || null, username: username.trim(), password, label: os.hostname() });
@@ -226,7 +226,7 @@ router.post('/issues/flush', async (_req, res) => {
 });
 
 router.post('/restart', (_req, res) => {
-  res.json({ ok: true, note: '正在重启，几秒后刷新页面' });
+  res.json({ ok: true, note: '正在重启，请在几秒后刷新页面' });
   // 先把响应发出去再退
   setTimeout(() => process.emit('nodesign:restart'), 150);
 });

@@ -71,7 +71,7 @@ export function mountRelayIssues(router, { sendError, readRawBody, record = reco
     const v = validateIssuePayload(body);
     if (!v.ok) return sendError(res, 400, 'BAD_ISSUE', v.error);
     const n = bump(req.relayDevice.id);
-    if (n > MAX_PER_DEVICE_PER_DAY) return sendError(res, 429, 'ISSUE_RATE_LIMITED', `这台设备今天已上报 ${MAX_PER_DEVICE_PER_DAY} 条，明天再发`);
+    if (n > MAX_PER_DEVICE_PER_DAY) return sendError(res, 429, 'ISSUE_RATE_LIMITED', `该设备今日上报已达 ${MAX_PER_DEVICE_PER_DAY} 条，请明日再试`);
     const it = v.item;
     const header = `[桌面版${it.clientVersion ? ' v' + it.clientVersion : ''}${it.platform ? ' ' + it.platform : ''} · 设备 ${req.relayDevice.label || req.relayDevice.id}${it.modelId ? ' · ' + it.modelId : ''}]`;
     const rec = record({
@@ -85,7 +85,7 @@ export function mountRelayIssues(router, { sendError, readRawBody, record = reco
       userId: req.relayUser.id,
       signature: it.signature || signatureOf(`${it.toolName || ''}|${it.summary}`),
     });
-    if (!rec) return sendError(res, 500, 'ISSUE_WRITE_FAILED', '站点这边没写进去');
+    if (!rec) return sendError(res, 500, 'ISSUE_WRITE_FAILED', '服务端写入失败');
     res.status(201).json({ ok: true, id: rec.id, count: rec.count });
   });
 }

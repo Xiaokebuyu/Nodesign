@@ -252,11 +252,11 @@ export const MODELS_BUILTIN = Object.freeze([
   // 两本账对不上）。数值由生产 run_model_usage 反推 SDK 价目（Opus 5 206 行残差 4e-15、≥20 万上下文 676 行同价即不分档；Sonnet 5 117 行中 116 行相符），改价先重跑拟合。
   {
     id: 'claude-sonnet-5[1m]', window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.sonnet5,
-    select: { label: 'Sonnet 5', desc: '快 · 日常改稿和铺页够用', gate: 'subscription' },
+    select: { label: 'Sonnet 5', desc: '响应快 · 适合日常改稿与排版', gate: 'subscription' },
   },
   {
     id: 'claude-opus-5[1m]', window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.opus5,
-    select: { label: 'Opus 5', desc: '前端与审美更强 · 烧订阅额度快得多，重活再开', gate: 'subscription' },
+    select: { label: 'Opus 5', desc: '前端与审美能力更强 · 订阅额度消耗较快，建议用于重要任务', gate: 'subscription' },
   },
   { id: 'claude-sonnet-5',       window: 200_000, brand: 'claude', prices: CLAUDE_LIST.sonnet5 },
   { id: 'claude-opus-5',         window: 200_000, brand: 'claude', prices: CLAUDE_LIST.opus5 },
@@ -343,7 +343,7 @@ export const MODELS_BUILTIN = Object.freeze([
     // 「当前无可用凭证」500 说来就来、不分请求大小、一来就是整段时间 —— 所以同 qwen 走
     // localGen 闸，label 写明不稳定，只给自己人。思考档在模型名里（-high/-medium/-low），
     // 选 high 即"默认高"；thinking 参数照旧 strip。
-    select: { label: 'Gemini 3.7 Flash（中转）', desc: '反重力通道 · 随时可能 500 · 思考档 high', gate: 'localGen' },
+    select: { label: 'Gemini 3.7 Flash（中转）', desc: '中转通道 · 稳定性一般，可能返回 5xx · 思考档 high', gate: 'localGen' },
     api: {
       upstream: 'lament', wireModel: '反重力-流式抗截断/gemini-3.7-flash-high',
       sdkAlias: 'claude-opus-4-6[1m]',     // 3.7 Flash 真 1M 窗口，alias 诚实；见上面那行订阅名的注释
@@ -362,7 +362,7 @@ export const MODELS_BUILTIN = Object.freeze([
     // 真窗口 1M；用户 08-21 深夜拍板压缩窗口 272k（省钱：携带成本 ≈ 1M 的 1/4、缓存失手最坏 $0.12/轮；近 14 天 649 回合只压缩过 11 次）
     id: 'deepseek-v4-flash-vision', window: 272_000, brand: 'deepseek',
     // 08-21 深夜开闸给所有档（含 basic）：basic 的 $5/天日限 + 表价记账管着它；pro/admin 不限
-    select: { label: 'DeepSeek V4 Flash · 视觉', desc: '快 · 有视觉（一次最多看 4 张图，旧图自动省略）· 272k 上下文 · 按用量计入每日额度（高峰 $0.44/$1.32 缓存 $0.014）' },
+    select: { label: 'DeepSeek V4 Flash · 视觉', desc: '响应快 · 支持视觉（单次最多 4 张图片，较早的图片自动省略）· 272k 上下文 · 按用量计入每日额度（高峰 $0.44/$1.32，缓存 $0.014）' },
     api: {
       upstream: 'zenGo', wireModel: 'deepseek-v4-flash-vision-exp',
       maxImages: 4,   // ⛔ 09-07 实撞 Console Go "At most 4 image(s)"，第 5 张起每发 400；没有替代线，只带最近 4 张（ingress/image-cap.js）
@@ -472,7 +472,7 @@ export const MODELS_BUILTIN = Object.freeze([
     //    所以那一家挂 = 全站默认路径挂；掉到 particle 也只有不带图的会话还能用（8 张上限）。
     // ⚠️ label 第二段是这两行**唯一**的区分（第一段一模一样）：`compactLabel` 按"撞不撞名"
     // 自己决定按钮上印长名还是短名，表里不用替它做这个决定，但第二段不能砍。
-    select: { label: 'GLM-5.3-Flash · 设计', desc: '有视觉 · 图不限张数 · 1M 上下文 · 极便宜', default: true },
+    select: { label: 'GLM-5.3-Flash · 设计', desc: '支持视觉 · 图片不限张数 · 1M 上下文 · 成本极低', default: true },
     api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['zai', 'particle'] } },
   },
   {
@@ -488,7 +488,7 @@ export const MODELS_BUILTIN = Object.freeze([
     //   有订阅资格的账号在演出面照旧走全局默认。两个字段的读者都在 model-context.js（scope 过滤 / 演出默认）。
     //   下架画布面时生产有 8 个画布会话钉着它 → server/scripts/migrate-canvas-model.mjs 改钉到 merge。
     id: 'glm-5.3-flash-rp', window: 1_000_000, brand: 'glm',
-    select: { label: 'GLM-5.3-Flash · 演出', desc: '每步更快 · 但整场最多 8 张图 · 1M 上下文 · 极便宜', only: 'stage', stageDefault: true },
+    select: { label: 'GLM-5.3-Flash · 演出', desc: '响应更快 · 单场最多 8 张图片 · 1M 上下文 · 成本极低', only: 'stage', stageDefault: true },
     api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['particle'] } },
   },
   // ── GMI Cloud · MiniMax（08-25）── 两行都是 GMI 标 `is_free` 的免费部署；账户无余额，付费行 402，
@@ -504,7 +504,7 @@ export const MODELS_BUILTIN = Object.freeze([
     // 按轮次闸而不是金额闸 —— zai 那条订阅用完撤掉的那天，`default: true` 要么回到这里，
     // 要么去别的四价全 0 的行（⛔ 不许落在付费行：那等于公开注册就直接烧钱）。
     // ⚠️ 这行的免费是 GMI「限时免费部署」，免费期一结束这条候补也不成立了
-    select: { label: 'MiniMax M3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 自己决定想多久' },
+    select: { label: 'MiniMax M3（免费）', desc: '免费 · 支持视觉 · 272k 上下文 · 思考时长自适应' },
     api: {
       upstream: 'gmi', wireModel: 'MiniMaxAI/MiniMax-M3',
       // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由：会话认得出，
@@ -533,7 +533,7 @@ export const MODELS_BUILTIN = Object.freeze([
     // ⚠️ 先 gate localGen（admin + 获批），理由是**限流**：全站共用一把 nvapi 钥匙 = 一个限流桶，
     // 而 agent 一轮会连着发好几发。08-25 实测串行 5 秒间隔的小请求 6 发里就撞了 1 发 429。
     // 开闸只要删掉 gate 这一处（清单、PUT /model、turn.js 三个消费方都走 selectableModelsFor）。
-    select: { label: 'Kimi K3（免费）', desc: '免费 · 有视觉 · 272k 上下文 · 思考档 max，首字可能等 · 上游限流，偶尔要等自动重试', gate: 'localGen' },
+    select: { label: 'Kimi K3（免费）', desc: '免费 · 支持视觉 · 272k 上下文 · 思考档 max，首字延迟较高 · 上游限流时会自动重试', gate: 'localGen' },
     api: {
       upstream: 'nvidia', wireModel: 'moonshotai/kimi-k3',
       // sdkAlias 不写 = 共用别名走会话路由（08-25 起的默认写法，见 SHARED_SDK_ALIAS）
