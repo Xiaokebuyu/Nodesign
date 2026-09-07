@@ -12,7 +12,7 @@ import { PanelManagerProvider } from '../components/layout/PanelManager.jsx';
 import { Sliders, MessageSquare, MessageSquarePlus } from 'lucide-react';
 import ChatPanel from '../components/chat/ChatPanel.jsx';
 import CanvasFrame from '../components/canvas/CanvasFrame.jsx';
-import { buildBreadcrumb } from './workspace-chrome.js';
+import { DEFAULT_PANELS, PANEL_META, buildBreadcrumb } from './workspace-chrome.js';
 import { useDeviceClass } from '../lib/device-class.js';
 // InspectTab 由 InspectFloatingCard 间接使用（不在此处直接 import）
 // CommentsTab 已删 — comments 嵌入到 InspectFloatingCard
@@ -22,6 +22,7 @@ import TweaksPanel from '../components/context-panel/TweaksPanel.jsx';
 import ShareModal from '../components/project/ShareModal.jsx';
 import ExportMenu from '../components/project/ExportMenu.jsx';
 import ProjectActionsMenu, { ProjectModeBadge } from '../components/project/ProjectActionsMenu.jsx';
+import { ProcessesButton } from '../components/project/ProcessPanel.jsx';
 import SnapshotModal from '../components/project/SnapshotModal.jsx';
 import UpgradeQuickModal from '../components/project/UpgradeQuickModal.jsx';
 import DirectEditModal from '../components/canvas/DirectEditModal.jsx';
@@ -347,25 +348,7 @@ export default function ProjectWorkspace() {
   //  - system / decisions → toolbar Settings popover（C2）
   //  - inspect / comments → 选中元素自动弹的 contextual InspectFloatingCard（C3）
   //  - 仅 tweaks 保留 floating panel（C5 schema 驱动）
-  const defaultPanels = useMemo(() => {
-    // 聊天栏默认贴右侧、留出顶栏高度，高度吃满可视区。**位置只是默认值** ——
-    // 拖过一次之后就由 localStorage 说了算（PanelManager 持久化 per-project）。
-    // 用 window 尺寸算是因为 panel 坐标是绝对像素，而"贴右边"要知道容器多宽；
-    // 容器就是视口减顶栏，首帧拿 window 足够准，之后 ResizeObserver 会收边。
-    const vw = typeof window !== 'undefined' ? window.innerWidth : 1440;
-    const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
-    const chatW = 380;
-    // chat 不在这张表里了：它 2026-08-08 起是钉在右缘的 ChatDock，自己管
-    // 收起/宽度，**位置不再是一个状态**。留在这里只会让 PanelManager 继续
-    // 持久化一份没人读的坐标。
-    return {
-      tweaks: { position: { x: 96, y: 160 }, size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
-    };
-  }, []);
-
-  const panelMeta = useMemo(() => ({
-    tweaks:    { label: 'Tweaks',    icon: Sliders },
-  }), []);
+  // 浮窗默认表搬去 workspace-chrome.js（DEFAULT_PANELS / PANEL_META）：纯常量，不该占这份文件的行数
 
   const handleIframeReady = useCallback((iframe) => {
     try { setIframeDoc(iframe.contentDocument); } catch { /* cross-origin */ }
@@ -1970,7 +1953,7 @@ export default function ProjectWorkspace() {
     exportFromMenu(id, format, cardId || boardUi?.artifactCardId || null, project.name);
 
   return (
-    <PanelManagerProvider projectId={id} defaultPanels={defaultPanels} panelMeta={panelMeta}>
+    <PanelManagerProvider projectId={id} defaultPanels={DEFAULT_PANELS} panelMeta={PANEL_META}>
     <AppShell
       // 工作台顶栏浮在画布之上、鼠标离开就淡出：画布是这里唯一的内容，
       // 横带越少越好。**浮起来而不是收起高度**——顶栏一参与布局，收展就会
@@ -1999,6 +1982,7 @@ export default function ProjectWorkspace() {
               上下文属于「这次对话」不属于项目，整组挪进聊天栏 composer 上沿；
               刷新进 ⋯，分享进导出菜单。留驻判据：每周会主动点的才配占常驻像素。 */}
           <ProjectModeBadge mode={project.mode} />
+          <ProcessesButton project={project} />
           <div style={{ position: 'relative' }}>
             <button
               ref={exportBtnRef}

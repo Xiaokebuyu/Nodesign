@@ -82,6 +82,16 @@ export const Me = {
 
 
 // ── Local（本地分发版专用：配置 / 钥匙 / 能力 / 体检 / 重启；hosted 下这组路由不存在）──
+/** 进程卡（2026-09-07 桌面端·缝三）：只有本地版挂了这组接口 */
+export const Processes = {
+  list: (pid) => jsonRequest('GET', `/api/projects/${pid}/processes`),
+  start: (pid, { command, name, cwd } = {}) => jsonRequest('POST', `/api/projects/${pid}/processes`, { command, name, cwd }),
+  log: (pid, id, tail = 200) => jsonRequest('GET', `/api/projects/${pid}/processes/${encodeURIComponent(id)}/log?tail=${tail}`),
+  stop: (pid, id) => jsonRequest('POST', `/api/projects/${pid}/processes/${encodeURIComponent(id)}/stop`),
+  restart: (pid, id) => jsonRequest('POST', `/api/projects/${pid}/processes/${encodeURIComponent(id)}/restart`),
+  remove: (pid, id) => jsonRequest('DELETE', `/api/projects/${pid}/processes/${encodeURIComponent(id)}`),
+};
+
 export const Local = {
   status: () => jsonRequest('GET', '/api/local/status'),
   /** 文件夹项目（2026-09-07 存量仓库道）：{ project, trust, created } */

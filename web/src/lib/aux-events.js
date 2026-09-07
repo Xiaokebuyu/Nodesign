@@ -10,6 +10,7 @@
  * @returns {boolean} true = 这条事件在这里消费完了，调用方就此收手
  */
 import { scrollToPage, pulseHighlight } from './canvas-iframe-ops.js';
+import { useProcessStore } from '../stores/processStore.js';
 
 export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
   switch (evt?.type) {
@@ -17,6 +18,11 @@ export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
     // 不套 stale guard —— 演出进程不是某个 run 的事，它是项目级状态
     case 'stage.changed':
       bumpList?.();
+      return true;
+    // 进程卡（2026-09-07）：登记表的变化和日志尾随。项目级状态，不套 stale guard
+    case 'process.changed':
+    case 'process.log':
+      useProcessStore.getState().applyEvent(evt);
       return true;
     // C6: agent 的 navigate_to_page / highlight（实现在 canvas-iframe-ops.js）
     case 'run.canvas_navigate':

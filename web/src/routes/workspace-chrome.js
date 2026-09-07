@@ -1,3 +1,4 @@
+
 /**
  * 工作台外壳的纯派生（2026-08-29，行数棘轮拆件）
  *
@@ -5,6 +6,20 @@
  * 不认识 React。ProjectWorkspace 那 2400 行里绝大多数是句柄和 effect，
  * 这类纯计算混在里面既占行数又不好单测。
  */
+
+import { Sliders } from 'lucide-react';
+
+/**
+ * 浮窗默认表（从 ProjectWorkspace 搬来，2026-09-07）。**位置只是默认值**：拖过一次之后
+ * 就由 localStorage 说了算（PanelManager 持久化 per-project）。
+ * chat 不在这张表里：它 2026-08-08 起是钉在右缘的 ChatDock，自己管收起/宽度，位置不再是一个状态。
+ */
+export const DEFAULT_PANELS = Object.freeze({
+  tweaks: { position: { x: 96, y: 160 }, size: { width: 320, height: 360 }, visible: false, zIndex: 100 },
+});
+export const PANEL_META = Object.freeze({
+  tweaks: { label: 'Tweaks', icon: Sliders },
+});
 
 /**
  * 面包屑 = **当前目录一路拆到根**（2026-08-13）。
