@@ -463,7 +463,9 @@ export function resolveWireModel(bodyModel) {
  * @returns {number|null}
  */
 export function priceTokens(appModel, tokens = {}) {
-  const p = BY_ID.get(appModel)?.api?.prices;
+  const row = BY_ID.get(appModel);
+  // 订阅 Claude 行没有 api 块，表价挂在行顶层 `prices`（model-table.js 订阅段的注释说明来历）
+  const p = row?.api?.prices || row?.prices;
   if (!p) return null;
   const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
   return (

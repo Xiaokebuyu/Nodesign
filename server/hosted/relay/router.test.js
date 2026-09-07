@@ -316,3 +316,33 @@ describe('记账：上游自报 0 元不算数（Zen Go 额度内报 0）', () =
     }
   });
 });
+
+describe('记账：订阅腿按 Claude 表价（09-07 桌面端计费遗留：之前行上没价记 0）', () => {
+  it('onUsage 报的 token 按 claude-opus-5[1m] 的 prices 入账，不再是 0', async () => {
+    const subForward2 = vi.fn((_req, res, _buf, opts) => {
+      opts.onUsage({ input: 1_000_000, output: 100_000, cacheRead: 2_000_000, cacheCreate: 100_000 });
+      res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"sub":true}');
+    });
+    const app2 = express();
+    app2.use('/api/relay', createRelayRouter({ moderate, forwardSub: subForward2 }));
+    const srv2 = http.createServer(app2);
+    await new Promise((r) => srv2.listen(0, '127.0.0.1', r));
+    const base2 = `http://127.0.0.1:${srv2.address().port}/api/relay`;
+    try {
+      const user = makeUser({ plan: 'pro' });
+      const { token } = mintDevice({ userId: user.id });
+      const sid = 'sid-sub-price';
+      const opened = await fetch(base2 + '/sessions', { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ sid, appModel: 'claude-opus-5[1m]' }) });
+      expect(opened.status).toBe(201);
+      const res = await fetch(`${base2}/__nd/${sid}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...BODY, model: 'claude-opus-5[1m]' }) });
+      expect(res.status).toBe(200);
+      const rows = usageRows(user.id);
+      expect(rows).toHaveLength(1);
+      // 5 + 25×0.1 + 0.5×2 + 10×0.1 = 5 + 2.5 + 1 + 1 = 9.5
+      expect(rows[0].cost_usd).toBeCloseTo(9.5, 6);
+      expect(rows[0].model).toBe('claude-opus-5[1m]');
+    } finally {
+      await new Promise((r) => srv2.close(r));
+    }
+  });
+});

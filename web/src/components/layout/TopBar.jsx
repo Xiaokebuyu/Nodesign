@@ -5,6 +5,7 @@ import { COLOR, CHROME, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, FONT_KAI } fr
 import { GRAIN } from '../../lib/paper.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { useMedia, NARROW } from '../../lib/use-media.js';
+import Popover from '../ui/Popover.jsx';
 
 /**
  * 用户角标（2026-07-30 多用户内测；07-30 晚收成头像）
@@ -50,15 +51,6 @@ function UserBadge() {
     return () => { dead = true; clearInterval(t); };
   }, [authUser]);
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    window.addEventListener('mousedown', onDown);
-    window.addEventListener('keydown', onKey);
-    return () => { window.removeEventListener('mousedown', onDown); window.removeEventListener('keydown', onKey); };
-  }, [open]);
-
   if (local) return <LocalSettingsEntry />;
   if (!authUser) return null;
   // 警戒线 75%：跟配额横幅第一档对齐。07-31 起额度是一个总数且单位是钱，
@@ -102,9 +94,9 @@ function UserBadge() {
         )}
       </button>
 
-      {open && (
+      {/* 09-07：portal 到光源层之上（Popover），跟模型选择器 / 语言菜单同一个病：首页夜里 z 60 的菜单被光源层压暗 */}
+      <Popover open={open} anchorRef={ref} onClose={() => setOpen(false)} placement="down" align="right" role="menu">
         <div style={{
-          position: 'absolute', top: '100%', right: 0, marginTop: GAP.sm,
           minWidth: 176,
           background: CHROME.bg,
           backgroundImage: GRAIN,
@@ -112,7 +104,6 @@ function UserBadge() {
           borderRadius: RADIUS.xl,
           boxShadow: SHADOW.menu,
           padding: GAP.xs,
-          zIndex: 60,
         }}>
           <div style={{
             padding: `${GAP.sm}px ${GAP.md}px`,
@@ -155,7 +146,7 @@ function UserBadge() {
             style={{ ...menuItem, width: '100%', border: 0, background: 'transparent', cursor: 'pointer' }}
           ><LogOut size={12} /> 登出</button>
         </div>
-      )}
+      </Popover>
     </div>
   );
 }

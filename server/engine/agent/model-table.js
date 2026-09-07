@@ -244,29 +244,32 @@ const GLM_MERGE_API = Object.freeze({
  */
 export const SHARED_SDK_ALIAS = 'claude-sonnet-4-6[1m]';
 
+// Claude 表价（美元 / 百万 token），订阅行用；来历见下面订阅段注释
+const CLAUDE_LIST = Object.freeze({ sonnet5: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 6 }, opus5: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 10 }, haiku45: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 } });
 export const MODELS_BUILTIN = Object.freeze([
   // ── 订阅通路（Claude 真名，零注入）──
+  // `prices` = Claude 表价，跟站内订阅会话 SDK 自报的 total_cost_usd 同口径（relay 订阅腿 09-07 前因行上没价记 0，网页端与桌面版
+  // 两本账对不上）。数值由生产 run_model_usage 反推 SDK 价目（Opus 5 206 行残差 4e-15、≥20 万上下文 676 行同价即不分档；Sonnet 5 117 行中 116 行相符），改价先重跑拟合。
   {
-    id: 'claude-sonnet-5[1m]', window: 1_000_000, brand: 'claude',
+    id: 'claude-sonnet-5[1m]', window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.sonnet5,
     select: { label: 'Sonnet 5', desc: '快 · 日常改稿和铺页够用', gate: 'subscription' },
   },
   {
-    id: 'claude-opus-5[1m]', window: 1_000_000, brand: 'claude',
+    id: 'claude-opus-5[1m]', window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.opus5,
     select: { label: 'Opus 5', desc: '前端与审美更强 · 烧订阅额度快得多，重活再开', gate: 'subscription' },
   },
-  { id: 'claude-sonnet-5',       window: 200_000, brand: 'claude' },
-  { id: 'claude-opus-5',         window: 200_000, brand: 'claude' },
+  { id: 'claude-sonnet-5',       window: 200_000, brand: 'claude', prices: CLAUDE_LIST.sonnet5 },
+  { id: 'claude-opus-5',         window: 200_000, brand: 'claude', prices: CLAUDE_LIST.opus5 },
   { id: 'claude-opus-4-7[1m]',   window: 1_000_000, brand: 'claude' },
   { id: 'claude-sonnet-4-6[1m]', window: 1_000_000, brand: 'claude' },   // = SHARED_SDK_ALIAS（共用别名的本体行，删了它加载断言会炸）
   { id: 'claude-opus-4-7',       window: 200_000, brand: 'claude' },
   { id: 'claude-sonnet-4-6',     window: 200_000, brand: 'claude' },
-  { id: 'claude-haiku-4-5',      window: 200_000, brand: 'claude' },
+  { id: 'claude-haiku-4-5',      window: 200_000, brand: 'claude', prices: CLAUDE_LIST.haiku45 },
   // 只当 alias 用的订阅名（08-20）：SDK 二进制认识的 1M 名里还空着的一个（strings 扫过：
   // opus-4-6/4-7/4-8/5、sonnet-4-5-20250929/4-6/5 七个 [1m]），给 gemini-3.7-flash 行做 spoof。
   { id: 'claude-opus-4-6[1m]',   window: 1_000_000, brand: 'claude' },
-  // 08-21 给 ox-alpha 做 spoof，08-26 随 Ox 整族下架**空出来**（行留着：它是 SDK 认识的 1M 名，是坑位不是垃圾）
+  // 下面两行 08-21 给 Ox 两行做过 spoof，08-26 随 Ox 下架**空出来**（行留着：SDK 认识的 1M 名是坑位不是垃圾）
   { id: 'claude-opus-4-8[1m]',   window: 1_000_000, brand: 'claude' },
-  // 同上，08-21 晚给 ox-alpha-max，08-26 也空出来了
   { id: 'claude-sonnet-4-5-20250929[1m]', window: 1_000_000, brand: 'claude' },
   // 独占 alias 池现状（08-26 更新）：opus-4-6[1m]→gemini-3.7-flash、opus-4-7[1m]→deepseek-v4-flash-vision、opus-5[1m]→qwen；
   // **空着三个**：opus-4-8[1m]、sonnet-4-5-20250929[1m]、haiku-4-5（Ox 三行 08-26 下架腾出来的）；
@@ -275,21 +278,18 @@ export const MODELS_BUILTIN = Object.freeze([
   // 这三个坑位留给真正需要"没会话也能按 alias 反查"的场合（探针、跨进程重放那类）。
 
   // ── API 通路 ──
-  // kimi-k2.6 行与 moonshot 上游 08-21 深夜清掉（用户：「把 kimi 3.1pro 的槽都清理一下」）：NoDesk 退役后没走过流量，
-  // 它的 alias claude-opus-4-7[1m] 转给 deepseek-v4-flash-vision。'enabled8k' 的 thinking 档逻辑留在 transformForUpstream 里备用。
+  // kimi-k2.6 行与 moonshot 上游 08-21 深夜清掉（NoDesk 退役后没走过流量），其 alias claude-opus-4-7[1m] 转给
+  // deepseek-v4-flash-vision；'enabled8k' 的 thinking 档逻辑留在 transformForUpstream 里备用。
   // 本地 Qwen（HauhauCS/Qwen3.8-27B-Uncensored-…-Aggressive-MTP-GGUF，底座官方
   // Qwen3.8-27B，有视觉）。⚠️ window 必须跟箱子 llama-server 的 -c 一致：低了
-  // 会在 SDK 触发 auto-compact 之前先撞上游 400。262144 = 该模型原生上限
-  // （YaRN 可外推到 1M，但那要额外开 rope 参数且短上下文质量有代价，不默认走）。
-  // alias 用 1M 档：SDK 按 alias 查 rawMaxTokens，用 200k 名会让 auto-compact 在
-  // ~180k 就触发，白扔 80k。⚠️ 这个 alias 同时是线上可选的订阅模型名，安全性靠两点
-  // （改动前先确认它们还成立）：①订阅会话根本不进 ingress，WIRE_LOOKUP 只服务
-  // API 会话；②repriceUsageDeltas 先看会话通路，订阅会话原样早退不 remap。
+  // 会在 SDK 触发 auto-compact 之前先撞上游 400。262144 = 该模型原生上限（YaRN 可外推到 1M，但要额外开 rope
+  // 参数且短上下文质量有代价，不默认走）。alias 用 1M 档：SDK 按 alias 查 rawMaxTokens，用 200k 名会让 auto-compact
+  // 在 ~180k 就触发，白扔 80k。⚠️ 这个 alias 同时是线上可选的订阅模型名，安全性靠两点（改动前先确认还成立）：
+  // ①订阅会话根本不进 ingress，WIRE_LOOKUP 只服务 API 会话；②repriceUsageDeltas 先看会话通路，订阅会话原样早退不 remap。
   {
-    // window 必须等于盒上 llama-server 启动日志里的 `n_ctx_slot`（每槽上下文），低了 SDK
-    // 在 auto-compact 之前先撞上游 400。08-20 起盒子是 RTX 5090 32G：OrcaRouter Q5_K_M +
-    // 视觉 + MTP 投机 + 1 槽 × 131072，再留 ~5G 给同卡的 ComfyUI（noobai）。换回 96G 盒子
-    // 就是 262_144 × 3 槽。盒上配置住 ops/qwen-box/（serve-prod.sh），两边要一起改。
+    // window 必须等于盒上 llama-server 启动日志里的 `n_ctx_slot`（每槽上下文），低了 SDK 在 auto-compact 之前先撞
+    // 上游 400。08-20 起盒子是 RTX 5090 32G：OrcaRouter Q5_K_M + 视觉 + MTP 投机 + 1 槽 × 131072，再留 ~5G 给同卡的
+    // ComfyUI（noobai）。换回 96G 盒子就是 262_144 × 3 槽。盒上配置住 ops/qwen-box/（serve-prod.sh），两边要一起改。
     id: 'qwen3.8-27b', window: 131_072, brand: 'qwen',
     // ⏸ **08-20 用户拍板从 picker 摘牌**（盒子按小时租，已关机）。删掉 `select` 一处，
     // 三个消费方一起拒：GET /api/me/models 的清单、PUT /model 的校验、turn.js 的

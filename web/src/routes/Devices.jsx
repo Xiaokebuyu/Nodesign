@@ -35,7 +35,7 @@ export default function Devices() {
     try { await navigator.clipboard.writeText(fresh.token); setCopied(true); } catch { /* 剪贴板不可用就让用户手选 */ }
   };
 
-  const crumbs = [{ label: 'Nodesign', to: '/' }, { label: t('桌面版设备') }];
+  const crumbs = [{ label: t('桌面版设备') }];
   const active = (devices || []).filter((d) => !d.revoked);
   const revoked = (devices || []).filter((d) => d.revoked);
 

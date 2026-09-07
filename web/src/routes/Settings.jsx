@@ -90,7 +90,7 @@ export default function Settings() {
 
   const visible = SECTIONS.filter((s) => (isLocal ? s.local : s.hosted));
   const cur = visible.find((s) => s.id === section) || visible[0];
-  const crumbs = [{ label: 'Nodesign', to: '/' }, { label: t('设置') }];
+  const crumbs = [{ label: t('设置') }];   // 字标本身就是「Nodesign」那一级，别重复
 
   return (
     <AppShell breadcrumb={crumbs}>

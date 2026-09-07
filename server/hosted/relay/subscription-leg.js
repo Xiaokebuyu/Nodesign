@@ -28,9 +28,9 @@
  *
  * ## 账
  *
- * 用 lib/ingress/anthropic-usage 旁听 token 数。订阅行没有 prices（站主按月付，不按 token），
- * 所以 costUsd 报 null，账本记 0 并告警 —— 这是**已知缺口**：pro 档走 relay 的订阅用量不计入
- * 日额度。站内对应的口径是 SDK 自报的 Claude 表价；要对齐得给订阅行填 prices。
+ * 用 lib/ingress/anthropic-usage 旁听 token 数。上游不报钱，costUsd 传 null，router 的 book 按订阅行
+ * 顶层 `prices`（Claude 表价，09-07 填上）记账 —— 跟站内订阅会话 SDK 自报的口径一致，pro 档走 relay
+ * 的订阅用量从此进日额度。（09-07 之前行上没价，这里记 0，桌面版与网页端两本账对不上。）
  */
 
 import fs from 'node:fs';

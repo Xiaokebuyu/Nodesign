@@ -199,7 +199,7 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     };
 
     if (session.mode === 'subscription') {
-      // 订阅行没有 prices：costUsd 走 null → 记 0（subscription-leg.js 头上写明了这是已知缺口）
+      // 订阅腿上游不报钱：costUsd 传 null，book 按订阅行的 Claude 表价记（09-07 起行上有 prices，跟站内 SDK 自报口径一致）
       forwardSub(req, res, bodyBuf, { onUsage: (tokens) => book({ appModel: session.appModel, costUsd: null, tokens }) });
       return;
     }

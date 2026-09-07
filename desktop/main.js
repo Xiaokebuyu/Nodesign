@@ -104,6 +104,7 @@ async function boot() {
   const ok = await waitHealth(appUrl, { timeoutMs: 60_000, alive: () => sup.running });
   if (!ok) return fatal(new Error('服务端 60 秒内没有就绪。'));
 
+  installAppMenu();
   createMainWindow();
   createTray();
   setupUpdater();
@@ -162,6 +163,7 @@ function createMainWindow() {
     width: bounds.width, height: bounds.height, minWidth: MIN_SIZE.width, minHeight: MIN_SIZE.height,
     ...(bounds.x != null ? { x: bounds.x, y: bounds.y } : { center: true }),
     show: false, backgroundColor: '#faf8f4',
+    autoHideMenuBar: true,   // 菜单栏不显示（加速键仍生效；Alt 能临时叫出来）
     webPreferences: {
       // 页面是 http://127.0.0.1 上的普通网页，保持默认的浏览器安全模型：
       // 不开 nodeIntegration，不关 contextIsolation。它要的能力全走服务端 HTTP，
@@ -223,7 +225,32 @@ function createMainWindow() {
     win.hide();
   });
 
+  // 页面缩放整个拿掉（09-07 站主：非 100% 时显示异常，建议取消）。画布有自己的缩放，浏览器级缩放
+  // 会让固定定位的弹层和按设备像素量的画布几何全错位。三道：① 菜单里不给缩放项（见 installAppMenu）
+  // ② 捏合缩放锁死 ③ Electron 按站点**持久化**缩放倍率，已经调过的用户重启也回不到 100%，所以每次
+  // 加载完归零，之后任何途径（Ctrl+滚轮等）改了也立刻拨回。
+  win.webContents.on('did-finish-load', () => {
+    try { win.webContents.setZoomFactor(1); win.webContents.setVisualZoomLevelLimits(1, 1); } catch { /* */ }
+  });
+  win.webContents.on('zoom-changed', () => { try { win.webContents.setZoomFactor(1); } catch { /* */ } });
+
   win.loadURL(appUrl);
+}
+
+/**
+ * 应用菜单：不用 Electron 缺省那份（它带 View → 放大 / 缩小 / 实际大小 三个加速键，Ctrl+= / Ctrl+- / Ctrl+0）。
+ * 菜单栏本身不显示（消费级桌面应用没有那一排「文件 编辑 查看」），但加速键还在：
+ * 编辑那组是 macOS 上剪贴板快捷键能用的前提；重载 / 开发者工具 / 全屏留给排障。
+ */
+function installAppMenu() {
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac ? [{ role: 'appMenu' }] : []),
+    { role: 'editMenu' },
+    { label: 'View', submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
+    { role: 'windowMenu' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 function showMainWindow() {

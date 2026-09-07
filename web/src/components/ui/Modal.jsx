@@ -49,7 +49,9 @@ export default function Modal({ show, onClose, title, width = 480, children, clo
       onMouseDown={(e) => { if (closable && e.target === e.currentTarget) onClose?.(); }}
       style={{
         position: 'fixed', inset: 0,
-        zIndex: 800,
+        // 960：压过首页光源层（home-sun.js 的 .ndd-canopy.over 是 950）。09-07 站主报「选到带锁的模型
+        // 弹出的提示半透明」——跟模型选择器同一个病：夜里光源层把 800 层的确认框整个压暗。Toast 是 1000，仍在其上。
+        zIndex: 960,
         background: visible ? PAPER.scrim : 'rgba(43,33,23,0)',
         backdropFilter: visible ? 'blur(3px)' : 'blur(0px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',

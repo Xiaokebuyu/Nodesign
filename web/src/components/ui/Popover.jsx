@@ -14,7 +14,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-/** 压在首页光源层（950）、顶栏（900）、弹窗（800）、toast（1000）之上；留在 FloatingPanel 的 9998 之下 */
+/** 压在首页光源层（950）、顶栏（900）、弹窗（960）、toast（1000）之上；留在 FloatingPanel 的 9998 之下 */
 export const POPOVER_Z = 9600;
 
 /**
