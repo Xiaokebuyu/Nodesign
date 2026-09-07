@@ -308,7 +308,7 @@ the URL directly instead.`,
           if (!(await loc.count())) {
             return asText([
               `点不到：${selector} 没匹配到元素。`,
-              '先用 browser_read 看页面上到底有什么文字 —— 链接文案经常跟你以为的不一样。',
+              '先用 browser_read 看页面上到底有什么文字 —— 链接文案常与预期不一致。',
               'text= 是**子串**匹配（`text=更多` 能命中「了解更多」），所以写短一点更容易命中。',
             ].join('\n'), true);
           }
@@ -377,8 +377,8 @@ click will help; say that rather than making them try three times.`,
         if (!r.released) {
           return asText([
             `等了 ${Math.round(r.waitedMs / 1000)} 秒没人接手。`,
-            '别在这站上继续耗 —— 跟用户说清楚"这个站从这台机器过不去"，换一个参考站。',
-            '（有些墙看的是服务器 IP 的信誉，人点多少次都一样。）',
+            '不要在该站点继续尝试 —— 告知用户「该站点从本服务无法访问」，改用其他参考站。',
+            '（部分风控依据服务器 IP 信誉，人工点击同样无法通过。）',
           ].join('\n'));
         }
         const nowAt = await withBrowser(projectId, async ({ page }) => where(page));
@@ -434,8 +434,8 @@ Everything lands in assets/references/web/ with a provenance sidecar (source
 URL, when, what you were looking for). It is there in the NEXT conversation too
 — that is the whole reason it goes to disk instead of just into your context.
 
-Write "lookingFor" honestly: in three days a folder of screenshots with no note
-about why they were taken is landfill.`,
+Write "lookingFor" honestly: screenshots saved without a stated purpose
+become unusable within days.`,
     {
       kinds: z.array(z.enum(['screenshot', 'palette', 'fonts', 'css', 'skeleton', 'motion'])).min(1)
         .describe('What to take. Cheap ones (palette/fonts/skeleton) can all go in one call; motion takes a few seconds (it scrolls the page).'),

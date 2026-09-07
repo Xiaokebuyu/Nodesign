@@ -101,11 +101,11 @@ Costs a few seconds and ~1.7k tokens; don't call it in a loop.`,
         }
         const page = await context.newPage();
         const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });
-        if (resp && resp.status() >= 400) return err(`画布页打不开：HTTP ${resp.status()}（${origin}）。NODESIGN_WEB_ORIGIN 指对了吗？`);
+        if (resp && resp.status() >= 400) return err(`画布页打开失败：HTTP ${resp.status()}（${origin}）。请确认 NODESIGN_WEB_ORIGIN 配置正确。`);
         try {
           await page.waitForSelector('html[data-eye-ready="1"]', { timeout: READY_TIMEOUT_MS });
         } catch {
-          return err('画布页没在 25s 内就绪（data-eye-ready 没出现）。多半是入口不对或登录被拒；截图放弃。');
+          return err('画布页没在 25s 内就绪（data-eye-ready 没出现）。通常为入口地址错误或鉴权失败；本次截图终止。');
         }
         const png = await page.screenshot({ type: 'png', fullPage: false });
         const data = png.toString('base64');

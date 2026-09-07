@@ -21,7 +21,7 @@ export function makePreToolUseBoardDirtyInjector({ projectId, sessionId }) {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
           permissionDecision: 'allow',
-          additionalContext: `⚠ 用户刚在板上动过手：${line}。位置以现状为准（拿不准先 read_board），别把他挪过的东西又搬回去。`,
+          additionalContext: `⚠ 用户刚调整过板面：${line}。位置以现状为准（拿不准先 read_board），别把他挪过的东西又搬回去。`,
         },
       };
     } catch { return {}; }

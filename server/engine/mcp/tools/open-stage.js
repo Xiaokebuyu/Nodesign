@@ -113,7 +113,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
       lore: z.object({ off: z.array(z.string().max(80)).max(500) }).optional().describe('按玩家开场前的回答**预先关掉**的世界书条目名（read_tavern_json 导出时给的名字）：他说不要某条支线 / 某类内容 / 某个人物线，对应条目名列在这里，开场页画成开关他还能改。没说就不传，全开'),
       panels: z.array(panelSchema).max(8).optional().describe('跑团 / 冒险类才要：背包、装备与穿着、商店、任务清单这类**清单状态**。声明了显示器就多出对应的页，演出进程用 update_panel 记账，玩家能在显示器里买 / 用 / 装上。恋爱日常那种不要硬加'),
       achievements: z.array(achievementSchema).max(40).optional()
-        .describe('奖杯。阈值按用户选的难度定（爽档 40 就给"她笑了"，严酷档要 80）。事件型的靠 state 里的标志位：牵手 == 1'),
+        .describe('奖杯。阈值按用户所选难度设定（宽松档 40 即可触发「她笑了」，严苛档需 80）。事件型的靠 state 里的标志位：牵手 == 1'),
       triggers: z.array(triggerSchema).max(20).optional()
         .describe('剧情推进：从酒馆卡的分阶段规则翻过来 —— 关键数值到了阈值，机器递纸条给演出进程，它这一段照着推'),
     },

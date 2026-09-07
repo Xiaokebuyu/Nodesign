@@ -101,7 +101,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       return err('text 是"单节点图"的简写，跟 nodes/shapes 二选一：一句话给 text，一张图把它写成一个 node。');
     }
     if (!args.text && !hasSketch) {
-      return err('空手不上板：给 text（一句话）或 nodes/shapes（一张图）。只想画线用 edit_board 的 add_edge。');
+      return err('内容不能为空：请提供 text（一句话）或 nodes/shapes（一张图）。只想画线用 edit_board 的 add_edge。');
     }
     // 单节点图 = 一句话（统一模型的退化情形）：转文件本体那条路，语义字段全保
     if (!args.text && !args.title && nodesIn.length === 1 && !shapesIn.length && !edgesIn.length) {
@@ -156,7 +156,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // ───────────────────────── 件数 = 1：板书（文件本体） ─────────────────────────
     if (args.text) {
       let body = String(args.text).trim();
-      if (!body) return err('空话不上板。');
+      if (!body) return err('正文不能为空。');
       // 控件围栏自愈（08-28 泉此方案）：角色把 nd:controls 写成裸文本开头 —— 语义无歧义
       // （正文以 nd:controls 起头且全文无围栏），替它补上，渲染层只认 ```nd:controls
       if (/^nd:controls\s*\n/.test(body) && !body.includes('```')) {
@@ -173,7 +173,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           return err('open_lane 是开新线，跟 reply_to/chain/near/place.with 互斥 —— 岔出点直接写在 open_lane 里。');
         }
         if (board.lanes?.[args.tag]) {
-          return err(`线 #${args.tag} 已经开过了（read_board 的「线的清单」那一节看得到）。接着写用 {tag:"${args.tag}", chain:true}；真要另起炉灶，换个名字。`);
+          return err(`线 #${args.tag} 已经开过了（read_board 的「线的清单」那一节看得到）。接着写用 {tag:"${args.tag}", chain:true}；如需另开一条线，请更换名称。`);
         }
       }
       // chain：接在同 tag 最新一条**自己写的**板书后面（chapter 线程不再手抄路径）。
@@ -235,8 +235,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         // 就是代笔/插嘴的物理形态 —— 这条按板上对象的**作者**判，不看内容不看场。
         // 角色之间可以互接（那就是对话），角色接主控的旁白也行。
         if (by === 'agent' && typeof e.by === 'string' && ROLE_SLUG_RE.test(e.by)) {
-          return err(`这条是「${e.by}」的话，你不接在它下面。想让它接着说：把 cue 寄给它`
-            + `（SendMessage）或让用户直接跟它说；你自己的旁白/场记另起一条（near 指过去就行）。`);
+          return err(`该条为「${e.by}」所写，不应在其下续写。如需它继续，请用 SendMessage`
+            + `通知它，或让用户直接跟它说；你自己的旁白/场记另起一条（near 指过去就行）。`);
         }
         parentId = pid2; zone = layerOf(pid2, e, known);
         replyRect = { x: e.x, y: e.y, ...estimateSizeOn(board, pid2, e) };
@@ -532,7 +532,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     // 零线大图提醒（08-27 用户报「草草一堆文字摊在那儿」）：软提醒不硬拒 ——
     // 但要说清楚这不是风格问题，是版面语言缺了一半
     if (nodesIn.length >= 3 && !innerEdges.length) {
-      lines.push(`⚠ ${nodesIn.length} 件 0 线 —— 这是摊了一堆字，不是一张图。线是版面的语言：`
+      lines.push(`⚠ ${nodesIn.length} 件 0 线 —— 当前只是散落的文字，尚未构成图。线是版面的语言：`
         + `补 edges（谁连谁、什么关系，布局会按结构分层摆）；这些如果本是一条思路，`
         + `改走 {tag, chain:true} 让它长成线。`);
     }

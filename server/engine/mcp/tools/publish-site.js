@@ -90,7 +90,7 @@ permission error, relay it as-is — do not retry.`,
           r.certReady === true
             ? '证书已就绪，现在就能 screenshot_url 自检。'
             : (r.certReady === false
-              ? '⚠ 证书还没签发完（等了 150 秒，通常 2-3 分钟）—— 现在截图会拿到 SSL 错误，过一会儿再试。'
+              ? '⚠ 证书还没签发完（等了 150 秒，通常 2-3 分钟）—— 此时截图会返回 SSL 错误，请稍后重试。'
               : '重新发布地址不变。'),
           r.warning ? `注意：${r.warning}` : null,
         ].filter(Boolean).join('\n'));

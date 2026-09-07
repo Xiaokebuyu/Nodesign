@@ -32,7 +32,7 @@
   };
 
   async function act(op, note) {
-    try { const r = await api.json('POST', 'panel', op); ND.flash(r.change || note || '好了'); }
+    try { const r = await api.json('POST', 'panel', op); ND.flash(r.change || note || '已完成'); }
     catch (err) { ND.flash(err.message, true); }
   }
 
@@ -53,7 +53,7 @@
   }
 
   function paintPanel(root, p) {
-    if (!p) { root.innerHTML = '<div class="empty">这块面板没了。</div>'; return; }
+    if (!p) { root.innerHTML = '<div class="empty">该面板已不存在。</div>'; return; }
     const S = store.state || {};
     let body = '';
     if (p.kind === 'equipment') {

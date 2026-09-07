@@ -58,7 +58,7 @@ async function onLinkClick(e) {
   window.scrollTo(0, 0);
   initPage();                                        // ⭐ 别忘了这一句
 }
-window.addEventListener('popstate', () => location.reload());  // 后退最省事的正确做法
+window.addEventListener('popstate', () => location.reload());  // 处理后退的最简可靠做法
 ```
 
 ## ⚠️ file:// 那道守卫要不要写
@@ -77,7 +77,7 @@ if (routerOk) document.addEventListener('click', onLinkClick);
 
 不写的话导出包里点任何链接都是白屏。
 
-## 帘幕/遮罩转场的两个坑
+## 帘幕/遮罩转场的两个易错点
 
 - **静止态要藏在视口外**（`position:fixed; inset:0; transform:translateY(100%)`），
   别用 `display:none` 切 —— 那样没有过渡可言

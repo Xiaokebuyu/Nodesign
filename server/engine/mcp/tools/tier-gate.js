@@ -46,8 +46,8 @@ export function tierDenial(projectId, capability, toolName) {
 export function tierDenialForOwner(owner, capability, toolName) {
   if (!can(owner, capability)) {
     const why = capability === 'imageGen' ? DENIAL.imageGen
-      : capability === 'webSearch' ? '这个账号不开放联网搜索。原话转告用户，不要重试。'
-        : `这个账号档位不开放 ${toolName}。原话转告用户，不要重试。`;
+      : capability === 'webSearch' ? '当前账号档位不含联网搜索。请如实转告用户，不要重试。'
+        : `当前账号档位不含 ${toolName}。请如实转告用户，不要重试。`;
     return deny(`${toolName} denied: ${why}`);
   }
   if (capability === 'webSearch') {
@@ -56,7 +56,7 @@ export function tierDenialForOwner(owner, capability, toolName) {
       const r = takeDaily(owner.id, cap);
       if (!r.ok) {
         const hrs = Math.ceil(r.retryAfterMs / 3_600_000);
-        return deny(`${toolName} denied: basic 档每天最多 ${cap} 次联网搜索，今天已用完（约 ${hrs} 小时后恢复）。原话转告用户，这轮别再搜了。`);
+        return deny(`${toolName} denied: basic 档每天最多 ${cap} 次联网搜索，今日额度已用尽（约 ${hrs} 小时后恢复）。请如实转告用户，本回合不再发起搜索。`);
       }
     }
   }

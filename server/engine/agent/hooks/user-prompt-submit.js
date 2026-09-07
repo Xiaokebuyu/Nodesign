@@ -47,9 +47,9 @@ import { getTurnMemory, setTurnMemory, fingerprint, diffItems } from './turn-sta
 
 /** PDF/Office 文档的解法（系统自带工具；python 包没装且装不上 —— 08-19 上报实锤）。只在首次出现二进制文档时说一遍。 */
 const BINARY_DOC_HINT = 'PDF / PPTX / DOCX / XLSX 直接 Read 拿不到结构化内容（二进制或 zip 包）。用系统自带的工具解'
-  + '（pdfplumber/PyPDF2/python-docx/openpyxl 这些 python 包**没装且装不上**，别试）：'
+  + '（pdfplumber/PyPDF2/python-docx/openpyxl 这些 python 包**未安装且无法安装**，请勿尝试）：'
   + 'pdf 文本 `pdftotext -layout 文件.pdf -`；pdf 转页图 `pdftoppm -png -r 100 文件.pdf 页前缀` 再 Read 图片；pdf 嵌入图 `pdfimages -png`。'
-  + 'docx/pptx/xlsx 用 `soffice --headless --convert-to txt|csv|pdf --outdir 目录 文件`（xlsx 转 csv；⚠️ soffice 吃不下中文文件名，先拷成 ASCII 名，并加 `-env:UserInstallation=file:///tmp/lo-任意名` 免得和渲染管线抢 profile）；'
+  + 'docx/pptx/xlsx 用 `soffice --headless --convert-to txt|csv|pdf --outdir 目录 文件`（xlsx 转 csv；⚠️ soffice 不支持中文文件名，先拷成 ASCII 名，并加 `-env:UserInstallation=file:///tmp/lo-任意名` 避免与渲染管线争用 profile）；'
   + 'docx/pptx 里的嵌入图直接 `unzip -o 文件 "word/media/*"`（pptx 是 `ppt/media/*`）。'
   + '**提取出来的不只是文本，通常还包含嵌入图片** —— 提取完一定 Read 看图片，别只看 stdout 文本就以为信息齐了。';
 
@@ -61,7 +61,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
   const sections = [];
 
   // cwd：唯一真正动态的一行。路径表（./ notes/ assets/ .claude/agent-memory/ 各是什么）在 prelude
-  sections.push({ key: 'cwd', title: '工作区', text: `你的 cwd 是 ${workspaceRoot} —— 项目工作区，产物直接住这儿（路径表见 prelude「你跑在哪」）。` });
+  sections.push({ key: 'cwd', title: '工作区', text: `你的 cwd 是 ${workspaceRoot} —— 项目工作区，产物直接存放于此（路径表见 prelude「你跑在哪」）。` });
 
   // 素材：顶层 assets/ + assets/references/**（逛站采回来的）
   try {
@@ -135,7 +135,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       const fit = fitFor(vp);
       const laneLine = fit.column
         ? `⚠️ 他在手机上（屏幕 ${fit.screen?.w}x${fit.screen?.h}px）。`
-          + `版面规矩：**一件 = 一屏，纵向单列**。每件宽度 ≤${fit.w}（超了就要横向滑动，手机上没人受得了），`
+          + `版面规矩：**一件 = 一屏，纵向单列**。每件宽度 ≤${fit.w}（超出后需横向滚动，移动端阅读体验很差），`
           + `高度到 ${fit.h} 都行（竖着滚是手机上读长内容的天然姿势）。`
           + `接着写就往**正下方**接，别用 side:'right'/'left' 并排 —— 并排的第二件在他屏幕外。`
           + `宁可多拆几件竖着排，也别把一件写宽。`
@@ -241,7 +241,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
             console.warn('[vars] 沿状态写不进去，下一轮可能重复触发：', e.message);
           }
           if (trig.fired.length) {
-            parts.push(`⚡ 这一拍有 ${trig.fired.length} 个条件命中了（你之前挂的）：\n`
+            parts.push(`⚡ 本回合有 ${trig.fired.length} 个条件被触发（此前由你设置）：\n`
               + trig.fired.map(f => `  · ${f.message}\n    （条件：${f.raw}）`).join('\n'));
           }
           const roster = [];
@@ -262,7 +262,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
         key: 'vars',
         title: '状态表',
         text: `⚠️ 状态表读不出来了：${st.why}\n`
-          + `  在修好之前 set_vars 会一直拒绝（它不会"尽力写"，那只会把表写得更坏）。`
+          + `  在修好之前 set_vars 会一直拒绝（工具不会做部分写入，以免进一步破坏表结构）。`
           + `${st.rel ? ` Read 一下 ${st.rel} 看看表被改成什么样了。` : ''}`,
       });
     }

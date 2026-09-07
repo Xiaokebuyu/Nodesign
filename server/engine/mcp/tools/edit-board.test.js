@@ -264,7 +264,7 @@ describe('板书正门（08-27）：set_text 认板书文件，笔权按作者�
     const [cid] = Object.entries(board.objects).find(([id, e]) => id.startsWith('notes/板书/') && e.tag === '正门试');
     await patchBoard(pid, { objects: { [cid]: { by: 'rp-someone' } } });
     const r = await edit({ ops: [{ op: 'set_text', id: cid, text: '主控想代笔' }] });
-    expect(r.content[0].text).toMatch(/笔权/);
+    expect(r.content[0].text).toMatch(/该条归它所有/);
     await patchBoard(pid, { objects: { [cid]: { by: 'agent' } } });
   });
 });
@@ -273,7 +273,7 @@ describe('用户座位放开（08-28 用户拍板"全部放开试试"：冻结 �
   it('⭐ move 用户拖过的东西挪得动，返回注明"原是用户亲手摆的"，seat 转 agent', async () => {
     await patchBoard(pid, { objects: { 'assets/用户摆的.png': { x: 50, y: 50, w: 100, h: 80, seat: 'user' } } });
     const r = await edit({ ops: [{ op: 'move', id: 'assets/用户摆的.png', to: { by: 'assets/a.png', side: 'left' } }] });
-    expect(r.content[0].text).toMatch(/原是用户亲手摆的/);
+    expect(r.content[0].text).toMatch(/原由用户手动设置/);
     const board = await readBoard(pid);
     expect(board.objects['assets/用户摆的.png'].x).not.toBe(50);   // 真挪了
     expect(board.objects['assets/用户摆的.png'].seat).toBe('agent');

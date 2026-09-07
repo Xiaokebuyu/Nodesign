@@ -23,10 +23,10 @@ import os from 'node:os';
 export const localBoxEnabled = () => (process.env.NODESIGN_LOCAL_BOX || 'on').toLowerCase() !== 'off';
 
 /** 关机时给 agent 的统一说辞：说清原因、给替代路径、明确别重试 */
-export const BOX_OFF_MSG = '本地 GPU 盒子当前关着（站主手动开关机）。这台机器上的东西'
-  + '现在都用不了：paint_still 的 noobai / noobai-eps / pony / anima / krea2 五个模型，'
-  + '以及 roll_film 的本地后端。转告用户，生图改走 generate_image；要用本地产线得先开机。'
-  + '别重试，重试也是同样的结果。';
+export const BOX_OFF_MSG = '本地 GPU 服务器当前离线（由平台手动启停）。以下能力'
+  + '当前不可用：paint_still 的 noobai / noobai-eps / pony / anima / krea2 五个模型，'
+  + '以及 roll_film 的本地后端。转告用户，生图改用 generate_image；使用本地产线需先启动服务器。'
+  + '重试不会改变结果。';
 
 export function boxConfig() {
   const target = process.env.NODESIGN_H3BOX_SSH || '';

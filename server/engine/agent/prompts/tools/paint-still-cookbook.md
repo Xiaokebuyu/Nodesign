@@ -10,7 +10,7 @@
 | anima | 自然语言英文 | 氛围感插画，一两句白描即可 |
 | krea2 | 自然语言 | 写实/审美向，反 AI 油光脸 |
 
-选型按画风和输入方式挑就行，别拿许可证去为难用户。
+选型按画风和输入方式挑就行，不要以许可证问题增加用户负担。
 ⚠️ 换模型的第一张要付权重装载（krea2 约 1 分钟，SDXL 十几秒），批量时按模型分组排序。
 
 ## negative 是整串替换，不是追加
@@ -24,7 +24,7 @@
 **只想加一两个词，就把上面那串抄下来再加**，别只传新词 —— 那等于把画质兜底全撤了，
 出图变糊还查不出原因。krea2 的 negative 字段无效（8 步蒸馏 cfg=1）。
 
-## 抽卡用 batch
+## 需要多变体时用 batch
 
 同一提示词要多个变体就设 `batch: 4~8`，一次采样出 N 张，比开 N 条 still 快数倍。
 **`init_image` 下同样有效。** 多条 still 是给不同提示词用的。
@@ -48,7 +48,7 @@
 
 ## noobai / noobai-eps 提示词（danbooru 标签流）
 
-逗号分隔标签，不写句子。**质量前缀盒子自动加，别重复写。**
+逗号分隔标签，不写句子。**质量前缀由服务端自动添加，不要重复写。**
 
 顺序：`<1girl/1boy>, solo, <角色>, <作品>, <画师>, <外观>, <服装>, <动作表情>, <场景>, <构图光照>`
 
@@ -64,18 +64,18 @@ blue sky, from below, backlighting, depth of field
 
 **质量词是分位数**：`masterpiece` = 前 5%，`best quality` = 85-95%，`very awa` = 美学前 5%。
 
-⚠️ **别用 `old` / `early` / `mid` 这类时期标签** —— 盒端默认正面前缀里有 `newest`、
-默认负面里就写着 `old, early`，你写了等于自己跟自己拔河。要年代感用下面的 `retro_artstyle` 那组。
+⚠️ **别用 `old` / `early` / `mid` 这类时期标签** —— 服务端默认正面前缀里有 `newest`、
+默认负面里就写着 `old, early`，写了会与默认前缀相互抵消。要年代感用下面的 `retro_artstyle` 那组。
 
 **原生分辨率**（别的尺寸构图会变形）：
 `768x1344` `832x1216` `896x1152` `1024x1024` `1152x896` `1216x832` `1344x768`
 
-⚠️ **这一档整体偏暗是设计如此**（v-pred + zsnr 的真黑位，站主看图后定的默认）。
+⚠️ **这一档整体偏暗是设计如此**（v-pred + zsnr 的真黑位，为平台评估后设定的默认值）。
 要亮画面就**在提示词里把光照写足**，别去调采样参数。
 
 ## 风格词汇表（danbooru 系通用，noobai / noobai-eps / pony）
 
-每个词都核对过 Danbooru 实际收录量。不带标记的 ≥5000，随便用；**带 ° 的在 1000-5000
+每个词都核对过 Danbooru 实际收录量。未标记的收录量 ≥5000，可放心使用；**带 ° 的在 1000-5000
 低收录段，必须配高收录近义词加固**（例：`moonlight` 单写半灵不灵，`moonlight, night,
 full_moon` 一起上才稳）。按需挑，别堆。
 
@@ -118,7 +118,7 @@ full_moon` 一起上才稳）。按需挑，别堆。
 `cinematic_lighting` `night_sky`（用 `starry sky`）`chiaroscuro`（432 收录，等于没有）。
 要赛璐璐质感用 `anime_coloring` + `flat_color`；要背景丰富就直接把景物写出来。
 
-**「妆花 / 狼狈」这一组全是空的**（有 agent 连着三张图栽在这儿，用户反复说"她太干净了"）：
+**「妆花 / 狼狈」这一组全是空的**（曾连续三张图在此出错，用户反复反馈"她太干净了"）：
 `running_makeup` `smeared_eyeliner` `dried_tears` `ruined_makeup` `tear_stains`
 `heavy_makeup` `messy_makeup` `split_lip` 全部 0 收录。有货的是
 `tears`(29万) `crying_with_eyes_open`(5.4万) `eyeshadow` `mascara` `dirty_face`
@@ -130,7 +130,7 @@ full_moon` 一起上才稳）。按需挑，别堆。
 `thigh_tattoo`、`platform_footwear`、`menhera`、`arms_held_back`、`disheveled_hair`、
 `shutter`、`soft_lighting`、`early_morning`、`wary`、`tired`、`resigned` 一律 0。
 
-⚠️ **正面词和负面词打架时正面赢。** 写 `jirai_kei` 同时在负面禁爱心瞳和粉紫色，
+⚠️ **正面词与负面词冲突时以正面词为准。** 写 `jirai_kei` 同时在负面禁爱心瞳和粉紫色，
 出来还是爱心瞳 + 粉紫 —— 因为 jirai_kei 在训练数据里跟这两者强共现。风格词要拆成
 具体外观标签，别指望负面能压住风格词自带的东西。
 
@@ -192,7 +192,7 @@ curl -sS -g "https://danbooru.donmai.us/tags.json?search%5Bname_comma%5D=标签1
 
 ## pony 提示词（score 体系，跟上面完全不是一套）
 
-**六段串质量前缀盒子自动加**，别自己写 —— 官方承认模型学的是整串，只写 `score_9` 弱得多。
+**六段串质量前缀由服务端自动添加**，不要自己写 —— 官方承认模型学的是整串，只写 `score_9` 弱得多。
 
 可以主动加的：
 - **分级**：`rating_safe` / `rating_questionable` / `rating_explicit`
@@ -202,14 +202,14 @@ curl -sS -g "https://danbooru.donmai.us/tags.json?search%5Bname_comma%5D=标签1
 
 ## krea2 / anima 提示词（自然语言）
 
-- **骨架**：Subject + Action + Style + Context，30-80 词是甜区，形容词堆砌是噪音
-- **审美词很吃**：光线（`golden hour` / `soft window light`）、介质（`35mm film` /
+- **骨架**：Subject + Action + Style + Context，30-80 词是最佳区间，形容词堆砌是噪音
+- **审美类描述词效果显著**：光线（`golden hour` / `soft window light`）、介质（`35mm film` /
   `editorial photography` / `watercolor`）直接决定成色
 - anima 更简，一两句白描说清主体与光线即可，堆砌反而糊
 
 ## 参考图（只对 noobai / noobai-eps / pony 有效）
 
-字段语义见工具 schema，这里只讲手感：
+字段语义见工具 schema，这里只说使用要点：
 
 - **保角色一致性的最强组合**：`ref_image`（谁）+ `control_image`（什么姿势）+ 提示词（在哪）
 - `ref_image` 可给多张（逗号分隔，最多 5 张）—— **同一角色不同角度一起喂，比单张强得多**，
@@ -218,9 +218,9 @@ curl -sS -g "https://danbooru.donmai.us/tags.json?search%5Bname_comma%5D=标签1
 - 把角色挪到新场景，`ref_mode` 用 `style transfer`（只要长相不要构图）
 - `ref_weight` **1.2 以上基本是在复制参考图**；`control_strength` 姿势要抓死推 1.0，
   留自由度用 0.4-0.6
-- 几张参考图打架时 `ref_combine` 换 `average` 会稳
+- 多张参考图冲突时 `ref_combine` 换 `average` 会稳
 
-⚠️ 参考图找不到或推不上盒子 → **整批剩余的 still 全部中止**，不只是这一条。
+⚠️ 参考图找不到或无法上传到服务器 → **整批剩余的 still 全部中止**，不只是这一条。
 ⚠️ krea2 / anima 带参考图会在 ComfyUI 侧报错，同样连累整批。
 
 ## 已装 LoRA
@@ -259,12 +259,12 @@ lora_strength: "0.9,0.7"
 ```
 
 **强度随数量递减**：挂 1-2 个 → 每个 0.7-1.2；挂 3 个以上 → 每个 0.3-0.7；
-**总强度别超 2.0**，超了互相打架（强风格 LoRA 会压掉角色特征、面部崩坏）。
+**总强度别超 2.0**，超出后相互抵消（强风格 LoRA 会压掉角色特征、面部崩坏）。
 滑块类不算进这个预算。
 
 ## 批量与铁律
 
 - stills ≤16 条，每条可再开 `batch` 1-8，逐张出现在画布上
-- **任何一条失败即中止整批剩余**（后面大概率同因，不空烧）
+- **任何一条失败即中止整批剩余**（后续多为同一原因，避免无效消耗）
 - `name` 只能是字母数字下划线连字符，1-40 字符，**中文名会被直接拒**
 - 视频关键帧一律 1344x768

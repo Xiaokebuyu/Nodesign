@@ -52,7 +52,7 @@ export const SHAPES = z.array(z.object({
   ring: z.object({ n: z.number().int().min(2).max(24), cx: z.number().min(-2000).max(2000), cy: z.number().min(-2000).max(2000), upright: z.boolean().optional() }).optional()
     .describe('CIRCULAR ARRAY: n copies around grid point (cx,cy). Draw ONE at its 12-o-clock spot. Default ROTATES each copy (petals, clock marks, top-down chairs facing a table); upright:true keeps them unrotated and just seats them round the circle (side-view things with gravity — tents or people round a fire)'),
   mirror: z.object({ axis: z.enum(['x', 'y']), at: z.number().min(-2000).max(2000) }).optional()
-    .describe("SYMMETRY: adds a mirrored copy across the axis at grid position `at` (axis:'x' = vertical mirror line). Draw half a butterfly, get the whole one"),
+    .describe("SYMMETRY: adds a mirrored copy across the axis at grid position `at` (axis:'x' = vertical mirror line). Draw one half and the mirrored half is generated"),
   scatter: z.object({ n: z.number().int().min(2).max(40), in: z.object({ x: z.number(), y: z.number(), w: z.number().min(1), h: z.number().min(1) }) }).optional()
     .describe('SPRINKLE: n copies at seeded-random spots inside the grid rect, with slight size jitter — a starry sky, grass, pebbles. Same call replays identically'),
 })).max(MAX_SHAPES);

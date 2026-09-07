@@ -34,7 +34,7 @@ function cueRow(m, presetId) {
 export function renderPresetsDoc() {
   const metas = IDS.map(id => [id, readMeta(id)]);
   const out = [];
-  out.push('# 写法预设的模块表（机器从 preset.json 生成，⛔ 别手改；改了 preset.json 就跑 `node server/scripts/gen-presets-doc.mjs`）', '');
+  out.push('# 写法预设的模块表（由 preset.json 自动生成，⛔ 请勿手动修改；修改 preset.json 后执行 `node server/scripts/gen-presets-doc.mjs`）', '');
   out.push('`open_stage.style = { preset, on: [...], off: [...] }`：`on` 在默认勾选之上加开，`off` 关掉。互斥组（★）里开一个，机器自动关掉同组默认的；总是开的组（●）关不掉。',
     '开场页会把你动过的每个开关标成「agent 预选」，玩家能改，改了以他的为准。**他没说的组别动，不传。**', '');
   out.push('## 他说的话 → 该动哪个开关', '', '| 他大概会说 | 动作 |', '|---|---|');

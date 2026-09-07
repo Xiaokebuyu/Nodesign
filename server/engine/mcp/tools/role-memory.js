@@ -55,14 +55,14 @@ you never rewrite history. When you wake up lost, Read your card and this file.`
       // 就 jot，连吃两次「你是主控」，于是它以为自己不是角色 —— 而它没有 Write 权限，
       // 那句指引把它引向一条走不通的路。话术必须说实话，并给一条走得通的出路。
       if (isSlotType(me)) {
-        return fail('你的实例名这会儿还没解析出来（刚上场、还没被点过名），记不进你的记忆文件。'
+        return fail('当前尚未解析出你的实例名（刚进入、尚未被寻址），无法写入你的记忆文件。'
           + '先照常演，下一拍再记；要是一直记不上，让主控用 SendMessage 点你一次。');
       }
       if (!isResidentRole(me)) {
         return fail('只有常驻角色有记忆文件。你是主控 —— 项目记忆走 记忆/ 目录（Write/Edit）。');
       }
       const text = String(args.text || '').trim();
-      if (!text) return fail('空的记不了。');
+      if (!text) return fail('内容为空，无法记录。');
 
       const homeRel = await roleHomeDir(workspaceRoot, me);
       const dir = path.join(workspaceRoot, homeRel);

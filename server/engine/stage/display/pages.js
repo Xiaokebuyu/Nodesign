@@ -17,8 +17,8 @@
     const back = (msg) => { tools.innerHTML = `${msg ? `<span class="muted">${esc(msg)}</span>` : ''}<button class="btn sm" data-act="edit">编辑</button>`; tools.querySelector('[data-act=edit]').onclick = () => editor(card, rel, text, onSaved); };
     tools.querySelector('[data-cancel]').onclick = () => { onSaved(text); back(''); };
     tools.querySelector('[data-save]').onclick = async () => {
-      try { const r = await api.saveFile(rel, ta.value); text = ta.value; onSaved(text); back(r.reopenOnNextLine ? '已保存 · 下一句话到时对方会按新的来' : '已保存'); }
-      catch (err) { ND.flash(`没存上：${err.message}`, true); }
+      try { const r = await api.saveFile(rel, ta.value); text = ta.value; onSaved(text); back(r.reopenOnNextLine ? '已保存 · 下一句话时对方会按新内容执行' : '已保存'); }
+      catch (err) { ND.flash(`保存失败：${err.message}`, true); }
     };
   }
   ND.editor = editor;
@@ -35,7 +35,7 @@
       r.innerHTML = `<div class="page-inner castwrap" id="castwrap" data-open="${this.open ? 1 : 0}"><h2>登场的人<small>${cast.length} 位 · 点一位看设定与记忆</small><span class="tools"><button class="btn sm" id="castFold" ${this.open ? '' : 'hidden'}>收起详情</button></span></h2><div class="castcols"><div class="people wide" id="people"></div><div id="detail" class="detail-col"></div></div></div>`;
       r.querySelector('#castFold').onclick = () => this.close();
       const people = r.querySelector('#people');
-      if (!cast.length) { people.innerHTML = '<p class="muted">还没有人。让 agent 用 cast_role 写卡、open_stage 建故事。</p>'; return; }
+      if (!cast.length) { people.innerHTML = '<p class="muted">暂无角色。请让 agent 用 cast_role 创建角色卡，再用 open_stage 建立故事。</p>'; return; }
       let files = [];
       try { files = (await api.files()).files; } catch { files = []; }
       this.files = files;
@@ -111,7 +111,7 @@
       const home = rel.replace(/\/角色卡\.md$/, '');
       const mine = (this.files || []).filter(f => f.rel.startsWith(`${home}/记忆/`));
       const list = box.querySelector('#pmem');
-      if (!mine.length) { list.innerHTML = '<p class="muted">还没有。她记住了什么，对方会自己写进来。</p>'; return; }
+      if (!mine.length) { list.innerHTML = '<p class="muted">暂无记录。该角色记住的内容会由对方写入。</p>'; return; }
       const items = await Promise.all(mine.map(async (f) => { const { text } = await api.readFile(f.rel); const fm = /^---\n([\s\S]*?)\n---\n?/.exec(text); const get = (k) => new RegExp(`^${k}:\\s*(.+)$`, 'm').exec(fm?.[1] || '')?.[1] || ''; return { name: f.rel.split('/').pop().replace(/\.md$/, ''), type: get('type'), description: get('description'), content: fm ? text.slice(fm[0].length).trim() : text }; }));
       const T = { progress: '进展', character: '态度', thread: '伏笔', world: '设定' };
       list.innerHTML = items.map(i => `<details><summary><span class="t">${esc(T[i.type] || i.type || '')}</span><span class="d">${esc(i.description || i.name)}</span></summary><div class="md">${renderMd(i.content)}</div></details>`).join('');
@@ -163,7 +163,7 @@
       const cfg = store.cfg || {}; const u = store.status.usage; const rules = store.rules; const earned = new Map(store.trophies.map(t => [t.id, t]));
       const r = this.root;
       r.innerHTML = `<div class="page-inner">
-        <section><h2>对方看到的是什么<small>${fmtK(cfg.promptChars || 0)} 字 · 每句话都原样重发，命中缓存几乎不要钱；改一个字整块重付</small></h2>
+        <section><h2>对方看到的是什么<small>${fmtK(cfg.promptChars || 0)} 字 · 每句话原样重发，命中缓存后成本极低；修改任意一字则整块重新计费</small></h2>
           <table class="kv">${(cfg.sources || []).map(s => `<tr><td>${esc(relOf(s) || s)}</td><td class="num"><button class="btn sm" data-open="${esc(relOf(s) || s)}">编辑</button></td></tr>`).join('') || '<tr><td colspan="2" class="muted">进程还没起过，起了才知道拼了哪些文件</td></tr>'}${cfg.styleNames?.length ? `<tr><td>写法 · ${esc(cfg.styleNames.join(' / '))}</td><td class="num"><span class="muted">下面改</span></td></tr>` : ''}</table>
           <p class="muted">设定文件（世界 / 规矩 / 怎么演）+ 每个人的卡（人设 + 他记得的事）+ 这个故事的记忆索引 + 你挑的写法。没有别的。</p></section>
         <section><h2>写法<small>换了之后下一句话到时对方按新的来</small></h2><div id="picker"><p class="muted">读取中…</p></div></section>
@@ -174,7 +174,7 @@
           ${rules.triggers.map(t => `<div class="trig"><div class="when">当 ${condHtml(t.when)} 时${(cfg.firedTriggers || []).includes(t.id) ? '<span class="fired">已触发</span>' : ''}${t.once === false ? '<span class="muted" style="font-size:10.5px;margin-left:6px">每次成立都递</span>' : ''}</div><div class="noteline">${esc(t.note)}</div></div>`).join('') || '<p class="muted">没设推进条件。</p>'}
           <p style="margin-top:8px"><button class="btn sm" id="editRules">编辑规则原文</button></p><div id="rulesSlot"></div></section>
         <section><h2>上一句的开销<small>${u ? `${esc(u.model || '')} · ${(u.durationMs / 1000).toFixed(1)}s` : '还没有'}</small></h2>
-          ${u ? `<table class="kv"><tr><th>上下文长度</th><td class="num">${fmtK(u.context)}</td></tr><tr><th>缓存命中</th><td class="num">${fmtK(u.cacheRead)}（${u.context ? Math.round((u.cacheRead / u.context) * 100) : 0}%）</td></tr><tr><th>新写入缓存</th><td class="num">${fmtK(u.cacheCreate)}</td></tr><tr><th>输出</th><td class="num">${fmtK(u.output)}</td></tr><tr><th>花费</th><td class="num">$${(u.costUsd || 0).toFixed(4)}</td></tr></table>` : '<p class="muted">说一句话之后这里就有数了。</p>'}
+          ${u ? `<table class="kv"><tr><th>上下文长度</th><td class="num">${fmtK(u.context)}</td></tr><tr><th>缓存命中</th><td class="num">${fmtK(u.cacheRead)}（${u.context ? Math.round((u.cacheRead / u.context) * 100) : 0}%）</td></tr><tr><th>新写入缓存</th><td class="num">${fmtK(u.cacheCreate)}</td></tr><tr><th>输出</th><td class="num">${fmtK(u.output)}</td></tr><tr><th>花费</th><td class="num">$${(u.costUsd || 0).toFixed(4)}</td></tr></table>` : '<p class="muted">发送一句话后这里会显示数据。</p>'}
         </section>
         <section><h2>这个故事的文件<small>世界书 / 拆开的预设 / 导入对账 / 记忆正文，对方用到时自己读</small></h2><div id="fileList" class="muted">读取中…</div></section>
         <section id="editorSlot"></section></div>`;

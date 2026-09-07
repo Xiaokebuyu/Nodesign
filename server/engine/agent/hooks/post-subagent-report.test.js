@@ -17,7 +17,7 @@ describe('子代理报告丢失兜底', () => {
     const text = out.hookSpecificOutput.additionalContext;
     expect(text).toMatch(/确实干了活/);
     expect(text).toMatch(/agent-abc\.jsonl/);
-    expect(text).toMatch(/别整轮重派/);
+    expect(text).toMatch(/不要整轮重派/);
     expect(text).toMatch(/16 次工具调用/);
   });
 
@@ -63,7 +63,7 @@ describe('子代理报告丢失兜底', () => {
   it('没有转录路径时不许假装有 —— 改说拆小重派', async () => {
     recordTaskNotification({ tool_use_id: 'tu_6', status: 'stopped', summary: '', usage: { tool_uses: 12 } });
     const text = (await handler(ctxOf('tu_6'))).hookSpecificOutput.additionalContext;
-    expect(text).toMatch(/没有转录路径/);
+    expect(text).toMatch(/没有可用的转录路径/);
     expect(text).toMatch(/拆小/);
   });
 });

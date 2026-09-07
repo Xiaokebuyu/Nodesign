@@ -89,10 +89,10 @@ export function makePostToolUseSubagentReportRecovery() {
         + '返回的错误类型不带 result 字段，最后那条消息会整个丢掉。');
     }
     if (note.outputFile) {
-      lines.push(`完整转录在 \`${note.outputFile}\`。**Read 它把结论捞出来，别整轮重派** ——`
-        + 'token 已经烧掉了，重跑一遍只是再烧一次。转录是 JSONL，从后往前读最快。');
+      lines.push(`完整转录在 \`${note.outputFile}\`。**Read 它取回结论，不要整轮重派** ——`
+        + '相关 token 已消耗，重跑只会再次消耗。转录是 JSONL，从后往前读最快。');
     } else {
-      lines.push('没有转录路径可捞。要重派的话把任务拆小（工具调用轮次少的时候不会丢）。');
+      lines.push('没有可用的转录路径。要重派的话把任务拆小（工具调用轮次少的时候不会丢）。');
     }
     return {
       hookSpecificOutput: {

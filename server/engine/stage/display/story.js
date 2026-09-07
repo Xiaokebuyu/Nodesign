@@ -89,7 +89,7 @@
       const from = Math.max(0, rows.length - this.shown);
       const more = from > 0 ? `<button class="more" data-act="more">查看更早的 ${from} 段</button>` : '';
       inner.innerHTML = (!rows.length && !store.draft && !store.thinking)
-        ? `<div class="empty">${store.cfg ? '还是空的。说一句话，故事就开始了。' : '这里还没有故事。'}</div>`
+        ? `<div class="empty">${store.cfg ? '暂无内容。发送一句话即可开始。' : '这里还没有故事。'}</div>`
         : more + rows.slice(from).map((r, k) => this.beatHtml(r, from + k)).join('');
       inner.appendChild(el('<div class="process" id="process" data-open="auto" hidden><div class="hd">' + ND.markSvg(store.cfg?.brand, 15) + '<b></b><span class="n"></span>' + CHEV + '</div><div class="body"></div></div>'));
       inner.appendChild(el('<article class="beat draft" id="draft" hidden></article>'));
@@ -198,7 +198,7 @@
     async fire(text, check = null) {
       if (!text || store.sending || ND.EMBED) return;
       store.sending = true; this.note(''); this.paintHandles();
-      try { await api.say(text, check); } catch (err) { this.note(`没送出去：${err.message}`, true); }
+      try { await api.say(text, check); } catch (err) { this.note(`发送失败：${err.message}`, true); }
       finally { store.sending = false; this.paintHandles(); }
     },
     note(t, err) { const n = $('note'); if (n) { n.textContent = t || ''; n.className = 'note' + (err ? ' err' : ''); } },
@@ -268,7 +268,7 @@
       else if (what.type === 'text' || what.type === 'thinking' || what.type === 'lore') this.paintProcess();
       else if (what.type === 'turn_end') { this.paintDraft(); this.paintProcess(); this.paintHandles(); }
       else if (what.type === 'status' || what.type === 'panel') { this.paintHandles(); this.paintProcess(); }
-      else if (what.type === 'error') this.note(`出错了：${what.error}`, true);
+      else if (what.type === 'error') this.note(`发生错误：${what.error}`, true);
       else if (what.type === 'hello' || what.type === 'config') { if (ND.needsOpening()) this.mount(this.root); else this.paintAll(); }
     },
   });
