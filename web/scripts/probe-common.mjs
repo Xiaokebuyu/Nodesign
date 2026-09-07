@@ -71,7 +71,9 @@ function authPassword() {
  * @param {string} [o.at]       钉死的时刻，'2026-08-30T13:00:00' 或 '13:00'
  * @param {string} [o.device]   playwright 设备名（真触屏模拟，见 shot-live.mjs 的教训）
  * @param {boolean} [o.login]   是否以 admin 登录（默认 true）
- * @param {boolean|number} [o.freeze] 画够几帧就掐掉 rAF，把动画层定住（比差异的判据必须开）
+ * @param {boolean|number} [o.freeze] 画够几帧就掐掉 rAF，把动画层定住（比差异的判据必须开）。
+ *   ⛔⛔ **它从页面一起来就开始数帧**。页面摆好之后你还要滚动 / 展开 / 注入元素的话，
+ *   那几帧早用完了 —— 见下面 freezeNow() 那段，别用 freeze。
  */
 export async function openProbe(o = {}) {
   const base = o.base || DEFAULT_BASE;
@@ -139,6 +141,20 @@ export async function openProbe(o = {}) {
     // SwiftShader（CPU 在模拟 GPU），再赶上同机在跑测试，单张截图能超过默认的 30s。
     // 截图超时报出来的样子跟"页面坏了"很像，别把它当 bug 查。
     shot: (opts) => page.screenshot({ timeout: 90_000, ...opts }),
+    /**
+     * ⭐⭐ 现在就把动画层定住（此刻之后 rAF 不再排帧）。
+     *
+     * ⛔⛔ `freeze: n` 是**从页面一起来就开始数帧**的，而"页面摆成你要量的样子"
+     * 往往发生在那之后。09-07 拿它量首页：`goto` → freeze 的 16 帧用完 → 才滚到 180。
+     * 光源层从此不再画，**遮挡图停在滚动前的位置**，屏幕上于是出现一块纸还在上面时
+     * 的影子 —— 它的边正好绕着「开工」按钮走，站主当成站点的 bug 报了上来，
+     * 我也差点跟着去改一个不存在的东西。三格并排（开 freeze / 不开 / 不开且藏掉那一层）
+     * 才把它判死。
+     *
+     * 规矩：**先把页面摆成最终样子，再定住。** 要滚动 / 要 hover / 要注入元素的判据，
+     * 一律 `openProbe({ ... })` 不带 freeze，摆好之后调这个。
+     */
+    async freezeNow() { await page.evaluate(() => { window.requestAnimationFrame = () => 0; }); },
     async close() { await browser.close(); },
   };
 }
