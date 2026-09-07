@@ -337,3 +337,84 @@ describe('影子的行进契约', () => {
     expect(div).toBeLessThan(n * 0.5);
   });
 });
+
+describe('画框遮罩：这一层别往界面外壳脸上画', () => {
+  /** 顶层里读遮罩、整段让开的那一笔 */
+  const guard = () => {
+    const line = code(GLSL).split('\n').find((l) => /texture2D\(uOccl,\s*vUv\)\.b/.test(l));
+    expect(line, '着色器里找不到读画框遮罩（uOccl 的 b 通道）的那一行').toBeTruthy();
+    return line;
+  };
+
+  it('⭐⭐⭐ 顶层遇到画框就整段让开 —— 这是「顶栏半透明」那一族的正解', () => {
+    // 站主 09-06 报「模型选择器半透明」、09-07 报「顶栏半透明」，同一件事：
+    // 这一层铺满视口压在 z<950 的一切之上，却只认识桌上的纸。
+    // ⛔ 从前的修法是把组件的 z 抬到 950 之上，那是在名单外面再补名单。
+    const g = guard();
+    expect(g, '让开这件事只该发生在顶层：底层在纸底下，画了也看不见').toMatch(/uOver\s*>\s*0\.5/);
+    expect(g, '没有遮挡图时不能去读那张纹理').toMatch(/uHasOccl\s*>\s*0\.5/);
+  });
+
+  it('⭐⭐ 让开之后只留一层**均匀**的夜色 —— 台灯的梯度正是「膜」的线索', () => {
+    // 实测顶栏那条带子夜里被这一层画了均值 70.5 灰阶，而且左 104 右 66 是台灯的
+    // 光池梯度。一块不透明的横条身上不该有桌灯的梯度。
+    const src = code(GLSL);
+    const body = src.slice(src.indexOf(guard()));
+    const assign = body.slice(0, body.indexOf('\n', body.indexOf('acc =')) + 1);
+    expect(assign, '画框那一笔要用 uNight × 一个常数，不能掺进 pool/cast/tint').toMatch(/uNight\s*\*\s*CHROME_NIGHT/);
+    for (const bad of ['pool', 'core', 'uTint', 'sh ', 'leaf']) {
+      expect(assign, `画框那一笔掺进了 ${bad} —— 那就又有梯度了`).not.toContain(bad);
+    }
+  });
+
+  it('⭐⭐⭐ castShadow 一眼都不看画框那一位 —— 它是遮罩不是几何', () => {
+    // ⛔ 第一版把顶栏当**遮挡物**写进高度通道（跟 09-02 那次同一个做法）：顶栏底下
+    //   压着的那半截输入纸被从几何里抹掉，夜里台面上的影子整片改向（实测台面
+    //   均值差 4.07 灰阶、23% 的像素）。物理上顶栏是挡在你和桌子之间的画框，
+    //   不参与光路 —— 纸照旧投影，只是被框子挡住的那一截你看不见。
+    const src = code(GLSL);
+    const fn = src.slice(src.indexOf('float castShadow'), src.indexOf('vec4 lay('));
+    expect(fn, '⛔ castShadow 读了 o.b：顶栏底下那半截纸会停止投影').not.toMatch(/o\.b|\.b\s*\)/);
+  });
+});
+
+describe('常驻的界面外壳：要么爬到光源层之上，要么进遮罩', () => {
+  /*
+   * ⭐⭐ 这条 lint 是「修了数次皆有遗留」的解药。
+   *
+   * 遗留是这么来的：光源层顶层压在 z<950 的一切之上，而修法一直是把**那一个**
+   * 组件的 z 抬上去（Modal 800→960、Popover→9600）。名单在人脑子里，新组件默认
+   * 还在底下，于是下一个组件又是一次「半透明」。
+   *
+   * 长在滚动区外面的那些（顶栏）由遮挡图自动收；这条管的是另一半 ——
+   * **App.jsx 里跟路由并排挂着、每一页都在的那几个**，它们浮在台面上方。
+   */
+  const SRC = path.join(HERE, '..');
+  const APP = fs.readFileSync(path.join(SRC, 'App.jsx'), 'utf8');
+  /** 光源层顶层的 z（home-sun.js 那条 .ndd-canopy.over） */
+  const CANOPY_Z = 950;
+
+  /** App.jsx 里跟 <RouterProvider> 并排挂着的那些 */
+  function alwaysOn() {
+    const tail = APP.slice(APP.indexOf('<RouterProvider'));
+    return [...tail.matchAll(/<([A-Z]\w+)\s*\/>/g)].map((m) => m[1]).map((name) => {
+      const imp = APP.match(new RegExp(`import ${name} from '([^']+)'`));
+      expect(imp, `App.jsx 里找不到 ${name} 的 import`).toBeTruthy();
+      return { name, src: fs.readFileSync(path.join(SRC, imp[1]), 'utf8') };
+    });
+  }
+
+  it('⭐⭐⭐ 常驻外壳里凡是 z 低于光源层的，都得带 data-nd-chrome', () => {
+    const list = alwaysOn();
+    // ⛔ 解析不出来就等于这条 lint 没跑（假绿），先把这件事钉住
+    expect(list.map((c) => c.name), '常驻外壳一个都没解析出来').toContain('QuotaBanner');
+    for (const { name, src } of list) {
+      const low = [...src.matchAll(/zIndex:\s*(\d+)/g)].map((m) => Number(m[1])).filter((z) => z < CANOPY_Z);
+      if (!low.length) continue;
+      expect(src, `${name} 浮在台面上方而 z=${low.join('/')} 低于光源层 ${CANOPY_Z}：`
+        + '它会被那一层当成桌面，纸的影子和台灯的光池画到它身上，读起来是半透明的。'
+        + '要么把 z 抬到光源层之上，要么给它的根节点加 data-nd-chrome'
+        + '（见 routes/home-occluders.js 的 CHROME）').toContain('data-nd-chrome');
+    }
+  });
+});

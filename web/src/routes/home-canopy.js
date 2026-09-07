@@ -287,7 +287,9 @@ export function mountCanopy({ under, over, getLight, still = false }) {
   // 封顶 780 是为了超宽屏 —— 再宽也不该多花钱。
   const SCALE = 0.42, CAP = 780;
   // 遮挡图跟光源层同一个内部分辨率 —— uv 要一一对上，差一点影子就错位
-  const occl = makeOccluders(1, 1);
+  // ⭐ 把台面交给遮挡图：它据此把**滚动区外面那一圈**（顶栏就在那儿）画成
+  //   界面外壳，这一层于是不再往顶栏脸上画影子和光。见 home-occluders.js 的 CHROME。
+  const occl = makeOccluders(1, 1, { host: over?.parentElement || null });
   function fit() {
     const w = Math.max(1, Math.round(Math.min(window.innerWidth * SCALE, CAP)));
     const h = Math.max(1, Math.round(w * (window.innerHeight / Math.max(window.innerWidth, 1))));

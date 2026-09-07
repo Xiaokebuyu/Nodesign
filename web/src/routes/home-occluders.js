@@ -1,5 +1,12 @@
 /**
- * 遮挡图 —— 让光源层知道桌上摆着哪些纸（2026-09-01）。
+ * 遮挡图 —— 让光源层知道桌上摆着哪些纸（2026-09-01），
+ * 以及**屏幕上哪一块根本不是桌子**（画框遮罩，2026-09-07，见文件末 CHROME 那段）。
+ *
+ * 一张 RGBA 纹理装两样东西：
+ *   `r` `g` `a` = 几何（纸有多高 / 是不是松动的那张 / 淡到什么程度）
+ *   `b`         = **画框遮罩**：这一格是界面外壳，光源层的顶层别往这儿画
+ *
+ * ⭐ 两样东西彼此独立，这一点是修 09-07 那个毛病的关键 —— 详见 CHROME。
  *
  * ## ⭐⭐ 为什么要有这一层
  *
@@ -87,11 +94,11 @@ export const OCCLUDERS = [
   //   投的那一小截几乎没变。
   //   ⚠️ 仍然分两条写、不合成一条：合成一条后第二片的抖动下标是 2，会比纸还高。
   ['.ndd-stack > .nd-tabs > *:not(.on)', 2.2],
-  // ⛔ **顶栏不进这张表。** 09-02 试过一版：它确实挡着光却不投影，读起来是透明的，
-  //   但补上影子之后更糟。顶栏不是桌上的一张纸，是画框的边。影子值钱是因为它表达
-  //   **会动的东西之间的关系**（卡片抬起来、纸叠在纸上、太阳转过去）；顶栏钉死不动，
-  //   它的影子是一条恒定的横带，不携带任何信息，却是整页最重的一笔
-  //   （实测紧贴下沿 148 对 216，落差 68，比任何一张卡都狠），还正好压在输入纸上沿。
+  // ⛔ **顶栏不进这张表。** 09-02 试过一版：补上影子之后更糟 —— 顶栏钉死不动，
+  //   它的影子是一条恒定的横带，不携带任何信息，却是整页最重的一笔（实测紧贴下沿
+  //   148 对 216，落差 68，比任何一张卡都狠），还正好压在输入纸上沿。
+  //   ⭐⭐⭐ 那一版真正错的地方是**进错了表**：顶栏要的从来不是「几何」，是
+  //   「这一层别往我脸上画」。09-07 起它走 CHROME 那张遮罩，见文件末。
 ];
 /** 高度编码进红色通道时的满量程 */
 const H_MAX = 4;
@@ -109,14 +116,114 @@ function matrixOf(str) {
 }
 
 /**
+ * ⭐⭐⭐ 画框遮罩（CHROME）—— 屏幕上**不是桌子**的那一块（2026-09-07）。
+ *
+ * ## 修的是哪一族毛病
+ *
+ * 光源层的顶层（`.ndd-canopy.over`）是一块**铺满整个视口**、z-index 950 的画布，
+ * 它压在 z 比它低的**一切**之上；而它判断「这一格该画什么」只有这张图一个依据。
+ * 图里从前只有「桌上的纸」，于是顶栏（z 3）、额度横幅（z 90）、09-06 之前的
+ * 弹窗（z 800）在它眼里全是**桌面**：纸的影子投上去、台灯的光池铺上去、
+ * 时段色偏染上去。一块不透明的横条身上盖着一层带梯度的光，读起来就是
+ * 「它是半透明的」——
+ *   站主 09-06 报「选到带锁模型的提示框半透明」、09-07 报「顶栏半透明」，
+ *   是同一件事的两次。
+ *
+ * 实测（exp 首页、钉死 22:00、藏掉 over 层做 A/B）：顶栏那条带子上被这一层画了
+ * **均值 70.5 灰阶**，而且从左到右 104 → 66 是一条**梯度** —— 那是台灯的光池。
+ * 一块不透明的横条身上不该有桌灯的梯度，这就是「膜」的铁证。
+ * （白天 13:00 那一发是 0 —— 但黄昏 17:30 是 6.24 灰阶的暖色时段色偏，
+ *   所以「只有夜里才有」也不对，只是夜里最刺眼。）
+ *
+ * ⭐ 怎么复量（仓库自带的尺子，不用另写脚本）：
+ *     node web/scripts/lens.mjs ab --hide=.ndd-canopy.over --at=22:00 --crop=0,0,1440,56
+ *   `--crop` 那一条就是顶栏。差异的**形状**比均值值钱：一层均匀的偏移只是"暗了"，
+ *   一条从左到右的梯度才是"这块横条是半透明的"。
+ *
+ * 从前每次都是把那**一个**组件的 z 抬到 950 之上（Modal 800→960、Popover→9600）。
+ * 那是在名单外面再补一张名单：新组件默认还在 950 底下，所以站主说
+ * 「之前修过数次，皆有遗留」。这里换成一条正面的规则：
+ * **屏幕上哪一块不是桌子，这张图自己说得清。**
+ *
+ * ## ⭐⭐⭐ 它是遮罩，不是遮挡物 —— 这一条是全部的关键
+ *
+ * 第一版把顶栏当**遮挡物**写进高度通道（跟 09-02 那次一样的做法），当场量出
+ * 台面那一大片跟着变了（夜里均值 4.07 灰阶、23% 的像素）：顶栏底下压着输入纸的
+ * 上半截，写高度就把那半截**从几何里抹掉**了，于是夜里台灯投出来的影子整片改向。
+ *
+ * 物理上也说不通：顶栏是**挡在你和桌子之间**的画框，不是压在纸上的另一张纸。
+ * 它不参与光路 —— 纸照旧投它的影子，只是被框子挡住的那一截你看不见而已。
+ * 所以它只该说一件事：「这一格别往上画」。
+ *
+ * 落地：`b` 通道，用 `lighten` 合成画上去 —— 逐通道取大值，只把 b 抬到 255，
+ * **r/g/a 一个都不动**（纸的几何原样留着）。着色器只在顶层读这一位，读到就整段
+ * 让开，只留一层**均匀**的夜色：屋里黑了画框跟着黑，但画框上没有桌灯的梯度、
+ * 也接不到纸的影子。castShadow 完全不看这一位 —— 画框不投影是因为它压根没有高度。
+ *
+ * ## 两个来源
+ *
+ *   自动  台面所在滚动区**外面**那一圈（顶栏就长在那儿）。这一半是**默认正确**的：
+ *         以后任何长在滚动区外面的横条都不用谁记得去登记。
+ *   登记  浮在台面**上方**、z 又没爬过 950 的那些，自己带 `data-nd-chrome`
+ *         （现在只有额度横幅一个）。爬过 950 的（Modal 960 / Popover 9600 /
+ *         toast 1000）本来就在这一层之上，不用管。
+ */
+const CHROME_SEL = '[data-nd-chrome]';
+
+/**
+ * 台面那块屏幕是谁在滚 —— 最近的那个滚动祖先。
+ *
+ * ⭐ 首页滚的从来不是 window，是 AppShell 里顶栏底下那个 `overflow:auto` 的 div
+ *   （顶栏在它**外面**，所以「滑着滑着顶栏没了」这件事不会发生）。它的可视矩形
+ *   就是桌面那块屏幕，外面那一圈按定义是画框。
+ */
+export function deskScrollerOf(el) {
+  for (let p = el?.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(p).overflowY)) return p;
+  }
+  return null;
+}
+
+/**
  * 开一张遮挡图。
  *
  * @param {number} w 内部分辨率，跟光源层那两块画布一样（uv 才对得上）
  * @param {number} h
+ * @param {object} [o]
+ * @param {Element} [o.host] 台面（`.ndd`）。给了就自动把它所在滚动区**外面**那一圈
+ *   画进画框遮罩 —— 顶栏是这么进来的，不用谁去登记。见上面 CHROME 那段。
  */
-export function makeOccluders(w, h) {
+export function makeOccluders(w, h, { host = null } = {}) {
   let lastSig = NaN;
   let version = 0;
+  /** 缓存滚动祖先：找它要走 getComputedStyle，不能每帧走一遍 */
+  let scroller = null, scrollerKnown = false;
+  /** 画框那几条：滚动区外面的一圈 + 登记进来的那些，视口像素 */
+  function chromeRects() {
+    const vw = window.innerWidth || 1;
+    const vh = window.innerHeight || 1;
+    const out = [];
+    if (host) {
+      if (!scrollerKnown || (scroller && !scroller.isConnected)) {
+        scroller = deskScrollerOf(host);
+        scrollerKnown = true;
+      }
+      if (scroller) {
+        const b = scroller.getBoundingClientRect();
+        out.push(
+          [0, 0, vw, b.top],                       // 顶栏那条
+          [0, b.bottom, vw, vh - b.bottom],
+          [0, b.top, b.left, b.bottom - b.top],
+          [b.right, b.top, vw - b.right, b.bottom - b.top],
+        );
+      }
+    }
+    for (const el of document.querySelectorAll(CHROME_SEL)) {
+      const b = el.getBoundingClientRect();
+      out.push([b.left, b.top, b.width, b.height]);
+    }
+    return out.filter(([, , bw, bh]) => bw >= 1 && bh >= 1);
+  }
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const g = canvas.getContext('2d', { willReadFrequently: false });
@@ -124,10 +231,11 @@ export function makeOccluders(w, h) {
   return {
     canvas,
     resize(nw, nh) {
-      if (canvas.width !== nw || canvas.height !== nh) { canvas.width = nw; canvas.height = nh; lastSig = NaN; }
+      if (canvas.width !== nw || canvas.height !== nh) { canvas.width = nw; canvas.height = nh; lastSig = NaN; scrollerKnown = false; }
     },
     /**
-     * 重画一遍。返回 `{ n, version }`：n 是这一帧有几张纸（一张都没有时着色器整段跳过），
+     * 重画一遍。返回 `{ n, version }`：n 是这一帧画了几笔（纸 + 画框遮罩；
+     * 一笔都没有时着色器整段跳过 uOccl），
      * version 只在**画面真的变了**的时候才加一。
      *
      * ⭐⭐ version 是为了省掉纹理上传。实测每帧都传一张 605x378 的 RGBA（915KB）
@@ -190,7 +298,11 @@ export function makeOccluders(w, h) {
           seen.push([b, h, i, rot, ow, oh, alpha, loose]);
         }
       }
-      if (sig === lastSig) return { n: seen.length, version };
+      // ⭐ 画框也进签名：顶栏高度变了（窄屏那条 44 / 桌面 56）、横幅来了走了，
+      //   遮罩跟着变，那一帧就得重画重传。
+      const chrome = chromeRects();
+      for (const r of chrome) for (const v of r) sig = (sig * 31 + Math.round(v * 2)) | 0;
+      if (sig === lastSig) return { n: seen.length + chrome.length, version };
       lastSig = sig;
       version += 1;
 
@@ -223,6 +335,16 @@ export function makeOccluders(w, h) {
           g.fillRect(b.left * kx, b.top * ky, b.width * kx, b.height * ky);
         }
         n += 1;
+      }
+      // ⭐⭐⭐ 画框遮罩最后画，而且用 `lighten`：逐通道取大值，只把 b 抬到 255，
+      //   **r/g/a 一个都不动**。纸的几何原样留着 —— 顶栏底下压着的那半截输入纸
+      //   照旧投它的影子（第一版拿高度通道去写，把那半截从几何里抹掉了，夜里台面
+      //   的影子整片改向，实测均值差 4.07 灰阶）。见 CHROME 那段。
+      if (chrome.length) {
+        g.globalCompositeOperation = 'lighten';
+        g.fillStyle = 'rgba(0,0,255,1)';
+        for (const [x, y, bw, bh] of chrome) { g.fillRect(x * kx, y * ky, bw * kx, bh * ky); n += 1; }
+        g.globalCompositeOperation = 'source-over';
       }
       return { n, version };
     },

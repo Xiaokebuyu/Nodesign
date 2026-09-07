@@ -132,12 +132,18 @@ export default function QuotaBanner() {
   if (banners.length === 0) return null;
 
   return (
-    <div style={{
-      position: 'fixed', top: 8, left: '50%', transform: 'translateX(-50%)',
-      zIndex: 90,
-      display: 'flex', flexDirection: 'column', gap: GAP.sm,
-      maxWidth: 'min(560px, calc(100vw - 32px))',
-    }}>
+    <div
+      /* ⭐ 这条横幅浮在台面上方，z 90 又在首页光源层（950）底下 —— 不打这个标记的话
+         它会被那一层当成桌面：纸的影子和台灯的光池会画到它身上，读起来是半透明的
+         （跟顶栏同病，见 routes/home-occluders.js 的 CHROME）。 */
+      data-nd-chrome=""
+      style={{
+        position: 'fixed', top: 8, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 90,
+        display: 'flex', flexDirection: 'column', gap: GAP.sm,
+        maxWidth: 'min(560px, calc(100vw - 32px))',
+      }}
+    >
       {/* 一次性下滑入场。不循环 —— 持续动效换不来注意力，只换来烦躁 */}
       <style>{'@keyframes nd-banner-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}'}</style>
       {banners.map((b) => (

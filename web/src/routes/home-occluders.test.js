@@ -11,14 +11,23 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { makeOccluders } from './home-occluders.js';
 
-let calls, styles;
+let calls, styles, op;
 beforeEach(() => {
   calls = [];
   styles = new Map();
+  op = 'source-over';
   vi.spyOn(window.HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
     clearRect() {}, save() {}, restore() {}, translate() {}, rotate() {},
-    set fillStyle(v) { calls.push({ fill: v }); },
-    fillRect(x, y, w, h) { calls[calls.length - 1].rect = [x, y, w, h]; },
+    set fillStyle(v) { calls.push({ fill: v, op }); },
+    // ⭐ 合成方式也记下来：画框遮罩靠 `lighten` 才能只抬蓝色通道而不动纸的几何，
+    //   记不下来的话「用没用对合成方式」就没有判据（见 home-occluders.js 的 CHROME）。
+    set globalCompositeOperation(v) { op = v; },
+    // 一支笔画多个矩形（画框那一遍就是）：每个矩形各记一笔，别互相覆盖
+    fillRect(x, y, w, h) {
+      let e = calls[calls.length - 1];
+      if (e.rect) { e = { fill: e.fill, op: e.op }; calls.push(e); }
+      e.rect = [x, y, w, h];
+    },
   });
   vi.stubGlobal('getComputedStyle', (el) => styles.get(el) || { transform: 'none', opacity: '1' });
   Object.defineProperty(window, 'innerWidth', { value: 1000, configurable: true });
@@ -146,4 +155,74 @@ it('比纸矮的东西叠在纸里的那一条归纸：矮的先画', () => {
   paint();
   const fills = calls.map((c) => ({ h: red(c.fill), wide: Math.abs(c.rect[2]) > 100 }));
   expect(fills[0].h).toBeLessThan(fills[fills.length - 1].h);   // 卡片（1.0）第一笔，纸（2.2）在后
+});
+
+// ── 画框遮罩（CHROME）────────────────────────────────────────────
+/**
+ * 造一个真实形状的外壳：顶栏一条 + 底下那个 overflow:auto 的滚动容器 + 台面。
+ * 首页就是这个形状（AppShell 的非 overlayTop 那条），顶栏长在滚动区**外面**。
+ */
+function shell({ barH = 56, vw = 1000, vh = 800 } = {}) {
+  const host = box('nd-shell', { bbox: { left: 0, top: 0, width: vw, height: vh } });
+  const scroll = box('scroll', { parent: host, bbox: { left: 0, top: barH, width: vw, height: vh - barH } });
+  styles.set(scroll, { transform: 'none', opacity: '1', overflowY: 'auto' });
+  return box('ndd', { parent: scroll, bbox: { left: 0, top: barH, width: vw, height: 3000 } });
+}
+/** 画框那几笔（蓝色通道，lighten） */
+const chromeCalls = () => calls.filter((c) => c.op === 'lighten');
+
+it('⭐⭐⭐ 顶栏那条带子自动进画框遮罩 —— 长在滚动区外面的东西不用谁去登记', () => {
+  const ndd = shell({ barH: 56 });
+  makeOccluders(500, 400, { host: ndd }).update();
+  const band = chromeCalls().find((c) => c.rect[3] > 0 && c.rect[1] === 0 && c.rect[2] === 500);
+  expect(band, '滚动区上面那条（顶栏）没进遮罩').toBeTruthy();
+  // 视口 1000x800 画进 500x400，顶栏 56 → 28
+  expect(band.rect).toEqual([0, 0, 500, 28]);
+  expect(band.fill, '遮罩要打在蓝色通道上').toMatch(/rgba\(0,0,255,1\)/);
+});
+
+it('⭐⭐⭐ 遮罩不动几何：顶栏底下压着的那半截纸，红/绿/alpha 一个都没被改', () => {
+  // ⛔ 这是第一版的病：把顶栏当遮挡物写进**高度通道**，顶栏底下那半截输入纸
+  //   就被从几何里抹掉了 —— 夜里台灯投出来的影子整片改向（实测台面均值差 4.07
+  //   灰阶、23% 的像素）。物理上顶栏是挡在你和桌子之间的画框，不参与光路。
+  const ndd = shell({ barH: 56 });
+  // 一叠输入纸，上半截滚进顶栏底下（top 为负）
+  box('ndd-pad', { parent: ndd, bbox: { left: 200, top: -40, width: 600, height: 200 } });
+  makeOccluders(500, 400, { host: ndd }).update();
+  const pad = calls.find((c) => c.op !== 'lighten' && Math.abs(c.rect[2]) > 100);
+  expect(pad, '纸没画进去').toBeTruthy();
+  expect(pad.rect, '纸的矩形被顶栏截掉了').toEqual([100, -20, 300, 100]);
+  expect(alpha(pad.fill)).toBe(1);
+  expect(red(pad.fill), '纸的高度被改了').toBeGreaterThan(0);
+  // 画框必须**最后**画：先画的话纸会把蓝色通道盖回 0
+  const lastPaper = calls.findLastIndex((c) => c.op !== 'lighten');
+  const firstChrome = calls.findIndex((c) => c.op === 'lighten');
+  expect(firstChrome, '画框要在所有纸之后画').toBeGreaterThan(lastPaper);
+});
+
+it('浮在台面上方、z 又没爬过光源层的那些，带 data-nd-chrome 就进遮罩', () => {
+  const ndd = shell();
+  const banner = box('banner', { parent: ndd, bbox: { left: 220, top: 8, width: 560, height: 48 } });
+  banner.setAttribute('data-nd-chrome', '');
+  makeOccluders(500, 400, { host: ndd }).update();
+  const hit = chromeCalls().find((c) => c.rect[2] === 280);
+  expect(hit, '横幅没进遮罩').toBeTruthy();
+  expect(hit.rect).toEqual([110, 4, 280, 24]);
+});
+
+it('顶栏高度变了，版本号得跟着变，否则遮罩不会重传', () => {
+  // ⚠️ 同族教训：签名漏了哪一项，那一项改了画面就不重画（遮挡图这边栽过一次）
+  const ndd = shell({ barH: 56 });
+  const occl = makeOccluders(500, 400, { host: ndd });
+  const a = occl.update();
+  expect(occl.update().version, '什么都没动却重画了').toBe(a.version);
+  const scroll = ndd.parentElement;
+  scroll.getBoundingClientRect = () => ({ left: 0, top: 44, width: 1000, height: 756, right: 1000, bottom: 800 });
+  expect(occl.update().version, '顶栏矮了 12px，遮罩没跟着变').toBeGreaterThan(a.version);
+});
+
+it('没有台面（host 没给）时一笔遮罩都不画 —— 别的页面不受这条影响', () => {
+  desk();
+  makeOccluders(500, 400).update();
+  expect(chromeCalls()).toHaveLength(0);
 });
