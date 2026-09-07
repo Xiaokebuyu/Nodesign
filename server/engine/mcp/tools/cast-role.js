@@ -11,7 +11,8 @@
  *
  * 新语义：角色卡是**数据**，子代理是**预注册的演员位**（rp-actor / rp-narrator，
  * 建项目时就落盘，见 cast.js slotAgentFile）。cast_role 只做两件事：
- *   1. 把人设写成 `角色/<名>/角色卡.md`（用户在画布上看得见、随时能改的文件夹范式）
+ *   1. 把人设写成 `角色/<名>/角色卡.md`（用户在画布上看得见、随时能改的文件夹范式）。
+ *      落在哪个 `角色/` 见 card.rolesDirFor：工作区里正好只有一场戏就写进那场戏里，否则写工作区根上
  *   2. 在 `.nd/cast.json` 登记 slug → 展示名/笔权/卡路径（板书署名与名册 API 的展示源）
  * 写完**当回合就能派**：Agent(subagent_type: 演员位, name: "rp-<id>", prompt: 卡)。
  *
@@ -105,7 +106,9 @@ rewriting it.`,
       // 卡落盘：角色/<名>/角色卡.md（文件夹范式：这个文件夹就是该角色的家，
       // 之后的记忆/日记等件都住这里；用户随时可改，改动对"下次派发/唤醒后重读卡"生效）
       const folder = folderNameFor(displayName, slug);
-      // 工作区里只有一个故事时卡直接写进它的文件夹（故事自成一体）；否则写根上的 角色/，open_stage 开始时搬
+      // 工作区里只有一个故事时卡直接写进它的文件夹（故事自成一体）；否则写根上的 角色/。
+      // ⛔ 根上那份**不会被搬进故事文件夹**（09-07 核过：adoptRootDirs 只搬 世界书/ 和 预设/）——
+      // 它是共用角色库，open_stage 按名字引用得到，多场戏可以共用同一张卡
       const rolesRel = await rolesDirFor(workspaceRoot);
       const dir = path.join(workspaceRoot, rolesRel, folder);
       const file = path.join(dir, '角色卡.md');

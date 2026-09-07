@@ -43,7 +43,11 @@ export const STATE_TABLE_TAG = '状态表';
 export const VALUE_MAX = 120;
 /** 键的上限与字符集：键要能当标识符用（将来触发器按它寻址），别收任意文本 */
 export const KEY_MAX = 40;
-const KEY_RE = /^[\p{L}\p{N}_][\p{L}\p{N}_·-]{0,39}$/u;
+/** 导出给 open_stage 的成就 / 触发器 id 共用（09-07）：同一个系统里「能当标识符的名字」只该有一条口径，
+ *  状态键收中文而成就 id 只收 ASCII，agent 没法从一处推另一处（问题库两条 open_stage 校验失败都是中文 id） */
+export const KEY_RE = /^[\p{L}\p{N}_][\p{L}\p{N}_·-]{0,39}$/u;
+/** 上面那条字符集的人话，工具描述与报错共用一份，别各写各的 */
+export const KEY_CHARSET_TEXT = '字母数字、中文、下划线、连字符、间隔号，不能以连字符开头，最多 40 字';
 
 /**
  * 剥掉围栏块再找表。
@@ -143,7 +147,7 @@ export function validateKey(k) {
   const s = String(k ?? '').trim();
   if (!s) return '键是空的';
   if (s.length > KEY_MAX) return `键「${s.slice(0, 12)}…」超过 ${KEY_MAX} 字`;
-  if (!KEY_RE.test(s)) return `键「${s}」含不能用的字符（只收字母数字、中文、下划线、连字符、间隔号，且不能以连字符开头）`;
+  if (!KEY_RE.test(s)) return `键「${s}」含不能用的字符（只收${KEY_CHARSET_TEXT}）`;
   return null;
 }
 

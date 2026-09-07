@@ -71,7 +71,7 @@ export async function bindSessionUpstream({ sessionId, model, ownerId, emit }) {
     // 而不是静默烧站主的订阅。owner 为空（无主项目；生产 08-21 实查 0 个）也 fail-closed。
     const owner = ownerId ? getUserById(ownerId) : null;
     if (!can(owner, 'subscription')) {
-      throw new Error(`订阅通路资格不足：项目 owner=${ownerId || '(无)'} 档位不含 subscription，模型=${model}`);
+      throw Object.assign(new Error(`订阅通路资格不足：项目 owner=${ownerId || '(无)'} 档位不含 subscription，模型=${model}`), { status: 403 });
     }
     out.baseUrl = process.env.ANTHROPIC_BASE_URL;
     out.apiKey = process.env.ANTHROPIC_API_KEY;
@@ -87,7 +87,8 @@ async function bindSessionToRelay(sessionId, appModel, route) {
   try {
     await openRelaySession(sessionId, appModel);
   } catch (err) {
-    throw new Error(`站主服务不让这个会话开始（${err.code || 'RELAY'}）：${err.message}`);
+    // status 给调用方用（api/stage.js 直接当 HTTP 码回）：relay 那头的判决属于上游不可用，不是本地参数错
+    throw Object.assign(new Error(`站主服务不让这个会话开始（${err.code || 'RELAY'}）：${err.message}`), { status: 502 });
   }
   return {
     relaySid: sessionId,

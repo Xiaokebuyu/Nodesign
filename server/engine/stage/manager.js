@@ -61,8 +61,8 @@ import { getBuiltinPluginsRoot } from '../agent/plugin-loader.js';
 import { defaultModel } from '../agent/session-model.js';
 import { brandOfModel } from '../agent/model-context.js';
 import { resolveSdkSpoofModel, pickThinkingConfig } from '../agent/model-context.js';
-import { buildEnv } from './env.js';
-import { unregisterIngressSession } from '../../lib/model-ingress.js';
+import { buildEnv, releaseUpstream } from './env.js';
+import { assertSayAllowed } from './gates.js';
 import { AgentContext, freshTurnCounters } from '../agent/context.js';
 import { createRun, markRunStarted, markRunSucceeded, markRunFailed, setRunMetrics, setRunModelUsage } from '../runs/store.js';
 import { getUserById } from '../../auth/users-store.js';
@@ -85,7 +85,7 @@ class StageRuntime {
     this.playAbs = path.join(this.wsRoot, root);
     this.session = null;
     this.sdkSid = null;
-    this.ingressRegistered = false;
+    this.bound = null;          // bindSessionUpstream 的回执（配对注销用，见 env.releaseUpstream）
     this.ctx = null;
     this.pendingRuns = [];
     this.subscribers = new Set();
@@ -187,6 +187,9 @@ async function cardOptionsOf(rt, cfg) {
  * 09-06 之前这里是 `defaultModel()`（NODESIGN_MODEL 的订阅行）：basic 用户开场页看到的"当前"是一条 locked 的
  * Sonnet，点开始就吃 403 —— 显示器读到的默认必须是这个账号真选得到的那条。查不到 owner 才退回全局默认。
  */
+/** 这场戏实际会用哪个模型：配置里挑过的 > 该 owner 在演出面的默认。起进程和外审闸共用一份，别各算各的 */
+export const modelOfConfig = (pid, stored) => stored.model || stageDefaultModel(pid);
+
 export function stageDefaultModel(pid) {
   const owner = getProject(pid)?.ownerId ? getUserById(getProject(pid).ownerId) : null;
   return (owner && defaultModelFor(owner, { scope: 'stage' })) || defaultModel();
@@ -217,70 +220,6 @@ async function sourcesChanged(rt) {
   return null;
 }
 
-// ───────────────────────────── 建故事 ─────────────────────────────
-
-/**
- * 建一个故事（open_stage 那条路）：写 台面.md / 规则.json / 戏.json，把在场者的卡搬进文件夹。
- * 同名的已存在 = 换设定重开（设定 / 规则重写，卡 / 场景 / 记忆都留着）。返回文件夹名。
- * **不起进程**：进程在玩家点「开始」或说第一句话时才起（09-06 起，之前 open_stage 一调就先烧 400MB）。
- */
-export async function createPlay(pid, { title, table, cast, vitals, skin, rules, model, style, panels, opening, lore, images } = {}) {
-  const ws = getWorkspaceRoot(pid);
-  await ensurePlays(pid);
-  const root = playFolderName(title);
-  const playAbs = path.join(ws, root);
-  await fs.mkdir(playAbs, { recursive: true });
-  if (table) await fs.writeFile(path.join(playAbs, TABLE_FILE), String(table).trim() + '\n', 'utf8');
-  if (rules) {
-    for (const r of [...(rules.achievements || []), ...(rules.triggers || [])]) {
-      const bad = validateCondition(r.when);
-      if (bad) throw Object.assign(new Error(`规则「${r.id || r.title || '?'}」的条件不合法：${bad}`), { status: 400 });
-    }
-    await writeRules(playAbs, { achievements: rules.achievements || [], triggers: rules.triggers || [] });
-  }
-  const stored = (await readPlayConfig(playAbs)) || {};
-  if (Array.isArray(panels) && panels.length) await writePanels(playAbs, declarePanels(await readPanels(playAbs), panels));
-  const castOut = [];
-  for (const c of cast || []) {
-    const name = String(c?.name || c || '').trim();
-    if (!name) continue;
-    let rel = await resolveCardPath(ws, name, { playRoot: root });
-    if (!rel) throw Object.assign(new Error(`没有「${name}」的角色卡（${ROLES_DIR}/${name}/${CARD_FILE}）：先用 cast_role 写卡再开`), { status: 409 });
-    // 卡在根上的 角色/ 里 → 整个家搬进故事的文件夹（卡 / 记忆 / 立绘一起），文件夹才自成一体
-    if (!rel.startsWith(`${root}/`)) {
-      const home = cardHome(rel);
-      const dest = path.join(root, ROLES_DIR, path.basename(home));
-      if (!(await exists(path.join(ws, dest)))) {
-        await fs.mkdir(path.dirname(path.join(ws, dest)), { recursive: true });
-        await fs.rename(path.join(ws, home), path.join(ws, dest));
-        rel = path.join(dest, CARD_FILE);
-      }
-    }
-    castOut.push({ name, card: rel, ...(c?.note ? { note: String(c.note).slice(0, 60) } : {}) });
-  }
-  await adoptRootDirs(ws, root);   // 根上的 世界书/ 预设/ 随开戏搬进故事文件夹（09-07 B1/C1）
-  const next = {
-    ...stored,
-    title: String(title || stored.title || root).slice(0, 60),
-    cast: castOut.length ? castOut : (stored.cast || []),
-    vitals: Array.isArray(vitals) ? vitals : (stored.vitals || []),
-    skin: SKINS.includes(skin) ? skin : (stored.skin || 'paper'),
-    model: model || stored.model || null,
-    ...(opening ? { opening: String(opening).slice(0, 6000) } : {}),   // 酒馆卡的开场白 / 场景，开场指令带给进程当底
-    ...(lore?.off?.length ? { lore: { off: lore.off.map(String).slice(0, 500), by: 'agent' } } : {}),
-    ...(typeof images === 'boolean' ? { images: { allow: images, by: 'agent' } } : {}),   // 演出进程能不能配图（玩家开场页还能改）   // agent 按玩家回答预先关掉的世界书条目（开场页能改）
-    lines: linesOf(stored),
-    currentLine: currentLine(stored).id,
-    startedAt: stored.startedAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  if (style?.preset) next.style = await resolveAgentStyle(playAbs, style);   // agent 的预选：差量存 style.agent，开场页逐个标出来；预设对不上会抛 409（09-07 D2）
-  delete next.systemPrompt;
-  await writePlayConfig(playAbs, next);
-  getProjectBus(pid).publish({ type: 'stage.changed', root, running: false });
-  return root;
-}
-
 // ───────────────────────────── 起进程 ─────────────────────────────
 
 export async function startStage(pid, root) {
@@ -292,7 +231,7 @@ export async function startStage(pid, root) {
   let stored = await loadConfig(rt);
   if (runningStages() >= MAX_RUNNING) throw Object.assign(new Error(`同时在进行的故事已满（${MAX_RUNNING}），等一个停下再开`), { status: 503 });
 
-  const model = stored.model || stageDefaultModel(pid);
+  const model = modelOfConfig(pid, stored);
   const owner = project.ownerId ? getUserById(project.ownerId) : null;
   // 这条线路有转录就 resume（模型记得前文）；没有就新开一个 id 并记到线路上
   const line = currentLine(stored);
@@ -436,9 +375,21 @@ function settleRun(rt, e) {
  * 用户对台上说一句。row 可换成机器发的那一行（开场：by:'system'），模型收到的仍是 text。
  * 每句都盖一个 uuid：它同时是转录里那条 user 记录的 uuid（回退 / 分叉按它切）。
  */
-export async function sayToStage(pid, root, text, { userId = null, row = null, check = null } = {}) {
+// `moderate` 只为测试注入分类器（跟 hosted/relay/gates.js 同一个姿势）：外审要打网络，
+// 不给注入口就只能靠真调用，那道闸的接线就永远没有判据。
+export async function sayToStage(pid, root, text, { userId = null, row = null, check = null, moderate = undefined } = {}) {
   const rt = runtimeOf(pid, root);
   if (!(await isPlayDir(rt.playAbs))) { await dropStage(pid, root, 'play-missing'); throw Object.assign(new Error(`没有这个故事（${root}/）：文件夹已经不在了`), { status: 404 }); }
+  // ── 额度 + 外审（09-07）：放在最前面，拦下 = 零成本 —— 话不进 scenes.jsonl、run 不建、进程不起。
+  // 两道闸的口径、范围与理由全在 gates.js 文件头；这里只负责把「谁在说」和「这场戏用哪个模型」交过去。
+  {
+    const owner = getProject(pid)?.ownerId || null;
+    const who = getUserById(userId || owner || '') || null;
+    await assertSayAllowed(
+      { user: who, model: modelOfConfig(pid, await loadConfig(rt)), text, projectId: pid, byPlayer: !row },
+      moderate ? { moderate } : undefined,
+    );
+  }
   if (rt.running && !rt.busy && !rt.session?.queued) {
     const changed = await sourcesChanged(rt);
     if (changed) { console.log(`[stage] ${pid}/${root} 设定改了（${changed}），重开`); await stopStage(pid, root, 'setup-changed'); }
@@ -488,7 +439,7 @@ export async function stopStage(pid, root, reason = 'user') {
   clearTimeout(rt.idleTimer);
   const s = rt.session; rt.session = null;
   try { await s.stop(); } catch { /* 已经退了 */ }
-  if (rt.ingressRegistered) { try { unregisterIngressSession(rt.sdkSid); } catch { /* */ } rt.ingressRegistered = false; }
+  releaseUpstream(rt);
   for (const id of rt.pendingRuns.splice(0)) { try { markRunFailed(id, `stage stopped: ${reason}`); } catch { /* */ } }
   rt.live = ''; rt.draft = ''; rt.thinking = '';
   rt.broadcast({ ...rt.status(), running: false, busy: false, stoppedFor: reason });

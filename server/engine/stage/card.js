@@ -146,7 +146,12 @@ export function renderCard({ name, slug = null, note = null, portrait = null, pe
 /**
  * 角色卡该写在哪个 角色/ 目录下（cast_role 用）。
  * 戏的文件夹自成一体，所以工作区里**只有一场戏**时卡直接写进它；没有戏或有多场（不知道给谁）
- * 时写根上的 角色/，open_stage 开戏时会把在场者的卡搬进戏的文件夹。
+ * 时写根上的 角色/。
+ *
+ * ⛔ 根上那份**没有谁会去搬**（09-07 修：这里原来写着"open_stage 开戏时会搬进戏的文件夹"，
+ * 而 play.adoptRootDirs 只搬 世界书/ 和 预设/，角色卡从来没被搬过；桌面用户照这句话找卡，
+ * 找不到，问题库 iss_mtqlyvl4_j3sr）。根上的 角色/ 就是共用角色库，下面的 resolveCardPath
+ * 按「戏里 → 登记表 → 根上」三级查，多场戏可以引用同一张卡。
  */
 export async function rolesDirFor(workspaceRoot) {
   const plays = await listPlays(workspaceRoot);
@@ -170,7 +175,7 @@ export async function resolveCardPath(workspaceRoot, nameOrSlug, { playRoot = nu
     if ((slug === key || slug === `rp-${key}` || e?.name === key) && typeof e?.card === 'string') {
       const hit = await tryRel(e.card);
       if (hit) return hit;
-      // 登记表还指着根上的路径、卡已经搬进戏的文件夹（open_stage 搬的）
+      // 登记表还指着根上的路径、而卡后来被用户自己挪进了戏的文件夹
       if (playRoot) { const moved = await tryRel(path.join(playRoot, e.card)); if (moved) return moved; }
     }
   }

@@ -24,8 +24,9 @@ import { guardProject } from './_guard.js';
 import { echoUserChalk } from '../engine/runs/user-chalk-echo.js';
 import { getProjectBus } from '../ws/broker.js';
 import {
-  stageState, startStage, stopStage, sayToStage, patchStageConfig, subscribeStage, setUserState, ensurePlays, createPlay, runtimeOf, panelOp,
+  stageState, startStage, stopStage, sayToStage, patchStageConfig, subscribeStage, setUserState, ensurePlays, runtimeOf, panelOp,
 } from '../engine/stage/manager.js';
+import { createPlay } from '../engine/stage/create.js';
 import { saveStageFile, readStageFile, listStageFiles, deleteMemory, listStageImages } from '../engine/stage/files.js';
 import { listLines, rewindTo, forkAt, switchLine, renameLine, deleteLine } from '../engine/stage/lines.js';
 import { openStory, uploadPreset } from '../engine/stage/opening.js';
@@ -54,7 +55,8 @@ router.post('/:pid/stage/echo', express.json({ limit: '64kb' }), async (req, res
 });
 
 function sendErr(res, err) {
-  res.status(Number(err?.status) || 500).json({ error: err?.message || 'stage error' });
+  // code 要透出去：外审拦下的那一发回 451 + MODERATION_BLOCKED，客户端才分得清「被拦」和「服务端出错」
+  res.status(Number(err?.status) || 500).json({ error: err?.message || 'stage error', ...(err?.code ? { code: err.code } : {}) });
 }
 /** 故事的文件夹名：一级、不带路径分隔、不以点开头 */
 function playOf(req, res) {

@@ -123,6 +123,9 @@ input,textarea,select{font:inherit;color:inherit}
 .vital.flash .row b{color:var(--accent);transition:color .2s}
 .bar{height:4px;background:var(--rule-md);border-radius:2px;overflow:hidden}
 .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--gold));border-radius:2px;transition:width .6s cubic-bezier(.2,.7,.3,1)}
+/* 进程出错横幅：钉在顶栏底下，不进 .app 那张网格（网格是具名区域，多一个孩子会被自动摆位摆坏） */
+.errbar{position:fixed;top:44px;left:0;right:0;z-index:50;padding:8px 12px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;max-height:38vh;overflow:auto;color:var(--red);background:var(--paper);border-bottom:1px solid var(--red);box-shadow:var(--shadow-lg)}
+.errbar[hidden]{display:none}
 .chips{display:flex;flex-wrap:wrap;gap:4px}
 .chip{font-size:10.5px;padding:2px 7px;border:1px solid var(--rule-md);border-radius:2px;color:var(--sub)}
 .chip.on{color:var(--paper);background:var(--accent);border-color:var(--accent)}

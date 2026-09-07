@@ -21,15 +21,17 @@ import { z } from 'zod';
 import { getProject } from '../../../projects/store.js';
 import { getUserById } from '../../../auth/users-store.js';
 import { allowedModelsFor } from '../../agent/model-context.js';
-import { stopStage, getStageRuntime, createPlay, SKINS } from '../../stage/manager.js';
+import { stopStage, getStageRuntime, SKINS } from '../../stage/manager.js';
+import { createPlay } from '../../stage/create.js';
 import { validateCondition } from '../../stage/rules.js';
 import { BUILTIN_IDS, DEFAULT_PRESET } from '../../stage/preset.js';
 import { readPlayConfig } from '../../stage/play.js';
 import { getSharedDir } from '../../../projects/workspace.js';
+import { KEY_RE, KEY_CHARSET_TEXT } from '../../../lib/state-table.js';
 import path from 'node:path';
 
 const castSchema = z.object({
-  name: z.string().min(1).max(30).describe('在场者的名字，必须已经有角色卡（cast_role 写的 角色/<名>/角色卡.md）'),
+  name: z.string().min(1).max(30).describe('在场者的名字，必须已经有角色卡（cast_role 写的 角色卡.md，在 <故事>/角色/<名>/ 或工作区根上的 角色/<名>/，按名字找得到就行）'),
   note: z.string().max(60).optional().describe('名字下面那行小字。不给就用卡 frontmatter 里的 note'),
 });
 
@@ -40,13 +42,15 @@ const vitalSchema = z.object({
     .describe('bar=进度条（配 max）/ chips=几个格子里亮一个（配 options）/ num=数字（配 unit）/ text=一行字'),
   max: z.number().optional(),
   unit: z.string().max(10).optional(),
-  options: z.array(z.string().max(20)).max(8).optional(),
+  // ⛔ 别再给档数加上限：09-07 用户拍板拿掉（有人要填 10 档公会阶级，被 max(8) 打回、丢了两档）。
+  // 显示器那边 .chips 是 flex-wrap，多几档只是多换一行，没有布局代价。
+  options: z.array(z.string().max(20)).optional().describe('as="chips" 用：有哪几档，从低到高写。档数不限'),
   initial: z.union([z.string().max(60), z.number()]).optional().describe('开场时的值'),
   who: z.string().max(30).optional().describe('这个值属于哪个在场者（比如"好感度"属于她）。给了显示器的角色页会把它挂在这个人身上；世界性的（时间 / 天气）不给'),
 });
 
 const achievementSchema = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/).describe('英文 id'),
+  id: z.string().regex(KEY_RE).describe(`这条成就的 id，机器按它记「已达成」。中文可以（跟状态键同一条口径：${KEY_CHARSET_TEXT}）`),
   title: z.string().min(1).max(30).describe('奖杯名，玩家看的'),
   desc: z.string().max(80).optional().describe('一句话说明'),
   when: z.string().min(3).max(200).describe('条件：键 比较符 值，用 and / or 连，比如 "好感 >= 60 and 表白状态 == 1"。键来自 vitals 与 write_scene 的 state，另有机器补的 拍数'),
@@ -54,7 +58,7 @@ const achievementSchema = z.object({
   hidden: z.boolean().default(false).describe('达成前不显示名字'),
 });
 const triggerSchema = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]{1,40}$/),
+  id: z.string().regex(KEY_RE).describe(`这条触发器的 id，机器按它记「已递过」。中文可以（跟状态键同一条口径：${KEY_CHARSET_TEXT}）`),
   when: z.string().min(3).max(200).describe('条件写法同成就'),
   note: z.string().min(1).max(300).describe('阈值到了要递给演出进程的便条，比如 "好感过 60，按卡上的分阶段人设进熟稔期，这一段起可以让她主动开口"'),
   once: z.boolean().default(true).describe('只触发一次（默认）还是每次成立都递'),
@@ -85,7 +89,8 @@ export function makeOpenStageTool({ projectId }) {
 Two kinds of files make a story (load skill \`stage-setup\` first):
   - the TABLE (\`table\` here → written to <story>/台面.md): world, difficulty, how much you
     ghost-write, prose rules, how to act. Everything that belongs to THIS story, not to a person.
-  - the CARDS (<story>/角色/<名>/角色卡.md, written earlier with cast_role): who each person is, how
+  - the CARDS (角色/<名>/角色卡.md, written earlier with cast_role; either inside the story folder or
+    in the workspace-root 角色/ library): who each person is, how
     they talk, what they never do, plus their own memory index. Everything that belongs to a PERSON.
     A card may carry a \`## 可选\` section (one \`- [ ] item — why\` per line): the player toggles those
     on the opening screen, so put "does the player want this subplot / trait?" items there.

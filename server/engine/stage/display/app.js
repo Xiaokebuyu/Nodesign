@@ -89,6 +89,14 @@
     $('sceneText').textContent = store.activeScene || ND.lastScene();
     $('statusDot').className = `dot ${st.running ? (st.busy ? 'busy' : 'on') : ''}`;
     const s = $('statusText'); s.textContent = STATUS_TEXT(); s.className = `pill status${st.error ? ' err' : ''}`;
+    s.title = st.error || '';
+    // 09-07：整个演出进程崩掉时玩家只看得到「出错了」三个字，原话一个字都没露过面
+    // （问题库 iss_mtqnrdgr_08v2 的后半截）。原话照登，别替它总结 —— 玩家要拿它去问站长。
+    const eb = $('errBar');
+    if (eb) {
+      eb.hidden = !st.error;
+      eb.textContent = st.error ? `故事进程出错了，这一段没有写出来。再说一句会自动重开一次；如果一直这样，把下面这行告诉站长。\n${st.error}` : '';
+    }
     const u = st.usage;
     $('ctxPill').textContent = u ? `上下文 ${fmtK(u.context)} · 缓存 ${u.context ? Math.round((u.cacheRead / u.context) * 100) : 0}%` : '';
     $('ctxPill').title = u ? `上一轮：输入 ${fmtK(u.input)} · 缓存读 ${fmtK(u.cacheRead)} · 缓存写 ${fmtK(u.cacheCreate)} · 输出 ${fmtK(u.output)} · $${(u.costUsd || 0).toFixed(4)} · ${(u.durationMs / 1000).toFixed(1)}s` : '';
@@ -217,6 +225,7 @@
       case 'backdrop': if (!store.cfg?.backdrop) { store.backdrop = e.file; paintBackdrop(); } break;
       case 'error': store.status.error = e.error; paintTop(); break;
       case 'reload': refreshHello(); return;
+      case 'notice': if (!ND.EMBED && e.text) ND.flash(e.text, e.priority === 'error'); return;
       case 'image_pending': if (!ND.EMBED) ND.flash('对方在画一张插图，画好会出现在正文里'); return;
       case 'image_failed': if (!ND.EMBED) ND.flash(`插图没画出来：${e.error || ''}`, true); return;
       default: break;
