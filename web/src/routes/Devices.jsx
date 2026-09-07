@@ -2,6 +2,7 @@
 // 令牌明文只在新建那一刻显示一次：复制走之后这页再也拿不到它，丢了就吊销再签。
 import { useState, useEffect } from 'react';
 import AppShell from '../components/layout/AppShell.jsx';
+import { Desk } from './desk.jsx';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../lib/theme.js';
 import { Me } from '../lib/api.js';
 import { Section, Card, Btn, Err, TextInput, Hint } from '../components/local/primitives.jsx';
@@ -41,6 +42,9 @@ export default function Devices() {
 
   return (
     <AppShell breadcrumb={crumbs}>
+      {/* 只要光，不要台面 —— 见 desk.jsx 的 .ndd-plain。
+          这页的页面级文字只有 Section 的标题，那个零件自己带 --desk-* 和兜底 */}
+      <Desk plain>
       <div style={{ maxWidth: 820, margin: '0 auto', padding: `${GAP.xl}px ${GAP.xl}px 80px`, fontFamily: FONT_SANS }}>
         <Section title={t('桌面版设备')} desc={t('若您在电脑上安装了 NoDesign 桌面版（或通过 npx 运行），可签发一枚令牌填入其设置页的「NoDesign 服务」。该设备的推理将使用本账号，并按本账号计量')}>
           <Card>
@@ -78,6 +82,7 @@ export default function Devices() {
           </Section>
         )}
       </div>
+      </Desk>
     </AppShell>
   );
 }

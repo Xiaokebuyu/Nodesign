@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle, Bot, Wrench, Check, EyeOff, Trash2, RotateCcw, Bug, Lightbulb, Monitor } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
+import { Desk } from './desk.jsx';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
 import { Admin } from '../lib/api-admin.js';
 import { useGlobalStore } from '../stores/globalStore.js';
@@ -36,17 +37,19 @@ const KIND_META = {
 export default function Issues() {
   return (
     <AppShell breadcrumb={[{ label: 'Harness 问题库' }]}>
+      {/* 只要光，不要台面 —— 见 desk.jsx 的 .ndd-plain */}
+      <Desk plain>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: `${GAP.page}px ${GAP.page}px` }}>
         <header style={{ marginBottom: GAP.xl }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, marginBottom: GAP.sm }}>
             <AlertTriangle size={18} color={COLOR.warn} />
             <h1 style={{
               fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700,
-              color: COLOR.text, letterSpacing: '-0.01em', margin: 0,
+              color: `var(--desk-ink, ${COLOR.text})`, letterSpacing: '-0.01em', margin: 0,
             }}>Harness 问题库</h1>
           </div>
           <p style={{
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2,
+            fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: `var(--desk-ink-2, ${COLOR.text2})`,
             lineHeight: 1.65, margin: 0, maxWidth: 680,
           }}>
             工具失败自动进这里（不依赖 agent 说），agent 也能主动报绕路和期望。
@@ -55,6 +58,7 @@ export default function Issues() {
         </header>
         <IssuesPanel />
       </div>
+      </Desk>
     </AppShell>
   );
 }
@@ -110,13 +114,13 @@ export function IssuesPanel() {
         )}
 
         <div style={{ display: 'flex', gap: GAP.lg, marginBottom: GAP.lg, flexWrap: 'wrap' }}>
-          <Segmented value={status} onChange={setStatus} options={[
+          <Segmented onDesk value={status} onChange={setStatus} options={[
             ['open', '待处理'], ['ack', '已知'], ['ignored', '忽略'], ['closed', '已修'], ['all', '全部'],
           ]} />
-          <Segmented value={source} onChange={setSource} options={[
+          <Segmented onDesk value={source} onChange={setSource} options={[
             ['all', '全部来源'], ['auto', '自动'], ['agent', 'agent 上报'], ['client', '桌面版 agent'], ['desktop', '桌面壳'],
           ]} />
-          <Segmented value={kind} onChange={setKind} options={[
+          <Segmented onDesk value={kind} onChange={setKind} options={[
             ['all', '全部类型'], ['bug', '故障'], ['friction', '摩擦'], ['idea', '想法'],
           ]} />
         </div>
@@ -236,9 +240,19 @@ function IconBtn({ children, title, onClick, danger }) {
   );
 }
 
-export function Segmented({ value, onChange, options }) {
+/**
+ * 分段选择。
+ *
+ * ⭐ `onDesk` = 这一支**直接坐在页面背景上**（不是在卡片里）。素台面夜里背景是黑的，
+ *   那时"没选中"这一档得从压一点墨翻成提一点白，容器那层淡底同理。
+ * ⛔ 默认 false，因为同一个零件也用在**卡片里**（管理台的档位编辑）——
+ *   在浅色的纸上换粉笔等于把字擦掉。谁坐在背景上，由调用方说了算。
+ */
+export function Segmented({ value, onChange, options, onDesk = false }) {
+  const tint = onDesk ? 'var(--desk-tint, rgba(43,33,23,0.04))' : 'rgba(43,33,23,0.04)';
+  const off = onDesk ? `var(--desk-pencil, ${COLOR.sub})` : COLOR.sub;
   return (
-    <div style={{ display: 'inline-flex', gap: GAP.xxs, padding: GAP.xxs, background: 'rgba(43,33,23,0.04)', borderRadius: RADIUS.lg }}>
+    <div style={{ display: 'inline-flex', gap: GAP.xxs, padding: GAP.xxs, background: tint, borderRadius: RADIUS.lg }}>
       {options.map(([v, label]) => (
         <button
           key={v}
@@ -246,7 +260,7 @@ export function Segmented({ value, onChange, options }) {
           style={{
             padding: `${GAP.xs}px ${GAP.md}px`,
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs,
-            color: value === v ? COLOR.text : COLOR.sub,
+            color: value === v ? COLOR.text : off,
             background: value === v ? COLOR.bgWhite : 'transparent',
             border: 0, borderRadius: RADIUS.md, cursor: 'pointer',
             boxShadow: value === v ? '0 1px 2px rgba(43,33,23,0.06)' : 'none',

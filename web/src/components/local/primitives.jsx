@@ -33,9 +33,12 @@ export function Select({ value, onChange, options, width }) {
 export function Section({ title, desc, actions, children }) {
   return (
     <section style={{ marginBottom: GAP.xxl }}>
+      {/* ⭐ 分区标题直接写在背景上，底下没有纸 —— 在素台面（<Desk plain>）里夜里要换粉笔。
+          ⚠️ **带兜底**：这个零件也给不在台面上的页面用（首启引导），拿不到变量时
+          必须跟从前一模一样，所以写 var(--x, 原值) 而不是光秃秃的 var(--x)。 */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: GAP.md, marginBottom: GAP.sm }}>
-        <h2 style={{ margin: 0, fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, color: COLOR.text }}>{title}</h2>
-        {desc && <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{desc}</span>}
+        <h2 style={{ margin: 0, fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, color: `var(--desk-ink, ${COLOR.text})` }}>{title}</h2>
+        {desc && <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: `var(--desk-pencil, ${COLOR.sub})` }}>{desc}</span>}
         <span style={{ flex: 1 }} />
         {actions}
       </div>

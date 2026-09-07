@@ -4,6 +4,7 @@ import {
   Copy, Pencil, Ban, RotateCcw, Send, X, Trash2,
 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
+import { Desk } from './desk.jsx';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS, BANNER } from '../lib/theme.js';
 import { Admin } from '../lib/api-admin.js';
 import { useGlobalStore } from '../stores/globalStore.js';
@@ -74,17 +75,19 @@ export default function AdminConsole() {
 
   return (
     <AppShell breadcrumb={[{ label: '控制台' }]}>
+      {/* 只要光，不要台面 —— 见 desk.jsx 的 .ndd-plain */}
+      <Desk plain>
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: `${GAP.page}px ${GAP.page}px` }}>
         <header style={{ marginBottom: GAP.xl }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, marginBottom: GAP.sm }}>
             <LayoutDashboard size={18} color={COLOR.brown} />
             <h1 style={{
               fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700,
-              color: COLOR.text, letterSpacing: '-0.01em', margin: 0,
+              color: `var(--desk-ink, ${COLOR.text})`, letterSpacing: '-0.01em', margin: 0,
             }}>控制台</h1>
           </div>
           <p style={{
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2,
+            fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: `var(--desk-ink-2, ${COLOR.text2})`,
             lineHeight: 1.65, margin: 0, maxWidth: 680,
           }}>
             内测运营的一张桌面：谁在用、烧了多少、放谁进来、有话广播。
@@ -113,7 +116,8 @@ export default function AdminConsole() {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: GAP.xxs, padding: 3, background: 'rgba(43,33,23,0.045)', borderRadius: RADIUS.xl, marginBottom: GAP.xl, width: 'fit-content' }}>
+        {/* 这排 tab 坐在页面背景上：素台面夜里背景是黑的，淡底和"没选中"那档都要翻过来 */}
+        <div style={{ display: 'flex', gap: GAP.xxs, padding: 3, background: 'var(--desk-tint, rgba(43,33,23,0.045))', borderRadius: RADIUS.xl, marginBottom: GAP.xl, width: 'fit-content' }}>
           {[
             ['users', '用户', Users],
             ['invites', '邀请码', Ticket],
@@ -128,7 +132,7 @@ export default function AdminConsole() {
                 display: 'inline-flex', alignItems: 'center', gap: GAP.sm,
                 padding: `${GAP.sm}px ${GAP.xl}px`,
                 fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, fontWeight: tab === key ? 600 : 400,
-                color: tab === key ? COLOR.text : COLOR.sub,
+                color: tab === key ? COLOR.text : `var(--desk-pencil, ${COLOR.sub})`,
                 background: tab === key ? COLOR.bgWhite : 'transparent',
                 border: 0, borderRadius: RADIUS.lg, cursor: 'pointer',
                 boxShadow: tab === key ? '0 1px 3px rgba(43,33,23,0.08)' : 'none',
@@ -143,6 +147,7 @@ export default function AdminConsole() {
         {tab === 'moderation' && <ModerationTab users={users} />}
         {tab === 'issues' && <IssuesPanel />}
       </div>
+      </Desk>
     </AppShell>
   );
 }
@@ -200,12 +205,13 @@ function UsersTab({ users, reload }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.md }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md, flexWrap: 'wrap' }}>
         <Segmented
+          onDesk
           value={sort}
           onChange={setSort}
           options={Object.entries(SORTS).map(([k, [label]]) => [k, label])}
         />
         {/* 这一行是这次改动的由头：翻到一半时，没有任何东西告诉你后面还有多少 */}
-        <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>
+        <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: `var(--desk-pencil, ${COLOR.sub})` }}>
           共 {sorted.length} 人
         </span>
       </div>
