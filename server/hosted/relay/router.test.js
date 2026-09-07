@@ -346,3 +346,32 @@ describe('记账：订阅腿按 Claude 表价（09-07 桌面端计费遗留：�
     }
   });
 });
+
+describe('头像与公告（09-07 桌面版顶栏对齐网页版）', () => {
+  it('PUT /avatar 收 image/*，缩成 128 webp 入库，/whoami 带 data URL；DELETE 清掉；/notice 有形状', async () => {
+    const { default: sharp } = await import('sharp');
+    const png = await sharp({ create: { width: 300, height: 200, channels: 3, background: '#c04040' } }).png().toBuffer();
+    const user = makeUser({ plan: 'basic', daily: 50 });
+    const { token } = mintDevice({ userId: user.id });
+    const h = { authorization: `Bearer ${token}` };
+    const put = await fetch(base + '/avatar', { method: 'PUT', headers: { ...h, 'content-type': 'image/png' }, body: png });
+    expect(put.status).toBe(200);
+    const pj = await put.json();
+    expect(pj.avatar).toMatch(/^data:image\/webp;base64,/);
+    const who = await (await fetch(base + '/whoami', { headers: h })).json();
+    expect(who.user.avatar).toBe(pj.avatar);
+    const meta = await sharp(Buffer.from(pj.avatar.split(',')[1], 'base64')).metadata();
+    expect([meta.width, meta.height, meta.format]).toEqual([128, 128, 'webp']);
+    // 不是图 → 400，不入库
+    const bad = await fetch(base + '/avatar', { method: 'PUT', headers: { ...h, 'content-type': 'image/png' }, body: Buffer.from('not an image') });
+    expect(bad.status).toBe(400);
+    expect((await (await fetch(base + '/whoami', { headers: h })).json()).user.avatar).toBe(pj.avatar);
+    // 非 image/* 直接拒
+    expect((await fetch(base + '/avatar', { method: 'PUT', headers: { ...h, 'content-type': 'text/plain' }, body: 'x' })).status).toBe(400);
+    expect((await fetch(base + '/avatar', { method: 'DELETE', headers: h })).status).toBe(200);
+    expect((await (await fetch(base + '/whoami', { headers: h })).json()).user.avatar).toBeNull();
+    const notice = await (await fetch(base + '/notice', { headers: h })).json();
+    expect(notice).toHaveProperty('notice');
+    expect(notice.quota).toMatchObject({ kind: 'daily', limit: 50 });
+  });
+});

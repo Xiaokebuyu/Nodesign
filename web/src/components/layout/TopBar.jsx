@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { LogOut, LayoutDashboard, Settings, Monitor } from 'lucide-react';
+import { LogOut, LayoutDashboard, Settings, Monitor, UserRound } from 'lucide-react';
 import { COLOR, CHROME, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, FONT_KAI } from '../../lib/theme.js';
 import { GRAIN } from '../../lib/paper.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { useMedia, NARROW } from '../../lib/use-media.js';
 import Popover from '../ui/Popover.jsx';
+import { t } from '../../lib/i18n.js';
 
 /**
  * 用户角标（2026-07-30 多用户内测；07-30 晚收成头像）
@@ -19,52 +20,65 @@ import Popover from '../ui/Popover.jsx';
  * 轮询也因此不能改成"打开才拉"（那样描边永远不会亮），只是从 90s 放慢到 5 分钟。
  */
 /** 本地分发版：账号徽记的位置换成设置入口（钥匙 / 模型插槽 / 本机能力） */
-function LocalSettingsEntry() {
-  return (
-    <Link to="/settings" title="设置" style={{
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30,
-      borderRadius: RADIUS.pill, color: CHROME.ink2, textDecoration: 'none',
-    }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(43,33,23,0.06)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-    ><Settings size={16} /></Link>
-  );
-}
-
+/**
+ * 右上角的账号徽章。两种形态一份组件（09-07 站主：桌面版是给用户的，不是给极客的，顶栏跟网页版对齐）：
+ *   hosted  身份来自登录墙（authUser）+ /api/me/usage（档位 / 今日额度）
+ *   local   身份来自站点账号（/api/local/status 的 relay.whoami：用户名 / 档位 / 额度）；没登录就是一颗「登录」入口，
+ *           点进设置页的账户块。以前这里是一颗齿轮 —— 那是给自己部署的人留的入口，桌面版用户不该看见它。
+ */
 function UserBadge() {
   const authUser = useGlobalStore(s => s.authUser);
-  const local = useGlobalStore(s => s.authProfile === 'local');   // 本地分发版：没有账号这回事，整块不渲染
-  const [usage, setUsage] = useState(null);
+  const local = useGlobalStore(s => s.authProfile === 'local');
+  const [usage, setUsage] = useState(null);      // hosted：/api/me/usage
+  const [relay, setRelay] = useState(null);      // local：status.relay
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
   useEffect(() => {
-    if (!authUser || local) return undefined;
+    if (!local && !authUser) return undefined;
     let dead = false;
     const pull = () => {
-      fetch('/api/me/usage').then(r => (r.ok ? r.json() : null))
-        .then(u => { if (!dead && u) setUsage(u); })
+      fetch(local ? '/api/local/status' : '/api/me/usage').then(r => (r.ok ? r.json() : null))
+        .then(u => { if (dead || !u) return; if (local) setRelay(u.relay || null); else setUsage(u); })
         .catch(() => {});
     };
     pull();
-    const t = setInterval(pull, 300_000);
-    return () => { dead = true; clearInterval(t); };
-  }, [authUser]);
+    const timer = setInterval(pull, 300_000);
+    return () => { dead = true; clearInterval(timer); };
+  }, [authUser, local]);
 
-  if (local) return <LocalSettingsEntry />;
-  if (!authUser) return null;
-  // 警戒线 75%：跟配额横幅第一档对齐。07-31 起额度是一个总数且单位是钱，
-  // 服务端直接给 pct（金额不下发给普通用户，见 api/me.js）
-  const pct = usage?.capped ? (usage.pct || 0) : 0;
+  if (!local && !authUser) return null;
+  // 本地版没登录站点账号：头像位画成登录入口，进设置页的账户块
+  if (local && !relay?.whoami?.username) {
+    return (
+      <Link to="/settings#account" title={t('登录站点账号')} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 10px 0 6px', borderRadius: 13,
+        fontFamily: FONT_KAI, fontSize: FONT_SIZE.sm, color: CHROME.ink2, textDecoration: 'none',
+        background: 'rgba(43,33,23,0.06)', border: '1.5px solid transparent', flexShrink: 0,
+      }}><UserRound size={14} /> {t('登录')}</Link>
+    );
+  }
+  const username = local ? relay.whoami.username : authUser.username;
+  const tier = (local ? relay.whoami.tier : usage?.tier) || null;
+  // 额度：hosted 的 usage 与 local 的 whoami.quota 归成同一形状 { capped, kind, used, limit }
+  const q = local ? relay.whoami.quota : usage;
+  const capped = local ? !!(q && q.kind !== 'unlimited') : !!q?.capped;
+  const used = Number(q?.used ?? q?.usedToday ?? 0);
+  const limit = Number(q?.limit || 0);
+  // 警戒线 75%：跟配额横幅第一档对齐。07-31 起额度是一个总数且单位是钱
+  const pct = capped ? (local ? (limit ? Math.min(100, (used / limit) * 100) : 0) : (usage?.pct || 0)) : 0;
   const nearCap = pct >= 75;
-  const initial = (authUser.username || '?').trim().slice(0, 1).toUpperCase();
-  // 档位标识（08-21，/api/me/usage.tier）：pro/admin 头像右下角一个朱砂点（盖过章的语法，不用金环——
+  const initial = (username || '?').trim().slice(0, 1).toUpperCase();
+  // 自定义头像（09-07）：hosted 走 /api/me/avatar（版本戳穿缓存），local 是 whoami 里的 data URL
+  const avatar = local ? (relay.whoami.avatar || null) : (usage?.avatarAt ? `/api/me/avatar?v=${encodeURIComponent(usage.avatarAt)}` : null);
+  // 档位标识（08-21）：pro/admin 头像右下角一个朱砂点（盖过章的语法，不用金环——
   // 纸+暖墨的版面里金色是唯一会发光的东西）；basic 无点，hover 给一句解锁提示当转化入口。
-  const tier = usage?.tier || null;
   const sealed = tier === 'pro' || tier === 'admin';
-  const title = tier === 'basic'
-    ? `${authUser.username} · Basic 档 · Claude 模型与站点发布仅限 Pro 档`
-    : authUser.username;
+  const title = tier === 'basic' ? `${username} · Basic 档 · Claude 模型与站点发布仅限 Pro 档` : username;
+  const logout = async () => {
+    try { await fetch(local ? '/api/local/relay/logout' : '/api/auth/logout', { method: 'POST' }); } catch { /* */ }
+    window.location.href = '/';
+  };
 
   return (
     <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
@@ -80,10 +94,10 @@ function UserBadge() {
           background: 'rgba(43,33,23,0.06)',
           border: nearCap ? `1.5px solid ${COLOR.warn}` : '1.5px solid transparent',
           cursor: 'pointer',
-          padding: 0,
+          padding: 0, overflow: 'hidden',
         }}
       >
-        {initial}
+        {avatar ? <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', borderRadius: 13 }} /> : initial}
         {sealed && (
           <span aria-label={tier} style={{
             position: 'absolute', right: -1, bottom: -1,
@@ -109,42 +123,39 @@ function UserBadge() {
             padding: `${GAP.sm}px ${GAP.md}px`,
             fontFamily: FONT_KAI, fontSize: FONT_SIZE.base, color: CHROME.ink,
           }}>
-            {authUser.username}
+            {username}
             {sealed && (
               <span style={{ marginLeft: 6, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.error, letterSpacing: 0.5 }}>
                 {tier}
               </span>
             )}
-            {usage && (
+            {q && (
               <div style={{
                 marginTop: 3, fontSize: FONT_SIZE.xs,
                 color: pct >= 90 ? COLOR.error : nearCap ? COLOR.warn : COLOR.sub,
               }}>
-                {usage.capped
-                  ? `${usage.kind === 'lifetime' ? '试用' : '今日'} $${(usage.used ?? usage.usedToday ?? 0).toFixed(2)} / $${(usage.limit || 0).toFixed(2)} · ${Math.round(pct)}%`
-                  : `今日 $${(usage.usedToday || 0).toFixed(2)} · 不限额`}
+                {capped
+                  ? `${q.kind === 'lifetime' ? t('试用') : t('今日')} $${used.toFixed(2)} / $${limit.toFixed(2)} · ${Math.round(pct)}%`
+                  : (local ? t('不限额') : `${t('今日')} $${used.toFixed(2)} · ${t('不限额')}`)}
               </div>
             )}
           </div>
           <div style={{ height: 1, background: CHROME.border, margin: `${GAP.xs}px 0` }} />
-          {authUser.role === 'admin' && (
+          {!local && authUser.role === 'admin' && (
             <Link to="/admin" onClick={() => setOpen(false)} style={menuItem}>
               <LayoutDashboard size={12} /> 控制台
             </Link>
           )}
           <Link to="/settings" onClick={() => setOpen(false)} style={menuItem}>
-            <Settings size={12} /> 设置
+            <Settings size={12} /> {t('设置')}
           </Link>
-          <Link to="/devices" onClick={() => setOpen(false)} style={menuItem}>
-            <Monitor size={12} /> 桌面版设备
-          </Link>
-          <button
-            onClick={async () => {
-              try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* */ }
-              window.location.reload();
-            }}
-            style={{ ...menuItem, width: '100%', border: 0, background: 'transparent', cursor: 'pointer' }}
-          ><LogOut size={12} /> 登出</button>
+          {local
+            // 设备管理在站点上；桌面壳把站外 window.open 交给系统浏览器
+            ? <button onClick={() => { setOpen(false); window.open(`${relay.url}/devices`, '_blank'); }} style={{ ...menuItem, width: '100%', border: 0, background: 'transparent', cursor: 'pointer' }}><Monitor size={12} /> {t('管理设备')}</button>
+            : <Link to="/devices" onClick={() => setOpen(false)} style={menuItem}><Monitor size={12} /> 桌面版设备</Link>}
+          <button onClick={logout} style={{ ...menuItem, width: '100%', border: 0, background: 'transparent', cursor: 'pointer' }}>
+            <LogOut size={12} /> {t('登出')}
+          </button>
         </div>
       </Popover>
     </div>

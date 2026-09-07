@@ -60,11 +60,16 @@ export default function QuotaBanner() {
   }, []);
 
   const pull = useCallback(() => {
-    if (useGlobalStore.getState().authProfile === 'local') return;   // 本地分发版没有额度也没有站务公告
-    fetch('/api/me/usage')
+    // 本地版（09-07 站主：桌面版收不到横幅通知）：公告与额度经 relay 从站点拉，归成跟 /api/me/usage 同一形状
+    const local = useGlobalStore.getState().authProfile === 'local';
+    fetch(local ? '/api/local/relay/notice' : '/api/me/usage')
       .then((r) => (r.ok ? r.json() : null))
-      .then((u) => {
-        if (!u) return;
+      .then((u0) => {
+        if (!u0) return;
+        const q = local ? u0.quota : null;
+        const u = local
+          ? { notice: u0.notice, capped: !!(q && q.kind !== 'unlimited'), kind: q?.kind, pct: q?.limit ? Math.min(100, (Number(q.used || 0) / Number(q.limit)) * 100) : 0 }
+          : u0;
 
         // 公告：一次只有一条生效，关过就不再弹
         if (u.notice?.id && !seen(noticeSeenKey(u.notice.id))) {

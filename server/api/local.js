@@ -24,7 +24,8 @@ import { probeCapabilities } from '../runtime/capabilities.js';
 import { envView, setEnvValues, envPath } from '../runtime/local-env.js';
 import { probeModel } from '../lib/ingress/slot-probe.js';
 import os from 'node:os';
-import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, normalizeRelayUrl, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
+import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, relayNotice, relayPutAvatar, relayDeleteAvatar, relayConfig, normalizeRelayUrl, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
+import { AVATAR_MAX_UPLOAD } from '../lib/avatar-store.js';
 import { loadPrefs, savePrefs, prefsPath } from '../runtime/local-prefs.js';
 import { listComponents, installComponent, uninstallComponent, applyComponentEnv } from '../runtime/components.js';
 import { selectableModelsFor } from '../engine/agent/model-context.js';
@@ -189,6 +190,26 @@ router.post('/relay/logout', async (_req, res) => {
 });
 
 // ── 站主 relay：重拉目录（设置页「刷新」按钮；令牌不变但站点那边档位/额度变了的时候用） ──
+// 站内公告（横幅）：经 relay 拉站点的当前公告，60s 缓存；没登录站点账号就是空
+let noticeCache = { at: 0, body: null };
+router.get('/relay/notice', async (_req, res) => {
+  if (!relayConfig()) return res.json({ notice: null, quota: null });
+  if (Date.now() - noticeCache.at < 60_000 && noticeCache.body) return res.json(noticeCache.body);
+  try { noticeCache = { at: Date.now(), body: await relayNotice() }; res.json(noticeCache.body); }
+  catch (err) { res.json({ notice: null, quota: null, error: err.message }); }
+});
+
+// 头像：原图透传给站点（站点缩图入库），成功后刷目录让顶栏 / 设置页拿到新图
+router.put('/relay/avatar', express.raw({ type: 'image/*', limit: AVATAR_MAX_UPLOAD }), async (req, res) => {
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: '请以 image/* 上传图片文件' });
+  try { await relayPutAvatar(req.body, req.headers['content-type']); await refreshRelayCatalog(); res.json({ ok: true, relay: relayView() }); }
+  catch (err) { res.status(err.status === 413 ? 413 : 400).json({ error: err.message }); }
+});
+router.delete('/relay/avatar', async (_req, res) => {
+  try { await relayDeleteAvatar(); await refreshRelayCatalog(); res.json({ ok: true, relay: relayView() }); }
+  catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 router.post('/relay/refresh', async (_req, res) => {
   await refreshRelayCatalog();
   await probeCapabilities({ force: true });
@@ -203,7 +224,7 @@ function relayView() {
     at: c.at,
     error: c.error,
     url: process.env.NODESIGN_RELAY_URL || DEFAULT_RELAY_URL,
-    whoami: c.whoami ? { username: c.whoami.user?.username, tier: c.whoami.user?.tier, quota: c.whoami.quota, device: c.whoami.device } : null,
+    whoami: c.whoami ? { username: c.whoami.user?.username, tier: c.whoami.user?.tier, avatar: c.whoami.user?.avatar || null, quota: c.whoami.quota, device: c.whoami.device } : null,
     models: c.models,
   };
 }

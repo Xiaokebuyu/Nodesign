@@ -36,6 +36,8 @@ import { getUserById } from '../../auth/users-store.js';
 import { openRelaySession, closeRelaySession, lookupRelaySession, startRelaySessionSweeper } from './sessions.js';
 import { decideRelay } from './gates.js';
 import { recordRelayUsage, installRelayUsageSource, relayDailySeries } from './usage.js';
+import { avatarDataUrl, setAvatar, clearAvatar, AVATAR_MAX_UPLOAD } from '../../lib/avatar-store.js';
+import { getActiveNotice } from '../../lib/notice-store.js';
 import { forwardSubscription } from './subscription-leg.js';
 import { handleRequest as forwardViaIngress } from '../../lib/model-ingress.js';
 import { priceTokens, resolveModelRoute, hasSubscriptionAccess, selectableModelsFor, PICKER_SCOPES } from '../../engine/agent/model-context.js';
@@ -114,7 +116,8 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     const user = req.relayUser;
     const quota = checkQuota(user);
     res.json({
-      user: { id: user.id, username: user.username, tier: tierOf(user) },
+      // avatar 是 data URL（128 webp，几 KB）：桌面版顶栏和设置页直接画，跟身份一起缓存在目录里
+      user: { id: user.id, username: user.username, tier: tierOf(user), avatar: avatarDataUrl(user.id) },
       device: { id: req.relayDevice.id, label: req.relayDevice.label },
       capabilities: { subscription: hasSubscriptionAccess(user) },
       // 网关替这个账号跑的工具（桌面版没有钥匙的那几件）：客户端的能力位和工具选路都按这张表
@@ -122,6 +125,23 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
       quota: { kind: quota.kind, used: quota.used, limit: quota.limit },
     });
   });
+
+  // 站内公告（09-07 站主：桌面版收不到横幅通知）：客户端 60s 一拉，跟网页端 /api/me/usage 搭车那条同源
+  router.get('/notice', (req, res) => {
+    res.json({ notice: getActiveNotice(), quota: (({ kind, used, limit }) => ({ kind, used, limit }))(checkQuota(req.relayUser)) });
+  });
+
+  // 头像（09-07）：原图 image/* ≤2MB 进来，服务端缩成 128 webp 存 users.avatar；桌面版下次 /whoami 就带新图
+  router.put('/avatar', async (req, res) => {
+    if (!/^image\//.test(String(req.headers['content-type'] || ''))) return sendError(res, 400, 'BAD_IMAGE', '请以 image/* 上传图片文件');
+    let buf;
+    try { buf = await readRawBody(req, AVATAR_MAX_UPLOAD); }
+    catch (err) { return sendError(res, err.status === 413 ? 413 : 400, err.status === 413 ? 'BODY_TOO_LARGE' : 'BAD_IMAGE', err.status === 413 ? '图片超过 2MB' : '读取图片失败'); }
+    try { await setAvatar(req.relayUser.id, buf); }
+    catch (err) { return sendError(res, 400, 'BAD_IMAGE', `图片无法处理：${err.message}`); }
+    res.json({ ok: true, avatar: avatarDataUrl(req.relayUser.id) });
+  });
+  router.delete('/avatar', (req, res) => { clearAvatar(req.relayUser.id); res.json({ ok: true }); });
 
   // 工具中继（搜索 / 生图）：tools.js
   mountRelayTools(router, { sendError, readRawBody, ...tools });

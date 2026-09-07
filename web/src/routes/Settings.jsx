@@ -118,7 +118,7 @@ export default function Settings() {
           </header>
           {cur.id === 'account' && (isLocal
             ? <LocalAccount relay={status?.relay} onChange={onRelayChange} showToast={showToast} />
-            : <HostedAccount authUser={authUser} usage={usage} />)}
+            : <HostedAccount authUser={authUser} usage={usage} showToast={showToast} />)}
           {cur.id === 'usage' && <UsageSection isLocal={isLocal} />}
           {cur.id === 'appearance' && <AppearanceSection />}
           {cur.id === 'models' && isLocal && (

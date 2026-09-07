@@ -92,6 +92,14 @@ export const Local = {
   restart: () => jsonRequest('POST', '/api/local/restart'),
   relayRefresh: () => jsonRequest('POST', '/api/local/relay/refresh'),
   relayLogin: (body) => jsonRequest('POST', '/api/local/relay/login', body),
+  relayNotice: () => jsonRequest('GET', '/api/local/relay/notice'),
+  relayPutAvatar: async (file) => {
+    const r = await fetch('/api/local/relay/avatar', { method: 'PUT', headers: { 'content-type': file.type || 'image/png' }, body: file });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    return j;
+  },
+  relayDeleteAvatar: () => jsonRequest('DELETE', '/api/local/relay/avatar'),
   prefs: () => jsonRequest('GET', '/api/local/prefs'),
   components: () => jsonRequest('GET', '/api/local/components'),
   installComponent: (id) => jsonRequest('POST', `/api/local/components/${encodeURIComponent(id)}/install`),

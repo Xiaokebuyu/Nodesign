@@ -213,6 +213,17 @@ export default {
     'Pages, posters, docs, decks, characters. All on one canvas.',
 
   '登录': 'Sign in',
+  // ── 顶栏账号徽章（components/layout/TopBar.jsx，09-07 桌面版跟网页版对齐）+ 头像（settings/AccountSection.jsx） ──
+  '登录站点账号': 'Sign in to your account',
+  '登出': 'Sign out',
+  '管理设备': 'Manage devices',
+  '试用': 'Trial',
+  '今日': 'Today',
+  '不限额': 'Unlimited',
+  '更换头像': 'Change avatar',
+  '移除头像': 'Remove avatar',
+  '头像已更新': 'Avatar updated',
+  '图片超过 2MB，请先缩小': 'Image is over 2MB, please shrink it first',
   '注册': 'Register',
   '邀请码注册': 'Register with code',
   // 中文标签是「中文 · ENGLISH」的双语花样，英文里那半就是重复，只留一个词

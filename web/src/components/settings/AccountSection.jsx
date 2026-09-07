@@ -8,19 +8,47 @@ import { t } from '../../lib/i18n.js';
 
 const TIER_LABEL = { basic: 'Basic', pro: 'Pro', trial: 'Trial', admin: 'Admin' };
 
-/** 身份卡：首字头像 + 用户名 + 档位标签 + 右侧动作 */
-function Identity({ name, tier, sub, actions }) {
+/**
+ * 身份卡：头像 + 用户名 + 档位标签 + 右侧动作。
+ * 头像可换（09-07）：点头像选图，原图交给 put（hosted 直传 /api/me/avatar，本地版经 relay 到站点），站点缩成 128 webp。
+ * avatar 是图片地址（hosted 的 /api/me/avatar?v= 或 whoami 里的 data URL）；没有就画首字。
+ */
+function Identity({ name, tier, sub, actions, avatar = null, onPut = null, onClear = null, showToast }) {
   const initial = (name || '?').trim().slice(0, 1).toUpperCase();
+  const [busy, setBusy] = useState(false);
+  const pick = () => {
+    if (!onPut || busy) return;
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = async () => {
+      const f = input.files?.[0]; if (!f) return;
+      if (f.size > 2 * 1024 * 1024) { showToast?.(t('图片超过 2MB，请先缩小'), 'error'); return; }
+      setBusy(true);
+      try { await onPut(f); showToast?.(t('头像已更新'), 'info'); }
+      catch (e) { showToast?.(e.message, 'error'); }
+      finally { setBusy(false); }
+    };
+    input.click();
+  };
+  const circle = { width: 48, height: 48, borderRadius: '50%', background: COLOR.btn, color: COLOR.btnText, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT_KAI, fontSize: 20, flexShrink: 0, overflow: 'hidden', padding: 0, border: 0, cursor: onPut ? 'pointer' : 'default', opacity: busy ? 0.6 : 1 };
   return (
     <Block first>
       <div style={{ display: 'flex', alignItems: 'center', gap: GAP.xl }}>
-        <div aria-hidden="true" style={{ width: 48, height: 48, borderRadius: '50%', background: COLOR.btn, color: COLOR.btnText, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT_KAI, fontSize: 20, flexShrink: 0 }}>{initial}</div>
+        <button type="button" onClick={pick} title={onPut ? t('更换头像') : undefined} aria-label={t('更换头像')} style={circle}>
+          {avatar ? <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : initial}
+        </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md }}>
             <span style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.h2, fontWeight: 600, color: COLOR.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
             {tier && <Badge tone={tier === 'pro' ? 'ink' : 'neutral'}>{TIER_LABEL[tier] || tier}</Badge>}
           </div>
           {sub && <div style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, color: COLOR.text4, marginTop: 2 }}>{sub}</div>}
+          {onPut && (
+            <div style={{ display: 'flex', gap: GAP.md, marginTop: 4, fontFamily: FONT_KAI, fontSize: FONT_SIZE.sm, color: COLOR.text4 }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); pick(); }} style={{ color: COLOR.text3 }}>{t('更换头像')}</a>
+              {avatar && onClear && <a href="#" onClick={async (e) => { e.preventDefault(); try { await onClear(); } catch (err) { showToast?.(err.message, 'error'); } }} style={{ color: COLOR.text3 }}>{t('移除头像')}</a>}
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', gap: GAP.sm, flexShrink: 0 }}>{actions}</div>
       </div>
@@ -68,6 +96,9 @@ export function LocalAccount({ relay, onChange, showToast }) {
     <>
       <Panel>
         <Identity name={name} tier={w.tier} sub={relay.ok ? t('已登录') : t('无法连接站点，以下为上次获取的信息')}
+          avatar={w.avatar || null} showToast={showToast}
+          onPut={async (f) => { const r = await Local.relayPutAvatar(f); onChange?.(r); }}
+          onClear={async () => { const r = await Local.relayDeleteAvatar(); onChange?.(r); }}
           actions={<>
             <Button size="sm" onClick={refresh}>{t('刷新')}</Button>
             <Button size="sm" variant="danger" onClick={logout}>{t('退出登录')}</Button>
@@ -113,12 +144,24 @@ export function RelayLoginForm({ relay, onDone, showToast }) {
   );
 }
 
-export function HostedAccount({ authUser, usage }) {
+export function HostedAccount({ authUser, usage, showToast }) {
   const logout = async () => { try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { /* */ } window.location.reload(); };
   const quota = usage ? (usage.capped ? { kind: 'daily', used: usage.used ?? usage.usedToday ?? 0, limit: usage.limit || 0 } : { kind: 'unlimited' }) : null;
+  // 头像版本戳：先信 usage 带来的，本页改过之后用本地的（顶栏 5 分钟一拉，自己会追上）
+  const [avatarAt, setAvatarAt] = useState(null);
+  const at = avatarAt ?? usage?.avatarAt ?? null;
+  const putAvatar = async (f) => {
+    const r = await fetch('/api/me/avatar', { method: 'PUT', headers: { 'content-type': f.type || 'image/png' }, body: f });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    setAvatarAt(j.avatarAt || String(Date.now()));
+    window.dispatchEvent(new Event('nd-usage-refresh'));
+  };
+  const clearAvatar = async () => { await fetch('/api/me/avatar', { method: 'DELETE' }); setAvatarAt(''); window.dispatchEvent(new Event('nd-usage-refresh')); };
   return (
     <Panel>
-      <Identity name={authUser?.username || '—'} tier={usage?.tier}
+      <Identity name={authUser?.username || '—'} tier={usage?.tier} showToast={showToast}
+        avatar={at ? `/api/me/avatar?v=${encodeURIComponent(at)}` : null} onPut={putAvatar} onClear={clearAvatar}
         actions={<Button size="sm" variant="danger" onClick={logout}>{t('登出')}</Button>} />
       <QuotaRow quota={quota} />
       <Row label={t('桌面版设备')} desc={t('此处列出使用本账号登录过桌面版的设备')}>

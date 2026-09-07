@@ -22,6 +22,7 @@ import { getSharedDir } from '../projects/workspace.js';
 import { getProject } from '../projects/store.js';
 import { selectableModelsFor, defaultModelFor, modelSourceFor } from '../engine/agent/model-context.js';
 import { tierOf } from '../auth/tier.js';
+import { getAvatar, setAvatar, clearAvatar, avatarAt, AVATAR_MAX_UPLOAD } from '../lib/avatar-store.js';
 
 const router = express.Router();
 
@@ -96,7 +97,25 @@ router.get('/usage', (req, res) => {
     username: req.user.username,
     role: req.user.role,
     tier: tierOf(req.user),                  // admin | pro | basic（auth/tier.js）：顶栏朱砂点 / pro 标签 / basic 解锁提示用
+    avatarAt: platform.isLocal ? null : avatarAt(req.user.id),   // 头像版本戳：前端拿它给 /api/me/avatar 做缓存穿透
   });
+});
+
+// ── 头像（09-07）：GET 出图 / PUT 原图（image/*，≤2MB，服务端缩成 128 webp）/ DELETE 清掉。本地版没有站点账号，走 /api/local/relay/avatar
+router.get('/avatar', (req, res) => {
+  const a = platform.isLocal ? null : getAvatar(req.user.id);
+  if (!a) return res.status(204).end();
+  res.set('Content-Type', 'image/webp').set('Cache-Control', 'private, max-age=0, must-revalidate').send(a.buf);
+});
+router.put('/avatar', express.raw({ type: 'image/*', limit: AVATAR_MAX_UPLOAD }), async (req, res) => {
+  if (platform.isLocal) return res.status(404).json({ error: '本地版的头像经站点账号设置' });
+  if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: '请以 image/* 上传图片文件' });
+  try { await setAvatar(req.user.id, req.body); res.json({ ok: true, avatarAt: avatarAt(req.user.id) }); }
+  catch (err) { res.status(400).json({ error: `图片无法处理：${err.message}` }); }
+});
+router.delete('/avatar', (req, res) => {
+  if (!platform.isLocal) clearAvatar(req.user.id);
+  res.json({ ok: true });
 });
 
 router.get('/showcase', (req, res) => {

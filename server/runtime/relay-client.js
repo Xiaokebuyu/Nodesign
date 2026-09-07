@@ -47,7 +47,7 @@ export function normalizeRelayUrl(url) {
   return String(url || DEFAULT_RELAY_URL).trim().replace(/\/+$/, '') || DEFAULT_RELAY_URL;
 }
 
-async function call(pathname, { method = 'GET', body = null, timeoutMs = FETCH_TIMEOUT_MS, auth = true, url = null } = {}) {
+async function call(pathname, { method = 'GET', body = null, raw = null, timeoutMs = FETCH_TIMEOUT_MS, auth = true, url = null } = {}) {
   const cfg = relayConfig();
   if (auth && !cfg) throw Object.assign(new Error('relay 未配置（缺少 NODESIGN_RELAY_TOKEN）'), { code: 'RELAY_NOT_CONFIGURED' });
   // 没令牌的路（首启登录）cfg 是 null：地址按 传入 > .env > 官方站 取
@@ -57,8 +57,9 @@ async function call(pathname, { method = 'GET', body = null, timeoutMs = FETCH_T
   try {
     const res = await fetch(`${base}/api/relay${pathname}`, {
       method,
-      headers: { ...(auth ? { authorization: `Bearer ${cfg.token}` } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
+      // raw = { buf, contentType }：二进制原样发（头像上传）；body 走 JSON
+      headers: { ...(auth ? { authorization: `Bearer ${cfg.token}` } : {}), ...(raw ? { 'content-type': raw.contentType } : body ? { 'content-type': 'application/json' } : {}) },
+      body: raw ? raw.buf : body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
     const text = await res.text();
@@ -132,6 +133,13 @@ export async function closeRelaySession(sid) {
 export async function relayLogin({ url = null, username, password, label }) {
   return call('/login', { method: 'POST', auth: false, url, body: { username, password, label } });
 }
+
+/** 站内公告 + 当前额度（桌面版横幅 60s 一拉） */
+export async function relayNotice() { return call('/notice'); }
+
+/** 头像：原图二进制上传，站点缩好存；回 { ok, avatar: dataUrl }。成功后调用方刷目录让 whoami 带上新图 */
+export async function relayPutAvatar(buf, contentType) { return call('/avatar', { method: 'PUT', raw: { buf, contentType } }); }
+export async function relayDeleteAvatar() { return call('/avatar', { method: 'DELETE' }); }
 
 /** 吊销当前这枚令牌。失败只记日志：令牌本地反正要清，服务器那头留着一枚吊不掉的也只是列表里多一行 */
 export async function relayLogout() {

@@ -45,7 +45,8 @@ describe('玩家点了带判定的选项：机器代掷', () => {
     const rt = { playAbs: dir, scenesRel: '场景/scenes.jsonl', broadcast: (e) => sent.push(e) };
     expect(await rollForChoice(rt, null)).toBe('');
     const note = await rollForChoice(rt, { label: '翻墙', dc: 1 });
-    expect(note).toMatch(/^【判定】.*翻墙：d20 = \d+ vs 难度 1 → (成功|大成功)。照这个结果写/);
+    // d20 天然 1 = 大失败，跟难度无关（dice.js 第 34 行）—— 之前这条按 1/20 概率随机红
+    expect(note).toMatch(/^【判定】.*翻墙：d20 = \d+ vs 难度 1 → (成功|大成功|大失败)。照这个结果写/);
     expect(sent[0].type).toBe('scene'); expect(sent[0].row.by).toBe('dice'); expect(sent[0].row.reason).toBe('翻墙');
     const lines = (await fs.readFile(path.join(dir, '场景/scenes.jsonl'), 'utf8')).trim().split('\n');
     expect(JSON.parse(lines[0])).toMatchObject({ by: 'dice', dc: 1, sides: 20 });
