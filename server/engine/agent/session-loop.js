@@ -85,7 +85,7 @@ import { autoNameProjectFromSession } from '../../projects/auto-name.js';
 // 合流并集（2026-08-13）：commitWorkspace/taskManifest 是扁平化这边的，
 // getUserById/levelFor 是 main 的每用户内容尺度旋钮（78ceaac）；
 // main 的 listTasks 已随任务层退役，不再引入
-import { commitTaskWorkspace, commitWorkspace, PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
+import { commitTaskWorkspace, commitWorkspace, getWorkspaceRoot, PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
 import { commitStaging } from '../../projects/board-tags.js';
 import { taskManifest } from '../../lib/artifact-target.js';
 import { getUserById } from '../../auth/users-store.js';
@@ -158,7 +158,8 @@ export async function runSession({
   // 文件夹项目里 sharedRoot = `<folder>/.nodesign`，所以 commitWorkspace / revert 那些
   // git 操作落在 .nodesign 自己的仓库里，碰不到用户源码的历史。
   const cwdRoot = sessionWorkspaceRoot;
-  const sharedRoot = canvasRoot || cwdRoot;
+  // 有 projectId 就自己问工作区层，不信调用方传的 —— 一个事实一个出处；canvasRoot 只给没项目的探针路用
+  const sharedRoot = projectId ? getWorkspaceRoot(projectId) : (canvasRoot || cwdRoot);
   const sessionMetaRoot = path.join(sharedRoot, '.nd', sessionId);
 
   const sessionAbortController = new AbortController();

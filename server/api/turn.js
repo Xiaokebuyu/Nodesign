@@ -391,7 +391,7 @@ router.post('/:pid/turn', async (req, res, next) => {
       if (!ok) {
         // race：刚 close 的 session（理论上极少）—— fallback 起新
         console.warn(`[turn] pushUserMessage failed for ${sid.slice(0, 8)}, falling back to new session`);
-        startNewRunSession({ runId: run.id, sid, sessionRoot, canvasRoot: getWorkspaceRoot(project.id), blocks: sdkUserMessage, eventBus: bus, project, finalSkillId, chat, initialPermissionMode });
+        startNewRunSession({ runId: run.id, sid, sessionRoot, blocks: sdkUserMessage, eventBus: bus, project, finalSkillId, chat, initialPermissionMode });
       } else {
         // push 后 emit 当前 queue 积压深度，前端显示"已排队 N 条"
         // depth=0 表示 agent idle 立刻处理；depth>0 表示 agent 还在忙，要排队
@@ -433,7 +433,9 @@ router.post('/:pid/turn', async (req, res, next) => {
  * 起一个新的 runSession（streamInput long-running query），并预 push 首条 user
  * message 让 SDK 启动后立即处理。fire-and-forget — 不阻塞 HTTP response。
  */
-function startNewRunSession({ runId, sid, sessionRoot, canvasRoot, blocks, eventBus, project, finalSkillId, chat, initialPermissionMode }) {
+function startNewRunSession({ runId, sid, sessionRoot, blocks, eventBus, project, finalSkillId, chat, initialPermissionMode }) {
+  // 画布真相根在这里算，不让两个调用点各传一份 —— 09-07 真跑时第二个调用点漏传，板书落进了用户仓库根
+  const canvasRoot = getWorkspaceRoot(project.id);
   const inputQueue = new AsyncQueue();
   inputQueue.push(blocks);   // 直接 push 进 queue —— runSession 启动后用 initialRunId 关联
 
