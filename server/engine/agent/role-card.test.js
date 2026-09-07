@@ -66,7 +66,7 @@ describe('派发期白名单：手写角色文件绕不开', () => {
 
   it('形状看不懂 → 拒（判据看不懂的东西不默认放行）', async () => {
     write('rp-evil', card('tools:'));
-    expect(await denyReason('rp-evil')).toMatch(/看不懂/);
+    expect(await denyReason('rp-evil')).toMatch(/无法解析/);
   });
 
   it('cast_role 写出来的合法角色 → 放行并强制后台', async () => {

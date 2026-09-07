@@ -135,7 +135,7 @@
 
   /** 配图开关（开场页 / 外观页共用）：说清代价 */
   ND.imagesToggle = function imagesToggle(container, { allow, by, onChange }) {
-    container.innerHTML = `<label class="tog images"><input type="checkbox" id="allowImg" ${allow ? 'checked' : ''}><span>让对方给故事配图<small>关键转折的插图、换场景的背景、人物的立绘由写故事的进程自己画。每张约 $0.20、一分钟，计入你的每日额度；它被要求省着用，两张之间至少隔三段。关着的话背景图仍由机器按地点自动生。</small>${by === 'agent' ? '<small style="color:var(--accent)">这是 agent 按你开场前的回答预选的，不合意就改。</small>' : ''}</span></label>`;
+    container.innerHTML = `<label class="tog images"><input type="checkbox" id="allowImg" ${allow ? 'checked' : ''}><span>让对方给故事配图<small>关键转折的插图、换场景的背景、人物的立绘由写故事的进程自己画。每张约 $0.20、一分钟，计入你的每日额度；系统限制其使用频率：两张之间至少间隔三段。关着的话背景图仍由机器按地点自动生。</small>${by === 'agent' ? '<small style="color:var(--accent)">这是 agent 按你开场前的回答预选的，不合意就改。</small>' : ''}</span></label>`;
     container.querySelector('#allowImg').onchange = (e) => onChange(e.target.checked);
   };
 

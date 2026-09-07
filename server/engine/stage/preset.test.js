@@ -69,7 +69,7 @@ describe('拼「写法」一节', () => {
     const d = await play();
     const r = await renderStyle(d, { preset: 'izumi' });
     expect(r.text).toMatch(/^## 写法/);
-    expect(r.text).toContain('干掉生硬');
+    expect(r.text).toContain('消除生硬');
     expect(r.text).not.toContain('武侠风味');
     expect(r.picked).toContain('顺眼舒服');
     const r2 = await renderStyle(d, { preset: 'izumi', modules: { 'voice-smooth': false, 'voice-wuxia': true } });

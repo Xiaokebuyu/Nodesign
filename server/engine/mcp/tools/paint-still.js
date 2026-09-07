@@ -99,7 +99,7 @@ async function pushRef({ box, root, relPath, jobId, slot, signal }) {
   const shrunk = await shrinkForPush(abs, slot);
   const remote = `~/refs/${jobId}-${slot}${shrunk ? '.png' : (path.extname(abs) || '.png')}`;
   const mk = await runBox(box, 'ssh', [...sshArgs(box), 'mkdir -p ~/refs'], { timeoutMs: 30_000, signal });
-  if (mk.code !== 0) return { err: `盒子建 refs 目录失败：${(mk.err || '').slice(-200)}` };
+  if (mk.code !== 0) return { err: `服务器建 refs 目录失败：${(mk.err || '').slice(-200)}` };
   let src = abs; let tmp = null;
   if (shrunk) {
     tmp = path.join(os.tmpdir(), `h3ref-${jobId}-${slot}.png`);
@@ -181,7 +181,7 @@ export async function paintStills(
     }
     const box = boxConfig();
     if (!box) {
-      return asText('本地生图盒子未配置（站主没开机或没设 NODESIGN_H3BOX_SSH）。转告用户，改用 generate_image。', true);
+      return asText('本地生图服务器未配置（未启动或未设置 NODESIGN_H3BOX_SSH）。转告用户，改用 generate_image。', true);
     }
     const project = getProject(projectId);
     if (!project) return asText('错误：项目不存在', true);
@@ -264,12 +264,12 @@ export async function paintStills(
         { timeoutMs: timeoutFor({ ...still, batch: nBatch }), signal });
       let failMsg = null; const bufs = [];
       if (gen.code !== 0) {
-        failMsg = gen.code === 255 ? `盒子连不上（没开机/地址过期）：${(gen.err || '').slice(-300)}`
+        failMsg = gen.code === 255 ? `无法连接渲染服务器（未启动或地址失效）：${(gen.err || '').slice(-300)}`
           : `生成失败 exit ${gen.code}：${(gen.err || gen.out).slice(-500)}`;
       } else {
         const remotePaths = gen.out.split('\n').map((l) => l.trim())
           .filter((l) => l.includes('/outputs/') && /\.(png|webp|jpg)$/.test(l));
-        if (!remotePaths.length) failMsg = `盒子跑完但没报出文件路径：${gen.out.slice(-400)}`;
+        if (!remotePaths.length) failMsg = `服务器已执行完毕但未返回文件路径：${gen.out.slice(-400)}`;
         // batch 的 N 张全取回来，别只拿第一张（08-11 前就是丢了后面全部）。
         // 多源拼进一次 scp —— 逐张各开连接的老写法，握手开销能跟生成时间打平（08-11 实测）
         if (!failMsg && remotePaths.length) {
@@ -336,10 +336,10 @@ export function makePaintStillTool(deps) {
     'paint_still',
     (localBoxEnabled()
       ? ''
-      : '⛔ CURRENTLY UNAVAILABLE — the owner powers this GPU box on and off by hand, '
-        + 'and it is off right now. Do not call this tool. Use generate_image instead, '
-        + 'and tell the user the local box is off if they asked for it specifically.\n\n')
-    + `Generate anime/illustration images on the owner's local GPU box. One call =
+      : '⛔ CURRENTLY UNAVAILABLE — this GPU lane is powered on and off manually, '
+        + 'and it is offline right now. Do not call this tool. Use generate_image instead, '
+        + 'and tell the user the local lane is offline if they asked for it specifically.\n\n')
+    + `Generate anime/illustration images on the platform's self-hosted GPU lane. One call =
 1-16 stills rendered serially; each finished image lands on the canvas
 immediately. Each still can also set batch=N to get N variations of the SAME
 prompt from one sampling pass — far cheaper than N separate stills, and it is

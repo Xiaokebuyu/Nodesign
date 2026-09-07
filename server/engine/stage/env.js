@@ -24,7 +24,7 @@ export async function buildEnv(rt, model, owner) {
     if (route.fastModel) env.ANTHROPIC_SMALL_FAST_MODEL = route.fastModel;
     if (route.window) env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = String(route.window);
   } else {
-    if (!can(owner, 'subscription')) throw Object.assign(new Error('这个账号没有订阅通路资格，故事进程起不来'), { status: 403 });
+    if (!can(owner, 'subscription')) throw Object.assign(new Error('当前账号不具备该模型通路的使用权限，演出进程无法启动'), { status: 403 });
     if (process.env.ANTHROPIC_BASE_URL) env.ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL;
     if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY; else delete env.ANTHROPIC_API_KEY;
     if (process.env.NODESIGN_FAST_MODEL) env.ANTHROPIC_SMALL_FAST_MODEL = process.env.NODESIGN_FAST_MODEL;

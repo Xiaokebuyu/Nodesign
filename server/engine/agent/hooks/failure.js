@@ -93,7 +93,7 @@ export function makePostToolUseFailureHandler({ ctx, projectId, sessionId }) {
       const errLower = error.toLowerCase();
       let cause;
       if (/http 429|rate.?limit|too many request/.test(errLower)) {
-        cause = '网关限流（429）→ 等 3-5 秒**直接重试**，不必改 prompt。短时间内连续生图触发的，过会儿就 OK';
+        cause = '网关限流（429）→ 等 3-5 秒**直接重试**，不必改 prompt。由短时间内连续生成触发，稍后即可恢复';
       } else if (/http 5\d\d|timeout|gateway|econnreset|socket/.test(errLower)) {
         cause = '网关 / 上游临时故障（5xx / 网络抖动）→ **直接重试 1-2 次**，多数情况下第二次就成；连续 3 次同错才考虑改思路';
       } else if (/no parts|no image|safety|blocked|policy/.test(errLower)) {
@@ -110,7 +110,7 @@ export function makePostToolUseFailureHandler({ ctx, projectId, sessionId }) {
       advice =
         `generate_image 失败：${error}\n\n`
         + `→ ${cause}\n\n`
-        + `**重要**：generate_image 多数失败是可恢复的（网关抖动 / prompt 微调）。第一次失败就放弃 = 用户没图用，跟"agent 不会生图"体感一样差。**默认应重试 1-2 次**，连续 3 次同错才考虑换思路 / 询问用户。`;
+        + `**重要**：generate_image 多数失败是可恢复的（网关抖动 / prompt 微调）。第一次失败就放弃 = 用户没图用，与「无法生成图片」的实际效果相同。**默认应重试 1-2 次**，连续 3 次同错才考虑换思路 / 询问用户。`;
     } else {
       advice =
         `${tool} 失败：${error}\n`

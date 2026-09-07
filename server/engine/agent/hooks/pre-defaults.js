@@ -47,15 +47,15 @@ async function illegalRoleTools(workspaceRoot, slug) {
 
   if (decl.kind === 'missing') {
     return `角色「${slug}」的文件里没有 tools 那一行 —— 那在 SDK 语义里等于**继承你的全部工具**，`
-      + `包括外发和花钱的那些。用 cast_role 重新造这个角色（它会写一份只含板上工具的声明）。`;
+      + `包括对外发布类与计费类工具。用 cast_role 重新造这个角色（它会写一份只含板上工具的声明）。`;
   }
   if (decl.kind === 'unparsable') {
-    return `角色「${slug}」的 tools 声明看不懂，为安全起见不派。用 cast_role 重新造它。`;
+    return `角色「${slug}」的 tools 声明无法解析，出于安全考虑不予派发。用 cast_role 重新造它。`;
   }
   const { rejected } = resolveRoleTools(decl.tools, MCP_SERVER_NAME);
   if (rejected.length) {
     return `角色「${slug}」声明了不该给角色的工具：${rejected.join('、')}。`
-      + `角色只能通过画布表达自己 —— 外发、花钱、改工作区结构的工具一律不发给它。`
+      + `角色仅通过画布表达 —— 对外发布类、计费类、修改工作区结构类工具一律不授予。`
       + `用 cast_role 重新造它，或把这些工具从它的文件里去掉。`;
   }
   return null;

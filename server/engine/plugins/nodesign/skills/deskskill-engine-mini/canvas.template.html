@@ -11,7 +11,7 @@
   ║    4. <script id="__nd-shadcn-lite"> 里的 4 件 shadcn-lite 组件       ║
   ║       (Card/Button/Badge/Tabs)，直接 <Card> 用，不需要 import        ║
   ║                                                                      ║
-  ║  渲染范式（系统统一处理，agent 不操心）：                                ║
+  ║  渲染范式（由系统统一处理，无需 agent 干预）：                           ║
   ║    · 每个 <section data-page> 写设计稿原坐标                          ║
   ║    · 系统给每 section 包 100vw×100vh frame + scroll-snap →            ║
   ║      单页铺满屏幕；滚轮 / 键盘 ↑↓ Space PgUp/PgDn 都按页切             ║
@@ -41,7 +41,7 @@
   ║  Anchor 单写：关键元素只写 data-anchor（deck 内唯一，重名加 -pN 后缀） ║
   ║              不再写 data-node-id（已废）                              ║
   ║                                                                      ║
-  ║  库速查见 prelude § Hybrid 全家桶库速查 + SKILL.md § Hybrid 选型表    ║
+  ║  库速查见 prelude § Hybrid 库速查 + SKILL.md § Hybrid 选型表          ║
   ║                                                                      ║
   ╚══════════════════════════════════════════════════════════════════════╝
 -->
@@ -50,7 +50,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{Deck 标题 · 改我}</title>
+  <title>{Deck 标题}</title>
 
   <!-- ══ 1. Google Fonts（按需改） ══ -->
   <!-- ⚠️ 字体 chain 铁律：每个 latin family 后面**必须**跟显式的 CJK family。     -->
@@ -93,7 +93,7 @@
   <!-- ══ 3. importmap：21 库预置 + 按 deck-kind 分组（agent import 哪个浏览器才下哪个）══ -->
   <!--                                                                                -->
   <!-- 按 deck-kind 选型 → SKILL.md § Hybrid 选型按 deck-kind 分流                    -->
-  <!-- 按内容类型查（"我要画图表 → recharts"）→ prelude § Hybrid 全家桶库速查         -->
+  <!-- 按内容类型查（"我要画图表 → recharts"）→ prelude § Hybrid 库速查               -->
   <!--                                                                                -->
   <!-- 库分组（下方 JSON 按此顺序排列）：                                              -->
   <!--   Core ............... react / react-dom（必装）                              -->
@@ -158,7 +158,7 @@
   <!-- ┄┄┄   · 瑞士网格           → 白底 / 单一无衬线 / 严格栅格            ┄┄┄ -->
   <!-- ┄┄┄   · 终端 HUD           → 深底 / 单一荧光色 / 等宽数字            ┄┄┄ -->
   <!-- ┄┄┄   · 杂志编辑风         → 衬线大标题 / 通栏窄栏混排 / 出血图      ┄┄┄ -->
-  <!-- ┄┄┄ 直接套用预置 = 5 deck 出来都长一样的 AI default。每份 deck 的 token ┄┄┄ -->
+  <!-- ┄┄┄ 直接沿用预置值，多份 deck 会呈现同一种 AI 默认观感。每份 deck 的 token ┄┄┄ -->
   <!-- ┄┄┄ 应该被它的隐喻穿透，把整组 --bg / --ink / --accent / --muted 重写。┄┄┄ -->
   <style id="design-tokens">
     :root {

@@ -220,7 +220,7 @@ on the minimap and listed with what is inside it.`,
             lines.push(l.registered
               ? `  #${l.tag}：${l.count} 节${l.parent ? `，岔自 ${l.parent}` : ''}，列头 (${l.x},${l.y})`
                 + `${l.frontier ? `，接着写会落 (${l.frontier.x},${l.frontier.y}) 附近` : ''}${l.lastId ? `，最新 ${l.lastId}` : ''}${dirTxt}`
-              : `  #${l.tag}：${l.count} 件（未登记的野线 —— chain:true 照样能续）${dirTxt}`);
+              : `  #${l.tag}：${l.count} 件（未登记的线，仍可用 chain:true 续写）${dirTxt}`);
           }
         }
       }

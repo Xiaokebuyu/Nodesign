@@ -136,9 +136,9 @@ export async function rollFilm(
     let box = null;
     if (backend !== 'modal') {
       box = boxConfig();
-      if (!box) return asText('视频盒子未配置（站主没开机）。转告用户；备用 Modal 档要站主设 NODESIGN_FILM_BACKEND=modal。', true);
+      if (!box) return asText('视频服务器未配置（当前未启动）。转告用户；启用备用 Modal 档需将 NODESIGN_FILM_BACKEND 设为 modal。', true);
       const mk = await runBox(box, 'ssh', [...sshArgs(box), 'mkdir -p nd_jobs'], { timeoutMs: 30_000, signal });
-      if (mk.code !== 0) return asText(`盒子连不上（没开机/地址过期）：\n${(mk.err || '').slice(-400)}\n转告用户。`, true);
+      if (mk.code !== 0) return asText(`无法连接渲染服务器（未启动或地址失效）：\n${(mk.err || '').slice(-400)}\n转告用户。`, true);
     }
 
     // 逐镜串行：一镜完整走完（渲→取回→上墙）再下一镜，agent 中途被打断也保住已出的
@@ -202,7 +202,7 @@ export async function rollFilm(
       }
     }
 
-    const head = `Batch done ${lines.length}/${shots.length} shots, seed=${seed}, via ${backend === 'modal' ? 'Modal H100+sage' : '5090 盒子 sage2'}`;
+    const head = `Batch done ${lines.length}/${shots.length} shots, seed=${seed}, via ${backend === 'modal' ? 'Modal H100+sage' : '5090 sage2'}`;
     // 2026-08-18：解禁。mp4 塞不进视觉通道，要看就 ffmpeg 抽帧再看那几张图。
     const tail = 'You may check these: pull two or three frames with ffmpeg and look at them '
       + 'for technical breakage (colour cast, duplicated figures, broken limbs, mush, first '
@@ -225,16 +225,16 @@ export function makeRollFilmTool(deps) {
     'roll_film',
     ((localBoxEnabled() || (process.env.NODESIGN_FILM_BACKEND || 'box').toLowerCase() === 'modal')
       ? ''
-      : '⛔ CURRENTLY UNAVAILABLE — the owner powers this GPU box on and off by hand, '
-        + 'and it is off right now. Do not call this tool; tell the user the local box is off.\n\n')
-    + `Generate video shots (picture + native audio) on the owner's self-hosted
-MiniMax-H3 lane (RTX 5090 box, SageAttention, Turbo 8-step, 24fps). One call =
+      : '⛔ CURRENTLY UNAVAILABLE — this GPU lane is powered on and off manually, '
+        + 'and it is offline right now. Do not call this tool; tell the user the local lane is offline.\n\n')
+    + `Generate video shots (picture + native audio) on the platform's self-hosted
+MiniMax-H3 lane (RTX 5090 server, SageAttention, Turbo 8-step, 24fps). One call =
 one batch of 1-16 shots rendered back-to-back; each finished shot lands on the
 canvas immediately. Max 12.25s per shot — longer stories are multiple shots.
 
 Call ONLY when the user explicitly asks for video, and align the shot list with
 the user before rolling a multi-shot batch. Roughly 3-5 minutes per shot,
-serial; tell the user the camera is rolling. Never auto-retry shots you already
+serial; tell the user rendering has started. Never auto-retry shots you already
 got back. Requires the GPU box online — if unreachable, relay that and stop.
 
 Prompts must follow the H3 three-field English format (cookbook arrives as a

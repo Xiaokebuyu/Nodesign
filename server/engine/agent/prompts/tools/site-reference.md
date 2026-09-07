@@ -13,19 +13,19 @@
 观察日志/           站点文件夹（**里面有 index.html 就被认作一个站点**）
   index.html        入口
   about.html        子页，同目录直接加
-  style.css         样式怎么组织你定 —— 手写道常见全站一份，构建道是 dist/ 里的分片，都行
+  style.css         样式怎么组织你定 —— 手写方式通常全站一份，构建方式为 dist/ 下的分片，两者均可
   posts/            子目录可以有（页面扫描深度 4 层）
   assets/           站点自己的素材，站内写相对路径 assets/x.png 引用
 _drafts/            独立单页住**工作区根**的 _drafts/（不在站点文件夹里）。各自渲成卡并排挑，
                     和其他产物平等；不算任何站的页面、不进整站导出。
-                    ⚠️ 放进 观察日志/_drafts/ 的文件系统**既不当页面也不当卡**，等于消失
+                    ⚠️ 放进 观察日志/_drafts/ 的文件系统**既不计为页面也不生成卡片**，等同于不被识别
 assets/generated/   generate_image 的落点（工作区根），站内引用见「路径铁律」
 .ndignore           不想被系统扫到的东西写这（gitignore 语法，无 ! 反选），只认工作区根这一份
 ```
 
 （旧项目里工作区根上直接放 index.html 的「根站」仍被识别和支持，但**新站一律入夹**。）
 
-**构建型站点**（Vite / React / Vue / Astro / 11ty / 自写 build 脚本）：源随便组织，
+**构建型站点**（Vite / React / Vue / Astro / 11ty / 自写 build 脚本）：源码结构自行组织，
 构建产物落 `dist/`（或 `out/` `build/` `_site/` `public/`，有 index.html 的那个自动
 被认作**产物根**）。现代工程源码里的 `index.html`（引 `/src/main.tsx` 那种 dev 入口）
 **不会**被误当产物 —— 构建完系统自动优先 dist。`.nd-project.json` 的 `"root": "<目录>"`
@@ -81,7 +81,7 @@ WebGL/Three.js（含 R3F）的一个静默坑：渲染器属性（如剖切要�
 
 ## 运行时库与构建
 
-- CDN 随便用（跟 deck 同生态）：`<script>` 标签或 importmap 拉 gsap / lenis /
+- CDN 可自由使用（跟 deck 同生态）：`<script>` 标签或 importmap 拉 gsap / lenis /
   three / alpine / htmx / echarts / katex（esm.sh / unpkg / jsdelivr）
 - npm install 跑得通，但依赖不进导出包 —— 只有构建型站点才值得装
 - **打包器一律配相对 base**（vite: `base: './'`）—— 预览挂在 artifact-file
@@ -117,5 +117,5 @@ WebGL/Three.js（含 R3F）的一个静默坑：渲染器属性（如剖切要�
 - **字体链少了 CJK 那段**：`'Inter', sans-serif` 换台机器中文就掉到系统默认字体。
   每段 latin family 后面必须跟 `'PingFang SC', 'Noto Sans SC'`
 - **改了 style.css 预览没变**：不会。html/css/js 走 `no-cache`，写完即时刷新
-- **标点跟正文主体语言走**：中文正文里的 `,` `:` 很扎眼，用全角 `，` `：`；
-  英文正文反过来，全角标点混进去一样扎眼，用半角加空格
+- **标点跟正文主体语言走**：中文正文里的 `,` `:` 会破坏版面一致性，用全角 `，` `：`；
+  英文正文反过来，全角标点混入同样破坏一致性，用半角加空格

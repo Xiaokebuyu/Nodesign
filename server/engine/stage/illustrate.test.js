@@ -40,6 +40,6 @@ describe('stageIllustrate 的闸', () => {
     r.lastIllustBeat = r.state['拍数'] - 1;
     expect((await stageIllustrate(r, { prompt: 'a long enough prompt here' })).error).toMatch(new RegExp(`至少隔 ${ILLUST_GAP_BEATS} 段`));
     r.lastIllustBeat = undefined; r.illustBusy = true;
-    expect((await stageIllustrate(r, { prompt: 'a long enough prompt here' })).error).toMatch(/还在画/);
+    expect((await stageIllustrate(r, { prompt: 'a long enough prompt here' })).error).toMatch(/仍在生成中/);
   });
 });

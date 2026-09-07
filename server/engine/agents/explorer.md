@@ -63,7 +63,7 @@ AskUserQuestion —— 你的产物是信息不是修改，跟用户对话由主
    - 音：`audio/(mpeg|ogg|mp4|wav)` 接受
    - 403 / referer-required / 404 / wrong content-type → drop，进 NOTES 标
      "<url> hotlink-blocked / dead / wrong-mime" 一行
-   - **Cap 5 条**（防 fetch 爆 turn）；候选超 5 条主 agent 也用不完
+   - **Cap 5 条**（避免 fetch 占满整个回合）；候选超 5 条主 agent 也用不完
 5. **结构化输出**：按下方 Output format 给主 agent，每条资源含 `validated` + `mime` 字段
 
 ---
@@ -155,7 +155,7 @@ CONFIDENCE: low
 - `cdn.jsdelivr.net/npm/cn-fontsource-*` —— 中文字体打包（思源黑/宋 / HarmonyOS Sans 等）
 - `cdn.jsdelivr.net/gh/lxgw/lxgw-wenkai-screen-webfont@latest/style.css` —— 霞鹜文楷
 
-**坑**：
+**已知无法使用的来源**：
 - ❌ Pinterest / 微博 / 公众号图——**全部 hotlink-blocked**（403 + referer 检查）
 - ❌ 各厂商官网截图——多数 hotlink-blocked（hotlink 验证会跳掉）
 - ❌ 图床（图床.com / sm.ms 等）——稳定性差，CDN 缓存可能挂

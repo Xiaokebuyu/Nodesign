@@ -79,7 +79,7 @@ write_on_board (tag: "${STATE_TABLE_TAG}"), then set values here.`,
       if (!found.found) {
         if (found.reason === 'multiple') {
           return fail(`板上有 ${found.rels.length} 条 tag 是「${STATE_TABLE_TAG}」的板书：${found.rels.join('、')}。`
-            + `状态表只能有一条 —— 先把多余的那条改掉 tag 或撤下来（edit_board remove），我不猜该改哪一条。`);
+            + `状态表只能存在一条 —— 请先修改多余条目的 tag 或将其移除（edit_board remove）；存在多条时不会自动选择。`);
         }
         return fail(`板上还没有状态表。先用 write_on_board 落一条（\`tag: "${STATE_TABLE_TAG}"\`），`
           + `正文里放一张两列的表：\n\n| 键 | 值 |\n| --- | --- |\n| 好感度_苏绵 | 3 |\n\n然后再来 set_vars。`);
@@ -98,7 +98,7 @@ write_on_board (tag: "${STATE_TABLE_TAG}"), then set values here.`,
         }
         // 大声失败：读不懂就停，绝不"尽力写" —— 写坏的表下一次会被写得更坏，
         // 而这一路是三个写入方里唯一守得住的那个
-        return fail(`${found.rel} 的状态表看不懂，这次一个键都没改：${err.message}\n`
+        return fail(`${found.rel} 的状态表无法解析，这次一个键都没改：${err.message}\n`
           + `（先把表修好 —— 它是普通 markdown，Read 那个文件就能看见。）`);
       }
 

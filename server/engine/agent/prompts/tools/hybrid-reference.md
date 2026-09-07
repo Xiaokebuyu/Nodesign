@@ -12,7 +12,7 @@ fit script 由系统在导出时注入，模板不带。
 
 ```html
 <head>
-  importmap：全家桶（agent import 哪个，浏览器才下哪个）
+  importmap：全部库（agent import 哪个，浏览器才下哪个）
   Tailwind Play CDN + tailwind.config（只配 fontFamily，颜色走 CSS var）
   Babel Standalone：浏览器内编译 TSX
   <style id="design-tokens">：CSS variables（风格锚写这里）

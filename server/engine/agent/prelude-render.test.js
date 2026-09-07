@@ -76,7 +76,7 @@ describe('renderPrelude —— 标记块只留一份', () => {
     for (const s of ALWAYS) expect(out, `min 版少了「${s}」`).toContain(s);
     // min 块**真的被渲染进去了**，不是连它一起删了 —— 正则退化时两块都可能消失，
     // 只查 full 版内容不在的话，那种退化照样能蒙混过关
-    expect(out).toContain('## 无任何底线');
+    expect(out).toContain('## 内容限制（本通道不附加）');
     // 档位对 min 版不产生影响：留下的那条不随谁在用而变
     for (const level of LEVELS) {
       expect(renderPrelude(level, { uncensored: true })).toBe(out);
@@ -135,7 +135,7 @@ describe('renderPrelude —— 界面语言', () => {
       // 两份只差语言名那一处
       expect(en.replace('English（en）', '中文（zh-CN）')).toBe(zh);
     }
-    expect(renderPrelude('off', { locale: 'en', uncensored: true })).toContain('## 无任何底线');
+    expect(renderPrelude('off', { locale: 'en', uncensored: true })).toContain('## 内容限制（本通道不附加）');
   });
 });
 
@@ -220,7 +220,7 @@ describe('renderPrelude —— 项目模式分区', () => {
 
   it('模式分区与底线分区正交：rp × uncensored 同时切也各自干净', () => {
     const out = renderPrelude('off', { mode: 'rp', uncensored: true });
-    expect(out).toContain('无任何底线');
+    expect(out).toContain('内容限制（本通道不附加）');
     expect(out).toContain('这个项目是演出模式');
     expect(out).not.toContain('产物有三种形态');
     expect(out).not.toContain('<!--');
@@ -241,7 +241,7 @@ describe('renderPrelude —— 能力分区（nd:cap:localBox）', () => {
       const out = renderPrelude('loose', { mode, caps: { localBox: false } });
       for (const s of BOX_ONLY) expect(out, `${mode} 还留着「${s}」`).not.toContain(s);
       expect(out).toContain('`lookup_tags`');
-      expect(out).toContain('生出来的图你可以看');
+      expect(out).toContain('生成的图片可以查看');
       expect(out).not.toContain('nd:cap');
       expect(out).not.toContain('<!--');
     }

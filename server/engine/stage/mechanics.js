@@ -231,7 +231,7 @@ export async function stageIllustrate(rt, { prompt, kind = 'moment', caption = '
   if (kind === 'moment' && rt.lastIllustBeat !== undefined && beat - rt.lastIllustBeat < ILLUST_GAP_BEATS) {
     return { error: `上一张才画在 ${beat - rt.lastIllustBeat} 段前，至少隔 ${ILLUST_GAP_BEATS} 段再画。` };
   }
-  if (rt.illustBusy) return { error: '上一张还在画，这一段别再要。' };
+  if (rt.illustBusy) return { error: '上一张仍在生成中，本段不再受理新的配图请求。' };
   const text = String(prompt || '').trim();
   if (text.length < 10) return { error: 'prompt 太短，写清画面：光线、构图、人物姿态与神情、环境。' };
   const sceneNow = rt.lastScene || sceneOf(null, rt.state);

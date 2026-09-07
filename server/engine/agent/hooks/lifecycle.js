@@ -104,7 +104,7 @@ export function makeStopReflectionHandler({ ctx, workspaceRoot }) {
                 const remain = Math.max(0, realMax - used).toLocaleString();
                 let body;
                 if (hit.tone === 'soft') {
-                  body = `上下文已用 ${percent}%（${usedStr}/${maxStr} tokens），还能再写一阵；下一个段落收尾时把当前进度记进记忆（记忆/ 主题文件+MEMORY.md 一行）或落一张便利贴（Write notes/<slug>.md），避免后续 compact 丢上下文。`;
+                  body = `上下文已用 ${percent}%（${usedStr}/${maxStr} tokens），剩余容量仍较充裕；下一个段落收尾时把当前进度记进记忆（记忆/ 主题文件+MEMORY.md 一行）或落一张便利贴（Write notes/<slug>.md），避免后续 compact 丢上下文。`;
                 } else if (hit.tone === 'firm') {
                   body = `上下文已用 ${percent}%（${usedStr}/${maxStr}，剩 ~${remain}）。从下一轮开始整理结论 / 落档，避免被自动 compact 硬切。`;
                 } else {

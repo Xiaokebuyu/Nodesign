@@ -182,7 +182,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           // Edit。笔权按作者判：只有作者本人能改自己的话（接续权闸的同一条纪律，
           // 角色因此第一次拥有了改自己板书的手）。
           if (e && !e.kind && id.startsWith(`${CHALK_DIR}/`)) {
-            if ((e.by || 'agent') !== by) { fail(`这条板书是「${e.by || 'agent'}」写的，笔权在它 —— 想让它改，寄 cue（SendMessage）或让用户直接说。`); continue; }
+            if ((e.by || 'agent') !== by) { fail(`这条板书是「${e.by || 'agent'}」写的，该条归它所有 —— 如需修改，用 SendMessage 通知它，或由用户直接提出。`); continue; }
             if (!o.text) { fail('改板书给 text（字号/字体/颜色是画布原生节点的旋钮，板书没有）'); continue; }
             const abs = chalkAbsPath(projectId, id);
             if (!abs) { fail(`${id} 的文件路径解析不了`); continue; }
@@ -221,7 +221,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           // 已经能按用户手感排（inferFlowDir 学票、自动挑侧），硬拒的最大受害者
           // 是用户自己（"帮我挪一下"被 agent 顶回"你自己拖"）。放开但**如实报**：
           // 挪的是他亲手摆的东西，agent 得心里有数、他不认可拖回去就是。
-          const wasUser = e.seat === 'user' ? '（原是用户亲手摆的，已挪 —— 他不认可会拖回去）' : '';
+          const wasUser = e.seat === 'user' ? '（该位置原由用户手动设置，现已移动；用户可自行拖回）' : '';
           const box = rectOf(id);
           const p = placeTo(o.to, box, new Set([id]));
           if (p.error) { fail(p.error); continue; }
@@ -395,7 +395,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           }
           const from = members.sort((a, b) => a[1].y - b[1].y)[0][0];   // 组里最上面那件当代表
           const to = targets.sort((a, b) => (a[1].y + (a[1].h || 0)) - (b[1].y + (b[1].h || 0))).pop()[0];   // 最下面 = 最新
-          if (from === to) { fail('组代表和目标是同一件（group_tag/target_tag 传反了？）'); continue; }
+          if (from === to) { fail('组代表和目标是同一件（请检查 group_tag 与 target_tag 是否颠倒）'); continue; }
           const existing = Object.entries(liveBindings).find(([, b]) => b.follow === bareTag(o.target_tag) && live[b.from]?.tag === bareTag(o.group_tag));
           const id = existing ? existing[0] : `b:a${stamp()}`;
           const binding = { type: 'annotates', from, to, by, label: o.label || '跟随', follow: bareTag(o.target_tag), ...(o.side ? { followSide: o.side } : {}) };
@@ -479,7 +479,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           // 藏进一张卷卡，展开即归位。视觉/渲染/read_board 三头减负，地皮照旧占着
           //（落位引擎仍把它们当障碍，所以永远不会有新东西压进卷里）。
           const members = Object.entries(live).filter(([, e]) => e?.tag === o.tag && Number.isFinite(e?.x));
-          if (!members.length) { fail(`没有 #${o.tag} 的东西，没得收`); continue; }
+          if (!members.length) { fail(`没有带 #${o.tag} 的条目，无法收纳`); continue; }
           if (board.rolls?.[o.tag] && !rolls[o.tag]) {
             report.push(`· #${i + 1} roll：#${o.tag} 本来就收着（${members.length} 件）`); ok += 1; continue;
           }

@@ -121,7 +121,7 @@ rewriting it.`,
         .find(([s2, e2]) => s2 !== slug && typeof e2?.card === 'string'
           && e2.card.replace(/\/角色卡\.md$/, '') === `${rolesRel}/${folder}`);
       if (claimedBy) {
-        return fail(`「${displayName}」这个家已经是 ${claimedBy[0]} 的了（角色/${folder}/）。`
+        return fail(`「${displayName}」的角色目录已归 ${claimedBy[0]} 使用（角色/${folder}/）。`
           + `同名两个角色会共用角色卡和记忆件 —— 换个展示名，`
           + `或者你要的其实是同一个人的话，用 ${claimedBy[0]} 这个名字重登（改卡就是重登同一个 slug）。`);
       }

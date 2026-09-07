@@ -151,7 +151,7 @@ describe('⭐ 条件触发器：端到端真跑（求值点=注入点）', () =>
     await put(withTrig('| 好感度 | 6 |'));
     const r3 = (await h({ prompt: 'hi' }, 't', {})).hookSpecificOutput.additionalContext;
     expect(r3, '假→真那一轮必须响').toMatch(/她开始主动找你说话了/);
-    expect(r3).toMatch(/条件命中/);
+    expect(r3).toMatch(/个条件被触发/);
 
     // ③ 一直为真，不再响；once 已退休
     await put(withTrig('| 好感度 | 7 |'));

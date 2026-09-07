@@ -11,9 +11,9 @@
 ## 真正硬的几条
 
 - **格数有天花板**：超过 6 格视觉碎片化，切 `<Tabs>`（≤4 个 variant 逐个看）或
-  embla 轮播（更多）。模板自带 `<Card>` `<Tabs>`，feature 阵列优先 reach for。
+  embla 轮播（更多）。模板自带 `<Card>` `<Tabs>`，feature 阵列优先使用这两个组件。
 - **每格图共用 referenceImages** 保持风格一致，跟 portrait 的多人物同理。
-- **锁图片比例**（aspect-ratio），不锁的 grid 高度参差是最常见的翻车。
+- **锁图片比例**（aspect-ratio），未锁定比例时 grid 高度参差，是最常见的失误。
 - caption 是辅料，字号和颜色明确低于格标题。
 
 ## 写法
