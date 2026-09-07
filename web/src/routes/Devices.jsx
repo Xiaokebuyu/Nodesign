@@ -42,23 +42,23 @@ export default function Devices() {
   return (
     <AppShell breadcrumb={crumbs}>
       <div style={{ maxWidth: 820, margin: '0 auto', padding: `${GAP.xl}px ${GAP.xl}px 80px`, fontFamily: FONT_SANS }}>
-        <Section title={t('桌面版设备')} desc={t('在电脑上装了 NoDesign 桌面版（或用 npx 跑）的话，签一枚令牌填进它的设置页「NoDesign 服务」，那台机器的推理就走这个账号、按这个账号计量')}>
+        <Section title={t('桌面版设备')} desc={t('若您在电脑上安装了 NoDesign 桌面版（或通过 npx 运行），可签发一枚令牌填入其设置页的「NoDesign 服务」。该设备的推理将使用本账号，并按本账号计量')}>
           <Card>
             {err && <Err>{err}</Err>}
             <div style={{ display: 'flex', gap: GAP.sm, alignItems: 'center', flexWrap: 'wrap' }}>
-              <TextInput value={label} onChange={setLabel} placeholder={t('给这台机器起个名（可选），如「家里的台式机」')} mono={false} width={320} />
-              <Btn primary onClick={create} disabled={busy}>{t('签一枚新令牌')}</Btn>
+              <TextInput value={label} onChange={setLabel} placeholder={t('为该设备命名（可选），例如「家中台式机」')} mono={false} width={320} />
+              <Btn primary onClick={create} disabled={busy}>{t('签发新令牌')}</Btn>
             </div>
             {fresh && (
               <div style={{ marginTop: GAP.md, padding: GAP.md, background: 'rgba(43,33,23,0.04)', borderRadius: 8 }}>
                 <div style={{ fontSize: FONT_SIZE.sm, color: COLOR.text2, marginBottom: GAP.xs }}>
-                  {t('这枚令牌只显示这一次，现在就复制走：')}
+                  {t('该令牌仅显示一次，请立即复制保存：')}
                 </div>
                 <div style={{ display: 'flex', gap: GAP.sm, alignItems: 'center', flexWrap: 'wrap' }}>
                   <code style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, wordBreak: 'break-all', userSelect: 'all', flex: 1, minWidth: 240 }}>{fresh.token}</code>
                   <Btn small onClick={copy}>{copied ? t('已复制') : t('复制')}</Btn>
                 </div>
-                <Hint>{t('填到桌面版：设置 → NoDesign 服务 → 设备令牌。丢了就在下面吊销这一枚，再签一枚新的。')}</Hint>
+                <Hint>{t('填入桌面版：设置 → NoDesign 服务 → 设备令牌。令牌遗失时，请在下方吊销该令牌并重新签发。')}</Hint>
               </div>
             )}
           </Card>
@@ -67,7 +67,7 @@ export default function Devices() {
         <Section title={t('在用的设备')}>
           <Card>
             {devices === null ? <span style={{ color: COLOR.sub, fontSize: FONT_SIZE.sm }}>{t('读取中…')}</span>
-              : active.length === 0 ? <span style={{ color: COLOR.sub, fontSize: FONT_SIZE.sm }}>{t('还没有签过令牌')}</span>
+              : active.length === 0 ? <span style={{ color: COLOR.sub, fontSize: FONT_SIZE.sm }}>{t('暂未签发过令牌')}</span>
                 : <DeviceRows rows={active} onRevoke={revoke} busy={busy} />}
           </Card>
         </Section>

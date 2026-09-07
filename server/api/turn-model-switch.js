@@ -52,7 +52,7 @@ export async function hotSwitchModelHandler(req, res, next) {
     if (wanted) {
       const modelUser = modelUserFor(req, project);   // 资格按项目 owner 算（_guard.js）
       if (isModelLockedFor(modelUser, wanted)) {
-        return res.status(403).json({ error: msg(req, '这个模型仅限 Pro 档，暂未对外开放'), code: 'MODEL_LOCKED', model: wanted });
+        return res.status(403).json({ error: msg(req, '该模型仅限 Pro 档，当前不对外开放'), code: 'MODEL_LOCKED', model: wanted });
       }
       if (!allowedModelsFor(modelUser).some((m) => m.id === wanted)) {
         return res.status(400).json({ error: `unknown model: ${model}`, code: 'UNKNOWN_MODEL' });

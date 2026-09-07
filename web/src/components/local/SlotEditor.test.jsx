@@ -55,10 +55,10 @@ function render(models) {
 /** ⚠️ 填进去的字（显示名、模型名）在 input.value 里，**不在 textContent 里** */
 const inputValues = () => [...host.querySelectorAll('input')].map((i) => i.value);
 /**
- * 崩的那一句 `t('剥掉（非 Claude 用这个）')` 的产物。断言它在页面上 =
+ * 崩的那一句 `t('剥离（非 Claude 模型使用）')` 的产物。断言它在页面上 =
  * 直接证明那次调用返回了字符串，而不是"没抛异常所以大概没事"。
  */
-const THINKING_STRIP_LABEL = '剥掉（非 Claude 用这个）';
+const THINKING_STRIP_LABEL = '剥离（非 Claude 模型使用）';
 
 describe('模型插槽编辑器', () => {
   it('⛔ 刚「加一行」出来的空模型行能渲染（0.0.8 就是死在这儿）', () => {

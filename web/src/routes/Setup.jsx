@@ -71,7 +71,7 @@ export function ComponentRows({ data, install, uninstall, compact = false }) {
 function stageLabel(job) {
   const pct = Math.round((job.progress || 0) * 100);
   const mb = (n) => `${(n / 1048576).toFixed(0)} MB`;
-  if (job.status === 'probing') return t('在测哪个下载源快…');
+  if (job.status === 'probing') return t('正在测试下载源速度…');
   const src = job.source === 'mirror' ? ` · ${t('镜像')}` : job.source === 'official' ? ` · ${t('官方源')}` : '';
   if (job.status === 'downloading') return `${t('下载中')} ${pct}%${job.total ? ` · ${mb(job.bytes || 0)} / ${mb(job.total)}` : ''}${src}`;
   if (job.status === 'verifying') return t('校验中');
@@ -93,7 +93,7 @@ export default function Setup() {
       <div style={{ width: 760, maxWidth: '100%' }}>
         <h1 style={{ fontFamily: FONT_KAI, fontSize: 26, color: COLOR.text, margin: `0 0 ${GAP.xs}px` }}>{t('准备工作')}</h1>
         <p style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text3, margin: `0 0 ${GAP.lg}px` }}>
-          {t('这些是 NoDesign 要用到的外部程序，第一次要下载一下。都装上功能最全；先跳过也行，以后在设置 → 组件里补。')}
+          {t('以下是 NoDesign 需要使用的外部程序，首次使用需先下载。全部安装后功能最完整；也可以先跳过，之后在「设置 → 组件」中补装。')}
         </p>
         <div style={{ background: COLOR.bgWhite, borderRadius: RADIUS.lg, padding: GAP.lg }}>
           {err && <Err>{err}</Err>}
@@ -103,7 +103,7 @@ export default function Setup() {
         <div style={{ display: 'flex', gap: GAP.md, marginTop: GAP.lg, alignItems: 'center' }}>
           {missing.length > 0 && <Btn primary onClick={installAll} disabled={busy}>{t('全部安装（{n} 个）', { n: missing.length, count: missing.length })}</Btn>}
           <span style={{ flex: 1 }} />
-          <Btn onClick={finish} disabled={busy}>{missing.length === 0 ? t('完成，进入') : t('稍后再说，先进入')}</Btn>
+          <Btn onClick={finish} disabled={busy}>{missing.length === 0 ? t('完成并进入') : t('暂不安装，直接进入')}</Btn>
         </div>
       </div>
     </div>

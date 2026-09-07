@@ -23,12 +23,12 @@ import ComponentsSection from '../components/settings/ComponentsSection.jsx';
 import AboutSection from '../components/settings/AboutSection.jsx';
 
 const SECTIONS = [
-  { id: 'account', label: '账户', desc: '你的站点账号、档位和这台设备', Icon: User, local: true, hosted: true },
-  { id: 'usage', label: '用量', desc: '近 30 天花了多少、花在哪个模型上', Icon: BarChart3, local: true, hosted: true },
-  { id: 'appearance', label: '外观', desc: '语言、字体和界面缩放，改了立刻生效', Icon: Palette, local: true, hosted: true },
-  { id: 'models', label: '模型', desc: '新会话默认用哪个、选择器里列哪些', Icon: Cpu, local: true, hosted: false },
-  { id: 'components', label: '组件', desc: '截图、导出、抠图这些功能要用到的外部程序', Icon: Package, local: true, hosted: false },
-  { id: 'about', label: '关于', desc: '版本、更新、数据存放位置', Icon: Info, local: true, hosted: false },
+  { id: 'account', label: '账户', desc: '您的站点账号、档位与本机设备', Icon: User, local: true, hosted: true },
+  { id: 'usage', label: '用量', desc: '近 30 天的消费金额与模型分布', Icon: BarChart3, local: true, hosted: true },
+  { id: 'appearance', label: '外观', desc: '语言、字体与界面缩放，修改后立即生效', Icon: Palette, local: true, hosted: true },
+  { id: 'models', label: '模型', desc: '新建会话的默认模型，以及选择器中显示的模型', Icon: Cpu, local: true, hosted: false },
+  { id: 'components', label: '组件', desc: '截图、导出、抠图等功能所需的外部程序', Icon: Package, local: true, hosted: false },
+  { id: 'about', label: '关于', desc: '版本、更新与数据存放位置', Icon: Info, local: true, hosted: false },
 ];
 // 旧链接 #advanced 仍指到关于页（重启 / 钥匙都在那里的「开发者选项」）
 const ALIAS = { advanced: 'about' };
@@ -80,7 +80,7 @@ export default function Settings() {
         const r = await fetch('/api/local/status');
         if (r.ok) { const s = await r.json(); if (s.pid !== status?.pid) { window.location.reload(); return; } }
       } catch { /* 还没起来 */ }
-      if (Date.now() < deadline) setTimeout(tick, 700); else { setRestarting(false); showToast?.(t('重启超时，手动刷新看看'), 'error'); }
+      if (Date.now() < deadline) setTimeout(tick, 700); else { setRestarting(false); showToast?.(t('重启超时，请手动刷新页面'), 'error'); }
     };
     setTimeout(tick, 1200);
   };

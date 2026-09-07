@@ -30,11 +30,11 @@ export default function ModelsSection({ status, cfg, draft, setDraft, save, savi
   const byokCount = cfg?.activeExternalModels?.length || 0;
   return (
     <>
-      <Panel title={t('可用的模型')} desc={t('默认是新会话起步用的那一个；关掉显示的行不会出现在选择器里，正在用它的会话不受影响')}>
+      <Panel title={t('可用的模型')} desc={t('默认模型用于新建的会话。关闭显示后该行不再出现在选择器中，正在使用它的会话不受影响')}>
         {err && <Block><Note tone="bad">{err}</Note></Block>}
         {!list && !err && <Block first><Note>{t('读取中…')}</Note></Block>}
         {list && options.length === 0 && (
-          <Block first><Note>{t('还没有可用的模型。到「账户」登录站点账号，或在下面填自己的 API Key。')}</Note></Block>
+          <Block first><Note>{t('暂无可用模型。请在「账户」中登录站点账号，或在下方填写您的 API Key。')}</Note></Block>
         )}
         {options.map((m, i) => {
           const isDefault = list.default === m.id;
@@ -46,8 +46,8 @@ export default function ModelsSection({ status, cfg, draft, setDraft, save, savi
                 <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md, flexWrap: 'wrap' }}>
                   <span style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, color: COLOR.text }}>{m.label}</span>
                   {isDefault && <Badge tone="ink">{t('默认')}</Badge>}
-                  <Badge>{m.source === 'relay' ? t('站点') : t('自己的钥匙')}</Badge>
-                  {m.locked && <Badge tone="warn">{m.lockReason || t('锁着')}</Badge>}
+                  <Badge>{m.source === 'relay' ? t('站点') : t('自有 API Key')}</Badge>
+                  {m.locked && <Badge tone="warn">{m.lockReason || t('受限')}</Badge>}
                 </div>
                 {m.desc && <div style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, color: COLOR.text4, marginTop: 2, lineHeight: 1.6 }}>{m.desc}</div>}
               </div>
@@ -57,12 +57,12 @@ export default function ModelsSection({ status, cfg, draft, setDraft, save, savi
         })}
       </Panel>
 
-      <Panel title={t('使用自己的 API Key')} desc={t('填了钥匙的模型走你自己的账，不经站点，也不计入站点额度。')}>
+      <Panel title={t('使用自己的 API Key')} desc={t('使用您自己 API Key 的模型不经过站点，费用由您的 API 账户承担，也不计入站点额度。')}>
         <Disclosure title={t('Claude 官方')} desc={status?.claudeAuth ? t('已配') : t('未配')}>
           <EnvKeys only={['模型']} bare showToast={showToast} onSaved={onStatus} />
         </Disclosure>
         <Disclosure title={t('自定义服务商')} desc={byokCount ? t('已配 {n} 个模型', { n: byokCount, count: byokCount }) : t('DeepSeek、OpenAI、智谱、通义、OpenRouter、中转站、本机 Ollama')}>
-          <Note>{t('OpenAI 格式或 Anthropic 格式都行。改完要重启服务端才生效（「关于」页有按钮）。')}</Note>
+          <Note>{t('支持 OpenAI 格式与 Anthropic 格式。修改后需重启服务端方可生效（「关于」页提供重启按钮）。')}</Note>
           <div style={{ marginTop: GAP.md }}>
             {cfg && draft
               ? <SlotEditor config={draft} setConfig={setDraft} errors={cfg.errors} enums={cfg.enums} active={cfg.activeExternalModels} needsRestart={needsRestart} onSave={save} saving={saving} showToast={showToast} />

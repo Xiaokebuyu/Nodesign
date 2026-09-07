@@ -96,7 +96,7 @@ export async function decideRelay({ user, body, appModel }, { moderate = moderat
 
   // ── 闸 1：档位。订阅通路骑的是站主账号，basic 档不给（auth/tier.js 的能力表） ──
   if (route.mode === 'subscription' && !hasSubscriptionAccess(user)) {
-    return deny(403, 'SUBSCRIPTION_REQUIRED', '这个账号没有订阅通路资格，换一个 API 模型。');
+    return deny(403, 'SUBSCRIPTION_REQUIRED', '当前账号不具备订阅通路权限，请改用 API 模型。');
   }
 
   // ── 闸 2：额度。服务器自己算的数，不看客户端报什么 ──

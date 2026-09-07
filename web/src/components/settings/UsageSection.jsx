@@ -52,16 +52,16 @@ export default function UsageSection({ isLocal }) {
           </div>
         </Block>
       </Panel>
-      <Panel title={t('每日花费')} desc={t('把鼠标停在柱子上看那天按模型怎么拆')}
+      <Panel title={t('每日花费')} desc={t('将指针停在柱状图上可查看当日按模型的明细')}
         aside={<div style={{ display: 'flex', gap: GAP.lg, paddingTop: 4 }}>
-          <Legend color={COLOR.btn} label={isLocal ? t('站点账本') : t('本站')} />
-          {isLocal && <Legend color={COLOR.dim} label={t('本机（自己的钥匙）')} />}
+          <Legend color={COLOR.btn} label={isLocal ? t('站点账单') : t('本站')} />
+          {isLocal && <Legend color={COLOR.dim} label={t('本机（自有 API Key）')} />}
         </div>}>
         <Block first style={{ paddingTop: GAP.sm }}>
-          {err && <Note tone="bad">{t('用量读不到：{err}', { err })}</Note>}
-          {siteErr && <Note tone="warn">{t('站点账本暂时读不到：{err}', { err: siteErr })}</Note>}
+          {err && <Note tone="bad">{t('用量读取失败：{err}', { err })}</Note>}
+          {siteErr && <Note tone="warn">{t('站点账单暂时无法读取：{err}', { err: siteErr })}</Note>}
           {!data && !err && <Note>{t('读取中…')}</Note>}
-          {empty && <Note>{t('这 30 天还没有花费。开一个会话用起来，这里就会有曲线。')}</Note>}
+          {empty && <Note>{t('近 30 天暂无消费记录。开始使用后，此处会显示用量曲线。')}</Note>}
           <div style={{ overflowX: 'auto', opacity: empty ? 0.5 : 1 }}>
             <svg width={W} height={H + 26} style={{ display: 'block', fontFamily: FONT_KAI }} viewBox={`0 0 ${W} ${H + 26}`}>
               {days.map((d, i) => {
@@ -86,7 +86,7 @@ export default function UsageSection({ isLocal }) {
               <>
                 <span style={{ fontFamily: FONT_MONO, color: COLOR.text }}>{picked}</span>
                 <span style={{ margin: `0 ${GAP.sm}px` }}>·</span>
-                {(series.byDay.get(picked) || []).sort((a, b) => b.cost - a.cost).map((m) => `${m.model}${m.src ? `（${m.src}）` : ''} $${m.cost.toFixed(3)}`).join('　') || t('没有花费')}
+                {(series.byDay.get(picked) || []).sort((a, b) => b.cost - a.cost).map((m) => `${m.model}${m.src ? `（${m.src}）` : ''} $${m.cost.toFixed(3)}`).join('　') || t('无消费记录')}
               </>
             ) : null}
           </div>

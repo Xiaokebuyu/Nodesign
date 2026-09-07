@@ -8,12 +8,12 @@ export default function ComponentsSection({ onStatus }) {
   const { data, err, install, uninstall, reload } = useComponents();
   const reprobe = async () => { const r = await fetch('/api/local/components/reprobe', { method: 'POST' }).then((x) => x.json()); onStatus?.({ capabilities: r.capabilities }); reload(); };
   return (
-    <Panel title={t('外部程序')} desc={t('都装上功能最全。自己装在别处的程序只要在 PATH 里也认。')}
-      aside={<Button size="sm" variant="ghost" onClick={reprobe} title={t('自己装了程序之后点一下，让 NoDesign 重新找一遍')}>{t('重新检测')}</Button>}>
+    <Panel title={t('外部程序')} desc={t('全部安装后功能最完整。已安装在其他位置的程序，只要在 PATH 中即可识别。')}
+      aside={<Button size="sm" variant="ghost" onClick={reprobe} title={t('手动安装程序后点击此处，让 NoDesign 重新检测')}>{t('重新检测')}</Button>}>
       {err && <Block><Note tone="bad">{err}</Note></Block>}
-      {data?.manifestError && <Block><Note tone="warn">{t('组件清单拉不到：{err}', { err: data.manifestError })}</Note></Block>}
+      {data?.manifestError && <Block><Note tone="warn">{t('组件清单获取失败：{err}', { err: data.manifestError })}</Note></Block>}
       {!data && <Block first><Note>{t('读取中…')}</Note></Block>}
-      {data && !(data.components || []).some((c) => c.supported) && <Block first><Note>{t('这个系统上没有需要单独安装的程序。')}</Note></Block>}
+      {data && !(data.components || []).some((c) => c.supported) && <Block first><Note>{t('当前系统无需单独安装外部程序。')}</Note></Block>}
       {data && <ComponentRows data={data} install={install} uninstall={uninstall} />}
     </Panel>
   );

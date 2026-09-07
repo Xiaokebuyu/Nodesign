@@ -92,7 +92,7 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     const user = getUserById(r.userId);
     const label = typeof body.label === 'string' ? body.label.trim().slice(0, 60) : '';
     const active = listDevices(user.id).filter((d) => !d.revoked);
-    if (active.length >= MAX_DEVICES) return sendError(res, 409, 'TOO_MANY_DEVICES', `最多 ${MAX_DEVICES} 台在用的设备，到站点「桌面版设备」吊销一台`);
+    if (active.length >= MAX_DEVICES) return sendError(res, 409, 'TOO_MANY_DEVICES', `在用设备数量已达上限（${MAX_DEVICES} 台），请在站点「桌面版设备」中吊销一台后重试`);
     const { device, token } = mintDevice({ userId: user.id, label: label || null });
     res.status(201).json({ token, device: { id: device.id, label: device.label }, user: { id: user.id, username: user.username, tier: tierOf(user) } });
   });
@@ -148,7 +148,7 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     const user = req.relayUser;
     // 档位闸提前到登记：客户端选了订阅模型而档位不够，这里就说，别等 SDK 起来第一发才 403
     if (resolveModelRoute(appModel).mode === 'subscription' && !hasSubscriptionAccess(user)) {
-      return sendError(res, 403, 'SUBSCRIPTION_REQUIRED', '这个账号没有订阅通路资格，换一个 API 模型。');
+      return sendError(res, 403, 'SUBSCRIPTION_REQUIRED', '当前账号不具备订阅通路权限，请改用 API 模型。');
     }
     const r = openRelaySession({ sid, appModel, userId: user.id, deviceId: req.relayDevice.id });
     if (!r.ok) return sendError(res, r.status, r.code, r.message);
@@ -167,7 +167,7 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     const { session, reason } = lookupRelaySession(sid, user.id);
     if (!session) {
       return reason === 'foreign'
-        ? sendError(res, 403, 'SID_FOREIGN', '这个会话不是你登记的。')
+        ? sendError(res, 403, 'SID_FOREIGN', '该会话不属于当前账号。')
         : sendError(res, 400, 'SESSION_UNKNOWN', '会话没登记：起 query 之前先 POST /api/relay/sessions。');
     }
 

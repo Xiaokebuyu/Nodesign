@@ -49,7 +49,7 @@ export function normalizeRelayUrl(url) {
 
 async function call(pathname, { method = 'GET', body = null, timeoutMs = FETCH_TIMEOUT_MS, auth = true, url = null } = {}) {
   const cfg = relayConfig();
-  if (auth && !cfg) throw Object.assign(new Error('relay 没配（缺 NODESIGN_RELAY_TOKEN）'), { code: 'RELAY_NOT_CONFIGURED' });
+  if (auth && !cfg) throw Object.assign(new Error('relay 未配置（缺少 NODESIGN_RELAY_TOKEN）'), { code: 'RELAY_NOT_CONFIGURED' });
   // 没令牌的路（首启登录）cfg 是 null：地址按 传入 > .env > 官方站 取
   const base = normalizeRelayUrl(url || cfg?.url || process.env.NODESIGN_RELAY_URL);
   const ctrl = new AbortController();
@@ -70,7 +70,7 @@ async function call(pathname, { method = 'GET', body = null, timeoutMs = FETCH_T
     }
     return json;
   } catch (err) {
-    if (err.name === 'AbortError') throw Object.assign(new Error(`relay ${base} ${timeoutMs / 1000}s 没响应`), { code: 'RELAY_TIMEOUT' });
+    if (err.name === 'AbortError') throw Object.assign(new Error(`relay ${base} 在 ${timeoutMs / 1000}s 内无响应`), { code: 'RELAY_TIMEOUT' });
     throw err;
   } finally {
     clearTimeout(timer);

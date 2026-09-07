@@ -245,7 +245,7 @@ router.post('/:pid/chatai/turn', async (req, res, next) => {
 
     // 08-21 经营态：演出通路烧的是带钥匙的 API 钱，公开注册号（免费档）不开 —— 跟订阅 Claude 同一把资格
     if (!can(req.user, 'subscription')) {
-      return res.status(403).json({ error: msg(req, '演出模式仅限 Pro 档，暂未对外开放；当前档位请用设计会话'), code: 'MODEL_LOCKED' });
+      return res.status(403).json({ error: msg(req, '演出模式仅限 Pro 档，当前不对外开放；当前档位请使用设计会话'), code: 'MODEL_LOCKED' });
     }
     const quota = checkQuota(req.user);
     if (!quota.ok) {
