@@ -36,7 +36,7 @@ import { mutex } from 'async-mutex-lite';
 import { validateProjectId, getProject } from '../projects/store.js';
 import { guardProject } from './_guard.js';
 import {
-  ensureSessionWorkspace, ensureProjectWorkspace, validateSessionId, getSharedDir,
+  ensureSessionWorkspace, getWorkspaceRoot, ensureProjectWorkspace, validateSessionId, getSharedDir,
 } from '../projects/workspace.js';
 import { renderRegionShot, saveRegionShot, PADDING, OUT_LONG_EDGE } from '../lib/region-shot.js';
 import { regionShotFromPage } from '../lib/docx-pages.js';
@@ -61,10 +61,12 @@ function guard(req, res) {
 }
 
 /** 两条挂载共用：alias 带 sid 走原路，项目级直接 ensure 工作区 */
-function rootOf(req) {
-  return req.params.sid !== undefined
-    ? ensureSessionWorkspace(req.params.pid, req.params.sid)
-    : ensureProjectWorkspace(req.params.pid);
+async function rootOf(req) {
+  // pending-changes.json 住画布根（agent 读工作区根才看得见）。ensureSessionWorkspace 自
+  // 2026-09-07 起返回 cwd，文件夹项目里那是用户仓库，所以只借它的副作用、根另问。
+  if (req.params.sid !== undefined) await ensureSessionWorkspace(req.params.pid, req.params.sid);
+  else await ensureProjectWorkspace(req.params.pid);
+  return getWorkspaceRoot(req.params.pid);
 }
 
 async function readBuf(sessionRoot) {

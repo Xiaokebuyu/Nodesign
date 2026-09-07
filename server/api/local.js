@@ -32,6 +32,8 @@ import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 import { recordIssue, signatureOf } from '../lib/issues-store.js';
 import { enqueueIssueUpload, flushIssueOutbox } from '../runtime/issue-outbox.js';
+import { openFolder, inspectFolderTrust } from '../projects/folder.js';
+import { getProject } from '../projects/store.js';
 
 export const RESTART_EXIT_CODE = 75;
 
@@ -250,6 +252,30 @@ router.post('/restart', (_req, res) => {
   res.json({ ok: true, note: '正在重启，请在几秒后刷新页面' });
   // 先把响应发出去再退
   setTimeout(() => process.emit('nodesign:restart'), 150);
+});
+
+// ── 文件夹项目（2026-09-07 存量仓库道）──
+// POST /api/local/projects/open-folder { path }  → { project, trust, created }
+//   同一个文件夹再开就是同一个项目（身份在 <folder>/.nodesign/project.json）。
+//   trust.needsDecision 为真且 project.folderTrust 为 null 时前端要先问信任门，
+//   再 PATCH /api/projects/:pid { folderTrust }；没答之前 turn 接口 409。
+router.post('/projects/open-folder', async (req, res, next) => {
+  try {
+    const out = await openFolder({ path: req.body?.path, ownerId: req.user?.id ?? null });
+    res.status(out.created ? 201 : 200).json(out);
+  } catch (err) {
+    if (err?.status === 400) return res.status(400).json({ error: err.message, code: err.code });
+    next(err);
+  }
+});
+
+// GET /api/local/projects/:pid/folder-trust → 重新盘一遍（用户想再看一眼里面有什么）
+router.get('/projects/:pid/folder-trust', async (req, res, next) => {
+  try {
+    const project = getProject(req.params.pid);
+    if (!project?.folderPath) return res.status(404).json({ error: 'not a folder project', code: 'NOT_FOLDER_PROJECT' });
+    res.json({ project, trust: await inspectFolderTrust(project.folderPath) });
+  } catch (err) { next(err); }
 });
 
 export default router;

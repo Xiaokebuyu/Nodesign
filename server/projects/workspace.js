@@ -42,9 +42,11 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mutex } from 'async-mutex-lite';
-import { validateProjectId, getProject } from './store.js';
+import { validateProjectId, getProject, folderPathOf } from './store.js';
 import { resolveModelContextWindow } from '../engine/agent/model-context.js';
 import { ensureActorSlots } from './workspace-slots.js';
+import { NODESIGN_DIR, ensureFolderProjectDir, ensureGitignore } from './workspace-layout.js';
+export { NODESIGN_DIR };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -87,9 +89,7 @@ export function validateSessionId(sid) {
   }
 }
 
-import {
-  DEFAULT_GITIGNORE, DEFAULT_CLAUDE_MD, DEFAULT_CLAUDE_MD_RP,
-} from './workspace-templates.js';
+import { DEFAULT_CLAUDE_MD, DEFAULT_CLAUDE_MD_RP } from './workspace-templates.js';
 import { migrateMemoryLayout } from './memory-migration.js';
 
 /**
@@ -182,13 +182,20 @@ export function getProjectWorkspace(projectId) {
 }
 
 /**
- * **项目工作区根** —— agent 的 cwd，产物的家，画布上看到的一切的真相。
- *
- * 这是扁平化之后唯一有意义的"工作目录"概念。旧名 `getSharedDir` 继续可用
- * （40+ 处调用，含义没变）。
+ * **项目工作区根** —— 产物的家，画布上看到的一切的真相。
+ * 普通项目 `<PROJECTS_DATA_ROOT>/<id>/shared`（也是 agent 的 cwd）；文件夹项目（2026-09-07
+ * 存量仓库道）`<folder>/.nodesign`，agent 站在 `<folder>` 里、画布只看这个点目录 ——
+ * 「agent 站在哪」问 `getAgentCwd`，「画布真相在哪」问这里（88 处调用点全是后者）。
  */
 export function getWorkspaceRoot(projectId) {
+  const folder = folderPathOf(projectId);
+  if (folder) return path.join(folder, NODESIGN_DIR);
   return path.join(getProjectWorkspace(projectId), 'shared');
+}
+
+/** **agent 站在哪**（SDK cwd）：普通项目 = 工作区根；文件夹项目 = 用户的文件夹。转录 / rewind / hydrate 要的是这个 */
+export function getAgentCwd(projectId) {
+  return folderPathOf(projectId) || getWorkspaceRoot(projectId);
 }
 
 /** 旧名，等价于 getWorkspaceRoot */
@@ -203,7 +210,7 @@ export const getSharedDir = getWorkspaceRoot;
  */
 export function getSessionWorkspace(projectId, sessionId) {
   validateSessionId(sessionId);
-  return getWorkspaceRoot(projectId);
+  return getAgentCwd(projectId);
 }
 
 /**
@@ -230,6 +237,9 @@ export async function ensureProjectWorkspace(projectId) {
   await removeRootLegacyArtifacts(projectId);
 
   const root = getWorkspaceRoot(projectId);
+  // 文件夹项目：先立 .nodesign/ 并从用户仓库的 git 视野里摘掉；下面所有家具都落在它里面，用户文件夹的根不碰
+  const folder = folderPathOf(projectId);
+  if (folder) await ensureFolderProjectDir(folder, root, projectId);
   await fs.mkdir(path.join(root, '.claude', 'skills'), { recursive: true });
   await fs.mkdir(path.join(root, '.claude', 'agents'), { recursive: true });
   await fs.mkdir(path.join(root, '.claude', 'agent-memory'), { recursive: true });
@@ -266,22 +276,6 @@ export async function ensureProjectWorkspace(projectId) {
 }
 
 /**
- * .gitignore：保证 DEFAULT_GITIGNORE 里每一条都在，用户自己加的行原样保留。
- * 按行合并而不是整文件覆盖 —— 有人会往里加自己的规则。
- */
-async function ensureGitignore(file) {
-  let existing = '';
-  try { existing = await fs.readFile(file, 'utf8'); } catch { /* 还没有 */ }
-  const have = new Set(existing.split('\n').map(l => l.trim()));
-  const missing = DEFAULT_GITIGNORE.split('\n').filter(l => l.trim() && !have.has(l.trim()));
-  if (!missing.length && existing) return;
-  const merged = existing
-    ? `${existing.replace(/\n*$/, '\n')}${missing.join('\n')}\n`
-    : DEFAULT_GITIGNORE;
-  await fs.writeFile(file, merged, 'utf8');
-}
-
-/**
  * 备好一个会话能开跑的一切（幂等）。返回**项目工作区根** = 这个会话的 cwd。
  *
  * 扁平化之后这里几乎没事干了，值得记一笔它以前干什么：建 `sessions/<sid>/`
@@ -302,7 +296,8 @@ export async function ensureSessionWorkspace(projectId, sessionId) {
   // （这正是 Claude Code 自己的形状）。
   await fs.mkdir(path.join(root, '.claude', 'projects'), { recursive: true });
   await fs.mkdir(getSessionMetaDir(projectId, sessionId), { recursive: true });
-  return root;
+  // 返回的是 cwd：普通项目 = root，文件夹项目 = 用户的文件夹（画布根另问 getWorkspaceRoot）
+  return getAgentCwd(projectId);
 }
 
 /**
@@ -700,7 +695,6 @@ const SESSION_DECK_RE = /^deck:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[
 // 决策从"agent 必须先做"翻译成"agent 看到提示自己判断"。
 
 // Office / PDF：二进制或 OOXML zip 包，Read 直接看是字节流，需 python 解
-
 
 // ── 老结构清理（用户决策"删了"）──
 

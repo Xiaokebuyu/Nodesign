@@ -187,6 +187,12 @@ router.patch('/:pid', (req, res, next) => {
       }
       patch.activeSessionId = v;
     }
+    // 文件夹项目的信任门答案（2026-09-07）。普通项目没有这道门，传了就是错
+    if ('folderTrust' in (req.body || {})) {
+      if (!project.folderPath) return res.status(400).json({ error: 'not a folder project', code: 'NOT_FOLDER_PROJECT' });
+      if (typeof req.body.folderTrust !== 'boolean') return res.status(400).json({ error: 'folderTrust must be boolean' });
+      patch.folderTrust = req.body.folderTrust;
+    }
     const updated = updateProject(req.params.pid, patch);
     // 指针**实际变化**才广播（project 是 guardProject 读的更新前快照）。
     // 为什么这条事件不带 sessionId 字段：见 events.js projectActiveSession 注释。

@@ -84,6 +84,8 @@ export const Me = {
 // ── Local（本地分发版专用：配置 / 钥匙 / 能力 / 体检 / 重启；hosted 下这组路由不存在）──
 export const Local = {
   status: () => jsonRequest('GET', '/api/local/status'),
+  /** 文件夹项目（2026-09-07 存量仓库道）：{ project, trust, created } */
+  openFolder: (path) => jsonRequest('POST', '/api/local/projects/open-folder', { path }),
   config: () => jsonRequest('GET', '/api/local/config'),
   saveConfig: (raw) => jsonRequest('PUT', '/api/local/config', raw),
   env: () => jsonRequest('GET', '/api/local/env'),

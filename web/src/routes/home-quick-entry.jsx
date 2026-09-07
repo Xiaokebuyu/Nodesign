@@ -11,7 +11,8 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { measureCaret } from '../lib/textarea-caret.js';
-import { Plus } from 'lucide-react';
+import { Plus, FolderOpen } from 'lucide-react';
+import FolderTrustDialog from '../components/project/FolderTrustDialog.jsx';
 import ComposerTray from '../components/chat/ComposerTray.jsx';
 import ModelPicker from '../components/chat/ModelPicker.jsx';
 import { isImeEnter } from '../lib/helpers.js';
@@ -19,7 +20,7 @@ import { useMedia, COARSE, NARROW } from '../lib/use-media.js';
 import { Clip } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
-import { Assets } from '../lib/api.js';
+import { Assets, Local } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
 import { SHEET_CLS, MODE_LABEL } from './home-sheets.js';
 
@@ -97,7 +98,14 @@ const CARET_H = 20;
 export default function QuickEntry({ prefill }) {
   const navigate = useNavigate();
   const createProject = useProjectStore(s => s.createProject);
+  const updateProject = useProjectStore(s => s.updateProject);
+  const hydrateOne = useProjectStore(s => s.hydrateOne);
   const showToast = useGlobalStore(s => s.showToast);
+  // 信任门待答的那次打开：{ project, trust, created }（见 FolderTrustDialog）
+  const [trustGate, setTrustGate] = useState(null);
+  // 桌面壳才有「打开文件夹」（2026-09-07 存量仓库道）：网页版没有本地文件系统可选
+  const desktop = typeof window !== 'undefined' ? window.nodesignDesktop : null;
+  const canOpenFolder = typeof desktop?.pickFolder === 'function';
   const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [greeting] = useState(pickGreeting);  // mount 时挑一次，刷新换一个
@@ -253,6 +261,55 @@ export default function QuickEntry({ prefill }) {
     return arr.filter(a => a.id !== id);
   });
 
+  /**
+   * 打开本地文件夹当项目（桌面版）。流程：系统选择框 → 服务端 openFolder（同一个文件夹
+   * 再开就是同一个项目）→ 有信任门要答就先弹 → 进工作区。第一次进去顺手发一句「先看看
+   * 这个仓库」，让 agent 先读不写，写成板书；已经干过活的项目直接进去。
+   */
+  const enterFolderProject = (out) => {
+    const firstVisit = !out.project.activeSessionId;
+    navigate(`/projects/${out.project.id}/work`, firstVisit ? {
+      state: {
+        initialMessage: t('先看看这个仓库：它是什么、怎么跑起来、结构和入口、我上次干到哪。写成板书，最后问我从哪改起。'),
+        attachments: [],
+      },
+    } : undefined);
+  };
+  const openFolder = async () => {
+    if (!canOpenFolder || submitting) return;
+    let folder = null;
+    try { folder = await desktop.pickFolder(); } catch (err) {
+      showToast(t('打开失败：{err}', { err: err.message }), 'error');
+      return;
+    }
+    if (!folder) return;
+    setSubmitting(true);
+    try {
+      const out = await Local.openFolder(folder);
+      await hydrateOne(out.project.id).catch(() => {});
+      if (out.trust?.needsDecision && out.project.folderTrust == null) {
+        setTrustGate(out);
+        setSubmitting(false);
+        return;
+      }
+      enterFolderProject(out);
+    } catch (err) {
+      showToast(t('打开失败：{err}', { err: err.message }), 'error');
+      setSubmitting(false);
+    }
+  };
+  const decideTrust = async (loadSettings) => {
+    const out = trustGate;
+    setTrustGate(null);
+    if (!out) return;
+    try {
+      await updateProject(out.project.id, { folderTrust: loadSettings });
+      enterFolderProject(out);
+    } catch (err) {
+      showToast(t('保存失败：{err}', { err: err.message }), 'error');
+    }
+  };
+
   const submit = async () => {
     const v = text.trim();
     // 只传附件不打字也能开工（2026-08-17，issue #1 第 8 条）
@@ -406,6 +463,16 @@ export default function QuickEntry({ prefill }) {
             >
               <Plus size={14} />
             </button>
+            {canOpenFolder && (
+              <button
+                className="att"
+                title={t('打开本地文件夹当项目')}
+                onClick={openFolder}
+                disabled={submitting}
+              >
+                <FolderOpen size={14} />
+              </button>
+            )}
             {/* 模型选择（2026-08-17，issue #1 第 7 条）：以前只长在会话里的 composer 上，
                 首页这一步反而没有 —— 而首页恰恰是**唯一**能决定新会话用哪个模型的地方
                 （进了会话之后模型的真相在服务端，这颗按钮改的是本地偏好）。
@@ -442,6 +509,13 @@ export default function QuickEntry({ prefill }) {
               槽位不变、露出来的是下一张同类纸的签。
               盖不住回形针和工具栏（两者 z 都比它高）：针别的是整叠，
               +/模型/开工 是这一叠的家什，纸是从它们底下抽走的。 */}
+          <FolderTrustDialog
+            show={!!trustGate}
+            folder={trustGate?.project?.folderPath}
+            trust={trustGate?.trust}
+            onDecide={decideTrust}
+            onCancel={() => setTrustGate(null)}
+          />
           {peel && (
             <div
               key={peel.id}

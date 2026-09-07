@@ -139,6 +139,8 @@ export const useProjectStore = create((set, get) => ({
     if (typeof patch.mode === 'string') apiPatch.mode = patch.mode;
     // 会话指针（2026-08-13 收敛后它就是会话真相源；null = 清空回"新会话"）
     if ('activeSessionId' in patch) apiPatch.activeSessionId = patch.activeSessionId;
+    // 文件夹项目的信任门答案（2026-09-07，桌面版）：没答之前服务端不开会话
+    if (typeof patch.folderTrust === 'boolean') apiPatch.folderTrust = patch.folderTrust;
     if (Object.keys(apiPatch).length === 0) return get().getProject(id);
     const { project } = await Projects.update(id, apiPatch);
     const e = enrich(project);

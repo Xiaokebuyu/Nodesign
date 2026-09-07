@@ -27,7 +27,7 @@ import path from 'path';
 import { validateProjectId, getProject } from '../projects/store.js';
 import { guardProject } from './_guard.js';
 import {
-  getSessionWorkspace, ensureSessionWorkspace, validateSessionId,
+  ensureSessionWorkspace, validateSessionId,
   getWorkspaceRoot, ensureProjectWorkspace,
   commitWorkspace, listHistory, revertWorkspace,
 } from '../projects/workspace.js';
@@ -61,16 +61,19 @@ function guard(req, res) {
 
 /** 两条挂载共用（只读路径）：alias 带 sid 走原路，项目级直接取工作区根 */
 function rootOf(req) {
-  return req.params.sid !== undefined
-    ? getSessionWorkspace(req.params.pid, req.params.sid)
-    : getWorkspaceRoot(req.params.pid);
+  // 两条挂载问的都是**画布真相**。2026-09-07 前 getSessionWorkspace 与 getWorkspaceRoot
+  // 同值所以没露馅；文件夹项目里前者是用户仓库、后者是 .nodesign，这里要的是后者。
+  // 带 sid 仍先校验 sid 形状（旧行为里 getSessionWorkspace 顺带做的那一步）。
+  if (req.params.sid !== undefined) validateSessionId(req.params.sid);
+  return getWorkspaceRoot(req.params.pid);
 }
 
 /** 两条挂载共用（写路径）：同上，但先 ensure 工作区存在 */
-function ensureRootOf(req) {
-  return req.params.sid !== undefined
-    ? ensureSessionWorkspace(req.params.pid, req.params.sid)
-    : ensureProjectWorkspace(req.params.pid);
+async function ensureRootOf(req) {
+  // 同 rootOf：要的是画布真相。ensureSessionWorkspace 现在返回 cwd，所以只借它的副作用
+  if (req.params.sid !== undefined) await ensureSessionWorkspace(req.params.pid, req.params.sid);
+  else await ensureProjectWorkspace(req.params.pid);
+  return getWorkspaceRoot(req.params.pid);
 }
 
 // 单文件 GET（assets/* 子树）—— 让 iframe 里 <img src="assets/generated/x.jpg">

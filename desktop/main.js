@@ -382,6 +382,18 @@ ipcMain.handle('nd:open-path', async (_e, p) => {
   return true;
 });
 
+// 选文件夹（2026-09-07）：系统目录选择框，只回路径。用户取消 → null。
+// 不在这里校验「能不能当项目」（数据目录、盘根之类），那是服务端 openFolder 的事，一处判。
+ipcMain.handle('nd:pick-folder', async () => {
+  const r = await dialog.showOpenDialog(win ?? undefined, {
+    title: '打开文件夹当项目',
+    buttonLabel: '打开',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (r.canceled || !r.filePaths?.length) return null;
+  return r.filePaths[0];
+});
+
 ipcMain.handle('nd:open-external', async (_e, url) => {
   const u = String(url || '');
   if (!/^https?:\/\//.test(u)) throw new Error('只能打开 http(s) 链接');

@@ -36,6 +36,7 @@ import { guardProject, guardRunInProject, modelUserFor } from './_guard.js';
 import {
   ensureProjectWorkspace,
   ensureSessionWorkspace,
+  getWorkspaceRoot,
   validateSessionId,
   getSessionMetaDir,
 } from '../projects/workspace.js';
@@ -101,6 +102,11 @@ router.post('/:pid/turn', async (req, res, next) => {
   try {
     const project = guardProject(req, res);
     if (!project) return;
+    // 文件夹项目的信任门（2026-09-07）：没答过就不开会话。答案不是 UI 状态，是服务端字段，
+    // 绕过前端直接打接口也开不了 —— 闸装在这里才算装了。
+    if (project.folderPath && project.folderTrust == null) {
+      return res.status(409).json({ error: 'folder trust undecided', code: 'FOLDER_TRUST_UNDECIDED' });
+    }
 
     const { chat, attachments, skillId, sessionId, permissionMode, requestId, raw, userMessageUuid } = req.body || {};
     // 只发附件不打字也是一条完整消息（2026-08-17，issue #1 第 8 条）：拖张参考图
@@ -385,7 +391,7 @@ router.post('/:pid/turn', async (req, res, next) => {
       if (!ok) {
         // race：刚 close 的 session（理论上极少）—— fallback 起新
         console.warn(`[turn] pushUserMessage failed for ${sid.slice(0, 8)}, falling back to new session`);
-        startNewRunSession({ runId: run.id, sid, sessionRoot, blocks: sdkUserMessage, eventBus: bus, project, finalSkillId, chat, initialPermissionMode });
+        startNewRunSession({ runId: run.id, sid, sessionRoot, canvasRoot: getWorkspaceRoot(project.id), blocks: sdkUserMessage, eventBus: bus, project, finalSkillId, chat, initialPermissionMode });
       } else {
         // push 后 emit 当前 queue 积压深度，前端显示"已排队 N 条"
         // depth=0 表示 agent idle 立刻处理；depth>0 表示 agent 还在忙，要排队
@@ -427,7 +433,7 @@ router.post('/:pid/turn', async (req, res, next) => {
  * 起一个新的 runSession（streamInput long-running query），并预 push 首条 user
  * message 让 SDK 启动后立即处理。fire-and-forget — 不阻塞 HTTP response。
  */
-function startNewRunSession({ runId, sid, sessionRoot, blocks, eventBus, project, finalSkillId, chat, initialPermissionMode }) {
+function startNewRunSession({ runId, sid, sessionRoot, canvasRoot, blocks, eventBus, project, finalSkillId, chat, initialPermissionMode }) {
   const inputQueue = new AsyncQueue();
   inputQueue.push(blocks);   // 直接 push 进 queue —— runSession 启动后用 initialRunId 关联
 
@@ -436,6 +442,8 @@ function startNewRunSession({ runId, sid, sessionRoot, blocks, eventBus, project
     projectId: project.id,
     ownerId: project.ownerId,   // 订阅通路的资格断言在 session-loop 做 OAuth 决策那一行（auth/tier.js）
     sessionWorkspaceRoot: sessionRoot,
+    canvasRoot,
+    folderTrust: project.folderPath ? project.folderTrust : null,
     eventBus,
     inputQueue,
     skillId: finalSkillId,

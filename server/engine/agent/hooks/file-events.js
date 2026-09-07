@@ -13,6 +13,7 @@
 import { Events } from '../events.js';
 import { walkTaskFiles } from '../../../lib/task-scan.js';
 import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { toWorkspaceRel } from '../../../lib/workspace-path.js';
 import { setActiveArtifact } from '../../../lib/artifact-target.js';
 
@@ -28,12 +29,28 @@ import { setActiveArtifact } from '../../../lib/artifact-target.js';
  *
  * 返回 {}：不干预 SDK，不影响 agent loop。
  */
-export function makeFileChangedHandler({ ctx, workspaceRoot }) {
+/**
+ * 画布相对路径；根外返回 null（2026-09-07 存量仓库道）。
+ * 文件夹项目里 agent 站在用户仓库、画布只看 `.nodesign/`：改一个源码文件不该在画布上
+ * 多一张卡。toWorkspaceRel 对根外路径是「原样退回」，下游会把那串绝对路径当物件 id
+ * 去入座，所以这里先拦。相对路径按 cwd 解析（SDK 的 Write/Edit 实际只给绝对路径，
+ * 这是兜底）—— 没传 cwdRoot 时 cwd 就是画布根，跟从前一样。
+ */
+function canvasRelOrNull(filePath, { workspaceRoot, cwdRoot }) {
+  if (typeof filePath !== 'string' || !filePath) return null;
+  const abs = path.isAbsolute(filePath) ? filePath : path.resolve(cwdRoot || workspaceRoot, filePath);
+  const rel = toWorkspaceRel(abs, workspaceRoot);
+  return path.isAbsolute(rel) ? null : rel;
+}
+
+export function makeFileChangedHandler({ ctx, workspaceRoot, cwdRoot = null }) {
   // eslint-disable-next-line no-unused-vars
   return async (input, _toolUseId, _options) => {
     try {
       // 同下 emitter：发工作区相对路径，前端拿它直接当物件 id 的路径部分
-      ctx.emit(Events.fileChanged(toWorkspaceRel(input.file_path, workspaceRoot), input.event));
+      const rel = canvasRelOrNull(input.file_path, { workspaceRoot, cwdRoot });
+      if (rel === null) return {};
+      ctx.emit(Events.fileChanged(rel, input.event));
     } catch (err) {
       console.warn(`[hooks/FileChanged] handler threw:`, err.message);
     }
@@ -50,14 +67,14 @@ export function makeFileChangedHandler({ ctx, workspaceRoot }) {
  * 不再等 run.done。PostToolUse 只在工具成功后触发（失败走 PostToolUseFailure），
  * 不会把写坏的半成品刷给用户。
  */
-export function makePostToolUseFileChangedEmitter({ ctx, workspaceRoot, sharedRoot, sessionId }) {
+export function makePostToolUseFileChangedEmitter({ ctx, workspaceRoot, sharedRoot, sessionId, cwdRoot = null }) {
   // eslint-disable-next-line no-unused-vars
   return async (input, _toolUseId, _options) => {
     try {
       const t = input?.tool_input;
       const filePath = typeof t?.file_path === 'string' ? t.file_path
         : typeof t?.notebook_path === 'string' ? t.notebook_path : null;
-      if (filePath) {
+      if (filePath && canvasRelOrNull(filePath, { workspaceRoot, cwdRoot }) !== null) {
         // 刚写的这份 html 就是"当前产物"——list_pages / screenshot / read_page
         // 不给 path 时默认打它，子代理不必知道任务目录长什么样（artifact-target.js）。
         // 形态（deck / site）不在这里定：resolveArtifactTarget 每次解析都按任务现状

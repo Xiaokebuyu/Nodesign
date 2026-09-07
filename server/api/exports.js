@@ -31,7 +31,7 @@ import JSZip from 'jszip';
 import { validateProjectId, getProject, listRunsForProject } from '../projects/store.js';
 import { guardProject } from './_guard.js';
 import {
-  getSessionWorkspace, getSharedDir, getWorkspaceRoot, validateSessionId,
+  getSharedDir, getWorkspaceRoot, validateSessionId,
 } from '../projects/workspace.js';
 import { DECK } from '../shared/deck.js';
 import { buildStandaloneHtml, isHybridHtml, inlineLocalImages } from './exports/build-standalone.js';
@@ -71,9 +71,9 @@ function guard(req, res) {
  * 跳过"当前会话正在做哪份产物"的记忆，落回全工作区寻址，正是项目级想要的。
  */
 function rootOf(req) {
-  return req.params.sid !== undefined
-    ? getSessionWorkspace(req.params.pid, req.params.sid)
-    : getWorkspaceRoot(req.params.pid);
+  // 两条挂载问的都是**画布真相**（文件夹项目里 cwd 是用户仓库，不是它）；带 sid 只校验形状
+  if (req.params.sid !== undefined) validateSessionId(req.params.sid);
+  return getWorkspaceRoot(req.params.pid);
 }
 
 // 按产物卡导出（2026-08-17 重做）实现在 ./exports/cards.js：跟这里的烘焙路由

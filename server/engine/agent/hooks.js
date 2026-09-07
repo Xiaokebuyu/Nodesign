@@ -106,7 +106,7 @@ import { makePostToolUseSubagentReportRecovery } from './hooks/post-subagent-rep
  * @param {string} [deps.projectId]
  * @returns {Partial<Record<string, Array<{ matcher?: string, hooks: Function[], timeout?: number }>>>}
  */
-export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, projectId, roleRoster: injected = null, projectMode = 'design' } = {}) {
+export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, projectId, roleRoster: injected = null, projectMode = 'design', cwdRoot = null } = {}) {
   // Bash 写盘嗅探（09-07）：pre 记时、post 扫 mtime 发 file_changed，两半共用一份状态
   const bashSniffer = makeBashWriteSniffer({ ctx, workspaceRoot });
   // 常驻角色名册：**一个会话一份**（闭包级，不是全局表）。派发时登记、收件人闸按它放行。
@@ -125,7 +125,7 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // 声明过，所以它一次都没触发过。注册保留（将来开 watcher 可覆盖 bash/子代理
     // 写文件），实时刷新真正走下面 PostToolUse 的确定性直发。
     FileChanged: [{
-      hooks: [makeFileChangedHandler({ ctx, workspaceRoot })],
+      hooks: [makeFileChangedHandler({ ctx, workspaceRoot, cwdRoot })],
     }],
 
     // ~~PreToolUse(Bash) 白名单~~ Phase 3d 删 —— 改用 session-loop.js sandbox option
@@ -303,7 +303,7 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // （FileChanged watcher hook 从未真正触发过，见上方 FileChanged 注释）
       {
         matcher: 'Write|Edit|MultiEdit|NotebookEdit',
-        hooks: [makePostToolUseFileChangedEmitter({ ctx, workspaceRoot, sharedRoot, sessionId })],
+        hooks: [makePostToolUseFileChangedEmitter({ ctx, workspaceRoot, sharedRoot, sessionId, cwdRoot })],
       },
       // Bash 落的文件（cp / build / curl）也要进画布与入座器（09-07 设计线对账 B1）
       { matcher: 'Bash', hooks: [bashSniffer.post] },

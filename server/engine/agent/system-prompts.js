@@ -75,6 +75,13 @@ const MODE_BLOCK = /<!-- nd:mode:(design|rp):start -->\n([\s\S]*?)<!-- nd:mode:\
  */
 const CAP_BLOCK = /<!-- nd:cap:(localBox):start -->\n([\s\S]*?)<!-- nd:cap:\1:end -->\n/g;
 
+/**
+ * 条件分区（2026-09-07 存量仓库道）：`nd:if:<旗>` 只在旗为真时留，`nd:unless:<旗>` 只在旗为假时留。
+ * 目前唯一的旗是 `folder`（文件夹项目：agent 站在用户的文件夹里，画布只看 .nodesign/）。
+ * 跟 mode / cap 不同，这类块不做「缺块就抛」的自检 —— 旗为假时整篇 prelude 就是从前的样子。
+ */
+const FLAG_BLOCK = /<!-- nd:(if|unless):([a-z]+):start -->\n([\s\S]*?)<!-- nd:\1:\2:end -->\n/g;
+
 // 加载期断言：两份都必须在。少一份说明有人编辑 prelude 时把标记删了，那时候
 // 正则会静默退化成"一份都不删"（uncensored 路径拿到完整底线）或"整节消失"。
 {
@@ -132,13 +139,18 @@ export function renderPrelude(level = 'loose', opts = {}) {
   const keep = opts.uncensored === true ? 'min' : 'full';
   const keepMode = opts.mode === 'rp' ? 'rp' : 'design';
   const capOff = new Set(Object.entries(opts.caps || {}).filter(([, v]) => v === false).map(([k]) => k));
+  // 文件夹项目：opts.folder 是用户文件夹的绝对路径（Windows 下带反斜杠，原样给 agent）
+  const folder = typeof opts.folder === 'string' && opts.folder ? opts.folder : null;
+  const flags = { folder: !!folder };
   // 认不出的 locale 落中文：这个产品是中文优先的，拿不准时给中文不给英文。
   const localeName = UI_LOCALE_NAME[opts.locale] || UI_LOCALE_NAME[DEFAULT_LOCALE];
   return NODESIGN_PRELUDE
     .replace(POLICY_BLOCK, (_all, which, body) => (which === keep ? body : ''))
     .replace(MODE_BLOCK, (_all, which, body) => (which === keepMode ? body : ''))
     .replace(CAP_BLOCK, (_all, which, body) => (capOff.has(which) ? '' : body))
+    .replace(FLAG_BLOCK, (_all, kind, flag, body) => ((kind === 'if') === !!flags[flag] ? body : ''))
     .replace('{{ADULT_POLICY}}', ADULT_POLICY[level] || ADULT_POLICY.loose)
     .replace('{{UI_LOCALE}}', localeName)
+    .replaceAll('{{FOLDER_PATH}}', folder || '')
     .trim();
 }

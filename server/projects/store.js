@@ -98,6 +98,17 @@ if (!projectsColNames.has('owner_id')) {
   console.log('[projects/store] projects.owner_id column added');
 }
 
+// 存量仓库道（2026-09-07，桌面版）：项目可以指向用户自己的一个文件夹。
+//   folder_path  绝对路径；NULL = 普通项目（工作区在 PROJECTS_DATA_ROOT 里）。
+//   folder_trust 信任门的答案：NULL 没答过（会话拒开）、1 装载文件夹自己的 .claude/、0 不装载。
+// 身份跟着文件夹走：<folder>/.nodesign/project.json 里也记 id，这一列只是本机索引（见 projects/folder.js）。
+if (!projectsColNames.has('folder_path')) {
+  db.exec('ALTER TABLE projects ADD COLUMN folder_path TEXT');
+  db.exec('ALTER TABLE projects ADD COLUMN folder_trust INTEGER');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_folder ON projects(folder_path) WHERE folder_path IS NOT NULL');
+  console.log('[projects/store] projects.folder_path / folder_trust columns added');
+}
+
 // 多用户内测（2026-07-30）：runs 计量真列 + 归属。原来 usage 全塞 metadata JSON
 // （且值全 0，absorbResult 断链），配额查询要 sum，promote 成真列
 const RUN_METRIC_COLS = [
@@ -163,6 +174,9 @@ function rowToProject(row) {
     mode: row.mode || 'design',
     autoNamed: !!row.auto_named,
     ownerId: row.owner_id || null,
+    folderPath: row.folder_path || null,
+    // 三态：null 没答过 / true 装载 / false 不装载
+    folderTrust: row.folder_trust == null ? null : !!row.folder_trust,
     activeSessionId: row.active_session_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -201,6 +215,31 @@ export function getProject(id) {
   return rowToProject(row);
 }
 
+/** 按文件夹找项目（唯一索引保证最多一条）。路径要先经 folder.js 规范化再来查。 */
+export function getProjectByFolder(folderPath) {
+  if (typeof folderPath !== 'string' || !folderPath) return null;
+  const row = db.prepare('SELECT * FROM projects WHERE folder_path = ?').get(folderPath);
+  return rowToProject(row);
+}
+
+/** 文件夹搬家了：project.json 里的 id 认得，路径换了。只有 folder.js 的 openFolder 调。 */
+export function rebindProjectFolder(projectId, folderPath) {
+  validateProjectId(projectId);
+  if (typeof folderPath !== 'string' || !folderPath) throw new Error('rebindProjectFolder: folderPath 必填');
+  db.prepare("UPDATE projects SET folder_path = ?, updated_at = datetime('now') WHERE id = ?").run(folderPath, projectId);
+  return getProject(projectId);
+}
+
+/**
+ * 项目指向的文件夹（没有就 null）。给 workspace.js 的路径 helper 用：那几个函数
+ * 一秒钟可能被扫描器叫几十次，所以这里只查一列、不走 rowToProject。
+ */
+export function folderPathOf(projectId) {
+  validateProjectId(projectId);
+  const row = db.prepare('SELECT folder_path FROM projects WHERE id = ?').get(projectId);
+  return row?.folder_path || null;
+}
+
 /**
  * 创建 project。
  * @param {object} opts
@@ -217,23 +256,30 @@ export function createProject({
   mode = 'design',
   autoNamed = false,
   ownerId = null,
+  folderPath = null,
+  id: explicitId = null,
 }) {
   if (!name || typeof name !== 'string') throw new Error('createProject: name 必填');
+  // 文件夹项目从 .nodesign/project.json 带 id 进来（换机器接回原身份）；其余一律现生成
+  if (explicitId != null) validateProjectId(explicitId);
+  if (folderPath != null && (typeof folderPath !== 'string' || !folderPath.trim())) {
+    throw new Error('createProject: folderPath 要么不传要么是非空字符串');
+  }
   if (kind !== 'project' && kind !== 'quick') {
     throw new Error(`createProject: kind 非法 (${kind})`);
   }
   if (mode !== 'design' && mode !== 'rp') {
     throw new Error(`createProject: mode 非法 (${mode})`);
   }
-  const id = newProjectId();
+  const id = explicitId || newProjectId();
   const desc = (typeof description === 'string' && description.trim()) ? description.trim() : null;
   db.prepare(
-    `INSERT INTO projects (id, name, skill_id, description, kind, mode, auto_named, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, name.trim(), skillId, desc, kind, mode, autoNamed ? 1 : 0, ownerId);
+    `INSERT INTO projects (id, name, skill_id, description, kind, mode, auto_named, owner_id, folder_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, name.trim(), skillId, desc, kind, mode, autoNamed ? 1 : 0, ownerId, folderPath || null);
   return getProject(id);
 }
 
-/** 更新（仅允许 name / skill_id / description / active_session_id / kind / mode / autoNamed） */
+/** 更新（仅允许 name / skill_id / description / active_session_id / kind / mode / autoNamed / folderTrust；folder_path 建后不改） */
 export function updateProject(id, patch) {
   validateProjectId(id);
   // 用户显式改名 = 这名字他自己定了，系统不再拿摘要覆盖
@@ -253,13 +299,17 @@ export function updateProject(id, patch) {
     kind: 'kind',
     mode: 'mode',
     autoNamed: 'auto_named',
+    folderTrust: 'folder_trust',
   };
+  if ('folderTrust' in patch && typeof patch.folderTrust !== 'boolean') {
+    throw new Error('updateProject: folderTrust 只能是 true/false');
+  }
   const sets = [];
   const args = [];
   for (const [camelK, sqlK] of Object.entries(map)) {
     if (camelK in patch) {
       sets.push(`${sqlK} = ?`);
-      args.push(camelK === 'autoNamed' ? (patch[camelK] ? 1 : 0) : patch[camelK]);
+      args.push((camelK === 'autoNamed' || camelK === 'folderTrust') ? (patch[camelK] ? 1 : 0) : patch[camelK]);
     }
   }
   if (sets.length === 0) return getProject(id);

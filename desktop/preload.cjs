@@ -14,4 +14,9 @@ contextBridge.exposeInMainWorld('nodesignDesktop', {
   openPath: (p) => ipcRenderer.invoke('nd:open-path', String(p || '')),
   /** 用系统浏览器打开外链 */
   openExternal: (url) => ipcRenderer.invoke('nd:open-external', String(url || '')),
+  /**
+   * 选一个本地文件夹当项目（2026-09-07 存量仓库道）。返回绝对路径，用户取消返回 null。
+   * 只出选择框、不动文件；真正建项目是页面拿路径去打 POST /api/local/projects/open-folder。
+   */
+  pickFolder: () => ipcRenderer.invoke('nd:pick-folder'),
 });

@@ -132,6 +132,11 @@ export async function runSession({
   projectId,
   ownerId = null,   // 项目 owner；订阅通路在 OAuth 决策那一行按 auth/tier.js 断言资格（见下）
   sessionWorkspaceRoot,
+  // 画布真相根（2026-09-07 存量仓库道）：文件夹项目里 agent 站在用户的文件夹，画布只看
+  // `<folder>/.nodesign`。不传 = 两者同一个目录（托管形态，扁平化以来一直如此）。
+  canvasRoot = null,
+  // 文件夹项目的信任门答案：false = 不装载文件夹自己的 .claude/（settingSources 置空）
+  folderTrust = null,
   eventBus,
   inputQueue,
   skillId = 'deskskill-engine-mini',
@@ -148,11 +153,13 @@ export async function runSession({
   if (!eventBus) throw new Error('runSession: eventBus required');
 
   // 2026-08-07 扁平化：cwd 就是项目工作区，`sharedRoot` 和它是同一个目录。
-  // 旧代码在这里用 `../../shared` 从会话沙盒爬回共享目录 —— 那条相对路径现在
-  // 会爬到数据根之外，两个名字保留只是为了不动下游几十处引用。
+  // 2026-09-07 起两者可以分开：`cwdRoot` 是 agent 站的地方（SDK cwd、PWD、转录落点），
+  // `sharedRoot` 是画布真相（MCP 工具、hooks、会话暗档案、每回合的 git 提交全走它）。
+  // 文件夹项目里 sharedRoot = `<folder>/.nodesign`，所以 commitWorkspace / revert 那些
+  // git 操作落在 .nodesign 自己的仓库里，碰不到用户源码的历史。
   const cwdRoot = sessionWorkspaceRoot;
-  const sharedRoot = cwdRoot;
-  const sessionMetaRoot = path.join(cwdRoot, '.nd', sessionId);
+  const sharedRoot = canvasRoot || cwdRoot;
+  const sessionMetaRoot = path.join(sharedRoot, '.nd', sessionId);
 
   const sessionAbortController = new AbortController();
   // initialPermissionMode 落进 active-runs，canUseTool 通过 getSessionPermissionMode 读
@@ -219,7 +226,7 @@ export async function runSession({
     skillId,
     eventBus,
     abortController: sessionAbortController,
-    workspaceRoot: cwdRoot,
+    workspaceRoot: sharedRoot,
     sessionId,
     appModel: model,
   });
@@ -395,7 +402,8 @@ export async function runSession({
       // 行拿到的是精简版底线：本地无审查权重跑在自己盒子上、gate 'localGen' 只对
       // 获批账号开、产物不外发，完整那节的前提（对外开放平台）根本不成立。
       append: (() => {
-        const owner = projectId ? getUserById(getProject(projectId)?.ownerId) : null;
+        const projectRow = projectId ? getProject(projectId) : null;
+        const owner = projectRow ? getUserById(projectRow.ownerId) : null;
         // 档位按模型通路取旋钮（08-20 两旋钮：订阅 / 本地与中转），model 是上面已解析的会话模型
         // 无主项目 fail-closed 到 tier.js 的默认（strict），别落 loose（生产 08-21 实查 0 个无主项目）
         // locale：项目 owner 在账号上记的界面语言。null（没表过态）时 renderPrelude
@@ -408,6 +416,8 @@ export async function runSession({
           // 能力分区（nd:cap 标记块）：盒子关机时 paint_still / roll_film 那段不教。
           // capabilityState 没探过返回 null → 不剥，跟 shouldRegisterTool 同纪律
           caps: { localBox: capabilityState('localBox')?.available ?? null },
+          // 文件夹项目（nd:if:folder 块）：路径地图换成「你站在用户仓库里、画布在 .nodesign」
+          folder: projectRow?.folderPath || null,
         });
       })(),
     },
@@ -518,7 +528,9 @@ export async function runSession({
     },
 
     persistSession: true,
-    settingSources: ['project'],
+    // 'project' = 读 cwd/.claude/settings.json 并装 CLAUDE.md。文件夹项目里 cwd 是用户的
+    // 仓库：信任门答「不装载」就置空（他的 hooks / permissions / CLAUDE.md 都不进来）。
+    settingSources: folderTrust === false ? [] : ['project'],
 
 
     includePartialMessages: STREAMING_ENABLED,
@@ -576,7 +588,7 @@ export async function runSession({
 
     // projectId 要传：PostToolUseFailure 记问题库时用它标归属（漏传的话
     // issues 行的 project_id 全是 null，事后追不回是哪个项目踩的）
-    hooks: createHooks({ ctx: sharedCtx, workspaceRoot: wsRoot, sharedRoot, sessionId, projectId, roleRoster, projectMode }),
+    hooks: createHooks({ ctx: sharedCtx, workspaceRoot: wsRoot, sharedRoot, sessionId, projectId, roleRoster, projectMode, cwdRoot }),
 
     mcpServers: {
       // 键名 = 模型眼里的 `mcp__<名>__<工具>` 前缀，也是 isolation.js 那条
