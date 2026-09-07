@@ -40,6 +40,10 @@ export const DESK_CSS = `
   --desk-ink: var(--ink);
   --desk-ink-2: var(--ink-2);
   --desk-pencil: var(--pencil);
+  /* 直接压在台面上的那种淡底（选中的导航项、hover）。⭐ 它跟 --desk-ink 是**一对**：
+     白天是"在浅色上压一点墨"，夜里台面已经是黑的，得反过来"在深色上提一点白"，
+     不然夜里那一格等于没有。 */
+  --desk-tint: rgba(43,33,23,0.08);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   /* ⛔ 台面这十四层**不画在这儿**（2026-08-28 性能案）。理由见下面 .ndd::before。 */
@@ -122,6 +126,54 @@ export const DESK_CSS = `
   --sketch-soft: rgba(236,231,218,0.88);
   --sketch-num: rgba(243,239,228,0.95);
   --sketch-rule: rgba(232,226,210,0.55);
+  --desk-tint: rgba(246,242,232,0.12);
+}
+
+/*
+ * ⭐⭐⭐ 素台面（<Desk plain>）—— **只要光，不要台面**（2026-09-07）。
+ *
+ * 站主报「日夜切换没有应用到设置页」。病根在挂载层次：写 data-nd-light、
+ * 起那两块光影画布的 <Canopy> 住在 <Desk> 里，而只有首页 / 橱窗 / Skill 页用了
+ * <Desk> —— 于是设置页在夜里是一整块亮米色，从首页点进去像走进一间还开着灯的屋子。
+ *
+ * ⭐ 但设置页**不该长成一张台面**。它自己的文件头上就写着「设置页是表单不是台面 ——
+ * 它要的是对齐、层级和一眼能读的行」（components/settings/ui.jsx），铺上木纹和旧钉眼
+ * 会跟它自己那套卡片打架。站主的直觉也是这个。
+ *
+ * 所以把两件事拆开：
+ *   台面（.ndd::before 那十四层 + 台面的留白）＝ 只有真的是桌子的页面才有
+ *   光（几点了、屋里黑没黑）        ＝ **整间屋子的事**，谁都该有
+ *
+ * ⛔ 不能靠"把 Canopy 提到 App 层"来做这件事：工作台是一整块画布，给它盖一层
+ *   夜色是另一个决定，站主没要过。素台面是**按页选**的，一页一页搬。
+ */
+.ndd-plain {
+  padding: 0;
+  /* 让外壳自己的底色透上来：素台面没有"板"，暗下来的是背景本身 */
+  background: transparent;
+}
+.ndd-plain::before { display: none; }
+/*
+ * ⭐⭐ 素台面上的粉笔要更实一档。
+ *
+ * 台面那套 --desk-ink-2 / --desk-pencil 是带透明度的（0.86 / 0.78）—— 它们躺在
+ * 一块被压到 2-3% 亮度的板子上，透一点底反而自然。素台面不一样：它没有板，
+ * 背景是外壳那层米色被压暗的结果，而**正文是居中的**，正好落在台灯洒过来的那片
+ * 亮区里（灯在 0.82/0.16，设置页正文从 x=478 起）。同一支笔，底比首页亮一大截。
+ *
+ * 实测（22:00，web/scripts/lens.mjs contrast --route=/settings）：
+ *   透明度那档  标题 1.86:1  说明行 1.51:1     ← 首页同类最差是 1.89
+ *   实笔这一档  见下面提交信息里的数
+ * ⚠️ 只动**没有纸垫着**的那三支笔。卡片里的字不吃这条 —— 它们坐在浅色的纸上，
+ *   跟项目卡是同一个道理，动了会反过来变糟。
+ */
+:root[data-nd-light="night"] .ndd-plain {
+  --desk-ink: rgba(250,247,240,1);
+  --desk-ink-2: rgba(244,240,230,1);
+  --desk-pencil: rgba(236,231,219,0.95);
+}
+@media (max-width: 640px) {
+  .ndd-plain { padding: 0; }
 }
 
 ${SUN_CSS}
@@ -150,10 +202,12 @@ ${SUN_CSS}
  *
  * @param {string} [css] 这一页额外的样式。首页把自己那一整份传进来（里面已经
  *   拼着 DESK_CSS）；不传就只上台面这一份。
+ * @param {boolean} [plain] **素台面**：只要光，不要台面那十四层和它的留白。
+ *   给"是表单不是台面"的页面用（设置页），见上面 .ndd-plain 那段。
  */
-export function Desk({ css, children }) {
+export function Desk({ css, plain = false, children }) {
   return (
-    <div className="ndd">
+    <div className={plain ? 'ndd ndd-plain' : 'ndd'}>
       <style>{css || DESK_CSS}</style>
       {/* 光源层（树影 / 台灯）。两块画布：一块压在板面之上内容之下，一块压在
           所有内容之上，靠 z-index 分前后。

@@ -11,10 +11,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, BarChart3, Palette, Cpu, Package, Info } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
-import { COLOR, GAP, FONT_SIZE, FONT_KAI, RADIUS } from '../lib/theme.js';
+import { GAP, FONT_SIZE, FONT_KAI, RADIUS } from '../lib/theme.js';
 import { Local } from '../lib/api.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { t } from '../lib/i18n.js';
+import { Desk } from './desk.jsx';
 import { LocalAccount, HostedAccount } from '../components/settings/AccountSection.jsx';
 import UsageSection from '../components/settings/UsageSection.jsx';
 import AppearanceSection from '../components/settings/AppearanceSection.jsx';
@@ -94,6 +95,15 @@ export default function Settings() {
 
   return (
     <AppShell breadcrumb={crumbs}>
+      {/*
+        ⭐⭐ `plain` = **只要光，不要台面**（见 desk.jsx 的 .ndd-plain）。
+        设置页要的是「屋里几点了」这件事跟着走 —— 从首页点进来不该像走进一间还开着灯的
+        屋子；但它自己是**表单不是台面**（ui.jsx 头上那句），铺木纹和钉眼会跟它的卡片打架。
+        ⚠️ 页面这一级的字（标题、说明、左边那列）直接写在背景上，底下没有纸 ——
+        夜里背景被压得很黑，所以它们跟台面上的字一样走 --desk-* 那套（夜里自动换粉笔）。
+        卡片里的字不用动：卡片自己是浅色的纸，跟项目卡同一个道理。
+      */}
+      <Desk plain>
       <div style={{ maxWidth: 980, margin: '0 auto', padding: `${GAP.page}px ${GAP.xxl}px 96px`, display: 'grid', gridTemplateColumns: '188px minmax(0, 1fr)', gap: GAP.page }}>
         <nav aria-label={t('设置')} style={{ position: 'sticky', top: 24, alignSelf: 'start', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {visible.map(({ id, label, Icon }) => {
@@ -103,7 +113,7 @@ export default function Settings() {
                 display: 'flex', alignItems: 'center', gap: GAP.base, textAlign: 'left',
                 padding: `${GAP.md}px ${GAP.lg}px`, borderRadius: RADIUS.md, border: 0, cursor: 'pointer',
                 fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg,
-                background: on ? 'rgba(43,33,23,0.08)' : 'transparent', color: on ? COLOR.text : COLOR.text4,
+                background: on ? 'var(--desk-tint)' : 'transparent', color: on ? 'var(--desk-ink)' : 'var(--desk-pencil)',
               }}>
                 <Icon size={15} strokeWidth={1.8} style={{ flexShrink: 0, opacity: on ? 1 : 0.75 }} />
                 {t(label)}
@@ -113,8 +123,8 @@ export default function Settings() {
         </nav>
         <div style={{ minWidth: 0 }}>
           <header style={{ marginBottom: GAP.xxl }}>
-            <h1 style={{ margin: 0, fontFamily: FONT_KAI, fontSize: 22, fontWeight: 600, color: COLOR.text }}>{t(cur.label)}</h1>
-            <p style={{ margin: `${GAP.xs}px 0 0`, fontFamily: FONT_KAI, fontSize: FONT_SIZE.base, color: COLOR.text4 }}>{t(cur.desc)}</p>
+            <h1 style={{ margin: 0, fontFamily: FONT_KAI, fontSize: 22, fontWeight: 600, color: 'var(--desk-ink)' }}>{t(cur.label)}</h1>
+            <p style={{ margin: `${GAP.xs}px 0 0`, fontFamily: FONT_KAI, fontSize: FONT_SIZE.base, color: 'var(--desk-ink-2)' }}>{t(cur.desc)}</p>
           </header>
           {cur.id === 'account' && (isLocal
             ? <LocalAccount relay={status?.relay} onChange={onRelayChange} showToast={showToast} />
@@ -131,6 +141,7 @@ export default function Settings() {
           )}
         </div>
       </div>
+      </Desk>
     </AppShell>
   );
 }
