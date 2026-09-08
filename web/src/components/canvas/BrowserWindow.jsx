@@ -266,6 +266,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
     let raf = 0;
     let last = '';
     let lastShot = 0;
+    let lastSent = 0;
     const frame = () => {
       raf = requestAnimationFrame(frame);
       const el = hostRef.current;
@@ -306,15 +307,16 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
       const r = el.getBoundingClientRect();
       const rect = r.width > 8 && r.height > 8 ? { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) } : null;
       const key = rect ? `${rect.x},${rect.y},${rect.width},${rect.height}` : 'null';
-      if (key !== last) { last = key; native.place(projectId, rect).catch(() => {}); }
+      // 变了立刻发；没变也每秒补发一次 —— 壳那头 setZoomFactor 在页面没就绪时会静默不生效，补发是自愈的路
+      if (key !== last || Date.now() - lastSent > 1000) { last = key; lastSent = Date.now(); native.place(projectId, rect).catch(() => {}); }
       // 画布上那张浏览器卡的缩略图靠 /browse/preview 现拍；视图停到屏外就拍不了（可见视口为空），
       // 所以趁它在屏内时每 8 秒刷一张，收窗前最后再刷一张
-      if (rect && Date.now() - lastShot > 8000) { lastShot = Date.now(); Browse.preview(projectId).catch(() => {}); }
+      if (rect && Date.now() - lastShot > 8000) { lastShot = Date.now(); Assets.preview(projectId).catch(() => {}); }
     };
     raf = requestAnimationFrame(frame);
     return () => {
       if (raf) cancelAnimationFrame(raf);
-      Browse.preview(projectId).catch(() => {});
+      Assets.preview(projectId).catch(() => {});
       setTimeout(() => native.place(projectId, null).catch(() => {}), 400);   // 先让最后一张缩略图拍完再停到屏外
     };
   }, [native, projectId]);

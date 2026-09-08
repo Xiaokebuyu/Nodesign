@@ -34,12 +34,20 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
 
   const ses = () => session.fromPartition(PARTITION);
 
-  function applyZoom(entry) {
+  function applyZoom(entry, retry = true) {
     const wc = entry.view.webContents;
     if (wc.isDestroyed()) return;
     const w = entry.rect ? entry.rect.width : entry.viewport.width;
     const zoom = Math.max(0.2, Math.min(3, w / entry.viewport.width));
-    try { wc.setZoomFactor(zoom); } catch { /* 页面还没就绪时会抛，下次 did-navigate 再来 */ }
+    try { wc.setZoomFactor(zoom); } catch { /* 页面还没就绪时会抛，下面复查再来 */ }
+    // 复查（09-08 晚站主实报「内容缩在一角」）：页面没就绪时 setZoomFactor 静默不生效，而页面这头只在矩形变了才再发 place；
+    // 300ms 后读回来对一次，不对就再设一次，再不对留给 did-navigate / did-finish-load
+    if (!retry) return;
+    setTimeout(() => {
+      if (wc.isDestroyed()) return;
+      let got = null; try { got = wc.getZoomFactor(); } catch { return; }
+      if (Math.abs(got - zoom) > 0.01) { log(`[browser-host] zoom ${entry.projectId} 期望 ${zoom.toFixed(3)} 实际 ${got.toFixed(3)}，重设`); applyZoom(entry, false); }
+    }, 300);
   }
 
   function layout(entry) {
@@ -87,6 +95,7 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
     wc.on('did-navigate', () => applyZoom(entry));
     wc.on('did-navigate-in-page', () => applyZoom(entry));
     wc.on('dom-ready', () => applyZoom(entry));
+    wc.on('did-finish-load', () => applyZoom(entry));
     wc.on('destroyed', () => { if (views.get(projectId) === entry) views.delete(projectId); byId.delete(id); });
     layout(entry);
     await wc.loadURL(marker).catch(() => {});
