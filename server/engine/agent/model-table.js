@@ -206,7 +206,7 @@ export const BRANDS = Object.freeze(['claude', 'deepseek', 'opencode', 'glm', 'g
 
 /**
  * Merge 网关上那两条 GLM 行**共用**的 api 配置：它们是同一个模型、同一个网关，
- * **差别只有厂商**（各自行里的 `bodyExtra.vendors`；为什么要分两行见表里那两行上方一整段）。
+ * 09-08 晚起**两行连厂商都不再区分**（不点名 vendors，网关自己路由；为什么见表里那两行上方一整段）。
  * ⛔ 写成共用不是为了省行数：思考档 / maxOutput / 价 / helper 行这些**必须对两条同时生效**，
  *    分开写迟早漂。改厂商以外的任何东西改这里，model-context.test.js 有断言盯着两行别分家。
  */
@@ -230,7 +230,7 @@ const GLM_MERGE_API = Object.freeze({
     prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
     // ⛔ 09-08 两行同时加的图片闸：**particle 一次最多 8 张内联图**，第 9 张起整发 400，而 zai 没了（见下面
     // 那段），所以多图会话每一发都死。裁图比死掉好：多出来的**最早的**换成占位文字（lib/ingress/image-cap.js，
-    // 跟 DeepSeek 视觉行同一套）。zai 复活要放开：删这行 + 默认行 vendors 改回 ['zai','particle']，两处一起。
+    // 跟 DeepSeek 视觉行同一套）。09-08 晚站主拍板：**不点名厂商也保留这道闸**，落到哪家都不会 400。
     maxImages: 8,
 });
 
@@ -448,6 +448,11 @@ export const MODELS_BUILTIN = Object.freeze([
   //   8 inline」400。→ 站主拍板：两行都点死 particle + 8 张的裁图闸（GLM_MERGE_API.maxImages）。
   //   ⭐ 判据：偏好序的后备是**静默**的，换了家只会在别的症状里露头；要知道谁在服务，看 x-merge-vendor
   //     或者点名单家看它 503 不 503。
+  // ⛔⛔ **09-08 晚撤销点死 particle**：生产库里 09-07 起 GLM 行缓存命中率从 80–100% 掉到 0、每轮 API 耗时
+  //   从 11–31 秒涨到 44–106 秒。直打网关同一段 100k 提示词各发两发：**particle 没有 prompt cache**（两发都不
+  //   命中、首字节 31 秒、还吃过一次 429），zai 第二发命中 101,312 token、首字节 5 秒、价钱五分之一。zai 当晚
+  //   已恢复。站主拍板：**不再点名 vendors，让网关自己路由**，8 张裁图闸保留。已知代价写在上面那段：网关默认
+  //   落哪家自己会变，而缓存每家一份，请求在两家之间跳一次就冷一次。
   {
     // 08-30 起 **1M**（跟上面那行一起开，用户拍板）。网关目录里这个模型本来就写的 1000000
     // （max_output 131072），此前的 272k 是我们自己收的口。两条 glm 行同时改，换线时
@@ -477,7 +482,7 @@ export const MODELS_BUILTIN = Object.freeze([
     // ⚠️ label 第二段是这两行**唯一**的区分（第一段一模一样）：`compactLabel` 按"撞不撞名"
     // 自己决定按钮上印长名还是短名，表里不用替它做这个决定，但第二段不能砍。
     select: { label: 'GLM-5.3-Flash · 设计', desc: '支持视觉 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', default: true },
-    api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['particle'] } },
+    api: GLM_MERGE_API,
   },
   {
     // ⭐⭐ 08-30 深夜加的第二条（用户拍板「让 RP 和设计玩家对号入座」）。跟上面那行同模型同价，
@@ -494,7 +499,7 @@ export const MODELS_BUILTIN = Object.freeze([
     id: 'glm-5.3-flash-rp', window: 1_000_000, brand: 'glm',
     standby: 'deepseek-v4-flash-vision',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     select: { label: 'GLM-5.3-Flash · 演出', desc: '响应快 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', only: 'stage', stageDefault: true },
-    api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['particle'] } },
+    api: GLM_MERGE_API,
   },
   // ⛔⛔ `minimax-m3`（GMI Cloud 上的免费部署，08-25 接进来、08-26 当过一天全员默认）**09-08 撤行**：
   // 站主拍板。GMI 那个账户没余额，而这家的「限时免费」在 09-08 之前就结束了 —— 生产日志里 01:34 /

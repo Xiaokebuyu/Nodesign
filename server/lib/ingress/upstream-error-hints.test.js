@@ -14,10 +14,10 @@ describe('上游 4xx 翻成人话（08-30）', () => {
     expect(upstreamErrorHint('accept at most 16 inline PNG', wire)).toContain('超过了上游的 16 张上限');
   });
 
-  it('⛔ 09-08 起两条 GLM 行同厂商：谁都不许再被建议"换另一条线"（换过去一样挂）', () => {
+  it('⛔ 09-08 起两条 GLM 行同一套路由：谁都不许再被建议"换另一条线"（换过去一样挂）', () => {
     for (const id of ['glm-5.3-flash-merge', 'glm-5.3-flash-rp']) {
       const wire = resolveWireModel(id);
-      expect(wire?.bodyExtra?.vendors, `${id} 的厂商`).toEqual(['particle']);
+      expect(wire?.bodyExtra?.vendors, `${id} 的厂商（09-08 晚起不点名）`).toBeUndefined();
       const out = upstreamErrorHint(RAW, wire);
       expect(out, `${id} 的文案还在指路`).not.toContain('换成');
       expect(out).toContain('超过了上游的 8 张上限');
