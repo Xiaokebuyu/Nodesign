@@ -68,7 +68,8 @@ const CAST = profile.isLocal ? CAST_LOCAL : CAST_HOSTED;
 const BACKPRESSURE_BYTES = 256 * 1024;
 /** 全局同时只允许一路活跃画面流。**这是 CPU 的主要保护**：满帧推流约 40% 单核
  * （见文件头的实测），这台机器只有一个核。 */
-const MAX_ACTIVE = 1;
+// 本地版是用户自己的机器，不设上限（09-08 站主：没必要）；托管版那条「全机器一路」的刹车仍是 1
+const MAX_ACTIVE = profile.isLocal ? Infinity : 1;
 
 /** projectId → { page, cdp, subs:Set<ws>, meta } */
 const casts = new Map();

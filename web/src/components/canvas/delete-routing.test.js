@@ -22,15 +22,19 @@
  */
 import { describe, it, expect } from 'vitest';
 import { deleteRouteFor } from './useBoardOpen.js';
-import { isFileBacked } from '../../lib/board-kinds.js';
+import { isFileBacked, KINDS } from '../../lib/board-kinds.js';
 
 /** 服务端 lib/task-scan.js 的 RESERVED_DIRS —— 通用删除路由碰不了这些顶层目录 */
 const RESERVED = new Set(['assets', 'exports', 'notes', 'node_modules', 'agent-memory']);
 
-/** 形态表里所有 backing:'file' 的形态（少一种这里就该补一种） */
-const FILE_KINDS = ['file', 'image', 'note', 'deck', 'docx', 'site', 'video', 'pdf'];
+/** 形态表里所有 backing:'file' 的形态 —— 从 KINDS 推导，新增一种形态这条测试自动跟上（09-08 评审：手写清单守不住第四代） */
+const FILE_KINDS = Object.entries(KINDS).filter(([, k]) => k.backing === 'file').map(([id]) => id);
 
 describe('删除分发（三代 bug 的守卫）', () => {
+  it('判据先验：形态表里 backing:file 的不止一种，且 image / site 在内', () => {
+    expect(FILE_KINDS.length).toBeGreaterThanOrEqual(6);
+    expect(FILE_KINDS).toEqual(expect.arrayContaining(['image', 'site', 'docx']));
+  });
   it('画布原生物件走 board.json 那条，不碰文件路由', () => {
     expect(deleteRouteFor({ native: true, id: 'scribble:abc' }, 'abc')).toBe('native');
   });

@@ -33,8 +33,20 @@ import { useGlobalStore } from '../../stores/globalStore.js';
  * 会不会被 chromium 节流，没在真 Windows 上量过。
  *
  * 万一不产帧 —— 把这个常量翻回 `true` 就退回原生视图，一行的事。别把这条路拆了。
+ *
+ * ## 09-08 晚：翻回 `true`（0.1.23 真机实报）
+ *
+ * 不是节流，比节流更早一步：视图停在屏外时**可见视口为空**，Chromium 对它的
+ * `Page.captureScreenshot` 直接拒绝——桌面报的原话是
+ * `Cannot take screenshot with 0 width`，agent 的 browser_screenshot / browser_computer
+ * 五次全挂，画面流首帧也是这张截图，所以用户什么都看不到。0.1.21 之前每次截图时
+ * 浏览器卡都开着、视图在屏内，从没撞过这条。
+ *
+ * 结论：**只要视图不在屏内就没有截图，而 CDP 路线的前提正是视图不在屏内**——这两条在
+ * 原生视图上互斥。CDP 路线要成立得换成 Electron 的离屏渲染（`webPreferences.offscreen`），
+ * 视图根本不挂进窗口、靠 OSR 自己产帧，那时才能把这个常量翻回 false。没在真机验之前别翻。
  */
-const DESKTOP_NATIVE_VIEW = false;
+const DESKTOP_NATIVE_VIEW = true;
 /** 缩略图档的宽度上限 */
 const THUMB_W = 480;
 const nativeView = () => (DESKTOP_NATIVE_VIEW && typeof window !== 'undefined' && window.nodesignDesktop?.browserView) || null;

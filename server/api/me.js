@@ -56,9 +56,8 @@ function withHealth(options) {
     return {
       ...m,
       ...(note ? { note } : {}),
-      health: h
-        ? { state: h.state, samples: h.samples, lastAt: h.lastAt, lastReason: h.lastReason, medianMs: h.medianMs }
-        : { state: 'nodata', samples: 0, lastAt: null, lastReason: '', medianMs: null },
+      // 没有 api.upstream 的行（订阅线的 claude-*）**不由这本账衡量**，不发 health —— 发「无数据」会把人推去换线（09-08 评审）
+      ...(h ? { health: { state: h.state, samples: h.samples, lastAt: h.lastAt, lastReason: h.lastReason, medianMs: h.medianMs } } : {}),
     };
   });
 }

@@ -188,7 +188,8 @@ export default {
   '还没有请求记录': 'no requests yet',
   '最近 {n} 发': 'last {n} calls',
   '最近一次失败：{why}': 'last failure: {why}',
-  '中位耗时 {s} 秒': 'median {s}s',
+  '首字节中位 {s} 秒': 'median first byte {s}s',
+  '不由状态账衡量': 'not measured by the status log',
   // 首页示例四条（09-08 重写：全部自带内容 —— 老那条不说是哪首歌，用的 9 人里 7 人在反问处离开）
   '把这几句做成一页歌词视觉：「晚风吹过便利店的招牌／我数着找零走回家／今天也没什么大事发生」': 'Turn these lines into a lyric page: "Night wind over the corner-store sign / I count my change on the walk home / nothing much happened today either"',
   '做一个角色档案站，先放这一个：秦晚，26 岁，旧钟表店老板，话少，怕猫': 'Build a character archive site, starting with this one: Qin Wan, 26, owns an old watch shop, quiet, afraid of cats',

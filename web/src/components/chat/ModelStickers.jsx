@@ -57,38 +57,41 @@ function agoText(at) {
 }
 
 function Sticker({ opt }) {
+  // 没有 health 字段 = 这条线不由环形账衡量（订阅线的 claude-*）：只画名字和印象，不画色点也不写「无数据」
+  const measured = !!opt.health;
   const st = STATES[opt.health?.state] || STATES.nodata;
   const state = opt.health?.state || 'nodata';
   const ago = agoText(opt.health?.lastAt);
-  // 悬停时把机器那半边的细节摊开：多少发、最近一次失败是什么、中位耗时
-  const detail = [
+  // 悬停时把机器那半边的细节摊开：多少发、最近一次失败是什么、首字节中位耗时
+  const detail = !measured ? [t('不由状态账衡量')] : [
     `${st.label()}`,
     state === 'nodata'
       ? (ago ? t('最近一次请求：{ago}', { ago }) : t('还没有请求记录'))
       : t('最近 {n} 发', { n: opt.health?.samples ?? 0 }),
     opt.health?.lastReason ? t('最近一次失败：{why}', { why: opt.health.lastReason }) : '',
-    opt.health?.medianMs ? t('中位耗时 {s} 秒', { s: (opt.health.medianMs / 1000).toFixed(1) }) : '',
-  ].filter(Boolean).join(' · ');
+    opt.health?.medianMs ? t('首字节中位 {s} 秒', { s: (opt.health.medianMs / 1000).toFixed(1) }) : '',
+  ];
+  const detailText = detail.filter(Boolean).join(' · ');
 
   return (
     <span
-      title={`${opt.label}——${detail}`}
+      title={`${opt.label}——${detailText}`}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 5,
         padding: '3px 8px', borderRadius: 999, flexShrink: 0,
         border: `1px solid ${PAPER.pencil}55`,
         background: `${PAPER.paper}CC`,
         fontSize: FONT_SIZE.xs, fontFamily: FONT_SANS,
-        color: state === 'nodata' ? PAPER.ink2 : PAPER.ink,
+        color: measured && state === 'nodata' ? PAPER.ink2 : PAPER.ink,
         // 不可用那档整枚压暗一点：它是唯一一个"别选我"的状态
         opacity: state === 'down' ? 0.72 : 1,
       }}
     >
       <ModelMark brand={opt.brand} size={11} pencil={false} />
       <span style={{ whiteSpace: 'nowrap' }}>{opt.label}</span>
-      <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot, flexShrink: 0 }} />
+      {measured && <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: st.dot, flexShrink: 0 }} />}
       {/* ⭐ 色点旁边一定要有字：只靠颜色分状态对色觉障碍不成立 */}
-      <span style={{ color: PAPER.ink2, whiteSpace: 'nowrap' }}>{st.label()}</span>
+      {measured && <span style={{ color: PAPER.ink2, whiteSpace: 'nowrap' }}>{st.label()}</span>}
       {opt.note && (
         <span style={{ color: PAPER.ink2, whiteSpace: 'nowrap', borderLeft: `1px solid ${PAPER.pencil}55`, paddingLeft: 6 }}>
           {opt.note}

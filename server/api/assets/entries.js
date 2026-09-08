@@ -31,11 +31,16 @@ function normRel(raw) {
  *
  * @returns {string|null} 出错原因；`null` = 放行
  */
-function guardRel(rel, root) {
+export function guardRel(rel, root) {
   const abs = path.resolve(root, rel);
   if (!abs.startsWith(root + path.sep)) return 'path escapes workspace';
-  const seg0 = rel.split('/')[0];
-  if (RESERVED_DIRS.has(seg0) || seg0.startsWith('.')) return 'reserved directory';
+  // ⛔ 09-08 评审：拿**归一化之后**的相对路径逐段查，不拿原始入参的第一段。原写法只看 `rel.split('/')[0]`，
+  //   而 Express 只归一化字面的 `..`，编码斜杠不归一 —— `DELETE /folders/a%2f..%2f.git` 到这里 rel='a/../.git'，
+  //   seg0='a' 放行、abs 却是 <root>/.git，直接进 fs.rm。归一化后 relN='.git'，每一段都查一遍。
+  const relN = path.relative(root, abs).split(path.sep);
+  if (!relN.length || !relN[0]) return 'path escapes workspace';
+  if (relN.includes('..')) return 'path escapes workspace';
+  if (RESERVED_DIRS.has(relN[0]) || relN[0].startsWith('.')) return 'reserved directory';
   return null;
 }
 

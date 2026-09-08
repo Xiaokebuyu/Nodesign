@@ -166,10 +166,15 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
      * （`sawFirstByte` 那套闸就长在这个函数里），上一层只知道整发的总耗时。
      */
     const sentAt = Date.now();
-    const report = (ok, reason, status = null) => {
+    let firstByteAt = null;   // 第一发拿到响应头的时刻（disarmFirstByte 处记）；环形账的 ms 用它，不用整发墙钟
+    /**
+     * @param {boolean|null} upstreamFault  这一发的结果算不算上游的账：客户端主动断开（用户点停止 / 关页面）
+     *   传 null —— 只报 onOutcome，不进环形账。09-08 评审：三次点停就够把一条健康的线判成「不可用」。
+     */
+    const report = (ok, reason, status = null, upstreamFault = true) => {
       if (outcomeReported) return undefined;
       outcomeReported = true;
-      upstreamHealth.note(wire.upstreamId, { ok, reason, status, ms: Date.now() - sentAt });
+      if (upstreamFault !== null) upstreamHealth.note(wire.upstreamId, { ok, reason, status, ms: firstByteAt ? firstByteAt - sentAt : null });
       return asStatus(onOutcome(ok, reason, status));
     };
 
@@ -197,7 +202,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
       try { currentReq?.destroy(); } catch { /* */ }
       console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 客户端断开，停止重发（已打 ${xf.attempts} 发）`);
-      report(false, 'client disconnected');
+      report(false, 'client disconnected', null, null);   // 不进环形账：这是用户的动作不是上游的
       if (xf.usageTotal || xf.cost != null) onBilling({ costUsd: xf.cost, usage: xf.usageTotal });
     });
 
@@ -306,6 +311,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
 
       currentReq = request((incoming) => {
         disarmFirstByte();
+        if (!firstByteAt) firstByteAt = Date.now();
         proxyRes = incoming;
         const status = proxyRes.statusCode || 502;
         if (status >= 400) {
@@ -346,19 +352,29 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
   }
 
   // ── 非流式（CLI 的兜底通路）：整包转，不做就地重发 ──
+  const nsSentAt = Date.now();
   request((proxyRes) => {
     const status = proxyRes.statusCode || 502;
     const chunks = [];
     let settled = false;
     proxyRes.on('data', (c) => chunks.push(c));
     // 上游半路掐了，'end' 不来 —— 别让请求悬着，就地回 502（CLI 会重试）
+    // 非流式的账（09-08 评审：这条路原来一发都不进环形账）。跟流式那条同样只报一次
+    let nsReported = false;
+    const nsFirstByte = Date.now();
+    const report = (ok, reason, status = null) => {
+      if (nsReported) return undefined;
+      nsReported = true;
+      upstreamHealth.note(wire.upstreamId, { ok, reason, status, ms: nsFirstByte - nsSentAt });
+      return asStatus(onOutcome(ok, reason, status));
+    };
     proxyRes.on('aborted', () => proxyRes.emit('error', Object.assign(new Error('upstream aborted'), { code: 'ECONNRESET' })));
     proxyRes.on('error', (err) => {
       if (settled) return;
       settled = true;
       const detail = err.code || err.message;
       console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 非流式响应被掐断（${detail}）`);
-      onOutcome(false, `upstream stream aborted: ${detail}`);
+      report(false, `upstream stream aborted: ${detail}`);
       if (res.headersSent) { try { res.end(); } catch { /* */ } return; }
       const errBody = JSON.stringify(toAnthropicError(502, `${label} 的响应传到一半断了（${detail}）—— 稍后再发一次`));
       res.writeHead(502, { 'Content-Type': 'application/json' }); res.end(errBody);
@@ -372,7 +388,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
         // ⚠️ 跟上面流式那条是**孪生的两条路**，翻译要两边都挂（生产走流式，探针走非流式，只补一边会以为修好了）
         let msg = upstreamErrorHint(text, wire) || (text.trim() ? text : `${label} 上游返回 ${status}（模型暂时不可用，稍后再发一次）`);
         let outStatus = status;
-        const override = asStatus(onOutcome(false, `HTTP ${status}`, status));
+        const override = report(false, `HTTP ${status}`, status);
         if (override) { outStatus = override; msg = `${msg}（已切换备用模型，正在重试）`; }
         const errBody = JSON.stringify(toAnthropicError(outStatus, msg));
         res.writeHead(outStatus, { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(errBody)) });
@@ -383,6 +399,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       let upstreamJson;
       try { upstreamJson = JSON.parse(text); out = fromOpenAIChatResponse(upstreamJson); }
       catch (err) {
+        report(false, `upstream JSON unreadable: ${err.message}`);
         const errBody = JSON.stringify(toAnthropicError(502, `ingress: upstream JSON unreadable (${err.message})`));
         res.writeHead(502, { 'Content-Type': 'application/json' }); res.end(errBody); return;
       }
@@ -393,11 +410,11 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
             ? `${label}以 ${alienFinish} 结束了这次请求，没有输出任何正文 —— 上游自己的链路出错，已自动重试仍失败；稍后再发，或换个模型（upstream ended with finish_reason='${alienFinish}' and no visible output）`
             : `${label}返回了空响应，一个字都没有 —— 上游问题，已自动重试仍失败；稍后再发，或换个模型（upstream returned no choices）`);
         console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 200-but-empty model=${wire.wireModel} ${String(msg).slice(0, 160)}`);
-        onOutcome(false, String(msg).slice(0, 120));
+        report(false, String(msg).slice(0, 120));
         const errBody = JSON.stringify(toAnthropicError(502, String(msg)));
         res.writeHead(502, { 'Content-Type': 'application/json' }); res.end(errBody); return;
       }
-      onOutcome(true);
+      report(true);
       onTruncated(truncationOfChatResponse(upstreamJson));
       const costUsd = upstreamCostOf(upstreamJson);   // Zen 放顶层、Merge 网关放 usage.cost
       if (costUsd != null || upstreamJson.usage) onBilling({ costUsd, usage: upstreamJson.usage || null });
@@ -406,6 +423,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       res.end(respBody);
     });
   }, (detail) => {
+    upstreamHealth.note(wire.upstreamId, { ok: false, reason: `forward: ${detail}`, status: null, ms: null });   // 连都没连上，没有响应头
     onOutcome(false, `forward: ${detail}`);
     if (res.headersSent) { try { res.end(); } catch { /* */ } return; }
     try { res.writeHead(502); res.end(`ingress forward error: ${detail}`); } catch { /* ignore */ }
