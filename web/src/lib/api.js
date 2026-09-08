@@ -136,6 +136,11 @@ export const Local = {
   installComponent: (id) => jsonRequest('POST', `/api/local/components/${encodeURIComponent(id)}/install`),
   uninstallComponent: (id) => jsonRequest('DELETE', `/api/local/components/${encodeURIComponent(id)}`),
   componentsReprobe: () => jsonRequest('POST', '/api/local/components/reprobe'),
+  /** 组件装哪（09-08）：换位置会把已装的搬过去（后台，状态在 components() 的 relocation 里） */
+  componentsLocation: () => jsonRequest('GET', '/api/local/components/location'),
+  relocateComponents: (dir) => jsonRequest('PUT', '/api/local/components/location', { dir }),
+  /** 用户自己装在别处的程序目录，能力探针先搜这些 */
+  setExtraBinDirs: (dirs) => jsonRequest('PUT', '/api/local/components/extra-dirs', { dirs }),
   savePrefs: (patch) => jsonRequest('PUT', '/api/local/prefs', patch),
   relayLogout: () => jsonRequest('POST', '/api/local/relay/logout'),
 };

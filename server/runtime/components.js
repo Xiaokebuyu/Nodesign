@@ -25,6 +25,7 @@ import { Writable } from 'node:stream';
 import { createRequire } from 'node:module';
 import { Unzip, UnzipInflate, UnzipPassThrough } from 'fflate';
 import { profile } from './profile.js';
+import { loadPrefs, savePrefs } from './local-prefs.js';
 
 export const COMPONENTS_MANIFEST_URL = process.env.NODESIGN_COMPONENTS_MANIFEST
   || 'https://github.com/Xiaokebuyu/Nodesign/releases/download/components-win64/manifest.json';
@@ -40,7 +41,17 @@ const PROBE_TIMEOUT_MS = 8000;
 /** 官方能通且吞吐不低于最快镜像的这个比例就用官方（官方永远是最新版，镜像可能落后） */
 const OFFICIAL_KEEP_RATIO = 1 / 3;
 
-export const componentsRoot = profile.isLocal ? path.join(profile.dataRoot, 'components') : null;
+/** 默认位置：<dataRoot>/components */
+export const defaultComponentsRoot = profile.isLocal ? path.join(profile.dataRoot, 'components') : null;
+/**
+ * 现在的位置（09-08 站主：不能只装 C 盘）：prefs.componentsDir 优先，否则默认。是函数不是常量 —— 换位置后立刻生效。
+ * ⚠️ 已装记录（<id>.json）里的 bin 目录是绝对路径，换位置要连记录一起搬（relocateComponents）。
+ */
+export function getComponentsRoot() {
+  if (!profile.isLocal) return null;
+  const pref = loadPrefs().componentsDir;
+  return pref && path.isAbsolute(pref) ? pref : defaultComponentsRoot;
+}
 const platformKey = `${process.platform}-${process.arch}`;
 
 let manifestCache = { at: 0, manifest: null, error: null };
@@ -173,15 +184,15 @@ export function _resetComponents() { manifestCache = { at: 0, manifest: null, er
 
 // ── 已装状态（磁盘） ──
 
-function installedPath(id) { return path.join(componentsRoot, `${id}.json`); }
-function dirOf(id) { return path.join(componentsRoot, id); }
+function installedPath(id) { return path.join(getComponentsRoot(), `${id}.json`); }
+function dirOf(id) { return path.join(getComponentsRoot(), id); }
 
 export function readInstalled(id) {
   try { return JSON.parse(fs.readFileSync(installedPath(id), 'utf8')); } catch { return null; }
 }
 
 function listInstalledIds() {
-  try { return fs.readdirSync(componentsRoot).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)); } catch { return []; }
+  try { return fs.readdirSync(getComponentsRoot()).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)); } catch { return []; }
 }
 
 /**
@@ -190,7 +201,7 @@ function listInstalledIds() {
  */
 export function componentEnv() {
   const binDirs = []; const env = {};
-  if (!componentsRoot) return { binDirs, env };
+  if (!getComponentsRoot()) return { binDirs, env };
   for (const id of listInstalledIds()) {
     const rec = readInstalled(id);
     if (!rec) continue;
@@ -215,7 +226,7 @@ export function applyComponentEnv() {
 // ── 清单 + 状态 → 前端要的列表 ──
 
 export async function listComponents() {
-  if (!componentsRoot) return { platform: platformKey, manifestError: null, components: [] };
+  if (!getComponentsRoot()) return { platform: platformKey, manifestError: null, components: [] };
   const manifest = await loadManifest();
   const defs = manifest?.components || {};
   const out = Object.entries(defs).map(([id, def]) => {
@@ -229,7 +240,67 @@ export async function listComponents() {
       job,
     };
   });
-  return { platform: platformKey, manifestError: manifestCache.error, components: out };
+  return { platform: platformKey, manifestError: manifestCache.error, components: out, location: componentsLocation(), relocation };
+}
+
+// ── 位置（09-08 站主：外部程序不能只装 C 盘）──
+
+let relocation = null;   // { status:'moving'|'done'|'error', from, to, done, total, error? }
+
+export function componentsLocation() {
+  return { dir: getComponentsRoot(), defaultDir: defaultComponentsRoot, custom: getComponentsRoot() !== defaultComponentsRoot };
+}
+
+/**
+ * 换组件目录。已装的搬过去（复制 + 改记录里的绝对路径 + 删旧的），搬完新目录生效、PATH 补上新目录、能力表重探。
+ * 后台跑，状态在 listComponents().relocation 里给前端轮询。正在装组件时拒绝（.download 和目录都在动）。
+ */
+export async function relocateComponents(dir, { move = true } = {}) {
+  if (!profile.isLocal) throw Object.assign(new Error('hosted profile 没有组件'), { code: 'NOT_LOCAL' });
+  if (typeof dir !== 'string' || !path.isAbsolute(dir)) throw Object.assign(new Error('要一个绝对路径'), { code: 'BAD_DIR' });
+  const to = path.resolve(dir);
+  const from = getComponentsRoot();
+  if (to === from) return { ok: true, unchanged: true, location: componentsLocation() };
+  if ([...jobs.values()].some((j) => j.status === 'downloading' || j.status === 'extracting' || j.status === 'installing')) {
+    throw Object.assign(new Error('正在装组件，装完再换位置'), { code: 'BUSY' });
+  }
+  if (relocation?.status === 'moving') throw Object.assign(new Error('正在搬，等它完'), { code: 'BUSY' });
+  // 目标必须能写；不能是数据目录本身 / 组件目录的子目录
+  if (to === path.resolve(profile.dataRoot) || (from && to.startsWith(from + path.sep))) throw Object.assign(new Error('不能选这个位置'), { code: 'BAD_DIR' });
+  fs.mkdirSync(to, { recursive: true });
+  const probeFile = path.join(to, `.nd-write-test-${process.pid}`);
+  try { fs.writeFileSync(probeFile, 'ok'); fs.rmSync(probeFile, { force: true }); } catch (err) { throw Object.assign(new Error(`这个位置写不了：${err.message}`), { code: 'NOT_WRITABLE' }); }
+  const ids = move ? listInstalledIds() : [];
+  relocation = { status: 'moving', from, to, done: 0, total: ids.length, error: null };
+  (async () => {
+    try {
+      for (const id of ids) {
+        const rec = readInstalled(id);
+        const srcDir = path.join(from, id);
+        const dstDir = path.join(to, id);
+        if (fs.existsSync(srcDir)) {
+          fs.rmSync(dstDir, { recursive: true, force: true });
+          fs.cpSync(srcDir, dstDir, { recursive: true });
+        }
+        if (rec) {
+          const swap = (v) => (typeof v === 'string' && v.startsWith(from) ? to + v.slice(from.length) : v);
+          const next = JSON.parse(JSON.stringify(rec), (_k, v) => (Array.isArray(v) ? v.map(swap) : swap(v)));
+          fs.writeFileSync(path.join(to, `${id}.json`), JSON.stringify(next, null, 2) + '\n');
+        }
+        // 新目录写好了再删旧的：中途断电最多是两份，不会一份都没有
+        fs.rmSync(srcDir, { recursive: true, force: true });
+        fs.rmSync(path.join(from, `${id}.json`), { force: true });
+        relocation.done++;
+      }
+      savePrefs({ componentsDir: to === defaultComponentsRoot ? null : to });
+      applyComponentEnv();
+      relocation.status = 'done';
+    } catch (err) {
+      relocation.status = 'error';
+      relocation.error = err.message;
+    }
+  })();
+  return { ok: true, relocation, location: componentsLocation() };
 }
 
 // ── 安装 ──
@@ -238,14 +309,14 @@ function setJob(id, patch) { jobs.set(id, { ...(jobs.get(id) || { status: 'idle'
 
 /** 装一个组件（幂等：正在装就返回现有任务；装完了且版本一样直接返回） */
 export async function installComponent(id) {
-  if (!componentsRoot) throw new Error('hosted profile 没有组件');
+  if (!getComponentsRoot()) throw new Error('hosted profile 没有组件');
   const manifest = await loadManifest();
   const def = manifest?.components?.[id];
   if (!def) throw Object.assign(new Error(`清单里没有组件 ${id}`), { code: 'UNKNOWN_COMPONENT' });
   if (def.platform && def.platform !== platformKey) throw Object.assign(new Error(`组件 ${id} 只有 ${def.platform} 的包，这台是 ${platformKey}`), { code: 'UNSUPPORTED_PLATFORM' });
   const cur = jobs.get(id);
   if (cur && ['probing', 'downloading', 'verifying', 'extracting', 'installing'].includes(cur.status)) return cur;
-  fs.mkdirSync(componentsRoot, { recursive: true });
+  fs.mkdirSync(getComponentsRoot(), { recursive: true });
   setJob(id, { status: 'downloading', progress: 0, bytes: 0, total: null, error: null });
   // 不 await：调用方拿任务状态轮询
   (async () => {
@@ -259,7 +330,7 @@ export async function installComponent(id) {
       setJob(id, { status: 'error', error: err.message });
       try {
         fs.rmSync(dirOf(id), { recursive: true, force: true });
-        for (const f of fs.readdirSync(componentsRoot)) if (f.startsWith(`${id}.`) && f.endsWith('.download')) fs.rmSync(path.join(componentsRoot, f), { force: true });
+        for (const f of fs.readdirSync(getComponentsRoot())) if (f.startsWith(`${id}.`) && f.endsWith('.download')) fs.rmSync(path.join(getComponentsRoot(), f), { force: true });
       } catch { /* */ }
     }
   })();
@@ -270,7 +341,7 @@ async function installZip(id, def) {
   const dir = dirOf(id);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
-  const tmp = path.join(componentsRoot, `${id}.download`);
+  const tmp = path.join(getComponentsRoot(), `${id}.download`);
 
   // 选源（官方 vs 镜像测速），然后下载 + sha256
   setJob(id, { status: 'probing' });
@@ -369,7 +440,7 @@ async function installPlaywright(id, def) {
     const w = weights[i] / wsum;
     const base = done;
     setJob(id, { status: 'probing', part: part.name, progress: base });
-    const tmp = path.join(componentsRoot, `${id}.${part.name}.download`);
+    const tmp = path.join(getComponentsRoot(), `${id}.${part.name}.download`);
     const { chosen, results } = await pickSource(part.sources);
     console.log(`[components] ${id}/${part.name} 选源 ${chosen.kind} ${chosen.url}（${results.map((r) => `${r.kind}:${r.probe.ok ? Math.round(r.probe.bytesPerSec / 1024) + 'KB/s' : '✗ ' + r.probe.error}`).join(' ')}）`);
     setJob(id, { status: 'downloading', source: chosen.kind, sourceUrl: chosen.url });
@@ -395,7 +466,7 @@ async function installPlaywright(id, def) {
 }
 
 export function uninstallComponent(id) {
-  if (!componentsRoot) return false;
+  if (!getComponentsRoot()) return false;
   fs.rmSync(dirOf(id), { recursive: true, force: true });
   fs.rmSync(installedPath(id), { force: true });
   jobs.delete(id);

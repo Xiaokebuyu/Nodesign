@@ -23,6 +23,7 @@ import { localBoxEnabled } from '../engine/mcp/tools/h3box-ssh.js';
 import { searchRoute, imageRoute } from '../engine/mcp/tools/relay-tools.js';
 import { whichBinary } from './which.js';
 import { platform } from './platform.js';
+import { loadPrefs } from './local-prefs.js';
 export { whichBinary };
 
 const isWin = process.platform === 'win32';
@@ -106,8 +107,12 @@ export const CAPABILITY_DEFS = Object.freeze([
       : { available: false, detail: !localBoxEnabled() ? '站主标记为关机（NODESIGN_LOCAL_BOX=off）' : 'NODESIGN_H3BOX_SSH 为空' }) },
 ]);
 
+/** 用户自己说的「我装在别处」目录（设置 → 组件 → 额外搜索目录；09-08 站主：不能只认 C 盘）。hosted 下没有 */
+function userBinDirs() {
+  try { return platform.isLocal ? loadPrefs().extraBinDirs || [] : []; } catch { return []; }
+}
 function bin(name, extra = []) {
-  const p = whichBinary(name, extra);
+  const p = whichBinary(name, [...userBinDirs(), ...extra]);
   return p ? { available: true, detail: p, path: p } : { available: false, detail: `${name} 不在 PATH${extra.length ? '（也不在常见安装位置）' : ''}` };
 }
 

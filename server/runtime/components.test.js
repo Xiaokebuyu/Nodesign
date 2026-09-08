@@ -110,6 +110,33 @@ describe('components', () => {
     await expect(c.installComponent('other')).rejects.toMatchObject({ code: 'UNSUPPORTED_PLATFORM' });
     await expect(c.installComponent('nope')).rejects.toMatchObject({ code: 'UNKNOWN_COMPONENT' });
   });
+  it('换位置（09-08 不能只装 C 盘）：已装的搬过去、记录里的绝对路径改写、旧的删掉、之后装到新位置', async () => {
+    await c.installComponent('tool'); await waitJob('tool');
+    const to = path.join(dataDir, 'elsewhere', 'nd-components');
+    const r = await c.relocateComponents(to);
+    expect(r.ok).toBe(true);
+    for (let i = 0; i < 100 && (await c.listComponents()).relocation?.status === 'moving'; i++) await new Promise((res) => setTimeout(res, 50));
+    const { relocation, location } = await c.listComponents();
+    expect(relocation.status, relocation.error).toBe('done');
+    expect(location.dir).toBe(to);
+    expect(location.custom).toBe(true);
+    const rec = c.readInstalled('tool');
+    expect(rec.binDirs).toEqual([path.join(to, 'tool', 'tool-1.2', 'bin')]);
+    expect(rec.python).toBe(path.join(to, 'tool', 'tool-1.2', 'py', 'python.exe'));
+    expect(fs.existsSync(path.join(to, 'tool', 'tool-1.2', 'bin', 'hello.exe'))).toBe(true);
+    expect(fs.existsSync(path.join(dataDir, 'components', 'tool'))).toBe(false);
+    expect(fs.existsSync(path.join(dataDir, 'components', 'tool.json'))).toBe(false);
+    expect(c.applyComponentEnv().binDirs).toEqual(rec.binDirs);
+    // 拒绝：数据目录本身 / 相对路径
+    await expect(c.relocateComponents(dataDir)).rejects.toMatchObject({ code: 'BAD_DIR' });
+    await expect(c.relocateComponents('relative/x')).rejects.toMatchObject({ code: 'BAD_DIR' });
+    // 搬回默认位置：componentsDir 归 null
+    await c.relocateComponents(path.join(dataDir, 'components'));
+    for (let i = 0; i < 100 && (await c.listComponents()).relocation?.status === 'moving'; i++) await new Promise((res) => setTimeout(res, 50));
+    expect((await c.listComponents()).location.custom).toBe(false);
+    expect(c.readInstalled('tool').binDirs[0].startsWith(path.join(dataDir, 'components'))).toBe(true);
+  });
+
   it('卸载：目录和记录都没了', async () => {
     await c.installComponent('tool'); await waitJob('tool');
     expect(c.uninstallComponent('tool')).toBe(true);

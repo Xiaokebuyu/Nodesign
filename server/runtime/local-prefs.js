@@ -17,6 +17,8 @@ const DEFAULTS = Object.freeze({
   hiddenModels: [],     // 选择器里不列的行（appModel id）；设置页「模型」的开关
   defaultModel: null,   // 新会话默认模型（null = 表的默认）
   setupDone: false,     // 首启引导页走过了（装完或点了「稍后」）
+  componentsDir: null,  // 外部程序装哪（绝对路径；null = <dataRoot>/components）。09-08 站主：不能只装 C 盘
+  extraBinDirs: [],     // 用户自己装在别处的程序目录（D:\LibreOffice\program 这类），能力探针先搜这些
 });
 
 let cache = null;
@@ -35,6 +37,8 @@ function sanitize(raw) {
   if (Array.isArray(raw?.hiddenModels)) out.hiddenModels = [...new Set(raw.hiddenModels.filter((x) => typeof x === 'string' && x))];
   if (typeof raw?.defaultModel === 'string' && raw.defaultModel) out.defaultModel = raw.defaultModel;
   if (raw?.setupDone === true) out.setupDone = true;
+  if (typeof raw?.componentsDir === 'string' && path.isAbsolute(raw.componentsDir)) out.componentsDir = raw.componentsDir;
+  if (Array.isArray(raw?.extraBinDirs)) out.extraBinDirs = [...new Set(raw.extraBinDirs.filter((x) => typeof x === 'string' && path.isAbsolute(x)))].slice(0, 20);
   return out;
 }
 

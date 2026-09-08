@@ -27,7 +27,7 @@ import os from 'node:os';
 import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, relayNotice, relayPutAvatar, relayDeleteAvatar, relayConfig, normalizeRelayUrl, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 import { AVATAR_MAX_UPLOAD } from '../lib/avatar-store.js';
 import { loadPrefs, savePrefs, prefsPath } from '../runtime/local-prefs.js';
-import { listComponents, installComponent, uninstallComponent, applyComponentEnv } from '../runtime/components.js';
+import { listComponents, installComponent, uninstallComponent, applyComponentEnv, componentsLocation, relocateComponents } from '../runtime/components.js';
 import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 import { recordIssue, signatureOf } from '../lib/issues-store.js';
@@ -139,6 +139,23 @@ router.delete('/components/:id', async (req, res) => {
   uninstallComponent(req.params.id);
   await probeCapabilities({ force: true });
   res.json({ ok: true, capabilities: capabilitySnapshot() });
+});
+// 组件装哪（09-08 站主：不能只装 C 盘）。PUT 换位置 = 把已装的搬过去（后台，状态在 GET /components 的 relocation）
+router.get('/components/location', (_req, res) => res.json({ location: componentsLocation(), extraBinDirs: loadPrefs().extraBinDirs }));
+router.put('/components/location', async (req, res) => {
+  try {
+    res.status(202).json(await relocateComponents(String(req.body?.dir || ''), { move: req.body?.move !== false }));
+  } catch (err) {
+    res.status(err.code === 'BUSY' ? 409 : 400).json({ error: err.message, code: err.code || 'RELOCATE_FAILED' });
+  }
+});
+// 用户自己装在别处的程序目录：能力探针先搜这些（存 prefs.extraBinDirs），改完立刻重探
+router.put('/components/extra-dirs', async (req, res) => {
+  const dirs = Array.isArray(req.body?.dirs) ? req.body.dirs.map(String) : [];
+  const prefs = savePrefs({ extraBinDirs: dirs });
+  applyComponentEnv();
+  await probeCapabilities({ force: true });
+  res.json({ ok: true, extraBinDirs: prefs.extraBinDirs, capabilities: capabilitySnapshot() });
 });
 // 装完重探能力表（前端看到 job.done 之后调一次；也给"重探"按钮用）
 router.post('/components/reprobe', async (_req, res) => {
