@@ -60,10 +60,18 @@ export function onDiagEvent(ev, projectId = null) {
       openTools.set(ev.blockId, { startedAt: Date.now(), name: ev.name, ...base, round: ev.round });
       if (openTools.size > CAP) openTools.delete(openTools.keys().next().value);
       break;
+    case 'run.delta.tool_use': {   // 完整 tool_use 块（非流式路径只有这条带名字）：补名字，没起过就当此刻起
+      const o = openTools.get(ev.blockId);
+      if (o) { if (!o.name || o.name === '<sdk-tool>') o.name = ev.name; }
+      else { openTools.set(ev.blockId, { startedAt: Date.now(), name: ev.name, ...base, round: ev.round }); }
+      break;
+    }
     case 'run.delta.tool_result': {
       const o = openTools.get(ev.blockId);
       openTools.delete(ev.blockId);
-      push(toolCalls, { ts: base.ts, projectId, sessionId: base.sessionId, runId: base.runId, round: ev.round, name: ev.name || o?.name || null, ok: ev.ok !== false, ms: o ? Date.now() - o.startedAt : null, error: ev.error ? brief(ev.error) : null });
+      // tool_result 事件里的 name 是占位符 '<sdk-tool>'（SDK 不带名），真名从 tool_use 配对
+      const name = (o?.name && o.name !== '<sdk-tool>') ? o.name : ((ev.name && ev.name !== '<sdk-tool>') ? ev.name : null);
+      push(toolCalls, { ts: base.ts, projectId, sessionId: base.sessionId, runId: base.runId, round: ev.round, name, ok: ev.ok !== false, ms: o ? Date.now() - o.startedAt : null, error: ev.error ? brief(ev.error) : null });
       break;
     }
     case 'run.tool_failure':

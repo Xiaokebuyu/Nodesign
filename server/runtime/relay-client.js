@@ -62,7 +62,9 @@ async function call(pathname, { method = 'GET', body = null, raw = null, form = 
     const res = await fetch(`${base}/api/relay${pathname}`, {
       method,
       // raw = { buf, contentType }：二进制原样发（头像上传）；form = FormData（市场发布，fetch 自己写 boundary）；body 走 JSON
-      headers: { ...(auth ? { authorization: `Bearer ${cfg.token}` } : {}), ...(raw ? { 'content-type': raw.contentType } : body ? { 'content-type': 'application/json' } : {}), ...(extraHeaders || {}) },
+      // ⛔ 不复用连接（09-08）：本机代理（fake-ip TUN）下半开的 keep-alive 连接会让下一发挂到超时，
+      //   站点这头什么都没收到。每发一次握手多 100~300ms，换来的是不会白等 8~60 秒。
+      headers: { connection: 'close', ...(auth ? { authorization: `Bearer ${cfg.token}` } : {}), ...(raw ? { 'content-type': raw.contentType } : body ? { 'content-type': 'application/json' } : {}), ...(extraHeaders || {}) },
       body: raw ? raw.buf : form ? form : body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
@@ -191,8 +193,19 @@ export function relayTools() {
  * 调网关上的一件工具。失败抛错带 code（TIER_DENIED / QUOTA_EXCEEDED / RELAY_TIMEOUT …），
  * 调用方把 message 原样给 agent。生图要等几十秒，超时单独给。
  */
-export async function relayToolCall(name, body, { timeoutMs = 60_000 } = {}) {
-  return call(`/tools/${encodeURIComponent(name)}`, { method: 'POST', body, timeoutMs });
+/**
+ * 工具代打（web_search 等）：09-08 站主一轮里 web_search 等了 60 秒才超时。连接停顿是本机到 Cloudflare 的事，
+ * 站点这头秒回，所以等 60 秒没意义：首发 20 秒、换连接再来一次 20 秒；真慢的搜索（网关代搜一般 3~8 秒）够用。
+ */
+export async function relayToolCall(name, body, { timeoutMs = 20_000 } = {}) {
+  const p = `/tools/${encodeURIComponent(name)}`;
+  try {
+    return await call(p, { method: 'POST', body, timeoutMs });
+  } catch (err) {
+    if (err.code !== 'RELAY_TIMEOUT' && !/fetch failed/i.test(String(err.message))) throw err;
+    console.warn(`[relay-client] tool ${name} 第一发 ${err.code || err.message}，换连接重试一次`);
+    return call(p, { method: 'POST', body, timeoutMs, headers: { connection: 'close' } });
+  }
 }
 
 /** 上报一条到站点 issues 表（hosted/relay/issues.js）。调用方是 runtime/issue-outbox.js，失败它自己排队 */

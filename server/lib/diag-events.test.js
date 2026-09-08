@@ -9,7 +9,8 @@ describe('诊断分接头', () => {
     const sid = 'ed914e35-0000-0000-0000-000000000000';
     onDiagEvent({ type: 'run.api_retry', sessionId: sid, runId: 'r1', attempt: 1, maxRetries: 10, retryDelayMs: 500, errorStatus: null, errorKind: 'unknown' }, 'p1');
     onDiagEvent({ type: 'run.tool_use.started', sessionId: sid, runId: 'r1', round: 2, blockId: 'b1', name: 'ToolSearch' }, 'p1');
-    onDiagEvent({ type: 'run.delta.tool_result', sessionId: sid, runId: 'r1', round: 2, blockId: 'b1', name: 'ToolSearch', ok: true }, 'p1');
+    onDiagEvent({ type: 'run.delta.tool_use', sessionId: sid, runId: 'r1', round: 2, blockId: 'b1', name: 'ToolSearch', input: {} }, 'p1');
+    onDiagEvent({ type: 'run.delta.tool_result', sessionId: sid, runId: 'r1', round: 2, blockId: 'b1', name: '<sdk-tool>', ok: true }, 'p1');
     onDiagEvent({ type: 'run.round.end', sessionId: sid, runId: 'r1', round: 2, stopReason: 'tool_use', usage: { input_tokens: 57418, output_tokens: 20, cache_read_input_tokens: 0 } }, 'p1');
     onDiagEvent({ type: 'run.context_usage', sessionId: sid, totalTokens: 80000, maxTokens: 1000000, percentage: 8 }, 'p1');
     onDiagEvent({ type: 'run.compact_boundary', sessionId: sid, compactMetadata: { trigger: 'auto' } }, 'p1');
