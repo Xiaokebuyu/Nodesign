@@ -19,6 +19,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import { loProfileFontSubstitutionXcu } from '../cjk-fonts.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
@@ -59,6 +60,13 @@ export async function renderDocx(docxPath, opts = {}) {
       HOME: scratch,                                // 军规1：可写 HOME
       FONTCONFIG_FILE: FONTCONF,                    // 军规3：字体替身
     };
+    // Windows 上五件中文字体缺谁就替谁（只在缺席时替，真字体在就用真的）：写进这份独立 profile 的注册表（lib/cjk-fonts.js）
+    const xcu = loProfileFontSubstitutionXcu();
+    if (xcu) {
+      const profileUser = join(scratch, 'loprofile', 'user');
+      await fs.mkdir(profileUser, { recursive: true });
+      await fs.writeFile(join(profileUser, 'registrymodifications.xcu'), xcu);
+    }
     await run(resolveBinary('libreoffice', 'soffice'), [
       // 军规1：独立 profile。⚠️ 必须是**真的 file URL**（fileUrl 而不是 'file://' + 路径）：
       // Windows 上拼出来的 `file://C:\…` 会让 LO 弹「bootstrap.ini 已经损坏」后退 1（见 lib/file-url.js）

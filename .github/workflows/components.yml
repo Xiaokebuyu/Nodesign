@@ -47,8 +47,10 @@ jobs:
           Get-ChildItem out
 
       # msiexec /a = 管理安装：只把 MSI 里的文件铺到目录，不真装、不要管理员。铺出来 soffice.exe 的上一级就是根
-      - name: LibreOffice（管理安装抽文件）
+      - name: LibreOffice（管理安装抽文件 + 兜底中文字体）
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           Invoke-WebRequest "https://download.documentfoundation.org/libreoffice/stable/$env:LO_VER/win/x86_64/LibreOffice_${env:LO_VER}_Win_x86-64.msi" -OutFile lo.msi
           Start-Process msiexec -ArgumentList '/a', "$PWD\lo.msi", '/qn', "TARGETDIR=$PWD\lo-extract" -Wait
@@ -56,6 +58,20 @@ jobs:
           if (-not $soffice) { throw 'soffice.exe not found after admin install' }
           $root = $soffice.Directory.Parent.FullName
           Write-Host "LibreOffice root: $root"
+          # 兜底中文字体（09-08）：非中文 Windows 缺楷体 / 仿宋 / 黑体时渲页用它们替（lib/cjk-fonts.js 写进 LO profile 的替换表，
+          # Always=false：真字体在就用真的）。放 LO 自己的 share/fonts/truetype，不碰系统字体目录，卸组件就一起没了。
+          $fonts = Join-Path $root 'share\fonts\truetype'
+          New-Item -ItemType Directory -Force -Path $fonts | Out-Null
+          $base = 'https://github.com/notofonts/noto-cjk/raw/main'
+          foreach ($f in @('Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf', 'Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Bold.otf', 'Serif/OTF/SimplifiedChinese/NotoSerifCJKsc-Regular.otf', 'Serif/OTF/SimplifiedChinese/NotoSerifCJKsc-Bold.otf')) {
+            Invoke-WebRequest "$base/$f" -OutFile (Join-Path $fonts (Split-Path $f -Leaf))
+          }
+          gh release download --repo lxgw/LxgwWenKai --pattern 'LXGWWenKai-Regular.ttf' --pattern 'LXGWWenKai-Medium.ttf' --dir $fonts
+          # 朱雀仿宋只发 zip（预发布），解开取 ttf
+          gh release download v0.212 --repo TrionesType/zhuque --pattern '*.zip' --dir zhuque
+          7z x (Get-ChildItem zhuque -Filter *.zip | Select-Object -First 1).FullName -ozhuque-x | Out-Null
+          Get-ChildItem zhuque-x -Recurse -Include *.ttf, *.otf | Copy-Item -Destination $fonts
+          Get-ChildItem $fonts | ForEach-Object { Write-Host ("font {0} {1:N0} bytes" -f $_.Name, $_.Length) }
           7z a -tzip -mx=5 "$PWD\out\libreoffice.zip" "$root\*" | Out-Null
 
       # 嵌入式 Python + pip + rembg(cpu) + 模型：让 rembg 自己把两个模型下到 U2NET_HOME，文件名由它定

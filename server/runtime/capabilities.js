@@ -22,6 +22,7 @@ import { isAvailable as rembgAvailable, REMBG_SETUP_HINT } from '../engine/mcp/t
 import { localBoxEnabled } from '../engine/mcp/tools/h3box-ssh.js';
 import { searchRoute, imageRoute } from '../engine/mcp/tools/relay-tools.js';
 import { whichBinary } from './which.js';
+import { checkCjkFonts } from '../lib/cjk-fonts.js';
 import { platform } from './platform.js';
 import { loadPrefs } from './local-prefs.js';
 export { whichBinary };
@@ -58,6 +59,11 @@ export const CAPABILITY_DEFS = Object.freeze([
   { id: 'libreoffice', kind: 'binary', level: 'feature', label: 'LibreOffice（soffice）', uses: 'Word/docx 形态：渲页图、缩略图、导出 PDF、build_docx 的页图体检',
     fix: isWin ? '官网装 LibreOffice（默认装到 C:\\Program Files\\LibreOffice）' : process.platform === 'darwin' ? 'brew install --cask libreoffice' : 'apt install libreoffice',
     probe: () => bin('soffice', LO_DIRS) },
+  // 09-08：docx 常用五件中文字体（宋体 / 黑体 / 楷体 / 仿宋 / 雅黑）在不在。非 Windows 走替身表不查；Windows 缺的那几件
+  // 渲页时用 LibreOffice 组件包自带的兜底字体替（lib/cjk-fonts.js），用户 Word 里仍是他机器自己的替换结果，页图与真机会有差
+  { id: 'cjkFonts', kind: 'service', level: 'feature', label: '中文字体（宋体 / 黑体 / 楷体 / 仿宋 / 雅黑）', uses: 'Word/docx 页图与用户 Word 一致',
+    fix: '装 Windows 的中文补充字体（设置 → 语言 → 中文 → 可选功能 → 字体），或接受兜底字体渲页',
+    probe: () => { const r = checkCjkFonts(); if (!r.checked) return { available: true, detail: '非 Windows：站点替身表' }; return r.missing.length ? { available: false, detail: `缺 ${r.missing.join(' / ')}（有 ${r.present.join(' / ') || '无'}）` } : { available: true, detail: '五件齐全' }; } },
   { id: 'poppler', kind: 'binary', level: 'feature', label: 'poppler（pdftoppm）', uses: 'docx 页图（PDF → PNG）',
     fix: isWin ? '装 poppler for Windows 并把 bin 目录加进 PATH' : process.platform === 'darwin' ? 'brew install poppler' : 'apt install poppler-utils',
     probe: () => bin('pdftoppm', BREW_DIRS) },

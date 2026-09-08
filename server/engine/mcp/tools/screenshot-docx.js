@@ -20,6 +20,7 @@
  */
 
 import fs from 'node:fs/promises';
+import { checkCjkFonts } from '../../../lib/cjk-fonts.js';
 import { execFileSync } from 'node:child_process';
 import { renderDocx, cleanupRender } from '../../../lib/docx/render.js';
 import { normalizeShot } from './helpers/shot-pipeline.js';
@@ -111,14 +112,21 @@ export async function screenshotDocx(target, opts = {}) {
     if (!explicit && total && total > DEFAULT_PAGES) {
       caption.push('（没传 pages 时默认只渲前两页）');
     }
+    // 字体那条按平台说实话（09-08）：Windows 上 LibreOffice 用的是本机真字体，五件齐全时字形可判；缺的那几件才是替身
+    const fonts = checkCjkFonts();
+    const fontNote = !fonts.checked
+      ? '① 中文是**替身字体**（雅黑/等线→MiSans、仿宋→朱雀仿宋、宋体→Noto Serif、楷体→LXGW），字形跟用户 Word 里仍有差；'
+        + 'CJK 全角等宽所以**断行位置**一致，但行高只有雅黑档对齐了（MiSans 1.326 ≈ 真雅黑 1.32）—— 宋体等其它档、'
+        + '以及 Mac 上替到苹方（≈1.4）的行高仍不同（2026-08-19 真 Word 实证：2 页简历在 Word 里变过 4 页）；'
+      : fonts.missing.length
+        ? `① 本机是 Windows，页图用的是本机字体，但缺 ${fonts.missing.join(' / ')}（用兜底字体替，只这几处字形不可判、行高可能有差）；`
+        : '① 本机是 Windows，宋体 / 黑体 / 楷体 / 仿宋 / 雅黑 五件齐全，页图用的是真字体，**字形可以照图判**；';
     caption.push(
-      '已知失真：① 中文是**替身字体**（雅黑/等线→MiSans、仿宋→朱雀仿宋、宋体→Noto Serif、'
-      + '楷体→LXGW），字形跟用户 Word 里仍有差；CJK 全角等宽所以**断行位置**一致，但行高只有'
-      + '雅黑档对齐了（MiSans 1.326 ≈ 真雅黑 1.32）—— 宋体等其它档、以及 Mac 上替到苹方（≈1.4）'
-      + '的行高仍不同（2026-08-19 真 Word 实证：2 页简历在 Word 里变过 4 页）；'
+      '已知失真：' + fontNote
       + '② **TOC 域**这里显示的是占位文案不是真目录（Word 打开更新域才生成）——'
       + '页码域是正常的，看到几就是几。'
-      + '版式、间距、缩进、层级可以照这张图判；字形观感、目录内容不能，'
+      + '版式、间距、缩进、层级可以照这张图判；目录内容不能，'
+      + (fonts.checked && !fonts.missing.length ? '' : '字形观感不能，')
       + '**multiple 行距下的页数和分页位置也不能**（排满的页真 Word 会多出页；'
       + '页数敏感的文档行距用 exact/atLeast 磅值，两边就一样高了）。',
     );
