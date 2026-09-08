@@ -77,6 +77,32 @@ export function newUserText(body) {
 const deny = (status, code, message, extra = {}) => ({ ok: false, status, code, message, ...extra });
 
 /**
+ * relay 的订阅腿总开关（2026-09-08 站主关掉）。
+ *
+ * 订阅腿是拿站主个人 claude.ai 的 OAuth token 替别人机器上的 SDK 转发请求 —— 从上游看是一个代理
+ * 在用一枚个人订阅 token 打请求，属于账号被封的形状。网页端的订阅会话不受影响：那是 Claude Code
+ * 自己的 CLI 在站主服务器上以 OAuth 模式直连。桌面版要用 Claude 走本机 `claude login`（本机有
+ * 凭据本来就优先本机，见 model-context.modelSourceFor）。
+ *
+ * 判决只有这一处：登记口（/sessions）、逐发判决（decideRelay）、目录（/models）、whoami 能力位
+ * 全都调它，别在调用点各写一个 `&& false`。要重开就把常量翻回 true，四处一起活。
+ */
+export const RELAY_SUBSCRIPTION_LEG_ENABLED = false;
+export const RELAY_SUBSCRIPTION_CLOSED_REASON = '桌面版暂不提供 Claude 订阅通路，请改用 API 模型；本机 claude login 过的话会直接走本机';
+
+/** 这个账号能不能在 relay 上走订阅腿 = 总开关 && 档位资格 */
+export function relaySubscriptionAllowed(user) {
+  return RELAY_SUBSCRIPTION_LEG_ENABLED && hasSubscriptionAccess(user);
+}
+
+/** 拒绝的话术：开关关着说"暂不提供"，开着才是"档位不够" */
+export function relaySubscriptionDenial() {
+  return RELAY_SUBSCRIPTION_LEG_ENABLED
+    ? { code: 'SUBSCRIPTION_REQUIRED', message: '当前账号不具备订阅通路权限，请改用 API 模型。' }
+    : { code: 'SUBSCRIPTION_CLOSED', message: RELAY_SUBSCRIPTION_CLOSED_REASON };
+}
+
+/**
  * 判一发 relay 请求放不放行。
  *
  * @param {object}  args
@@ -94,9 +120,10 @@ export async function decideRelay({ user, body, appModel }, { moderate = moderat
   const model = appModel;
   const route = resolveModelRoute(model);
 
-  // ── 闸 1：档位。订阅通路骑的是站主账号，basic 档不给（auth/tier.js 的能力表） ──
-  if (route.mode === 'subscription' && !hasSubscriptionAccess(user)) {
-    return deny(403, 'SUBSCRIPTION_REQUIRED', '当前账号不具备订阅通路权限，请改用 API 模型。');
+  // ── 闸 1：订阅腿。总开关（现在关着）+ 档位（订阅通路骑的是站主账号，basic 档不给） ──
+  if (route.mode === 'subscription' && !relaySubscriptionAllowed(user)) {
+    const d = relaySubscriptionDenial();
+    return deny(403, d.code, d.message);
   }
 
   // ── 闸 2：额度。服务器自己算的数，不看客户端报什么 ──

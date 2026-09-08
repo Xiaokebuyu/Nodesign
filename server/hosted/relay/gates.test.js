@@ -1,17 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import crypto from 'node:crypto';
 import db from '../../engine/runs/store.js';
-import { decideRelay, newUserText, _resetSeen } from './gates.js';
+import { decideRelay, newUserText, _resetSeen, relaySubscriptionAllowed, RELAY_SUBSCRIPTION_LEG_ENABLED } from './gates.js';
 
-function makeUser({ role = 'user', plan = 'basic', lifetime = null, daily = null } = {}) {
+function makeUser({ role = 'user', plan = 'basic', lifetime = null, daily = null, moderationLevelApi = null } = {}) {
   const id = 'u_' + crypto.randomBytes(4).toString('hex');
   db.prepare('INSERT INTO users (id, username, password_hash, role, disabled) VALUES (?, ?, ?, ?, 0)')
     .run(id, id, 'x', role);
-  return { id, username: id, role, plan, disabled: false, lifetimeCostLimitUsd: lifetime, dailyCostLimitUsd: daily };
+  return { id, username: id, role, plan, disabled: false, lifetimeCostLimitUsd: lifetime, dailyCostLimitUsd: daily, moderationLevelApi };
 }
 
 /** 未知 model 名 → resolveModelRoute 判为订阅通路（走站主账号那条） */
 const SUBSCRIPTION_BODY = { model: 'claude-sonnet-5', messages: [{ role: 'user', content: '你好' }] };
+/** 表里的 API 行（deepseek 经 ingress）：订阅腿开关跟它无关 */
+const API_BODY = { model: 'deepseek-v4-flash-vision', messages: [{ role: 'user', content: '你好' }] };
 const pass = async () => ({ ok: true, level: 'strict' });
 
 beforeEach(() => { _resetSeen(); });
@@ -49,10 +51,23 @@ describe('闸 1：档位', () => {
     const r = await decideRelay({ user: makeUser({ plan: 'basic' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate: pass });
     expect(r.ok).toBe(false);
     expect(r.status).toBe(403);
-    expect(r.code).toBe('SUBSCRIPTION_REQUIRED');
+    expect(r.code).toBe('SUBSCRIPTION_CLOSED');
   });
-  it('pro 档过得去这一闸', async () => {
+  it('订阅腿总开关关着（09-08）：pro 档也 403，code=SUBSCRIPTION_CLOSED；重开时这条要翻回 ok', async () => {
+    expect(RELAY_SUBSCRIPTION_LEG_ENABLED).toBe(false);
     const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate: pass });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(403);
+    expect(r.code).toBe('SUBSCRIPTION_CLOSED');
+    expect(relaySubscriptionAllowed(makeUser({ plan: 'pro' }))).toBe(false);
+    expect(relaySubscriptionAllowed(makeUser({ role: 'admin' }))).toBe(false);
+  });
+  it('basic 档在开关关着时拿到的也是 SUBSCRIPTION_CLOSED（话术跟着开关走）', async () => {
+    const r = await decideRelay({ user: makeUser({ plan: 'basic' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate: pass });
+    expect(r.code).toBe('SUBSCRIPTION_CLOSED');
+  });
+  it('API 行不受订阅腿开关影响', async () => {
+    const r = await decideRelay({ user: makeUser({ plan: 'basic' }), body: API_BODY, appModel: API_BODY.model }, { moderate: pass });
     expect(r.ok).toBe(true);
   });
 });
@@ -61,19 +76,21 @@ describe('闸 2：额度', () => {
   it('总额度用完 → 402，且不打外审（顺序：贵的闸在后）', async () => {
     const moderate = vi.fn(pass);
     const user = makeUser({ plan: 'pro', lifetime: 0 });
-    const r = await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    const r = await decideRelay({ user, body: API_BODY, appModel: API_BODY.model }, { moderate });
     expect(r.ok).toBe(false);
     expect(r.status).toBe(402);
     expect(r.code).toBe('QUOTA_EXCEEDED');
     expect(moderate).not.toHaveBeenCalled();
   });
   it('admin 不受额度限制', async () => {
-    const r = await decideRelay({ user: makeUser({ role: 'admin', lifetime: 0 }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate: pass });
+    const r = await decideRelay({ user: makeUser({ role: 'admin', lifetime: 0 }), body: API_BODY, appModel: API_BODY.model }, { moderate: pass });
     expect(r.ok).toBe(true);
   });
 });
 
 describe('闸 3：外审', () => {
+  // 载体是 API 行（订阅腿 09-08 关了）。API 通路默认档 off（tier.js moderationDefaultApi），
+  // 所以要审得起来的用例给 user 显式 moderationLevelApi:'strict'；admin 那条不给，测的就是默认 off。
   // shouldModerate 没有 OPENAI_API_KEY 就整道跳过（既定的 fail-open）。
   // 这几条测的是"审起来之后怎么判"，所以先把前提装上。
   beforeEach(() => { process.env.OPENAI_API_KEY = 'test-key-not-used-真调用被注入替换了'; });
@@ -81,7 +98,7 @@ describe('闸 3：外审', () => {
 
   it('判定拦截 → 403 CONTENT_BLOCKED（认的是 ok:false，不是 blocked）', async () => {
     const moderate = async () => ({ ok: false, level: 'strict', category: 'weapons', severity: 'normal', reason: '不行' });
-    const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    const r = await decideRelay({ user: makeUser({ plan: 'pro', moderationLevelApi: 'strict' }), body: API_BODY, appModel: API_BODY.model }, { moderate });
     expect(r.ok).toBe(false);
     expect(r.status).toBe(403);
     expect(r.code).toBe('CONTENT_BLOCKED');
@@ -90,37 +107,37 @@ describe('闸 3：外审', () => {
 
   it('同一段文本第二次不再打外审（去重）', async () => {
     const moderate = vi.fn(pass);
-    const user = makeUser({ plan: 'pro' });
-    await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
-    await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    const user = makeUser({ plan: 'pro', moderationLevelApi: 'strict' });
+    await decideRelay({ user, body: API_BODY, appModel: API_BODY.model }, { moderate });
+    await decideRelay({ user, body: API_BODY, appModel: API_BODY.model }, { moderate });
     expect(moderate).toHaveBeenCalledTimes(1);
   });
 
   it('去重按人分：换个人要重新审', async () => {
     const moderate = vi.fn(pass);
-    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
-    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    await decideRelay({ user: makeUser({ plan: 'pro', moderationLevelApi: 'strict' }), body: API_BODY, appModel: API_BODY.model }, { moderate });
+    await decideRelay({ user: makeUser({ plan: 'pro', moderationLevelApi: 'strict' }), body: API_BODY, appModel: API_BODY.model }, { moderate });
     expect(moderate).toHaveBeenCalledTimes(2);
   });
 
   it('fail-open 那一发放行，但不记指纹：服务恢复后要重新审', async () => {
     const moderate = vi.fn(async () => ({ ok: true, level: 'strict', failedOpen: true }));
-    const user = makeUser({ plan: 'pro' });
-    expect((await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate })).ok).toBe(true);
-    await decideRelay({ user, body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    const user = makeUser({ plan: 'pro', moderationLevelApi: 'strict' });
+    expect((await decideRelay({ user, body: API_BODY, appModel: API_BODY.model }, { moderate })).ok).toBe(true);
+    await decideRelay({ user, body: API_BODY, appModel: API_BODY.model }, { moderate });
     expect(moderate).toHaveBeenCalledTimes(2);   // 没被去重表挡住
   });
 
   it('admin 的外审默认档是 off，压根不打', async () => {
     const moderate = vi.fn(pass);
-    await decideRelay({ user: makeUser({ role: 'admin' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    await decideRelay({ user: makeUser({ role: 'admin' }), body: API_BODY, appModel: API_BODY.model }, { moderate });
     expect(moderate).not.toHaveBeenCalled();
   });
 
   it('没配 OPENAI_API_KEY 时整道外审安静地不存在（既定 fail-open，但值得知道）', async () => {
     delete process.env.OPENAI_API_KEY;
     const moderate = vi.fn(pass);
-    const r = await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    const r = await decideRelay({ user: makeUser({ plan: 'pro', moderationLevelApi: 'strict' }), body: API_BODY, appModel: API_BODY.model }, { moderate });
     expect(r.ok).toBe(true);
     expect(r.moderated).toBe(false);
     expect(moderate).not.toHaveBeenCalled();
@@ -129,7 +146,7 @@ describe('闸 3：外审', () => {
   it('总闸 NODESIGN_MODERATION=off 时也不审', async () => {
     process.env.NODESIGN_MODERATION = 'off';
     const moderate = vi.fn(pass);
-    await decideRelay({ user: makeUser({ plan: 'pro' }), body: SUBSCRIPTION_BODY, appModel: SUBSCRIPTION_BODY.model }, { moderate });
+    await decideRelay({ user: makeUser({ plan: 'pro', moderationLevelApi: 'strict' }), body: API_BODY, appModel: API_BODY.model }, { moderate });
     expect(moderate).not.toHaveBeenCalled();
     delete process.env.NODESIGN_MODERATION;
   });

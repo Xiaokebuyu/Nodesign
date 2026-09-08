@@ -48,8 +48,8 @@ const db = (await import('../../engine/runs/store.js')).default;
 const { mintDevice } = await import('./devices.js');
 const { hashPassword } = await import('../users-write.js');
 const { createRelayRouter } = await import('./router.js');
-const { _resetRelaySessions } = await import('./sessions.js');
-const { _resetSeen } = await import('./gates.js');
+const { _resetRelaySessions, openRelaySession } = await import('./sessions.js');
+const { _resetSeen, RELAY_SUBSCRIPTION_CLOSED_REASON, RELAY_SUBSCRIPTION_LEG_ENABLED } = await import('./gates.js');
 const { installRelayUsageSource, _resetInstalled } = await import('./usage.js');
 const { _resetUsageSources, checkQuota } = await import('../../lib/quota.js');
 const { resolveModelRoute } = await import('../../engine/agent/model-context.js');
@@ -158,11 +158,16 @@ describe('目录', () => {
     expect(sonnet.locked).toBe(true);
     expect(typeof sonnet.lockReason).toBe('string');
   });
-  it('pro：订阅行不锁', async () => {
+  it('pro：订阅腿关着（09-08），订阅行照样锁、原因是"暂不提供"；API 行不锁', async () => {
     const user = makeUser({ plan: 'pro' });
     const { token } = mintDevice({ userId: user.id });
     const j = await (await api(token, '/models')).json();
-    expect(j.models.find((m) => m.id === 'claude-sonnet-5[1m]').locked).toBe(false);
+    const sonnet = j.models.find((m) => m.id === 'claude-sonnet-5[1m]');
+    expect(sonnet.locked).toBe(true);
+    expect(sonnet.lockReason).toBe(RELAY_SUBSCRIPTION_CLOSED_REASON);
+    expect(j.models.find((m) => m.id === 'fake-anthro')).toEqual({ id: 'fake-anthro', locked: false });
+    const w = await (await api(token, '/whoami')).json();
+    expect(w.capabilities.subscription).toBe(false);
   });
 });
 
@@ -172,7 +177,7 @@ describe('会话登记', () => {
     const { token } = mintDevice({ userId: user.id });
     const { r } = await openSession(token, 'claude-sonnet-5[1m]');
     expect(r.status).toBe(403);
-    expect((await r.json()).code).toBe('SUBSCRIPTION_REQUIRED');
+    expect((await r.json()).code).toBe('SUBSCRIPTION_CLOSED');
   });
   it('API 行 → 201，mode=api；没登记就推理 → 400；别人的 sid → 403', async () => {
     const a = makeUser(); const b = makeUser();
@@ -273,18 +278,35 @@ describe('API 腿：转发 + 记账', () => {
   });
 });
 
-describe('订阅腿', () => {
-  it('pro 登记订阅模型 → 201 mode=subscription，推理走订阅腿而不是入口', async () => {
+describe('订阅腿（09-08 总开关关着：pro/admin 也进不去，订阅转发函数一次都不该被调）', () => {
+  it('pro 登记订阅模型 → 403 SUBSCRIPTION_CLOSED，订阅腿零调用', async () => {
     expect(resolveModelRoute('claude-sonnet-5[1m]').mode).toBe('subscription');
     const user = makeUser({ plan: 'pro' });
     const { token } = mintDevice({ userId: user.id });
-    const { r, sid } = await openSession(token, 'claude-sonnet-5[1m]');
-    expect(r.status).toBe(201);
-    expect((await r.json()).mode).toBe('subscription');
+    const { r } = await openSession(token, 'claude-sonnet-5[1m]');
+    expect(r.status).toBe(403);
+    expect((await r.json()).code).toBe('SUBSCRIPTION_CLOSED');
+    expect(subForward).not.toHaveBeenCalled();
+  });
+  it('admin 也一样 403', async () => {
+    const user = makeUser({ role: 'admin' });
+    const { token } = mintDevice({ userId: user.id });
+    const { r } = await openSession(token, 'claude-sonnet-5[1m]');
+    expect(r.status).toBe(403);
+    expect(subForward).not.toHaveBeenCalled();
+  });
+  it('绕过登记口：直接往一个已登记为订阅的 sid 打推理 → 逐发判决也 403，订阅腿零调用', async () => {
+    const user = makeUser({ plan: 'pro' });
+    const { token } = mintDevice({ userId: user.id });
+    // 模拟"部署前登记成功"的残留会话：绕过 HTTP 登记口直接写会话表
+    const sid = crypto.randomUUID();
+    const opened = openRelaySession({ sid, appModel: 'claude-sonnet-5[1m]', userId: user.id, deviceId: 'dev' });
+    expect(opened.ok).toBe(true);
+    expect(opened.session.mode).toBe('subscription');
     const res = await infer(token, sid, { ...BODY, model: 'claude-sonnet-5[1m]' });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ sub: true });
-    expect(subForward).toHaveBeenCalledTimes(1);
+    expect(res.status).toBe(403);
+    expect((await res.json()).code).toBe('SUBSCRIPTION_CLOSED');
+    expect(subForward).not.toHaveBeenCalled();
     expect(upstreamSeen).toHaveLength(0);
   });
 });
@@ -318,7 +340,8 @@ describe('记账：上游自报 0 元不算数（Zen Go 额度内报 0）', () =
 });
 
 describe('记账：订阅腿按 Claude 表价（09-07 桌面端计费遗留：之前行上没价记 0）', () => {
-  it('onUsage 报的 token 按 claude-opus-5[1m] 的 prices 入账，不再是 0', async () => {
+  // 订阅腿 09-08 总开关关了，这条到不了记账；开关翻回 true 时自动恢复运行，不用人记得
+  (RELAY_SUBSCRIPTION_LEG_ENABLED ? it : it.skip)('onUsage 报的 token 按 claude-opus-5[1m] 的 prices 入账，不再是 0', async () => {
     const subForward2 = vi.fn((_req, res, _buf, opts) => {
       opts.onUsage({ input: 1_000_000, output: 100_000, cacheRead: 2_000_000, cacheCreate: 100_000 });
       res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"sub":true}');

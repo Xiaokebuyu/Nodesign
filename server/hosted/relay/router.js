@@ -35,13 +35,13 @@ import { verifyDeviceToken, tokenFromRequest, mintDevice, revokeDevice, listDevi
 import { checkPassword } from '../auth-routes.js';
 import { getUserById } from '../../auth/users-store.js';
 import { openRelaySession, closeRelaySession, lookupRelaySession, startRelaySessionSweeper } from './sessions.js';
-import { decideRelay } from './gates.js';
+import { decideRelay, relaySubscriptionAllowed, relaySubscriptionDenial, RELAY_SUBSCRIPTION_CLOSED_REASON } from './gates.js';
 import { recordRelayUsage, installRelayUsageSource, relayDailySeries } from './usage.js';
 import { avatarDataUrl, setAvatar, clearAvatar, AVATAR_MAX_UPLOAD } from '../../lib/avatar-store.js';
 import { getActiveNotice } from '../../lib/notice-store.js';
 import { forwardSubscription } from './subscription-leg.js';
 import { handleRequest as forwardViaIngress } from '../../lib/model-ingress.js';
-import { priceTokens, resolveModelRoute, hasSubscriptionAccess, selectableModelsFor, PICKER_SCOPES } from '../../engine/agent/model-context.js';
+import { priceTokens, resolveModelRoute, selectableModelsFor, PICKER_SCOPES } from '../../engine/agent/model-context.js';
 import { checkQuota } from '../../lib/quota.js';
 import { tierOf } from '../../auth/tier.js';
 import { mountRelayTools, relayToolsFor } from './tools.js';
@@ -122,7 +122,7 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
       // avatar 是 data URL（128 webp，几 KB）：桌面版顶栏和设置页直接画，跟身份一起缓存在目录里
       user: { id: user.id, username: user.username, tier: tierOf(user), avatar: avatarDataUrl(user.id) },
       device: { id: req.relayDevice.id, label: req.relayDevice.label },
-      capabilities: { subscription: hasSubscriptionAccess(user) },
+      capabilities: { subscription: relaySubscriptionAllowed(user) },
       // 网关替这个账号跑的工具（桌面版没有钥匙的那几件）：客户端的能力位和工具选路都按这张表
       tools: relayToolsFor(user),
       quota: { kind: quota.kind, used: quota.used, limit: quota.limit },
@@ -161,7 +161,12 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     const byId = new Map();
     for (const scope of PICKER_SCOPES) {
       for (const m of selectableModelsFor(req.relayUser, { scope })) {
-        if (!byId.has(m.id)) byId.set(m.id, { id: m.id, locked: !!m.locked, ...(m.lockReason ? { lockReason: m.lockReason } : {}) });
+        if (byId.has(m.id)) continue;
+        // 订阅行在 relay 上还要过订阅腿的总开关：站内 pro 不锁，桌面版照样锁（原因写明白，客户端选择器直接显示）
+        const subClosed = resolveModelRoute(m.id).mode === 'subscription' && !relaySubscriptionAllowed(req.relayUser);
+        const locked = !!m.locked || subClosed;
+        const lockReason = subClosed && !m.locked ? RELAY_SUBSCRIPTION_CLOSED_REASON : m.lockReason;
+        byId.set(m.id, { id: m.id, locked, ...(locked && lockReason ? { lockReason } : {}) });
       }
     }
     res.json({ models: [...byId.values()] });
@@ -174,8 +179,9 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     const { sid, appModel } = body || {};
     const user = req.relayUser;
     // 档位闸提前到登记：客户端选了订阅模型而档位不够，这里就说，别等 SDK 起来第一发才 403
-    if (resolveModelRoute(appModel).mode === 'subscription' && !hasSubscriptionAccess(user)) {
-      return sendError(res, 403, 'SUBSCRIPTION_REQUIRED', '当前账号不具备订阅通路权限，请改用 API 模型。');
+    if (resolveModelRoute(appModel).mode === 'subscription' && !relaySubscriptionAllowed(user)) {
+      const d = relaySubscriptionDenial();
+      return sendError(res, 403, d.code, d.message);
     }
     const r = openRelaySession({ sid, appModel, userId: user.id, deviceId: req.relayDevice.id });
     if (!r.ok) return sendError(res, r.status, r.code, r.message);
