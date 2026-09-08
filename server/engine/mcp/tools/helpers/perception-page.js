@@ -32,6 +32,7 @@
  */
 
 import path from 'node:path';
+import { fileUrl } from '../../../../lib/file-url.js';
 import { getProject } from '../../../../projects/store.js';
 import { COOKIE_NAME, mintToken, authEnabled } from '../../../../auth/session.js';
 import { getUserById } from '../../../../auth/users-store.js';
@@ -197,7 +198,8 @@ export async function openArtifactPage(browser, {
 
   const page = await context.newPage();
   if (!url) {
-    return { page, context, url: `file://${absPath}`, note, viaHttp: false, goto: () => page.goto(`file://${absPath}`, { waitUntil, timeout }) };
+    const fileHref = fileUrl(absPath);
+    return { page, context, url: fileHref, note, viaHttp: false, goto: () => page.goto(fileHref, { waitUntil, timeout }) };
   }
 
   return {

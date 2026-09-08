@@ -24,6 +24,7 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fileUrl } from '../file-url.js';
 // 二进制路径走启动探测（Mac/Win 的 LibreOffice 不在 PATH；没探到就原名让 ENOENT 原样报）
 import { resolveBinary } from '../../runtime/capabilities.js';
 
@@ -59,7 +60,9 @@ export async function renderDocx(docxPath, opts = {}) {
       FONTCONFIG_FILE: FONTCONF,                    // 军规3：字体替身
     };
     await run(resolveBinary('libreoffice', 'soffice'), [
-      `-env:UserInstallation=file://${scratch}/loprofile`,  // 军规1：独立 profile
+      // 军规1：独立 profile。⚠️ 必须是**真的 file URL**（fileUrl 而不是 'file://' + 路径）：
+      // Windows 上拼出来的 `file://C:\…` 会让 LO 弹「bootstrap.ini 已经损坏」后退 1（见 lib/file-url.js）
+      `-env:UserInstallation=${fileUrl(join(scratch, 'loprofile'))}`,
       '--headless', '--convert-to', 'pdf', '--outdir', scratch, inFile,
     ], { env, timeout: opts.timeoutMs ?? SOFFICE_TIMEOUT });
 

@@ -25,6 +25,7 @@ import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import { taskManifest, can } from './kinds/index.js';
 import { resolveArtifactFile } from './artifact-file-path.js';
+import { fileUrl } from './file-url.js';
 import { resolveDeckSize, extractDeckAspect } from '../shared/deck.js';
 import { openArtifactPage, launchPerceptionBrowser } from '../engine/mcp/tools/helpers/perception-page.js';
 
@@ -117,7 +118,7 @@ export async function renderCoverShot(cover, pctx = {}) {
     } catch (err) {
       if (!opened.viaHttp) throw err;
       console.warn('[cover] http 加载失败，退回 file://:', err.message);
-      await page.goto('file://' + cover.absPath, { waitUntil: 'networkidle', timeout: 20_000 });
+      await page.goto(fileUrl(cover.absPath), { waitUntil: 'networkidle', timeout: 20_000 });
     }
     // 字体加载完再截（同导出管线的口径：CJK 子集是 lazy 的，不显式 load 会截到 fallback）
     await page.evaluate(async () => {

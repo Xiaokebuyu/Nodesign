@@ -46,11 +46,19 @@ import {
 } from '../../../lib/artifact-target.js';
 import { getTurnMemory, setTurnMemory, fingerprint, diffItems } from './turn-state-memory.js';
 
+/**
+ * soffice 的 `-env:UserInstallation` 要的是**真的 file URL**（三斜杠 + 正斜杠）。09-08：Windows 上写成
+ * `file://C:\\…` LO 认不出，弹「配置文件 bootstrap.ini 已经损坏」后退 1 —— 报错指不到根因，所以这里把形状写死给它看。
+ */
+const LO_PROFILE_HINT = process.platform === 'win32'
+  ? '`-env:UserInstallation=file:///C:/Users/<你的用户名>/AppData/Local/Temp/lo-任意名`（**三个斜杠 + 正斜杠**；写成 `file://C:\\…` LibreOffice 会报「bootstrap.ini 已经损坏」）'
+  : '`-env:UserInstallation=file:///tmp/lo-任意名`';
+
 /** PDF/Office 文档的解法（系统自带工具；python 包没装且装不上 —— 08-19 上报实锤）。只在首次出现二进制文档时说一遍。 */
 const BINARY_DOC_HINT = 'PDF / PPTX / DOCX / XLSX 直接 Read 拿不到结构化内容（二进制或 zip 包）。用系统自带的工具解'
   + '（pdfplumber/PyPDF2/python-docx/openpyxl 这些 python 包**未安装且无法安装**，请勿尝试）：'
   + 'pdf 文本 `pdftotext -layout 文件.pdf -`；pdf 转页图 `pdftoppm -png -r 100 文件.pdf 页前缀` 再 Read 图片；pdf 嵌入图 `pdfimages -png`。'
-  + 'docx/pptx/xlsx 用 `soffice --headless --convert-to txt|csv|pdf --outdir 目录 文件`（xlsx 转 csv；⚠️ soffice 不支持中文文件名，先拷成 ASCII 名，并加 `-env:UserInstallation=file:///tmp/lo-任意名` 避免与渲染管线争用 profile）；'
+  + 'docx/pptx/xlsx 用 `soffice --headless --convert-to txt|csv|pdf --outdir 目录 文件`（xlsx 转 csv；⚠️ soffice 不支持中文文件名，先拷成 ASCII 名，并加 ' + LO_PROFILE_HINT + ' 避免与渲染管线争用 profile）；'
   + 'docx/pptx 里的嵌入图直接 `unzip -o 文件 "word/media/*"`（pptx 是 `ppt/media/*`）。'
   + '**提取出来的不只是文本，通常还包含嵌入图片** —— 提取完一定 Read 看图片，别只看 stdout 文本就以为信息齐了。';
 

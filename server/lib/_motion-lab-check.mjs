@@ -15,6 +15,7 @@
 import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileUrl } from './file-url.js';
 
 const TMP = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-motion-check-'));
 // ⛔ 先把库指走再 import 任何 server 模块：后面穿工具本体那两节的 import 链
@@ -68,7 +69,7 @@ await fs.writeFile(PAGE, `<!doctype html><meta charset="utf-8"><title>c</title>
 const { chromium } = await import('playwright');
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 800, height: 500 } });
-await page.goto(`file://${PAGE}`);
+await page.goto(fileUrl(PAGE));
 
 // ── 1. 完整录制：trigger + 表达式 + screencast ─────────────────────
 console.log('1. recordMotion（trigger + 表达式 + screencast）');

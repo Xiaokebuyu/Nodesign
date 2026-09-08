@@ -12,6 +12,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { fileUrl } from '../../lib/file-url.js';
 import { resolveDeckSize, extractDeckAspect } from '../../shared/deck.js';
 import { fitInjectionBlock } from '../standalone-fit.js';
 import { buildStandaloneHtml, isHybridHtml } from './build-standalone.js';
@@ -56,7 +57,7 @@ export async function prepareExportPage(browser, filePath, opts = {}) {
     deviceScaleFactor: dpr,
   });
   const page = await ctx.newPage();
-  await page.goto('file://' + loadPath, { waitUntil: 'networkidle', timeout: 30_000 });
+  await page.goto(fileUrl(loadPath), { waitUntil: 'networkidle', timeout: 30_000 });
 
   // 字体强等待——比 await document.fonts.ready 严格得多。
   //
