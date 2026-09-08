@@ -44,7 +44,7 @@ describe('tierOf / can', () => {
     }
     expect(CAPABILITY_NAMES).toContain('moderationDefault');
     expect(CAPABILITY_NAMES).toContain('moderationDefaultApi');
-    expect(basicDefaultDailyUsd({})).toBe(5);
+    expect(basicDefaultDailyUsd({})).toBe(10);
     expect(basicDefaultDailyUsd({ NODESIGN_BASIC_DEFAULT_DAILY_USD: '8' })).toBe(8);
     expect(basicDefaultDailyUsd({ NODESIGN_BASIC_DEFAULT_DAILY_USD: '0' })).toBeNull();
   });
