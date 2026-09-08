@@ -30,6 +30,26 @@ export const DEFAULT_EMPTY_RETRIES = 2;
 export const DEFAULT_RETRY_BUDGET_MS = 120_000;
 export const RETRY_DELAY_MS = 1_000;
 const PING_INTERVAL_MS = 15_000;
+/**
+ * 首字节两道闸（2026-09-08，桌面端经 relay 吃 Cloudflare 524 之后加的）：
+ * Cloudflare 要求源站 **120 秒内返回响应头**，而这里原本要等上游的状态行才写 200 —— 上游一发 TTFB 超过
+ * 两分钟，客户端拿到的就是 CF 替我们回的 524，服务端只看到「客户端断开」。网页版 ingress 走 localhost
+ * 不经 CF，所以只有 relay 暴露在这 120 秒下。
+ *   - EARLY_COMMIT：等这么久还没首字节，就先写 200 + SSE 头并开 ping 保活；之后上游再报错改走流内 error 事件
+ *     （代价：上游 4xx 的状态码丢了，CLI 按状态码的退避重试失效，靠这里自己的重发链兜）。
+ *   - FIRST_BYTE：等这么久还没首字节，掐掉这一发走既有的 attemptOver 判决（零可见输出 → 就地重发 / 额度用完 → 收场）。
+ * 两个数都要 < 120 秒（早提交必须赶在 CF 之前），FIRST_BYTE > EARLY_COMMIT（先保活再判死）。
+ */
+export const DEFAULT_EARLY_COMMIT_MS = 60_000;
+export const DEFAULT_FIRST_BYTE_MS = 90_000;
+export function earlyCommitMs(env = process.env) {
+  const v = Number(env.NODESIGN_INGRESS_EARLY_COMMIT_MS);
+  return Number.isFinite(v) && v > 0 ? v : DEFAULT_EARLY_COMMIT_MS;
+}
+export function firstByteMs(env = process.env) {
+  const v = Number(env.NODESIGN_INGRESS_FIRST_BYTE_MS);
+  return Number.isFinite(v) && v > 0 ? v : DEFAULT_FIRST_BYTE_MS;
+}
 
 /** 零可见输出时最多再打几发（0 = 关掉就地重发） */
 export function emptyRetryLimit(env = process.env) {
@@ -179,6 +199,14 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       if (xf.cost != null || xf.usageTotal) onBilling({ costUsd: xf.cost, usage: xf.usageTotal });
     });
 
+    /** 写 200 + SSE 头、把转换层接到 res 上；只做一次 */
+    const commitStream = () => {
+      if (streaming || dead) return;
+      streaming = true;
+      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+      res.flushHeaders?.();
+      xf.pipe(res);
+    };
     const finish = (verdict) => { stopPing(); xf.finalize(verdict); xf.end(); };
     /** 还没开始流就失败：回真正的 HTTP 状态码（CLI 据此退避重试）；已经在流里了：以 error 事件收场 */
     const failHard = (status, msg, reason) => {
@@ -201,6 +229,8 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
     // 这是模型体质问题不是协议问题：Ox 两个主行放宽到 6 次 / 360 秒，别的行照旧 2 次 / 120 秒。
     const maxRetries = Number.isFinite(wire.emptyRetries) ? wire.emptyRetries : emptyRetryLimit();
     const budgetMs = Number.isFinite(wire.retryBudgetMs) ? wire.retryBudgetMs : retryBudgetMs();
+    const earlyMs = earlyCommitMs();
+    const fbMs = Math.max(firstByteMs(), earlyMs + 1);
     /** 重发额度还够吗（次数 + 墙钟预算 + 客户端还在） */
     const canRetry = () => !dead && (xf.attempts - 1) < maxRetries && (Date.now() - t0) < budgetMs;
 
@@ -208,6 +238,12 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       if (dead) return;
       let over = false;
       let proxyRes = null;
+      let earlyTimer = null;
+      let firstByteTimer = null;
+      const disarmFirstByte = () => {
+        if (earlyTimer) { clearTimeout(earlyTimer); earlyTimer = null; }
+        if (firstByteTimer) { clearTimeout(firstByteTimer); firstByteTimer = null; }
+      };
       /**
        * 这一发结束（干净 EOF / RST / 连不上都走这里 —— res 的收尾权只有它一个主人）。
        * @param {string|null} why  非空 = 异常收场的原因
@@ -217,6 +253,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
         if (over || dead) return;
         over = true;
         currentReq = null;
+        disarmFirstByte();
         if (why) console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 这一发异常收场（${why}）`);
         try { proxyRes?.unpipe?.(xf); } catch { /* 已经断了就算了 */ }   // 解开这一发的 pipe，别让监听器一发发攒着
         const verdict = xf.attemptEnd();
@@ -233,7 +270,25 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
         retryTimer = setTimeout(() => { retryTimer = null; if (dead) return; xf.beginAttempt(); runAttempt(); }, RETRY_DELAY_MS);
       };
 
+      // 首字节两道闸（见文件头 DEFAULT_EARLY_COMMIT_MS 那段）：拿到响应头就拆
+      earlyTimer = setTimeout(() => {
+        earlyTimer = null;
+        if (over || dead || streaming) return;
+        console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 等首字节 ${Math.round(earlyMs / 1000)}s —— 先提交流保活`);
+        commitStream();
+        try { res.write('event: ping\ndata: {"type":"ping"}\n\n'); } catch { /* 客户端已经走了 */ }   // 头后面跟一个字节，nginx 才一定往外冲
+        startPing();
+      }, earlyMs);
+      firstByteTimer = setTimeout(() => {
+        firstByteTimer = null;
+        if (over || dead) return;
+        console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 等首字节 ${Math.round(fbMs / 1000)}s —— 掐断这一发`);
+        try { currentReq?.destroy(new Error('first byte timeout')); } catch { /* */ }
+      }, fbMs);
+      earlyTimer.unref?.(); firstByteTimer.unref?.();
+
       currentReq = request((incoming) => {
+        disarmFirstByte();
         proxyRes = incoming;
         const status = proxyRes.statusCode || 502;
         if (status >= 400) {
@@ -256,11 +311,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
         }
 
         stopPing();
-        if (!streaming) {
-          streaming = true;
-          res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-          xf.pipe(res);
-        }
+        commitStream();
         proxyRes.on('aborted', () => attemptOver('aborted'));
         proxyRes.on('error', (err) => attemptOver(err.code || err.message));
         proxyRes.on('end', () => attemptOver(null));
