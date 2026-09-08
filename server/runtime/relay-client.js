@@ -21,6 +21,7 @@
  */
 
 import { profile } from './profile.js';
+import { noteRelayCall } from '../lib/diag-events.js';
 
 /** 站主的站点。设置页可用 NODESIGN_RELAY_URL 覆盖（自建 hosted 实例、内网镜像） */
 export const DEFAULT_RELAY_URL = 'https://nodesign.xiaobuyu.trade';
@@ -54,6 +55,9 @@ async function call(pathname, { method = 'GET', body = null, raw = null, form = 
   const base = normalizeRelayUrl(url || cfg?.url || process.env.NODESIGN_RELAY_URL);
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const sentAt = Date.now();
+  let headAt = null;
+  const account = (status, error = null) => noteRelayCall({ path: pathname, method, status, error, headMs: headAt ? headAt - sentAt : null, totalMs: Date.now() - sentAt });
   try {
     const res = await fetch(`${base}/api/relay${pathname}`, {
       method,
@@ -62,6 +66,7 @@ async function call(pathname, { method = 'GET', body = null, raw = null, form = 
       body: raw ? raw.buf : form ? form : body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
+    headAt = Date.now();
     // responseType 'buffer'：二进制响应（skill 下载 / 参考图）。出错时服务端仍回 JSON，照常解错
     if (responseType === 'buffer' && res.ok) {
       return { buffer: Buffer.from(await res.arrayBuffer()), contentType: res.headers.get('content-type') || 'application/octet-stream', headers: res.headers };
@@ -69,12 +74,14 @@ async function call(pathname, { method = 'GET', body = null, raw = null, form = 
     const text = await res.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { /* 非 JSON（nginx 的 502 页之类） */ }
+    account(res.status);
     if (!res.ok) {
       const message = json?.error?.message || json?.error || `HTTP ${res.status}`;
       throw Object.assign(new Error(message), { status: res.status, code: json?.code || `HTTP_${res.status}`, quota: json?.quota || null, body: json });
     }
     return json;
   } catch (err) {
+    if (!headAt) account(null, err.name === 'AbortError' ? 'timeout' : (err.code || err.message));
     if (err.name === 'AbortError') throw Object.assign(new Error(`relay ${base} 在 ${timeoutMs / 1000}s 内无响应`), { code: 'RELAY_TIMEOUT' });
     throw err;
   } finally {

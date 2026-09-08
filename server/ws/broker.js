@@ -10,6 +10,7 @@
 
 import { EventBus } from '../engine/agent/events.js';
 import { attachDiagnosticsTap } from '../lib/diag-events.js';
+import { attachWorkspaceAudit } from '../lib/workspace-audit.js';
 import { attachLiveTurnTracker } from '../engine/runs/live-turn.js';
 import { attachBoardTasklist } from '../engine/runs/board-tasklist.js';
 import { attachBoardSeater } from '../engine/runs/board-seater.js';
@@ -31,6 +32,7 @@ export function getProjectBus(projectId) {
     attachBoardSeater(bus, projectId);
     // 诊断分接头（09-08）：API 重试 / 每轮用量 / 工具调用起止收进环形账，给本地版 MCP 诊断端点读
     attachDiagnosticsTap(bus, projectId);
+    attachWorkspaceAudit(bus, projectId);   // run 收尾后板↔磁盘对账（lib/workspace-audit.js）
     projectBuses.set(projectId, bus);
   }
   return bus;

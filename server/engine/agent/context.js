@@ -39,6 +39,7 @@ export function freshTurnCounters() {
     toolFailures: 0,
     compactBoundaries: 0,
     apiRetries: 0,
+    firstTool: null,           // 本回合第一个工具名（AskUserQuestion = 先问；反问率统计用，落 run.metadata）
     durationMs: 0,
     durationApiMs: 0,
     totalCostUsd: 0,
@@ -259,6 +260,7 @@ export class AgentContext {
       toolFailures: c.toolFailures || 0,
       compactBoundaries: c.compactBoundaries || 0,
       apiRetries: c.apiRetries || 0,
+      firstTool: c.firstTool || null,
       modelUsage: c.modelUsage ? JSON.parse(JSON.stringify(c.modelUsage)) : null,
     };
   }

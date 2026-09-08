@@ -403,3 +403,26 @@ export function _truncateRunsTable() {
 }
 
 export default db;
+
+/**
+ * 反问率（2026-09-08 诊断埋点⑪）：最近 N 天每个回合第一个工具是不是 AskUserQuestion，按主模型分组。
+ * 数据来自 run.metadata.firstTool（context.js 计数器）；老回合没有这个字段，按 unknown 记。
+ */
+export function askFirstStats({ days = 7 } = {}) {
+  const rows = db.prepare(
+    `SELECT r.metadata AS metadata, u.model AS model
+       FROM runs r LEFT JOIN run_model_usage u ON u.run_id = r.id
+      WHERE r.created_at >= datetime('now', ?) AND r.status IN ('succeeded', 'failed', 'cancelled')`,
+  ).all(`-${Math.max(1, Math.floor(days))} days`);
+  const byModel = new Map();
+  for (const row of rows) {
+    let meta = {}; try { meta = JSON.parse(row.metadata || '{}'); } catch { /* */ }
+    const model = row.model || '(无用量记录)';
+    const first = meta.firstTool === undefined ? 'unknown' : (meta.firstTool || '(无工具)');
+    const m = byModel.get(model) || { runs: 0, askFirst: 0, unknown: 0, noTool: 0 };
+    m.runs += 1;
+    if (first === 'unknown') m.unknown += 1; else if (first === 'AskUserQuestion') m.askFirst += 1; else if (first === '(无工具)') m.noTool += 1;
+    byModel.set(model, m);
+  }
+  return { days, models: Object.fromEntries([...byModel].map(([k, v]) => [k, { ...v, askFirstRate: v.runs - v.unknown > 0 ? Math.round(100 * v.askFirst / (v.runs - v.unknown)) : null }])) };
+}

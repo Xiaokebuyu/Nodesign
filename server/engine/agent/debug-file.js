@@ -8,6 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { platform } from '../../runtime/platform.js';
+import { noteStderr } from '../../lib/diag-events.js';
 
 const KEEP_MS = 7 * 24 * 3600 * 1000;
 
@@ -27,4 +28,18 @@ export function claudeDebugOptions(sessionId, { isLocal = platform.isLocal, data
     }
   } catch { return {}; }
   return { debugFile: path.join(dir, `${sessionId}.txt`) };
+}
+
+/**
+ * CLI 子进程的 stderr（session-loop 的 stderr 回调）：控制台照打一行截断的；本地版另外**全量**追加到
+ * <dataRoot>/logs/claude-debug/<sid>.stderr.log（跟调试日志同目录、同 7 天清理）；末 20 行进 diag-events 的环形。
+ */
+export function onClaudeStderr(sessionId, data) {
+  const line = String(data ?? '').trim();
+  if (!line) return;
+  console.error(`[session ${String(sessionId).slice(0, 8)}/claude.stderr]`, line.slice(0, 500));
+  noteStderr(sessionId, line);
+  const dir = platform.isLocal ? claudeDebugDir() : null;
+  if (!dir || !/^[0-9a-f-]{36}$/i.test(String(sessionId))) return;
+  try { fs.appendFileSync(path.join(dir, `${sessionId}.stderr.log`), `${new Date().toISOString()} ${line}\n`); } catch { /* 盘满就算了 */ }
 }

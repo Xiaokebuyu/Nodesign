@@ -331,7 +331,14 @@ function setupUpdater() {
     updater.autoDownload = true;          // 后台下，别打断用户
     updater.autoInstallOnAppQuit = true;  // 用户不点也会在下次退出时装上
 
+    // 生命周期逐个记（09-08 诊断埋点⑤）：logger 只记 electron-updater 自己想说的，事件名才是对账的锚
+    updater.on('checking-for-update', () => log('[updater] event checking-for-update'));
+    updater.on('update-available', (info) => log(`[updater] event update-available ${info?.version || '?'}`));
+    updater.on('update-not-available', (info) => log(`[updater] event update-not-available（远端 ${info?.version || '?'}）`));
+    let lastPct = -10;
+    updater.on('download-progress', (p) => { const pct = Math.floor(p?.percent || 0); if (pct - lastPct >= 25) { lastPct = pct; log(`[updater] event download-progress ${pct}%`); } });
     updater.on('update-downloaded', (info) => {
+      log(`[updater] event update-downloaded ${info?.version || '?'}`);
       dialog.showMessageBox(win, {
         type: 'info',
         buttons: ['立即重启更新', '下次启动时更新'],
@@ -340,6 +347,7 @@ function setupUpdater() {
         message: `NoDesign ${info.version} 已下载完成。`,
         detail: '重启大约几秒钟，正在跑的会话会被中断。',
       }).then(async ({ response }) => {
+        log(`[updater] 用户选择：${response === 0 ? '立即重启更新' : '下次启动时更新'}`);
         if (response !== 0) return;
         // 装之前再问一次远端（09-07 站主：半小时发了三版，下好的那份可能已经过期）。
         // 远端更新了就不装这份：autoDownload 开着，这次 check 会自己把新的下下来，再弹一次上面的框
@@ -355,7 +363,7 @@ function setupUpdater() {
         quitAndInstall();
       });
     });
-    updater.on('error', (e) => { log(`更新检查失败：${e?.message || e}`); reportShellIssue('bug', `更新失败：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e)); });
+    updater.on('error', (e) => { log(`[updater] event error ${e?.message || e}`); reportShellIssue('bug', `更新失败：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e)); });
 
     checkForUpdates({ silent: true });
     setInterval(() => checkForUpdates({ silent: true }), 6 * 60 * 60 * 1000).unref?.();

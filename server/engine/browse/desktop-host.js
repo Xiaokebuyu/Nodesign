@@ -100,3 +100,9 @@ export async function openDesktopView(projectId, { proxyPort, viewport }) {
 export async function closeDesktopView(viewId) {
   try { await bridge('DELETE', `/views/${encodeURIComponent(viewId)}`); } catch (err) { console.warn('[browse/desktop] close view failed:', err.message); }
 }
+
+/** 诊断：壳里视图表（摆没摆上桌面 / 矩形 / 真实 bounds / zoom / 遮没遮）。不是桌面版或 bridge 不在回 null */
+export async function desktopViews() {
+  if (!process.env.NODESIGN_DESKTOP_BRIDGE) return null;
+  try { return (await bridge('GET', '/views'))?.views ?? null; } catch (err) { return { error: err.message }; }
+}

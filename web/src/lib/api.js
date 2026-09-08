@@ -373,6 +373,8 @@ export const Assets = {
    */
   browsePreviewUrl: (pid, at) =>
     `/api/projects/${pid}/browse/preview${at ? `?at=${encodeURIComponent(at)}` : ''}`,
+  /** 让服务端现拍一张缩略图（桌面版原生视图在屏内时才拍得到，BrowserWindow 每 8 秒催一次） */
+  preview: (pid) => fetch(`/api/projects/${pid}/browse/preview?at=${Date.now()}`, { credentials: 'include' }).then(() => undefined),
 };
 
 // ── Stage（RP 显示器，2026-09-05；当晚改成一场戏一个文件夹）──

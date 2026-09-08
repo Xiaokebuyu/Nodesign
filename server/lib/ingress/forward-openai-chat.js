@@ -26,6 +26,7 @@ import { upstreamCostOf } from './upstream-billing.js';
 import { upstreamErrorHint } from './upstream-error-hints.js';
 import { armIdleWatchdog } from './stream-watchdog.js';
 import { upstreamHealth } from './upstream-health.js';
+import { noteBalance } from '../diag-events.js';
 
 export const DEFAULT_EMPTY_RETRIES = 2;
 export const DEFAULT_RETRY_BUDGET_MS = 120_000;
@@ -313,6 +314,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
         disarmFirstByte();
         if (!firstByteAt) firstByteAt = Date.now();
         proxyRes = incoming;
+        noteBalance(wire.upstreamId, incoming.headers?.['x-credit-balance-usd']);   // merge 的余额只在响应头上
         const status = proxyRes.statusCode || 502;
         if (status >= 400) {
           const chunks = [];
@@ -355,6 +357,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
   const nsSentAt = Date.now();
   request((proxyRes) => {
     const status = proxyRes.statusCode || 502;
+    noteBalance(wire.upstreamId, proxyRes.headers?.['x-credit-balance-usd']);
     const chunks = [];
     let settled = false;
     proxyRes.on('data', (c) => chunks.push(c));

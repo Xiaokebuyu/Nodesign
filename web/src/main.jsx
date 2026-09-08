@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { applyUiPrefs } from './lib/ui-prefs.js';
+import { installClientErrorReporting } from './lib/client-errors.js';
 import App from './App.jsx';
 import AuthGate from './components/AuthGate.jsx';
 import { useGlobalStore } from './stores/globalStore.js';
@@ -73,6 +74,7 @@ function Root() {
 }
 
 applyUiPrefs();   // 字体 / 缩放偏好：首帧之前就应用，别闪一下再换
+installClientErrorReporting();   // 09-08 诊断埋点⑦⑧⑨：window.onerror / 未接 Promise 进问题库，带面包屑与长任务计数
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <Root />

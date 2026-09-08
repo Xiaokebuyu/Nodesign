@@ -32,7 +32,9 @@ import { findTranscript, findDebugLog, readTranscript } from './session-transcri
 import { claudeDebugDir } from '../engine/agent/debug-file.js';
 import { networkProbe, relayProbe } from './probes.js';
 import { sessionStatus, toolInventory, envSummary, browserStatus, grepLog } from './runtime-readers.js';
-import { listApiEvents, listToolCalls } from '../lib/diag-events.js';
+import { listApiEvents, listToolCalls, listRelayCalls, upstreamBalances } from '../lib/diag-events.js';
+import { auditWorkspace } from '../lib/workspace-audit.js';
+import { askFirstStats } from '../engine/runs/store.js';
 import { readPageLog } from '../engine/browse/page-log.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -231,9 +233,9 @@ function buildServer({ desktopState }) {
   }, async () => text(envSummary()));
 
   server.registerTool('browser_status', {
-    description: '常驻浏览器：每个项目的当前 URL、忙闲、空闲时长、页面日志里最后一次错误。',
+    description: '常驻浏览器：每个项目的当前 URL、忙闲、空闲时长、页面日志里最后一次错误；桌面版另附壳里的视图表（摆没摆上桌面 / 矩形 / 真实 bounds / zoom / 遮没遮）。',
     inputSchema: {},
-  }, async () => text(browserStatus()));
+  }, async () => text(await browserStatus()));
 
   server.registerTool('browser_log', {
     description: '一个项目常驻浏览器的页面日志（console 的 warn/error、pageerror、请求失败、>=400 的响应；页关了日志还在）。',
@@ -250,12 +252,48 @@ function buildServer({ desktopState }) {
   });
 
   server.registerTool('session_debug_log', {
-    description: '一个会话的 Claude Code 调试日志尾巴（本地版每会话一份，<dataRoot>/logs/claude-debug/<session_id>.txt）：API 重试的底层原因（连接错误 / 状态码 / 响应体）在这里。',
-    inputSchema: { session_id: z.string().min(1), tail: z.number().int().min(10).max(2000).optional() },
-  }, async ({ session_id, tail }) => {
+    description: '一个会话的 Claude Code 调试日志尾巴（本地版每会话一份，<dataRoot>/logs/claude-debug/<session_id>.txt）：API 重试的底层原因（连接错误 / 状态码 / 响应体）在这里。which=stderr 读 CLI 子进程的 stderr 全量（<session_id>.stderr.log）。',
+    inputSchema: { session_id: z.string().min(1), tail: z.number().int().min(10).max(2000).optional(), which: z.enum(['debug', 'stderr']).optional() },
+  }, async ({ session_id, tail, which }) => {
+    if (which === 'stderr') {
+      const f = claudeDebugDir() && /^[0-9a-f-]{36}$/i.test(session_id) ? path.join(claudeDebugDir(), `${session_id}.stderr.log`) : null;
+      if (!f || !fs.existsSync(f)) return text(`没找到会话 ${session_id} 的 stderr 文件（${claudeDebugDir() || '无数据目录'}/${session_id}.stderr.log）`);
+      return text(await tailFile(f, tail ?? 200));
+    }
     const f = findDebugLog(claudeDebugDir(), session_id, 'claude-debug') || findDebugLog(platform.claudeConfigDir, session_id);
     if (!f) return text(`没找到会话 ${session_id} 的调试日志（${claudeDebugDir() || '无数据目录'}/${session_id}.txt，也不在 ~/.claude/debug/）`);
     return text(await tailFile(f, tail ?? 200));
+  });
+
+  // ── 09-08 晚第二批埋点：relay 每发三时刻 / 上游余额 / 工作区对账 / 反问率 / 问题库新签名 ──
+  server.registerTool('relay_calls', {
+    description: '桌面到站点的 relay 调用环形账（最近 500 条）：路径、状态码、响应头耗时、总耗时、错误。跟站点的 relay_usage 对账，定位停顿在哪一段。',
+    inputSchema: { limit: z.number().int().min(1).max(500).optional() },
+  }, async ({ limit }) => text(listRelayCalls({ limit: limit ?? 100 })));
+
+  server.registerTool('upstream_balances', {
+    description: '各上游最近一次响应头里的余额（merge 的 x-credit-balance-usd）与时间；余额一发之间掉超过 0.5 美元会在 server.log 里 warn。',
+    inputSchema: {},
+  }, async () => text(upstreamBalances()));
+
+  server.registerTool('workspace_audit', {
+    description: '一个项目板↔磁盘对账：板上有座位但磁盘不存在的卡（dangling）、磁盘上有但板上没有的文件（unseated，前 50 个）。run 收尾时也自动跑一次，dangling>0 记 auto 问题。',
+    inputSchema: { project_id: z.string().min(1) },
+  }, async ({ project_id }) => text(await auditWorkspace(project_id)));
+
+  server.registerTool('ask_first_rate', {
+    description: '反问率：最近 N 天每个回合第一个工具是不是 AskUserQuestion，按主模型分组（run.metadata.firstTool，09-08 之前的回合记 unknown）。',
+    inputSchema: { days: z.number().int().min(1).max(90).optional() },
+  }, async ({ days }) => text(askFirstStats({ days: days ?? 7 })));
+
+  server.registerTool('issues_new', {
+    description: '问题库里最近 N 天**第一次出现**的签名（first_seen 在窗口内），新的在前；跟 issues 工具的区别是它只看新面孔。',
+    inputSchema: { days: z.number().int().min(1).max(90).optional(), limit: z.number().int().min(1).max(200).optional() },
+  }, async ({ days, limit }) => {
+    const since = Date.now() - (days ?? 7) * 86400000;
+    const rows = listIssues({ limit: 500 }).filter((i) => new Date(String(i.firstSeen).replace(' ', 'T') + 'Z').getTime() >= since);
+    rows.sort((a, b) => String(b.firstSeen).localeCompare(String(a.firstSeen)));
+    return text({ days: days ?? 7, count: rows.length, issues: rows.slice(0, limit ?? 50).map((i) => ({ id: i.id, firstSeen: i.firstSeen, count: i.count, source: i.source, toolName: i.toolName, summary: String(i.summary).slice(0, 160) })) });
   });
 
   server.registerTool('repo_folder', {

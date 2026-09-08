@@ -10,6 +10,7 @@
  * 那条接线在 BoardCanvas 的 renderObjectCard 里，这里只提供"打开"本身。
  */
 import { Assets } from '../../lib/api.js';
+import { crumb } from '../../lib/client-errors.js';
 import { primaryOf } from '../../lib/board-kinds.js';
 import { makeBoardReaders } from './BoardOverlays.jsx';
 import { useGlobalStore } from '../../stores/globalStore.js';
@@ -123,8 +124,10 @@ export function useBoardOpen({
     }
     // 物件 id 去掉 `kind:` 前缀就是工作区相对路径 —— 跟 renameEntry / moveEntry 同一个口径
     const rel = String(o.id).slice(String(o.id).indexOf(':') + 1);
+    const route = deleteRouteFor(o, rel);
+    crumb('delete.request', { id: String(o.id).slice(0, 80), route });   // 四步漏斗①：请求发出（②服务端返回 ③reload ④卡消失在 useBoardData）
     try {
-      switch (deleteRouteFor(o, rel)) {
+      switch (route) {
         // 便利贴落点从 `tasks/<任务>/notes/` 收敛成工作区的 `notes/` 之后，
         // 删除只认文件名（不再需要先知道它属于哪个任务）
         case 'chalk': await Assets.removeChalk(projectId, o.name); break;
@@ -132,10 +135,12 @@ export function useBoardOpen({
         case 'note': await Assets.removeNote(projectId, o.name); break;
         default: await Assets.removeEntry(projectId, rel);
       }
+      crumb('delete.ok', { id: String(o.id).slice(0, 80) });
       reload();
     } catch (err) {
       // ⛔ 原来只有 console.warn。删除是用户主动发起的动作，失败必须说出来 ——
       // 静默失败比报错更坏：他以为删掉了，直到刷新才发现还在。
+      crumb('delete.fail', { id: String(o.id).slice(0, 80), error: String(err.message).slice(0, 120) });
       console.warn('[board] delete failed:', err.message);
       useGlobalStore.getState().showToast(`删不掉：${err.message}`, 'error');
     }

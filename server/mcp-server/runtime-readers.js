@@ -15,6 +15,7 @@ import { listIngressSessions } from '../lib/ingress/session-routes.js';
 import { sessionDiagStats } from '../lib/diag-events.js';
 import { status as browserResidents } from '../engine/browse/registry.js';
 import { readPageLog } from '../engine/browse/page-log.js';
+import { desktopViews } from '../engine/browse/desktop-host.js';
 import { TOOL_CAPABILITIES } from '../engine/mcp/capability-gate.js';
 import { RP_HIDDEN_TOOLS } from '../engine/mcp/mode-profile.js';
 import { capabilityState } from '../runtime/capabilities.js';
@@ -59,9 +60,10 @@ export function envSummary() {
   };
 }
 
-export function browserStatus() {
+export async function browserStatus() {
   const residents = browserResidents().map((r) => ({ ...r, log: (() => { const l = readPageLog(r.projectId, { limit: 1 }); return { total: l.total ?? 0, lastError: l.lastError ?? null }; })() }));
-  return { resident: residents.length, residents };
+  const shell = await desktopViews();   // 桌面版：壳里的视图表（placed / rect / bounds / zoom / blocked）
+  return { resident: residents.length, residents, ...(shell !== null ? { shellViews: shell } : {}) };
 }
 
 /** 日志尾巴 + 过滤：pattern（大小写不敏感的子串或 /regex/）、since（ISO 或 "2026-09-08 11:2"，按行首时间戳字符串比较） */

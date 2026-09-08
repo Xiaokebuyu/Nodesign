@@ -51,6 +51,17 @@ const DESKTOP_NATIVE_VIEW = true;
 const THUMB_W = 480;
 /** 原生视图四周那圈框的内边距（px）：视图是壳画的矩形，圆角和阴影都做不到它身上，只能画在它外面 */
 const FRAME_PAD = 6;
+/** 压在画布上、原生视图要让位的浮层：聊天卡（悬浮 / 固定都算）+ 任何标了 data-nd-overlay 的东西；隐藏的不算 */
+function overlayRects() {
+  const out = [];
+  for (const el of document.querySelectorAll('[data-chat-card], [data-nd-overlay]')) {
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) < 0.05) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) out.push(r);
+  }
+  return out;
+}
 const nativeView = () => (DESKTOP_NATIVE_VIEW && typeof window !== 'undefined' && window.nodesignDesktop?.browserView) || null;
 
 /**
@@ -254,33 +265,57 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
     if (!native) return undefined;
     let raf = 0;
     let last = '';
+    let lastShot = 0;
     const frame = () => {
       raf = requestAnimationFrame(frame);
       const el = hostRef.current;
-      if (!el) return;
+      const wrap = el?.parentElement;
+      if (!el || !wrap) return;
       if (overlayOpenRef.current) {   // 弹窗期间停到屏外，弹窗关了下一帧就回来
         if (last !== 'null') { last = 'null'; native.place(projectId, null).catch(() => {}); }
         return;
       }
-      // 先把自己撑成容器里最大的 16:9（框的内边 + 底下留 64px 给浮动工具栏），再把矩形报给壳
-      const box = el.parentElement?.parentElement?.getBoundingClientRect();
-      if (box) {
-        const w = Math.max(0, Math.min(box.width - 16 - FRAME_PAD * 2, (box.height - 64 - 16 - FRAME_PAD * 2) * 16 / 9));
-        const ws = `${Math.floor(w)}px`; const hs = `${Math.floor(w * 9 / 16)}px`;
-        if (el.style.width !== ws) el.style.width = ws;
-        if (el.style.height !== hs) el.style.height = hs;
+      const box = wrap.parentElement?.getBoundingClientRect();
+      if (!box) return;
+      // 可用区 = 容器 减去 压在它上面的浮层（聊天卡 data-chat-card 是绝对定位的悬浮卡，不推挤画布）。
+      // 原生视图画在所有 HTML 之上，不让位就把聊天卡盖住；让位 = 在剩下的空地里重新摆一块最大的 16:9，
+      // zoom 跟着宽度走（壳里 zoom = 宽 / 1366），页面不重排只缩放，agent 的坐标契约不变。
+      let free = { left: box.left + 8, right: box.right - 8, top: box.top + 8, bottom: box.bottom - 64 - 8 };
+      for (const ob of overlayRects()) {
+        if (ob.right <= free.left || ob.left >= free.right || ob.bottom <= free.top || ob.top >= free.bottom) continue;
+        const cutLeft = ob.right - free.left;   // 浮层在左边时要让出的宽
+        const cutRight = free.right - ob.left;  // 浮层在右边时要让出的宽
+        if (cutLeft < cutRight) free = { ...free, left: ob.right + 8 }; else free = { ...free, right: ob.left - 8 };
+      }
+      const freeW = Math.max(0, free.right - free.left - FRAME_PAD * 2);
+      const freeH = Math.max(0, free.bottom - free.top - FRAME_PAD * 2);
+      const w = Math.floor(Math.max(0, Math.min(freeW, freeH * 16 / 9)));
+      const h = Math.floor(w * 9 / 16);
+      const ws = `${w}px`; const hs = `${h}px`;
+      if (el.style.width !== ws) el.style.width = ws;
+      if (el.style.height !== hs) el.style.height = hs;
+      // 框居中在可用区里：容器本身是居中排版，用 transform 把差值补上（不改布局，不引发重排）
+      const cur = wrap.getBoundingClientRect();
+      const wantCx = (free.left + free.right) / 2; const wantCy = (free.top + free.bottom) / 2;
+      const curCx = (cur.left + cur.right) / 2; const curCy = (cur.top + cur.bottom) / 2;
+      const dx = Math.round((wantCx - curCx) + (parseFloat(wrap.dataset.dx || '0'))); const dy = Math.round((wantCy - curCy) + (parseFloat(wrap.dataset.dy || '0')));
+      if (dx !== Number(wrap.dataset.dx || 0) || dy !== Number(wrap.dataset.dy || 0)) {
+        wrap.dataset.dx = String(dx); wrap.dataset.dy = String(dy);
+        wrap.style.transform = (dx || dy) ? `translate(${dx}px, ${dy}px)` : '';
       }
       const r = el.getBoundingClientRect();
       const rect = r.width > 8 && r.height > 8 ? { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) } : null;
       const key = rect ? `${rect.x},${rect.y},${rect.width},${rect.height}` : 'null';
-      if (key === last) return;
-      last = key;
-      native.place(projectId, rect).catch(() => {});
+      if (key !== last) { last = key; native.place(projectId, rect).catch(() => {}); }
+      // 画布上那张浏览器卡的缩略图靠 /browse/preview 现拍；视图停到屏外就拍不了（可见视口为空），
+      // 所以趁它在屏内时每 8 秒刷一张，收窗前最后再刷一张
+      if (rect && Date.now() - lastShot > 8000) { lastShot = Date.now(); Browse.preview(projectId).catch(() => {}); }
     };
     raf = requestAnimationFrame(frame);
     return () => {
       if (raf) cancelAnimationFrame(raf);
-      native.place(projectId, null).catch(() => {});
+      Browse.preview(projectId).catch(() => {});
+      setTimeout(() => native.place(projectId, null).catch(() => {}), 400);   // 先让最后一张缩略图拍完再停到屏外
     };
   }, [native, projectId]);
   /** 共视·打断即接手：回合在飞且没接手 = agent 在操作，盖遮罩；人先按停（或 agent 举手求助）才能接手 */

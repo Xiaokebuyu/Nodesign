@@ -45,3 +45,17 @@ export function dumpRequestShape(parsed, sessionTag, dir = process.env.ND_INGRES
   }
 }
 
+
+/** 一发请求的形状摘要（不含正文）：系统提示字数、reminder 段数、工具数、消息数、最后一条 user 字数 */
+export function requestShape(parsed) {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const msgs = Array.isArray(parsed.messages) ? parsed.messages : [];
+  const sys = typeof parsed.system === 'string' ? parsed.system : (Array.isArray(parsed.system) ? parsed.system.map((b) => b?.text || '').join('') : '');
+  let reminders = 0; let lastUserChars = 0;
+  for (const m of msgs) {
+    const blocks = typeof m?.content === 'string' ? [{ type: 'text', text: m.content }] : (Array.isArray(m?.content) ? m.content : []);
+    for (const b of blocks) if (b?.type === 'text' && /<system-reminder>/.test(b.text || '')) reminders += 1;
+    if (m?.role === 'user') lastUserChars = blocks.filter((b) => b?.type === 'text').reduce((n, b) => n + (b.text || '').length, 0);
+  }
+  return { model: parsed.model ?? null, systemChars: sys.length, reminders, tools: Array.isArray(parsed.tools) ? parsed.tools.length : 0, messages: msgs.length, lastUserChars, maxTokens: parsed.max_tokens ?? null };
+}

@@ -25,6 +25,7 @@ import { noteOf } from '../engine/agent/model-notes.js';
 import { upstreamHealth } from '../lib/ingress/upstream-health.js';
 import { tierOf } from '../auth/tier.js';
 import { getAvatar, setAvatar, clearAvatar, avatarAt, AVATAR_MAX_UPLOAD } from '../lib/avatar-store.js';
+import { recordIssue, signatureOf } from '../lib/issues-store.js';
 
 const router = express.Router();
 
@@ -181,3 +182,24 @@ router.delete('/showcase/:id', (req, res) => {
 });
 
 export default router;
+
+// ── 前端错误上报（09-08 诊断埋点⑦）：window.onerror / unhandledrejection 经这里进问题库，source='client' ──
+// 每用户每天 20 条；正文里带路由、最近的用户动作面包屑、长任务计数（web/src/lib/client-errors.js 组的）。
+const clientIssueCount = new Map();   // `${userId}:${day}` → n
+router.post('/client-issues', express.json({ limit: '16kb' }), (req, res) => {
+  const b = req.body || {};
+  const summary = typeof b.summary === 'string' ? b.summary.trim().slice(0, 200) : '';
+  if (summary.length < 8) return res.status(400).json({ error: 'summary 太短' });
+  const key = `${req.user.id}:${new Date().toISOString().slice(0, 10)}`;
+  const n = (clientIssueCount.get(key) || 0) + 1;
+  clientIssueCount.set(key, n);
+  if (clientIssueCount.size > 5000) clientIssueCount.clear();
+  if (n > 20) return res.status(429).json({ error: '今日前端上报已满' });
+  const detail = typeof b.detail === 'string' ? b.detail.slice(0, 6000) : '';
+  const rec = recordIssue({
+    source: 'client', kind: 'bug', toolName: typeof b.where === 'string' ? `web:${b.where.slice(0, 40)}` : 'web',
+    summary, detail, signature: b.signature ? String(b.signature).slice(0, 64) : signatureOf(`client|${summary}`),
+    projectId: typeof b.projectId === 'string' ? b.projectId.slice(0, 40) : null, sessionId: null, runId: null, userId: req.user.id,
+  });
+  res.status(201).json({ ok: true, id: rec?.id ?? null });
+});

@@ -38,7 +38,7 @@ import sharp from 'sharp';
 import { resolveWireModel, UPSTREAMS } from '../engine/agent/model-context.js';
 import { resolveSessionWire, fallbackLogged } from './ingress/session-routes.js';
 import { makeStandbySwitcher, PERMANENT } from './ingress/standby.js';
-import { forwardOpenAIChat } from './ingress/forward-openai-chat.js'; import { flattenToolReferences } from './ingress/tool-reference.js';
+import { forwardOpenAIChat } from './ingress/forward-openai-chat.js'; import { flattenToolReferences } from './ingress/tool-reference.js'; import { noteFirstRequest } from './diag-events.js'; import { requestShape } from './ingress/request-dump.js';
 import { failStreaks, exhaustedErrorBody } from './ingress/upstream-fail-streak.js';
 import { armIdleWatchdog } from './ingress/stream-watchdog.js'; import { dumpRequestShape } from './ingress/request-dump.js';   // 后者是量具
 import { noteUpstreamBilling, openaiTokens } from './ingress/upstream-billing.js';
@@ -168,6 +168,7 @@ export async function handleRequest(req, res, bodyBuf, opts = {}) {
     return;
   }
   dumpRequestShape(parsed, sessionTag);   // 量具，ND_INGRESS_DUMP_DIR 有值才落盘（ingress/request-dump.js）
+  noteFirstRequest(sessionTag, requestShape(parsed));   // 每会话第一发的组成进诊断账（后续发忽略）
 
   const routed = resolveSessionWire(parsed?.model, sessionTag);
   const wire = routed.wire;

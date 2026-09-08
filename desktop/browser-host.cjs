@@ -112,23 +112,29 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
   ipcMain.handle('nd:browser-place', (_e, projectId, rect) => {
     const pid = String(projectId || '');
     const r = rect && Number.isFinite(rect.width) && rect.width > 0 ? { x: +rect.x, y: +rect.y, width: +rect.width, height: +rect.height } : null;
+    const prev = wishes.get(pid)?.rect || null;
     wishes.set(pid, { ...(wishes.get(pid) || {}), rect: r });
     const entry = views.get(pid);
     if (entry) { entry.rect = r; layout(entry); }
+    // 只记 摆上/收起 的切换，不记逐帧的位移（09-08 诊断埋点⑥）
+    if (!!prev !== !!r) log(`[browser-host] place ${pid} ${r ? `${r.width}×${r.height}@${r.x},${r.y}` : 'null（停到屏外）'} live=${!!entry}`);
     return { ok: true, live: !!entry };
   });
   ipcMain.handle('nd:browser-block', (_e, projectId, on) => {
     const pid = String(projectId || '');
+    const was = !!wishes.get(pid)?.blocked;
     wishes.set(pid, { ...(wishes.get(pid) || {}), blocked: !!on });
     const entry = views.get(pid);
     if (entry) { entry.blocked = !!on; layout(entry); }
+    if (was !== !!on) log(`[browser-host] block ${pid} ${on ? 'on（agent 在操作）' : 'off（可接手）'} live=${!!entry}`);
     return { ok: true, live: !!entry };
   });
   // 接手：把键盘焦点交给视图（否则按了手形按钮之后敲键盘打进的是主窗口）
   ipcMain.handle('nd:browser-focus', (_e, projectId) => {
     const entry = views.get(String(projectId || ''));
-    if (!entry || entry.view.webContents.isDestroyed()) return { ok: false };
+    if (!entry || entry.view.webContents.isDestroyed()) { log(`[browser-host] focus ${projectId} 没有视图`); return { ok: false }; }
     try { entry.view.webContents.focus(); } catch { /* */ }
+    log(`[browser-host] focus ${projectId}`);
     return { ok: true };
   });
   ipcMain.handle('nd:browser-state', (_e, projectId) => {

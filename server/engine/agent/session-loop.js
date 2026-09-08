@@ -80,7 +80,7 @@ import {
   STREAMING_ENABLED,
   handleSDKMessage,
   detectArtifact,
-} from './agent-shared.js'; import { claudeDebugOptions } from './debug-file.js';
+} from './agent-shared.js'; import { claudeDebugOptions, onClaudeStderr } from './debug-file.js';
 import { autoNameProjectFromSession } from '../../projects/auto-name.js';
 // 合流并集（2026-08-13）：commitWorkspace/taskManifest 是扁平化这边的，
 // getUserById/levelFor 是 main 的每用户内容尺度旋钮（78ceaac）；
@@ -610,9 +610,7 @@ export async function runSession({
     // rawMaxTokens fallback 200k"）；其余子代理走 fastModel，跟以前一致。
     agents: createAgents({ mainModel: model, sdkModel, fastModel }),
 
-    stderr: (data) => {
-      console.error(`[session ${sessionId.slice(0, 8)}/claude.stderr]`, data.trim());
-    },
+    stderr: (data) => onClaudeStderr(sessionId, data),   // 控制台一行 + 本地版全量落盘 + 末 20 行进诊断账（debug-file.js）
     ...claudeDebugOptions(sessionId),   // 本地版：每会话一份 Claude Code 调试日志（engine/agent/debug-file.js）
   };
 

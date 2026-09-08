@@ -342,6 +342,7 @@ function handleAssistantBlocks(ctx, content, skipTextThinking = false) {
         // 快照（真流式 tool_input 只发抽出字段的增量，别的字段靠这条补全）
         ctx.emit(Events.deltaToolUse(ctx.counters.turns, block.id, block.name, block.input));
         ctx.incrementTool(false);
+        if (!ctx.counters.firstTool) ctx.counters.firstTool = block.name;   // 反问率：第一个工具是不是 AskUserQuestion
 
         // Phase 1：TodoWrite 工具单独再 emit 一条 todoUpdated。
         // SDK 不会在 type:'system' 里专门推 TodoWrite 状态 —— agent 用工具
