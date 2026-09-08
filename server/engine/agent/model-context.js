@@ -294,7 +294,9 @@ export function crossLaneSwitchReason(fromModel, toModel) {
   if (!fromModel || !toModel || fromModel === toModel) return null;
   const from = resolveWireModel(fromModel);
   const to = resolveWireModel(toModel);
-  if (from?.protocol === 'openai-chat' && to?.protocol !== 'openai-chat') {
+  // 09-08 站主撤掉「openai-chat → API 透传行」这一段的拦截：ingress 的透传腿现在会把没签名的思考块剥掉
+  // （transformForUpstream → stripUnsignedThinking）。仍拦的只剩订阅行：那条路不经 ingress，剥不了。
+  if (from?.protocol === 'openai-chat' && resolveModelRoute(toModel).mode === 'subscription') {
     const fromLabel = BY_ID.get(from.appModel)?.select?.label || from.appModel;
     return `本会话在 ${fromLabel} 上创建，其思考记录切换到其他模型后会被拒收。如需更换模型，请新建一个会话`;
   }

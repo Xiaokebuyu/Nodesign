@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { flattenToolReferences, toolReferenceText } from './tool-reference.js';
+import { flattenToolReferences, toolReferenceText, stripUnsignedThinking } from './tool-reference.js';
 
 describe('flattenToolReferences（Anthropic 透传腿）', () => {
   it('tool_result 里的 tool_reference 块换成一条 text；别的块不动；没有就不改', () => {
@@ -15,5 +15,21 @@ describe('flattenToolReferences（Anthropic 透传腿）', () => {
     expect(msgs[2].content[0].content).toEqual([{ type: 'text', text: 'plain' }]);
     expect(flattenToolReferences(msgs)).toBe(false);
     expect(flattenToolReferences([{ role: 'user', content: 'str' }])).toBe(false);
+  });
+});
+
+describe('stripUnsignedThinking（透传腿）', () => {
+  it('没签名的 thinking / redacted_thinking 剥掉，有签名的留；剥空补占位；user 消息不动', () => {
+    const msgs = [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [{ type: 'thinking', thinking: '合成的', }, { type: 'text', text: '答' }] },
+      { role: 'assistant', content: [{ type: 'thinking', thinking: 'x' }] },
+      { role: 'assistant', content: [{ type: 'thinking', thinking: 'y', signature: 'sig' }, { type: 'redacted_thinking', data: 'z' }, { type: 'tool_use', id: 't', name: 'Read', input: {} }] },
+    ];
+    expect(stripUnsignedThinking(msgs)).toBe(true);
+    expect(msgs[1].content).toEqual([{ type: 'text', text: '答' }]);
+    expect(msgs[2].content).toEqual([{ type: 'text', text: '(思考略)' }]);
+    expect(msgs[3].content.map((b) => b.type)).toEqual(['thinking', 'tool_use']);
+    expect(stripUnsignedThinking(msgs)).toBe(false);
   });
 });

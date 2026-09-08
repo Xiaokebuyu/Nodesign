@@ -94,8 +94,10 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'glm-5.3-flash-merge')).toBeNull();
     // Anthropic 原生透传的行（09-08 前拿 minimax-m3 当例子，它撤了，换 gemini 这条 lament 上游的）：
     // 从 openai-chat 行切过去同样要拦；反向放行
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'gemini-3.7-flash')).toMatch(/新建一个会话/);
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'gemini-3.7-flash')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
+    // 09-08 站主撤掉「openai-chat → API 透传行」的拦截（ingress 透传腿剥掉没签名的思考块）；订阅行仍拦
+    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'gemini-3.7-flash')).toBeNull();
+    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
+    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5[1m]')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
     expect(crossLaneSwitchReason('gemini-3.7-flash', 'glm-5.3-flash-merge')).toBeNull();
     // 同为 openai-chat 的两行互切不算跨线（原先钉在 Ox 高/深想两行上，08-26 换成 glm ↔ deepseek 视觉）
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
@@ -312,7 +314,7 @@ describe('repriceUsageDeltas', () => {
 describe('modelSwitchRejection：三条写模型的路共用的那一个判断（08-25 收口）', () => {
   it('协议闸：跑过的 openai-chat 会话换到别的通路要拦；同通路、反向、同模型放行', () => {
     expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]' })).toMatch(/新建一个会话/);
-    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'gemini-3.7-flash' })).toMatch(/新建一个会话/);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'gemini-3.7-flash' })).toBe(null);   // 09-08 起 API 透传行放行（ingress 剥思考块）
     expect(modelSwitchRejection({ from: 'gemini-3.7-flash', to: 'glm-5.3-flash-merge' })).toBe(null);
     expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'glm-5.3-flash-merge' })).toBe(null);
   });

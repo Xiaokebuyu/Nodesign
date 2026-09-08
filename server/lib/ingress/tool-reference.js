@@ -25,3 +25,19 @@ export function flattenToolReferences(messages) {
   return changed;
 }
 
+
+/**
+ * assistant 历史里没有 signature 的 thinking / redacted_thinking 块剥掉（openai-chat 转换层合成的思考块没签名，
+ * Anthropic 协议的上游会 400）。剥空了的消息补一个占位文本，别留空 content。原地改，返回改没改。
+ */
+export function stripUnsignedThinking(messages) {
+  let changed = false;
+  for (const msg of messages) {
+    if (msg?.role !== 'assistant' || !Array.isArray(msg.content)) continue;
+    const kept = msg.content.filter((b) => !((b?.type === 'thinking' || b?.type === 'redacted_thinking') && !b.signature));
+    if (kept.length === msg.content.length) continue;
+    msg.content = kept.length ? kept : [{ type: 'text', text: '(思考略)' }];
+    changed = true;
+  }
+  return changed;
+}
