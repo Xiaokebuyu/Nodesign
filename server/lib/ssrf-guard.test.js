@@ -15,6 +15,8 @@ describe('blockReason —— 按 IP 判', () => {
       '192.168.1.1', '169.254.169.254', '0.0.0.0', '100.64.0.1', '224.0.0.1', '255.255.255.255']) {
       expect(blockReason(ip), ip).toBeTruthy();
     }
+    // 托管站点上 fake-ip 段（198.18/15）照拦；本地版放行那面在 ssrf-guard.fakeip.test.js
+    expect(blockReason('198.18.1.236')).toMatch(/reserved/);
   });
 
   it('真公网放行', () => {
