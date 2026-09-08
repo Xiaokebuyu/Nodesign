@@ -30,6 +30,12 @@ import { listActiveRuns } from '../engine/runs/active-runs.js';
 import { listIssues } from '../lib/issues-store.js';
 import { findTranscript, findDebugLog, readTranscript } from './session-transcript.js';
 import { claudeDebugDir } from '../engine/agent/debug-file.js';
+import { networkProbe, relayProbe } from './probes.js';
+import { sessionStatus, toolInventory, envSummary, browserStatus, grepLog } from './runtime-readers.js';
+import { listApiEvents, listToolCalls } from '../lib/diag-events.js';
+import { readPageLog } from '../engine/browse/page-log.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
 export const MCP_PATH = '/mcp';
 const TOKEN_FILE = 'mcp-token';
@@ -166,13 +172,73 @@ function buildServer({ desktopState }) {
   }, async ({ limit, status, source }) => text(listIssues({ limit: limit ?? 30, status, source })));
 
   server.registerTool('server_log', {
-    description: '服务端 / 桌面主进程日志尾巴（<dataRoot>/logs/server.log 与 desktop.log）。',
-    inputSchema: { which: z.enum(['server', 'desktop']).optional(), tail: z.number().int().min(10).max(2000).optional() },
-  }, async ({ which, tail }) => {
+    description: '服务端 / 桌面主进程日志尾巴（<dataRoot>/logs/server.log 与 desktop.log）。pattern=子串或 /正则/（不分大小写）；since=时间下限（"2026-09-08 11:20"），按行首时间戳过滤。',
+    inputSchema: { which: z.enum(['server', 'desktop']).optional(), tail: z.number().int().min(10).max(2000).optional(), pattern: z.string().max(200).optional(), since: z.string().max(40).optional() },
+  }, async ({ which, tail, pattern, since }) => {
     const dir = platform.dataRoot ? path.join(platform.dataRoot, 'logs') : null;
     if (!dir) return text('没有数据目录（不是本地版？）');
-    return text(await tailFile(path.join(dir, `${which || 'server'}.log`), tail ?? 200));
+    const file = path.join(dir, `${which || 'server'}.log`);
+    if (!pattern && !since) return text(await tailFile(file, tail ?? 200));
+    return text(grepLog(file, { tail: tail ?? 200, pattern: pattern || null, since: since || null }));
   });
+
+  // ── 09-08「多埋几个点」那批：探针两件、环形账两本、状态四件 ──
+  server.registerTool('network_probe', {
+    description: '到站点的链路探针：DNS（解析到 198.18.x = 本机 fake-ip 代理在中间）、TCP、TLS 握手耗时、/api/health 往返、系统代理环境变量。「首发 API 重试中 — unknown」这类连接层问题先看它。',
+    inputSchema: { url: z.string().url().optional(), timeout_ms: z.number().int().min(1000).max(30000).optional() },
+  }, async ({ url, timeout_ms }) => text(await networkProbe({ url, timeoutMs: timeout_ms ?? 8000 })));
+
+  server.registerTool('relay_probe', {
+    description: '用当前设备令牌真打站点的 /whoami、/models、/notice：状态码、耗时、账号档位、模型清单与锁定原因。分清「登录态坏了」和「模型不可用」。',
+    inputSchema: { timeout_ms: z.number().int().min(1000).max(30000).optional() },
+  }, async ({ timeout_ms }) => text(await relayProbe({ timeoutMs: timeout_ms ?? 8000 })));
+
+  server.registerTool('api_events', {
+    description: '进程内环形账（最近 500 条）：SDK 的 API 重试（次数 / 错误种类 / 状态码）、每轮用量（输入 / 输出 / 缓存命中）与停止原因、压缩、错误。看「模型这一发怎么了」「缓存有没有命中」用它。',
+    inputSchema: { session_id: z.string().optional(), limit: z.number().int().min(1).max(500).optional() },
+  }, async ({ session_id, limit }) => text(listApiEvents({ sessionId: session_id, limit: limit ?? 100 })));
+
+  server.registerTool('tool_calls', {
+    description: '进程内环形账（最近 500 条）：每次工具调用的名字、耗时、成败、错误摘要。agent 绕圈（同一工具连调）在这里直接显形。',
+    inputSchema: { session_id: z.string().optional(), limit: z.number().int().min(1).max(500).optional() },
+  }, async ({ session_id, limit }) => text(listToolCalls({ sessionId: session_id, limit: limit ?? 100 })));
+
+  server.registerTool('session_status', {
+    description: '内存里的会话登记表：钉的模型、有没有换到备用线、权限模式、在飞回合、上下文用量、压缩次数、最后活动时间。',
+    inputSchema: {},
+  }, async () => text(sessionStatus()));
+
+  server.registerTool('tool_inventory', {
+    description: '业务工具清单：每件是常驻还是延迟加载（延迟的要 ToolSearch 才有 schema）、rp 模式下是否隐藏、本机能力闸怎么判（缺 chromium / LibreOffice 等）。用户说「agent 说没有这个工具」时用。',
+    inputSchema: { mode: z.enum(['design', 'rp']).optional() },
+  }, async ({ mode }) => {
+    const { createNodesignMcpServer, ALWAYS_LOAD_TOOLS } = await import('../engine/mcp/index.js');
+    const root = platform.dataRoot ? path.join(platform.dataRoot, 'tmp', 'tool-inventory') : os.tmpdir();
+    fs.mkdirSync(root, { recursive: true });
+    const srv = createNodesignMcpServer({ workspaceRoot: root, sharedRoot: root, projectId: 'proj_diag', sessionId: 'diag', ctx: {}, projectMode: 'design' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'diag', version: '0' });
+    try {
+      await srv.instance.connect(a); await client.connect(b);
+      const { tools } = await client.listTools();
+      return text(toolInventory(tools.map((t) => t.name), ALWAYS_LOAD_TOOLS, { mode: mode || 'design', toolSearch: true }));
+    } finally { try { await client.close(); } catch { /* */ } try { await srv.instance.close(); } catch { /* */ } }
+  });
+
+  server.registerTool('env_summary', {
+    description: '运行环境一览：.env 白名单键配没配（只报键名与掩码，不报值）、权限模式、沙盒开关、数据目录磁盘余量、进程内存与运行时长。',
+    inputSchema: {},
+  }, async () => text(envSummary()));
+
+  server.registerTool('browser_status', {
+    description: '常驻浏览器：每个项目的当前 URL、忙闲、空闲时长、页面日志里最后一次错误。',
+    inputSchema: {},
+  }, async () => text(browserStatus()));
+
+  server.registerTool('browser_log', {
+    description: '一个项目常驻浏览器的页面日志（console 的 warn/error、pageerror、请求失败、>=400 的响应；页关了日志还在）。',
+    inputSchema: { project_id: z.string().min(1), limit: z.number().int().min(1).max(300).optional(), level: z.enum(['error', 'warn']).optional() },
+  }, async ({ project_id, limit, level }) => text(readPageLog(project_id, { limit: limit ?? 100, level: level || null })));
 
   server.registerTool('session_transcript', {
     description: '一个会话的 Claude Code 记录（<claudeConfigDir>/projects/…/<session_id>.jsonl），每行压成一句：时间 / 角色 / 工具名与参数 / 工具结果类型。查「agent 为什么绕圈、最后一发发了什么」用这个；raw=true 回原始 jsonl 行。',

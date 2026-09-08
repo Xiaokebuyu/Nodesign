@@ -35,6 +35,7 @@ import { normalizeShot } from './helpers/shot-pipeline.js';
 import { capture } from '../../browse/capture.js';
 import { collectPage, formatPage } from '../../browse/page-digest.js';
 import { recordVisit } from '../../browse/state.js';
+import { notePageError } from '../../browse/page-log.js';
 import { formatMotionInventory } from '../../motion/inventory.js';
 
 const NAV_TIMEOUT = _limits.NAV_TIMEOUT_MS;
@@ -136,6 +137,7 @@ The user has a browser card on their desktop and can watch, or take over.`,
           // 这不削弱安全：CDP 闸照旧拦跳转与子资源（那些是预检看不见的）。
           const pre = await checkUrl(url);
           if (!pre.ok) {
+            notePageError(projectId, `navigate ${url} 被网络闸拒：${pre.reason}`);   // 诊断埋点：browser_log 里看得见
             return asText([
               `没打开，也没离开当前页面 —— 网络闸拒了这个地址：${pre.reason}`,
               ...denyText(pre, projectId, url),

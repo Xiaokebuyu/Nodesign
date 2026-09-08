@@ -47,7 +47,14 @@ describe('MCP 诊断端点', () => {
     expect((await init.json()).result.serverInfo.name).toBe('nodesign-diagnostics');
     const list = await (await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }, tok)).json();
     const names = list.result.tools.map(t => t.name);
-    expect(names).toEqual(expect.arrayContaining(['health', 'list_projects', 'project_status', 'recent_runs', 'issues', 'server_log', 'session_transcript', 'session_debug_log']));
+    expect(names).toEqual(expect.arrayContaining(['health', 'list_projects', 'project_status', 'recent_runs', 'issues', 'server_log', 'session_transcript', 'session_debug_log', 'network_probe', 'relay_probe', 'api_events', 'tool_calls', 'session_status', 'tool_inventory', 'env_summary', 'browser_status', 'browser_log']));
+    const st = await (await rpc({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'session_status', arguments: {} } }, tok)).json();
+    expect(JSON.parse(st.result.content[0].text)).toHaveProperty('sessions');
+    const inv = await (await rpc({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'tool_inventory', arguments: {} } }, tok)).json();
+    const body2 = JSON.parse(inv.result.content[0].text);
+    expect(body2.total).toBeGreaterThan(40);
+    expect(body2.tools.find((t) => t.name === 'generate_image').load).toBe('deferred');
+    expect(body2.tools.find((t) => t.name === 'screenshot_canvas').load).toBe('always');
     const h = await (await rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'health', arguments: {} } }, tok)).json();
     const body = JSON.parse(h.result.content[0].text);
     expect(body.ok).toBe(true);

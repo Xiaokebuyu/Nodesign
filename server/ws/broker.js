@@ -9,6 +9,7 @@
  */
 
 import { EventBus } from '../engine/agent/events.js';
+import { attachDiagnosticsTap } from '../lib/diag-events.js';
 import { attachLiveTurnTracker } from '../engine/runs/live-turn.js';
 import { attachBoardTasklist } from '../engine/runs/board-tasklist.js';
 import { attachBoardSeater } from '../engine/runs/board-seater.js';
@@ -28,6 +29,8 @@ export function getProjectBus(projectId) {
     attachBoardTasklist(bus, projectId);
     // 服务端入座（2026-08-25 范式重做④）：本轮新产物 run 收尾一批排座
     attachBoardSeater(bus, projectId);
+    // 诊断分接头（09-08）：API 重试 / 每轮用量 / 工具调用起止收进环形账，给本地版 MCP 诊断端点读
+    attachDiagnosticsTap(bus, projectId);
     projectBuses.set(projectId, bus);
   }
   return bus;

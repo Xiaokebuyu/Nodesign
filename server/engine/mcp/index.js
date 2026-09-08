@@ -106,7 +106,7 @@ import { makeLookupTagsTool } from './tools/lookup-tags.js';
 // 省 ~80k 字符常驻 schema。prelude 的工具速查表仍列全部工具名 + 一句话用途，
 // agent 知道存在什么、需要时先 ToolSearch("select:mcp__nodesign__<tool>")。
 // （kimi 时代曾全局 alwaysLoad —— kimi 不认 ToolSearch；claude 系模型原生受训，可放心 defer）
-const ALWAYS_LOAD_TOOLS = new Set([
+export const ALWAYS_LOAD_TOOLS = new Set([
   'screenshot_canvas', 'read_page', 'list_pages', 'query_elements',
   'get_computed_styles', 'navigate_to_page', 'highlight', 'preview_deck',
   'get_pending_changes', 'clear_pending_changes',

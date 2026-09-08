@@ -571,6 +571,14 @@ export function getQuerySession(sessionId) {
  * @param {string} sessionId
  * @returns {boolean} true=session 已存在且 query 活着
  */
+/** 诊断用：全部在册的 query 会话（不含 abort 了没清的残留标记 aborted:true 也照列） */
+export function listQuerySessions() {
+  return [...activeQuerySessions].map(([sessionId, rec]) => ({
+    sessionId, aborted: !!rec.abortController?.signal?.aborted, permissionMode: rec.currentPermissionMode ?? null, startedAt: rec.startedAt ? new Date(rec.startedAt).toISOString() : null, pendingRuns: rec.pendingRunIds?.length ?? 0,
+    currentRunId: rec.currentRunId || null, lastActivity: rec.lastActivityAt ? new Date(rec.lastActivityAt).toISOString() : null, hasQuery: !!rec.query,
+  }));
+}
+
 export function hasActiveQuerySession(sessionId) {
   const rec = activeQuerySessions.get(sessionId);
   if (!rec) return false;

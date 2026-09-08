@@ -48,6 +48,11 @@ export function sessionMainModel(sessionId) {
   return sessionRoutes.get(sessionId)?.appModel || null;
 }
 
+/** 诊断用：全部登记在案的 API 会话（主行 / 原行 / 换没换线） */
+export function listIngressSessions() {
+  return [...sessionRoutes].map(([sessionId, r]) => ({ sessionId, appModel: r.appModel, origModel: r.origModel || r.appModel, switched: !!r.switched, fastModel: r.fastModel || null }));
+}
+
 export function unregisterIngressSession(sessionId) {
   sessionRoutes.delete(sessionId);
   for (const k of fallbackLogged) {

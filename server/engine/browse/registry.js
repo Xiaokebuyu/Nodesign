@@ -38,6 +38,7 @@ import { getProjectWorkspace } from '../../projects/workspace.js';
 import { FIDELITY_LAUNCH_ARGS } from '../mcp/tools/helpers/perception-page.js';
 import { attachSsrfGuard } from '../../lib/ssrf-guard.js';
 import { startBrowseProxy } from '../../lib/browse-proxy.js';
+import { attachPageLog } from './page-log.js';
 import { desktopHostConfigured, openDesktopView, closeDesktopView } from './desktop-host.js';
 
 /**
@@ -234,6 +235,7 @@ export async function withBrowser(projectId, fn) {
       const h = await launchBrowseBrowser(projectId);
       entry = { projectId, ...h, lastUsed: Date.now(), busy: false, idleTimer: null };
       live.set(projectId, entry);
+      attachPageLog(projectId, entry.page);   // 诊断埋点（page-log.js）：console / pageerror / 请求失败进环形账
       console.log(`[browse] launched ${projectId} in ${Date.now() - t0}ms (${live.size}/${MAX_RESIDENT} resident)`);
     }
     entry.busy = true;
