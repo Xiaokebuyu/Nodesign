@@ -38,6 +38,7 @@ import { getProjectWorkspace } from '../../projects/workspace.js';
 import { FIDELITY_LAUNCH_ARGS } from '../mcp/tools/helpers/perception-page.js';
 import { attachSsrfGuard } from '../../lib/ssrf-guard.js';
 import { startBrowseProxy } from '../../lib/browse-proxy.js';
+import { desktopHostConfigured, openDesktopView, closeDesktopView } from './desktop-host.js';
 
 /**
  * 常驻上限（内存）。1 vCPU 上活跃画面流另有 ≤1 的上限，见 screencast 那一层。
@@ -82,7 +83,29 @@ function chromeUa(raw) {
   return String(raw).replace(/HeadlessChrome\//g, 'Chrome/');
 }
 
+/**
+ * 桌面版（09-08 缝二）：页面住在 Electron 的 WebContentsView 里，这里只拿到它的 playwright page。
+ * 跟下面 headless 那条的差别：不 launch、闸只装在这一页（context 是整个应用共用的）、关的时候销视图不关 context。
+ */
+async function attachDesktopView(projectId) {
+  const { port: proxyPort } = await startBrowseProxy();
+  const { page, context, viewId, cdp } = await openDesktopView(projectId, { proxyPort, viewport: VIEWPORT });
+  const guard = await attachSsrfGuard(context, undefined, { proxied: true, scope: 'page' });
+  await guard.armPage(page);
+  guard.watchPopups(page);
+  const realUa = await page.evaluate(() => navigator.userAgent).catch(() => '');
+  const ua = chromeUa(realUa.replace(/\s*Electron\/\S+/, '').replace(/\s*nodesign\/\S+/i, ''));
+  const m = realUa.match(/Chrome\/(\d+)/);
+  const major = m ? m[1] : '133';
+  await cdp.send('Emulation.setUserAgentOverride', {
+    userAgent: ua, acceptLanguage: 'zh-CN,zh;q=0.9,en;q=0.8',
+    userAgentMetadata: { brands: [{ brand: 'Chromium', version: major }, { brand: 'Google Chrome', version: major }, { brand: 'Not?A_Brand', version: '24' }], fullVersion: `${major}.0.0.0`, platform: process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'macOS' : 'Linux', platformVersion: '10.0.0', architecture: 'x86', model: '', mobile: false },
+  }).catch(() => { /* 覆盖不上就用 Electron 自己的 UA */ });
+  return { context, page, guard, ua, desktopViewId: viewId };
+}
+
 async function launchBrowseBrowser(projectId) {
+  if (desktopHostConfigured()) return attachDesktopView(projectId);
   const { chromium } = await import('playwright');
   // profile 必须落在 `<pid>/` 下、`shared/` **之外**：shared 是 agent 的 cwd 也是
   // artifact-file 的服务根 —— 放进去等于 (a) cookie jar 能被当文件服出去
@@ -163,7 +186,9 @@ export async function closeFor(projectId, why = 'explicit') {
   // 先让画面流那一层知道（它要通知正在看的人，并且停掉编码），再关浏览器 ——
   // 反过来的话 CDP 会话已经死了，stopScreencast 只会抛一堆没意义的错
   try { (await import('./screencast.js')).forget(projectId); } catch { /* */ }
-  try { await entry.context.close(); } catch { /* 已经死了就算了 */ }
+  // 桌面版：context 是 Electron 整个应用的，关它等于关应用 —— 只销自己那张视图
+  if (entry.desktopViewId) await closeDesktopView(entry.desktopViewId);
+  else { try { await entry.context.close(); } catch { /* 已经死了就算了 */ } }
   console.log(`[browse] closed ${projectId} (${why})`);
   return true;
 }

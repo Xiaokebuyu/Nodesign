@@ -379,6 +379,17 @@ export function cancelRun(runId, reason = 'user_cancel') {
           // 失败兜底：close 整个 session（用户预期 stop 起码能停下来）
           closeQuerySession(sid, reason + ':interrupt_failed');
         });
+        // 停止路径补落终态（08-30 挂账，09-08 修）：interrupt 成功≠回合结束 —— SDK 在 API 重试 / 首包之前被打断时
+        // 不会吐 result，runs 行停在 running、前端等不到 run.cancelled（activeRun 卡住，桌面版共视的遮罩也就卡住）。
+        // 给它 8 秒：还是这一轮在飞就关整个 session，runSession 的收尾路径会 finishTurn('cancelled')，行落终态、事件照发。
+        const timer = setTimeout(() => {
+          const still = activeQuerySessions.get(sid);
+          if (still && still.currentRunId === runId && !still.abortController.signal.aborted) {
+            console.warn(`[active-runs] run ${runId} still running 8s after interrupt → closing session ${sid.slice(0, 8)} to settle it`);
+            closeQuerySession(sid, reason + ':interrupt_timeout');
+          }
+        }, 8000);
+        timer.unref?.();
       } else {
         // race：query handle 还没 attach（runSession 启动 race window）
         // 直接 close session 兜底

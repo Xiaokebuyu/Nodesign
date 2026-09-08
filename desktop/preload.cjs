@@ -19,4 +19,15 @@ contextBridge.exposeInMainWorld('nodesignDesktop', {
    * 只出选择框、不动文件；真正建项目是页面拿路径去打 POST /api/local/projects/open-folder。
    */
   pickFolder: () => ipcRenderer.invoke('nd:pick-folder'),
+  /**
+   * 共视（09-08）：agent 的浏览器是壳里的一张原生视图，页面只负责说它该摆在哪、agent 在不在操作。
+   *   place(projectId, rect|null)  rect 是页面 CSS px（getBoundingClientRect 那套），null = 收起（视图停到屏外，agent 照用）
+   *   block(projectId, on)         on = agent 在操作，盖一层遮罩；人要接手先按停回合
+   *   state(projectId)             { live, url, blocked }
+   */
+  browserView: {
+    place: (projectId, rect) => ipcRenderer.invoke('nd:browser-place', String(projectId || ''), rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null),
+    block: (projectId, on) => ipcRenderer.invoke('nd:browser-block', String(projectId || ''), !!on),
+    state: (projectId) => ipcRenderer.invoke('nd:browser-state', String(projectId || '')),
+  },
 });

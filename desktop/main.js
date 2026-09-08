@@ -27,6 +27,7 @@ import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, screen, ipc
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { updateCheckMessage } from './update-message.js';
 import { resolveWindowBounds, MIN_SIZE } from './window-state.js';
 
@@ -43,6 +44,19 @@ const appRoot = app.isPackaged ? app.getAppPath() : path.resolve(here, '..');
 const serverEntry = path.join(appRoot, 'server', 'index.js');
 
 const HOST = '127.0.0.1';
+
+// 共视（09-08 缝二）：agent 的浏览器在 Electron 里原生显示。CDP 口必须在 app ready 之前定
+// （remote-debugging-port 是启动开关），所以这几行在最顶上；bridge 在 boot 里起。
+// NODESIGN_DESKTOP_BROWSER=off 可关掉，服务端就退回 headless 那条老路。
+const require = createRequire(import.meta.url);
+const { createBrowserHost, pickCdpPort } = require('./browser-host.cjs');
+const browserHostEnabled = process.env.NODESIGN_DESKTOP_BROWSER !== 'off';
+const cdpPort = browserHostEnabled ? pickCdpPort() : 0;
+if (browserHostEnabled) {
+  app.commandLine.appendSwitch('remote-debugging-port', String(cdpPort));
+  app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
+}
+let browserHost = null;
 
 let win = null;
 let splash = null;
@@ -79,6 +93,21 @@ async function boot() {
   }
   env.PORT = String(port);
   appUrl = `http://${HOST}:${port}/`;
+
+  // 共视 bridge：服务端凭这三个 env 找到我们（建视图）和 chromium（CDP）。起不来就不给 env，服务端自动走 headless
+  if (browserHostEnabled) {
+    try {
+      browserHost = createBrowserHost({ getWindow: () => win, log, cdpPort });
+      const { bridgeUrl, token, cdpUrl } = await browserHost.start();
+      env.NODESIGN_DESKTOP_BRIDGE = bridgeUrl;
+      env.NODESIGN_DESKTOP_BRIDGE_TOKEN = token;
+      env.NODESIGN_DESKTOP_CDP = cdpUrl;
+      log(`共视 bridge ${bridgeUrl}，CDP ${cdpUrl}`);
+    } catch (err) {
+      log(`共视 bridge 起不来，浏览器退回 headless：${err.message}`);
+      browserHost = null;
+    }
+  }
 
   // 服务端输出写进数据目录的日志文件（Electron 窗口进程没有控制台，inherit 等于丢掉）。
   // 用户报问题时让他把这个文件发过来；文件超过 5MB 起动时滚一份 .old
@@ -183,6 +212,7 @@ function createMainWindow() {
   const scheduleSave = () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveWindowState, 400); };
   win.on('resize', scheduleSave); win.on('move', scheduleSave);
   win.on('maximize', scheduleSave); win.on('unmaximize', scheduleSave);
+  browserHost?.onWindowReady(win);
 
   // 导出 / 交付（09-07 站主：「桌面版的导出没有做」）：页面用 blob URL + <a download> 触发下载，
   // Electron 没人接的话就弹一个系统另存为对话框，还常被主窗挡在后面看不见。这里接过来：
@@ -414,6 +444,7 @@ app.on('before-quit', (e) => {
   if (quitting || !sup?.running) return;
   e.preventDefault();
   quitting = true;
+  try { browserHost?.destroyAll(); } catch { /* 退出路上别被视图绊住 */ }
   sup.stop().then(() => app.quit());
 });
 

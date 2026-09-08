@@ -98,6 +98,8 @@ function handleConn(ws, pid) {
     try {
       if (msg.type === 'subscribe') {
         if (!live) return send({ type: 'idle', reason: 'agent 还没开始浏览（没有常驻浏览器）' });
+        // 桌面版共视（09-08）：页面是 Electron 原生视图，不要帧 —— 只要状态和地址。截帧编码是纯浪费
+        if (msg.native) { touchProject(pid); return send({ type: 'subscribed', url: live.page.url(), native: true }); }
         const r = await subscribe(pid, ws, live.page);
         if (r.ok) touchProject(pid);
         return send(r.ok ? { type: 'subscribed', url: live.page.url() } : { type: 'error', reason: r.reason });

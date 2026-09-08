@@ -7,6 +7,10 @@ import { INK_SURFACE } from '../../lib/paper.js';
 function displayUrl(u) { try { return decodeURI(u); } catch { return u; } }
 import ArtifactWindow from './ArtifactWindow.jsx';
 import { Browse, Assets } from '../../lib/api.js';
+import { useGlobalStore } from '../../stores/globalStore.js';
+
+/** 桌面版共视（09-08）：页面是壳里的原生视图，这里只负责说它摆在哪 */
+const nativeView = () => (typeof window !== 'undefined' && window.nodesignDesktop?.browserView) || null;
 
 /**
  * BrowserWindow —— 播放 agent 当前的浏览器画面，必要时你接手（2026-08-18）
@@ -64,6 +68,10 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
   const [openSite, setOpenSite] = useState(null);
   const [shelfOpen, setShelfOpen] = useState(true);
   const canvasRef = useRef(null);
+  const hostRef = useRef(null);      // 共视：原生视图要摆的那块（16:9）
+  const native = nativeView();
+  const activeRun = useGlobalStore(s => s.activeRun);
+  const agentBusy = !!activeRun && activeRun.pid === projectId;
   const wsRef = useRef(null);
   const takeoverRef = useRef(false);
   takeoverRef.current = takeover;
@@ -99,7 +107,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
-    ws.onopen = () => { setStatus('connecting'); ws.send(JSON.stringify({ type: 'subscribe' })); };
+    ws.onopen = () => { setStatus('connecting'); ws.send(JSON.stringify({ type: 'subscribe', native: !!nativeView() })); };
     ws.onclose = (e) => { setStatus(e.code === 4401 ? 'error' : 'closed'); if (e.code === 4401) setNote('没有权限'); };
     ws.onerror = () => setStatus('error');
     ws.onmessage = async (e) => {
@@ -183,6 +191,48 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
     };
   }, [takeover, send]);
 
+  /**
+   * 共视·摆位：把 hostRef 的矩形（页面 CSS px）报给壳，壳把原生视图钉在那儿；收窗就 place(null)（视图停到屏外，agent 照用）。
+   * 矩形随窗口大小 / 滚动 / 布局变化而变，ResizeObserver + resize/scroll 兜住，rAF 合并。
+   */
+  useEffect(() => {
+    if (!native) return undefined;
+    let raf = 0;
+    const report = () => {
+      raf = 0;
+      const el = hostRef.current;
+      if (!el) return;
+      // 先把自己撑成容器里最大的 16:9（底下留 64px 给浮动工具栏），再把矩形报给壳
+      const box = el.parentElement?.getBoundingClientRect();
+      if (box) {
+        const w = Math.max(0, Math.min(box.width - 16, (box.height - 64 - 16) * 16 / 9));
+        el.style.width = `${Math.floor(w)}px`;
+        el.style.height = `${Math.floor(w * 9 / 16)}px`;
+      }
+      const r = el.getBoundingClientRect();
+      native.place(projectId, r.width > 8 && r.height > 8 ? { x: r.left, y: r.top, width: r.width, height: r.height } : null).catch(() => {});
+    };
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(report); };
+    const ro = new ResizeObserver(schedule);
+    if (hostRef.current?.parentElement) ro.observe(hostRef.current.parentElement);
+    window.addEventListener('resize', schedule);
+    window.addEventListener('scroll', schedule, true);
+    schedule();
+    const tick = setInterval(schedule, 1000);   // 兜底：CSS 动画 / 顶栏收放这类没有事件的位移
+    return () => {
+      ro.disconnect(); window.removeEventListener('resize', schedule); window.removeEventListener('scroll', schedule, true);
+      clearInterval(tick); if (raf) cancelAnimationFrame(raf);
+      native.place(projectId, null).catch(() => {});
+    };
+  }, [native, projectId]);
+  /** 共视·打断即接手：回合在飞且没接手 = agent 在操作，盖遮罩；人先按停（或 agent 举手求助）才能接手 */
+  useEffect(() => {
+    if (!native) return undefined;
+    const blocked = agentBusy && !takeover && !(help || liveHelp);
+    native.block(projectId, blocked).catch(() => {});
+    return undefined;
+  }, [native, projectId, agentBusy, takeover, help, liveHelp]);
+
   const groups = useMemo(() => [
     // 地址是**读数不是输入框**：给人一个能敲 URL 的地方等于给一条绕过出网闸的
     // 错觉（闸在网络层照样拦，但不如不提供这个入口）。
@@ -230,15 +280,19 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         icon: takeover ? Play : Hand,
         title: takeover
           ? '好了继续 —— 把控制权交回 agent（它正等着）'
-          : '我来接手 —— 点击/滚动/打字会直接发到那个浏览器里',
+          : (native && agentBusy && !(help || liveHelp))
+            ? 'agent 正在操作 —— 先按停这一轮，才能接手'
+            : '我来接手 —— 点击/滚动/打字会直接发到那个浏览器里',
         active: takeover,
+        disabled: !!(native && agentBusy && !takeover && !(help || liveHelp)),
         onClick: () => {
+          if (native && agentBusy && !takeover && !(help || liveHelp)) return;
           if (takeover) { send({ type: 'release' }); setTakeover(false); }
           else setTakeover(true);
         },
       }],
     },
-  ], [addr, takeover, send, projectId, onClose]);
+  ], [addr, takeover, send, projectId, onClose, native, agentBusy, help, liveHelp]);
 
   const stateLine = {
     connecting: '连接中…',
@@ -271,7 +325,16 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         flex: 1, minHeight: 0, width: '100%', display: 'flex', alignItems: 'center',
         justifyContent: 'center', padding: GAP.md, boxSizing: 'border-box', position: 'relative',
       }}>
-        <canvas
+        {native && (
+          // 原生视图钉在这块上（壳按这个矩形摆）。16:9 = 视图 zoom 后正好 1366×768 CSS px，agent 坐标 1:1。
+          // 底下留 64px 给浮动工具栏：视图是壳画的，压在 DOM 之上，工具栏躲不开它
+          <div ref={hostRef} style={{
+            margin: '0 auto 64px', borderRadius: 2,
+            boxShadow: status === 'live' ? '0 2px 12px rgba(43,39,35,.18)' : 'none',
+            background: status === 'live' ? 'transparent' : 'rgba(43,33,23,0.03)',
+          }} />
+        )}
+        {!native && <canvas
           ref={canvasRef}
           tabIndex={takeover ? 0 : -1}
           title={takeover ? '接手中：点一下这块画面再打字（键盘只在这里生效）' : undefined}
@@ -283,9 +346,9 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
             outline: takeover ? `2px solid ${COLOR.accent || '#8a4b2d'}` : 'none',
             outlineOffset: 3,
           }}
-        />
-        {/* 空白态提示（下面那块）与画面共用这块容器 */}
-        {(!gotFrame || stateLine) && (
+        />}
+        {/* 空白态提示（下面那块）与画面共用这块容器。共视下没有帧：live 就是有画面 */}
+        {((native ? status !== 'live' : !gotFrame) || stateLine) && (
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center', gap: GAP.sm,

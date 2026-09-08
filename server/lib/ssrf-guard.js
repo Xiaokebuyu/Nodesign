@@ -377,7 +377,7 @@ export async function checkUrl(raw, { timeoutMs = 4000 } = {}) {
  * @param {(ev: {url: string, reason: string, stage: string}) => void} [onBlocked]
  * @returns {Promise<{ blocked: Array, armPage: (page) => Promise<void> }>}
  */
-export async function attachSsrfGuard(context, onBlocked, { proxied = false } = {}) {
+export async function attachSsrfGuard(context, onBlocked, { proxied = false, scope = 'context' } = {}) {
   const blocked = [];
   const armed = new WeakSet();
   const note = (url, reason, stage) => {
@@ -430,6 +430,17 @@ export async function attachSsrfGuard(context, onBlocked, { proxied = false } = 
     await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
     armed.add(page);
   }
+
+  // scope:'page'（09-08 桌面版共视）：context 是 Electron 整个应用共用的那一个，里面还有 NoDesign 自己的窗
+  // （http://127.0.0.1:PORT，正是这道闸最要拦的地址）—— 绝不能整 context 扫一遍装闸，也不能把新开的
+  // 应用窗当弹窗关掉。调用方对**自己那一页** armPage，它开出的弹窗由 page.on('popup') 兜住。
+  if (scope === 'page') return { blocked, armPage, watchPopups: (page) => page.on('popup', (p) => {
+    setTimeout(() => {
+      if (armed.has(p) || p.isClosed()) return;
+      note(p.url() || '(popup)', 'popup was not armed with the network guard — closed', 'popup');
+      p.close().catch(() => {});
+    }, 250);
+  }) };
 
   // 没经过 armPage 的页面（弹窗）立刻关掉。给 armPage 一个微任务的机会先登记，
   // 免得把我们自己刚造的页面误杀。
