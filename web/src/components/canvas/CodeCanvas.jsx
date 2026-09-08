@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import Editor from '@monaco-editor/react';
+import '../../lib/monaco-local.js';   // monaco 本地打包（09-08），别去 CDN
 import { Save } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 

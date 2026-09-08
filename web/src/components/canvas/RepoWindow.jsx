@@ -15,6 +15,7 @@ import { ChevronRight, ChevronDown, File, Folder, FolderOpen, GitBranch, Refresh
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS } from '../../lib/theme.js';
 import { Repo } from '../../lib/api.js';
 import ArtifactWindow from './ArtifactWindow.jsx';
+import '../../lib/monaco-local.js';   // monaco 本地打包（09-08），别去 CDN
 
 const Editor = lazy(() => import('@monaco-editor/react'));
 

@@ -268,13 +268,14 @@ export default function QuickEntry({ prefill }) {
    * 文件夹本身）跟新建项目一样进去等用户开口；已经干过活的项目直接进去。
    */
   const enterFolderProject = (out) => {
-    const firstVisit = !out.project.activeSessionId && out.desk === '.nodesign';
-    navigate(`/projects/${out.project.id}/work`, firstVisit ? {
-      state: {
-        initialMessage: t('先看看这个仓库：它是什么、怎么跑起来、结构和入口、我上次干到哪。写成板书，最后问我从哪改起。'),
-        attachments: [],
-      },
-    } : undefined);
+    // 输入框里已经写了话就当首条消息带进去（选文件夹只是定「放哪」，不是另一件事）；
+    // 没写字、且是有东西的文件夹第一次进，才发那句「先看看这个仓库」
+    const typed = text.trim();
+    const firstVisit = !out.project.activeSessionId;
+    const message = typed || (firstVisit && out.desk === '.nodesign'
+      ? t('先看看这个仓库：它是什么、怎么跑起来、结构和入口、我上次干到哪。写成板书，最后问我从哪改起。')
+      : '');
+    navigate(`/projects/${out.project.id}/work`, message ? { state: { initialMessage: message, attachments: [] } } : undefined);
   };
   const openFolder = async () => {
     if (!canOpenFolder || submitting) return;
@@ -455,6 +456,21 @@ export default function QuickEntry({ prefill }) {
               不照抄一份 JSX —— 照抄的那份迟早跟真的分叉。 */}
           <div className="foot" ref={footRef}>
           <ComposerTray items={attachments} onRemove={handleRemoveAtt} />
+          {/* 桌面版（09-08 站主定）：默认放数据目录，但「项目放哪」要有一句明显的话，不能只是一颗图标 */}
+          {canOpenFolder && (
+            <div className="pick-line">
+              <span>{t('新项目默认放在 NoDesign 自己的目录里。想放进你的文件夹，或打开一个已有仓库：')}</span>
+              <button
+                className="pick"
+                title={t('空文件夹从零开始；已有仓库先读一遍再动')}
+                onClick={openFolder}
+                disabled={submitting}
+              >
+                <FolderOpen size={13} />
+                {t('选一个文件夹')}
+              </button>
+            </div>
+          )}
           <div className="bar">
             <button
               className="att"
@@ -464,16 +480,7 @@ export default function QuickEntry({ prefill }) {
             >
               <Plus size={14} />
             </button>
-            {canOpenFolder && (
-              <button
-                className="att"
-                title={t('打开本地文件夹当项目')}
-                onClick={openFolder}
-                disabled={submitting}
-              >
-                <FolderOpen size={14} />
-              </button>
-            )}
+
             {/* 模型选择（2026-08-17，issue #1 第 7 条）：以前只长在会话里的 composer 上，
                 首页这一步反而没有 —— 而首页恰恰是**唯一**能决定新会话用哪个模型的地方
                 （进了会话之后模型的真相在服务端，这颗按钮改的是本地偏好）。

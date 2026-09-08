@@ -268,6 +268,17 @@ ${DESK_CSS}
   transition: border-color 0.15s, color 0.15s; }
 .ndd-pad .att:hover { border-color: var(--ink); color: var(--ink); }
 .ndd-pad .att:disabled { opacity: 0.45; cursor: default; }
+/* 桌面版「选一个文件夹」（09-08 站主定：默认放数据目录，但要给一个**明显的**选位置入口）：
+   带字的胶囊，不是一颗圆图标 —— 图标没人知道它是"项目放哪"这件事。旁边一句小字说清默认在哪。 */
+.ndd-pad .pick { height: 27px; padding: 0 10px 0 8px; border-radius: 14px; flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  background: transparent; border: 1px solid rgba(43,33,23,0.2); color: var(--ink-2);
+  font: 12px var(--kai); letter-spacing: 0.04em; white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s; }
+.ndd-pad .pick:hover { border-color: var(--ink); color: var(--ink); }
+.ndd-pad .pick:disabled { opacity: 0.45; cursor: default; }
+.ndd-pad .pick-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 12px;
+  font: 12px var(--kai); color: var(--ink-2); letter-spacing: 0.02em; }
 /* 模型选择：ModelPicker 自带的是全站 chrome 那套皮（无衬线 + 圆角），落在纸上
    像一颗从别处剪来的按钮。只改字与形，**颜色一律不碰** —— 它的底色本来就在
    传达"你选过没有"（选过是实心墨块，跟隔壁开工钮同一支墨），改了就把信号抹平。
