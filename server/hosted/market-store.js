@@ -30,6 +30,11 @@ export const MARKET_DIR = process.env.VITEST
   : path.resolve(process.env.NODESIGN_MARKET_DIR || path.join(PROJECTS_DATA_ROOT, '..', 'market-data'));
 
 export const STATES = Object.freeze(['pending', 'approved', 'rejected', 'withdrawn', 'revoked']);
+/** 新发布落在哪个状态：'approved' = 发布即上架（09-08 站主定，初期不审核）；'pending' = 先审后上架 */
+export const DEFAULT_PUBLISH_STATE = 'approved';
+let publishState = DEFAULT_PUBLISH_STATE;
+/** 测试用：审核流程的测试要 'pending' 才走得到审核那一步 */
+export function _setPublishState(state) { publishState = STATES.includes(state) ? state : DEFAULT_PUBLISH_STATE; }
 export const IMAGE_MAX_COUNT = 6;
 export const IMAGE_MAX_UPLOAD = 8 * 1024 * 1024;   // 单张原图上限；缩完只剩几百 KB
 export const IMAGE_MAX_EDGE = 1600;
@@ -137,13 +142,15 @@ export async function createPublication({ userId, skillBuffer, validation, skill
     await fs.writeFile(path.join(dir, 'SKILL.md'), skillMd || '', 'utf8');
     for (let i = 0; i < images.length; i++) await fs.writeFile(path.join(dir, 'images', `${i}.webp`), images[i]);
     const first = validation.skills?.[0] || {};
+    // 09-08 站主定：初期不审核，发布即上架（state 直接 approved）。审核台留着，站长事后仍可 rejected / revoked；
+    // 要恢复先审后上架，把这里的 state 改回默认 'pending' 即可（DEFAULT_PUBLISH_STATE 一处）。
     db.prepare(`INSERT INTO market_publications
-      (id, user_id, skill_name, skill_version, skill_description, skill_mode, skill_sha256, title, note, image_count, source, showcase_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, user_id, skill_name, skill_version, skill_description, skill_mode, skill_sha256, title, note, image_count, source, showcase_id, state)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, userId, validation.manifest.name, validation.manifest.version || first.version || null,
         first.description || validation.manifest.description || null, validation.mode || null,
         crypto.createHash('sha256').update(skillBuffer).digest('hex'),
-        title, note ?? null, images.length, source ?? null, showcaseId ?? null);
+        title, note ?? null, images.length, source ?? null, showcaseId ?? null, publishState);
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
     throw err;

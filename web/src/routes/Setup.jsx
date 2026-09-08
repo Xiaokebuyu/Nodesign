@@ -79,9 +79,43 @@ function stageLabel(job) {
   return `${t('安装中')} ${pct}%`;
 }
 
+/**
+ * 引导页上的「装到哪」（09-08 站主确认：开头就能选盘，不只是设置页）。装之前换位置最省事 —— 这时候还没东西要搬。
+ * 桌面版走系统选择框；没有选择框的环境给一个输入框。
+ */
+function InstallLocation({ data, onChanged }) {
+  const [loc, setLoc] = useState(null);
+  const [manual, setManual] = useState('');
+  const [err, setErr] = useState('');
+  const load = () => Local.componentsLocation().then((r) => { setLoc(r.location); setErr(''); }).catch((e) => setErr(e.message));
+  useEffect(() => { load(); }, []);
+  const relocation = data?.relocation || null;
+  useEffect(() => { if (relocation?.status === 'done') { load(); onChanged?.(); } }, [relocation?.status]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const relocate = async (dir) => { if (!dir) return; try { await Local.relocateComponents(dir); setManual(''); await load(); } catch (e) { setErr(e.message); } };
+  const pick = async () => { const d = window.nodesignDesktop; if (!d?.pickFolder) return; const dir = await d.pickFolder().catch(() => null); if (dir) relocate(dir); };
+  const moving = relocation?.status === 'moving';
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: GAP.sm, padding: `${GAP.sm}px 0 ${GAP.md}px`, borderBottom: `1px solid ${COLOR.borderLt}`, marginBottom: GAP.md, fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text3 }}>
+      <span>{t('装到：')}</span>
+      <span style={{ fontFamily: 'ui-monospace, monospace', color: COLOR.text2, wordBreak: 'break-all' }}>{loc?.dir || '…'}</span>
+      {loc && !loc.custom && <span style={{ color: COLOR.sub }}>{t('（默认，在 NoDesign 的数据目录里）')}</span>}
+      {window.nodesignDesktop?.pickFolder
+        ? <Button size="sm" variant="ghost" onClick={pick} disabled={moving}>{t('换个位置')}</Button>
+        : (
+          <>
+            <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder={t('绝对路径')} style={{ minWidth: 220, padding: '3px 8px', font: 'inherit' }} />
+            <Button size="sm" variant="ghost" onClick={() => relocate(manual.trim())} disabled={!manual.trim() || moving}>{t('用这个')}</Button>
+          </>
+        )}
+      {moving && <span style={{ color: COLOR.sub }}>{t('正在搬：{done} / {total}', { done: relocation.done, total: relocation.total })}</span>}
+      {err && <span style={{ color: COLOR.error }}>{err}</span>}
+    </div>
+  );
+}
+
 export default function Setup() {
   const showToast = useGlobalStore((s) => s.showToast);
-  const { data, err, busy, install } = useComponents();
+  const { data, err, busy, install, reload } = useComponents();
   const missing = (data?.components || []).filter((c) => c.supported && !c.installed);
   const finish = async () => {
     try { await Local.savePrefs({ setupDone: true }); window.location.href = '/'; }
@@ -98,6 +132,7 @@ export default function Setup() {
         <div style={{ background: COLOR.bgWhite, borderRadius: RADIUS.lg, padding: GAP.lg }}>
           {err && <Err>{err}</Err>}
           {data?.manifestError && <Err>{t('组件清单拉不到：{err}', { err: data.manifestError })}</Err>}
+          <InstallLocation data={data} onChanged={reload} />
           {!data ? <span style={{ color: COLOR.sub, fontSize: FONT_SIZE.sm }}>{t('读取中…')}</span> : <ComponentRows data={data} install={install} compact />}
         </div>
         <div style={{ display: 'flex', gap: GAP.md, marginTop: GAP.lg, alignItems: 'center' }}>

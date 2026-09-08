@@ -100,7 +100,7 @@ export default function Market() {
             <h1 style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700, color: 'var(--desk-ink)', letterSpacing: '-0.01em', margin: 0 }}>{t('Skill 市场')}</h1>
           </div>
           <p style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: 'var(--desk-ink-2)', lineHeight: 1.6, margin: 0, maxWidth: 680 }}>
-            {t('别人探索出来的方法论，连同它做出来的东西的样子。装进自己的 skill 库，下个新会话点名就能用。每一条上架前站主都看过全文。')}
+            {t('别人探索出来的方法论，连同它做出来的东西的样子。装进自己的 skill 库，下个新会话点名就能用。装之前先看一眼 SKILL.md 全文，装了之后它会整段进你 agent 的上下文。')}
           </p>
         </header>
 
@@ -125,7 +125,7 @@ export default function Market() {
         {items === null ? (
           <div style={loadingStyle}>{t('加载中…')}</div>
         ) : items.length === 0 ? (
-          <div style={loadingStyle}>{t('货架还是空的。橱窗里的作品可以发上来，站主看过就上架。')}</div>
+          <div style={loadingStyle}>{t('货架还是空的。橱窗里的作品可以发上来，发布即上架。')}</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: narrow ? GAP.lg : GAP.xl }}>
             {items.map(p => <MarketCard key={p.id} pub={p} onOpen={() => navigate(`/market/${p.id}`)} onInstall={() => install(p)} />)}

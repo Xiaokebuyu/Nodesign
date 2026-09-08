@@ -42,7 +42,7 @@ export default function PublishDialog({ show, onClose, skillName, showcaseId = n
     setBusy(true);
     try {
       const { publication } = await Market.publish({ title: title.trim(), note: note.trim(), skillName, showcaseId, images });
-      showToast(t('已提交，等站主看过就上架'), 'success');
+      showToast(t('已发布，上架了'), 'success');
       onPublished?.(publication);
       onClose?.();
     } catch (err) {
@@ -98,7 +98,7 @@ export default function PublishDialog({ show, onClose, skillName, showcaseId = n
           </div>
         </div>
       </div>
-      <ModalFooter onCancel={onClose} onConfirm={submit} confirmLabel={busy ? t('提交中…') : t('提交审核')} cancelLabel={t('取消')} confirmDisabled={busy} />
+      <ModalFooter onCancel={onClose} onConfirm={submit} confirmLabel={busy ? t('提交中…') : t('发布')} cancelLabel={t('取消')} confirmDisabled={busy} />
     </Modal>
   );
 }

@@ -255,7 +255,7 @@ function ShowcaseCard({ entry, publication, onRemove, onPublish }) {
               color: publication.state === 'approved' ? COLOR.success : COLOR.warn,
               padding: `1px 7px`, border: `1px solid currentColor`, borderRadius: RADIUS.pill,
             }}>
-              <Store size={10} /> {publication.state === 'approved' ? t('市场上架中') : t('市场审核中')}
+              <Store size={10} /> {publication.state === 'approved' ? t('市场上架中') : t('市场处理中')}
             </Link>
           ) : (
             <button onClick={onPublish} style={{

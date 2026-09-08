@@ -15,7 +15,7 @@ process.env.NODESIGN_USER_PLUGINS_DIR = path.join(os.tmpdir(), `nd-local-market-
 
 const db = (await import('../engine/runs/store.js')).default;
 const { createMarketRouter } = await import('./market-routes.js');
-const { _resetForTest, MARKET_DIR } = await import('./market-store.js');
+const { _resetForTest, _setPublishState, MARKET_DIR } = await import('./market-store.js');
 const { installPluginToRoot } = await import('../lib/plugin-install.js');
 const { getUserPluginsRoot } = await import('../engine/agent/plugin-loader.js');
 
@@ -54,7 +54,7 @@ version: 0.3.0
 正文
 `;
 
-beforeAll(() => _resetForTest());
+beforeAll(() => { _resetForTest(); _setPublishState('pending'); });   // 这里测的是审核那条流程
 afterAll(async () => {
   await new Promise((r) => siteServer.close(r));
   await new Promise((r) => localServer.close(r));

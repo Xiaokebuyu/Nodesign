@@ -10,7 +10,7 @@ import JSZip from 'jszip';
 import db from '../engine/runs/store.js';
 import { createMarketRouter } from './market-routes.js';
 import adminRouter from './admin.js';
-import { _resetForTest, featuredSlotsFor, MARKET_DIR, marketOriginPolicy } from './market-store.js';
+import { _resetForTest, _setPublishState, featuredSlotsFor, MARKET_DIR, marketOriginPolicy, DEFAULT_PUBLISH_STATE } from './market-store.js';
 import { installPluginToRoot } from '../lib/plugin-install.js';
 import { getUserPluginsRoot, loadInstalledPlugins } from '../engine/agent/plugin-loader.js';
 import { readPluginOrigin, setPluginOriginPolicy } from '../lib/plugin-origin.js';
@@ -86,7 +86,28 @@ async function installSkillFor(user, name) {
   expect([200, 201]).toContain(r.status);
 }
 
-describe('市场：发布 → 审核 → 货架 → 安装', () => {
+describe('市场：发布即上架（09-08 站主定：初期不审核）', () => {
+  it('新发布直接 approved，货架上立刻有；审核台仍能事后下架', async () => {
+    expect(DEFAULT_PUBLISH_STATE).toBe('approved');
+    const author = makeUser(); const other = makeUser(); const admin = makeUser('admin');
+    users.set(author.id, author); users.set(other.id, other); users.set(admin.id, admin);
+    const zip = new JSZip();
+    zip.file('.claude-plugin/plugin.json', JSON.stringify({ name: 'live-now', version: '1.0.0', description: 'x' }));
+    zip.file('skills/live-now/SKILL.md', SKILL_MD('live-now'));
+    const r = await as(author, '/api/relay/market', { method: 'POST', body: publishForm({ skillZip: await zip.generateAsync({ type: 'nodebuffer' }), images: [PNG_1x1] }) });
+    expect(r.status).toBe(201);
+    const { publication } = await r.json();
+    expect(publication.state).toBe('approved');
+    const shelf = await (await as(other, '/api/relay/market')).json();
+    expect(shelf.items.some((x) => x.id === publication.id)).toBe(true);
+    await json(admin, `/api/admin/market/${publication.id}/review`, 'POST', { state: 'revoked' });
+    expect((await as(other, `/api/relay/market/${publication.id}`)).status).toBe(404);
+  });
+});
+
+describe('市场：发布 → 审核 → 货架 → 安装（先审后上架那条流程，DEFAULT 改回 pending 时就是它）', () => {
+  beforeAll(() => _setPublishState('pending'));
+  afterAll(() => _setPublishState(DEFAULT_PUBLISH_STATE));
   it('网页发布：从装着的 skill 打包 + 上传参考图 → pending；作者看得到，别人 404；站主审过才上架', async () => {
     const author = makeUser(); const other = makeUser(); const admin = makeUser('admin');
     users.set(author.id, author); users.set(other.id, other); users.set(admin.id, admin);
