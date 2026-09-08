@@ -52,7 +52,8 @@ import { mountMcpDiagnostics, healthReport } from './mcp-server/diagnostics.js';
 import { desktopLoginState } from './auth/middleware.js';
 import { stopAllProcesses } from './engine/process/registry.js';
 import { platform } from './runtime/platform.js';
-import { refreshRelayCatalog } from './runtime/relay-client.js';
+import { refreshRelayCatalog, relayRevokedPublicationIds } from './runtime/relay-client.js';
+import { setPluginOriginPolicy } from './lib/plugin-origin.js';
 import { startIssueOutbox } from './runtime/issue-outbox.js';
 import { probeCapabilities, summarizeCapabilities } from './runtime/capabilities.js';
 import { applyComponentEnv } from './runtime/components.js';
@@ -67,6 +68,8 @@ if (platform.isLocal) applyComponentEnv();
 // 站主 relay 的目录（配了令牌才拉；没配 / 拉不到都不阻止起动，选择器就只剩本机钥匙的行）。
 // ⚠️ 在能力探测之前：联网搜索 / 生图两位要看"网关给不给"（relay-tools.js），目录没拉就探成"没有"
 const relay = platform.isLocal ? await refreshRelayCatalog() : null;
+// 市场装来的 skill：站点撤回过的（whoami 带回的名单）本机 plugin-loader 不再加载。hosted 那半在 hosted/mount.js 注册
+if (platform.isLocal) setPluginOriginPolicy((origin) => relayRevokedPublicationIds().has(origin.publicationId));
 // 客户端上报发件箱：启动补发积压（含桌面壳写的），之后定时（本地版才有；hosted 里是空操作）
 startIssueOutbox();
 await probeCapabilities();

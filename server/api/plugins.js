@@ -5,6 +5,7 @@
  *   GET    /api/plugins                                列用户级 plugin
  *   POST   /api/plugins/install                        上传 zip → ~/.nodesign/plugins/
  *   DELETE /api/plugins/:name                          卸载用户级 plugin
+ *   GET    /api/plugins/:name/export                   打包成 zip 下载（09-08；只带 skill 和参考材料，见 lib/plugin-pack.js）
  *
  * Project 级（仅当前 project，挂在 /api/projects 跟 assets/turn 同前缀）：
  *   GET    /api/projects/:pid/plugins                  列 project 级 plugin
@@ -41,6 +42,7 @@ import {
   installPluginToRoot,
   uninstallFromRoot,
 } from '../lib/plugin-install.js';
+import { packPluginDir, findUserPluginDir } from '../lib/plugin-pack.js';
 
 // 允许的上传 mime / 后缀（双轨：单 .md / zip）。multer fileFilter 拦其他类型。
 const ALLOWED_MIME = new Set([
@@ -116,6 +118,19 @@ userPluginsRouter.post('/install', upload.single('file'), async (req, res, next)
     const force = req.query.force === 'true';
     const result = await installPluginToRoot(req.file.buffer, root, { force });
     res.status(result.status).json(result.body);
+  } catch (err) { next(err); }
+});
+
+// 导出：Skill 管理页那句「先导出文件互传」以前没有对应按钮。打出来的 zip 是 plugin-zip 形态，
+// 传回 /install 直接认。找不到（含名字不合规 / 内置的）一律 404
+userPluginsRouter.get('/:name/export', async (req, res, next) => {
+  try {
+    if (!req.user?.id) return res.status(401).json({ error: 'unauthorized' });
+    const hit = await findUserPluginDir(req.user.id, req.params.name);
+    if (!hit) return res.status(404).json({ error: 'plugin not found' });
+    const { buffer } = await packPluginDir(hit.dir);
+    res.set('Content-Disposition', `attachment; filename="${hit.plugin.name}-${hit.plugin.version || '0.0.0'}.zip"`);
+    res.type('application/zip').send(buffer);
   } catch (err) { next(err); }
 });
 

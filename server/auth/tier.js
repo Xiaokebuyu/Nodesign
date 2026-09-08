@@ -50,14 +50,15 @@ export const PLANS = Object.freeze(['pro', 'basic']);
  * ⚠️ 连带效果不止于"不审"：同一格值也管 prelude 的成人段（agent/system-prompts.js），
  * 'off' 那档写的是「成人内容明确允许，不用迂回」。改这一格 = 同时改口径和提示词。
  */
+// 09-08 市场线：publishSkill / installMarketSkill 三档全开（站主：所有档位都能发，我来审）；要收紧只改这里
 const CAPABILITIES = Object.freeze({
-  admin: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'off', moderationDefaultApi: 'off', webSearchDailyCap: null }),
+  admin: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'off', moderationDefaultApi: 'off', webSearchDailyCap: null, publishSkill: true, installMarketSkill: true }),
   // 08-21 晚用户拍板「所有审查都开到严格」：pro 默认档 loose → strict（admin 仍免审）
   // 08-30 起这条只管订阅通路；API 通路见 moderationDefaultApi
-  pro: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'strict', moderationDefaultApi: 'off', webSearchDailyCap: null }),
+  pro: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'strict', moderationDefaultApi: 'off', webSearchDailyCap: null, publishSkill: true, installMarketSkill: true }),
   // 08-21 深夜用户拍板：basic 是今后唯一对外分发的档（pro 不再新发，只手动给）；basic 可用 Ox 免费行 + OpenCode Go 付费行 +
   // 生图（$0.20/张计入同一本账），每人每天 $5 总额度（注册时写 dailyCostLimitUsd，见 basicDefaultDailyUsd）；订阅 Claude / 本地产线 / 发布仍不开
-  basic: Object.freeze({ subscription: false, webSearch: true, imageGen: true, localGen: false, publishSite: false, moderationDefault: 'strict', moderationDefaultApi: 'off', webSearchDailyCap: 'env' }),
+  basic: Object.freeze({ subscription: false, webSearch: true, imageGen: true, localGen: false, publishSite: false, moderationDefault: 'strict', moderationDefaultApi: 'off', webSearchDailyCap: 'env', publishSkill: true, installMarketSkill: true }),
 });
 
 /** basic 档注册时写入的每日总额度（美元）。env NODESIGN_BASIC_DEFAULT_DAILY_USD；0 或非法 = 不写（走全局默认日限） */

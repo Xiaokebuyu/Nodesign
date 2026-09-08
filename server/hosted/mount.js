@@ -37,6 +37,13 @@ export function mountHostedAuth(app) {
 export async function mountHostedLate(app) {
   const { default: adminRouter } = await import('./admin.js');
   const { default: devicesRouter } = await import('./devices-api.js');
+  const { createMarketRouter } = await import('./market-routes.js');
+  const { marketOriginPolicy } = await import('./market-store.js');
+  const { setPluginOriginPolicy } = await import('../lib/plugin-origin.js');
+  // 站主撤回一条发布 → 从它装来的 plugin 在每个人的下个会话里都不再加载（plugin-loader 按来源文件来问）
+  setPluginOriginPolicy(marketOriginPolicy);
   app.use('/api/admin', adminRouter);
   app.use('/api/me/devices', devicesRouter);   // 跟内核的 /api/me 各管各的前缀，先后无所谓
+  // skill 市场（09-08）：网页入口。桌面版的入口在 relay/router.js 里挂的 /api/relay/market，同一份处理函数
+  app.use('/api/market', createMarketRouter({ userOf: (req) => req.user, source: 'web' }));
 }

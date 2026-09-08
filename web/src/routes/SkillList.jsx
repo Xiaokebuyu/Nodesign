@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Wrench, Plus, Upload, Trash2, BookOpen, Box, ChevronDown, ChevronRight } from 'lucide-react';
+import { Wrench, Plus, Upload, Trash2, BookOpen, Box, ChevronDown, ChevronRight, Download, Send } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
 import { Desk } from './desk.jsx';
@@ -9,6 +9,8 @@ import { paperCard } from '../lib/paper.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { Plugins, Skills } from '../lib/api.js';
+import { t } from '../lib/i18n.js';
+import PublishDialog from '../components/market/PublishDialog.jsx';
 
 /**
  * SkillList — 用户级 plugin 管理面板（跨 project 全局）
@@ -38,6 +40,7 @@ export default function SkillList() {
   const confirm = useGlobalStore(s => s.confirm);
   const narrow = useMedia(NARROW);
 
+  const [publishing, setPublishing] = useState(null);   // 要发到市场的那个 plugin（09-08）
   const [plugins, setPlugins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -194,6 +197,7 @@ export default function SkillList() {
                 key={p.path || p.name}
                 plugin={p}
                 onUninstall={p.scope === 'builtin' ? null : () => handleUninstall(p.name)}
+                onPublish={p.scope === 'user' ? () => setPublishing(p) : null}
               />
             ))}
           </div>
@@ -231,11 +235,18 @@ export default function SkillList() {
         </div>
       </div>
       </Desk>
+      <PublishDialog
+        show={!!publishing}
+        onClose={() => setPublishing(null)}
+        skillName={publishing?.name || ''}
+        defaultTitle={publishing?.skills?.[0]?.name || publishing?.name || ''}
+        defaultNote={publishing?.description || ''}
+      />
     </AppShell>
   );
 }
 
-function PluginRow({ plugin, onUninstall }) {
+function PluginRow({ plugin, onUninstall, onPublish }) {
   const [expanded, setExpanded] = useState(false);
   const narrow = useMedia(NARROW);
   const scopeLabel = SCOPE_LABEL[plugin.scope] || plugin.scope;
@@ -300,6 +311,23 @@ function PluginRow({ plugin, onUninstall }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, flexShrink: 0 }}>
+          {/* 用户级的两颗（09-08）：导出成 zip（只带 skill 和参考材料）/ 发到市场 */}
+          {plugin.scope === 'user' && (
+            <a
+              href={`/api/plugins/${encodeURIComponent(plugin.name)}/export`}
+              download
+              onClick={(e) => e.stopPropagation()}
+              title={t('导出 zip')}
+              style={{ color: COLOR.sub, padding: GAP.xs, display: 'inline-flex' }}
+            ><Download size={14} /></a>
+          )}
+          {onPublish && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onPublish(); }}
+              title={t('发布到市场')}
+              style={{ background: 'transparent', border: 'none', color: COLOR.sub, cursor: 'pointer', padding: GAP.xs }}
+            ><Send size={14} /></button>
+          )}
           {onUninstall ? (
             <button
               onClick={(e) => { e.stopPropagation(); onUninstall(); }}

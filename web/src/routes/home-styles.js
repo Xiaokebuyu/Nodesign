@@ -376,6 +376,8 @@ ${DESK_CSS}
   background-color: var(--sticky); background-image: var(--grain);
   box-shadow: ${PAPER_SHADOW.tag};
   transform: rotate(4deg); pointer-events: none; }
+/* 别人的（09-08 市场精选混进项目区）：同一副纸签，墨色不是红色 —— 红的那张是「你上次停在这」，这张是「这不是你的」 */
+.ndd-card .last.peer { color: var(--ink-2); transform: rotate(-3deg); }
 .ndd-card .more { position: absolute; top: 9px; right: 9px; z-index: 8;
   width: 26px; height: 26px; border-radius: 50%;
   background: rgba(255,254,246,0.94); border: 1px solid rgba(43,33,23,0.16);

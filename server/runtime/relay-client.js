@@ -47,7 +47,7 @@ export function normalizeRelayUrl(url) {
   return String(url || DEFAULT_RELAY_URL).trim().replace(/\/+$/, '') || DEFAULT_RELAY_URL;
 }
 
-async function call(pathname, { method = 'GET', body = null, raw = null, timeoutMs = FETCH_TIMEOUT_MS, auth = true, url = null } = {}) {
+async function call(pathname, { method = 'GET', body = null, raw = null, form = null, responseType = 'json', timeoutMs = FETCH_TIMEOUT_MS, auth = true, url = null } = {}) {
   const cfg = relayConfig();
   if (auth && !cfg) throw Object.assign(new Error('relay 未配置（缺少 NODESIGN_RELAY_TOKEN）'), { code: 'RELAY_NOT_CONFIGURED' });
   // 没令牌的路（首启登录）cfg 是 null：地址按 传入 > .env > 官方站 取
@@ -57,17 +57,21 @@ async function call(pathname, { method = 'GET', body = null, raw = null, timeout
   try {
     const res = await fetch(`${base}/api/relay${pathname}`, {
       method,
-      // raw = { buf, contentType }：二进制原样发（头像上传）；body 走 JSON
+      // raw = { buf, contentType }：二进制原样发（头像上传）；form = FormData（市场发布，fetch 自己写 boundary）；body 走 JSON
       headers: { ...(auth ? { authorization: `Bearer ${cfg.token}` } : {}), ...(raw ? { 'content-type': raw.contentType } : body ? { 'content-type': 'application/json' } : {}) },
-      body: raw ? raw.buf : body ? JSON.stringify(body) : undefined,
+      body: raw ? raw.buf : form ? form : body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
+    // responseType 'buffer'：二进制响应（skill 下载 / 参考图）。出错时服务端仍回 JSON，照常解错
+    if (responseType === 'buffer' && res.ok) {
+      return { buffer: Buffer.from(await res.arrayBuffer()), contentType: res.headers.get('content-type') || 'application/octet-stream', headers: res.headers };
+    }
     const text = await res.text();
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { /* 非 JSON（nginx 的 502 页之类） */ }
     if (!res.ok) {
       const message = json?.error?.message || json?.error || `HTTP ${res.status}`;
-      throw Object.assign(new Error(message), { status: res.status, code: json?.code || `HTTP_${res.status}`, quota: json?.quota || null });
+      throw Object.assign(new Error(message), { status: res.status, code: json?.code || `HTTP_${res.status}`, quota: json?.quota || null, body: json });
     }
     return json;
   } catch (err) {
@@ -155,6 +159,12 @@ export async function relayUsageDaily(days = 30) {
 // ── 工具中继（09-07）：桌面版没有站主的钥匙，联网搜索 / 生图这类调用交给网关用站主的钥匙跑 ──
 
 /** 目录里 /whoami 报的"网关替你跑的工具"：{ web_search: bool, generate_image: bool }；目录没拉到 = 全 false */
+/** whoami 带回的「装过但已被站点撤回」的发布 id；目录没拉到 = 空集（宁可多加载也别把人家正常的 skill 静默藏掉） */
+export function relayRevokedPublicationIds() {
+  const ids = catalog.ok ? catalog.whoami?.market?.revoked : null;
+  return new Set(Array.isArray(ids) ? ids : []);
+}
+
 export function relayTools() {
   return catalog.ok && catalog.whoami?.tools && typeof catalog.whoami.tools === 'object' ? catalog.whoami.tools : {};
 }
@@ -171,3 +181,18 @@ export async function relayToolCall(name, body, { timeoutMs = 60_000 } = {}) {
 export async function relayReportIssue(item) {
   return call('/issues', { method: 'POST', body: item, timeoutMs: 15_000 });
 }
+
+// ── skill 市场（09-08）：桌面版的货架和发布都在站点上，本机只做打包 / 落盘 ──
+
+export async function relayMarketList() { return call('/market'); }
+export async function relayMarketMine() { return call('/market/mine'); }
+export async function relayMarketFeatured() { return call('/market/featured'); }
+export async function relayMarketGet(id) { return call(`/market/${encodeURIComponent(id)}`); }
+/** @returns {Promise<{ buffer: Buffer, contentType: string }>} */
+export async function relayMarketImage(id, n) { return call(`/market/${encodeURIComponent(id)}/images/${Number(n)}`, { responseType: 'buffer', timeoutMs: 20_000 }); }
+/** 发布：form 是 FormData（title / note / skill 文件 / images[]）。站点校验要解 zip、缩图，给 60s */
+export async function relayMarketPublish(form) { return call('/market', { method: 'POST', form, timeoutMs: 60_000 }); }
+export async function relayMarketWithdraw(id) { return call(`/market/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+/** skill 原字节回来本机装；响应头 X-ND-Skill-Sha256 是站点记的哈希 */
+export async function relayMarketDownload(id) { return call(`/market/${encodeURIComponent(id)}/download`, { responseType: 'buffer', timeoutMs: 30_000 }); }
+export async function relayMarketInstalled(id) { return call(`/market/${encodeURIComponent(id)}/installed`, { method: 'POST' }); }

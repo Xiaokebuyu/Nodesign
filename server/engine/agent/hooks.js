@@ -72,6 +72,8 @@ import { makePostToolUseSlotAliasHandler } from './hooks/slot-alias.js';
 import { makePreToolUsePerformanceLogGuard } from './hooks/pre-performance-log-guard.js';
 import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-guard.js';
 import { PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
+import { getUserPluginsBaseRoot, getUserPluginsRoot } from './plugin-loader.js';
+import { getProject } from '../../projects/store.js';
 import { makeUserPromptSubmitHandler } from './hooks/user-prompt-submit.js';
 import {
   makeFileChangedHandler,
@@ -150,7 +152,12 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // 项目边界闸：结构化工具不进 bwrap，沙盒管不着它们跨项目读写 ——
       // 数据根里、又不在本工作区里的路径一律拒。见 pre-workspace-scope-guard.js
       matcher: 'Read|Grep|Glob|Write|Edit|NotebookEdit',
-      hooks: [makePreToolUseWorkspaceScopeGuard({ workspaceRoot, dataRoot: PROJECTS_DATA_ROOT })],
+      hooks: [makePreToolUseWorkspaceScopeGuard({
+        workspaceRoot, dataRoot: PROJECTS_DATA_ROOT,
+        // 别人的 skill 库也拒（09-08）：自己那支按项目 owner 算，跟 plugin-loader 同口径
+        pluginsBaseRoot: getUserPluginsBaseRoot(),
+        ownPluginsRoot: projectId ? getUserPluginsRoot(getProject(projectId)?.ownerId) : null,
+      })],
     }, {
       matcher: 'Task|Agent',
       hooks: [

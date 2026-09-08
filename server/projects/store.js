@@ -208,6 +208,17 @@ export function listProjects({ limit = 100, kind, owner } = {}) {
   return rows.map(rowToProject);
 }
 
+/** 某人有几个项目（首页给别人作品留位置时用；owner 同样必填，理由同上） */
+export function countProjects({ kind, owner } = {}) {
+  if (owner === undefined) throw new Error('countProjects: owner 必填（用户 id 或 null=全量）');
+  const wheres = [];
+  const args = [];
+  if (kind) { wheres.push('kind = ?'); args.push(kind); }
+  if (owner !== null) { wheres.push('owner_id = ?'); args.push(owner); }
+  const whereSql = wheres.length ? `WHERE ${wheres.join(' AND ')}` : '';
+  return db.prepare(`SELECT COUNT(*) c FROM projects ${whereSql}`).get(...args).c;
+}
+
 /** 读单条 */
 export function getProject(id) {
   validateProjectId(id);

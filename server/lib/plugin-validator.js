@@ -28,12 +28,17 @@
 
 import JSZip from 'jszip';
 import { parseFrontmatter } from '../engine/agent/skill.js';
+import { disallowedComponents, componentError, frontmatterStrictErrors } from './plugin-components.js';
+export { disallowedComponents, frontmatterStrictErrors, COMPONENT_ALLOW_RE, COMPONENT_DENY_DIRS } from './plugin-components.js';
+// 解压那半 09-08 拆去 plugin-extract.js（行数棘轮）；老调用方仍从这里引
+export { extractPluginZip, extractToStaging } from './plugin-extract.js';
 
 // ── 校验阈值 ──
 
 export const LIMITS = {
   ZIP_MAX_BYTES: 8 * 1024 * 1024,      // 总大小 ≤ 8MB
   ENTRY_MAX_BYTES: 2 * 1024 * 1024,    // 单文件 ≤ 2MB
+  UNZIPPED_MAX_BYTES: 32 * 1024 * 1024, // 解压后总量 ≤ 32MB（09-08：压缩后 8MB 挡不住炸弹）
   ENTRY_MAX_COUNT: 200,                 // entries ≤ 200
 };
 
@@ -94,6 +99,22 @@ export async function validatePluginZip(buffer) {
   }
   if (entries.length === 0) {
     return { ok: false, errors: ['zip 为空'] };
+  }
+
+  // ── 3b. 解压后大小（09-08 审出的 zip 炸弹）：ZIP_MAX_BYTES 量的是压缩后，DEFLATE 能到 1000:1。
+  // 在**任何** entry 解压之前按 central directory 里的 uncompressedSize 逐个卡单文件上限、累计卡总量；
+  // 读不到这个数（不是 loadAsync 来的对象）就当超限 —— 宁可拒一个正常包，不能让一个人上传所有安装者替他解。
+  {
+    let total = 0;
+    for (const p of entries) {
+      const e = zip.files[p];
+      if (e.dir) continue;
+      const size = e?._data?.uncompressedSize;
+      if (!Number.isFinite(size) || size < 0) return { ok: false, errors: [`entry \`${p}\` 读不到解压后大小，拒绝`] };
+      if (size > LIMITS.ENTRY_MAX_BYTES) return { ok: false, errors: [`entry \`${p}\` 解压后 ${formatBytes(size)} 超限（≤ ${formatBytes(LIMITS.ENTRY_MAX_BYTES)}）`] };
+      total += size;
+      if (total > LIMITS.UNZIPPED_MAX_BYTES) return { ok: false, errors: [`zip 解压后总大小超限（≤ ${formatBytes(LIMITS.UNZIPPED_MAX_BYTES)}）`] };
+    }
   }
 
   // ── 4. entry 路径安全（path traversal / 绝对路径） ──
@@ -186,6 +207,13 @@ export async function validatePluginZip(buffer) {
     warnings.push('plugin.json 缺 `version`，默认为 `0.0.0`');
   }
 
+  // ── 6.5 组件白名单：只许 plugin.json + skills/<id>/ 下的文本与图片 ──
+  {
+    const rels = entries.filter((p) => !zip.files[p].dir && p.startsWith(rootPrefix)).map((p) => p.slice(rootPrefix.length)).filter(Boolean);
+    const bad = disallowedComponents(rels, 'plugin');
+    if (bad.length) return { ok: false, errors: [componentError(bad)] };
+  }
+
   // ── 7. 找 skills/<id>/SKILL.md ──
   const skillsPrefix = `${rootPrefix}skills/`;
   const skillFiles = entries.filter(p => p.startsWith(skillsPrefix) && p.endsWith('/SKILL.md'));
@@ -230,6 +258,10 @@ export async function validatePluginZip(buffer) {
       };
     }
 
+    {
+      const fmErrors = frontmatterStrictErrors(skillRaw);
+      if (fmErrors.length) return { ok: false, errors: fmErrors.map((e) => `${skillFilePath}：${e}`) };
+    }
     const { frontmatter } = parseFrontmatter(skillRaw);
     if (!frontmatter.name) {
       return {
@@ -283,15 +315,7 @@ export async function validatePluginZip(buffer) {
     };
   }
 
-  // ── 9. 单文件大小：抽查所有 entry ──
-  // 大文件可能在 patterns/ 等附件里；逐个 entry uncompressed 大小检查
-  for (const p of entries) {
-    const entry = zip.files[p];
-    if (entry.dir) continue;
-    // jszip 没暴露 uncompressedSize（除非用 _data），保守做法：解到 nodebuffer 看大小
-    // 但全 zip 解一遍开销大，这里只对 *已知关键路径*（manifest + skill）做尺寸保护（上面已做）。
-    // 其他文件（如 skill 的 patterns/*.md）按总大小限制即可（总 ≤ 8MB 包含）。
-  }
+  // ── 9. 单文件大小：第 3b 步已经按 central directory 的 uncompressedSize 逐个卡过，这里不再解压抽查 ──
 
   return {
     ok: true,
@@ -304,44 +328,6 @@ export async function validatePluginZip(buffer) {
     warnings,
     rootPrefix,  // 解压时用，去掉 wrapper 层
   };
-}
-
-/**
- * 把校验通过的 zip 解压到目标目录（atomic：先解到 staging，调用方完成后 rename）。
- *
- * 注意：本函数假定 `validatePluginZip` 已经过，**只关心 path 安全**这一项二次防御。
- *
- * @param {Buffer} buffer
- * @param {string} stagingDir - 已建好的空目录绝对路径
- * @param {string} rootPrefix - validate 时识别的 wrapper 前缀（可能是 '' 或 'foo/'）
- * @returns {Promise<void>}
- */
-export async function extractPluginZip(buffer, stagingDir, rootPrefix = '') {
-  const path = await import('node:path');
-  const fs = await import('node:fs/promises');
-
-  const zip = await JSZip.loadAsync(buffer);
-  for (const [entryPath, entry] of Object.entries(zip.files)) {
-    if (entry.dir) continue;
-    // 去 wrapper 前缀
-    if (rootPrefix && !entryPath.startsWith(rootPrefix)) continue;
-    const relativePath = rootPrefix ? entryPath.slice(rootPrefix.length) : entryPath;
-    if (!relativePath) continue;
-    // 二次防御：拒绝 .. / 绝对路径（应该已被 validate 拦但保险）
-    if (relativePath.includes('..') || relativePath.startsWith('/')) {
-      throw new Error(`unsafe entry path during extract: ${relativePath}`);
-    }
-    const targetPath = path.join(stagingDir, relativePath);
-    // 校验解压后路径仍在 stagingDir 下（resolve 后比较 prefix）
-    const resolvedTarget = path.resolve(targetPath);
-    const resolvedStaging = path.resolve(stagingDir);
-    if (!resolvedTarget.startsWith(resolvedStaging + path.sep) && resolvedTarget !== resolvedStaging) {
-      throw new Error(`extract target escapes staging dir: ${relativePath}`);
-    }
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    const content = await entry.async('nodebuffer');
-    await fs.writeFile(targetPath, content);
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -470,6 +456,10 @@ function validateSingleMd(buffer) {
     };
   }
 
+  {
+    const fmErrors = frontmatterStrictErrors(rawText);
+    if (fmErrors.length) return { ok: false, errors: fmErrors };
+  }
   const { frontmatter } = parseFrontmatter(rawText);
   if (!frontmatter.name) {
     return {
@@ -567,6 +557,13 @@ async function validateSingleSkillZip(zip, entries, topDirs) {
     };
   }
 
+  // 组件白名单：skill 根下只许文本与图片，scripts/ 一类不进来
+  {
+    const rels = entries.filter((p) => !zip.files[p].dir && p.startsWith(rootPrefix)).map((p) => p.slice(rootPrefix.length)).filter(Boolean);
+    const bad = disallowedComponents(rels, 'skill');
+    if (bad.length) return { ok: false, errors: [componentError(bad)] };
+  }
+
   // 读 SKILL.md frontmatter
   let rawText;
   try {
@@ -582,6 +579,10 @@ async function validateSingleSkillZip(zip, entries, topDirs) {
     };
   }
 
+  {
+    const fmErrors = frontmatterStrictErrors(rawText);
+    if (fmErrors.length) return { ok: false, errors: fmErrors };
+  }
   const { frontmatter } = parseFrontmatter(rawText);
   if (!frontmatter.name) {
     return {
@@ -642,76 +643,6 @@ async function validateSingleSkillZip(zip, entries, topDirs) {
     rootPrefix,             // wrapper 前缀
     skillRootPrefix: rootPrefix,  // skill 内容前缀（同 rootPrefix，命名留扩展空间）
   };
-}
-
-/**
- * 把校验通过的 upload 解到 stagingDir，按 SDK plugin 目录结构布局。
- *
- * mode 多态分派：
- *   - 'single-md'        → 写 plugin.json + skills/<name>/SKILL.md
- *   - 'single-skill-zip' → 解 zip 全部内容到 skills/<name>/（含 patterns/ 等附件）+ 写 plugin.json
- *   - 'plugin-zip'       → 走旧 extractPluginZip 逻辑（直接解压）
- *
- * @param {object} opts
- * @param {Buffer} opts.buffer
- * @param {object} opts.validation - validateSkillUpload 返回
- * @param {string} opts.stagingDir - 已建好的空目录绝对路径
- */
-export async function extractToStaging({ buffer, validation, stagingDir }) {
-  const path = await import('node:path');
-  const fs = await import('node:fs/promises');
-
-  if (validation.mode === 'plugin-zip') {
-    return extractPluginZip(buffer, stagingDir, validation.rootPrefix);
-  }
-
-  // 写 plugin.json（single-md 和 single-skill-zip 都要）
-  const manifestDir = path.join(stagingDir, '.claude-plugin');
-  await fs.mkdir(manifestDir, { recursive: true });
-  await fs.writeFile(
-    path.join(manifestDir, 'plugin.json'),
-    JSON.stringify({
-      name: validation.manifest.name,
-      version: validation.manifest.version,
-      description: validation.manifest.description,
-    }, null, 2),
-    'utf8',
-  );
-
-  const skillDir = path.join(stagingDir, 'skills', validation.manifest.name);
-  await fs.mkdir(skillDir, { recursive: true });
-
-  if (validation.mode === 'single-md') {
-    await fs.writeFile(path.join(skillDir, 'SKILL.md'), validation.rawText, 'utf8');
-    return;
-  }
-
-  if (validation.mode === 'single-skill-zip') {
-    const zip = await JSZip.loadAsync(buffer);
-    const prefix = validation.skillRootPrefix || '';
-    for (const [entryPath, entry] of Object.entries(zip.files)) {
-      if (entry.dir) continue;
-      if (prefix && !entryPath.startsWith(prefix)) continue;
-      const relativePath = prefix ? entryPath.slice(prefix.length) : entryPath;
-      if (!relativePath) continue;
-      // 二次防御
-      if (relativePath.includes('..') || relativePath.startsWith('/')) {
-        throw new Error(`unsafe entry path during extract: ${relativePath}`);
-      }
-      const targetPath = path.join(skillDir, relativePath);
-      const resolvedTarget = path.resolve(targetPath);
-      const resolvedSkill = path.resolve(skillDir);
-      if (!resolvedTarget.startsWith(resolvedSkill + path.sep) && resolvedTarget !== resolvedSkill) {
-        throw new Error(`extract target escapes skill dir: ${relativePath}`);
-      }
-      await fs.mkdir(path.dirname(targetPath), { recursive: true });
-      const content = await entry.async('nodebuffer');
-      await fs.writeFile(targetPath, content);
-    }
-    return;
-  }
-
-  throw new Error(`unknown validation.mode: ${validation.mode}`);
 }
 
 function formatBytes(n) {

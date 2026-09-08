@@ -13,6 +13,10 @@
  *   GET    /api/admin/issues           harness 问题库（按次数降序）+ 按工具聚合
  *   PATCH  /api/admin/issues/:id       {status} open|ack|ignored|closed
  *   DELETE /api/admin/issues/:id       删掉一条
+ *   GET    /api/admin/market?state=    市场审核台：发布列表（默认 pending；all = 全部）+ 各状态计数
+ *   GET    /api/admin/market/:id       一条发布 + SKILL.md 全文（图走 /api/market/:id/images/:n，admin 看得到任何状态）
+ *   POST   /api/admin/market/:id/review {state: approved|rejected|revoked, reviewNote?}
+ *   PATCH  /api/admin/market/:id       {featuredRank: 整数|null} 加精 / 取消精选（只有 approved 能加精）
  */
 
 import express from 'express';
@@ -24,6 +28,7 @@ import { usedCostToday, usedCostTotal, usedTokensToday, limitFor } from '../lib/
 import { listIssues, setIssueStatus, removeIssue, issueStats } from '../lib/issues-store.js';
 import { createNotice, listNotices, getActiveNotice, retireNotice, retireAllNotices } from '../lib/notice-store.js';
 import { flagCounts, listFlags, removeFlag, levelForKnob, LEVELS } from '../lib/moderation.js';
+import { listForAdmin, countByState, getPublication, reviewPublication, setFeaturedRank, readSkillMd, STATES } from './market-store.js';
 
 const router = express.Router();
 // admin 专属守卫。原来住在 auth/middleware.js，那是内核文件；这里是它唯一的使用者，
@@ -196,6 +201,43 @@ router.patch('/issues/:id', (req, res) => {
 router.delete('/issues/:id', (req, res) => {
   if (!removeIssue(req.params.id)) return res.status(404).json({ error: 'issue not found' });
   res.status(204).end();
+});
+
+// ── skill 市场审核台（2026-09-08）──
+// 发布进来一律 pending；站主在这里看全文和图再判。加精 = 进所有人首页的项目区，所以加精前
+// 要看过封面（封面是产物截图，等于替作者公开了那件东西的样子）。
+
+router.get('/market', (req, res) => {
+  const state = typeof req.query.state === 'string' && (STATES.includes(req.query.state) || req.query.state === 'all') ? req.query.state : 'pending';
+  res.json({ items: listForAdmin({ state }), counts: countByState() });
+});
+
+router.get('/market/:id', async (req, res) => {
+  const publication = getPublication(req.params.id);
+  if (!publication) return res.status(404).json({ error: 'publication not found' });
+  res.json({ publication, skillMd: await readSkillMd(publication.id) });
+});
+
+router.post('/market/:id/review', (req, res) => {
+  const state = String(req.body?.state || '');
+  if (!['approved', 'rejected', 'revoked'].includes(state)) return res.status(400).json({ error: 'state 需为 approved / rejected / revoked' });
+  const reviewNote = typeof req.body?.reviewNote === 'string' ? req.body.reviewNote.trim().slice(0, 500) || null : null;
+  const publication = reviewPublication(req.params.id, { state, reviewNote, reviewedBy: req.user.id });
+  if (!publication) return res.status(404).json({ error: 'publication not found' });
+  res.json({ publication });
+});
+
+router.patch('/market/:id', (req, res) => {
+  const raw = req.body?.featuredRank;
+  const rank = raw === null || raw === undefined || raw === '' ? null : Number(raw);
+  if (rank !== null && !Number.isInteger(rank)) return res.status(400).json({ error: 'featuredRank 需为整数或 null' });
+  try {
+    const publication = setFeaturedRank(req.params.id, rank);
+    if (!publication) return res.status(404).json({ error: 'publication not found' });
+    res.json({ publication });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
 });
 
 export default router;

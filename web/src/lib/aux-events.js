@@ -12,6 +12,7 @@
 import { scrollToPage, pulseHighlight } from './canvas-iframe-ops.js';
 import { useProcessStore } from '../stores/processStore.js';
 import { useRepoStore } from '../stores/repoStore.js';
+import { t } from './i18n.js';
 
 export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
   switch (evt?.type) {
@@ -73,6 +74,10 @@ export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
       showToast(`🎲 ${evt.label}：${evt.n}d${evt.sides}${mod} → [${(evt.rolls || []).join(', ')}] = ${evt.total}${vs}`, 'info');
       return true;
     }
+    // skill 沉淀成功（09-08 接上：服务端一直在发，前端从没消费 —— 用户不知道自己刚多了一条能发到市场的东西）
+    case 'run.skill_crystallized':
+      showToast(t('skill「{name}」已存进你的 skill 库，作品进了橱窗；下个新会话生效，橱窗里能发到市场。', { name: evt.skillName || evt.title || '' }), 'success');
+      return true;
     default:
       return false;
   }
