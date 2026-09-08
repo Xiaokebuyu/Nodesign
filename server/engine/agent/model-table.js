@@ -94,6 +94,19 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
   // 08-21 晚：Zen 第二入口 /zen/go（= OpenCode Go 订阅，$10/月换 $12/5h·$30/周·$60/月）。跟 'zen' 同一把钥匙、
   // **目录不同**（免费 stealth 行只在 /zen/v1，Go 目录里是常驻付费款）。响应带 `cost`（流式在 [DONE] 之后
   // 补 {"choices":[],"cost":"…"}）与 cached_tokens → lib/ingress/upstream-billing.js。今天内置的 API 行大半挂这儿。
+  // DeepSeek 官方（09-08 晚站主接的，钥匙 ~/apikey/deepseek-官方.md，按量 CNY 账户）：OpenAI 格式 base 是根路径不带 /v1，
+  // 思考文本字段 reasoning_content、缓存命中在 usage.prompt_cache_hit_tokens（转换层两处都认）。目录里只列 v4-flash /
+  // v4-pro / v4-flash-vision-exp，**预览模型不在目录里但点名能用**（v4.1-flash-expires-on-0910 实测 200、吃图、流式工具调用都通）。
+  // 价目（api-docs 模型&价格页，CNY/百万，高峰=空闲两倍）：flash 输入 3.0 / 缓存命中 0.10 / 输出 9.0 → 按高峰 7.1 折 USD 记账。
+  // 余额只有 /user/balance 能看（接入时 19.90 CNY），没有响应头。
+  deepseek: Object.freeze({
+    label: 'DeepSeek 官方 api.deepseek.com',
+    baseUrl: process.env.NODESIGN_UPSTREAM_DEEPSEEK_URL || 'https://api.deepseek.com',
+    keyEnv: 'NODESIGN_UPSTREAM_DEEPSEEK_KEY',
+    authStyle: 'bearer',
+    protocol: 'openai-chat',
+    countTokens: false,
+  }),
   zenGo: Object.freeze({
     label: 'OpenCode Zen Go',
     baseUrl: process.env.NODESIGN_UPSTREAM_ZEN_GO_URL || 'https://opencode.ai/zen/go/v1',   // 探针覆盖，同上
@@ -366,6 +379,21 @@ export const MODELS_BUILTIN = Object.freeze([
   // 额度内上游 cost 报 0、余额不扣 → 记账按**表价**（高峰价；北京 09-12/14-18 是高峰）让每用户日限跟 Go 池子一起受控，cost>0 以上游为准
   // （context.applyUpstreamBilling）。探针：文本/图(webp)/工具/流式全通，首字 ~450ms，reasoning_effort 收；DeepSeek ZDR。先 gate localGen 试跑，过关改 'subscription'
   {
+    // 09-08 晚站主接的 DeepSeek 官方预览行：模型名带着到期日（09-10 之后上游会拒，届时会话级 standby 换到下面那条视觉行）。
+    // 按量计入每日额度（站主：以后加充值，现在先按额度走）；1M 窗口走共用别名（不写 sdkAlias）。
+    id: 'deepseek-v4.1-flash-expires-on-0910', window: 1_000_000, brand: 'deepseek',
+    standby: 'deepseek-v4-flash-vision',
+    select: { label: 'DeepSeek V4.1 Flash · 官方预览', desc: '官方直连 · 支持视觉 · 1M 上下文 · 09-10 到期 · 按用量计入每日额度（高峰 $0.42/$1.27，缓存 $0.014）' },
+    api: {
+      upstream: 'deepseek', wireModel: 'deepseek-v4.1-flash-expires-on-0910',
+      fastModel: 'deepseek-v4-flash-helper',
+      thinking: 'strip',
+      reasoningEffort: 'high',
+      maxOutput: 131_072,
+      prices: { input: 0.42, output: 1.27, cacheRead: 0.014, cacheWrite: 0 },
+    },
+  },
+  {
     // 真窗口 1M；用户 08-21 深夜拍板压缩窗口 272k（省钱：携带成本 ≈ 1M 的 1/4、缓存失手最坏 $0.12/轮；近 14 天 649 回合只压缩过 11 次）
     id: 'deepseek-v4-flash-vision', window: 272_000, brand: 'deepseek',
     standby: 'glm-5.3-flash-merge',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
@@ -385,36 +413,7 @@ export const MODELS_BUILTIN = Object.freeze([
       prices: { input: 0.44, output: 1.32, cacheRead: 0.014, cacheWrite: 0 },
     },
   },
-  // ⛔ `glm-5.3-flash`（/zen/go 上那条，08-26 接替下架的 Ox Alpha）**08-27 撤掉**：用户拍板。
-  // 同一个模型现在还有两条线（下面的 zai 官方直连、再下面的 merge 网关），而这条是三条里最贵的
-  // （$0.15/$0.50 缓存 $0.03，是 merge 那条的十倍），留着只会让人在 picker 里挑错。
-  // 撤之前查过的两处（下次删行照这个查）：① 全表没有别的行的 fastModel 指着它（Ox 那次就是栽在这里，
-  // 失效还不出声）；② 生产累计只跑过 9 个 run（$0.26），session-config 里钉着它的会话只有 2 个 ——
-  // 那两个会拿到 403 MODEL_NOT_ALLOWED（「这个会话指向的模型现在不可用，请换一个」），fail-loud，
-  // 表里没有"退役 → 继任"的映射，也**不会**静默落到订阅通路。
-  // ⚠️ 上游 `zenGo` 本身留着：deepseek 视觉行和全站唯一的 helper 行都挂在它上面。
-  // 复牌就是照下面两条 glm 行的形状写一份：upstream 'zenGo'、wireModel 'glm-5.3-flash'、
-  // 窗口跟那两行取同一个数（08-30 起是 1M）、thinking strip、reasoningEffort high、
-  // maxOutput 131072、prices 0.15/0.50/0.03/0。
-  // ⛔⛔ `glm-5.3-flash-zai`（Z.ai 官方直连，08-26 接替下架的 Ox、08-27 起当全员默认行）
-  // **2026-08-30 撤掉：站主那条包月订阅的额度耗尽了**。
-  // ⭐ 撤的时候上游原话是：`[1310][Weekly/Monthly Limit Exhausted. Your limit will reset at
-  // 2026-09-03 02:23:20]` —— **不是订阅到期，是周/月配额用尽，09-03 会自己重置**。
-  // 所以这不见得是永别：09-03 之后想复牌，照下面的配方把行和上游加回来、.env 里那行钥匙
-  // 去掉 # 即可。⚠️ 但复牌**不等于自动拿回默认**：`default: true` 现在在 merge 那行上，
-  // 而且"默认行是谁"有三条断言钉着（见 model-context.test.js），要挪得先在那儿绊一下。
-  // ⚠️ 也别忘了它每周都会再耗尽一次 —— 真要长期当默认，得先想清楚"配额用尽那天怎么办"，
-  // 这次的答案是人工撤行，那不是个能每周做一遍的答案。这一行从 08-26 起就写着「用完就撤」，
-  // 撤法也提前写好了，这次是照着执行的：删行 + 删上游 zai + 删 .env 的 NODESIGN_UPSTREAM_ZAI_KEY
-  // + **同一个动作把 `default: true` 挪走**（那条代价当时就点名了：不挪的话新会话第一轮就落在
-  // 一个不存在的行上，而"默认行必须免费"那条断言拦不住这一种 —— 它只看价，不看这行还在不在）。
-  // 撤之前查的两处照旧：① 没有别的行的 fastModel 指着它；② 只有它挂在上游 zai 上。
-  // 钉着它的 15 个会话（13 个项目、大多是真的 basic 用户）**改钉到下面那条 merge 行** ——
-  // 同一个模型，对话中途不换性格；不清空钉子是因为清了会落到 NODESIGN_MODEL 的订阅行，
-  // basic 用户照样 403。表里仍然没有"退役 → 继任"的自动映射，那是数据迁移不是代码。
-  // 复牌配方（上游注释里那份没删）：upstream 'zai'、wireModel 'glm-5.3-flash'、窗口跟 merge 行取同一个数、
-  // thinking 'strip'（⚠️ budget_tokens 在这家不管用，要"不想"走 disabled）、liftImages false、
-  // maxOutput 131072、四价全 0、fastModel 'deepseek-v4-flash-helper'（helper 特意不留在这家：并发桶只有 3）。
+  // ⛔ 退役行（`glm-5.3-flash` zenGo 08-27 撤、`glm-5.3-flash-zai` 官方直连 08-30 撤）：原注释与复牌配方见 model-table-retired.md
   // ── Merge 网关 · GLM-5.3-Flash（08-27）── 不做动态路由：每家各有各的 prompt cache，一个会话在几条线之间
   // 跳，跳一次几边都是冷的。本行实测：**只能** OpenAI chat（见上游注释）、prompt cache 真命中（9038 →
   // 第二发 cache_read 9024）、$0.015/$0.05 是全表最便宜的一档（08-27 撤掉的 zenGo 那条贵 10 倍）、6 并发
@@ -501,28 +500,7 @@ export const MODELS_BUILTIN = Object.freeze([
     select: { label: 'GLM-5.3-Flash · 演出', desc: '响应快 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', only: 'stage', stageDefault: true },
     api: GLM_MERGE_API,
   },
-  // ⛔⛔ `minimax-m3`（GMI Cloud 上的免费部署，08-25 接进来、08-26 当过一天全员默认）**09-08 撤行**：
-  // 站主拍板。GMI 那个账户没余额，而这家的「限时免费」在 09-08 之前就结束了 —— 生产日志里 01:34 /
-  // 01:45 / 01:46 / 04:19 / 05:35 一路 402「Insufficient balance / model_access_denied」，
-  // 也就是说它已经是个**点了必失败**的选项。撤之前查的三处（撤行照这个查）：
-  //   ① 没有别的行的 fastModel 指着它（它自己的 fast 是 deepseek-v4-flash-helper）；
-  //   ② 只有它挂在上游 gmi 上 → 那条上游今天没有行了（留着，接法见上游注释）；
-  //   ③ 生产上 12 个会话钉着它 → `node server/scripts/migrate-canvas-model.mjs --from minimax-m3
-  //      --to glm-5.3-flash-merge --apply` 改钉到默认行（⛔ 不能清空钉子：清了落到 NODESIGN_MODEL
-  //      的订阅行，basic 用户照样 403 —— 08-30 zai 下架时的同一课）。
-  // ⚠️ 连带后果（站主 09-08 知情拍板）：**公开注册号从此没有免费行**（kimi-k3 是 gate 住的），全部走
-  //   美元闸。默认行 glm 一轮 ≈$0.0023，basic 的 $5/天 ≈ 2000 轮，比原来的免费轮次闸还宽。
-  // 复牌配方：upstream 'gmi'、wireModel 'MiniMaxAI/MiniMax-M3'、window 272_000（真窗口 1048576，收在
-  //   GMI「512k 以上翻倍」那道价格坎下面）、brand 'minimax'、fastModel 'deepseek-v4-flash-helper'、
-  //   thinking 'adaptive'（这家的思考是开关不是档位，发 enabled+budget 等于每轮强制想）、liftImages
-  //   false（tool_result 里的图原生直通）、四价全 0。⚠️ 复牌前先确认 GMI 账户有没有余额。
-  // ── NVIDIA build · Kimi K3（08-25）── 免费开发者档，08-25 体检（裸 OpenAI 协议）：
-  // 文本 ✓ / 工具（含回程 tool 消息）✓ / **视觉真的有** ✓（判据是 token 账：同一张图 prompt_tokens 98 → 322
-  // 且答出图里的 ND-7342 与黄色三角）/ 流式含 reasoning_content 与 tool_calls 增量、末块带 usage ✓ /
-  // prompt cache 命中（8101 里缓存 3072）✓ / 上下文实测 **40 万 token 照收**（260k/400k 两档都 200）。
-  // ⛔ 没有 /v1/messages 也没有 count_tokens（都 404）→ 走 openai-chat 转换层 + 入口本地估算。
-  // ⛔ 思考档是 **low | high | max** 三个值（上游 400 的原话：`Unsupported Kimi K3 thinking_effort="medium"`），
-  // 跟 Ox 一样，所以 medium 别写。
+  // ⛔⛔ `minimax-m3` 09-08 撤行（GMI 没余额、限免结束）：原注释与迁移脚本用法见 model-table-retired.md
   {
     // 上游至少收 400k，这里按 272k 收口：跟 deepseek 行同一个理由（每轮重传全量上下文，出网流量要钱），
     // 而且实测延迟随上下文明显变长（260k 那发 24.9s、400k 那发 39.8s）。要放大改这一个数就行。
