@@ -6,8 +6,10 @@
 # 触发：
 #   - 手动：Actions 页面 → "desktop" → Run workflow（分支任选）
 #   - 打 tag：git tag desktop-v0.0.10 && git push origin desktop-v0.0.10
-# 产物：GitHub Releases 里一份**草稿**（v<package.json 的 version>），含 NoDesign-Setup-<v>.exe、
-# .blockmap、latest.yml。草稿只有仓库成员看得到；点 Publish 之后 electron-updater 才会把它当更新。
+# 产物：GitHub Releases 里的 v<package.json 的 version>，含 NoDesign-Setup-<v>.exe、.blockmap、latest.yml。
+# ⛔⛔ **两种触发都直接发布**：最后一步 `gh release edit --draft=false --latest`，手动 dispatch 也不是草稿，
+# electron-updater 立刻把它当更新推给所有人。09-08 曾从一条落后 main 十三个提交的分支手动 dispatch 出 0.1.22，
+# 用户自动更新后丢功能（已回滚）。发之前先 `git log origin/main..HEAD` 对基线，版本号从 package.json 读。
 name: desktop
 
 on:
