@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { COLOR, GAP, RADIUS, SHADOW, FONT_SANS, FONT_SIZE, alpha } from '../../lib/theme.js';
+import { PORTAL_Z } from '../../lib/z-layers.js';
 
 /**
  * ContextMenu —— 画布的右键菜单（2026-08-08）。
@@ -71,7 +72,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
         right: flip.x ? window.innerWidth - x : undefined,
         top: flip.y ? undefined : y,
         bottom: flip.y ? window.innerHeight - y : undefined,
-        width: MENU_W, zIndex: 9000,
+        width: MENU_W, zIndex: PORTAL_Z.POPOVER,
         background: COLOR.bg,
         borderRadius: RADIUS.lg,
         boxShadow: SHADOW.menu,

@@ -20,7 +20,9 @@ import { listEntries, getEntry, removeEntry } from '../lib/showcase-store.js';
 import { getArtifactCover } from '../lib/cover.js';
 import { getSharedDir } from '../projects/workspace.js';
 import { getProject } from '../projects/store.js';
-import { selectableModelsFor, defaultModelFor, modelSourceFor } from '../engine/agent/model-context.js';
+import { selectableModelsFor, defaultModelFor, modelSourceFor, upstreamOf } from '../engine/agent/model-context.js';
+import { noteOf } from '../engine/agent/model-notes.js';
+import { upstreamHealth } from '../lib/ingress/upstream-health.js';
 import { tierOf } from '../auth/tier.js';
 import { getAvatar, setAvatar, clearAvatar, avatarAt, AVATAR_MAX_UPLOAD } from '../lib/avatar-store.js';
 
@@ -36,8 +38,33 @@ const router = express.Router();
  * `FALLBACK_MODELS` 硬编码常量，于是**带闸门的模型（本地 Qwen）在首页永远不出现** ——
  * 会话里能选、首页选不了，同一颗按钮两种清单。兜底清单从此只在这条接口也挂了时用。
  */
+/**
+ * 给每行挂上「状态色点」和「印象短语」—— 输入框上方那排贴纸的数据源（09-08）。
+ *
+ * · `health.state`  机器算的（`ingress/upstream-health.js` 的环形账）：ok / degraded / down / nodata
+ * · `note`          人写的（`engine/agent/model-notes.js`），没写就没有，界面留白
+ *
+ * ⛔ **半小时没请求一律 nodata**，不拿旧数据装绿 —— 判据在账本那边，这里只是转发。
+ * ⚠️ 色点是**上游**的健康度不是厂商的：几行共用一条上游会一起亮灭，而 merge 那条线上
+ *    究竟是谁在服务只有 `x-merge-vendor` 知道（见 upstream-health.js 头注）。
+ */
+function withHealth(options) {
+  return options.map((m) => {
+    const up = upstreamOf(m.id);
+    const h = up ? upstreamHealth.stateOf(up) : null;
+    const note = noteOf(m.id);
+    return {
+      ...m,
+      ...(note ? { note } : {}),
+      health: h
+        ? { state: h.state, samples: h.samples, lastAt: h.lastAt, lastReason: h.lastReason, medianMs: h.medianMs }
+        : { state: 'nodata', samples: 0, lastAt: null, lastReason: '', medianMs: null },
+    };
+  });
+}
+
 router.get('/models', (req, res) => {
-  res.json({ options: selectableModelsFor(req.user), default: defaultModelFor(req.user) });
+  res.json({ options: withHealth(selectableModelsFor(req.user)), default: defaultModelFor(req.user) });
 });
 
 /**

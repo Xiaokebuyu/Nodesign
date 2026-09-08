@@ -58,8 +58,10 @@ describe('角色精灵跟主精灵的能力对账', () => {
   });
 
   it('⭐ 两边在同一层 —— 差一层就"看起来不在一个平面上"（用户实报）', () => {
-    expect(/const SPRITE_Z = (\d+)/.exec(read('RoleSprites.jsx'))?.[1]).toBe('305');
-    expect(read('SpriteSketchLayer.jsx')).toContain('zIndex: 305');
+    // 09-08：判据从"两个文件里都写着 305"升级成"两边都引用同一个档位常量"。
+    // 比数字更强 —— 数字对得上只是**此刻**一样，引用同一个常量是**改了也还一样**。
+    expect(read('RoleSprites.jsx'), '角色精灵没引用档位表').toContain('SPRITE_Z = BOARD_Z.SPRITE');
+    expect(read('SpriteSketchLayer.jsx'), '主精灵没引用档位表').toContain('zIndex: BOARD_Z.SPRITE');
   });
 
   it('角色也能点开对话、闲时能拖走（主精灵这两样早就有）', () => {

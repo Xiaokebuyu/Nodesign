@@ -7,6 +7,7 @@ import BoardCanvas from './BoardCanvas.jsx';
 import FloatingToolbar from '../ui/FloatingToolbar.jsx';
 import AnnotatePopover from './AnnotatePopover.jsx';
 import { t } from '../../lib/i18n.js';
+import { BOARD_Z } from '../../lib/z-layers.js';
 
 // 懒加载（2026-07-28 重构 4）：DeckWindow 拖着 Monaco 全家，是首屏包的大头，
 // 但只在用户 ✏️ 开编辑窗时才需要 —— 动态 import 让它单独分 chunk
@@ -478,9 +479,9 @@ export default function CanvasFrame({
           boundsRef={toolbarHostRef}
           dock="bottom-center"
           stack="row"
-          // 510 = ARTIFACT_WINDOW_Z(500) + 10。写常量不 import ——
-          // ArtifactWindow 是懒加载的，为一个数字把它拖进主包不值
-          zIndex={510}
+          // ⭐ 原来这里写死 510 并注释「ArtifactWindow 懒加载，为一个数字拖进主包不值」——
+          // 那条理由随 z-layers 作废了：它是无依赖的叶子模块，import 不带任何东西进来。
+          zIndex={BOARD_Z.TOOLBAR}
           // 贴边浮现（2026-08-14，用户点名跟 AI 悬浮卡同一套手感）：平时收着，
           // 鼠标到底缘那条带就出来；末尾的图钉钉住 = 常驻
           autoHide

@@ -8,6 +8,7 @@ import { useDropzone } from '../../lib/useDropzone.js';
 import { isImeEnter } from '../../lib/helpers.js';
 import { useMedia, COARSE } from '../../lib/use-media.js';
 import ComposerTray from './ComposerTray.jsx';
+import ModelStickers from './ModelStickers.jsx';
 import SuggestionChip from './SuggestionChip.jsx';
 import ComposerMenu from './ComposerMenu.jsx';
 import ModelPicker from './ModelPicker.jsx';
@@ -205,6 +206,9 @@ export default function ChatComposer({
             <Upload size={14} /> 松开上传到附件托盘
           </div>
         )}
+        {/* 最顶：模型贴纸（09-08）——每条线现在什么状况。只报状态不管切换，切换走下面那颗按钮 */}
+        <ModelStickers />
+
         {/* 顶层：附件托盘（多 modality 信号；空时不渲染）*/}
         <ComposerTray items={trayItems} onRemove={onRemoveTrayItem} />
 

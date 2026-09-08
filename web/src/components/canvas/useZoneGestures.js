@@ -122,8 +122,16 @@ export function useZoneGestures({
    * 一起废了，所以现在只删目录和它在画布上的那些卡，**对话一个字不动**。
    * zid 就是文件夹的工作区相对路径（可以是嵌套的 `稿件/初稿`）。
    */
-  const handleDeleteFolder = useCallback(async (zid, title) => {
-    const ok = await useGlobalStore.getState().confirm({
+  /**
+   * @param {string} zid
+   * @param {string} title
+   * @param {{ confirmed?: boolean }} [opts] `confirmed: true` = 调用方已经问过了，别再问。
+   *   ⛔ 批量删除必须传它：全局 confirm 是**单槽**的（起新的会把上一个 resolve 成 false），
+   *   一个循环里连开三个确认框，前两个会被自己人掐掉，只有最后一个能弹出来 ——
+   *   于是「选中三个文件夹删除」只有最后一个真被删。09-08 查实。
+   */
+  const handleDeleteFolder = useCallback(async (zid, title, opts) => {
+    const ok = opts?.confirmed || await useGlobalStore.getState().confirm({
       title: '删除文件夹',
       message: `删除「${title || zid}」？文件夹里的全部内容会一起删掉，此操作不可撤销。对话记录不受影响。`,
       confirmLabel: '删除',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ArrowLeft, RotateCw, Hand, Play, Loader2, Globe, PowerOff, FolderOpen, ChevronDown } from 'lucide-react';
+import { ArrowLeft, RotateCw, Hand, Play, Loader2, Globe, PowerOff, FolderOpen, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { COLOR, CANVAS, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { INK_SURFACE } from '../../lib/paper.js';
 
@@ -9,8 +9,35 @@ import ArtifactWindow from './ArtifactWindow.jsx';
 import { Browse, Assets } from '../../lib/api.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 
-/** 桌面版共视（09-08）：页面是壳里的原生视图，这里只负责说它摆在哪 */
-const nativeView = () => (typeof window !== 'undefined' && window.nodesignDesktop?.browserView) || null;
+/**
+ * 桌面版画面走哪条路 —— **09-08 站主拍板改走 CDP 连续帧，这里关掉原生视图**。
+ *
+ * ## 为什么换
+ *
+ * 原生视图（Electron 的 `WebContentsView`）**永远画在所有 HTML 之上**，这是合成器
+ * 架构不是配置项：它根本不在 DOM 里，任何 z-index 都够不着它。于是它会盖住 AI 侧边栏、
+ * 盖住确认弹窗（用户点删除"没反应"其实是框被盖住了）、盖住右键菜单和浮动面板 ——
+ * 每加一个浮层就得手动为它报一次矩形，是打地鼠。
+ *
+ * 换成 CDP 截图流之后：画面是个普通 `<canvas>`，老实吃 z-index，**网页版和桌面版
+ * 并成同一条代码路径**，"只有桌面版有"的那一整类 bug 直接消失。
+ *
+ * 代价（localhost 抹不平的那部分）：JPEG 编解码的 CPU、负载下丢帧、输入要合成事件
+ * 绕一圈。站主的判断是"都本地了，质量不会比原生差多少"。
+ *
+ * ## 为什么留成一个常量而不是删干净
+ *
+ * 有一个还没实测的未知数：**屏外停车（PARK）的视图会不会持续产帧**。
+ * `Page.captureScreenshot`（单张）在 park 状态可用是已知的（`browser-host.cjs` 的
+ * PARK 机制就是为它留的），但 `Page.startScreencast`（连续帧）对被遮挡/离屏的视图
+ * 会不会被 chromium 节流，没在真 Windows 上量过。
+ *
+ * 万一不产帧 —— 把这个常量翻回 `true` 就退回原生视图，一行的事。别把这条路拆了。
+ */
+const DESKTOP_NATIVE_VIEW = false;
+/** 缩略图档的宽度上限 */
+const THUMB_W = 480;
+const nativeView = () => (DESKTOP_NATIVE_VIEW && typeof window !== 'undefined' && window.nodesignDesktop?.browserView) || null;
 
 /**
  * BrowserWindow —— 播放 agent 当前的浏览器画面，必要时你接手（2026-08-18）
@@ -67,6 +94,12 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
   const [sites, setSites] = useState([]);
   const [openSite, setOpenSite] = useState(null);
   const [shelfOpen, setShelfOpen] = useState(true);
+  /**
+   * 画面尺寸档（09-08 站主：agent 一开浏览器就展开大屏怼脸，默认先给缩略图）。
+   * 改走 CDP 之后这件事变得很便宜 —— 原生视图那套 16:9 硬契约
+   * （`zoom = 矩形宽 / 1366`，agent 坐标要 1:1）没有了，画面就是张图，缩放随便。
+   */
+  const [expanded, setExpanded] = useState(false);
   const canvasRef = useRef(null);
   const hostRef = useRef(null);      // 共视：原生视图要摆的那块（16:9）
   const native = nativeView();
@@ -274,6 +307,18 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
       }],
     },
     {
+      // 画面大小（09-08）：默认缩略图，这颗按钮把它展开。
+      // ⭐ 双击画面也能切，但**光有双击不够** —— 收起来的东西必须有一个看得见的
+      // 展开入口，不然它对没试过双击的人就等于不存在。
+      id: 'size',
+      items: [{
+        id: 'zoom',
+        icon: expanded ? Minimize2 : Maximize2,
+        title: expanded ? '缩小 —— 让画面回到缩略图大小' : '放大 —— 铺满这扇窗',
+        onClick: () => setExpanded(v => !v),
+      }],
+    },
+    {
       id: 'takeover',
       items: [{
         id: 'hand',
@@ -292,7 +337,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         },
       }],
     },
-  ], [addr, takeover, send, projectId, onClose, native, agentBusy, help, liveHelp]);
+  ], [addr, takeover, send, projectId, onClose, native, agentBusy, help, liveHelp, expanded]);
 
   const stateLine = {
     connecting: '连接中…',
@@ -337,9 +382,15 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         {!native && <canvas
           ref={canvasRef}
           tabIndex={takeover ? 0 : -1}
-          title={takeover ? '接手中：点一下这块画面再打字（键盘只在这里生效）' : undefined}
+          onDoubleClick={() => setExpanded(v => !v)}
+          title={takeover
+            ? '接手中：点一下这块画面再打字（键盘只在这里生效）'
+            : (expanded ? '双击缩小' : '双击放大')}
           style={{
-            maxWidth: '100%', maxHeight: '100%', display: gotFrame ? 'block' : 'none',
+            // 缩略图档：宽度封在 THUMB_W，双击或点工具栏那颗按钮展开
+            maxWidth: expanded ? '100%' : THUMB_W, maxHeight: '100%',
+            display: gotFrame ? 'block' : 'none',
+            transition: 'max-width 220ms cubic-bezier(0.32,0.72,0,1)',
             background: '#fff', borderRadius: 2,
             boxShadow: '0 2px 12px rgba(43,39,35,.18)',
             cursor: takeover ? 'pointer' : 'default',

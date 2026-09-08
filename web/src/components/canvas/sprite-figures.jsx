@@ -10,6 +10,7 @@
  *   - deepseek 鲸：常态是起伏/甩尾/呼吸/喷气四条**周期不整除**的动作叠在一起（看不出循环点），
  *              干活期间每隔一会儿潜一次 —— 潜是有信息量的动作，所以卡在"开始干活"和随机间隔上
  *   - opencode 方块光标：下半截填充块像终端光标那样涨落。Ox 是隐身模型，画供应商的标
+ *   - glm      Z 的三笔顺序提亮（09-08）：**只在精灵上**，picker 里那枚是静态的
  *   - 其它（gemini/qwen）没有专门的动法：出场画法一样，干活时整体轻微呼吸
  *
  * 动画全在 CSS，节点不重挂 —— 精灵是常驻元素，React 侧只切 class 和几个计时器。
@@ -17,7 +18,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { PAPER } from '../../lib/paper.js';
 import { CLAUDE_BRAND, CLAUDE_PATH } from '../ui/claude-mark.js';
-import { MARKS } from '../ui/ModelMark.jsx';
+import { MARKS, GLM_STROKES } from '../ui/ModelMark.jsx';
+
+/**
+ * GLM 三笔的错拍与周期。⭐ 跟鲸那四条同一条纪律：**周期别跟别的动作整除**，
+ * 整除的话几秒就看出循环点 —— 那是「在放动画」不是「活着」。
+ * 340 是二分出来的：260 显得慌，420 拖沓。
+ */
+const GLM_STEP = 340;
+const GLM_PERIOD = 1900;
 
 /** 描线用时（手写文字的起笔时刻拿它当 delay，字总在图标成形后才落） */
 export const MARK_DRAW_MS = 760;
@@ -114,6 +123,22 @@ export const FIGURE_KEYFRAMES = `
     88%, 100% { transform: skewY(0); }
   }
   @keyframes ndSeaBreath { 0% { transform: scale(1); } 50% { transform: scale(1.028); } 100% { transform: scale(1); } }
+  /**
+   * GLM 三笔顺序提亮（09-08 站主选的 v2 ① 那版）。
+   *
+   * ⚠️ 这是**只给精灵用的**。同一个动法放进 picker 行会出事：半透明在这套界面里
+   * 已经有含义了 ——「这一项不可用」，而 picker 马上要放可用性状态色点，两者会抢同一句话。
+   * 站主 09-08 明确划了范围：精灵上动，picker 不动。
+   *
+   * 底 0.34 是量过的：整枚平均灰度比闲态淡 +0.243，比其余变体高一个数量级。
+   * 在纸面精灵上这是"轮流被点到"，在一行模型名旁边就是"这行是灰的"——同一个动画，
+   * 两个语境两种读法，所以范围必须钉死。
+   */
+  @keyframes ndGlmLit {
+    0%, 100% { opacity: 0.34; }
+    12%      { opacity: 1; }
+    38%      { opacity: 0.34; }
+  }
   @keyframes ndSeaSpout {
     0%   { stroke-dashoffset: 1; opacity: 0; }
     3%   { opacity: 0.9; }
@@ -307,6 +332,34 @@ function OpenCodeFigure({ size, active }) {
 }
 
 /**
+ * 干活时的 GLM：Z 的三笔**顺序提亮**（上横 → 斜杠 → 下横），闲时静止。
+ *
+ * ⭐ 三笔的墨量是 12.9 / 75.3 / 13.5（视图单位²）—— 斜杠一个人占 74%。所以错拍
+ * 不是等分的：`STEP` 走完两拍就到斜杠，读起来是"小 → 大 → 小"，跟 Z 的笔顺一致。
+ *
+ * ⛔ 墨色形状只画一份（跟 OpenCode 那枚同一条纪律）：静态一份 + 动画一份叠着，
+ * 静止时严丝合缝，一动就露双影。
+ */
+function GlmFigure({ size, active }) {
+  const mark = MARKS.glm;
+  return (
+    <Frame vb={mark.vb} size={size}>
+      {GLM_STROKES.map((d, i) => (
+        <path key={`pen${i}`} d={d} pathLength="1" {...PENCIL_STROKE} style={PENCIL_IN} />
+      ))}
+      {GLM_STROKES.map((d, i) => (
+        <path
+          key={i} d={d} fill={mark.color}
+          style={active
+            ? { animation: `ndGlmLit ${GLM_PERIOD}ms linear infinite`, animationDelay: `${i * GLM_STEP - GLM_PERIOD}ms` }
+            : INK_IN}
+        />
+      ))}
+    </Frame>
+  );
+}
+
+/**
  * 精灵的身体。`brand` 认不出时不画（服务端有断言兜着，这里只可能是前端比服务端旧）——
  * 宁可空着也不画错一家的标。
  *
@@ -364,6 +417,7 @@ export function SpriteFigure({ brand, size = 44, active = false, onClick, onDrag
   if (brand === 'claude') body = active ? <ClaudeSpinner size={size} /> : <InkSketch mark={mark} size={size} />;
   else if (brand === 'deepseek') body = <WhaleFigure size={size} active={active} />;
   else if (brand === 'opencode') body = <OpenCodeFigure size={size} active={active} />;
+  else if (brand === 'glm') body = <GlmFigure size={size} active={active} />;
   // gemini / qwen 没有专门的动法：出场画法一样，干活时整体轻微呼吸
   else body = <InkSketch mark={mark} size={size} style={active ? { animation: 'ndSeaBreath 2600ms ease-in-out infinite', transformOrigin: 'center' } : undefined} />;
   return (

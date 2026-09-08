@@ -6,6 +6,7 @@ import { isImeEnter } from '../../lib/helpers.js';
 import { SpriteFigure, FIGURE_KEYFRAMES, MARK_DRAW_MS, figureWidth } from './sprite-figures.jsx';
 import { useCurrentModelBrand } from '../../lib/model-brand.js';
 import { MAIN_AGENT_ID } from '../../lib/board-presence.js';
+import { BOARD_Z } from '../../lib/z-layers.js';
 
 /**
  * SpriteSketchLayer —— 铅笔定格精灵（2026-08-14，日记本批）
@@ -106,7 +107,7 @@ export function SpriteAskInput({ x, y, width = 350, onSubmit, onClose }) {
   useEffect(() => { ref.current?.focus(); }, []);
   return (
     <div
-      style={{ position: 'absolute', left: x, top: y, width, zIndex: 320, pointerEvents: 'auto' }}
+      style={{ position: 'absolute', left: x, top: y, width, zIndex: BOARD_Z.SPRITE_BUBBLE, pointerEvents: 'auto' }}
       onPointerDown={(e) => e.stopPropagation()}
     >
       <input
@@ -397,7 +398,7 @@ export function AmbientSpriteLayer({ agentActive = false, workAnchor = null, cam
   return (
     <>
       <div style={{
-        position: 'absolute', left: at.x, top: at.y, zIndex: 305, pointerEvents: 'none',
+        position: 'absolute', left: at.x, top: at.y, zIndex: BOARD_Z.SPRITE, pointerEvents: 'none',
         // 头顶位整块往上吊一个自身高度：留白就跟手写行有几行无关了
         transform: hang ? 'translateY(-100%)' : undefined,
         // 目标间移动是"走过去"；槽位重落走 drawKey 重画（定格换场），过渡不碍事。
@@ -420,7 +421,7 @@ export function AmbientSpriteLayer({ agentActive = false, workAnchor = null, cam
       {hasFrames && frameSpot && (
         <div style={{
           position: 'absolute', left: frameSpot.x, top: frameSpot.y, width: FRAME_W,
-          zIndex: 304, pointerEvents: 'auto',
+          zIndex: BOARD_Z.SPRITE_FRAME, pointerEvents: 'auto',
           display: 'flex', flexDirection: 'column', gap: 10,
           transition: 'left 300ms cubic-bezier(0.32,0.72,0,1), top 300ms cubic-bezier(0.32,0.72,0,1)',
         }}>

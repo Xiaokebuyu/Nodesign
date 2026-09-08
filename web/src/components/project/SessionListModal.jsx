@@ -7,6 +7,7 @@ import { Sessions } from '../../lib/api.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { timeAgo } from '../../lib/helpers.js';
 import { useHoverReveal } from '../../lib/use-hover-reveal.js';
+import { SHELL_Z } from '../../lib/z-layers.js';
 
 /**
  * SessionListModal —— 项目内 session 历史列表（S4）
@@ -338,7 +339,7 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
             borderRadius: RADIUS.md,
             boxShadow: SHADOW.pop,
             padding: GAP.xs,
-            zIndex: 1200,
+            zIndex: SHELL_Z.MODAL_STACKED,
           }}>
           <MenuItem icon={<GitBranch size={12} />} label="Fork" onClick={onFork} />
           <MenuItem icon={<Edit2 size={12} />} label="重命名" onClick={onRename} />

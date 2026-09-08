@@ -8,7 +8,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { SpriteFigure, figureWidth } from './sprite-figures.jsx';
-import { MARKS } from '../ui/ModelMark.jsx';
+import { MARKS, GLM_STROKES } from '../ui/ModelMark.jsx';
+import ModelMark from '../ui/ModelMark.jsx';
 
 function mount(props) {
   const host = document.createElement('div');
@@ -34,6 +35,46 @@ describe('SpriteFigure', () => {
     const star = mount({ brand: 'claude' });
     expect(star.html()).toContain(MARKS.claude.paths[0].d.slice(0, 40));
     star.unmount();
+  });
+
+  describe('GLM 三笔顺序提亮（09-08）', () => {
+    it('三笔是三个独立形状，各带各的错拍', () => {
+      const m = mount({ brand: 'glm', active: true });
+      const paths = [...m.host.querySelectorAll('path')].filter(p => p.getAttribute('fill') === MARKS.glm.color);
+      expect(paths.length, '墨色形状应该正好三份（三笔）').toBe(3);
+      const delays = paths.map(p => p.style.animationDelay);
+      expect(new Set(delays).size, `三笔的 delay 得各不相同，现在是 ${delays.join(' / ')}`).toBe(3);
+      for (const p of paths) expect(p.style.animation).toContain('ndGlmLit');
+      m.unmount();
+    });
+
+    it('闲着时不动（全站规矩：闲态只呼吸，这枚连呼吸都不做）', () => {
+      const m = mount({ brand: 'glm', active: false });
+      expect(m.html()).not.toContain('ndGlmLit');
+      m.unmount();
+    });
+
+    it('⛔ 墨色形状只画一份 —— 静态一份+动画一份叠着，一动就露双影', () => {
+      const m = mount({ brand: 'glm', active: true });
+      for (const d of GLM_STROKES) {
+        const n = [...m.host.querySelectorAll('path')].filter(p => p.getAttribute('d') === d).length;
+        // 一份铅笔稿 + 一份墨 = 2；出现 3 份就是双影
+        expect(n, `这一笔画了 ${n} 份（应该是铅笔稿 1 + 墨 1）`).toBe(2);
+      }
+      m.unmount();
+    });
+
+    it('⭐⭐ 这个动画**不许**漏进 picker —— 半透明在那儿的意思是「不可用」', () => {
+      // 站主 09-08 划的范围：精灵上动、picker 不动。而且 picker 马上要放
+      // 可用性状态色点，一枚会自己变淡的标会跟那颗点抢同一句话。
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const root = createRoot(host);
+      act(() => { root.render(<ModelMark brand="glm" size={16} />); });
+      expect(host.innerHTML).not.toContain('ndGlmLit');
+      expect(host.innerHTML).not.toContain('animation');
+      act(() => { root.unmount(); }); host.remove();
+    });
   });
 
   it('认不出的 brand 什么都不画（宁可空着也不画错一家的标）', () => {

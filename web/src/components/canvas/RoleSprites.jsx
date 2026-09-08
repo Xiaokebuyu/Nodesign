@@ -52,9 +52,10 @@ import { PAPER } from '../../lib/paper.js';
 import { TEXT_FONT_CSS } from '../../lib/text-fonts.js';
 import { isRolePresence, slugOfPresence } from '../../lib/board-presence.js';
 import { useCurrentModelBrand } from '../../lib/model-brand.js';
+import { BOARD_Z } from '../../lib/z-layers.js';
 
 /** 跟主精灵同一层（AmbientSpriteLayer 用的就是 305）—— 差一层就"看着不在一个平面上" */
-const SPRITE_Z = 305;
+const SPRITE_Z = BOARD_Z.SPRITE;
 
 /**
  * 候场时那句常驻提示（2026-08-28 用户拍板）。

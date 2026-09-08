@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Monitor, Folder, Check } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SANS, FONT_KAI, FONT_SIZE, alpha } from '../../lib/theme.js';
 import { PAPER, PAPER_SHADOW, GRAIN } from '../../lib/paper.js';
+import { PORTAL_Z } from '../../lib/z-layers.js';
 
 /**
  * MoveToPopover —— 「移动到…」的目标选择（2026-08-13）。
@@ -92,7 +93,7 @@ export default function MoveToPopover({ x, y, folders = [], current = '', exclud
         right: flip.x ? window.innerWidth - x : undefined,
         top: flip.y ? undefined : y,
         bottom: flip.y ? window.innerHeight - y : undefined,
-        width: POP_W, maxHeight: MAX_H, zIndex: 9000,
+        width: POP_W, maxHeight: MAX_H, zIndex: PORTAL_Z.POPOVER,
         display: 'flex', flexDirection: 'column',
         background: PAPER.paper, backgroundImage: GRAIN,
         borderRadius: 2, boxShadow: PAPER_SHADOW.near,

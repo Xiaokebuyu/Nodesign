@@ -64,8 +64,12 @@ export function buildBoardMenu(ctx, act) {
             title: '删除选中的内容', message: `删掉这 ${sel.length} 件？`, confirmLabel: '删除', danger: true,
           });
           if (!ok) return;
-          objs.forEach(o => act.handleDeleteNote(o));
-          zones.forEach(z => act.handleDeleteFolder(z, z.split('/').pop()));
+          // ⛔ 09-08：原来这两行是 forEach 不 await。文件夹那条尤其坏 ——
+          // handleDeleteFolder 自己还会再 await 一次确认，而全局 confirm 是**单槽**
+          // （起新的会把上一个 resolve 成 false），于是三个文件夹只有最后一个弹得出框、
+          // 前两个静默返回。串行 await + confirmed:true（上面已经问过一次了）两处一起改才对。
+          for (const o of objs) await act.handleDeleteNote(o);
+          for (const z of zones) await act.handleDeleteFolder(z, z.split('/').pop(), { confirmed: true });
         },
       },
     ];

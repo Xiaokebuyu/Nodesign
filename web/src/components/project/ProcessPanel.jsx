@@ -5,6 +5,7 @@ import { PAPER } from '../../lib/paper.js';
 import { useProcessStore } from '../../stores/processStore.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { t } from '../../lib/i18n.js';
+import { SHELL_Z } from '../../lib/z-layers.js';
 
 /**
  * 进程卡（2026-09-07 桌面端·缝三）：顶栏一枚徽章 + 一张面板。
@@ -90,7 +91,7 @@ function ProcessPanel({ pid, onClose, onWatch }) {
   return (
     <div
       style={{
-        position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 460, maxHeight: '70vh', zIndex: 900,
+        position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 460, maxHeight: '70vh', zIndex: SHELL_Z.PANEL,
         display: 'flex', flexDirection: 'column',
         background: PAPER.paper, border: `1px solid ${PAPER.hair}`, borderRadius: 3,
         boxShadow: '0 12px 32px rgba(43,33,23,0.22)', fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: PAPER.ink2,

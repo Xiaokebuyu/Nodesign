@@ -309,6 +309,14 @@ export const Assets = {
    */
   renameEntry: (pid, from, name) =>
     jsonRequest('POST', `/api/projects/${pid}/rename`, { from, name }),
+  /**
+   * 删掉一件文件形态的东西（09-08 新增）。
+   * `rel` 是工作区相对路径，跟 renameEntry/moveEntry 的 `from` 同一个口径
+   * （物件 id 去掉 `kind:` 前缀）。⛔ 在这条之前，非便签的卡全被塞进 removeNote，
+   * 那条只收 `assets/notes/` 下的 .md —— 删图片必 400，而且前端把错吞了。
+   */
+  removeEntry: (pid, rel) =>
+    jsonRequest('DELETE', `/api/projects/${pid}/entries/${rel.split('/').map(encodeURIComponent).join('/')}`),
   removeFolder: (pid, rel) =>
     jsonRequest('DELETE', `/api/projects/${pid}/folders/${String(rel).split('/').map(encodeURIComponent).join('/')}`),
   /** 画布布局（空间画布，含 zones 分区）*/

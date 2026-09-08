@@ -31,6 +31,7 @@ import { USER_UPLOAD_DIR, ensureUploadDir, uploadRefPath, listUploadedAssets, de
 import { getProjectCover } from '../lib/cover.js';
 import { makeDocxPageHandler, makeDocxPdfHandler } from './assets/docx-page.js';
 import { mountNotesRoutes } from './assets/notes.js';
+import { mountEntryRoutes } from './assets/entries.js';
 import { safeSegment, decorateNoteText, decorateFilePreview, PREVIEW_EXTS } from './assets/helpers.js';
 import { CHALK_DIR } from '../lib/chalk.js';
 import {
@@ -726,48 +727,6 @@ router.post('/:pid/rename', express.json(), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/:pid/folders/*subPath', async (req, res, next) => {
-  try {
-    if (!guardProject(req, res)) return;
-    const raw = req.params.subPath;
-    const rel = (Array.isArray(raw) ? raw.join('/') : (raw || '')).replace(/\/+$/, '');
-    if (!rel) return res.status(400).json({ error: 'folder path required' });
-
-    const root = getSharedDir(req.params.pid);
-    const dir = path.resolve(root, rel);
-    // 防越界 + 防把工作区自己删了；保留目录一概不许删（.claude 里是项目指引和
-    // 记忆，.nd 是各次对话的暗档案，.git 是历史 —— 都不是"用户的文件夹"）
-    if (dir !== path.join(root, rel) || !dir.startsWith(root + path.sep)) {
-      return res.status(400).json({ error: 'invalid path' });
-    }
-    if (RESERVED_DIRS.has(rel.split('/')[0])) {
-      return res.status(400).json({ error: 'reserved directory' });
-    }
-    const st = await fs.stat(dir).catch(() => null);
-    if (!st?.isDirectory()) return res.status(404).json({ error: 'folder not found' });
-
-    // 是个正在演的故事就先停进程、摘运行时（09-06）：不然文件夹没了它还活着，下一句话把 场景/ 重新长出来
-    try { if (await dropStage(req.params.pid, rel, 'folder-deleted')) console.log(`[assets] ${req.params.pid}/${rel} 删除：演出进程已停`); } catch { /* 不是故事 */ }
-    await fs.rm(dir, { recursive: true, force: true });
-
-    // board.json 跟着剪：这个文件夹自己的那行，以及住在它里面的全部物件。
-    // 不剪的话磁盘上没了、画布上还在，就是 2026-07-30 那批「删不掉的僵尸
-    // 文件夹」的来源 —— 删除必须是一个动作，不能指望前端补第二刀。
-    const board = await readBoard(req.params.pid);
-    const patch = { zones: { [rel]: null }, objects: {} };
-    const under = `${rel}/`;
-    for (const id of Object.keys(board?.objects || {})) {
-      const p = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id;
-      if (p === rel || p.startsWith(under)) patch.objects[id] = null;
-    }
-    for (const zid of Object.keys(board?.zones || {})) {
-      if (zid.startsWith(under)) patch.zones[zid] = null;      // 嵌套在里面的子文件夹
-    }
-    await patchBoard(req.params.pid, patch);
-
-    res.json({ ok: true, removed: rel, objects: Object.keys(patch.objects).length });
-  } catch (err) { next(err); }
-});
 
 router.get('/:pid/artifact-file/*subPath', async (req, res, next) => {
   try {
@@ -884,6 +843,9 @@ router.get('/:pid/artifact-file/*subPath', async (req, res, next) => {
     res.end(await fs.readFile(servePath));
   } catch (err) { next(err); }
 });
+
+// 删除（assets/entries.js）——文件与文件夹共用同一套闸
+mountEntryRoutes({ router, guardProject, getSharedDir });
 
 // 便签增删改（assets/notes.js）——自成一体，不跟这里其余路由共享状态
 mountNotesRoutes({ router, guardProject, getSharedDir, ensureProjectWorkspace, sanitizeFilename });
