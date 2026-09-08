@@ -346,3 +346,71 @@ export async function revertToTurn(projectId, runId) {
   statusCache.delete(folder);
   return { restored: restore, removed: remove };
 }
+
+// ── 分支纪律（09-08 站主定）：改之前工作树要干净，而且在 NoDesign 自己的分支上，不在 main 上改 ──
+//
+// 每轮开工前（turn.js 收到请求、起 run 之前）机器跑一遍：
+//   没 git → init + 把 HARD_IGNORE_DIRS 和 .nodesign 写进 info/exclude + 把现状提交成「NoDesign 接手前的样子」
+//   已在 nodesign/* 分支 → 什么都不做
+//   工作树不干净 → 不切（切了会把他的改动一起带走，谁的都分不清），交给状态块让 agent 先问
+//   干净 → `git switch -c nodesign/<yyyymmdd-hhmm>`
+// 只在这里做一次判断、结果回给调用方和状态块；agent 那边照状态块的话行事。
+
+export const WORK_BRANCH_PREFIX = 'nodesign/';
+
+async function gitOk(folder, args, opts) {
+  return (await gitEnv(folder, args, process.env, opts)) != null;
+}
+
+async function ensureLocalExclude(folder) {
+  const excludeFile = path.join(folder, '.git', 'info', 'exclude');
+  let existing = '';
+  try { existing = await fs.readFile(excludeFile, 'utf8'); } catch { /* 没有就建 */ }
+  const have = new Set(existing.split('\n').map(l => l.trim()));
+  const want = [`${NODESIGN_DIR}/`, ...[...HARD_IGNORE_DIRS].map(d => `${d}/`)].filter(l => !have.has(l));
+  if (!want.length) return;
+  await fs.mkdir(path.dirname(excludeFile), { recursive: true });
+  await fs.writeFile(excludeFile, `${existing.replace(/\n*$/, existing ? '\n' : '')}${want.join('\n')}\n`, 'utf8');
+}
+
+function workBranchName(now = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${WORK_BRANCH_PREFIX}${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}`;
+}
+
+/**
+ * @returns {Promise<null|{ action:'none'|'init'|'branched'|'dirty'|'already'|'failed', branch:string|null, dirty:number, note?:string }>}
+ *   null = 不是仓库项目
+ */
+export async function ensureWorkBranch(projectId) {
+  const folder = repoFolderOf(projectId);
+  if (!folder) return null;
+  const out = { action: 'none', branch: null, dirty: 0 };
+  try {
+    if (!(await isGitRepo(folder))) {
+      if (!(await gitOk(folder, ['init', '-q', '-b', 'main']))) return { ...out, action: 'failed', note: 'git init 失败' };
+      await ensureLocalExclude(folder);
+      await gitOk(folder, ['add', '-A', '--', '.'], { timeoutMs: 120000 });
+      await gitOk(folder, ['-c', 'user.email=nodesign@local', '-c', 'user.name=NoDesign', 'commit', '-q', '--allow-empty', '-m', 'NoDesign 接手前的样子'], { timeoutMs: 120000 });
+      out.action = 'init';
+    }
+    await ensureLocalExclude(folder);
+    statusCache.delete(folder);
+    const status = await gitStatusMap(folder, { fresh: true });
+    out.dirty = status ? status.size : 0;
+    const branch = ((await gitEnv(folder, ['rev-parse', '--abbrev-ref', 'HEAD'], process.env)) || '').trim();
+    out.branch = branch || null;
+    if (branch.startsWith(WORK_BRANCH_PREFIX)) return { ...out, action: out.action === 'init' ? 'init' : 'already' };
+    if (out.dirty > 0) return { ...out, action: 'dirty' };
+    // 空仓库（还没有任何提交）切不了分支：先落一个空提交当根
+    if (!(await gitOk(folder, ['rev-parse', '--verify', 'HEAD']))) {
+      await gitOk(folder, ['-c', 'user.email=nodesign@local', '-c', 'user.name=NoDesign', 'commit', '-q', '--allow-empty', '-m', 'NoDesign 接手前的样子']);
+    }
+    const name = workBranchName();
+    if (!(await gitOk(folder, ['switch', '-q', '-c', name]))) return { ...out, action: 'failed', note: '开分支失败' };
+    statusCache.delete(folder);
+    return { ...out, action: 'branched', branch: name };
+  } catch (err) {
+    return { ...out, action: 'failed', note: err?.message || String(err) };
+  }
+}

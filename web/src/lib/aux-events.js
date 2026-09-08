@@ -34,6 +34,14 @@ export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
     case 'repo.turn_done':
       useRepoStore.getState().turnDone(evt);
       return true;
+    // 开工前的分支纪律结果（09-08）：机器切了分支 / init 了 git / 工作树不干净没切。说一声，卡面跟着刷
+    case 'repo.branch':
+      useRepoStore.getState().touch(evt);
+      if (evt.action === 'branched') showToast?.(`仓库：已切到分支 ${evt.branch}，改动都在这条分支上`, 'info');
+      else if (evt.action === 'init') showToast?.(`仓库：这个文件夹没有 git，已 init 并切到 ${evt.branch}`, 'info');
+      else if (evt.action === 'dirty') showToast?.(`仓库：工作树有 ${evt.dirty} 处未提交改动，没开分支，agent 会先问你`, 'info');
+      else if (evt.action === 'failed') showToast?.(`仓库：没能开分支（${evt.note || '未知原因'}），agent 会先问你`, 'error');
+      return true;
     // C6: agent 的 navigate_to_page / highlight（实现在 canvas-iframe-ops.js）
     case 'run.canvas_navigate':
       if (!isStale) scrollToPage(evt.page);

@@ -53,6 +53,7 @@ import { AsyncQueue } from '../lib/async-queue.js';
 import { checkQuota, checkFreeQuota, checkConcurrency, fmtUsd } from '../lib/quota.js';
 import { shouldModerate, moderateText, recordViolation, levelFor } from '../lib/moderation.js';
 import { getProjectBus } from '../ws/broker.js';
+import { ensureWorkBranch } from '../projects/repo.js';
 import { Events } from '../engine/agent/events.js';
 import { readPendingSummary } from './pending-changes.js';
 import { pendingRewinds } from './sessions-rewind.js';
@@ -106,6 +107,15 @@ router.post('/:pid/turn', async (req, res, next) => {
     // 绕过前端直接打接口也开不了 —— 闸装在这里才算装了。
     if (project.folderPath && project.folderTrust == null) {
       return res.status(409).json({ error: 'folder trust undecided', code: 'FOLDER_TRUST_UNDECIDED' });
+    }
+    // 分支纪律（09-08 站主定）：仓库项目每轮开工前机器先把 git 备好、干净就切到 nodesign/ 分支。
+    // 结果不挡回合：不干净 / 失败都写进这轮状态块让 agent 先问用户（hooks/user-prompt-submit）。
+    if (project.folderPath) {
+      const wb = await ensureWorkBranch(project.id).catch(err => ({ action: 'failed', note: err.message }));
+      if (wb && wb.action !== 'none' && wb.action !== 'already') {
+        console.log(`[repo] ${project.id} work branch: ${wb.action}${wb.branch ? ` ${wb.branch}` : ''}${wb.dirty ? ` dirty=${wb.dirty}` : ''}${wb.note ? ` (${wb.note})` : ''}`);
+        getProjectBus(project.id).publish({ type: 'repo.branch', sessionId: null, ...wb });
+      }
     }
 
     const { chat, attachments, skillId, sessionId, permissionMode, requestId, raw, userMessageUuid } = req.body || {};

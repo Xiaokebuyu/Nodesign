@@ -24,6 +24,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getProject } from '../../../projects/store.js';
+import { repoFolderOf, repoSummary } from '../../../projects/repo.js';
 import { readUiConfigFile, withUiDefaults } from '../../../projects/ui-config.js';
 import { readAssetsSummary } from '../../../projects/assets-summary.js';
 import { relationsDigest } from '../../../lib/board-relations.js';
@@ -61,7 +62,31 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
   const sections = [];
 
   // cwd：唯一真正动态的一行。路径表（./ notes/ assets/ .claude/agent-memory/ 各是什么）在 prelude
-  sections.push({ key: 'cwd', title: '工作区', text: `你的 cwd 是 ${workspaceRoot} —— 项目工作区，产物直接存放于此（路径表见 prelude「你跑在哪」）。` });
+  // ⚠️ 仓库项目（09-08）cwd ≠ 桌面：这行曾一律写「你的 cwd 是 <桌面>」，agent 拿它当真，把 Glob 在仓库根
+  //    返回的相对路径当成桌面里的（站主贴的思考过程）。两个根分开说。
+  const repoFolder = projectId ? repoFolderOf(projectId) : null;
+  if (repoFolder) {
+    sections.push({ key: 'cwd', title: '工作区', text: `你的 cwd 是 ${repoFolder}（用户的仓库；Bash / Glob / Grep / Read / Write 都相对它）。桌面是 ${workspaceRoot}（画布看的目录，只有 NoDesign 的 MCP 工具认它；给用户看的产物写这里，用绝对路径）。` });
+    // 仓库状态 + 分支纪律（09-08 站主定）：开工前机器已经检查过并切到 nodesign/ 分支；不干净时机器不切，agent 先问
+    try {
+      const sum = await repoSummary(projectId);
+      const g = sum?.git;
+      if (g) {
+        const c = g.counts;
+        const dirty = c.modified + c.added + c.deleted + c.untracked;
+        const onWork = /^nodesign\//.test(g.branch || '');
+        const lines = [`仓库：分支 ${g.branch || '（游离 HEAD）'}${g.head ? `，上次提交 ${g.head.sha} ${g.head.subject}` : ''}；未提交改动 ${dirty} 处。`];
+        if (onWork) lines.push('你在 NoDesign 自己开的分支上，改和加都放心做；不要切回 main / master，不要 merge，合不合回去是用户的事。');
+        else if (dirty) lines.push('⚠️ 工作树不干净，所以机器**没有**替他开分支。改任何文件之前先问用户：这些改动是他自己在做的吗，要他先提交/暂存，还是就在上面继续。他答了再动。');
+        else lines.push('⚠️ 你不在 nodesign/ 分支上（机器没切成功）。改文件前先 `git switch -c nodesign/<日期-简短说明>`，别直接在这条分支上改。');
+        sections.push({ key: 'repo', title: '仓库', text: lines.join('\n') });
+      } else if (sum) {
+        sections.push({ key: 'repo', title: '仓库', text: '仓库：这个文件夹没有 git（机器应该已经 init 过了；没有的话先 `git init` 再 `git switch -c nodesign/<日期-简短说明>`，改动都在分支上做）。' });
+      }
+    } catch { /* 采不到就不说 */ }
+  } else {
+    sections.push({ key: 'cwd', title: '工作区', text: `你的 cwd 是 ${workspaceRoot} —— 项目工作区，产物直接存放于此（路径表见 prelude「你跑在哪」）。` });
+  }
 
   // 素材：顶层 assets/ + assets/references/**（逛站采回来的）
   try {

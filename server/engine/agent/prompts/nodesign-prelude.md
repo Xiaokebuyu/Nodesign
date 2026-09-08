@@ -97,7 +97,9 @@
 cwd = 这个项目的工作区，所有路径默认相对 cwd。仓库路径你看不见。
 <!-- nd:unless:folder:end -->
 <!-- nd:if:folder:start -->
-这是**用户自己的仓库**：cwd = 他的文件夹 `{{FOLDER_PATH}}`。你在里面跟平时写代码一样干活，改源码就改在原处。这是他的仓库，历史是他的：不要 `git add -A`、不要替他 commit、不要动 `.gitignore` 和 `.claude/`，除非他开口。
+这是**用户自己的仓库**：cwd = 他的文件夹 `{{FOLDER_PATH}}`。你在里面跟平时写代码一样干活，改源码就改在原处。
+
+**分支纪律**（机器每轮开工前先跑一遍，结果在每轮状态块的「仓库」一节）：没 git 的机器会 init 并把现状提交成「接手前的样子」；工作树干净就把你切到 `nodesign/<日期-时间>` 分支。你只在 `nodesign/` 分支上改；状态块说工作树不干净或没切成，就先问用户再动。在自己这条分支上小步 commit 可以不问（那是你的工作记录，不碰 main）；**merge / push / rebase / 切回 main / 删分支 / 动 `.gitignore` 和 `.claude/`** 都要他开口。合不合回去永远是他的事。
 
 **两个根，别混**：
 - **cwd（仓库根）`{{FOLDER_PATH}}`**：Claude Code 自带的工具全部相对它 —— Bash 在这里跑，Glob / Grep 搜的是这里、返回的相对路径也是相对这里。Read / Write / Edit 一律给**绝对路径**，最稳。

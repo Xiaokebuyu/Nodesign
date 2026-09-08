@@ -122,3 +122,44 @@ describe('改道安全网：快照 / 结算 / 回退', () => {
     expect(await recordTurnEnd('proj_nope0000_none', 'x')).toBeNull();
   });
 });
+
+describe('分支纪律：开工前机器备好 git、切到 nodesign/ 分支', () => {
+  it('干净的仓库：切到 nodesign/<日期> 分支；再来一轮不动', async () => {
+    const { ensureWorkBranch, WORK_BRANCH_PREFIX } = await import('./repo.js');
+    // beforeAll 留下的改动先清干净（上面的回退测试已经还原过，这里再保险一次）
+    git(dir, 'checkout', '--', '.'); git(dir, 'clean', '-fdq', '--', 'src');
+    const a = await ensureWorkBranch(pid);
+    expect(a.action).toBe('branched');
+    expect(a.branch.startsWith(WORK_BRANCH_PREFIX)).toBe(true);
+    expect(git(dir, 'rev-parse', '--abbrev-ref', 'HEAD').trim()).toBe(a.branch);
+    const b = await ensureWorkBranch(pid);
+    expect(b.action).toBe('already');
+    expect(b.branch).toBe(a.branch);
+  });
+  it('不干净的 main：不切分支，报 dirty 数', async () => {
+    const { ensureWorkBranch } = await import('./repo.js');
+    git(dir, 'switch', '-q', 'main');
+    fs.writeFileSync(path.join(dir, 'README.md'), '# dirty\n');
+    const r = await ensureWorkBranch(pid);
+    expect(r.action).toBe('dirty');
+    expect(r.dirty).toBe(1);
+    expect(git(dir, 'rev-parse', '--abbrev-ref', 'HEAD').trim()).toBe('main');
+    git(dir, 'checkout', '--', 'README.md');
+  });
+  it('没有 git 的文件夹：init、exclude 里有 .nodesign 和 node_modules、根提交、再切分支', async () => {
+    const { ensureWorkBranch } = await import('./repo.js');
+    const plain = path.join(tmp, 'plain');
+    fs.mkdirSync(path.join(plain, 'node_modules', 'x'), { recursive: true });
+    fs.writeFileSync(path.join(plain, 'app.py'), 'print(1)\n');
+    const { project } = await openFolder({ path: plain });
+    const r = await ensureWorkBranch(project.id);
+    expect(r.action).toBe('branched');
+    expect(fs.existsSync(path.join(plain, '.git'))).toBe(true);
+    const exclude = fs.readFileSync(path.join(plain, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude).toMatch(/^\.nodesign\/$/m);
+    expect(exclude).toMatch(/^node_modules\/$/m);
+    expect(git(plain, 'log', '--format=%s', 'main').trim()).toBe('NoDesign 接手前的样子');
+    expect(git(plain, 'ls-tree', '--name-only', 'main').trim().split('\n')).toEqual(['app.py']);   // node_modules 没进
+    expect(git(plain, 'rev-parse', '--abbrev-ref', 'HEAD').trim()).toBe(r.branch);
+  });
+});
