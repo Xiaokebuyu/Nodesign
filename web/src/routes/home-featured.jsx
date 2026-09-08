@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Market } from '../lib/api-market.js';
+import { useGlobalStore } from '../stores/globalStore.js';
 import { sheetClassOf } from './home-sheets.js';
 import { timeAgo } from '../lib/helpers.js';
 import { t } from '../lib/i18n.js';
@@ -30,6 +31,14 @@ export function useFeatured(enabled) {
 
 export function FeaturedCard({ pub, tilt }) {
   const [failed, setFailed] = useState(false);
+  const navigate = useNavigate();
+  const showToast = useGlobalStore((s) => s.showToast);
+  // 照着来一个（v2）：新项目 + 参考图 + skill，进工作台自动发开工提示词（agent 先对齐再做）
+  const fork = async (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try { const r = await Market.fork(pub.id); navigate(`/projects/${r.projectId}/work`, { state: { initialMessage: r.prompt } }); }
+    catch (err) { showToast(err.code === 'WEB_ONLY' ? t('桌面版暂不支持照着来一个，请在网页端操作') : t('没开成：{err}', { err: err.message }), 'error'); }
+  };
   return (
     <div className={`ndd-card ${sheetClassOf('design')}`}>
       <Link to={`/market/${pub.id}`} style={{ '--rot': tilt }}>
@@ -42,12 +51,13 @@ export function FeaturedCard({ pub, tilt }) {
         )}
         <div className="t">{pub.title}</div>
         <div className="m">
-          <span>{t('{name} 的 skill', { name: pub.author?.username || '' })}</span>
+          <span>{pub.hasSkill === false ? t('{name} 的作品', { name: pub.author?.username || '' }) : t('{name} 的 skill', { name: pub.author?.username || '' })}</span>
           <span>{timeAgo(pub.createdAt)}</span>
         </div>
       </Link>
       <span className="pin" />
       <span className="last peer">{t('别人的')}</span>
+      <button type="button" className="ndd-fork" onClick={fork} title={t('开一个新项目：参考图放进去、有 skill 就装上，agent 先跟你对齐再做')}>{t('照着来一个')}</button>
     </div>
   );
 }

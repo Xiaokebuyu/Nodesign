@@ -28,8 +28,10 @@ import multer from 'multer';
 import JSZip from 'jszip';
 
 import { can } from '../auth/tier.js';
-import { getProject, countProjects } from '../projects/store.js';
-import { getSharedDir } from '../projects/workspace.js';
+import { getProject, countProjects, createProject } from '../projects/store.js';
+import { getSharedDir, ensureProjectWorkspace } from '../projects/workspace.js';
+import { promises as fsp } from 'node:fs';
+import path from 'node:path';
 import { getEntry as getShowcaseEntry } from '../lib/showcase-store.js';
 import { getArtifactCover } from '../lib/cover.js';
 import { validateSkillUpload, LIMITS } from '../lib/plugin-validator.js';
@@ -38,7 +40,7 @@ import { writePluginOrigin } from '../lib/plugin-origin.js';
 import { packPluginDir, findUserPluginDir } from '../lib/plugin-pack.js';
 import { getUserPluginsRoot } from '../engine/agent/plugin-loader.js';
 import {
-  createPublication, getPublication, listApproved, listByUser, listFeatured, featuredSlotsFor,
+  createPublication, updatePublication, findOwnActive, getPublication, listApproved, listByUser, listFeatured, featuredSlotsFor,
   withdrawPublication, readSkillBuffer, readSkillMd, readImage, recordInstall, installedIdsFor,
   normalizeImage, IMAGE_MAX_COUNT, IMAGE_MAX_UPLOAD, TITLE_MAX, NOTE_MAX,
 } from './market-store.js';
@@ -79,6 +81,51 @@ function publicView(pub, installed) {
   // reviewNote / reviewedAt 是站主的内部批注（09-08 审出漏到货架上）
   const { userId, skillSha256, skillMode, reviewedBy, reviewNote, reviewedAt, ...rest } = pub;
   return { ...rest, installed: installed?.has(pub.id) || false };
+}
+
+/**
+ * 从"用户 + skill 名或字节 + 图片字节 + 标题说明"落一条发布。路由（multipart）和 agent 的注册口（lib/market-bridge）共用。
+ * 图片是原图字节（这里 normalize）。返回 { status, body }，不碰 res。
+ */
+export async function publishForUser({ me, skillBuffer = null, skillName = '', kind = null, images, title, note, source, showcaseId = null }) {
+  if (!can(me, 'publishSkill')) return { status: 403, body: { error: '当前档位不能发布到市场', code: 'TIER_DENIED' } };
+  title = String(title || '').trim(); note = String(note || '').trim();
+  if (!title) return { status: 400, body: { error: '标题不能为空', code: 'BAD_INPUT' } };
+  if (title.length > TITLE_MAX) return { status: 400, body: { error: `标题最长 ${TITLE_MAX} 字`, code: 'BAD_INPUT' } };
+  if (note.length > NOTE_MAX) return { status: 400, body: { error: `说明最长 ${NOTE_MAX} 字`, code: 'BAD_INPUT' } };
+  skillName = String(skillName || '').trim();
+  const isWork = kind === 'work' || (!skillBuffer && !skillName);
+  let validation = null;
+  if (!isWork) {
+    if (!skillBuffer) {
+      const hit = await findUserPluginDir(me.id, skillName);
+      if (!hit) return { status: 404, body: { error: `你的 skill 库里没有「${skillName}」`, code: 'SKILL_NOT_FOUND' } };
+      try { skillBuffer = (await packPluginDir(hit.dir)).buffer; }
+      catch (err) { return { status: 400, body: { error: `打包失败：${err.message}`, code: 'PACK_FAILED' } }; }
+    }
+    validation = await validateSkillUpload(skillBuffer);
+    if (!validation.ok) return { status: 400, body: { error: 'skill 没过校验', code: 'VALIDATION_FAILED', errors: validation.errors } };
+    // 市场只收**一个 skill、只有 SKILL.md**（09-08 审出：审核台只看第一份 SKILL.md）
+    const single = await onlyOneSkillMd(skillBuffer, validation);
+    if (!single.ok) return { status: 400, body: { error: single.reason, code: 'MULTI_FILE_SKILL' } };
+  } else skillBuffer = null;
+  const normalized = [];
+  for (const img of images || []) {
+    if (img.buf.length > IMAGE_MAX_UPLOAD) return { status: 413, body: { error: `图片 ${img.name} 超过 8MB`, code: 'IMAGE_TOO_LARGE' } };
+    try { normalized.push(await normalizeImage(img.buf)); }
+    catch (err) { return { status: 400, body: { error: `图片 ${img.name} 无法处理：${err.message}`, code: 'BAD_IMAGE' } }; }
+    if (normalized.length >= IMAGE_MAX_COUNT) break;
+  }
+  if (!normalized.length) return { status: 400, body: { error: '至少要一张参考图（截图或上传）', code: 'NO_IMAGE' } };
+  const skillMd = isWork ? null : await extractFirstSkillMd(skillBuffer, validation);
+  // 同一作者再发同一件东西 → 原地更新，不堆重复条目（v2）
+  const existing = findOwnActive({ userId: me.id, skillName: isWork ? null : validation.manifest.name, showcaseId: isWork ? showcaseId : null });
+  if (existing) {
+    const publication = await updatePublication(existing.id, { skillBuffer, validation, skillMd, images: normalized, title, note: note || null });
+    return { status: 200, body: { publication, updated: true, warnings: validation?.warnings || [] } };
+  }
+  const publication = await createPublication({ userId: me.id, skillBuffer, validation, skillMd, images: normalized, title, note: note || null, source, showcaseId });
+  return { status: 201, body: { publication, warnings: validation?.warnings || [] } };
 }
 
 /**
@@ -145,52 +192,67 @@ export function createMarketRouter({ userOf, source }) {
   router.post('/', upload.fields([{ name: 'images', maxCount: IMAGE_MAX_COUNT }, { name: 'skill', maxCount: 1 }]), async (req, res, next) => {
     try {
       const me = req.marketUser;
-      if (!can(me, 'publishSkill')) return fail(res, 403, 'TIER_DENIED', '当前档位不能发布到市场');
-      const title = String(req.body?.title || '').trim();
-      const note = String(req.body?.note || '').trim();
-      if (!title) return fail(res, 400, 'BAD_INPUT', '标题不能为空');
-      if (title.length > TITLE_MAX) return fail(res, 400, 'BAD_INPUT', `标题最长 ${TITLE_MAX} 字`);
-      if (note.length > NOTE_MAX) return fail(res, 400, 'BAD_INPUT', `说明最长 ${NOTE_MAX} 字`);
-
-      // skill 字节：桌面版直接给文件；网页给名字、这边从他装着的那份打包
-      let skillBuffer = req.files?.skill?.[0]?.buffer || null;
-      if (!skillBuffer) {
-        const skillName = String(req.body?.skillName || '').trim();
-        if (!skillName) return fail(res, 400, 'BAD_INPUT', '要发布哪个 skill？给 skillName 或上传 skill 文件');
-        const hit = await findUserPluginDir(me.id, skillName);
-        if (!hit) return fail(res, 404, 'SKILL_NOT_FOUND', `你的 skill 库里没有「${skillName}」`);
-        try { skillBuffer = (await packPluginDir(hit.dir)).buffer; }
-        catch (err) { return fail(res, 400, 'PACK_FAILED', `打包失败：${err.message}`); }
-      }
-      const validation = await validateSkillUpload(skillBuffer);
-      if (!validation.ok) return res.status(400).json({ error: 'skill 没过校验', code: 'VALIDATION_FAILED', errors: validation.errors });
-      // 市场 v1 只收**一个 skill、只有 SKILL.md**（09-08 审出：审核台只看第一份 SKILL.md，多 skill / 附件里的东西站主看不到就过审了）。
-      // 「站主逐条看过全文」这句承诺要成立，包里就只能有站主看得到的那一份。
-      const single = await onlyOneSkillMd(skillBuffer, validation);
-      if (!single.ok) return fail(res, 400, 'MULTI_FILE_SKILL', single.reason);
-
-      // 参考图：上传的优先；没传而带了 showcaseId 就截那件作品的封面
-      const images = [];
-      for (const f of req.files?.images || []) {
-        if (f.size > IMAGE_MAX_UPLOAD) return fail(res, 413, 'IMAGE_TOO_LARGE', `图片 ${f.originalname} 超过 8MB`);
-        try { images.push(await normalizeImage(f.buffer)); }
-        catch (err) { return fail(res, 400, 'BAD_IMAGE', `图片 ${f.originalname} 无法处理：${err.message}`); }
-      }
+      const images = (req.files?.images || []).map((f) => ({ buf: f.buffer, type: f.mimetype || 'image/png', name: f.originalname || 'shot' }));
+      // 没传图而带了 showcaseId：截那件作品的封面
       const showcaseId = String(req.body?.showcaseId || '').trim() || null;
       if (!images.length && showcaseId) {
         const entry = getShowcaseEntry(showcaseId);
         if (entry && entry.userId === me.id && entry.projectId && entry.artifactRel && getProject(entry.projectId)) {
           try {
             const shot = await getArtifactCover(entry.projectId, getSharedDir(entry.projectId), entry.artifactRel);
-            if (shot?.buffer) images.push(await normalizeImage(shot.buffer));
+            if (shot?.buffer) images.push({ buf: shot.buffer, type: 'image/webp', name: 'cover.webp' });
           } catch (err) { console.warn('[market] 截封面失败:', err.message); }
         }
       }
-      if (!images.length) return fail(res, 400, 'NO_IMAGE', '至少要一张参考图（截图或上传）');
+      const r = await publishForUser({
+        me, skillBuffer: req.files?.skill?.[0]?.buffer || null, skillName: req.body?.skillName, kind: String(req.body?.kind || '').trim() || null,
+        images, title: req.body?.title, note: req.body?.note, source, showcaseId,
+      });
+      res.status(r.status).json(r.body);
+    } catch (err) { next(err); }
+  });
 
-      const skillMd = await extractFirstSkillMd(skillBuffer, validation);
-      const publication = await createPublication({ userId: me.id, skillBuffer, validation, skillMd, images, title, note: note || null, source, showcaseId });
-      res.status(201).json({ publication, warnings: validation.warnings || [] });
+  // 照着来一个（v2，09-08 晚）：不复制别人的产物（09-08 早站主定的口径），而是给请求者开一个新项目：
+  // 参考图落进 参考图/、有 skill 就装进他的库、回一句预填的开工提示词（先看参考、先对齐，不直接铺量）。
+  // 只在网页（source=web）提供：桌面版的项目在用户本机，这里替他建服务器项目是错的；桌面走本地路由（待做）。
+  router.post('/:id/fork', async (req, res, next) => {
+    try {
+      const me = req.marketUser;
+      const pub = req.publication;
+      if (source !== 'web') return fail(res, 409, 'WEB_ONLY', '桌面版暂不支持照着来一个，请在网页端操作');
+      if (pub.state !== 'approved') return fail(res, 409, 'NOT_APPROVED', '这条发布还没通过审核');
+      const project = createProject({ name: String(pub.title).slice(0, 40), mode: 'design', ownerId: me.id, skillId: 'site-craft' });
+      await ensureProjectWorkspace(project.id);
+      const refDir = path.join(getSharedDir(project.id), '参考图');
+      await fsp.mkdir(refDir, { recursive: true });
+      const copied = [];
+      for (let i = 0; i < pub.imageCount; i++) {
+        const buf = await readImage(pub.id, i);
+        if (!buf) continue;
+        const name = `ref-${pub.id.replace(/^pub_/, '')}-${i + 1}.webp`;
+        await fsp.writeFile(path.join(refDir, name), buf);
+        copied.push(`参考图/${name}`);
+      }
+      let skillInstalled = false;
+      if (pub.hasSkill && can(me, 'installMarketSkill')) {
+        const root = getUserPluginsRoot(me.id);
+        if (root) {
+          const r = await installPluginToRoot(await readSkillBuffer(pub.id), root, { force: false });
+          if (r.status === 200 || r.status === 201) {
+            await writePluginOrigin(r.body.installed.path, { publicationId: pub.id, skillSha256: pub.skillSha256 });
+            recordInstall({ publicationId: pub.id, userId: me.id, skillSha256: pub.skillSha256, source });
+            skillInstalled = true;
+          } else if (r.status === 409) skillInstalled = true;   // 同名已装，照用
+        }
+      }
+      const prompt = [
+        `照着「${pub.title}」做一个我自己的版本。`,
+        copied.length ? `参考图在 ${copied[0].replace(/\/[^/]+$/, '/')} 里（${copied.length} 张），先看过。` : '',
+        pub.hasSkill ? `它的做法已经装成 skill「${pub.skillName}」，按那套方法来。` : '',
+        pub.note ? `作者的说明：${String(pub.note).slice(0, 300)}` : '',
+        '动手之前先跟我对齐：这次的内容和场合是什么、风格往哪个方向。',
+      ].filter(Boolean).join('\n');
+      res.status(201).json({ projectId: project.id, prompt, images: copied, skillInstalled });
     } catch (err) { next(err); }
   });
 
@@ -206,6 +268,7 @@ export function createMarketRouter({ userOf, source }) {
       if (!can(me, 'installMarketSkill')) return fail(res, 403, 'TIER_DENIED', '当前档位不能安装市场里的 skill');
       const pub = req.publication;
       if (pub.state !== 'approved') return fail(res, 409, 'NOT_APPROVED', '这条发布还没通过审核');
+      if (!pub.hasSkill) return fail(res, 409, 'NO_SKILL', '这是一件作品，没有可安装的 skill；用「照着来一个」');
       const root = getUserPluginsRoot(me.id);
       if (!root) return fail(res, 401, 'UNAUTHENTICATED', '需要登录');
       const force = req.query.force === '1' || req.query.force === 'true';
@@ -223,6 +286,7 @@ export function createMarketRouter({ userOf, source }) {
       const pub = req.publication;
       // 站主要能下待审的包看原件（09-08）；别人只能下 approved 的
       if (pub.state !== 'approved' && !req.isOwner && !req.isAdmin) return fail(res, 409, 'NOT_APPROVED', '这条发布还没通过审核');
+      if (!pub.hasSkill) return fail(res, 409, 'NO_SKILL', '这是一件作品，没有 skill 可下载');
       const buf = await readSkillBuffer(pub.id);
       res.set('X-ND-Skill-Sha256', pub.skillSha256);
       res.type(pub.skillMode === 'single-md' ? 'text/markdown' : 'application/zip').send(buf);

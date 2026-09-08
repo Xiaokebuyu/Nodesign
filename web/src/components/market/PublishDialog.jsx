@@ -55,9 +55,9 @@ export default function PublishDialog({ show, onClose, skillName, showcaseId = n
     <Modal show={show} onClose={busy ? undefined : onClose} title={t('发布到市场')} width={520} closable={!busy}>
       <div style={{ padding: `${GAP.lg}px ${GAP.xl}px`, display: 'flex', flexDirection: 'column', gap: GAP.xl }}>
         <div>
-          <label style={modalLabel}>Skill</label>
-          <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.md, color: PAPER.ink }}>{skillName}</div>
-          <div style={{ ...modalHint, marginTop: GAP.xs }}>{t('发的是现在装着的这份。之后本地再改，货架上的不跟着变。')}</div>
+          <label style={modalLabel}>{skillName ? 'Skill' : t('作品')}</label>
+          <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.md, color: PAPER.ink }}>{skillName || t('只发图和说明，不带 skill')}</div>
+          <div style={{ ...modalHint, marginTop: GAP.xs }}>{skillName ? t('发的是现在装着的这份。再次发布会原地更新货架上的这条。') : t('别人能「照着来一个」：参考图进他的新项目。再次发布会原地更新。')}</div>
         </div>
         <div>
           <label style={modalLabel}>{t('标题')}</label>

@@ -76,7 +76,9 @@ export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
     }
     // skill 沉淀成功（09-08 接上：服务端一直在发，前端从没消费 —— 用户不知道自己刚多了一条能发到市场的东西）
     case 'run.skill_crystallized':
-      showToast(t('skill「{name}」已存进你的 skill 库，作品进了橱窗；下个新会话生效，橱窗里能发到市场。', { name: evt.skillName || evt.title || '' }), 'success');
+      showToast(evt.skillName
+        ? t('skill「{name}」已存进你的 skill 库，作品进了橱窗；下个新会话生效，橱窗里能发到市场。', { name: evt.skillName })
+        : t('「{title}」已进你的橱窗。', { title: evt.title || '' }), 'success');
       return true;
     default:
       return false;

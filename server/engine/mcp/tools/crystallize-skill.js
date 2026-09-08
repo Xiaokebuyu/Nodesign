@@ -23,16 +23,29 @@ import { getUserPluginsRoot } from '../../agent/plugin-loader.js';
 import { installPluginToRoot } from '../../../lib/plugin-install.js';
 import { upsertEntry } from '../../../lib/showcase-store.js';
 import { getActiveArtifact } from '../../../lib/artifact-target.js';
+import { publishToMarket, marketPublisherRegistered } from '../../../lib/market-bridge.js';
+import { promises as fsp } from 'node:fs';
+import path from 'node:path';
 import { Events } from '../../agent/events.js';
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]{2,39}$/;
 
-function composeSkillMd({ name, title, description, body }) {
+/** 覆盖已有 skill 时版本号递进（0.1.0 → 0.1.1），新建从 0.1.0 起。读不到就当新建。 */
+async function nextVersion(root, name) {
+  try {
+    const md = await fsp.readFile(path.join(root, name, 'skills', name, 'SKILL.md'), 'utf8');
+    const m = md.match(/^version:\s*(\d+)\.(\d+)\.(\d+)\s*$/m);
+    if (m) return `${m[1]}.${m[2]}.${Number(m[3]) + 1}`;
+  } catch { /* 没有旧的 */ }
+  return '0.1.0';
+}
+
+function composeSkillMd({ name, title, description, body, version = '0.1.0' }) {
   return [
     '---',
     `name: ${name}`,
     `description: ${description.replace(/\n+/g, ' ').trim()}`,
-    'version: 0.1.0',
+    `version: ${version}`,
     '---',
     '',
     `# ${title.trim()}`,
@@ -48,15 +61,20 @@ function composeSkillMd({ name, title, description, body }) {
  * @param {string} [deps.sessionId]
  * @param {import('../../agent/context.js').AgentContext} [deps.ctx]
  */
-export function makeCrystallizeSkillTool({ projectId, sessionId, ctx }) {
+export function makeCrystallizeSkillTool({ projectId, sessionId, ctx, workspaceRoot = null }) {
   return tool(
     'crystallize_skill',
-    `Distill a style/approach the user and you worked out together into a REUSABLE
-SKILL owned by this user, and put the finished work in their personal showcase.
+    `Put a finished work in the user's personal showcase, optionally distill the
+style/approach into a REUSABLE SKILL owned by this user, and optionally publish
+the work (with the images you pick) to the public market.
 
-Call this ONLY when the user asks to keep a style, or explicitly confirms they
-want this approach reusable. Never call it unprompted — a skill the user did not
-ask for is clutter in every future session.
+Three uses, all ONLY on the user's explicit request — never unprompted:
+1. "Keep this style" → give name/title/description/body (the skill), plus the work.
+2. "Put this in my showcase" → omit the skill fields; give artifactPath and a title.
+3. "Publish this" / "share it to the market" → set publish: true and pick 1–6
+   images (workspace-relative paths: screenshots you took, generated images) that
+   show the work best. Publishing makes the images and text PUBLIC to every user
+   of the site immediately; say so to the user before calling.
 
 What belongs in \`body\` is the METHODOLOGY, not the artifact:
 - The reasoning behind the choices (why this type scale, why this palette works
@@ -76,14 +94,18 @@ The skill lands in the user's personal plugin dir and becomes available in NEW
 sessions across all their projects (plugin discovery happens at session start,
 so it does not apply to the current session).`,
     {
-      name: z.string()
-        .describe('Skill id, kebab-case, 3-40 chars (e.g. "quiet-editorial-deck"). Becomes the plugin/skill name.'),
+      name: z.string().optional()
+        .describe('Skill id, kebab-case, 3-40 chars (e.g. "quiet-editorial-deck"). Omit to skip the skill and only showcase/publish the work.'),
       title: z.string().min(2).max(80)
-        .describe('Human-readable name of the style (e.g. "安静的编辑气质 · 长文型 deck")'),
-      description: z.string().min(20).max(600)
-        .describe('Frontmatter description — the routing signal. MUST say when to use it AND when not to.'),
-      body: z.string().min(200)
-        .describe('The methodology in markdown: reasoning, rejected alternatives, anti-default list, and where the style breaks down.'),
+        .describe('Human-readable name of the style or the work (e.g. "安静的编辑气质 · 长文型站点")'),
+      description: z.string().min(20).max(600).optional()
+        .describe('Skill frontmatter description — the routing signal. MUST say when to use it AND when not to. Required with name.'),
+      body: z.string().min(200).optional()
+        .describe('The methodology in markdown: reasoning, rejected alternatives, anti-default list, and where the style breaks down. Required with name.'),
+      publish: z.boolean().optional()
+        .describe('Also publish to the public market (visible to all users at once). Only when the user asked to publish/share.'),
+      images: z.array(z.string()).max(6).optional()
+        .describe('Workspace-relative image paths to show on the market card (1–6; png/jpg/webp). First one is the cover. Required when publish is true.'),
       showcaseTitle: z.string().max(80).optional()
         .describe('Title for the showcase card. Defaults to the style title.'),
       showcaseNote: z.string().max(400).optional()
@@ -93,29 +115,37 @@ so it does not apply to the current session).`,
       overwrite: z.boolean().optional()
         .describe('Replace an existing skill of the same name. Ask the user before setting this.'),
     },
-    async ({ name, title, description, body, showcaseTitle, showcaseNote, artifactPath, overwrite }) => {
+    async ({ name, title, description, body, showcaseTitle, showcaseNote, artifactPath, overwrite, publish, images }) => {
       const fail = (text) => ({ content: [{ type: 'text', text }], isError: true });
       try {
-        if (!NAME_RE.test(String(name || ''))) {
+        const withSkill = !!name;
+        if (withSkill && !NAME_RE.test(String(name || ''))) {
           return fail(`Invalid skill name "${name}" — use kebab-case, 3-40 chars, e.g. "quiet-editorial-deck".`);
         }
+        if (withSkill && (!description || !body)) return fail('A skill needs description and body; omit name to only showcase/publish the work.');
         if (!projectId) return fail('No project bound; cannot resolve who owns this skill.');
         const ownerId = getProject(projectId)?.ownerId || null;
         const root = getUserPluginsRoot(ownerId);
         if (!root) {
           return fail('This project has no owner on record, so there is no personal skill library to write to.');
         }
+        if (publish && !marketPublisherRegistered()) return fail('This instance has no market to publish to (site market off, or desktop not signed in).');
+        if (publish && !(images?.length)) return fail('publish: true needs 1–6 images (workspace-relative paths) for the market card.');
 
-        const md = composeSkillMd({ name, title, description, body });
-        const result = await installPluginToRoot(Buffer.from(md, 'utf8'), root, { force: !!overwrite });
-        if (result.status === 409) {
-          return fail(`A skill named "${name}" already exists in this user's library `
-            + `(${result.body.existing?.description || 'no description'}). `
-            + 'Ask the user whether to replace it, then call again with overwrite: true.');
-        }
-        if (result.status >= 400) {
-          const errs = (result.body.errors || []).join('; ') || result.body.error;
-          return fail(`Skill rejected by validator: ${errs}`);
+        let result = { body: {} };
+        if (withSkill) {
+          const version = overwrite ? await nextVersion(root, name) : '0.1.0';
+          const md = composeSkillMd({ name, title, description, body, version });
+          result = await installPluginToRoot(Buffer.from(md, 'utf8'), root, { force: !!overwrite });
+          if (result.status === 409) {
+            return fail(`A skill named "${name}" already exists in this user's library `
+              + `(${result.body.existing?.description || 'no description'}). `
+              + 'Ask the user whether to replace it, then call again with overwrite: true.');
+          }
+          if (result.status >= 400) {
+            const errs = (result.body.errors || []).join('; ') || result.body.error;
+            return fail(`Skill rejected by validator: ${errs}`);
+          }
         }
 
         // 橱窗条目：作品 + 它沉淀出来的 skill
@@ -131,7 +161,7 @@ so it does not apply to the current session).`,
             projectId,
             taskId: null,
             artifactRel,
-            skillName: name,
+            skillName: withSkill ? name : null,
             title: (showcaseTitle || title).trim(),
             note: showcaseNote?.trim() || null,
           });
@@ -142,22 +172,43 @@ so it does not apply to the current session).`,
         try {
           ctx?.emit?.({
             type: 'run.skill_crystallized',
-            skillName: name,
+            skillName: withSkill ? name : null,
             title: title.trim(),
             showcaseId: entry?.id || null,
           });
         } catch { /* emit fail-safe */ }
+
+        // 发布到市场（09-08 晚 v2）：图从工作区读原字节，站点侧 normalize；发布即上架
+        let published = '';
+        if (publish) {
+          const root2 = workspaceRoot ? path.resolve(workspaceRoot) : null;
+          if (!root2) return fail('publish: no workspace root bound; cannot read the images.');
+          const bufs = [];
+          for (const rel of images) {
+            const abs = path.resolve(root2, String(rel).replace(/\\/g, '/'));
+            if (!abs.startsWith(root2 + path.sep)) return fail(`Image path escapes the workspace: ${rel}`);
+            if (!/\.(png|jpe?g|webp)$/i.test(abs)) return fail(`Not an image file: ${rel} (png / jpg / webp only)`);
+            try { bufs.push({ buf: await fsp.readFile(abs), type: /\.png$/i.test(abs) ? 'image/png' : /\.webp$/i.test(abs) ? 'image/webp' : 'image/jpeg', name: path.basename(abs) }); }
+            catch { return fail(`Cannot read image: ${rel}`); }
+          }
+          try {
+            const pub = await publishToMarket({ userId: ownerId, title: (showcaseTitle || title).trim(), note: showcaseNote?.trim() || null, skillName: withSkill ? name : null, images: bufs, showcaseId: entry?.id || null });
+            published = ` Published to the market as ${pub?.kind === 'work' ? 'a work' : 'a skill'} (id ${pub?.id}, ${bufs.length} image${bufs.length > 1 ? 's' : ''}); it is public now.`;
+          } catch (err) {
+            return fail(`Showcase updated, but publishing failed: ${err?.message || err}`);
+          }
+        }
 
         const warn = (result.body.warnings || []).length
           ? ` Warnings: ${result.body.warnings.join('; ')}.` : '';
         return {
           content: [{
             type: 'text',
-            text: `Skill "${name}" saved to the user's personal library`
-              + `${artifactRel ? ` and the work added to their showcase` : ''}.`
-              + ` It becomes available in NEW sessions (not this one).${warn}`
-              + ` Tell the user plainly what you captured and what boundary you wrote,`
-              + ` so they can correct it while it is fresh.`,
+            text: (withSkill
+              ? `Skill "${name}" saved to the user's personal library${artifactRel ? ' and the work added to their showcase' : ''}. It becomes available in NEW sessions (not this one).`
+              : `Work added to the user's showcase${artifactRel ? '' : ' (no artifact path resolved; card has no cover)'}.`)
+              + published + warn
+              + (withSkill ? ' Tell the user plainly what you captured and what boundary you wrote, so they can correct it while it is fresh.' : ' Tell the user where to find it.'),
           }],
         };
       } catch (err) {

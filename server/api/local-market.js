@@ -25,6 +25,7 @@ import {
   relayConfig, relayMarketList, relayMarketMine, relayMarketFeatured, relayMarketGet, relayMarketImage,
   relayMarketPublish, relayMarketWithdraw, relayMarketDownload, relayMarketInstalled,
 } from '../runtime/relay-client.js';
+import { registerMarketPublisher } from '../lib/market-bridge.js';
 
 const IMAGE_MAX_COUNT = 6;
 const IMAGE_MAX_UPLOAD = 8 * 1024 * 1024;
@@ -68,14 +69,41 @@ router.get('/:id/images/:n', async (req, res) => {
   } catch (err) { relayFail(res, err); }
 });
 
+/** 组 multipart 发给站点。skillZip 为空 = 作品（kind=work） */
+async function publishViaRelay({ title, note, skillName, skillZip, images }) {
+  const form = new FormData();
+  form.set('title', String(title || ''));
+  form.set('note', String(note || ''));
+  if (skillZip) form.set('skill', new Blob([skillZip], { type: 'application/zip' }), `${skillName}.zip`);
+  else form.set('kind', 'work');
+  for (const img of images) form.append('images', new Blob([img.buf], { type: img.type }), img.name);
+  return relayMarketPublish(form);
+}
+
+// agent 的 crystallize_skill（publish:true）经注册口发布（lib/market-bridge）：本机 skill 打包 + 图字节 → relay
+registerMarketPublisher(async ({ userId, title, note, skillName, images }) => {
+  if (!relayConfig()) throw Object.assign(new Error('还没登录站点账号，发布不了市场'), { code: 'RELAY_NOT_CONFIGURED' });
+  let skillZip = null;
+  if (skillName) {
+    const hit = await findUserPluginDir(userId, skillName);
+    if (!hit) throw Object.assign(new Error(`本机 skill 库里没有「${skillName}」`), { code: 'SKILL_NOT_FOUND' });
+    skillZip = (await packPluginDir(hit.dir)).buffer;
+  }
+  const r = await publishViaRelay({ title, note, skillName, skillZip, images });
+  return r.publication;
+});
+
 // 发布：本机 skill → zip；图 = 上传的 / 没上传就截 showcaseId 那件作品（要装了 chromium 部件）
 router.post('/', upload.array('images', IMAGE_MAX_COUNT), async (req, res) => {
   try {
+    // v2（09-08 晚）：没给 skillName 就是作品（只发图和说明）
     const skillName = String(req.body?.skillName || '').trim();
-    if (!skillName) return res.status(400).json({ error: '要发布哪个 skill？', code: 'BAD_INPUT' });
-    const hit = await findUserPluginDir(req.user?.id, skillName);
-    if (!hit) return res.status(404).json({ error: `本机 skill 库里没有「${skillName}」`, code: 'SKILL_NOT_FOUND' });
-    const { buffer: skillZip } = await packPluginDir(hit.dir);
+    let skillZip = null;
+    if (skillName) {
+      const hit = await findUserPluginDir(req.user?.id, skillName);
+      if (!hit) return res.status(404).json({ error: `本机 skill 库里没有「${skillName}」`, code: 'SKILL_NOT_FOUND' });
+      skillZip = (await packPluginDir(hit.dir)).buffer;
+    }
 
     const images = (req.files || []).map((f) => ({ buf: f.buffer, type: f.mimetype || 'image/png', name: f.originalname || 'shot.png' }));
     const showcaseId = String(req.body?.showcaseId || '').trim();
@@ -90,12 +118,7 @@ router.post('/', upload.array('images', IMAGE_MAX_COUNT), async (req, res) => {
     }
     if (!images.length) return res.status(400).json({ error: '至少要一张参考图：截图没截到（这台机器可能没装 chromium 部件），请手动传一张', code: 'NO_IMAGE' });
 
-    const form = new FormData();
-    form.set('title', String(req.body?.title || ''));
-    form.set('note', String(req.body?.note || ''));
-    form.set('skill', new Blob([skillZip], { type: 'application/zip' }), `${skillName}.zip`);
-    for (const img of images) form.append('images', new Blob([img.buf], { type: img.type }), img.name);
-    res.status(201).json(await relayMarketPublish(form));
+    res.status(201).json(await publishViaRelay({ title: req.body?.title, note: req.body?.note, skillName, skillZip, images }));
   } catch (err) { relayFail(res, err); }
 });
 

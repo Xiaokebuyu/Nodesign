@@ -378,6 +378,12 @@ ${DESK_CSS}
   transform: rotate(4deg); pointer-events: none; }
 /* 别人的（09-08 市场精选混进项目区）：同一副纸签，墨色不是红色 —— 红的那张是「你上次停在这」，这张是「这不是你的」 */
 .ndd-card .last.peer { color: var(--ink-2); transform: rotate(-3deg); }
+/* 精选卡（别人的）右下角「照着来一个」：悬停才显，别抢卡面 */
+.ndd-card .ndd-fork { position: absolute; right: 10px; bottom: 10px; z-index: 7; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--ink-3); background: var(--paper); color: var(--ink-1); font: 12px/1.2 var(--font-sans, sans-serif);
+  cursor: pointer; opacity: 0; transform: translateY(4px); transition: opacity .18s ease, transform .18s ease; }
+.ndd-card:hover .ndd-fork, .ndd-card .ndd-fork:focus-visible { opacity: 1; transform: none; }
+@media (hover: none) { .ndd-card .ndd-fork { opacity: 1; transform: none; } }
 .ndd-card .more { position: absolute; top: 9px; right: 9px; z-index: 8;
   width: 26px; height: 26px; border-radius: 50%;
   background: rgba(255,254,246,0.94); border: 1px solid rgba(43,33,23,0.16);

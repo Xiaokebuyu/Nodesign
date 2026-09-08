@@ -414,8 +414,9 @@ export default {
   '至少传一张参考图': 'Add at least one reference image',
   '已发布，上架了': 'Published and live',
   '发布失败：{err}': 'Could not publish: {err}',
-  '发的是现在装着的这份。之后本地再改，货架上的不跟着变。':
-    'What gets published is the copy installed right now. Later local edits do not change the listed one.',
+  '发的是现在装着的这份。再次发布会原地更新货架上的这条。': 'Publishes the copy installed right now. Publishing again updates this listing in place.',
+  '只发图和说明，不带 skill': 'Images and a note only, no skill',
+  '别人能「照着来一个」：参考图进他的新项目。再次发布会原地更新。': 'Others can "make one like this": your references land in their new project. Publishing again updates in place.',
   '标题': 'Title',
   '别人在货架上看到的名字': 'The name others see on the shelf',
   '说明': 'Notes',
@@ -458,10 +459,17 @@ export default {
   'SKILL.md 全文（装了之后 agent 读到的就是这段）': 'Full SKILL.md (this is exactly what the agent reads once installed)',
   '市场': 'Market',
   '{name} 的 skill': "{name}'s skill",
+  '{name} 的作品': "{name}'s work",
+  '照着来一个': 'Make one like this',
+  '开一个新项目：参考图放进去、有 skill 就装上，agent 先跟你对齐再做': 'Start a new project with these references (and the skill, if any); the agent aligns with you before building',
+  '桌面版暂不支持照着来一个，请在网页端操作': 'Not available on the desktop app yet; use the website',
+  '没开成：{err}': 'Could not start: {err}',
+  '作品': 'Work',
   '别人的': "someone else's",
   '导出 zip': 'Export zip',
   'skill「{name}」已存进你的 skill 库，作品进了橱窗；下个新会话生效，橱窗里能发到市场。':
     'Skill "{name}" is saved to your skill library and the piece is in your gallery. It takes effect from the next new session; you can publish it to the market from the gallery.',
+  '「{title}」已进你的橱窗。': '"{title}" is now in your showcase.',
 
   // ── 橱窗 · 回头提炼（routes/showcase-distill.jsx）──
   '把做过的东西留成方法': 'Turn what you made into a method',

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Store, Download, Check, Trash2, LayoutTemplate } from 'lucide-react';
+import { Store, Download, Check, Trash2, LayoutTemplate, Copy } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
 import { Desk } from './desk.jsx';
@@ -50,6 +50,16 @@ export default function Market() {
     MarketApi.mine().then(d => setMine(d.items || [])).catch(() => setMine([]));
   }, [showToast]);
   useEffect(load, [load]);
+
+  // 照着来一个（v2，09-08 晚）：不复制别人的产物，开新项目 + 参考图 + skill，进工作台自动发一句开工提示词（agent 会先对齐）
+  const fork = async (pub) => {
+    try {
+      const r = await MarketApi.fork(pub.id);
+      navigate(`/projects/${r.projectId}/work`, { state: { initialMessage: r.prompt } });
+    } catch (err) {
+      showToast(err.code === 'WEB_ONLY' ? t('桌面版暂不支持照着来一个，请在网页端操作') : t('没开成：{err}', { err: err.message }), 'error');
+    }
+  };
 
   const install = async (pub, { force = false } = {}) => {
     try {
@@ -128,13 +138,13 @@ export default function Market() {
           <div style={loadingStyle}>{t('货架还是空的。橱窗里的作品可以发上来，发布即上架。')}</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: narrow ? GAP.lg : GAP.xl }}>
-            {items.map(p => <MarketCard key={p.id} pub={p} onOpen={() => navigate(`/market/${p.id}`)} onInstall={() => install(p)} />)}
+            {items.map(p => <MarketCard key={p.id} pub={p} onOpen={() => navigate(`/market/${p.id}`)} onInstall={() => install(p)} onFork={() => fork(p)} />)}
           </div>
         )}
       </div>
       </Desk>
 
-      <DetailModal id={openId} onClose={() => navigate('/market')} onInstall={install} onWithdraw={withdraw} isLocal={isLocal} isMine={openId ? mineIds.has(openId) : false} />
+      <DetailModal id={openId} onClose={() => navigate('/market')} onInstall={install} onFork={fork} onWithdraw={withdraw} isLocal={isLocal} isMine={openId ? mineIds.has(openId) : false} />
     </AppShell>
   );
 }
@@ -148,7 +158,7 @@ function StatePill({ state }) {
   );
 }
 
-function MarketCard({ pub, onOpen, onInstall }) {
+function MarketCard({ pub, onOpen, onInstall, onFork }) {
   const { hover, hoverProps } = useHoverReveal();
   return (
     <div {...hoverProps} style={{
@@ -167,13 +177,18 @@ function MarketCard({ pub, onOpen, onInstall }) {
           <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {pub.author?.username} · {t('{n} 人装过', { n: pub.installCount || 0 })}
           </span>
-          <button onClick={(e) => { e.stopPropagation(); if (!pub.installed) onInstall(); }} title={pub.installed ? t('已装') : t('装到我的 skill 库')} style={{
+          <button onClick={(e) => { e.stopPropagation(); onFork(); }} title={t('照着来一个')} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: RADIUS.md, border: `1px solid ${COLOR.border}`, background: 'transparent', color: COLOR.text2, cursor: 'pointer', flexShrink: 0,
+          }}>
+            <Copy size={12} /><span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs }}>{t('照着来一个')}</span>
+          </button>
+          {pub.hasSkill !== false && <button onClick={(e) => { e.stopPropagation(); if (!pub.installed) onInstall(); }} title={pub.installed ? t('已装') : t('装到我的 skill 库')} style={{
             ...ghostIcon, display: 'inline-flex', alignItems: 'center', gap: GAP.xs, padding: `${GAP.xxs}px ${GAP.sm}px`,
             color: pub.installed ? COLOR.success : COLOR.text2, borderColor: pub.installed ? COLOR.success : COLOR.border, flexShrink: 0,
           }}>
             {pub.installed ? <Check size={12} /> : <Download size={12} />}
             <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs }}>{pub.installed ? t('已装') : t('安装')}</span>
-          </button>
+          </button>}
         </div>
       </div>
       {pub.featuredRank != null && (
@@ -183,7 +198,7 @@ function MarketCard({ pub, onOpen, onInstall }) {
   );
 }
 
-function DetailModal({ id, onClose, onInstall, onWithdraw, isLocal, isMine }) {
+function DetailModal({ id, onClose, onInstall, onFork, onWithdraw, isLocal, isMine }) {
   const [data, setData] = useState(null);
   const [shot, setShot] = useState(0);
   useEffect(() => {
@@ -212,11 +227,16 @@ function DetailModal({ id, onClose, onInstall, onWithdraw, isLocal, isMine }) {
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md, flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, color: COLOR.brown }}>{pub.skillName}@{pub.skillVersion || '0.0.0'}</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, color: COLOR.brown }}>{pub.hasSkill === false ? t('作品') : `${pub.skillName}@${pub.skillVersion || '0.0.0'}`}</span>
             <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{pub.author?.username} · {timeAgo(pub.createdAt)} · {t('{n} 人装过', { n: pub.installCount || 0 })}</span>
             {pub.state && pub.state !== 'approved' && <StatePill state={pub.state} />}
             <span style={{ flex: 1 }} />
             {pub.state === 'approved' && (
+              <button onClick={() => onFork(pub)} style={primaryBtn} title={t('开一个新项目：参考图放进去、有 skill 就装上，agent 先跟你对齐再做')}>
+                <Copy size={13} /> {t('照着来一个')}
+              </button>
+            )}
+            {pub.state === 'approved' && pub.hasSkill !== false && (
               <button onClick={() => !installed && onInstall(pub)} style={{ ...primaryBtn, opacity: installed ? 0.6 : 1, cursor: installed ? 'default' : 'pointer' }}>
                 {installed ? <><Check size={13} /> {t('已装')}</> : <><Download size={13} /> {t('装到我的 skill 库')}</>}
               </button>
@@ -226,12 +246,12 @@ function DetailModal({ id, onClose, onInstall, onWithdraw, isLocal, isMine }) {
             )}
           </div>
           {pub.note && <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: COLOR.text2, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{pub.note}</div>}
-          <div>
+          {pub.hasSkill !== false && <div>
             <div style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.sm, letterSpacing: '0.12em', color: PAPER.pencil, marginBottom: GAP.sm }}>{t('SKILL.md 全文（装了之后 agent 读到的就是这段）')}</div>
             <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.md, color: COLOR.text, lineHeight: 1.7, padding: `${GAP.md}px ${GAP.lg}px`, background: 'rgba(43,33,23,0.025)', borderRadius: RADIUS.lg }}>
               <MarkdownText>{data.skillMd || ''}</MarkdownText>
             </div>
-          </div>
+          </div>}
         </div>
       )}
     </Modal>
