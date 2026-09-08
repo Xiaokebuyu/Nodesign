@@ -279,6 +279,8 @@ ${DESK_CSS}
 .ndd-pad .pick:disabled { opacity: 0.45; cursor: default; }
 .ndd-pad .pick-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 12px;
   font: 12px var(--kai); color: var(--ink-2); letter-spacing: 0.02em; }
+.ndd-pad .pick-path { font: 12px var(--mono, ui-monospace, monospace); color: var(--ink); max-width: 46%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 /* 模型选择：ModelPicker 自带的是全站 chrome 那套皮（无衬线 + 圆角），落在纸上
    像一颗从别处剪来的按钮。只改字与形，**颜色一律不碰** —— 它的底色本来就在
    传达"你选过没有"（选过是实心墨块，跟隔壁开工钮同一支墨），改了就把信号抹平。

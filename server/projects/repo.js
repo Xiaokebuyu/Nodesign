@@ -19,6 +19,8 @@ import { spawn } from 'node:child_process';
 import { folderPathOf } from './store.js';
 import { NODESIGN_DIR, BASELINE_FILE, deskRelOf, DESK_NESTED } from './workspace-layout.js';
 import { HARD_IGNORE_DIRS } from '../lib/task-scan.js';
+import { capabilityState } from '../runtime/capabilities.js';
+import { docPdf } from '../lib/docx-pages.js';
 
 export const MAX_FILE_BYTES = 512 * 1024;
 const STATUS_TTL_MS = 2000;
@@ -179,6 +181,36 @@ export async function repoFile(projectId, rel) {
   } finally {
     await fh.close();
   }
+}
+
+/** 仓库窗能原样送给浏览器看的类型（pdf 用内置阅读器，图/音/视频用标签）。html/svg 不在这里：同源跑脚本 */
+const RAW_MIME = {
+  '.pdf': 'application/pdf',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg',
+};
+/** 原样送出：{ abs, mime }。类型不在表里 → 415 */
+export async function repoRawFile(projectId, rel) {
+  const folder = repoFolderOf(projectId);
+  if (!folder) throw repoError('NOT_REPO_PROJECT', '这个项目没有仓库卡', 404);
+  const { abs, rel: clean } = await resolveInside(folder, rel);
+  const mime = RAW_MIME[path.extname(clean).toLowerCase()];
+  if (!mime) throw repoError('REPO_RAW_TYPE', '这种文件不能原样预览', 415);
+  let st;
+  try { st = await fs.stat(abs); } catch { throw repoError('REPO_NOT_FOUND', '没有这个文件', 404); }
+  if (!st.isFile()) throw repoError('REPO_NOT_FILE', '不是文件');
+  return { abs, mime, size: st.size };
+}
+
+/** word 转成 PDF 给内置阅读器看。要 LibreOffice；没有回 501 让前端说清楚 */
+export async function repoDocPdf(projectId, rel) {
+  const folder = repoFolderOf(projectId);
+  if (!folder) throw repoError('NOT_REPO_PROJECT', '这个项目没有仓库卡', 404);
+  const { abs, rel: clean } = await resolveInside(folder, rel);
+  if (!/\.(docx|doc|odt|pptx|ppt|xlsx|xls)$/i.test(clean)) throw repoError('REPO_RAW_TYPE', '不是能转 PDF 的文档', 415);
+  const lo = capabilityState('libreoffice');
+  if (lo && !lo.available) throw repoError('NO_LIBREOFFICE', lo.fix ? `这台机器没有 LibreOffice，装了才能预览：${lo.fix}` : '这台机器没有 LibreOffice，装了才能预览', 501);
+  return docPdf(abs);
 }
 
 export function _resetStatusCache() { statusCache.clear(); }

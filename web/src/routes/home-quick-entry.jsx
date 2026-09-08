@@ -42,6 +42,12 @@ const GREETINGS_MORNING = ['早，今天先做哪个？', '早上好，想做什
 const GREETINGS_AFTERNOON = ['下午想做点什么？', '午后小憩，做点什么？'];
 const GREETINGS_EVENING = ['晚上有想做的吗？说说看', '深夜灵感最值钱，敲下来'];
 
+/** 路径太长只留尾巴两段（Windows 路径动辄六七层，整条摆出来把那一行挤没了） */
+function shortPath(p) {
+  const segs = String(p || '').replace(/[\\/]+$/, '').split(/[\\/]/);
+  return segs.length > 3 ? `…/${segs.slice(-2).join('/')}` : p;
+}
+
 function pickGreeting() {
   const h = new Date().getHours();
   let pool = GREETINGS_GENERIC;
@@ -262,53 +268,65 @@ export default function QuickEntry({ prefill }) {
   });
 
   /**
-   * 打开本地文件夹当项目（桌面版）。流程：系统选择框 → 服务端 openFolder（同一个文件夹
-   * 再开就是同一个项目）→ 有信任门要答就先弹 → 进工作区。**有东西的文件夹**第一次进去
-   * 顺手发一句「先看看这个仓库」，让 agent 先读不写，写成板书；空文件夹（09-08：桌面就是
-   * 文件夹本身）跟新建项目一样进去等用户开口；已经干过活的项目直接进去。
+   * 工作文件夹（桌面版，09-08 站主定的流程）：选文件夹**只是定位置**，不建项目、不开画布、
+   * 不替他发话。第一条消息发出去，才在那个文件夹里开工：openFolder（同一个文件夹再开就是
+   * 同一个项目）→ 有信任门要答就先弹（消息先存着）→ 附件上传 → 进工作区，首条消息就是他写的那句。
+   * 空文件夹和已有仓库走同一条路，区别只在服务端桌面在哪（desk）。
    */
-  const enterFolderProject = (out) => {
-    // 输入框里已经写了话就当首条消息带进去（选文件夹只是定「放哪」，不是另一件事）；
-    // 没写字、且是有东西的文件夹第一次进，才发那句「先看看这个仓库」
-    const typed = text.trim();
-    const firstVisit = !out.project.activeSessionId;
-    const message = typed || (firstVisit && out.desk === '.nodesign'
-      ? t('先看看这个仓库：它是什么、怎么跑起来、结构和入口、我上次干到哪。写成板书，最后问我从哪改起。')
-      : '');
-    navigate(`/projects/${out.project.id}/work`, message ? { state: { initialMessage: message, attachments: [] } } : undefined);
-  };
-  const openFolder = async () => {
+  const [folderPick, setFolderPick] = useState(null);   // 选好的绝对路径；null = 放数据目录
+  const pickFolder = async () => {
     if (!canOpenFolder || submitting) return;
     let folder = null;
     try { folder = await desktop.pickFolder(); } catch (err) {
       showToast(t('打开失败：{err}', { err: err.message }), 'error');
       return;
     }
-    if (!folder) return;
-    setSubmitting(true);
-    try {
-      const out = await Local.openFolder(folder);
-      await hydrateOne(out.project.id).catch(() => {});
-      if (out.trust?.needsDecision && out.project.folderTrust == null) {
-        setTrustGate(out);
-        setSubmitting(false);
-        return;
+    if (folder) setFolderPick(folder);
+  };
+  /** 附件上传 + 跳工作区：数据目录项目和文件夹项目共用这一段 */
+  const enterProject = async (projId, v) => {
+    const ready = [];
+    for (const a of attachments) {
+      if (!a._file) continue;
+      try {
+        const { asset } = await Assets.upload(projId, a._file);
+        ready.push({ type: 'asset', path: asset.path, name: asset.name, size: asset.size, mime: asset.mime });
+      } catch (err) {
+        showToast(t('{name} 上传失败：{err}', { name: a.name, err: err.message }), 'error');
       }
-      enterFolderProject(out);
-    } catch (err) {
-      showToast(t('打开失败：{err}', { err: err.message }), 'error');
-      setSubmitting(false);
     }
+    // 附件已消费（上传完/失败都算），objectURL 在跳走前回收 —— SPA 跳转
+    // 不卸载页面，不收会一直挂到刷新
+    attachments.forEach(a => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
+    // 一个字没写、附件又全传失败：项目已经建出来了，照旧进去，但得说一声
+    // 为什么进去之后什么都没发生
+    if (!v && ready.length === 0) {
+      showToast(t('附件都没传上去，进项目后可以重新上传再说'), 'error');
+    }
+    navigate(`/projects/${projId}/work`, { state: { initialMessage: v, attachments: ready } });
+  };
+  const submitIntoFolder = async (v) => {
+    const out = await Local.openFolder(folderPick);
+    await hydrateOne(out.project.id).catch(() => {});
+    if (out.trust?.needsDecision && out.project.folderTrust == null) {
+      // 信任门：答完再进。消息和附件都还在输入框里，decideTrust 接着走
+      setTrustGate(out);
+      setSubmitting(false);
+      return;
+    }
+    await enterProject(out.project.id, v);
   };
   const decideTrust = async (loadSettings) => {
     const out = trustGate;
     setTrustGate(null);
     if (!out) return;
+    setSubmitting(true);
     try {
       await updateProject(out.project.id, { folderTrust: loadSettings });
-      enterFolderProject(out);
+      await enterProject(out.project.id, text.trim());
     } catch (err) {
       showToast(t('保存失败：{err}', { err: err.message }), 'error');
+      setSubmitting(false);
     }
   };
 
@@ -318,6 +336,7 @@ export default function QuickEntry({ prefill }) {
     if ((!v && attachments.length === 0) || submitting) return;
     setSubmitting(true);
     try {
+      if (folderPick) { await submitIntoFolder(v); return; }
       // 1. 直接建**真项目**（2026-07-28：首页不再有"闪聊"这个二等公民）。
       //    名字先用用户这句话垫着，标 autoNamed —— 第一轮跑完服务端会用 SDK helper
       //    写的会话摘要正名一次，用户之后随时可以在项目里「⋯ → 重命名」改。
@@ -329,32 +348,11 @@ export default function QuickEntry({ prefill }) {
         mode,
         autoNamed: true,
       });
-      // 2. 上传暂存的附件到新 project（单文件失败不阻塞其他，让用户看到 toast 自决）
-      const ready = [];
-      for (const a of attachments) {
-        if (!a._file) continue;
-        try {
-          const { asset } = await Assets.upload(proj.id, a._file);
-          ready.push({ type: 'asset', path: asset.path, name: asset.name, size: asset.size, mime: asset.mime });
-        } catch (err) {
-          showToast(t('{name} 上传失败：{err}', { name: a.name, err: err.message }), 'error');
-        }
-      }
-      // 3. 跳 Workspace 把首条消息 + attachments 塞 location.state；ProjectWorkspace 的
+      // 2+3. 上传附件、跳 Workspace 把首条消息 + attachments 塞 location.state；ProjectWorkspace 的
       //    initialMessage useEffect（mount 后 250ms 等 WS 上线）单点负责发首条 turn。
       //    旧实现这里也调 Turn.send 预发一条 → 后端 isNewSession=true 起 session A，
       //    Workspace 上线后又发一条 → 起 session B，导致每次闪聊创 2 个 session。
-      // 附件已消费（上传完/失败都算），objectURL 在跳走前回收 —— SPA 跳转
-      // 不卸载页面，不收会一直挂到刷新
-      attachments.forEach(a => { if (a.previewUrl) URL.revokeObjectURL(a.previewUrl); });
-      // 一个字没写、附件又全传失败：项目已经建出来了，照旧进去，但得说一声
-      // 为什么进去之后什么都没发生
-      if (!v && ready.length === 0) {
-        showToast(t('附件都没传上去，进项目后可以重新上传再说'), 'error');
-      }
-      navigate(`/projects/${proj.id}/work`, {
-        state: { initialMessage: v, attachments: ready },
-      });
+      await enterProject(proj.id, v);
     } catch (err) {
       showToast(t('创建失败：{err}', { err: err.message }), 'error');
       setSubmitting(false);
@@ -459,16 +457,28 @@ export default function QuickEntry({ prefill }) {
           {/* 桌面版（09-08 站主定）：默认放数据目录，但「项目放哪」要有一句明显的话，不能只是一颗图标 */}
           {canOpenFolder && (
             <div className="pick-line">
-              <span>{t('新项目默认放在 NoDesign 自己的目录里。想放进你的文件夹，或打开一个已有仓库：')}</span>
-              <button
-                className="pick"
-                title={t('空文件夹从零开始；已有仓库先读一遍再动')}
-                onClick={openFolder}
-                disabled={submitting}
-              >
-                <FolderOpen size={13} />
-                {t('选一个文件夹')}
-              </button>
+              {folderPick ? (
+                <>
+                  <FolderOpen size={13} />
+                  <span>{t('第一条消息发出去，就在这个文件夹里开工：')}</span>
+                  <span className="pick-path" title={folderPick}>{shortPath(folderPick)}</span>
+                  <button className="pick" onClick={pickFolder} disabled={submitting}>{t('换一个')}</button>
+                  <button className="pick" onClick={() => setFolderPick(null)} disabled={submitting} title={t('改回放在 NoDesign 自己的目录里')}>×</button>
+                </>
+              ) : (
+                <>
+                  <span>{t('新项目默认放在 NoDesign 自己的目录里。想放进你的文件夹，或在一个已有仓库里干活：')}</span>
+                  <button
+                    className="pick"
+                    title={t('只是先定位置：不会建项目，也不会替你发话')}
+                    onClick={pickFolder}
+                    disabled={submitting}
+                  >
+                    <FolderOpen size={13} />
+                    {t('选一个文件夹')}
+                  </button>
+                </>
+              )}
             </div>
           )}
           <div className="bar">

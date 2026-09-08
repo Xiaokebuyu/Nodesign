@@ -11,11 +11,12 @@
  * 状态刷新：窗开着每 8 秒拉一次 summary + 已展开目录（agent 在改的时候树上的标记会跟着变）。
  */
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, GitBranch, RefreshCw, FileWarning, Undo2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, GitBranch, RefreshCw, FileWarning, Undo2, Eye, Code } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS } from '../../lib/theme.js';
 import { Repo } from '../../lib/api.js';
 import { useRepoStore } from '../../stores/repoStore.js';
 import { formatClock } from '../../lib/helpers.js';
+import MarkdownMath from '../ui/MarkdownMath.jsx';
 import ArtifactWindow from './ArtifactWindow.jsx';
 import '../../lib/monaco-local.js';   // monaco 本地打包（09-08），别去 CDN
 
@@ -48,6 +49,29 @@ function languageOf(rel) {
   const ext = name.includes('.') ? name.split('.').pop() : '';
   return LANG_BY_EXT[ext] || 'plaintext';
 }
+
+/**
+ * 通用渲染器（09-08 站主提）：按扩展名决定「渲染」还是「原文」。
+ *   markdown → 渲染（可切原文）；pdf → 内置阅读器；word 等 → 服务端转 PDF（要 LibreOffice）；
+ *   图 / 音 / 视频 → 标签；其余 → Monaco 原文。
+ */
+const IMG_EXTS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
+const VIDEO_EXTS = new Set(['mp4', 'webm']);
+const AUDIO_EXTS = new Set(['mp3', 'wav', 'ogg']);
+const DOC_EXTS = new Set(['docx', 'doc', 'odt', 'pptx', 'ppt', 'xlsx', 'xls']);
+function viewerOf(rel) {
+  const name = rel.split('/').pop().toLowerCase();
+  const ext = name.includes('.') ? name.split('.').pop() : '';
+  if (ext === 'md' || ext === 'markdown') return 'markdown';
+  if (ext === 'pdf') return 'pdf';
+  if (DOC_EXTS.has(ext)) return 'doc';
+  if (IMG_EXTS.has(ext)) return 'image';
+  if (VIDEO_EXTS.has(ext)) return 'video';
+  if (AUDIO_EXTS.has(ext)) return 'audio';
+  return 'text';
+}
+/** 不用读正文就能显示的类型（pdf / 文档 / 媒体走地址） */
+const URL_VIEWERS = new Set(['pdf', 'doc', 'image', 'video', 'audio']);
 
 function fmtSize(n) {
   if (!Number.isFinite(n)) return '';
@@ -159,6 +183,30 @@ function TurnsStrip({ projectId, turns, onReverted }) {
   );
 }
 
+/** word 等 → 服务端转 PDF 进内置阅读器。没有 LibreOffice 时服务端 501，这里把它的话原样说出来 */
+function DocPdfFrame({ projectId, rel }) {
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    setErr(null);
+    fetch(Repo.pdfUrl(projectId, rel), { method: 'HEAD' }).then(async (r) => {
+      if (!alive || r.ok) return;
+      let msg = `预览失败（${r.status}）`;
+      try { const j = await fetch(Repo.pdfUrl(projectId, rel)).then(x => x.json()); if (j?.error) msg = j.error; } catch { /* 原话拿不到就用状态码 */ }
+      setErr(msg);
+    }).catch(() => { if (alive) setErr('预览失败'); });
+    return () => { alive = false; };
+  }, [projectId, rel]);
+  if (err) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: GAP.xl, color: COLOR.sub, fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, textAlign: 'center', lineHeight: 1.8 }}>
+        {err}
+      </div>
+    );
+  }
+  return <iframe title={rel} src={Repo.pdfUrl(projectId, rel)} style={{ flex: 1, border: 0, width: '100%', minHeight: 0 }} />;
+}
+
 export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }) {
   const [summary, setSummary] = useState(null);
   const [nodes, setNodes] = useState({});        // rel → entries
@@ -166,6 +214,7 @@ export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }
   const [selected, setSelected] = useState(null);
   const [file, setFile] = useState(null);         // { path, text, size, binary, truncated } | { path, error }
   const [turns, setTurns] = useState([]);
+  const [rawMode, setRawMode] = useState(false);   // markdown：渲染 / 原文
   const repoVersion = useRepoStore(s => s.version);   // agent 写了仓库文件 / 一轮结算 → 重拉
   const openRef = useRef(open); openRef.current = open;
 
@@ -203,6 +252,8 @@ export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }
 
   const openFile = useCallback(async (rel) => {
     setSelected(rel);
+    setRawMode(false);
+    if (URL_VIEWERS.has(viewerOf(rel))) { setFile({ path: rel, byUrl: true }); return; }
     setFile({ path: rel, loading: true });
     try {
       const r = await Repo.file(projectId, rel);
@@ -212,9 +263,28 @@ export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }
     }
   }, [projectId]);
 
+  const viewer = file?.path ? viewerOf(file.path) : null;
+  // README 里的相对图片（![](docs/a.png)）要从仓库里取：按当前文件所在目录拼成 raw 地址；http(s)/data 原样
+  const mdComponents = useMemo(() => {
+    const dir = file?.path ? file.path.split('/').slice(0, -1) : [];
+    const resolve = (src) => {
+      if (!src || /^(https?:|data:|blob:)/i.test(src)) return src;
+      const parts = [...dir];
+      for (const seg of src.replace(/^\.\//, '').split('/')) {
+        if (seg === '..') parts.pop(); else if (seg && seg !== '.') parts.push(seg);
+      }
+      return Repo.rawUrl(projectId, parts.join('/'));
+    };
+    return {
+      img: ({ node, src, ...props }) => <img {...props} src={resolve(src)} style={{ maxWidth: '100%' }} />,
+    };
+  }, [file?.path, projectId]);
   const groups = useMemo(() => [
-    { id: 'repo', items: [{ id: 'refresh', icon: RefreshCw, title: '重新读一遍', onClick: refresh }] },
-  ], [refresh]);
+    { id: 'repo', items: [
+      { id: 'refresh', icon: RefreshCw, title: '重新读一遍', onClick: refresh },
+      ...(viewer === 'markdown' ? [{ id: 'raw', icon: rawMode ? Eye : Code, title: rawMode ? '看渲染后的样子' : '看原文', onClick: () => setRawMode(v => !v) }] : []),
+    ] },
+  ], [refresh, viewer, rawMode]);
 
   const git = summary?.git || null;
   const counts = git?.counts;
@@ -289,7 +359,29 @@ export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }
                   <FileWarning size={14} /> 二进制文件，这里不显示
                 </div>
               )}
-              {typeof file.text === 'string' && (
+              {file.byUrl && viewer === 'pdf' && (
+                <iframe title={file.path} src={Repo.rawUrl(projectId, file.path)} style={{ flex: 1, border: 0, width: '100%', minHeight: 0 }} />
+              )}
+              {file.byUrl && viewer === 'doc' && (
+                <DocPdfFrame projectId={projectId} rel={file.path} />
+              )}
+              {file.byUrl && viewer === 'image' && (
+                <div style={{ flex: 1, minHeight: 0, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: GAP.lg }}>
+                  <img src={Repo.rawUrl(projectId, file.path)} alt={file.path} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                </div>
+              )}
+              {file.byUrl && viewer === 'video' && (
+                <video controls src={Repo.rawUrl(projectId, file.path)} style={{ flex: 1, minHeight: 0, width: '100%', background: '#000' }} />
+              )}
+              {file.byUrl && viewer === 'audio' && (
+                <div style={{ padding: GAP.xl }}><audio controls src={Repo.rawUrl(projectId, file.path)} style={{ width: '100%' }} /></div>
+              )}
+              {typeof file.text === 'string' && viewer === 'markdown' && !rawMode && (
+                <div className="nd-repo-md" style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: `${GAP.lg}px ${GAP.xl}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, lineHeight: 1.75, color: COLOR.text2, maxWidth: 860 }}>
+                  <MarkdownMath components={mdComponents}>{file.text}</MarkdownMath>
+                </div>
+              )}
+              {typeof file.text === 'string' && (viewer !== 'markdown' || rawMode) && (
                 <div style={{ flex: 1, minHeight: 0 }}>
                   <Suspense fallback={<pre style={{ margin: 0, padding: GAP.md, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, overflow: 'auto', height: '100%', boxSizing: 'border-box' }}>{file.text}</pre>}>
                     <Editor
