@@ -107,6 +107,16 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     protocol: 'openai-chat',
     countTokens: false,
   }),
+  // 基元律动 tokenrhythm.studio（09-08 晚，钥匙 ~/apikey/基元律动.md，CNY）：OpenAI 格式，/v1/models 自带价目（glm-5.3-flash 标价
+  // 0.80/2.80/缓存 0.23 CNY/百万，接入时打折一半）；reasoning_content / cached_tokens 转换层都认；顶层 cost_cny 不认，按表价记。
+  tokenrhythm: Object.freeze({
+    label: '基元律动 tokenrhythm.studio',
+    baseUrl: process.env.NODESIGN_UPSTREAM_TOKENRHYTHM_URL || 'https://tokenrhythm.studio/v1',
+    keyEnv: 'NODESIGN_UPSTREAM_TOKENRHYTHM_KEY',
+    authStyle: 'bearer',
+    protocol: 'openai-chat',
+    countTokens: false,
+  }),
   zenGo: Object.freeze({
     label: 'OpenCode Zen Go',
     baseUrl: process.env.NODESIGN_UPSTREAM_ZEN_GO_URL || 'https://opencode.ai/zen/go/v1',   // 探针覆盖，同上
@@ -378,6 +388,20 @@ export const MODELS_BUILTIN = Object.freeze([
   // ── OpenCode Go · DeepSeek V4 Flash Vision Exp（08-21 深夜，第一条付费行）── /zen/go = OpenCode Go 订阅（$10/月换 $12/5h·$30/周·$60/月）：
   // 额度内上游 cost 报 0、余额不扣 → 记账按**表价**（高峰价；北京 09-12/14-18 是高峰）让每用户日限跟 Go 池子一起受控，cost>0 以上游为准
   // （context.applyUpstreamBilling）。探针：文本/图(webp)/工具/流式全通，首字 ~450ms，reasoning_effort 收；DeepSeek ZDR。先 gate localGen 试跑，过关改 'subscription'
+  {
+    // 09-08 晚基元律动那条 GLM-5.3-Flash：同模型第二条渠道，按标价折 USD 记（打折价不写进表，折扣没了表不用改），掉线换 merge 那条
+    id: 'glm-5.3-flash-tokenrhythm', window: 1_000_000, brand: 'glm',
+    standby: 'glm-5.3-flash-merge',
+    select: { label: 'GLM-5.3-Flash · 基元律动', desc: '第二条渠道 · 支持视觉 · 1M 上下文 · 按用量计入每日额度（标价 $0.11/$0.39，缓存 $0.03）' },
+    api: {
+      upstream: 'tokenrhythm', wireModel: 'glm-5.3-flash',
+      fastModel: 'deepseek-v4-flash-helper',
+      thinking: 'strip',
+      reasoningEffort: 'high',
+      maxOutput: 131_072,
+      prices: { input: 0.113, output: 0.394, cacheRead: 0.032, cacheWrite: 0 },
+    },
+  },
   {
     // 09-08 晚站主接的 DeepSeek 官方预览行：模型名带着到期日（09-10 之后上游会拒，届时会话级 standby 换到下面那条视觉行）。
     // 按量计入每日额度（站主：以后加充值，现在先按额度走）；1M 窗口走共用别名（不写 sdkAlias）。
