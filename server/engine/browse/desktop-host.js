@@ -91,9 +91,12 @@ export async function openDesktopView(projectId, { proxyPort, viewport }) {
   const browser = await cdpBrowser();
   const page = await findPage(browser, created.marker);
   const context = page.context();
-  // DPR 钉 1：HiDPI 屏（Windows 常见 125% / 150%）上截图会按 DPR 放大，坐标就不再 1:1。width/height 给 0 = 不改视口尺寸
+  // ⛔ 这里**不要**做 `Emulation.setDeviceMetricsOverride({ deviceScaleFactor: 1 })`。
+  // 05:21 那版为了 HiDPI 上截图坐标 1:1 钉过 DPR=1，结果 Windows 125%/150% 缩放下页面按 DPR 1 画进一个
+  // DPR 1.5 的面：内容只占左上 2/3，其余是仿真视口外的灰 —— 站主 09-08 晚两次实报（「预览内容缩在一角」、
+  // 「agent 看到的截图只有左上角是画面」）都是它。坐标 1:1 改由截图侧 `scale: 'css'` 保证（Playwright 按
+  // CSS 像素出图，与 DPR 无关；点击坐标本来就是 CSS 像素）。
   const cdp = await context.newCDPSession(page);
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 0, height: 0, deviceScaleFactor: 1, mobile: false }).catch(() => {});
   return { page, context, viewId: created.viewId, cdp };
 }
 

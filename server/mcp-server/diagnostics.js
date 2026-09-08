@@ -277,7 +277,7 @@ function buildServer({ desktopState }) {
   }, async () => text(upstreamBalances()));
 
   server.registerTool('workspace_audit', {
-    description: '一个项目板↔磁盘对账：板上有座位但磁盘不存在的卡（dangling）、磁盘上有但板上没有的文件（unseated，前 50 个）。run 收尾时也自动跑一次，dangling>0 记 auto 问题。',
+    description: '一个项目板↔磁盘对账：板上有座位但磁盘不存在的卡（dangling）、磁盘上有但板上没有的文件（unseated，前 50 个）、同层矩形互压的物件对（overlaps：谁后到 seatedAt/seatedBy、大卡是否在邻居入座后长过 grewOver）。run 收尾时也自动跑一次，dangling>0 记 auto 问题。',
     inputSchema: { project_id: z.string().min(1) },
   }, async ({ project_id }) => text(await auditWorkspace(project_id)));
 

@@ -132,9 +132,9 @@ the workspace for the user.`,
           if (selector) {
             const loc = page.locator(selector).first();
             if (!(await loc.count())) return asText(`选择器没匹配到元素：${selector}`, true);
-            buf = await loc.screenshot({ type: 'png' });
+            buf = await loc.screenshot({ type: 'png', scale: 'css' });
           } else {
-            buf = await page.screenshot({ type: 'png', fullPage: fullPage === true });
+            buf = await page.screenshot({ type: 'png', fullPage: fullPage === true, scale: 'css' });
             // 顺手把这张存成桌面卡片的预览 —— **不额外截图**，只是这一张本来就有。
             // 整页图不用：卡片是一块 16:10 的画框，塞一张长图进去看不出东西。
             if (fullPage !== true) await saveFrame(projectId, buf);

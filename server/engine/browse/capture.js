@@ -347,9 +347,9 @@ export async function capture({
         const loc = page.locator(selector).first();
         // 短超时快速失败：一个选不中的选择器不该让整次采集卡 30 秒
         await loc.waitFor({ state: 'visible', timeout: 6000 });
-        raw = await loc.screenshot({ type: 'png', timeout: 8000 });
+        raw = await loc.screenshot({ type: 'png', timeout: 8000, scale: 'css' });
       } else {
-        raw = await page.screenshot({ type: 'png', fullPage: false });
+        raw = await page.screenshot({ type: 'png', fullPage: false, scale: 'css' });
       }
       // 走跟感知层同一条归一化（webp、缩到 API 反正会缩的规格）—— 参考图不需要
       // 无损，而 76MB 的 references 目录已经是这个项目的既有账

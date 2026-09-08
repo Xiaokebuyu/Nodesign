@@ -181,3 +181,32 @@ describe('renameBoardPaths：搬进文件夹后显式 zone 字段不能留在旧
     expect(layerOf('b.webp', board.objects['b.webp'], new Set(Object.keys(board.zones)))).toBe('');
   });
 });
+
+describe('座位戳（09-08 埋点）：位置变了盖 seatedAt/seatedBy，尺寸变了盖 sizedAt，都只在 patchBoard 一处', () => {
+  beforeAll(async () => { await ensureProjectWorkspace(pid); });
+
+  it('新座按 seat 推 seatedBy；同坐标回写不改戳；挪了换戳；用户拖成 user；尺寸变了盖 sizedAt', async () => {
+    const id = 'assets/generated/stamp.png';
+    await patchBoard(pid, { objects: { [id]: { x: 10, y: 20, z: 1, seat: 'auto', provisional: true } } });
+    let e = (await readBoard(pid)).objects[id];
+    expect(e.seatedBy).toBe('client');
+    expect(typeof e.seatedAt).toBe('number');
+    const t0 = e.seatedAt;
+    await new Promise((r) => setTimeout(r, 3));
+    await patchBoard(pid, { objects: { [id]: { x: 10, y: 20, z: 2 } } });   // 前端整表回写：坐标没变
+    e = (await readBoard(pid)).objects[id];
+    expect(e.seatedAt).toBe(t0);
+    await patchBoard(pid, { objects: { [id]: { x: 300, y: 20, seat: 'auto', provisional: false } } });   // 入座器重解
+    e = (await readBoard(pid)).objects[id];
+    expect(e.seatedBy).toBe('seater');
+    expect(e.seatedAt).toBeGreaterThan(t0);
+    await patchBoard(pid, { objects: { [id]: { x: 320, y: 40, seat: 'user' } } });
+    e = (await readBoard(pid)).objects[id];
+    expect(e.seatedBy).toBe('user');
+    expect(e.sizedAt).toBeUndefined();
+    await patchBoard(pid, { objects: { [id]: { w: 960, h: 628 } } });   // 主角放大的尺寸回写
+    e = (await readBoard(pid)).objects[id];
+    expect(typeof e.sizedAt).toBe('number');
+    expect(e.seatedBy).toBe('user');   // 尺寸变不算挪座
+  });
+});

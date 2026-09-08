@@ -14,7 +14,9 @@ import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 
 export const CODEX_BIN = process.env.NODESIGN_CODEX_BIN || 'codex';
-export const CODEX_IMAGE_TIMEOUT_MS = Number(process.env.NODESIGN_CODEX_IMAGE_TIMEOUT_MS) || 240_000;
+// 240s → 300s（09-08 深夜实测：codex 内置 image_gen 一张 100～217s，壳子再加 25～50s；271s 那张被 240s 掐死时图已经出来了）。
+// 三道预算要错开：这里 300s < relay produce 330s < 桌面 relay 腿 360s，谁先到都能报出人话而不是 unknown。
+export const CODEX_IMAGE_TIMEOUT_MS = Number(process.env.NODESIGN_CODEX_IMAGE_TIMEOUT_MS) || 300_000;
 
 /**
  * 变体模式的 preserve 词表。键是 agent 传的枚举值，值是展开进 prompt 的英文短语。

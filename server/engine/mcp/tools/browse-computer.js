@@ -162,7 +162,7 @@ async function withModifiers(page, mods, fn) {
 
 /** 浏览通道的视口截图：存桌面卡预览 + 归一化（1366×768 在阈值内，不缩）→ 文本块在前，图在后 */
 export async function viewportShot(page, projectId, lead) {
-  const buf = await page.screenshot({ type: 'png' });
+  const buf = await page.screenshot({ type: 'png', scale: 'css' });
   await saveFrame(projectId, buf);
   const shot = await normalizeShot(buf);
   return {
@@ -183,7 +183,7 @@ async function zoomShot(page, region, frame, lead) {
       + 'zoom takes viewport pixels — coordinates from a fullPage screenshot are in page space and do NOT work here; scroll the target into view first, or subtract the scroll offset.', true);
   }
   const clip = { x: toPage(x0, frame), y: toPage(y0, frame), width: toPage(x1 - x0, frame), height: toPage(y1 - y0, frame) };
-  const buf = await page.screenshot({ type: 'png', clip });
+  const buf = await page.screenshot({ type: 'png', clip, scale: 'css' });
   const { default: sharp } = await import('sharp');
   const k = Math.min(frame.w / (x1 - x0), frame.h / (y1 - y0));   // 放大到塞满截图空间
   const up = await sharp(buf)

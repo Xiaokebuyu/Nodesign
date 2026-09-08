@@ -30,8 +30,7 @@ export { TEXT_FONTS } from './board-sanitize.js';
 import { DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS, MAX_LANES, MAX_SHEETS } from './board-limits.js';
 import {
   clampNum, sanitizeSize, sanitizeTag, sanitizeObject, sanitizeBinding, sanitizeZone, sanitizeBoard, sanitizeLane, sanitizeRoll, sanitizeSheet,
-  isSafeCanvasId,
-} from './board-sanitize.js';
+  isSafeCanvasId, stampSeat } from './board-sanitize.js';
 
 // 分区自动铺位常数 —— 与前端 BoardCanvas 的 ZONE_* 保持一致（数值约定，非共享代码）
 // ZONE_DEFAULTS 已删（#14）：它是"文件夹=版面上一整条带"时代的默认矩形，
@@ -115,7 +114,7 @@ export function patchBoard(pid, patch) {
         // by/seat/w/h/tag/staging 全被抹掉且零报错（08-25 体检三陷阱之②）。
         // 合并后瘦条目只更新它带来的字段。要删整条传 null；单字段清除走
         // 各自的专用路（commitStaging 清 staging、removeByTag 摘 tag）。
-        const merged = board.objects[id] ? { ...board.objects[id], ...o } : o;
+        const merged = board.objects[id] ? { ...board.objects[id], ...o } : o; stampSeat(board.objects[id], o, merged);   // 座位戳只在这一处盖（board-sanitize.stampSeat）
         const s = sanitizeObject(merged, board.size);
         if (s && (board.objects[id] || Object.keys(board.objects).length < MAX_OBJECTS)) board.objects[id] = s;
       }

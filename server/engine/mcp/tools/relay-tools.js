@@ -44,7 +44,7 @@ export async function relayWebSearch({ query, provider, count, includeImages }) 
  */
 export async function relayGenerateImage(payload) {
   try {
-    const r = await relayToolCall('generate_image', payload, { timeoutMs: 5 * 60_000 });
+    const r = await relayToolCall('generate_image', payload, { timeoutMs: 6 * 60_000 });   // 三道预算的最外层（codex 300s < relay 330s < 这里 360s）
     // 网关为了穿 Cloudflare 的 100 秒先发了 200 头，之后的失败是 200 + 错误形状
     if (r?.type === 'error') return { error: `generate_image failed (relay ${r.code || ''}): ${r.error?.message || '未知错误'}` };
     return r?.error ? { error: String(r.error) } : r;

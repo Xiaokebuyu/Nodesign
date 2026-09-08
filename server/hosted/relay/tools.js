@@ -121,7 +121,7 @@ export function mountRelayTools(router, { sendError, readRawBody, produce = prod
       try {
         produced = await produce({
           route, prompt, aspectRatio, imageSize, thinkingLevel, responseModalities, useGrounding: !!useGrounding, modelId,
-          refs: files, isVariation: !!isVariation, codexOutAbs: path.join(tmp, 'out.png'), signal: AbortSignal.timeout(4 * 60_000),
+          refs: files, isVariation: !!isVariation, codexOutAbs: path.join(tmp, 'out.png'), signal: AbortSignal.timeout(330_000),   // > codex 300s，< 桌面腿 360s（helpers/codex-imagegen.js 头注）
         });
       } catch (err) {
         return failStreaming(502, 'IMAGE_FAILED', `generate_image ${err.stage === 'extract' ? 'failed' : `${err.stage || route} error`}: ${err.message}`);
