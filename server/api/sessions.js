@@ -95,8 +95,10 @@ export async function listSessionsForProject(pid) {
     ...await readSids(path.join(getProjectWorkspace(pid), 'sessions')),
   ])];
   const results = await Promise.all(sids.map(async (sid) => {
-    // 转录按 **cwd** 编码定位，而 cwd 现在就是工作区（getSessionWorkspace 也返回它）
-    const sessionRoot = workspaceRoot;
+    // 转录按 **cwd** 编码定位。⚠️ 09-08 站主在 Windows 上报「会话历史全没了」：仓库项目 cwd 是用户文件夹、
+    // 桌面是 <folder>/.nodesign，这里曾直接拿桌面（workspaceRoot）去编码 → 转录永远找不到 → 列表空。
+    // 问 getSessionWorkspace（= agent 站的地方），跟本文件其余四处和 ws/index.js 同一份答案。
+    const sessionRoot = getSessionWorkspace(pid, sid);
     try {
       const info = await withConfigDir(GLOBAL_CLAUDE_CONFIG_DIR, () =>
         getSessionInfo(sid, { dir: sessionRoot }),
