@@ -399,10 +399,63 @@ export default {
   '原项目已删除': 'source project deleted',
   '这件作品沉淀出来的 skill': 'the skill distilled from this piece',
   'Skill 市场': 'Skill market',
-  '还没开': 'not open yet',
-  '发布自己的 skill、下别人的来用。开之前要先解决一件事：SKILL.md 会整段进 agent 的上下文，等于让陌生人往你的会话里写指令，得有发布审核和可见范围才敢开。':
-    "Publish your own skills, install other people's. One thing has to be settled first: a SKILL.md goes into the agent's context whole, which means letting a stranger write instructions into your session. That needs review and visibility scoping before it can open.",
-  '现在要给朋友，先导出文件互传：': 'To share with a friend today, export the file and send it over:',
+  '看看别人探索出来的方法论，装到自己的 skill 库里。上面每张卡都能发过去：发的是 skill 和截图，不带产物；站主看过全文才上架。':
+    "See the methods other people worked out and install them into your own skill library. Every card above can be published there: what goes is the skill and screenshots, not the artifact; nothing is listed until the site owner has read it in full.",
+  '市场上架中': 'listed in market',
+  '市场审核中': 'in market review',
+  '发布到市场': 'Publish to market',
+
+  // ── 市场 · 发布弹窗（components/market/PublishDialog.jsx）──
+  '标题不能为空': 'Title cannot be empty',
+  '至少传一张参考图': 'Add at least one reference image',
+  '已提交，等站主看过就上架': 'Submitted. It goes live once the site owner has reviewed it.',
+  '发布失败：{err}': 'Could not publish: {err}',
+  '发的是现在装着的这份。之后本地再改，货架上的不跟着变。':
+    'What gets published is the copy installed right now. Later local edits do not change the listed one.',
+  '标题': 'Title',
+  '别人在货架上看到的名字': 'The name others see on the shelf',
+  '说明': 'Notes',
+  '它适合做什么、在哪种场合会失效。写给要装它的人。':
+    'What it is good for and where it stops working. Written for whoever installs it.',
+  '参考图': 'Reference images',
+  '去掉': 'Remove',
+  '不传就用这件作品的首屏截图当封面；最多 {n} 张。': 'Leave empty to use a screenshot of this piece as the cover; up to {n} images.',
+  '至少一张，最多 {n} 张。给别人看看这套方法做出来的东西长什么样。': 'At least one, up to {n}. Show people what this method produces.',
+  '提交中…': 'Submitting…',
+  '提交审核': 'Submit for review',
+
+  // ── 市场（routes/Market.jsx）──
+  '待审': 'in review',
+  '已上架': 'listed',
+  '没通过': 'not approved',
+  '已撤回': 'withdrawn',
+  '已下架': 'delisted',
+  '先在设置里登录站点账号，市场才能用': 'Sign in to the site in Settings first; the market needs an account.',
+  '市场拉取失败：{err}': 'Could not load the market: {err}',
+  '装好了。下个新会话起 agent 就认识它了。': 'Installed. The agent knows it from your next new session.',
+  '覆盖已装的同名 skill？': 'Replace the installed skill with the same name?',
+  '你已经装了一个叫「{name}」的 skill。覆盖后旧的那份就没了。': 'You already have a skill called "{name}". Replacing it discards the old copy.',
+  '覆盖': 'Replace',
+  '安装失败：{err}': 'Could not install: {err}',
+  '撤回这条发布？': 'Withdraw this listing?',
+  '货架上不再展示「{title}」。已经装了的人手里那份不受影响。': '"{title}" stops showing on the shelf. Copies people already installed are not affected.',
+  '撤回': 'Withdraw',
+  '撤回失败：{err}': 'Could not withdraw: {err}',
+  '别人探索出来的方法论，连同它做出来的东西的样子。装进自己的 skill 库，下个新会话点名就能用。每一条上架前站主都看过全文。':
+    'Methods other people worked out, along with what they produced. Install one into your skill library and name it in your next new session. The site owner reads every listing in full before it goes up.',
+  '我发的': 'Mine',
+  '站主批注：{note}': 'Owner\'s note: {note}',
+  '货架还是空的。橱窗里的作品可以发上来，站主看过就上架。': 'The shelf is empty so far. Pieces in your gallery can be published here; they go up once the owner has read them.',
+  '{n} 人装过': { one: '{n} install', other: '{n} installs' },
+  '已装': 'Installed',
+  '装到我的 skill 库': 'Install to my skills',
+  '安装': 'Install',
+  '精选': 'Featured',
+  'SKILL.md 全文（装了之后 agent 读到的就是这段）': 'Full SKILL.md (this is exactly what the agent reads once installed)',
+  '市场': 'Market',
+  '导出 zip': 'Export zip',
+  'skill「{name}」已存进你的 skill 库，作品进了橱窗；下个新会话生效，橱窗里能发到市场。':
+    'Skill "{name}" is saved to your skill library and the piece is in your gallery. It takes effect from the next new session; you can publish it to the market from the gallery.',
 
   // ── 橱窗 · 回头提炼（routes/showcase-distill.jsx）──
   '把做过的东西留成方法': 'Turn what you made into a method',

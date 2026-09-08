@@ -3,6 +3,7 @@ import Home from './routes/Home.jsx';
 import ProjectWorkspace from './routes/ProjectWorkspace.jsx';
 import SkillList from './routes/SkillList.jsx';
 import Showcase from './routes/Showcase.jsx';
+import Market from './routes/Market.jsx';
 import Issues from './routes/Issues.jsx';
 import AdminConsole from './routes/AdminConsole.jsx';
 import Settings from './routes/Settings.jsx';
@@ -26,6 +27,9 @@ const router = createBrowserRouter([
   // 橱窗取代了假模板市场（2026-07-30）：卡片是用户自己做出来的作品 + 那次探索
   // 固化出来的 skill。/templates 是旧地址，留个重定向别让老链接 404。
   { path: '/gallery', element: <Showcase /> },
+  // skill 市场（09-08）：/market/:id 是同一页上的详情弹窗
+  { path: '/market', element: <Market /> },
+  { path: '/market/:id', element: <Market /> },
   { path: '/templates', element: <Navigate to="/gallery" replace /> },
   // 内测控制台（admin 用；后端 adminGuard 兜底，非 admin 进来只会看到报错空态）
   { path: '/admin', element: <AdminConsole /> },

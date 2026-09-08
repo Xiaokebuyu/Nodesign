@@ -28,6 +28,10 @@
 
 import JSZip from 'jszip';
 import { parseFrontmatter } from '../engine/agent/skill.js';
+import { disallowedComponents, componentError, frontmatterStrictErrors } from './plugin-components.js';
+export { disallowedComponents, frontmatterStrictErrors, COMPONENT_ALLOW_RE, COMPONENT_DENY_DIRS } from './plugin-components.js';
+// 解压那半 09-08 拆去 plugin-extract.js（行数棘轮）；老调用方仍从这里引
+export { extractPluginZip, extractToStaging } from './plugin-extract.js';
 
 // ── 校验阈值 ──
 
@@ -60,72 +64,6 @@ const RESERVED_PLUGIN_NAMES = new Set([
  *   ok: false, errors: string[]
  * }>}
  */
-/**
- * ── 组件白名单（2026-09-08，市场线）──
- *
- * 一个 plugin 目录在 SDK 眼里不只是 skill：hooks/hooks.json 能把 command 或 JS module 挂进 CLI 宿主进程，
- * .mcp.json 能起 stdio 进程，agents/ commands/ 是另两种会被加载的组件。`disableSkillShellExecution`
- * 只管 SKILL.md 正文和 slash command 里的 inline shell，管不到这些；bwrap 只管 Bash 工具。
- * 所以上传能进来的只有两样：plugin 清单 + skills/<id>/ 下的文本与图片。别的一律 hard-fail，
- * 错误里点名是哪几个文件，用户自己删掉再传。导出（lib/plugin-pack.js）用同一张表，导出再上传不会绕过。
- */
-export const COMPONENT_ALLOW_RE = /\.(md|txt|json|ya?ml|csv|html|css|svg|png|jpe?g|webp|gif)$/i;
-export const COMPONENT_DENY_DIRS = new Set(['hooks', 'agents', 'commands', 'scripts', 'bin', 'node_modules']);
-
-/**
- * @param {string[]} rels  相对 plugin 根（plugin-zip）或 skill 根（single-skill-zip）的文件路径，不含目录项
- * @param {'plugin'|'skill'} layout
- * @returns {string[]} 不该出现的文件（空 = 通过）
- */
-export function disallowedComponents(rels, layout) {
-  const bad = [];
-  for (const rel of rels) {
-    const segs = rel.split('/');
-    let ok;
-    if (layout === 'plugin') {
-      ok = rel === '.claude-plugin/plugin.json'
-        || (segs[0] === 'skills' && segs.length >= 3 && !segs.some((x) => COMPONENT_DENY_DIRS.has(x)) && COMPONENT_ALLOW_RE.test(rel));
-    } else {
-      ok = !segs.some((x) => COMPONENT_DENY_DIRS.has(x)) && COMPONENT_ALLOW_RE.test(rel);
-    }
-    if (!ok) bad.push(rel);
-  }
-  return bad;
-}
-
-function componentError(bad) {
-  const shown = bad.slice(0, 5).map((x) => `\`${x}\``).join('、');
-  return `包里有不允许的文件：${shown}${bad.length > 5 ? ` 等 ${bad.length} 个` : ''} —— 只收 plugin.json 和 skills/<id>/ 下的文本与图片；hooks / scripts / agents / commands / .mcp.json 不能带（它们会被 SDK 当组件执行）`;
-}
-
-/**
- * ── frontmatter 严格形态（2026-09-08）──
- *
- * 我们的 parseFrontmatter 是手写的极简版（重复 key 取最后一个、不认多行标量），SDK 自己用的是真 YAML。
- * 两边解出不同的 description 就是「validator 看到 A、注进 system prompt 的是 B」。堵法不是换解析器
- * （loader 那边还有一份），是把能造成分歧的形态在上传口全拒：重复 key、多行标量（| >）、非 key: value 的行、
- * 块内再出现 ---。合规的 SKILL.md 本来就长不成那样。
- */
-export function frontmatterStrictErrors(rawText) {
-  const m = /^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/.exec(rawText);
-  if (!m) return ['缺 YAML frontmatter（文件要以 --- 开头、--- 结尾的一段 key: value 开场）'];
-  const errors = [];
-  const seen = new Set();
-  for (const line of m[1].split('\n')) {
-    const t = line.trim();
-    if (!t || t.startsWith('#')) continue;
-    if (t === '---' || t === '...') { errors.push('frontmatter 里不能再出现 --- / ...（多文档）'); continue; }
-    const km = /^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/.exec(t);
-    if (!km || line !== line.trimStart()) { errors.push(`frontmatter 只接受顶层 \`key: value\`，这一行不是：\`${t.slice(0, 60)}\``); continue; }
-    const [, key, value] = km;
-    if (seen.has(key)) errors.push(`frontmatter 里 \`${key}\` 出现了两次`);
-    seen.add(key);
-    if (/^[|>]/.test(value)) errors.push(`frontmatter \`${key}\` 用了多行标量（| 或 >），改成一行`);
-    if (/^[&*!]/.test(value)) errors.push(`frontmatter \`${key}\` 用了锚点 / 标签（& * !），不支持`);
-  }
-  return errors;
-}
-
 export async function validatePluginZip(buffer) {
   const errors = [];
   const warnings = [];
@@ -381,44 +319,6 @@ export async function validatePluginZip(buffer) {
     warnings,
     rootPrefix,  // 解压时用，去掉 wrapper 层
   };
-}
-
-/**
- * 把校验通过的 zip 解压到目标目录（atomic：先解到 staging，调用方完成后 rename）。
- *
- * 注意：本函数假定 `validatePluginZip` 已经过，**只关心 path 安全**这一项二次防御。
- *
- * @param {Buffer} buffer
- * @param {string} stagingDir - 已建好的空目录绝对路径
- * @param {string} rootPrefix - validate 时识别的 wrapper 前缀（可能是 '' 或 'foo/'）
- * @returns {Promise<void>}
- */
-export async function extractPluginZip(buffer, stagingDir, rootPrefix = '') {
-  const path = await import('node:path');
-  const fs = await import('node:fs/promises');
-
-  const zip = await JSZip.loadAsync(buffer);
-  for (const [entryPath, entry] of Object.entries(zip.files)) {
-    if (entry.dir) continue;
-    // 去 wrapper 前缀
-    if (rootPrefix && !entryPath.startsWith(rootPrefix)) continue;
-    const relativePath = rootPrefix ? entryPath.slice(rootPrefix.length) : entryPath;
-    if (!relativePath) continue;
-    // 二次防御：拒绝 .. / 绝对路径（应该已被 validate 拦但保险）
-    if (relativePath.includes('..') || relativePath.startsWith('/')) {
-      throw new Error(`unsafe entry path during extract: ${relativePath}`);
-    }
-    const targetPath = path.join(stagingDir, relativePath);
-    // 校验解压后路径仍在 stagingDir 下（resolve 后比较 prefix）
-    const resolvedTarget = path.resolve(targetPath);
-    const resolvedStaging = path.resolve(stagingDir);
-    if (!resolvedTarget.startsWith(resolvedStaging + path.sep) && resolvedTarget !== resolvedStaging) {
-      throw new Error(`extract target escapes staging dir: ${relativePath}`);
-    }
-    await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    const content = await entry.async('nodebuffer');
-    await fs.writeFile(targetPath, content);
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -734,84 +634,6 @@ async function validateSingleSkillZip(zip, entries, topDirs) {
     rootPrefix,             // wrapper 前缀
     skillRootPrefix: rootPrefix,  // skill 内容前缀（同 rootPrefix，命名留扩展空间）
   };
-}
-
-/**
- * 把校验通过的 upload 解到 stagingDir，按 SDK plugin 目录结构布局。
- *
- * mode 多态分派：
- *   - 'single-md'        → 写 plugin.json + skills/<name>/SKILL.md
- *   - 'single-skill-zip' → 解 zip 全部内容到 skills/<name>/（含 patterns/ 等附件）+ 写 plugin.json
- *   - 'plugin-zip'       → 走旧 extractPluginZip 逻辑（直接解压）
- *
- * @param {object} opts
- * @param {Buffer} opts.buffer
- * @param {object} opts.validation - validateSkillUpload 返回
- * @param {string} opts.stagingDir - 已建好的空目录绝对路径
- */
-export async function extractToStaging({ buffer, validation, stagingDir }) {
-  const path = await import('node:path');
-  const fs = await import('node:fs/promises');
-
-  if (validation.mode === 'plugin-zip') {
-    await extractPluginZip(buffer, stagingDir, validation.rootPrefix);
-    // 清单永远重写成只含 name / version / description：用户带来的 hooks / mcpServers 一类字段不落盘
-    // （SDK 会读 manifest 里的组件声明，组件白名单只拦文件，这里拦字段）
-    await fs.writeFile(
-      path.join(stagingDir, '.claude-plugin', 'plugin.json'),
-      JSON.stringify({ name: validation.manifest.name, version: validation.manifest.version, description: validation.manifest.description }, null, 2),
-      'utf8',
-    );
-    return;
-  }
-
-  // 写 plugin.json（single-md 和 single-skill-zip 都要）
-  const manifestDir = path.join(stagingDir, '.claude-plugin');
-  await fs.mkdir(manifestDir, { recursive: true });
-  await fs.writeFile(
-    path.join(manifestDir, 'plugin.json'),
-    JSON.stringify({
-      name: validation.manifest.name,
-      version: validation.manifest.version,
-      description: validation.manifest.description,
-    }, null, 2),
-    'utf8',
-  );
-
-  const skillDir = path.join(stagingDir, 'skills', validation.manifest.name);
-  await fs.mkdir(skillDir, { recursive: true });
-
-  if (validation.mode === 'single-md') {
-    await fs.writeFile(path.join(skillDir, 'SKILL.md'), validation.rawText, 'utf8');
-    return;
-  }
-
-  if (validation.mode === 'single-skill-zip') {
-    const zip = await JSZip.loadAsync(buffer);
-    const prefix = validation.skillRootPrefix || '';
-    for (const [entryPath, entry] of Object.entries(zip.files)) {
-      if (entry.dir) continue;
-      if (prefix && !entryPath.startsWith(prefix)) continue;
-      const relativePath = prefix ? entryPath.slice(prefix.length) : entryPath;
-      if (!relativePath) continue;
-      // 二次防御
-      if (relativePath.includes('..') || relativePath.startsWith('/')) {
-        throw new Error(`unsafe entry path during extract: ${relativePath}`);
-      }
-      const targetPath = path.join(skillDir, relativePath);
-      const resolvedTarget = path.resolve(targetPath);
-      const resolvedSkill = path.resolve(skillDir);
-      if (!resolvedTarget.startsWith(resolvedSkill + path.sep) && resolvedTarget !== resolvedSkill) {
-        throw new Error(`extract target escapes skill dir: ${relativePath}`);
-      }
-      await fs.mkdir(path.dirname(targetPath), { recursive: true });
-      const content = await entry.async('nodebuffer');
-      await fs.writeFile(targetPath, content);
-    }
-    return;
-  }
-
-  throw new Error(`unknown validation.mode: ${validation.mode}`);
 }
 
 function formatBytes(n) {

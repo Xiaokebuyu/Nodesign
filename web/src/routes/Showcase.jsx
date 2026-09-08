@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, Upload, Trash2, Store, ArrowRight } from 'lucide-react';
+import { Sparkles, Upload, Trash2, Store, ArrowRight, Send } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
 import { Desk } from './desk.jsx';
@@ -14,6 +14,8 @@ import { useHoverReveal } from '../lib/use-hover-reveal.js';
 import { timeAgo } from '../lib/helpers.js';
 import { t } from '../lib/i18n.js';
 import DistillPanel from './showcase-distill.jsx';
+import PublishDialog from '../components/market/PublishDialog.jsx';
+import { Market } from '../lib/api-market.js';
 
 /**
  * Showcase — 个人作品橱窗（/gallery，替掉原来的假模板市场）
@@ -31,11 +33,14 @@ import DistillPanel from './showcase-distill.jsx';
  * 动作搬到了字的旁边 —— 说明常驻（不再只在空状态里露一次），并且给一条现在就
  * 能走的路：挑一个做过的项目让它回头读一遍。
  *
- * 市场（下别人发布的 skill）先留入口不开：SKILL.md 会整段进 agent 上下文，等于
- * 让陌生人往你的会话里写指令，得先有发布审核和可见范围才能开。
+ * 市场 2026-09-08 开了（/market）：每张卡的 skill 能「发布到市场」，发出去进待审，站主看过
+ * SKILL.md 全文和截图才上架 —— 「陌生人的 SKILL.md 会整段进你的 agent 上下文」那条顾虑靠人审，
+ * 不靠不开。发的是 skill + 截图，不带产物。
  */
 export default function Showcase() {
   const [entries, setEntries] = useState(null);   // null = 加载中
+  const [publishing, setPublishing] = useState(null);   // 正在发布的那条 entry
+  const [pubs, setPubs] = useState([]);                 // 我在市场上的发布（按 showcaseId 对回卡片）
   const showToast = useGlobalStore(s => s.showToast);
   const confirm = useGlobalStore(s => s.confirm);
   const narrow = useMedia(NARROW);
@@ -45,8 +50,11 @@ export default function Showcase() {
     Me.showcase()
       .then(({ entries: list = [] }) => { if (!dead) setEntries(list); })
       .catch(() => { if (!dead) setEntries([]); });
+    // 市场那侧拉不到（桌面版没登录站点）就当没发过，不弹错：这一页的主角是橱窗
+    Market.mine().then(({ items = [] }) => { if (!dead) setPubs(items); }).catch(() => {});
     return () => { dead = true; };
   }, []);
+  const pubOf = (entry) => pubs.find(p => p.showcaseId === entry.id && ['pending', 'approved'].includes(p.state)) || null;
 
   const handleRemove = async (entry) => {
     if (!(await confirm({
@@ -117,14 +125,23 @@ export default function Showcase() {
             gap: narrow ? GAP.lg : GAP.xl,
           }}>
             {entries.map(e => (
-              <ShowcaseCard key={e.id} entry={e} onRemove={() => handleRemove(e)} />
+              <ShowcaseCard key={e.id} entry={e} publication={pubOf(e)} onRemove={() => handleRemove(e)} onPublish={() => setPublishing(e)} />
             ))}
           </div>
         )}
 
-        <MarketPlaceholder />
+        <MarketEntry />
       </div>
       </Desk>
+      <PublishDialog
+        show={!!publishing}
+        onClose={() => setPublishing(null)}
+        skillName={publishing?.skillName || ''}
+        showcaseId={publishing?.id || null}
+        defaultTitle={publishing?.title || ''}
+        defaultNote={publishing?.note || ''}
+        onPublished={(p) => setPubs(list => [p, ...list])}
+      />
     </AppShell>
   );
 }
@@ -152,7 +169,7 @@ function EmptyState() {
   );
 }
 
-function ShowcaseCard({ entry, onRemove }) {
+function ShowcaseCard({ entry, publication, onRemove, onPublish }) {
   // hover 管视觉抬起（触屏恒 false），revealed 管那颗移出钮（触屏恒 true）
   const { revealed, hover, hoverProps } = useHoverReveal();
   const [noCover, setNoCover] = useState(false);
@@ -228,6 +245,28 @@ function ShowcaseCard({ entry, onRemove }) {
             {entry.createdAt ? timeAgo(entry.createdAt) : ''}
           </span>
         </div>
+
+        {/* 市场那行（09-08）：有 skill 才能发；发过的显示状态，没发的给一颗「发布」 */}
+        {entry.skillName && (
+          publication ? (
+            <Link to={`/market/${publication.id}`} style={{
+              display: 'inline-flex', alignItems: 'center', gap: GAP.xs, alignSelf: 'flex-start', marginTop: GAP.xs,
+              fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, textDecoration: 'none',
+              color: publication.state === 'approved' ? COLOR.success : COLOR.warn,
+              padding: `1px 7px`, border: `1px solid currentColor`, borderRadius: RADIUS.pill,
+            }}>
+              <Store size={10} /> {publication.state === 'approved' ? t('市场上架中') : t('市场审核中')}
+            </Link>
+          ) : (
+            <button onClick={onPublish} style={{
+              display: 'inline-flex', alignItems: 'center', gap: GAP.xs, alignSelf: 'flex-start', marginTop: GAP.xs,
+              fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text2, cursor: 'pointer',
+              padding: `1px 7px`, background: 'transparent', border: `1px solid ${COLOR.border}`, borderRadius: RADIUS.pill,
+            }}>
+              <Send size={10} /> {t('发布到市场')}
+            </button>
+          )
+        )}
       </div>
 
       {revealed && (
@@ -248,43 +287,29 @@ function ShowcaseCard({ entry, onRemove }) {
   );
 }
 
-/** 市场入口：先占位不开（理由写在卡片里，别让人以为是忘了做） */
-function MarketPlaceholder() {
+/** 市场入口（09-08 开了）：别人的方法论在那边，自己的从上面每张卡发过去 */
+function MarketEntry() {
   return (
-    <div style={{
+    <Link to="/market" style={{
       marginTop: GAP.page,
       padding: `${GAP.xl}px`,
       background: COLOR.bgCard,
-      border: `1px dashed ${COLOR.borderMd}`,
+      border: `1px solid ${COLOR.borderMd}`,
       borderRadius: RADIUS.xxl,
       display: 'flex', alignItems: 'flex-start', gap: GAP.lg,
+      textDecoration: 'none',
     }}>
-      <Store size={18} color={COLOR.sub} style={{ flexShrink: 0, marginTop: GAP.xxs }} />
+      <Store size={18} color={COLOR.gold} style={{ flexShrink: 0, marginTop: GAP.xxs }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: FONT_MONO, fontSize: FONT_SIZE.base, fontWeight: 600,
-          color: COLOR.text2, marginBottom: GAP.xs,
-          display: 'flex', alignItems: 'center', gap: GAP.sm,
-        }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.base, fontWeight: 600, color: COLOR.text2, marginBottom: GAP.xs }}>
           {t('Skill 市场')}
-          <span style={{
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, fontWeight: 400, color: COLOR.sub,
-            padding: '1px 7px', background: 'rgba(43,33,23,0.04)', borderRadius: RADIUS.pill,
-          }}>{t('还没开')}</span>
         </div>
         <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.sub, lineHeight: 1.65 }}>
-          {/* ⚠️ 链接不进 t() 的参数：interpolate 走的是 String(params[k])，塞 React
-              元素进去会在页面上印出 [object Object]。整句留在词表里、链接单独成短语，
-              这样英文侧的词序也不受链接位置绑架。 */}
-          {t('发布自己的 skill、下别人的来用。开之前要先解决一件事：SKILL.md 会整段进 agent 的上下文，等于让陌生人往你的会话里写指令，得有发布审核和可见范围才敢开。')}
-          {' '}
-          {t('现在要给朋友，先导出文件互传：')}
-          {' '}
-          <Link to="/skills" style={{ color: COLOR.text2, textDecoration: 'underline' }}>{t('Skill 管理')}</Link>
+          {t('看看别人探索出来的方法论，装到自己的 skill 库里。上面每张卡都能发过去：发的是 skill 和截图，不带产物；站主看过全文才上架。')}
         </div>
       </div>
       <ArrowRight size={14} color={COLOR.dim} style={{ flexShrink: 0, marginTop: GAP.xs }} />
-    </div>
+    </Link>
   );
 }
 

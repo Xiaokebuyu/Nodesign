@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2 } from 'lucide-react';
+import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2, Store } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.jsx';
 import QuickEntry from './home-quick-entry.jsx';
@@ -124,6 +124,9 @@ export default function Home() {
               不是顶栏的按钮。留在这的两个都是"去别处看"，不是"在这开工"。 */}
           <Link to="/gallery" title={t('橱窗')} style={iconBtnStyle}>
             <LayoutTemplate size={14} />{narrow ? null : ` ${t('橱窗')}`}
+          </Link>
+          <Link to="/market" title={t('市场')} style={iconBtnStyle}>
+            <Store size={14} />{narrow ? null : ` ${t('市场')}`}
           </Link>
           <Link to="/skills" title="Skill" style={iconBtnStyle}>
             <Wrench size={14} />{narrow ? null : ' Skill'}

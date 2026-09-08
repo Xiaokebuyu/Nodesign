@@ -102,8 +102,8 @@ describe('台面的窄屏留白只有一份，且住在共用的那一份里', (
 });
 
 describe('顶栏动作在窄屏上一律只留图标', () => {
-  /** 顶栏上挂过 DayToggle 的三页 */
-  const PAGES = ['Home.jsx', 'Showcase.jsx', 'SkillList.jsx'];
+  /** 顶栏上挂过 DayToggle 的几页（09-08 加市场页） */
+  const PAGES = ['Home.jsx', 'Showcase.jsx', 'SkillList.jsx', 'Market.jsx'];
 
   it('每处 <DayToggle> 都传了 compact —— 不传就是常驻四个汉字', () => {
     for (const f of PAGES) {
@@ -128,5 +128,7 @@ describe('顶栏动作在窄屏上一律只留图标', () => {
       .toMatch(/narrow \? null :[^\n]*Skill 管理/);
     expect(strip(read('SkillList.jsx')), '「上传 skill \\/ plugin」的字要按 narrow 收')
       .toMatch(/narrow \? null :[^\n]*上传 skill/);
+    expect(strip(read('Market.jsx')), '市场页「我的橱窗」的字要按 narrow 收')
+      .toMatch(/narrow \? null :[^\n]*我的橱窗/);
   });
 });
