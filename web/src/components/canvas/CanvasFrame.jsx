@@ -15,6 +15,7 @@ const SiteWindow = lazy(() => import('./SiteWindow.jsx'));
 const DocxWindow = lazy(() => import('./DocxWindow.jsx'));
 const StageWindow = lazy(() => import('./StageWindow.jsx'));
 const BrowserWindow = lazy(() => import('./BrowserWindow.jsx'));
+const RepoWindow = lazy(() => import('./RepoWindow.jsx'));
 
 /**
  * CanvasFrame — 中栏总壳（2026-07-28 桌面化重构）
@@ -100,6 +101,7 @@ export default function CanvasFrame({
   // 但内容层各是各的：deck 是等比 letterbox 的设计稿，站点按真实设备宽取景，
   // 世界是地图 + 世界书。同一时刻只开一扇。
   const [siteSrc, setSiteSrc] = useState(null);
+  const [repoWin, setRepoWin] = useState(null);   // 仓库窗（2026-09-08）：{ name }
   const [docxSrc, setDocxSrc] = useState(null);
   const [stageSrc, setStageSrc] = useState(null);   // 演出显示器（09-05）：{ kind:'stage', root, title }
 
@@ -111,6 +113,11 @@ export default function CanvasFrame({
     // 可以跟产物窗同时开着（你在看站点、agent 在旁边逛参考站，两件事）。
     if (desc?.kind === 'browse') {
       onBrowse?.({ url: desc.url || null, help: null });
+      return;
+    }
+    // 仓库窗（2026-09-08）：同 browse，不占产物窗的位子；状态就住在这儿（刷新丢了也无妨，重开一下）
+    if (desc?.kind === 'repo') {
+      setRepoWin({ name: desc.name || null });
       return;
     }
     if (desc?.kind === 'site') {
@@ -214,6 +221,7 @@ export default function CanvasFrame({
    * "上报"变成无限循环（2026-08-18 真踩到，一小时才定位）。
    */
   const closeBrowse = useCallback(() => onBrowse?.(null), [onBrowse]);
+  const closeRepo = useCallback(() => setRepoWin(null), []);
 
   const winSigRef = useRef('');
   const reportWinGroups = useCallback((gs) => {
@@ -224,7 +232,7 @@ export default function CanvasFrame({
   }, []);
 
   // 有窗开着 = 屏幕被一件产物占满，外层据此收掉顶栏的浮现
-  const windowOpen = (deckOpen && (sessionId || deckTaskSrc)) || !!siteSrc || !!docxSrc || !!stageSrc || !!browseWin;
+  const windowOpen = (deckOpen && (sessionId || deckTaskSrc)) || !!siteSrc || !!docxSrc || !!stageSrc || !!browseWin || !!repoWin;
   /**
    * 关掉当前这扇窗，不管它是哪一种（2026-08-29 移动端外壳第三刀）。
    *
@@ -235,7 +243,7 @@ export default function CanvasFrame({
    */
   const closeWindow = useCallback(() => {
     setDeckOpen(false); setDeckTaskSrc(null);
-    setSiteSrc(null); setDocxSrc(null); setStageSrc(null);
+    setSiteSrc(null); setDocxSrc(null); setStageSrc(null); setRepoWin(null);
     closeBrowse();
   }, [closeBrowse]);
   useEffect(() => { onWindowOpenChange?.(!!windowOpen, closeWindow); }, [windowOpen, onWindowOpenChange, closeWindow]);
@@ -262,6 +270,8 @@ export default function CanvasFrame({
       target = { kind: 'object', id: stageSrc.cardId || `stage:${stageSrc.root || ''}`, path: stageSrc.root || null, title: stageSrc.title || t('演出'), typeLabel: t('演出') };
     } else if (browseWin) {
       target = { kind: 'object', id: 'browse', path: browseWin.url || null, title: t('浏览器画面'), typeLabel: t('浏览器') };
+    } else if (repoWin) {
+      target = { kind: 'object', id: 'repo', path: null, title: repoWin.name || t('仓库'), typeLabel: t('仓库') };
     }
     if (!target) return;
     const r = toolbarHostRef.current?.getBoundingClientRect();
@@ -270,7 +280,7 @@ export default function CanvasFrame({
       y: Math.round(r ? r.bottom - 56 : window.innerHeight - 120),
       target,
     });
-  }, [deckOpen, sessionId, deckTaskSrc, deckRelPath, siteSrc, docxSrc, stageSrc, browseWin, project?.name]);
+  }, [deckOpen, sessionId, deckTaskSrc, deckRelPath, siteSrc, docxSrc, stageSrc, browseWin, repoWin, project?.name]);
 
   const toolbarGroups = useMemo(() => {
     if (!winGroups) return boardGroups;
@@ -321,7 +331,7 @@ export default function CanvasFrame({
               : siteSrc ? `site:${siteSrc.base || siteSrc.task || siteSrc.entry || ''}`
                 : docxSrc ? `docx:${docxSrc.file || docxSrc.task || ''}`
                   : stageSrc ? `stage:${stageSrc.root || ''}`
-                    : browseWin ? 'browse' : null
+                    : browseWin ? 'browse' : repoWin ? 'repo' : null
           }
         />
 
@@ -433,6 +443,17 @@ export default function CanvasFrame({
               root={stageSrc.root}
               title={stageSrc.title}
               onClose={() => setStageSrc(null)}
+              onToolbarGroups={reportWinGroups}
+            />
+          </Suspense>
+        )}
+
+        {repoWin && (
+          <Suspense fallback={null}>
+            <RepoWindow
+              projectId={projectId}
+              name={repoWin.name}
+              onClose={closeRepo}
               onToolbarGroups={reportWinGroups}
             />
           </Suspense>

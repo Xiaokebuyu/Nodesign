@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Assets, Sessions, Instruction, Browse } from '../../lib/api.js';
+import { Assets, Sessions, Instruction, Browse, Repo } from '../../lib/api.js';
 import { useBoardFilter } from './board-filter.jsx';
 
 /**
@@ -88,6 +88,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   // 浏览器卡：逛过站才有（服务端读 .browser/state.json 判）。⚠️ 跟上面三个不一样，
   // 它**要能变回 null** —— 项目从没逛过站时服务端给 null，那时桌面上就不该有这张卡。
   const [browse, setBrowse] = useState(null);
+  const [repo, setRepo] = useState(null);      // 仓库卡载荷（本地版文件夹项目才有；404 = 没有）
   const [sessions, setSessions] = useState([]);
   // 布局（saved + 本地改动合一）：{ [id]: {x,y,z} }；zones：{ [路径]: {x,y} }
   //（zones 存档 2026-08-13 瘦身只剩坐标；存量的 w/h/expanded 读进来不用）
@@ -146,6 +147,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
     // 浏览器卡走**自己的端点**（不在 /artifacts 里）：它的真相在服务端进程 +
     // 一份浏览痕迹，跟磁盘扫描不是一回事。见 server/api/browse.js 头注。
     Browse.state(projectId).then(r => setBrowse(r?.url ? r : null)).catch(() => {});
+    Repo.summary(projectId).then(r => setRepo(r?.folder ? r : null)).catch(() => setRepo(null));
     if (Array.isArray(s?.sessions)) setSessions(s.sessions);
     if (b?.board && !layoutLoadedRef.current) {
       layoutLoadedRef.current = true;
@@ -224,7 +226,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   }, [scheduleSave]);
 
   return {
-    artifacts, tasks, folders, sessions, browse, filter, filterGroup,
+    artifacts, tasks, folders, sessions, browse, repo, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
     rolls, setRolls, sheets, shelf,
     guideText, fileCount,

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Presentation, Globe, Map as MapIcon, FileText, Compass, Drama } from 'lucide-react';
+import { Presentation, Globe, Map as MapIcon, FileText, Compass, Drama, FolderGit2, Folder, File } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../../../lib/theme.js';
 import { PAPER } from '../../../lib/paper.js';
 import { SITE_VIEWPORTS, DECK_EMBED_W } from '../../../lib/board-geometry.js';
 import { ARTIFACT_HEADER_H, ARTIFACT_PREVIEW_H, HERO_SCALE } from '../../../lib/board-kinds.js';
 import { versionOfFile, versionOfSitePage } from '../../../lib/file-versions.js';
 import { formatClock } from '../../../lib/helpers.js';
-import { Assets, Stage } from '../../../lib/api.js';
+import { Assets, Stage, Repo } from '../../../lib/api.js';
 import { joinRel } from '../../../lib/paths.js';
 import { freezeWin, thawWin } from '../../../lib/frame-freeze.js';
 import LiveFrame from '../LiveFrame.jsx';
@@ -79,6 +79,32 @@ function ServedImagePreview({ src, box, initialFailed = false, fallback }) {
 }
 
 /** 三张脸：图标 / 一行小字 / 预览内容。骨架之外的差异**只有这三样**。 */
+/** 仓库卡的卡面：根上一层条目 + git 状态字母。只读、轮询、失败就留一句话。 */
+function RepoTreePreview({ projectId, box }) {
+  const [entries, setEntries] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const pull = () => Repo.tree(projectId, '').then(r => { if (alive) setEntries(r.entries || []); }).catch(() => { if (alive) setEntries([]); });
+    pull();
+    const timer = setInterval(pull, 8000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [projectId]);
+  if (!entries) return <div style={fallbackBox(box)}>读取中…</div>;
+  if (!entries.length) return <div style={fallbackBox(box)}>空文件夹</div>;
+  const mark = (e) => e.status || (e.changes ? String(e.changes) : '');
+  return (
+    <div style={{ width: box.w, height: box.h, overflow: 'hidden', padding: `${GAP.xs}px 0`, boxSizing: 'border-box', fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, lineHeight: 1.6 }}>
+      {entries.map(e => (
+        <div key={e.rel} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: `0 ${GAP.md}px`, color: e.ignored ? COLOR.dim : COLOR.text2, whiteSpace: 'nowrap' }}>
+          {e.dir ? <Folder size={11} style={{ flexShrink: 0, opacity: 0.6 }} /> : <File size={11} style={{ flexShrink: 0, opacity: 0.6 }} />}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name}</span>
+          {mark(e) && <span style={{ marginLeft: 'auto', color: e.status === 'D' ? COLOR.error : (e.status === 'A' || e.status === '?') ? COLOR.success : COLOR.warn }}>{mark(e)}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export const ARTIFACT_FACES = {
   deck: {
     icon: Presentation,
@@ -216,6 +242,24 @@ export const ARTIFACT_FACES = {
         )}
       />
     ),
+  },
+
+  /**
+   * 仓库卡（2026-09-08）—— 卡上是**一列顶层条目**（文件夹在前）+ 每条的 git 标记。
+   * 不是截图不是 iframe：树本身就是这张卡最有信息量的样子，而且便宜。
+   * 8 秒拉一次（跟窗里同一个节奏）：agent 在改的时候标记会跟着变。
+   */
+  repo: {
+    icon: FolderGit2,
+    tip: '双击进这个仓库（看文件树、看 agent 改了什么、读源码）',
+    summary: (o) => {
+      const g = o.git;
+      if (!g) return '文件夹';
+      const c = g.counts || {};
+      const n = (c.modified || 0) + (c.added || 0) + (c.deleted || 0) + (c.untracked || 0);
+      return `${g.branch || '游离'}${n ? ` · ${n} 处改动` : ' · 干净'}`;
+    },
+    Preview: ({ projectId, box }) => <RepoTreePreview projectId={projectId} box={box} />,
   },
 
   /**

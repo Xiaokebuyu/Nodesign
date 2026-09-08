@@ -83,6 +83,13 @@ export const Me = {
 
 // ── Local（本地分发版专用：配置 / 钥匙 / 能力 / 体检 / 重启；hosted 下这组路由不存在）──
 /** 进程卡（2026-09-07 桌面端·缝三）：只有本地版挂了这组接口 */
+/** 仓库卡（2026-09-08，只在本地版有）：看向用户文件夹的窗。全部只读。 */
+export const Repo = {
+  summary: (pid) => jsonRequest('GET', `/api/projects/${pid}/repo`),
+  tree: (pid, rel = '') => jsonRequest('GET', `/api/projects/${pid}/repo/tree?path=${encodeURIComponent(rel)}`),
+  file: (pid, rel) => jsonRequest('GET', `/api/projects/${pid}/repo/file?path=${encodeURIComponent(rel)}`),
+};
+
 export const Processes = {
   list: (pid) => jsonRequest('GET', `/api/projects/${pid}/processes`),
   start: (pid, { command, name, cwd } = {}) => jsonRequest('POST', `/api/projects/${pid}/processes`, { command, name, cwd }),

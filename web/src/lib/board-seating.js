@@ -25,7 +25,7 @@ import { pickHero } from './hero.js';
 import { orderWithGroups } from './relation-order.js';
 
 /** 尺寸要回写给服务端的形态（产物卡：主角档会变大，服务端估不准） */
-const ARTIFACT_TYPES = new Set(['deck', 'site', 'docx', 'browse']);
+const ARTIFACT_TYPES = new Set(['deck', 'site', 'docx', 'browse', 'repo']);
 
 /**
  * @param {object} deps

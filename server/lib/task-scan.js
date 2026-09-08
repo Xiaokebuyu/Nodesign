@@ -75,6 +75,8 @@ export function isReservedFile(name) {
  */
 export const RESERVED_FILES = new Set([
   'board.json',        // 画布布局，画布自己的存档
+  'project.json',      // 文件夹项目的身份（09-07，住 .nodesign/ 根 = 桌面根）
+  'baseline.json',     // 文件夹项目的首开快照（09-08），同上
   '.nd-project.json',  // 产物标记（形态兜底）
   '.gitignore',
   '.ndignore',

@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { KINDS } from './kinds/index.js';
-import { ARTIFACT_PREVIEW_H, estimateSize } from './board-kind-sizes.js';
+import { ARTIFACT_PREVIEW_H, RUNTIME_SINGLETONS, estimateSize } from './board-kind-sizes.js';
 
 describe('ARTIFACT_PREVIEW_H 覆盖注册表', () => {
   it('KINDS 里每个形态都有预览高（漏一行 = 该形态摆位矩形是 file 细条）', () => {
@@ -19,7 +19,7 @@ describe('ARTIFACT_PREVIEW_H 覆盖注册表', () => {
 
   it('反向：表里的键除 browse 单例外都是真形态（改名/下线后别留幽灵行）', () => {
     for (const k of Object.keys(ARTIFACT_PREVIEW_H)) {
-      if (k === 'browse') continue;   // 浏览器卡是单例，不在 KINDS 里（见 estimateSize 分支）
+      if (RUNTIME_SINGLETONS.has(k)) continue;   // 运行时单例（浏览器 / 仓库）不在 KINDS 里（见 estimateSize 分支）
       expect(KINDS[k], `ARTIFACT_PREVIEW_H 里的「${k}」不在 KINDS 注册表`).toBeTruthy();
     }
   });

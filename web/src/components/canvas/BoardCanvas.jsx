@@ -159,7 +159,7 @@ export default function BoardCanvas({
   // 数据层（加载 / 持有 / 落盘）—— 2026-08-13 拆进 useBoardData.js（刀 4 续）。
   // 派生（objects/folderView）留在本组件：它跟拖拽、影子区缠在一起。
   const {
-    artifacts, tasks, folders, sessions, browse, filter, filterGroup,
+    artifacts, tasks, folders, sessions, browse, repo, filter, filterGroup,
     layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
     rolls, setRolls, sheets, shelf,
     guideText, fileCount,
@@ -338,13 +338,13 @@ export default function BoardCanvas({
   }, [projectId]);
 
   const objects = useMemo(
-    () => deriveBoardObjects({ tasks, artifacts, layout, browse })
+    () => deriveBoardObjects({ tasks, artifacts, layout, browse, repo })
       .filter(o => passesFilter(o, filter))
       .filter(o => showArchive || !isArchivePath(o.id))
       // 收卷（2026-08-27 收纳器，件在 RollLayer.jsx）：收着的组渲染层不画（卷卡替它
       // 站着）。座位仍在 layout 里 —— 服务端落位照旧把它们当障碍。
       .filter(o => { const t = o.tag || o.pos?.tag; return !t || !rolls[t]; }),
-    [tasks, artifacts, layout, browse, filter, showArchive, rolls]);
+    [tasks, artifacts, layout, browse, repo, filter, showArchive, rolls]);
 
   const { rollGroup, unrollGroup } = useRollActions(projectId, setRolls);
 

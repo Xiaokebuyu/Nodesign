@@ -45,7 +45,7 @@ import { mutex } from 'async-mutex-lite';
 import { validateProjectId, getProject, folderPathOf } from './store.js';
 import { resolveModelContextWindow } from '../engine/agent/model-context.js';
 import { ensureActorSlots } from './workspace-slots.js';
-import { NODESIGN_DIR, ensureFolderProjectDir, ensureGitignore } from './workspace-layout.js';
+import { NODESIGN_DIR, deskRootOf, ensureFolderProjectDir, ensureGitExclude, ensureGitignore } from './workspace-layout.js';
 export { NODESIGN_DIR };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -182,14 +182,14 @@ export function getProjectWorkspace(projectId) {
 }
 
 /**
- * **项目工作区根** —— 产物的家，画布上看到的一切的真相。
- * 普通项目 `<PROJECTS_DATA_ROOT>/<id>/shared`（也是 agent 的 cwd）；文件夹项目（2026-09-07
- * 存量仓库道）`<folder>/.nodesign`，agent 站在 `<folder>` 里、画布只看这个点目录 ——
+ * **项目工作区根（桌面）** —— 产物的家，画布上看到的一切的真相。
+ * 托管项目 `<PROJECTS_DATA_ROOT>/<id>/shared`（也是 agent 的 cwd）；文件夹项目按首开时空不空：
+ * 空文件夹 = 文件夹本身，用户的仓库 = `<folder>/.nodesign`（判据从盘上读，见 workspace-layout.js 头注）。
  * 「agent 站在哪」问 `getAgentCwd`，「画布真相在哪」问这里（88 处调用点全是后者）。
  */
 export function getWorkspaceRoot(projectId) {
   const folder = folderPathOf(projectId);
-  if (folder) return path.join(folder, NODESIGN_DIR);
+  if (folder) return deskRootOf(folder);
   return path.join(getProjectWorkspace(projectId), 'shared');
 }
 
@@ -264,6 +264,8 @@ export async function ensureProjectWorkspace(projectId) {
   await mergeSettingsDefaults(path.join(root, '.claude', 'settings.json'));
 
   await flattenWorkspace(projectId);
+  // 桌面 = 文件夹本身的项目：上面那步刚 git init 完，这时才轮到把 .nodesign/ 排除出去
+  if (folder) await ensureGitExclude(folder);
 
   // 返回**工作区根**（…/shared），跟 ensureSessionWorkspace 一致（2026-08-13）。
   // 以前返回的是项目目录（shared 的上一层）——两个 ensure 返回值差一层目录，

@@ -14,7 +14,12 @@ import { boardHeroId, heroSize } from './board-hero.js';
 
 export const DECK_EMBED_W = 640;
 export const ARTIFACT_HEADER_H = 28;
-export const ARTIFACT_PREVIEW_H = { deck: 360, site: 400, docx: 420, browse: 360, stage: 400 };
+export const ARTIFACT_PREVIEW_H = { deck: 360, site: 400, docx: 420, browse: 360, stage: 400, repo: 300 };
+/**
+ * 运行时单例卡：id 就是形态名、背后没有文件（browse = agent 浏览器，repo = 用户的仓库，09-08）。
+ * 尺寸 / 障碍 / read_board 对账 / 反向断言四处都问这一份，别各自写 `=== 'browse'`。
+ */
+export const RUNTIME_SINGLETONS = new Set(['browse', 'repo']);
 
 // file 是 224x32 的细条卡（parity 测试上岗第一天就逮住我猜成 160x120 ——
 // 那是涂鸦的默认身位。别猜，抄表）
@@ -82,8 +87,8 @@ export function estimateSize(id, entry) {
   // 浏览器卡是**单例**，id 就是 'browse'（没有路径可挂 —— 它背后不是文件）。
   // 不给这条分支的话它会掉到最后的 file 兜底（224×32 的细条），agent 摆位时
   // 就会拿一个错的矩形去算"挨着谁摆、会不会压到谁"。
-  if (s === 'browse') {
-    return { w: DECK_EMBED_W, h: ARTIFACT_HEADER_H + ARTIFACT_PREVIEW_H.browse };
+  if (RUNTIME_SINGLETONS.has(s)) {
+    return { w: DECK_EMBED_W, h: ARTIFACT_HEADER_H + ARTIFACT_PREVIEW_H[s] };
   }
   const m = KIND_PREFIX_RE.exec(s);
   if (m) {

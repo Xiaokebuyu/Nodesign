@@ -255,7 +255,7 @@ router.post('/restart', (_req, res) => {
 });
 
 // ── 文件夹项目（2026-09-07 存量仓库道）──
-// POST /api/local/projects/open-folder { path }  → { project, trust, created }
+// POST /api/local/projects/open-folder { path }  → { project, trust, created, desk, baseline }（desk：'.' 空文件夹开的 / '.nodesign' 用户仓库）
 //   同一个文件夹再开就是同一个项目（身份在 <folder>/.nodesign/project.json）。
 //   trust.needsDecision 为真且 project.folderTrust 为 null 时前端要先问信任门，
 //   再 PATCH /api/projects/:pid { folderTrust }；没答之前 turn 接口 409。

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, Square, RotateCcw, ExternalLink, Trash2, X, Play } from 'lucide-react';
+import { Activity, Square, RotateCcw, ExternalLink, Trash2, X, Play, Eye } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO, alpha } from '../../lib/theme.js';
 import { PAPER } from '../../lib/paper.js';
 import { useProcessStore } from '../../stores/processStore.js';
@@ -31,7 +31,12 @@ function openUrl(url) {
   else window.open(url, '_blank', 'noopener');
 }
 
-export function ProcessesButton({ project }) {
+/**
+ * @param {object} props
+ * @param {(url: string) => void} [props.onWatch] 「在画布上看」：把 dev server 的地址开进 agent 浏览器那张卡（09-08）。
+ *   没给就不显示那颗按钮（网页版没有本地进程，也到不了这里）。
+ */
+export function ProcessesButton({ project, onWatch }) {
   const pid = project?.id;
   const bucket = useProcessStore((s) => s.byProject[pid]);
   const load = useProcessStore((s) => s.load);
@@ -64,12 +69,12 @@ export function ProcessesButton({ project }) {
       >
         <Activity size={12} />{label}
       </button>
-      {open && <ProcessPanel pid={pid} onClose={() => setOpen(false)} />}
+      {open && <ProcessPanel pid={pid} onClose={() => setOpen(false)} onWatch={onWatch} />}
     </div>
   );
 }
 
-function ProcessPanel({ pid, onClose }) {
+function ProcessPanel({ pid, onClose, onWatch }) {
   const bucket = useProcessStore((s) => s.byProject[pid]);
   const { stop, restart, remove, start, fetchLog } = useProcessStore.getState();
   const showToast = useGlobalStore((s) => s.showToast);
@@ -106,6 +111,7 @@ function ProcessPanel({ pid, onClose }) {
             onStop={() => act(() => stop(pid, p.id))}
             onRestart={() => act(() => restart(pid, p.id))}
             onRemove={() => act(() => remove(pid, p.id))}
+            onWatch={onWatch}
           />
         ))}
       </div>
@@ -123,7 +129,7 @@ function ProcessPanel({ pid, onClose }) {
   );
 }
 
-function ProcessRow({ p, open, lines, onToggle, busy, onStop, onRestart, onRemove }) {
+function ProcessRow({ p, open, lines, onToggle, busy, onStop, onRestart, onRemove, onWatch }) {
   const tailRef = useRef(null);
   useEffect(() => { if (open && tailRef.current) tailRef.current.scrollTop = tailRef.current.scrollHeight; }, [open, lines]);
   const color = STATUS_COLOR[p.status] || PAPER.pencil;
@@ -135,6 +141,9 @@ function ProcessRow({ p, open, lines, onToggle, busy, onStop, onRestart, onRemov
         <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 170 }} title={p.command}>{p.name}</span>
         <span style={{ color: PAPER.pencil, fontSize: FONT_SIZE.xs }}>{t(STATUS_LABEL[p.status] || p.status)}{p.by === 'user' ? ` · ${t('你起的')}` : ''}</span>
         <span style={{ flex: 1 }} />
+        {p.url && p.status === 'running' && onWatch && (
+          <button onClick={(e) => { e.stopPropagation(); onWatch(p.url); }} title={t('在画布上看：开进浏览器卡，agent 和你看同一个画面')} style={btn}><Eye size={13} /></button>
+        )}
         {p.url && p.status === 'running' && (
           <button onClick={(e) => { e.stopPropagation(); openUrl(p.url); }} title={p.url} style={btn}><ExternalLink size={13} />{p.port ? `:${p.port}` : ''}</button>
         )}

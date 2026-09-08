@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { layerOf } from './canvas-id.js';
-import { estimateSizeOn, zoneRects } from './board-kind-sizes.js';
+import { estimateSizeOn, zoneRects, RUNTIME_SINGLETONS } from './board-kind-sizes.js';
 import { inflateSpriteSeats, rollCardRect } from './board-place.js';
 import { getViewpoint } from '../projects/viewpoint-store.js';
 
@@ -47,7 +47,7 @@ function seatBacked(id, entry, sharedRoot) {
   if (!sharedRoot) return true;
   if (entry?.kind) return true;
   const s = String(id || '');
-  if (s === 'browse') return true;
+  if (RUNTIME_SINGLETONS.has(s)) return true;
   const bare = s.replace(/^(deck|site|docx|text|scribble):/, '');
   if (!bare || bare.includes('..')) return true;
   try { fs.accessSync(path.join(sharedRoot, bare)); return true; } catch { return false; }

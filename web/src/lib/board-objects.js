@@ -10,10 +10,10 @@
 import { cardIdOf } from './board-kinds.js';
 
 /**
- * @param {{tasks?:Array, artifacts?:Array, layout?:object, browse?:object|null}} src
+ * @param {{tasks?:Array, artifacts?:Array, layout?:object, browse?:object|null, repo?:object|null}} src
  * @returns {Array} 画布物件
  */
-export function deriveBoardObjects({ tasks = [], artifacts = [], layout = {}, browse = null }) {
+export function deriveBoardObjects({ tasks = [], artifacts = [], layout = {}, browse = null, repo = null }) {
     const out = [];
     // 浏览器卡（2026-08-18）：`/artifacts` 给 `browse` 才有，也就是"这个项目
     // 逛过站"。它的真相在服务端的 `.browser/state.json`，所以**浏览器实例被空闲
@@ -26,6 +26,11 @@ export function deriveBoardObjects({ tasks = [], artifacts = [], layout = {}, br
     // 有为什么是两者之一）。只看 url 的话"采过但没有访问记录"的项目会没有卡。
     if (browse?.url || browse?.sites?.length) {
       out.push({ id: 'browse', type: 'browse', ...browse, title: browse.title || browse.host });
+    }
+    // 仓库卡（2026-09-08）：`GET /repo` 有载荷才有 = 这是本地版打开的用户文件夹、桌面缩在 .nodesign 里。
+    // 同 browse 一样是单例、住根上；真相是文件夹本身（视图形态，拖它不搬文件）。
+    if (repo?.folder) {
+      out.push({ id: 'repo', type: 'repo', ...repo, title: repo.name });
     }
     // 画布原生物件先进来（它们不依赖任何数据源，只依赖 layout 本身）
     for (const [id, l] of Object.entries(layout)) {

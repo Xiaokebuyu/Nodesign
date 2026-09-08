@@ -107,6 +107,11 @@ export function useBoardOpen({
       onFocusDeck?.({ kind: 'browse', url: o.url || null });
       return;
     }
+    // 仓库卡（2026-09-08）：开看向用户文件夹的那扇窗（文件树 + 代码阅读器），跟 browse 一样不占产物窗的位子
+    if (o.type === 'repo') {
+      onFocusDeck?.({ kind: 'repo', name: o.name || o.title || null });
+      return;
+    }
     // 演出（2026-09-05）：开的是显示器那扇窗，内容跟卡上是同一个页面，只是工具栏换成 RP 那条
     if (o.type === 'stage') {
       onFocusDeck?.({ kind: 'stage', root: o.root, title: o.title, cardId: o.id, stage: o.stage || null });

@@ -418,7 +418,9 @@ export async function runSession({
           // capabilityState 没探过返回 null → 不剥，跟 shouldRegisterTool 同纪律
           caps: { localBox: capabilityState('localBox')?.available ?? null },
           // 文件夹项目（nd:if:folder 块）：路径地图换成「你站在用户仓库里、画布在 .nodesign」
-          folder: projectRow?.folderPath || null,
+          // 只有「桌面缩进 .nodesign 的用户仓库」才算 folder 项目；空文件夹开的项目桌面就是文件夹本身，
+          // 跟托管项目同一套话（09-08，判据见 workspace-layout.js）
+          folder: projectRow?.folderPath && sharedRoot !== cwdRoot ? projectRow.folderPath : null,
         });
       })(),
     },

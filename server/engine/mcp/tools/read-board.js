@@ -15,7 +15,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { readBoard } from '../../../projects/board-store.js';
-import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
+import { estimateSizeOn, RUNTIME_SINGLETONS } from '../../../lib/board-kind-sizes.js';
 import { layerOf, bareTag } from '../../../lib/canvas-id.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
 import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
@@ -114,7 +114,7 @@ on the minimap and listed with what is inside it.`,
       const root = getSharedDir(projectId);
       const staleIds = new Set();
       await Promise.all(items.map(async ({ id, entry }) => {
-        if (entry.kind === 'text' || entry.kind === 'scribble' || id === 'browse') return;
+        if (entry.kind === 'text' || entry.kind === 'scribble' || RUNTIME_SINGLETONS.has(id)) return;
         const bare = String(id).replace(/^(deck|site|docx):/, '');
         if (!bare || bare.includes('..') || /^(text|scribble|b):/.test(bare)) return;
         try { await fs.access(path.resolve(root, bare)); } catch { staleIds.add(id); }

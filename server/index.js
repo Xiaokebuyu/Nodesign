@@ -47,6 +47,7 @@ import { sweepOrphanRuns } from './engine/runs/store.js';
 import meRouter from './api/me.js';
 import localRouter, { RESTART_EXIT_CODE } from './api/local.js';
 import processesRouter from './api/processes.js';
+import repoRouter from './api/repo.js';
 import { stopAllProcesses } from './engine/process/registry.js';
 import { platform } from './runtime/platform.js';
 import { refreshRelayCatalog } from './runtime/relay-client.js';
@@ -120,6 +121,7 @@ app.use('/api/me', meRouter);
 // 本地分发版专用（配置文件 / 状态 / 重启）。hosted 下不挂：这组接口假设请求者就是机器的主人
 if (platform.isLocal) app.use('/api/local', localRouter);
 if (platform.isLocal) app.use('/api/projects', processesRouter);   // 进程卡（2026-09-07）：只有本地版起用户进程
+if (platform.isLocal) app.use('/api/projects', repoRouter);        // 仓库卡（2026-09-08）：看向用户文件夹的窗，只在本地版有
 
 // ── 业务路由 ──
 // projects router 挂在 /api/projects（CRUD）

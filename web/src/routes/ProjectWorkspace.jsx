@@ -38,7 +38,7 @@ import { newId, newUserMessageId } from '../lib/helpers.js';
 import { useRewindEvents } from './use-rewind-events.js';
 import { findElementByAnchor } from '../lib/html-utils.js';
 import { serializeForAI } from '../lib/element-semantics.js';
-import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges } from '../lib/api.js';
+import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges, Browse } from '../lib/api.js';
 import { handleAuxEvent } from '../lib/aux-events.js';
 import { exportFromMenu } from '../components/canvas/card-export.js';
 import { openProjectWS } from '../lib/ws-client.js';
@@ -143,6 +143,17 @@ export default function ProjectWorkspace() {
     if (listBumpTimerRef.current) clearTimeout(listBumpTimerRef.current);
     listBumpTimerRef.current = setTimeout(() => setListVersion(v => v + 1), 500);
   }, []);
+
+  /**
+   * 进程面板「在画布上看」（09-08）：把 dev server 的地址开进 agent 浏览器（同一只 chromium，
+   * 人和 agent 看同一个画面），窗直接弹出来，桌面上那张浏览器卡随 reload 换页。
+   * 走的是用户点的 Browse.open：出网闸对登记过的本机端口放行（registry 的 isRegisteredLoopback）。
+   */
+  const watchLocalUrl = useCallback((url) => {
+    Browse.open(id, url)
+      .then((r) => { setBrowseWin({ url: r?.url || url, help: null }); bumpListSoon(); })
+      .catch((err) => showToast?.(err?.message || '浏览器打不开这个地址', 'error'));
+  }, [id, setBrowseWin, bumpListSoon, showToast]);
   useEffect(() => () => { if (listBumpTimerRef.current) clearTimeout(listBumpTimerRef.current); }, []);
   // agent 改画布布局（board.updated）→ bump，BoardCanvas 整份重拉 board.json
   const [boardVersion, setBoardVersion] = useState(0);
@@ -1982,7 +1993,7 @@ export default function ProjectWorkspace() {
               上下文属于「这次对话」不属于项目，整组挪进聊天栏 composer 上沿；
               刷新进 ⋯，分享进导出菜单。留驻判据：每周会主动点的才配占常驻像素。 */}
           <ProjectModeBadge mode={project.mode} />
-          <ProcessesButton project={project} />
+          <ProcessesButton project={project} onWatch={watchLocalUrl} />
           <div style={{ position: 'relative' }}>
             <button
               ref={exportBtnRef}

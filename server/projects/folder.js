@@ -22,6 +22,7 @@ import {
   createProject, getProject, getProjectByFolder, rebindProjectFolder, updateProject,
 } from './store.js';
 import { ensureProjectWorkspace, NODESIGN_DIR, PROJECTS_DATA_ROOT } from './workspace.js';
+import { initFolderIdentity } from './workspace-layout.js';
 
 const PROJECT_ID_RE = /^proj_[a-z0-9_]{6,80}$/i;
 
@@ -119,13 +120,15 @@ export async function openFolder({ path: input, ownerId = null }) {
     created = true;
   }
 
+  // 身份 + 首开快照 + 桌面在哪，都在 ensureProjectWorkspace 之前定：它一开工就要问 getWorkspaceRoot
+  const { desk, baseline } = await initFolderIdentity(folder, project.id);
   const trust = await inspectFolderTrust(folder);
   // 没有要拍板的东西就直接算信任；有东西且没答过就留 null 等用户
   if (project.folderTrust == null && !trust.needsDecision) {
     project = updateProject(project.id, { folderTrust: true });
   }
   await ensureProjectWorkspace(project.id);
-  return { project, trust, created };
+  return { project, trust, created, desk, baseline };
 }
 
 async function exists(p) {

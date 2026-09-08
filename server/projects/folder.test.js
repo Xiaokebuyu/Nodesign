@@ -124,3 +124,49 @@ describe('openFolder', () => {
     expect(fs.existsSync(path.join(dir, '.git'))).toBe(false);
   });
 });
+
+describe('桌面在哪（09-08：不分文件夹项目，按首开时空不空）', () => {
+  it('空文件夹：桌面就是文件夹本身，身份文件 desk="."，快照为空；.nodesign 排除进 exclude', async () => {
+    const dir = path.join(tmp, 'empty-new');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, '.DS_Store'), '');   // 系统垃圾不算「有东西」
+    const out = await openFolder({ path: dir });
+    expect(out.desk).toBe('.');
+    expect(out.baseline).toEqual([]);
+    expect(getWorkspaceRoot(out.project.id)).toBe(dir);
+    expect(getAgentCwd(out.project.id)).toBe(dir);
+    const identity = JSON.parse(fs.readFileSync(path.join(dir, NODESIGN_DIR, 'project.json'), 'utf8'));
+    expect(identity.desk).toBe('.');
+    // 跟托管项目 shared/ 同款：根上有 .claude、assets、CLAUDE.md，还 git init 了
+    expect(fs.existsSync(path.join(dir, '.claude'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, '.git'))).toBe(true);
+    const exclude = fs.readFileSync(path.join(dir, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude).toMatch(/^\.nodesign\/$/m);
+    // 桌面 = 文件夹本身的项目没有仓库卡（没有「外面」可看）
+    const { repoSummary } = await import('./repo.js');
+    expect(await repoSummary(out.project.id)).toBeNull();
+  });
+
+  it('有东西的文件夹：桌面缩进 .nodesign，快照记下首开时根上的条目；后来装满了也不搬家', async () => {
+    const dir = mkRepo('has-stuff', { git: false });
+    fs.writeFileSync(path.join(dir, 'README.md'), '# x\n');
+    const out = await openFolder({ path: dir });
+    expect(out.desk).toBe('.nodesign');
+    expect(out.baseline.map(e => e.name)).toEqual(['README.md', 'src']);
+    expect(getWorkspaceRoot(out.project.id)).toBe(path.join(dir, NODESIGN_DIR));
+    // 第二次开：快照不重拍（.nodesign 之外又多了东西也不进快照）
+    fs.writeFileSync(path.join(dir, 'later.txt'), 'later\n');
+    const again = await openFolder({ path: dir });
+    expect(again.baseline.map(e => e.name)).toEqual(['README.md', 'src']);
+    expect(again.desk).toBe('.nodesign');
+  });
+
+  it('09-07 那批没有 desk 字段的老身份文件：按缩进算', async () => {
+    const dir = path.join(tmp, 'legacy-identity');
+    fs.mkdirSync(path.join(dir, NODESIGN_DIR), { recursive: true });
+    fs.writeFileSync(path.join(dir, NODESIGN_DIR, 'project.json'), JSON.stringify({ id: 'proj_legacy01', createdAt: '2026-09-07T00:00:00.000Z' }));
+    const out = await openFolder({ path: dir });
+    expect(out.desk).toBe('.nodesign');
+    expect(getWorkspaceRoot(out.project.id)).toBe(path.join(dir, NODESIGN_DIR));
+  });
+});

@@ -263,11 +263,12 @@ export default function QuickEntry({ prefill }) {
 
   /**
    * 打开本地文件夹当项目（桌面版）。流程：系统选择框 → 服务端 openFolder（同一个文件夹
-   * 再开就是同一个项目）→ 有信任门要答就先弹 → 进工作区。第一次进去顺手发一句「先看看
-   * 这个仓库」，让 agent 先读不写，写成板书；已经干过活的项目直接进去。
+   * 再开就是同一个项目）→ 有信任门要答就先弹 → 进工作区。**有东西的文件夹**第一次进去
+   * 顺手发一句「先看看这个仓库」，让 agent 先读不写，写成板书；空文件夹（09-08：桌面就是
+   * 文件夹本身）跟新建项目一样进去等用户开口；已经干过活的项目直接进去。
    */
   const enterFolderProject = (out) => {
-    const firstVisit = !out.project.activeSessionId;
+    const firstVisit = !out.project.activeSessionId && out.desk === '.nodesign';
     navigate(`/projects/${out.project.id}/work`, firstVisit ? {
       state: {
         initialMessage: t('先看看这个仓库：它是什么、怎么跑起来、结构和入口、我上次干到哪。写成板书，最后问我从哪改起。'),
