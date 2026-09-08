@@ -471,11 +471,11 @@ export const MODELS_BUILTIN = Object.freeze([
   //   8 inline」400。→ 站主拍板：两行都点死 particle + 8 张的裁图闸（GLM_MERGE_API.maxImages）。
   //   ⭐ 判据：偏好序的后备是**静默**的，换了家只会在别的症状里露头；要知道谁在服务，看 x-merge-vendor
   //     或者点名单家看它 503 不 503。
+  // ⭐⭐ **09-08 深夜点死 zai**（站主拍板）：不点名时网关来回换家、缓存冷（一轮五发两发命中 0）；particle 标价与 zai 相同且缓存从不命中。
   // ⛔⛔ **09-08 晚撤销点死 particle**：生产库里 09-07 起 GLM 行缓存命中率从 80–100% 掉到 0、每轮 API 耗时
   //   从 11–31 秒涨到 44–106 秒。直打网关同一段 100k 提示词各发两发：**particle 没有 prompt cache**（两发都不
   //   命中、首字节 31 秒、还吃过一次 429），zai 第二发命中 101,312 token、首字节 5 秒、价钱五分之一。zai 当晚
-  //   已恢复。站主拍板：**不再点名 vendors，让网关自己路由**，8 张裁图闸保留。已知代价写在上面那段：网关默认
-  //   落哪家自己会变，而缓存每家一份，请求在两家之间跳一次就冷一次。
+  //   已恢复。当时拍板不点名让网关自己路由；代价当晚就兑现了（来回换家、缓存冷），见上面「深夜点死 zai」。
   {
     // 08-30 起 **1M**（跟上面那行一起开，用户拍板）。网关目录里这个模型本来就写的 1000000
     // （max_output 131072），此前的 272k 是我们自己收的口。两条 glm 行同时改，换线时
@@ -505,7 +505,7 @@ export const MODELS_BUILTIN = Object.freeze([
     // ⚠️ label 第二段是这两行**唯一**的区分（第一段一模一样）：`compactLabel` 按"撞不撞名"
     // 自己决定按钮上印长名还是短名，表里不用替它做这个决定，但第二段不能砍。
     select: { label: 'GLM-5.3-Flash · 设计', desc: '支持视觉 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', default: true },
-    api: GLM_MERGE_API,
+    api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['zai'] } },
   },
   {
     // ⭐⭐ 08-30 深夜加的第二条（用户拍板「让 RP 和设计玩家对号入座」）。跟上面那行同模型同价，
@@ -522,7 +522,7 @@ export const MODELS_BUILTIN = Object.freeze([
     id: 'glm-5.3-flash-rp', window: 1_000_000, brand: 'glm',
     standby: 'deepseek-v4-flash-vision',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     select: { label: 'GLM-5.3-Flash · 演出', desc: '响应快 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', only: 'stage', stageDefault: true },
-    api: GLM_MERGE_API,
+    api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['zai'] } },
   },
   // ⛔⛔ `minimax-m3` 09-08 撤行（GMI 没余额、限免结束）：原注释与迁移脚本用法见 model-table-retired.md
   {
