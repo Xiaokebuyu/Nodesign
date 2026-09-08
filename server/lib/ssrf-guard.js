@@ -41,6 +41,7 @@ import os from 'node:os';
 import dns from 'node:dns/promises';
 import net from 'node:net';
 import { isRegisteredLoopback } from '../engine/process/registry.js';
+import { platform } from '../runtime/platform.js';
 
 /** IPv4 段（CIDR），含各类保留段 —— 不只私网，元数据和 CGNAT 也在里面 */
 const V4_BLOCKS = [
@@ -54,7 +55,7 @@ const V4_BLOCKS = [
   ['192.0.2.0', 24],       // TEST-NET-1
   ['192.88.99.0', 24],     // 6to4 relay（已弃用）
   ['192.168.0.0', 16],     // RFC1918
-  ['198.18.0.0', 15],      // 基准测试
+  ['198.18.0.0', 15],      // 基准测试 —— ⚠️ 本地版放行：这是 Clash / Surge / Shadowrocket 等代理 fake-ip 模式的网段（见 FAKE_IP）
   ['198.51.100.0', 24],    // TEST-NET-2
   ['203.0.113.0', 24],     // TEST-NET-3
   ['224.0.0.0', 4],        // 组播
@@ -66,9 +67,17 @@ const V6_PREFIXES = ['::1', '::', 'fc', 'fd', 'fe8', 'fe9', 'fea', 'feb', 'ff'];
 
 const v4ToInt = (ip) => ip.split('.').reduce((a, o) => (a << 8 >>> 0) + (Number(o) & 255), 0) >>> 0;
 
+/**
+ * 198.18.0.0/15 在用户自己的机器上不是"内网"（09-08 桌面版实撞：www.andidea.jp → 198.18.1.236 被拒）。
+ * 开着 Clash / Surge / Shadowrocket 的 fake-ip 模式时，本机所有域名都解析成这一段，真正的目的地由代理去解；
+ * 拦它等于把所有用代理的桌面用户的浏览器全废掉。它也不通往任何真实内网（RFC 2544 基准段，不可路由）。
+ * 托管站点上没有 fake-ip，照旧拦（保留段一律不出网）。
+ */
+const FAKE_IP = '198.18.0.0';
 function v4Blocked(ip) {
   const n = v4ToInt(ip);
   for (const [base, bits] of V4_BLOCKS) {
+    if (base === FAKE_IP && platform.isLocal) continue;
     const mask = bits === 0 ? 0 : (0xFFFFFFFF << (32 - bits)) >>> 0;
     if ((n & mask) === (v4ToInt(base) & mask)) return true;
   }

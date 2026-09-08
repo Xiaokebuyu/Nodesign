@@ -246,8 +246,8 @@ function ShowcaseCard({ entry, publication, onRemove, onPublish }) {
           </span>
         </div>
 
-        {/* 市场那行（09-08）：有 skill 才能发；发过的显示状态，没发的给一颗「发布」 */}
-        {entry.skillName && (
+        {/* 市场那行（09-08）：发过的显示状态，没发的给一颗「发布」。v2 起没 skill 的作品也能发（只发图和说明） */}
+        {(
           publication ? (
             <Link to={`/market/${publication.id}`} style={{
               display: 'inline-flex', alignItems: 'center', gap: GAP.xs, alignSelf: 'flex-start', marginTop: GAP.xs,

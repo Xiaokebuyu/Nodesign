@@ -124,9 +124,9 @@ async function main() {
   // ── 4. loadSkill + loadInstalledPlugins ──
   console.log('4) loadSkill / loadInstalledPlugins');
   {
-    const skill = await loadSkill('deskskill-engine-mini');
-    if (skill.name !== 'deskskill-engine-mini') fail('skill name 错', skill);
-    if (!skill.systemPrompt.includes('deck')) fail('systemPrompt 内容不像 deskskill-engine-mini', skill.systemPrompt.slice(0, 100));
+    const skill = await loadSkill('site-craft');
+    if (skill.name !== 'site-craft') fail('skill name 错', skill);
+    if (!skill.systemPrompt.includes('站点')) fail('systemPrompt 内容不像 site-craft', skill.systemPrompt.slice(0, 100));
     if (!skill.description) fail('description 没解析');
     ok(`deskskill-engine-mini v${skill.version} 加载成功（systemPrompt ${skill.systemPrompt.length} 字节）`);
 

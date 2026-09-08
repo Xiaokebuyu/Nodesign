@@ -14,9 +14,12 @@ import { _resetForTest, _setPublishState, featuredSlotsFor, MARKET_DIR, marketOr
 import { installPluginToRoot } from '../lib/plugin-install.js';
 import { getUserPluginsRoot, loadInstalledPlugins } from '../engine/agent/plugin-loader.js';
 import { readPluginOrigin, setPluginOriginPolicy } from '../lib/plugin-origin.js';
+import { findUserPluginDir } from '../lib/plugin-pack.js';
+import { upsertEntry } from '../lib/showcase-store.js';
 
 // 用户级 plugin 根指到临时目录（plugin-loader 认这个 env）
 process.env.NODESIGN_USER_PLUGINS_DIR = path.join(os.tmpdir(), `nd-market-plugins-${process.pid}`);
+process.env.PROJECTS_DATA_DIR = process.env.PROJECTS_DATA_DIR || path.join(os.tmpdir(), `nd-market-projects-${process.pid}`);
 
 function makeUser(role = 'user') {
   const id = 'u_' + crypto.randomBytes(4).toString('hex');
@@ -208,7 +211,10 @@ describe('市场：发布 → 审核 → 货架 → 安装（先审后上架那�
     expect((await twoRes.json()).code).toBe('MULTI_FILE_SKILL');
 
     expect((await as(author, '/api/relay/market', { method: 'POST', body: publishForm({ skillZip, images: [] }) })).status).toBe(400);   // 没图
-    expect((await as(author, '/api/relay/market', { method: 'POST', body: publishForm({}) })).status).toBe(400);                      // 没 skill
+    // v2（09-08 晚）：没 skill 只带图 = 作品，能发（kind=work）；下面 v2 那组 describe 专门测
+    const workRes = await as(author, '/api/relay/market', { method: 'POST', body: publishForm({ title: '一张海报' }) });
+    expect(workRes.status).toBe(201);
+    expect((await workRes.json()).publication).toMatchObject({ kind: 'work', hasSkill: false });
     const badZip = await new JSZip().file('skills/x/SKILL.md', 'no frontmatter').generateAsync({ type: 'nodebuffer' });
     const bad = await as(author, '/api/relay/market', { method: 'POST', body: publishForm({ skillZip: badZip }) });
     expect(bad.status).toBe(400);
@@ -289,5 +295,101 @@ describe('市场：发布 → 审核 → 货架 → 安装（先审后上架那�
 
   it('featuredSlotsFor：6 减自己的项目数，到 0 为止', () => {
     expect([0, 1, 3, 6, 9].map((n) => featuredSlotsFor(n))).toEqual([6, 5, 3, 0, 0]);
+  });
+});
+
+
+describe('市场 v2（09-08 晚）：作品发布 / 原地更新 / 照着来一个 / agent 注册口', () => {
+  it('作品（无 skill）：发布 201 kind=work；安装与下载 409 NO_SKILL；同一橱窗条目再发 = 原地更新不新增', async () => {
+    const author = makeUser(); const other = makeUser();
+    users.set(author.id, author); users.set(other.id, other);
+    const pid = makeProject(author.id);
+    const entry = upsertEntry({ userId: author.id, projectId: pid, taskId: null, artifactRel: 'site/index.html', skillName: null, title: '海报', note: null });
+    const fd = publishForm({ title: '春节海报', note: '暖色调' }); fd.set('showcaseId', entry.id); fd.set('kind', 'work');
+    const r1 = await as(author, '/api/market', { method: 'POST', body: fd });
+    expect(r1.status).toBe(201);
+    const pub = (await r1.json()).publication;
+    expect(pub).toMatchObject({ kind: 'work', hasSkill: false, imageCount: 1, showcaseId: entry.id });
+    expect((await as(other, `/api/market/${pub.id}/install`, { method: 'POST' })).status).toBe(409);
+    expect((await (await as(other, `/api/market/${pub.id}/install`, { method: 'POST' })).json()).code).toBe('NO_SKILL');
+    expect((await as(other, `/api/market/${pub.id}/download`)).status).toBe(409);
+    // 再发：换两张图、改说明 → 同一个 id，200 updated
+    const fd2 = publishForm({ title: '春节海报 v2', note: '换了配色', images: [PNG_1x1, PNG_1x1] }); fd2.set('showcaseId', entry.id); fd2.set('kind', 'work');
+    const r2 = await as(author, '/api/market', { method: 'POST', body: fd2 });
+    expect(r2.status).toBe(200);
+    const j2 = await r2.json();
+    expect(j2.updated).toBe(true);
+    expect(j2.publication).toMatchObject({ id: pub.id, title: '春节海报 v2', note: '换了配色', imageCount: 2 });
+    const shelf = (await (await as(other, '/api/market')).json()).items.filter((p) => p.id === pub.id);
+    expect(shelf).toHaveLength(1);
+    expect(shelf[0].hasSkill).toBe(false);
+  });
+
+  it('skill：同一作者同名 skill 再发 = 原地更新（版本跟着新 SKILL.md），别人的同名不算', async () => {
+    const author = makeUser(); const other = makeUser();
+    users.set(author.id, author); users.set(other.id, other);
+    await installSkillFor(author, 'warm-poster');
+    const r1 = await as(author, '/api/market', { method: 'POST', body: publishForm({ skillName: 'warm-poster' }) });
+    expect(r1.status).toBe(201);
+    const id = (await r1.json()).publication.id;
+    // 覆盖装一版 0.1.1 再发
+    const bumped = SKILL_MD('warm-poster').replace('version: 0.1.0', 'version: 0.1.1');
+    const inst = await installPluginToRoot(Buffer.from(bumped), getUserPluginsRoot(author.id), { force: true });
+    expect([200, 201]).toContain(inst.status);
+    const r2 = await as(author, '/api/market', { method: 'POST', body: publishForm({ skillName: 'warm-poster', title: '暖色海报 v2' }) });
+    expect(r2.status).toBe(200);
+    expect((await r2.json()).publication).toMatchObject({ id, skillVersion: '0.1.1', title: '暖色海报 v2' });
+    // 别人发同名是另一条
+    await installSkillFor(other, 'warm-poster');
+    const r3 = await as(other, '/api/market', { method: 'POST', body: publishForm({ skillName: 'warm-poster' }) });
+    expect(r3.status).toBe(201);
+    expect((await r3.json()).publication.id).not.toBe(id);
+  });
+
+  it('照着来一个：网页开新项目、参考图入座、有 skill 就装、回开工提示词；桌面版 409 WEB_ONLY；没过审 409', async () => {
+    const author = makeUser(); const me = makeUser();
+    users.set(author.id, author); users.set(me.id, me);
+    await installSkillFor(author, 'vn-site');
+    const r1 = await as(author, '/api/market', { method: 'POST', body: publishForm({ skillName: 'vn-site', title: '互动视觉小说站', note: '像翻一本书', images: [PNG_1x1, PNG_1x1] }) });
+    expect(r1.status).toBe(201);
+    const pub = (await r1.json()).publication;
+    const f = await as(me, `/api/market/${pub.id}/fork`, { method: 'POST' });
+    expect(f.status).toBe(201);
+    const j = await f.json();
+    expect(j.projectId).toMatch(/^proj_/);
+    expect(j.images).toEqual([expect.stringMatching(/^参考图\/ref-.*-1\.webp$/), expect.stringMatching(/-2\.webp$/)]);
+    expect(j.skillInstalled).toBe(true);
+    expect(j.prompt).toContain('互动视觉小说站');
+    expect(j.prompt).toContain('先跟我对齐');
+    const { getSharedDir } = await import('../projects/workspace.js');
+    const dir = path.join(getSharedDir(j.projectId), '参考图');
+    expect((await fs.readdir(dir)).length).toBe(2);
+    expect(db.prepare('SELECT owner_id, mode FROM projects WHERE id = ?').get(j.projectId)).toMatchObject({ owner_id: me.id, mode: 'design' });
+    expect((await findUserPluginDir(me.id, 'vn-site'))).toBeTruthy();
+    // 桌面版不提供
+    expect((await as(me, `/api/relay/market/${pub.id}/fork`, { method: 'POST' })).status).toBe(409);
+    expect((await (await as(me, `/api/relay/market/${pub.id}/fork`, { method: 'POST' })).json()).code).toBe('WEB_ONLY');
+  });
+
+  it('agent 注册口：hosted 注册的 publisher 走同一条 publishForUser（作品 / skill 两种），没注册时 publishToMarket 抛 MARKET_UNAVAILABLE', async () => {
+    const { registerMarketPublisher, publishToMarket, marketPublisherRegistered, _resetMarketPublisher } = await import('../lib/market-bridge.js');
+    const { publishForUser } = await import('./market-routes.js');
+    _resetMarketPublisher();
+    expect(marketPublisherRegistered()).toBe(false);
+    await expect(publishToMarket({ userId: 'x', title: 't', images: [] })).rejects.toMatchObject({ code: 'MARKET_UNAVAILABLE' });
+    const author = makeUser(); users.set(author.id, author);
+    registerMarketPublisher(async ({ userId, title, note, skillName, images, showcaseId }) => {
+      const me = users.get(userId);
+      const r = await publishForUser({ me, skillName: skillName || '', kind: skillName ? null : 'work', images, title, note, source: 'web', showcaseId: showcaseId || null });
+      if (r.status >= 400) throw Object.assign(new Error(r.body.error), { code: r.body.code });
+      return r.body.publication;
+    });
+    const work = await publishToMarket({ userId: author.id, title: '一张图', note: null, skillName: null, images: [{ buf: PNG_1x1, type: 'image/png', name: 'a.png' }], showcaseId: null });
+    expect(work).toMatchObject({ kind: 'work', hasSkill: false, state: 'approved' });
+    await installSkillFor(author, 'bridge-skill');
+    const sk = await publishToMarket({ userId: author.id, title: '带 skill', note: 'x', skillName: 'bridge-skill', images: [{ buf: PNG_1x1, type: 'image/png', name: 'a.png' }], showcaseId: null });
+    expect(sk).toMatchObject({ kind: 'skill', hasSkill: true, skillName: 'bridge-skill' });
+    await expect(publishToMarket({ userId: author.id, title: '没图', note: null, skillName: null, images: [], showcaseId: null })).rejects.toMatchObject({ code: 'NO_IMAGE' });
+    _resetMarketPublisher();
   });
 });

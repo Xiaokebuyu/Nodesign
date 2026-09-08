@@ -101,25 +101,22 @@ describe('派生导出（旧签名不变）', () => {
     expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
     expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
     expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
-    // ⭐⭐ Merge 网关上那**两条** GLM 行的厂商（08-28 建，08-30 拆两行，**09-08 两行都点死 particle**）。
-    //   09-08 实测：点名 `vendors:['zai']` 一律 503「temporarily unavailable due to recent provider failures」，
-    //   连不带图的纯文本也 503 —— 这家在网关上没了。而 vendors 是"取第一个**可用的**"，所以
-    //   `['zai','particle']` 早就静默落在 particle 上（x-merge-vendor 实锤），症状是生产日志里
-    //   「accept at most 8 inline」400 —— 那是 particle 的闸。站主拍板：两行都点死 particle，
-    //   多出来的图在入口裁掉（GLM_MERGE_API.maxImages=8）。
+    // ⭐⭐ Merge 网关上那**两条** GLM 行的厂商（08-28 建，08-30 拆两行，09-08 上午两行点死 particle，
+    //   **09-08 晚撤销点名**）。撤的依据：生产库 09-07 起 GLM 行缓存命中率 0、每轮 44–106 秒；直打网关
+    //   particle 没有 prompt cache（100k 两发都不命中、首字节 31 秒），zai 第二发命中 101k、首字节 5 秒。
+    //   站主拍板：不点名 vendors，网关自己路由；8 张裁图闸保留，落到哪家都不会 400。
     //   ⛔ **baseten 一条都不许出现**：同一发请求实测 $0.000626，是 particle 的 48 倍。
     //     它进来不报错，只在月底的账上出现。
-    //   ⭐ zai 复活要放开：这里、GLM_MERGE_API.maxImages、两条 desc 一起改，别只改一处。
+    //   ⛔ 也不许再点死单家：点死 particle 就是 09-08 那一天的账（没缓存、慢五倍）。
     const design = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
     const rp = resolveWireModel('glm-5.3-flash-rp')?.bodyExtra?.vendors;
-    const okPinned = (v) => Array.isArray(v) && v.length === 1 && v[0] === 'particle';
-    expect(okPinned(design), `设计行的厂商现在是 ${JSON.stringify(design)}`).toBe(true);
-    expect(okPinned(rp), `演出行的厂商现在是 ${JSON.stringify(rp)}`).toBe(true);
+    const okUnpinned = (v) => v === undefined;
+    expect(okUnpinned(design), `设计行的厂商现在是 ${JSON.stringify(design)}`).toBe(true);
+    expect(okUnpinned(rp), `演出行的厂商现在是 ${JSON.stringify(rp)}`).toBe(true);
     // 判据先验一遍：坏写法都得拦下来，否则上面两条是恒真的
-    expect(okPinned(['zai', 'particle']), '09-08 起偏好序不算数：zai 不可用时它静默落 particle，闸却按"有 zai 兜底"配').toBe(false);
-    expect(okPinned(['particle', 'baseten']), 'baseten 混进来 = 静默贵 48 倍').toBe(false);
-    expect(okPinned(undefined), '整个撤掉 = 网关自己挑，而它的默认自己会变').toBe(false);
-    // ⛔ 点死了厂商，那 8 张的裁图闸就是唯一的活路：两行都得有，缺一行 = 那条线图一多就每发 400
+    expect(okUnpinned(['particle']), '点死 particle = 没缓存、每轮慢五倍（09-08 的账）').toBe(false);
+    expect(okUnpinned(['particle', 'baseten']), 'baseten 混进来 = 静默贵 48 倍').toBe(false);
+    // ⛔ 不点名厂商，落到 particle 时 8 张的裁图闸就是唯一的活路：两行都得有，缺一行 = 那条线图一多就每发 400
     for (const id of ['glm-5.3-flash-merge', 'glm-5.3-flash-rp']) {
       expect(resolveWireModel(id)?.maxImages, `${id} 少了 maxImages`).toBe(8);
     }

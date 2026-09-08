@@ -244,7 +244,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
 
       // crystallize_skill — 把探索出来的方法论固化成用户自己的 skill + 作品进橱窗
       // （2026-07-30）。用户明确要求才调；写的是判断依据不是成品 HTML。
-      makeCrystallizeSkillTool({ projectId, sessionId, ctx }),
+      makeCrystallizeSkillTool({ projectId, sessionId, ctx, workspaceRoot: workspaceRoot || sharedRoot }),
 
       // publish_site — 站点一键上线 Cloudflare Pages（2026-08-02）。用户明确要求
       // 才调（发公网是外发动作）；额度按项目 owner 算，与站点窗按钮共用一套闸门。

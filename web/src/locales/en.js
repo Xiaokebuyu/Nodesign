@@ -205,18 +205,17 @@ export default {
   // 整面墙是"纸桌面 + 来访登记卡"的隐喻，英文保留这层温度，不改写成通用 SaaS 措辞。
   // ⚠️ 三个场景（login-wall/scenes/*.jsx）的故事文案**没翻**：那是 1500x800 固定
   // 设计稿，文案框宽度写死到 11.5% 这种量级，英文塞进去必然溢出。见 README 的缺口一节。
-  '来访登记': 'Visitor Log',
-  '凭邀请': 'BY INVITE',
-  '免费开放中 · 邀请码可解锁 Claude': 'Open to all · invite code unlocks Claude',
-  '小范围内测中': 'Private beta',
-  '创作者的 agent 工作间': "A creator's agent workshop",
+  '登录或注册': 'Sign in or register',
+  '公开测试': 'Public beta',
+  '开放注册': 'Registration open',
+  '内测阶段，仅限邀请': 'Private beta, invite only',
+  '面向创作者的 agent 工作台': 'An agent workbench for creators',
   // h1 分三段是因为中间那段带手绘下划线，中英都是"动词短语 ×3"的结构，逐段对得上
   // ⚠️ 标题是**一行一个整句**，别再拆成 '想到，' + '做出来' + '，验一遍' 那样拼 ——
   // 中文下碰巧成立，换到别的语言就是词序赌博。英文按英文重写，不直译。
-  '说一句话，它做出来': 'Say it in a sentence.',
-  '哪里不对，圈哪里': "Circle what's wrong.",
-  '网页、海报、文档、演示稿、能演的角色，都在一块画布上。':
-    'Pages, posters, docs, decks, characters. All on one canvas.',
+  '一句话描述需求，agent 完成制作': 'Describe it in a sentence; the agent builds it',
+  '在预览上圈选，直接修改': 'Circle anything on the preview to change it',
+  '网页、海报、文档、可互动的角色，在同一块画布上完成。': 'Websites, posters, documents and interactive characters, all on one canvas.',
 
   '登录': 'Sign in',
   // ── 顶栏账号徽章（components/layout/TopBar.jsx，09-07 桌面版跟网页版对齐）+ 头像（settings/AccountSection.jsx） ──
@@ -231,23 +230,17 @@ export default {
   '头像已更新': 'Avatar updated',
   '图片超过 2MB，请先缩小': 'Image is over 2MB, please shrink it first',
   '注册': 'Register',
-  '邀请码注册': 'Register with code',
   // 中文标签是「中文 · ENGLISH」的双语花样，英文里那半就是重复，只留一个词
   '用户名 · USERNAME': 'Username',
   '密码 · PASSWORD': 'Password',
   '邀请码 · INVITE': 'Invite code',
-  '（可选）': ' (optional)',
-  '写下用户名': 'Write your username',
-  '写下密码': 'Write your password',
+  '请输入用户名': 'Enter your username',
+  '请输入密码': 'Enter your password',
   '设置密码，至少 8 位': 'Set a password, at least 8 characters',
-  '有就填，解锁 Claude 订阅模型': 'Got one? It unlocks Claude subscription models',
   // 「核 对 中」那几个空格是中文两三字词的字间距手法，英文不需要
-  '核 对 中': 'Checking…',
-  '开 号': 'Sign up',
-  '进 门': 'Enter',
-  '直接开号即可，免费模型人人可用；有邀请码的填进去解锁对应档位。':
-    'Just sign up. Free models are open to everyone; an invite code unlocks the matching plan.',
-  '目前仅限受邀开号。': 'Currently invite-only.',
+  '正在验证': 'Verifying',
+  '注册即可使用，免费模型对所有用户开放。': 'Register to start. Free models are open to every account.',
+  '当前仅接受邀请注册。': 'Registration is currently by invitation only.',
   '登录失败 ({status})': 'Sign-in failed ({status})',
   '注册失败 ({status})': 'Registration failed ({status})',
   '网络错误，请重试': 'Network error. Try again.',
@@ -421,8 +414,9 @@ export default {
   '至少传一张参考图': 'Add at least one reference image',
   '已发布，上架了': 'Published and live',
   '发布失败：{err}': 'Could not publish: {err}',
-  '发的是现在装着的这份。之后本地再改，货架上的不跟着变。':
-    'What gets published is the copy installed right now. Later local edits do not change the listed one.',
+  '发的是现在装着的这份。再次发布会原地更新货架上的这条。': 'Publishes the copy installed right now. Publishing again updates this listing in place.',
+  '只发图和说明，不带 skill': 'Images and a note only, no skill',
+  '别人能「照着来一个」：参考图进他的新项目。再次发布会原地更新。': 'Others can "make one like this": your references land in their new project. Publishing again updates in place.',
   '标题': 'Title',
   '别人在货架上看到的名字': 'The name others see on the shelf',
   '说明': 'Notes',
@@ -465,10 +459,17 @@ export default {
   'SKILL.md 全文（装了之后 agent 读到的就是这段）': 'Full SKILL.md (this is exactly what the agent reads once installed)',
   '市场': 'Market',
   '{name} 的 skill': "{name}'s skill",
+  '{name} 的作品': "{name}'s work",
+  '照着来一个': 'Make one like this',
+  '开一个新项目：参考图放进去、有 skill 就装上，agent 先跟你对齐再做': 'Start a new project with these references (and the skill, if any); the agent aligns with you before building',
+  '桌面版暂不支持照着来一个，请在网页端操作': 'Not available on the desktop app yet; use the website',
+  '没开成：{err}': 'Could not start: {err}',
+  '作品': 'Work',
   '别人的': "someone else's",
   '导出 zip': 'Export zip',
   'skill「{name}」已存进你的 skill 库，作品进了橱窗；下个新会话生效，橱窗里能发到市场。':
     'Skill "{name}" is saved to your skill library and the piece is in your gallery. It takes effect from the next new session; you can publish it to the market from the gallery.',
+  '「{title}」已进你的橱窗。': '"{title}" is now in your showcase.',
 
   // ── 橱窗 · 回头提炼（routes/showcase-distill.jsx）──
   '把做过的东西留成方法': 'Turn what you made into a method',

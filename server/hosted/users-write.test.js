@@ -57,9 +57,9 @@ describe('registerUser', () => {
       expect(u.dailyCostLimitUsd).toBe(20);
       expect(u.lifetimeCostLimitUsd).toBeNull();
       expect(u.plan).toBe('pro');
-      // 公开注册号（basic）：每天 $5 总额度（08-21 深夜：Go 付费行 + 生图按张计价都记这本账；Ox 免费行另按轮次闸）
+      // 公开注册号（basic）：每天 $10 总额度（09-08 前 $5）（08-21 深夜：Go 付费行 + 生图按张计价都记这本账；Ox 免费行另按轮次闸）
       const pub = registerUser({ username: uniq('pub20'), password: 'password123', inviteCode: '' });
-      expect(pub.dailyCostLimitUsd).toBe(5);
+      expect(pub.dailyCostLimitUsd).toBe(10);
     } finally {
       if (saved === undefined) delete process.env.NODESIGN_INVITE_DEFAULT_DAILY_USD; else process.env.NODESIGN_INVITE_DEFAULT_DAILY_USD = saved;
     }

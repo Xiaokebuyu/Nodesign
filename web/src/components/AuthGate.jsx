@@ -173,15 +173,15 @@ export default function AuthGate({ children }) {
   const form = desktop ? (
     <>
       <h2>{t('登录 NoDesign')}</h2>
-      <div className="m">{t('用站点账号登录，这台电脑就能用站点提供的模型和额度')}</div>
+      <div className="m">{t('使用站点账号登录后，本机即可使用站点提供的模型与额度')}</div>
       <div className="ndw-field">
         <label htmlFor="ndw-u">{t('用户名 · USERNAME')}</label>
-        <input id="ndw-u" value={username} placeholder={t('写下用户名')} autoFocus
+        <input id="ndw-u" value={username} placeholder={t('请输入用户名')} autoFocus
           autoComplete="username" onChange={(e) => setUsername(e.target.value)} />
       </div>
       <div className="ndw-field">
         <label htmlFor="ndw-p">{t('密码 · PASSWORD')}</label>
-        <input id="ndw-p" type="password" value={password} placeholder={t('写下密码')}
+        <input id="ndw-p" type="password" value={password} placeholder={t('请输入密码')}
           autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} />
       </div>
       {showSite && (
@@ -193,18 +193,18 @@ export default function AuthGate({ children }) {
       )}
       <p className="ndw-err">{error || (desktop.error ? t('连不上站点：{err}', { err: desktop.error }) : '')}</p>
       <button className="go" type="submit" disabled={busy}>
-        {busy ? t('核 对 中') : t('进 门')}
+        {busy ? t('正在验证') : t('登录')}
       </button>
       <p className="foot">
-        <a href={siteUrl.trim() || desktop.url || '#'} target="_blank" rel="noreferrer">{t('没有账号？去站点注册')}</a>
+        <a href={siteUrl.trim() || desktop.url || '#'} target="_blank" rel="noreferrer">{t('没有账号？前往站点注册')}</a>
         {' · '}
         <a href="#site" onClick={(e) => { e.preventDefault(); setShowSite((v) => !v); }}>{showSite ? t('用官方站') : t('换个站点')}</a>
       </p>
     </>
   ) : (
     <>
-      <h2>{t('来访登记')}</h2>
-      <div className="m">{openReg ? t('免费开放中 · 邀请码可解锁 Claude') : t('小范围内测中')}</div>
+      <h2>{t('登录或注册')}</h2>
+      <div className="m">{openReg ? t('开放注册') : t('内测阶段，仅限邀请')}</div>
       <div className="ndw-tabs">
         <button type="button" className={isRegister ? '' : 'on'}
           onClick={() => { setMode('login'); setError(''); }}>
@@ -212,33 +212,34 @@ export default function AuthGate({ children }) {
         </button>
         <button type="button" className={isRegister ? 'on' : ''}
           onClick={() => { setMode('register'); setError(''); }}>
-          {openReg ? t('注册') : t('邀请码注册')}{isRegister && <Underline />}
+          {openReg ? t('注册') : t('注册')}{isRegister && <Underline />}
         </button>
       </div>
       <div className="ndw-field">
         <label htmlFor="ndw-u">{t('用户名 · USERNAME')}</label>
-        <input id="ndw-u" value={username} placeholder={t('写下用户名')} autoFocus
+        <input id="ndw-u" value={username} placeholder={t('请输入用户名')} autoFocus
           autoComplete="username" onChange={(e) => setUsername(e.target.value)} />
       </div>
       <div className="ndw-field">
         <label htmlFor="ndw-p">{t('密码 · PASSWORD')}</label>
         <input id="ndw-p" type="password" value={password}
-          placeholder={isRegister ? t('设置密码，至少 8 位') : t('写下密码')}
+          placeholder={isRegister ? t('设置密码，至少 8 位') : t('请输入密码')}
           autoComplete={isRegister ? 'new-password' : 'current-password'}
           onChange={(e) => setPassword(e.target.value)} />
       </div>
-      {isRegister && (
+      {/* 开放注册时不显示邀请码（09-08 站主：登录页别再挂邀请码字样）；后端仍收 inviteCode，关闭开放注册就回到受邀模式 */}
+      {isRegister && !openReg && (
         <div className="ndw-field">
-          <label htmlFor="ndw-i">{t('邀请码 · INVITE')}{openReg ? t('（可选）') : ''}</label>
-          <input id="ndw-i" value={inviteCode} placeholder={openReg ? t('有就填，解锁 Claude 订阅模型') : 'nd-xxxxxxxx'}
+          <label htmlFor="ndw-i">{t('邀请码 · INVITE')}</label>
+          <input id="ndw-i" value={inviteCode} placeholder="nd-xxxxxxxx"
             onChange={(e) => setInviteCode(e.target.value)} />
         </div>
       )}
       <p className="ndw-err">{error}</p>
       <button className="go" type="submit" disabled={busy}>
-        {busy ? t('核 对 中') : isRegister ? t('开 号') : t('进 门')}
+        {busy ? t('正在验证') : isRegister ? t('注册') : t('登录')}
       </button>
-      <p className="foot">{openReg ? t('直接开号即可，免费模型人人可用；有邀请码的填进去解锁对应档位。') : t('目前仅限受邀开号。')}</p>
+      <p className="foot">{openReg ? t('注册即可使用，免费模型对所有用户开放。') : t('当前仅接受邀请注册。')}</p>
     </>
   );
 
@@ -272,16 +273,16 @@ export default function AuthGate({ children }) {
           <div className="ndw-head">
             <div className="row">
               <span className="ndw-logo">Nodesign</span>
-              <span className="ndw-anno">{t('创作者的 agent 工作间')}</span>
+              <span className="ndw-anno">{t('面向创作者的 agent 工作台')}</span>
             </div>
             {/* 标题**一行一个整句**，不再拿三段 t() 拼一句（2026-08-28）。
                 拼句在中文下碰巧成立，换到英文就是词序赌博；而且旧版给中间那段
                 加了 nowrap，英文一长直接压进右边场景的照片里。 */}
             <h1>
-              <span className="l">{t('说一句话，它做出来')}</span>
-              <span className="l u">{t('哪里不对，圈哪里')}<Underline w={1.8} /></span>
+              <span className="l">{t('一句话描述需求，agent 完成制作')}</span>
+              <span className="l u">{t('在预览上圈选，直接修改')}<Underline w={1.8} /></span>
             </h1>
-            <p className="ndw-sub">{t('网页、海报、文档、演示稿、能演的角色，都在一块画布上。')}</p>
+            <p className="ndw-sub">{t('网页、海报、文档、可互动的角色，在同一块画布上完成。')}</p>
           </div>
 
           {/* 会换的那一半：一套构图 = 一个场景文件 */}
@@ -290,7 +291,7 @@ export default function AuthGate({ children }) {
           {/* 跨场景不变的锚（二）：线索的终点，门 */}
           <form className="ndw-card" onSubmit={submit}>
             <span className="pin" />
-            <div className="ndw-stamp">{desktop ? t('桌面版') : t('凭邀请')}</div>
+            <div className="ndw-stamp">{desktop ? t('桌面版') : t('公开测试')}</div>
             {form}
           </form>
         </div>

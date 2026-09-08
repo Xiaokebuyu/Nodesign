@@ -16,7 +16,7 @@
  * 对独占别名的行结果不变（自己的 alias 反查到的就是自己）。
  */
 
-import { resolveWireModel, resolveModelRoute, wireNamesOf } from '../../engine/agent/model-context.js';
+import { resolveWireModel, resolveModelRoute, wireNamesOf, standbyModelOf } from '../../engine/agent/model-context.js';
 
 const sessionRoutes = new Map();     // sessionId → { appModel, fastModel }
 /** `${sid}:${model}` 只告一次，防日志洪水（model-ingress.js 读写） */
@@ -24,7 +24,28 @@ export const fallbackLogged = new Set();
 
 export function registerIngressSession(sessionId, appModel) {
   const route = resolveModelRoute(appModel);
-  if (route.mode === 'api') sessionRoutes.set(sessionId, { appModel: route.appModel, fastModel: route.fastModel });
+  if (route.mode === 'api') sessionRoutes.set(sessionId, { appModel: route.appModel, fastModel: route.fastModel, origModel: route.appModel });
+}
+
+/**
+ * 会话级换线（09-08，新用户第一句话撞 402 / 连续 503 案）：把这个会话的主行换成模型表里的 standby 行。
+ * 一个会话只换一次（不来回跳），换过之后 CLI 仍拿原行的名字发请求，所以匹配主行时原行和备用行的名字都认。
+ * @returns {{ from: string, to: string } | null}  没注册 / 没 standby / 已换过 → null
+ */
+export function switchSessionToStandby(sessionId) {
+  const sess = sessionId ? sessionRoutes.get(sessionId) : null;
+  if (!sess || sess.switched) return null;
+  const to = standbyModelOf(sess.appModel);
+  if (!to) return null;
+  const route = resolveModelRoute(to);
+  if (route.mode !== 'api') return null;
+  sessionRoutes.set(sessionId, { appModel: route.appModel, fastModel: route.fastModel, origModel: sess.origModel || sess.appModel, switched: true });
+  return { from: sess.appModel, to: route.appModel };
+}
+
+/** 测试与状态查询：这个会话当前主行（换过线就是备用行） */
+export function sessionMainModel(sessionId) {
+  return sessionRoutes.get(sessionId)?.appModel || null;
 }
 
 export function unregisterIngressSession(sessionId) {
@@ -54,7 +75,10 @@ export function resolveSessionWire(bodyModel, sessionTag) {
     const direct = resolveWireModel(bodyModel);
     return { wire: direct, reason: direct ? 'table' : 'none', role: 'main' };
   }
-  if (wireNamesOf(sess.appModel).includes(bodyModel)) return { wire: resolveWireModel(sess.appModel), reason: 'table', role: 'main' };
+  // 主行：原行的名字和（换过线时）备用行的名字都算 —— CLI 换线后仍按原行名字发
+  if (wireNamesOf(sess.appModel).includes(bodyModel) || (sess.switched && wireNamesOf(sess.origModel).includes(bodyModel))) {
+    return { wire: resolveWireModel(sess.appModel), reason: 'table', role: 'main' };
+  }
   if (wireNamesOf(sess.fastModel).includes(bodyModel)) return { wire: resolveWireModel(sess.fastModel), reason: 'table', role: 'helper' };
   const direct = resolveWireModel(bodyModel);
   return {

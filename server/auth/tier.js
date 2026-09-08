@@ -57,14 +57,14 @@ const CAPABILITIES = Object.freeze({
   // 08-30 起这条只管订阅通路；API 通路见 moderationDefaultApi
   pro: Object.freeze({ subscription: true, webSearch: true, imageGen: true, localGen: true, publishSite: true, moderationDefault: 'strict', moderationDefaultApi: 'off', webSearchDailyCap: null, publishSkill: true, installMarketSkill: true }),
   // 08-21 深夜用户拍板：basic 是今后唯一对外分发的档（pro 不再新发，只手动给）；basic 可用 Ox 免费行 + OpenCode Go 付费行 +
-  // 生图（$0.20/张计入同一本账），每人每天 $5 总额度（注册时写 dailyCostLimitUsd，见 basicDefaultDailyUsd）；订阅 Claude / 本地产线 / 发布仍不开
+  // 生图（$0.20/张计入同一本账），每人每天 $10 总额度（09-08 前是 $5）（注册时写 dailyCostLimitUsd，见 basicDefaultDailyUsd）；订阅 Claude / 本地产线 / 发布仍不开
   basic: Object.freeze({ subscription: false, webSearch: true, imageGen: true, localGen: false, publishSite: false, moderationDefault: 'strict', moderationDefaultApi: 'off', webSearchDailyCap: 'env', publishSkill: true, installMarketSkill: true }),
 });
 
 /** basic 档注册时写入的每日总额度（美元）。env NODESIGN_BASIC_DEFAULT_DAILY_USD；0 或非法 = 不写（走全局默认日限） */
 export function basicDefaultDailyUsd(env = process.env) {
   const raw = env.NODESIGN_BASIC_DEFAULT_DAILY_USD;
-  if (raw === undefined || raw === '') return 5;
+  if (raw === undefined || raw === '') return 10;   // 09-08 站主：5 太小气，提到 10（存量 basic 的 5 已批量改 10）
   const v = Number(raw);
   return Number.isFinite(v) && v > 0 ? v : null;
 }

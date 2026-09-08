@@ -2,7 +2,8 @@
  * server/hosted/market-store.js — skill 市场的存储层（2026-09-08 开线）
  *
  * 一条发布 = 一个 skill 包 + 几张参考图 + 标题说明。**不带产物本身**（站主 09-08 拍板：
- * 只要截图和 skill，不搬产物）。发布是快照：发布那一刻的 skill 字节存下来，作者之后改本地那份
+ * 只要截图和 skill，不搬产物）。09-08 晚 v2：kind='work' 的发布可以**没有 skill**（只有图和说明），
+ * 给"看别人做的、照着来一个"用；skill 列填空串满足 NOT NULL，hasSkill 由 skill_sha256 非空判。发布是快照：发布那一刻的 skill 字节存下来，作者之后改本地那份
  * 不影响货架上的；撤回也只是改状态，已经装到别人机器上的那份不动（要动那是 revoke，刀 2）。
  *
  * 状态机：pending（待审）→ approved / rejected（站主判）；作者可 withdrawn；站主可 revoked（已装的也失效）。
@@ -114,6 +115,7 @@ function rowToPublication(row, { withAuthor = true } = {}) {
     reviewedAt: row.reviewed_at,
     featuredRank: row.featured_rank,
     installCount: row.install_count,
+    hasSkill: !!row.skill_sha256,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     ...(withAuthor ? { author: authorOf(row.user_id) } : {}),
@@ -132,29 +134,70 @@ export async function normalizeImage(buf) {
  * 落一条发布。skill 字节已经过 validateSkillUpload（validation 是它的返回），图片已经 normalize 过。
  * 全部文件先写进目录再插行；插行失败把目录删掉（别留孤儿目录）。
  */
-export async function createPublication({ userId, skillBuffer, validation, skillMd, images, title, note, source, showcaseId }) {
+export async function createPublication({ userId, skillBuffer = null, validation = null, skillMd = null, images, title, note, source, showcaseId }) {
   if (!userId) throw new Error('userId required');
+  if (!images?.length) throw new Error('at least one image required');
   const id = newId();
   const dir = publicationDir(id);
   await fs.mkdir(path.join(dir, 'images'), { recursive: true });
   try {
-    await fs.writeFile(path.join(dir, 'skill.bin'), skillBuffer);
-    await fs.writeFile(path.join(dir, 'SKILL.md'), skillMd || '', 'utf8');
+    const hasSkill = !!skillBuffer;
+    if (hasSkill) {
+      await fs.writeFile(path.join(dir, 'skill.bin'), skillBuffer);
+      await fs.writeFile(path.join(dir, 'SKILL.md'), skillMd || '', 'utf8');
+    }
     for (let i = 0; i < images.length; i++) await fs.writeFile(path.join(dir, 'images', `${i}.webp`), images[i]);
-    const first = validation.skills?.[0] || {};
+    const first = validation?.skills?.[0] || {};
     // 09-08 站主定：初期不审核，发布即上架（state 直接 approved）。审核台留着，站长事后仍可 rejected / revoked；
     // 要恢复先审后上架，把这里的 state 改回默认 'pending' 即可（DEFAULT_PUBLISH_STATE 一处）。
     db.prepare(`INSERT INTO market_publications
-      (id, user_id, skill_name, skill_version, skill_description, skill_mode, skill_sha256, title, note, image_count, source, showcase_id, state)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(id, userId, validation.manifest.name, validation.manifest.version || first.version || null,
-        first.description || validation.manifest.description || null, validation.mode || null,
-        crypto.createHash('sha256').update(skillBuffer).digest('hex'),
+      (id, user_id, kind, skill_name, skill_version, skill_description, skill_mode, skill_sha256, title, note, image_count, source, showcase_id, state)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, userId, hasSkill ? 'skill' : 'work',
+        hasSkill ? validation.manifest.name : '', hasSkill ? (validation.manifest.version || first.version || null) : null,
+        hasSkill ? (first.description || validation.manifest.description || null) : null, hasSkill ? (validation.mode || null) : null,
+        hasSkill ? crypto.createHash('sha256').update(skillBuffer).digest('hex') : '',
         title, note ?? null, images.length, source ?? null, showcaseId ?? null, publishState);
   } catch (err) {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
     throw err;
   }
+  return getPublication(id);
+}
+
+/**
+ * 同一作者再发同一件东西 → 原地更新（09-08 晚 v2，站主：同一个项目做久了内容会变，别在货架上堆重复条目）。
+ * 判「同一件」：有 skill 按 (user_id, skill_name)，作品按 (user_id, showcase_id)；只认还挂着的（approved / pending）。
+ * @returns {object|null} 现有那条（rowToPublication）
+ */
+export function findOwnActive({ userId, skillName = null, showcaseId = null }) {
+  if (skillName) {
+    return rowToPublication(db.prepare("SELECT * FROM market_publications WHERE user_id = ? AND skill_name = ? AND state IN ('approved','pending') ORDER BY created_at DESC LIMIT 1").get(userId, skillName));
+  }
+  if (showcaseId) {
+    return rowToPublication(db.prepare("SELECT * FROM market_publications WHERE user_id = ? AND showcase_id = ? AND skill_sha256 = '' AND state IN ('approved','pending') ORDER BY created_at DESC LIMIT 1").get(userId, showcaseId));
+  }
+  return null;
+}
+
+/** 原地更新一条发布：换图、说明、标题、skill 字节；id / featured_rank / install_count 不动。文件先写后改行。 */
+export async function updatePublication(id, { skillBuffer = null, validation = null, skillMd = null, images, title, note }) {
+  const dir = publicationDir(id);
+  const imgDir = path.join(dir, 'images');
+  await fs.rm(imgDir, { recursive: true, force: true });
+  await fs.mkdir(imgDir, { recursive: true });
+  for (let i = 0; i < images.length; i++) await fs.writeFile(path.join(imgDir, `${i}.webp`), images[i]);
+  const hasSkill = !!skillBuffer;
+  if (hasSkill) {
+    await fs.writeFile(path.join(dir, 'skill.bin'), skillBuffer);
+    await fs.writeFile(path.join(dir, 'SKILL.md'), skillMd || '', 'utf8');
+  }
+  const first = validation?.skills?.[0] || {};
+  db.prepare(`UPDATE market_publications SET title = ?, note = ?, image_count = ?, updated_at = datetime('now')
+      ${hasSkill ? ', skill_version = ?, skill_description = ?, skill_mode = ?, skill_sha256 = ?' : ''} WHERE id = ?`)
+    .run(...[title, note ?? null, images.length,
+      ...(hasSkill ? [validation.manifest.version || first.version || null, first.description || validation.manifest.description || null, validation.mode || null, crypto.createHash('sha256').update(skillBuffer).digest('hex')] : []),
+      id]);
   return getPublication(id);
 }
 

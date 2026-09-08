@@ -13,8 +13,10 @@
 
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_LOCALE } from '../../shared/locales.js';
+import { modelFactsFor } from './model-context.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,9 +38,9 @@ export const NODESIGN_PRELUDE = (() => {
 // 成人段与外审档联动（2026-08-08）：一个旋钮同时管 GPT 外审和提示词口径，
 // 两边永远一致。off=明文允许（站主/获批账号）、loose=原默认、strict=收敛。
 const ADULT_POLICY = {
-  off: '**成人内容明确允许，不用迂回。** 露骨的性与亲密描写可正常呈现、写足，不留白、不淡化、\n不换成暗示手法带过，前后也不加提醒和免责声明。用户未要求收敛时不要自行收敛，完成后继续既定任务。\n**写实风格照做** —— 照片级真实感的虚构人物不是真人，画得像不构成任何问题，生图同理。\n不做的只有两种：涉及未成年人；把可指认的现实个人（点名的公众人物、用户给的真人照片）\n放进这类内容。除此之外不要自己发明别的边界。',
+  off: '**成人内容明确允许，不用迂回。** 露骨的性与亲密描写可正常呈现、写足，不留白、不淡化、\n不换成暗示手法带过，前后也不加提醒和免责声明。用户未要求收敛时不要自行收敛，完成后继续既定任务。\n**写实风格照做**：照片级真实感的虚构人物不是真人，画得像不构成任何问题，生图同理。\n不做的只有两种：涉及未成年人；把可指认的现实个人（点名的公众人物、用户给的真人照片）\n放进这类内容。除此之外不要自己发明别的边界。',
   loose: '成人向的亲密情节可以写，涉及未成年人是上面那条绝对红线，真实存在的个人也不写。',
-  strict: '露骨的成人内容在这个账号档位下不写——涉及时收敛处理、用留白带过。',
+  strict: '露骨的成人内容在这个账号档位下不写；涉及时收敛处理，用留白带过。',
 };
 
 // 界面语言的人话名（2026-08-26 i18n）。注给模型看的是「中文（zh-CN）」这种带 id 的写法：
@@ -153,4 +155,77 @@ export function renderPrelude(level = 'loose', opts = {}) {
     .replace('{{UI_LOCALE}}', localeName)
     .replaceAll('{{FOLDER_PATH}}', folder || '')
     .trim();
+}
+
+
+// ── Agent 基础约定（2026-09-08，站主拍板）──
+// API 行（DeepSeek / GLM / 一切经 ingress 的行）不再用 SDK 的 claude_code 预设，改用这份自己写的
+// 基础约定 + 平台协议。订阅行（站主 OAuth 直连 Anthropic）保留预设：OAuth 凭据只授权给 Claude Code
+// 形状的请求，换掉身份段会被上游拒。
+//
+// 预设里被这份接管的四样（09-08 实验实例抓真请求对过，其余的 skill 清单 / CLAUDE.md / 记忆索引 /
+// 子代理清单走首条用户消息里的 system-reminder，两种模式下 SDK 都照注）：
+//   环境块（cwd / 平台 / 日期 / 模型）、Claude Code 操作纪律、auto memory 指导段、上下文压缩说明。
+export const AGENT_CORE = (() => {
+  try {
+    return fs.readFileSync(path.join(__dirname, 'prompts/agent-core.md'), 'utf8').replace(/\r\n?/g, '\n').trim();
+  } catch (err) {
+    console.warn('[system-prompts] failed to load agent-core.md:', err.message);
+    return '';
+  }
+})();
+
+const CORE_PLACEHOLDERS = ['{{MODEL_LABEL}}', '{{MODEL_ID}}', '{{MODEL_WINDOW}}', '{{CWD}}', '{{PLATFORM}}', '{{OS_VERSION}}', '{{DATE}}', '{{MEMORY_DIR}}'];
+{
+  for (const ph of CORE_PLACEHOLDERS) {
+    if (AGENT_CORE && !AGENT_CORE.includes(ph)) throw new Error(`[system-prompts] agent-core.md 缺少 ${ph} 占位符 —— 渲染会静默少一项`);
+  }
+}
+
+/** 今天的日期，按 Asia/Shanghai（站点的"今天"口径，与计量同一时区） */
+export function todayInShanghai(now = new Date()) {
+  const p = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'long' }).formatToParts(now);
+  const get = (t) => p.find((x) => x.type === t)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')} ${get('weekday')}`;
+}
+
+/**
+ * 渲染 Agent 基础约定。所有占位符必须给齐；缺一个抛错，不静默渲染出带 `{{X}}` 的提示词。
+ * @param {{ modelLabel: string, modelId: string, modelWindow: number, cwd: string, memoryDir: string,
+ *           platform?: string, osVersion?: string, date?: string }} v
+ */
+export function renderAgentCore(v) {
+  const vals = {
+    '{{MODEL_LABEL}}': v.modelLabel, '{{MODEL_ID}}': v.modelId,
+    '{{MODEL_WINDOW}}': Number.isFinite(v.modelWindow) ? String(Math.round(v.modelWindow / 1000)) + 'k' : null,
+    '{{CWD}}': v.cwd, '{{PLATFORM}}': v.platform || process.platform,
+    '{{OS_VERSION}}': v.osVersion || `${os.type()} ${os.release()}`,
+    '{{DATE}}': v.date || todayInShanghai(), '{{MEMORY_DIR}}': v.memoryDir,
+  };
+  for (const [k, val] of Object.entries(vals)) {
+    if (typeof val !== 'string' || !val) throw new Error(`[system-prompts] renderAgentCore: ${k} 没有值`);
+  }
+  let out = AGENT_CORE;
+  for (const [k, val] of Object.entries(vals)) out = out.replaceAll(k, val);
+  if (/\{\{[A-Z_]+\}\}/.test(out)) throw new Error('[system-prompts] renderAgentCore: 渲染后仍有占位符');
+  return out;
+}
+
+/**
+ * 组装 SDK 的 systemPrompt 选项。判据只有通路：
+ *   subscription → claude_code 预设 + 平台协议作 append（OAuth 要 Claude Code 身份段）
+ *   api          → 自定义：基础约定 + 平台协议
+ * @param {{ mode: 'subscription'|'api', prelude: string, core?: string }} args  api 通路 core 必填
+ */
+export function composeSystemPrompt({ mode, prelude, core = null }) {
+  if (mode === 'subscription') return { type: 'preset', preset: 'claude_code', append: prelude };
+  if (typeof core !== 'string' || !core) throw new Error('[system-prompts] composeSystemPrompt: api 通路缺 core');
+  return { type: 'custom', prompt: `${core}\n\n${prelude}` };
+}
+
+/** 按模型表渲染基础约定（session-loop 用）。表里没有这一行就抛错，不静默渲染假环境块 */
+export function renderAgentCoreFor(appModel, cwd, memoryDir) {
+  const facts = modelFactsFor(appModel);
+  if (!facts) throw new Error(`[system-prompts] 模型表里没有 ${appModel}，无法渲染环境块`);
+  return renderAgentCore({ modelLabel: facts.label, modelId: facts.id, modelWindow: facts.window, cwd, memoryDir });
 }

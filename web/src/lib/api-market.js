@@ -48,6 +48,8 @@ export const Market = {
   },
   withdraw: (id) => jsonRequest('DELETE', `${marketBase()}/${encodeURIComponent(id)}`),
   /** 装到我这（网页：我的 plugin 根；桌面版：本机）。同名已装 → 409，body.existing / incoming；force 覆盖 */
+  /** 照着来一个（v2）：开一个新项目，参考图入座、skill 装上，回 { projectId, prompt }。桌面版 409 WEB_ONLY */
+  fork: (id) => jsonRequest('POST', `${marketBase()}/${encodeURIComponent(id)}/fork`),
   install: (id, { force } = {}) => jsonRequest('POST', `${marketBase()}/${encodeURIComponent(id)}/install${force ? '?force=1' : ''}`),
 };
 

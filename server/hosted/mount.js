@@ -37,7 +37,17 @@ export function mountHostedAuth(app) {
 export async function mountHostedLate(app) {
   const { default: adminRouter } = await import('./admin.js');
   const { default: devicesRouter } = await import('./devices-api.js');
-  const { createMarketRouter } = await import('./market-routes.js');
+  const { createMarketRouter, publishForUser } = await import('./market-routes.js');
+  const { registerMarketPublisher } = await import('../lib/market-bridge.js');
+  const { getUserById } = await import('../auth/users-store.js');
+  // agent 的 crystallize_skill（publish:true）经这个口发布（09-08 晚 v2）；hosted 直接落库，桌面版走 relay（api/local-market.js）
+  registerMarketPublisher(async ({ userId, title, note, skillName, images, showcaseId }) => {
+    const me = getUserById(userId);
+    if (!me) throw Object.assign(new Error('发布者账号不存在'), { code: 'NO_USER' });
+    const r = await publishForUser({ me, skillName: skillName || '', kind: skillName ? null : 'work', images, title, note, source: 'web', showcaseId: showcaseId || null });
+    if (r.status >= 400) throw Object.assign(new Error(r.body.error + (r.body.errors ? '：' + r.body.errors.join('；') : '')), { code: r.body.code });
+    return r.body.publication;
+  });
   const { marketOriginPolicy } = await import('./market-store.js');
   const { setPluginOriginPolicy } = await import('../lib/plugin-origin.js');
   // 站主撤回一条发布 → 从它装来的 plugin 在每个人的下个会话里都不再加载（plugin-loader 按来源文件来问）
