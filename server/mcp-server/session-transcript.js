@@ -23,9 +23,10 @@ export function findTranscript(configDir, sid) {
   return null;
 }
 
-export function findDebugLog(configDir, sid) {
+/** 调试日志：默认找 <configDir>/debug/<sid>.txt；sub='claude-debug' 时 configDir 本身就是那个目录（本地版 debugFile 落点） */
+export function findDebugLog(configDir, sid, sub = 'debug') {
   if (!configDir || !SID.test(sid)) return null;
-  const f = path.join(configDir, 'debug', `${sid}.txt`);
+  const f = sub === 'claude-debug' ? path.join(configDir, `${sid}.txt`) : path.join(configDir, sub, `${sid}.txt`);
   return fs.existsSync(f) ? f : null;
 }
 

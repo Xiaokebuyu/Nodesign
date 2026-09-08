@@ -80,7 +80,7 @@ import {
   STREAMING_ENABLED,
   handleSDKMessage,
   detectArtifact,
-} from './agent-shared.js';
+} from './agent-shared.js'; import { claudeDebugOptions } from './debug-file.js';
 import { autoNameProjectFromSession } from '../../projects/auto-name.js';
 // 合流并集（2026-08-13）：commitWorkspace/taskManifest 是扁平化这边的，
 // getUserById/levelFor 是 main 的每用户内容尺度旋钮（78ceaac）；
@@ -613,6 +613,7 @@ export async function runSession({
     stderr: (data) => {
       console.error(`[session ${sessionId.slice(0, 8)}/claude.stderr]`, data.trim());
     },
+    ...claudeDebugOptions(sessionId),   // 本地版：每会话一份 Claude Code 调试日志（engine/agent/debug-file.js）
   };
 
   // ── per-turn lifecycle helpers ──

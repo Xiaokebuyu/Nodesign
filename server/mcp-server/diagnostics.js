@@ -29,6 +29,7 @@ import { listRuns } from '../engine/runs/store.js';
 import { listActiveRuns } from '../engine/runs/active-runs.js';
 import { listIssues } from '../lib/issues-store.js';
 import { findTranscript, findDebugLog, readTranscript } from './session-transcript.js';
+import { claudeDebugDir } from '../engine/agent/debug-file.js';
 
 export const MCP_PATH = '/mcp';
 const TOKEN_FILE = 'mcp-token';
@@ -183,11 +184,11 @@ function buildServer({ desktopState }) {
   });
 
   server.registerTool('session_debug_log', {
-    description: '一个会话的 Claude Code 调试日志尾巴（<claudeConfigDir>/debug/<session_id>.txt）：API 重试的底层原因（连接错误 / 状态码）在这里。',
+    description: '一个会话的 Claude Code 调试日志尾巴（本地版每会话一份，<dataRoot>/logs/claude-debug/<session_id>.txt）：API 重试的底层原因（连接错误 / 状态码 / 响应体）在这里。',
     inputSchema: { session_id: z.string().min(1), tail: z.number().int().min(10).max(2000).optional() },
   }, async ({ session_id, tail }) => {
-    const f = findDebugLog(platform.claudeConfigDir, session_id);
-    if (!f) return text(`没找到会话 ${session_id} 的调试日志（${platform.claudeConfigDir || '无 claudeConfigDir'}/debug/${session_id}.txt）`);
+    const f = findDebugLog(claudeDebugDir(), session_id, 'claude-debug') || findDebugLog(platform.claudeConfigDir, session_id);
+    if (!f) return text(`没找到会话 ${session_id} 的调试日志（${claudeDebugDir() || '无数据目录'}/${session_id}.txt，也不在 ~/.claude/debug/）`);
     return text(await tailFile(f, tail ?? 200));
   });
 
