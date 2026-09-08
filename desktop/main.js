@@ -114,6 +114,7 @@ async function boot() {
   const dataDir = env.NODESIGN_DATA_DIR || path.join(app.getPath('home'), '.nodesign');
   dataDirPath = dataDir;
   openDesktopLog(dataDir);
+  settleUpdateLedger(dataDir);
   windowStatePath = path.join(dataDir, 'window.json');
   const logFd = openServerLog(dataDir);
   sup = createSupervisor({
@@ -318,6 +319,39 @@ let updater = null;
  * 开发态没有 latest.yml 可查，直接不装 —— 否则每次起都报一条查不到更新的错。
  */
 let updaterState = 'init';   // 'init' | 'dev' | 'ready' | 'failed: …'
+let downloadedVersion = null;   // 已下好、等退出时装的那版（退出路径据此决定装不装、装完拉不拉起）
+
+/**
+ * 更新台账（09-08 深夜站主问「首次安装点了下次更新会不会把应用删了」）：
+ *   退出前写 <数据目录>/update-pending.json {from,to,at}；下次启动对账 —— 版本号等于 to 就记「已更新」，
+ *   不等于就是静默安装没装上（安装器在目录被占用时会回滚并静默退出，什么都不说），上报一条壳问题。
+ *   另外记 last-version，跨版本启动时留一行「已从 x 更新到 y」，用户报「更新之后 xx 坏了」时有锚。
+ */
+function settleUpdateLedger(dataDir) {
+  const pendingFile = path.join(dataDir, 'update-pending.json');
+  const lastFile = path.join(dataDir, 'last-version');
+  const now = app.getVersion();
+  try {
+    if (fs.existsSync(pendingFile)) {
+      const p = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+      fs.unlinkSync(pendingFile);
+      if (p?.to === now) log(`[updater] 退出时静默安装已完成：${p.from} → ${now}`);
+      else {
+        log(`[updater] ✗ 退出时静默安装没装上：期望 ${p?.to}，现在跑的是 ${now}（${p?.from} 退出于 ${p?.at}）`);
+        reportShellIssue('bug', `退出时静默安装没装上：期望 ${p?.to}，实际 ${now}`, JSON.stringify(p));
+      }
+    }
+  } catch (e) { log(`[updater] 更新台账读不了：${e?.message || e}`); }
+  try {
+    const last = fs.existsSync(lastFile) ? fs.readFileSync(lastFile, 'utf8').trim() : '';
+    if (last && last !== now) log(`[updater] 版本变化：${last} → ${now}`);
+    if (last !== now) fs.writeFileSync(lastFile, now);
+  } catch { /* 台账写不进不影响正事 */ }
+}
+function notePendingInstall() {
+  if (!downloadedVersion || !dataDirPath) return;
+  try { fs.writeFileSync(path.join(dataDirPath, 'update-pending.json'), JSON.stringify({ from: app.getVersion(), to: downloadedVersion, at: new Date().toISOString() })); } catch { /* */ }
+}
 function setupUpdater() {
   if (!app.isPackaged) { updaterState = 'dev'; return; }
   import('electron-updater').then((mod) => {
@@ -339,15 +373,19 @@ function setupUpdater() {
     updater.on('download-progress', (p) => { const pct = Math.floor(p?.percent || 0); if (pct - lastPct >= 25) { lastPct = pct; log(`[updater] event download-progress ${pct}%`); } });
     updater.on('update-downloaded', (info) => {
       log(`[updater] event update-downloaded ${info?.version || '?'}`);
+      downloadedVersion = info?.version || null;
+      // ⚠️ 第二个按钮的字要说真话：机制是 autoInstallOnAppQuit —— **退出时**静默装，不是「下次启动时」。
+      // 原来写「下次启动时更新」，用户退出后立刻再点图标会撞上安装器正在挪目录的那十几秒（「找不到文件」，
+      // 像是应用被删了）。现在退出路径自己调 quitAndInstall(silent, forceRun)，装完把应用拉起来。
       dialog.showMessageBox(win, {
         type: 'info',
-        buttons: ['立即重启更新', '下次启动时更新'],
+        buttons: ['立即重启更新', '退出时自动安装'],
         defaultId: 0,
         title: '有新版本',
         message: `NoDesign ${info.version} 已下载完成。`,
-        detail: '重启大约几秒钟，正在跑的会话会被中断。',
+        detail: '重启大约几秒钟，正在跑的会话会被中断。\n选「退出时自动安装」的话，下次退出会在后台安装几十秒并自动重新打开，期间别急着点图标。',
       }).then(async ({ response }) => {
-        log(`[updater] 用户选择：${response === 0 ? '立即重启更新' : '下次启动时更新'}`);
+        log(`[updater] 用户选择：${response === 0 ? '立即重启更新' : '退出时自动安装'}`);
         if (response !== 0) return;
         // 装之前再问一次远端（09-07 站主：半小时发了三版，下好的那份可能已经过期）。
         // 远端更新了就不装这份：autoDownload 开着，这次 check 会自己把新的下下来，再弹一次上面的框
@@ -443,6 +481,7 @@ ipcMain.handle('nd:open-external', async (_e, url) => {
 async function quitAndInstall() {
   quitting = true;
   await sup?.stop();
+  notePendingInstall();
   updater.quitAndInstall();
 }
 
@@ -453,7 +492,12 @@ app.on('before-quit', (e) => {
   e.preventDefault();
   quitting = true;
   try { browserHost?.destroyAll(); } catch { /* 退出路上别被视图绊住 */ }
-  sup.stop().then(() => app.quit());
+  sup.stop().then(() => {
+    // 有下好的更新：自己调 quitAndInstall(静默, 装完拉起)，别把这一步留给 autoInstallOnAppQuit 的默认路
+    //（那条路装完不拉起，用户以为应用没了）。台账先写，下次启动对账。
+    if (downloadedVersion && updater) { notePendingInstall(); try { updater.quitAndInstall(true, true); return; } catch (e) { log(`[updater] quitAndInstall 失败，按普通退出：${e?.message || e}`); } }
+    app.quit();
+  });
 });
 
 app.on('window-all-closed', () => { /* 托盘常驻，不在这里退出 */ });
