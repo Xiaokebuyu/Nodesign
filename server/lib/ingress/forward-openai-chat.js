@@ -107,7 +107,7 @@ export function upstreamHeaders({ wire, key, wantStream, target, bodyLength, ses
 /** onOutcome 可返回要改写的状态码（ingress 换线后把 401/402/403 改成 503 让 CLI 重试）；只认 4xx/5xx 整数，别的返回值一律忽略 */
 const asStatus = (v) => (Number.isInteger(v) && v >= 400 && v <= 599 ? v : undefined);
 
-export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag = null, target, path, agent, onOutcome = () => {}, onBilling = () => {}, onTruncated = () => {}, onNotice = () => {} }) {
+export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag = null, target, path, agent, timing = null, onOutcome = () => {}, onBilling = () => {}, onTruncated = () => {}, onNotice = () => {} }) {
   const wantStream = !!parsed.stream;
   const label = wire.upstream?.label || wire.upstreamId;
   const body = toOpenAIChatRequest(parsed, { reasoningEffort: wire.reasoningEffort, maxOutput: wire.maxOutput, bodyExtra: wire.bodyExtra });
@@ -115,6 +115,24 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
   const useHttps = target.protocol === 'https:';
   const headers = upstreamHeaders({ wire, key, wantStream, target, bodyLength: outBody.length, sessionTag });
   const t0 = Date.now();
+  /**
+   * 09-08 耗时账：每个客户端请求结束时打一行，把「一轮为什么慢」拆成可以分别归因的段：
+   *   up=请求头到请求体收齐（桌面→CF→nginx→这里的上传；站内会话≈0）
+   *   prep=收齐到发上游（转换层 + 修补流水线，这台 1 vCPU 机器上会被别的活挤）
+   *   head=发出到上游响应头（DeepSeek 这类 0.1s 就回头、真正的等待在后面）
+   *   first=发出到上游第一个正文 chunk（**这才是用户感觉到的首字节**）
+   *   total=发出到收完；attempts=就地重发次数；末尾是 token 账（cr=缓存命中）
+   * 09-08 深夜桌面 DSv4.1 首字节 23s 的案子：count_tokens 对照排除了上传、直打上游排除了模型本身，
+   * 剩下这段没有任何量具能看见 —— 这行就是为它加的。
+   */
+  const timingLine = (ok, reason, { attempts, sentAt, firstByteAt, firstChunkAt, usage }) => {
+    const u = usage || {};
+    const seg = (a, b) => (a && b ? `${b - a}ms` : '-');
+    console.log(`[ingress-timing] sid=${sidShort} upstream=${wire.upstreamId} model=${wire.wireModel} ok=${ok}${reason ? ` reason=${String(reason).slice(0, 60)}` : ''}`
+      + ` body=${Math.round(outBody.length / 1024)}KB up=${seg(timing?.arrivedAt, timing?.bodyAt)} prep=${seg(timing?.bodyAt, t0)}`
+      + ` head=${seg(sentAt, firstByteAt)} first=${seg(sentAt, firstChunkAt)} total=${seg(sentAt, Date.now())} attempts=${attempts ?? 1}`
+      + ` in=${u.prompt_tokens ?? '-'} out=${u.completion_tokens ?? '-'} cr=${u.prompt_tokens_details?.cached_tokens ?? '-'} rt=${u.completion_tokens_details?.reasoning_tokens ?? '-'}`);
+  };
 
   /**
    * 发一发上游。onError 由调用方给 —— ⛔ **这里绝不碰 res**：
@@ -168,6 +186,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
      */
     const sentAt = Date.now();
     let firstByteAt = null;   // 第一发拿到响应头的时刻（disarmFirstByte 处记）；环形账的 ms 用它，不用整发墙钟
+    let firstChunkAt = null;  // 第一发的第一个正文 chunk（耗时账的 first；DeepSeek 响应头 0.1s 就回，头不等于首字节）
     /**
      * @param {boolean|null} upstreamFault  这一发的结果算不算上游的账：客户端主动断开（用户点停止 / 关页面）
      *   传 null —— 只报 onOutcome，不进环形账。09-08 评审：三次点停就够把一条健康的线判成「不可用」。
@@ -176,6 +195,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       if (outcomeReported) return undefined;
       outcomeReported = true;
       if (upstreamFault !== null) upstreamHealth.note(wire.upstreamId, { ok, reason, status, ms: firstByteAt ? firstByteAt - sentAt : null });
+      timingLine(ok, reason, { attempts: xf.attempts, sentAt, firstByteAt, firstChunkAt, usage: xf.usageTotal });
       return asStatus(onOutcome(ok, reason, status));
     };
 
@@ -346,6 +366,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
           console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} 流静默 ${Math.round(silentMs / 1000)}s —— 看门狗掐断死流`);
           try { proxyRes.destroy(new Error('stream idle watchdog')); } catch { /* 已经死了就算了 */ }
         } });
+        proxyRes.once('data', () => { if (!firstChunkAt) firstChunkAt = Date.now(); });
         proxyRes.pipe(xf, { end: false });   // end:false —— 这条 SSE 还要接着用（可能再打一发）
       }, (detail) => attemptOver(detail, false));   // 连不上 / RST：同一条判决路，绝不自己碰 res
     };

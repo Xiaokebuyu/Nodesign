@@ -89,11 +89,11 @@ export async function getOrStartIngress() {
   if (_instance) return _instance;
 
   const server = http.createServer((req, res) => {
-    const chunks = [];
+    const chunks = []; const arrivedAt = Date.now();
     req.on('data', (c) => chunks.push(c));
     req.on('end', async () => {
       try {
-        await handleRequest(req, res, Buffer.concat(chunks));
+        await handleRequest(req, res, Buffer.concat(chunks), { timing: { arrivedAt, bodyAt: Date.now() } });
       } catch (err) {
         console.error(`[model-ingress] handler error: ${err?.stack || err?.message || err}`);
         try { res.writeHead(502); res.end(`ingress handler error: ${err?.message || 'unknown'}`); } catch { /* ignore */ }
@@ -259,7 +259,7 @@ export async function handleRequest(req, res, bodyBuf, opts = {}) {
     const target = new URL(wire.upstream.baseUrl);
     // helper 请求降档：主行想多少归主行，helper 一句话的活用 helperReasoningEffort（默认 low）
     const wireFwd = routed.role === 'helper' && wire.helperReasoningEffort ? { ...wire, reasoningEffort: wire.helperReasoningEffort } : wire;
-    forwardOpenAIChat({ parsed, wire: wireFwd, key, res, sidShort, sessionTag, target, path: joinPath(target.pathname, '/chat/completions'), agent: agentFor(wire, target.protocol === 'https:'), onOutcome: noteOutcome,
+    forwardOpenAIChat({ parsed, wire: wireFwd, key, res, sidShort, sessionTag, target, timing: opts.timing, path: joinPath(target.pathname, '/chat/completions'), agent: agentFor(wire, target.protocol === 'https:'), onOutcome: noteOutcome,
       // 上游自报费用按会话 × appModel 累加（helper 请求记到 helper 行头上），session-loop 结账时取走
       onBilling: customBilling
         ? (info) => customBilling({ appModel: wireFwd.appModel, protocol: 'openai-chat', costUsd: info.costUsd ?? null, tokens: openaiTokens(info.usage) })

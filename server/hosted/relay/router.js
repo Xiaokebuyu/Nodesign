@@ -204,9 +204,11 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
         : sendError(res, 400, 'SESSION_UNKNOWN', '会话没登记：起 query 之前先 POST /api/relay/sessions。');
     }
 
+    const arrivedAt = Date.now();   // 09-08 耗时账：请求头到 → 请求体收齐 = 上传那段（桌面→CF→这里）
     let bodyBuf;
     try { bodyBuf = await readRawBody(req); }
     catch (err) { return sendError(res, err.status || 400, 'BAD_BODY', err.message); }
+    const bodyAt = Date.now();
     let parsed;
     try { parsed = JSON.parse(bodyBuf.toString('utf8')); }
     catch { return sendError(res, 400, 'BAD_JSON', '请求体不是 JSON'); }
@@ -237,7 +239,7 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
       return;
     }
     try {
-      await forwardApi(req, res, bodyBuf, { onBilling: book });
+      await forwardApi(req, res, bodyBuf, { onBilling: book, timing: { arrivedAt, bodyAt } });
     } catch (err) {
       console.error(`[relay] forward error: ${err?.stack || err?.message || err}`);
       if (!res.headersSent) sendError(res, 502, 'FORWARD_FAILED', err?.message || 'forward failed');
