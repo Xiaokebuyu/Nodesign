@@ -18,6 +18,7 @@ server/runs/*/
 # Per-project workspace 目录（持久化，含 canvas.html / spec.json / .git / assets）
 # 每个 project 一个子目录，纯 dev 数据，不入仓
 server/projects-data/
+server/market-data/
 
 # 服务端缓存（首页封面截图等，按源 mtime 重建，删了自愈）
 server/.cache/

@@ -6,6 +6,7 @@
  *   PUT  /api/local/config    保存（先校验；有错也存——用户可能在存半成品——但把 errors 回给页面标红）。
  *                             模型表是加载时冻结的，改动要 POST /restart 才生效，响应里 needsRestart 说这件事
  *   POST /api/local/restart   优雅退出并以 RESTART_EXIT_CODE 退，bin/nodesign.js 的 supervisor 拉起新进程
+ *   *    /api/local/market/…  skill 市场（经 relay 转站点；本机打包 / 落盘），见 local-market.js
  *
  * 请求者恒为 LOCAL_OWNER（admin）；这里不再做权限判断——hosted 下整组路由不存在。
  */
@@ -32,12 +33,16 @@ import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 import { recordIssue, signatureOf } from '../lib/issues-store.js';
 import { enqueueIssueUpload, flushIssueOutbox } from '../runtime/issue-outbox.js';
+import localMarketRouter from './local-market.js';
 
 export const RESTART_EXIT_CODE = 75;
 
 const pkg = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../package.json'), 'utf8'));
 
 const router = express.Router();
+
+// skill 市场（09-08）：本机只打包 / 落盘 / 转发，货架在站点上。见 local-market.js
+router.use('/market', localMarketRouter);
 
 router.get('/status', (_req, res) => {
   res.json({

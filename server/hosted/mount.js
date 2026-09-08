@@ -37,6 +37,9 @@ export function mountHostedAuth(app) {
 export async function mountHostedLate(app) {
   const { default: adminRouter } = await import('./admin.js');
   const { default: devicesRouter } = await import('./devices-api.js');
+  const { createMarketRouter } = await import('./market-routes.js');
   app.use('/api/admin', adminRouter);
   app.use('/api/me/devices', devicesRouter);   // 跟内核的 /api/me 各管各的前缀，先后无所谓
+  // skill 市场（09-08）：网页入口。桌面版的入口在 relay/router.js 里挂的 /api/relay/market，同一份处理函数
+  app.use('/api/market', createMarketRouter({ userOf: (req) => req.user, source: 'web' }));
 }

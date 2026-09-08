@@ -24,6 +24,7 @@
  *   POST   /__nd/:sid/v1/messages/count_tokens
  *   POST   /tools/web_search       网关替桌面版搜（站主的 key；basic 档日上限）        tools.js
  *   POST   /tools/generate_image   网关替桌面版出图（站主的通道；$0.20/张进账本）      tools.js
+ *   *      /market/...             skill 市场（发布 / 货架 / 下载回本机装）                 ../market-routes.js
  *
  * 拒绝一律回 Anthropic 错误形状 {type:'error', error:{type, message}} 外加我们自己的 code：
  * SDK 认得前者能把话显示给用户，客户端认得后者能做对应的引导（换模型 / 明天再来）。
@@ -45,6 +46,7 @@ import { checkQuota } from '../../lib/quota.js';
 import { tierOf } from '../../auth/tier.js';
 import { mountRelayTools, relayToolsFor } from './tools.js';
 import { mountRelayIssues } from './issues.js';
+import { createMarketRouter } from '../market-routes.js';
 
 const BODY_MAX = 64 * 1024 * 1024;   // 带图的 Messages body 能到十几 MB；站内入口本来没有上限
 
@@ -147,6 +149,8 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
   mountRelayTools(router, { sendError, readRawBody, ...tools });
   // 客户端上报（report_issue / 桌面壳事件）落站点 issues 表：issues.js
   mountRelayIssues(router, { sendError, readRawBody });
+  // skill 市场（09-08）：桌面版入口，跟网页的 /api/market 同一份处理函数。multipart 自己解，不依赖 express.json
+  router.use('/market', createMarketRouter({ userOf: (req) => req.relayUser, source: 'desktop' }));
 
   // 目录：客户端拿着同一张 model-table，只需要知道"哪些行这个账号能用、哪些锁着"。两个选择器面（canvas / stage）
   // 的并集，面的过滤客户端自己做。字段只给 id / locked / lockReason，标签和描述客户端表里有。

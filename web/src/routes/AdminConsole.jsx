@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  LayoutDashboard, Users, Ticket, Megaphone, AlertTriangle, ShieldAlert,
+  LayoutDashboard, Users, Ticket, Megaphone, AlertTriangle, ShieldAlert, Store,
   Copy, Pencil, Ban, RotateCcw, Send, X, Trash2,
 } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
@@ -13,6 +13,7 @@ import { IssuesPanel, Segmented } from './Issues.jsx';
 import { PAPER_SHADOW } from '../lib/paper.js';
 import { Chip, Field, NumInput, PrimaryBtn, GhostBtn, IconBtn } from '../components/admin/primitives.jsx';
 import { ModLevelChip, LimitEditor } from '../components/admin/LimitEditor.jsx';
+import { MarketTab } from './admin-market.jsx';
 
 /**
  * AdminConsole — 内测控制台（/admin，2026-08-02）
@@ -123,6 +124,7 @@ export default function AdminConsole() {
             ['invites', '邀请码', Ticket],
             ['notices', '公告', Megaphone],
             ['moderation', '审核', ShieldAlert],
+            ['market', '市场', Store],
             ['issues', '问题库', AlertTriangle],
           ].map(([key, label, Icon]) => (
             <button
@@ -145,6 +147,7 @@ export default function AdminConsole() {
         {tab === 'invites' && <InvitesTab invites={invites} users={users} reload={reload} copy={copy} />}
         {tab === 'notices' && <NoticesTab />}
         {tab === 'moderation' && <ModerationTab users={users} />}
+        {tab === 'market' && <MarketTab />}
         {tab === 'issues' && <IssuesPanel />}
       </div>
       </Desk>
