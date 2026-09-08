@@ -44,3 +44,31 @@ describe('composeUserMessage 基数', () => {
     expect(displayText.split('唯一一句')).toHaveLength(2); // 出现 1 次
   });
 });
+
+describe('附件路径 × 桌面 ≠ cwd（09-08 桌面版仓库项目）', () => {
+  it('小图按桌面找到并内联；大文件给绝对路径；文档给相对桌面的路径', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-compose-'));
+    const desk = path.join(folder, '.nodesign');
+    fs.mkdirSync(path.join(desk, '用户内容'), { recursive: true });
+    // 1×1 PNG
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    fs.writeFileSync(path.join(desk, '用户内容', 'a.png'), png);
+    fs.writeFileSync(path.join(desk, '用户内容', 'big.bin'), Buffer.alloc(16));
+    const attachments = [
+      { type: 'asset', path: '用户内容/a.png', name: 'a.png', mime: 'image/png', size: png.length },
+      { type: 'asset', path: '../../shared/用户内容/big.bin', name: 'big.bin', mime: 'application/octet-stream', size: 16 },   // 老形状也认
+      { type: 'asset', path: '用户内容/spec.docx', name: 'spec.docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', size: 10 },
+    ];
+    const { blocks } = await composeUserMessage('看看', attachments, EMPTY_PENDING, { desk, cwd: folder });
+    expect(blocks.some((b) => b.type === 'image')).toBe(true);
+    const texts = blocks.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    expect(texts).toContain(path.join(desk, '用户内容', 'big.bin'));   // Read 用绝对路径
+    expect(texts).toContain('用户内容/spec.docx');                     // read_document 相对桌面
+    expect(texts).not.toContain('../../shared');
+    // 旧签名（cwd = 桌面）：路径相对 cwd
+    const old = await composeUserMessage('看看', [attachments[1]], EMPTY_PENDING, desk);
+    expect(old.blocks.map((b) => b.text).join('\n')).toContain('- 用户内容/big.bin');
+  });
+});

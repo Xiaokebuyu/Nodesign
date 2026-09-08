@@ -34,9 +34,14 @@ export async function ensureUploadDir(sharedRoot) {
   return dir;
 }
 
-/** agent / 前端拿到的引用路径。cwd 是 sessions/<sid>/，所以 `../../shared/<dir>/<name>` */
+/**
+ * agent / 前端拿到的引用路径：**相对桌面**（`<dir>/<name>`）。
+ * 09-08 前是 `../../shared/<dir>/<name>` —— 扁平化（08-07）之前 cwd 是 sessions/<sid>/ 时代的写法，
+ * 之后一直靠 turn-compose 剥前缀才能内联小图；大图 / 文档那两行原样发给 agent，从 cwd 根本解析不到。
+ * 桌面版仓库项目（cwd ≠ 桌面）把这条老账彻底暴露了。消费方对老形状仍然兼容（safe-path 剥前缀）。
+ */
 export function uploadRefPath(dirRel, filename) {
-  return `../../shared/${dirRel}/${filename}`;
+  return `${dirRel}/${filename}`;
 }
 
 /**

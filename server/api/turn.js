@@ -319,7 +319,7 @@ router.post('/:pid/turn', async (req, res, next) => {
     // 就是命令本身，多包一层 system 注入就不会被识别
     const { displayText, blocks } = raw === true && chatText.trim()
       ? { displayText: chatText.trim(), blocks: [{ type: 'text', text: chatText.trim() }] }
-      : await composeUserMessage(chatText, attachments, pendingSummary, sessionRoot);
+      : await composeUserMessage(chatText, attachments, pendingSummary, { desk: getWorkspaceRoot(project.id), cwd: sessionRoot });
 
     // 上传/附件诊断：NODESIGN_DEBUG_TURN=1 时打印 blocks 概况，定位 image 体积/媒体类型
     // 引发的 400/超 token 类问题（配合 binary-fixup-proxy 的 /tmp dump）

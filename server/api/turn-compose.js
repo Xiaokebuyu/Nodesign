@@ -34,7 +34,19 @@ const IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'imag
  * Anthropic image content block 仅支持 jpeg/png/gif/webp，不支持 svg/heic 等。
  * 不在白名单的 image mime → 按文本路径降级。
  */
-export async function composeUserMessage(chat, attachments, pendingSummary, sessionRoot) {
+/**
+ * @param {string|{desk:string,cwd:string}} roots  旧签名是 sessionRoot 一个字符串（cwd = 桌面）；
+ *   09-08 起可以分开给：desk = 桌面（上传件真住的地方，getWorkspaceRoot），cwd = agent 站的地方（getAgentCwd）。
+ *   仓库项目里两者不同：内联要按 desk 找文件，写给 agent 的路径要从 cwd 出发才 Read 得到。
+ */
+export async function composeUserMessage(chat, attachments, pendingSummary, roots) {
+  const deskRoot = typeof roots === 'string' ? roots : roots.desk;
+  const cwdRoot = typeof roots === 'string' ? roots : (roots.cwd || roots.desk);
+  const sessionRoot = deskRoot;
+  /** 去掉老前缀后的桌面相对路径 */
+  const deskRel = (p) => String(p || '').replace(/^(?:\.\.\/)+shared\//, '');
+  /** 给 Read 用：从 cwd 出发的路径；两个根不同时直接给绝对路径，不让 agent 算 */
+  const forRead = (p) => (deskRoot === cwdRoot ? deskRel(p) : path.join(deskRoot, deskRel(p)));
   const blocks = [];
 
   // C4：用户在过去时段做的 direct edit + comment → prepend system 提示
@@ -83,9 +95,10 @@ export async function composeUserMessage(chat, attachments, pendingSummary, sess
         blocks.push(inline);
         inlineImageNames.push(a.name || path.basename(a.path));
       } else if (isExtractable(a.path)) {
-        docLines.push(`- ${a.path}${a.name ? `（${a.name}）` : ''}`);
+        // read_document 是画布工具，收的是相对桌面的路径
+        docLines.push(`- ${deskRel(a.path)}${a.name ? `（${a.name}）` : ''}`);
       } else {
-        fallbackLines.push(`- ${a.path}${a.name ? `（${a.name}）` : ''}`);
+        fallbackLines.push(`- ${forRead(a.path)}${a.name ? `（${a.name}）` : ''}`);
       }
     }
 
@@ -98,7 +111,7 @@ export async function composeUserMessage(chat, attachments, pendingSummary, sess
     if (fallbackLines.length > 0) {
       blocks.push({
         type: 'text',
-        text: `可用素材（用 Read 工具读取，路径相对 workspace）：\n${fallbackLines.join('\n')}`,
+        text: `可用素材（用 Read 工具读取${deskRoot === cwdRoot ? '，路径相对 cwd' : '，给的是绝对路径'}）：\n${fallbackLines.join('\n')}`,
       });
     }
     if (docLines.length > 0) {
