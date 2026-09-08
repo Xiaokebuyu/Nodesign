@@ -144,9 +144,9 @@ describe('renderPrelude —— 界面语言', () => {
  * 会话悄悄多背或少背一族教义。特征串取各分区里最不会被顺手改掉的话。
  */
 const DESIGN_ONLY = [
-  '产物有三种形态',
-  '新建 deck 先问比例',
-  'preview_deck',
+  '产物有两种形态',
+  '固定画幅的页面不先问比例',
+  'export_handoff',
   '产物会话五件',
   'crystallize_skill',
   '做完之前先自己看',
@@ -222,7 +222,7 @@ describe('renderPrelude —— 项目模式分区', () => {
     const out = renderPrelude('off', { mode: 'rp', uncensored: true });
     expect(out).toContain('内容限制（本通道不附加）');
     expect(out).toContain('这个项目是演出模式');
-    expect(out).not.toContain('产物有三种形态');
+    expect(out).not.toContain('产物有两种形态');
     expect(out).not.toContain('<!--');
   });
 });

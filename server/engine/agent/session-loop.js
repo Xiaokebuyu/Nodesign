@@ -112,7 +112,7 @@ import { levelFor } from '../../lib/moderation.js';
  * @param {string} opts.sessionWorkspaceRoot
  * @param {import('./events.js').EventBus} opts.eventBus
  * @param {import('../../lib/async-queue.js').AsyncQueue} opts.inputQueue
- * @param {string} [opts.skillId='deskskill-engine-mini']
+ * @param {string} [opts.skillId='site-craft']
  * @param {string} [opts.sessionTitle]
  * @param {string[]} [opts.toolAllowlist=DEFAULT_TOOL_ALLOWLIST]
  * @param {string} [opts.initialPermissionMode]
@@ -140,7 +140,7 @@ export async function runSession({
   folderTrust = null,
   eventBus,
   inputQueue,
-  skillId = 'deskskill-engine-mini',
+  skillId = 'site-craft',   // 只是 runs.skill_id 的标签，不加载任何东西（09-08 deck 并入站点后改）
   sessionTitle = null,
   toolAllowlist = DEFAULT_TOOL_ALLOWLIST,
   initialPermissionMode = null,

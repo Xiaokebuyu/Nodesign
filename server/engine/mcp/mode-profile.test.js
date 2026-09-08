@@ -73,7 +73,8 @@ describe('mode-profile —— skill 按模式筛', () => {
     expect(got).not.toContain('stage-setup');
     expect(got).not.toContain('story-craft');
     expect(got).not.toContain('story-intimacy');
-    expect(got).toContain('deskskill-engine-mini');
+    expect(got).toContain('site-craft');
+    expect(got).not.toContain('deskskill-engine-mini');   // 09-08 deck 并入站点，skill 已删
   });
 
   it('⭐ 标 stage 的技法包两种主会话都拿不到 —— 只有演出进程点名装', () => {
@@ -86,7 +87,7 @@ describe('mode-profile —— skill 按模式筛', () => {
 
   it('⭐ 演出会话拿不到设计三件 —— 它们的工具在 RP 下本来就没注册', () => {
     const got = filterSkillsForMode(ALL_SKILLS, 'rp');
-    for (const n of ['deskskill-engine-mini', 'docx-craft', 'site-craft']) {
+    for (const n of ['docx-craft', 'site-craft']) {
       expect(got, `${n} 的工具在 RP 下已 unregister，描述不该还在`).not.toContain(n);
     }
     expect(got).toContain('stage-setup');

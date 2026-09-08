@@ -82,6 +82,9 @@ export function upstreamHeaders({ wire, key, wantStream, target, bodyLength, ses
   return headers;
 }
 
+/** onOutcome 可返回要改写的状态码（ingress 换线后把 401/402/403 改成 503 让 CLI 重试）；只认 4xx/5xx 整数，别的返回值一律忽略 */
+const asStatus = (v) => (Number.isInteger(v) && v >= 400 && v <= 599 ? v : undefined);
+
 export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag = null, target, path, agent, onOutcome = () => {}, onBilling = () => {}, onTruncated = () => {}, onNotice = () => {} }) {
   const wantStream = !!parsed.stream;
   const label = wire.upstream?.label || wire.upstreamId;
@@ -131,7 +134,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
     let retryTimer = null;
     let outcomeReported = false;
     // 一个客户端请求只报一次结果 —— 会话连续失败计数按"请求"算，报重了止损会提前触发
-    const report = (ok, reason) => { if (outcomeReported) return; outcomeReported = true; onOutcome(ok, reason); };
+    const report = (ok, reason, status = null) => { if (outcomeReported) return undefined; outcomeReported = true; return asStatus(onOutcome(ok, reason, status)); };
 
     const stopPing = () => { if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } };
     const startPing = () => {
@@ -181,7 +184,8 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
     const failHard = (status, msg, reason) => {
       stopPing();
       if (!streaming) {
-        report(false, reason);
+        const override = report(false, reason, status);
+        if (override) { status = override; msg = `${msg}（已切换备用模型，正在重试）`; }
         const errBody = JSON.stringify(toAnthropicError(status, msg));
         try {
           res.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(errBody)) });
@@ -298,10 +302,12 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       if (status >= 400) {
         console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} ${status} model=${wire.wireModel} body=${text.slice(0, 200).replace(/\s+/g, ' ')}`);
         // ⚠️ 跟上面流式那条是**孪生的两条路**，翻译要两边都挂（生产走流式，探针走非流式，只补一边会以为修好了）
-        const msg = upstreamErrorHint(text, wire) || (text.trim() ? text : `${label} 上游返回 ${status}（模型暂时不可用，稍后再发一次）`);
-        onOutcome(false, `HTTP ${status}`);
-        const errBody = JSON.stringify(toAnthropicError(status, msg));
-        res.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(errBody)) });
+        let msg = upstreamErrorHint(text, wire) || (text.trim() ? text : `${label} 上游返回 ${status}（模型暂时不可用，稍后再发一次）`);
+        let outStatus = status;
+        const override = asStatus(onOutcome(false, `HTTP ${status}`, status));
+        if (override) { outStatus = override; msg = `${msg}（已切换备用模型，正在重试）`; }
+        const errBody = JSON.stringify(toAnthropicError(outStatus, msg));
+        res.writeHead(outStatus, { 'Content-Type': 'application/json', 'Content-Length': String(Buffer.byteLength(errBody)) });
         res.end(errBody);
         return;
       }

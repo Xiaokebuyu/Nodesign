@@ -85,6 +85,11 @@ function checkRow(row) {
   if (!row.api.sdkAlias || !BY_ID.has(row.api.sdkAlias) || BY_ID.get(row.api.sdkAlias).api) throw new Error(`[model-context] ${row.id} 的 sdkAlias 必须是表内订阅模型名：${row.api.sdkAlias}`);
   const fast = BY_ID.get(row.api.fastModel);
   if (!fast || !fast.api) throw new Error(`[model-context] ${row.id} 的 fastModel 必须是表内 API 模型：${row.api.fastModel}`);
+  // standby（09-08）：上游连续失败 / 402 时会话级换到的备用行，必须是表内另一条 API 行
+  if (row.standby !== undefined) {
+    const sb = BY_ID.get(row.standby);
+    if (!sb || !sb.api || sb.id === row.id) throw new Error(`[model-context] ${row.id} 的 standby 必须是表内另一条 API 模型：${row.standby}`);
+  }
 }
 for (const row of MODELS) {
   if (BY_ID.has(row.id)) throw new Error(`[model-context] 模型 id 重复：${row.id}`);
@@ -139,6 +144,11 @@ export function wireNamesOf(appModel) {
 export const SELECTABLE_MODELS = Object.freeze(
   MODELS.filter((m) => m.select).map((m) => Object.freeze({ id: m.id, brand: m.brand, ...m.select })),
 );
+
+/** 这一行的备用行 id（模型表 standby 字段）。没有 → null */
+export function standbyModelOf(appModel) {
+  return (appModel && BY_ID.get(appModel)?.standby) || null;
+}
 
 /** 系统提示的环境块要报真实模型：label / id / 上下文窗口。不认识的 id → null（调用方 fail-loud） */
 export function modelFactsFor(appModel) {

@@ -72,7 +72,7 @@ export function assertModeProfileNames(registeredNames) {
  * 注进系统提示词**（body 才是按需加载，见 agent/skill.js 头注）。所以每装一个 skill，
  * 它那几百字节的描述就在**每一个会话**里常驻 —— 不分模式。
  *
- * 实测（08-30）：RP 会话现在背着 deskskill-engine-mini(562B) / docx-craft(1123B) /
+ * 实测（08-30）：RP 会话曾背着 docx-craft(1123B) /
  * site-craft(782B) 三份描述，合计 ~2.4KB，而这三个 skill 要用的工具
  * （`build_docx` / `publish_site` / `preview_deck`）在 RP 模式下**根本没注册**
  * ——上面那张 RP_HIDDEN_TOOLS 已经把它们摘掉了。工具没了描述还在，是纯亏。
@@ -86,7 +86,7 @@ export function assertModeProfileNames(registeredNames) {
  */
 export const SKILL_MODES = Object.freeze({
   // 设计产线：工具在 RP 下已下架，描述跟着走
-  'deskskill-engine-mini': 'design',
+  // 09-08 站主拍板 deck 并入站点（固定画幅 / 翻页是页面属性），deskskill-engine-mini 已删
   'docx-craft': 'design',
   'site-craft': 'design',
   // 演出侧：主 agent 在 rp 项目里只做开场前的准备（stage-setup）
@@ -128,7 +128,7 @@ export function assertSkillModeNames(installedNames) {
  * skill 按模式筛的总入口（08-30；从 session-loop 拆来 —— 行数棘轮）。
  * SDK 只把 description 注进系统提示词（body 按需加载），所以每个 skill 的几百字节
  * 描述是**每个会话**的常驻成本，不分模式。筛之前 RP 会话背着设计三件
- * （deskskill/docx/site 合计 ~2.4KB）的描述，而它们要用的工具在 RP 下压根没注册。
+ * （docx/site 两件）的描述，而它们要用的工具在 RP 下压根没注册。
  * 对账跟 assertModeProfileNames 一样狠：表里的名字没装上就当场炸，别静默空转。
  */
 export function modeSkillsFor(installedNames, mode) {

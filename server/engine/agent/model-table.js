@@ -342,6 +342,7 @@ export const MODELS_BUILTIN = Object.freeze([
   // 对照改用 3.7 Flash 行；sonnet-4-6[1m] 这个 alias 名腾出来备用。中转站 thinking 参数零效果的结论见 08-20 记录。
   {
     id: 'gemini-3.7-flash', window: 1_000_000, brand: 'gemini',
+    standby: 'glm-5.3-flash-merge',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     // 08-20 用户拍板：要 3.7 Flash，先用中转站 + lift shim 顶着。它只在中转站的「反重力-」
     // 通道上有（转卖 Antigravity OAuth 额度），今天体检 6/9：文本/视觉/非流式 tool_use/
     // prompt cache 真命中（cache_read 8162）都好；流式 stop_reason 恒=end_turn（假上游实验证明
@@ -367,6 +368,7 @@ export const MODELS_BUILTIN = Object.freeze([
   {
     // 真窗口 1M；用户 08-21 深夜拍板压缩窗口 272k（省钱：携带成本 ≈ 1M 的 1/4、缓存失手最坏 $0.12/轮；近 14 天 649 回合只压缩过 11 次）
     id: 'deepseek-v4-flash-vision', window: 272_000, brand: 'deepseek',
+    standby: 'glm-5.3-flash-merge',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     // 08-21 深夜开闸给所有档（含 basic）：basic 的 $5/天日限 + 表价记账管着它；pro/admin 不限
     select: { label: 'DeepSeek V4 Flash · 视觉', desc: '响应快 · 支持视觉（单次最多 4 张图片，较早的图片自动省略）· 272k 上下文 · 按用量计入每日额度（高峰 $0.44/$1.32，缓存 $0.014）' },
     api: {
@@ -453,6 +455,7 @@ export const MODELS_BUILTIN = Object.freeze([
     // ⭐ 跟 zai 那行不同的是**这条有 prompt cache**（9038 → 第二发 cache_read 9024），
     // 所以窗口开大对它的边际成本温和得多：重传的部分大都按 $0.003/M 的缓存读走。
     id: 'glm-5.3-flash-merge', window: 1_000_000, brand: 'glm',
+    standby: 'deepseek-v4-flash-vision',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     // 08-27 用户拍板**直接对全员开**（含 basic）：跟 deepseek 视觉行同一套管法 ——
     // 它**不是免费行**（四价非 0），走的是每日美元额度，basic 的 $5/天 + 表价记账管着它，
     // 而这行的单价是全表最低的一档，同样的钱能跑十倍的量。
@@ -489,6 +492,7 @@ export const MODELS_BUILTIN = Object.freeze([
     //   有订阅资格的账号在演出面照旧走全局默认。两个字段的读者都在 model-context.js（scope 过滤 / 演出默认）。
     //   下架画布面时生产有 8 个画布会话钉着它 → server/scripts/migrate-canvas-model.mjs 改钉到 merge。
     id: 'glm-5.3-flash-rp', window: 1_000_000, brand: 'glm',
+    standby: 'deepseek-v4-flash-vision',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     select: { label: 'GLM-5.3-Flash · 演出', desc: '响应快 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', only: 'stage', stageDefault: true },
     api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['particle'] } },
   },
@@ -518,6 +522,7 @@ export const MODELS_BUILTIN = Object.freeze([
     // 上游至少收 400k，这里按 272k 收口：跟 deepseek 行同一个理由（每轮重传全量上下文，出网流量要钱），
     // 而且实测延迟随上下文明显变长（260k 那发 24.9s、400k 那发 39.8s）。要放大改这一个数就行。
     id: 'kimi-k3', window: 272_000, brand: 'kimi',
+    standby: 'glm-5.3-flash-merge',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     // ⚠️ 先 gate localGen（admin + 获批），理由是**限流**：全站共用一把 nvapi 钥匙 = 一个限流桶，
     // 而 agent 一轮会连着发好几发。08-25 实测串行 5 秒间隔的小请求 6 发里就撞了 1 发 429。
     // 开闸只要删掉 gate 这一处（清单、PUT /model、turn.js 三个消费方都走 selectableModelsFor）。

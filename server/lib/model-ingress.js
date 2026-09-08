@@ -37,6 +37,7 @@ import https from 'node:https';
 import sharp from 'sharp';
 import { resolveWireModel, UPSTREAMS } from '../engine/agent/model-context.js';
 import { resolveSessionWire, fallbackLogged } from './ingress/session-routes.js';
+import { makeStandbySwitcher, PERMANENT } from './ingress/standby.js';
 import { forwardOpenAIChat } from './ingress/forward-openai-chat.js';
 import { failStreaks, exhaustedErrorBody } from './ingress/upstream-fail-streak.js';
 import { armIdleWatchdog } from './ingress/stream-watchdog.js'; import { dumpRequestShape } from './ingress/request-dump.js';   // 后者是量具
@@ -224,19 +225,19 @@ export async function handleRequest(req, res, bodyBuf, opts = {}) {
     res.end(body);
     return;
   }
-  const noteOutcome = (ok, reason) => {
-    if (isCountTokens) return;
+  // 换线见 ingress/standby.js：主行第 2 次连续失败或 401/402/403 → 切到 standby 行，不可重试的 4xx 改写成 503 让 CLI 重试
+  const label = wire.upstream?.label || wire.upstreamId;
+  const tryStandby = makeStandbySwitcher({ sessionTag, sidShort, streakKey, failStreaks, label, noticeSession, upstreamId: wire.upstreamId });
+  /** @returns {number|undefined} 要改写给 CLI 的状态码 */
+  const noteOutcome = (ok, reason, status = null) => {
+    if (isCountTokens) return undefined;
     const n = failStreaks.note(streakKey, ok, reason);
-    // 上游抖的时候会话里什么都不动（CLI 在退避重试，一次 503 能挂 50~140 秒）—— 推一句人话，
-    // 让用户知道是在重试而不是卡死，等不及可以自己点停止。节流住在 session-notice.js。
-    if (!ok && routed.role !== 'helper') {
-      const label = wire.upstream?.label || wire.upstreamId;
-      noticeSession(sessionTag, {
-        key: 'upstream_retry',
-        text: `${label} 上游繁忙（${reason || '未知'}），正在自动重试第 ${n} 次；等不及可以点停止。`,
-        priority: 'warn',
-      });
-    }
+    if (ok || routed.role === 'helper') return undefined;
+    const permanent = PERMANENT.has(status);
+    if ((permanent || n >= 2) && tryStandby(reason)) return permanent ? 503 : undefined;
+    // 上游抖的时候会话里什么都不动（CLI 在退避重试，一次 503 能挂 50~140 秒）：推一句人话让用户知道在重试，节流在 session-notice.js
+    noticeSession(sessionTag, { key: 'upstream_retry', text: `${label} 上游繁忙（${reason || '未知'}），正在自动重试第 ${n} 次；等不及可以点停止。`, priority: 'warn' });
+    return undefined;
   };
 
   // count_tokens：上游没有该端点 → 本地估算短路（SDK 内部窗口计数要有数，
@@ -296,7 +297,7 @@ export async function handleRequest(req, res, bodyBuf, opts = {}) {
     headers,
     agent: agentFor(wire, useHttps),
   }, (proxyRes) => {
-    // count_tokens 404 → 降级本地估算并记住这个上游没有该端点
+    let statusOverride;   // 换线后把 401/402/403 改写成 503 让 CLI 重试；count_tokens 404 → 降级本地估算并记住这个上游没有该端点
     if (isCountTokens && (proxyRes.statusCode === 404 || proxyRes.statusCode === 405)) {
       countTokensDead.add(wire.upstreamId);
       proxyRes.resume();   // 丢弃上游响应体
@@ -314,12 +315,10 @@ export async function handleRequest(req, res, bodyBuf, opts = {}) {
         const preview = Buffer.concat(respChunks).slice(0, 200).toString('utf8').replace(/\s+/g, ' ');
         console.warn(`[model-ingress] sid=${sidShort} upstream=${wire.upstreamId} ${proxyRes.statusCode} model=${wire.wireModel} body=${preview}`);
       });
-      // 透传路：5xx 记一次失败（4xx 是请求本身的问题，CLI 不重试，不记）；2xx 算成功
-      if (proxyRes.statusCode >= 500) noteOutcome(false, `HTTP ${proxyRes.statusCode}`);
-    } else {
-      noteOutcome(true);
-    }
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      // 透传路：5xx 记一次失败；401/402/403 走换线（其余 4xx 是请求本身的问题，CLI 不重试，不记）；2xx 算成功
+      if (proxyRes.statusCode >= 500 || PERMANENT.has(proxyRes.statusCode)) statusOverride = noteOutcome(false, `HTTP ${proxyRes.statusCode}`, proxyRes.statusCode);
+    } else noteOutcome(true);
+    res.writeHead(statusOverride || proxyRes.statusCode, statusOverride ? { 'Content-Type': proxyRes.headers['content-type'] || 'application/json' } : proxyRes.headers);
     // 断流看门狗（2026-08-29，proj_mtexu1kp 现场）：上游 SSE 半路断粮不报错不 EOF，
     // run 会无限挂起。只对流式响应上岗；掐掉后 CLI 收到流错误自己重试。
     if (proxyRes.statusCode < 400 && String(proxyRes.headers['content-type'] || '').includes('event-stream')) {
