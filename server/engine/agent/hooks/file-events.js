@@ -16,6 +16,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { toWorkspaceRel } from '../../../lib/workspace-path.js';
 import { setActiveArtifact } from '../../../lib/artifact-target.js';
+import { gitStatusMap } from '../../../projects/repo.js';
 
 /**
  * FileChanged handler（P0+ s1 C4）：agent 写文件后 SDK 触发，转发给 EventBus。
@@ -74,7 +75,12 @@ export function makePostToolUseFileChangedEmitter({ ctx, workspaceRoot, sharedRo
       const t = input?.tool_input;
       const filePath = typeof t?.file_path === 'string' ? t.file_path
         : typeof t?.notebook_path === 'string' ? t.notebook_path : null;
-      if (filePath && canvasRelOrNull(filePath, { workspaceRoot, cwdRoot }) !== null) {
+      if (filePath && cwdRoot && cwdRoot !== workspaceRoot && canvasRelOrNull(filePath, { workspaceRoot, cwdRoot }) === null) {
+        // 仓库项目（09-08）：写的是用户仓库里的文件（在 cwd 里、不在桌面里）→ 发 repo.file_changed，
+        // 仓库卡刷新、精灵走过去。不发 run.file_changed：画布上没有这张卡，发了只会让前端等一个永远不来的座位
+        const abs = path.isAbsolute(filePath) ? filePath : path.resolve(cwdRoot, filePath);
+        if (abs.startsWith(cwdRoot + path.sep)) ctx.emit(Events.repoFileChanged(path.relative(cwdRoot, abs).replace(/\\/g, '/'), 'change'));
+      } else if (filePath && canvasRelOrNull(filePath, { workspaceRoot, cwdRoot }) !== null) {
         // 刚写的这份 html 就是"当前产物"——list_pages / screenshot / read_page
         // 不给 path 时默认打它，子代理不必知道任务目录长什么样（artifact-target.js）。
         // 形态（deck / site）不在这里定：resolveArtifactTarget 每次解析都按任务现状
@@ -101,14 +107,30 @@ export function makePostToolUseFileChangedEmitter({ ctx, workspaceRoot, sharedRo
  * node_modules / 隐藏目录不进），mtime 晚于起点的都发一次。上限 48 条，超了不发（构建产物成百上千，
  * 入座器那边也有封顶）。
  */
-export function makeBashWriteSniffer({ ctx, workspaceRoot, maxEmit = 48 }) {
+export function makeBashWriteSniffer({ ctx, workspaceRoot, cwdRoot = null, maxEmit = 48 }) {
   const started = new Map();   // toolUseId → ms
+  // 仓库项目（09-08）：agent 用 sed / echo >> 改仓库文件不走 Write/Edit，上面那条嗅探又只走桌面。
+  // 这里 Bash 完了问一次 git status（dirty 的才 stat），mtime 晚于起点的发 repo.file_changed。
+  const repoFolder = cwdRoot && cwdRoot !== workspaceRoot ? cwdRoot : null;
+  const sniffRepo = async (since) => {
+    const status = await gitStatusMap(repoFolder, { fresh: true });
+    if (!status) return;
+    let n = 0;
+    for (const rel of status.keys()) {
+      let st;
+      try { st = await fs.stat(path.join(repoFolder, rel)); } catch { continue; }   // 删了的 stat 不到，跳过
+      if (st.mtimeMs < since) continue;
+      if (n++ >= maxEmit) break;
+      try { ctx.emit(Events.repoFileChanged(rel, 'change')); } catch { /* */ }
+    }
+  };
   return {
     pre: async (_input, toolUseId) => { started.set(String(toolUseId), Date.now() - 1500); return {}; },
     post: async (_input, toolUseId) => {
       const since = started.get(String(toolUseId));
       started.delete(String(toolUseId));
       if (!since || !workspaceRoot || !ctx?.emit) return {};
+      if (repoFolder) await sniffRepo(since).catch(err => console.warn('[hooks/bash-write-sniffer] repo', err.message));
       try {
         const files = await walkTaskFiles(workspaceRoot, { maxDepth: 4 });
         let n = 0;

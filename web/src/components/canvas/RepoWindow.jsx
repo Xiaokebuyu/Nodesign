@@ -11,9 +11,11 @@
  * 状态刷新：窗开着每 8 秒拉一次 summary + 已展开目录（agent 在改的时候树上的标记会跟着变）。
  */
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen, GitBranch, RefreshCw, FileWarning } from 'lucide-react';
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, GitBranch, RefreshCw, FileWarning, Undo2 } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS } from '../../lib/theme.js';
 import { Repo } from '../../lib/api.js';
+import { useRepoStore } from '../../stores/repoStore.js';
+import { formatClock } from '../../lib/helpers.js';
 import ArtifactWindow from './ArtifactWindow.jsx';
 import '../../lib/monaco-local.js';   // monaco 本地打包（09-08），别去 CDN
 
@@ -110,12 +112,61 @@ function TreeLevel({ rel, nodes, open, onToggle, onOpenFile, selected, depth }) 
   });
 }
 
+/**
+ * 最近几轮（改道安全网，09-08）：每轮开工前服务端拍了快照，这里列「这轮改了 N 个文件」，
+ * 按钮是「回到这轮之前」—— 两步确认（先点变成"确定？"，再点才发），不弹系统对话框。
+ * 回退会把这轮**和之后所有轮**改过的文件一起还原，按钮文案说清楚。
+ */
+function TurnsStrip({ projectId, turns, onReverted }) {
+  const [arm, setArm] = useState(null);     // 待确认的 runId
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(null);
+  const shown = turns.filter(t => t.endedAt && t.changed.length);
+  if (!shown.length) return null;
+  const doRevert = async (runId) => {
+    setBusy(true); setNote(null);
+    try {
+      const r = await Repo.revert(projectId, runId);
+      setNote(`已还原 ${r.restored.length + r.removed.length} 个文件`);
+      onReverted?.();
+    } catch (err) {
+      setNote(err?.message || '回退失败');
+    } finally { setBusy(false); setArm(null); }
+  };
+  return (
+    <div style={{ borderBottom: `1px solid ${COLOR.borderLt}`, padding: `${GAP.xs}px ${GAP.lg}px`, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: GAP.md, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>
+      {shown.slice(0, 4).map((t, i) => (
+        <span key={t.runId} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span title={t.changed.map(c => `${c.status} ${c.rel}`).join('\n')}>
+            {i === 0 ? '上一轮' : formatClock(t.startedAt)} 改了 {t.changed.length} 个文件
+          </span>
+          <button
+            disabled={busy}
+            onClick={() => (arm === t.runId ? doRevert(t.runId) : setArm(t.runId))}
+            title={arm === t.runId ? '再点一次就还原：这轮和之后所有轮的改动都会回到这轮开工之前' : '回到这轮开工之前（只动仓库工作树，不碰 git 历史）'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 3, cursor: busy ? 'default' : 'pointer',
+              border: `1px solid ${arm === t.runId ? COLOR.error : COLOR.borderMd}`, borderRadius: 2, padding: '0 6px',
+              background: 'transparent', color: arm === t.runId ? COLOR.error : COLOR.text2, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+            }}
+          >
+            <Undo2 size={10} />{arm === t.runId ? '确定？' : '回到这轮之前'}
+          </button>
+        </span>
+      ))}
+      {note && <span style={{ color: COLOR.text2 }}>{note}</span>}
+    </div>
+  );
+}
+
 export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }) {
   const [summary, setSummary] = useState(null);
   const [nodes, setNodes] = useState({});        // rel → entries
   const [open, setOpen] = useState(() => new Set());
   const [selected, setSelected] = useState(null);
   const [file, setFile] = useState(null);         // { path, text, size, binary, truncated } | { path, error }
+  const [turns, setTurns] = useState([]);
+  const repoVersion = useRepoStore(s => s.version);   // agent 写了仓库文件 / 一轮结算 → 重拉
   const openRef = useRef(open); openRef.current = open;
 
   const loadDir = useCallback(async (rel) => {
@@ -130,11 +181,12 @@ export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }
 
   const refresh = useCallback(async () => {
     Repo.summary(projectId).then(setSummary).catch(() => {});
+    Repo.turns(projectId).then(r => setTurns(r?.turns || [])).catch(() => {});
     await loadDir('');
     for (const rel of openRef.current) await loadDir(rel);
   }, [projectId, loadDir]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh(); }, [refresh, repoVersion]);
   useEffect(() => {
     const timer = setInterval(refresh, REFRESH_MS);
     return () => clearInterval(timer);
@@ -179,7 +231,9 @@ export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }
       onClose={onClose}
       groups={groups}
       onToolbarGroups={onToolbarGroups}
-      headerExtra={git?.head ? (
+      headerExtra={(
+        <>
+        {git?.head && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: GAP.sm, padding: `${GAP.xs}px ${GAP.lg}px`,
           borderBottom: `1px solid ${COLOR.borderLt}`, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub,
@@ -198,7 +252,10 @@ export default function RepoWindow({ projectId, name, onClose, onToolbarGroups }
             </span>
           )}
         </div>
-      ) : null}
+        )}
+        <TurnsStrip projectId={projectId} turns={turns} onReverted={refresh} />
+        </>
+      )}
       contentStyle={{ background: CANVAS.paper }}
     >
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>

@@ -7,7 +7,8 @@
  *   - tree：列一层目录，每条带 git 状态（子目录聚合成「里面有几处改动」）
  *   - file：读一份文本文件给代码阅读器（512KB 封顶，二进制不读）
  *
- * ⛔ 只读。仓库卡不搬文件、不改文件 —— 改动是 agent 在 cwd 里做的，这里只是看。
+ * ⛔ 看的那半是只读的：仓库卡不搬文件、不改文件 —— 改动是 agent 在 cwd 里做的，这里只是看。
+ *    唯一会写工作树的是文件底下的「回到这轮之前」（revertToTurn），而且只还原快照里有的路径。
  * ⛔ 路径全部锁在文件夹里：`..` 拒、软链跳出去也拒（realpath 对比）。
  * git 状态一次 `status --porcelain=v1 -z` 全拿，按请求缓存 2 秒 —— 树展开一层一次请求，
  * 不能每层都跑一次 git。
@@ -56,9 +57,9 @@ async function isGitRepo(folder) {
  * git 状态表：rel → 'M' | 'A' | 'D' | '?' | 'R'（工作树 + 暂存区合并成一个字母，够仓库卡用）。
  * 返回 null = 不是 git 仓库或 git 不在。
  */
-export async function gitStatusMap(folder) {
+export async function gitStatusMap(folder, { fresh = false } = {}) {
   const hit = statusCache.get(folder);
-  if (hit && Date.now() - hit.at < STATUS_TTL_MS) return hit.data;
+  if (!fresh && hit && Date.now() - hit.at < STATUS_TTL_MS) return hit.data;
   let data = null;
   if (await isGitRepo(folder)) {
     const raw = await git(folder, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
@@ -181,3 +182,135 @@ export async function repoFile(projectId, rel) {
 }
 
 export function _resetStatusCache() { statusCache.clear(); }
+
+// ── 改道安全网：每轮开工前拍快照，改坏了一键回到这轮之前（2026-09-08）──
+//
+// 快照 = 一棵 git tree 对象（临时索引里 `add -A` 再 `write-tree`），**不碰用户的索引和 HEAD**，
+// 未跟踪文件也在里面（.gitignore 照常生效；.nodesign/ 在 info/exclude 里，桌面不进快照）。
+// 回退 = 拿快照和现在的差异（再拍一棵树做 diff-tree），改过/删了的 `git restore --source=<tree>` 回来，
+// 这轮新建的删掉。只动工作树，不动索引。
+// 记录住 `.nodesign/turns.json`（最近 TURNS_KEEP 轮）：{ runId, sessionId, tree, startedAt, endedAt, changed }。
+
+export const TURNS_FILE = 'turns.json';
+const TURNS_KEEP = 40;
+const pendingStarts = new Map();   // runId → Promise（startTurn 是同步的，快照在后台拍，结算时等它）
+
+async function withTempIndex(folder, fn) {
+  const tmp = path.join(folder, '.git', `nd-index-${process.pid}-${Date.now()}`);
+  try { return await fn({ ...process.env, GIT_INDEX_FILE: tmp }); } finally { await fs.rm(tmp, { force: true }).catch(() => {}); }
+}
+
+function gitEnv(cwd, args, env, { timeoutMs = 20000 } = {}) {
+  return new Promise((resolve) => {
+    let out = '';
+    let child;
+    try { child = spawn('git', args, { cwd, env, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true }); } catch { resolve(null); return; }
+    const timer = setTimeout(() => { try { child.kill(); } catch { /* 已退出 */ } }, timeoutMs);
+    child.stdout.on('data', d => { out += d; });
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
+    child.on('close', code => { clearTimeout(timer); resolve(code === 0 ? out : null); });
+  });
+}
+
+/** 工作树现在的样子拍成一棵 tree；不是 git 仓库或失败回 null */
+export async function snapshotTree(folder) {
+  if (!(await isGitRepo(folder))) return null;
+  return withTempIndex(folder, async (env) => {
+    // 先把 HEAD 读进临时索引（有 HEAD 的话），再 add -A：这样删除也能体现，空仓库也不炸
+    await gitEnv(folder, ['read-tree', 'HEAD'], env);
+    if ((await gitEnv(folder, ['add', '-A', '--', '.'], env)) == null) return null;
+    const tree = await gitEnv(folder, ['write-tree'], env);
+    return tree ? tree.trim() : null;
+  });
+}
+
+/** 快照 tree 到现在的差异：[{ rel, status:'M'|'A'|'D'|'R' }] */
+export async function changedSince(folder, tree) {
+  const now = await snapshotTree(folder);
+  if (!now || !tree) return [];
+  if (now === tree) return [];
+  const raw = await gitEnv(folder, ['diff-tree', '-r', '-z', '--name-status', '--no-renames', tree, now], process.env);
+  if (raw == null) return [];
+  const parts = raw.split('\0');
+  const out = [];
+  for (let i = 0; i + 1 < parts.length; i += 2) {
+    const status = parts[i]; const rel = parts[i + 1];
+    if (!status || !rel) continue;
+    out.push({ rel: rel.replace(/\\/g, '/'), status: status[0] });
+  }
+  return out;
+}
+
+async function turnsPath(folder) { return path.join(folder, NODESIGN_DIR, TURNS_FILE); }
+async function readTurns(folder) {
+  try { const j = JSON.parse(await fs.readFile(await turnsPath(folder), 'utf8')); return Array.isArray(j) ? j : []; } catch { return []; }
+}
+async function writeTurns(folder, turns) {
+  await fs.mkdir(path.join(folder, NODESIGN_DIR), { recursive: true });
+  await fs.writeFile(await turnsPath(folder), JSON.stringify(turns.slice(-TURNS_KEEP), null, 2) + '\n', 'utf8');
+}
+
+/** 回合开工：拍快照记一笔。不是仓库项目就什么都不做。同步返回，快照在后台拍。 */
+export function recordTurnStart(projectId, { runId, sessionId = null } = {}) {
+  const folder = repoFolderOf(projectId);
+  if (!folder || !runId) return;
+  const p = (async () => {
+    const tree = await snapshotTree(folder);
+    if (!tree) return;
+    const turns = await readTurns(folder);
+    turns.push({ runId, sessionId, tree, startedAt: new Date().toISOString(), endedAt: null, changed: [] });
+    await writeTurns(folder, turns);
+  })().catch(err => console.warn('[repo] turn snapshot failed:', err?.message || err));
+  pendingStarts.set(runId, p);
+}
+
+/** 回合结束：算这轮改了什么，写回记录。返回改动清单（给事件/摘要用）。 */
+export async function recordTurnEnd(projectId, runId) {
+  const folder = repoFolderOf(projectId);
+  if (!folder || !runId) return null;
+  await pendingStarts.get(runId);
+  pendingStarts.delete(runId);
+  const turns = await readTurns(folder);
+  const rec = turns.find(t => t.runId === runId);
+  if (!rec) return null;
+  rec.changed = await changedSince(folder, rec.tree);
+  rec.endedAt = new Date().toISOString();
+  statusCache.delete(folder);
+  await writeTurns(folder, turns);
+  return rec.changed;
+}
+
+/** 最近的回合（新的在前），只给前端要的字段 */
+export async function listTurns(projectId, { limit = 8 } = {}) {
+  const folder = repoFolderOf(projectId);
+  if (!folder) return [];
+  const turns = await readTurns(folder);
+  return turns.slice(-limit).reverse().map(t => ({
+    runId: t.runId, sessionId: t.sessionId, startedAt: t.startedAt, endedAt: t.endedAt, changed: t.changed || [],
+  }));
+}
+
+/**
+ * 回到某一轮开工之前：这轮之后（含之后所有轮）改过的文件全部还原。
+ * 只动工作树。返回还原了哪些。
+ */
+export async function revertToTurn(projectId, runId) {
+  const folder = repoFolderOf(projectId);
+  if (!folder) throw repoError('NOT_REPO_PROJECT', '这个项目没有仓库卡', 404);
+  const turns = await readTurns(folder);
+  const rec = turns.find(t => t.runId === runId);
+  if (!rec?.tree) throw repoError('TURN_NOT_FOUND', '没有这一轮的快照', 404);
+  const changed = await changedSince(folder, rec.tree);
+  const restore = changed.filter(c => c.status !== 'A').map(c => c.rel);
+  const remove = changed.filter(c => c.status === 'A').map(c => c.rel);
+  if (restore.length) {
+    const ok = await gitEnv(folder, ['restore', '--source', rec.tree, '--worktree', '--', ...restore], process.env, { timeoutMs: 60000 });
+    if (ok == null) throw repoError('REVERT_FAILED', 'git restore 失败', 500);
+  }
+  for (const rel of remove) {
+    const { abs } = await resolveInside(folder, rel).catch(() => ({ abs: null }));
+    if (abs) await fs.rm(abs, { force: true }).catch(() => {});
+  }
+  statusCache.delete(folder);
+  return { restored: restore, removed: remove };
+}

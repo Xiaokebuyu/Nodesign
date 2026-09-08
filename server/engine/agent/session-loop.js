@@ -86,6 +86,7 @@ import { autoNameProjectFromSession } from '../../projects/auto-name.js';
 // getUserById/levelFor 是 main 的每用户内容尺度旋钮（78ceaac）；
 // main 的 listTasks 已随任务层退役，不再引入
 import { commitTaskWorkspace, commitWorkspace, getWorkspaceRoot, PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
+import { recordTurnStart, recordTurnEnd } from '../../projects/repo.js';
 import { commitStaging } from '../../projects/board-tags.js';
 import { taskManifest } from '../../lib/artifact-target.js';
 import { getUserById } from '../../auth/users-store.js';
@@ -633,6 +634,8 @@ export async function runSession({
     // 请求 body.model 查表，天然无跨会话互写问题。
     process.env.NODESIGN_CURRENT_TURN_ID = runId;
     markRunStarted(runId);
+    // 仓库项目（09-08 改道安全网）：开工前拍一棵快照树，改坏了能回到这轮之前。后台拍，不挡回合
+    if (projectId) recordTurnStart(projectId, { runId, sessionId });
     // 丢掉回合之外留下的半截标记：CLI 在两个回合之间还会用**主模型**打几发
     // （SUGGESTION MODE 的猜你想问、标题生成等，真路径探针实测），那些也会被
     // ingress 标成半截。不清的话下一轮一开场就吃到陈旧标记，平白续接一次
@@ -730,6 +733,13 @@ export async function runSession({
     // commit 前面，改名这一轮就漏掉了。
     await commitWorkspace(projectId, sessionId, `turn ${status}: ${new Date().toISOString()}`, { author: 'agent' })
       .catch((err) => console.warn('[git] turn commit failed:', err.message));
+    // 仓库项目：结算这轮改了用户仓库里的什么（跟快照树 diff），前端仓库卡据此刷新 / 给回退按钮
+    if (projectId && runId) {
+      try {
+        const changed = await recordTurnEnd(projectId, runId);
+        if (changed) sharedCtx.emit({ type: 'repo.turn_done', sessionId: null, runId, changed });
+      } catch (err) { console.warn('[repo] turn settle failed:', err.message); }
+    }
 
     // 黑板草稿兜底落定（2026-08-23）：agent 这一轮 write_on_board 画图留下的 staging
     // 物件，没调 edit_board commit 也在回合结束时变实 —— 草稿态是"正在画"的信号，

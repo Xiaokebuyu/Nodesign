@@ -11,6 +11,7 @@
  */
 import { scrollToPage, pulseHighlight } from './canvas-iframe-ops.js';
 import { useProcessStore } from '../stores/processStore.js';
+import { useRepoStore } from '../stores/repoStore.js';
 
 export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
   switch (evt?.type) {
@@ -23,6 +24,15 @@ export function handleAuxEvent(evt, { isStale, showToast, bumpList = null }) {
     case 'process.changed':
     case 'process.log':
       useProcessStore.getState().applyEvent(evt);
+      return true;
+    // 仓库卡（2026-09-08）：agent 写了仓库里的文件 / 一轮结算完。项目级状态，不套 stale guard。
+    // repo.file_changed 同时在 STAGE_EVENTS 里（精灵走到仓库卡上）——那一步在 ProjectWorkspace 里
+    // 排在旁路之前，已经发生过了；这里只负责让卡和窗刷新
+    case 'repo.file_changed':
+      useRepoStore.getState().touch(evt);
+      return true;
+    case 'repo.turn_done':
+      useRepoStore.getState().turnDone(evt);
       return true;
     // C6: agent 的 navigate_to_page / highlight（实现在 canvas-iframe-ops.js）
     case 'run.canvas_navigate':

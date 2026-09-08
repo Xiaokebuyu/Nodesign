@@ -270,6 +270,9 @@ export const Events = {
 
   // C4 FileChanged hook → 前端 reload iframe
   fileChanged: (filePath, event) => ({ type: 'run.file_changed', filePath, event }),
+  // 用户仓库里的文件被 agent 写了（09-08 存量仓库道）：路径是**仓库相对**，不是画布 id ——
+  // 画布上没有这个文件的卡，精灵走到仓库卡上、仓库窗的树刷新。
+  repoFileChanged: (rel, event) => ({ type: 'repo.file_changed', rel, event }),
 
   /**
    * 板书/草图落定广播（sessionId:null）。原是 write-on-board / sketch-on-board

@@ -138,6 +138,21 @@ describe('位置与话', () => {
     expect(t[MAIN_AGENT_ID].targetId).toBe('tasks/甲/x.md');
   });
 
+  /**
+   * 用户仓库里的文件（09-08 存量仓库道）：画布上没有那张卡，目标就是仓库卡（单例 id 'repo'）。
+   * ⚠️ 这个 case 必须排在 delta.tool_input / file_changed 那对 fallthrough **前面**——
+   * 第一版插在两者中间，delta.tool_input 直接掉进仓库分支，三条老测试当场红。
+   */
+  it('repo.file_changed：精灵走到仓库卡上，不挂账', () => {
+    const t = run([
+      { type: 'run.start' },
+      { type: 'repo.file_changed', rel: 'src/index.js', event: 'change' },
+    ]);
+    expect(t[MAIN_AGENT_ID].targetId).toBe('repo');
+    expect(t[MAIN_AGENT_ID].zoneId).toBe('');
+    expect(t[MAIN_AGENT_ID].pendingFile).toBe(null);
+  });
+
   it('delta.tool_input 没带 filePath（纯文本增量拍）不动位置', () => {
     const a = run([
       { type: 'run.start' },

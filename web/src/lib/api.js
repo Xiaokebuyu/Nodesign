@@ -88,6 +88,10 @@ export const Repo = {
   summary: (pid) => jsonRequest('GET', `/api/projects/${pid}/repo`),
   tree: (pid, rel = '') => jsonRequest('GET', `/api/projects/${pid}/repo/tree?path=${encodeURIComponent(rel)}`),
   file: (pid, rel) => jsonRequest('GET', `/api/projects/${pid}/repo/file?path=${encodeURIComponent(rel)}`),
+  /** 最近几轮各改了什么（改道安全网） */
+  turns: (pid) => jsonRequest('GET', `/api/projects/${pid}/repo/turns`),
+  /** 回到某一轮开工之前：这轮及之后改过的文件全部还原（只动工作树） */
+  revert: (pid, runId) => jsonRequest('POST', `/api/projects/${pid}/repo/turns/${encodeURIComponent(runId)}/revert`, {}),
 };
 
 export const Processes = {

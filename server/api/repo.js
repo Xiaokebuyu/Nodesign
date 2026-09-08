@@ -4,13 +4,15 @@
  *   GET /api/projects/:pid/repo                     分支 / 上次提交 / 改动计数；不是仓库项目 → 404
  *   GET /api/projects/:pid/repo/tree?path=<rel>     列一层，每条带 git 状态
  *   GET /api/projects/:pid/repo/file?path=<rel>     文本内容给代码阅读器（512KB 封顶）
+ *   GET /api/projects/:pid/repo/turns                最近几轮：每轮改了什么（09-08 改道安全网）
+ *   POST /api/projects/:pid/repo/turns/:runId/revert 回到这一轮开工之前（只动工作树）
  *
- * 全部只读。仓库卡是一扇窗，不是一双手。
+ * 看是只读的；revert 是唯一会写工作树的动作，只还原快照里有的路径。
  */
 
 import express from 'express';
 import { guardProject } from './_guard.js';
-import { repoSummary, repoTree, repoFile } from '../projects/repo.js';
+import { repoSummary, repoTree, repoFile, listTurns, revertToTurn } from '../projects/repo.js';
 
 const router = express.Router();
 
@@ -39,6 +41,20 @@ router.get('/:pid/repo/file', async (req, res, next) => {
   try {
     if (!guardProject(req, res)) return;
     res.json(await repoFile(req.params.pid, typeof req.query.path === 'string' ? req.query.path : ''));
+  } catch (err) { try { fail(res, err); } catch (e) { next(e); } }
+});
+
+router.get('/:pid/repo/turns', async (req, res, next) => {
+  try {
+    if (!guardProject(req, res)) return;
+    res.json({ turns: await listTurns(req.params.pid) });
+  } catch (err) { next(err); }
+});
+
+router.post('/:pid/repo/turns/:runId/revert', async (req, res, next) => {
+  try {
+    if (!guardProject(req, res)) return;
+    res.json(await revertToTurn(req.params.pid, req.params.runId));
   } catch (err) { try { fail(res, err); } catch (e) { next(e); } }
 });
 

@@ -108,7 +108,7 @@ import { makePostToolUseSubagentReportRecovery } from './hooks/post-subagent-rep
  */
 export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, projectId, roleRoster: injected = null, projectMode = 'design', cwdRoot = null } = {}) {
   // Bash 写盘嗅探（09-07）：pre 记时、post 扫 mtime 发 file_changed，两半共用一份状态
-  const bashSniffer = makeBashWriteSniffer({ ctx, workspaceRoot });
+  const bashSniffer = makeBashWriteSniffer({ ctx, workspaceRoot, cwdRoot });
   // 常驻角色名册：**一个会话一份**（闭包级，不是全局表）。派发时登记、收件人闸按它放行。
   // 两个 handler 必须拿同一个引用 —— 各建各的等于闸永远看到空名册，症状是所有角色
   // 都寄不出信（fail-closed，至少不静默漏）。见 cast.js createRoleRoster 的头注释。

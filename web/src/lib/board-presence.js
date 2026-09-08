@@ -154,6 +154,16 @@ export function reducePresence(table, evt, resolve) {
     //                         的另一半病根；run.delta.tool_use 不听 —— 那条快照
     //                         里的 file_path 是绝对路径，前端解析不了）。
     //   run.file_changed      写完落盘（权威，兜住非流式工具写的文件）。
+    // 用户仓库里的文件（09-08）：画布上没它的卡，目标就是仓库卡本身（单例 id 'repo'，住根层）
+    case 'repo.file_changed': {
+      let cur = table[who];
+      if (!cur) {
+        table = materializeMain();
+        cur = table[who];
+      }
+      if (cur.targetId === 'repo' && cur.zoneId === '') return table;
+      return { ...table, [who]: { ...cur, targetId: 'repo', zoneId: '', pendingFile: null, at: evt.at || cur.at } };
+    }
     case 'run.delta.tool_input':
     case 'run.file_changed': {
       let cur = table[who];

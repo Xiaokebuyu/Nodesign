@@ -7,6 +7,7 @@ import { ARTIFACT_HEADER_H, ARTIFACT_PREVIEW_H, HERO_SCALE } from '../../../lib/
 import { versionOfFile, versionOfSitePage } from '../../../lib/file-versions.js';
 import { formatClock } from '../../../lib/helpers.js';
 import { Assets, Stage, Repo } from '../../../lib/api.js';
+import { useRepoStore } from '../../../stores/repoStore.js';
 import { joinRel } from '../../../lib/paths.js';
 import { freezeWin, thawWin } from '../../../lib/frame-freeze.js';
 import LiveFrame from '../LiveFrame.jsx';
@@ -82,13 +83,14 @@ function ServedImagePreview({ src, box, initialFailed = false, fallback }) {
 /** 仓库卡的卡面：根上一层条目 + git 状态字母。只读、轮询、失败就留一句话。 */
 function RepoTreePreview({ projectId, box }) {
   const [entries, setEntries] = useState(null);
+  const repoVersion = useRepoStore(s => s.version);   // agent 写了仓库文件 → 立刻重拉，不等 8 秒
   useEffect(() => {
     let alive = true;
     const pull = () => Repo.tree(projectId, '').then(r => { if (alive) setEntries(r.entries || []); }).catch(() => { if (alive) setEntries([]); });
     pull();
     const timer = setInterval(pull, 8000);
     return () => { alive = false; clearInterval(timer); };
-  }, [projectId]);
+  }, [projectId, repoVersion]);
   if (!entries) return <div style={fallbackBox(box)}>读取中…</div>;
   if (!entries.length) return <div style={fallbackBox(box)}>空文件夹</div>;
   const mark = (e) => e.status || (e.changes ? String(e.changes) : '');

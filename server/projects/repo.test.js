@@ -83,3 +83,42 @@ describe('repoFile', () => {
     await expect(repoFile(pid, 'src')).rejects.toMatchObject({ code: 'REPO_NOT_FILE' });
   });
 });
+
+describe('改道安全网：快照 / 结算 / 回退', () => {
+  it('开工拍树、结算算差异、回退还原改动并删掉新建的', async () => {
+    const { recordTurnStart, recordTurnEnd, listTurns, revertToTurn, snapshotTree } = await import('./repo.js');
+    // 先把 beforeAll 留下的改动当"用户自己的"：回退只该回到这轮开工时的样子，不是 HEAD
+    const before = fs.readFileSync(path.join(dir, 'src', 'index.js'), 'utf8');   // 'export const a = 2;\n'（用户自己改的）
+    recordTurnStart(pid, { runId: 'run_t1', sessionId: 'sess_1' });
+    await new Promise(r => setTimeout(r, 300));
+    // agent 这一轮：改一个、新一个、删一个
+    fs.writeFileSync(path.join(dir, 'src', 'index.js'), 'export const a = 3;\n');
+    fs.writeFileSync(path.join(dir, 'src', 'agent-made.js'), 'export {}\n');
+    fs.rmSync(path.join(dir, 'README.md'));
+    const changed = await recordTurnEnd(pid, 'run_t1');
+    expect(changed.map(c => `${c.status} ${c.rel}`).sort()).toEqual(['A src/agent-made.js', 'D README.md', 'M src/index.js']);
+    const turns = await listTurns(pid);
+    expect(turns[0].runId).toBe('run_t1');
+    expect(turns[0].changed.length).toBe(3);
+    // 回退：改的回到开工时（a = 2，不是 HEAD 的 a = 1）、删的回来、新建的删掉；git 索引和 HEAD 不动
+    const out = await revertToTurn(pid, 'run_t1');
+    expect(out.restored.sort()).toEqual(['README.md', 'src/index.js']);
+    expect(out.removed).toEqual(['src/agent-made.js']);
+    expect(fs.readFileSync(path.join(dir, 'src', 'index.js'), 'utf8')).toBe(before);
+    expect(fs.existsSync(path.join(dir, 'README.md'))).toBe(true);
+    expect(fs.existsSync(path.join(dir, 'src', 'agent-made.js'))).toBe(false);
+    expect(git(dir, 'rev-parse', '--abbrev-ref', 'HEAD').trim()).toBe('main');
+    expect(git(dir, 'diff', '--cached', '--name-only').trim()).toBe('');   // 索引没被碰
+    // 回退后再拍一棵树，跟开工快照一样
+    const now = await snapshotTree(dir);
+    const rec = JSON.parse(fs.readFileSync(path.join(dir, '.nodesign', 'turns.json'), 'utf8')).find(t => t.runId === 'run_t1');
+    expect(now).toBe(rec.tree);
+    // 临时索引文件没留下
+    expect(fs.readdirSync(path.join(dir, '.git')).filter(n => n.startsWith('nd-index-'))).toEqual([]);
+  });
+  it('不是仓库项目：开工什么都不记、结算回 null', async () => {
+    const { recordTurnStart, recordTurnEnd } = await import('./repo.js');
+    recordTurnStart('proj_nope0000_none', { runId: 'x' });
+    expect(await recordTurnEnd('proj_nope0000_none', 'x')).toBeNull();
+  });
+});

@@ -27,6 +27,8 @@ export const STAGE_EVENTS = new Set([
   'run.start', 'run.tool_use_summary',
   'run.tool_use.started', 'run.delta.tool_use', 'run.delta.tool_input', 'ui.chalk_edit',
   'run.delta.tool_result', 'run.file_changed', 'run.deck_preview',
+  // 用户仓库里的文件被写了（09-08 存量仓库道）：画布上没那张卡，精灵走到仓库卡上
+  'repo.file_changed',
   'run.done', 'run.error', 'run.cancelled',
   // 铅笔精灵：服务端压好的手写短句
   //（run.recap 2026-08-19 移出名单：收场 recap 随那条 haiku 小结线路一起退役，
