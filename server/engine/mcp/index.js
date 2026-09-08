@@ -29,6 +29,7 @@
 
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { withParamSanitizer } from './param-sanitizer.js';
+import { withImageDiet } from './image-diet.js';
 import { withCapabilityGate, shouldRegisterTool } from './capability-gate.js';
 import { shouldRegisterForMode, assertModeProfileNames } from './mode-profile.js';
 import { MCP_SERVER_NAME } from './server-name.js';
@@ -417,6 +418,9 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
     // （</rationale><parameter name="scope">… 原样落进 tool_use.input，会话
     // 008fe16c 4/4 实锤）。挂在出口包全部工具 —— 哪个工具中招看 recordIssue。
     withParamSanitizer(t, { projectId, sessionId })
+  )).map((t) => (
+    // 图片减重（2026-09-08 深夜）：回给模型的 image block 长边 1280 / JPEG q80，13 个回图工具一处收（mcp/image-diet.js）
+    withImageDiet(t, { projectId, sessionId })
   ));
 
   // batch 解析表回填：此刻 tools 里的实例已过完 能力闸/模式闸/alwaysLoad/消毒 全套

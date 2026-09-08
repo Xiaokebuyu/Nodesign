@@ -14,6 +14,13 @@ import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 
 export const CODEX_BIN = process.env.NODESIGN_CODEX_BIN || 'codex';
+/**
+ * 生图桥自己的模型与推理档（09-08 深夜站主定）：这一趟 codex 只做「调生图工具 → 拷文件」，不需要 ~/.codex/config.toml
+ * 里给编码用的 gpt-6-astra + high。实测一张图 API 本身 100～217s，壳子（读 SKILL、想、cp）25～50s —— 换小模型省的是
+ * 壳子那段和额度，不是 API 那段。留 env 口：NODESIGN_CODEX_IMAGE_MODEL / NODESIGN_CODEX_IMAGE_EFFORT；给空串 = 用 config.toml 的。
+ */
+export const CODEX_IMAGE_MODEL = process.env.NODESIGN_CODEX_IMAGE_MODEL ?? 'gpt-5.6-luna';
+export const CODEX_IMAGE_EFFORT = process.env.NODESIGN_CODEX_IMAGE_EFFORT ?? 'low';
 // 240s → 300s（09-08 深夜实测：codex 内置 image_gen 一张 100～217s，壳子再加 25～50s；271s 那张被 240s 掐死时图已经出来了）。
 // 三道预算要错开：这里 300s < relay produce 330s < 桌面 relay 腿 360s，谁先到都能报出人话而不是 unknown。
 export const CODEX_IMAGE_TIMEOUT_MS = Number(process.env.NODESIGN_CODEX_IMAGE_TIMEOUT_MS) || 300_000;
@@ -103,7 +110,10 @@ export function buildCodexBridgePrompt({ prompt, aspectRatio, absOut, refCount, 
  * 失败自动重试一次。abort signal / 超时都 SIGKILL 子进程。
  */
 export async function runCodexImageGen({ bridgePrompt, refPaths, cwd, signal, expectFile, timeoutMs = CODEX_IMAGE_TIMEOUT_MS }) {
-  const args = ['exec', '--skip-git-repo-check', '-s', 'workspace-write', '-C', cwd, bridgePrompt];
+  const args = ['exec', '--skip-git-repo-check', '-s', 'workspace-write', '-C', cwd];
+  if (CODEX_IMAGE_MODEL) args.push('-m', CODEX_IMAGE_MODEL);
+  if (CODEX_IMAGE_EFFORT) args.push('-c', `model_reasoning_effort="${CODEX_IMAGE_EFFORT}"`);
+  args.push(bridgePrompt);
   for (const p of refPaths) args.push('-i', p);
 
   const runOnce = () => new Promise((resolve, reject) => {
