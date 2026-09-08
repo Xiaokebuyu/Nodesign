@@ -10,27 +10,24 @@
  * ⚠️ 原文一律保留在括号里：翻译是加一句，不是换一句。看日志和看聊天框的是同一个人。
  */
 
-/** 一条上游原文里的图片张数上限（particle 是 8）。这条闸只有 particle 有，zai 到 20 张都收 */
+/** 一条上游原文里的图片张数上限（particle 是 8）。zai 曾经到 20 张都收，09-08 它在网关上没了 */
 const INLINE_IMAGE_CAP = /accept at most (\d+) inline/i;
 
 /**
  * @param {string} raw       上游回的错误正文
- * @param {object} [wire]    这一发用的行（要 bodyExtra.vendors 判是不是"只走 particle"那条）
+ * @param {object} [_wire]   这一发用的行。09-08 起没有分支要看它了（两条 GLM 行同厂商），留着是因为调用方在传，
+ *                           下次真要按行分文案时不用再改调用点
  * @returns {string|null}    加了人话的完整文案；没有可翻译的就回 null（调用方原样透传）
  */
-export function upstreamErrorHint(raw, wire) {
+export function upstreamErrorHint(raw, _wire) {
   const text = String(raw || '');
   const cap = text.match(INLINE_IMAGE_CAP);
   if (cap) {
     const n = cap[1];
-    // 只有"演出"那条线（点死 particle）才该建议换线；默认那条线不该撞到这条闸，
-    // 09-06 起演出行只在演出显示器里选得到（画布选择器不列它），所以指路指到显示器的外观页，
-    // 真撞到了说明是别的原因，别把人往一条同样会挂的线上引。
-    const onlyParticle = Array.isArray(wire?.bodyExtra?.vendors)
-      && wire.bodyExtra.vendors.length === 1 && wire.bodyExtra.vendors[0] === 'particle';
-    const hint = onlyParticle
-      ? `「演出」这条线整场最多带 ${n} 张图，这一轮超了。在显示器「外观」页的模型里换成「GLM-5.3-Flash · 设计」就没有这个限制 —— 同一个模型、同样的价钱，只是每一步稍慢一点。`
-      : `这一轮带的图超过了上游的 ${n} 张上限。少发几张、或者开一个新会话再继续。`;
+    // ⛔ 09-08 起两条 GLM 行都点死 particle，并在入口按 maxImages=8 裁图（lib/ingress/image-cap.js），
+    // 所以正常情况下**撞不到这条闸**；还能撞到说明有图没被裁到（例如上游数法跟我们不一样）。
+    // 原来那句「换到设计那条线」已删：那条线现在也是 particle，指过去一样挂 —— 别把人往同样的墙上引。
+    const hint = `这一轮带的图超过了上游的 ${n} 张上限。少发几张、或者开一个新会话再继续。`;
     return `${hint}（上游原文：${text.slice(0, 200).replace(/\s+/g, ' ')}）`;
   }
   return null;

@@ -183,12 +183,16 @@ export default function ModelPicker({
     // 大上下文切模型要重新过一遍缓存，先把代价说清楚再让他按
     if (contextTokens >= WARN_FROM_TOKENS) {
       const est = contextTokens * COLD_START_USD_PER_TOKEN;
-      const okToSwitch = window.confirm(
-        `切换模型将使当前会话的缓存失效。\n\n`
-        + `当前上下文 ${(contextTokens / 1000).toFixed(0)}k tokens，下一轮需重新读取，`
-        + `预计额外产生约 $${est.toFixed(2)} 费用（之后恢复正常）。\n\n`
-        + `对话与画布不会丢失。是否继续？`,
-      );
+      // ⛔ 09-08 站主：这里以前是 window.confirm —— 桌面版里那是一个**系统弹窗**
+      // （Electron 把它渲成 Windows 的模态框），跟应用长得不是一回事，而且它会把整个
+      // 渲染进程堵住。站内确认框上面那个 locked 分支已经在用了，两个分支用同一个。
+      const okToSwitch = await confirmDialog({
+        title: t('切换模型会让缓存失效'),
+        // ⚠️ 一句一个词条（别拆成几段拼）：拆开的句子换成英文语序就散了
+        message: t('当前上下文 {k}k tokens，下一轮要重新读一遍，预计额外产生约 ${usd}（之后恢复正常）。\n\n对话与画布不会丢失。',
+          { k: (contextTokens / 1000).toFixed(0), usd: est.toFixed(2) }),
+        confirmLabel: t('继续切换'), cancelLabel: t('先不换'),
+      });
       if (!okToSwitch) return;
     }
     const prev = remote;

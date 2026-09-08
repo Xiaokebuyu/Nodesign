@@ -110,7 +110,7 @@ describe('额度闸（09-07 补：以前这条路上只有账没有闸）', () =
 
   it('免费行不看金额（按金额算对 $0 的行没有意义，跟 turn.js 同一条判据）', async () => {
     await expect(
-      assertSayAllowed({ user: mkUser({ limit: 0 }), model: 'minimax-m3', text: '推开门' }, { moderate: pass }),
+      assertSayAllowed({ user: mkUser({ limit: 0 }), model: 'kimi-k3', text: '推开门' }, { moderate: pass }),   // 09-08 minimax 撤行，免费行样本换成它
     ).resolves.toMatchObject({ quota: false });
   });
 

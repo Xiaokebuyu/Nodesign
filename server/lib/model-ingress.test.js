@@ -281,15 +281,16 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
       expect(resolveSessionWire('glm-5.3-flash-merge', null)).toMatchObject({ role: 'main' });
     } finally { unregisterIngressSession(S2); }
   });
-  it('⭐共用别名（MiniMax 三行 + 外部插槽同名）：主行优先 —— alias 解成会话主行，helper 按 app id 认', () => {
-    const S = 'ingress-test-minimax';
-    registerIngressSession(S, 'minimax-m3');
+  // 09-08 MiniMax 撤行后样本换成 kimi-k3：同一个形状（表里不写 sdkAlias → 共用别名，fast 是 zenGo 那条 helper）
+  it('⭐共用别名（多行 + 外部插槽同名）：主行优先 —— alias 解成会话主行，helper 按 app id 认', () => {
+    const S = 'ingress-test-shared-alias';
+    registerIngressSession(S, 'kimi-k3');
     try {
       // 主行和 fast 行共用同一个 alias，wireNamesOf 两边都包含它 —— 靠 resolveSessionWire 先问主行定胜负
-      expect(resolveSessionWire('claude-sonnet-4-6[1m]', S)).toMatchObject({ reason: 'table', role: 'main', wire: { appModel: 'minimax-m3', thinking: 'adaptive' } });
-      expect(resolveSessionWire('claude-sonnet-4-6', S)).toMatchObject({ role: 'main', wire: { appModel: 'minimax-m3' } });
+      expect(resolveSessionWire('claude-sonnet-4-6[1m]', S)).toMatchObject({ reason: 'table', role: 'main', wire: { appModel: 'kimi-k3', thinking: 'strip' } });
+      expect(resolveSessionWire('claude-sonnet-4-6', S)).toMatchObject({ role: 'main', wire: { appModel: 'kimi-k3' } });
       expect(resolveSessionWire('deepseek-v4-flash-helper', S)).toMatchObject({ role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper', thinking: 'strip', protocol: 'openai-chat' } });
-      // 别家的 alias 仍然不跨行：改道本会话 fast（minimax 的 helper 行），并标 collision
+      // 别家的 alias 仍然不跨行：改道本会话 fast（kimi 的 helper 行），并标 collision
       expect(resolveSessionWire('claude-opus-4-7[1m]', S)).toMatchObject({ reason: 'collision', collidesWith: 'deepseek-v4-flash-vision', wire: { appModel: 'deepseek-v4-flash-helper' } });
       // SDK 内部 helper 的默认 Claude 名（不在表里）→ fallback 到同一个 fast 行
       expect(resolveSessionWire('claude-sonnet-5', S)).toMatchObject({ reason: 'fallback', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper' } });

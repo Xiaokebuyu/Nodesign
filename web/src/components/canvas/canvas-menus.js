@@ -11,6 +11,7 @@ import {
   MessageSquarePlus, Link2, StickyNote, Group, Check, Eraser, Download,
 } from 'lucide-react';
 import { canAddToContext, isFileBacked } from '../../lib/board-kinds.js';
+import { useGlobalStore } from '../../stores/globalStore.js';
 
 /**
  * @param {object} ctx 命中解析的结果
@@ -57,8 +58,12 @@ export function buildBoardMenu(ctx, act) {
         id: 'del', icon: Trash2, label: '删除', danger: true, hint: `${sel.length} 件`,
         // 批量删除加一道确认：单件删错了还能从 git 里捞，一次删十件是另一
         // 个量级的事故，而这个菜单项就挨着"移动到…"
-        onClick: () => {
-          if (!window.confirm(`删掉这 ${sel.length} 件？`)) return;
+        // ⛔ 09-08：站内确认框，不是 window.confirm —— 桌面版里后者是系统弹窗（见 ModelPicker 那处）
+        onClick: async () => {
+          const ok = await useGlobalStore.getState().confirm({
+            title: '删除选中的内容', message: `删掉这 ${sel.length} 件？`, confirmLabel: '删除', danger: true,
+          });
+          if (!ok) return;
           objs.forEach(o => act.handleDeleteNote(o));
           zones.forEach(z => act.handleDeleteFolder(z, z.split('/').pop()));
         },

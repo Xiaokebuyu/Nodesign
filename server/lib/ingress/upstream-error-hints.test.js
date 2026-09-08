@@ -6,21 +6,22 @@ import { resolveWireModel } from '../../engine/agent/model-context.js';
 const RAW = '{"error":{"type":"provider_error","message":"GLM requests accept at most 8 inline PNG, JPEG, WEBP, or GIF data URLs of at most 16 MiB each, with valid base64 and 64 MiB of images in total. Remote image URLs, local files, video, and audio are not supported."}}';
 
 describe('上游 4xx 翻成人话（08-30）', () => {
-  it('⭐⭐ 演出行撞图片上限 → 告诉他换哪条线，并且**张数从原文里抠**不是写死的', () => {
+  it('⭐⭐ 撞图片上限 → 给一句他能照做的话，并且**张数从原文里抠**不是写死的', () => {
     const wire = resolveWireModel('glm-5.3-flash-rp');
-    expect(wire?.bodyExtra?.vendors, '演出行必须是点死 particle 的那条，否则这条翻译认不出它').toEqual(['particle']);
     const out = upstreamErrorHint(RAW, wire);
-    expect(out).toContain('最多带 8 张图');
-    expect(out).toContain('GLM-5.3-Flash · 设计');   // ⚠️ 跟表里 select.label 逐字一致，改 label 要一起改
-    expect(resolveWireModel('glm-5.3-flash-merge') && true).toBe(true);
+    expect(out).toContain('超过了上游的 8 张上限');
     // 张数不是写死的：上游哪天改成 16，文案要跟着走
-    expect(upstreamErrorHint('accept at most 16 inline PNG', wire)).toContain('最多带 16 张图');
+    expect(upstreamErrorHint('accept at most 16 inline PNG', wire)).toContain('超过了上游的 16 张上限');
   });
 
-  it('⛔ 设计行撞到同一条错**不许**建议换线 —— 换过去一样挂，那是把人往坑里引', () => {
-    const out = upstreamErrorHint(RAW, resolveWireModel('glm-5.3-flash-merge'));
-    expect(out).not.toContain('换成');
-    expect(out).toContain('超过了上游的 8 张上限');
+  it('⛔ 09-08 起两条 GLM 行同厂商：谁都不许再被建议"换另一条线"（换过去一样挂）', () => {
+    for (const id of ['glm-5.3-flash-merge', 'glm-5.3-flash-rp']) {
+      const wire = resolveWireModel(id);
+      expect(wire?.bodyExtra?.vendors, `${id} 的厂商`).toEqual(['particle']);
+      const out = upstreamErrorHint(RAW, wire);
+      expect(out, `${id} 的文案还在指路`).not.toContain('换成');
+      expect(out).toContain('超过了上游的 8 张上限');
+    }
   });
 
   it('原文一律留在括号里：看日志和看聊天框的是同一个人', () => {

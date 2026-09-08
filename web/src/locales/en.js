@@ -272,6 +272,11 @@ export default {
 
   // ── 模型选择器（components/chat/ModelPicker.jsx）──
   '这个模型仅限 Pro 档': 'This model is Pro tier only',
+  '切换模型会让缓存失效': 'Switching models invalidates the cache',
+  '当前上下文 {k}k tokens，下一轮要重新读一遍，预计额外产生约 ${usd}（之后恢复正常）。\n\n对话与画布不会丢失。':
+    'The context is {k}k tokens and has to be read again on the next turn, costing roughly ${usd} extra (back to normal after that).\n\nYour conversation and canvas are unaffected.',
+  '继续切换': 'Switch anyway',
+  '先不换': 'Keep current',
   '知道了': 'Got it',
   '关闭': 'Close',
   '未配置模型': 'No model configured',

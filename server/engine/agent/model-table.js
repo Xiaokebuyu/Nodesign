@@ -68,6 +68,8 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
   // 只有 is_free 的 MiniMax 两行能用 —— 也就是说踩错行不会静默花钱，会当场 402 fail-loud。
   // 钥匙是一枚 JWT（`~/apikey/gmicloud-API.md`），x-api-key 和 bearer 两种头实测都通，
   // 按平台文档取 bearer。
+  // ⛔ 09-08 起**没有行挂在它上面**（minimax-m3 撤了，见表里那段）。留着的理由跟 zen 一样：接法都探过了，
+  //    下次要接这家照上面这段写一行就行。⚠️ 复牌前先看账户余额，09-08 之前它已经一路 402 了。
   gmi: Object.freeze({
     label: 'GMI Cloud api.gmi-serving.com',
     baseUrl: process.env.NODESIGN_UPSTREAM_GMI_URL || 'https://api.gmi-serving.com',   // ⚠️ 不带 /v1：透传路是 baseUrl + 原始路径
@@ -226,6 +228,10 @@ const GLM_MERGE_API = Object.freeze({
     // 顶层 cost（Zen 是顶层），lib/ingress/upstream-billing.js 的 upstreamCostOf 两处都认，
     // 所以额度口径以上游自报为准，这里的表价是兜底
     prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
+    // ⛔ 09-08 两行同时加的图片闸：**particle 一次最多 8 张内联图**，第 9 张起整发 400，而 zai 没了（见下面
+    // 那段），所以多图会话每一发都死。裁图比死掉好：多出来的**最早的**换成占位文字（lib/ingress/image-cap.js，
+    // 跟 DeepSeek 视觉行同一套）。zai 复活要放开：删这行 + 默认行 vendors 改回 ['zai','particle']，两处一起。
+    maxImages: 8,
 });
 
 /**
@@ -407,28 +413,17 @@ export const MODELS_BUILTIN = Object.freeze([
   // 复牌配方（上游注释里那份没删）：upstream 'zai'、wireModel 'glm-5.3-flash'、窗口跟 merge 行取同一个数、
   // thinking 'strip'（⚠️ budget_tokens 在这家不管用，要"不想"走 disabled）、liftImages false、
   // maxOutput 131072、四价全 0、fastModel 'deepseek-v4-flash-helper'（helper 特意不留在这家：并发桶只有 3）。
-  // ── Merge 网关 · GLM-5.3-Flash（08-27）── 同一个模型的**第三条线**。照 08-26 那次的判断做成独立行、
-  // 不做动态路由：三家各有各的 prompt cache，一个会话在几条线之间跳，跳一次几边都是冷的。
-  // 三条线的实测差别（都是真跑出来的，不是抄文档；接第四条时照这个格式对账）：
-  //                zai 官方直连（默认行）      merge 网关（本行）
-  //   协议         Anthropic 原生透传          **只能** OpenAI chat（见上游注释）
-  //   prompt cache **没有**                    真命中（9038 → 第二发 cache_read 9024）
-  //   花钱         包月订阅，记 0（限时）       **$0.015/$0.05**，真金白银但全表最便宜的一档
-  //   并发         **上限 3**                  6 并发全 200（15.8s，没撞到上限）
-  //   视觉         稳                          **约 7~10% 的请求会瞎**（厂商轮盘，见上游注释）
-  //   count_tokens 恒 0 的桩 → 关掉             有且回真数，但仍关掉（理由见上游注释）
-  // 08-27 撤掉的 zenGo 那条（$0.15/$0.50）是三条里最贵的，本行的输入价是它的 1/10：
-  // 满窗一轮的缓存读从 $0.03 掉到 $0.003。**zai 那条订阅用完之后，这条是接得住量的那一条**
-  // （有缓存、并发不紧），只是接默认之前得先解决瞎图那 7~10%（或者接受它）。
+  // ── Merge 网关 · GLM-5.3-Flash（08-27）── 不做动态路由：每家各有各的 prompt cache，一个会话在几条线之间
+  // 跳，跳一次几边都是冷的。本行实测：**只能** OpenAI chat（见上游注释）、prompt cache 真命中（9038 →
+  // 第二发 cache_read 9024）、$0.015/$0.05 是全表最便宜的一档（08-27 撤掉的 zenGo 那条贵 10 倍）、6 并发
+  // 全 200、count_tokens 有真数但仍关掉。跟已删的「zai 官方直连」那条的逐项对照表留在 git 里（08-30 之前）。
   // ── Merge 网关上的**两条** GLM 行（08-30 深夜拆开）：同模型、同网关、同价，**差别只有厂商** ──
   //   particle：内联图 **8 张是硬上限** —— n=8 ✅，n=9 起一律 400
   //     「GLM requests accept at most 8 inline PNG…」（9/10/12/16/20 全挂）。
   //   zai：n=4→20 全 ✅，且抽问第 1/10/16 张里印的词都念得出来 —— 是真读了，不是收下再悄悄丢。
-  //   速度（28 万上下文、逐轮追加、缓存 4/4 命中）：particle 每步 1.8-2.8s / 冷启 14.4s，
-  //     zai 每步 3.9-7.0s / 冷启 20.6s，5 轮同价 $0.00787。⛔ 早前「只快 20%」是 6.5 万上量的，
-  //     差距随上下文放大 —— **这类账必须在真实体量上量**。
-  //   → 默认行（设计）走 zai：真会话一个就有 51 张图，图多是这个产品的主路径不是边角。
-  //     演出行走 particle：rp 模式的会话实测最多 6 张图（见那行的注释）。
+  //   速度（28 万上下文、缓存 4/4 命中）：particle 每步 1.8-2.8s / 冷启 14.4s，zai 每步 3.9-7.0s / 冷启 20.6s。
+  //     ⛔ 早前「只快 20%」是 6.5 万上量的，差距随上下文放大 —— **这类账必须在真实体量上量**。
+  //   ⛔ 当时的结论「默认行走 zai（真会话一个就有 51 张图）、演出行走 particle」**09-08 作废**，见下面那段。
   // ⛔⛔ 留给下一个人的判据：**复验 particle 的图必须发 9 张以上。**08-30 白天那趟用三张图复测，
   //   得出「多图 400 已经没了 36/36」于是把默认改成 particle，上线 40 分钟就被真会话打回 ——
   //   那条限制不是没了，是从 1 张放宽到 8 张，三张的题目它根本不需要拦。同族老账见
@@ -445,6 +440,12 @@ export const MODELS_BUILTIN = Object.freeze([
   //   8/8 落 particle）。它自带的 round_robin / least_latency / 策略 API 也不能用 —— **全是按请求选的，
   //   而 prompt cache 每家一份跨不过去**（同一前缀换一家 cached 立刻归 0、贵 5 倍）＝每轮都冷。
   //   ⏸ 曾按 sessionId 哈希做过会话粘性分配（`4939279`），撤了；要回来去那个 commit 拿。
+  // ⛔⛔ **09-08 实测：zai 这家在网关上没了** —— 点名 `vendors:['zai']` 一律 503「temporarily unavailable
+  //   due to recent provider failures」，**无图的纯文本也 503**，所以不是图的问题。而 vendors 是「取第一个
+  //   可用的」，默认行**早就在走 particle**（x-merge-vendor 实锤），症状却是生产日志里四次「accept at most
+  //   8 inline」400。→ 站主拍板：两行都点死 particle + 8 张的裁图闸（GLM_MERGE_API.maxImages）。
+  //   ⭐ 判据：偏好序的后备是**静默**的，换了家只会在别的症状里露头；要知道谁在服务，看 x-merge-vendor
+  //     或者点名单家看它 503 不 503。
   {
     // 08-30 起 **1M**（跟上面那行一起开，用户拍板）。网关目录里这个模型本来就写的 1000000
     // （max_output 131072），此前的 272k 是我们自己收的口。两条 glm 行同时改，换线时
@@ -472,8 +473,8 @@ export const MODELS_BUILTIN = Object.freeze([
     //    所以那一家挂 = 全站默认路径挂；掉到 particle 也只有不带图的会话还能用（8 张上限）。
     // ⚠️ label 第二段是这两行**唯一**的区分（第一段一模一样）：`compactLabel` 按"撞不撞名"
     // 自己决定按钮上印长名还是短名，表里不用替它做这个决定，但第二段不能砍。
-    select: { label: 'GLM-5.3-Flash · 设计', desc: '支持视觉 · 图片不限张数 · 1M 上下文 · 成本极低', default: true },
-    api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['zai', 'particle'] } },
+    select: { label: 'GLM-5.3-Flash · 设计', desc: '支持视觉 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', default: true },
+    api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['particle'] } },
   },
   {
     // ⭐⭐ 08-30 深夜加的第二条（用户拍板「让 RP 和设计玩家对号入座」）。跟上面那行同模型同价，
@@ -488,37 +489,24 @@ export const MODELS_BUILTIN = Object.freeze([
     //   有订阅资格的账号在演出面照旧走全局默认。两个字段的读者都在 model-context.js（scope 过滤 / 演出默认）。
     //   下架画布面时生产有 8 个画布会话钉着它 → server/scripts/migrate-canvas-model.mjs 改钉到 merge。
     id: 'glm-5.3-flash-rp', window: 1_000_000, brand: 'glm',
-    select: { label: 'GLM-5.3-Flash · 演出', desc: '响应更快 · 单场最多 8 张图片 · 1M 上下文 · 成本极低', only: 'stage', stageDefault: true },
+    select: { label: 'GLM-5.3-Flash · 演出', desc: '响应快 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', only: 'stage', stageDefault: true },
     api: { ...GLM_MERGE_API, bodyExtra: { vendors: ['particle'] } },
   },
-  // ── GMI Cloud · MiniMax（08-25）── 两行都是 GMI 标 `is_free` 的免费部署；账户无余额，付费行 402，
-  // 所以这条上游不存在"选错模型静默烧钱"。目录价（免费期结束后才会真收）：M3 $0.60/$2.40 缓存 $0.12，
-  // **prompt 超过 512k 单价翻倍**（$1.20/$4.80）；M2.7 $0.30/$1.20 缓存 $0.06。今天一律记 0。
-  {
-    // 真窗口 1048576。272k 是用户 08-25 拍板的档（跟 deepseek 行同一个理由：每轮都要重传全量上下文，
-    // 这台机器的出网流量超 200GiB/月要真付钱；且正好落在 GMI「512k 以上翻倍」那道价格坎下面）。
-    id: 'minimax-m3', window: 272_000, brand: 'minimax',
-    // 08-26 到 08-27 当过全员默认，08-27 把 `default: true` 交给 zai 那条官方直连（用户拍板）：
-    // 这条上游 08-26 实测串行 4/8 大面积限流（当天生产日志 106 次 429），当默认不够好。
-    // ⭐ 它仍是**候补默认**：四价全 0 = modelIsFree，公开注册号的经营态靠的是免费行走 turn.js 的
-    // 按轮次闸而不是金额闸 —— zai 那条订阅用完撤掉的那天，`default: true` 要么回到这里，
-    // 要么去别的四价全 0 的行（⛔ 不许落在付费行：那等于公开注册就直接烧钱）。
-    // ⚠️ 这行的免费是 GMI「限时免费部署」，免费期一结束这条候补也不成立了
-    select: { label: 'MiniMax M3（免费）', desc: '免费 · 支持视觉 · 272k 上下文 · 思考时长自适应' },
-    api: {
-      upstream: 'gmi', wireModel: 'MiniMaxAI/MiniMax-M3',
-      // 不写 sdkAlias = 共用别名（SHARED_SDK_ALIAS）走会话级路由：会话认得出，
-      // 全表反查认不出（探针要带会话前缀）。独占 1M 坑位 08-25 起已满员，新行都走这条默认路。
-      fastModel: 'deepseek-v4-flash-helper',
-      // ⭐ M3 的思考是**开关不是档位**：GMI 部署实测 adaptive（模型自己决定想不想、想多久）/
-      // disabled（不想）/ enabled+budget（每轮强制想）三种都收，但没有 low|medium|high 这套档。
-      // 本站给 API 行一律发 enabled+8192（pickThinkingConfig），对 M3 等于每一轮都强制想 ——
-      // agent 的活大半是"读文件、调工具"这种不值得想的，所以出口改写成 adaptive。
-      thinking: 'adaptive',
-      liftImages: false,   // 08-25 体检 3b：tool_result 里的图**原生直通**（跟 llama.cpp 一样），不需要提升
-      prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    },
-  },
+  // ⛔⛔ `minimax-m3`（GMI Cloud 上的免费部署，08-25 接进来、08-26 当过一天全员默认）**09-08 撤行**：
+  // 站主拍板。GMI 那个账户没余额，而这家的「限时免费」在 09-08 之前就结束了 —— 生产日志里 01:34 /
+  // 01:45 / 01:46 / 04:19 / 05:35 一路 402「Insufficient balance / model_access_denied」，
+  // 也就是说它已经是个**点了必失败**的选项。撤之前查的三处（撤行照这个查）：
+  //   ① 没有别的行的 fastModel 指着它（它自己的 fast 是 deepseek-v4-flash-helper）；
+  //   ② 只有它挂在上游 gmi 上 → 那条上游今天没有行了（留着，接法见上游注释）；
+  //   ③ 生产上 12 个会话钉着它 → `node server/scripts/migrate-canvas-model.mjs --from minimax-m3
+  //      --to glm-5.3-flash-merge --apply` 改钉到默认行（⛔ 不能清空钉子：清了落到 NODESIGN_MODEL
+  //      的订阅行，basic 用户照样 403 —— 08-30 zai 下架时的同一课）。
+  // ⚠️ 连带后果（站主 09-08 知情拍板）：**公开注册号从此没有免费行**（kimi-k3 是 gate 住的），全部走
+  //   美元闸。默认行 glm 一轮 ≈$0.0023，basic 的 $5/天 ≈ 2000 轮，比原来的免费轮次闸还宽。
+  // 复牌配方：upstream 'gmi'、wireModel 'MiniMaxAI/MiniMax-M3'、window 272_000（真窗口 1048576，收在
+  //   GMI「512k 以上翻倍」那道价格坎下面）、brand 'minimax'、fastModel 'deepseek-v4-flash-helper'、
+  //   thinking 'adaptive'（这家的思考是开关不是档位，发 enabled+budget 等于每轮强制想）、liftImages
+  //   false（tool_result 里的图原生直通）、四价全 0。⚠️ 复牌前先确认 GMI 账户有没有余额。
   // ── NVIDIA build · Kimi K3（08-25）── 免费开发者档，08-25 体检（裸 OpenAI 协议）：
   // 文本 ✓ / 工具（含回程 tool 消息）✓ / **视觉真的有** ✓（判据是 token 账：同一张图 prompt_tokens 98 → 322
   // 且答出图里的 ND-7342 与黄色三角）/ 流式含 reasoning_content 与 tool_calls 增量、末块带 usage ✓ /

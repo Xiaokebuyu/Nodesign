@@ -13,16 +13,25 @@
  *
  * 只动画布会话的 session-config.json；演出那边的 `戏.json` **一个字不碰**（演出面本来就还能选这行）。
  *
+ * 09-08 起它是**通用的改钉工具**（撤行是常事）：--from / --to 不传就是 09-06 那次的默认。
+ * 第二次用它是 09-08 撤 minimax-m3（GMI 账户 402）：--from minimax-m3 --to glm-5.3-flash-merge。
+ *
  * 用法：
- *   node server/scripts/migrate-canvas-model.mjs            # 只报，不写
- *   node server/scripts/migrate-canvas-model.mjs --apply    # 真写
+ *   node server/scripts/migrate-canvas-model.mjs                              # 只报，不写
+ *   node server/scripts/migrate-canvas-model.mjs --apply                      # 真写
+ *   node server/scripts/migrate-canvas-model.mjs --from A --to B --apply      # 换一对
  * 数据目录从 PROJECTS_DATA_DIR 取（跟服务端同一个 .env：`node --env-file=.env …`），没配就用 ./server/projects-data。
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const FROM = 'glm-5.3-flash-rp';
-const TO = 'glm-5.3-flash-merge';
+/** 09-08 起可传参（撤行是常事，别每次复制一个脚本）：--from <id> --to <id>，不传就是 09-06 那次的默认 */
+const argOf = (name, fallback) => {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : fallback;
+};
+const FROM = argOf('from', 'glm-5.3-flash-rp');
+const TO = argOf('to', 'glm-5.3-flash-merge');
 const apply = process.argv.includes('--apply');
 const root = path.resolve(process.env.PROJECTS_DATA_DIR || './server/projects-data');
 
