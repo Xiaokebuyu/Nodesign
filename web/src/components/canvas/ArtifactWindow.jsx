@@ -6,6 +6,7 @@ import { PAPER, PAPER_SHADOW, GRAIN, INK_SURFACE, pinFill } from '../../lib/pape
 import { COLOR, GAP, FONT_SANS, FONT_SIZE, RADIUS } from '../../lib/theme.js';
 import { POP_IN } from '../../lib/board-geometry.js';
 import { exportItemsFor } from '../../lib/export-formats.js';
+import { BOARD_Z } from '../../lib/z-layers.js';
 
 /**
  * ArtifactWindow —— 三种产物共用的那扇窗（2026-08-07；2026-08-13 改成装订文件）
@@ -63,7 +64,8 @@ import { exportItemsFor } from '../../lib/export-formats.js';
  * section 的 `isolation:'isolate'` —— 窗关在那个层叠上下文里出不来，
  * 外面的浮窗层永远在上。
  */
-export const ARTIFACT_WINDOW_Z = 500;
+/** @deprecated 直接用 BOARD_Z.WINDOW；这个名字留着是因为别处还在 import */
+export const ARTIFACT_WINDOW_Z = BOARD_Z.WINDOW;
 
 /** 顶栏高度。只装身份和关闭，越窄越好 —— 内容才是主角 */
 const CHROME_H = 30;

@@ -5,6 +5,7 @@ import { useViewportWidth, useMedia, COARSE } from '../../lib/use-media.js';
 import { useDeviceClass } from '../../lib/device-class.js';
 import { MobileSheet, TalkFab } from './MobileShell.jsx';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { SHELL_Z } from '../../lib/z-layers.js';
 
 /**
  * ChatDock —— 悬浮 AI 卡（2026-08-13，第三形态）。
@@ -336,7 +337,7 @@ export default function ChatDock({
           // 固定 = 钉在板上（mid，贴得平）；悬浮 = 刚拿起来的纸（浮得高）
           boxShadow: pinned ? PAPER_SHADOW.mid : PAPER_SHADOW.near,
           borderRadius: 0,
-          zIndex: 120,
+          zIndex: SHELL_Z.DOCK,
           transform: open ? 'none' : `translateX(${side === 'right' ? OFF : -OFF}px)`,
           opacity: open ? 1 : 0,
           visibility: open ? 'visible' : 'hidden',

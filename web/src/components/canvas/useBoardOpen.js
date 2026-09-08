@@ -12,6 +12,7 @@
 import { Assets } from '../../lib/api.js';
 import { primaryOf } from '../../lib/board-kinds.js';
 import { makeBoardReaders } from './BoardOverlays.jsx';
+import { useGlobalStore } from '../../stores/globalStore.js';
 
 const EXT_MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -42,6 +43,37 @@ export function sitePageFrom(o, previewPath) {
     : p;
   if (!rel || !/\.html?$/i.test(rel)) return null;
   return (Array.isArray(o.pages) ? o.pages : []).includes(rel) ? rel : null;
+}
+
+/**
+ * 删一件东西该走哪条路由（09-08 抽成纯函数，为的是能测）。
+ *
+ * ⛔ **这一族 bug 已经犯了三代**：右键菜单的门开的是 `isFileBacked(obj) || obj.native`，
+ * 而分发器只认识 chalk / taskNote，剩下全用一个 `else` 兜到便签路由上。图片、散文件、
+ * 站点、word、deck、video 于是全部删不掉，而且错被 `console.warn` 吞掉 ——
+ * 用户看到的是「点了删除什么都没发生」。前两代都只改了门没改分发器，注释里都写着。
+ *
+ * 抽出来是因为**这三代都没有测试**。现在 `delete-routing.test.js` 拿形态表里每一种
+ * `backing === 'file'` 的形态跑一遍，少一条分支当场红。
+ *
+ * @param {object} o   画布物件
+ * @param {string} rel 工作区相对路径（物件 id 去掉 `kind:` 前缀）
+ * @returns {'native'|'chalk'|'taskNote'|'note'|'entry'}
+ */
+export function deleteRouteFor(o, rel) {
+  if (o?.native) return 'native';
+  if (o?.chalk) return 'chalk';
+  if (o?.noteTask) return 'taskNote';
+  // ⚠️ **只按路径分流，不看 type。**
+  //
+  // 便签住在 notes/ 或 assets/notes/ 下，这两个都在服务端 RESERVED_DIRS 里，
+  // 通用路由碰不了它们 —— 所以路径在 notes/ 下的必须走便签路由。
+  //
+  // 反过来也成立，而且是写这条测试才发现的：**不能加 `|| o.type === 'note'`**。
+  // 一张 type='note' 但落在 `稿件/想法.md` 的卡，便签路由（只在 assets/notes/ 里找）
+  // 会 404 —— 那就是换了个姿势重犯同一个错。服务端按路径找文件，前端就得按路径分流。
+  if (/^(assets\/)?notes\//.test(rel || '')) return 'note';
+  return 'entry';
 }
 
 export function useBoardOpen({
@@ -89,14 +121,24 @@ export function useBoardOpen({
       removeLayoutEntry(o.id);   // 唯一一条会发 null（= 服务端删整条）的路，见 useBoardData
       return;
     }
+    // 物件 id 去掉 `kind:` 前缀就是工作区相对路径 —— 跟 renameEntry / moveEntry 同一个口径
+    const rel = String(o.id).slice(String(o.id).indexOf(':') + 1);
     try {
-      // 便利贴落点从 `tasks/<任务>/notes/` 收敛成工作区的 `notes/` 之后，
-      // 删除只认文件名（不再需要先知道它属于哪个任务）
-      if (o.chalk) await Assets.removeChalk(projectId, o.name);
-      else if (o.noteTask) await Assets.removeTaskNote(projectId, o.name);
-      else await Assets.removeNote(projectId, o.name);
+      switch (deleteRouteFor(o, rel)) {
+        // 便利贴落点从 `tasks/<任务>/notes/` 收敛成工作区的 `notes/` 之后，
+        // 删除只认文件名（不再需要先知道它属于哪个任务）
+        case 'chalk': await Assets.removeChalk(projectId, o.name); break;
+        case 'taskNote': await Assets.removeTaskNote(projectId, o.name); break;
+        case 'note': await Assets.removeNote(projectId, o.name); break;
+        default: await Assets.removeEntry(projectId, rel);
+      }
       reload();
-    } catch (err) { console.warn('[board] delete note failed:', err.message); }
+    } catch (err) {
+      // ⛔ 原来只有 console.warn。删除是用户主动发起的动作，失败必须说出来 ——
+      // 静默失败比报错更坏：他以为删掉了，直到刷新才发现还在。
+      console.warn('[board] delete failed:', err.message);
+      useGlobalStore.getState().showToast(`删不掉：${err.message}`, 'error');
+    }
   };
 
   const focusDeck = (o, previewPath) => {

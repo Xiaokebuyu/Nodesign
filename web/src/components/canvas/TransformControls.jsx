@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { COLOR } from '../../lib/theme.js';
 import { CANVAS, alpha } from '../../lib/theme.js';
+import { BOARD_Z } from '../../lib/z-layers.js';
 
 /**
  * TransformControls —— 选中的墨类物件（text / scribble）的变换控制器（2026-08-13）
@@ -73,7 +74,7 @@ export default function TransformControls({ o, sz, camScale = 1, toWorld, onChan
     <div style={{
       position: 'absolute', left: o.pos.x, top: o.pos.y, width: sz.w, height: sz.h,
       transform: `rotate(${rotation}deg) scale(${objScale})`, transformOrigin: '50% 50%',
-      pointerEvents: 'none', zIndex: 400,
+      pointerEvents: 'none', zIndex: BOARD_Z.TRANSFORM,
     }}>
       {/* 选框 */}
       <div style={{

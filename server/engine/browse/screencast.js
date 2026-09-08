@@ -41,8 +41,29 @@
  *    同时活跃画面流全局 ≤1（**这条是 CPU 定的，不是内存**）。
  */
 
-/** 帧参数：1 vCPU 下的取舍，别调高（改这里前先拿 `top` 量一遍） */
-const CAST = { format: 'jpeg', quality: 45, maxWidth: 1024, maxHeight: 700, everyNthFrame: 5 };
+import { profile } from '../../runtime/profile.js';
+
+/**
+ * 帧参数 —— **按 profile 分两档**（09-08 桌面版改走 CDP 连续帧时拆开的）。
+ *
+ * 上面文件头那三道刹车全是给**托管版那台 1 vCPU 机器**定的：满帧推流吃掉约 40% 单核、
+ * 每 fps 约 3.1pp。那些数在托管版仍然成立，一个都没动。
+ *
+ * 桌面版的量纲完全不同：
+ *   · 帧不过网 —— 服务端和浏览器在同一台机器上，走 localhost
+ *   · 核不是 1 个，是用户自己的 PC
+ *   · 看的人只有他自己，不存在多个订阅者抢一路流
+ *
+ * 所以本地档把三个旋钮全松开：`everyNthFrame: 1`（**这就是上限 —— CDP 没有 fps 这个
+ * 参数**，帧率由页面自己产帧的速度和 ack 往返决定，设不出 60，只能尽力）、
+ * quality 45 → 82、画幅 1024 → 1366（跟视图 viewport 一致，不再降采样）。
+ *
+ * ⚠️ 两笔 localhost 抹不平的成本，别指望跟原生视图一样：JPEG 编解码的 CPU，
+ * 以及负载下的丢帧（滚动和视频最明显）。要再高就不是 JPEG 能解决的了。
+ */
+const CAST_HOSTED = { format: 'jpeg', quality: 45, maxWidth: 1024, maxHeight: 700, everyNthFrame: 5 };
+const CAST_LOCAL = { format: 'jpeg', quality: 82, maxWidth: 1366, maxHeight: 768, everyNthFrame: 1 };
+const CAST = profile.isLocal ? CAST_LOCAL : CAST_HOSTED;
 /** socket 里积压超过这个就不再 ack（= 让 chromium 停发） */
 const BACKPRESSURE_BYTES = 256 * 1024;
 /** 全局同时只允许一路活跃画面流。**这是 CPU 的主要保护**：满帧推流约 40% 单核
