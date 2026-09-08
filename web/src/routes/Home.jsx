@@ -20,6 +20,7 @@ import { t, getLocale } from '../lib/i18n.js';
 import { sheetClassOf } from './home-sheets.js';
 import { DayToggle } from './home-light.jsx';
 import { Desk } from './desk.jsx';
+import { useFeatured, FeaturedCard } from './home-featured.jsx';
 
 /**
  * Home 页 —— 进门之后的那面板子（2026-08-03 改版）
@@ -113,6 +114,9 @@ export default function Home() {
   }, []);
 
   const narrow = useMedia(NARROW);
+  // 别人的（09-08）：站主加精的市场条目混进项目区，数量服务端按我的项目数算。列表 hydrate 完再拉，
+  // 服务端那边数的项目数才跟我看到的一致
+  const featured = useFeatured(hydrated);
 
   return (
     <AppShell
@@ -172,19 +176,26 @@ export default function Home() {
             <div className="ndd-quiet">{t('正在打开…')}</div>
           ) : error ? (
             <ErrorState message={error} onRetry={() => hydrate({ kind: 'project' }).catch(() => {})} />
-          ) : projects.length === 0 ? (
-            <EmptyState
-              onPick={(text) => {
-                setPrefill({ text, ts: Date.now() });
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-            />
           ) : (
-            <div className="ndd-grid">
-              {projects.map((p, i) => (
-                <ProjectCard key={p.id} project={p} stat={stats?.[p.id]} newest={i === 0} />
-              ))}
-            </div>
+            <>
+              {projects.length === 0 && (
+                <EmptyState
+                  onPick={(text) => {
+                    setPrefill({ text, ts: Date.now() });
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              )}
+              {(projects.length > 0 || featured.length > 0) && (
+                <div className="ndd-grid">
+                  {/* newest 只在自己的里面算：别人的排在后面，「接着做」不会挂到它们头上 */}
+                  {projects.map((p, i) => (
+                    <ProjectCard key={p.id} project={p} stat={stats?.[p.id]} newest={i === 0} />
+                  ))}
+                  {featured.map(f => <FeaturedCard key={f.id} pub={f} tilt={tilt(f.id)} />)}
+                </div>
+              )}
+            </>
           )}
       </Desk>
     </AppShell>

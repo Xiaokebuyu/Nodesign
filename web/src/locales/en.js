@@ -453,6 +453,8 @@ export default {
   '精选': 'Featured',
   'SKILL.md 全文（装了之后 agent 读到的就是这段）': 'Full SKILL.md (this is exactly what the agent reads once installed)',
   '市场': 'Market',
+  '{name} 的 skill': "{name}'s skill",
+  '别人的': "someone else's",
   '导出 zip': 'Export zip',
   'skill「{name}」已存进你的 skill 库，作品进了橱窗；下个新会话生效，橱窗里能发到市场。':
     'Skill "{name}" is saved to your skill library and the piece is in your gallery. It takes effect from the next new session; you can publish it to the market from the gallery.',
