@@ -109,6 +109,10 @@ export const Processes = {
 
 export const Local = {
   status: () => jsonRequest('GET', '/api/local/status'),
+  /** MCP 服务端（2026-09-08 诊断段）：{ url, token, addCommand } */
+  mcp: () => jsonRequest('GET', '/api/local/mcp'),
+  /** 运行健康一览（跟 MCP 的 health 工具同一份） */
+  health: () => jsonRequest('GET', '/api/local/health'),
   /** 文件夹项目（2026-09-07 存量仓库道）：{ project, trust, created } */
   openFolder: (path) => jsonRequest('POST', '/api/local/projects/open-folder', { path }),
   config: () => jsonRequest('GET', '/api/local/config'),

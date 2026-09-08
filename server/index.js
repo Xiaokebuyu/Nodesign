@@ -48,6 +48,8 @@ import meRouter from './api/me.js';
 import localRouter, { RESTART_EXIT_CODE } from './api/local.js';
 import processesRouter from './api/processes.js';
 import repoRouter from './api/repo.js';
+import { mountMcpDiagnostics, healthReport } from './mcp-server/diagnostics.js';
+import { desktopLoginState } from './auth/middleware.js';
 import { stopAllProcesses } from './engine/process/registry.js';
 import { platform } from './runtime/platform.js';
 import { refreshRelayCatalog } from './runtime/relay-client.js';
@@ -122,6 +124,12 @@ app.use('/api/me', meRouter);
 if (platform.isLocal) app.use('/api/local', localRouter);
 if (platform.isLocal) app.use('/api/projects', processesRouter);   // 进程卡（2026-09-07）：只有本地版起用户进程
 if (platform.isLocal) app.use('/api/projects', repoRouter);        // 仓库卡（2026-09-08）：看向用户文件夹的窗，只在本地版有
+// NoDesign 作为 MCP 服务端·第一段（2026-09-08 站主定：先只做运行质量检查）：POST /mcp，Bearer 令牌，只读。
+// 站主用它远程看桌面版跑得怎么样（用户 ssh -R 把 127.0.0.1:PORT 隧道过去）。健康一览也给 REST 一份。
+if (platform.isLocal) {
+  mountMcpDiagnostics(app, { desktopState: desktopLoginState });
+  app.get('/api/local/health', (_req, res) => res.json(healthReport({ desktop: desktopLoginState() })));
+}
 
 // ── 业务路由 ──
 // projects router 挂在 /api/projects（CRUD）

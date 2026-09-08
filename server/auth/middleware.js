@@ -24,7 +24,7 @@ import { msg } from '../shared/messages.js';
 export const publicUser = (u) => (u ? { id: u.id, username: u.username, role: u.role, locale: u.locale ?? null } : null);
 
 /** 本地版：站点账号登录态（AuthGate 据此决定首启是不是先要登录）。loggedIn = .env 里有令牌；whoami 拉到了才有身份 */
-function desktopLoginState() {
+export function desktopLoginState() {
   const c = relayCatalog();
   return {
     loggedIn: !!relayConfig(),

@@ -9,7 +9,7 @@
 //
 // 零件在 components/settings/ui.jsx；各块在 components/settings/*Section.jsx。
 import { useState, useEffect, useCallback } from 'react';
-import { User, BarChart3, Palette, Cpu, Package, Info } from 'lucide-react';
+import { User, BarChart3, Palette, Cpu, Package, Info, Plug } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import { GAP, FONT_SIZE, FONT_KAI, RADIUS } from '../lib/theme.js';
 import { Local } from '../lib/api.js';
@@ -22,6 +22,7 @@ import AppearanceSection from '../components/settings/AppearanceSection.jsx';
 import ModelsSection from '../components/settings/ModelsSection.jsx';
 import ComponentsSection from '../components/settings/ComponentsSection.jsx';
 import AboutSection from '../components/settings/AboutSection.jsx';
+import McpSection from '../components/settings/McpSection.jsx';
 
 const SECTIONS = [
   { id: 'account', label: '账户', desc: '您的站点账号、档位与本机设备', Icon: User, local: true, hosted: true },
@@ -29,6 +30,7 @@ const SECTIONS = [
   { id: 'appearance', label: '外观', desc: '语言、字体与界面缩放，修改后立即生效', Icon: Palette, local: true, hosted: true },
   { id: 'models', label: '模型', desc: '新建会话的默认模型，以及选择器中显示的模型', Icon: Cpu, local: true, hosted: false },
   { id: 'components', label: '组件', desc: '截图、导出、抠图等功能所需的外部程序', Icon: Package, local: true, hosted: false },
+  { id: 'mcp', label: 'MCP', desc: '把运行情况开放给 Claude Code / Codex 这类 agent；本机健康一览', Icon: Plug, local: true, hosted: false },
   { id: 'about', label: '关于', desc: '版本、更新与数据存放位置', Icon: Info, local: true, hosted: false },
 ];
 // 旧链接 #advanced 仍指到关于页（重启 / 钥匙都在那里的「开发者选项」）
@@ -136,6 +138,7 @@ export default function Settings() {
               onStatus={() => Local.status().then(setStatus).catch(() => {})} showToast={showToast} />
           )}
           {cur.id === 'components' && isLocal && <ComponentsSection status={status} onStatus={patchStatus} />}
+          {cur.id === 'mcp' && isLocal && <McpSection />}
           {cur.id === 'about' && isLocal && (
             <AboutSection status={status} onStatus={patchStatus} restart={restart} restarting={restarting} showToast={showToast} />
           )}

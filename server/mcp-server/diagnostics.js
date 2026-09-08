@@ -1,0 +1,209 @@
+/**
+ * server/mcp-server/diagnostics.js — NoDesign 作为 MCP **服务端**的第一段：运行质量检查（2026-09-08 站主定）。
+ *
+ * 只在本地版挂（index.js），只读、只看运行情况：健康、能力探针、项目 / 仓库 / 进程 / 回合 / 问题库 / 日志尾巴。
+ * 画布工具那一族**不在这里**（那是「作为服务端」的第二段，站主说先只做功能与健康检查）。
+ *
+ * 传输：Streamable HTTP（`POST /mcp`），无状态 —— 每个请求起一个 McpServer + transport，用完即扔。
+ * 鉴权：Bearer 令牌，住 `<dataRoot>/mcp-token`（首次启动生成，0600）。**没有令牌一律 401**，哪怕只绑 127.0.0.1：
+ * 桌面版 listenHost 是 127.0.0.1，但用户会拿 ssh -R 把它隧道到别处（给站主远程看的正是这条路）。
+ *
+ * 连法（Claude Code / Codex / curl）：
+ *   claude mcp add --transport http nodesign http://127.0.0.1:<PORT>/mcp --header "Authorization: Bearer <token>"
+ *   令牌：设置页「MCP」或 GET /api/local/mcp（本地版，需已登录）。
+ */
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import { z } from 'zod';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { platform } from '../runtime/platform.js';
+import { capabilitySnapshot, probeCapabilities } from '../runtime/capabilities.js';
+import { listProjects, getProject, folderPathOf } from '../projects/store.js';
+import { getWorkspaceRoot, getAgentCwd } from '../projects/workspace.js';
+import { repoSummary, listTurns, repoFolderOf } from '../projects/repo.js';
+import { listProcesses, readProcessLog } from '../engine/process/registry.js';
+import { listRuns } from '../engine/runs/store.js';
+import { listActiveRuns } from '../engine/runs/active-runs.js';
+import { listIssues } from '../lib/issues-store.js';
+
+export const MCP_PATH = '/mcp';
+const TOKEN_FILE = 'mcp-token';
+const startedAt = Date.now();
+let cachedToken = null;
+/** 版本从仓库根 package.json 读：桌面版是 node 直起 server，没有 npm_package_version */
+let cachedVersion = null;
+function appVersion() {
+  if (cachedVersion) return cachedVersion;
+  try { cachedVersion = JSON.parse(fs.readFileSync(path.join(platform.repoRoot, 'package.json'), 'utf8')).version || null; } catch { cachedVersion = process.env.npm_package_version || null; }
+  return cachedVersion;
+}
+
+/** 令牌：首次生成落盘（0600），之后读文件。dataRoot 不可写时退回进程内随机值（本轮有效） */
+export function mcpToken() {
+  if (cachedToken) return cachedToken;
+  const file = platform.dataRoot ? path.join(platform.dataRoot, TOKEN_FILE) : null;
+  if (file) {
+    try { cachedToken = fs.readFileSync(file, 'utf8').trim(); if (cachedToken) return cachedToken; } catch { /* 还没有 */ }
+  }
+  cachedToken = crypto.randomBytes(24).toString('base64url');
+  if (file) {
+    try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, cachedToken + '\n', { mode: 0o600 }); } catch (err) { console.warn('[mcp] token 落盘失败：', err.message); }
+  }
+  return cachedToken;
+}
+
+function bearerOk(req) {
+  const h = String(req.headers.authorization || '');
+  const m = /^Bearer\s+(.+)$/i.exec(h);
+  if (!m) return false;
+  const a = Buffer.from(m[1].trim()); const b = Buffer.from(mcpToken());
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+function text(obj) { return { content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2) }] }; }
+
+async function tailFile(file, lines) {
+  try {
+    const st = fs.statSync(file);
+    const size = Math.min(st.size, 256 * 1024);
+    const fd = fs.openSync(file, 'r');
+    try {
+      const buf = Buffer.alloc(size);
+      fs.readSync(fd, buf, 0, size, st.size - size);
+      const all = buf.toString('utf8').split('\n');
+      return all.slice(-lines).join('\n');
+    } finally { fs.closeSync(fd); }
+  } catch (err) { return `（读不到 ${file}：${err.message}）`; }
+}
+
+/** 健康一览：版本 / 平台 / 进程 / relay / 能力。给 `health` 工具和 GET /api/local/health 共用 */
+export function healthReport({ desktop = null } = {}) {
+  const mem = process.memoryUsage();
+  return {
+    ok: true,
+    version: appVersion(),
+    profile: platform.profile,
+    uptimeSec: Math.round((Date.now() - startedAt) / 1000),
+    platform: { os: process.platform, release: os.release(), arch: process.arch, node: process.version, electron: process.versions.electron || null },
+    dataRoot: platform.dataRoot, cacheRoot: platform.cacheRoot,
+    sandboxEnabled: platform.sandboxEnabled, permissionModeDefault: platform.permissionModeDefault,
+    memoryMB: { rss: Math.round(mem.rss / 1048576), heapUsed: Math.round(mem.heapUsed / 1048576) },
+    activeRuns: listActiveRuns().length,
+    relay: desktop,
+    capabilities: capabilitySnapshot().map(c => ({ id: c.id, level: c.level, available: c.available, detail: c.detail || null, fix: c.available ? undefined : c.fix })),
+  };
+}
+
+function buildServer({ desktopState }) {
+  const server = new McpServer({ name: 'nodesign-diagnostics', version: appVersion() || '0.0.0' });
+
+  server.registerTool('health', {
+    description: '运行健康一览：版本、平台、内存、在飞回合数、relay 登录态、能力探针结果（哪些外部程序在 / 不在）。',
+    inputSchema: {},
+  }, async () => text(healthReport({ desktop: desktopState?.() || null })));
+
+  server.registerTool('probe_capabilities', {
+    description: '重新探一遍外部程序 / 服务（git、chromium、LibreOffice、ffmpeg、进程能力…），回最新结果。',
+    inputSchema: {},
+  }, async () => { await probeCapabilities({ force: true }); return text(capabilitySnapshot()); });
+
+  server.registerTool('list_projects', {
+    description: '本机所有项目：id、名字、模式、文件夹路径（有的话）、桌面在哪、活动会话。',
+    inputSchema: { limit: z.number().int().min(1).max(200).optional() },
+  }, async ({ limit }) => text(listProjects({ limit: limit ?? 100 }).map(p => ({
+    id: p.id, name: p.name, mode: p.mode, folderPath: p.folderPath || null,
+    desk: p.folderPath ? getWorkspaceRoot(p.id) : null, cwd: p.folderPath ? getAgentCwd(p.id) : null,
+    folderTrust: p.folderTrust ?? null, activeSessionId: p.activeSessionId || null, updatedAt: p.updatedAt,
+  }))));
+
+  server.registerTool('project_status', {
+    description: '一个项目的现状：仓库（分支 / 上次提交 / 未提交改动）、最近几轮改了什么、在跑的进程、最近回合的状态与报错。',
+    inputSchema: { project_id: z.string().min(1) },
+  }, async ({ project_id }) => {
+    const p = getProject(project_id);
+    if (!p) return text({ error: 'no such project' });
+    const [repo, turns, processes] = await Promise.all([
+      repoSummary(project_id).catch(e => ({ error: e.message })),
+      listTurns(project_id, { limit: 5 }).catch(() => []),
+      listProcesses(project_id).catch(() => []),
+    ]);
+    const runs = listRuns({ limit: 200 }).filter(r => r.projectId === project_id).slice(0, 10)
+      .map(r => ({ id: r.id, status: r.status, error: r.error, models: Object.keys(r.metadata?.modelUsage || {}), createdAt: r.createdAt, finishedAt: r.finishedAt, sessionId: r.sessionId }));
+    return text({
+      project: { id: p.id, name: p.name, mode: p.mode, folderPath: p.folderPath || null, folderTrust: p.folderTrust ?? null, desk: getWorkspaceRoot(p.id), cwd: getAgentCwd(p.id), activeSessionId: p.activeSessionId || null },
+      repo, turns, processes, runs,
+    });
+  });
+
+  server.registerTool('recent_runs', {
+    description: '最近的回合（跨项目）：状态、报错、模型、耗时。看「用户说没反应」时先看这个。',
+    inputSchema: { limit: z.number().int().min(1).max(100).optional(), status: z.string().optional() },
+  }, async ({ limit, status }) => text(listRuns({ limit: limit ?? 20, status }).map(r => ({
+    id: r.id, projectId: r.projectId, sessionId: r.sessionId, status: r.status, error: r.error,
+    models: Object.keys(r.metadata?.modelUsage || {}), durationMs: r.metadata?.durationMs ?? null, toolFailures: r.metadata?.toolFailures ?? null,
+    createdAt: r.createdAt, startedAt: r.startedAt, finishedAt: r.finishedAt,
+    tokens: { in: r.inputTokens, out: r.outputTokens, cacheRead: r.cacheReadTokens }, costUsd: r.totalCostUsd,
+  }))));
+
+  server.registerTool('list_processes', {
+    description: '一个项目登记过的长驻进程（dev server / 后端）：状态、端口、命令。',
+    inputSchema: { project_id: z.string().min(1) },
+  }, async ({ project_id }) => text(await listProcesses(project_id)));
+
+  server.registerTool('read_process_log', {
+    description: '读一个进程的日志尾巴。',
+    inputSchema: { project_id: z.string().min(1), id: z.string().min(1), tail: z.number().int().min(1).max(400).optional() },
+  }, async ({ project_id, id, tail }) => text(await readProcessLog(project_id, id, { tail: tail ?? 120 })));
+
+  server.registerTool('issues', {
+    description: '问题库（agent / 前端 / 桌面端上报的 friction 与故障），新的在前。',
+    inputSchema: { limit: z.number().int().min(1).max(200).optional(), status: z.string().optional(), source: z.string().optional() },
+  }, async ({ limit, status, source }) => text(listIssues({ limit: limit ?? 30, status, source })));
+
+  server.registerTool('server_log', {
+    description: '服务端 / 桌面主进程日志尾巴（<dataRoot>/logs/server.log 与 desktop.log）。',
+    inputSchema: { which: z.enum(['server', 'desktop']).optional(), tail: z.number().int().min(10).max(2000).optional() },
+  }, async ({ which, tail }) => {
+    const dir = platform.dataRoot ? path.join(platform.dataRoot, 'logs') : null;
+    if (!dir) return text('没有数据目录（不是本地版？）');
+    return text(await tailFile(path.join(dir, `${which || 'server'}.log`), tail ?? 200));
+  });
+
+  server.registerTool('repo_folder', {
+    description: '一个项目的仓库文件夹路径（没有仓库卡的项目回 null）。',
+    inputSchema: { project_id: z.string().min(1) },
+  }, async ({ project_id }) => text({ folder: repoFolderOf(project_id), folderPath: folderPathOf(project_id) }));
+
+  return server;
+}
+
+/**
+ * Express 挂载：`POST /mcp`（JSON-RPC 走这里）；GET / DELETE 在无状态模式下直接 405。
+ * @param {import('express').Express} app
+ * @param {{ desktopState?: () => object }} deps
+ */
+export function mountMcpDiagnostics(app, { desktopState = null } = {}) {
+  mcpToken();   // 启动时就生成，设置页能立刻拿到
+  app.post(MCP_PATH, async (req, res) => {
+    if (!bearerOk(req)) {
+      res.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'unauthorized: Bearer <mcp-token> required' }, id: null });
+      return;
+    }
+    const server = buildServer({ desktopState });
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    res.on('close', () => { transport.close().catch(() => {}); server.close().catch(() => {}); });
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (err) {
+      console.warn('[mcp] request failed:', err.message);
+      if (!res.headersSent) res.status(500).json({ jsonrpc: '2.0', error: { code: -32603, message: err.message }, id: null });
+    }
+  });
+  const reject = (_req, res) => res.status(405).set('Allow', 'POST').json({ jsonrpc: '2.0', error: { code: -32000, message: 'stateless server: POST only' }, id: null });
+  app.get(MCP_PATH, reject);
+  app.delete(MCP_PATH, reject);
+}

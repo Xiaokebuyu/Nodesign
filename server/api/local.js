@@ -31,6 +31,7 @@ import { listComponents, installComponent, uninstallComponent, applyComponentEnv
 import { selectableModelsFor } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 import { recordIssue, signatureOf } from '../lib/issues-store.js';
+import { mcpToken, MCP_PATH } from '../mcp-server/diagnostics.js';
 import { enqueueIssueUpload, flushIssueOutbox } from '../runtime/issue-outbox.js';
 import { openFolder, inspectFolderTrust } from '../projects/folder.js';
 import { getProject } from '../projects/store.js';
@@ -232,6 +233,14 @@ function relayView() {
 }
 
 // ── 上报（桌面壳 / 设置页用）：本机落表 + 排进发件箱发给站点 ──
+// GET /api/local/mcp → { url, token, addCommand }：设置页「MCP」一节 + 给站主远程看的连法。令牌只在本地版、登录后可见
+router.get('/mcp', (req, res) => {
+  const port = process.env.PORT || 4001;
+  const url = `http://127.0.0.1:${port}${MCP_PATH}`;
+  const token = mcpToken();
+  res.json({ url, token, addCommand: `claude mcp add --transport http nodesign ${url} --header "Authorization: Bearer ${token}"` });
+});
+
 router.post('/issues', (req, res) => {
   const b = req.body || {};
   const kind = ['bug', 'friction', 'idea'].includes(b.kind) ? b.kind : 'bug';
