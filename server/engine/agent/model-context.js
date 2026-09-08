@@ -156,6 +156,18 @@ export function modelFactsFor(appModel) {
   return row ? { id: row.id, label: row.select?.label || row.label || row.id, window: row.window } : null;
 }
 
+/**
+ * 这一行走的是哪条上游（`UPSTREAMS` 的键）。不认识的 id → null。
+ *
+ * 贴纸栏用它把「模型行」映到「上游健康度」。⚠️ 是**多对一**：好几行可能共用一条上游，
+ * 它们的色点会一起亮一起灭 —— 这是对的，因为账本记的确实是那条上游的成败。
+ * 但**别反过来把色点读成"这个厂商的健康度"**：merge 那条线上 vendors 是"第一个可用的赢"、
+ * 后备静默，同一条上游这一发可能是 zai 服务的、下一发就是 particle（见 upstream-health.js 头注）。
+ */
+export function upstreamOf(appModel) {
+  return (appModel && BY_ID.get(appModel)?.api?.upstream) || null;
+}
+
 /** 这个 appModel 出自谁家（BRANDS 之一）。不认识的 id → null，调用方自己决定兜底，别猜。 */
 export function brandOfModel(appModel) {
   return BY_ID.get(appModel)?.brand || null;

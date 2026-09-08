@@ -25,6 +25,7 @@ import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAITo
 import { upstreamCostOf } from './upstream-billing.js';
 import { upstreamErrorHint } from './upstream-error-hints.js';
 import { armIdleWatchdog } from './stream-watchdog.js';
+import { upstreamHealth } from './upstream-health.js';
 
 export const DEFAULT_EMPTY_RETRIES = 2;
 export const DEFAULT_RETRY_BUDGET_MS = 120_000;
@@ -154,7 +155,23 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
     let retryTimer = null;
     let outcomeReported = false;
     // 一个客户端请求只报一次结果 —— 会话连续失败计数按"请求"算，报重了止损会提前触发
-    const report = (ok, reason, status = null) => { if (outcomeReported) return undefined; outcomeReported = true; return asStatus(onOutcome(ok, reason, status)); };
+    /**
+     * 每个客户端请求的最终判决报一次。
+     *
+     * 09-08 顺带喂**每上游的环形账**（`upstream-health.js`）→ 输入框上方那排贴纸的状态色点。
+     * ⚠️ 跟 `onOutcome` 里那本 `failStreaks` 是**两本账**：那本按会话记连续失败、用来止损、
+     * 成功即清零；这本按上游记历史、用来算比例。目的不同，别合并。
+     *
+     * ⭐ 记在这一层而不是 model-ingress，是因为**首字节的计时只有这里有**
+     * （`sawFirstByte` 那套闸就长在这个函数里），上一层只知道整发的总耗时。
+     */
+    const sentAt = Date.now();
+    const report = (ok, reason, status = null) => {
+      if (outcomeReported) return undefined;
+      outcomeReported = true;
+      upstreamHealth.note(wire.upstreamId, { ok, reason, status, ms: Date.now() - sentAt });
+      return asStatus(onOutcome(ok, reason, status));
+    };
 
     const stopPing = () => { if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } };
     const startPing = () => {
