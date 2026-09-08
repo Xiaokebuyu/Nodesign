@@ -159,6 +159,12 @@ export async function relayUsageDaily(days = 30) {
 // ── 工具中继（09-07）：桌面版没有站主的钥匙，联网搜索 / 生图这类调用交给网关用站主的钥匙跑 ──
 
 /** 目录里 /whoami 报的"网关替你跑的工具"：{ web_search: bool, generate_image: bool }；目录没拉到 = 全 false */
+/** whoami 带回的「装过但已被站点撤回」的发布 id；目录没拉到 = 空集（宁可多加载也别把人家正常的 skill 静默藏掉） */
+export function relayRevokedPublicationIds() {
+  const ids = catalog.ok ? catalog.whoami?.market?.revoked : null;
+  return new Set(Array.isArray(ids) ? ids : []);
+}
+
 export function relayTools() {
   return catalog.ok && catalog.whoami?.tools && typeof catalog.whoami.tools === 'object' ? catalog.whoami.tools : {};
 }

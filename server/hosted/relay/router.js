@@ -47,6 +47,7 @@ import { tierOf } from '../../auth/tier.js';
 import { mountRelayTools, relayToolsFor } from './tools.js';
 import { mountRelayIssues } from './issues.js';
 import { createMarketRouter } from '../market-routes.js';
+import { revokedInstalledIdsFor } from '../market-store.js';
 
 const BODY_MAX = 64 * 1024 * 1024;   // 带图的 Messages body 能到十几 MB；站内入口本来没有上限
 
@@ -125,6 +126,8 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
       // 网关替这个账号跑的工具（桌面版没有钥匙的那几件）：客户端的能力位和工具选路都按这张表
       tools: relayToolsFor(user),
       quota: { kind: quota.kind, used: quota.used, limit: quota.limit },
+      // 市场（09-08）：这个账号装过、后来被撤回的发布 —— 本机 plugin-loader 按它跳过对应目录
+      market: { revoked: revokedInstalledIdsFor(user.id) },
     });
   });
 

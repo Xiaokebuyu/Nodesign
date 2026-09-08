@@ -10,9 +10,10 @@ import JSZip from 'jszip';
 import db from '../engine/runs/store.js';
 import { createMarketRouter } from './market-routes.js';
 import adminRouter from './admin.js';
-import { _resetForTest, featuredSlotsFor, MARKET_DIR } from './market-store.js';
+import { _resetForTest, featuredSlotsFor, MARKET_DIR, marketOriginPolicy } from './market-store.js';
 import { installPluginToRoot } from '../lib/plugin-install.js';
-import { getUserPluginsRoot } from '../engine/agent/plugin-loader.js';
+import { getUserPluginsRoot, loadInstalledPlugins } from '../engine/agent/plugin-loader.js';
+import { readPluginOrigin, setPluginOriginPolicy } from '../lib/plugin-origin.js';
 
 // 用户级 plugin 根指到临时目录（plugin-loader 认这个 env）
 process.env.NODESIGN_USER_PLUGINS_DIR = path.join(os.tmpdir(), `nd-market-plugins-${process.pid}`);
@@ -139,11 +140,25 @@ describe('市场：发布 → 审核 → 货架 → 安装', () => {
     expect(shelf2.items[0].installed).toBe(true);
     expect(shelf2.items[0].installCount).toBe(1);
 
-    // 作者撤回 → 货架空；已装的那份不动
+    // 装来的那份带来源文件，指回这条发布
+    const originDir = path.join(getUserPluginsRoot(other.id), 'dossier-site');
+    expect((await readPluginOrigin(originDir))?.publicationId).toBe(publication.id);
+    const loadedNames = async () => (await loadInstalledPlugins({ userId: other.id })).plugins.map((p) => path.basename(p.path));
+    setPluginOriginPolicy(marketOriginPolicy);
+    expect(await loadedNames()).toContain('dossier-site');
+
+    // 作者撤回 → 货架空；已装的那份不动、照常加载（撤回≠撤销）
     expect((await as(author, `/api/market/${publication.id}`, { method: 'DELETE' })).status).toBe(204);
     expect((await (await as(other, '/api/market')).json()).items).toHaveLength(0);
-    await fs.access(path.join(getUserPluginsRoot(other.id), 'dossier-site', 'skills', 'dossier-site', 'SKILL.md'));
+    await fs.access(path.join(originDir, 'skills', 'dossier-site', 'SKILL.md'));
+    expect(await loadedNames()).toContain('dossier-site');
     expect((await as(author, `/api/market/${publication.id}`, { method: 'DELETE' })).status).toBe(409);
+
+    // 站主撤销 → 文件还在，但下个会话不再加载
+    await json(admin, `/api/admin/market/${publication.id}/review`, 'POST', { state: 'revoked', reviewNote: '含注入指令' });
+    await fs.access(path.join(originDir, 'skills', 'dossier-site', 'SKILL.md'));
+    expect(await loadedNames()).not.toContain('dossier-site');
+    setPluginOriginPolicy(null);
   });
 
   it('桌面版发布：直接给 skill 文件；下载回本机装再记一笔；拒绝没图 / 没 skill / 没过校验的', async () => {

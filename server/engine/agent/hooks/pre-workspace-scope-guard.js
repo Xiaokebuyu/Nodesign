@@ -39,16 +39,25 @@ function tempDirs() {
 /**
  * @returns {null | string} null=放行；string=拒绝理由
  */
-export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolName } = {}) {
+export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolName, pluginsBaseRoot = null, ownPluginsRoot = null } = {}) {
   if (!workspaceRoot) return null;
   const ws = path.resolve(workspaceRoot);
   const isWrite = WRITE_TOOLS.has(toolName);
-  if (!isWrite && !dataRoot) return null;
+  if (!isWrite && !dataRoot && !pluginsBaseRoot) return null;
   const root = dataRoot ? path.resolve(dataRoot) : null;
+  const pluginsBase = pluginsBaseRoot ? path.resolve(pluginsBaseRoot) : null;
+  const ownPlugins = ownPluginsRoot ? path.resolve(ownPluginsRoot) : null;
   for (const field of TARGET_FIELDS) {
     const v = toolInput?.[field];
     if (typeof v !== 'string' || !v) continue;
     const abs = path.resolve(ws, v);          // 相对路径按工作区解析
+    // 别人的 skill 库（2026-09-08 市场线）：用户级 plugin 根按 userId 分目录，可它在数据根之外，
+    // 下面那条「数据根内越界」管不到 —— 于是 A 的 agent 能 Read 走 B 结晶的方法论。
+    // 自己那一支放行（SDK 本来就要读它、附件也在里面），别人的一律拒，读写同判。
+    if (pluginsBase && insideDir(abs, pluginsBase) && !(ownPlugins && insideDir(abs, ownPlugins))) {
+      return '这个路径在别人的 skill 库里。你自己装的 skill 在 ' + (ownPlugins || '你的 skill 目录')
+        + ' —— 别人的方法论不是公共资料，要用请让对方发布到市场再安装。';
+    }
     // ⛔ 角色文件是**判据本身**，不许模型手写（2026-08-26 fable 验收）。
     //
     // 派发闸靠读 `.claude/agents/<slug>.md` 的 tools 行决定放不放行，可那份文件
@@ -92,11 +101,11 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolNa
   return null;
 }
 
-export function makePreToolUseWorkspaceScopeGuard({ workspaceRoot, dataRoot }) {
+export function makePreToolUseWorkspaceScopeGuard({ workspaceRoot, dataRoot, pluginsBaseRoot = null, ownPluginsRoot = null }) {
   return async (input) => {
     try {
       const reason = checkWorkspaceScope(input?.tool_input, {
-        workspaceRoot, dataRoot, toolName: input?.tool_name,
+        workspaceRoot, dataRoot, toolName: input?.tool_name, pluginsBaseRoot, ownPluginsRoot,
       });
       if (!reason) return {};
       return {

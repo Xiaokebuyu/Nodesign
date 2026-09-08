@@ -18,6 +18,7 @@ import { getSharedDir } from '../projects/workspace.js';
 import { getEntry as getShowcaseEntry } from '../lib/showcase-store.js';
 import { getArtifactCover } from '../lib/cover.js';
 import { installPluginToRoot } from '../lib/plugin-install.js';
+import { writePluginOrigin } from '../lib/plugin-origin.js';
 import { packPluginDir, findUserPluginDir } from '../lib/plugin-pack.js';
 import { getUserPluginsRoot } from '../engine/agent/plugin-loader.js';
 import {
@@ -107,10 +108,13 @@ router.post('/:id/install', async (req, res) => {
   try {
     const root = getUserPluginsRoot(req.user?.id);
     if (!root) return res.status(401).json({ error: 'unauthorized' });
-    const { buffer } = await relayMarketDownload(req.params.id);
+    const { buffer, headers } = await relayMarketDownload(req.params.id);
     const force = req.query.force === '1' || req.query.force === 'true';
     const r = await installPluginToRoot(buffer, root, { force });
-    if (r.status === 200 || r.status === 201) relayMarketInstalled(req.params.id).catch((err) => console.warn('[local-market] 回报安装失败:', err.message));
+    if (r.status === 200 || r.status === 201) {
+      await writePluginOrigin(r.body.installed.path, { publicationId: req.params.id, skillSha256: headers?.get?.('x-nd-skill-sha256') || null, site: relayConfig()?.url || null });
+      relayMarketInstalled(req.params.id).catch((err) => console.warn('[local-market] 回报安装失败:', err.message));
+    }
     res.status(r.status).json(r.body);
   } catch (err) { relayFail(res, err); }
 });

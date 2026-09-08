@@ -244,6 +244,17 @@ export function recordInstall({ publicationId, userId, skillSha256, source = nul
   if (!existed) db.prepare("UPDATE market_publications SET install_count = install_count + 1 WHERE id = ?").run(publicationId);
 }
 
+/** 这个人装过、后来被站主撤回的发布 id：桌面版 whoami 带回去，本机 plugin-loader 据此跳过 */
+export function revokedInstalledIdsFor(userId) {
+  return db.prepare(`SELECT i.publication_id id FROM market_installs i JOIN market_publications p ON p.id = i.publication_id
+    WHERE i.user_id = ? AND p.state = 'revoked'`).all(userId).map((r) => r.id);
+}
+
+/** plugin-loader 的来源判决（hosted 那半）：这条发布被站主撤回了 → 从它装来的 plugin 不加载。mount.js 注册 */
+export function marketOriginPolicy(origin) {
+  return getPublication(origin.publicationId)?.state === 'revoked';
+}
+
 export function installedIdsFor(userId) {
   return new Set(db.prepare('SELECT publication_id FROM market_installs WHERE user_id = ?').all(userId).map((r) => r.publication_id));
 }

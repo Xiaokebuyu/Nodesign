@@ -34,6 +34,7 @@ import { getEntry as getShowcaseEntry } from '../lib/showcase-store.js';
 import { getArtifactCover } from '../lib/cover.js';
 import { validateSkillUpload, LIMITS } from '../lib/plugin-validator.js';
 import { installPluginToRoot } from '../lib/plugin-install.js';
+import { writePluginOrigin } from '../lib/plugin-origin.js';
 import { packPluginDir, findUserPluginDir } from '../lib/plugin-pack.js';
 import { getUserPluginsRoot } from '../engine/agent/plugin-loader.js';
 import {
@@ -188,7 +189,10 @@ export function createMarketRouter({ userOf, source }) {
       if (!root) return fail(res, 401, 'UNAUTHENTICATED', '需要登录');
       const force = req.query.force === '1' || req.query.force === 'true';
       const r = await installPluginToRoot(await readSkillBuffer(pub.id), root, { force });
-      if (r.status === 200 || r.status === 201) recordInstall({ publicationId: pub.id, userId: me.id, skillSha256: pub.skillSha256, source });
+      if (r.status === 200 || r.status === 201) {
+        await writePluginOrigin(r.body.installed.path, { publicationId: pub.id, skillSha256: pub.skillSha256 });
+        recordInstall({ publicationId: pub.id, userId: me.id, skillSha256: pub.skillSha256, source });
+      }
       res.status(r.status).json(r.body);
     } catch (err) { next(err); }
   });

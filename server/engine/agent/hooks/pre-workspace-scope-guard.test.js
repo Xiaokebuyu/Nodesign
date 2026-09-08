@@ -131,3 +131,23 @@ describe('角色板书文件不许改', () => {
     expect(checkWorkspaceScope({ file_path: roleNote }, { ...c, toolName: 'Read' })).toBeNull();
   });
 });
+
+// 别人的 skill 库（2026-09-08 市场线）：用户级 plugin 根在数据根之外，靠这一条单独拦
+describe('别人的 skill 库', () => {
+  const pctx = { ...ctx, pluginsBaseRoot: '/home/svc/.nodesign/plugins', ownPluginsRoot: '/home/svc/.nodesign/plugins/u_me' };
+  it('自己那支放行（含附件），内置 plugin 目录照旧放行', () => {
+    expect(checkWorkspaceScope({ file_path: '/home/svc/.nodesign/plugins/u_me/my-skill/skills/my-skill/SKILL.md' }, { ...pctx, toolName: 'Read' })).toBeNull();
+    expect(checkWorkspaceScope({ path: '/home/svc/.nodesign/plugins/u_me/my-skill/skills/my-skill/patterns' }, { ...pctx, toolName: 'Glob' })).toBeNull();
+    expect(checkWorkspaceScope({ path: '/home/x/projects/Nodesign/server/engine/plugins' }, { ...pctx, toolName: 'Read' })).toBeNull();
+  });
+  it('别人那支 Read / Grep / Glob 都拒；列整个根也拒；Write 同判', () => {
+    for (const toolName of ['Read', 'Grep', 'Glob']) {
+      expect(checkWorkspaceScope({ file_path: '/home/svc/.nodesign/plugins/u_other/cool-skill/skills/cool-skill/SKILL.md' }, { ...pctx, toolName })).toMatch(/别人的 skill 库/);
+    }
+    expect(checkWorkspaceScope({ path: '/home/svc/.nodesign/plugins' }, { ...pctx, toolName: 'Glob' })).toMatch(/别人的 skill 库/);
+    expect(checkWorkspaceScope({ file_path: '/home/svc/.nodesign/plugins/u_other/x/SKILL.md', content: 'x' }, { ...pctx, toolName: 'Write' })).toMatch(/别人的 skill 库/);
+  });
+  it('没给 ownPluginsRoot（项目没有 owner）时整个根都拒，不退回放行', () => {
+    expect(checkWorkspaceScope({ file_path: '/home/svc/.nodesign/plugins/u_me/x/SKILL.md' }, { ...pctx, ownPluginsRoot: null, toolName: 'Read' })).toMatch(/别人的 skill 库/);
+  });
+});

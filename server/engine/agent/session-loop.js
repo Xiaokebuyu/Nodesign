@@ -343,6 +343,8 @@ export async function runSession({
   const sdkOptions = {
     cwd: cwdRoot,
     strictMcpConfig: true,   // 只认下面 mcpServers 那份（09-06）：不然宿主机 ~/.claude.json 里站主的 claude.ai 连接器会挂进每个用户的会话
+                             // ⚠️ 它顺带也挡了 plugin 目录里的 .mcp.json，但那不是它的职责：plugin 的 MCP 由 plugin-loader 给每个条目
+                             // 加 skipMcpDiscovery 挡（09-08）；哪天为别的原因去掉这行，plugin 那面不会跟着开
     abortController: sessionAbortController,
     // --replay-user-messages（2026-08-20）：让 CLI 把每条用户消息在**真正并进对话
     // 的那一刻**原样回显（带我们 push 时盖的 uuid）。这是 run 记账的 turn 边界锚 ——

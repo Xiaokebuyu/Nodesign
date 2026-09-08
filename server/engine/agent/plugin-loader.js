@@ -26,6 +26,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { readPluginOrigin, isPluginOriginRevoked } from '../../lib/plugin-origin.js';
 
 import { PLUGIN_ROOT, parseFrontmatter } from './skill.js';
 import { getSharedDir } from '../../projects/workspace.js';
@@ -171,6 +172,13 @@ async function scanPluginRoot(rootDir, sourceLabel) {
       continue;
     }
 
+    // 从市场装来的：站主撤回过就不加载（lib/plugin-origin.js；没来源文件的不会被问到）
+    const origin = await readPluginOrigin(pluginDir);
+    if (origin && await isPluginOriginRevoked(origin)) {
+      console.warn(`[plugin-loader] ${sourceLabel}/${entry.name} 来自已撤回的发布 ${origin.publicationId}，跳过`);
+      continue;
+    }
+
     // 扫该 plugin 内所有 skills/<id>/SKILL.md，取 frontmatter.name 作为 SDK skill name
     const skillsDir = path.join(pluginDir, 'skills');
     const skillNames = [];
@@ -217,7 +225,7 @@ async function scanPluginRoot(rootDir, sourceLabel) {
  * @param {string} [opts.userId]    - 项目 owner 的用户 id；不传则跳过用户级扫描
  *                                    （不是"退回全局共享根"——那正是要修掉的东西）
  * @returns {Promise<{
- *   plugins: Array<{ type: 'local', path: string }>,
+ *   plugins: Array<{ type: 'local', path: string, skipMcpDiscovery: true }>,
  *   skills: string[],
  *   diagnostics: { builtin: number, user: number, project: number }
  * }>}
@@ -247,7 +255,10 @@ export async function loadInstalledPlugins({ projectId, userId } = {}) {
       continue;
     }
     seenNames.add(p.name);
-    plugins.push({ type: 'local', path: p.path });
+    // skipMcpDiscovery：plugin 目录里的 .mcp.json / manifest 的 mcpServers 一概不读。上传的包里本来就不许带
+    // （plugin-validator 组件白名单 + 清单重写），这里是第二道；strictMcpConfig 那行挡的是宿主机的 ~/.claude.json，
+    // 别指望它顺带挡这个
+    plugins.push({ type: 'local', path: p.path, skipMcpDiscovery: true });
     for (const skillName of p.skills) {
       // SDK skills 列表也去重（两个 plugin 同 skill name 取先发现的）
       if (!skills.includes(skillName)) skills.push(skillName);

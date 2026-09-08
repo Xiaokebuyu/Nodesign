@@ -6,7 +6,7 @@
  *   - 发布到市场：发布的是**当前装着的那份**，打成 zip 交给站点重新过一遍 validator
  *
  * 打出来的 zip 是 plugin-zip 形态（根上有 .claude-plugin/plugin.json），validateSkillUpload 认得。
- * 只收文本类和图片类文件（见 PACK_ALLOW_RE），别的一律不进包：这条跟市场的组件白名单是同一张表，
+ * 只收文本类和图片类文件，别的一律不进包：白名单直接用 plugin-validator 的 disallowedComponents，
  * 导出一个带 hooks/ 的 plugin 也只会得到它的 skill 部分——导出面和发布面口径一致，不然导出再上传
  * 就成了绕过白名单的路。
  *
@@ -17,17 +17,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import JSZip from 'jszip';
 
-import { LIMITS } from './plugin-validator.js';
+import { LIMITS, disallowedComponents } from './plugin-validator.js';
 import { getUserPluginsRoot, listInstalledPluginsDetailed } from '../engine/agent/plugin-loader.js';
 import { isValidPluginName } from './plugin-install.js';
-
-/**
- * 进包的文件：plugin 清单、skill 正文、参考材料（md / txt / json / yaml / csv）、参考图。
- * 顶层只认 .claude-plugin/ 与 skills/ 两个目录；skills/<id>/ 下再按扩展名筛。
- */
-export const PACK_ALLOW_RE = /\.(md|txt|json|ya?ml|csv|html|css|svg|png|jpe?g|webp|gif)$/i;
-/** 可执行 / 会被 SDK 当组件加载的东西，无论扩展名一律不进包 */
-const PACK_DENY_DIR = new Set(['hooks', 'agents', 'commands', 'scripts', 'bin', 'node_modules']);
 
 /** 走目录树，回相对路径列表（正斜杠） */
 async function walk(dir, rel = '', out = []) {
@@ -45,15 +37,10 @@ async function walk(dir, rel = '', out = []) {
   return out;
 }
 
-/** 一个 plugin 目录里哪些文件会进包（纯函数的那半，方便测） */
+/** 一个 plugin 目录里哪些文件会进包：白名单就是 plugin-validator 的那一张（disallowedComponents），不另抄 */
 export function packableEntries(relPaths) {
-  return relPaths.filter((p) => {
-    const segs = p.split('/');
-    if (p === '.claude-plugin/plugin.json') return true;
-    if (segs[0] !== 'skills' || segs.length < 3) return false;
-    if (segs.some((s) => PACK_DENY_DIR.has(s))) return false;
-    return PACK_ALLOW_RE.test(p);
-  });
+  const bad = new Set(disallowedComponents(relPaths, 'plugin'));
+  return relPaths.filter((p) => !bad.has(p));
 }
 
 /**
