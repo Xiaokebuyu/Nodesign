@@ -1,5 +1,5 @@
 /**
- * 桌面版市场链路整条跑一遍：本机（local-market.js）→ relay-client → 站点（真的 market-routes，设备令牌换用户）。
+ * 桌面版市场链路整条跑一遍（放在 hosted/ 下：它要同时 import 站点那半，内核目录里的文件不许引 hosted）：本机（local-market.js）→ relay-client → 站点（真的 market-routes，设备令牌换用户）。
  * 站点和本机用的是同一个进程同一个 DB（测试里够用）；本机 plugin 根指到临时目录。
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -14,8 +14,8 @@ process.env.NODESIGN_PROFILE = 'local';
 process.env.NODESIGN_USER_PLUGINS_DIR = path.join(os.tmpdir(), `nd-local-market-${process.pid}`);
 
 const db = (await import('../engine/runs/store.js')).default;
-const { createMarketRouter } = await import('../hosted/market-routes.js');
-const { _resetForTest, MARKET_DIR } = await import('../hosted/market-store.js');
+const { createMarketRouter } = await import('./market-routes.js');
+const { _resetForTest, MARKET_DIR } = await import('./market-store.js');
 const { installPluginToRoot } = await import('../lib/plugin-install.js');
 const { getUserPluginsRoot } = await import('../engine/agent/plugin-loader.js');
 
@@ -34,7 +34,7 @@ process.env.NODESIGN_RELAY_URL = `http://127.0.0.1:${siteServer.address().port}`
 process.env.NODESIGN_RELAY_TOKEN = TOKEN;
 
 // ── 本机：LOCAL_OWNER 在 authGuard 挂 req.user；这里手挂 ──
-const localMarketRouter = (await import('./local-market.js')).default;
+const localMarketRouter = (await import('../api/local-market.js')).default;
 const LOCAL_ID = '_anon';
 const local = express();
 local.use((req, _res, next) => { req.user = { id: LOCAL_ID, role: 'admin' }; next(); });
@@ -103,7 +103,7 @@ describe('桌面版：本机打包发布 → 站点；站点下载 → 本机落
 
   it('安装：站点 approved 的条目下载回来落进本机 plugin 根，并回报站点计数', async () => {
     // 造一条 approved（站点侧直接写：作者是另一个人）
-    const { createPublication, reviewPublication, getPublication } = await import('../hosted/market-store.js');
+    const { createPublication, reviewPublication, getPublication } = await import('./market-store.js');
     const { validateSkillUpload } = await import('../lib/plugin-validator.js');
     const md = SKILL_MD.replace(/desk-skill/g, 'someone-skill');
     const v = await validateSkillUpload(Buffer.from(md));
