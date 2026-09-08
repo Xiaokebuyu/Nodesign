@@ -207,7 +207,7 @@ export default {
   // 设计稿，文案框宽度写死到 11.5% 这种量级，英文塞进去必然溢出。见 README 的缺口一节。
   '来访登记': 'Visitor Log',
   '凭邀请': 'BY INVITE',
-  '免费开放中 · 邀请码可解锁 Claude': 'Open to all · invite code unlocks Claude',
+  '免费开放中': 'Open to all',
   '小范围内测中': 'Private beta',
   '创作者的 agent 工作间': "A creator's agent workshop",
   // h1 分三段是因为中间那段带手绘下划线，中英都是"动词短语 ×3"的结构，逐段对得上
@@ -236,17 +236,14 @@ export default {
   '用户名 · USERNAME': 'Username',
   '密码 · PASSWORD': 'Password',
   '邀请码 · INVITE': 'Invite code',
-  '（可选）': ' (optional)',
   '写下用户名': 'Write your username',
   '写下密码': 'Write your password',
   '设置密码，至少 8 位': 'Set a password, at least 8 characters',
-  '有就填，解锁 Claude 订阅模型': 'Got one? It unlocks Claude subscription models',
   // 「核 对 中」那几个空格是中文两三字词的字间距手法，英文不需要
   '核 对 中': 'Checking…',
   '开 号': 'Sign up',
   '进 门': 'Enter',
-  '直接开号即可，免费模型人人可用；有邀请码的填进去解锁对应档位。':
-    'Just sign up. Free models are open to everyone; an invite code unlocks the matching plan.',
+  '直接开号即可，免费模型人人可用。': 'Just sign up. The free models are open to everyone.',
   '目前仅限受邀开号。': 'Currently invite-only.',
   '登录失败 ({status})': 'Sign-in failed ({status})',
   '注册失败 ({status})': 'Registration failed ({status})',

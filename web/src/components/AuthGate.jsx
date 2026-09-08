@@ -204,7 +204,7 @@ export default function AuthGate({ children }) {
   ) : (
     <>
       <h2>{t('来访登记')}</h2>
-      <div className="m">{openReg ? t('免费开放中 · 邀请码可解锁 Claude') : t('小范围内测中')}</div>
+      <div className="m">{openReg ? t('免费开放中') : t('小范围内测中')}</div>
       <div className="ndw-tabs">
         <button type="button" className={isRegister ? '' : 'on'}
           onClick={() => { setMode('login'); setError(''); }}>
@@ -227,10 +227,11 @@ export default function AuthGate({ children }) {
           autoComplete={isRegister ? 'new-password' : 'current-password'}
           onChange={(e) => setPassword(e.target.value)} />
       </div>
-      {isRegister && (
+      {/* 开放注册时不显示邀请码（09-08 站主：登录页别再挂邀请码字样）；后端仍收 inviteCode，关闭开放注册就回到受邀模式 */}
+      {isRegister && !openReg && (
         <div className="ndw-field">
-          <label htmlFor="ndw-i">{t('邀请码 · INVITE')}{openReg ? t('（可选）') : ''}</label>
-          <input id="ndw-i" value={inviteCode} placeholder={openReg ? t('有就填，解锁 Claude 订阅模型') : 'nd-xxxxxxxx'}
+          <label htmlFor="ndw-i">{t('邀请码 · INVITE')}</label>
+          <input id="ndw-i" value={inviteCode} placeholder="nd-xxxxxxxx"
             onChange={(e) => setInviteCode(e.target.value)} />
         </div>
       )}
@@ -238,7 +239,7 @@ export default function AuthGate({ children }) {
       <button className="go" type="submit" disabled={busy}>
         {busy ? t('核 对 中') : isRegister ? t('开 号') : t('进 门')}
       </button>
-      <p className="foot">{openReg ? t('直接开号即可，免费模型人人可用；有邀请码的填进去解锁对应档位。') : t('目前仅限受邀开号。')}</p>
+      <p className="foot">{openReg ? t('直接开号即可，免费模型人人可用。') : t('目前仅限受邀开号。')}</p>
     </>
   );
 
