@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { dumpRequestShape } from './model-ingress.js';
+import { dumpRequestShape } from './request-dump.js';
 
 describe('dumpRequestShape（ND_INGRESS_DUMP_DIR 量具）', () => {
   it('没给目录 → 不落盘不报错', () => {

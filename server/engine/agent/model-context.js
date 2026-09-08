@@ -140,6 +140,12 @@ export const SELECTABLE_MODELS = Object.freeze(
   MODELS.filter((m) => m.select).map((m) => Object.freeze({ id: m.id, brand: m.brand, ...m.select })),
 );
 
+/** 系统提示的环境块要报真实模型：label / id / 上下文窗口。不认识的 id → null（调用方 fail-loud） */
+export function modelFactsFor(appModel) {
+  const row = appModel ? BY_ID.get(appModel) : null;
+  return row ? { id: row.id, label: row.select?.label || row.label || row.id, window: row.window } : null;
+}
+
 /** 这个 appModel 出自谁家（BRANDS 之一）。不认识的 id → null，调用方自己决定兜底，别猜。 */
 export function brandOfModel(appModel) {
   return BY_ID.get(appModel)?.brand || null;

@@ -44,9 +44,10 @@ function codeLines(text) {
 
 function walk(dir, out = []) {
   for (const name of fs.readdirSync(dir)) {
-    if (name === 'node_modules' || name === 'lab') continue;
+    // projects-data / db 是运行数据不是源码（生产工作区里有几十 GB 且含悬空软链，stat 会炸）
+    if (name === 'node_modules' || name === 'lab' || name === 'projects-data' || name === 'db' || name.startsWith('.')) continue;
     const p = path.join(dir, name);
-    const st = fs.statSync(p);
+    let st; try { st = fs.statSync(p); } catch { continue; }   // 悬空软链
     if (st.isDirectory()) walk(p, out);
     else if (/\.(js|mjs|cjs)$/.test(name)) out.push(p);
   }

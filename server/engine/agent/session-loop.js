@@ -57,14 +57,14 @@ import {
 import { loadInstalledPlugins } from './plugin-loader.js';
 import { createHooks } from './hooks.js';
 import { buildIsolationOptions, prepareAgentDirs, sandboxShimEnv } from './isolation.js';
-import { MEMORY_EXTRA_GUIDELINES, mergeAgentSettings } from './memory-config.js';
+import { MEMORY_EXTRA_GUIDELINES, mergeAgentSettings, memoryDirFor } from './memory-config.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
 import { MCP_SERVER_NAME } from '../mcp/server-name.js';
 import { assertInitContract } from './init-contract.js';
 import { clearSessionFlights } from './subagent-flight.js'; import { clearStageStatus } from './stage-status.js';
 import { createRoleRoster } from './cast.js';
 import { createAgents } from '../agents/index.js';
-import { resolveSdkSpoofModel, pickThinkingConfig, isUncensoredModel } from './model-context.js';
+import { resolveSdkSpoofModel, pickThinkingConfig, isUncensoredModel, resolveModelRoute } from './model-context.js';
 import { bindSessionUpstream, unbindSessionFromRelay } from './session-binding.js';
 import { resolveSessionModel } from './session-model.js';
 import { unregisterIngressSession } from '../../lib/model-ingress.js';
@@ -74,7 +74,7 @@ import { unregisterSessionNotice } from '../../lib/ingress/session-notice.js';
 import { clampFirstClause } from '../../lib/quick-summary.js';
 import { AsyncQueue } from '../../lib/async-queue.js';
 import { platform } from '../../runtime/platform.js';
-import { renderPrelude } from './system-prompts.js';
+import { renderPrelude, renderAgentCoreFor, composeSystemPrompt } from './system-prompts.js';
 import {
   DEFAULT_TOOL_ALLOWLIST,
   STREAMING_ENABLED,
@@ -395,9 +395,12 @@ export async function runSession({
     // SKILL.md body 全文每 turn 恒驻在 system prompt 里。改造后 system prompt 静态前缀更稳
     // （省 cache），SKILL.md body 只在 agent 真需要决策时进入 context。详见
     // memory/nodesign_system_prompt_architecture.md。
-    systemPrompt: {
-      type: 'preset',
-      preset: 'claude_code',
+    // 09-08 起按通路二选一（system-prompts.composeSystemPrompt）：订阅行 = claude_code 预设 + 平台协议作 append；
+    // API 行 = 自己写的 Agent 基础约定（prompts/agent-core.md）+ 平台协议。预设那 50k 字里对 API 行有用的
+    // 四样（环境块 / 操作纪律 / 记忆指导 / 压缩说明）都在基础约定里；其余 SDK 注入走首条用户消息，两种模式相同。
+    systemPrompt: composeSystemPrompt({
+      mode: resolveModelRoute(model).mode,
+      core: resolveModelRoute(model).mode === 'api' ? renderAgentCoreFor(model, cwdRoot, memoryDirFor(sharedRoot)) : null,
       // 成人段随项目 owner 的外审档联动（renderPrelude）；无主项目落 tier.js 的 strict，绝不落 off。
       // ⚠️ 08-30 默认档按通路拆成两栏（订阅 strict / 非订阅 off）→ 同一个项目换个模型跑成人段就换一档。
       //
@@ -405,7 +408,7 @@ export async function runSession({
       // 判模型名 —— 那是模型属性，写在这儿就是给那张表开第二个真相源。为 true 的
       // 行拿到的是精简版底线：本地无审查权重跑在自己盒子上、gate 'localGen' 只对
       // 获批账号开、产物不外发，完整那节的前提（对外开放平台）根本不成立。
-      append: (() => {
+      prelude: (() => {
         const projectRow = projectId ? getProject(projectId) : null;
         const owner = projectRow ? getUserById(projectRow.ownerId) : null;
         // 档位按模型通路取旋钮（08-20 两旋钮：订阅 / 本地与中转），model 是上面已解析的会话模型
@@ -426,7 +429,7 @@ export async function runSession({
           folder: projectRow?.folderPath && sharedRoot !== cwdRoot ? projectRow.folderPath : null,
         });
       })(),
-    },
+    }),
     plugins: installed.plugins,
     skills: modeSkillsFor(installed.skills, projectMode),   // 按模式筛+对账（拆件见 mode-profile）
 
