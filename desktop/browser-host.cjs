@@ -124,6 +124,13 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
     if (entry) { entry.blocked = !!on; layout(entry); }
     return { ok: true, live: !!entry };
   });
+  // 接手：把键盘焦点交给视图（否则按了手形按钮之后敲键盘打进的是主窗口）
+  ipcMain.handle('nd:browser-focus', (_e, projectId) => {
+    const entry = views.get(String(projectId || ''));
+    if (!entry || entry.view.webContents.isDestroyed()) return { ok: false };
+    try { entry.view.webContents.focus(); } catch { /* */ }
+    return { ok: true };
+  });
   ipcMain.handle('nd:browser-state', (_e, projectId) => {
     const entry = views.get(String(projectId || ''));
     return entry ? { live: true, url: entry.view.webContents.getURL(), blocked: entry.blocked } : { live: false };

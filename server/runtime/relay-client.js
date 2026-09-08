@@ -47,7 +47,7 @@ export function normalizeRelayUrl(url) {
   return String(url || DEFAULT_RELAY_URL).trim().replace(/\/+$/, '') || DEFAULT_RELAY_URL;
 }
 
-async function call(pathname, { method = 'GET', body = null, raw = null, form = null, responseType = 'json', timeoutMs = FETCH_TIMEOUT_MS, auth = true, url = null } = {}) {
+async function call(pathname, { method = 'GET', body = null, raw = null, form = null, responseType = 'json', timeoutMs = FETCH_TIMEOUT_MS, auth = true, url = null, headers: extraHeaders = null } = {}) {
   const cfg = relayConfig();
   if (auth && !cfg) throw Object.assign(new Error('relay 未配置（缺少 NODESIGN_RELAY_TOKEN）'), { code: 'RELAY_NOT_CONFIGURED' });
   // 没令牌的路（首启登录）cfg 是 null：地址按 传入 > .env > 官方站 取
@@ -58,7 +58,7 @@ async function call(pathname, { method = 'GET', body = null, raw = null, form = 
     const res = await fetch(`${base}/api/relay${pathname}`, {
       method,
       // raw = { buf, contentType }：二进制原样发（头像上传）；form = FormData（市场发布，fetch 自己写 boundary）；body 走 JSON
-      headers: { ...(auth ? { authorization: `Bearer ${cfg.token}` } : {}), ...(raw ? { 'content-type': raw.contentType } : body ? { 'content-type': 'application/json' } : {}) },
+      headers: { ...(auth ? { authorization: `Bearer ${cfg.token}` } : {}), ...(raw ? { 'content-type': raw.contentType } : body ? { 'content-type': 'application/json' } : {}), ...(extraHeaders || {}) },
       body: raw ? raw.buf : form ? form : body ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
@@ -117,8 +117,19 @@ export function _setRelayCatalog(c) { catalog = c; }
 // ── 会话 ──
 
 /** 起 query 前登记。失败抛错（带 code：SUBSCRIPTION_REQUIRED / DEVICE_TOKEN_INVALID / RELAY_TIMEOUT …），让 init 失败得有话说 */
+/**
+ * 开会话：8 秒超时或连接层失败就**换一条新连接再打一次**。09-08 站主桌面两次「RELAY_TIMEOUT：8s 内无响应」，
+ * 站点 nginx 在那两个时刻连 499 都没有 —— 请求根本没到，是本机到 Cloudflare 的连接偶发停顿（代理侧半开连接）。
+ * 紧接着的重试都是秒回，所以这里自己重试一次，带 connection: close 绕开可能坏掉的连接池。幂等：服务端按 sid 去重。
+ */
 export async function openRelaySession(sid, appModel) {
-  return call('/sessions', { method: 'POST', body: { sid, appModel } });
+  try {
+    return await call('/sessions', { method: 'POST', body: { sid, appModel } });
+  } catch (err) {
+    if (err.code !== 'RELAY_TIMEOUT' && !/fetch failed/i.test(String(err.message))) throw err;
+    console.warn(`[relay-client] open session ${String(sid).slice(0, 8)} 第一发 ${err.code || err.message}，换连接重试一次`);
+    return call('/sessions', { method: 'POST', body: { sid, appModel }, headers: { connection: 'close' } });
+  }
 }
 
 /** 结束后注销。失败只记日志：服务器有空闲清扫兜底，注销失败不该影响收尾 */

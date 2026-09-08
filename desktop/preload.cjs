@@ -29,5 +29,6 @@ contextBridge.exposeInMainWorld('nodesignDesktop', {
     place: (projectId, rect) => ipcRenderer.invoke('nd:browser-place', String(projectId || ''), rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null),
     block: (projectId, on) => ipcRenderer.invoke('nd:browser-block', String(projectId || ''), !!on),
     state: (projectId) => ipcRenderer.invoke('nd:browser-state', String(projectId || '')),
+    focus: (projectId) => ipcRenderer.invoke('nd:browser-focus', String(projectId || '')),
   },
 });

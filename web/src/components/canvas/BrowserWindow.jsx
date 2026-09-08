@@ -49,6 +49,8 @@ import { useGlobalStore } from '../../stores/globalStore.js';
 const DESKTOP_NATIVE_VIEW = true;
 /** 缩略图档的宽度上限 */
 const THUMB_W = 480;
+/** 原生视图四周那圈框的内边距（px）：视图是壳画的矩形，圆角和阴影都做不到它身上，只能画在它外面 */
+const FRAME_PAD = 6;
 const nativeView = () => (DESKTOP_NATIVE_VIEW && typeof window !== 'undefined' && window.nodesignDesktop?.browserView) || null;
 
 /**
@@ -117,9 +119,13 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
   const native = nativeView();
   const activeRun = useGlobalStore(s => s.activeRun);
   const agentBusy = !!activeRun && activeRun.pid === projectId;
+  // 全局弹窗（confirm / prompt）开着时原生视图让位：它画在所有 HTML 之上，会把「确定删除？」整个盖住（09-08 站主实报）
+  const overlayOpen = useGlobalStore(s => !!(s.confirmDialog || s.promptDialog));
   const wsRef = useRef(null);
   const takeoverRef = useRef(false);
   takeoverRef.current = takeover;
+  const overlayOpenRef = useRef(false);
+  overlayOpenRef.current = overlayOpen;
 
   const send = useCallback((obj) => {
     const ws = wsRef.current;
@@ -238,35 +244,42 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
 
   /**
    * 共视·摆位：把 hostRef 的矩形（页面 CSS px）报给壳，壳把原生视图钉在那儿；收窗就 place(null)（视图停到屏外，agent 照用）。
-   * 矩形随窗口大小 / 滚动 / 布局变化而变，ResizeObserver + resize/scroll 兜住，rAF 合并。
+   *
+   * 09-08 晚改成 **rAF 逐帧跟随**：侧边栏收放、顶栏出现、画布平移缩放这些位移大多没有事件
+   * （ResizeObserver 只看尺寸不看位置，CSS transition 期间更是一个事件都没有），原来靠 1 秒一次的
+   * 兜底轮询，视图会先留在原地再跳过去。现在每帧量一次矩形，**变了才发 IPC**，没变一个字节都不发；
+   * 量一次 getBoundingClientRect 的开销可以忽略。
    */
   useEffect(() => {
     if (!native) return undefined;
     let raf = 0;
-    const report = () => {
-      raf = 0;
+    let last = '';
+    const frame = () => {
+      raf = requestAnimationFrame(frame);
       const el = hostRef.current;
       if (!el) return;
-      // 先把自己撑成容器里最大的 16:9（底下留 64px 给浮动工具栏），再把矩形报给壳
-      const box = el.parentElement?.getBoundingClientRect();
+      if (overlayOpenRef.current) {   // 弹窗期间停到屏外，弹窗关了下一帧就回来
+        if (last !== 'null') { last = 'null'; native.place(projectId, null).catch(() => {}); }
+        return;
+      }
+      // 先把自己撑成容器里最大的 16:9（框的内边 + 底下留 64px 给浮动工具栏），再把矩形报给壳
+      const box = el.parentElement?.parentElement?.getBoundingClientRect();
       if (box) {
-        const w = Math.max(0, Math.min(box.width - 16, (box.height - 64 - 16) * 16 / 9));
-        el.style.width = `${Math.floor(w)}px`;
-        el.style.height = `${Math.floor(w * 9 / 16)}px`;
+        const w = Math.max(0, Math.min(box.width - 16 - FRAME_PAD * 2, (box.height - 64 - 16 - FRAME_PAD * 2) * 16 / 9));
+        const ws = `${Math.floor(w)}px`; const hs = `${Math.floor(w * 9 / 16)}px`;
+        if (el.style.width !== ws) el.style.width = ws;
+        if (el.style.height !== hs) el.style.height = hs;
       }
       const r = el.getBoundingClientRect();
-      native.place(projectId, r.width > 8 && r.height > 8 ? { x: r.left, y: r.top, width: r.width, height: r.height } : null).catch(() => {});
+      const rect = r.width > 8 && r.height > 8 ? { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) } : null;
+      const key = rect ? `${rect.x},${rect.y},${rect.width},${rect.height}` : 'null';
+      if (key === last) return;
+      last = key;
+      native.place(projectId, rect).catch(() => {});
     };
-    const schedule = () => { if (!raf) raf = requestAnimationFrame(report); };
-    const ro = new ResizeObserver(schedule);
-    if (hostRef.current?.parentElement) ro.observe(hostRef.current.parentElement);
-    window.addEventListener('resize', schedule);
-    window.addEventListener('scroll', schedule, true);
-    schedule();
-    const tick = setInterval(schedule, 1000);   // 兜底：CSS 动画 / 顶栏收放这类没有事件的位移
+    raf = requestAnimationFrame(frame);
     return () => {
-      ro.disconnect(); window.removeEventListener('resize', schedule); window.removeEventListener('scroll', schedule, true);
-      clearInterval(tick); if (raf) cancelAnimationFrame(raf);
+      if (raf) cancelAnimationFrame(raf);
       native.place(projectId, null).catch(() => {});
     };
   }, [native, projectId]);
@@ -345,7 +358,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         onClick: () => {
           if (native && agentBusy && !takeover && !(help || liveHelp)) return;
           if (takeover) { send({ type: 'release' }); setTakeover(false); }
-          else setTakeover(true);
+          else { setTakeover(true); native?.focus?.(projectId)?.catch?.(() => {}); }
         },
       }],
     },
@@ -383,13 +396,23 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         justifyContent: 'center', padding: GAP.md, boxSizing: 'border-box', position: 'relative',
       }}>
         {native && (
-          // 原生视图钉在这块上（壳按这个矩形摆）。16:9 = 视图 zoom 后正好 1366×768 CSS px，agent 坐标 1:1。
-          // 底下留 64px 给浮动工具栏：视图是壳画的，压在 DOM 之上，工具栏躲不开它
-          <div ref={hostRef} style={{
-            margin: '0 auto 64px', borderRadius: 2,
-            boxShadow: status === 'live' ? '0 2px 12px rgba(43,39,35,.18)' : 'none',
-            background: status === 'live' ? 'transparent' : 'rgba(43,33,23,0.03)',
-          }} />
+          // 原生视图钉在 hostRef 上（壳按这个矩形摆）。16:9 = 视图 zoom 后正好 1366×768 CSS px，agent 坐标 1:1。
+          // 底下留 64px 给浮动工具栏：视图是壳画的，压在 DOM 之上，工具栏躲不开它。
+          // 外面那层是「框」：视图本身是壳里一块硬边矩形，圆角、阴影、接手时的描边都只能画在它外面 ——
+          // 一圈纸色的衬边 + 软阴影，让它看起来是贴在桌面上的一张纸，不是浮在界面上的一块屏。
+          <div style={{
+            margin: '0 auto 64px', padding: FRAME_PAD, borderRadius: 8, boxSizing: 'content-box',
+            background: takeover ? (COLOR.accent || '#8a4b2d') : 'rgba(43,33,23,0.08)',
+            boxShadow: status === 'live'
+              ? '0 1px 0 rgba(255,255,255,.5) inset, 0 6px 22px rgba(43,39,35,.22), 0 1px 3px rgba(43,39,35,.18)'
+              : 'none',
+            transition: 'background 160ms ease',
+          }}>
+            <div ref={hostRef} style={{
+              borderRadius: 2,
+              background: status === 'live' ? 'transparent' : 'rgba(43,33,23,0.03)',
+            }} />
+          </div>
         )}
         {!native && <canvas
           ref={canvasRef}

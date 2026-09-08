@@ -9,6 +9,8 @@ import { isImeEnter } from '../../lib/helpers.js';
 import { useMedia, COARSE } from '../../lib/use-media.js';
 import ComposerTray from './ComposerTray.jsx';
 import ModelStickers from './ModelStickers.jsx';
+/** 模型状态贴纸栏开关：09-08 晚站主撤下第一版，重做前保持 false */
+const MODEL_STICKERS_ENABLED = false;
 import SuggestionChip from './SuggestionChip.jsx';
 import ComposerMenu from './ComposerMenu.jsx';
 import ModelPicker from './ModelPicker.jsx';
@@ -206,8 +208,9 @@ export default function ChatComposer({
             <Upload size={14} /> 松开上传到附件托盘
           </div>
         )}
-        {/* 最顶：模型贴纸（09-08）——每条线现在什么状况。只报状态不管切换，切换走下面那颗按钮 */}
-        <ModelStickers />
+        {/* 最顶：模型贴纸（09-08）——每条线现在什么状况。只报状态不管切换，切换走下面那颗按钮。
+            ⏸ 09-08 晚站主看过第一版后撤下（组件与服务端环形账都留着，/api/me/models 照发 health），下一轮重做再打开 */}
+        {MODEL_STICKERS_ENABLED && <ModelStickers />}
 
         {/* 顶层：附件托盘（多 modality 信号；空时不渲染）*/}
         <ComposerTray items={trayItems} onRemove={onRemoveTrayItem} />

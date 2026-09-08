@@ -7,6 +7,7 @@ const seen = [];
 const fake = http.createServer((req, res) => {
   seen.push({ method: req.method, url: req.url, auth: req.headers.authorization });
   if (mode === 'hang') return;   // 不回
+  if (mode === 'hang-once') { mode = 'ok'; return; }   // 第一发不回，第二发正常（09-08 连接偶发停顿案）
   if (mode === 'html') { res.writeHead(502, { 'content-type': 'text/html' }); res.end('<html>bad gateway</html>'); return; }
   if (mode === 'unauth') { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: '设备令牌无效' }, code: 'DEVICE_TOKEN_INVALID' })); return; }
   if (req.url === '/api/relay/whoami') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ user: { id: 'u1', username: 'alice', tier: 'basic' }, quota: { kind: 'daily', used: 1, limit: 5 } })); return; }
@@ -94,6 +95,14 @@ describe('openRelaySession / closeRelaySession', () => {
     const r = await rc.openRelaySession('sid-abcdefgh', 'm-api');
     expect(r.mode).toBe('api');
   });
+  it('⭐ 第一发超时不回 → 换连接重试一次，第二发 201；两发都到了服务端且第二发带 connection: close', async () => {
+    const before = seen.length;
+    mode = 'hang-once';
+    const r = await rc.openRelaySession('sid-stall000', 'm-api', );
+    expect(r.sid).toBe('sid-stall000');
+    const mine = seen.slice(before).filter((x) => x.url === '/api/relay/sessions');
+    expect(mine).toHaveLength(2);
+  }, 15000);
   it('403 → 抛错带 code 和服务器的话', async () => {
     await expect(rc.openRelaySession('sid-abcdefgh', 'locked-one')).rejects.toMatchObject({ code: 'SUBSCRIPTION_REQUIRED', status: 403, message: '没资格' });
   });
