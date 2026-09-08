@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAIToAnthropicSSE } from './openai-chat.js';
+import { toOpenAIChatRequest, fromOpenAIChatResponse, toAnthropicError, OpenAIToAnthropicSSE, toolReferenceText, sanitizeParameters } from './openai-chat.js';
 
 const img = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
 
@@ -242,5 +242,31 @@ describe('OpenAIToAnthropicSSE · /zen/go 的 cost（08-21 晚）', () => {
     const ev2 = ev(await collect(xf2, [`data: ${JSON.stringify({ id: 'z', choices: [{ index: 0, delta: { reasoning_content: '想想…' } }] })}\n\n`]));
     expect(ev2.at(-1).d.error.message).toMatch(/^Zen Go在模型还在思考/);
     expect(xf2.failReason).toMatch(/before any visible output/);
+  });
+});
+
+describe('延迟工具在 openai-chat 腿上（09-08 桌面版 GLM 连搜七次 ToolSearch 的病根）', () => {
+  it('tool_result 里的 tool_reference 块翻成「已装载、直接调」的文字，不再丢成 (empty)', () => {
+    const out = toOpenAIChatRequest({ model: 'm', messages: [
+      { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'ToolSearch', input: { query: 'select:mcp__nodesign__generate_image' } }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: [{ type: 'tool_reference', tool_name: 'mcp__nodesign__generate_image' }, { type: 'tool_reference', tool_name: 'mcp__nodesign__pin_to_board' }] }] },
+    ] });
+    const tool = out.messages.find((m) => m.role === 'tool');
+    expect(tool.content).not.toBe('(empty)');
+    expect(tool.content).toContain('mcp__nodesign__generate_image');
+    expect(tool.content).toContain('mcp__nodesign__pin_to_board');
+    expect(tool.content).toContain('直接调用');
+    expect(toolReferenceText(['a'])).toContain('1 个工具');
+  });
+  it('⛔ 函数参数里带 \\p{…} 的 pattern 剥掉（zai 400 Invalid API parameter）；ASCII pattern 保留；原 schema 不动', () => {
+    const schema = { type: 'object', properties: { id: { type: 'string', pattern: '^[\\p{L}\\p{N}_][\\p{L}\\p{N}_·-]{0,39}$' }, items: { type: 'array', items: { type: 'object', properties: { k: { type: 'string', pattern: '^[a-z]+$' } } } } } };
+    const out = toOpenAIChatRequest({ model: 'm', messages: [{ role: 'user', content: 'hi' }], tools: [{ name: 'open_stage', input_schema: schema }] });
+    const params = out.tools[0].function.parameters;
+    expect(params.properties.id.pattern).toBeUndefined();
+    expect(params.properties.items.items.properties.k.pattern).toBe('^[a-z]+$');
+    expect(schema.properties.id.pattern).toContain('\\p{L}');
+    // 判据先验：sanitizeParameters 对无 pattern 的 schema 是恒等
+    const plain = { type: 'object', properties: { a: { type: 'number', minimum: 0 } }, required: ['a'] };
+    expect(sanitizeParameters(plain)).toEqual(plain);
   });
 });

@@ -36,6 +36,8 @@
  *   会话直接判死 —— 现有的 content_filter→end_turn 在 Claude Code 语境下才是对的
  */
 import { Transform } from 'node:stream';
+import { toolReferenceText } from './tool-reference.js';
+export { toolReferenceText };
 import { upstreamCostOf } from './upstream-billing.js';
 
 const STOP_MAP = { tool_calls: 'tool_use', stop: 'end_turn', length: 'max_tokens', content_filter: 'end_turn', function_call: 'tool_use' };
@@ -82,16 +84,35 @@ function imagePart(block) {
 }
 
 /** tool_result.content → (text, images[])。图不留在 tool 消息里（上游挂死），拿出来给调用方放进 user 消息 */
+/**
+ * 函数参数 schema 去掉上游不认的部分。09-08 实测 zai 对 `pattern` 里的 `\p{L}` 这类 Unicode 属性转义一律
+ * 400「Invalid API parameter」（open_stage 的成就 / 触发器 id）；ASCII 字符类它收。校验仍在本站 MCP 层做，
+ * 上游丢掉 pattern 只少一个提示，不少一道闸。原对象不动。
+ */
+export function sanitizeParameters(schema) {
+  if (Array.isArray(schema)) return schema.map(sanitizeParameters);
+  if (!schema || typeof schema !== 'object') return schema;
+  const out = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (k === 'pattern' && typeof v === 'string' && /\\p\{/.test(v)) continue;
+    out[k] = sanitizeParameters(v);
+  }
+  return out;
+}
+
 function splitToolResult(block) {
   const images = [];
   let text = '';
   if (typeof block.content === 'string') text = block.content;
   else if (Array.isArray(block.content)) {
     const parts = [];
+    const refs = [];
     for (const inner of block.content) {
       if (inner?.type === 'text') parts.push(inner.text || '');
       else if (inner?.type === 'image') { const p = imagePart(inner); if (p) { images.push(p); parts.push('[image: see the image attached to the following user message]'); } }
+      else if (inner?.type === 'tool_reference' && inner.tool_name) refs.push(inner.tool_name);
     }
+    if (refs.length) parts.push(toolReferenceText(refs));
     text = parts.join('\n');
   }
   if (block.is_error && text) text = `[tool error] ${text}`;
@@ -152,7 +173,7 @@ export function toOpenAIChatRequest(parsed, opts = {}) {
   if (Array.isArray(parsed.tools)) {
     const fns = parsed.tools
       .filter(t => t && t.name && (t.type === undefined || t.type === 'custom'))
-      .map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } } }));
+      .map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: sanitizeParameters(t.input_schema) || { type: 'object', properties: {} } } }));
     if (fns.length) out.tools = fns;
   }
   const tc = parsed.tool_choice;

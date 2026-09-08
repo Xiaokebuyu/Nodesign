@@ -38,7 +38,7 @@ import sharp from 'sharp';
 import { resolveWireModel, UPSTREAMS } from '../engine/agent/model-context.js';
 import { resolveSessionWire, fallbackLogged } from './ingress/session-routes.js';
 import { makeStandbySwitcher, PERMANENT } from './ingress/standby.js';
-import { forwardOpenAIChat } from './ingress/forward-openai-chat.js';
+import { forwardOpenAIChat } from './ingress/forward-openai-chat.js'; import { flattenToolReferences } from './ingress/tool-reference.js';
 import { failStreaks, exhaustedErrorBody } from './ingress/upstream-fail-streak.js';
 import { armIdleWatchdog } from './ingress/stream-watchdog.js'; import { dumpRequestShape } from './ingress/request-dump.js';   // 后者是量具
 import { noteUpstreamBilling, openaiTokens } from './ingress/upstream-billing.js';
@@ -393,13 +393,13 @@ export async function transformForUpstream(parsed, wire) {
 
   // 图片归一：长边超限下采样（所有上游统一做，安全无害）+ 把上游解不开的格式
   // 转码过去（只有声明了 imageFormats 的上游才做，见 model-context 那张表）
-  if (Array.isArray(parsed.messages)) {
-    const allowed = wire.upstream?.imageFormats || null;
-    if (await normalizeImages(parsed.messages, VISION_MAX_DIM, allowed)) mutated = true;
-  }
+  if (Array.isArray(parsed.messages) && await normalizeImages(parsed.messages, VISION_MAX_DIM, wire.upstream?.imageFormats || null)) mutated = true;
 
   // 一次 prompt 的图片张数上限（行内 maxImages；DeepSeek V4 Flash Vision 是 4）：多的最早的换占位文字（ingress/image-cap.js）
   if (wire.maxImages && capImages(parsed.messages, wire.maxImages) > 0) mutated = true;
+
+  // ToolSearch 结果的 tool_reference 块只有 Anthropic 第一方认，这里的上游都不是：翻成文字（ingress/tool-reference.js）
+  if (Array.isArray(parsed.messages) && flattenToolReferences(parsed.messages)) mutated = true;
 
   // 上游要的额外顶层字段（merge 的 vendor 点名）。放在这里是 **Anthropic 透传腿的读者** ——
   // 那条腿直接 JSON.stringify(parsed)。openai-chat 腿另有一个读者，见 toOpenAIChatRequest

@@ -28,6 +28,7 @@ import { listProcesses, readProcessLog } from '../engine/process/registry.js';
 import { listRuns } from '../engine/runs/store.js';
 import { listActiveRuns } from '../engine/runs/active-runs.js';
 import { listIssues } from '../lib/issues-store.js';
+import { findTranscript, findDebugLog, readTranscript } from './session-transcript.js';
 
 export const MCP_PATH = '/mcp';
 const TOKEN_FILE = 'mcp-token';
@@ -170,6 +171,24 @@ function buildServer({ desktopState }) {
     const dir = platform.dataRoot ? path.join(platform.dataRoot, 'logs') : null;
     if (!dir) return text('没有数据目录（不是本地版？）');
     return text(await tailFile(path.join(dir, `${which || 'server'}.log`), tail ?? 200));
+  });
+
+  server.registerTool('session_transcript', {
+    description: '一个会话的 Claude Code 记录（<claudeConfigDir>/projects/…/<session_id>.jsonl），每行压成一句：时间 / 角色 / 工具名与参数 / 工具结果类型。查「agent 为什么绕圈、最后一发发了什么」用这个；raw=true 回原始 jsonl 行。',
+    inputSchema: { session_id: z.string().min(1), tail: z.number().int().min(1).max(500).optional(), raw: z.boolean().optional() },
+  }, async ({ session_id, tail, raw }) => {
+    const f = findTranscript(platform.claudeConfigDir, session_id);
+    if (!f) return text(`没找到会话 ${session_id} 的记录（${platform.claudeConfigDir || '无 claudeConfigDir'}/projects/*/${session_id}.jsonl）`);
+    return text(readTranscript(f, { tail: tail ?? 80, summary: !raw }));
+  });
+
+  server.registerTool('session_debug_log', {
+    description: '一个会话的 Claude Code 调试日志尾巴（<claudeConfigDir>/debug/<session_id>.txt）：API 重试的底层原因（连接错误 / 状态码）在这里。',
+    inputSchema: { session_id: z.string().min(1), tail: z.number().int().min(10).max(2000).optional() },
+  }, async ({ session_id, tail }) => {
+    const f = findDebugLog(platform.claudeConfigDir, session_id);
+    if (!f) return text(`没找到会话 ${session_id} 的调试日志（${platform.claudeConfigDir || '无 claudeConfigDir'}/debug/${session_id}.txt）`);
+    return text(await tailFile(f, tail ?? 200));
   });
 
   server.registerTool('repo_folder', {

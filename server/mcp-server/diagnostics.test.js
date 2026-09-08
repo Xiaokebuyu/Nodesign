@@ -47,7 +47,7 @@ describe('MCP 诊断端点', () => {
     expect((await init.json()).result.serverInfo.name).toBe('nodesign-diagnostics');
     const list = await (await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }, tok)).json();
     const names = list.result.tools.map(t => t.name);
-    expect(names).toEqual(expect.arrayContaining(['health', 'list_projects', 'project_status', 'recent_runs', 'issues', 'server_log']));
+    expect(names).toEqual(expect.arrayContaining(['health', 'list_projects', 'project_status', 'recent_runs', 'issues', 'server_log', 'session_transcript', 'session_debug_log']));
     const h = await (await rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'health', arguments: {} } }, tok)).json();
     const body = JSON.parse(h.result.content[0].text);
     expect(body.ok).toBe(true);
