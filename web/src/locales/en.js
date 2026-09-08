@@ -205,18 +205,17 @@ export default {
   // 整面墙是"纸桌面 + 来访登记卡"的隐喻，英文保留这层温度，不改写成通用 SaaS 措辞。
   // ⚠️ 三个场景（login-wall/scenes/*.jsx）的故事文案**没翻**：那是 1500x800 固定
   // 设计稿，文案框宽度写死到 11.5% 这种量级，英文塞进去必然溢出。见 README 的缺口一节。
-  '来访登记': 'Visitor Log',
-  '凭邀请': 'BY INVITE',
-  '免费开放中': 'Open to all',
-  '小范围内测中': 'Private beta',
-  '创作者的 agent 工作间': "A creator's agent workshop",
+  '登录或注册': 'Sign in or register',
+  '公开测试': 'Public beta',
+  '开放注册': 'Registration open',
+  '内测阶段，仅限邀请': 'Private beta, invite only',
+  '面向创作者的 agent 工作台': 'An agent workbench for creators',
   // h1 分三段是因为中间那段带手绘下划线，中英都是"动词短语 ×3"的结构，逐段对得上
   // ⚠️ 标题是**一行一个整句**，别再拆成 '想到，' + '做出来' + '，验一遍' 那样拼 ——
   // 中文下碰巧成立，换到别的语言就是词序赌博。英文按英文重写，不直译。
-  '说一句话，它做出来': 'Say it in a sentence.',
-  '哪里不对，圈哪里': "Circle what's wrong.",
-  '网页、海报、文档、演示稿、能演的角色，都在一块画布上。':
-    'Pages, posters, docs, decks, characters. All on one canvas.',
+  '一句话描述需求，agent 完成制作': 'Describe it in a sentence; the agent builds it',
+  '在预览上圈选，直接修改': 'Circle anything on the preview to change it',
+  '网页、海报、文档、可互动的角色，在同一块画布上完成。': 'Websites, posters, documents and interactive characters, all on one canvas.',
 
   '登录': 'Sign in',
   // ── 顶栏账号徽章（components/layout/TopBar.jsx，09-07 桌面版跟网页版对齐）+ 头像（settings/AccountSection.jsx） ──
@@ -231,20 +230,17 @@ export default {
   '头像已更新': 'Avatar updated',
   '图片超过 2MB，请先缩小': 'Image is over 2MB, please shrink it first',
   '注册': 'Register',
-  '邀请码注册': 'Register with code',
   // 中文标签是「中文 · ENGLISH」的双语花样，英文里那半就是重复，只留一个词
   '用户名 · USERNAME': 'Username',
   '密码 · PASSWORD': 'Password',
   '邀请码 · INVITE': 'Invite code',
-  '写下用户名': 'Write your username',
-  '写下密码': 'Write your password',
+  '请输入用户名': 'Enter your username',
+  '请输入密码': 'Enter your password',
   '设置密码，至少 8 位': 'Set a password, at least 8 characters',
   // 「核 对 中」那几个空格是中文两三字词的字间距手法，英文不需要
-  '核 对 中': 'Checking…',
-  '开 号': 'Sign up',
-  '进 门': 'Enter',
-  '直接开号即可，免费模型人人可用。': 'Just sign up. The free models are open to everyone.',
-  '目前仅限受邀开号。': 'Currently invite-only.',
+  '正在验证': 'Verifying',
+  '注册即可使用，免费模型对所有用户开放。': 'Register to start. Free models are open to every account.',
+  '当前仅接受邀请注册。': 'Registration is currently by invitation only.',
   '登录失败 ({status})': 'Sign-in failed ({status})',
   '注册失败 ({status})': 'Registration failed ({status})',
   '网络错误，请重试': 'Network error. Try again.',
