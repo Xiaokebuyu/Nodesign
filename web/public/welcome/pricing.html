@@ -6,7 +6,7 @@
 <meta name="description" content="免费模型对所有用户开放，其余按用量计费。每次会话底部实时显示 token 与金额。">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
 <link rel="stylesheet" href="https://fonts.loli.net/css2?family=Zhi+Mang+Xing&amp;display=swap">
-<link rel="stylesheet" href="assets/style.css?v=202609091845">
+<link rel="stylesheet" href="assets/style.css?v=202609091923">
 <script>document.documentElement.className += ' js';</script>
 </head>
 <body>
@@ -35,7 +35,7 @@
   <section class="hero col">
     <div class="eyebrow reveal is-in">定价</div>
     <h1 class="reveal is-in" style="--i:1">免费使用，按需选择部署方式</h1>
-    <p class="hero-sub reveal is-in" style="--i:2">线上版本免费，每日设有用量额度。桌面版与自部署版本支持自有密钥，费用直接结算至模型服务商，平台不收取分成。</p>
+    <p class="hero-sub reveal is-in" style="--i:2">线上版本免费，并设有每日额度。桌面版与自部署版本支持自有密钥（BYOK）。费用直接结算至模型服务商，平台不收取分成。</p>
   </section>
 
   <div class="col">
@@ -44,12 +44,12 @@
       <div class="price">
         <h3>线上版本</h3>
         <div class="amt">¥0</div>
-        <p class="note">注册即用，每天 10 美元额度</p>
+        <p class="note">注册即用，每日额度为 10 美元</p>
         <ul>
-          <li>额度按模型实际消耗折算，北京时间零点重置</li>
-          <li>生图 0.20 美元一张，计入同一份额度</li>
+          <li>每日额度按模型实际消耗折算，北京时间零点重置</li>
+          <li>图像生成每张 0.20 美元，计入同一份每日额度</li>
           <li>DeepSeek V4 Flash、GLM-5.3-Flash、Gemini 3.7 Flash，Kimi K3 免费</li>
-          <li>画布、板书、记忆、导出全部可用</li>
+          <li>支持画布、板书、记忆与导出</li>
           <li>不含 Claude 模型，不能发布站点到公网</li>
         </ul>
         <a class="btn btn-solid" href="/login">开始使用</a>
@@ -61,26 +61,26 @@
         <p class="note">Windows · 自动更新</p>
         <ul>
           <li>登录站点账号，用同一份每日额度</li>
-          <li>或配置自有 API 密钥直连模型服务商</li>
-          <li>自有密钥模式功能完整，支持 Claude</li>
-          <li>文件、浏览器与 Word 组件均在本机</li>
+          <li>或配置自有密钥（BYOK）直连模型服务商</li>
+          <li>自有密钥（BYOK）模式支持完整功能与 Claude</li>
+          <li>文件、浏览器与 Word 文档组件均在本机</li>
           <li>macOS 版本尚未验证</li>
         </ul>
         <a class="btn btn-solid" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载 Windows 版</a>
       </div>
 
       <div class="price">
-        <h3>自己部署</h3>
+        <h3>自部署</h3>
         <div class="amt">开源</div>
-        <p class="note">AGPL-3.0 · 整栈跑在你的机器上</p>
+        <p class="note">AGPL-3.0 · 全栈本地运行</p>
         <ul>
-          <li><code>npx @xiaobuyu/nodesign</code> 一条命令起来</li>
+          <li>通过 <code>npx @xiaobuyu/nodesign</code> 启动</li>
           <li>数据仅存于本地，工作区为普通文件夹</li>
-          <li>使用自有模型密钥，或登录 Claude 订阅</li>
+          <li>使用自有密钥（BYOK），或登录 Claude 订阅</li>
           <li>需要 Node.js 20 以上</li>
           <li>源码托管于 GitHub</li>
         </ul>
-        <a class="btn btn-ghost" href="https://github.com/Xiaokebuyu/Nodesign">去 GitHub</a>
+        <a class="btn btn-ghost" href="https://github.com/Xiaokebuyu/Nodesign">查看 GitHub</a>
       </div>
 
     </div>
@@ -92,17 +92,17 @@
       <div>
         <h2 class="reveal is-in">单场会话成本参考</h2>
         <div class="lead reveal is-in" style="--i:1">
-          <p>线上版本近 30 天真实用量，统计截至 2026 年 9 月 9 日，不含内部账号。按线上模型标价折算；自有密钥模式下，费用以模型服务商账单为准。</p>
+          <p>以下为线上版本近 30 天的实际用量，统计截至 2026 年 9 月 9 日，不含内部账号。费用按线上模型标价折算。自有密钥（BYOK）模式以模型服务商账单为准。</p>
         </div>
         <div class="usage reveal is-in" style="--i:2">
           <div class="u"><b>167</b><span>场会话</span></div>
           <div class="u"><b>4.2 万</b><span>每场 token 中位数（不含缓存读取）</span></div>
           <div class="u"><b>$0.41</b><span>每场花费中位数</span></div>
-          <div class="u"><b>$1.16</b><span>四分之三的会话不超过这个数</span></div>
+          <div class="u"><b>$1.16</b><span>四分之三会话的费用上限</span></div>
         </div>
       </div>
       <aside class="notes reveal is-in" style="--i:1">
-        <p><b>统计口径</b>一场会话通常覆盖一件事的完整流程：需求、生成、多轮修改。取中位数以排除少数长会话的影响。</p>
+        <p><b>统计口径</b>一场会话通常覆盖需求、生成与多轮修改。中位数可降低少数长会话的影响。</p>
         <p><b>额度参考</b>每日 10 美元额度按中位数约合二十余场会话，图像生成较多时消耗更快。</p>
       </aside>
     </div>
@@ -116,38 +116,38 @@
         <div class="faq reveal is-in" style="--i:1">
 
           <details>
-            <summary>哪个模型是免费的？</summary>
+            <summary>免费模型</summary>
             <div class="ans"><p>Kimi K3 不计费。其他模型按实际用量计入每日额度，每一轮的消耗在会话栏底部实时显示。</p></div>
           </details>
 
           <details>
-            <summary>额度用完了怎么办？</summary>
-            <div class="ans"><p>额度于北京时间零点重置。如需不受额度限制，可使用桌面版配置自有密钥，或本地部署开源版本。</p></div>
+            <summary>每日额度用尽后</summary>
+            <div class="ans"><p>每日额度于北京时间零点重置。桌面版支持配置自有密钥（BYOK），也可自部署开源版本。</p></div>
           </details>
 
           <details>
-            <summary>能用 Claude 吗？</summary>
+            <summary>Claude 支持</summary>
             <div class="ans"><p>线上版本不提供 Claude。桌面版与自部署版本支持：配置 Anthropic API 密钥，或登录 Claude 订阅。</p></div>
           </details>
 
           <details>
-            <summary>自带密钥支持哪些服务商？</summary>
+            <summary>自有密钥（BYOK）支持的服务商</summary>
             <div class="ans"><p>兼容 Anthropic Messages 接口或 OpenAI Chat 接口的服务商均可配置，设置页内置常见预设，并提供连通性检测。</p></div>
           </details>
 
           <details>
-            <summary>做完的东西归谁？</summary>
-            <div class="ans"><p>归用户所有。站点为静态文件，文档为标准 Word 文件，导出后不依赖本平台。</p></div>
+            <summary>产物所有权</summary>
+            <div class="ans"><p>归用户所有。站点为静态文件，文档为标准 Word 文档，导出后不依赖本平台。</p></div>
           </details>
 
           <details>
-            <summary>数据存在哪？</summary>
+            <summary>数据存储</summary>
             <div class="ans"><p>线上版本：存储于服务器上用户各自的工作区，相互隔离。桌面版与自部署版本：存储于本机用户目录，产物、板书与记忆均为普通文件。</p></div>
           </details>
 
           <details>
-            <summary>以后会收费吗？</summary>
-            <div class="ans"><p>当前免费。线上版本的每日额度可能随成本调整。开源版本遵循 AGPL-3.0，自有密钥模式不收取分成。</p></div>
+            <summary>后续定价</summary>
+            <div class="ans"><p>当前免费。线上版本的每日额度可能随成本调整。开源版本遵循 AGPL-3.0，自有密钥（BYOK）模式不收取分成。</p></div>
           </details>
 
         </div>
@@ -158,7 +158,7 @@
   <section class="cta col">
     <div class="cta-in">
       <h2 class="reveal is-in">开始使用</h2>
-      <p class="hero-sub reveal is-in" style="--i:1">注册即用，免费额度每日重置。</p>
+      <p class="hero-sub reveal is-in" style="--i:1">注册即用，每日额度按日重置。</p>
       <div class="btn-row reveal is-in" style="--i:2;margin-top:32px">
         <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
         <a class="btn btn-ghost btn-lg" href="cases.html">查看案例</a>
@@ -184,7 +184,7 @@
   </footer>
 
 </div>
-<script src="assets/site.js?v=202609091845"></script>
+<script src="assets/site.js?v=202609091923"></script>
 
 
 </body></html>

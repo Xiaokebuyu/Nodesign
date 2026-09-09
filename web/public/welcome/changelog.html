@@ -7,7 +7,7 @@
 <meta name="description" content="Nodesign 的版本记录。公开测试期间每周都在改。">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
 <link rel="stylesheet" href="https://fonts.loli.net/css2?family=Zhi+Mang+Xing&display=swap">
-<link rel="stylesheet" href="assets/style.css?v=202609091845">
+<link rel="stylesheet" href="assets/style.css?v=202609091923">
 <script>document.documentElement.className += ' js';</script>
 </head>
 <body>
@@ -47,10 +47,10 @@
           <h3>问题修复与体验改进</h3>
           <ul>
             <li>移除界面缩放功能，修复 Windows 显示缩放 110% 下输入框与浮动工具栏溢出</li>
-            <li>自有密钥支持与内置同名的模型 id</li>
+            <li>自有密钥（BYOK）可配置与内置模型同名的模型 id</li>
             <li>首页项目栏展示公开作品，数量随自有项目数递减</li>
             <li>过长的板书自动折叠中段，首尾保持可见</li>
-            <li>站点、Word、文件夹等窗口为固定的会话栏让位</li>
+            <li>站点、Word 文档、文件夹等窗口适配固定会话栏布局</li>
             <li>修复白天模式卡片阴影锯齿；桌面版更新改由国内镜像分发</li>
           </ul>
         </div>
@@ -61,11 +61,11 @@
         <div class="log-body">
           <h3>市场、仓库项目与共视</h3>
           <ul>
-            <li>市场 v2：作品可直接发布上架，支持「照着来一个」，Agent 可代为发布</li>
+            <li>市场 v2：作品可直接发布上架，支持基于现有作品创建，Agent 可执行发布</li>
             <li>支持以本地文件夹作为项目，Agent 在仓库内工作</li>
-            <li>Agent 的浏览器在桌面版内原生显示，可随时接管</li>
-            <li>演示稿并入站点形态，海报与演示统一为固定画幅页面</li>
-            <li>修复 Windows 下 Word 导出失败</li>
+            <li>Agent 的浏览器在桌面版内原生显示，支持用户接管</li>
+            <li>演示并入站点形态，海报与演示统一为固定画幅页面</li>
+            <li>修复 Windows 下 Word 文档导出失败</li>
             <li>接入 DeepSeek 官方渠道与 GLM-5.3-Flash 双渠道，按会话自动切换</li>
             <li>桌面版内置诊断端点，便于远程排查</li>
           </ul>
@@ -90,8 +90,8 @@
           <h3>Windows 安装包</h3>
           <ul>
             <li>Electron 客户端，安装后自动更新</li>
-            <li>Chromium、ffmpeg、抠图模型、Word 组件按需安装</li>
-            <li>登录站点账号使用站点模型与额度，或配置自有密钥</li>
+            <li>Chromium、ffmpeg、背景移除模型、Word 文档组件按需安装</li>
+            <li>登录站点账号使用站点模型与每日额度，或配置自有密钥（BYOK）</li>
             <li>导出文件保存至「下载」文件夹并通知</li>
           </ul>
         </div>
@@ -102,8 +102,8 @@
         <div class="log-body">
           <h3>板书重定位</h3>
           <ul>
-            <li>板书用于解释，内容归产物，画布作为 Agent 的桌面</li>
-            <li>落位由画布计算，Agent 仅描述相对位置</li>
+            <li>板书用于解释，内容关联至产物，画布作为 Agent 的工作区</li>
+            <li>对象位置由画布计算，Agent 仅描述相对位置</li>
           </ul>
         </div>
       </article>
@@ -122,11 +122,11 @@
       <article class="log-item reveal">
         <div class="log-date">2026-08-29</div>
         <div class="log-body">
-          <h3>画布重做上线（105 个提交一次合入）</h3>
+          <h3>新版画布上线（105 个提交一次合入）</h3>
           <ul>
             <li>分级渲染：缩放至不可读时仅显示名称</li>
-            <li>产物之间的关系线：改自、对照、取材、接着做</li>
-            <li>黑板：单击查看全史，文件夹内容按纸张叠放</li>
+            <li>产物之间的关系线：来源、对照、取材、后续制作</li>
+            <li>板书：单击查看完整历史，文件夹内容按纸张叠放</li>
             <li>界面多语言第一轮</li>
           </ul>
         </div>
@@ -138,7 +138,7 @@
           
           <ul>
             <li>README 整体重写，英文版成为主展示版</li>
-            <li>产品定位：哪里错了，圈哪里</li>
+            <li>产品定位：圈选错误区域并修改</li>
           </ul>
         </div>
       </article>
@@ -149,7 +149,7 @@
           <h3>开源</h3>
           <ul>
             <li>以 AGPL-3.0 开源，支持 <code>npx @xiaobuyu/nodesign</code> 本地运行</li>
-            <li>本地版支持自有密钥</li>
+            <li>本地版支持自有密钥（BYOK）</li>
             <li>修复 Windows 首次运行问题</li>
           </ul>
         </div>
@@ -160,8 +160,8 @@
         <div class="log-body">
           <h3>开放注册</h3>
           <ul>
-            <li>取消邀请码，开放注册，每日额度制</li>
-            <li>图像生成对所有用户开放，按张计入额度</li>
+            <li>取消邀请码，开放注册，采用每日额度</li>
+            <li>图像生成对所有用户开放，按张计入每日额度</li>
           </ul>
         </div>
       </article>
@@ -172,7 +172,7 @@
           <h3>定位转向独立创作者</h3>
           <ul>
             <li>示例与功能取舍面向创作者场景：歌词页、作品集、同人本、档案站</li>
-            <li>个人橱窗：将个人风格沉淀为 skill</li>
+            <li>个人橱窗：将个人风格保存为 skill</li>
           </ul>
         </div>
       </article>
@@ -180,7 +180,7 @@
       <article class="log-item reveal">
         <div class="log-date">2026-05-03<span class="log-ver">v0.1.0-mvp</span></div>
         <div class="log-body">
-          <h3>第一个能跑的版本</h3>
+          <h3>首个可运行版本</h3>
           <ul>
             <li>首次提交：2026 年 4 月 29 日</li>
           </ul>
@@ -193,7 +193,7 @@
   <section class="cta col">
     <div class="cta-in">
       <h2 class="reveal">反馈渠道</h2>
-      <p class="hero-sub reveal" style="--i:1">用户反馈优先排期。可通过桌面版内的「报告问题」或 GitHub Issues 提交。</p>
+      <p class="hero-sub reveal" style="--i:1">我们会优先评估用户反馈。可通过桌面版内的「报告问题」或 GitHub Issues 提交。</p>
       <div class="btn-row reveal" style="--i:2;margin-top:32px">
         <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
         <a class="btn btn-ghost btn-lg" href="https://github.com/Xiaokebuyu/Nodesign/issues">GitHub Issues</a>
@@ -219,6 +219,6 @@
   </footer>
 
 </div>
-<script src="assets/site.js?v=202609091845"></script>
+<script src="assets/site.js?v=202609091923"></script>
 </body>
 </html>

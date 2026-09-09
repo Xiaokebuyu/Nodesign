@@ -6,7 +6,7 @@
 <meta name="description" content="画布、工具、圈选修改、记忆与交付。Nodesign 的工作方式。">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
 <link rel="stylesheet" href="https://fonts.loli.net/css2?family=Zhi+Mang+Xing&amp;display=swap">
-<link rel="stylesheet" href="assets/style.css?v=202609091845">
+<link rel="stylesheet" href="assets/style.css?v=202609091923">
 <script>document.documentElement.className += ' js';</script>
 </head>
 <body>
@@ -34,11 +34,11 @@
 
   <section class="hero col">
     <div class="eyebrow reveal is-in">产品概述</div>
-    <h1 class="reveal is-in" style="--i:1">它自己挑工具，自己检查</h1>
-    <p class="hero-sub reveal is-in" style="--i:2">你只需要说清要什么。选工具、排步骤、完成后的自检，都由它负责。</p>
+    <h1 class="reveal is-in" style="--i:1">Agent 选择工具并检查结果</h1>
+    <p class="hero-sub reveal is-in" style="--i:2">描述需求，Agent 安排步骤、调用工具并检查产物。</p>
     <div class="hero-cta btn-row reveal is-in" style="--i:3">
       <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
-      <a class="btn btn-ghost btn-lg" href="cases.html">先看它做过什么</a>
+      <a class="btn btn-ghost btn-lg" href="cases.html">查看案例</a>
     </div>
   </section>
 
@@ -56,15 +56,15 @@
     <div class="sec-num">01</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal is-in">产物是画布上的独立对象，不是聊天记录里的附件</h2>
+        <h2 class="reveal is-in">产物是画布上的独立对象</h2>
         <div class="lead reveal is-in" style="--i:1">
-          <p>做出来一件东西，它就落在画布上，有自己的位置。<strong>你可以拖动它、圈选它、让它和别的东西并排</strong>，也可以让它去取材。生成图抠完直接进页面，文档里的图直接进演示。</p>
-          <p>一轮做完，画布本身就是这一轮的成果，不必再去文件夹里翻找。</p>
+          <p>每件产物在画布上都有独立位置。<strong>用户可以拖动、圈选和排列产物</strong>，也可以复用已有内容。图像完成背景移除后可用于页面，Word 文档中的图像可用于演示。</p>
+          <p>一轮制作结束后，产物继续保留在画布上。</p>
         </div>
       </div>
       <aside class="notes reveal is-in" style="--i:1">
-        <p><b>关系线</b>产物之间可以连线：改自、对照、取材、接着做。来源关系一目了然。</p>
-        <p><b>关掉还在</b>下次进入，画布保持你离开时的状态。</p>
+        <p><b>关系线</b>产物之间可标记来源、对照、取材和后续制作关系。</p>
+        <p><b>状态保留</b>再次进入项目时，画布保持上次关闭时的状态。</p>
       </aside>
     </div>
   </section>
@@ -74,27 +74,27 @@
     <div class="sec-num">02</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal is-in">它自己挑工具</h2>
+        <h2 class="reveal is-in">Agent 自动选择工具</h2>
         <div class="lead reveal is-in" style="--i:1">
-          <p>你不用记住它有哪些能力。说清楚要什么，它自己决定该生图、该抠图、该写页面，还是该跑一段代码。</p>
-          <p>工具执行后它会自行检查结果：截图、读回文件、跑一遍校验。不对就回头改，不用你盯着。</p>
+          <p>描述需求后，Agent 选择图像生成、背景移除、页面制作或代码执行工具。</p>
+          <p>工具执行后，Agent 通过截图、文件读取和校验检查结果。发现问题后继续修改。</p>
         </div>
       </div>
       <aside class="notes reveal is-in" style="--i:1">
-        <p><b>看得见</b>它调了哪个工具、花了多久、改了什么，会话栏里逐条记录。</p>
+        <p><b>过程可见</b>会话栏逐条记录工具调用、耗时和文件改动。</p>
         <p><b>工具规模</b>截至 2026 年 9 月 9 日共 60 件专用工具，覆盖画布、板书、图像、文档、浏览器、进程与演出。以下为常用的八件。</p>
       </aside>
     </div>
 
     <div class="grid g4" style="grid-column:2">
-      <div class="cell reveal is-in"><span class="k">generate_image</span><h3>生图</h3><p>按描述出图，可指定风格，完成后直接落在画布上。</p></div>
-      <div class="cell reveal is-in" style="--i:1"><span class="k">remove_background</span><h3>抠图</h3><p>抠出透明底，作为版面元素使用，不是当作配图。</p></div>
-      <div class="cell reveal is-in" style="--i:2"><span class="k">Write / Edit</span><h3>写页面</h3><p>用它自己的文件工具手写 HTML/CSS，不套模板，改的是工作区里的真实文件。</p></div>
-      <div class="cell reveal is-in" style="--i:3"><span class="k">screenshot_canvas</span><h3>自己看</h3><p>完成后自行截图检查版面，不对就回头修。</p></div>
-      <div class="cell reveal is-in"><span class="k">build_docx</span><h3>出文档</h3><p>真 Word 文件，排版符合中文规范，对方可以继续编辑。</p></div>
-      <div class="cell reveal is-in" style="--i:1"><span class="k">paint_still</span><h3>画分镜</h3><p>先确定人物与场景，再逐镜推进。</p></div>
-      <div class="cell reveal is-in" style="--i:2"><span class="k">roll_film</span><h3>拼片子</h3><p>分镜拼成成片，按 EDL 排序，导出视频。</p></div>
-      <div class="cell reveal is-in" style="--i:3"><span class="k">cast_role</span><h3>演角色</h3><p>演出模式里的角色有自己的设定和说话方式，一场戏下来保持一致。</p></div>
+      <div class="cell reveal is-in"><span class="k">generate_image</span><h3>图像生成</h3><p>按描述生成图像，可指定风格。结果直接添加至画布。</p></div>
+      <div class="cell reveal is-in" style="--i:1"><span class="k">remove_background</span><h3>背景移除</h3><p>生成透明背景图像，可用作版面元素。</p></div>
+      <div class="cell reveal is-in" style="--i:2"><span class="k">Write / Edit</span><h3>制作页面</h3><p>生成工作区内的 HTML/CSS 源文件，不依赖预设模板。</p></div>
+      <div class="cell reveal is-in" style="--i:3"><span class="k">screenshot_canvas</span><h3>检查画布</h3><p>完成后截图检查版面，并修正发现的问题。</p></div>
+      <div class="cell reveal is-in"><span class="k">build_docx</span><h3>生成 Word 文档</h3><p>生成符合中文排版规范的 Word 文档，支持继续编辑。</p></div>
+      <div class="cell reveal is-in" style="--i:1"><span class="k">paint_still</span><h3>生成分镜</h3><p>确定人物与场景后，逐镜生成画面。</p></div>
+      <div class="cell reveal is-in" style="--i:2"><span class="k">roll_film</span><h3>生成视频</h3><p>按 EDL 排序分镜并导出视频。</p></div>
+      <div class="cell reveal is-in" style="--i:3"><span class="k">cast_role</span><h3>运行角色</h3><p>演出模式按角色设定生成一致的行为与表达。</p></div>
     </div>
   </section>
 
@@ -102,28 +102,28 @@
     <div class="sec-num">03</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal">它会怎么安排</h2>
+        <h2 class="reveal">Agent 的执行流程</h2>
         <div class="lead reveal" style="--i:1">
-          <p>选一个场景，看它把这件事拆成几步、挑了哪些工具。</p>
+          <p>选择场景，查看任务步骤和工具组合。</p>
         </div>
       </div>
       <aside class="notes reveal" style="--i:1">
-        <p><b>只是示意</b>真实会话里顺序由它自己决定，不会照抄这套。</p>
+        <p><b>流程示意</b>真实会话的执行顺序由 Agent 根据需求确定。</p>
       </aside>
     </div>
 
     <div class="picker reveal" style="grid-column:2">
       <div class="picker-tabs">
-        <button class="is-on" data-scene="lyric">做个歌词页</button>
-        <button data-scene="deck">整理成一份 deck</button>
-        <button data-scene="archive">做个角色档案站</button>
+        <button class="is-on" data-scene="lyric">歌词页</button>
+        <button data-scene="deck">成果演示</button>
+        <button data-scene="archive">角色档案站</button>
       </div>
 
       <div class="picker-panel is-on" data-panel="lyric">
         <div class="picker-steps">
-          <div><b>01</b><span>先排一版骨架，把标题、歌词、留白的位置定下来。</span></div>
-          <div><b>02</b><span>生一张夜空底图，抠掉边缘，压在版面下层。</span></div>
-          <div><b>03</b><span>写页面，截图自检，字号和行距不对就回头调。</span></div>
+          <div><b>01</b><span>确定标题、歌词和留白的位置。</span></div>
+          <div><b>02</b><span>生成夜空背景图，移除边缘背景并置于版面底层。</span></div>
+          <div><b>03</b><span>制作页面并截图检查，调整字号和行距。</span></div>
         </div>
         <div class="tool-row">
           <span class="tool-pill">generate_image</span>
@@ -135,8 +135,8 @@
 
       <div class="picker-panel" data-panel="deck">
         <div class="picker-steps">
-          <div><b>01</b><span>先翻画布上已有的产物，看哪些能进这份 deck。</span></div>
-          <div><b>02</b><span>按叙事排屏，定每屏的主张和配图。</span></div>
+          <div><b>01</b><span>读取画布中的现有产物，选择演示素材。</span></div>
+          <div><b>02</b><span>安排演示顺序，确定每屏的要点和配图。</span></div>
           <div><b>03</b><span>生成页面，导出 PDF 和 PPTX 各一份。</span></div>
         </div>
         <div class="tool-row">
@@ -148,9 +148,9 @@
 
       <div class="picker-panel" data-panel="archive">
         <div class="picker-steps">
-          <div><b>01</b><span>把设定文本读进来，拆成人物、时间线、关系三块。</span></div>
-          <div><b>02</b><span>每个角色配一张肖像，统一画风。</span></div>
-          <div><b>03</b><span>搭站点，关系用连线画出来，可检索。</span></div>
+          <div><b>01</b><span>读取设定文本，整理人物、时间线和关系。</span></div>
+          <div><b>02</b><span>为每个角色生成统一风格的肖像。</span></div>
+          <div><b>03</b><span>制作站点，以关系线展示人物关系并支持检索。</span></div>
         </div>
         <div class="tool-row">
           <span class="tool-pill">Write / Edit</span>
@@ -165,12 +165,12 @@
   <section class="dark">
     <div class="col">
       <div class="eyebrow reveal is-in">03 · 改法</div>
-      <h2 class="reveal is-in" style="margin-top:22px;--i:1">不用打字描述，圈选即可</h2>
-      <p class="lead reveal is-in" style="--i:2">「第三段再往左一点」「这块字号收一号」，这类描述很难说清楚，直接指出来更快。在预览上圈一块，写一句，它按你的意思改。</p>
+      <h2 class="reveal is-in" style="margin-top:22px;--i:1">圈选目标区域，直接修改</h2>
+      <p class="lead reveal is-in" style="--i:2">段落位置、字号等视觉问题不必描述坐标。在预览上圈选区域并输入要求，Agent 完成修改。</p>
       <div class="steps reveal is-in" style="--i:3">
-        <div><span class="num">圈</span><b>框住目标区域</b><span>在预览上拖一个框，它知道你指的是哪。</span></div>
-        <div><span class="num">说</span><b>写一句要求</b><span>「留白多一点」，不用给出具体数值。</span></div>
-        <div><span class="num">改</span><b>它来完成修改</b><span>改完叠在旧版之上，不满意随时回退。</span></div>
+        <div><span class="num">圈</span><b>选择目标区域</b><span>在预览上拖动选框，标记修改范围。</span></div>
+        <div><span class="num">写</span><b>输入修改要求</b><span>可描述留白等视觉调整，无需提供具体数值。</span></div>
+        <div><span class="num">改</span><b>Agent 完成修改</b><span>新版本叠放在旧版本上，支持回退。</span></div>
       </div>
     </div>
   </section>
@@ -180,14 +180,14 @@
     <div class="sec-num">04</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal is-in">它记得你，也记得这个项目</h2>
+        <h2 class="reveal is-in">跨会话保留偏好与项目记录</h2>
         <div class="lead reveal is-in" style="--i:1">
-          <p>长期记忆、项目档案、板书，三样东西叠在一起，<strong>下次开对话不用重新交代一遍</strong>。你偏好什么、这个项目定过什么、上轮讨论到哪，它自己检索。</p>
+          <p>长期记忆、项目档案和板书共同保存上下文。<strong>新会话可继续使用已有信息</strong>。Agent 检索用户偏好、项目决策和上轮进度。</p>
         </div>
       </div>
       <aside class="notes reveal is-in" style="--i:1">
-        <p><b>记忆</b>跨会话保留，写在工作区里，随时可以查看和修改。</p>
-        <p><b>板书</b>讨论的结论贴在画布上，不会埋在聊天记录里。</p>
+        <p><b>记忆</b>跨会话保留在工作区中，支持查看和修改。</p>
+        <p><b>板书</b>讨论结论记录在画布上，可直接查看。</p>
       </aside>
     </div>
   </section>
@@ -197,16 +197,16 @@
     <div class="sec-num">05</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal is-in">做完就能拿走</h2>
+        <h2 class="reveal is-in">以标准文件交付</h2>
         <div class="lead reveal is-in" style="--i:1">
           <p>站点整站导出 zip，单页导出为自包含 HTML；文档导出 <code>.docx</code>，演示导出 PDF / PPTX。要发布到公网，桌面版与自部署版本配置 Cloudflare 令牌后，可直接发布至自有域名。</p>
-          <p>交付物是纯静态文件，不绑定平台，放到哪里都能运行。</p>
+          <p>交付物为静态文件，不绑定平台，可独立运行。</p>
         </div>
       </div>
       <aside class="notes reveal is-in" style="--i:1">
-        <p><b>账单公开</b>每一轮消耗的 token 与金额，会话栏底部实时显示，不用等到月底。</p>
-        <p><b>格式不锁死</b>导出的是标准文件格式，离开平台也能继续编辑。</p>
-        <p><b>自带密钥</b>支持 BYOK，填上自己的 API 密钥就能使用完整功能。</p>
+        <p><b>用量透明</b>会话栏底部实时显示每轮消耗的 token 与金额。</p>
+        <p><b>标准格式</b>导出标准文件，离开平台后仍可继续编辑。</p>
+        <p><b>自有密钥（BYOK）</b>桌面版与自部署版本支持配置 API 密钥并使用完整功能。</p>
       </aside>
     </div>
   </section>
@@ -218,7 +218,7 @@
       <p class="hero-sub reveal is-in" style="--i:1">免费模型对所有用户开放，注册即可使用。</p>
       <div class="btn-row reveal is-in" style="--i:2;margin-top:32px">
         <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
-        <a class="btn btn-ghost btn-lg" href="pricing.html">看看怎么收费</a>
+        <a class="btn btn-ghost btn-lg" href="pricing.html">查看定价</a>
       </div>
     </div>
   </section>
@@ -241,7 +241,7 @@
   </footer>
 
 </div>
-<script src="assets/site.js?v=202609091845"></script>
+<script src="assets/site.js?v=202609091923"></script>
 
 
 </body></html>
