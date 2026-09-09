@@ -34,15 +34,15 @@
 
   <section class="hero col">
     <div class="eyebrow reveal is-in">定价</div>
-    <h1 class="reveal is-in" style="--i:1">线上免费试玩，桌面版自带钥匙</h1>
-    <p class="hero-sub reveal is-in" style="--i:2">线上站是试玩场，每人每天有一个额度上限。真正当工具用的是桌面版和开源本地版：填你自己的模型密钥，费用直接付给模型商，这里不抽成。</p>
+    <h1 class="reveal is-in" style="--i:1">免费使用，按需选择部署方式</h1>
+    <p class="hero-sub reveal is-in" style="--i:2">线上版本免费，每日设有用量额度。桌面版与自部署版本支持自有密钥，费用直接结算至模型服务商，平台不收取分成。</p>
   </section>
 
   <div class="col">
     <div class="prices reveal is-in">
 
       <div class="price">
-        <h3>线上试玩</h3>
+        <h3>线上版本</h3>
         <div class="amt">¥0</div>
         <p class="note">注册即用，每天 10 美元额度</p>
         <ul>
@@ -52,7 +52,7 @@
           <li>画布、板书、记忆、导出全部可用</li>
           <li>不含 Claude 模型，不能发布站点到公网</li>
         </ul>
-        <a class="btn btn-solid" href="/login">开始试玩</a>
+        <a class="btn btn-solid" href="/login">开始使用</a>
       </div>
 
       <div class="price">
@@ -61,10 +61,10 @@
         <p class="note">Windows · 自动更新</p>
         <ul>
           <li>登录站点账号，用同一份每日额度</li>
-          <li>或填自己的 API 密钥直连模型商，不经过站点</li>
-          <li>自带密钥时功能完整：Claude 也能用</li>
-          <li>文件在本机，浏览器和 Word 组件也在本机</li>
-          <li>macOS 版还没验证</li>
+          <li>或配置自有 API 密钥直连模型服务商</li>
+          <li>自有密钥模式功能完整，支持 Claude</li>
+          <li>文件、浏览器与 Word 组件均在本机</li>
+          <li>macOS 版本尚未验证</li>
         </ul>
         <a class="btn btn-solid" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载 Windows 版</a>
       </div>
@@ -75,10 +75,10 @@
         <p class="note">AGPL-3.0 · 整栈跑在你的机器上</p>
         <ul>
           <li><code>npx @xiaobuyu/nodesign</code> 一条命令起来</li>
-          <li>数据只在本地，工作区就是普通文件夹</li>
-          <li>自备模型密钥，或登录自己的 Claude 订阅</li>
+          <li>数据仅存于本地，工作区为普通文件夹</li>
+          <li>使用自有模型密钥，或登录 Claude 订阅</li>
           <li>需要 Node.js 20 以上</li>
-          <li>源码在 GitHub，欢迎提 issue</li>
+          <li>源码托管于 GitHub</li>
         </ul>
         <a class="btn btn-ghost" href="https://github.com/Xiaokebuyu/Nodesign">去 GitHub</a>
       </div>
@@ -90,9 +90,9 @@
     <div class="sec-num">账</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal is-in">一场会话大概花多少</h2>
+        <h2 class="reveal is-in">单场会话成本参考</h2>
         <div class="lead reveal is-in" style="--i:1">
-          <p>下面是线上站近 30 天的真实用量，统计到 2026 年 9 月 9 日，排掉了站主自己。按线上模型的标价折算；桌面版自带密钥的话，账单在你的模型商那边。</p>
+          <p>线上版本近 30 天真实用量，统计截至 2026 年 9 月 9 日，不含内部账号。按线上模型标价折算；自有密钥模式下，费用以模型服务商账单为准。</p>
         </div>
         <div class="usage reveal is-in" style="--i:2">
           <div class="u"><b>167</b><span>场会话</span></div>
@@ -102,8 +102,8 @@
         </div>
       </div>
       <aside class="notes reveal is-in" style="--i:1">
-        <p><b>怎么读</b>一场会话通常是一件事从头到尾：说需求、它做、圈着改几轮。中位数比平均数老实，几场长会话会把平均数拉得很高。</p>
-        <p><b>免费额度够不够</b>每天 10 美元，按中位数算是二十几场会话。生图多的话会快一些。</p>
+        <p><b>统计口径</b>一场会话通常覆盖一件事的完整流程：需求、生成、多轮修改。取中位数以排除少数长会话的影响。</p>
+        <p><b>额度参考</b>每日 10 美元额度按中位数约合二十余场会话，图像生成较多时消耗更快。</p>
       </aside>
     </div>
   </section>
@@ -117,37 +117,37 @@
 
           <details>
             <summary>哪个模型是免费的？</summary>
-            <div class="ans"><p>Kimi K3 那一行不计费。其它模型按实际用量折算进每天的额度，每一轮花了多少，会话栏底部当场显示。</p></div>
+            <div class="ans"><p>Kimi K3 不计费。其他模型按实际用量计入每日额度，每一轮的消耗在会话栏底部实时显示。</p></div>
           </details>
 
           <details>
             <summary>额度用完了怎么办？</summary>
-            <div class="ans"><p>北京时间零点重置。要不受额度限制，就用桌面版填自己的密钥，或者用开源版本地跑。</p></div>
+            <div class="ans"><p>额度于北京时间零点重置。如需不受额度限制，可使用桌面版配置自有密钥，或本地部署开源版本。</p></div>
           </details>
 
           <details>
             <summary>能用 Claude 吗？</summary>
-            <div class="ans"><p>线上站不开放 Claude。桌面版和本地版可以：填 Anthropic 的 API 密钥，或者登录你自己的 Claude 订阅。</p></div>
+            <div class="ans"><p>线上版本不提供 Claude。桌面版与自部署版本支持：配置 Anthropic API 密钥，或登录 Claude 订阅。</p></div>
           </details>
 
           <details>
             <summary>自带密钥支持哪些服务商？</summary>
-            <div class="ans"><p>凡是兼容 Anthropic Messages 接口或 OpenAI Chat 接口的都能填，设置页里有几家的预设。填完有体检按钮可以试。</p></div>
+            <div class="ans"><p>兼容 Anthropic Messages 接口或 OpenAI Chat 接口的服务商均可配置，设置页内置常见预设，并提供连通性检测。</p></div>
           </details>
 
           <details>
             <summary>做完的东西归谁？</summary>
-            <div class="ans"><p>归你。站点是静态文件，文档是真 Word 文件，导出之后不绑定这里。</p></div>
+            <div class="ans"><p>归用户所有。站点为静态文件，文档为标准 Word 文件，导出后不依赖本平台。</p></div>
           </details>
 
           <details>
             <summary>数据存在哪？</summary>
-            <div class="ans"><p>线上站：存在服务器上你自己的工作区里，别人看不到。桌面版和本地版：存在你电脑的用户目录下，产物、板书、记忆都是普通文件。</p></div>
+            <div class="ans"><p>线上版本：存储于服务器上用户各自的工作区，相互隔离。桌面版与自部署版本：存储于本机用户目录，产物、板书与记忆均为普通文件。</p></div>
           </details>
 
           <details>
             <summary>以后会收费吗？</summary>
-            <div class="ans"><p>现在不收。线上试玩的额度可能会随成本调整。开源版按 AGPL-3.0 授权，桌面版自带密钥这条路不会加价。</p></div>
+            <div class="ans"><p>当前免费。线上版本的每日额度可能随成本调整。开源版本遵循 AGPL-3.0，自有密钥模式不收取分成。</p></div>
           </details>
 
         </div>
@@ -157,11 +157,11 @@
 
   <section class="cta col">
     <div class="cta-in">
-      <h2 class="reveal is-in">先试一件小事</h2>
-      <p class="hero-sub reveal is-in" style="--i:1">注册即用，免费额度每天重置。觉得顺手再装桌面版。</p>
+      <h2 class="reveal is-in">开始使用</h2>
+      <p class="hero-sub reveal is-in" style="--i:1">注册即用，免费额度每日重置。</p>
       <div class="btn-row reveal is-in" style="--i:2;margin-top:32px">
         <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
-        <a class="btn btn-ghost btn-lg" href="cases.html">先看看做出来的东西</a>
+        <a class="btn btn-ghost btn-lg" href="cases.html">查看案例</a>
       </div>
     </div>
   </section>
@@ -179,7 +179,7 @@
       <a href="about.html">关于</a>
       <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a>
       <a href="https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md">English</a>
-      <span class="grow">开源 · AGPL-3.0 · 一个人做的</span>
+      <span class="grow">开源 · AGPL-3.0</span>
     </div>
   </footer>
 

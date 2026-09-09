@@ -35,7 +35,7 @@
   <section class="hero col">
     <div class="eyebrow reveal">面向创作者的 AGENT 工作台 · 开源</div>
     <h1 class="reveal" style="--i:1">一句话描述需求，agent 完成制作</h1>
-    <p class="hero-sub reveal" style="--i:2">哪里错了，圈哪里。网页、图、Word 文档在同一块画布上做出来，做完的都是真文件，能下载、能继续改、能发布。</p>
+    <p class="hero-sub reveal" style="--i:2">描述需求，Agent 在画布上完成网页、图像与 Word 文档的制作。在预览上圈选即可修改。产物以标准文件交付，支持下载、继续编辑与发布。</p>
     <div class="hero-cta btn-row reveal" style="--i:3">
       <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
       <a class="btn btn-ghost btn-lg" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载 Windows 桌面版</a>
@@ -44,30 +44,132 @@
     <div class="facts reveal" style="--i:4">
       <div class="fact"><b>一句话</b><span>即可开工</span></div>
       <div class="fact"><b>圈选</b><span>直接修改</span></div>
-      <div class="fact"><b>真文件</b><span>能下载 · 能发布</span></div>
-      <div class="fact"><b>自带密钥</b><span>桌面版 · 不抽成</span></div>
+      <div class="fact"><b>标准文件</b><span>下载 · 编辑 · 发布</span></div>
+      <div class="fact"><b>BYOK</b><span>自有密钥 · 不收分成</span></div>
     </div>
   </section>
 
-  <!-- ============ 画布（真实截图） ============ -->
+  <!-- ============ 画布（按真实工作区手绘） ============ -->
+  <section class="canvas-zone">
+    <div class="cz-inner cz-board" aria-label="工作区示意">
+
+      <span class="zone-tag" style="left:2%;top:5.5%">#leiyu-guanxi</span>
+      <div class="chalk chalk-title" style="left:2.4%;top:9.5%">《雷雨》人物关系图</div>
+
+      <svg class="cz-lines m-hide" viewBox="0 0 1000 700" preserveAspectRatio="none" aria-hidden="true">
+        <!-- 明面关系：灰细线 -->
+        <path d="M178 318 C 240 300, 300 300, 362 318" class="ln"/>
+        <path d="M168 336 C 150 380, 160 410, 185 440" class="ln"/>
+        <path d="M182 336 C 260 380, 320 410, 378 428" class="ln"/>
+        <path d="M372 336 C 375 370, 378 400, 383 426" class="ln"/>
+        <path d="M600 302 C 580 360, 530 420, 496 470" class="ln"/>
+        <!-- 隐秘纠葛：红粗线 -->
+        <path d="M362 332 C 320 380, 260 420, 205 440" class="ln red"/>
+        <path d="M205 456 C 300 515, 400 518, 482 492" class="ln red"/>
+        <path d="M188 314 C 300 262, 470 258, 592 290" class="ln red"/>
+        <!-- 肖像取材线：虚线 -->
+        <path d="M157 218 L 165 308" class="ln dot"/>
+        <path d="M347 218 L 366 308" class="ln dot"/>
+        <path d="M517 218 L 492 466" class="ln dot"/>
+        <path d="M187 528 L 190 456" class="ln dot"/>
+      </svg>
+
+      <svg class="cz-lines m-only" viewBox="0 0 1000 700" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M160 330 C 250 315, 330 315, 410 330" class="ln"/>
+        <path d="M425 345 C 360 400, 250 460, 165 508" class="ln red"/>
+        <path d="M170 525 C 280 572, 450 572, 555 528" class="ln red"/>
+        <path d="M180 232 L 155 318" class="ln dot"/>
+        <path d="M500 232 L 440 318" class="ln dot"/>
+        <path d="M820 232 L 605 500" class="ln dot"/>
+      </svg>
+      <span class="ln-label m-only" style="left:24%;top:43%">夫妻</span>
+      <span class="ln-label red m-only" style="left:21%;top:58.5%">旧情</span>
+      <span class="ln-label red m-only" style="left:30%;top:81%">相恋 · 实为兄妹</span>
+      <span class="ln-label m-hide" style="left:25.5%;top:42.6%">夫妻</span>
+      <span class="ln-label m-hide red" style="left:36%;top:36.4%">三十年前</span>
+      <span class="ln-label m-hide red" style="left:26.5%;top:55%">旧情</span>
+      <span class="ln-label m-hide red" style="left:31.5%;top:74.4%">相恋 · 实为兄妹</span>
+
+      <figure class="pcard pcard-portrait p1" style="left:9%;top:14%">
+        <img src="assets/portrait-zhoupuyuan.webp" alt="周朴园肖像" width="480" height="320">
+        <figcaption>[portrait] portrait-zhoupuyuan.png</figcaption>
+      </figure>
+      <figure class="pcard pcard-portrait p2" style="left:28%;top:14%">
+        <img src="assets/portrait-fanyi.webp" alt="繁漪肖像" width="480" height="320">
+        <figcaption>[portrait] portrait-fanyi.png</figcaption>
+      </figure>
+      <figure class="pcard pcard-portrait p3" style="left:45%;top:14%">
+        <img src="assets/portrait-sifeng.webp" alt="四凤肖像" width="480" height="320">
+        <figcaption>[portrait] portrait-sifeng.png</figcaption>
+      </figure>
+      <figure class="pcard pcard-portrait p4" style="left:12%;bottom:4%">
+        <img src="assets/portrait-zhouping.webp" alt="周萍肖像" width="480" height="320">
+        <figcaption>[portrait] portrait-zhouping.png</figcaption>
+      </figure>
+
+      <div class="chalk chalk-node n1" style="left:12%;top:44%"><b>周朴园</b><span class="d">矿主 一家之主<br>30 年前始乱终弃了侍萍</span></div>
+      <div class="chalk chalk-node n2" style="left:33%;top:44%"><b>繁漪</b><span class="d">周朴园现任妻子<br>被压抑、渴望自由</span></div>
+      <div class="chalk chalk-node n3" style="left:57%;top:40%"><b>鲁侍萍</b><span class="d">鲁贵妻子<br>30 年前被周朴园抛弃</span></div>
+      <div class="chalk chalk-node n4" style="left:14%;top:61%"><b>周萍</b><span class="d">周朴园长子<br>懦弱、悔恨交加</span></div>
+      <div class="chalk chalk-node n5" style="left:34%;top:60%"><b>周冲</b><span class="d">周朴园幼子<br>天真理想主义</span></div>
+      <div class="chalk chalk-node n6" style="left:45%;top:66%"><b>四凤</b><span class="d">侍萍与鲁贵之女<br>周公馆丫鬟</span></div>
+
+      <article class="pcard pcard-note" style="left:60.5%;top:auto;bottom:6%;width:12.5%">
+        <span class="pcard-tag">决策</span>
+        <h4>风格锚</h4>
+        <p>肖像统一 1920 年代油画质感；红线记隐秘纠葛，灰线记明面关系。</p>
+      </article>
+
+      <div class="minimap" aria-hidden="true"><i style="left:14%;top:26%"></i><i style="left:40%;top:26%"></i><i style="left:62%;top:22%"></i><i style="left:18%;top:70%"></i></div>
+
+      <aside class="chat-panel">
+        <div class="chat-h">
+          <span class="pill">《雷雨》人物关系图 ▾</span>
+          <span class="ico"><span>新对话</span><span>⊙</span><span>◫</span></span>
+        </div>
+        <div class="chat-body">
+          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">portrait-zhoupuyuan ›</span></span></div>
+          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">portrait-fanyi ›</span></span></div>
+          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">portrait-zhouping ›</span></span></div>
+          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">portrait-sifeng ›</span></span></div>
+          <div class="evt"><span class="glyph">⊕</span><span><span class="path">pin_to_board</span> <span class="arg">4 张 · 板顶一排 ›</span></span></div>
+          <div class="evt"><span class="glyph">⌾</span><span><span class="path">relate_on_board</span> <span class="arg">ref × 4 ›</span></span></div>
+          <div class="evt think"><span class="glyph">◔</span><span>四张肖像已经生成，正在用取材线把它们连回各自的名字节点，肖像一排放在板顶。</span></div>
+          <div class="evt"><span class="glyph">◫</span><span><span class="path">look_at_board</span> <span class="arg">leiyu-guanxi ›</span></span></div>
+          <div class="evt done"><span class="glyph">✓</span><span>DONE</span></div>
+          <div class="reply">
+            <p>《雷雨》人物关系图已经画在黑板上了。周公馆与鲁家分两簇排开：灰线是明面上的夫妻、父子、母女，红线是隐秘的纠葛，繁漪与周萍的旧情、周萍与四凤的相恋、周朴园与侍萍三十年前的旧事。</p>
+            <p>周朴园、繁漪、周萍、四凤四位配了肖像，1920 年代油画质感，已用取材线连回各自的名字。</p>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="ph">描述你想做什么…</div>
+          <div class="row">
+            <span class="plus">＋</span>
+            <span class="model">Sonnet 5 ▾</span>
+            <span class="send">发送</span>
+          </div>
+        </div>
+      </aside>
+
+    </div>
+  </section>
+
   <div class="col">
-    <figure class="cz-shot reveal">
-      <div class="shot"><img src="assets/shot-leiyu.webp" alt="Nodesign 画布：《雷雨》人物关系图，粉笔写的人物节点、红灰两种关系线、三张当场生成的肖像" width="1800" height="1125"></div>
-      <figcaption>FIG. 01 · 真实画布，一轮跑完的样子。《雷雨》八个人物用粉笔写在黑板上，灰线是明面关系，红线是隐秘纠葛，三张肖像是当场生成再连回名字的。整块板是 agent 一次画上去的。</figcaption>
-    </figure>
+    <figcaption>FIG. 01 · 工作区示意，按真实界面绘制。画布上是《雷雨》人物关系板：粉笔节点、两类关系线、当场生成并连回节点的肖像。右侧会话栏记录工具调用、思考与回复。</figcaption>
     <div class="cz-notes reveal" style="--i:1">
-      <div><b>画布</b>产物、板书、素材夹都是画布上的对象，有自己的位置，能拖能圈能连线。</div>
-      <div><b>聊天卡</b>钉在右侧，它调了哪个工具、改了哪个文件、想了什么，逐条记着。</div>
-      <div><b>黑板</b>讨论的结论直接写在画布上，不埋在聊天记录里。</div>
+      <div><b>画布</b>产物、板书与素材都是画布上的对象，支持拖动、圈选与连线。</div>
+      <div><b>会话栏</b>工具调用、文件改动与思考过程逐条记录。</div>
+      <div><b>黑板</b>讨论结论直接写在画布上，不埋在聊天记录里。</div>
     </div>
     <div class="cz-pair">
       <figure class="cz-shot reveal" style="margin-top:0">
         <div class="shot"><img src="assets/shot-xizang.webp" alt="西藏攻略项目的画布：素材文件夹、演示稿、站点卡、决策便签" width="1800" height="1125" loading="lazy"></div>
-        <figcaption>FIG. 02 · 西藏攻略项目。左边素材夹和站点卡，中间一张黄色便签记着这轮定下的风格，右边聊天卡里是它正在查页面。</figcaption>
+        <figcaption>FIG. 02 · 真实工作区 · 西藏攻略项目：素材夹、站点卡、决策便签与会话栏。</figcaption>
       </figure>
       <figure class="cz-shot reveal" style="margin-top:0;--i:1">
         <div class="shot"><img src="assets/shot-spica.webp" alt="SPiCa 项目的画布：粉笔写的步骤清单、站点首页卡、把方法收成 skill 的对话" width="1800" height="1125" loading="lazy"></div>
-        <figcaption>FIG. 03 · SPiCa 歌词页项目。粉笔写的「这一轮的步骤」勾着进度，做完一句「整理成 skill 保存到我的橱窗」，它把这套做法收进了橱窗。</figcaption>
+        <figcaption>FIG. 03 · 真实工作区 · SPiCa 项目：粉笔步骤清单与站点卡，本轮做法已沉淀为 skill。</figcaption>
       </figure>
     </div>
   </div>
@@ -77,13 +179,13 @@
     <div class="sec-num">看</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal">20 秒，看它做一件事</h2>
+        <h2 class="reveal">20 秒演示</h2>
         <div class="lead reveal" style="--i:1">
-          <p>西藏攻略项目里敲一句「用画布上现有的素材，再做一张单页的路线总览海报」。它先问画幅，答 16:9 之后开始做，草稿夹长出来，自己截图检查，最后海报缩略图进夹。录的是真会话，没剪工具调用。</p>
+          <p>在西藏攻略项目中输入「用画布上现有的素材，再做一张单页的路线总览海报」。Agent 先确认画幅，随后生成草稿、截图自检并输出海报。真实会话录制，工具调用未剪辑。</p>
         </div>
       </div>
       <aside class="notes reveal" style="--i:1">
-        <p><b>它会先问</b>比例、风格这类拿不准的事它先问再做，宁可多问一句，也不铺一版错的。</p>
+        <p><b>先确认再执行</b>画幅、风格等关键参数在动手前确认，避免整版返工。</p>
       </aside>
     </div>
     <figure class="cz-shot reveal" style="grid-column:2;margin-top:40px">
@@ -205,13 +307,13 @@
     <div class="sec-num">04</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal">画布上做出来、发到公网的站</h2>
+        <h2 class="reveal">已发布的作品</h2>
         <div class="lead reveal" style="--i:1">
-          <p>都是站主自己在公开测试期间做的，每一个都在线，点开就是真站。</p>
+          <p>以下站点均使用 Nodesign 制作并发布，全部在线，可直接访问。</p>
         </div>
       </div>
       <aside class="notes reveal" style="--i:1">
-        <p><b>能验证</b>这一页只放能点开的。用户的作品在应用里的市场。</p>
+        <p><b>可验证</b>本页仅收录可访问的公开链接。用户作品见应用内市场。</p>
       </aside>
     </div>
 
@@ -230,7 +332,7 @@
       </a>
     </div>
     <div class="btn-row reveal" style="grid-column:2;margin-top:34px">
-      <a class="btn btn-ghost" href="cases.html">全部七个案例</a>
+      <a class="btn btn-ghost" href="cases.html">查看全部案例</a>
     </div>
   </section>
 
@@ -239,9 +341,9 @@
     <div class="sec-num">况</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal">现在做到哪了</h2>
+        <h2 class="reveal">产品现状</h2>
         <div class="lead reveal" style="--i:1">
-          <p>一个人做的，公开测试中。数字截至 2026 年 9 月 9 日，从仓库和数据库里直接数出来的，排掉了站主自己。</p>
+          <p>公开测试中。以下数据截至 2026 年 9 月 9 日，来自代码仓库与生产数据库，不含内部账号。</p>
         </div>
         <div class="stats reveal" style="--i:2">
           <div><b>60</b><span>件专用工具</span></div>
@@ -250,13 +352,14 @@
           <div><b>139</b><span>位注册用户</span></div>
         </div>
         <div class="status reveal" style="--i:3">
-          <p>界面目前只有中文。Windows 桌面版在真机上跑过，macOS 还没验证。手机上能看能聊，整理和编辑用电脑。</p>
-          <p>线上站每人每天有额度上限，当试玩场用。要当工具用，装桌面版填自己的密钥，或者 <code>npx @xiaobuyu/nodesign</code> 本地跑。</p>
+          <span class="k">版本状态</span>
+          <p>界面语言：中文。桌面版：Windows 已验证，macOS 尚未验证。移动端：支持查看与对话，编辑建议在桌面完成。</p>
+          <p>线上版本设有每日额度，适合体验。长期使用建议安装桌面版并配置自有密钥，或通过 <code>npx @xiaobuyu/nodesign</code> 本地部署。</p>
         </div>
       </div>
       <aside class="notes reveal" style="--i:1">
-        <p><b>开源</b>AGPL-3.0，源码在 <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a>，中英文 README 各一份。</p>
-        <p><b>近 30 天</b>167 场会话，每场花费中位数 0.41 美元。细账在<a href="pricing.html">定价页</a>。</p>
+        <p><b>开源</b>AGPL-3.0，源码托管于 <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a>，提供中英文 README。</p>
+        <p><b>近 30 天</b>167 场会话，单场费用中位数 0.41 美元。详见<a href="pricing.html">定价页</a>。</p>
       </aside>
     </div>
   </section>
@@ -298,7 +401,7 @@
       <a href="about.html">关于</a>
       <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a>
       <a href="https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md">English</a>
-      <span class="grow">开源 · AGPL-3.0 · 一个人做的</span>
+      <span class="grow">开源 · AGPL-3.0</span>
     </div>
   </footer>
 
