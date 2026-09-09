@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN" class=" js js"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>定价 · Nodesign</title>
+<meta name="description" content="免费模型对所有用户开放，其余按用量计费。每次会话底部实时显示 token 与金额。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
+<link rel="stylesheet" href="https://fonts.loli.net/css2?family=Zhi+Mang+Xing&amp;display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<script>document.documentElement.className += ' js';</script>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="proof" aria-hidden="true">
+    <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+    <span class="bar"><b></b><b></b><b></b><b></b></span>
+    <span class="tag">PROOF · 2026-09</span>
+  </div>
+
+  <header class="nav">
+    <div class="col nav-in">
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="10" cy="10" r="6.2"></circle><path d="M10 1.6v5M10 13.4v5M1.6 10h5M13.4 10h5"></path></svg></span>Nodesign</a>
+      <nav class="nav-links">
+        <a href="product.html">产品概述</a>
+        <a href="cases.html">案例</a>
+        <a href="pricing.html" aria-current="page">定价</a>
+        <a href="docs.html">文档</a>
+        <a href="changelog.html">更新日志</a>
+      </nav>
+      <a class="btn btn-solid" href="/login">免费开始 <span>→</span></a>
+    </div>
+  </header>
+
+  <section class="hero col">
+    <div class="eyebrow reveal is-in">定价</div>
+    <h1 class="reveal is-in" style="--i:1">免费开始，按用量付</h1>
+    <p class="hero-sub reveal is-in" style="--i:2">没有订阅门槛。免费模型对所有用户开放，其他模型按实际消耗结算。每一轮的账目，会话栏底部实时显示。</p>
+  </section>
+
+  <div class="col">
+    <div class="prices reveal is-in">
+
+      <div class="price" data-anchor="n_mtubbr01_yuz1">
+        <h3>免费</h3>
+        <div class="amt">¥0</div>
+        <p class="note" data-anchor="n_mtubbkfv_bc58">注册即可使用，无需任何费用</p>
+        <ul>
+          <li>免费模型对所有用户开放</li>
+          <li data-anchor="n_mtubbsiu_p5hl">画布与全部产物形态</li>
+          <li>记忆、板书、项目档案</li>
+          <li>导出交付物</li>
+        </ul>
+        <a class="btn btn-solid" href="/login">开始用</a>
+      </div>
+
+      <div class="price" data-anchor="n_mtubbt74_i4s1">
+        <h3>按用量</h3>
+        <div class="amt">用多少付多少</div>
+        <p class="note">无月费，按实际消耗结算</p>
+        <ul>
+          <li>每次会话底部实时显示 token 与金额</li>
+          <li>按实际消耗结算</li>
+          <li>账单随时可查，历史留在画布上</li>
+          <li>充值即用</li>
+        </ul>
+        <a class="btn btn-ghost" href="/login">免费开始</a>
+      </div>
+
+      <div class="price">
+        <h3>自带密钥 <span class="small" style="font-family:var(--mono);font-size:11px;letter-spacing:.1em">BYOK</span></h3>
+        <div class="amt">走你的额度</div>
+        <p class="note">填上自己的 API 密钥即可使用</p>
+        <ul>
+          <li>完整功能，不打折扣</li>
+          <li>费用直接走你的模型额度</li>
+          <li>不经过我们的计费</li>
+          <li>适合已经有额度的用户</li>
+        </ul>
+        <a class="btn btn-ghost" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载客户端</a>
+      </div>
+
+    </div>
+  </div>
+
+  <section class="sec col" style="padding-top:96px">
+    <div class="sec-num">算</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal is-in">估一下每个月要花多少</h2>
+        <div class="lead reveal is-in" style="--i:1">
+          <p>拖动滑块，看你的用量大概落在哪个区间。数字按公开的用量小票折算，一次会话平均 4.8 万 token。</p>
+        </div>
+        <div class="calc reveal is-in" style="--i:2">
+          <div class="calc-row">
+            <label for="vol">每月做多少件事</label>
+            <input type="range" id="vol" min="1" max="60" value="12" step="1">
+            <output id="volOut">12 件</output>
+          </div>
+          <div class="calc-out">
+            <span class="calc-label">预计消耗</span>
+            <strong id="costOut">57.6 万 tok</strong>
+            <span class="calc-note">免费模型不产生费用。换成更强的模型，按实际消耗结算。</span>
+          </div>
+        </div>
+      </div>
+      <aside class="notes reveal is-in" style="--i:1">
+        <p><b>怎么算的</b>一次会话平均 4.8 万 token，取自公开测试期间公开的用量小票。</p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="sec col" style="padding-top:96px">
+    <div class="sec-num">问</div>
+    <div class="sec-body">
+      <div style="grid-column:1 / -1">
+        <h2 class="reveal is-in">常见问题</h2>
+        <div class="faq reveal is-in" style="--i:1">
+
+          <details>
+            <summary>免费模型和别的模型有什么区别？</summary>
+            <div class="ans"><p>免费模型对所有用户开放，日常够用。要更强的模型，按用量付费，与其他模型一样按实际消耗计算。</p></div>
+          </details>
+
+          <details>
+            <summary>怎么知道我花了多少？</summary>
+            <div class="ans"><p>每次会话底部写着这一轮的 token 和金额。画布上的产物还会附一条用量记录，写清这件东西的总花费。</p></div>
+          </details>
+
+          <details>
+            <summary>可以自带密钥吗？</summary>
+            <div class="ans"><p>可以。填上自己的 API 密钥就能使用完整功能，费用直接走你自己的额度。适合已经有模型额度的用户。</p></div>
+          </details>
+
+          <details>
+            <summary>做完的东西归谁？</summary>
+            <div class="ans"><p>归你。产物是纯静态文件，导出之后不绑定平台，放到哪里都能运行。</p></div>
+          </details>
+
+          <details>
+            <summary>能商用吗？</summary>
+            <div class="ans"><p>能。你做出来的东西，版权和用途都归你。</p></div>
+          </details>
+
+          <details>
+            <summary>支持哪些产物？</summary>
+            <div class="ans"><p>站点与落地页、海报与长图、演示、Word 文档、图像与视频、可互动的角色。都在同一块画布上完成。</p></div>
+          </details>
+
+          <details>
+            <summary>数据存在哪？</summary>
+            <div class="ans"><p>产物和记忆都以文件形式存在你的工作区里，随时可以查看、修改和导出。</p></div>
+          </details>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta col">
+    <div class="cta-in">
+      <h2 class="reveal is-in">免费开始使用</h2>
+      <p class="hero-sub reveal is-in" style="--i:1">注册即可使用，免费模型对所有用户开放。</p>
+      <div class="btn-row reveal is-in" style="--i:2;margin-top:32px">
+        <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
+        <a class="btn btn-ghost btn-lg" href="cases.html">先看看别人做的</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="col">
+    <div class="foot-in">
+      <span style="font-family:var(--serif);font-size:16px;color:var(--ink-2)">Nodesign</span>
+      <span>公开测试中</span>
+      <a href="index.html">首页</a>
+      <a href="product.html">产品概述</a>
+      <a href="cases.html">案例</a>
+      <a href="pricing.html">定价</a>
+      <a href="docs.html">文档</a>
+      <a href="changelog.html">更新日志</a>
+      <a href="about.html">关于</a>
+      <span class="grow">面向创作者的 agent 工作台</span>
+    </div>
+  </footer>
+
+</div>
+<script src="assets/site.js"></script>
+
+
+</body></html>

@@ -1,59 +1,303 @@
 <!doctype html>
-<html lang="zh-CN">
-<head>
+<html lang="zh-CN"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NoDesign</title>
-<meta name="description" content="一张画布，说一句话，Agent 把网站、图和文档在你眼前做出来。哪里错了圈哪里。">
-<!--
-  官网落地页（2026-09-09 起）。
-
-  这是没登录的访客在根路径看到的页面：nginx 按 nd_auth cookie 分流到 /welcome/，
-  前端 AuthGate 再兜一层（cookie 过期的也来这儿）。登录的人访问 / 直接进应用。
-
-  这个目录是纯静态的：站主用 NoDesign 自己做的站点整包替换进来即可（index.html + 它的
-  资源文件放同一目录，路径写相对的）。随 `npm run deploy` 一起上线，不占服务端。
-
-  下面这份只是占位：结构和链接是定好的，样子等真站点来换。
--->
-<style>
-  :root { color-scheme: light; }
-  body { margin: 0; background: #efe7d8; color: #2b2622; font: 16px/1.7 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
-  main { max-width: 640px; margin: 0 auto; padding: 48px 20px 64px; }
-  h1 { font-size: 28px; line-height: 1.35; margin: 0 0 8px; }
-  .sub { margin: 0 0 28px; opacity: .78; }
-  .demo { display: block; width: 100%; border-radius: 6px; box-shadow: 0 10px 30px rgba(50,35,20,.18); background: #fff; }
-  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 28px 0 8px; }
-  .btn { display: inline-block; padding: 12px 20px; border-radius: 6px; background: #2b2622; color: #fff; text-decoration: none; font-weight: 600; }
-  .btn.ghost { background: transparent; color: #2b2622; border: 1.5px solid #2b2622; }
-  .small { font-size: 13px; opacity: .7; margin: 0 0 32px; }
-  .honest { border-left: 3px solid #b8532e; padding: 4px 14px; margin: 32px 0; opacity: .85; }
-  footer { margin-top: 40px; font-size: 14px; opacity: .75; }
-  footer a { color: inherit; }
-</style>
+<title>Nodesign · 面向创作者的 agent 工作台</title>
+<meta name="description" content="一句话描述需求，agent 完成制作。在预览上圈选，直接修改。网页、海报、文档、可互动的角色，都在同一块画布上完成。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
+<link rel="stylesheet" href="https://fonts.loli.net/css2?family=Zhi+Mang+Xing&amp;display=swap">
+<link rel="stylesheet" href="assets/style.css">
+<script>document.documentElement.className += ' js';</script>
 </head>
 <body>
-<main>
-  <h1>一张画布，说一句话，它开始做。<br>哪里错了，圈哪里。</h1>
-  <p class="sub">网站、图、Word 文档都在你眼前做出来，做完的都是真文件。</p>
+<div class="wrap">
 
-  <img class="demo" src="https://cdn.jsdelivr.net/gh/Xiaokebuyu/Nodesign@main/docs/demo.gif" alt="演示：在画布上圈住一处，Agent 改的是真实文件">
-
-  <div class="cta">
-    <a class="btn" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载 Windows 桌面版</a>
-    <a class="btn ghost" href="/login">在线试玩 · 登录</a>
-  </div>
-  <p class="small">开源，自己带钥匙，不抽成。</p>
-
-  <div class="honest">
-    一个人做的，内测中。界面目前只有中文，macOS 还没验过。
+  <div class="proof" aria-hidden="true">
+    <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+    <span class="bar"><b></b><b></b><b></b><b></b></span>
+    <span class="tag">PROOF · 2026-09</span>
   </div>
 
-  <footer>
-    <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a> ·
-    <a href="https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md">English README</a> ·
-    <code>npx @xiaobuyu/nodesign</code>
+  <header class="nav">
+    <div class="col nav-in">
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="10" cy="10" r="6.2"></circle><path d="M10 1.6v5M10 13.4v5M1.6 10h5M13.4 10h5"></path></svg></span>Nodesign</a>
+      <nav class="nav-links">
+        <a href="product.html">产品概述</a>
+        <a href="cases.html">案例</a>
+        <a href="pricing.html">定价</a>
+        <a href="docs.html">文档</a>
+        <a href="changelog.html">更新日志</a>
+      </nav>
+      <a class="btn btn-solid" href="/login">免费开始 <span>→</span></a>
+    </div>
+  </header>
+
+  <section class="hero col">
+    <div class="eyebrow reveal">面向创作者的 AGENT 工作台</div>
+    <h1 class="reveal" style="--i:1">一句话描述需求，agent 完成制作</h1>
+    <p class="hero-sub reveal" style="--i:2">在预览上圈选，直接修改。网页、海报、文档、可互动的角色，都在同一块画布上完成。</p>
+    <div class="hero-cta btn-row reveal" style="--i:3">
+      <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
+      <a class="btn btn-ghost btn-lg" href="product.html">看看它能做什么</a>
+    </div>
+
+    <div class="facts reveal" style="--i:4">
+      <div class="fact"><b>一句话</b><span>即可开工</span></div>
+      <div class="fact"><b>圈选</b><span>直接修改</span></div>
+      <div class="fact"><b>按用量</b><span>计费 · 账单可查</span></div>
+      <div class="fact"><b>支持 BYOK</b><span>自带密钥</span></div>
+    </div>
+  </section>
+
+  <!-- ============ 画布 ============ -->
+  <section class="canvas-zone">
+    <div class="cz-inner">
+
+
+      <article class="pcard pcard-site is-active">
+        <div class="pcard-tools"><i>＋</i><i>⤓</i><i>◫</i></div>
+        <header class="pcard-bar">
+          <span class="pcard-dot"></span>
+          <span class="pcard-name">Nodesign 官网 · index.html</span>
+          <span class="pcard-status">已上线 · 4 页</span>
+        </header>
+        <div class="pcard-body"><img src="assets/card-site.webp" alt=""></div>
+      </article>
+
+      <article class="pcard pcard-note">
+        <span class="pcard-tag">#Nodesign 官网</span>
+        <h4>字再收一号</h4>
+        <p>留白多一点</p>
+      </article>
+
+      <article class="pcard pcard-img">
+        <div class="pcard-img-in"><img src="assets/card-sky.webp" alt=""></div>
+        <span class="pcard-label">夜空底.png</span>
+      </article>
+
+      <article class="pcard pcard-doc">
+        <header class="pcard-bar"><span class="pcard-name">稿件.docx</span></header>
+        <div class="pcard-body"><img src="assets/card-doc.webp" alt=""></div>
+      </article>
+
+      <aside class="chat-panel">
+        <div class="chat-h">
+          <span class="pill">新对话 ▾</span>
+          <span class="ico"><span>⊙</span><span>⟳</span><span>▤</span></span>
+        </div>
+        <div class="chat-body">
+          <div class="evt">
+            <span class="glyph">✎</span>
+            <span><span class="path">Nodesign官网/index.html</span><span class="diff">+4 <i>-2</i></span><br>标题改成左对齐，图版换成细边</span>
+          </div>
+          <div class="evt">
+            <span class="glyph">✎</span>
+            <span><span class="path">Nodesign官网/assets/style.css</span><span class="diff">+18 <i>-6</i></span><br>定价改用竖细线分隔</span>
+          </div>
+          <div class="evt">
+            <span class="glyph">⌾</span>
+            <span>先自检，再交付</span>
+          </div>
+          <div class="chip">screenshot_canvas · index.html</div>
+          <div class="thinking"><span class="spin"></span>思考中 · 62 tok</div>
+        </div>
+        <div class="composer">
+          <div class="ph">描述你想做什么…</div>
+          <div class="row">
+            <span class="plus">＋</span>
+            <span>自动选模型 ▾</span>
+            <span class="stop">停止</span>
+          </div>
+        </div>
+      </aside>
+
+    </div>
+  </section>
+
+  <div class="col">
+    <figcaption>FIG. 01 · 左边是画布，产物浮在上面。右边是会话栏，工具调用与改动逐条记录。不用切换窗口。</figcaption>
+  </div>
+
+  <!-- ============ 01 怎么工作 ============ -->
+  <section class="sec col">
+    <div class="sec-num">01</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">一句话，走完整个流程</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>大多数工具把「想」和「做」拆开：你描述，它生成，你再回头改。Nodesign 把这两步放进同一块画布。<strong>你说一句，它自己排步骤、调工具、生成产物</strong>，做完的结果就留在画布上。</p>
+          <p>不满意的地方不用打字描述。在预览上圈一块，写一句，它按你说的改。改完的版本叠在旧版之上，随时可以回退。</p>
+        </div>
+        <blockquote class="pull reveal" style="--i:2">
+          先给我一版能看的，细节后面再调。
+          <cite>用户坐下来说的第一句话，多半是这个意思</cite>
+        </blockquote>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>它自己调用工具</b>生图、抠图、写页面、跑代码、截图自检，工具由它自己选。</p>
+        <p><b>产物留在画布上</b>每一件产物在画布上有固定位置，随时可以找回。</p>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ 对照 ============ -->
+  <section class="sec col">
+    <div class="sec-num">对照</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">同一件事，两条路</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>左边是现在的做法，右边是它跑完一轮的结果。</p>
+        </div>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>不是替代</b>它接的是重复劳动那一层，判断和取舍还是你的。</p>
+      </aside>
+    </div>
+
+    <table class="cmp reveal" style="grid-column:2">
+      <thead><tr><th></th><th>传统流程</th><th>Nodesign</th></tr></thead>
+      <tbody>
+        <tr><td>描述需求</td><td>写文档、画线框，来回确认</td><td class="hi">说一句</td></tr>
+        <tr><td>出第一版</td><td>排期、等设计稿</td><td class="hi">它当场做出来</td></tr>
+        <tr><td>修改</td><td>标注、截图、再沟通</td><td class="hi">圈一块，写一句</td></tr>
+        <tr><td>交付</td><td>打包、导出、传文件</td><td class="hi">一条命令发布</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ 02 六个位置 ============ -->
+  <section class="dark">
+    <div class="col">
+      <div class="eyebrow reveal">02 · 一次会话的六个位置</div>
+      <h2 class="reveal" style="margin-top:22px;--i:1">从一句话到可交付的产物</h2>
+      <p class="lead reveal" style="--i:2">它先给出结构，确认后再继续。</p>
+      <div class="steps reveal" style="--i:3">
+        <div><span class="num">①</span><b>描述需求</b><span>一句模糊的话，甚至还没想清楚要什么。</span></div>
+        <div><span class="num">②</span><b>它先给出结构</b><span>排好再动手，省得来回返工。</span></div>
+        <div><span class="num">③</span><b>它自己选工具</b><span>生图、抠图、写页面、跑代码，自己挑。</span></div>
+        <div><span class="num">④</span><b>产物落到画布上</b><span>不是下载到文件夹里，而是留在画布上。</span></div>
+        <div><span class="num">⑤</span><b>圈选后直接改</b><span>不用描述坐标，指出来就能改。</span></div>
+        <div><span class="num">⑥</span><b>沉淀成一个项目</b><span>每一版都保留，随时可以回退。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 能做什么 ============ -->
+  <section class="sec col">
+    <div class="sec-num">03</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">一块画布，多种产物形态</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>它不是只能做网页的工具。产物形态是画布上的一个属性，你说要什么，它就按那种产物的规范来做。</p>
+        </div>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>产物之间可以互相取材</b>生成图抠完直接进页面，文档里的图直接进演示。</p>
+      </aside>
+    </div>
+
+    <div class="grid g4" style="grid-column:2">
+      <div class="cell reveal">
+        <span class="k">WEB</span>
+        <h3>网页与站点</h3>
+        <p>落地页、作品集、多页站点。响应式，可直接发布。</p>
+        <ul><li>整站导出</li><li>移动端单独检查</li></ul>
+      </div>
+      <div class="cell reveal" style="--i:1">
+        <span class="k">DOC</span>
+        <h3>文档与演示</h3>
+        <p>真 Word 文件，对方可以打开继续编辑。演示按屏翻页。</p>
+        <ul><li>.docx 导出</li><li>固定画幅页面</li></ul>
+      </div>
+      <div class="cell reveal" style="--i:2">
+        <span class="k">IMAGE</span>
+        <h3>图像与视频</h3>
+        <p>生图、抠图、海报、短片。抠出的主体可作版面元素。</p>
+        <ul><li>透明底叠层</li><li>分镜拼装</li></ul>
+      </div>
+      <div class="cell reveal" style="--i:3">
+        <span class="k">PLAY</span>
+        <h3>角色与互动</h3>
+        <p>可交互的角色与原型。状态保留，重新打开还在。</p>
+        <ul><li>角色设定档案</li><li>可交互原型</li></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 案例 ============ -->
+  <section class="sec col">
+    <div class="sec-num">04</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">画布上完成的作品</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>公开测试期间完成的项目，每一件都附有完整的会话记录与用量账单。</p>
+        </div>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>全部真实</b>下面每一件都有对应的会话记录、工具调用和用量账单。</p>
+      </aside>
+    </div>
+
+    <div class="works" style="grid-column:2">
+      <a class="work reveal" href="cases.html">
+        <div class="work-cover"><img src="assets/case-lyrics.webp" alt=""></div>
+        <div class="work-meta"><span class="work-tag">歌词页 · WEB</span><h3>SPiCa 歌词页</h3><p>夜色与星空主题。周二晚开始，周四凌晨上线。</p></div>
+      </a>
+      <a class="work reveal" style="--i:1" href="cases.html">
+        <div class="work-cover"><img src="assets/case-archive.webp" alt=""></div>
+        <div class="work-meta"><span class="work-tag">档案站 · WEB</span><h3>角色档案站</h3><p>把分散的角色设定整理成一套可浏览的站点。</p></div>
+      </a>
+      <a class="work reveal" style="--i:2" href="cases.html">
+        <div class="work-cover"><img src="assets/case-night.webp" alt=""></div>
+        <div class="work-meta"><span class="work-tag">短片 · VIDEO</span><h3>夜班者</h3><p>39 个镜头，外卖员的夜班。从分镜到成片。</p></div>
+      </a>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="cta col">
+    <div class="cta-in">
+      <div class="cta-grid">
+        <div>
+          <h2 class="reveal">开始你的第一个项目</h2>
+          <p class="hero-sub reveal" style="--i:1">一句话开始，产物直接留在画布上。</p>
+          <div class="btn-row reveal" style="--i:2;margin-top:32px">
+            <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
+            <a class="btn btn-ghost btn-lg" href="pricing.html">先看看怎么收费</a>
+          </div>
+        </div>
+        <aside class="cta-side reveal" style="--i:3">
+          <span class="pcard-tag">常见的第一句话</span>
+          <ul>
+            <li>给我的新歌做个歌词视觉页</li>
+            <li>把这半年做的整理成一份 deck</li>
+            <li>做个收集角色设定的档案站</li>
+          </ul>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <footer class="col">
+    <div class="foot-in">
+      <span style="font-family:var(--serif);font-size:16px;color:var(--ink-2)">Nodesign</span>
+      <span>公开测试中</span>
+      <a href="index.html">首页</a>
+      <a href="product.html">产品概述</a>
+      <a href="cases.html">案例</a>
+      <a href="pricing.html">定价</a>
+      <a href="docs.html">文档</a>
+      <a href="changelog.html">更新日志</a>
+      <a href="about.html">关于</a>
+      <span class="grow">面向创作者的 agent 工作台</span>
+    </div>
   </footer>
-</main>
-</body>
-</html>
+
+</div>
+<script src="assets/site.js"></script>
+
+
+</body></html>
