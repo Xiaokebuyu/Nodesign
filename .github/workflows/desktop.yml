@@ -6,7 +6,8 @@
 # 触发：
 #   - 手动：Actions 页面 → "desktop" → Run workflow（分支任选）
 #   - 打 tag：git tag desktop-v0.0.10 && git push origin desktop-v0.0.10
-# 产物：GitHub Releases 里的 v<package.json 的 version>，含 NoDesign-Setup-<v>.exe、.blockmap、latest.yml。
+# 产物：GitHub Releases 里的 v<package.json 的 version>，含 NoDesign-Setup-<v>.exe、.blockmap、latest.yml；
+#       同一批文件镜像到 Cloudflare R2（https://dl.xiaobuyu.trade/desktop/），客户端先从那里拉（09-09）。
 # ⛔⛔ **两种触发都直接发布**：最后一步 `gh release edit --draft=false --latest`，手动 dispatch 也不是草稿，
 # electron-updater 立刻把它当更新推给所有人。09-08 曾从一条落后 main 十三个提交的分支手动 dispatch 出 0.1.22，
 # 用户自动更新后丢功能（已回滚）。发之前先 `git log origin/main..HEAD` 对基线，版本号从 package.json 读。
@@ -75,6 +76,42 @@ jobs:
           # 没证书：electron-builder 会警告一次，装的时候 SmartScreen 拦一道"未知发布者"
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --win --publish always
+
+      # 镜像到 Cloudflare R2（09-09）：国内到 GitHub 不通（问题库 8 次 4 台机），客户端先从 dl.xiaobuyu.trade 拉、
+      # 拉不到才退回 GitHub（desktop/main.js UPDATE_FEEDS）。传的是同一批文件；latest.yml **最后**传，客户端才不会
+      # 拿到一份指向 404 的清单。只留最近 3 版的安装包（latest.yml 永远指向刚传的那版，不能用按天数的生命周期规则——
+      # 一个多月没发版它会把当前那版也删掉）。没配 R2 秘密就跳过，GitHub 照发。
+      # 秘密：R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY（R2 → Manage API Tokens → Object Read & Write，限定桶）。
+      - name: 镜像到 Cloudflare R2（dl.xiaobuyu.trade/desktop）
+        shell: pwsh
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: 'true'
+          # aws cli ≥2.23 默认给 PUT 加 CRC 校验尾（R2 不认，报 NotImplemented）：改成只在必须时算
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_BUCKET: nodesign-desktop
+        run: |
+          if (-not $env:AWS_ACCESS_KEY_ID) { Write-Host "没配 R2 秘密，跳过镜像"; exit 0 }
+          $ErrorActionPreference = 'Stop'
+          $v = node -p "require('./package.json').version"
+          $ep = "https://$($env:R2_ACCOUNT_ID).r2.cloudflarestorage.com"
+          $dst = "s3://$($env:R2_BUCKET)/desktop"
+          aws s3 cp "dist-desktop/NoDesign-Setup-$v.exe" "$dst/NoDesign-Setup-$v.exe" --endpoint-url $ep --content-type application/octet-stream --only-show-errors
+          aws s3 cp "dist-desktop/NoDesign-Setup-$v.exe.blockmap" "$dst/NoDesign-Setup-$v.exe.blockmap" --endpoint-url $ep --content-type application/octet-stream --only-show-errors
+          aws s3 cp "dist-desktop/latest.yml" "$dst/latest.yml" --endpoint-url $ep --content-type text/yaml --cache-control no-cache --only-show-errors
+          Write-Host "已镜像 $v 到 $dst"
+          # 只留最近 3 版（按版本号排，别按时间：重跑老 tag 也不该把新版删掉）
+          $names = (aws s3 ls "$dst/" --endpoint-url $ep) | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^NoDesign-Setup-(\d+\.\d+\.\d+)\.exe$' }
+          $versions = $names | ForEach-Object { [version]($_ -replace '^NoDesign-Setup-|\.exe$','') } | Sort-Object -Unique -Descending
+          foreach ($old in ($versions | Select-Object -Skip 3)) {
+            aws s3 rm "$dst/NoDesign-Setup-$old.exe" --endpoint-url $ep --only-show-errors
+            aws s3 rm "$dst/NoDesign-Setup-$old.exe.blockmap" --endpoint-url $ep --only-show-errors
+            Write-Host "清掉旧版 $old"
+          }
 
       # 三个资产（exe / blockmap / latest.yml）都传完才发布：先发布再传的话，这几分钟里客户端拉 latest.yml 是 404。
       # 站主 09-07：现在只有他一台机器在用、在调试，每版点 Publish 是纯麻烦 —— 直接发。有外部用户后想恢复"先验再推"，删掉这一步即可。

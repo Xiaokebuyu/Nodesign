@@ -319,6 +319,33 @@ let updater = null;
  * 开发态没有 latest.yml 可查，直接不装 —— 否则每次起都报一条查不到更新的错。
  */
 let updaterState = 'init';   // 'init' | 'dev' | 'ready' | 'failed: …'
+/**
+ * 更新源（09-09）：先走 Cloudflare R2 上的镜像，拉不到再退回 GitHub Releases。
+ * 问题库里「更新失败 net::ERR_CONNECTION_RESET / TIMED_OUT / SSL_PROTOCOL_ERROR」8 次 4 台机，全是国内到
+ * GitHub 不通，有人因此卡在 0.1.12。镜像是同一批文件（exe / blockmap / latest.yml，工作流打完包顺手传上去），
+ * 走 dl.xiaobuyu.trade —— 跟站点同一条 CF 链路，能开站点就能拉包。GitHub 只当兜底：镜像 4xx/5xx/连不上
+ * 就切过去再查一次，每个检查周期最多切一次（别在两个都坏的时候来回打转）。
+ */
+const UPDATE_FEEDS = {
+  r2: { provider: 'generic', url: 'https://dl.xiaobuyu.trade/desktop', channel: 'latest' },
+  github: { provider: 'github', owner: 'Xiaokebuyu', repo: 'Nodesign' },
+};
+let updateFeed = 'r2';
+let feedFellBack = false;   // 这个检查周期里已经退回过 GitHub 了
+let feedChecking = false;   // checkForUpdates 在飞：check 的失败由它的 catch 处理，'error' 事件那头别抢（electron-updater 两边都会报）
+function useUpdateFeed(name) {
+  updateFeed = name;
+  try { updater.setFeedURL(UPDATE_FEEDS[name]); } catch (e) { log(`[updater] setFeedURL(${name}) 失败：${e?.message || e}`); }
+  log(`[updater] 更新源 → ${name}`);
+}
+/** 镜像这一路失败 → 切 GitHub 再来一次；已经在 GitHub 上或本周期切过 → 不再切 */
+function fallbackFeedOr(e) {
+  if (updateFeed !== 'r2' || feedFellBack) return false;
+  feedFellBack = true;
+  log(`[updater] 镜像不通（${e?.message || e}），退回 GitHub 再查一次`);
+  useUpdateFeed('github');
+  return true;
+}
 let downloadedVersion = null;   // 已下好、等退出时装的那版（退出路径据此决定装不装、装完拉不拉起）
 
 /**
@@ -401,8 +428,15 @@ function setupUpdater() {
         quitAndInstall();
       });
     });
-    updater.on('error', (e) => { log(`[updater] event error ${e?.message || e}`); reportShellIssue('bug', `更新失败：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e)); });
+    updater.on('error', (e) => {
+      log(`[updater] event error [${updateFeed}] ${e?.message || e}`);
+      if (feedChecking) return;   // check 的失败：checkForUpdates 的 catch 负责退路和上报
+      // 下载途中镜像断了也走同一条退路
+      if (fallbackFeedOr(e)) { updater.checkForUpdates().catch((e2) => log(`[updater] 退回 GitHub 后仍失败：${e2?.message || e2}`)); return; }
+      reportShellIssue('bug', `更新失败[${updateFeed}]：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e));
+    });
 
+    useUpdateFeed('r2');
     checkForUpdates({ silent: true });
     setInterval(() => checkForUpdates({ silent: true }), 6 * 60 * 60 * 1000).unref?.();
   }).catch((e) => { updaterState = `failed: ${e.message}`; log(`更新模块加载失败：${e.stack || e.message}`); reportShellIssue('bug', `更新模块加载失败：${String(e.message).slice(0, 120)}`, String(e.stack || e.message)); });
@@ -416,13 +450,26 @@ function checkForUpdates({ silent }) {
     }
     return;
   }
-  updater.checkForUpdates().then((r) => {
-    log(`[updater] 检查结果：已发布最新 ${r?.updateInfo?.version ?? '?'}，本机 ${app.getVersion()}，${r?.isUpdateAvailable ? '有更新' : '无更新'}`);
+  // 每个周期从镜像起手（上个周期退回过 GitHub 的话，这次再给镜像一次机会）
+  feedFellBack = false;
+  if (updateFeed !== 'r2') useUpdateFeed('r2');
+  const check = async () => {
+    feedChecking = true;
+    try { return await updater.checkForUpdates(); } catch (e) {
+      if (!fallbackFeedOr(e)) throw e;
+      return await updater.checkForUpdates();
+    } finally { feedChecking = false; }
+  };
+  check().then((r) => {
+    log(`[updater] 检查结果[${updateFeed}]：已发布最新 ${r?.updateInfo?.version ?? '?'}，本机 ${app.getVersion()}，${r?.isUpdateAvailable ? '有更新' : '无更新'}`);
     if (silent) return;
     // ⛔ 三种结果都要说话。09-07 站主装着比已发布版本新的草稿包点「检查更新」，没有任何反应 ——
     // 原来只在"版本号相等"时弹"已是最新"，服务器版本比本机旧那条路什么都不说。
     dialog.showMessageBox(win, { type: 'info', message: updateCheckMessage(r, app.getVersion()) });
-  }).catch((e) => { if (!silent) dialog.showMessageBox(win, { type: 'error', message: `检查更新失败：${e.message}` }); });
+  }).catch((e) => {
+    reportShellIssue('bug', `更新失败[${updateFeed}]：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e));
+    if (!silent) dialog.showMessageBox(win, { type: 'error', message: `检查更新失败：${e.message}` });
+  });
 }
 
 /* ── 壳自己的上报（09-07）：写进数据目录的 issue-outbox.jsonl，服务端起来时经设备令牌发给站点 ──
