@@ -85,7 +85,7 @@ ${DESK_CSS}
 .nd-tabs > *:disabled { cursor: default; opacity: 0.55; }
 /* 签在纸后面：整叠自己成一个层叠上下文，签 z1、纸 z2 */
 .ndd-stack { position: relative; max-width: 720px; margin: 0 auto; z-index: 10;
-  transform: rotate(-0.35deg); }
+  transform: rotate(-0.35deg); will-change: transform; }
 .ndd-stack > .nd-tabs { z-index: 1; }
 
 /* ===== 两种纸的配方（2026-08-28）=====
@@ -329,6 +329,11 @@ ${DESK_CSS}
   box-shadow: ${PAPER_SHADOW.sheet};
   text-decoration: none; color: inherit;
   transform: rotate(var(--rot, 0deg)); transform-origin: 50% 7px;
+  /* 提成独立合成层（09-09）：站主 Windows 110% 下卡的斜边出现一级级的高低差 —— 以前他调过的缩放把有效倍率
+     抵回 1.0 附近所以没露；倍率老实变成 1.1 之后，转过的纸被分瓦片各自光栅，每块对斜边的取整差 1px，
+     接缝就是台阶。独立层 = 纸在自己的层里按轴对齐光栅，旋转交给 GPU 整层做、边缘由合成器抗锯齿。
+     代价：卡上的字比直接光栅稍软一点。同款处理给了 .ndd-stack / .ndd-sheet 两张同样转过的纸。 */
+  will-change: transform;
   transition: transform 0.28s cubic-bezier(0.25,1,0.5,1), box-shadow 0.28s; }
 /* 挂在最上面那张贴得没那么平 */
 .ndd-card.top > a { box-shadow: ${PAPER_SHADOW.sheetHigh}; }
@@ -424,7 +429,7 @@ ${DESK_CSS}
   padding: 42px 40px 34px; text-align: center;
   background-color: var(--paper); background-image: var(--grain);
   box-shadow: ${PAPER_SHADOW.mid};
-  transform: rotate(0.4deg); transform-origin: 50% 8px; }
+  transform: rotate(0.4deg); transform-origin: 50% 8px; will-change: transform; }
 .ndd-sheet .pin { position: absolute; top: 8px; left: 50%; width: 9px; height: 9px;
   border-radius: 50%; margin-left: -4.5px;
   background: radial-gradient(circle at 35% 30%, ${PAPER.pinA}, ${PAPER.pinB} 65%);
