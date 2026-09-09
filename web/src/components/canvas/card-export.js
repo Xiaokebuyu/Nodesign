@@ -20,11 +20,10 @@ import { useGlobalStore } from '../../stores/globalStore.js';
 /**
  * 拿一个同源下载地址，先 fetch 成 blob 再走 pushDownload。
  *
- * 09-09 桌面版 0.1.34 案：agent deliver_files 后前端用 `<a href="/api/…/exports/file/x.zip" download>`
- * 直接点，Electron 主进程的 will-download 一次都没触发（desktop.log 里只有手动导出的两条「已保存」），
- * 用户什么都没拿到而 agent 说「已在下载」。手动导出走的是 blob URL + <a download>，同一台机器上落地
- * 正常 —— 所以交付也收口到这一条：不依赖浏览器对「带 download 的同源导航」的处理，两种壳一种路。
- * 非 2xx 时把服务端的错误说出来（原来的写法 404 也只是静静地什么都不发生）。
+ * 跟手动导出收成同一条路（原来 agent 交付是 `<a href="/api/…/exports/file/x.zip" download>` 直接点）。
+ * 好处只有两个：非 2xx 时把服务端的错误说出来（原来 404 就静静地什么都不发生）；两种壳一种路。
+ * ⚠️ 09-09 桌面版 0.1.34「导出后下载目录里没有」那案**不是**这条链的病：desktop.log 里五次都
+ * 「已保存」，文件是落盘之后被别的东西（杀软隔离一类）拿走的。别把这段当那件事的修法。
  */
 export async function downloadFromUrl(url, filename) {
   const res = await fetch(url);

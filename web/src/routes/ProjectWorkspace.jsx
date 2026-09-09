@@ -1110,8 +1110,7 @@ export default function ProjectWorkspace() {
         if (!evt.url) break;
         if (deliveredRef.current.has(evt.url)) break;
         deliveredRef.current.add(evt.url);
-        // 先 fetch 成 blob 再触发下载，跟手动导出同一条路（09-09 桌面版 0.1.34 案：直接 <a href download>
-        // 在 Electron 里一次都没触发 will-download；见 card-export.js downloadFromUrl 的注释）
+        // 先 fetch 成 blob 再触发下载，跟手动导出同一条路；非 2xx 会弹出服务端的错误（见 card-export.js）
         downloadFromUrl(evt.url, evt.filename || '')
           .then(() => showToast(`agent 给了你 ${evt.filename}${evt.note ? ` · ${evt.note}` : ''}`, 'success'))
           .catch((err) => { deliveredRef.current.delete(evt.url); showToast(`下载失败：${err.message}`, 'error'); });
