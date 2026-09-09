@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NoDesign</title>
+<meta name="description" content="一张画布，说一句话，Agent 把网站、图和文档在你眼前做出来。哪里错了圈哪里。">
+<!--
+  官网落地页（2026-09-09 起）。
+
+  这是没登录的访客在根路径看到的页面：nginx 按 nd_auth cookie 分流到 /welcome/，
+  前端 AuthGate 再兜一层（cookie 过期的也来这儿）。登录的人访问 / 直接进应用。
+
+  这个目录是纯静态的：站主用 NoDesign 自己做的站点整包替换进来即可（index.html + 它的
+  资源文件放同一目录，路径写相对的）。随 `npm run deploy` 一起上线，不占服务端。
+
+  下面这份只是占位：结构和链接是定好的，样子等真站点来换。
+-->
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; background: #efe7d8; color: #2b2622; font: 16px/1.7 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 48px 20px 64px; }
+  h1 { font-size: 28px; line-height: 1.35; margin: 0 0 8px; }
+  .sub { margin: 0 0 28px; opacity: .78; }
+  .demo { display: block; width: 100%; border-radius: 6px; box-shadow: 0 10px 30px rgba(50,35,20,.18); background: #fff; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 28px 0 8px; }
+  .btn { display: inline-block; padding: 12px 20px; border-radius: 6px; background: #2b2622; color: #fff; text-decoration: none; font-weight: 600; }
+  .btn.ghost { background: transparent; color: #2b2622; border: 1.5px solid #2b2622; }
+  .small { font-size: 13px; opacity: .7; margin: 0 0 32px; }
+  .honest { border-left: 3px solid #b8532e; padding: 4px 14px; margin: 32px 0; opacity: .85; }
+  footer { margin-top: 40px; font-size: 14px; opacity: .75; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>一张画布，说一句话，它开始做。<br>哪里错了，圈哪里。</h1>
+  <p class="sub">网站、图、Word 文档都在你眼前做出来，做完的都是真文件。</p>
+
+  <img class="demo" src="https://cdn.jsdelivr.net/gh/Xiaokebuyu/Nodesign@main/docs/demo.gif" alt="演示：在画布上圈住一处，Agent 改的是真实文件">
+
+  <div class="cta">
+    <a class="btn" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载 Windows 桌面版</a>
+    <a class="btn ghost" href="/login">在线试玩 · 登录</a>
+  </div>
+  <p class="small">开源，自己带钥匙，不抽成。</p>
+
+  <div class="honest">
+    一个人做的，内测中。界面目前只有中文，macOS 还没验过。
+  </div>
+
+  <footer>
+    <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a> ·
+    <a href="https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md">English README</a> ·
+    <code>npx @xiaobuyu/nodesign</code>
+  </footer>
+</main>
+</body>
+</html>

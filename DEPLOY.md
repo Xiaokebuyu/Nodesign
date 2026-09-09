@@ -385,6 +385,17 @@ server {
         proxy_connect_timeout 60s;
     }
 
+    # 根路径分流（2026-09-09 官网）：没有登录 cookie 的访客去官网 /welcome/（web/public/welcome/，
+    # 纯静态随前端一起部署），带 cookie 的直接进应用。cookie 过期的会走到 SPA，AuthGate 再送去 /welcome/。
+    # exact match 优先于下面的 location /，所以这里的头要重写一遍。
+    location = / {
+        if ($cookie_nd_auth = "") { return 302 /welcome/; }
+        try_files /index.html =404;
+        add_header Cache-Control "no-cache";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    }
+
     # SPA fallback：所有 / 路径都返 index.html 让 React Router 接管
     location / {
         try_files $uri $uri/ /index.html;

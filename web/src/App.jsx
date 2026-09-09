@@ -15,6 +15,9 @@ import QuotaBanner from './components/layout/QuotaBanner.jsx';
 
 const router = createBrowserRouter([
   { path: '/', element: <Home /> },
+  // /login（09-09）：没登录时 AuthGate 在任何路径都渲染登录墙，所以这里只需要接住
+  // 「已登录还打开 /login」的人，送回首页。官网（/welcome/）上的登录按钮指到这儿。
+  { path: '/login', element: <Navigate to="/" replace /> },
   // 项目只剩一张工作台（2026-07-28：ProjectHub 控制台页退役 —— 记忆 / 指引 /
   // 品牌 / 文件回到桌面顶带的"项目区"，会话列表归左栏会话头）
   //   /projects/:id              → 重定向到 /work

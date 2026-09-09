@@ -75,6 +75,10 @@ export default function AuthGate({ children }) {
       useGlobalStore.getState().setAuthUser?.(s.user || null);
       setPhase('ok');
     } else {
+      // 没登录的访客在根路径看到的是官网（web/public/welcome/，09-09 起），登录墙挪到 /login。
+      // nginx 已按 nd_auth cookie 在 / 分流；这里兜的是 cookie 还在但已失效的那种，
+      // 走到 SPA 才知道没登录。别的路径（/login、/projects/…）照旧在原地显示墙。
+      if (location.pathname === '/') { location.replace('/welcome/'); return; }
       setPhase('login');
     }
   };
