@@ -35,65 +35,154 @@
 
   <section class="hero col">
     <div class="eyebrow reveal">更新日志</div>
-    <h1 class="reveal" style="--i:1">每周都在改</h1>
-    <p class="hero-sub reveal" style="--i:2">公开测试期间的版本记录。功能上了就写在这里，不用等公告。</p>
+    <h1 class="reveal" style="--i:1">改了什么，都写在这</h1>
+    <p class="hero-sub reveal" style="--i:2">按仓库里的 tag 和提交记录整理，日期和版本号都是真的。桌面版的版本号和 npm 包的版本号是两条线。完整记录在 <a href="https://github.com/Xiaokebuyu/Nodesign/commits/main">GitHub</a>。</p>
   </section>
 
   <div class="col">
     <div class="log">
-
       <article class="log-item reveal">
-        <div class="log-date">2026-09-09<span class="log-ver">v0.9.4</span></div>
+        <div class="log-date">2026-09-09<span class="log-ver">桌面 0.1.32 → 0.1.34</span></div>
         <div class="log-body">
-          <h3>画布去掉了窗口外壳</h3>
+          <h3>一天三版，都是用的人报上来的</h3>
           <ul>
-            <li>画布整幅铺开，产物卡直接浮在点阵上</li>
-            <li>会话栏改成浮动面板，不再固定占一列</li>
-            <li>板书改成直接写在画布上，不用再占一张卡</li>
+            <li>界面缩放功能整个拿掉：Windows 显示缩放 110% 时输入框和浮动工具栏会溢出，问题出在缩放本身</li>
+            <li>自带密钥可以用与内置同名的模型 id，不再报「已存在」</li>
+            <li>首页项目栏混入别人公开的作品，自己项目越多混入越少</li>
+            <li>板书太长时中间自动折起，头尾保持可见</li>
+            <li>站点、Word、文件夹这些窗口给钉住的聊天卡让位</li>
+            <li>白天模式卡片影子的锯齿修掉；桌面版更新改走国内可达的镜像</li>
           </ul>
         </div>
       </article>
 
       <article class="log-item reveal">
-        <div class="log-date">2026-09-02<span class="log-ver">v0.9.3</span></div>
+        <div class="log-date">2026-09-08<span class="log-ver">桌面 0.1.13 → 0.1.31</span></div>
         <div class="log-body">
-          <h3>支持自带密钥</h3>
+          <h3>一天十九版</h3>
           <ul>
-            <li>填上自己的 API 密钥即可使用完整功能</li>
-            <li>费用直接走你自己的模型额度，不经过我们的计费</li>
+            <li>市场 v2：作品可以直接发布上架，别人能「照着来一个」，agent 也能替你发</li>
+            <li>打开本地文件夹当项目：agent 站在你的仓库里干活，画布只看它写下的东西</li>
+            <li>agent 的浏览器在桌面版里原生显示，它在看什么你看得见，随时能接手</li>
+            <li>演示稿并入站点形态：海报、演示都是固定画幅的页面，不再单独问比例</li>
+            <li>Word 导出在 Windows 上修好（此前几版全线失败）</li>
+            <li>模型：接入 DeepSeek 官方渠道，GLM-5.3-Flash 两条渠道，按会话自动换线</li>
+            <li>桌面版内置诊断端点，出问题能让站主远程看日志</li>
           </ul>
         </div>
       </article>
 
       <article class="log-item reveal">
-        <div class="log-date">2026-08-26<span class="log-ver">v0.9.2</span></div>
+        <div class="log-date">2026-09-07<span class="log-ver">桌面 0.1.10 → 0.1.12</span></div>
         <div class="log-body">
-          <h3>产物之间的关系线</h3>
+          
           <ul>
-            <li>产物之间可以连线：改自、对照、取材、接着做</li>
-            <li>来源关系一目了然，不用自己记哪个版本从哪来</li>
+            <li>账号头像与横幅通知，头像可自定义</li>
+            <li>演出模式（角色扮演的显示器）接通桌面版</li>
+            <li>设计线的系统提示精修随包更新</li>
           </ul>
         </div>
       </article>
 
       <article class="log-item reveal">
-        <div class="log-date">2026-08-19<span class="log-ver">v0.9.1</span></div>
+        <div class="log-date">2026-09-06<span class="log-ver">桌面版首发 0.1.1 → 0.1.9</span></div>
         <div class="log-body">
-          <h3>导出交付物</h3>
+          <h3>Windows 安装包</h3>
           <ul>
-            <li>站点整站导出 zip，单页导出为自包含 HTML</li>
-            <li>文档导出 .docx，演示导出 PDF 与 PPTX</li>
+            <li>Electron 壳，一次安装，之后自动更新</li>
+            <li>Chromium、ffmpeg、抠图模型、Word 组件按需安装，不装也能用基础功能</li>
+            <li>登录站点账号就能用站点的模型与额度；也可以自带密钥</li>
+            <li>导出直接落到「下载」文件夹，完成后弹通知</li>
           </ul>
         </div>
       </article>
 
       <article class="log-item reveal">
-        <div class="log-date">2026-08-12<span class="log-ver">v0.9.0</span></div>
+        <div class="log-date">2026-09-05</div>
         <div class="log-body">
-          <h3>公开测试开始</h3>
+          <h3>板书重定位</h3>
           <ul>
-            <li>免费模型对所有用户开放</li>
-            <li>画布、记忆、板书三件套上线</li>
+            <li>板书只做解释，内容归产物，画布是 agent 的桌面</li>
+            <li>落位归机器：agent 只说「放在谁旁边」，坐标由画布算</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-08-30<span class="log-ver">npm 0.0.8</span></div>
+        <div class="log-body">
+          
+          <ul>
+            <li>画图能力：agent 能画趋势图和示意图，数据变了图跟着变</li>
+            <li>对话可以回退到任意一句，从那里分叉</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-08-29</div>
+        <div class="log-body">
+          <h3>画布重做上线（105 个提交一次合入）</h3>
+          <ul>
+            <li>分级渲染：缩到读不了就只画名字</li>
+            <li>产物之间的关系线：改自、对照、取材、接着做</li>
+            <li>黑板：单击看全史，文件夹里的东西像纸一样叠放</li>
+            <li>界面多语言第一轮（覆盖率约三分之一）</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-08-24<span class="log-ver">npm 0.0.7</span></div>
+        <div class="log-body">
+          
+          <ul>
+            <li>README 整体重写，英文版成为主展示版</li>
+            <li>定位收成一句话：哪里错了，圈哪里</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-08-22<span class="log-ver">npm 0.0.1</span></div>
+        <div class="log-body">
+          <h3>开源</h3>
+          <ul>
+            <li>以 AGPL-3.0 开源，<code>npx @xiaobuyu/nodesign</code> 一条命令本地跑</li>
+            <li>本地版支持自带密钥；线上站只作试玩</li>
+            <li>Windows 首跑的几处坑当天修掉</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-08-21</div>
+        <div class="log-body">
+          <h3>开放注册</h3>
+          <ul>
+            <li>不再需要邀请码；basic 成为唯一对外档，每天一份额度</li>
+            <li>生图对所有人开放，按张计入额度</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-07-30</div>
+        <div class="log-body">
+          <h3>定位转向独立创作者</h3>
+          <ul>
+            <li>示例、文案、功能取舍都按创作者手里的东西来：歌词页、作品集、同人本、档案站</li>
+            <li>个人橱窗：把自己摸索出来的风格沉淀成 skill</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-05-03<span class="log-ver">v0.1.0-mvp</span></div>
+        <div class="log-body">
+          <h3>第一个能跑的版本</h3>
+          <ul>
+            <li>第一次提交在 2026 年 4 月 29 日，到今天 1,176 次提交</li>
           </ul>
         </div>
       </article>
@@ -103,11 +192,11 @@
 
   <section class="cta col">
     <div class="cta-in">
-      <h2 class="reveal">有新东西会写在这里</h2>
-      <p class="hero-sub reveal" style="--i:1">想知道下一个版本做什么，直接问我们。</p>
+      <h2 class="reveal">下一个版本做什么</h2>
+      <p class="hero-sub reveal" style="--i:1">用的人报的问题排在最前面。桌面版里有「报告问题」，GitHub 上也能提。</p>
       <div class="btn-row reveal" style="--i:2;margin-top:32px">
         <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
-        <a class="btn btn-ghost btn-lg" href="about.html">关于 Nodesign</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/Xiaokebuyu/Nodesign/issues">提一个问题</a>
       </div>
     </div>
   </section>
@@ -123,7 +212,9 @@
       <a href="docs.html">文档</a>
       <a href="changelog.html">更新日志</a>
       <a href="about.html">关于</a>
-      <span class="grow">面向创作者的 agent 工作台</span>
+      <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a>
+      <a href="https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md">English</a>
+      <span class="grow">开源 · AGPL-3.0 · 一个人做的</span>
     </div>
   </footer>
 

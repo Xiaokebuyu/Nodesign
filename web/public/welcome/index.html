@@ -33,90 +33,64 @@
   </header>
 
   <section class="hero col">
-    <div class="eyebrow reveal">面向创作者的 AGENT 工作台</div>
+    <div class="eyebrow reveal">面向创作者的 AGENT 工作台 · 开源</div>
     <h1 class="reveal" style="--i:1">一句话描述需求，agent 完成制作</h1>
-    <p class="hero-sub reveal" style="--i:2">在预览上圈选，直接修改。网页、海报、文档、可互动的角色，都在同一块画布上完成。</p>
+    <p class="hero-sub reveal" style="--i:2">哪里错了，圈哪里。网页、图、Word 文档在同一块画布上做出来，做完的都是真文件，能下载、能继续改、能发布。</p>
     <div class="hero-cta btn-row reveal" style="--i:3">
       <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
-      <a class="btn btn-ghost btn-lg" href="product.html">看看它能做什么</a>
+      <a class="btn btn-ghost btn-lg" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载 Windows 桌面版</a>
     </div>
 
     <div class="facts reveal" style="--i:4">
       <div class="fact"><b>一句话</b><span>即可开工</span></div>
       <div class="fact"><b>圈选</b><span>直接修改</span></div>
-      <div class="fact"><b>按用量</b><span>计费 · 账单可查</span></div>
-      <div class="fact"><b>支持 BYOK</b><span>自带密钥</span></div>
+      <div class="fact"><b>真文件</b><span>能下载 · 能发布</span></div>
+      <div class="fact"><b>自带密钥</b><span>桌面版 · 不抽成</span></div>
     </div>
   </section>
 
-  <!-- ============ 画布 ============ -->
-  <section class="canvas-zone">
-    <div class="cz-inner">
-
-
-      <article class="pcard pcard-site is-active">
-        <div class="pcard-tools"><i>＋</i><i>⤓</i><i>◫</i></div>
-        <header class="pcard-bar">
-          <span class="pcard-dot"></span>
-          <span class="pcard-name">Nodesign 官网 · index.html</span>
-          <span class="pcard-status">已上线 · 4 页</span>
-        </header>
-        <div class="pcard-body"><img src="assets/card-site.webp" alt=""></div>
-      </article>
-
-      <article class="pcard pcard-note">
-        <span class="pcard-tag">#Nodesign 官网</span>
-        <h4>字再收一号</h4>
-        <p>留白多一点</p>
-      </article>
-
-      <article class="pcard pcard-img">
-        <div class="pcard-img-in"><img src="assets/card-sky.webp" alt=""></div>
-        <span class="pcard-label">夜空底.png</span>
-      </article>
-
-      <article class="pcard pcard-doc">
-        <header class="pcard-bar"><span class="pcard-name">稿件.docx</span></header>
-        <div class="pcard-body"><img src="assets/card-doc.webp" alt=""></div>
-      </article>
-
-      <aside class="chat-panel">
-        <div class="chat-h">
-          <span class="pill">新对话 ▾</span>
-          <span class="ico"><span>⊙</span><span>⟳</span><span>▤</span></span>
-        </div>
-        <div class="chat-body">
-          <div class="evt">
-            <span class="glyph">✎</span>
-            <span><span class="path">Nodesign官网/index.html</span><span class="diff">+4 <i>-2</i></span><br>标题改成左对齐，图版换成细边</span>
-          </div>
-          <div class="evt">
-            <span class="glyph">✎</span>
-            <span><span class="path">Nodesign官网/assets/style.css</span><span class="diff">+18 <i>-6</i></span><br>定价改用竖细线分隔</span>
-          </div>
-          <div class="evt">
-            <span class="glyph">⌾</span>
-            <span>先自检，再交付</span>
-          </div>
-          <div class="chip">screenshot_canvas · index.html</div>
-          <div class="thinking"><span class="spin"></span>思考中 · 62 tok</div>
-        </div>
-        <div class="composer">
-          <div class="ph">描述你想做什么…</div>
-          <div class="row">
-            <span class="plus">＋</span>
-            <span>自动选模型 ▾</span>
-            <span class="stop">停止</span>
-          </div>
-        </div>
-      </aside>
-
-    </div>
-  </section>
-
+  <!-- ============ 画布（真实截图） ============ -->
   <div class="col">
-    <figcaption>FIG. 01 · 左边是画布，产物浮在上面。右边是会话栏，工具调用与改动逐条记录。不用切换窗口。</figcaption>
+    <figure class="cz-shot reveal">
+      <div class="shot"><img src="assets/shot-leiyu.webp" alt="Nodesign 画布：《雷雨》人物关系图，粉笔写的人物节点、红灰两种关系线、三张当场生成的肖像" width="1800" height="1125"></div>
+      <figcaption>FIG. 01 · 真实画布，一轮跑完的样子。《雷雨》八个人物用粉笔写在黑板上，灰线是明面关系，红线是隐秘纠葛，三张肖像是当场生成再连回名字的。整块板是 agent 一次画上去的。</figcaption>
+    </figure>
+    <div class="cz-notes reveal" style="--i:1">
+      <div><b>画布</b>产物、板书、素材夹都是画布上的对象，有自己的位置，能拖能圈能连线。</div>
+      <div><b>聊天卡</b>钉在右侧，它调了哪个工具、改了哪个文件、想了什么，逐条记着。</div>
+      <div><b>黑板</b>讨论的结论直接写在画布上，不埋在聊天记录里。</div>
+    </div>
+    <div class="cz-pair">
+      <figure class="cz-shot reveal" style="margin-top:0">
+        <div class="shot"><img src="assets/shot-xizang.webp" alt="西藏攻略项目的画布：素材文件夹、演示稿、站点卡、决策便签" width="1800" height="1125" loading="lazy"></div>
+        <figcaption>FIG. 02 · 西藏攻略项目。左边素材夹和站点卡，中间一张黄色便签记着这轮定下的风格，右边聊天卡里是它正在查页面。</figcaption>
+      </figure>
+      <figure class="cz-shot reveal" style="margin-top:0;--i:1">
+        <div class="shot"><img src="assets/shot-spica.webp" alt="SPiCa 项目的画布：粉笔写的步骤清单、站点首页卡、把方法收成 skill 的对话" width="1800" height="1125" loading="lazy"></div>
+        <figcaption>FIG. 03 · SPiCa 歌词页项目。粉笔写的「这一轮的步骤」勾着进度，做完一句「整理成 skill 保存到我的橱窗」，它把这套做法收进了橱窗。</figcaption>
+      </figure>
+    </div>
   </div>
+
+  <!-- ============ 20 秒演示 ============ -->
+  <section class="sec col">
+    <div class="sec-num">看</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">20 秒，看它做一件事</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>西藏攻略项目里敲一句「用画布上现有的素材，再做一张单页的路线总览海报」。它先问画幅，答 16:9 之后开始做，草稿夹长出来，自己截图检查，最后海报缩略图进夹。录的是真会话，没剪工具调用。</p>
+        </div>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>它会先问</b>比例、风格这类拿不准的事它先问再做，宁可多问一句，也不铺一版错的。</p>
+      </aside>
+    </div>
+    <figure class="cz-shot reveal" style="grid-column:2;margin-top:40px">
+      <div class="shot"><video src="assets/demo.mp4" poster="assets/demo-poster.webp" autoplay muted loop playsinline preload="metadata" width="1280" height="800"></video></div>
+      <figcaption>FIG. 04 · 2026-08-22 录制，Sonnet 5。</figcaption>
+    </figure>
+  </section>
 
   <!-- ============ 01 怎么工作 ============ -->
   <section class="sec col">
@@ -134,7 +108,7 @@
         </blockquote>
       </div>
       <aside class="notes reveal" style="--i:1">
-        <p><b>它自己调用工具</b>生图、抠图、写页面、跑代码、截图自检，工具由它自己选。</p>
+        <p><b>它自己调用工具</b>生图、抠图、写页面、跑代码、上网查资料、截图自检，工具由它自己选。</p>
         <p><b>产物留在画布上</b>每一件产物在画布上有固定位置，随时可以找回。</p>
       </aside>
     </div>
@@ -231,29 +205,59 @@
     <div class="sec-num">04</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal">画布上完成的作品</h2>
+        <h2 class="reveal">画布上做出来、发到公网的站</h2>
         <div class="lead reveal" style="--i:1">
-          <p>公开测试期间完成的项目，每一件都附有完整的会话记录与用量账单。</p>
+          <p>都是站主自己在公开测试期间做的，每一个都在线，点开就是真站。</p>
         </div>
       </div>
       <aside class="notes reveal" style="--i:1">
-        <p><b>全部真实</b>下面每一件都有对应的会话记录、工具调用和用量账单。</p>
+        <p><b>能验证</b>这一页只放能点开的。用户的作品在应用里的市场。</p>
       </aside>
     </div>
 
     <div class="works" style="grid-column:2">
-      <a class="work reveal" href="cases.html">
-        <div class="work-cover"><img src="assets/case-lyrics.webp" alt=""></div>
-        <div class="work-meta"><span class="work-tag">歌词页 · WEB</span><h3>SPiCa 歌词页</h3><p>夜色与星空主题。周二晚开始，周四凌晨上线。</p></div>
+      <a class="work reveal" href="https://third-pole.share.xiaobuyu.trade" target="_blank" rel="noopener">
+        <div class="work-cover"><img src="assets/case-third-pole.webp" alt="深入第三极" loading="lazy"></div>
+        <div class="work-meta"><span class="work-tag">旅行手册站 · WEB</span><h3>深入第三极</h3><p>藏南藏北三十日路线。从「做个西藏攻略的 ppt」一句话起。</p></div>
       </a>
-      <a class="work reveal" style="--i:1" href="cases.html">
-        <div class="work-cover"><img src="assets/case-archive.webp" alt=""></div>
-        <div class="work-meta"><span class="work-tag">档案站 · WEB</span><h3>角色档案站</h3><p>把分散的角色设定整理成一套可浏览的站点。</p></div>
+      <a class="work reveal" style="--i:1" href="https://jet-engine-lab.share.xiaobuyu.trade" target="_blank" rel="noopener">
+        <div class="work-cover"><img src="assets/case-jet-engine-lab.webp" alt="喷气发动机实验台" loading="lazy"></div>
+        <div class="work-meta"><span class="work-tag">3D 互动教具 · WEBGL</span><h3>喷气发动机实验台</h3><p>程序化几何的涡扇发动机，可转可拆，按站位读数据。</p></div>
       </a>
-      <a class="work reveal" style="--i:2" href="cases.html">
-        <div class="work-cover"><img src="assets/case-night.webp" alt=""></div>
-        <div class="work-meta"><span class="work-tag">短片 · VIDEO</span><h3>夜班者</h3><p>39 个镜头，外卖员的夜班。从分镜到成片。</p></div>
+      <a class="work reveal" style="--i:2" href="https://soutaiseiriron.share.xiaobuyu.trade" target="_blank" rel="noopener">
+        <div class="work-cover"><img src="assets/case-soutaiseiriron.webp" alt="相対性理論 纸上手账" loading="lazy"></div>
+        <div class="work-meta"><span class="work-tag">粉丝站 · WEB</span><h3>相対性理論 · 纸上手账</h3><p>先让它上网调查乐队，再定纸上手账这个风格。</p></div>
       </a>
+    </div>
+    <div class="btn-row reveal" style="grid-column:2;margin-top:34px">
+      <a class="btn btn-ghost" href="cases.html">全部七个案例</a>
+    </div>
+  </section>
+
+  <!-- ============ 数字与状态 ============ -->
+  <section class="sec col">
+    <div class="sec-num">况</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">现在做到哪了</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>一个人做的，公开测试中。数字截至 2026 年 9 月 9 日，从仓库和数据库里直接数出来的，排掉了站主自己。</p>
+        </div>
+        <div class="stats reveal" style="--i:2">
+          <div><b>60</b><span>件专用工具</span></div>
+          <div><b>1,176</b><span>次提交 · 自 04-29</span></div>
+          <div><b>2,446</b><span>个测试用例</span></div>
+          <div><b>139</b><span>位注册用户</span></div>
+        </div>
+        <div class="status reveal" style="--i:3">
+          <p>界面目前只有中文。Windows 桌面版在真机上跑过，macOS 还没验证。手机上能看能聊，整理和编辑用电脑。</p>
+          <p>线上站每人每天有额度上限，当试玩场用。要当工具用，装桌面版填自己的密钥，或者 <code>npx @xiaobuyu/nodesign</code> 本地跑。</p>
+        </div>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>开源</b>AGPL-3.0，源码在 <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a>，中英文 README 各一份。</p>
+        <p><b>近 30 天</b>167 场会话，每场花费中位数 0.41 美元。细账在<a href="pricing.html">定价页</a>。</p>
+      </aside>
     </div>
   </section>
 
@@ -266,7 +270,7 @@
           <p class="hero-sub reveal" style="--i:1">一句话开始，产物直接留在画布上。</p>
           <div class="btn-row reveal" style="--i:2;margin-top:32px">
             <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
-            <a class="btn btn-ghost btn-lg" href="pricing.html">先看看怎么收费</a>
+            <a class="btn btn-ghost btn-lg" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载 Windows 桌面版</a>
           </div>
         </div>
         <aside class="cta-side reveal" style="--i:3">
@@ -292,7 +296,9 @@
       <a href="docs.html">文档</a>
       <a href="changelog.html">更新日志</a>
       <a href="about.html">关于</a>
-      <span class="grow">面向创作者的 agent 工作台</span>
+      <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a>
+      <a href="https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md">English</a>
+      <span class="grow">开源 · AGPL-3.0 · 一个人做的</span>
     </div>
   </footer>
 

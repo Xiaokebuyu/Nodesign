@@ -34,78 +34,76 @@
 
   <section class="hero col">
     <div class="eyebrow reveal is-in">定价</div>
-    <h1 class="reveal is-in" style="--i:1">免费开始，按用量付</h1>
-    <p class="hero-sub reveal is-in" style="--i:2">没有订阅门槛。免费模型对所有用户开放，其他模型按实际消耗结算。每一轮的账目，会话栏底部实时显示。</p>
+    <h1 class="reveal is-in" style="--i:1">线上免费试玩，桌面版自带钥匙</h1>
+    <p class="hero-sub reveal is-in" style="--i:2">线上站是试玩场，每人每天有一个额度上限。真正当工具用的是桌面版和开源本地版：填你自己的模型密钥，费用直接付给模型商，这里不抽成。</p>
   </section>
 
   <div class="col">
     <div class="prices reveal is-in">
 
-      <div class="price" data-anchor="n_mtubbr01_yuz1">
-        <h3>免费</h3>
+      <div class="price">
+        <h3>线上试玩</h3>
         <div class="amt">¥0</div>
-        <p class="note" data-anchor="n_mtubbkfv_bc58">注册即可使用，无需任何费用</p>
+        <p class="note">注册即用，每天 10 美元额度</p>
         <ul>
-          <li>免费模型对所有用户开放</li>
-          <li data-anchor="n_mtubbsiu_p5hl">画布与全部产物形态</li>
-          <li>记忆、板书、项目档案</li>
-          <li>导出交付物</li>
+          <li>额度按模型实际消耗折算，北京时间零点重置</li>
+          <li>生图 0.20 美元一张，计入同一份额度</li>
+          <li>DeepSeek V4 Flash、GLM-5.3-Flash、Gemini 3.7 Flash，Kimi K3 免费</li>
+          <li>画布、板书、记忆、导出全部可用</li>
+          <li>不含 Claude 模型，不能发布站点到公网</li>
         </ul>
-        <a class="btn btn-solid" href="/login">开始用</a>
-      </div>
-
-      <div class="price" data-anchor="n_mtubbt74_i4s1">
-        <h3>按用量</h3>
-        <div class="amt">用多少付多少</div>
-        <p class="note">无月费，按实际消耗结算</p>
-        <ul>
-          <li>每次会话底部实时显示 token 与金额</li>
-          <li>按实际消耗结算</li>
-          <li>账单随时可查，历史留在画布上</li>
-          <li>充值即用</li>
-        </ul>
-        <a class="btn btn-ghost" href="/login">免费开始</a>
+        <a class="btn btn-solid" href="/login">开始试玩</a>
       </div>
 
       <div class="price">
-        <h3>自带密钥 <span class="small" style="font-family:var(--mono);font-size:11px;letter-spacing:.1em">BYOK</span></h3>
-        <div class="amt">走你的额度</div>
-        <p class="note">填上自己的 API 密钥即可使用</p>
+        <h3>桌面版</h3>
+        <div class="amt">免费</div>
+        <p class="note">Windows · 自动更新</p>
         <ul>
-          <li>完整功能，不打折扣</li>
-          <li>费用直接走你的模型额度</li>
-          <li>不经过我们的计费</li>
-          <li>适合已经有额度的用户</li>
+          <li>登录站点账号，用同一份每日额度</li>
+          <li>或填自己的 API 密钥直连模型商，不经过站点</li>
+          <li>自带密钥时功能完整：Claude 也能用</li>
+          <li>文件在本机，浏览器和 Word 组件也在本机</li>
+          <li>macOS 版还没验证</li>
         </ul>
-        <a class="btn btn-ghost" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载客户端</a>
+        <a class="btn btn-solid" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup-0.1.34.exe">下载 Windows 版</a>
+      </div>
+
+      <div class="price">
+        <h3>自己部署</h3>
+        <div class="amt">开源</div>
+        <p class="note">AGPL-3.0 · 整栈跑在你的机器上</p>
+        <ul>
+          <li><code>npx @xiaobuyu/nodesign</code> 一条命令起来</li>
+          <li>数据只在本地，工作区就是普通文件夹</li>
+          <li>自备模型密钥，或登录自己的 Claude 订阅</li>
+          <li>需要 Node.js 20 以上</li>
+          <li>源码在 GitHub，欢迎提 issue</li>
+        </ul>
+        <a class="btn btn-ghost" href="https://github.com/Xiaokebuyu/Nodesign">去 GitHub</a>
       </div>
 
     </div>
   </div>
 
   <section class="sec col" style="padding-top:96px">
-    <div class="sec-num">算</div>
+    <div class="sec-num">账</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal is-in">估一下每个月要花多少</h2>
+        <h2 class="reveal is-in">一场会话大概花多少</h2>
         <div class="lead reveal is-in" style="--i:1">
-          <p>拖动滑块，看你的用量大概落在哪个区间。数字按公开的用量小票折算，一次会话平均 4.8 万 token。</p>
+          <p>下面是线上站近 30 天的真实用量，统计到 2026 年 9 月 9 日，排掉了站主自己。按线上模型的标价折算；桌面版自带密钥的话，账单在你的模型商那边。</p>
         </div>
-        <div class="calc reveal is-in" style="--i:2">
-          <div class="calc-row">
-            <label for="vol">每月做多少件事</label>
-            <input type="range" id="vol" min="1" max="60" value="12" step="1">
-            <output id="volOut">12 件</output>
-          </div>
-          <div class="calc-out">
-            <span class="calc-label">预计消耗</span>
-            <strong id="costOut">57.6 万 tok</strong>
-            <span class="calc-note">免费模型不产生费用。换成更强的模型，按实际消耗结算。</span>
-          </div>
+        <div class="usage reveal is-in" style="--i:2">
+          <div class="u"><b>167</b><span>场会话</span></div>
+          <div class="u"><b>4.2 万</b><span>每场 token 中位数（不含缓存读取）</span></div>
+          <div class="u"><b>$0.41</b><span>每场花费中位数</span></div>
+          <div class="u"><b>$1.16</b><span>四分之三的会话不超过这个数</span></div>
         </div>
       </div>
       <aside class="notes reveal is-in" style="--i:1">
-        <p><b>怎么算的</b>一次会话平均 4.8 万 token，取自公开测试期间公开的用量小票。</p>
+        <p><b>怎么读</b>一场会话通常是一件事从头到尾：说需求、它做、圈着改几轮。中位数比平均数老实，几场长会话会把平均数拉得很高。</p>
+        <p><b>免费额度够不够</b>每天 10 美元，按中位数算是二十几场会话。生图多的话会快一些。</p>
       </aside>
     </div>
   </section>
@@ -118,38 +116,38 @@
         <div class="faq reveal is-in" style="--i:1">
 
           <details>
-            <summary>免费模型和别的模型有什么区别？</summary>
-            <div class="ans"><p>免费模型对所有用户开放，日常够用。要更强的模型，按用量付费，与其他模型一样按实际消耗计算。</p></div>
+            <summary>哪个模型是免费的？</summary>
+            <div class="ans"><p>Kimi K3 那一行不计费。其它模型按实际用量折算进每天的额度，每一轮花了多少，会话栏底部当场显示。</p></div>
           </details>
 
           <details>
-            <summary>怎么知道我花了多少？</summary>
-            <div class="ans"><p>每次会话底部写着这一轮的 token 和金额。画布上的产物还会附一条用量记录，写清这件东西的总花费。</p></div>
+            <summary>额度用完了怎么办？</summary>
+            <div class="ans"><p>北京时间零点重置。要不受额度限制，就用桌面版填自己的密钥，或者用开源版本地跑。</p></div>
           </details>
 
           <details>
-            <summary>可以自带密钥吗？</summary>
-            <div class="ans"><p>可以。填上自己的 API 密钥就能使用完整功能，费用直接走你自己的额度。适合已经有模型额度的用户。</p></div>
+            <summary>能用 Claude 吗？</summary>
+            <div class="ans"><p>线上站不开放 Claude。桌面版和本地版可以：填 Anthropic 的 API 密钥，或者登录你自己的 Claude 订阅。</p></div>
+          </details>
+
+          <details>
+            <summary>自带密钥支持哪些服务商？</summary>
+            <div class="ans"><p>凡是兼容 Anthropic Messages 接口或 OpenAI Chat 接口的都能填，设置页里有几家的预设。填完有体检按钮可以试。</p></div>
           </details>
 
           <details>
             <summary>做完的东西归谁？</summary>
-            <div class="ans"><p>归你。产物是纯静态文件，导出之后不绑定平台，放到哪里都能运行。</p></div>
-          </details>
-
-          <details>
-            <summary>能商用吗？</summary>
-            <div class="ans"><p>能。你做出来的东西，版权和用途都归你。</p></div>
-          </details>
-
-          <details>
-            <summary>支持哪些产物？</summary>
-            <div class="ans"><p>站点与落地页、海报与长图、演示、Word 文档、图像与视频、可互动的角色。都在同一块画布上完成。</p></div>
+            <div class="ans"><p>归你。站点是静态文件，文档是真 Word 文件，导出之后不绑定这里。</p></div>
           </details>
 
           <details>
             <summary>数据存在哪？</summary>
-            <div class="ans"><p>产物和记忆都以文件形式存在你的工作区里，随时可以查看、修改和导出。</p></div>
+            <div class="ans"><p>线上站：存在服务器上你自己的工作区里，别人看不到。桌面版和本地版：存在你电脑的用户目录下，产物、板书、记忆都是普通文件。</p></div>
+          </details>
+
+          <details>
+            <summary>以后会收费吗？</summary>
+            <div class="ans"><p>现在不收。线上试玩的额度可能会随成本调整。开源版按 AGPL-3.0 授权，桌面版自带密钥这条路不会加价。</p></div>
           </details>
 
         </div>
@@ -159,11 +157,11 @@
 
   <section class="cta col">
     <div class="cta-in">
-      <h2 class="reveal is-in">免费开始使用</h2>
-      <p class="hero-sub reveal is-in" style="--i:1">注册即可使用，免费模型对所有用户开放。</p>
+      <h2 class="reveal is-in">先试一件小事</h2>
+      <p class="hero-sub reveal is-in" style="--i:1">注册即用，免费额度每天重置。觉得顺手再装桌面版。</p>
       <div class="btn-row reveal is-in" style="--i:2;margin-top:32px">
         <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
-        <a class="btn btn-ghost btn-lg" href="cases.html">先看看别人做的</a>
+        <a class="btn btn-ghost btn-lg" href="cases.html">先看看做出来的东西</a>
       </div>
     </div>
   </section>
@@ -179,7 +177,9 @@
       <a href="docs.html">文档</a>
       <a href="changelog.html">更新日志</a>
       <a href="about.html">关于</a>
-      <span class="grow">面向创作者的 agent 工作台</span>
+      <a href="https://github.com/Xiaokebuyu/Nodesign">GitHub</a>
+      <a href="https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md">English</a>
+      <span class="grow">开源 · AGPL-3.0 · 一个人做的</span>
     </div>
   </footer>
 

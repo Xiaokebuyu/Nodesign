@@ -49,18 +49,4 @@
     });
   }
 
-  /* ---------- 用量计算器 ---------- */
-  var vol = document.getElementById('vol');
-  if (vol) {
-    var volOut = document.getElementById('volOut');
-    var costOut = document.getElementById('costOut');
-    var perRun = 48000; /* 一次会话平均 token，取自公开的用量小票 */
-    var update = function () {
-      var n = Number(vol.value);
-      volOut.textContent = n + ' 件';
-      costOut.textContent = (n * perRun / 10000).toFixed(1) + ' 万 tok';
-    };
-    vol.addEventListener('input', update);
-    update();
-  }
 })();
