@@ -46,7 +46,7 @@ export function makePlacer() {
     ];
     // 折叠如实报：卡高封顶到 CARD_MAX_H，超出的折在卡里
     if (box.capped) {
-      lines.push(`⚠ Long for one card: it shows the first ~${box.h}px, the rest is folded (the reader clicks to unfold). A board note explains one thing — if this is real content, it belongs in an artifact (docx / site / deck); if it is several points, write several notes.`);
+      lines.push(`⚠ Long for one card (capped at ${box.h}px): the head and the tail stay visible, the middle is folded (the reader clicks the seam to unfold). A board note explains one thing — if this is real content, it belongs in an artifact (docx / site / deck); if it is several points, write several notes.`);
     }
     // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话
     {

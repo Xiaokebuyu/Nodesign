@@ -8,6 +8,11 @@
  * `i18n-catalog.lint.test.js` 会拦。
  */
 export default {
+  // ── 板书中段折叠（components/canvas/cards/ChalkFold.jsx，09-09）──
+  '中间折起约 {n} 行 · 展开': 'About {n} lines folded in the middle · Expand',
+  '收起中间': 'Fold the middle',
+  '这条板书很长，中间折起来了；点开看全文': 'This note is long, so its middle is folded; click to read it all',
+
   // ── 模型插槽编辑器（components/local/SlotEditor.jsx）——「配 Key」的表单本体 ──
   // 服务商预设名：英文名的（DeepSeek / OpenAI / Ollama）本来就通用，不进词表；
   // 只翻中文名的那几家，英文用户看「智谱」「硅基流动」是认不出的。
