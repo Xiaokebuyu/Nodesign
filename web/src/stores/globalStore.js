@@ -109,6 +109,13 @@ export const useGlobalStore = create((set) => ({
    */
   chatDockOpenTick: 0,
   openChatDock: () => set((st) => ({ chatDockOpenTick: st.chatDockOpenTick + 1 })),
+  /**
+   * 悬浮 AI 卡此刻**钉住**时占的位置（09-09，产物窗让位用）：{ side: 'left'|'right', width } 或 null。
+   * 只报钉住的：滑出来的卡压一会儿就走，窗要是跟着缩，鼠标一碰边缘整个预览就抖一下（站主定「只让钉住的」）。
+   * 写的人只有 ChatDock；读的人是 ArtifactWindow（六扇窗共用的壳）。
+   */
+  chatDockPinned: null,
+  setChatDockPinned: (v) => set((st) => ((st.chatDockPinned?.side === v?.side && st.chatDockPinned?.width === v?.width) ? {} : { chatDockPinned: v })),
   consumeChatDraft: () => {
     const draft = useGlobalStore.getState().chatDraft;
     set({ chatDraft: '' });

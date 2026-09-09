@@ -145,6 +145,10 @@ export default function ChatDock({
    * 所以让不让位由调用方按设备档决定，这儿只负责把数报准。
    */
   useEffect(() => { onOpenChange?.(open, open ? width : 0, cfg.side); }, [open, width, cfg.side, onOpenChange]);
+  // 钉住且开着 → 告诉产物窗往另一边收（globalStore.chatDockPinned）；悬浮态不报，卸载时清掉
+  const setChatDockPinned = useGlobalStore((s) => s.setChatDockPinned);
+  useEffect(() => { setChatDockPinned(open && cfg.pinned ? { side: cfg.side, width: width + EDGE_GAP } : null); }, [open, cfg.pinned, cfg.side, width, setChatDockPinned]);
+  useEffect(() => () => setChatDockPinned(null), [setChatDockPinned]);
 
   // ── 程序化唤出：就地标注/圈选发送（openChatDock）、要把光标放进输入框
   //   （focusComposer —— 对着收起的卡聚焦是空操作，所以它隐含"先出来"）。
