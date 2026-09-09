@@ -403,7 +403,10 @@ void main() {
     //   跨过一行格子要走一百多像素，self.a > 0.5 一刀切下去，影子的边就是一级级 2px 的台阶
     //   （站主 Windows 110% 白天模式实报；分辨率翻倍只让台阶变小变多，证实是逐格判决）。
     //   改成按纸的覆盖率在「桌面接影」和「纸面接影」之间连续混合，格子之间双线性插值就是平滑的斜边。
-    float selfA = smoothstep(0.3, 0.7, self.a);
+    //   ⚠️ 混合系数就用覆盖率本身，别套 smoothstep：遮挡图里纸边那一行格子的覆盖率沿边是线性变化的，
+    //   双线性插值出来的等值线才是直的；套一层 S 形重映射，等值线就成了一段段弧（站主 09-09 二报「边不平，
+    //   有曲线」）。松动的纸（g 通道）淡出到一半时仍不算纸 —— 那条阈值只留给它。
+    float selfA = self.g > 0.5 ? step(0.5, self.a) : clamp(self.a, 0.0, 1.0);
     float shOut = castShadow(vUv, ar, 0.0);
     float shIn = selfA > 0.001 ? castShadow(vUv, ar, self.r) : 0.0;
     sh = mix(shOut, shIn, selfA);
