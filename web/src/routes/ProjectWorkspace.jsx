@@ -40,7 +40,7 @@ import { findElementByAnchor } from '../lib/html-utils.js';
 import { serializeForAI } from '../lib/element-semantics.js';
 import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges, Browse } from '../lib/api.js';
 import { handleAuxEvent } from '../lib/aux-events.js';
-import { exportFromMenu } from '../components/canvas/card-export.js';
+import { exportFromMenu, downloadFromUrl } from '../components/canvas/card-export.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
 import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult } from '../lib/chat-stream.js';
@@ -1110,17 +1110,11 @@ export default function ProjectWorkspace() {
         if (!evt.url) break;
         if (deliveredRef.current.has(evt.url)) break;
         deliveredRef.current.add(evt.url);
-        try {
-          const a = document.createElement('a');
-          a.href = evt.url;
-          a.download = evt.filename || '';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          showToast(`agent 给了你 ${evt.filename}${evt.note ? ` · ${evt.note}` : ''}`, 'success');
-        } catch (err) {
-          showToast(`下载失败：${err.message}`, 'error');
-        }
+        // 先 fetch 成 blob 再触发下载，跟手动导出同一条路（09-09 桌面版 0.1.34 案：直接 <a href download>
+        // 在 Electron 里一次都没触发 will-download；见 card-export.js downloadFromUrl 的注释）
+        downloadFromUrl(evt.url, evt.filename || '')
+          .then(() => showToast(`agent 给了你 ${evt.filename}${evt.note ? ` · ${evt.note}` : ''}`, 'success'))
+          .catch((err) => { deliveredRef.current.delete(evt.url); showToast(`下载失败：${err.message}`, 'error'); });
         break;
       }
 
