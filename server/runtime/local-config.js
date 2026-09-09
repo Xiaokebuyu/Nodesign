@@ -36,8 +36,26 @@ export const REASONING_EFFORTS = Object.freeze(['low', 'medium', 'high', 'max'])
 export const MAX_RETRY_BUDGET_MS = 400_000;
 
 const ID_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
-const RESERVED_UPSTREAMS = new Set(Object.keys(UPSTREAMS_BUILTIN));
-const RESERVED_MODELS = new Set(MODELS_BUILTIN.map((m) => m.id));
+/**
+ * 内置上游名保留：外部 upstream 不许同名。内置行按名字指向它们（baseUrl / 协议 / 钥匙环境变量），
+ * 同名顶替会把内置行悄悄改道到用户的地址与协议上。
+ */
+export const RESERVED_UPSTREAM_IDS = Object.freeze(Object.keys(UPSTREAMS_BUILTIN));
+const RESERVED_UPSTREAMS = new Set(RESERVED_UPSTREAM_IDS);
+/**
+ * 模型 id 分两类（09-09 改，此前内置行 id 一律保留）：
+ *   - 订阅 Claude 行（没有 api 段：claude-sonnet-5 / claude-opus-5[1m] …）**保留**。它们是 sdkAlias 的落点、
+ *     SHARED_SDK_ALIAS 的本体，用户的 API 行顶上去会让 model-context 的结构断言炸；要用官方 Claude 走
+ *     「Claude 官方」那张卡（claude login 或 API Key），不是插槽。
+ *   - 内置 API 行（deepseek-v4-flash-vision / kimi-k3 / glm-5.3-flash-* …）**可被同名插槽顶替**：
+ *     插槽编辑器把上游模型名直接当 id（idFromWire），用户拿自己的钥匙接「和站里同一个模型」是最常见的
+ *     BYOK 场景，以前一律拒「内置模型名，换一个」等于逼他起别名、选择器里再多出一条重复的。
+ *     顶替 = 表里只剩用户那行（model-context 合并时把同名内置行去掉），本机钥匙优先，跟 modelSourceFor
+ *     的口径一致。
+ */
+export const RESERVED_MODEL_IDS = Object.freeze(MODELS_BUILTIN.filter((m) => !m.api).map((m) => m.id));
+export const SHADOWABLE_MODEL_IDS = Object.freeze(MODELS_BUILTIN.filter((m) => !!m.api).map((m) => m.id));
+const RESERVED_MODELS = new Set(RESERVED_MODEL_IDS);
 
 const PricesSchema = z.object({
   input: z.number().min(0), output: z.number().min(0),
@@ -109,7 +127,7 @@ export function validateLocalConfig(raw) {
   for (const [id, u] of Object.entries(top.data.upstreams)) {
     const where = `upstreams.${id}`;
     if (!ID_RE.test(id)) { errors.push({ where, message: 'upstream id 只能是字母数字 . _ -' }); continue; }
-    if (RESERVED_UPSTREAMS.has(id)) { errors.push({ where, message: `'${id}' 是内置上游名，换一个` }); continue; }
+    if (RESERVED_UPSTREAMS.has(id)) { errors.push({ where, message: `'${id}' 是内置上游名，换一个（比如 my-${id}）` }); continue; }
     const r = UpstreamSchema.safeParse(u);
     if (!r.success) { for (const i of r.error.issues) errors.push({ where, message: issueText(i) }); continue; }
     const d = r.data;
@@ -128,7 +146,7 @@ export function validateLocalConfig(raw) {
     const r = ModelSchema.safeParse(m);
     if (!r.success) { for (const iss of r.error.issues) errors.push({ where, message: issueText(iss) }); return; }
     const d = r.data;
-    if (RESERVED_MODELS.has(d.id)) { errors.push({ where, message: `'${d.id}' 是内置模型名，换一个` }); return; }
+    if (RESERVED_MODELS.has(d.id)) { errors.push({ where, message: `'${d.id}' 是内置 Claude 订阅模型名，插槽不能用它做 id；官方 Claude 请在「Claude 官方」里登录或填 API Key，这里换一个 id` }); return; }
     if (seen.has(d.id)) { errors.push({ where, message: `id '${d.id}' 重复` }); return; }
     if (!out.upstreams[d.upstream]) { errors.push({ where, message: `upstream '${d.upstream}' 不存在或没通过校验（外部模型只能指向本文件里的 upstream）` }); return; }
     if (d.emptyRetries === 0 && d.retryBudgetMs) { errors.push({ where, message: 'emptyRetries=0 时 retryBudgetMs 没有意义' }); return; }

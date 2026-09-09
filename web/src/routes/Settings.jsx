@@ -27,7 +27,7 @@ import McpSection from '../components/settings/McpSection.jsx';
 const SECTIONS = [
   { id: 'account', label: '账户', desc: '您的站点账号、档位与本机设备', Icon: User, local: true, hosted: true },
   { id: 'usage', label: '用量', desc: '近 30 天的消费金额与模型分布', Icon: BarChart3, local: true, hosted: true },
-  { id: 'appearance', label: '外观', desc: '语言、字体与界面缩放，修改后立即生效', Icon: Palette, local: true, hosted: true },
+  { id: 'appearance', label: '外观', desc: '语言与字体，修改后立即生效', Icon: Palette, local: true, hosted: true },
   { id: 'models', label: '模型', desc: '新建会话的默认模型，以及选择器中显示的模型', Icon: Cpu, local: true, hosted: false },
   { id: 'components', label: '组件', desc: '截图、导出、抠图等功能所需的外部程序', Icon: Package, local: true, hosted: false },
   { id: 'mcp', label: 'MCP', desc: '把运行情况开放给 Claude Code / Codex 这类 agent；本机健康一览', Icon: Plug, local: true, hosted: false },

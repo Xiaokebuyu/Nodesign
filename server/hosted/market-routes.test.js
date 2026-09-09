@@ -279,11 +279,19 @@ describe('市场：发布 → 审核 → 货架 → 安装（先审后上架那�
     expect(f0.items.map((i) => i.id)).toEqual([ids[1], ids[0]]);
     expect((await (await as(author, '/api/market/featured')).json()).items).toHaveLength(0);
 
+    // 补位（09-09）：没加精的 approved 排在加精的后面补进首页；withdrawn/pending 的不算
+    await installSkillFor(author, 'skill-c');
+    const c = (await (await as(author, '/api/market', { method: 'POST', body: publishForm({ skillName: 'skill-c', title: 'skill-c' }) })).json()).publication.id;
+    expect((await (await as(viewer, '/api/market/featured')).json()).items.map((i) => i.id)).toEqual([ids[1], ids[0]]);   // 还是 pending → 不补
+    await json(admin, `/api/admin/market/${c}/review`, 'POST', { state: 'approved' });
+    expect((await (await as(viewer, '/api/market/featured')).json()).items.map((i) => i.id)).toEqual([ids[1], ids[0], c]);
+    await as(author, `/api/market/${c}`, { method: 'DELETE' });
+
     // viewer 建了 5 个项目 → 只剩 1 个位置；6 个 → 0
     for (let i = 0; i < 5; i++) makeProject(viewer.id);
     const f5 = await (await as(viewer, '/api/market/featured')).json();
     expect(f5.slots).toBe(1);
-    expect(f5.items.map((i) => i.id)).toEqual([ids[1]]);
+    expect(f5.items.map((i) => i.id)).toEqual([ids[1]]);   // 只剩 1 位：加精 rank 最小的那条，补位的排不上
     makeProject(viewer.id);
     expect((await (await as(viewer, '/api/market/featured')).json()).slots).toBe(0);
 

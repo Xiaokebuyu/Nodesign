@@ -65,7 +65,7 @@ export default function ModelsSection({ status, cfg, draft, setDraft, save, savi
           <Note>{t('支持 OpenAI 格式与 Anthropic 格式。修改后需重启服务端方可生效（「关于」页提供重启按钮）。')}</Note>
           <div style={{ marginTop: GAP.md }}>
             {cfg && draft
-              ? <SlotEditor config={draft} setConfig={setDraft} errors={cfg.errors} enums={cfg.enums} active={cfg.activeExternalModels} needsRestart={needsRestart} onSave={save} saving={saving} showToast={showToast} />
+              ? <SlotEditor config={draft} setConfig={setDraft} errors={cfg.errors} enums={cfg.enums} active={cfg.activeExternalModels} names={{ reservedUpstreams: cfg.reservedUpstreamIds, reservedModels: cfg.reservedModelIds, shadowableModels: cfg.shadowableModelIds, shadowed: cfg.shadowedBuiltinModels }} needsRestart={needsRestart} onSave={save} saving={saving} showToast={showToast} />
               : <Note>{t('读取中…')}</Note>}
           </div>
           {status?.configPath && <div style={{ marginTop: GAP.md }}><Note>{t('配置文件')}：<Mono copy>{status.configPath}</Mono></Note></div>}

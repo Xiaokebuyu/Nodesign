@@ -39,9 +39,15 @@ function tempDirs() {
 /**
  * @returns {null | string} null=放行；string=拒绝理由
  */
-export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolName, pluginsBaseRoot = null, ownPluginsRoot = null } = {}) {
+export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, dataRoot, toolName, pluginsBaseRoot = null, ownPluginsRoot = null } = {}) {
   if (!workspaceRoot) return null;
   const ws = path.resolve(workspaceRoot);
+  // 仓库道（09-07 起 cwd 与画布真相分开）：agent 站在用户的文件夹 cwdRoot，画布在 <folder>/.nodesign = ws。
+  // 用户的源码就在 cwdRoot 里，系统提示也说「改源码就改在原处」—— 这道闸只认 ws 会把 Edit 拒掉，
+  // 而 Bash 照样写得进去（09-09 问题库 iss_mttx8sta_27ym：agent 被迫绕成 Bash+node 改文件）。
+  // 所以 cwdRoot 也是自己的地盘；.claude/agents 那条同样在两个根下都拦（isolation.js 同口径）。
+  const cwd = cwdRoot ? path.resolve(cwdRoot) : null;
+  const ownRoots = cwd && cwd !== ws ? [ws, cwd] : [ws];
   const isWrite = WRITE_TOOLS.has(toolName);
   if (!isWrite && !dataRoot && !pluginsBaseRoot) return null;
   const root = dataRoot ? path.resolve(dataRoot) : null;
@@ -50,7 +56,7 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolNa
   for (const field of TARGET_FIELDS) {
     const v = toolInput?.[field];
     if (typeof v !== 'string' || !v) continue;
-    const abs = path.resolve(ws, v);          // 相对路径按工作区解析
+    const abs = path.resolve(cwd || ws, v);   // 相对路径按 agent 站的地方解析（SDK cwd；没分开时就是工作区）
     // 别人的 skill 库（2026-09-08 市场线）：用户级 plugin 根按 userId 分目录，可它在数据根之外，
     // 下面那条「数据根内越界」管不到 —— 于是 A 的 agent 能 Read 走 B 结晶的方法论。
     // 自己那一支放行（SDK 本来就要读它、附件也在里面），别人的一律拒，读写同判。
@@ -69,7 +75,7 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolNa
     // 酒馆卡/世界书**——外来文本能借主 agent 的手造出一个拿着外发工具的角色。
     // 修法只能是「让判据不可被它改」：正门 cast_role 走服务端 fs（不过这道闸），
     // 模型这侧一律拒。⚠️ Bash 不归这道闸管，那半靠沙盒（isolation.js）。
-    if (isWrite && insideDir(abs, path.join(ws, '.claude', 'agents'))) {
+    if (isWrite && ownRoots.some((r) => insideDir(abs, path.join(r, '.claude', 'agents')))) {
       return '角色文件不能手写 —— 用 cast_role。'
         + '那个目录里的文件同时是「这个角色能用哪些工具」的判据，'
         + '手写等于自己给自己发权限，所以一律拒绝（改已有角色也走 cast_role）。';
@@ -88,10 +94,10 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolNa
         }
       } catch { /* 新建/读不到 → 放行 */ }
     }
-    if (insideDir(abs, ws)) continue;         // 自己的工作区，放行
+    if (ownRoots.some((r) => insideDir(abs, r))) continue;         // 自己的工作区 / 自己的仓库，放行
     if (isWrite) {
       if (tempDirs().some(d => insideDir(abs, d))) continue;   // 临时文件随便写
-      return `${toolName} 只能落在你自己的工作区里（${ws}），或者临时目录。`
+      return `${toolName} 只能落在你自己的工作区里（${ownRoots.join(' 或 ')}），或者临时目录。`
         + '产物、草稿、附件全都归工作区管；往外写一律拒绝。';
     }
     if (!root || !insideDir(abs, root)) continue;   // 数据根之外的读不归这道闸管
@@ -101,11 +107,11 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, dataRoot, toolNa
   return null;
 }
 
-export function makePreToolUseWorkspaceScopeGuard({ workspaceRoot, dataRoot, pluginsBaseRoot = null, ownPluginsRoot = null }) {
+export function makePreToolUseWorkspaceScopeGuard({ workspaceRoot, cwdRoot = null, dataRoot, pluginsBaseRoot = null, ownPluginsRoot = null }) {
   return async (input) => {
     try {
       const reason = checkWorkspaceScope(input?.tool_input, {
-        workspaceRoot, dataRoot, toolName: input?.tool_name, pluginsBaseRoot, ownPluginsRoot,
+        workspaceRoot, cwdRoot, dataRoot, toolName: input?.tool_name, pluginsBaseRoot, ownPluginsRoot,
       });
       if (!reason) return {};
       return {

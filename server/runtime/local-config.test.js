@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateLocalConfig, MAX_RETRY_BUDGET_MS } from './local-config.js';
+import { validateLocalConfig, MAX_RETRY_BUDGET_MS, RESERVED_MODEL_IDS, SHADOWABLE_MODEL_IDS } from './local-config.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,7 +37,7 @@ describe('validateLocalConfig', () => {
     const v = validateLocalConfig({
       upstreams: { ...GOOD.upstreams, zenGo: { baseUrl: 'https://x.example.com', key: 'k' }, nokey: { baseUrl: 'https://y.example.com' } },
       models: [...GOOD.models,
-        { id: 'glm-5.3-flash-merge', label: '撞内置名', window: 100000, upstream: 'relay', wireModel: 'x' },
+        { id: 'claude-sonnet-5', label: '撞内置 Claude 订阅名', window: 100000, upstream: 'relay', wireModel: 'x' },
         { id: 'orphan', label: '指向不存在的上游', window: 100000, upstream: 'ghost', wireModel: 'x' },
         { id: 'badfast', label: 'fast 指错', window: 100000, upstream: 'relay', wireModel: 'x', fastModel: 'nope' },
         { id: 'toolong', label: '预算超线', window: 100000, upstream: 'relay', wireModel: 'x', emptyRetries: 3, retryBudgetMs: MAX_RETRY_BUDGET_MS + 1 },
@@ -49,11 +49,26 @@ describe('validateLocalConfig', () => {
     const text = v.errors.map((e) => `${e.where} ${e.message}`).join('\n');
     expect(text).toMatch(/upstreams\.zenGo .*内置上游名/);
     expect(text).toMatch(/upstreams\.nokey .*key 或 keyEnv/);
-    expect(text).toMatch(/glm-5\.3-flash.*内置模型名/);
+    expect(text).toMatch(/claude-sonnet-5.*内置 Claude 订阅模型名/);
     expect(text).toMatch(/orphan.*upstream 'ghost' 不存在/);
     expect(text).toMatch(/badfast.*fastModel 'nope'/);
     expect(text).toMatch(/toolong.*retryBudgetMs/);
     expect(text).toMatch(/extra.*sdkAlias/);   // strict：不认识的字段报出来，别静默吞（sdkAlias 是自动分配的，不许手填）
+  });
+
+  it('同名顶替（09-09）：内置 API 行的 id 可以做插槽 id（不报错、原样进表）；订阅 Claude 名仍保留', () => {
+    const v = validateLocalConfig({
+      upstreams: GOOD.upstreams,
+      models: [
+        { id: 'glm-5.3-flash-merge', label: '顶替内置 API 行', window: 100000, upstream: 'relay', wireModel: 'glm-5.3-flash' },
+        { id: 'claude-opus-5', label: '订阅名', window: 100000, upstream: 'anth', wireModel: 'claude-opus-5' },
+      ],
+    });
+    expect(v.models.map((m) => m.id)).toEqual(['glm-5.3-flash-merge']);
+    expect(v.errors.map((e) => e.message).join('\n')).toMatch(/claude-opus-5.*内置 Claude 订阅模型名/);
+    expect(SHADOWABLE_MODEL_IDS).toContain('glm-5.3-flash-merge');
+    expect(RESERVED_MODEL_IDS).toContain('claude-opus-5');
+    expect(RESERVED_MODEL_IDS.some((id) => SHADOWABLE_MODEL_IDS.includes(id))).toBe(false);
   });
 
   it('根不是对象 / 坏 JSON 形状 → 一条错、空配置', () => {
@@ -103,6 +118,36 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     // hosted profile（子进程没设 NODESIGN_PROFILE）下外部行也进 picker（钥匙过滤只在 local），key 在条目上
     expect(o.picker.sort()).toEqual(['glm-5', 'kimi-k2']);
     expect(o.relayKey).toBe('sk-test');
+  });
+
+  it('同名顶替进表（09-09）：外部行顶掉同名内置 API 行，路由走用户上游；引用被顶行做 fast/standby 的内置行断言照过；local picker 靠用户的 key 列出它', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'nd-cfg-'));
+    const cfg = path.join(dir, 'config.json');
+    writeFileSync(cfg, JSON.stringify({
+      upstreams: { 'my-deepseek': { baseUrl: 'https://api.deepseek.com/v1', protocol: 'openai-chat', key: 'sk-mine' } },
+      models: [
+        { id: 'deepseek-v4-flash-vision', label: '我的', window: 128000, upstream: 'my-deepseek', wireModel: 'deepseek-v4-flash-vision' },
+        { id: 'deepseek-v4-flash-helper', label: '我的 helper', window: 128000, upstream: 'my-deepseek', wireModel: 'deepseek-v4-flash' },
+      ],
+    }));
+    const code = `
+      import { resolveModelRoute, MODEL_CONFIG_ERRORS, shadowedBuiltinModelIds, externalModelIds, selectableModelsFor, standbyModelOf, modelSourceFor } from '../engine/agent/model-context.js';
+      const r = resolveModelRoute('deepseek-v4-flash-vision');
+      console.log(JSON.stringify({ errors: MODEL_CONFIG_ERRORS, shadowed: shadowedBuiltinModelIds(), external: externalModelIds(),
+        up: r.upstreamId, mode: r.mode, sdkAlias: r.sdkAlias,
+        picker: selectableModelsFor({ id: '_anon', role: 'admin' }).filter((m) => m.id.startsWith('deepseek-v4')).map((m) => [m.id, modelSourceFor(m.id)]),
+        standby: standbyModelOf('deepseek-v4.1-flash-expires-on-0910') }));`;
+    const base = { ...process.env }; delete base.VITEST; delete base.DEEPSEEK_API_KEY;
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: here, env: { ...base, NODESIGN_PROFILE: 'local', NODESIGN_DATA_DIR: dir, NODESIGN_MODELS_CONFIG: cfg, DB_PATH: path.join(dir, 'x.db') }, encoding: 'utf8' });
+    expect(r.status, r.stderr).toBe(0);
+    const o = JSON.parse(r.stdout.trim().split('\n').pop());
+    expect(o.errors).toEqual([]);
+    expect(o.shadowed.sort()).toEqual(['deepseek-v4-flash-helper', 'deepseek-v4-flash-vision']);
+    expect(o.external.sort()).toEqual(['deepseek-v4-flash-helper', 'deepseek-v4-flash-vision']);
+    expect(o).toMatchObject({ up: 'my-deepseek', mode: 'api' });
+    expect(o.standby).toBe('deepseek-v4-flash-vision');   // 内置行的 standby 指向被顶的名字 → 现在解到用户那行，断言不炸
+    expect(o.picker).toContainEqual(['deepseek-v4-flash-vision', 'local']);   // 本机钥匙优先：不走 relay
+    expect(o.picker.map(([id]) => id)).not.toContain('deepseek-v4.1-flash-expires-on-0910');   // 没顶的内置行本机没钥匙、也没 relay → 照旧藏
   });
 
   it('local profile：外部行进 picker 靠条目上的 key（不是 env）；keyEnv 没设的行藏掉（08-22 smoke 抓到的洞）', () => {

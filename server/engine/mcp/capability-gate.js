@@ -17,6 +17,9 @@ import { capabilityState } from '../../runtime/capabilities.js';
 const CHROMIUM_TOOLS = [
   'screenshot_canvas', 'screenshot_url', 'list_pages', 'query_elements', 'get_computed_styles', 'explain_style',
   'profile_scroll', 'trace_motion',
+  // look_at_board 走 launchPerceptionBrowser（perception-page.js），跟 screenshot_canvas 同一个 chromium。
+  // 09-07 问题库 iss_mtr33277_qs9n：缺二进制时它没标 UNAVAILABLE，黑板纪律又要求画完就看 → 必失败还得自己绕
+  'look_at_board',
   'browser_navigate', 'browser_read', 'browser_click', 'browser_screenshot', 'browser_capture', 'browser_computer',
   'browser_find', 'browser_batch', 'browser_request_help',
   'artifact_open', 'artifact_computer', 'artifact_find', 'artifact_motion', 'artifact_batch',

@@ -16,8 +16,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { platform } from '../runtime/platform.js';
-import { loadLocalConfig, saveLocalConfig, CONFIG_ENUMS } from '../runtime/local-config.js';
-import { MODEL_CONFIG_ERRORS, externalModelIds } from '../engine/agent/model-context.js';
+import { loadLocalConfig, saveLocalConfig, CONFIG_ENUMS, RESERVED_UPSTREAM_IDS, RESERVED_MODEL_IDS, SHADOWABLE_MODEL_IDS } from '../runtime/local-config.js';
+import { MODEL_CONFIG_ERRORS, externalModelIds, shadowedBuiltinModelIds } from '../engine/agent/model-context.js';
 import { UPSTREAMS_BUILTIN, SHARED_SDK_ALIAS } from '../engine/agent/model-table.js';
 import { capabilitySnapshot } from '../runtime/capabilities.js';
 import { TOOL_CAPABILITIES } from '../engine/mcp/capability-gate.js';
@@ -73,7 +73,11 @@ router.get('/config', (_req, res) => {
   const cfg = loadLocalConfig();
   res.json({ path: cfg.path, exists: cfg.exists, raw: cfg.raw || { upstreams: {}, models: [] }, errors: cfg.errors, enums: CONFIG_ENUMS,
     // 这份文件里的行此刻有没有在跑：不在这份名单里说明还没重启（或校验没过）
-    activeExternalModels: externalModelIds() });
+    activeExternalModels: externalModelIds(),
+    // 名字规则（09-09）：内置上游名不许同名；内置 Claude 订阅名不许做插槽 id；内置 API 行可被同名插槽顶替
+    // （编辑器据此在保存前就提示，别等保存才红）。shadowed = 此刻真被顶掉的内置行
+    reservedUpstreamIds: RESERVED_UPSTREAM_IDS, reservedModelIds: RESERVED_MODEL_IDS, shadowableModelIds: SHADOWABLE_MODEL_IDS,
+    shadowedBuiltinModels: shadowedBuiltinModelIds() });
 });
 
 router.put('/config', (req, res) => {

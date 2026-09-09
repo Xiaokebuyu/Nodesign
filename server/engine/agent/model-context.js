@@ -66,7 +66,12 @@ function withDefaultAlias(row) {
   if (!row.api || row.api.sdkAlias) return row;
   return Object.freeze({ ...row, api: Object.freeze({ ...row.api, sdkAlias: SHARED_SDK_ALIAS }) });
 }
-const MODELS = Object.freeze([...MODELS_BUILTIN, ...external.models.map(toExternalRow)].map(withDefaultAlias));
+// 同名顶替（09-09）：外部插槽的 id 撞上内置 **API** 行 → 内置那行退出表，只剩用户的（本机钥匙优先，
+// 跟 modelSourceFor 一个口径）。订阅 Claude 行在 local-config 校验就拒了，到不了这里。
+const externalIds = new Set(external.models.map((m) => m.id));
+const SHADOWED_BUILTIN_IDS = Object.freeze(MODELS_BUILTIN.filter((r) => externalIds.has(r.id) && r.api).map((r) => r.id));
+const MODELS = Object.freeze([...MODELS_BUILTIN.filter((r) => !externalIds.has(r.id) || !r.api), ...external.models.map(toExternalRow)].map(withDefaultAlias));
+if (SHADOWED_BUILTIN_IDS.length) console.log(`[model-context] 外部插槽顶替了同名内置行（用本机钥匙）：${SHADOWED_BUILTIN_IDS.join(', ')}`);
 /** 外部插槽被整条丢掉的原因（启动日志一份、GET /api/local/config 一份，同一个数组） */
 export const MODEL_CONFIG_ERRORS = external.errors;
 
@@ -125,6 +130,11 @@ if (MODEL_CONFIG_ERRORS.length) {
 /** 当前进程里真正生效的外部行 id（配置页据此判「已生效 / 要重启」） */
 export function externalModelIds() {
   return [...BY_ID.values()].filter((r) => r.external).map((r) => r.id);
+}
+
+/** 被同名外部插槽顶掉的内置行 id（配置页标「已顶替内置行」；只报被顶且外部行真进了表的） */
+export function shadowedBuiltinModelIds() {
+  return SHADOWED_BUILTIN_IDS.filter((id) => BY_ID.get(id)?.external);
 }
 
 /** 一行在入口会以哪些 body.model 名出现（id / sdkAlias / 剥 [1m] 的 alias）。session-routes 会话优先匹配用；不认识的 id → [] */

@@ -156,6 +156,7 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       matcher: 'Read|Grep|Glob|Write|Edit|NotebookEdit',
       hooks: [makePreToolUseWorkspaceScopeGuard({
         workspaceRoot, dataRoot: PROJECTS_DATA_ROOT,
+        cwdRoot,   // 仓库道：用户的文件夹也是自己的地盘（09-09，问题库 iss_mttx8sta_27ym）
         // 别人的 skill 库也拒（09-08）：自己那支按项目 owner 算，跟 plugin-loader 同口径
         pluginsBaseRoot: getUserPluginsBaseRoot(),
         ownPluginsRoot: projectId ? getUserPluginsRoot(getProject(projectId)?.ownerId) : null,

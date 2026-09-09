@@ -52,8 +52,15 @@ function errorsFor(errors, whereRe) {
 }
 const num = (v) => (v === '' || v == null ? undefined : Number(v));
 const esc = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-/** 上游真名 → 合法 id（schema：字母数字 . _ -，64 字内）。'deepseek/deepseek-chat' → 'deepseek-chat' */
-const idFromWire = (wire) => String(wire || '').split('/').pop().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+/**
+ * 上游真名 → 合法 id（schema：字母数字 . _ -，64 字内）。'deepseek/deepseek-chat' → 'deepseek-chat'
+ * 撞上内置 Claude 订阅名（服务端保留，见 local-config.js RESERVED_MODEL_IDS）就加 -mine：中转站给的
+ * `claude-sonnet-5` 之类原样当 id 会被服务端拒。撞内置 **API** 行的名字不改 —— 那是有意的顶替（09-09）。
+ */
+const idFromWire = (wire, reserved = []) => {
+  const base = String(wire || '').split('/').pop().replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+  return reserved.includes(base) ? `${base}-mine`.slice(0, 64) : base;
+};
 
 /** 字段 = 小标题 + 控件。放组件外：在 SlotEditor 里定义的话每次渲染都是新类型，React 重挂输入框，敲一个字失一次焦 */
 const labelStyle = { fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub, marginBottom: 2 };
@@ -80,7 +87,12 @@ function NumberPick({ value, presets, allowEmpty, emptyLabel, onChange, width = 
   );
 }
 
-export default function SlotEditor({ config, setConfig, errors, enums, active, needsRestart, onSave, saving, showToast }) {
+export default function SlotEditor({ config, setConfig, errors, enums, active, names = {}, needsRestart, onSave, saving, showToast }) {
+  // 名字规则来自 GET /api/local/config（服务端一份真相）：内置上游名 / 内置 Claude 订阅名不许用；内置 API 行可被同名顶替
+  const reservedUpstreams = names.reservedUpstreams || [];
+  const reservedModels = names.reservedModels || [];
+  const shadowableModels = names.shadowableModels || [];
+  const shadowedNow = names.shadowed || [];
   const [probe, setProbe] = useState({});        // id → { busy, result }
   const [jsonMode, setJsonMode] = useState(false);
   const [jsonText, setJsonText] = useState('');
@@ -100,13 +112,20 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
   const addUpstream = () => { let i = 1; while (upstreams[`upstream${i}`]) i++; setUp(`upstream${i}`, EMPTY_UPSTREAM); };
   const addModel = () => setConfig({ ...config, models: [...models, { ...EMPTY_MODEL, upstream: Object.keys(upstreams)[0] || '' }] });
 
-  /** 选预设：地址/协议/鉴权/显示名一起填；id 还是自动名（upstreamN）的话换成预设名（不撞已有的） */
+  /**
+   * 选预设：地址/协议/鉴权/显示名一起填；id 还是自动名（upstreamN）的话换成预设名（不撞已有的）。
+   * 预设名撞内置上游名（deepseek / zen 都是内置表里的键）就用 my-deepseek：以前直接用 'deepseek'，
+   * 保存时才被服务端拒「内置上游名，换一个」—— 选个预设就踩雷（09-09）。
+   */
   const applyPreset = (id, presetId) => {
     const p = PROVIDER_PRESETS.find((x) => x.id === presetId);
     if (!p) return;
     const patch = { baseUrl: p.baseUrl, protocol: p.protocol, label: p.label, authStyle: p.authStyle };
     let newId = id;
-    if (/^upstream\d+$/.test(id) && p.id !== 'custom' && !upstreams[p.id]) newId = p.id;
+    if (/^upstream\d+$/.test(id) && p.id !== 'custom') {
+      const want = reservedUpstreams.includes(p.id) ? `my-${p.id}` : p.id;
+      if (!upstreams[want]) newId = want;
+    }
     const next = {}; for (const [k, v] of Object.entries(upstreams)) next[k === id ? newId : k] = k === id ? { ...v, ...patch } : v;
     if (!patch.authStyle) delete next[newId].authStyle;
     setConfig({ ...config, upstreams: next, models: models.map((m) => (m.upstream === id ? { ...m, upstream: newId } : m)) });
@@ -200,7 +219,9 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
             const pr = probe[m.id];
             const isActive = active?.includes(m.id);
             const preset = presetByBaseUrl(upstreams[m.upstream]?.baseUrl);
-            const idAuto = !m.id || m.id === idFromWire(m.wireModel);   // id 还跟着上游真名走 → 改真名时自动更新
+            const idAuto = !m.id || m.id === idFromWire(m.wireModel, reservedModels);   // id 还跟着上游真名走 → 改真名时自动更新
+            const shadows = !!m.id && shadowableModels.includes(m.id);   // 与内置 API 行同名 = 顶替（有意为之，提示不拦）
+            const reservedHit = !!m.id && reservedModels.includes(m.id);  // 与内置 Claude 订阅名同名 = 保存会被拒，先说
             return (
               <Card key={i} style={{ padding: GAP.md }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr 1fr 150px 28px', gap: GAP.sm, alignItems: 'end' }}>
@@ -209,7 +230,7 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
                       onChange={(v) => { const p = presetByBaseUrl(upstreams[v]?.baseUrl); setModel(i, { upstream: v, ...(p?.brand && (!m.brand || m.brand === 'custom') ? { brand: p.brand } : {}) }); }} />
                   </Field>
                   <Field label={t('模型名（发送给服务商的 model，需完全一致）')}>
-                    <TextInput value={m.wireModel} onChange={(v) => setModel(i, { wireModel: v, ...(idAuto ? { id: idFromWire(v) } : {}), ...(!m.label || m.label === m.wireModel ? { label: v } : {}) })} placeholder={preset?.example || t('如 deepseek-chat')} />
+                    <TextInput value={m.wireModel} onChange={(v) => setModel(i, { wireModel: v, ...(idAuto ? { id: idFromWire(v, reservedModels) } : {}), ...(!m.label || m.label === m.wireModel ? { label: v } : {}) })} placeholder={preset?.example || t('如 deepseek-chat')} />
                   </Field>
                   <Field label={t('显示名（选择器里的名字）')}>
                     <TextInput mono={false} value={m.label} onChange={(v) => setModel(i, { label: v })} placeholder={t('如 DeepSeek V3')} />
@@ -235,6 +256,10 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
                   </div>
                   <Hint>{t('窗口请填写服务商标称的上下文长度（填得过大会在写满时被对方返回 400，填得过小则浪费可用容量）。价目 / 重试 / liftImages / fastModel 等少用字段在 JSON 模式中填写，字段名与内置表一致。')}</Hint>
                 </Fold>
+                {shadows && <Hint>{isActive && shadowedNow.includes(m.id)
+                  ? t('已顶替内置的「{id}」：这个模型的请求现在走您自己的 API Key，不经过站点。', { id: m.id })
+                  : t('与内置模型「{id}」同名：保存并重启后，这一条会顶替内置的那条，请求走您自己的 API Key。想两条并存就在「高级」里改一个内部 id。', { id: m.id })}</Hint>}
+                {reservedHit && <Err>{t('「{id}」是内置 Claude 订阅模型名，不能用作内部 id。官方 Claude 请在上方「Claude 官方」中登录或填写 API Key；经中转站接入的 Claude 请在「高级」里改一个内部 id（例如 {id}-mine）。', { id: m.id })}</Err>}
                 <Err>{errorsFor(errors, new RegExp(`^models(\\[${i}\\]| \\(${esc(m.id)}\\))`))}</Err>
                 {pr?.result && <ProbeResult r={pr.result} />}
               </Card>

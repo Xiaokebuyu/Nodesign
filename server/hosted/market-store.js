@@ -43,6 +43,12 @@ export const TITLE_MAX = 80;
 export const NOTE_MAX = 2000;
 /** 首页项目区里给别人作品的位置：自己项目越多给得越少，到 0 为止 */
 export const FEATURED_HOME_BASE = 6;
+/**
+ * 首页位置精选填不满时，用最新上架的（approved、没加精）补（09-09）。
+ * 09-08 上生产的版本只认加精的行，而站主同日定了「发布即上架、初期不审核」，从没加精过一条 →
+ * 这个位置在生产上一直是空的，看起来像功能没上。加精仍然排最前；关掉这个开关 = 回到只认加精。
+ */
+export const FEATURED_HOME_FILL = true;
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS market_publications (
@@ -236,12 +242,15 @@ export function featuredSlotsFor(ownProjectCount, base = FEATURED_HOME_BASE) {
   return Math.max(0, base - own);
 }
 
-/** 精选（approved 且 featured_rank 非空），排掉看的人自己的 */
-export function listFeatured({ excludeUserId = null, limit = FEATURED_HOME_BASE } = {}) {
+/**
+ * 首页混入的条目：精选（approved 且 featured_rank 非空）按 rank 靠前；FEATURED_HOME_FILL 开着就再用
+ * 没加精的 approved 按时间倒序补满 limit。排掉看的人自己的。
+ */
+export function listFeatured({ excludeUserId = null, limit = FEATURED_HOME_BASE, fill = FEATURED_HOME_FILL } = {}) {
   if (limit <= 0) return [];
   return db.prepare(`SELECT * FROM market_publications
-    WHERE state = 'approved' AND featured_rank IS NOT NULL AND (? IS NULL OR user_id <> ?)
-    ORDER BY featured_rank, created_at DESC LIMIT ?`).all(excludeUserId, excludeUserId, limit).map((r) => rowToPublication(r));
+    WHERE state = 'approved' AND (? OR featured_rank IS NOT NULL) AND (? IS NULL OR user_id <> ?)
+    ORDER BY (featured_rank IS NULL), featured_rank, created_at DESC LIMIT ?`).all(fill ? 1 : 0, excludeUserId, excludeUserId, limit).map((r) => rowToPublication(r));
 }
 
 /** 站主判：approved / rejected / revoked；批注可空。approved 以外一律清 featured_rank */

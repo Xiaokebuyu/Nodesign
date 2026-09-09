@@ -9,7 +9,7 @@
  *
  *   GET    /                  货架（approved；精选靠前）+ 我装过哪些
  *   GET    /mine              我发布过的（任何状态）
- *   GET    /featured          首页项目区要混入的精选：数量 = max(0, 6 - 我的项目数)，排掉我自己的
+ *   GET    /featured          首页项目区要混入的别人的作品：加精的靠前、不够用最新上架的补（FEATURED_HOME_FILL）；数量 = max(0, 6 - 我的项目数)，排掉我自己的
  *   GET    /:id               详情（含 SKILL.md 全文）。非 approved 只给作者和 admin
  *   GET    /:id/images/:n     参考图（webp）
  *   POST   /                  发布（multipart）：title, note, images[]≤6；skill 二选一 —— 文件字段 skill（桌面版打好的 zip）

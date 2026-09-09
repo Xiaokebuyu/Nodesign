@@ -56,7 +56,7 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
     const { view, blocker } = entry;
     if (!entry.attached) { win.contentView.addChildView(view); entry.attached = true; }
     if (entry.rect) {
-      const z = win.webContents.getZoomFactor() || 1;   // 页面 CSS px → DIP（设置页有界面缩放）
+      const z = win.webContents.getZoomFactor() || 1;   // 页面 CSS px → DIP。主窗倍率被 main.js 钉在 1（界面缩放 09-07/09-09 两层都拿掉了），这里只是防御
       const r = { x: Math.round(entry.rect.x * z), y: Math.round(entry.rect.y * z), width: Math.round(entry.rect.width * z), height: Math.round(entry.rect.height * z) };
       view.setBounds(r);
       applyZoom(entry);
@@ -151,7 +151,7 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
     return entry ? { live: true, url: entry.view.webContents.getURL(), blocked: entry.blocked } : { live: false };
   });
 
-  // 主窗自己的缩放变了（设置页界面缩放）→ 重排
+  // 主窗自己的缩放变了（正常不会：main.js 把倍率钉在 1，这里兜 zoom-changed 拨回那一瞬）→ 重排
   function onWindowReady(win) {
     win.webContents.on('zoom-changed', () => { for (const e of views.values()) layout(e); });
     win.on('resize', () => { for (const e of views.values()) layout(e); });

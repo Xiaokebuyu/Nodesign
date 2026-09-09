@@ -151,3 +151,21 @@ describe('别人的 skill 库', () => {
     expect(checkWorkspaceScope({ file_path: '/home/svc/.nodesign/plugins/u_me/x/SKILL.md' }, { ...pctx, ownPluginsRoot: null, toolName: 'Read' })).toMatch(/别人的 skill 库/);
   });
 });
+
+describe('仓库道（09-09，问题库 iss_mttx8sta_27ym）：cwdRoot 是用户自己的文件夹，也是自己的地盘', () => {
+  const cwdRoot = '/home/u/Desktop/投递台账';
+  const repoCtx = { workspaceRoot: `${cwdRoot}/.nodesign`, cwdRoot, dataRoot };
+  it('Edit 用户仓库根目录的源码 → 放行（此前只认 .nodesign，被拒后 agent 只能绕 Bash）', () => {
+    expect(checkWorkspaceScope({ file_path: `${cwdRoot}/log.mjs` }, { ...repoCtx, toolName: 'Edit' })).toBeNull();
+    expect(checkWorkspaceScope({ file_path: 'src/app.js' }, { ...repoCtx, toolName: 'Write' })).toBeNull();   // 相对路径按画布根解析也仍在仓库里
+    expect(checkWorkspaceScope({ file_path: `${cwdRoot}/.nodesign/board/a.md` }, { ...repoCtx, toolName: 'Write' })).toBeNull();
+  });
+  it('仓库外面照拒；仓库根下的 .claude/agents 同样不许手写', () => {
+    expect(checkWorkspaceScope({ file_path: '/home/u/Desktop/别的仓库/x.js' }, { ...repoCtx, toolName: 'Edit' })).toMatch(/只能落在/);
+    expect(checkWorkspaceScope({ file_path: `${cwdRoot}/.claude/agents/hero.md` }, { ...repoCtx, toolName: 'Write' })).toMatch(/cast_role/);
+    expect(checkWorkspaceScope({ file_path: `${cwdRoot}/.nodesign/.claude/agents/hero.md` }, { ...repoCtx, toolName: 'Write' })).toMatch(/cast_role/);
+  });
+  it('没传 cwdRoot（普通项目）行为不变', () => {
+    expect(checkWorkspaceScope({ file_path: '/home/u/Desktop/投递台账/log.mjs' }, { ...ctx, toolName: 'Edit' })).toMatch(/只能落在/);
+  });
+});
