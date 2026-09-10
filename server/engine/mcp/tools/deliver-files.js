@@ -26,6 +26,30 @@ export function safeName(name, fallback) {
   return base || fallback;
 }
 
+const DIR_SKIP = new Set(['node_modules', '.git', 'exports', '__pycache__']);
+const DIR_FILE_CAP = 2000;
+/** 递归收一个文件夹里的文件（工作区相对路径，/ 分隔）；软链一律不跟（safeResolveRead 那条同款理由） */
+export async function collectDir(root, relDir, out) {
+  const stack = [relDir];
+  while (stack.length) {
+    const cur = stack.pop();
+    let entries = [];
+    try { entries = await fs.readdir(path.join(root, cur), { withFileTypes: true }); } catch { continue; }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const e of entries) {
+      if (e.name.startsWith('.') || DIR_SKIP.has(e.name)) continue;
+      const rel = `${cur}/${e.name}`;
+      if (e.isDirectory()) stack.push(rel);
+      else if (e.isFile()) {
+        if (out.length >= DIR_FILE_CAP) return;
+        const abs = path.join(root, rel);
+        const st = await fs.stat(abs);
+        out.push({ rel, abs, size: st.size });
+      }
+    }
+  }
+}
+
 export function makeDeliverFilesTool({ workspaceRoot, projectId, sessionId, ctx }) {
   return tool(
     'deliver_files',
@@ -34,7 +58,8 @@ download list. Use this when the user asks for something concrete ("give me
 those three images", "send me the deck", "export the cover").
 
 - One path → that file is delivered as-is.
-- Several paths → they are zipped into a single download.
+- Several paths, or a folder → they are zipped into a single download (a folder
+  is delivered whole, keeping its structure; node_modules/.git are skipped).
 
 Paths are workspace-relative (e.g. "canvas.html", "稿件/主稿.html",
 "assets/generated/cover.png"). Pick exactly what the user asked for — do not
@@ -81,6 +106,13 @@ engineering handoff package use export_handoff instead.`,
           try {
             const st = await fs.stat(abs);
             if (st.isFile()) picked.push({ rel, abs, size: st.size });
+            else if (st.isDirectory()) {
+              // 文件夹整个交付（09-09 案：用户标注站点文件夹说「打包发给我」，agent 传文件夹名被拒，
+              // 只好自己 ls 再列 19 条路径）。递归收文件，跳过依赖目录与隐藏目录，封顶防止把仓库打进去。
+              const before = picked.length;
+              await collectDir(root, rel.replace(/\/+$/, ''), picked);
+              if (picked.length === before) missing.push(`${rel} (empty folder)`);
+            }
             else missing.push(`${rel} (not a file)`);
           } catch {
             missing.push(rel);

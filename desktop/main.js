@@ -73,6 +73,9 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', () => showMainWindow());
+  // Windows 上 Notification 要有 AppUserModelId 才显示（electron-builder.yml 的 appId）。没有它，
+  // 导出完成那条「已保存到下载」静默不弹，用户以为什么都没发生（09-09 0.1.34 导出案）。
+  if (process.platform === 'win32') { try { app.setAppUserModelId('com.xiaobuyu.nodesign'); } catch { /* */ } }
   app.whenReady().then(boot).catch(fatal);
 }
 
@@ -228,7 +231,11 @@ function createMainWindow() {
       item.setSavePath(target);
       item.once('done', (_ev, state) => {
         if (state === 'completed') {
-          log(`[download] 已保存 ${target}`);
+          // 「completed」之后再摸一次文件：存进去又不见了（杀软隔离 / 同步盘搬走）要在日志里看得出来
+          let size = -1;
+          try { size = fs.statSync(target).size; } catch { /* */ }
+          log(`[download] 已保存 ${target} (${size >= 0 ? size + ' bytes' : '⚠️ 落盘后立刻找不到'})`);
+          if (size < 0) reportShellIssue('bug', '导出落盘后立刻找不到', `文件 ${target}`);
           if (Notification.isSupported()) {
             const n = new Notification({ title: '已导出', body: `${path.basename(target)} 已保存到「下载」，点击定位` });
             n.on('click', () => shell.showItemInFolder(target));

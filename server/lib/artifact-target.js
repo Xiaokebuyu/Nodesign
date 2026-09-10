@@ -199,9 +199,28 @@ export async function resolveArtifactTarget(workspaceRoot, relPath, sessionId) {
 
   const tryPath = async (rel) => {
     if (!rel) return null;
-    const abs = path.resolve(workspaceRoot, rel);
+    // 先归一（反斜杠 / ./ / ?query）再落盘找：decorate 已经这么做了，找文件那一步不归一的话
+    // Windows 风格的路径在别的平台上就是另一个不存在的文件名
+    const abs = path.resolve(workspaceRoot, normalizeRel(rel));
     if (!insideWorkspace(workspaceRoot, abs)) return null;
-    return (await exists(abs)) ? decorate(rel) : null;
+    if (!(await exists(abs))) return null;
+    // 给的是文件夹（站点卡的 id 就是文件夹名，导出菜单 / 工具常把它原样喂进来）→ 落到它的入口文件。
+    // 以前 exists() 对目录也放行，下游 readFile 直接 EISDIR 500（09-09 桌面版 0.1.34 导出 HTML 案）。
+    let st = null;
+    try { st = await fs.stat(abs); } catch { return null; }
+    if (st.isDirectory()) {
+      const dir = normalizeRel(rel).replace(/\/+$/, '');
+      const m = await taskManifest(workspaceRoot);
+      const owned = (m?.artifacts || []).find(a => a.entryRel && (a.root === dir || a.srcRoot === dir));
+      // 站点的 index.html 先于 deck 的 canvas.html：文件夹形态的产物几乎都是站点
+      const order = [KIND_SITE, KIND_DECK, ...Object.keys(ENTRY_FILE).filter(k => k !== KIND_SITE && k !== KIND_DECK)];
+      const candidates = owned ? [owned.entryRel] : order.map(k => `${dir}/${ENTRY_FILE[k]}`);
+      for (const c of candidates) {
+        if (await exists(path.resolve(workspaceRoot, c))) return decorate(c);
+      }
+      return null;
+    }
+    return decorate(rel);
   };
 
   if (relPath) {

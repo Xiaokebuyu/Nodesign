@@ -17,6 +17,23 @@ import { useGlobalStore } from '../../stores/globalStore.js';
  */
 
 /** 把 blob 塞进浏览器下载。objectURL 要回收，不然一次会话点几十次就攒一堆 */
+/**
+ * 拿一个同源下载地址，先 fetch 成 blob 再走 pushDownload。
+ *
+ * 跟手动导出收成同一条路（原来 agent 交付是 `<a href="/api/…/exports/file/x.zip" download>` 直接点）。
+ * 好处只有两个：非 2xx 时把服务端的错误说出来（原来 404 就静静地什么都不发生）；两种壳一种路。
+ * ⚠️ 09-09 桌面版 0.1.34「导出后下载目录里没有」那案**不是**这条链的病：desktop.log 里五次都
+ * 「已保存」，文件是落盘之后被别的东西（杀软隔离一类）拿走的。别把这段当那件事的修法。
+ */
+export async function downloadFromUrl(url, filename) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(data.error || `${res.status} ${res.statusText}`), { status: res.status });
+  }
+  pushDownload(await res.blob(), filename);
+}
+
 function pushDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
