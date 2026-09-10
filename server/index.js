@@ -56,7 +56,7 @@ import { refreshRelayCatalog, relayRevokedPublicationIds } from './runtime/relay
 import { setPluginOriginPolicy } from './lib/plugin-origin.js';
 import { startIssueOutbox } from './runtime/issue-outbox.js';
 import { probeCapabilities, summarizeCapabilities } from './runtime/capabilities.js';
-import { applyComponentEnv } from './runtime/components.js';
+import { applyComponentEnv, sweepStaleComponentDirs } from './runtime/components.js';
 
 // 启动时 dump 平台决策（让运维一眼看到 OS / HOME / claudeConfigDir / sandbox / preflight）
 // 跨平台坑排查的第一信号
@@ -65,6 +65,8 @@ platform.dump();
 // GET /api/local/status 都读它。探测是异步的（playwright 要 import），在 listen 之前等它
 // 本地分发版：先把装好的组件目录挂进 PATH（runtime/components.js），能力表才探得到它们
 if (platform.isLocal) applyComponentEnv();
+// 上次更新时删不掉的旧组件目录，趁常驻进程还没起来再清一次（09-10 EPERM 案）
+if (platform.isLocal) await sweepStaleComponentDirs();
 // 站主 relay 的目录（配了令牌才拉；没配 / 拉不到都不阻止起动，选择器就只剩本机钥匙的行）。
 // ⚠️ 在能力探测之前：联网搜索 / 生图两位要看"网关给不给"（relay-tools.js），目录没拉就探成"没有"
 const relay = platform.isLocal ? await refreshRelayCatalog() : null;

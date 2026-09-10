@@ -20,26 +20,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { pipeline } from 'node:stream/promises';
-import { Writable } from 'node:stream';
 import { createRequire } from 'node:module';
-import { Unzip, UnzipInflate, UnzipPassThrough } from 'fflate';
 import { profile } from './profile.js';
+// 选源 / 下载 / 解压那一半（09-10 拆出去，行数棘轮）。这里连同原来的导出一起转出，调用方不用改
+import { sourcesFor, probeSource, pickSource, downloadFile, extractZip, envMirrors, DEFAULT_MIRRORS } from './components-fetch.js';
+export { sourcesFor, probeSource, pickSource, downloadFile, extractZip, DEFAULT_MIRRORS };
+// 装/卸 rembg 之前要停它的常驻 python（见 COMPONENT_HOLDERS）
+import { startRembgService, stopRembgService } from '../services/rembg-launcher.js';
 import { loadPrefs, savePrefs } from './local-prefs.js';
 
 export const COMPONENTS_MANIFEST_URL = process.env.NODESIGN_COMPONENTS_MANIFEST
   || 'https://github.com/Xiaokebuyu/Nodesign/releases/download/components-win64/manifest.json';
-/**
- * 镜像（站主 09-06：GitHub 在国内经常"通但只有几十 KB/s"）。每个镜像是一个目录前缀，里面按文件名放同一批资产
- * （manifest.json 和各个 zip），server/scripts/sync-components-mirror.sh 从 release 同步过去。
- * 清单自己的 mirrors 字段优先，其次 env NODESIGN_COMPONENTS_MIRRORS（逗号分隔），最后这份内置默认。
- */
-export const DEFAULT_MIRRORS = ['https://nodesign.xiaobuyu.trade/dl/components-win64'];
 const MANIFEST_TTL_MS = 60 * 60 * 1000;
-const PROBE_BYTES = 512 * 1024;
-const PROBE_TIMEOUT_MS = 8000;
-/** 官方能通且吞吐不低于最快镜像的这个比例就用官方（官方永远是最新版，镜像可能落后） */
-const OFFICIAL_KEEP_RATIO = 1 / 3;
 
 /** 默认位置：<dataRoot>/components */
 export const defaultComponentsRoot = profile.isLocal ? path.join(profile.dataRoot, 'components') : null;
@@ -59,10 +51,6 @@ let manifestCache = { at: 0, manifest: null, error: null };
 const jobs = new Map();
 
 // ── 清单 ──
-
-function envMirrors() {
-  return (process.env.NODESIGN_COMPONENTS_MIRRORS || '').split(',').map((x) => x.trim().replace(/\/+$/, '')).filter(Boolean);
-}
 
 /** 清单：官方地址不通就挨个试镜像里的 manifest.json（镜像可能落后一版，所以官方先） */
 export async function loadManifest({ force = false } = {}) {
@@ -93,99 +81,88 @@ export async function loadManifest({ force = false } = {}) {
   return manifestCache.manifest;
 }
 
-/** 这个资产所有可下的地址：官方在前，镜像按清单 → env → 内置的顺序 */
-export function sourcesFor(def, manifest) {
-  const file = def.url.split('/').pop();
-  const mirrors = [...(Array.isArray(manifest?.mirrors) ? manifest.mirrors : []), ...envMirrors(), ...DEFAULT_MIRRORS]
-    .map((m) => String(m).replace(/\/+$/, ''));
-  const out = [{ kind: 'official', url: def.url }];
-  for (const m of [...new Set(mirrors)]) out.push({ kind: 'mirror', url: `${m}/${file}` });
-  return out;
-}
-
-/** 拉前 512KB 测吞吐（Range）。不通 / 超时 → ok:false。不支持 Range 的源会把整个文件发过来，读够就断 */
-export async function probeSource(url, { bytes = PROBE_BYTES, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  const t0 = Date.now();
-  try {
-    const res = await fetch(url, { headers: { range: `bytes=0-${bytes - 1}` }, signal: ctrl.signal });
-    if (!res.ok || !res.body) return { ok: false, error: `HTTP ${res.status}` };
-    const reader = res.body.getReader();
-    let got = 0;
-    while (got < bytes) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      got += value.length;
-    }
-    try { await reader.cancel(); } catch { /* */ }
-    const ms = Math.max(1, Date.now() - t0);
-    return { ok: got > 0, bytes: got, ms, bytesPerSec: Math.round((got / ms) * 1000) };
-  } catch (err) {
-    return { ok: false, error: err.name === 'AbortError' ? `${timeoutMs / 1000}s 没响应` : err.message };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/**
- * 选源：所有候选并行测速。官方能通、且吞吐不低于最快镜像的 OFFICIAL_KEEP_RATIO 就用官方（永远最新）；
- * 否则最快的那个能通的镜像；一个都不通就还是官方（让下载那步报真实的错）。
- */
-export async function pickSource(sourcesOrDef, manifest) {
-  const sources = Array.isArray(sourcesOrDef) ? sourcesOrDef : sourcesFor(sourcesOrDef, manifest);
-  const results = await Promise.all(sources.map(async (s) => ({ ...s, probe: await probeSource(s.url) })));
-  const officials = results.filter((r) => r.kind === 'official' && r.probe.ok).sort((a, b) => b.probe.bytesPerSec - a.probe.bytesPerSec);
-  const mirrorsOk = results.filter((r) => r.kind !== 'official' && r.probe.ok).sort((a, b) => b.probe.bytesPerSec - a.probe.bytesPerSec);
-  const official = officials[0] || null;
-  const best = mirrorsOk[0] || null;
-  let chosen;
-  if (official && (!best || official.probe.bytesPerSec >= best.probe.bytesPerSec * OFFICIAL_KEEP_RATIO)) chosen = official;
-  else chosen = best || results[0];
-  return { chosen, results };
-}
-
-/**
- * 下载到文件：流式、边下边算 sha256、按 content-length 报进度。
- * ⚠️ 报错要带地址和状态码 —— 装失败时用户看到的就是这一句，别再发生"退出码 1"那种什么都没说的报错。
- */
-export async function downloadFile(url, dest, { onProgress = null, timeoutMs = 6 * 60 * 60 * 1000 } = {}) {
-  let res;
-  try {
-    res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-  } catch (err) {
-    throw new Error(`下载 ${url} 失败：${err.cause?.message || err.message}`);
-  }
-  if (!res.ok || !res.body) throw new Error(`下载 ${url} 失败：HTTP ${res.status}`);
-  const total = Number(res.headers.get('content-length')) || null;
-  const hash = crypto.createHash('sha256');
-  let bytes = 0;
-  const out = fs.createWriteStream(dest);
-  const meter = new Writable({
-    write(chunk, _enc, cb) {
-      hash.update(chunk); bytes += chunk.length;
-      onProgress?.(bytes, total);
-      out.write(chunk, cb);
-    },
-    final(cb) { out.end(cb); },
-  });
-  try {
-    await pipeline(res.body, meter);
-  } catch (err) {
-    fs.rmSync(dest, { force: true });
-    throw new Error(`下载 ${url} 中断在 ${Math.round(bytes / 1048576)}MB${total ? ` / ${Math.round(total / 1048576)}MB` : ''}：${err.cause?.message || err.message}`);
-  }
-  if (total && bytes !== total) { fs.rmSync(dest, { force: true }); throw new Error(`下载 ${url} 不完整：${bytes} / ${total} 字节`); }
-  return { sha256: hash.digest('hex'), bytes, total };
-}
-
-/** 测试用 */
+/** 判据专用：把内存里的缓存与任务清空（磁盘上的记录不动） */
 export function _resetComponents() { manifestCache = { at: 0, manifest: null, error: null }; jobs.clear(); }
 
 // ── 已装状态（磁盘） ──
 
 function installedPath(id) { return path.join(getComponentsRoot(), `${id}.json`); }
 function dirOf(id) { return path.join(getComponentsRoot(), id); }
+/**
+ * 装到哪个目录（09-10 改）：`<root>/<id>-<sha 前 8 位>`，**每个版本一个新目录**。
+ *
+ * 起因是站主更新 rembg 时的 `EPERM, Permission denied … \components\rembg`：原来的做法是
+ * "先把 `<root>/<id>` 整个删掉再解压"，而 Windows 上那个目录随时可能删不动 —— 杀软在扫、
+ * 资源管理器开着、或者我们自己 spawn 的 python 还攥着 DLL。**装一个新东西不该以能删掉旧东西为前提。**
+ * 记录里存的全是绝对路径（dir / binDirs / python / modelsDir），所以换个目录名没有任何人需要知道。
+ * 旧目录装完之后尽力清（sweepOtherDirs），清不掉也只是占地方，不影响用。
+ */
+function installDirFor(id, def) {
+  const tag = typeof def?.sha256 === 'string' && /^[0-9a-f]{8}/.test(def.sha256) ? def.sha256.slice(0, 8) : null;
+  return tag ? path.join(getComponentsRoot(), `${id}-${tag}`) : dirOf(id);
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 删目录，Windows 上要有耐心：杀软扫描 / 刚退出的进程还没放开句柄，都会让 rm 当场 EPERM，
+ * 而这些锁通常一两秒就没了。node 自己的 maxRetries 在 rm 内部退避，外面再包一层给它更长的机会。
+ * 最后还是不行就把真话抛出去，调用方决定这是致命还是"先留着"。
+ */
+async function rmDir(dir, { attempts = 4 } = {}) {
+  for (let i = 1; ; i++) {
+    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); return; }
+    catch (err) {
+      if (i >= attempts) throw err;
+      await sleep(300 * i);
+    }
+  }
+}
+
+/** 同一个组件留下的别的目录（旧版本、上次没删干净的）尽力清掉；清不掉**不算装失败** */
+async function sweepOtherDirs(id, keepDir) {
+  const root = getComponentsRoot();
+  if (!root) return;
+  const keep = path.resolve(keepDir || '');
+  const mine = new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(-[0-9a-f]{8})?$`);
+  let names = [];
+  try { names = fs.readdirSync(root); } catch { return; }
+  for (const name of names) {
+    if (!mine.test(name)) continue;
+    const full = path.join(root, name);
+    if (path.resolve(full) === keep) continue;
+    try { if (!fs.statSync(full).isDirectory()) continue; } catch { continue; }
+    try { await rmDir(full, { attempts: 2 }); console.log(`[components] 清掉旧目录 ${full}`); }
+    catch (err) { console.warn(`[components] 旧目录暂时删不掉（不影响使用，下次起动再试）：${full} ${err.code || err.message}`); }
+  }
+}
+
+/**
+ * 谁攥着这个组件的文件 —— 装之前先停，装完再拉起来（09-10）。
+ * rembg 的 python.exe 是服务端自己 spawn 的常驻进程：不停它，Windows 上连删都删不动，
+ * 而且装完不重开的话，跑着的还是**旧包里的**那个解释器。
+ * ⚠️ 这张表是「装/卸组件」与「谁在用它」之间唯一的接头处，加组件时想一下要不要在这儿留一条。
+ */
+export const COMPONENT_HOLDERS = {
+  rembg: {
+    stop: () => stopRembgService(),
+    start: () => { startRembgService().catch((err) => console.warn(`[components] rembg 服务没拉起来：${err.message}`)); },
+  },
+};
+
+/**
+ * 起动时扫一遍：每个装着的组件，把**记录没指着的**同名目录清掉（09-10）。
+ * 上一次更新时删不掉的旧目录（那会儿文件还被占着）在这里有第二次机会 —— 而这时候
+ * rembg 的常驻 python 还没起来（index.js 里这一步在 startRembgService 之前），最容易删得动。
+ * 删不掉就再等下一次，不影响任何功能。
+ */
+export async function sweepStaleComponentDirs() {
+  if (!getComponentsRoot()) return;
+  for (const id of listInstalledIds()) {
+    const rec = readInstalled(id);
+    if (rec?.dir) await sweepOtherDirs(id, rec.dir);
+  }
+}
 
 export function readInstalled(id) {
   try { return JSON.parse(fs.readFileSync(installedPath(id), 'utf8')); } catch { return null; }
@@ -280,8 +257,9 @@ export async function relocateComponents(dir, { move = true } = {}) {
     try {
       for (const id of ids) {
         const rec = readInstalled(id);
-        const srcDir = path.join(from, id);
-        const dstDir = path.join(to, id);
+        // 目录名不再一定等于 id（09-10 起是 <id>-<sha8>），按记录走；记录里没有就退回老布局
+        const srcDir = rec?.dir && fs.existsSync(rec.dir) ? rec.dir : path.join(from, id);
+        const dstDir = path.join(to, path.basename(srcDir));
         if (fs.existsSync(srcDir)) {
           fs.rmSync(dstDir, { recursive: true, force: true });
           fs.cpSync(srcDir, dstDir, { recursive: true });
@@ -324,6 +302,9 @@ export async function installComponent(id) {
   setJob(id, { status: 'downloading', progress: 0, bytes: 0, total: null, error: null });
   // 不 await：调用方拿任务状态轮询
   (async () => {
+    const holder = COMPONENT_HOLDERS[id] || null;
+    // 停在最前面：跑着的进程攥着旧包的文件，Windows 上连删都删不动（09-10 站主更新 rembg 撞的 EPERM）
+    try { holder?.stop(); } catch (err) { console.warn(`[components] 停 ${id} 的常驻进程失败（继续装）：${err.message}`); }
     try {
       if (def.kind === 'playwright') await installPlaywright(id, def);
       else await installZip(id, def);
@@ -333,17 +314,28 @@ export async function installComponent(id) {
       console.error(`[components] 装 ${id} 失败：${err.message}`);
       setJob(id, { status: 'error', error: err.message });
       try {
-        fs.rmSync(dirOf(id), { recursive: true, force: true });
         for (const f of fs.readdirSync(getComponentsRoot())) if (f.startsWith(`${id}.`) && f.endsWith('.download')) fs.rmSync(path.join(getComponentsRoot(), f), { force: true });
       } catch { /* */ }
+      // 收拾这次尝试留下的半截。⚠️ 只删**这次装进去的那个目录**，不碰已经能用的那份 ——
+      // 09-10 之前这里一把 rmSync(dirOf(id))，等于"更新失败顺手把能用的旧版本也毁了"。
+      // chromium 是例外：它自己一上来就把 <id> 整个清了（部件按 playwright 的目录规则落盘），
+      // 失败时那份已经是半截，留着比删掉更坏 —— 连记录一起撤，界面老实说"未安装"。
+      const live = readInstalled(id)?.dir || null;
+      const attempt = def.kind === 'playwright' ? dirOf(id) : installDirFor(id, def);
+      if (def.kind === 'playwright' || !live || path.resolve(attempt) !== path.resolve(live)) {
+        try { await rmDir(attempt, { attempts: 2 }); } catch { /* 删不掉就留着，下次装/起动再扫 */ }
+        if (live && path.resolve(attempt) === path.resolve(live)) fs.rmSync(installedPath(id), { force: true });
+      }
     }
+    // 成功要用新包重开，失败也要把旧的拉回来 —— 别让一次更新把用户的抠图变成不可用
+    try { holder?.start(); } catch (err) { console.warn(`[components] 拉起 ${id} 的常驻进程失败：${err.message}`); }
   })();
   return jobs.get(id);
 }
 
 async function installZip(id, def) {
-  const dir = dirOf(id);
-  fs.rmSync(dir, { recursive: true, force: true });
+  const dir = installDirFor(id, def);      // 每个版本一个目录，装新的不用先删旧的（见 installDirFor）
+  await rmDir(dir);                        // 同一版本重装：这个目录是上一次的自己，删得动
   fs.mkdirSync(dir, { recursive: true });
   const tmp = path.join(getComponentsRoot(), `${id}.download`);
 
@@ -373,6 +365,8 @@ async function installZip(id, def) {
   if (def.python) rec.python = path.join(dir, def.python);
   if (def.modelsDir) rec.modelsDir = path.join(dir, def.modelsDir);   // rembg 的模型目录 → U2NET_HOME
   fs.writeFileSync(installedPath(id), JSON.stringify(rec, null, 2));
+  // 记录先落定再扫尾：中途断电最多是多占一份地方，不会出现"记录指着已经被删的目录"
+  await sweepOtherDirs(id, dir);
 }
 
 // ── chromium：按 playwright 的目录规则落盘，下载走上面同一条管道 ──
@@ -469,9 +463,14 @@ async function installPlaywright(id, def) {
   fs.writeFileSync(installedPath(id), JSON.stringify(rec, null, 2));
 }
 
-export function uninstallComponent(id) {
+export async function uninstallComponent(id) {
   if (!getComponentsRoot()) return false;
-  fs.rmSync(dirOf(id), { recursive: true, force: true });
+  const holder = COMPONENT_HOLDERS[id] || null;
+  try { holder?.stop(); } catch { /* 停不掉也照删，下面 rmDir 会有耐心 */ }
+  const rec = readInstalled(id);
+  // 记录里那份（可能是 <id>-<sha8>）先删，再扫掉同名的其它目录（老布局的 <id> 也在内）
+  if (rec?.dir) { try { await rmDir(rec.dir); } catch (err) { console.warn(`[components] 卸 ${id}：${rec.dir} 删不掉 ${err.code || err.message}`); } }
+  await sweepOtherDirs(id, null);
   fs.rmSync(installedPath(id), { force: true });
   jobs.delete(id);
   return true;
@@ -500,92 +499,3 @@ function resolveGlobDir(root, pattern) {
  * （外部属性高 16 位，且只有 version-made-by 的高字节 = 3（unix）那套才算数），所以自己从文件尾部读一遍。
  * 认 zip64（LibreOffice 那种上万条目的包）。解析不了返回空表 —— 权限位只是锦上添花，别让它拦下安装。
  */
-export function readZipModes(zipPath) {
-  const modes = new Map();
-  const fd = fs.openSync(zipPath, 'r');
-  try {
-    const size = fs.fstatSync(fd).size;
-    const tailLen = Math.min(size, 0xffff + 22 + 20);
-    const tail = Buffer.alloc(tailLen);
-    fs.readSync(fd, tail, 0, tailLen, size - tailLen);
-    let eocd = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-    if (eocd < 0) return modes;
-    let cdSize = tail.readUInt32LE(eocd + 12);
-    let cdOff = tail.readUInt32LE(eocd + 16);
-    if (cdSize === 0xffffffff || cdOff === 0xffffffff || tail.readUInt16LE(eocd + 10) === 0xffff) {
-      const loc = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x06, 0x07]), eocd);   // zip64 EOCD locator
-      if (loc < 0) return modes;
-      const z64Off = Number(tail.readBigUInt64LE(loc + 8));
-      const z64 = Buffer.alloc(56);
-      fs.readSync(fd, z64, 0, 56, z64Off);
-      if (z64.readUInt32LE(0) !== 0x06064b50) return modes;
-      cdSize = Number(z64.readBigUInt64LE(40));
-      cdOff = Number(z64.readBigUInt64LE(48));
-    }
-    const cd = Buffer.alloc(cdSize);
-    fs.readSync(fd, cd, 0, cdSize, cdOff);
-    let i = 0;
-    while (i + 46 <= cd.length && cd.readUInt32LE(i) === 0x02014b50) {
-      const os = cd[i + 5];
-      const nameLen = cd.readUInt16LE(i + 28), extraLen = cd.readUInt16LE(i + 30), commentLen = cd.readUInt16LE(i + 32);
-      const attrs = cd.readUInt32LE(i + 38);
-      const name = cd.toString('utf8', i + 46, i + 46 + nameLen);
-      const mode = os === 3 ? (attrs >>> 16) & 0o7777 : 0;
-      if (mode) modes.set(name, mode);
-      i += 46 + nameLen + extraLen + commentLen;
-    }
-  } finally {
-    fs.closeSync(fd);
-  }
-  return modes;
-}
-
-/** 流式解压 zip 到 dest；strip = 剥掉前几层目录（上游 zip 常带一层 name-version/） */
-export async function extractZip(zipPath, dest, strip = 0) {
-  let modes = null;
-  if (process.platform !== 'win32') {
-    try { modes = readZipModes(zipPath); } catch (err) { console.warn(`[components] 读不到 ${path.basename(zipPath)} 的权限位：${err.message}`); }
-  }
-  return new Promise((resolve, reject) => {
-    const unzip = new Unzip();
-    unzip.register(UnzipInflate);
-    unzip.register(UnzipPassThrough);   // method 0（stored）：小文件常是这个，不注册就 "no stream handler"
-    const pending = new Set();
-    let failed = null;
-    const fail = (err) => { if (!failed) { failed = err; reject(err); } };
-    unzip.onfile = (file) => {
-      const rel = file.name.split('/').filter(Boolean).slice(strip).join('/');
-      // 不 start() 的条目 fflate 直接跳过（start 前必须先挂 ondata，不然它抛 no stream handler）
-      if (!rel || rel.split('/').some((seg) => seg === '..')) return;   // 目录项 / 越界路径
-      const target = path.join(dest, rel);
-      if (!path.resolve(target).startsWith(path.resolve(dest) + path.sep)) return;
-      if (file.name.endsWith('/')) { fs.mkdirSync(target, { recursive: true }); return; }
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      const ws = fs.createWriteStream(target);
-      // unix 权限位在 zip 的外部属性高 16 位（os=3 才是 unix 那套）。不带出来的话 chrome 旁边的
-      // chrome_crashpad_handler / chrome_sandbox 全没 +x，浏览器一起就死（09-07 在 arm64 上对照 playwright 自己解的那份逮到的）
-      const mode = modes?.get(file.name) || 0;
-      const p = new Promise((res, rej) => {
-        ws.on('finish', () => {
-          if (mode && process.platform !== 'win32') { try { fs.chmodSync(target, mode); } catch { /* */ } }
-          res();
-        });
-        ws.on('error', rej);
-      });
-      pending.add(p);
-      file.ondata = (err, chunk, final) => {
-        if (err) { ws.destroy(err); fail(err); return; }
-        if (chunk && chunk.length) ws.write(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.length));
-        if (final) ws.end();
-      };
-      file.start();
-    };
-    const rs = fs.createReadStream(zipPath, { highWaterMark: 1 << 20 });
-    rs.on('data', (c) => { try { unzip.push(new Uint8Array(c.buffer, c.byteOffset, c.length), false); } catch (err) { fail(err); rs.destroy(); } });
-    rs.on('error', fail);
-    rs.on('end', () => {
-      try { unzip.push(new Uint8Array(0), true); } catch (err) { fail(err); return; }
-      Promise.all(pending).then(() => { if (!failed) resolve(); }).catch(fail);
-    });
-  });
-}

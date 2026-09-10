@@ -86,9 +86,11 @@ describe('components', () => {
     const rec = c.readInstalled('tool');
     expect(rec.version).toBe('1.2');
     expect(rec.sha256).toBe(sha);
-    expect(rec.binDirs).toEqual([path.join(dataDir, 'components', 'tool', 'tool-1.2', 'bin')]);
+    // 目录名是 <id>-<sha8>（09-10 起每个版本一个目录，见 installDirFor），断言跟着记录走
+    expect(rec.dir).toBe(path.join(dataDir, 'components', `tool-${sha.slice(0, 8)}`));
+    expect(rec.binDirs).toEqual([path.join(rec.dir, 'tool-1.2', 'bin')]);
     expect(fs.readFileSync(path.join(rec.binDirs[0], 'hello.exe'), 'utf8')).toBe('MZ hello');
-    expect(rec.python).toBe(path.join(dataDir, 'components', 'tool', 'tool-1.2', 'py', 'python.exe'));
+    expect(rec.python).toBe(path.join(rec.dir, 'tool-1.2', 'py', 'python.exe'));
     const { binDirs, env } = c.applyComponentEnv();
     expect(binDirs).toEqual(rec.binDirs);
     expect(process.env.PATH.split(path.delimiter)[0]).toBe(rec.binDirs[0]);
@@ -123,6 +125,7 @@ describe('components', () => {
   });
   it('换位置（09-08 不能只装 C 盘）：已装的搬过去、记录里的绝对路径改写、旧的删掉、之后装到新位置', async () => {
     await c.installComponent('tool'); await waitJob('tool');
+    const dirName = path.basename(c.readInstalled('tool').dir);   // <id>-<sha8>
     const to = path.join(dataDir, 'elsewhere', 'nd-components');
     const r = await c.relocateComponents(to);
     expect(r.ok).toBe(true);
@@ -132,10 +135,10 @@ describe('components', () => {
     expect(location.dir).toBe(to);
     expect(location.custom).toBe(true);
     const rec = c.readInstalled('tool');
-    expect(rec.binDirs).toEqual([path.join(to, 'tool', 'tool-1.2', 'bin')]);
-    expect(rec.python).toBe(path.join(to, 'tool', 'tool-1.2', 'py', 'python.exe'));
-    expect(fs.existsSync(path.join(to, 'tool', 'tool-1.2', 'bin', 'hello.exe'))).toBe(true);
-    expect(fs.existsSync(path.join(dataDir, 'components', 'tool'))).toBe(false);
+    expect(rec.binDirs).toEqual([path.join(to, dirName, 'tool-1.2', 'bin')]);
+    expect(rec.python).toBe(path.join(to, dirName, 'tool-1.2', 'py', 'python.exe'));
+    expect(fs.existsSync(path.join(to, dirName, 'tool-1.2', 'bin', 'hello.exe'))).toBe(true);
+    expect(fs.existsSync(path.join(dataDir, 'components', dirName))).toBe(false);
     expect(fs.existsSync(path.join(dataDir, 'components', 'tool.json'))).toBe(false);
     expect(c.applyComponentEnv().binDirs).toEqual(rec.binDirs);
     // 拒绝：数据目录本身 / 相对路径
@@ -150,9 +153,58 @@ describe('components', () => {
 
   it('卸载：目录和记录都没了', async () => {
     await c.installComponent('tool'); await waitJob('tool');
-    expect(c.uninstallComponent('tool')).toBe(true);
+    const dir = c.readInstalled('tool').dir;
+    expect(await c.uninstallComponent('tool')).toBe(true);
     expect(c.readInstalled('tool')).toBeNull();
+    expect(fs.existsSync(dir)).toBe(false);
     expect(fs.existsSync(path.join(dataDir, 'components', 'tool'))).toBe(false);
+  });
+
+  /**
+   * 09-10 站主更新 rembg 撞的 `EPERM, Permission denied … \components\rembg`：
+   * 老做法是"先把 <id> 整个删掉再解压"，而 Windows 上那个目录随时可能删不动
+   * （杀软在扫、我们自己 spawn 的 python 攥着 DLL）。**装新东西不该以能删掉旧东西为前提。**
+   */
+  it('装进带版本的目录，装完把旧目录扫掉', async () => {
+    const legacy = path.join(dataDir, 'components', 'tool');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, '老版本占位'), 'x');
+    await c.installComponent('tool'); await waitJob('tool');
+    const rec = c.readInstalled('tool');
+    expect(path.basename(rec.dir)).toBe(`tool-${sha.slice(0, 8)}`);      // 目录名带内容指纹
+    expect(rec.binDirs[0].startsWith(rec.dir)).toBe(true);               // 记录里的绝对路径跟着走
+    expect(fs.existsSync(legacy)).toBe(false);                           // 老布局那份被扫掉
+  });
+
+  it('旧目录删不掉也只是留着，不算装失败（Windows 上文件被占着就是这样）', async () => {
+    await c.installComponent('tool'); await waitJob('tool');
+    const stuck = path.join(dataDir, 'components', 'tool-deadbeef');     // 冒充上一版留下的目录
+    fs.mkdirSync(stuck, { recursive: true });
+    const realRm = fs.rmSync;
+    fs.rmSync = (target, ...rest) => {
+      if (String(target) === stuck) throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
+      return realRm(target, ...rest);
+    };
+    try {
+      c._resetComponents();
+      await c.installComponent('tool');
+      const job = await waitJob('tool');
+      expect(job.status, job.error).toBe('done');                        // 扫不掉 ≠ 装失败
+      expect(c.readInstalled('tool')).not.toBeNull();
+    } finally { fs.rmSync = realRm; realRm(stuck, { recursive: true, force: true }); }
+  });
+
+  it('装/卸之前先停住用这个组件的常驻进程，装完再拉起来', async () => {
+    const calls = [];
+    c.COMPONENT_HOLDERS.tool = { stop: () => calls.push('stop'), start: () => calls.push('start') };
+    try {
+      await c.installComponent('tool');
+      expect((await waitJob('tool')).status).toBe('done');
+      expect(calls).toEqual(['stop', 'start']);
+      calls.length = 0;
+      await c.uninstallComponent('tool');
+      expect(calls).toEqual(['stop']);
+    } finally { delete c.COMPONENT_HOLDERS.tool; }
   });
   it('chromium：官方地址 → npmmirror 地址（cft 走 chrome-for-testing，其余走 playwright/builds）', () => {
     // 这两条就是 09-06 站主机器上要下的东西：官方跳 storage.googleapis.com，镜像那条实测 206

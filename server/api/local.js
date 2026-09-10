@@ -145,7 +145,7 @@ router.post('/components/:id/install', async (req, res) => {
   }
 });
 router.delete('/components/:id', async (req, res) => {
-  uninstallComponent(req.params.id);
+  await uninstallComponent(req.params.id);
   await probeCapabilities({ force: true });
   res.json({ ok: true, capabilities: capabilitySnapshot() });
 });
