@@ -405,8 +405,9 @@ export const MODELS_BUILTIN = Object.freeze([
   {
     // 09-08 晚站主接的 DeepSeek 官方直连行。09-10 站主：换成官方现在的名字 —— 上游目录里那个带到期日的预览名
     // 今天到期、已经不在 `GET /models` 里（现在只有 deepseek-flash / deepseek-v4-pro），wireModel 改点 deepseek-flash。
-    // ⚠️ 行的 id **故意没跟着改**：它是会话与用量账里存下来的身份，改了旧会话解析不到这行（会落回订阅通路）。
-    //    要改得配一张旧 id → 新 id 的迁移表，另说。
+    // ⚠️ 行的 id **故意没跟着改**：它是会话与用量账里存下来的身份。改了之后，钉着旧 id 的会话在 turn 入口
+    //    就被挡下（api/turn.js 的 allowedModelsFor 检查 → 403「这个会话指向的模型现在不可用，请在模型选择器里换一个」），
+    //    每一个都要人手换一次。要改得配一张旧 id → 新 id 的迁移表，另说。
     // ⚠️ 价钱沿用 09-08 记的那份（flash 档高峰价），换名之后没有重新核对过价目页。
     // 按量计入每日额度（站主：以后加充值，现在先按额度走）；1M 窗口走共用别名（不写 sdkAlias）。
     id: 'deepseek-v4.1-flash-expires-on-0910', window: 1_000_000, brand: 'deepseek',

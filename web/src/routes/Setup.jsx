@@ -56,7 +56,14 @@ export function ComponentRows({ data, install, uninstall, compact = false }) {
               {job?.status === 'error' && <div style={{ marginTop: GAP.xs }}><Note tone="bad">{job.error}</Note></div>}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, flexShrink: 0 }}>
-              {c.installed && !active && <Badge tone="ok">{t('已安装')}{c.installedVersion ? ` · ${c.installedVersion}` : ''}</Badge>}
+              {c.installed && !active && (
+                c.outdated
+                  ? <Badge tone="warn">{t('有更新')}</Badge>
+                  : <Badge tone="ok">{t('已安装')}{c.installedVersion ? ` · ${c.installedVersion}` : ''}</Badge>
+              )}
+              {/* 装着的那份跟清单对不上就给一颗「更新」（09-10 rembg 那次：包里补了 C++ 运行库，
+                  只看"装没装"的话，装过的用户永远拿不到修好的包）。装是覆盖式的，不用先卸。 */}
+              {c.installed && c.outdated && !active && <Button size="sm" variant="primary" onClick={() => install(c.id)}>{t('更新')}</Button>}
               {!c.installed && !active && job?.status !== 'error' && <Button size="sm" variant="primary" onClick={() => install(c.id)}>{t('安装')}</Button>}
               {c.installed && !active && !compact && uninstall && <Button size="sm" variant="ghost" onClick={() => uninstall(c.id)}>{t('卸载')}</Button>}
               {job?.status === 'error' && <Button size="sm" onClick={() => install(c.id)}>{t('重试')}</Button>}

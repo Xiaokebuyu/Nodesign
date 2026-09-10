@@ -98,6 +98,17 @@ describe('components', () => {
     c.applyComponentEnv();
     expect(process.env.PATH.split(path.delimiter).filter((d) => d === rec.binDirs[0])).toHaveLength(1);
   });
+  it('装着的那份跟清单 sha 对不上 → outdated（09-10：rembg 补运行库那次版本号不变，只认版本号的话装过的人永远拿不到修好的包）', async () => {
+    await c.installComponent('tool');
+    expect((await waitJob('tool')).status).toBe('done');
+    expect((await c.listComponents()).components.find((x) => x.id === 'tool').outdated).toBe(false);
+    // 清单换了新包（内容变了、版本号可以一个字不动）
+    const recPath = path.join(dataDir, 'components', 'tool.json');
+    fs.writeFileSync(recPath, JSON.stringify({ ...JSON.parse(fs.readFileSync(recPath, 'utf8')), sha256: 'a'.repeat(64) }));
+    const row = (await c.listComponents()).components.find((x) => x.id === 'tool');
+    expect(row.outdated).toBe(true);
+    expect(row.installed).toBe(true);   // 仍然是"装着的"，只是旧了 —— 装是覆盖式的，更新就是再装一次
+  });
   it('sha256 对不上 → error，目录清掉，不留半截', async () => {
     await c.installComponent('bad');
     const job = await waitJob('bad');

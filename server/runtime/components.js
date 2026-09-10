@@ -237,6 +237,10 @@ export async function listComponents() {
       sizeMb: def.kind === 'playwright' ? PLAYWRIGHT_BUNDLE_MB : (def.sizeMb || null),
       supported: !def.platform || def.platform === platformKey,
       installed: !!installed, installedVersion: installed?.version || null,
+      // 装着的那份跟清单对不上 = 有更新（09-10）。判据用 **sha256 不是版本号**：rembg 那次修的是包里
+      // 缺 msvcp140（见 components.yml），版本号一个字都不用变，只认版本号的话所有装过的用户永远拿不到修好的包。
+      // 装是覆盖式的（installZip 先 rm 整个目录），所以"更新"就是再装一次，不用先卸。
+      outdated: !!(installed && def.sha256 && installed.sha256 && String(installed.sha256).toLowerCase() !== String(def.sha256).toLowerCase()),
       job,
     };
   });

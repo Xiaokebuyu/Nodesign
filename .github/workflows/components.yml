@@ -127,7 +127,9 @@ jobs:
       - name: 版本表 + manifest.json
         shell: pwsh
         run: |
-          @{ git = $env:GIT_VER; ffmpeg = $env:FFMPEG_VER; poppler = $env:POPPLER_VER; libreoffice = $env:LO_VER; rembg = "py$env:PY_VER" } | ConvertTo-Json | Set-Content out/versions.json
+          # rembg 版本号带上 +crt：09-10 起包里自带 VC++ 运行库，装过旧包的用户界面上要看得出这是不同的一份
+          # （"有更新"那个判据认的是 sha256，见 runtime/components.js；版本号只是给人看的）
+          @{ git = $env:GIT_VER; ffmpeg = $env:FFMPEG_VER; poppler = $env:POPPLER_VER; libreoffice = $env:LO_VER; rembg = "py$env:PY_VER+crt" } | ConvertTo-Json | Set-Content out/versions.json
           node desktop/components/build-manifest.mjs out $env:RELEASE_TAG
           Get-Content out/manifest.json
 
