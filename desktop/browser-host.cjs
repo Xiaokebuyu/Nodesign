@@ -47,34 +47,44 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
    *    display scale factor。于是视口从来不是 1366：模型收到的图是按另一个宽度布局的（画面缩在一角），
    *    frame 又按 1366 判界（坐标点不着）。
    *    对着一个会撒谎的读数纠错，纠不出真相；改成对着**我们真正关心的那个数**纠。
-   * ⭐ 学到的偏差存在 entry.zoomBias 上：下次矩形一变就直接带上，不用每次重新收敛。
+   * ⛔ **不学「偏差」**（09-10 当天就撤了）。第一版把纠出来的比例记成 entry.zoomBias 想
+   *    一劳永逸，站主机器上的日志立刻打脸：
+   *      16:41:40.133 实测 2310×1299 → zoom 0.682→1.154
+   *      16:41:40.587 实测  808×454  → zoom 1.154→0.682     ← 450ms 后自己荡回来
+   *    因为差错**不是系统性的**（稳态下 zoom 恰好 = bounds/1366，一分不差），是
+   *    「量早了」：矩形刚变、页面还没重排完就去读 innerWidth，读到的是上一拍的数。
+   *    把一个瞬时值学成常量，等于把一次误读变成之后每次都错。
+   * ⭐ 换成**代次闸**：读数只有在「这中间没有再 layout 过」时才算数，荡不起来。
    */
   function applyZoom(entry, verify = 2) {
     const wc = entry.view.webContents;
     if (wc.isDestroyed()) return;
     const w = (entry.bounds && entry.bounds.width) || entry.viewport.width;
-    const zoom = clampZoom((w / entry.viewport.width) * (entry.zoomBias || 1));
+    const zoom = clampZoom(w / entry.viewport.width);
     entry.zoomApplied = zoom;   // 基准用**我们设下去的值**，不回读（回读那个数不可信）
     try { wc.setZoomFactor(zoom); } catch { /* 页面还没就绪时会抛，下面复查再来 */ }
-    if (verify > 0) setTimeout(() => checkViewport(entry, verify), 300);
+    if (verify > 0) setTimeout(() => checkViewport(entry, verify, entry.seq), 300);
   }
 
-  /** 复查：页面量到的视口跟要的差多少，就按比例把 zoom 拨过去（页面没就绪时 setZoomFactor 也会静默不生效，这条同时兜住它） */
-  function checkViewport(entry, left) {
+  /**
+   * 复查：页面量到的视口跟要的差多少，就按比例把 zoom 拨过去。
+   * （页面没就绪时 setZoomFactor 会静默不生效，这条同时兜住它。）
+   * @param {number} seq 派这次复查时的布局代次；对不上说明中间又摆过一次，这个读数已经过期
+   */
+  function checkViewport(entry, left, seq) {
     const wc = entry.view.webContents;
-    if (wc.isDestroyed()) return;
+    if (wc.isDestroyed() || entry.seq !== seq) return;
     wc.executeJavaScript('({w:window.innerWidth,h:window.innerHeight})', true).then((vp) => {
-      if (!vp || !(vp.w > 0)) return;
+      if (!vp || !(vp.w > 0) || entry.seq !== seq) return;    // 读的过程中又摆了 → 这个数不作数
       const want = entry.viewport.width;
       entry.cssViewport = { width: vp.w, height: vp.h };
       if (Math.abs(vp.w - want) <= Math.max(2, want * 0.01)) return;    // 1% 以内算到位
       const base = entry.zoomApplied || 1;
       const next = clampZoom(base * (vp.w / want));
-      entry.zoomBias = clampZoom(next / ((entry.bounds && entry.bounds.width ? entry.bounds.width : want) / want));
       log(`[browser-host] viewport ${entry.projectId} 实测 ${vp.w}×${vp.h}（要 ${want}×${entry.viewport.height}）→ zoom ${base.toFixed(3)}→${next.toFixed(3)}`);
       entry.zoomApplied = next;
       try { wc.setZoomFactor(next); } catch { return; }
-      if (left > 1) setTimeout(() => checkViewport(entry, left - 1), 300);
+      if (left > 1) setTimeout(() => checkViewport(entry, left - 1, seq), 300);
     }).catch(() => { /* 导航中读不到，下一次 layout/did-navigate 再来 */ });
   }
 
@@ -93,6 +103,7 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
       : { ...PARK, width: entry.viewport.width, height: entry.viewport.height };
     view.setBounds(r);
     entry.bounds = r;          // applyZoom 只认这个 —— 视口 = bounds ÷ zoom，两个数出自同一次 layout
+    entry.seq = (entry.seq || 0) + 1;   // 布局代次：在飞的复查凭它判断自己的读数过没过期
     applyZoom(entry);
     if (!alive) return;
     if (!entry.attached) { win.contentView.addChildView(view); entry.attached = true; }
