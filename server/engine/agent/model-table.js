@@ -235,6 +235,32 @@ export const MODELS_BUILTIN = Object.freeze([
     },
   },
   {
+    // 09-10 站主要的第三条 GLM 5.3 Flash：走 **OpenCode Go 那条订阅**（Go 目录里这个模型刚拿到双倍限额）。
+    // 跟另外两条同模型不同渠道，值钱的不是价而是那份限额。
+    // ⚠️⚠️ 记账口径跟别的行不一样：Go 是站主 $10/月的订阅，上游自报 `cost` **恒 0**（09-10 实测），
+    //   而 applyUpstreamBilling 只在自报 **> 0** 时才盖表价 —— 所以下面这份表价不是"兜底"而是**唯一**的
+    //   记账依据。不填价 = 这行对用户免费，全站一起白嫖你那份订阅限额，每日额度闸对它形同虚设。
+    //   价沿用 merge 那行（同一个模型的网关标价），让 basic 的 $5/天对它照常有意义。
+    // ⛔ 这把钥匙**跟 deepseek 视觉行共用一个限流桶**（同 NODESIGN_UPSTREAM_ZEN_KEY / 同一份 Go 订阅）：
+    //   这行被用爆，那行跟着一起挂。要先只给自己试就在 select 里加一处 `gate: 'localGen'`。
+    // 09-10 实测（真发一次）：文本 / 工具位都通；思考字段是 **reasoning_content**（不是 merge 那边的
+    //   thinking，转换层两种都认）；usage 带 prompt_tokens_details.cached_tokens = 有 prompt cache。
+    // ⚠️ 没写 standby（站主 09-10「先别加 fallback」）—— 要接就是一行 `standby: 'glm-5.3-flash-merge'`。
+    id: 'glm-5.3-flash-go', window: 1_000_000, brand: 'glm',
+    select: { label: 'GLM-5.3-Flash · OpenCode Go', desc: '第三条渠道 · 走 OpenCode Go 订阅（限额双倍）· 1M 上下文 · 单次最多 4 张图片' },
+    api: {
+      upstream: 'zenGo', wireModel: 'glm-5.3-flash',
+      fastModel: 'deepseek-v4-flash-helper',
+      thinking: 'strip',
+      reasoningEffort: 'high',    // zen 系没有 medium 档，跟另外两条 glm 行取一致
+      maxOutput: 131_072,
+      // ⛔ 同一个上游的 deepseek 视觉行 09-07 实撞过 Console Go 的 "At most 4 image(s)"。这条没实测，
+      // 按同上游的已知上限先收着：裁图比整发 400 好（lib/ingress/image-cap.js）
+      maxImages: 4,
+      prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
+    },
+  },
+  {
     // 09-08 晚站主接的 DeepSeek 官方直连行。09-10 站主拍板**出口名跟展示名分开**：上游目录把版本抹了（只剩 deepseek-flash），
     // 选择器里再抹一次用户就不知道在用哪一代 → id/label 写 v4.1、发出去的只认 wireModel。旧 id 在 model-renames.js。价沿用 09-08 没重核。
     id: 'deepseek-v4.1-flash', window: 1_000_000, brand: 'deepseek',
