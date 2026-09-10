@@ -91,6 +91,13 @@ const ModelSchema = z.object({
   emptyRetries: z.number().int().min(0).max(10).optional(),
   retryBudgetMs: z.number().int().min(0).max(MAX_RETRY_BUDGET_MS).optional(),
   uncensored: z.boolean().default(false),
+  // 钟点闸（09-10）：这行每天有几段时间不可用。判据在 lib/model-availability.js，那儿也有更细的校验
+  // （'HH:MM-HH:MM'、时区名认不认）—— 这里只管形状，内容错了由 buildIndex 那趟把整行丢掉并报出来。
+  unavailable: z.object({
+    why: z.string().trim().max(60).optional(),
+    tz: z.string().trim().max(60).optional(),
+    windows: z.array(z.string().trim()).min(1),
+  }).strict().optional(),
 }).strict();
 
 export const ConfigSchema = z.object({
@@ -111,7 +118,7 @@ function issueText(issue) {
  *   upstreams 值已是 UPSTREAMS 条目形状（label/baseUrl/keyEnv/key/authStyle/protocol/countTokens/imageFormats/external）
  *   models 值是归一化后的配置条目（还不是表行；转表行在 model-context.js toExternalRow）
  */
-export function validateLocalConfig(raw) {
+export function validateLocalConfig(raw, { allowBuiltinUpstreams = false } = {}) {
   const errors = [];
   const out = { upstreams: {}, models: [], errors };
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -148,7 +155,13 @@ export function validateLocalConfig(raw) {
     const d = r.data;
     if (RESERVED_MODELS.has(d.id)) { errors.push({ where, message: `'${d.id}' 是内置 Claude 订阅模型名，插槽不能用它做 id；官方 Claude 请在「Claude 官方」里登录或填 API Key，这里换一个 id` }); return; }
     if (seen.has(d.id)) { errors.push({ where, message: `id '${d.id}' 重复` }); return; }
-    if (!out.upstreams[d.upstream]) { errors.push({ where, message: `upstream '${d.upstream}' 不存在或没通过校验（外部模型只能指向本文件里的 upstream）` }); return; }
+    // allowBuiltinUpstreams（09-10，给**站点**插槽开的）：站主在管理台加一行"挂在 merge 网关上的新模型"时，
+    // 不该被逼着把这个网关连钥匙再声明一遍（钥匙在 .env 里，页面上不该出现第二份）。
+    // ⛔ 本地分发版仍旧不许：那边的插槽是用户自己的钥匙，指向内置上游等于借站主的钥匙发请求。
+    // ⛔ 两种情况都不许**重名顶替**内置上游（RESERVED_UPSTREAMS 那道闸在上面），只许引用。
+    if (!out.upstreams[d.upstream] && !(allowBuiltinUpstreams && UPSTREAMS_BUILTIN[d.upstream])) {
+      errors.push({ where, message: `upstream '${d.upstream}' 不存在或没通过校验（${allowBuiltinUpstreams ? '可以填内置上游名，或' : ''}只能指向本文件里的 upstream）` }); return;
+    }
     if (d.emptyRetries === 0 && d.retryBudgetMs) { errors.push({ where, message: 'emptyRetries=0 时 retryBudgetMs 没有意义' }); return; }
     seen.add(d.id);
     out.models.push(Object.freeze(d));

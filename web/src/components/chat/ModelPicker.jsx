@@ -168,9 +168,15 @@ export default function ModelPicker({
     // 口径（08-21 深夜）：pro 不对外分发，留着锁行只是让人知道有更高档，文案不给任何"去哪里拿资格"的路径
     const lockedOpt = options.find(o => o.id === id && o.locked);
     if (lockedOpt) {
+      // 09-10 起锁不止一种：站主停用 / 上游高峰关门的行带 unavailableKind，理由由服务端算好
+      // （几点回来那句话要现算）。写死"仅限 Pro 档"对这两种是**假话** —— 用户会跑去升级档位。
       await confirmDialog({
-        title: t('这个模型仅限 Pro 档'),
-        message: `${lockedOpt.label} 属于 Pro 档，当前不对外开放。选择器中未加锁的模型均为您当前档位可用的模型。`,
+        title: lockedOpt.unavailableKind
+          ? (lockedOpt.unavailableKind === 'closed' ? t('这个模型现在不开门') : t('这个模型已被停用'))
+          : t('这个模型仅限 Pro 档'),
+        message: lockedOpt.unavailableKind
+          ? `${lockedOpt.label}：${lockedOpt.lockReason}`
+          : `${lockedOpt.label} 属于 Pro 档，当前不对外开放。选择器中未加锁的模型均为您当前档位可用的模型。`,
         confirmLabel: t('知道了'), cancelLabel: t('关闭'),
       });
       return;

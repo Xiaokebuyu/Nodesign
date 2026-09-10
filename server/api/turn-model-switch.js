@@ -3,7 +3,8 @@ import { getQuery, getRun, getSessionIdByRunId } from '../engine/runs/active-run
 import { ensureSessionWorkspace, getSessionMetaDir } from '../projects/workspace.js';
 import { applySessionModel, resolveSessionModel, defaultModel } from '../engine/agent/session-model.js';
 import { registerIngressSession } from '../lib/model-ingress.js';
-import { allowedModelsFor, isModelLockedFor, resolveSdkSpoofModel, modelSwitchRejection, resolveModelRoute } from '../engine/agent/model-context.js';
+import { allowedModelsFor, modelLockFor, resolveSdkSpoofModel, resolveModelRoute } from '../engine/agent/model-context.js';
+import { modelSwitchRejection } from '../engine/agent/model-switch-rules.js';   // 换模型的闸 09-10 拆出去了
 import { msg } from '../shared/messages.js';
 
 /**
@@ -51,8 +52,9 @@ export async function hotSwitchModelHandler(req, res, next) {
     // 08-21：热切路以前不过白名单（任意字符串直达 SDK）。与 PUT /sessions/:sid/model 同口径
     if (wanted) {
       const modelUser = modelUserFor(req, project);   // 资格按项目 owner 算（_guard.js）
-      if (isModelLockedFor(modelUser, wanted)) {
-        return res.status(403).json({ error: msg(req, '该模型仅限 Pro 档，当前不对外开放'), code: 'MODEL_LOCKED', model: wanted });
+      const lock = modelLockFor(modelUser, wanted);   // 话按锁的种类取（09-10，同 turn.js）
+      if (lock) {
+        return res.status(403).json({ error: lock.unavailableKind ? lock.lockReason : msg(req, '该模型仅限 Pro 档，当前不对外开放'), code: 'MODEL_LOCKED', model: wanted });
       }
       if (!allowedModelsFor(modelUser).some((m) => m.id === wanted)) {
         return res.status(400).json({ error: `unknown model: ${model}`, code: 'UNKNOWN_MODEL' });

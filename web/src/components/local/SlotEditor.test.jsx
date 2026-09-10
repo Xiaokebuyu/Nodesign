@@ -44,11 +44,11 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); });
 
-function render(models) {
+function render(models, props = {}) {
   const config = { upstreams: { deepseek: UPSTREAM }, models };
   act(() => root.render(
     <SlotEditor config={config} setConfig={() => {}} errors={[]} enums={CONFIG_ENUMS}
-      active={[]} needsRestart={false} onSave={() => {}} saving={false} showToast={() => {}} />,
+      active={[]} needsRestart={false} onSave={() => {}} saving={false} showToast={() => {}} {...props} />,
   ));
   return host.textContent;
 }
@@ -89,5 +89,56 @@ describe('模型插槽编辑器', () => {
   it('渲染过程没有往 console.error 里吐东西', () => {
     render([FRESH_ROW]);
     expect(errors, `React 报了：\n${errors.join('\n')}`).toEqual([]);
+  });
+});
+
+/**
+ * 09-10 加的两处：站点管理台复用这个编辑器（applyMode='hot'），以及每行能声明"每天关门时段"。
+ * 钉住的是**填进去的字变成什么形状** —— 这个字段填错不会当场报错，只会让那一行在服务端被静默丢掉。
+ */
+/**
+ * 往受控输入框里"打字"。⚠️ 直接 `box.value = x` 再派发 input **不会**触发 React 的 onChange：
+ * React 自己记着上一次的值，看见没变就不往下走（第一版就是这么假绿的）。要走原型上的 setter。
+ */
+const type = (box, value) => {
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+  act(() => { setter.call(box, value); box.dispatchEvent(new Event('input', { bubbles: true })); });
+};
+
+describe('站点场合与关门时段', () => {
+  const rowWith = (over) => ({ id: 'x', label: 'X', window: 128000, upstream: 'deepseek', wireModel: 'deepseek-chat', ...over });
+
+  it("applyMode='hot'：措辞是保存即可，不提重启", () => {
+    render([rowWith({})], { applyMode: 'hot' });
+    expect(host.textContent).toContain('未生效（保存即可）');
+    expect(host.textContent).not.toContain('保存并重启');
+  });
+
+  it('canProbe=false 时不画「检测」按钮（站点那边还没有这个端点）', () => {
+    render([rowWith({})], { canProbe: false, active: ['x'] });
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent.includes('检测'))).toBe(false);
+    render([rowWith({})], { active: ['x'] });
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent.includes('检测'))).toBe(true);
+  });
+
+  it('内置上游进服务商下拉：站主不用把网关连钥匙再声明一遍', () => {
+    render([rowWith({})], { builtinUpstreams: { merge: { label: 'Merge Gateway', keyPresent: true }, zen: { label: 'OpenCode Zen', keyPresent: false } } });
+    const opts = [...host.querySelectorAll('option')].map((o) => o.textContent);
+    expect(opts).toContain('Merge Gateway');
+    expect(opts).toContain('OpenCode Zen（缺钥匙）');   // 没配钥匙的要写明，别让人挑完才发现发不出去
+  });
+
+  it('关门时段：逗号顿号空格都当分隔符，空了整个字段不写（不是空数组）', () => {
+    let got;
+    act(() => root.render(
+      <SlotEditor config={{ upstreams: { deepseek: UPSTREAM }, models: [rowWith({})] }} setConfig={(c) => { got = c; }}
+        errors={[]} enums={CONFIG_ENUMS} active={[]} needsRestart={false} onSave={() => {}} saving={false} showToast={() => {}} />,
+    ));
+    const box = [...host.querySelectorAll('input')].find((i) => i.placeholder === '01:00-04:00, 06:00-10:00');
+    expect(box, '高级里那个关门时段输入框没画出来').toBeTruthy();
+    type(box, '01:00-04:00、06:00-10:00');
+    expect(got.models[0].unavailable).toEqual({ tz: 'UTC', windows: ['01:00-04:00', '06:00-10:00'] });
+    type(box, '  ');
+    expect(got.models[0].unavailable).toBeUndefined();
   });
 });

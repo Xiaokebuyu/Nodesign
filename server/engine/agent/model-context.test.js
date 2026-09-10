@@ -3,7 +3,7 @@
  * 撞车断言 —— 这张表写错一个字的历史下场是"两处静默降级没人报错"。
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,12 +16,15 @@ import {
   resolveWireModel,
   repriceUsageDeltas,
   selectableModelsFor,
-  allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree, crossLaneSwitchReason, hotSwitchLaneReason, modelSwitchRejection,
+  allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree,
   canonicalModelId, standbyModelOf,
   UPSTREAMS, BRANDS, brandOfModel, SHARED_SDK_ALIAS,
 } from './model-context.js';
 import { MODELS_BUILTIN, SHARED_SDK_ALIAS as SHARED_FROM_TABLE } from './model-table.js';
 import { RENAMED_MODELS, followRename } from './model-renames.js';
+import { crossLaneSwitchReason, hotSwitchLaneReason, modelSwitchRejection } from './model-switch-rules.js';   // 09-10 拆出去的换模型闸
+import { modelLockFor } from './model-context.js';
+import { setModelEnabled } from '../../lib/model-switches.js';
 // 08-30：默认行换成付费行之后，「并发闸把它算在哪一档」成了这张表的一条硬约束（见文末 describe）
 import { decideConcurrency } from '../../lib/quota.js';
 
@@ -636,8 +639,9 @@ describe('选择器两个面：画布 / 演出（09-06 用户拍板「首页不�
  */
 describe('改过名的行', () => {
   it('旧 id 翻成现名；不认识的原样；活着的行原样', () => {
-    expect(canonicalModelId('deepseek-v4.1-flash-expires-on-0910')).toBe('deepseek-flash');
-    expect(canonicalModelId('deepseek-flash')).toBe('deepseek-flash');
+    expect(canonicalModelId('deepseek-v4.1-flash-expires-on-0910')).toBe('deepseek-v4.1-flash');
+    expect(canonicalModelId('deepseek-flash')).toBe('deepseek-v4.1-flash');   // 上午改名留下的旧 id，现在只是 wireModel
+    expect(canonicalModelId('deepseek-v4.1-flash')).toBe('deepseek-v4.1-flash');
     expect(canonicalModelId('nobody-knows-this')).toBe('nobody-knows-this');
     expect(canonicalModelId(null)).toBe(null);
     expect(canonicalModelId('')).toBe('');
@@ -654,11 +658,13 @@ describe('改过名的行', () => {
   it('拿旧 id 查行的每一路都通：通路 / 窗口 / 牌子 / standby / 价钱', () => {
     const old = 'deepseek-v4.1-flash-expires-on-0910';
     expect(resolveModelRoute(old).mode).toBe('api');
-    expect(resolveModelRoute(old).appModel).toBe('deepseek-flash');   // 下游拿到的是现名
-    expect(resolveModelContextWindow(old)).toBe(resolveModelContextWindow('deepseek-flash'));
+    expect(resolveModelRoute(old).appModel).toBe('deepseek-v4.1-flash');   // 下游拿到的是现名
+    expect(resolveModelContextWindow(old)).toBe(resolveModelContextWindow('deepseek-v4.1-flash'));
     expect(brandOfModel(old)).toBe('deepseek');
-    expect(standbyModelOf(old)).toBe(standbyModelOf('deepseek-flash'));
+    expect(standbyModelOf(old)).toBe(standbyModelOf('deepseek-v4.1-flash'));
+    // 出口名跟展示名分开：id 是 v4.1，发给官方的仍是目录里那个 deepseek-flash
     expect(resolveWireModel(old)?.wireModel).toBe('deepseek-flash');
+    expect(resolveWireModel('deepseek-v4.1-flash')?.wireModel).toBe('deepseek-flash');
   });
 
   it('followRename：多跳跟到底，成环当没改过（表长大之后才会出事的两条）', () => {
@@ -667,5 +673,53 @@ describe('改过名的行', () => {
     expect(followRename('a', { a: 'a' })).toBe('a');               // 自指
     expect(followRename('x', { a: 'b' })).toBe('x');
     expect(followRename('', {})).toBe('');
+  });
+});
+
+/**
+ * 不可用的两把闸（2026-09-10）：站主的总闸 + 模型自己的钟点闸。
+ * 钉的是同一条口径的两头：**清单里看得见但选不了**、**白名单里没有它**。
+ * 藏起来是错的（用户会以为行被删了），放行也是错的（403 才是真话）。
+ */
+describe('不可用的行：看得见、选不了、话是真的', () => {
+  const admin = { role: 'admin' };
+  const MERGE = 'deepseek-v4.1-flash-merge';
+  const inPeak = new Date(Date.UTC(2026, 8, 10, 7, 0));     // 高峰第二段里
+  const offPeak = new Date(Date.UTC(2026, 8, 10, 13, 0));
+
+  afterEach(() => { setModelEnabled(MERGE, true, { updatedBy: 'test' }); });
+
+  it('钟点闸：高峰里 locked + 写明几点回来，白名单里没有它；非高峰照常', () => {
+    const row = selectableModelsFor(admin, { now: inPeak }).find((m) => m.id === MERGE);
+    expect(row.locked).toBe(true);
+    expect(row.unavailableKind).toBe('closed');
+    expect(row.lockReason).toMatch(/北京时间 18:00/);
+    expect(row.resumesAt).toBe('2026-09-10T10:00:00.000Z');
+    expect(allowedModelsFor(admin, { now: inPeak }).some((m) => m.id === MERGE)).toBe(false);
+
+    const open = selectableModelsFor(admin, { now: offPeak }).find((m) => m.id === MERGE);
+    expect(open.locked).toBeUndefined();
+    expect(allowedModelsFor(admin, { now: offPeak }).some((m) => m.id === MERGE)).toBe(true);
+  });
+
+  it('总闸：站主停用之后 admin 自己也选不了（管理台不是绕过闸门的后门）', () => {
+    setModelEnabled(MERGE, false, { updatedBy: 'test' });
+    const row = selectableModelsFor(admin, { now: offPeak }).find((m) => m.id === MERGE);
+    expect(row.locked).toBe(true);
+    expect(row.unavailableKind).toBe('disabled');
+    expect(row.lockReason).toMatch(/停用/);
+    expect(allowedModelsFor(admin, { now: offPeak }).some((m) => m.id === MERGE)).toBe(false);
+    expect(isModelLockedFor(admin, MERGE, { now: offPeak })).toBe(true);
+  });
+
+  it('拒绝的话从行上取（modelLockFor），三个端点据它回 403 —— 写死"仅限 Pro 档"对这两把闸是假话', () => {
+    const lock = modelLockFor(admin, MERGE, { now: inPeak });
+    expect(lock.lockReason).toMatch(/换一个模型/);
+    expect(lock.lockReason).not.toMatch(/Pro 档/);
+    expect(modelLockFor(admin, MERGE, { now: offPeak })).toBeNull();
+  });
+
+  it('默认模型不会落在关着门的行上', () => {
+    expect(defaultModelFor(admin, { now: inPeak })).not.toBe(MERGE);
   });
 });

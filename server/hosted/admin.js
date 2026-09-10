@@ -17,6 +17,8 @@
  *   GET    /api/admin/market/:id       一条发布 + SKILL.md 全文（图走 /api/market/:id/images/:n，admin 看得到任何状态）
  *   POST   /api/admin/market/:id/review {state: approved|rejected|revoked, reviewNote?}
  *   PATCH  /api/admin/market/:id       {featuredRank: 整数|null} 加精 / 取消精选（只有 approved 能加精）
+ *   GET    /api/admin/models           站点模型全景（开关状态 / 钟点闸 / 上游 / 价 / 被谁引用）→ model-admin.js
+ *   PATCH  /api/admin/models/:id       {enabled} 把一行从全站收走 / 放回来
  */
 
 import express from 'express';
@@ -29,6 +31,7 @@ import { listIssues, setIssueStatus, removeIssue, issueStats } from '../lib/issu
 import { createNotice, listNotices, getActiveNotice, retireNotice, retireAllNotices } from '../lib/notice-store.js';
 import { flagCounts, listFlags, removeFlag, levelForKnob, LEVELS } from '../lib/moderation.js';
 import { listForAdmin, countByState, getPublication, reviewPublication, setFeaturedRank, readSkillMd, STATES } from './market-store.js';
+import modelAdminRouter from './model-admin.js';
 
 const router = express.Router();
 // admin 专属守卫。原来住在 auth/middleware.js，那是内核文件；这里是它唯一的使用者，
@@ -39,6 +42,9 @@ function adminGuard(req, res, next) {
 }
 
 router.use(adminGuard);
+
+// 站点模型管理台（09-10）：清单 + 总闸。单独一个文件，它会长（站点插槽的增删改也要落在那儿）
+router.use('/models', modelAdminRouter);
 
 router.post('/invites', (req, res) => {
   const maxUses = Number(req.body?.maxUses) || 1;

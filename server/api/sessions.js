@@ -44,7 +44,8 @@ import { getProjectBus } from '../ws/broker.js';
 import { getLastContextUsage } from '../engine/runs/live-turn.js';
 import { Events } from '../engine/agent/events.js';
 import { resolveSessionModel, applySessionModel, defaultModel } from '../engine/agent/session-model.js';
-import { selectableModelsFor, allowedModelsFor, isModelLockedFor, defaultModelFor, modelSwitchRejection, canonicalModelId } from '../engine/agent/model-context.js';
+import { selectableModelsFor, allowedModelsFor, modelLockFor, defaultModelFor, canonicalModelId } from '../engine/agent/model-context.js';
+import { modelSwitchRejection } from '../engine/agent/model-switch-rules.js';   // 换模型的闸 09-10 拆出去了
 
 
 import { mountRewindRoute } from './sessions-rewind.js';
@@ -238,8 +239,10 @@ router.put('/:pid/sessions/:sid/model', async (req, res, next) => {
     // 只收清单里的 id：随手传个拼错的 model 进去，SDK 会自己 fallback、真实容量
     // 查不到，两处都不报错，事后只能从"怎么变慢了"倒推
     const modelUser = modelUserFor(req, project);   // 资格按项目 owner 算（_guard.js）
-    if (raw !== null && isModelLockedFor(modelUser, raw)) {
-      return res.status(403).json({ error: '该模型仅限 Pro 档，当前不对外开放', code: 'MODEL_LOCKED', model: raw });
+    // 话按锁的种类取（09-10，同 turn.js）：站主停用 / 钟点关门都有自己的理由，写死"Pro 档"是假话
+    const lock = raw !== null ? modelLockFor(modelUser, raw) : null;
+    if (lock) {
+      return res.status(403).json({ error: lock.lockReason || '该模型仅限 Pro 档，当前不对外开放', code: 'MODEL_LOCKED', model: raw });
     }
     if (typeof raw === 'string' && !allowedModelsFor(modelUser).some((m) => m.id === raw)) {
       return res.status(400).json({ error: `unknown model: ${raw}`, code: 'UNKNOWN_MODEL' });

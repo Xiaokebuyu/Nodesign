@@ -24,7 +24,11 @@
  */
 export const RENAMED_MODELS = Object.freeze({
   // 09-10：DeepSeek 官方换了目录，我们那行的 id 里还带着预览名的到期日（09-08 接的时候就这么写的）
-  'deepseek-v4.1-flash-expires-on-0910': 'deepseek-flash',
+  'deepseek-v4.1-flash-expires-on-0910': 'deepseek-v4.1-flash',
+  // 09-10 同日第二次：先跟着上游目录改成了 deepseek-flash，站主随即拍板展示名要留版本号 → 落回 v4.1。
+  // ⚠️ 目录名 deepseek-flash 现在只当 wireModel 用，**不再是任何一行的 id**，所以这条必须留着（上午改名后
+  // 建的会话文件里存的就是它）。两条都直接指现名而不是串成 a→b→c：加载断言要求每个目标是活着的行。
+  'deepseek-flash': 'deepseek-v4.1-flash',
 });
 
 /**

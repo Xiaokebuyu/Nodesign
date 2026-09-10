@@ -75,8 +75,16 @@ export default {
   '与内置模型「{id}」同名：保存并重启后，这一条会顶替内置的那条，请求走您自己的 API Key。想两条并存就在「高级」里改一个内部 id。': 'Same name as the built-in model "{id}": after saving and restarting, this slot replaces the built-in one and requests use your own API key. To keep both, change the internal id under "Advanced".',
   '「{id}」是内置 Claude 订阅模型名，不能用作内部 id。官方 Claude 请在上方「Claude 官方」中登录或填写 API Key；经中转站接入的 Claude 请在「高级」里改一个内部 id（例如 {id}-mine）。': '"{id}" is a built-in Claude subscription model name and cannot be used as an internal id. For official Claude, sign in or enter an API key under "Claude (official)" above; for Claude via a relay, change the internal id under "Advanced" (for example {id}-mine).',
   '数字': 'Number',
-  '窗口请填写服务商标称的上下文长度（填得过大会在写满时被对方返回 400，填得过小则浪费可用容量）。价目 / 重试 / liftImages / fastModel 等少用字段在 JSON 模式中填写，字段名与内置表一致。':
-    'Set the context window to the length the provider advertises: too large and the provider returns a 400 once it fills, too small and you waste available capacity. Rarer fields (pricing, retry, liftImages, fastModel) go in JSON mode, with the same field names as the built-in table.',
+  '窗口请填写服务商标称的上下文长度（填得过大会在写满时被对方返回 400，填得过小则浪费可用容量）。关门时段按 UTC 写，落在里面的时候这一行在选择器里灰着并写明几点恢复，不会自动换到别的模型。价目 / 重试 / liftImages / fastModel 等少用字段在 JSON 模式中填写，字段名与内置表一致。':
+    'Set the context window to the length the provider advertises: too large and the provider returns a 400 once it fills, too small and you waste available capacity. Closing hours are in UTC; while inside one, this row is greyed out in the picker with the time it comes back, and nothing switches models for you. Rarer fields (pricing, retry, liftImages, fastModel) go in JSON mode, with the same field names as the built-in table.',
+  '○ 未生效（保存即可）': '○ Not live yet (just save)',
+  '已保存，当场生效（不用重启）': 'Saved and live now (no restart needed)',
+  '每天关门时段（UTC）': 'Daily closing hours (UTC)',
+  '关门的理由（选择器里会写给用户看）': 'Why it closes (shown to users in the picker)',
+  '如 上游高峰涨价': 'e.g. upstream peak-hour pricing',
+  '（缺钥匙）': ' (no key)',
+  '这个模型现在不开门': 'This model is closed right now',
+  '这个模型已被停用': 'This model has been turned off',
   '（参考）': '(reference)',
 
   '保存插槽': 'Save slots',

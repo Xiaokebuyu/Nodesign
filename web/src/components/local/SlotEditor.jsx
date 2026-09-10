@@ -51,6 +51,15 @@ function errorsFor(errors, whereRe) {
   return (errors || []).filter((e) => whereRe.test(e.where)).map((e) => e.message).join('；');
 }
 const num = (v) => (v === '' || v == null ? undefined : Number(v));
+/**
+ * 「每天关门时段」输入框 → schema 的 unavailable 字段。空 = 整个字段不写（不是写个空数组）。
+ * 逗号顿号空格都当分隔符：站主是照着上游文档抄那两段时间过来的，不该被格式绊住。
+ * ⚠️ 这里**不校验**每段的写法（那是服务端的事，判据只有一份）——写错了保存后那一行会被丢掉并标红。
+ */
+const windowsFromText = (text, prev) => {
+  const windows = String(text || '').split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
+  return windows.length ? { ...(prev || {}), tz: prev?.tz || 'UTC', windows } : undefined;
+};
 const esc = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /**
  * 上游真名 → 合法 id（schema：字母数字 . _ -，64 字内）。'deepseek/deepseek-chat' → 'deepseek-chat'
@@ -87,7 +96,18 @@ function NumberPick({ value, presets, allowEmpty, emptyLabel, onChange, width = 
   );
 }
 
-export default function SlotEditor({ config, setConfig, errors, enums, active, names = {}, needsRestart, onSave, saving, showToast }) {
+/**
+ * 两个场合共用这一个编辑器（09-10）：
+ *   - 本地分发版的设置页（`<dataRoot>/config.json`，改完要重启才生效）
+ *   - 站点管理台的模型页（存库，保存**当场重建索引**，不重启）
+ * 差别只在三处措辞和两个能力位上，用 applyMode / builtinUpstreams / canProbe 三个 prop 表达 ——
+ * 复制一份出来改是这类页面分叉的开始（同一个表单两份字段清单，迟早对不上 schema）。
+ *
+ * @param {'restart'|'hot'} [applyMode] 保存之后怎么生效
+ * @param {object|null} [builtinUpstreams] 站内已有的上游（{id: {label, keyPresent}}）：模型行可以直接引用，不用再声明一遍
+ * @param {boolean} [canProbe] 有没有逐行体检那个端点（本地有，站点还没有）
+ */
+export default function SlotEditor({ config, setConfig, errors, enums, active, names = {}, needsRestart, onSave, saving, showToast, applyMode = 'restart', builtinUpstreams = null, canProbe = true }) {
   // 名字规则来自 GET /api/local/config（服务端一份真相）：内置上游名 / 内置 Claude 订阅名不许用；内置 API 行可被同名顶替
   const reservedUpstreams = names.reservedUpstreams || [];
   const reservedModels = names.reservedModels || [];
@@ -110,7 +130,7 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
   const setModel = (i, patch) => setConfig({ ...config, models: models.map((m, j) => (j === i ? { ...m, ...patch } : m)) });
   const delModel = (i) => setConfig({ ...config, models: models.filter((_, j) => j !== i) });
   const addUpstream = () => { let i = 1; while (upstreams[`upstream${i}`]) i++; setUp(`upstream${i}`, EMPTY_UPSTREAM); };
-  const addModel = () => setConfig({ ...config, models: [...models, { ...EMPTY_MODEL, upstream: Object.keys(upstreams)[0] || '' }] });
+  const addModel = () => setConfig({ ...config, models: [...models, { ...EMPTY_MODEL, upstream: Object.keys(upstreams)[0] || Object.keys(builtinUpstreams || {})[0] || '' }] });
 
   /**
    * 选预设：地址/协议/鉴权/显示名一起填；id 还是自动名（upstreamN）的话换成预设名（不撞已有的）。
@@ -157,7 +177,9 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
     <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.lg }}>
       <div style={{ display: 'flex', gap: GAP.md, alignItems: 'center' }}>
         <Btn primary disabled={saving} onClick={onSave}>{saving ? t('保存中…') : t('保存插槽')}</Btn>
-        {needsRestart && <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.warn }}>{t('已保存，重启后生效（页头「重启」）')}</span>}
+        {needsRestart && (applyMode === 'hot'
+          ? <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.success }}>{t('已保存，当场生效（不用重启）')}</span>
+          : <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.warn }}>{t('已保存，重启后生效（页头「重启」）')}</span>)}
         <span style={{ flex: 1 }} />
         <Btn small onClick={() => { setJsonText(JSON.stringify(config, null, 2)); setJsonMode(true); }}>{t('JSON 模式')}</Btn>
       </div>
@@ -212,7 +234,7 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md, marginBottom: GAP.sm }}>
           <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text2 }}>{t('② 模型（每一行 = 模型选择器里的一项）')}</span>
-          <Btn small disabled={!Object.keys(upstreams).length} onClick={addModel}><Plus size={12} /> {t('加一行')}</Btn>
+          <Btn small disabled={!Object.keys(upstreams).length && !Object.keys(builtinUpstreams || {}).length} onClick={addModel}><Plus size={12} /> {t('加一行')}</Btn>
         </div>
         <div style={{ display: 'grid', gap: GAP.md }}>
           {models.map((m, i) => {
@@ -226,7 +248,9 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
               <Card key={i} style={{ padding: GAP.md }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '170px 1fr 1fr 150px 28px', gap: GAP.sm, alignItems: 'end' }}>
                   <Field label={t('服务商')}>
-                    <Select value={m.upstream || ''} options={[{ value: '', label: t('选一个…') }, ...Object.keys(upstreams).map((k) => ({ value: k, label: upstreams[k].label || k }))]}
+                    <Select value={m.upstream || ''} options={[{ value: '', label: t('选一个…') }, ...Object.keys(upstreams).map((k) => ({ value: k, label: upstreams[k].label || k })),
+                      // 站内已有的上游（地址和钥匙都在服务端）：站点插槽可以直接挂上去，不用把网关连钥匙再声明一遍
+                      ...Object.entries(builtinUpstreams || {}).map(([k, u]) => ({ value: k, label: `${u.label || k}${u.keyPresent ? '' : t('（缺钥匙）')}` }))]}
                       onChange={(v) => { const p = presetByBaseUrl(upstreams[v]?.baseUrl); setModel(i, { upstream: v, ...(p?.brand && (!m.brand || m.brand === 'custom') ? { brand: p.brand } : {}) }); }} />
                   </Field>
                   <Field label={t('模型名（发送给服务商的 model，需完全一致）')}>
@@ -241,8 +265,8 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
                   <button onClick={() => delModel(i)} title="删除" style={{ border: 0, background: 'transparent', color: COLOR.sub, cursor: 'pointer', paddingBottom: 8 }}><Trash2 size={14} /></button>
                 </div>
                 <div style={{ display: 'flex', gap: GAP.sm, alignItems: 'center', justifyContent: 'flex-end', marginTop: GAP.sm }}>
-                  <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: isActive ? COLOR.success : COLOR.sub }}>{isActive ? t('● 生效中') : t('○ 未生效（保存并重启）')}</span>
-                  <Btn small disabled={!isActive || pr?.busy} onClick={() => runProbe(m.id)}>{pr?.busy ? t('检测中…') : t('检测')}</Btn>
+                  <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: isActive ? COLOR.success : COLOR.sub }}>{isActive ? t('● 生效中') : (applyMode === 'hot' ? t('○ 未生效（保存即可）') : t('○ 未生效（保存并重启）'))}</span>
+                  {canProbe && <Btn small disabled={!isActive || pr?.busy} onClick={() => runProbe(m.id)}>{pr?.busy ? t('检测中…') : t('检测')}</Btn>}
                 </div>
                 <Fold title={t('高级')} desc={t('说明 / 思考参数 / 输出上限 / 图标 / 内部 id')}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px 140px 200px 140px 160px', gap: GAP.sm, alignItems: 'end' }}>
@@ -253,8 +277,16 @@ export default function SlotEditor({ config, setConfig, errors, enums, active, n
                     <Field label={t('单轮最大输出')}><NumberPick value={m.maxOutput} presets={MAX_OUTPUT_PRESETS.map((v) => ({ value: v, label: v >= 1024 ? `${Math.round(v / 1024)}k` : String(v) }))} allowEmpty emptyLabel="默认" onChange={(v) => setModel(i, { maxOutput: v })} width={110} /></Field>
                     <Field label={t('图标')}><Select value={m.brand || 'custom'} options={enums.BRANDS} onChange={(v) => setModel(i, { brand: v })} /></Field>
                     <Field label={t('内部 id')}><TextInput value={m.id} onChange={(v) => setModel(i, { id: v })} placeholder={t('自动')} /></Field>
+                    <Field label={t('每天关门时段（UTC）')}>
+                      <TextInput value={(m.unavailable?.windows || []).join(', ')} placeholder="01:00-04:00, 06:00-10:00"
+                        onChange={(v) => setModel(i, { unavailable: windowsFromText(v, m.unavailable) })} />
+                    </Field>
+                    <Field label={t('关门的理由（选择器里会写给用户看）')}>
+                      <TextInput mono={false} value={m.unavailable?.why || ''} placeholder={t('如 上游高峰涨价')}
+                        onChange={(v) => setModel(i, { unavailable: m.unavailable ? { ...m.unavailable, why: v || undefined } : undefined })} />
+                    </Field>
                   </div>
-                  <Hint>{t('窗口请填写服务商标称的上下文长度（填得过大会在写满时被对方返回 400，填得过小则浪费可用容量）。价目 / 重试 / liftImages / fastModel 等少用字段在 JSON 模式中填写，字段名与内置表一致。')}</Hint>
+                  <Hint>{t('窗口请填写服务商标称的上下文长度（填得过大会在写满时被对方返回 400，填得过小则浪费可用容量）。关门时段按 UTC 写，落在里面的时候这一行在选择器里灰着并写明几点恢复，不会自动换到别的模型。价目 / 重试 / liftImages / fastModel 等少用字段在 JSON 模式中填写，字段名与内置表一致。')}</Hint>
                 </Fold>
                 {shadows && <Hint>{isActive && shadowedNow.includes(m.id)
                   ? t('已顶替内置的「{id}」：这个模型的请求现在走您自己的 API Key，不经过站点。', { id: m.id })

@@ -22,6 +22,11 @@ export const Admin = {
   setIssueStatus: (id, status) => jsonRequest('PATCH', `/api/admin/issues/${id}`, { status }),
   removeIssue: (id) => jsonRequest('DELETE', `/api/admin/issues/${id}`),
   // 控制台（2026-08-02）：用户 / 邀请码 / 公告，后端早齐了，这里只是接线
+  models: () => jsonRequest('GET', '/api/admin/models'),
+  patchModel: (id, patch) => jsonRequest('PATCH', `/api/admin/models/${encodeURIComponent(id)}`, patch),
+  modelSlots: () => jsonRequest('GET', '/api/admin/models/slots'),
+  saveModelSlots: (raw) => jsonRequest('PUT', '/api/admin/models/slots', raw),
+
   users: () => jsonRequest('GET', '/api/admin/users'),
   patchUser: (id, patch) => jsonRequest('PATCH', `/api/admin/users/${id}`, patch),
   /** 设计 / 演出各自的项目数、回合数、花费（后端已排掉站主自己） */

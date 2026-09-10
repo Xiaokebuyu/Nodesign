@@ -41,20 +41,26 @@ import { can, localGenApproved, DENIAL } from '../../auth/tier.js';
 import { platform } from '../../runtime/platform.js';
 import { UPSTREAMS_BUILTIN, MODELS_BUILTIN, BRANDS, SHARED_SDK_ALIAS } from './model-table.js';
 import { RENAMED_MODELS, followRename } from './model-renames.js';
-import { loadLocalConfig } from '../../runtime/local-config.js';
+import { loadSlotConfig } from '../../runtime/slot-config.js';   // 插槽从哪来（本地文件 / 站点库）只在那儿知道
 import { relayModelEntry } from '../../runtime/relay-client.js';
+import { availabilityOf, validateUnavailableSpec } from '../../lib/model-availability.js';
 import { loadPrefs } from '../../runtime/local-prefs.js';
 
 export { BRANDS, SHARED_SDK_ALIAS };
 
-// ── 内置表 + 用户插槽合并（08-22）──
-const external = loadLocalConfig();
-export const UPSTREAMS = Object.freeze({ ...UPSTREAMS_BUILTIN, ...external.upstreams });
+// ── 内置表 + 插槽合并，派生索引（08-22 建；09-10 改成**可重建**）──
+// 可重建是为了站点模型能在管理台上加/改而不重启（重启要等所有在飞的回合，站主宁可不加）。
+// ⭐ 规矩只有一条：**整套建好了才换上去**（build 炸了就抛，旧索引原样留着 —— 半套索引坏得没声音）。
+// ⚠️ 在飞请求不受影响：它们手里攥的是行对象本身，行是 frozen 的。
+// ⚠️ 导出的四个是 `let`（ESM 活绑定）。⛔ 别在别处把它们存进模块级 const —— 那份拷贝重建后就是旧表，且不报错。
+
 /** 配置条目 → 表行（字段名一一对应，见 local-config.js 文件头；sdkAlias 不许手填 = 永远走下面的共用别名默认） */
 function toExternalRow(m) {
-  const { id, label, desc, brand, window, uncensored, upstream, wireModel, fastModel, ...api } = m;
+  // ⚠️ 剩下的全进 api 段，所以**行级字段必须在这儿点名**（09-10 加 unavailable 时踩到：不点名就落进 api.unavailable，
+  // 钟点闸读 row.unavailable 读不到，静默失效）
+  const { id, label, desc, brand, window, uncensored, unavailable, upstream, wireModel, fastModel, ...api } = m;
   return Object.freeze({
-    id, window, brand, external: true, ...(uncensored ? { uncensored: true } : {}),
+    id, window, brand, external: true, ...(uncensored ? { uncensored: true } : {}), ...(unavailable ? { unavailable } : {}),
     select: Object.freeze({ label, desc }),
     api: Object.freeze({ upstream, wireModel, fastModel: fastModel || id, ...api }),
   });
@@ -67,77 +73,127 @@ function withDefaultAlias(row) {
   if (!row.api || row.api.sdkAlias) return row;
   return Object.freeze({ ...row, api: Object.freeze({ ...row.api, sdkAlias: SHARED_SDK_ALIAS }) });
 }
-// 同名顶替（09-09）：外部插槽的 id 撞上内置 **API** 行 → 内置那行退出表，只剩用户的（本机钥匙优先，
-// 跟 modelSourceFor 一个口径）。订阅 Claude 行在 local-config 校验就拒了，到不了这里。
-const externalIds = new Set(external.models.map((m) => m.id));
-const SHADOWED_BUILTIN_IDS = Object.freeze(MODELS_BUILTIN.filter((r) => externalIds.has(r.id) && r.api).map((r) => r.id));
-const MODELS = Object.freeze([...MODELS_BUILTIN.filter((r) => !externalIds.has(r.id) || !r.api), ...external.models.map(toExternalRow)].map(withDefaultAlias));
-if (SHADOWED_BUILTIN_IDS.length) console.log(`[model-context] 外部插槽顶替了同名内置行（用本机钥匙）：${SHADOWED_BUILTIN_IDS.join(', ')}`);
-/** 外部插槽被整条丢掉的原因（启动日志一份、GET /api/local/config 一份，同一个数组） */
-export const MODEL_CONFIG_ERRORS = external.errors;
 
-// ── 派生索引（模块加载时构建 + 断言）──
-// 分级：内置行的错照旧当场炸（那是代码错）；外部行的错丢行 + 记进 MODEL_CONFIG_ERRORS（那是用户配置错，别拉下整站）
-
-const BY_ID = new Map();
-/** wire 名（appModel / sdkAlias / alias 剥 [1m] 后缀形态）→ 行。入口反查用 */
-const WIRE_LOOKUP = new Map();
-
-function checkRow(row) {
+/**
+ * 一行的自检。分级仍旧：**内置行的错当场炸**（代码错），外部行的错丢行 + 记进 errors。
+ * ⚠️ 上游表与 id 索引当参数传：重建时这两样是新的，读闭包里那份会静默拿到旧表。
+ */
+function checkRow(row, upstreams, byId) {
   if (!BRANDS.includes(row.brand)) throw new Error(`[model-context] ${row.id} 的 brand 必须是 BRANDS 之一：${row.brand}`);
+  // 钟点闸（09-10）：写坏了要在这儿炸，不能等到某天窗口生效才发现"这行怎么一直关门"
+  const badHours = validateUnavailableSpec(row.unavailable);
+  if (badHours.length) throw new Error(`[model-context] ${row.id} 的 unavailable 写坏了：${badHours.join('；')}`);
   if (!row.api) return;
-  if (!UPSTREAMS[row.api.upstream]) throw new Error(`[model-context] ${row.id} 指向不存在的 upstream: ${row.api.upstream}`);
+  if (!upstreams[row.api.upstream]) throw new Error(`[model-context] ${row.id} 指向不存在的 upstream: ${row.api.upstream}`);
   // alias 必须是本表里的订阅 Claude 名 —— SDK 才认识、窗口才查得到
-  if (!row.api.sdkAlias || !BY_ID.has(row.api.sdkAlias) || BY_ID.get(row.api.sdkAlias).api) throw new Error(`[model-context] ${row.id} 的 sdkAlias 必须是表内订阅模型名：${row.api.sdkAlias}`);
-  const fast = BY_ID.get(row.api.fastModel);
+  if (!row.api.sdkAlias || !byId.has(row.api.sdkAlias) || byId.get(row.api.sdkAlias).api) throw new Error(`[model-context] ${row.id} 的 sdkAlias 必须是表内订阅模型名：${row.api.sdkAlias}`);
+  const fast = byId.get(row.api.fastModel);
   if (!fast || !fast.api) throw new Error(`[model-context] ${row.id} 的 fastModel 必须是表内 API 模型：${row.api.fastModel}`);
   // standby（09-08）：上游连续失败 / 402 时会话级换到的备用行，必须是表内另一条 API 行
   if (row.standby !== undefined) {
-    const sb = BY_ID.get(row.standby);
+    const sb = byId.get(row.standby);
     if (!sb || !sb.api || sb.id === row.id) throw new Error(`[model-context] ${row.id} 的 standby 必须是表内另一条 API 模型：${row.standby}`);
   }
 }
-for (const row of MODELS) {
-  if (BY_ID.has(row.id)) throw new Error(`[model-context] 模型 id 重复：${row.id}`);
-  BY_ID.set(row.id, row);
-}
-// 共用别名的本体必须始终是表内一条订阅 Claude 行：它是「不写 sdkAlias」的默认值，哪怕此刻没行在用，
-// 删掉/改坏那条订阅行也要当场炸，不能等到下一条新行加进来才发现 SDK 不认识、窗口查不到。
-{
-  const shared = BY_ID.get(SHARED_SDK_ALIAS);
-  if (!shared || shared.api) throw new Error(`[model-context] SHARED_SDK_ALIAS（${SHARED_SDK_ALIAS}）必须是表内订阅模型行 —— 它是 sdkAlias 不写时的默认值`);
-}
-for (const row of MODELS) {
-  try { checkRow(row); } catch (err) {
-    if (!row.external) throw err;
-    BY_ID.delete(row.id); MODEL_CONFIG_ERRORS.push({ where: `models (${row.id})`, message: err.message }); continue;
+
+/**
+ * 建一整套索引。**不碰任何模块状态** —— 建坏了往外抛，调用方决定是炸进程（启动时）还是留着旧的（重建时）。
+ * @returns {{upstreams: object, models: object[], byId: Map, wireLookup: Map, errors: object[], shadowed: string[], path: string|null}}
+ */
+function buildIndex() {
+  const external = loadSlotConfig();
+  const errors = [...external.errors];
+  const upstreams = Object.freeze({ ...UPSTREAMS_BUILTIN, ...external.upstreams });
+  // 同名顶替（09-09）：外部插槽的 id 撞上内置 **API** 行 → 内置那行退出表，只剩用户的（本机钥匙优先，
+  // 跟 modelSourceFor 一个口径）。订阅 Claude 行在 local-config 校验就拒了，到不了这里。
+  const externalIds = new Set(external.models.map((m) => m.id));
+  const shadowed = Object.freeze(MODELS_BUILTIN.filter((r) => externalIds.has(r.id) && r.api).map((r) => r.id));
+  const models = Object.freeze(
+    [...MODELS_BUILTIN.filter((r) => !externalIds.has(r.id) || !r.api), ...external.models.map(toExternalRow)].map(withDefaultAlias),
+  );
+
+  const byId = new Map();
+  for (const row of models) {
+    if (byId.has(row.id)) throw new Error(`[model-context] 模型 id 重复：${row.id}`);
+    byId.set(row.id, row);
   }
-  if (!row.api) continue;
-  // 共用别名的行（sdkAlias 没写、派生时补的默认值）只按 id 进反查表：那个别名同时属于好几行，
-  // 全表反查分不出谁是谁，只有会话知道（session-routes.resolveSessionWire 主行优先）。
-  const sharesAlias = row.api.sdkAlias === SHARED_SDK_ALIAS;
-  const keys = sharesAlias ? [row.id] : [row.id, row.api.sdkAlias, row.api.sdkAlias.replace(/\[1m\]$/i, '')];
-  for (const k of keys) {
-    const prev = WIRE_LOOKUP.get(k);
-    if (prev && prev !== row) throw new Error(`[model-context] wire 名撞车：'${k}' 同时属于 ${prev.id} 和 ${row.id}（独占 sdkAlias 不能共用；不想独占就别写 sdkAlias，让它走共用别名）`);
-    WIRE_LOOKUP.set(k, row);
+  // 共用别名的本体必须始终是表内一条订阅 Claude 行：它是「不写 sdkAlias」的默认值，哪怕此刻没行在用，
+  // 删掉/改坏那条订阅行也要当场炸，不能等到下一条新行加进来才发现 SDK 不认识、窗口查不到。
+  {
+    const shared = byId.get(SHARED_SDK_ALIAS);
+    if (!shared || shared.api) throw new Error(`[model-context] SHARED_SDK_ALIAS（${SHARED_SDK_ALIAS}）必须是表内订阅模型行 —— 它是 sdkAlias 不写时的默认值`);
   }
-}
-if (MODEL_CONFIG_ERRORS.length) {
-  console.warn(`[model-context] 本地插槽配置有 ${MODEL_CONFIG_ERRORS.length} 处问题（对应条目已跳过）${external.path ? `：${external.path}` : ''}`);
-  for (const e of MODEL_CONFIG_ERRORS) console.warn(`  - ${e.where}: ${e.message}`);
+  const wireLookup = new Map();
+  for (const row of models) {
+    try { checkRow(row, upstreams, byId); } catch (err) {
+      if (!row.external) throw err;
+      byId.delete(row.id); errors.push({ where: `models (${row.id})`, message: err.message }); continue;
+    }
+    if (!row.api) continue;
+    // 共用别名的行（sdkAlias 没写、派生时补的默认值）只按 id 进反查表：那个别名同时属于好几行，
+    // 全表反查分不出谁是谁，只有会话知道（session-routes.resolveSessionWire 主行优先）。
+    const sharesAlias = row.api.sdkAlias === SHARED_SDK_ALIAS;
+    const keys = sharesAlias ? [row.id] : [row.id, row.api.sdkAlias, row.api.sdkAlias.replace(/\[1m\]$/i, '')];
+    for (const k of keys) {
+      const prev = wireLookup.get(k);
+      if (prev && prev !== row) throw new Error(`[model-context] wire 名撞车：'${k}' 同时属于 ${prev.id} 和 ${row.id}（独占 sdkAlias 不能共用；不想独占就别写 sdkAlias，让它走共用别名）`);
+      wireLookup.set(k, row);
+    }
+  }
+  // 改过名的行（09-10，表在 model-renames.js）：只对账**目标得是活着的行**（指向不存在的行 = 表写错了，
+  // 当场炸，别等用户拿旧 id 撞上）。旧名还活着不算错：那多半是同名插槽，活着的那行说了算。
+  for (const [oldId, newId] of Object.entries(RENAMED_MODELS)) {
+    if (!byId.has(newId)) throw new Error(`[model-context] RENAMED_MODELS 里 ${oldId} 指向不存在的行：${newId}`);
+  }
+  return { upstreams, models, byId, wireLookup, errors, shadowed, path: external.path || null };
 }
 
-// ── 改过名的行（2026-09-10）──────────────────────────────────────────
-// 表在 model-table.js 的 RENAMED_MODELS（那儿写着规矩）。这里是它唯一的用法：
-// **把存下来的旧 id 翻成现在的 id**。存量在四个地方指着 id —— 会话的 session-config.json、
-// 本地偏好的 defaultModel / hiddenModels、前端记的选择、用量账（这一份不翻，见表上的注释）。
-{
-  for (const [oldId, newId] of Object.entries(RENAMED_MODELS)) {
-    // 指向不存在的行 = 表写错了，当场炸（内置表的错就该当场炸，别等用户撞上）
-    if (!BY_ID.has(newId)) throw new Error(`[model-context] RENAMED_MODELS 里 ${oldId} 指向不存在的行：${newId}`);
-    // 旧名还活着不算错：那多半是用户自己配了个同名插槽，活着的那行说了算（canonicalModelId 先查表）
+/** picker 清单的派生：unavailable 跟着带过来，选择器那行要现算"此刻开不开门、几点回来" */
+const deriveSelectable = (models) => Object.freeze(
+  models.filter((m) => m.select).map((m) => Object.freeze({ id: m.id, brand: m.brand, ...m.select, ...(m.unavailable ? { unavailable: m.unavailable } : {}) })),
+);
+
+function logIndex(idx) {
+  if (idx.shadowed.length) console.log(`[model-context] 外部插槽顶替了同名内置行（用本机钥匙）：${idx.shadowed.join(', ')}`);
+  if (idx.errors.length) {
+    console.warn(`[model-context] 插槽配置有 ${idx.errors.length} 处问题（对应条目已跳过）${idx.path ? `：${idx.path}` : ''}`);
+    for (const e of idx.errors) console.warn(`  - ${e.where}: ${e.message}`);
   }
+}
+
+// 启动时建一次。内置表的错在这儿炸进程，口径跟 08-22 起一样（代码错就该拦在门口）
+let INDEX = buildIndex();
+logIndex(INDEX);
+
+let BY_ID = INDEX.byId;
+/** wire 名（appModel / sdkAlias / alias 剥 [1m] 后缀形态）→ 行。入口反查用 */
+let WIRE_LOOKUP = INDEX.wireLookup;
+let SHADOWED_BUILTIN_IDS = INDEX.shadowed;
+
+export let UPSTREAMS = INDEX.upstreams;
+/** 外部插槽被整条丢掉的原因（启动日志一份、GET /api/local/config 一份） */
+export let MODEL_CONFIG_ERRORS = INDEX.errors;
+/** **全部行的原样清单**（内置 + 插槽，含 helper 行）。管理台看的是站点侧事实，跟按用户判资格的清单不是一回事。⛔ 只读 */
+export let MODEL_ROWS = INDEX.models;
+export let SELECTABLE_MODELS = deriveSelectable(INDEX.models);
+
+/**
+ * **重建整套索引**（09-10）。管理台改完站点模型调它，不用重启服务端。
+ * 建坏了原样抛出、**旧索引一个字都不动**：调用方把错显示在页面上，站照旧跑着。
+ * @returns {{models: number, errors: {where: string, message: string}[]}}
+ */
+export function rebuildModelIndex() {
+  const next = buildIndex();          // 炸了就到此为止，下面一行都不执行
+  INDEX = next;
+  BY_ID = next.byId;
+  WIRE_LOOKUP = next.wireLookup;
+  SHADOWED_BUILTIN_IDS = next.shadowed;
+  UPSTREAMS = next.upstreams;
+  MODEL_CONFIG_ERRORS = next.errors;
+  MODEL_ROWS = next.models;
+  SELECTABLE_MODELS = deriveSelectable(next.models);
+  logIndex(next);
+  return { models: next.models.length, errors: next.errors };
 }
 
 /**
@@ -186,9 +242,6 @@ export function wireNamesOf(appModel) {
  * `selectableModelsFor(user)`，直接用这个等于把闸门拆了。保留导出是因为它是
  * 「表里哪些行可选」的唯一真相，闸门只是在它上面过滤。
  */
-export const SELECTABLE_MODELS = Object.freeze(
-  MODELS.filter((m) => m.select).map((m) => Object.freeze({ id: m.id, brand: m.brand, ...m.select })),
-);
 
 /** 这一行的备用行 id（模型表 standby 字段）。没有 → null */
 export function standbyModelOf(appModel) {
@@ -272,6 +325,7 @@ export function modelSourceFor(appModel) {
 
 export function selectableModelsFor(user, opts) {
   const scope = scopeOf(opts);
+  const now = opts?.now instanceof Date ? opts.now : new Date();   // 钟点闸的"此刻"，测试要能钉住
   const approved = localGenApproved(user);   // 档位 + 逐人批准，同 paint_still / roll_film / 演出端点一把尺
   const subscribed = hasSubscriptionAccess(user);
   const out = [];
@@ -282,6 +336,14 @@ export function selectableModelsFor(user, opts) {
     // 本地版：用户在设置页藏起来的行带 hidden 标（选择器不列，设置页要列出来给他再打开；不影响能不能用）
     // 存下来的是"当时的 id"：行改过名的话，偏好里还写着旧名（canonicalModelId 翻一下再比）
     const hidden = platform.isLocal && loadPrefs().hiddenModels.some((id) => canonicalModelId(id) === m.id) ? { hidden: true } : {};
+    // 站主的总闸 + 钟点闸（09-10）：不可用 = **看得见选不了**，理由写在行上。
+    // 藏起来是错的 —— 用户会以为这行被删了，然后来问我们（入口必须同时是出口）。
+    // ⛔ 这里只拦，不改会话的模型：换线是用户自己的事（站主 09-10：先别加 fallback）。
+    const avail = availabilityOf(m, now);
+    if (!avail.ok) {
+      out.push({ ...m, locked: true, lockReason: avail.reason, unavailableKind: avail.kind, resumesAt: avail.resumesAt, ...(source === 'relay' ? { source } : {}), ...hidden });
+      continue;
+    }
     if (source === 'relay') {
       // relay 那头按站主那边的档位判过了（锁/不锁、原因），本地的 user 是 LOCAL_OWNER（admin），本地档位判断在这一行不适用
       const entry = relayModelEntry(m.id);
@@ -300,9 +362,18 @@ export function allowedModelsFor(user, opts) {
   return selectableModelsFor(user, opts).filter((m) => !m.locked);
 }
 
+/**
+ * 这个模型对这个用户「看得见选不了」时返回**那一行**（带 lockReason），能用 → null。
+ * ⭐ 拒绝的话从这里取，别在各自的端点里手写：锁的种类 09-10 起不止一种（Pro 档 / 站主停用 /
+ *   钟点关门），手写那句"仅限 Pro 档"会当场变成假话。api/model-lock-reason.lint.test.js 盯着。
+ */
+export function modelLockFor(user, appModel, opts) {
+  return selectableModelsFor(user, opts).find((m) => m.id === appModel && m.locked) || null;
+}
+
 /** 这个模型对这个用户是「看得见选不了」吗（在清单里且 locked）。turn 拒绝时据此回 403 而不是 400 */
 export function isModelLockedFor(user, appModel, opts) {
-  return selectableModelsFor(user, opts).some((m) => m.id === appModel && m.locked);
+  return !!modelLockFor(user, appModel, opts);
 }
 
 /**
@@ -328,78 +399,8 @@ export function defaultModelFor(user, opts) {
   return (visible.find((m) => m.default) || visible[0] || allowed[0])?.id || null;
 }
 
-/**
- * 会话中途从 openai-chat 行（Ox / DeepSeek）切到别的通路要拦（08-21 fable 评审 P3）：转换层合成的
- * thinking 块没有 signature，CLI 会把它们原样回传给说 Anthropic 协议的那一头 → 400 invalid signature。
- * 返回拒绝理由或 null。
- *
- * ⚠️ 拦的是**协议方向**不是"要不要 Claude"：08-25 接了 MiniMax（Anthropic 原生透传）之后，
- * 从 Ox 切到 MiniMax 同样是这条路，所以话里不许再写死"换到 Claude"。
- */
-export function crossLaneSwitchReason(fromModel, toModel) {
-  if (!fromModel || !toModel || fromModel === toModel) return null;
-  const from = resolveWireModel(fromModel);
-  const to = resolveWireModel(toModel);
-  // 09-08 站主撤掉「openai-chat → API 透传行」这一段的拦截：ingress 的透传腿现在会把没签名的思考块剥掉
-  // （transformForUpstream → stripUnsignedThinking）。仍拦的只剩订阅行：那条路不经 ingress，剥不了。
-  if (from?.protocol === 'openai-chat' && resolveModelRoute(toModel).mode === 'subscription') {
-    const fromLabel = rowOf(from.appModel)?.select?.label || from.appModel;
-    return `本会话在 ${fromLabel} 上创建，其思考记录切换到其他模型后会被拒收。如需更换模型，请新建一个会话`;
-  }
-  return null;
-}
+// 换模型的三条闸 09-10 搬去 model-switch-rules.js（本文件顶到 600 行棘轮）：那是策略，这里是表。
 
-/**
- * **运行中**热切模型（POST /runs/:runId/model）额外要拦的一条：订阅 ↔ API 跨通路。
- *
- * 决定一条会话走订阅还是走 API 的是**起 query 那一刻注入的 env**（BASE_URL / API_KEY，
- * 见 session-loop 的 route 分支），而 env 是 per-query 的，`setModel` 改不动它。所以跑到
- * 一半跨通路切的真实后果是：
- *   - 订阅会话切到 API 行 → binary 手里没有 ingress 地址，会拿着 ~/.claude 的 OAuth 把
- *     **alias 名**（那都是真实存在的 Claude 模型）打到 anthropic.com —— 界面写着"免费"，
- *     烧的是订阅额度。⛔ 这是要花真钱的那种错。
- *   - API 会话切回订阅行 → 那个名字进了 ingress 反查不到，兜底到本会话的 fast 行，
- *     等于"切了没生效"。
- * 两边都不是用户想要的，所以运行中一律拒绝，让人等这轮跑完（PUT /sessions/:sid/model
- * 那条等空闲重启 query，换的是新 env，不受这条限制）。
- *
- * 与 crossLaneSwitchReason 是两条**正交**的闸：那条管协议（openai-chat 的思考块没
- * signature），这条管通路（env 定死在起 query 那一刻）。
- */
-export function hotSwitchLaneReason(fromModel, toModel) {
-  if (!fromModel || !toModel || fromModel === toModel) return null;
-  const from = resolveModelRoute(fromModel).mode;
-  const to = resolveModelRoute(toModel).mode;
-  if (from === to) return null;
-  return to === 'api'
-    ? '本轮会话由订阅模型启动，运行中无法切换到 API 模型：网关地址与密钥在本轮启动时已确定，强行切换会占用订阅额度。请在本轮结束后再切换，或新建一个会话'
-    : '本轮会话由 API 模型启动，运行中无法切换回订阅模型：网关地址同样在本轮启动时已确定。请在本轮结束后再切换，或新建一个会话';
-}
-
-/**
- * **换模型该不该拒**（null = 放行）。三条写模型的路共用这一个判断：turn.js 的 body.model、
- * sessions.js 的 PUT /model、turn-model-switch.js 的运行中热切。
- *
- * 收成一份是因为 08-21 装的那条协议闸在两处都没真工作过（08-25 发现）：sessions.js 那份把闸写在
- * applySessionModel **之后**、又拿 apply 之后的模型当 from，等于自己跟自己比，恒返 null；turn.js 那份
- * 带着 `override &&`，跑在全局默认上的会话整个逃过检查。同一个判断散成三份手写代码就是这个下场 ——
- * 这个仓库为「同一件事有多个实例」付过最贵的学费。
- *
- * @param {object} p
- * @param {string} p.from        **改之前**的有效模型（⚠️ 不是刚写进去的那个 —— 那正是旧 bug）
- * @param {string} p.to          要换成的模型（清覆盖时传全局默认那一行，别传 null）
- * @param {boolean} [p.hasHistory] 这个会话跑过没有。没跑过就没有历史，协议闸不该拦（拦了只是让人换不了模型）
- * @param {boolean} [p.running]  当前有没有正在跑的 query。跑着的话 env 已经定死，额外过通路闸
- * @returns {string|null} 给用户看的拒绝理由
- */
-export function modelSwitchRejection({ from, to, hasHistory = true, running = false }) {
-  if (!from || !to || from === to) return null;
-  if (hasHistory) {
-    const why = crossLaneSwitchReason(from, to);
-    if (why) return why;
-  }
-  return running ? hotSwitchLaneReason(from, to) : null;
-}
 
 /** 免费行（API 行且四价全 0）：金额配额对它无意义，turn.js 改走按轮次的免费闸 */
 export function modelIsFree(appModel) {

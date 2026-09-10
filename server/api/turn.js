@@ -48,7 +48,8 @@ import {
 import { pushUserMessage, getQueueDepth } from '../engine/runs/turn-relay.js';
 import { applySessionModel, resolveSessionModel } from '../engine/agent/session-model.js';
 import { lruGet, lruPut, inflightTurns, INFLIGHT_RETENTION_MS } from './turn-inflight.js';
-import { allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree, hasSubscriptionAccess, modelSwitchRejection, resolveModelRoute, canonicalModelId } from '../engine/agent/model-context.js';
+import { allowedModelsFor, modelLockFor, defaultModelFor, modelIsFree, hasSubscriptionAccess, resolveModelRoute, canonicalModelId } from '../engine/agent/model-context.js';
+import { modelSwitchRejection } from '../engine/agent/model-switch-rules.js';   // 换模型的闸 09-10 拆出去了
 import { AsyncQueue } from '../lib/async-queue.js';
 import { checkQuota, checkFreeQuota, checkConcurrency, fmtUsd } from '../lib/quota.js';
 import { shouldModerate, moderateText, recordViolation, levelFor } from '../lib/moderation.js';
@@ -206,9 +207,12 @@ router.post('/:pid/turn', async (req, res, next) => {
     const turnModel = requestedModelEarly || sessionModelEarly.override
       || (keepLegacyDefault ? sessionModelEarly.model : defaultModelFor(modelUser)) || sessionModelEarly.model;
     // 解析出来的模型一律过白名单（不只 body.model）：旧覆盖/资格收回/无 select 裸名都在此拦（fable P0）
-    if (isModelLockedFor(modelUser, turnModel)) {
+    // 拒绝的话按锁的种类来（09-10）：站主停用 / 钟点关门的行有自己的 lockReason，
+    // 手写"仅限 Pro 档"对它们是假话。没有种类标记 = 老的档位锁，仍走可翻译的那句
+    const lock = modelLockFor(modelUser, turnModel);
+    if (lock) {
       return res.status(403).json({
-        error: msg(req, '该模型（{model}）仅限 Pro 档，当前不对外开放。请更换为免费模型后继续', { model: turnModel }),
+        error: lock.unavailableKind ? lock.lockReason : msg(req, '该模型（{model}）仅限 Pro 档，当前不对外开放。请更换为免费模型后继续', { model: turnModel }),
         code: 'MODEL_LOCKED', model: turnModel,
       });
     }
