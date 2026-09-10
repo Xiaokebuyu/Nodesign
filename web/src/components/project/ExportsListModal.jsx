@@ -3,6 +3,7 @@ import { Download, RefreshCw, FileArchive } from 'lucide-react';
 import Modal from '../ui/Modal.jsx';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { Exports } from '../../lib/api.js';
+import { deliverFile } from '../../lib/deliver-file.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
 
 /**
@@ -45,14 +46,7 @@ export default function ExportsListModal({ show, onClose, projectId, sessionId }
   const handleDownload = async (file) => {
     try {
       const { blob, filename } = await Exports.downloadFile(projectId, file.name);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename || file.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      await deliverFile(blob, filename || file.name);   // 桌面版由主进程写盘，见 lib/deliver-file.js
     } catch (err) {
       setError(err);
     }

@@ -15,6 +15,13 @@ contextBridge.exposeInMainWorld('nodesignDesktop', {
   /** 用系统浏览器打开外链 */
   openExternal: (url) => ipcRenderer.invoke('nd:open-external', String(url || '')),
   /**
+   * 导出直接落盘（09-10）：页面把字节交过来，主进程自己 fs 写 —— 不经 Chromium 的下载通道，
+   * 于是文件不带 Mark-of-the-Web（09-09 那案：下载出来的 zip 五次都落盘了又被拿走）。
+   * 存哪儿由主进程决定（prefs.exportDir，空着就是系统「下载」），**页面说了不算**。
+   * 返回 { path, size }。
+   */
+  saveExport: (filename, data) => ipcRenderer.invoke('nd:save-export', String(filename || ''), data),
+  /**
    * 选一个本地文件夹当项目（2026-09-07 存量仓库道）。返回绝对路径，用户取消返回 null。
    * 只出选择框、不动文件；真正建项目是页面拿路径去打 POST /api/local/projects/open-folder。
    */

@@ -30,6 +30,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { updateCheckMessage } from './update-message.js';
 import { resolveWindowBounds, MIN_SIZE } from './window-state.js';
+import { exportDirFrom, uniqueTarget } from './export-target.js';
 
 import {
   PortBusyError,
@@ -522,6 +523,37 @@ ipcMain.handle('nd:pick-folder', async () => {
   });
   if (r.canceled || !r.filePaths?.length) return null;
   return r.filePaths[0];
+});
+
+/** 导出落哪儿（09-10）：prefs.exportDir 有就用它，否则系统「下载」。算术在 export-target.js（那儿有判据） */
+function exportTargetDir() {
+  let prefs = null;
+  try { prefs = JSON.parse(fs.readFileSync(path.join(dataDirPath, 'prefs.json'), 'utf8')); } catch { /* 没有就默认 */ }
+  return exportDirFrom(prefs, app.getPath('downloads'), (d) => fs.statSync(d).isDirectory());
+}
+
+/**
+ * 导出直接落盘：页面把字节交过来，这里 fs 写。
+ *
+ * 为什么不走浏览器下载（09-09 案）：那条路出来的文件带 Mark-of-the-Web，杀软对这种 zip 下手是常事 ——
+ * 日志里五次「已保存」、同名却从没加过 (2) 序号，说明每次存之前上一份已经被拿走了。自己写就没有这个标记。
+ * 写完**回摸一次**：还在就报大小，不在就记问题库 —— 下次再丢，日志里分得清是"没写"还是"写了又没了"。
+ */
+ipcMain.handle('nd:save-export', async (_e, filename, data) => {
+  const dir = exportTargetDir();
+  await fs.promises.mkdir(dir, { recursive: true });
+  const target = uniqueTarget(dir, filename, (x) => fs.existsSync(x));
+  await fs.promises.writeFile(target, Buffer.from(data));
+  let size = -1;
+  try { size = fs.statSync(target).size; } catch { /* */ }
+  log(`[export] 已写入 ${target}（${size >= 0 ? `${size} bytes` : '⚠️ 写完立刻找不到'}）`);
+  if (size < 0) reportShellIssue('bug', '导出写完立刻找不到', `文件 ${target}`);
+  if (Notification.isSupported()) {
+    const n = new Notification({ title: '已导出', body: `${path.basename(target)} → ${dir}，点击定位` });
+    n.on('click', () => shell.showItemInFolder(target));
+    n.show();
+  }
+  return { path: target, size };
 });
 
 ipcMain.handle('nd:open-external', async (_e, url) => {

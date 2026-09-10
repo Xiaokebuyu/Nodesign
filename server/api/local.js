@@ -12,7 +12,7 @@
  */
 
 import express from 'express';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync, accessSync, constants as fsConstants } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { platform } from '../runtime/platform.js';
@@ -187,6 +187,21 @@ router.put('/prefs', (req, res) => {
   if ('hiddenModels' in body) patch.hiddenModels = Array.isArray(body.hiddenModels) ? body.hiddenModels.filter((id) => known.has(id)) : [];
   if ('defaultModel' in body) patch.defaultModel = body.defaultModel || null;
   if ('setupDone' in body) patch.setupDone = !!body.setupDone;
+  // 导出往哪儿写（09-10）。空 = 回系统「下载」。**这里就要挡住写不进去的目录** ——
+  // 让它在设置页当场红，而不是等用户导出时才发现文件没出现（写盘的是桌面壳，那边只会退回默认）
+  if ('exportDir' in body) {
+    const dir = String(body.exportDir || '').trim();
+    if (dir) {
+      if (!path.isAbsolute(dir)) return res.status(400).json({ error: msg(req, '要一个绝对路径') });
+      try {
+        if (!statSync(dir).isDirectory()) throw new Error('not a dir');
+        accessSync(dir, fsConstants.W_OK);
+      } catch {
+        return res.status(400).json({ error: msg(req, '这个文件夹不存在或写不进去：{dir}', { dir }) });
+      }
+    }
+    patch.exportDir = dir || null;
+  }
   res.json({ ok: true, prefs: savePrefs(patch) });
 });
 

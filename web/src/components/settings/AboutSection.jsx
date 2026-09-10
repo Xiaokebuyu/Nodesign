@@ -1,10 +1,11 @@
-// 设置 → 关于：版本 / 检查更新 / 数据目录 / 日志 / 重启；「开发者选项」折叠（其他钥匙与开关、插槽问题、配置文件）。
+// 设置 → 关于：版本 / 检查更新 / 数据目录 / 导出到 / 日志 / 重启；「开发者选项」折叠（其他钥匙与开关、插槽问题、配置文件）。
 // 检查更新与打开文件夹走桌面壳的桥（desktop/preload.cjs 挂的 window.nodesignDesktop）；
 // 不在桌面壳里（浏览器开的本地版）就只显示版本，不画按不动的按钮。
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Panel, Row, Block, Button, Mono, Disclosure, Note } from './ui.jsx';
 import EnvKeys from '../local/EnvKeys.jsx';
 import { t } from '../../lib/i18n.js';
+import { Local } from '../../lib/api.js';
 
 const bridge = () => (typeof window !== 'undefined' ? window.nodesignDesktop : null) || null;
 
@@ -21,6 +22,18 @@ export default function AboutSection({ status, onStatus, restart, restarting, sh
   };
   const openDir = async (p) => { try { await d.openPath(p); } catch (e) { showToast?.(e.message, 'error'); } };
 
+  // 导出往哪儿写（09-10）：空 = 系统「下载」。桌面版才有意义（网页版是浏览器在管下载）
+  const [exportDir, setExportDir] = useState(null);
+  useEffect(() => { if (d) Local.prefs().then((r) => setExportDir(r?.prefs?.exportDir || '')).catch(() => {}); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+  const saveExportDir = async (dir) => {
+    try { const r = await Local.savePrefs({ exportDir: dir }); setExportDir(r?.prefs?.exportDir || ''); showToast?.(dir ? t('以后导出到这里') : t('以后导出到系统「下载」'), 'success'); }
+    catch (e) { showToast?.(e.message, 'error'); }
+  };
+  const pickExportDir = async () => {
+    const dir = await d?.pickFolder?.().catch(() => null);
+    if (dir) saveExportDir(dir);
+  };
+
   if (!status) return <Panel><Block first><Note>{t('读取中…')}</Note></Block></Panel>;
   const logPath = `${status.dataRoot}/logs/server.log`;
   return (
@@ -36,6 +49,15 @@ export default function AboutSection({ status, onStatus, restart, restarting, sh
             {d && <Button size="sm" variant="ghost" onClick={() => openDir(status.dataRoot)}>{t('打开文件夹')}</Button>}
           </div>
         </Row>
+        {d && (
+          <Row label={t('导出到')} desc={t('导出的产物写在这里。留空则写入系统「下载」文件夹；导出完成时通知里可以直接定位')} stack>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <Mono copy>{exportDir || t('系统「下载」文件夹')}</Mono>
+              <Button size="sm" variant="ghost" onClick={pickExportDir}>{t('选一个文件夹')}</Button>
+              {exportDir && <Button size="sm" variant="ghost" onClick={() => saveExportDir('')}>{t('恢复默认')}</Button>}
+            </div>
+          </Row>
+        )}
         <Row label={t('日志')} desc={t('反馈问题时请附上该文件')} stack>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <Mono copy>{logPath}</Mono>

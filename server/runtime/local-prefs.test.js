@@ -16,10 +16,11 @@ const another = mc.SELECTABLE_MODELS.find((m) => m.id !== apiRow.id && mc.resolv
 
 describe('local-prefs', () => {
   it('没文件 → 默认；写了再读回；不认识的键丢掉', () => {
-    expect(prefs.loadPrefs()).toEqual({ hiddenModels: [], defaultModel: null, setupDone: false, componentsDir: null, extraBinDirs: [] });
-    expect(prefs.savePrefs({ hiddenModels: ['a', 'a', 3, ''], defaultModel: 'x', junk: 1, setupDone: 'yes', componentsDir: 'relative/no', extraBinDirs: ['rel', 3] })).toEqual({ hiddenModels: ['a'], defaultModel: 'x', setupDone: false, componentsDir: null, extraBinDirs: [] });
+    const DEFAULTS = { hiddenModels: [], defaultModel: null, setupDone: false, componentsDir: null, extraBinDirs: [], exportDir: null };
+    expect(prefs.loadPrefs()).toEqual(DEFAULTS);
+    expect(prefs.savePrefs({ hiddenModels: ['a', 'a', 3, ''], defaultModel: 'x', junk: 1, setupDone: 'yes', componentsDir: 'relative/no', extraBinDirs: ['rel', 3], exportDir: 'relative/no' })).toEqual({ ...DEFAULTS, hiddenModels: ['a'], defaultModel: 'x' });
     prefs._resetPrefsCache();
-    expect(prefs.loadPrefs()).toEqual({ hiddenModels: ['a'], defaultModel: 'x', setupDone: false, componentsDir: null, extraBinDirs: [] });
+    expect(prefs.loadPrefs()).toEqual({ ...DEFAULTS, hiddenModels: ['a'], defaultModel: 'x' });
     expect(prefs.savePrefs({ setupDone: true }).setupDone).toBe(true);
     expect(JSON.parse(fs.readFileSync(prefs.prefsPath, 'utf8')).junk).toBeUndefined();
   });

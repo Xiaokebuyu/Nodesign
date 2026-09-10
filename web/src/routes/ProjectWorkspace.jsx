@@ -1112,7 +1112,7 @@ export default function ProjectWorkspace() {
         deliveredRef.current.add(evt.url);
         // 先 fetch 成 blob 再触发下载，跟手动导出同一条路；非 2xx 会弹出服务端的错误（见 card-export.js）
         downloadFromUrl(evt.url, evt.filename || '')
-          .then(() => showToast(`agent 给了你 ${evt.filename}${evt.note ? ` · ${evt.note}` : ''}`, 'success'))
+          .then((r) => showToast(`agent 给了你 ${evt.filename}${evt.note ? ` · ${evt.note}` : ''}${r?.path ? ` · 已存到 ${r.path}` : ''}`, 'success'))
           .catch((err) => { deliveredRef.current.delete(evt.url); showToast(`下载失败：${err.message}`, 'error'); });
         break;
       }

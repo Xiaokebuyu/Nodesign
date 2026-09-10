@@ -3,6 +3,7 @@ import { Download } from 'lucide-react';
 import Modal from '../ui/Modal.jsx';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, alpha } from '../../lib/theme.js';
 import { Assets, Exports } from '../../lib/api.js';
+import { deliverFile } from '../../lib/deliver-file.js';
 import { groupArtifacts } from '../../lib/export-groups.js';
 import { exportItemsFor } from '../../lib/export-formats.js';
 
@@ -95,12 +96,9 @@ export default function ExportPicker({ open, onClose, projectId, initialType = n
       const { blob, filename, skipped } = BAKE_FORMATS.has(format)
         ? await Exports.download(projectId, format, relOfCardId(ids[0]))
         : await Exports.cards(projectId, ids, format);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename || '导出';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      onToast?.(`已下载：${a.download}`, 'success');
+      const name = filename || '导出';
+      const { path } = await deliverFile(blob, name);   // 桌面版由主进程写盘，见 lib/deliver-file.js
+      onToast?.(path ? `已保存：${path}` : `已下载：${name}`, 'success');
       // 少了什么必须说出来 —— 静默少东西是导出最贵的失败方式
       if (skipped?.total) onToast?.(`有 ${skipped.total} 个没导出：${skipped.items?.[0]?.reason || ''}`, 'error');
       onClose?.();

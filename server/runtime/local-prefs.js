@@ -19,6 +19,7 @@ const DEFAULTS = Object.freeze({
   setupDone: false,     // 首启引导页走过了（装完或点了「稍后」）
   componentsDir: null,  // 外部程序装哪（绝对路径；null = <dataRoot>/components）。09-08 站主：不能只装 C 盘
   extraBinDirs: [],     // 用户自己装在别处的程序目录（D:\LibreOffice\program 这类），能力探针先搜这些
+  exportDir: null,      // 导出往哪儿写（绝对路径；null = 系统「下载」）。09-10 站主：导出的存放位置要能自己定
 });
 
 let cache = null;
@@ -38,6 +39,7 @@ function sanitize(raw) {
   if (typeof raw?.defaultModel === 'string' && raw.defaultModel) out.defaultModel = raw.defaultModel;
   if (raw?.setupDone === true) out.setupDone = true;
   if (typeof raw?.componentsDir === 'string' && path.isAbsolute(raw.componentsDir)) out.componentsDir = raw.componentsDir;
+  if (typeof raw?.exportDir === 'string' && path.isAbsolute(raw.exportDir)) out.exportDir = raw.exportDir;
   if (Array.isArray(raw?.extraBinDirs)) out.extraBinDirs = [...new Set(raw.extraBinDirs.filter((x) => typeof x === 'string' && path.isAbsolute(x)))].slice(0, 20);
   return out;
 }

@@ -1,4 +1,5 @@
 import { Exports } from '../../lib/api.js';
+import { deliverFile } from '../../lib/deliver-file.js';
 import { defaultFormatFor } from '../../lib/export-formats.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 
@@ -16,14 +17,14 @@ import { useGlobalStore } from '../../stores/globalStore.js';
  * 不该在卡上再长一层菜单。
  */
 
-/** 把 blob 塞进浏览器下载。objectURL 要回收，不然一次会话点几十次就攒一堆 */
 /**
- * 拿一个同源下载地址，先 fetch 成 blob 再走 pushDownload。
+ * 拿一个同源下载地址，先 fetch 成 blob 再交给 deliver-file.js 那道门。
  *
  * 跟手动导出收成同一条路（原来 agent 交付是 `<a href="/api/…/exports/file/x.zip" download>` 直接点）。
  * 好处只有两个：非 2xx 时把服务端的错误说出来（原来 404 就静静地什么都不发生）；两种壳一种路。
  * ⚠️ 09-09 桌面版 0.1.34「导出后下载目录里没有」那案**不是**这条链的病：desktop.log 里五次都
- * 「已保存」，文件是落盘之后被别的东西（杀软隔离一类）拿走的。别把这段当那件事的修法。
+ * 「已保存」，文件是落盘之后被别的东西（杀软隔离一类）拿走的。别把这段当那件事的修法 ——
+ * 那件事的修法在 lib/deliver-file.js（桌面版不再经 Chromium 下载，主进程自己写盘）。
  */
 export async function downloadFromUrl(url, filename) {
   const res = await fetch(url);
@@ -31,18 +32,7 @@ export async function downloadFromUrl(url, filename) {
     const data = await res.json().catch(() => ({}));
     throw Object.assign(new Error(data.error || `${res.status} ${res.statusText}`), { status: res.status });
   }
-  pushDownload(await res.blob(), filename);
-}
-
-function pushDownload(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename || '导出';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return deliverFile(await res.blob(), filename);
 }
 
 /**
@@ -54,7 +44,8 @@ export async function exportCard(projectId, obj) {
   const toast = useGlobalStore.getState().showToast;
   try {
     const { blob, filename, skipped } = await Exports.cards(projectId, [obj.id], format);
-    pushDownload(blob, filename || obj.title);
+    const { path } = await deliverFile(blob, filename || obj.title);
+    if (path) toast(`已保存：${path}`, 'success');
     // ⚠️ 收不到的卡必须说出来。静默少东西是导出最贵的失败方式：用户解压之后
     // 才发现少了，那时他已经不知道是哪一步丢的。
     if (skipped?.total) {
@@ -103,8 +94,8 @@ export async function exportFromMenu(projectId, format, cardId, fallbackName) {
       ? await Exports.cards(projectId, [cardId], cardFormat)
       : await Exports.download(projectId, format);
     const name = filename || `${fallbackName || 'design'}.${format === 'handoff' ? 'zip' : format}`;
-    pushDownload(blob, name);
-    toast(`已下载：${name}`, 'success');
+    const { path } = await deliverFile(blob, name);
+    toast(path ? `已保存：${path}` : `已下载：${name}`, 'success');
     if (skipped?.total) toast(`有 ${skipped.total} 张没导出`, 'error');
   } catch (err) {
     toast(`导出失败：${err.message}`, 'error');

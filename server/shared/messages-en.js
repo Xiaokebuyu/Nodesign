@@ -12,6 +12,8 @@ export default {
   // 英文用户的第一站。这几条说不对，后面做得再好也没机会被看到。
   '用户名或密码错误': 'Incorrect username or password',
   '请填写用户名和密码': 'Both username and password are required',
+  '要一个绝对路径': 'Needs an absolute path',
+  '这个文件夹不存在或写不进去：{dir}': "This folder doesn't exist or isn't writable: {dir}",
   '模型 {id} 不在可选清单里': 'Model {id} is not in the available list',
   '尝试次数过多，{waitMin} 分钟后再试': 'Too many attempts. Try again in {waitMin} minutes.',
   '这个网络今天开的号太多了，明天再来': 'Too many accounts created from this network today. Try again tomorrow.',
