@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import http from 'node:http';
 import { promises as fs, readFileSync, writeFileSync } from 'node:fs';
-import { REMBG_VENV_PYTHON, REMBG_SETUP_HINT, resolveRembgSocket, rembgTransport } from '../engine/mcp/tools/helpers/rembg.js';
+import { REMBG_VENV_PYTHON, rembgSetupHint, forgetImportCheck, resolveRembgSocket, rembgTransport } from '../engine/mcp/tools/helpers/rembg.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // services/ 在 server/services/，server root 上溯 1 层
@@ -219,7 +219,7 @@ export async function startRembgService() {
   } catch (err) {
     console.warn(
       `[rembg-service] not started: ${err.code === 'ENOENT' ? 'venv or script missing' : err.message}.`
-      + ` Setup: ${REMBG_SETUP_HINT}.`
+      + ` Setup: ${rembgSetupHint()}.`
       + ' remove_background tool will fall back to per-call spawn (slower).',
     );
     return false;
@@ -246,6 +246,9 @@ function spawnService(py, script, preload) {
       env: {
         ...process.env,
         NODESIGN_REMBG_PRELOAD: preload,
+        // 中文 Windows 上 traceback 里的系统报错默认按 GBK 写，落进日志就是乱码
+        // （09-10 那条 `DLL load failed ... ??????` 就是这么来的）。钉成 utf-8
+        PYTHONIOENCODING: 'utf-8',
         // 显式写进子进程 env：killStaleServices 靠读 /proc/<pid>/environ
         // 判断某个 service 是不是"自己这一份"，不写的话认不出来
         NODESIGN_REMBG_SOCKET: process.env.NODESIGN_REMBG_SOCKET || DEFAULT_SOCKET,
@@ -268,6 +271,9 @@ function spawnService(py, script, preload) {
   serviceProc.on('exit', (code, signal) => {
     console.log(`[rembg-service] exited code=${code} signal=${signal}`);
     serviceProc = null;
+    // 非正常退出 → 把"import 过得去"那张成功记号撕掉：环境可能是后来才坏的（杀软拿走 DLL、
+    // 组件被改），下次探能力时重新真跑一遍，别拿旧的绿灯骗人
+    if (code && !recycling) forgetImportCheck().catch(() => {});
     if (recycling) {
       recycling = false;
       // 隔一拍再起：给 atexit 清 socket 的时间，否则新进程 bind 会撞上旧 socket 文件

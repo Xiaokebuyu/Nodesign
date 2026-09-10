@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { isAvailable as rembgAvailable, REMBG_SETUP_HINT } from '../engine/mcp/tools/helpers/rembg.js';
+import { isAvailable as rembgAvailable, rembgSetupHint } from '../engine/mcp/tools/helpers/rembg.js';
 // 盒子开没开机只有一个判据 —— h3box-ssh.localBoxEnabled。这里曾经自己写了一遍
 // `=== 'on'`，跟那边 `!== 'off'`（默认开）的默认值正好相反，同一个变量两套读法。
 import { localBoxEnabled } from '../engine/mcp/tools/h3box-ssh.js';
@@ -41,7 +41,8 @@ const BREW_DIRS = process.platform === 'darwin' ? ['/opt/homebrew/bin', '/usr/lo
 
 /**
  * 能力表。kind：binary | key | service。level：'required'（没有就跑不起来）| 'feature'（少一块功能）。
- * fix 写给人看：装法一句话。probe 返回 { available, detail, path? }。
+ * fix 写给人看：装法一句话，**可以写成函数**（装法取决于运行时状态时用，探测时才求值）。
+ * probe 返回 { available, detail, path? }。
  */
 export const CAPABILITY_DEFS = Object.freeze([
   { id: 'git', kind: 'binary', level: 'required', label: 'git', uses: '项目工作区的版本历史（建项目就要用）',
@@ -71,7 +72,8 @@ export const CAPABILITY_DEFS = Object.freeze([
     fix: isWin ? '装 ffmpeg 并加进 PATH' : process.platform === 'darwin' ? 'brew install ffmpeg' : 'apt install ffmpeg',
     probe: () => bin('ffmpeg', BREW_DIRS) },
   { id: 'rembg', kind: 'service', level: 'feature', label: 'rembg 抠图环境', uses: 'remove_background',
-    fix: `${REMBG_SETUP_HINT}（见 server/services/rembg-launcher.js）`,
+    // 函数：装法要看是组件包还是自己 venv 装的，而组件的 env 是启动时才挂上的（见 helpers/rembg.js）
+    fix: () => `${rembgSetupHint()}（见 server/services/rembg-launcher.js）`,
     probe: async () => { const r = await rembgAvailable(); return { available: r.available, detail: r.available ? `mode=${r.mode}` : r.reason }; } },
   { id: 'imageGen', kind: 'service', level: 'feature', label: '生图通道', uses: 'generate_image',
     fix: '桌面版：登录站点即可（网关代出图）；自己搭：npm i -g @openai/codex && codex login，或 NODESIGN_IMAGE_PROVIDER=gateway + NODESIGN_GATEWAY_KEY',
@@ -133,7 +135,8 @@ export async function probeCapabilities({ force = false } = {}) {
       let r;
       try { r = await def.probe(); } catch (err) { r = { available: false, detail: `探测出错：${err.message}` }; }
       const { probe: _p, ...meta } = def;
-      state.set(def.id, Object.freeze({ ...meta, available: !!r.available, detail: r.detail || '', ...(r.path ? { path: r.path } : {}) }));
+      const fix = typeof def.fix === 'function' ? def.fix() : def.fix;
+      state.set(def.id, Object.freeze({ ...meta, fix, available: !!r.available, detail: r.detail || '', ...(r.path ? { path: r.path } : {}) }));
     }
     return capabilitySnapshot();
   })();

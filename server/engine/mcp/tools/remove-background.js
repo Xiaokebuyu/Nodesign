@@ -36,7 +36,7 @@ import { patchBoard } from '../../../projects/board-store.js';
 import fs from 'node:fs/promises';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { removeBackground as rembgRemove, isAvailable as rembgIsAvailable, REMBG_SETUP_HINT } from './helpers/rembg.js';
+import { removeBackground as rembgRemove, isAvailable as rembgIsAvailable, rembgSetupHint } from './helpers/rembg.js';
 
 const SUPPORTED_INPUT_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff']);
 
@@ -245,7 +245,7 @@ Returns: text caption with output path + image content block (preview the result
         return {
           content: [{
             type: 'text',
-            text: `remove_background failed: rembg unavailable (${avail.reason}). Setup once: ${REMBG_SETUP_HINT}`,
+            text: `remove_background failed: rembg unavailable (${avail.reason}). Setup once: ${rembgSetupHint()}`,
           }],
           isError: true,
         };

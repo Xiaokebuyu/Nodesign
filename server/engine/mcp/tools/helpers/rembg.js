@@ -34,9 +34,23 @@ const IS_WIN = process.platform === 'win32';
 export const REMBG_VENV_PYTHON = IS_WIN
   ? path.join(SERVER_ROOT, '.venv-rembg', 'Scripts', 'python.exe')
   : path.join(SERVER_ROOT, '.venv-rembg', 'bin', 'python3');
-export const REMBG_SETUP_HINT = IS_WIN
+const SELF_BUILT_HINT = IS_WIN
   ? 'cd server && python -m venv .venv-rembg && .venv-rembg\\Scripts\\python.exe -m pip install rembg onnxruntime'
   : 'cd server && python3 -m venv .venv-rembg && .venv-rembg/bin/python3 -m pip install rembg onnxruntime';
+/**
+ * 装法提示 —— **是函数不是常量**：桌面版的抠图环境是下载来的组件包（NODESIGN_REMBG_PYTHON
+ * 指到 <components>/rembg/python.exe），对那些用户说"cd server && python -m venv"没有任何意义。
+ * 而组件的 env 是启动时才挂上的（runtime/components.js applyComponentEnv），模块加载那一刻还看不到，
+ * 所以只能到用的时候现算。
+ */
+export function rembgSetupHint() {
+  if (resolvePython() !== REMBG_VENV_PYTHON) {
+    return '设置 → 组件 里把「rembg 抠图环境」卸了重装一次；'
+      + '要是报的是 DLL 初始化例程失败，装一次 Microsoft Visual C++ 2015-2022 x64 运行库'
+      + '（https://aka.ms/vs/17/release/vc_redist.x64.exe）再重启应用';
+  }
+  return SELF_BUILT_HINT;
+}
 const DEFAULT_PYTHON = REMBG_VENV_PYTHON;
 const DEFAULT_HELPER = path.join(__dirname, 'rembg-bridge.py');
 // fallback spawn 的 timeout——首次冷启 + 模型 load 留余量
@@ -237,8 +251,81 @@ async function removeViaSpawn(inputBuf, opts) {
 }
 
 /**
- * 检查 rembg 整体可用——service 在线 OR fallback (venv + bridge) 文件齐。
- * 不实际推理，只探活 + stat 文件。
+ * 这个 python 能不能真的 `import onnxruntime`（2026-09-10）。
+ *
+ * ⭐⭐ 为什么非得跑一次子进程：09-10 站主机器上，组件包装得好好的、文件全在，能力表因此一路
+ * 报"可用"，而 service 每次起来都当场死在 `ImportError: DLL load failed ... 初始化例程失败`
+ * （包里不带 MSVCP140*，跟系统那份老运行库配不上）。**探针问的问题要跟用户要做的事是同一个问题**：
+ * 抠图要的是"import 得动"，不是"python.exe 在不在"。
+ *
+ * 缓存的方向是**只记成功**：成功写在 python 旁边（按大小+mtime 认人，换组件自动作废），以后免费；
+ * 失败只在内存里留 60 秒 —— 用户装完运行库重探一下就该翻身，把失败钉在盘上等于给他一个出不去的门。
+ */
+const IMPORT_OK_FILE = '.nd-import-ok.json';
+const IMPORT_FAIL_TTL_MS = 60_000;
+const IMPORT_TIMEOUT_MS = 30_000;
+let importFail = null;   // { at, reason, py }
+
+async function pythonStamp(py) {
+  const st = await fs.stat(py);
+  return `${st.size}:${Math.round(st.mtimeMs)}`;
+}
+
+/** 成功的记号作废（service 意外退出时叫一下：环境可能是后来才坏的） */
+export async function forgetImportCheck() {
+  importFail = null;
+  const py = resolvePython();
+  try { await fs.unlink(path.join(path.dirname(py), IMPORT_OK_FILE)); } catch { /* 没有就算了 */ }
+}
+
+export async function checkImport() {
+  const py = resolvePython();
+  let stamp;
+  try { stamp = await pythonStamp(py); } catch { return { ok: false, reason: `python not found: ${py}` }; }
+
+  const okFile = path.join(path.dirname(py), IMPORT_OK_FILE);
+  try {
+    const rec = JSON.parse(await fs.readFile(okFile, 'utf8'));
+    if (rec.stamp === stamp) return { ok: true, cached: true };
+  } catch { /* 没记号 / 记号对不上 → 老老实实跑一次 */ }
+
+  if (importFail && importFail.py === py && Date.now() - importFail.at < IMPORT_FAIL_TTL_MS) {
+    return { ok: false, reason: importFail.reason, cached: true };
+  }
+
+  const reason = await new Promise((resolve) => {
+    let proc;
+    try {
+      // PYTHONIOENCODING：中文 Windows 上 traceback 里的系统报错默认按 GBK 写出来，
+      // 落进日志和界面就是一片乱码（server.log 里那几行就是），钉成 utf-8 才读得懂
+      proc = spawn(py, ['-c', 'import onnxruntime'], { env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+    } catch (err) { resolve(`spawn 失败：${err.message}`); return; }
+    let err = '';
+    proc.stderr.setEncoding('utf8');
+    proc.stderr.on('data', (c) => { err += c; });
+    const timer = setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* */ } resolve(`import 超时（${IMPORT_TIMEOUT_MS / 1000}s）`); }, IMPORT_TIMEOUT_MS);
+    proc.on('error', (e) => { clearTimeout(timer); resolve(`spawn 失败：${e.message}`); });
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) { resolve(null); return; }
+      // traceback 的最后一行才是病因（前面全是调用栈）
+      const last = err.trim().split(/\r?\n/).filter(Boolean).pop() || `退出码 ${code}`;
+      resolve(last.slice(0, 300));
+    });
+  });
+
+  if (reason) {
+    importFail = { at: Date.now(), reason, py };
+    return { ok: false, reason };
+  }
+  importFail = null;
+  try { await fs.writeFile(okFile, JSON.stringify({ stamp, at: new Date().toISOString() })); } catch { /* 写不进去只是下次再跑一遍 */ }
+  return { ok: true };
+}
+
+/**
+ * 检查 rembg 整体可用——service 在线（那就是活证据）OR 文件齐 **且 import 得动**。
+ * 不实际推理。
  *
  * @returns {Promise<{ available: boolean, mode?: 'service'|'spawn', reason?: string }>}
  */
@@ -258,6 +345,8 @@ export async function isAvailable() {
   } catch {
     return { available: false, reason: `service down + bridge script not found: ${helper}` };
   }
+  const imp = await checkImport();
+  if (!imp.ok) return { available: false, reason: `python 起得来但 import onnxruntime 不行：${imp.reason}` };
   return { available: true, mode: 'spawn' };
 }
 

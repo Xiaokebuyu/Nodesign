@@ -75,6 +75,13 @@ jobs:
           7z a -tzip -mx=5 "$PWD\out\libreoffice.zip" "$root\*" | Out-Null
 
       # 嵌入式 Python + pip + rembg(cpu) + 模型：让 rembg 自己把两个模型下到 U2NET_HOME，文件名由它定
+      #
+      # ⛔⛔ C++ 运行库必须**跟着包走**（09-10 案）：嵌入式 Python 只带 vcruntime140*.dll，
+      # 而 onnxruntime 的 onnxruntime_pybind11_state.pyd 还要 MSVCP140.dll / MSVCP140_1.dll ——
+      # 那两个原本是从用户机器的 System32 拿的。于是包里那份新 vcruntime（14.42，压得过 System32，
+      # 因为应用目录的搜索顺序在它前面）跟用户那份老 msvcp140 配成一对，DllMain 里就挂了：
+      # 站主机器上九次会话次次 `DLL 初始化例程失败`，抠图从来没能用（onnxruntime 官方也写着
+      # Windows 要 VC++ 运行库、建议最新版）。整套一起拷、别只拷 msvcp140 —— 半套就是换个方向的混搭。
       - name: rembg 环境
         shell: pwsh
         run: |
@@ -89,6 +96,32 @@ jobs:
           $env:U2NET_HOME = "$PWD\rembg-env\models"
           & rembg-env\python.exe -c "from rembg import new_session; new_session('isnet-general-use'); new_session('birefnet-general-lite'); print('models ok')"
           Get-ChildItem rembg-env\models
+          # 先不压：运行库还没拷进去（压 484MB 要好几分钟，压两遍没意义）
+
+      # 判据不能是"在这台机器上 import 得动"——跑器自己装着运行库，那只证明跑器装着（09-10 假绿）。
+      # 要查的是**包里有没有**：拷完逐个 Test-Path，缺一个就 throw（pwsh 的 ErrorActionPreference
+      # 管不了外部命令，所以判据一律自己 throw，别指望上一条命令的退出码）。
+      - name: C++ 运行库跟着包走（onnxruntime 要 MSVCP140*）
+        shell: pwsh
+        run: |
+          $crt = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\*\VC\Redist\MSVC\*\x64\Microsoft.VC143.CRT' -Directory -EA SilentlyContinue |
+                 Sort-Object { [version]$_.Parent.Parent.Name } | Select-Object -Last 1
+          if (-not $crt) { throw '找不到 VC143 redist 目录（跑器上的 VS 2022 布局变了？）' }
+          Write-Host "CRT 来源：$($crt.FullName)"
+          # 拷之前记下 Python 自带那份的版本：redist 比它旧就是**降级**，反而会把 Python 自己弄坏
+          $before = [version](Get-Item 'rembg-env\vcruntime140.dll').VersionInfo.FileVersion
+          Copy-Item "$($crt.FullName)\*.dll" rembg-env\ -Force
+          $after = [version](Get-Item 'rembg-env\vcruntime140.dll').VersionInfo.FileVersion
+          if ($after -lt $before) { throw "redist 的 vcruntime140 ($after) 比 Python 自带的 ($before) 旧，别拷" }
+          foreach ($d in 'msvcp140.dll', 'msvcp140_1.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            $f = Get-Item "rembg-env\$d" -EA SilentlyContinue
+            if (-not $f) { throw "包里缺 $d —— 用户机器上 onnxruntime 会以「DLL 初始化例程失败」告终" }
+            Write-Host ("  {0}  {1}" -f $d, $f.VersionInfo.FileVersion)
+          }
+          # 换完运行库再 import 一次。⚠️ 这**不能**证明用户机器上能用（跑器自己装着 redist），
+          # 它只证明上面那几行没把这个 env 弄坏 —— 真正的判据是上面的"包里有没有"。
+          & rembg-env\python.exe -c "import onnxruntime; print('onnxruntime', onnxruntime.__version__)"
+          if ($LASTEXITCODE -ne 0) { throw "拷完运行库反而 import 不动了（退出码 $LASTEXITCODE）" }
           7z a -tzip -mx=5 "$PWD\out\rembg.zip" "$PWD\rembg-env\*" | Out-Null
 
       - name: 版本表 + manifest.json
