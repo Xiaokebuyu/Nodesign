@@ -27,6 +27,14 @@ const API_MAX_PIXELS = 3_750_000;
 export const API_IMAGE_LIMITS = { longEdge: API_LONG_EDGE, maxPixels: API_MAX_PIXELS };
 /** 高分辨率档的 token 估算（⌈w/28⌉×⌈h/28⌉），给 caption 报成本用 */
 export const visionTokens = (w, h) => Math.ceil(w / 28) * Math.ceil(h / 28);
+/**
+ * 出图会被缩多少（1 = 不缩）。**模型读到的坐标就是缩完那张图的像素**，所以凡是
+ * 要把截图坐标换回页面坐标的地方（frame.scale）必须问这一份 —— 上面那句
+ * 「两处都要和这里同一套算法」原来只是句注释，抄漏一次就是坐标整体错位。
+ */
+export const shotScale = (w, h) => (w > 0 && h > 0
+  ? Math.min(1, API_LONG_EDGE / Math.max(w, h), Math.sqrt(API_MAX_PIXELS / (w * h)))
+  : 1);
 
 // ── 渲染层保真（2026-08-07）──
 // 2026-08-05 事故：一次 screenshot_canvas 的位图整体呈暗色反转（深棕底米白字），
@@ -82,7 +90,7 @@ export async function normalizeShot(buf) {
     const w = meta.width || 0;
     const h = meta.height || 0;
     if (!w || !h) return { data: buf.toString('base64'), mimeType: 'image/png', note: null };
-    const scale = Math.min(1, API_LONG_EDGE / Math.max(w, h), Math.sqrt(API_MAX_PIXELS / (w * h)));
+    const scale = shotScale(w, h);
     const tw = Math.max(1, Math.round(w * scale));
     const th = Math.max(1, Math.round(h * scale));
     let img = sharp(buf);

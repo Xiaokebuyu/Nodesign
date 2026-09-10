@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useDeviceClass } from '../../lib/device-class.js';
-import { useGlobalStore } from '../../stores/globalStore.js';
+import { useDockYield, yieldInset } from '../../lib/dock-yield.js';
 import { PAPER, PAPER_SHADOW, GRAIN, INK_SURFACE, pinFill } from '../../lib/paper.js';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE, RADIUS } from '../../lib/theme.js';
 import { POP_IN } from '../../lib/board-geometry.js';
@@ -189,9 +189,9 @@ export default function ArtifactWindow({
    * 浏览器视图让位是被迫的（原生视图盖住一切）；纸是 HTML，让位是为了预览别被卡压掉右边三分之一、
    * 关闭钮别被压住。只让**钉住**的卡：滑出的卡压一会儿就走，跟着缩会抖。手机没有这张卡。
    */
-  const dockPinned = useGlobalStore((s) => s.chatDockPinned);
-  // 平板档整个画布区已经在让（ProjectWorkspace 按 chatDockW 收窄 section），这里再让就是让两次 → 只在桌面档做
-  const yieldInset = deviceClass === 'desktop' && dockPinned?.width > 0 ? { [dockPinned.side]: dockPinned.width + 10 } : null;
+  // 判据在 lib/dock-yield.js（只让钉住的、只在桌面档让，两条边界的来由写在那儿）——
+  // 09-10 扩到图片详情 / 阅读器 / 项目区 / 编排设置页时收成一份，省得下一处再抄一遍。
+  const inset = yieldInset(useDockYield());
   const tree = (
     <div style={phone
       ? { position: 'fixed', inset: 0, zIndex: PHONE_Z, overscrollBehavior: 'contain' }
@@ -210,7 +210,7 @@ export default function ArtifactWindow({
       {/* 窗 = 一张钉在板上的大纸（物料同首页项目卡：纸色 + 颗粒 + 直角）；手机上铺满整屏 */}
       <div data-artifact-paper style={{
         // 四边写长手不写 inset：让位只改一边，长手才能单独盖（happy-dom 也不认 inset 简写）
-        position: 'absolute', top: phone ? 0 : 8, bottom: phone ? 0 : 8, left: phone ? 0 : 10, right: phone ? 0 : 10, ...yieldInset,
+        position: 'absolute', top: phone ? 0 : 8, bottom: phone ? 0 : 8, left: phone ? 0 : 10, right: phone ? 0 : 10, ...inset,
         transition: phone ? undefined : 'left 200ms ease, right 200ms ease',
         background: PAPER.paper, backgroundImage: GRAIN,
         borderRadius: 0, overflow: 'hidden',

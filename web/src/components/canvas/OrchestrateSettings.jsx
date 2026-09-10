@@ -18,6 +18,7 @@ import { createPortal } from 'react-dom';
 import { X, GripVertical, Plus } from 'lucide-react';
 import { Chatai } from '../../lib/api.js';
 import { GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
+import { useDockYield, yieldPadding } from '../../lib/dock-yield.js';
 import { PAPER, PAPER_SHADOW } from '../../lib/paper.js';
 
 /** token 估算 —— 服务端 orchestrate.js 同款下限口径（CJK 1 字 1 枚），只用于展示 */
@@ -33,6 +34,7 @@ const 默认行 = { id: '', 注: '平台默认（服务端 env 定的那个）',
 const 段色 = { 系: '#3F4D46', 史: '#7A6C58', 尾: PAPER.red };
 
 export default function OrchestrateSettings({ projectId, dir, onClose }) {
+  const 让 = useDockYield();   // 给钉住的聊天卡让位（判据在 lib/dock-yield.js）
   const [state, setState] = useState({ loading: true });   // {loading}|{error}|{cfg,files,状况}
   const [选中, set选中] = useState(null);                   // {区, i}
   const [dirty, setDirty] = useState(false);
@@ -127,8 +129,11 @@ export default function OrchestrateSettings({ projectId, dir, onClose }) {
     // 聊天栏都在它底下。两个前身都翻过车：absolute 贴宿主 → 站点窗比可视区宽，
     // 保存钮被聊天栏压住；裸 fixed → 窗口的 POP_IN transform 把 fixed 变局部
     // 定位，照样困在窗里。编排是专注型任务，盖全屏是对的。
+    // 让位（09-10）：这是**全视口** fixed，钉住的聊天卡就压在它上面 —— 900 宽的播放单
+    // 右边一栏会整条被卡盖住。同 BoardOverlays 的罩子，走 padding 不走 inset（居中布局）。
     scrim: { position: 'fixed', inset: 0, zIndex: 600, background: PAPER.scrim,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: GAP.md },
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: GAP.md,
+      transition: 'padding 200ms ease', ...yieldPadding(让, GAP.md) },
     panel: { width: 'min(920px, 100%)', height: '100%', background: PAPER.wall,
       boxShadow: PAPER_SHADOW.far, display: 'flex', flexDirection: 'column',
       fontFamily: FONT_SANS, color: PAPER.ink },
@@ -149,7 +154,7 @@ export default function OrchestrateSettings({ projectId, dir, onClose }) {
     输入框: { border: `1px solid ${PAPER.hair}`, background: PAPER.paper, color: PAPER.ink,
       font: `13px ${FONT_MONO}`, padding: '3px 7px', width: 64 },
     脚: { flexShrink: 0, borderTop: `1px solid ${PAPER.hair}`, padding: `${GAP.xs + 2}px ${GAP.lg}px ${GAP.sm}px`, background: PAPER.wall },
-  }), [拖中]);
+  }), [拖中, 让]);
 
   const 区块 = (名, 注) => (
     <section style={{ marginTop: GAP.lg }}>

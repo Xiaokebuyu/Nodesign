@@ -10,6 +10,16 @@
 import { cardIdOf } from './board-kinds.js';
 
 /**
+ * 这个项目该不该有浏览器卡。**判据只有这一份**（服务端 engine/browse/card.js 那半是同一句话）：
+ * 有访问记录 **或者** 采到过东西。数据层和派生层都问它 —— 两处各写一遍就是 09-10 那个
+ * 「采过但没访问记录 → 桌面上没有这张卡」的病根。
+ * @param {{url?: string|null, sites?: Array}|null} browse `GET /browse` 的载荷
+ */
+export function hasBrowseCard(browse) {
+  return !!(browse?.url || browse?.sites?.length);
+}
+
+/**
  * @param {{tasks?:Array, artifacts?:Array, layout?:object, browse?:object|null, repo?:object|null}} src
  * @returns {Array} 画布物件
  */
@@ -24,7 +34,10 @@ export function deriveBoardObjects({ tasks = [], artifacts = [], layout = {}, br
     // 跟顶层产物平级。
     // 判据跟服务端一致：有访问记录**或者**采到过东西（`browseCard` 头注释里
     // 有为什么是两者之一）。只看 url 的话"采过但没有访问记录"的项目会没有卡。
-    if (browse?.url || browse?.sites?.length) {
+    // ⛔ 判据只有 hasBrowseCard 这一份：09-10 逮到数据层**先**按 `r.url` 过滤了一道，
+    //    于是"采过但没访问记录"的项目在这儿连 browse 都拿不到 —— 桌面上没有这张卡，
+    //    也就没有座位、没有坐标，agent 的 read_board 看不见它、place{by:'browse'} 锚不上。
+    if (hasBrowseCard(browse)) {
       out.push({ id: 'browse', type: 'browse', ...browse, title: browse.title || browse.host });
     }
     // 仓库卡（2026-09-08）：`GET /repo` 有载荷才有 = 这是本地版打开的用户文件夹、桌面缩在 .nodesign 里。

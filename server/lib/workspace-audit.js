@@ -15,7 +15,7 @@ import { getSharedDir } from '../projects/workspace.js';
 import { walkTaskFiles, RESERVED_DIRS } from './task-scan.js';
 import { recordIssue } from './issues-store.js';
 import { obstaclesIn } from './board-obstacles.js';
-import { estimateSizeOn } from './board-kind-sizes.js';
+import { estimateSizeOn, RUNTIME_SINGLETONS } from './board-kind-sizes.js';
 
 const KIND_PREFIX = /^(deck|site|docx|stage):(.+)$/;
 const NATIVE_PREFIX = /^[a-z_-]+:.+/i;   // `C:` 这种冒号后面没东西的不是原生物件，是 Windows 盘符漏进来的影子
@@ -26,6 +26,11 @@ export async function auditWorkspace(projectId, { sharedRoot = getSharedDir(proj
   const zones = Object.keys(b?.zones || {});   // 文件夹卡：id 就是文件夹相对路径
   const dangling = []; const checked = []; const covered = new Set();
   for (const id of [...ids, ...zones]) {
+    // 运行时单例（browse / repo）背后本来就没有文件，不参与磁盘对账 —— read_board 那头早就
+    // 这么判了（board-kind-sizes.RUNTIME_SINGLETONS 的头注写着"四处都问这一份"，这就是漏掉的
+    // 第四处）。漏掉的后果不是没查出来，是**每轮都报一条假的 dangling**：站主库里 09-08 那条
+    // 「画布上 1 张卡对应的文件磁盘上不存在」×4 全是浏览器卡，假警报会训练人忽略真警报。
+    if (RUNTIME_SINGLETONS.has(id)) continue;
     let rel = null; const m = KIND_PREFIX.exec(id);
     if (m) rel = m[2];
     else if (!NATIVE_PREFIX.test(id)) rel = id;

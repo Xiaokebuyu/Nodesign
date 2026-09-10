@@ -34,41 +34,72 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
 
   const ses = () => session.fromPartition(PARTITION);
 
-  function applyZoom(entry, retry = true) {
+  const clampZoom = (z) => Math.max(0.2, Math.min(3, z));
+
+  /**
+   * 让页面的 CSS 视口等于 entry.viewport（工具层写死的 1366×768，坐标契约就靠它）。
+   *
+   * ⛔ **判据是页面自己量的 innerWidth，不是 getZoomFactor**（2026-09-10 改）。
+   *    原来那版拿 `getZoomFactor()` 回读对账，站主机器上的日志（desktop.log，09-08 起每一场都有）
+   *    是这样的：`place 1068×600` → `zoom 期望 0.782 实际 0.851，重设` → 再读还是 0.851……
+   *    期望值随 rAF 送来的新矩形一路变（1.000/0.782/0.786/0.791/0.816/0.824/0.835），回读值咬死不动，
+   *    **一次都没对上过**。实际÷期望 ≈ 1.25 = 他那块屏的 Windows 缩放 —— set 和 get 差着一个
+   *    display scale factor。于是视口从来不是 1366：模型收到的图是按另一个宽度布局的（画面缩在一角），
+   *    frame 又按 1366 判界（坐标点不着）。
+   *    对着一个会撒谎的读数纠错，纠不出真相；改成对着**我们真正关心的那个数**纠。
+   * ⭐ 学到的偏差存在 entry.zoomBias 上：下次矩形一变就直接带上，不用每次重新收敛。
+   */
+  function applyZoom(entry, verify = 2) {
     const wc = entry.view.webContents;
     if (wc.isDestroyed()) return;
-    const w = entry.rect ? entry.rect.width : entry.viewport.width;
-    const zoom = Math.max(0.2, Math.min(3, w / entry.viewport.width));
+    const w = (entry.bounds && entry.bounds.width) || entry.viewport.width;
+    const zoom = clampZoom((w / entry.viewport.width) * (entry.zoomBias || 1));
+    entry.zoomApplied = zoom;   // 基准用**我们设下去的值**，不回读（回读那个数不可信）
     try { wc.setZoomFactor(zoom); } catch { /* 页面还没就绪时会抛，下面复查再来 */ }
-    // 复查（09-08 晚站主实报「内容缩在一角」）：页面没就绪时 setZoomFactor 静默不生效，而页面这头只在矩形变了才再发 place；
-    // 300ms 后读回来对一次，不对就再设一次，再不对留给 did-navigate / did-finish-load
-    if (!retry) return;
-    setTimeout(() => {
-      if (wc.isDestroyed()) return;
-      let got = null; try { got = wc.getZoomFactor(); } catch { return; }
-      if (Math.abs(got - zoom) > 0.01) { log(`[browser-host] zoom ${entry.projectId} 期望 ${zoom.toFixed(3)} 实际 ${got.toFixed(3)}，重设`); applyZoom(entry, false); }
-    }, 300);
+    if (verify > 0) setTimeout(() => checkViewport(entry, verify), 300);
+  }
+
+  /** 复查：页面量到的视口跟要的差多少，就按比例把 zoom 拨过去（页面没就绪时 setZoomFactor 也会静默不生效，这条同时兜住它） */
+  function checkViewport(entry, left) {
+    const wc = entry.view.webContents;
+    if (wc.isDestroyed()) return;
+    wc.executeJavaScript('({w:window.innerWidth,h:window.innerHeight})', true).then((vp) => {
+      if (!vp || !(vp.w > 0)) return;
+      const want = entry.viewport.width;
+      entry.cssViewport = { width: vp.w, height: vp.h };
+      if (Math.abs(vp.w - want) <= Math.max(2, want * 0.01)) return;    // 1% 以内算到位
+      const base = entry.zoomApplied || 1;
+      const next = clampZoom(base * (vp.w / want));
+      entry.zoomBias = clampZoom(next / ((entry.bounds && entry.bounds.width ? entry.bounds.width : want) / want));
+      log(`[browser-host] viewport ${entry.projectId} 实测 ${vp.w}×${vp.h}（要 ${want}×${entry.viewport.height}）→ zoom ${base.toFixed(3)}→${next.toFixed(3)}`);
+      entry.zoomApplied = next;
+      try { wc.setZoomFactor(next); } catch { return; }
+      if (left > 1) setTimeout(() => checkViewport(entry, left - 1), 300);
+    }).catch(() => { /* 导航中读不到，下一次 layout/did-navigate 再来 */ });
   }
 
   function layout(entry) {
     const win = getWindow();
-    if (!win || win.isDestroyed()) return;
+    const alive = !!win && !win.isDestroyed();
     const { view, blocker } = entry;
+    // ⭐ bounds **先定下来，而且不看有没有窗**（2026-09-10）：setBounds 不需要窗，只有
+    //    addChildView 需要。原来整个函数在没窗时早退 —— 新建的 WebContentsView 默认
+    //    bounds 是 0×0，页面就按 0 宽布局 —— 这正是问题库里 09-08 那条 "Cannot take
+    //    screenshot with 0 width" 的形状（没在站主机器上复核过，但这条路确实能走到）。
+    //    而 dom-ready/did-finish-load 上挂的 applyZoom 照跑，于是 zoom 与 bounds 出自两处。
+    const z = alive ? (win.webContents.getZoomFactor() || 1) : 1;   // 页面 CSS px → DIP。主窗倍率被 main.js 钉在 1，这里只是防御
+    const r = entry.rect
+      ? { x: Math.round(entry.rect.x * z), y: Math.round(entry.rect.y * z), width: Math.round(entry.rect.width * z), height: Math.round(entry.rect.height * z) }
+      : { ...PARK, width: entry.viewport.width, height: entry.viewport.height };
+    view.setBounds(r);
+    entry.bounds = r;          // applyZoom 只认这个 —— 视口 = bounds ÷ zoom，两个数出自同一次 layout
+    applyZoom(entry);
+    if (!alive) return;
     if (!entry.attached) { win.contentView.addChildView(view); entry.attached = true; }
-    if (entry.rect) {
-      const z = win.webContents.getZoomFactor() || 1;   // 页面 CSS px → DIP。主窗倍率被 main.js 钉在 1（界面缩放 09-07/09-09 两层都拿掉了），这里只是防御
-      const r = { x: Math.round(entry.rect.x * z), y: Math.round(entry.rect.y * z), width: Math.round(entry.rect.width * z), height: Math.round(entry.rect.height * z) };
-      view.setBounds(r);
-      applyZoom(entry);
-      if (entry.blocked) {
-        if (!entry.blockerAttached) { win.contentView.addChildView(blocker); entry.blockerAttached = true; }
-        blocker.setBounds(r);
-      } else if (entry.blockerAttached) { win.contentView.removeChildView(blocker); entry.blockerAttached = false; }
-    } else {
-      view.setBounds({ ...PARK, width: entry.viewport.width, height: entry.viewport.height });
-      applyZoom(entry);
-      if (entry.blockerAttached) { win.contentView.removeChildView(blocker); entry.blockerAttached = false; }
-    }
+    if (entry.rect && entry.blocked) {
+      if (!entry.blockerAttached) { win.contentView.addChildView(blocker); entry.blockerAttached = true; }
+      blocker.setBounds(r);
+    } else if (entry.blockerAttached) { win.contentView.removeChildView(blocker); entry.blockerAttached = false; }
   }
 
   async function createView({ projectId, proxyPort, viewport }) {
@@ -174,7 +205,18 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
             if (!m) return reply(404, { error: 'no such route' });
             if (req.method === 'POST' && !m[1]) return reply(200, await createView(j));
             if (req.method === 'DELETE' && m[1]) return reply(200, { ok: destroyView(m[1]) });
-            if (req.method === 'GET' && !m[1]) return reply(200, { views: [...views.values()].map(e => ({ id: e.id, projectId: e.projectId, url: e.view.webContents.getURL(), placed: !!e.rect, rect: e.rect, bounds: e.view.getBounds(), zoom: e.view.webContents.isDestroyed() ? null : e.view.webContents.getZoomFactor(), blocked: e.blocked })) });
+            if (req.method === 'GET' && !m[1]) {
+              return reply(200, { views: [...views.values()].map(e => {
+                const dead = e.view.webContents.isDestroyed();
+                const bounds = e.view.getBounds();
+                const zoom = dead ? null : e.view.webContents.getZoomFactor();
+                // ⭐ cssViewport = bounds ÷ zoom —— 这就是页面自己量到的 innerWidth/innerHeight，
+                //    也是 agent 那边坐标契约的那个数。它不等于 viewport 就是共视对不上位，
+                //    别再靠肉眼看截图猜（09-10：「画面缩到一角」「坐标定位不到」是同一个数错了）。
+                const cssViewport = e.cssViewport || ((zoom && bounds.width) ? { width: Math.round(bounds.width / zoom), height: Math.round(bounds.height / zoom) } : null);
+                return { id: e.id, projectId: e.projectId, url: e.view.webContents.getURL(), placed: !!e.rect, rect: e.rect, bounds, zoom, cssViewport, want: e.viewport, ok: !!cssViewport && cssViewport.width === e.viewport.width, blocked: e.blocked };
+              }) });
+            }
             // 诊断：这张视图现在长什么样（PNG base64）。站主远程看共视对不对位时用
             if (req.method === 'GET' && m[1]) { const e = byId.get(m[1]); if (!e) return reply(404, { error: 'no such view' }); const img = await e.view.webContents.capturePage(); return reply(200, { png: img.toPNG().toString('base64'), size: img.getSize() }); }
             reply(405, { error: 'method' });

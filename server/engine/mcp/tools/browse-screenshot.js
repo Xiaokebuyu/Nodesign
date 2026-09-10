@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { withBrowser, _limits } from '../../browse/registry.js';
 import { saveFrame } from '../../browse/state.js';
 import { normalizeShot, visionTokens } from './helpers/shot-pipeline.js';
+import { liveFrame } from './browse-computer.js';
 import { recordMotion, pickNearestFrames, composeSheet, encodeWebm, motionCaptionLines } from './helpers/motion-lab.js';
 import { wheelScroll, elementMotionReport, elementMotionLines } from './helpers/motion-scroll.js';
 
@@ -143,7 +144,13 @@ the workspace for the user.`,
           return {
             content: [
               { type: 'text', text: [`${await where(page)}`,
-                selector ? `只截了 ${selector}` : `${fullPage ? '整页' : '视口'} ${VP.width}×${VP.height}${fullPage ? '' : ` (≈${visionTokens(VP.width, VP.height)} tokens)`}`,
+                // 视口尺寸**现量**（桌面版共视那条路它不一定是 1366×768，写死就是骗模型；见 browse-computer.liveFrame）
+                selector ? `只截了 ${selector}` : await (async () => {
+                  const f = await liveFrame(page);
+                  return `${fullPage ? '整页' : '视口'} ${f.pageW ?? VP.width}×${f.pageH ?? VP.height}`
+                    + (fullPage ? '' : ` (≈${visionTokens(f.w, f.h)} tokens)`)
+                    + (f.off ? ` ⚠ 不是常规的 ${VP.width}×${VP.height}` : '');
+                })(),
                 shot.note].filter(Boolean).join(' · ') },
               { type: 'image', data: shot.data, mimeType: shot.mimeType },
             ],

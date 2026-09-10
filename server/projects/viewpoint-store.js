@@ -100,8 +100,13 @@ export function describeViewpoint(v, rects = null) {
       const inside = rects.filter(r => !(r.x + r.w < c.x || r.x > c.x + c.w || r.y + r.h < c.y || r.y > c.y + c.h));
       // 带坐标和占位（08-27 用户提）：agent 摆放要知道视口里谁占了哪，不该再专门调工具去问
       if (inside.length) {
-        bits.push(`视口里 ${inside.length} 件（id@(x,y)宽x高）：${inside.slice(0, 12)
-          .map(r => `${r.id}@(${Math.round(r.x)},${Math.round(r.y)})${Math.round(r.w)}x${Math.round(r.h)}`)
+        // ⛔ id 和坐标之间**必须有空格**，跟 read_board 的写法一字不差（2026-09-10）。
+        //    原来是 `browse@(48,10)640x388` 这样黏在一起 —— 站主 09-10 的会话里 agent 直接把
+        //    这一整串当 id 喂回 write_on_board 的 near（写成 `browse@48,10`），拿回来一句
+        //    「既没有座位」。座位明明在 (48,10)。**打印出来的形状要能喂回去**，否则这一行
+        //    读起来像坐标、用起来是陷阱（[[feedback-entrance-must-be-exit]] 又一例）。
+        bits.push(`视口里 ${inside.length} 件（id 空格 @(x,y) 宽x高；喂回工具时只取 id 那一段）：${inside.slice(0, 12)
+          .map(r => `${r.id} @(${Math.round(r.x)},${Math.round(r.y)}) ${Math.round(r.w)}x${Math.round(r.h)}`)
           .join('、')}${inside.length > 12 ? ' 等' : ''}`);
       } else bits.push('视口里是空地');
     }

@@ -32,11 +32,43 @@ import { z } from 'zod';
 import { withBrowser, _limits } from '../../browse/registry.js';
 import { handleForRef, staleRefText } from '../../browse/refs.js';
 import { recordVisit, saveFrame } from '../../browse/state.js';
-import { normalizeShot } from './helpers/shot-pipeline.js';
+import { normalizeShot, shotScale } from './helpers/shot-pipeline.js';
 
 const VP = _limits.VIEWPORT;
-/** 浏览通道的截图空间：视口像素 1:1（browse-computer.test.js 守着这个前提） */
+/** 浏览通道的**标称**截图空间：视口像素 1:1（browse-computer.test.js 守着这个前提） */
 export const BROWSE_FRAME = { w: VP.width, h: VP.height, scale: 1 };
+
+let warnedViewport = '';
+/**
+ * 这一刻**真正**的截图空间 —— 现量，不拿常量当真话（2026-09-10）。
+ *
+ * 病史：这里原来一路用 BROWSE_FRAME。托管版那条路它说的是真话（页面视口由
+ * playwright 钉死 1366×768）；桌面版共视这条不是 —— 页面住在 Electron 的
+ * WebContentsView 里，视口 = 视图 bounds ÷ zoomFactor，两个数只要有一次没对上，
+ * 页面就按另一个宽度布局。后果是**双份的**，而且两份都不报错：
+ *   · 回给模型的图是那个真视口截的 —— 1366 宽的站画进一张两千多宽的图里，
+ *     归一化再一缩，就是站主报的「画面缩到视窗左上角」；
+ *   · frame 还按 1366×768 判坐标 —— 右半边的 ref 一律回「outside the 1366×768
+ *     screenshot」，坐标点不着，就是站主报的「定位不到」。
+ * 所以坐标空间现量：视口多少说多少，归一化缩了多少写进 scale（缩放算法只有
+ * shot-pipeline.shotScale 一份）。量不到才退回常量；量到了跟标称不一样就当场说出来。
+ */
+export async function liveFrame(page) {
+  let vp = null;
+  try { vp = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight })); } catch { /* 刚导航/正忙：退回标称 */ }
+  if (!vp || !(vp.w > 0) || !(vp.h > 0)) return { ...BROWSE_FRAME, measured: false };
+  const off = vp.w !== VP.width || vp.h !== VP.height;
+  if (off) {
+    const key = `${vp.w}x${vp.h}`;
+    if (key !== warnedViewport) {
+      warnedViewport = key;
+      console.warn(`[browse] 视口不是 ${VP.width}×${VP.height} 而是 ${key} —— 截图与坐标按实测走`
+        + '（桌面版共视：视图 bounds 与 zoomFactor 没对上；见 desktop/browser-host.cjs 的 layout）');
+    }
+  } else if (warnedViewport) { warnedViewport = ''; }
+  const scale = shotScale(vp.w, vp.h);
+  return { w: Math.round(vp.w * scale), h: Math.round(vp.h * scale), scale, measured: true, off, pageW: vp.w, pageH: vp.h };
+}
 const asText = (text, isError = false) => ({ content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) });
 
 export const ACTIONS = [
@@ -160,14 +192,19 @@ async function withModifiers(page, mods, fn) {
   }
 }
 
-/** 浏览通道的视口截图：存桌面卡预览 + 归一化（1366×768 在阈值内，不缩）→ 文本块在前，图在后 */
-export async function viewportShot(page, projectId, lead) {
+/** 浏览通道的视口截图：存桌面卡预览 + 归一化 → 文本块在前，图在后。frame 由调用方现量（liveFrame） */
+export async function viewportShot(page, projectId, lead, frame = null) {
+  const f = frame || await liveFrame(page);
   const buf = await page.screenshot({ type: 'png', scale: 'css' });
   await saveFrame(projectId, buf);
   const shot = await normalizeShot(buf);
+  // 视口跟标称不一样时**明说**：模型看到的图确实是那个尺寸，别让它按 1366×768 去猜坐标
+  const off = f.off
+    ? `⚠ this browser's viewport is ${f.pageW}×${f.pageH}, not the usual ${VP.width}×${VP.height} — the numbers above are the ones that count`
+    : null;
   return {
     content: [
-      { type: 'text', text: [lead, `viewport ${VP.width}×${VP.height} — coordinates you use next are these pixels`, shot.note].filter(Boolean).join(' · ') },
+      { type: 'text', text: [lead, `viewport ${f.w}×${f.h} — coordinates you use next are these pixels`, off, shot.note].filter(Boolean).join(' · ') },
       { type: 'image', data: shot.data, mimeType: shot.mimeType },
     ],
   };
@@ -388,7 +425,9 @@ browser_find and click its ref.`,
           page.on('request', onReq);
           let r;
           try {
-            r = await runAction(page, a, { frame: BROWSE_FRAME, shot: (p, lead) => viewportShot(p, projectId, lead) });
+            // 坐标空间一次调用量一次（batch 里每个子工具各自走这条 handler，各量各的）
+            const frame = await liveFrame(page);
+            r = await runAction(page, a, { frame, shot: (p, lead) => viewportShot(p, projectId, lead, frame) });
           } catch (err) {
             page.off('request', onReq);
             if (/Execution context was destroyed|Target closed|frame was detached/i.test(String(err?.message))) {

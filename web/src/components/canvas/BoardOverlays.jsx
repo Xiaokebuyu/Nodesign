@@ -23,6 +23,7 @@ import { Assets, Instruction } from '../../lib/api.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, MODAL } from '../../lib/theme.js';
 import { POP_IN } from '../../lib/board-geometry.js';
 import { readerOf } from '../../lib/board-kinds.js';
+import { useDockYield, yieldPadding } from '../../lib/dock-yield.js';
 import InstructionsCard from '../project/InstructionsCard.jsx';
 import FilesCard from '../project/FilesCard.jsx';
 
@@ -252,13 +253,25 @@ export function ImageDetailOverlay({ projectId, detail, onClose, onAdd }) {
  * 之下"的老账，08-07 窗层抬到 500 后没人 rebase，于是文件夹窗里双击 .md
  * 阅读器整个躲在窗后面，看起来"双击没反应"。层级要引用档位常量别写裸数。
  */
+/**
+ * 三张浮层共用的罩子。**图片详情 / markdown 阅读器 / 项目区都从这儿出去**，
+ * 所以让位钉在这一处（2026-09-10 站主点名「图片阅读」时一起收的）。
+ *
+ * ⚠️ 让位走 **padding 不走 inset**：这张罩子是"铺满 + flex 居中"，改 inset 会把
+ *    居中的内容压扁（图片按 maxHeight:100% 缩，人看到的是图变小而不是挪开），
+ *    加 padding 才是把整块内容从卡底下挪出来。判据见 lib/dock-yield.js。
+ * 罩子本身仍然铺满：点空白关闭这件事不该在卡那一侧失灵。
+ */
 function Overlay({ children, onClose }) {
+  const pad = yieldPadding(useDockYield(), GAP.page);
   return (
     <div
       onClick={onClose}
+      data-board-overlay
       style={{
         position: 'absolute', inset: 0, zIndex: MODAL.zIndex, background: 'rgba(43,33,23,0.42)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: GAP.page,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: GAP.page, ...pad,
+        transition: 'padding 200ms ease',
       }}
     >
       <div

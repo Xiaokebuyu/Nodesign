@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { _limits } from '../../browse/registry.js';
 import { API_IMAGE_LIMITS } from './helpers/shot-pipeline.js';
-import { ACTIONS, parseChords, parseModifiers, checkCoord } from './browse-computer.js';
+import { ACTIONS, parseChords, parseModifiers, checkCoord, liveFrame, BROWSE_FRAME } from './browse-computer.js';
 
 describe('browser_computer 坐标空间', () => {
   it('视口在归一化阈值内：截图不缩，截图像素 = 视口像素', () => {
@@ -74,5 +74,45 @@ describe('键名翻译（xdotool 风格 → Playwright）', () => {
     expect(parseModifiers('ctrl+shift')).toEqual(['Control', 'Shift']);
     expect(parseModifiers('super')).toEqual(['Meta']);
     expect(() => parseModifiers('hyper')).toThrow(/unknown modifier/);
+  });
+});
+
+/**
+ * 坐标空间现量（2026-09-10）。
+ *
+ * 为什么值得一组测试：写死 1366×768 的错法**全是静默的**。桌面版共视那条路页面视口
+ * 由 Electron 的 bounds÷zoom 决定，只要那两个数错开一个倍率，模型收到的就是
+ * 「一张更宽的图（画面缩在一角）+ 一个按 1366 判界的 frame（右半边全成越界）」——
+ * 两个症状一个根，而且两边都不报错。所以这里钉住：量到多少就说多少。
+ */
+describe('liveFrame：坐标空间按实测走', () => {
+  const fakePage = (vp) => ({ evaluate: async () => (typeof vp === 'function' ? vp() : vp) });
+
+  it('常规视口：跟标称一致，scale=1，不喊警报', async () => {
+    const f = await liveFrame(fakePage({ w: _limits.VIEWPORT.width, h: _limits.VIEWPORT.height }));
+    expect(f).toMatchObject({ w: _limits.VIEWPORT.width, h: _limits.VIEWPORT.height, scale: 1, measured: true, off: false });
+  });
+
+  it('视口被撑宽（共视对不上位）：frame 跟着变大，并标记 off', async () => {
+    const f = await liveFrame(fakePage({ w: 2073, h: 1166 }));
+    expect(f.off).toBe(true);
+    expect(f.pageW).toBe(2073);
+    // 2073×1166 = 2.4MP，仍在 3.75MP 内且长边 <2000？长边 2073 > 2000 → 要缩
+    expect(f.scale).toBeCloseTo(2000 / 2073, 5);
+    expect(f.w).toBe(Math.round(2073 * f.scale));
+    // 坐标判界跟着实测走：按标称 1366 会把这一点判成越界
+    expect(checkCoord([f.w - 1, f.h - 1], f)).toBeNull();
+    expect(checkCoord([f.w - 1, f.h - 1], BROWSE_FRAME)).toMatch(/outside/);
+  });
+
+  it('量不到（页面正忙 / 刚导航）就退回标称，不抛', async () => {
+    const f = await liveFrame({ evaluate: async () => { throw new Error('Execution context was destroyed'); } });
+    expect(f).toMatchObject({ ...BROWSE_FRAME, measured: false });
+  });
+
+  it('量到 0 宽（视图 bounds 没设过）也退回标称 —— 别拿 0 当坐标空间', async () => {
+    const f = await liveFrame(fakePage({ w: 0, h: 0 }));
+    expect(f.measured).toBe(false);
+    expect(f.w).toBe(_limits.VIEWPORT.width);
   });
 });

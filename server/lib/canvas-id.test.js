@@ -50,3 +50,26 @@ describe('layerOf', () => {
     expect(layerOf('doc:_root', null, folders)).toBe('');
   });
 });
+
+/**
+ * 座次装饰要剥掉（2026-09-10）。
+ *
+ * 现场：站主 09-10 那个会话里，每轮注入的工作台状态印的是 `browse@(48,10)640x388`，
+ * agent 把它当 id 喂回 write_on_board 的 near（`browse@48,10`），拿回一句「既没有座位」——
+ * 而座位就在 (48,10)。印的那头已经改成带空格；这里是存量与手误的兜底。
+ * 边界钉死：正常文件名里的 `@`（logo@2x.png）不许被咬掉。
+ */
+describe('normalizeCanvasId：剥座次装饰', () => {
+  it('黏在 id 后面的坐标/尺寸都剥掉', () => {
+    expect(normalizeCanvasId('browse@48,10')).toBe('browse');
+    expect(normalizeCanvasId('browse@(48,10)640x388')).toBe('browse');
+    expect(normalizeCanvasId('notes/板书/a.md@(711,-140)432x384')).toBe('notes/板书/a.md');
+    expect(normalizeCanvasId('参考图/x.jpg @(0,0) 200x176')).toBe('参考图/x.jpg');
+  });
+
+  it('⛔ 文件名里本来就有的 @ 不许动', () => {
+    expect(normalizeCanvasId('参考图/logo@2x.png')).toBe('参考图/logo@2x.png');
+    expect(normalizeCanvasId('a@1,2 b')).toBe('a@1,2 b');       // 坐标不在结尾 = 不是装饰
+    expect(normalizeCanvasId('deck:主稿.html')).toBe('deck:主稿.html');
+  });
+});

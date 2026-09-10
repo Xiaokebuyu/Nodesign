@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Assets, Sessions, Instruction, Browse, Repo } from '../../lib/api.js';
 import { useBoardFilter } from './board-filter.jsx';
+import { hasBrowseCard } from '../../lib/board-objects.js';
 
 /**
  * useBoardData —— 画布的数据层（2026-08-13 刀 4 续，从 BoardCanvas 拆出）。
@@ -146,7 +147,10 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
     if (Array.isArray(a?.folders)) setFolders(a.folders);
     // 浏览器卡走**自己的端点**（不在 /artifacts 里）：它的真相在服务端进程 +
     // 一份浏览痕迹，跟磁盘扫描不是一回事。见 server/api/browse.js 头注。
-    Browse.state(projectId).then(r => setBrowse(r?.url ? r : null)).catch(() => {});
+    // ⛔ 判据走 hasBrowseCard（跟服务端 browseCard 同一句：有访问记录**或**采到过东西）。
+    //    这里原来自己写了半句 `r?.url`，比派生层严 —— "采过但没访问记录"的项目在这一步
+    //    就被扔成 null，桌面上没有这张卡、没有座位、没有坐标（09-10 站主报的"定位不到"）。
+    Browse.state(projectId).then(r => setBrowse(hasBrowseCard(r) ? r : null)).catch(() => {});
     Repo.summary(projectId).then(r => setRepo(r?.folder ? r : null)).catch(() => setRepo(null));
     if (Array.isArray(s?.sessions)) setSessions(s.sessions);
     if (b?.board && !layoutLoadedRef.current) {

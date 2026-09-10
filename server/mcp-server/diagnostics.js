@@ -233,7 +233,7 @@ function buildServer({ desktopState }) {
   }, async () => text(envSummary()));
 
   server.registerTool('browser_status', {
-    description: '常驻浏览器：每个项目的当前 URL、忙闲、空闲时长、页面日志里最后一次错误；桌面版另附壳里的视图表（摆没摆上桌面 / 矩形 / 真实 bounds / zoom / 遮没遮）。',
+    description: '常驻浏览器：每个项目的当前 URL、忙闲、空闲时长、页面日志里最后一次错误；桌面版另附壳里的视图表（摆没摆上桌面 / 矩形 / 真实 bounds / zoom / 遮没遮 / cssViewport=bounds÷zoom 与 ok —— ok:false 就是共视对不上位，画面会缩在一角、坐标会判越界）。',
     inputSchema: {},
   }, async () => text(await browserStatus()));
 

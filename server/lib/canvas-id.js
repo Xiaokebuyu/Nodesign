@@ -7,8 +7,17 @@
  * 迁过来（现在没动它：改稳定工具要单独一刀）。
  */
 
+/**
+ * 座次表印出来的装饰：`browse@(48,10)640x388`、`browse@48,10`。
+ * ⚠️ 判据卡得很死（必须以坐标结尾），`logo@2x.png` 这种正常文件名碰不着。
+ * 印的那头已经改成带空格了（viewpoint-store），这里是**存量与手误的兜底** ——
+ * 09-10 真发生过：agent 把整串当 id 喂回来，错误话术还回「既没有座位」，人和模型一起被带偏。
+ */
+const SEAT_DECOR = /\s*@\(?-?\d+\s*,\s*-?\d+\)?(?:\s*\d+x\d+)?$/;
+
 export function normalizeCanvasId(raw) {
   let id = String(raw || '').trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '');
+  id = id.replace(SEAT_DECOR, '').trim();
   if (!id || id.includes('..')) return null;
   // （doc:brand / doc:_root 映射 2026-08-24 拆除：项目文档并进根 CLAUDE.md，
   //   记忆住 记忆/，都是普通画布文件，没有特殊 id 了）
