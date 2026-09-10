@@ -40,6 +40,7 @@
 import { can, localGenApproved, DENIAL } from '../../auth/tier.js';
 import { platform } from '../../runtime/platform.js';
 import { UPSTREAMS_BUILTIN, MODELS_BUILTIN, BRANDS, SHARED_SDK_ALIAS } from './model-table.js';
+import { RENAMED_MODELS, followRename } from './model-renames.js';
 import { loadLocalConfig } from '../../runtime/local-config.js';
 import { relayModelEntry } from '../../runtime/relay-client.js';
 import { loadPrefs } from '../../runtime/local-prefs.js';
@@ -127,6 +128,40 @@ if (MODEL_CONFIG_ERRORS.length) {
   for (const e of MODEL_CONFIG_ERRORS) console.warn(`  - ${e.where}: ${e.message}`);
 }
 
+// ── 改过名的行（2026-09-10）──────────────────────────────────────────
+// 表在 model-table.js 的 RENAMED_MODELS（那儿写着规矩）。这里是它唯一的用法：
+// **把存下来的旧 id 翻成现在的 id**。存量在四个地方指着 id —— 会话的 session-config.json、
+// 本地偏好的 defaultModel / hiddenModels、前端记的选择、用量账（这一份不翻，见表上的注释）。
+{
+  for (const [oldId, newId] of Object.entries(RENAMED_MODELS)) {
+    // 指向不存在的行 = 表写错了，当场炸（内置表的错就该当场炸，别等用户撞上）
+    if (!BY_ID.has(newId)) throw new Error(`[model-context] RENAMED_MODELS 里 ${oldId} 指向不存在的行：${newId}`);
+    // 旧名还活着不算错：那多半是用户自己配了个同名插槽，活着的那行说了算（canonicalModelId 先查表）
+  }
+}
+
+/**
+ * 旧 id → 现在的 id。不认识的名字原样返回（"不在表里"仍然由调用方按原来的方式处理）。
+ *
+ * 三条边界情况都在这儿收口：**活着的行优先**（用户的同名插槽不该被历史包袱顶掉）、
+ * 多跳跟到底（a→b→c）、成环当没改过（表写坏了不该拖垮请求）。
+ */
+export function canonicalModelId(appModel) {
+  if (typeof appModel !== 'string' || !appModel) return appModel;
+  if (BY_ID.has(appModel)) return appModel;   // 活着的行优先（用户的同名插槽说了算）
+  return followRename(appModel);              // 多跳与成环在 model-table.js 的 followRename 里
+}
+
+/**
+ * 查表拿一行 —— 认现名，也认改名前的旧名。
+ * ⭐ 本文件里凡是"拿 appModel 查行"的地方都走它（价钱 / 通路 / 牌子 / standby / 窗口…），
+ *   不是各自 `BY_ID.get`：改名这件事只该在一个地方知道。构表与自检那一段除外（它们要的是**原样**）。
+ */
+function rowOf(appModel) {
+  if (typeof appModel !== 'string' || !appModel) return undefined;
+  return BY_ID.get(appModel) || BY_ID.get(canonicalModelId(appModel));
+}
+
 /** 当前进程里真正生效的外部行 id（配置页据此判「已生效 / 要重启」） */
 export function externalModelIds() {
   return [...BY_ID.values()].filter((r) => r.external).map((r) => r.id);
@@ -139,7 +174,7 @@ export function shadowedBuiltinModelIds() {
 
 /** 一行在入口会以哪些 body.model 名出现（id / sdkAlias / 剥 [1m] 的 alias）。session-routes 会话优先匹配用；不认识的 id → [] */
 export function wireNamesOf(appModel) {
-  const row = appModel ? BY_ID.get(appModel) : null;
+  const row = appModel ? rowOf(appModel) : null;
   if (!row) return [];
   return row.api ? [row.id, row.api.sdkAlias, row.api.sdkAlias.replace(/\[1m\]$/i, '')] : [row.id];
 }
@@ -157,12 +192,12 @@ export const SELECTABLE_MODELS = Object.freeze(
 
 /** 这一行的备用行 id（模型表 standby 字段）。没有 → null */
 export function standbyModelOf(appModel) {
-  return (appModel && BY_ID.get(appModel)?.standby) || null;
+  return (appModel && rowOf(appModel)?.standby) || null;
 }
 
 /** 系统提示的环境块要报真实模型：label / id / 上下文窗口。不认识的 id → null（调用方 fail-loud） */
 export function modelFactsFor(appModel) {
-  const row = appModel ? BY_ID.get(appModel) : null;
+  const row = appModel ? rowOf(appModel) : null;
   return row ? { id: row.id, label: row.select?.label || row.label || row.id, window: row.window } : null;
 }
 
@@ -175,12 +210,12 @@ export function modelFactsFor(appModel) {
  * 后备静默，同一条上游这一发可能是 zai 服务的、下一发就是 particle（见 upstream-health.js 头注）。
  */
 export function upstreamOf(appModel) {
-  return (appModel && BY_ID.get(appModel)?.api?.upstream) || null;
+  return (appModel && rowOf(appModel)?.api?.upstream) || null;
 }
 
 /** 这个 appModel 出自谁家（BRANDS 之一）。不认识的 id → null，调用方自己决定兜底，别猜。 */
 export function brandOfModel(appModel) {
-  return BY_ID.get(appModel)?.brand || null;
+  return rowOf(appModel)?.brand || null;
 }
 
 /**
@@ -227,7 +262,7 @@ const upstreamKeyPresent = (row) => { if (!row.api) return !!platform.claudeAuth
  * ⭐ 本机优先：用户自己配了钥匙就是明确想用自己的，不该被 relay 悄悄接管。
  */
 export function modelSourceFor(appModel) {
-  const row = BY_ID.get(appModel);
+  const row = rowOf(appModel);
   if (!row) return null;
   if (!platform.isLocal) return 'local';
   if (upstreamKeyPresent(row)) return 'local';
@@ -245,7 +280,8 @@ export function selectableModelsFor(user, opts) {
     const source = modelSourceFor(m.id);
     if (!source) continue;   // 本地版：本机没钥匙、relay 也没有 → 藏起来；hosted 永远 'local'
     // 本地版：用户在设置页藏起来的行带 hidden 标（选择器不列，设置页要列出来给他再打开；不影响能不能用）
-    const hidden = platform.isLocal && loadPrefs().hiddenModels.includes(m.id) ? { hidden: true } : {};
+    // 存下来的是"当时的 id"：行改过名的话，偏好里还写着旧名（canonicalModelId 翻一下再比）
+    const hidden = platform.isLocal && loadPrefs().hiddenModels.some((id) => canonicalModelId(id) === m.id) ? { hidden: true } : {};
     if (source === 'relay') {
       // relay 那头按站主那边的档位判过了（锁/不锁、原因），本地的 user 是 LOCAL_OWNER（admin），本地档位判断在这一行不适用
       const entry = relayModelEntry(m.id);
@@ -284,7 +320,7 @@ export function defaultModelFor(user, opts) {
   }
   // 本地版：设置页选的默认模型优先（得还在可选清单里且没藏；否则当没设）
   if (platform.isLocal) {
-    const want = loadPrefs().defaultModel;
+    const want = canonicalModelId(loadPrefs().defaultModel);   // 设置页存的是当时的 id，行改过名要翻
     const row = want ? allowed.find((m) => m.id === want && !m.hidden) : null;
     if (row) return row.id;
   }
@@ -307,7 +343,7 @@ export function crossLaneSwitchReason(fromModel, toModel) {
   // 09-08 站主撤掉「openai-chat → API 透传行」这一段的拦截：ingress 的透传腿现在会把没签名的思考块剥掉
   // （transformForUpstream → stripUnsignedThinking）。仍拦的只剩订阅行：那条路不经 ingress，剥不了。
   if (from?.protocol === 'openai-chat' && resolveModelRoute(toModel).mode === 'subscription') {
-    const fromLabel = BY_ID.get(from.appModel)?.select?.label || from.appModel;
+    const fromLabel = rowOf(from.appModel)?.select?.label || from.appModel;
     return `本会话在 ${fromLabel} 上创建，其思考记录切换到其他模型后会被拒收。如需更换模型，请新建一个会话`;
   }
   return null;
@@ -367,7 +403,7 @@ export function modelSwitchRejection({ from, to, hasHistory = true, running = fa
 
 /** 免费行（API 行且四价全 0）：金额配额对它无意义，turn.js 改走按轮次的免费闸 */
 export function modelIsFree(appModel) {
-  const p = BY_ID.get(appModel)?.api?.prices;
+  const p = rowOf(appModel)?.api?.prices;
   return !!p && ['input', 'output', 'cacheRead', 'cacheWrite'].every((k) => Number(p[k]) === 0);
 }
 
@@ -380,20 +416,20 @@ export function modelIsFree(appModel) {
  */
 export function isUncensoredModel(appModel) {
   if (!appModel) return false;
-  return BY_ID.get(appModel)?.uncensored === true;
+  return rowOf(appModel)?.uncensored === true;
 }
 
 /** 决定 sdkOptions.model 喂什么。API 行给 alias；订阅/未知原样返回（让 SDK 自己 fallback） */
 export function resolveSdkSpoofModel(appModel) {
   if (!appModel) return appModel;
-  const row = BY_ID.get(appModel);
+  const row = rowOf(appModel);
   return row?.api ? row.api.sdkAlias : appModel;
 }
 
 /** 真实 context window。查表；未命中按 pattern fallback；都不匹配返 null */
 export function resolveModelContextWindow(appModel) {
   if (!appModel) return null;
-  const row = BY_ID.get(appModel);
+  const row = rowOf(appModel);
   if (row) return row.window;
   if (/^kimi[-_]/i.test(appModel)) return 256_000;
   if (/\[1m\]$/i.test(appModel))   return 1_000_000;
@@ -414,7 +450,7 @@ export function resolveModelContextWindow(appModel) {
  *     前端思考期完全静默（2026-07-23 "失联"问题主因）。
  */
 export function pickThinkingConfig(model) {
-  const row = model ? BY_ID.get(model) : null;
+  const row = model ? rowOf(model) : null;
   if (row?.api) return { type: 'enabled', budgetTokens: 8192 };
   if (model && /^claude-(?:opus-(?:4-[6789]|[5-9])|sonnet-[5-9]|fable|mythos)/.test(model)) {
     return { type: 'adaptive', display: 'summarized' };
@@ -440,7 +476,7 @@ export function pickThinkingConfig(model) {
  * }}
  */
 export function resolveModelRoute(appModel) {
-  const row = appModel ? BY_ID.get(appModel) : null;
+  const row = appModel ? rowOf(appModel) : null;
   if (!row?.api) return { mode: 'subscription' };
   return {
     mode: 'api',
@@ -458,7 +494,9 @@ export function resolveModelRoute(appModel) {
  * → 该发往哪里、怎么修。查不到返回 null（入口 fail-loud 502，不静默转发）。
  */
 export function resolveWireModel(bodyModel) {
-  const row = typeof bodyModel === 'string' ? WIRE_LOOKUP.get(bodyModel) : null;
+  // 反查表按 wire 名建（id / 独占别名）。改过名的行：拿旧 id 发过来的请求也认（09-10）——
+  // 正常路径上入口收到的已经是现名（会话按 route.appModel 注册），这一步是兜住残留的注册与旧探针
+  const row = typeof bodyModel === 'string' ? (WIRE_LOOKUP.get(bodyModel) || WIRE_LOOKUP.get(canonicalModelId(bodyModel))) : null;
   if (!row) return null;
   return {
     appModel: row.id,
@@ -503,7 +541,7 @@ export function resolveWireModel(bodyModel) {
  * @returns {number|null}
  */
 export function priceTokens(appModel, tokens = {}) {
-  const row = BY_ID.get(appModel);
+  const row = rowOf(appModel);
   // 订阅 Claude 行没有 api 块，表价挂在行顶层 `prices`（model-table.js 订阅段的注释说明来历）
   const p = row?.api?.prices || row?.prices;
   if (!p) return null;
@@ -532,7 +570,7 @@ export function priceTokens(appModel, tokens = {}) {
  */
 export function repriceUsageDeltas(deltas, sessionAppModel) {
   if (!deltas || typeof deltas !== 'object') return deltas;
-  const sessionRow = sessionAppModel ? BY_ID.get(sessionAppModel) : null;
+  const sessionRow = sessionAppModel ? rowOf(sessionAppModel) : null;
   if (!sessionRow?.api) return deltas;
   // API 会话的所有请求必经 ingress：表内 key 按表归；不在表里的 key（SDK 内部
   // helper 用 config 默认 Claude 名发的请求）必然被 ingress 的会话 fast 兜底

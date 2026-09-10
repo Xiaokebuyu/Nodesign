@@ -25,6 +25,7 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import { getQuerySession, closeQuerySession } from '../runs/active-runs.js';
+import { canonicalModelId } from './model-context.js';
 
 const CONFIG_NAME = 'session-config.json';
 
@@ -87,10 +88,18 @@ export async function readSessionConfigFile(sessionRoot) {
   }
 }
 
-/** 会话自己的模型覆盖；没设过返回 null */
+/**
+ * 会话自己的模型覆盖；没设过返回 null。
+ *
+ * ⭐ 出门前过一道 canonicalModelId（09-10）：文件里存的是**当时那个 id**，而行是会改名的
+ * （model-table.js 的 RENAMED_MODELS）。不翻的话，那些老会话下一次发消息会被 turn 入口的
+ * 白名单挡下（403「这个会话指向的模型现在不可用」），每一个都得人手换一次。
+ * 不改盘上的文件：翻译是读的时候做的，下次用户自己换模型时才会把新名写回去。
+ */
 export async function readSessionModelOverride(sessionRoot) {
   const cfg = await readSessionConfigFile(sessionRoot);
-  return typeof cfg.model === 'string' && cfg.model.trim() ? cfg.model.trim() : null;
+  const raw = typeof cfg.model === 'string' && cfg.model.trim() ? cfg.model.trim() : null;
+  return raw ? canonicalModelId(raw) : null;
 }
 
 /**

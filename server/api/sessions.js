@@ -44,7 +44,7 @@ import { getProjectBus } from '../ws/broker.js';
 import { getLastContextUsage } from '../engine/runs/live-turn.js';
 import { Events } from '../engine/agent/events.js';
 import { resolveSessionModel, applySessionModel, defaultModel } from '../engine/agent/session-model.js';
-import { selectableModelsFor, allowedModelsFor, isModelLockedFor, defaultModelFor, modelSwitchRejection } from '../engine/agent/model-context.js';
+import { selectableModelsFor, allowedModelsFor, isModelLockedFor, defaultModelFor, modelSwitchRejection, canonicalModelId } from '../engine/agent/model-context.js';
 
 
 import { mountRewindRoute } from './sessions-rewind.js';
@@ -229,7 +229,9 @@ router.put('/:pid/sessions/:sid/model', async (req, res, next) => {
     const project = guardProject(req, res);
     if (!project) return;
 
-    const raw = req.body?.model;
+    // canonicalModelId：前端可能还记着改名前的 id（09-10 起行会改名，表在 model-table.js 的
+    // RENAMED_MODELS）。在**进门这一处**翻成现名，后面的白名单、换线闸、落盘都只看得到现名
+    const raw = typeof req.body?.model === 'string' ? canonicalModelId(req.body.model) : req.body?.model;
     if (raw !== null && typeof raw !== 'string') {
       return res.status(400).json({ error: 'model must be a string or null' });
     }

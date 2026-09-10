@@ -17,9 +17,11 @@ import {
   repriceUsageDeltas,
   selectableModelsFor,
   allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree, crossLaneSwitchReason, hotSwitchLaneReason, modelSwitchRejection,
+  canonicalModelId, standbyModelOf,
   UPSTREAMS, BRANDS, brandOfModel, SHARED_SDK_ALIAS,
 } from './model-context.js';
 import { MODELS_BUILTIN, SHARED_SDK_ALIAS as SHARED_FROM_TABLE } from './model-table.js';
+import { RENAMED_MODELS, followRename } from './model-renames.js';
 // 08-30：默认行换成付费行之后，「并发闸把它算在哪一档」成了这张表的一条硬约束（见文末 describe）
 import { decideConcurrency } from '../../lib/quota.js';
 
@@ -624,5 +626,46 @@ describe('选择器两个面：画布 / 演出（09-06 用户拍板「首页不�
     const row = MODELS_BUILTIN.find((m) => m.id === 'glm-5.3-flash-rp');
     expect([row.select.only, row.select.stageDefault, row.select.default]).toEqual(['stage', true, undefined]);
     expect(MODELS_BUILTIN.filter((m) => m.select?.stageDefault).map((m) => m.id)).toEqual(['glm-5.3-flash-rp']);
+  });
+});
+
+/**
+ * 行改名之后，存量还指着旧 id（2026-09-10 建的 RENAMED_MODELS）。
+ * 这一组钉的是"改名是有存量的事"：会话文件、偏好、前端记的选择都存着当时那个 id，
+ * 翻不过来的下场是老会话下一次发消息被白名单挡下（403），每个都要人手换一次。
+ */
+describe('改过名的行', () => {
+  it('旧 id 翻成现名；不认识的原样；活着的行原样', () => {
+    expect(canonicalModelId('deepseek-v4.1-flash-expires-on-0910')).toBe('deepseek-flash');
+    expect(canonicalModelId('deepseek-flash')).toBe('deepseek-flash');
+    expect(canonicalModelId('nobody-knows-this')).toBe('nobody-knows-this');
+    expect(canonicalModelId(null)).toBe(null);
+    expect(canonicalModelId('')).toBe('');
+  });
+
+  it('改名表里的每个目标都得是表里活着的行（写错当场炸，这里再对一遍账）', () => {
+    const ids = new Set(SELECTABLE_MODELS.map((m) => m.id));
+    for (const [oldId, newId] of Object.entries(RENAMED_MODELS)) {
+      expect(ids.has(newId), `${oldId} → ${newId}：目标不在表里`).toBe(true);
+      expect(canonicalModelId(oldId)).toBe(newId);
+    }
+  });
+
+  it('拿旧 id 查行的每一路都通：通路 / 窗口 / 牌子 / standby / 价钱', () => {
+    const old = 'deepseek-v4.1-flash-expires-on-0910';
+    expect(resolveModelRoute(old).mode).toBe('api');
+    expect(resolveModelRoute(old).appModel).toBe('deepseek-flash');   // 下游拿到的是现名
+    expect(resolveModelContextWindow(old)).toBe(resolveModelContextWindow('deepseek-flash'));
+    expect(brandOfModel(old)).toBe('deepseek');
+    expect(standbyModelOf(old)).toBe(standbyModelOf('deepseek-flash'));
+    expect(resolveWireModel(old)?.wireModel).toBe('deepseek-flash');
+  });
+
+  it('followRename：多跳跟到底，成环当没改过（表长大之后才会出事的两条）', () => {
+    expect(followRename('a', { a: 'b', b: 'c' })).toBe('c');
+    expect(followRename('a', { a: 'b', b: 'a' })).toBe('a');       // 成环
+    expect(followRename('a', { a: 'a' })).toBe('a');               // 自指
+    expect(followRename('x', { a: 'b' })).toBe('x');
+    expect(followRename('', {})).toBe('');
   });
 });

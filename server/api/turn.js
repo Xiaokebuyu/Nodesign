@@ -48,7 +48,7 @@ import {
 import { pushUserMessage, getQueueDepth } from '../engine/runs/turn-relay.js';
 import { applySessionModel, resolveSessionModel } from '../engine/agent/session-model.js';
 import { lruGet, lruPut, inflightTurns, INFLIGHT_RETENTION_MS } from './turn-inflight.js';
-import { allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree, hasSubscriptionAccess, modelSwitchRejection, resolveModelRoute } from '../engine/agent/model-context.js';
+import { allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree, hasSubscriptionAccess, modelSwitchRejection, resolveModelRoute, canonicalModelId } from '../engine/agent/model-context.js';
 import { AsyncQueue } from '../lib/async-queue.js';
 import { checkQuota, checkFreeQuota, checkConcurrency, fmtUsd } from '../lib/quota.js';
 import { shouldModerate, moderateText, recordViolation, levelFor } from '../lib/moderation.js';
@@ -196,7 +196,9 @@ router.post('/:pid/turn', async (req, res, next) => {
     // 07-31 起只剩这一道：分模型限额撤了，因为金额天然让 opus 烧得更快，
     // 不需要第二个数字表达同一个意图。
     // 模型解析提前到配额之前（08-21，配额按是否免费分岔）：body.model > 会话覆盖 > 默认（defaultModelFor）
-    const requestedModelEarly = typeof req.body?.model === 'string' && req.body.model.trim() ? req.body.model.trim() : null;
+    // canonicalModelId：前端可能还记着改名前的 id（表在 model-table.js 的 RENAMED_MODELS）。
+    // 会话覆盖那一半在 session-model.js 读的时候就翻过了，这里管的是 body 里带上来的
+    const requestedModelEarly = typeof req.body?.model === 'string' && req.body.model.trim() ? canonicalModelId(req.body.model.trim()) : null;
     const sessionModelEarly = await resolveSessionModel(getSessionMetaDir(project.id, sid));
     const modelUser = modelUserFor(req, project);   // 资格按项目 owner 算（_guard.js）：admin 代看 basic 项目时老会话不许落回订阅行，否则 202 后 INIT_FAILED
     // 老用户没覆盖的老会话保持全局默认，不静默切 Ox；新会话/公开号 → defaultModelFor
