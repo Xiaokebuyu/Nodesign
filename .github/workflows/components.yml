@@ -104,13 +104,23 @@ jobs:
       - name: C++ 运行库跟着包走（onnxruntime 要 MSVCP140*）
         shell: pwsh
         run: |
-          $crt = Get-ChildItem 'C:\Program Files\Microsoft Visual Studio\2022\*\VC\Redist\MSVC\*\x64\Microsoft.VC143.CRT' -Directory -EA SilentlyContinue |
-                 Sort-Object { [version]$_.Parent.Parent.Name } | Select-Object -Last 1
-          if (-not $crt) { throw '找不到 VC143 redist 目录（跑器上的 VS 2022 布局变了？）' }
-          Write-Host "CRT 来源：$($crt.FullName)"
+          # ⛔ 别写死 VS 的年份/版号目录（09-10 第一次就栽在这：写死 2022\*\…\Microsoft.VC143.CRT，
+          # 跑器上根本没有这条路径，整步 throw 掉）。改成**找**：任何 VS 装的任何 Microsoft.VC*.CRT
+          # 的 x64 那份，挑最新的；找不到就退回 System32（跑器上装着 redist，是同一批可分发文件）。
+          $found = Get-ChildItem 'C:\Program Files*\Microsoft Visual Studio' -Directory -Recurse -Depth 6 -Filter 'Microsoft.VC*.CRT' -EA SilentlyContinue |
+                   Where-Object { $_.FullName -match '\\x64\\' -and (Test-Path (Join-Path $_.FullName 'msvcp140.dll')) }
+          $crtDir = ($found | Sort-Object { (Get-Item (Join-Path $_.FullName 'msvcp140.dll')).VersionInfo.FileVersionRaw } | Select-Object -Last 1)?.FullName
+          if (-not $crtDir) {
+            Write-Host '没在 VS 里找到 redist 目录，退回 System32'
+            $crtDir = "$env:WINDIR\System32"
+          }
+          Write-Host "CRT 来源：$crtDir"
           # 拷之前记下 Python 自带那份的版本：redist 比它旧就是**降级**，反而会把 Python 自己弄坏
           $before = [version](Get-Item 'rembg-env\vcruntime140.dll').VersionInfo.FileVersion
-          Copy-Item "$($crt.FullName)\*.dll" rembg-env\ -Force
+          foreach ($d in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'msvcp140_atomic_wait.dll', 'msvcp140_codecvt_ids.dll', 'vcruntime140.dll', 'vcruntime140_1.dll', 'concrt140.dll', 'vcomp140.dll') {
+            $src = Join-Path $crtDir $d
+            if (Test-Path $src) { Copy-Item $src rembg-env\ -Force } else { Write-Host "  （没有 $d，跳过）" }
+          }
           $after = [version](Get-Item 'rembg-env\vcruntime140.dll').VersionInfo.FileVersion
           if ($after -lt $before) { throw "redist 的 vcruntime140 ($after) 比 Python 自带的 ($before) 旧，别拷" }
           foreach ($d in 'msvcp140.dll', 'msvcp140_1.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
