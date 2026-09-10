@@ -57,7 +57,8 @@ export async function liveFrame(page) {
   let vp = null;
   try { vp = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight })); } catch { /* 刚导航/正忙：退回标称 */ }
   if (!vp || !(vp.w > 0) || !(vp.h > 0)) return { ...BROWSE_FRAME, measured: false };
-  const off = vp.w !== VP.width || vp.h !== VP.height;
+  // ±2px 的容差：矩形按 16:9 取整会让高度差一两个像素，那是舍入不是错位，别为它喊狼来了
+  const off = Math.abs(vp.w - VP.width) > 2 || Math.abs(vp.h - VP.height) > 2;
   if (off) {
     const key = `${vp.w}x${vp.h}`;
     if (key !== warnedViewport) {
@@ -192,13 +193,36 @@ async function withModifiers(page, mods, fn) {
   }
 }
 
-/** 浏览通道的视口截图：存桌面卡预览 + 归一化 → 文本块在前，图在后。frame 由调用方现量（liveFrame） */
+/**
+ * 浏览通道的视口截图：截 → **压回 1:1** → 归一化 → 文本块在前，图在后。
+ *
+ * ⛔ 为什么要压回 1:1（2026-09-10 第二刀，站主贴的实测把第一刀的漏洞照出来了）：
+ *    共视里页面缩放 <1 时 `devicePixelRatio` 也 <1，而 playwright 的 `scale:'css'`
+ *    是拿 1/dpr 当倍率的 —— 于是它不是"按 CSS 像素出图"，而是**放大**出图。
+ *    站主机器上的真数：视口 1366×767，抓回来 **3384×1900**（2.48 倍），再被 2000
+ *    长边闸压成 2000×1123。页面统共只有 1366 像素的版面信息，却花了 2952 token
+ *    （1:1 只要 1372），而且 frame 那时还说坐标空间是 1366 —— 差 1.46 倍。
+ *    往下缩是超采样（比原生 1366 渲还清楚），往上放才是糊的，所以只在**图比视口大**时压。
+ * ⭐ 压完 frame.scale 就回到 1，坐标 = CSS 像素 = 截图像素，契约恢复成一句话。
+ * ⛔ 最后一步一律**按出图的真实尺寸**回填 frame（frame 是跟 runAction 共用的同一个对象）：
+ *    预测再准也只是预测，模型读的是那张图。
+ */
 export async function viewportShot(page, projectId, lead, frame = null) {
   const f = frame || await liveFrame(page);
-  const buf = await page.screenshot({ type: 'png', scale: 'css' });
+  let buf = await page.screenshot({ type: 'png', scale: 'css' });
   await saveFrame(projectId, buf);
+  const { default: sharp } = await import('sharp');
+  let raw = null;
+  try { raw = await sharp(buf).metadata(); } catch { /* 量不到就照原样走 */ }
+  if (f.measured && raw?.width > f.pageW) {
+    try { buf = await sharp(buf).resize({ width: f.pageW, kernel: 'lanczos3' }).png().toBuffer(); } catch { /* 压不动就算了 */ }
+  }
   const shot = await normalizeShot(buf);
-  // 视口跟标称不一样时**明说**：模型看到的图确实是那个尺寸，别让它按 1366×768 去猜坐标
+  // 回填：模型读到的坐标就是这张图的像素
+  if (shot.w > 0 && shot.h > 0) {
+    f.w = shot.w; f.h = shot.h;
+    if (f.measured && f.pageW > 0) f.scale = shot.w / f.pageW;
+  }
   const off = f.off
     ? `⚠ this browser's viewport is ${f.pageW}×${f.pageH}, not the usual ${VP.width}×${VP.height} — the numbers above are the ones that count`
     : null;

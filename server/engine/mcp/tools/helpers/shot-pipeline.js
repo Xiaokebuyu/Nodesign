@@ -89,7 +89,7 @@ export async function normalizeShot(buf) {
     const meta = await sharp(buf).metadata();
     const w = meta.width || 0;
     const h = meta.height || 0;
-    if (!w || !h) return { data: buf.toString('base64'), mimeType: 'image/png', note: null };
+    if (!w || !h) return { data: buf.toString('base64'), mimeType: 'image/png', note: null, w, h };
     const scale = shotScale(w, h);
     const tw = Math.max(1, Math.round(w * scale));
     const th = Math.max(1, Math.round(h * scale));
@@ -103,9 +103,11 @@ export async function normalizeShot(buf) {
     if (scale < 0.35 && Math.max(w, h) / Math.min(w, h) > 4) {
       note += ' — long page squeezed hard; details are unreadable at this scale. Prefer sectioned shots (viewport + beforeShot scroll) or pageIndex/device over fullPage.';
     }
-    return { data: out.toString('base64'), mimeType: 'image/webp', note };
+    // ⭐ 出图尺寸要回给调用方：模型读到的坐标就是**这张图**的像素，
+    //    谁把坐标换回页面像素，谁就得拿这两个数算（09-10 案：frame 说 1366、图其实 2000）。
+    return { data: out.toString('base64'), mimeType: 'image/webp', note, w: tw, h: th };
   } catch (err) {
-    return { data: buf.toString('base64'), mimeType: 'image/png', note: `image normalize skipped: ${err?.message || err}` };
+    return { data: buf.toString('base64'), mimeType: 'image/png', note: `image normalize skipped: ${err?.message || err}`, w: 0, h: 0 };
   }
 }
 

@@ -4,10 +4,13 @@
  * 最要紧的是第一条：视口必须落在 shot-pipeline 不缩图的范围内。视口和阈值分住
  * 两个文件，谁改了一边另一边不会知道 —— 这条断言就是把两边钉在一起的钉子。
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { _limits } from '../../browse/registry.js';
 import { API_IMAGE_LIMITS } from './helpers/shot-pipeline.js';
-import { ACTIONS, parseChords, parseModifiers, checkCoord, liveFrame, BROWSE_FRAME } from './browse-computer.js';
+import { ACTIONS, parseChords, parseModifiers, checkCoord, liveFrame, viewportShot, BROWSE_FRAME } from './browse-computer.js';
+
+// 存桌面卡预览那一步要写盘，跟这组测的东西无关，挡掉
+vi.mock('../../browse/state.js', () => ({ saveFrame: async () => {}, recordVisit: async () => {} }));
 
 describe('browser_computer 坐标空间', () => {
   it('视口在归一化阈值内：截图不缩，截图像素 = 视口像素', () => {
@@ -115,4 +118,46 @@ describe('liveFrame：坐标空间按实测走', () => {
     expect(f.measured).toBe(false);
     expect(f.w).toBe(_limits.VIEWPORT.width);
   });
+});
+
+/**
+ * 出图与坐标空间必须是同一张图（2026-09-10 第二刀）。
+ *
+ * 现场：站主机器上视口 1366×767，抓回来的位图却是 **3384×1900** —— playwright 的
+ * `scale:'css'` 拿 1/devicePixelRatio 当倍率，而共视里页面缩放 <1 时 dpr 也 <1，
+ * 于是它不是"按 CSS 像素出图"而是放大出图；再被 2000 长边闸压成 2000×1123。
+ * 那一版 frame 说坐标空间是 1366 —— 跟模型手里那张图差 1.46 倍，全在静默里。
+ * 现在：比视口大就压回 1:1（往下缩是超采样，比原生渲还清楚），并且**按出图真实尺寸回填 frame**。
+ */
+describe('viewportShot：图和坐标空间是同一张', () => {
+  it('⭐ 3384×1900 的位图 + 1366×767 的视口 → 压回 1366 宽，frame 跟着回到 1:1', async () => {
+    const sharp = (await import('sharp')).default;
+    const big = await sharp({ create: { width: 3384, height: 1900, channels: 3, background: '#888' } }).png().toBuffer();
+    const page = {
+      evaluate: async () => ({ w: 1366, h: 767 }),
+      screenshot: async () => big,
+    };
+    const f = await liveFrame(page);
+    expect(f.off, '±2px 容差内不该喊「不是常规视口」').toBe(false);
+    const r = await viewportShot(page, 'proj_test_shot', '', f);
+
+    const out = await sharp(Buffer.from(r.content[1].data, 'base64')).metadata();
+    expect(out.width, '出图压回视口宽').toBe(1366);
+    expect(f.w).toBe(out.width);              // frame 就是这张图
+    expect(f.h).toBe(out.height);
+    expect(f.scale).toBeCloseTo(1, 3);        // 截图像素 = CSS 像素，契约回到一句话
+    expect(r.content[0].text).toContain('viewport 1366×767');
+    expect(r.content[0].text).not.toContain('⚠');
+  }, 20000);
+
+  it('图本来就不大（托管那条路）：一个字不动', async () => {
+    const sharp = (await import('sharp')).default;
+    const same = await sharp({ create: { width: 1366, height: 768, channels: 3, background: '#fff' } }).png().toBuffer();
+    const page = { evaluate: async () => ({ w: 1366, h: 768 }), screenshot: async () => same };
+    const f = await liveFrame(page);
+    const r = await viewportShot(page, 'proj_test_shot', '', f);
+    const out = await sharp(Buffer.from(r.content[1].data, 'base64')).metadata();
+    expect([out.width, out.height]).toEqual([1366, 768]);
+    expect(f.scale).toBeCloseTo(1, 5);
+  }, 20000);
 });
