@@ -10,7 +10,9 @@
  *   GET   /api/admin/models          全景清单（含内置 helper 行）
  *   GET   /api/admin/models/slots    站点自己配的那份（原样 + 校验结果 + 表单要的枚举）
  *   PUT   /api/admin/models/slots    {upstreams, models} 整份存回 → **当场重建索引**，不重启
- *   PATCH /api/admin/models/:id      {enabled: boolean} 开 / 关
+ *   PATCH /api/admin/models/:id      {enabled?: boolean, unavailable?: {why,tz,windows}|null|'reset'}
+ *                                    开 / 关；以及**改这行几点关门**（含内置行 —— 表里那份只是出厂默认）。
+ *                                    unavailable: 对象 = 这么关；null = 明确不关门；'reset' = 撤回、回到出厂那份
  *
  * ⭐ 站点插槽跟本地分发版的插槽是**同一套字段、同一个校验**（runtime/slot-config.js），只是存放处不同。
  *   保存之后调 rebuildModelIndex()：整套索引重建好了才换上去，建不成就原样抛出、旧表继续跑。
@@ -27,8 +29,8 @@
 
 import express from 'express';
 import { MODEL_ROWS, MODEL_CONFIG_ERRORS, rebuildModelIndex, externalModelIds, shadowedBuiltinModelIds } from '../engine/agent/model-context.js';
-import { listModelSwitches, setModelEnabled } from '../lib/model-switches.js';
-import { closureNow } from '../lib/model-availability.js';
+import { listModelSwitches, setModelEnabled, setModelHours } from '../lib/model-switches.js';
+import { closureNow, effectiveHoursOf, validateUnavailableSpec } from '../lib/model-availability.js';
 import { loadSiteConfig } from '../runtime/slot-config.js';
 import { writeSiteSlots } from '../lib/site-model-slots.js';
 import { configPath, CONFIG_ENUMS, RESERVED_UPSTREAM_IDS, RESERVED_MODEL_IDS, SHADOWABLE_MODEL_IDS } from '../runtime/local-config.js';
@@ -49,7 +51,8 @@ export function adminModelList(now = new Date()) {
   }
   return MODEL_ROWS.map((m) => {
     const sw = switches.get(m.id);
-    const closed = closureNow(m.unavailable, now);
+    const hours = effectiveHoursOf(m);            // 站主设过就是他那份，没设过是表里那份
+    const closed = closureNow(hours.spec, now);
     return {
       id: m.id,
       brand: m.brand,
@@ -65,7 +68,9 @@ export function adminModelList(now = new Date()) {
       wireModel: m.api?.wireModel || null,
       prices: m.api?.prices || null,
       standby: m.standby || null,
-      unavailable: m.unavailable || null,        // 钟点闸的原始声明（几点到几点关门）
+      unavailable: hours.spec,                   // **此刻真在用的**那份关门时段（null = 不关门）
+      unavailableSource: hours.source,           // 'admin' 站主设的 | 'row' 表里出厂的 | 'none' 没有
+      builtinUnavailable: m.unavailable || null, // 出厂那份（站主想"改回默认"时给他看的参照）
       enabled: !sw || sw.enabled,                // 没记录 = 启用
       switchedAt: sw?.updatedAt || null,
       switchedBy: sw?.updatedBy || null,
@@ -155,6 +160,20 @@ router.patch('/:id', (req, res) => {
   const list = adminModelList();
   const row = list.find((m) => m.id === req.params.id);
   if (!row) return res.status(404).json({ error: `没有这一行：${req.params.id}` });
+  // 关门时段：单独一条路，跟开关互不影响（改时段不该顺手把一行打开，反过来也是）
+  if ('unavailable' in (req.body || {})) {
+    const spec = req.body.unavailable;
+    if (spec === 'reset') setModelHours(row.id, undefined, { updatedBy: req.user?.id || null });
+    else if (spec === null) setModelHours(row.id, null, { updatedBy: req.user?.id || null });
+    else {
+      const bad = validateUnavailableSpec(spec);
+      if (bad.length) return res.status(400).json({ error: bad.join('；') });
+      setModelHours(row.id, spec, { updatedBy: req.user?.id || null });
+    }
+    if (!('enabled' in (req.body || {}))) {
+      return res.json({ model: adminModelList().find((m) => m.id === row.id) });
+    }
+  }
   if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'enabled 需为 true / false' });
   const enabled = req.body.enabled;
   // ⛔ 别把最后一条能选的行关掉：全站没有可用模型 = 谁都发不出消息，而且那一刻管理台自己也在站里。

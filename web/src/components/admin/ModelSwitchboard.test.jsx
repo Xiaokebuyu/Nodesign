@@ -38,6 +38,7 @@ const row = (over = {}) => ({
   upstream: 'merge', wireModel: 'deepseek/deepseek-v4.1-flash',
   prices: { input: 0.15, output: 0.6 }, standby: null,
   unavailable: { why: '上游高峰时段涨价', tz: 'UTC', windows: ['01:00-04:00', '06:00-10:00'] },
+  unavailableSource: 'row', builtinUnavailable: { why: '上游高峰时段涨价', tz: 'UTC', windows: ['01:00-04:00', '06:00-10:00'] },
   enabled: true, switchedAt: null, switchedBy: null, switchNote: null,
   closedNow: null, usedAsFastBy: [], usedAsStandbyBy: [], ...over,
 });
@@ -97,6 +98,70 @@ describe('ModelSwitchboard', () => {
     const expand = [...host.querySelectorAll('button')].find(b => b.textContent.includes('内部行'));
     await act(async () => { expand.click(); });
     expect(text()).toContain('deepseek-v4-flash-helper');
+  });
+});
+
+describe('关门时段的设置入口（内置行也能改）', () => {
+  const openEditor = async () => {
+    const btn = [...host.querySelectorAll('button')].find((b) => b.textContent.includes('关门时段'));
+    await act(async () => { btn.click(); });
+  };
+  const box = (ph) => [...host.querySelectorAll('input')].find((i) => i.placeholder === ph);
+  const click = async (label) => {
+    const b = [...host.querySelectorAll('button')].find((x) => x.textContent === label);
+    await act(async () => { b.click(); });
+  };
+  const type = (el, value) => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    act(() => { setter.call(el, value); el.dispatchEvent(new Event('input', { bubbles: true })); });
+  };
+
+  it('每行都有入口；打开后按现有时段回填', async () => {
+    await render([row()]);
+    await openEditor();
+    expect(box('01:00-04:00, 06:00-10:00').value).toBe('01:00-04:00, 06:00-10:00');
+  });
+
+  it('保存：PATCH {unavailable:{windows,tz,why}}，不带 enabled（改时段不动开关）', async () => {
+    await render([row()]);
+    await openEditor();
+    type(box('01:00-04:00, 06:00-10:00'), '06:00-10:00');
+    type(box('关门的理由（用户看得到）'), '只关早上那段');
+    patchModel.mockResolvedValue({ model: row() });
+    await click('保存');
+    expect(patchModel).toHaveBeenCalledWith('deepseek-v4.1-flash-merge', { unavailable: { windows: ['06:00-10:00'], tz: 'UTC', why: '只关早上那段' } });
+    expect(patchModel.mock.calls[0][1]).not.toHaveProperty('enabled');
+  });
+
+  it('「不关门」发 null（明确取消，不是没设过）；出厂那份还留着当参照', async () => {
+    await render([row()]);
+    await openEditor();
+    patchModel.mockResolvedValue({ model: row() });
+    await click('不关门');
+    expect(patchModel).toHaveBeenCalledWith('deepseek-v4.1-flash-merge', { unavailable: null });
+  });
+
+  it('没改过的行不给「恢复默认」（没东西可恢复）', async () => {
+    await render([row({ unavailableSource: 'row' })]);
+    await openEditor();
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent === '恢复默认')).toBe(false);
+    expect(text()).not.toContain('你改过');
+  });
+
+  it('站主改过的行：行上标「你改过」，编辑器里多一个「恢复默认」', async () => {
+    await render([row({ unavailableSource: 'admin', builtinUnavailable: { windows: ['01:00-04:00', '06:00-10:00'] } })]);
+    expect(text()).toContain('你改过');
+    await openEditor();
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent === '恢复默认')).toBe(true);
+    patchModel.mockResolvedValue({ model: row() });
+    await click('恢复默认');
+    expect(patchModel).toHaveBeenCalledWith('deepseek-v4.1-flash-merge', { unavailable: 'reset' });
+  });
+
+  it('被取消关门的行：行上说清楚出厂本来是几点（不然没人记得改过什么）', async () => {
+    await render([row({ unavailable: null, unavailableSource: 'admin', builtinUnavailable: { windows: ['01:00-04:00'], tz: 'UTC' } })]);
+    expect(text()).toContain('取消了');
+    expect(text()).toContain('01:00-04:00');
   });
 });
 

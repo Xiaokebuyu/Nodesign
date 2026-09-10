@@ -136,6 +136,53 @@ describe('站点插槽：加一行不用重启', () => {
   });
 });
 
+describe('关门时段：内置行也能在管理台上改', () => {
+  const patchHours = (id, unavailable) => { touched.add(id); return call(`/${id}`, { method: 'PATCH', body: JSON.stringify({ unavailable }) }); };
+  const inPeak = new Date(Date.UTC(2026, 8, 10, 7, 0));
+  afterEach(async () => { await patchHours(MERGE_ROW, 'reset'); });
+
+  it('默认用表里那份（source=row），改完变成站主那份（source=admin），reset 回到出厂', async () => {
+    expect(adminModelList().find((m) => m.id === MERGE_ROW).unavailableSource).toBe('row');
+
+    const r = await patchHours(MERGE_ROW, { why: '先只关早上那段', tz: 'UTC', windows: ['06:00-10:00'] });
+    expect(r.status).toBe(200);
+    const after = (await r.json()).model;
+    expect(after.unavailableSource).toBe('admin');
+    expect(after.unavailable.windows).toEqual(['06:00-10:00']);
+    expect(after.builtinUnavailable.windows).toHaveLength(2);   // 出厂那份留着当参照
+    expect(after.enabled).toBe(true);                            // ⛔ 改时段不该顺手动开关
+
+    await patchHours(MERGE_ROW, 'reset');
+    expect(adminModelList().find((m) => m.id === MERGE_ROW).unavailableSource).toBe('row');
+  });
+
+  it('null = 明确不关门：连表里写着的那两段也不再关（这就是"取消"，不是"没设过"）', async () => {
+    expect(adminModelList(inPeak).find((m) => m.id === MERGE_ROW).closedNow).not.toBeNull();
+    await patchHours(MERGE_ROW, null);
+    const row = adminModelList(inPeak).find((m) => m.id === MERGE_ROW);
+    expect(row.closedNow).toBeNull();
+    expect(row.unavailableSource).toBe('admin');
+    expect(row.unavailable).toBeNull();
+  });
+
+  it('给一条本来没时段的行加上关门（内置行的出厂值是空）', async () => {
+    const r = await patchHours('deepseek-v4-flash-vision', { why: '夜里不开', tz: 'Asia/Shanghai', windows: ['23:00-02:00'] });
+    expect(r.status).toBe(200);
+    const row = adminModelList(new Date(Date.UTC(2026, 8, 10, 16, 0))).find((m) => m.id === 'deepseek-v4-flash-vision');   // 北京 00:00
+    expect(row.closedNow.resumesAt).toBe('2026-09-10T18:00:00.000Z');   // 北京 02:00
+    await patchHours('deepseek-v4-flash-vision', 'reset');
+  });
+
+  it('写坏了当场 400，不落库', async () => {
+    const r = await patchHours(MERGE_ROW, { windows: ['一点到四点'] });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/HH:MM-HH:MM/);
+    expect(adminModelList().find((m) => m.id === MERGE_ROW).unavailableSource).toBe('row');
+    const tz = await patchHours(MERGE_ROW, { windows: ['01:00-02:00'], tz: 'Mars/Olympus' });
+    expect(tz.status).toBe(400);
+  });
+});
+
 describe('PATCH /api/admin/models/:id', () => {
   it('关一行：落库、留痕（谁关的）、清单立刻跟着变', async () => {
     const r = await patch(MERGE_ROW, { enabled: false, note: '先关着看看' });

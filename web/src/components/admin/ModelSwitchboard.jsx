@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Power, PowerOff, Clock, ChevronDown, ChevronRight } from 'lucide-react';
+import { Power, PowerOff, Clock, ChevronDown, ChevronRight, CalendarClock } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
 import { Admin } from '../../lib/api-admin.js';
@@ -56,6 +56,22 @@ export function ModelSwitchboard() {
     setBusy(null);
   };
 
+  /**
+   * 改这行的关门时段。spec：对象 = 这么关；null = 明确不关门；'reset' = 撤回、回到表里那份出厂值。
+   * ⚠️ 跟开关走同一个端点但**互不影响**：改时段不会顺手把一行打开。
+   */
+  const saveHours = async (row, spec) => {
+    setBusy(row.id);
+    try {
+      await Admin.patchModel(row.id, { unavailable: spec });
+      showToast(spec === 'reset' ? '已恢复出厂时段' : (spec === null ? '已改成不关门' : '关门时段已更新'), 'success');
+      load();
+    } catch (err) {
+      showToast(`改不动：${err.message}`, 'error');
+    }
+    setBusy(null);
+  };
+
   const [selectable, helpers] = useMemo(() => [
     (models || []).filter(m => m.selectable),
     (models || []).filter(m => !m.selectable),
@@ -72,7 +88,7 @@ export function ModelSwitchboard() {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.md }}>
-        {selectable.map(m => <ModelRow key={m.id} m={m} busy={busy === m.id} onToggle={() => toggle(m)} />)}
+        {selectable.map(m => <ModelRow key={m.id} m={m} busy={busy === m.id} onToggle={() => toggle(m)} onHours={(spec) => saveHours(m, spec)} />)}
       </div>
 
       <SiteSlots onApplied={load} />
@@ -91,7 +107,7 @@ export function ModelSwitchboard() {
         </button>
         {showHelpers && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.md, marginTop: GAP.md }}>
-            {helpers.map(m => <ModelRow key={m.id} m={m} busy={busy === m.id} onToggle={() => toggle(m)} />)}
+            {helpers.map(m => <ModelRow key={m.id} m={m} busy={busy === m.id} onToggle={() => toggle(m)} onHours={(spec) => saveHours(m, spec)} />)}
           </div>
         )}
       </div>
@@ -157,9 +173,10 @@ function SiteSlots({ onApplied }) {
   );
 }
 
-function ModelRow({ m, busy, onToggle }) {
+function ModelRow({ m, busy, onToggle, onHours }) {
   const closed = m.closedNow;
   const off = !m.enabled;
+  const [editHours, setEditHours] = useState(false);
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: GAP.lg, flexWrap: 'wrap',
@@ -185,13 +202,17 @@ function ModelRow({ m, busy, onToggle }) {
           {m.wireModel && <span style={{ color: COLOR.text3 }}> → {m.upstream}/{m.wireModel}</span>}
           {!m.wireModel && <span style={{ color: COLOR.text3 }}> · 订阅通路</span>}
         </div>
-        {(m.unavailable || m.usedAsFastBy.length > 0 || m.usedAsStandbyBy.length > 0) && (
+        {(m.unavailable || m.unavailableSource === 'admin' || m.usedAsFastBy.length > 0 || m.usedAsStandbyBy.length > 0) && (
           <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text3, marginTop: 3 }}>
-            {m.unavailable && <span>每天 {m.unavailable.windows.join('、')}（{m.unavailable.tz || 'UTC'}）关门 —— {m.unavailable.why}。</span>}
+            {m.unavailable
+              ? <span>每天 {m.unavailable.windows.join('、')}（{m.unavailable.tz || 'UTC'}）关门{m.unavailable.why ? ` —— ${m.unavailable.why}` : ''}
+                {m.unavailableSource === 'admin' && <span style={{ color: COLOR.warn }}>（你改过）</span>}。</span>
+              : (m.unavailableSource === 'admin' && <span style={{ color: COLOR.warn }}>你把这行的关门时段取消了（表里本来写着 {m.builtinUnavailable?.windows?.join('、') || '不关门'}）。</span>)}
             {m.usedAsFastBy.length > 0 && <span> {m.usedAsFastBy.length} 行拿它当 helper。</span>}
             {m.usedAsStandbyBy.length > 0 && <span> {m.usedAsStandbyBy.length} 行拿它当备用行。</span>}
           </div>
         )}
+        {editHours && <HoursEditor m={m} busy={busy} onSave={(spec) => { onHours(spec); setEditHours(false); }} onCancel={() => setEditHours(false)} />}
       </div>
 
       <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub, minWidth: 150 }}>
@@ -200,6 +221,18 @@ function ModelRow({ m, busy, onToggle }) {
           : <span style={{ color: COLOR.text3 }}>按订阅额度</span>}
         <div style={{ color: COLOR.text3 }}>{fmtWindow(m.window)} 上下文</div>
       </div>
+
+      <button
+        onClick={() => setEditHours((v) => !v)}
+        title="设置这一行每天几点关门"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: GAP.sm,
+          padding: `${GAP.sm}px ${GAP.lg}px`,
+          fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+          color: COLOR.sub, background: 'transparent',
+          border: `1px solid ${COLOR.border}`, borderRadius: RADIUS.lg, cursor: 'pointer',
+        }}
+      ><CalendarClock size={13} /> 关门时段</button>
 
       <button
         onClick={onToggle}
@@ -216,6 +249,49 @@ function ModelRow({ m, busy, onToggle }) {
       >
         {off ? <><Power size={13} /> 启用</> : <><PowerOff size={13} /> 停用</>}
       </button>
+    </div>
+  );
+}
+
+/**
+ * 一行的关门时段编辑器。三个动作对应服务端的三态：
+ *   保存 = 按填的窗口关；不关门 = 明确取消（连内置行写着的那份也不算数）；恢复默认 = 撤回，回到表里那份。
+ * ⚠️ 这里**不校验窗口写法**：判据在服务端（lib/model-availability.js），写错了回 400 并原样告诉你哪儿不对 ——
+ *   前端再判一遍就是第二份真相，两边迟早对不上。
+ */
+function HoursEditor({ m, busy, onSave, onCancel }) {
+  const cur = m.unavailable;
+  const [windows, setWindows] = useState((cur?.windows || []).join(', '));
+  const [why, setWhy] = useState(cur?.why || '');
+  const [tz, setTz] = useState(cur?.tz || 'UTC');
+  const list = windows.split(/[,，、\s]+/).map((x) => x.trim()).filter(Boolean);
+
+  const box = {
+    padding: `${GAP.sm}px ${GAP.md}px`, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.text,
+    background: COLOR.bgWhite, border: `1px solid ${COLOR.borderMd}`, borderRadius: RADIUS.lg, outline: 'none',
+  };
+  const btn = (color) => ({
+    padding: `${GAP.sm}px ${GAP.lg}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, fontWeight: 600,
+    color, background: `color-mix(in srgb, ${color} 10%, transparent)`,
+    border: 0, borderRadius: RADIUS.lg, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1,
+  });
+
+  return (
+    <div style={{ display: 'flex', gap: GAP.sm, alignItems: 'center', flexWrap: 'wrap', marginTop: GAP.md, paddingTop: GAP.md, borderTop: `1px dashed ${COLOR.border}` }}>
+      <input value={windows} onChange={(e) => setWindows(e.target.value)} placeholder="01:00-04:00, 06:00-10:00" style={{ ...box, width: 210 }} />
+      <select value={tz} onChange={(e) => setTz(e.target.value)} style={{ ...box, fontFamily: FONT_SANS }}>
+        <option value="UTC">UTC</option>
+        <option value="Asia/Shanghai">北京时间</option>
+      </select>
+      <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="关门的理由（用户看得到）" style={{ ...box, fontFamily: FONT_SANS, width: 200 }} />
+      <button disabled={busy || !list.length} style={btn(COLOR.success)}
+        onClick={() => onSave({ windows: list, tz, ...(why.trim() ? { why: why.trim() } : {}) })}>保存</button>
+      <button disabled={busy} style={btn(COLOR.warn)} onClick={() => onSave(null)}>不关门</button>
+      {m.unavailableSource === 'admin' && <button disabled={busy} style={btn(COLOR.sub)} onClick={() => onSave('reset')}>恢复默认</button>}
+      <button disabled={busy} style={{ ...btn(COLOR.sub), background: 'transparent' }} onClick={onCancel}>取消</button>
+      <span style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.text3 }}>
+        落在窗口里时这行灰着、写明几点恢复，不会自动换到别的模型
+      </span>
     </div>
   );
 }

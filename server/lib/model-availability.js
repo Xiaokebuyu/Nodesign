@@ -3,9 +3,10 @@
  *
  * 两个来源，一个判据：
  *   1. **站主的总闸**（lib/model-switches.js，落库、留痕）
- *   2. **钟点闸**（模型表的 `unavailable` 字段，现算、不落任何存储）—— 起因是 Merge 网关那条
- *      DeepSeek V4.1 Flash：上游在 UTC 01:00-04:00、06:00-10:00 两段涨价一倍，站主宁可这几个钟头
- *      关门也不付双倍。
+ *   2. **钟点闸**（现算、不落任何存储）—— 起因是 Merge 网关那条 DeepSeek V4.1 Flash：上游在
+ *      UTC 01:00-04:00、06:00-10:00 两段涨价一倍，站主宁可这几个钟头关门也不付双倍。
+ *      时段有两个来源，**管理台设的那份优先**（含"明确不关门"）：见 effectiveHoursOf。
+ *      模型表里的 `unavailable` 是这行出厂时带的默认，站主没设过就用它。
  *
  * ⛔ 不可用**不自动换线**（站主 09-10：先别加 fallback）。它做两件事：选择器里那行灰着、写清楚
  *    什么时候回来；请求进来就拦下，话里直说"换一行"。会话被别人悄悄搬到另一个模型上，比用不了更糟。
@@ -17,7 +18,7 @@
  *    夏令时切换那天会差一个钟头。UTC 没有夏令时；换成有夏令时的时区再来修这一处。
  */
 
-import { isModelDisabled } from './model-switches.js';
+import { isModelDisabled, hoursOverrideOf } from './model-switches.js';
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -103,6 +104,17 @@ function resumeText(resumesAt, minutesLeft) {
 }
 
 /**
+ * 这一行**实际**按哪份时段关门：站主在管理台上设过就用他那份（`null` = 他明确说了不关门），
+ * 没设过用模型表里这行自己声明的。
+ * @returns {{spec: object|null, source: 'admin'|'row'|'none'}}
+ */
+export function effectiveHoursOf(row) {
+  const override = row?.id ? hoursOverrideOf(row.id) : undefined;
+  if (override !== undefined) return { spec: override, source: 'admin' };   // null 也算设过（"别关门"是个决定）
+  return row?.unavailable ? { spec: row.unavailable, source: 'row' } : { spec: null, source: 'none' };
+}
+
+/**
  * 这一行此刻能不能用。**picker / PUT /model / turn 三处都问它**。
  * @param {{id: string, unavailable?: object}} row 模型表的行，或 SELECTABLE_MODELS 里的条目
  * @param {Date} [now]
@@ -113,7 +125,7 @@ export function availabilityOf(row, now = new Date()) {
   if (isModelDisabled(row.id)) {
     return { ok: false, kind: 'disabled', reason: '站主已停用这个模型，请在选择器里换一个', resumesAt: null };
   }
-  const closed = closureNow(row.unavailable, now);
+  const closed = closureNow(effectiveHoursOf(row).spec, now);
   if (closed) {
     return {
       ok: false,
