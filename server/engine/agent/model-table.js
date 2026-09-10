@@ -95,8 +95,8 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
   // **目录不同**（免费 stealth 行只在 /zen/v1，Go 目录里是常驻付费款）。响应带 `cost`（流式在 [DONE] 之后
   // 补 {"choices":[],"cost":"…"}）与 cached_tokens → lib/ingress/upstream-billing.js。今天内置的 API 行大半挂这儿。
   // DeepSeek 官方（09-08 晚站主接的，钥匙 ~/apikey/deepseek-官方.md，按量 CNY 账户）：OpenAI 格式 base 是根路径不带 /v1，
-  // 思考文本字段 reasoning_content、缓存命中在 usage.prompt_cache_hit_tokens（转换层两处都认）。目录里只列 v4-flash /
-  // v4-pro / v4-flash-vision-exp，**预览模型不在目录里但点名能用**（v4.1-flash-expires-on-0910 实测 200、吃图、流式工具调用都通）。
+  // 思考文本字段 reasoning_content、缓存命中在 usage.prompt_cache_hit_tokens（转换层两处都认）。09-10 上游换了目录：`GET /models` 现在只有
+  // `deepseek-flash` 和 `deepseek-v4-pro`，09-08 接的那个预览名（v4.1-flash-expires-on-0910）如名所示今天到期、也已经不在目录里。
   // 价目（api-docs 模型&价格页，CNY/百万，高峰=空闲两倍）：flash 输入 3.0 / 缓存命中 0.10 / 输出 9.0 → 按高峰 7.1 折 USD 记账。
   // 余额只有 /user/balance 能看（接入时 19.90 CNY），没有响应头。
   deepseek: Object.freeze({
@@ -403,13 +403,17 @@ export const MODELS_BUILTIN = Object.freeze([
     },
   },
   {
-    // 09-08 晚站主接的 DeepSeek 官方预览行：模型名带着到期日（09-10 之后上游会拒，届时会话级 standby 换到下面那条视觉行）。
+    // 09-08 晚站主接的 DeepSeek 官方直连行。09-10 站主：换成官方现在的名字 —— 上游目录里那个带到期日的预览名
+    // 今天到期、已经不在 `GET /models` 里（现在只有 deepseek-flash / deepseek-v4-pro），wireModel 改点 deepseek-flash。
+    // ⚠️ 行的 id **故意没跟着改**：它是会话与用量账里存下来的身份，改了旧会话解析不到这行（会落回订阅通路）。
+    //    要改得配一张旧 id → 新 id 的迁移表，另说。
+    // ⚠️ 价钱沿用 09-08 记的那份（flash 档高峰价），换名之后没有重新核对过价目页。
     // 按量计入每日额度（站主：以后加充值，现在先按额度走）；1M 窗口走共用别名（不写 sdkAlias）。
     id: 'deepseek-v4.1-flash-expires-on-0910', window: 1_000_000, brand: 'deepseek',
     standby: 'deepseek-v4-flash-vision',
-    select: { label: 'DeepSeek V4.1 Flash · 官方预览', desc: '官方直连 · 支持视觉 · 1M 上下文 · 09-10 到期 · 按用量计入每日额度（高峰 $0.42/$1.27，缓存 $0.014）' },
+    select: { label: 'DeepSeek Flash · 官方直连', desc: '官方直连 · 支持视觉 · 1M 上下文 · 按用量计入每日额度（高峰 $0.42/$1.27，缓存 $0.014）' },
     api: {
-      upstream: 'deepseek', wireModel: 'deepseek-v4.1-flash-expires-on-0910',
+      upstream: 'deepseek', wireModel: 'deepseek-flash',
       fastModel: 'deepseek-v4-flash-helper',
       thinking: 'strip',
       reasoningEffort: 'high',
