@@ -6,6 +6,8 @@ import { useProcessStore } from '../../stores/processStore.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { t } from '../../lib/i18n.js';
 import { SHELL_Z } from '../../lib/z-layers.js';
+// 「地址在哪儿开」全站一处（进程卡的按钮和正文里的链接走同一条路）
+import { openUrl } from '../../lib/open-url.js';
 
 /**
  * 进程卡（2026-09-07 桌面端·缝三）：顶栏一枚徽章 + 一张面板。
@@ -25,12 +27,6 @@ const STATUS_COLOR = {
   lost: PAPER.pencil,
 };
 const STATUS_LABEL = { running: '在跑', exited: '已退出', stopped: '已停', failed: '失败', lost: '失联' };
-
-function openUrl(url) {
-  const d = typeof window !== 'undefined' ? window.nodesignDesktop : null;
-  if (d?.openExternal) d.openExternal(url).catch(() => window.open(url, '_blank'));
-  else window.open(url, '_blank', 'noopener');
-}
 
 /**
  * @param {object} props

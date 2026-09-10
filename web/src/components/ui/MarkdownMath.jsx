@@ -19,6 +19,7 @@
  */
 import ReactMarkdown from 'react-markdown';
 import { MATH_PLUGINS, normalizeMath } from '../../lib/markdown-math.js';
+import { openUrl } from '../../lib/open-url.js';
 import { COLOR, GAP } from '../../lib/theme.js';
 
 /**
@@ -56,6 +57,27 @@ const COMPONENTS = {
     className?.includes('task-list-item')
       ? <li className={className} style={{ listStyle: 'none', marginLeft: `-${GAP.lg}px` }} {...props} />
       : <li className={className} {...props} />
+  ),
+  /**
+   * 链接（2026-09-10 站主报的白屏）：模型写进正文的地址 —— dev server、发布出去的站点、
+   * 查到的资料 —— 点了都不能在本窗口开。桌面版那一下会把整个应用导航走，回不来只能重启
+   * （为什么、以及壳那边为什么拦不住，见 lib/open-url.js 开头）。
+   * 页内锚点（`#…`）留默认：那是目录跳转，不是离开。
+   * ⚠️ 这里管的是全站每一处 markdown（聊天正文、板书、仓库道的 README、市场页），
+   *   别在某个使用处自己再写一份 `a` —— 那就是第二份会分叉的真相。
+   */
+  a: ({ node, href, children, ...props }) => (
+    typeof href === 'string' && href.startsWith('#')
+      ? <a {...props} href={href}>{children}</a>
+      : (
+        <a
+          {...props}
+          href={href || ''}
+          target="_blank"
+          rel="noreferrer noopener"
+          onClick={(e) => { e.preventDefault(); openUrl(href); }}
+        >{children}</a>
+      )
   ),
   // 默认那个勾选框在纸面上又蓝又大，压小并去掉指针
   input: ({ node, ...props }) => (
