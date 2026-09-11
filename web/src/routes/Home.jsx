@@ -178,6 +178,15 @@ export default function Home() {
                   }}
                 />
               )}
+              {/* 没有项目的新人（09-12 站主）：别人的作品另起一个分区，不挂在「我的项目 · 0 个项目」底下 ——
+                  挂在底下的话既跟空状态那张大卡挤成一团（网格没有上边距，钉子和签还往上探），又会被读成
+                  「这些是我的」。有项目之后照旧混进自己的网格里（09-08 定的），靠「别人的」签区分。 */}
+              {projects.length === 0 && featured.length > 0 && (
+                <div className="ndd-head peer">
+                  <h2>{t('找找灵感')}<Underline w={1.6} color="var(--desk-ink)" /></h2>
+                  <span className="n">{t('点开看看，或照着来一个')}</span>
+                </div>
+              )}
               {(projects.length > 0 || featured.length > 0) && (
                 <div className="ndd-grid">
                   {/* newest 只在自己的里面算：别人的排在后面，「接着做」不会挂到它们头上 */}

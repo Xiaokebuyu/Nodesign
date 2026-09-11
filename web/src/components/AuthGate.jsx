@@ -260,7 +260,10 @@ export default function AuthGate({ children }) {
       {/* 顶栏（09-12 印刷风）：不进 1500x800 那张设计稿（稿里的东西按 --s 缩放），横贯整个视口。
           语言切换器挂在这里 —— 门外必须能换语言，英文用户读不懂登录表单的话，站内做得再好也没机会被看到。 */}
       <header className="ndw-nav">
-        <a className="brand" href="/welcome/"><img src={nMark} alt="" />Nodesign</a>
+        {/* 桌面版里字标不做链接：桌面窗口里点一个裸 <a> 是顶层导航，会把整个应用换成官网静态页 */}
+        {desktop
+          ? <span className="brand"><img src={nMark} alt="" />Nodesign</span>
+          : <a className="brand" href="/welcome/"><img src={nMark} alt="" />Nodesign</a>}
         <nav className="links">
           {!desktop && <a href="/welcome/">{t('官网')}</a>}
           {!desktop && <a href="/welcome/docs.html">{t('文档')}</a>}

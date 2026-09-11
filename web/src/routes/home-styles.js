@@ -320,6 +320,8 @@ ${DESK_CSS}
   font: 800 25px var(--display); letter-spacing: -0.02em; text-shadow: .026em .018em 0 rgba(178,58,46,0.14); }
 .ndd-head h2 svg { display: none; }
 .ndd-head .n { font: 12px var(--code); color: var(--desk-pencil); letter-spacing: 0.06em; }
+/* 新人那一屏的「找找灵感」：跟上面那张空状态大卡拉开，别让精选卡顶上去 */
+.ndd-head.peer { margin-top: 56px; }
 
 /* ===== 项目卡：钉在板上的纸 =====
    ⛔ 轨道的下限必须写成 min(300px, 100%)、卡自己必须 min-width: 0 —— 两条都是

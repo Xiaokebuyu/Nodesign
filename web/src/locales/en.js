@@ -145,6 +145,8 @@ export default {
   '最近对话': 'Recent chats',
   '正在打开…': 'Opening…',
   '先给它一句话': 'Start with one sentence',
+  '找找灵感': 'Find inspiration',
+  '点开看看，或照着来一个': 'Open one, or start your own from it',
   '想到什么先写下来。': 'Write down whatever comes to mind.',
   '不用先想清楚，': "You don't have to figure it out first, ",
   '它会问你缺的那部分。': 'it will ask you for the missing pieces.',
