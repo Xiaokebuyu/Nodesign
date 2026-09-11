@@ -244,13 +244,21 @@ function gitEnv(cwd, args, env, { timeoutMs = 20000 } = {}) {
   });
 }
 
+/**
+ * 快照与回退要**原样搬字节**，不能让用户的换行符配置插手（09-11）：core.autocrlf=true（Git for Windows
+ * 安装器的默认）下，add 把 CRLF 收成 LF、restore 再按配置写成 CRLF —— 原本 LF 的文件回退完变成 CRLF。
+ * 只关 autocrlf 这一个：仓库自己 .gitattributes 里声明的 text/eol 照旧生效（那是仓库对换行符的约定）。
+ * 分支纪律那几条（接手提交、切分支）不走这个，它们是在用户的仓库里正常提交，按用户的配置来。
+ */
+const RAW_BYTES = ['-c', 'core.autocrlf=false'];
+
 /** 工作树现在的样子拍成一棵 tree；不是 git 仓库或失败回 null */
 export async function snapshotTree(folder) {
   if (!(await isGitRepo(folder))) return null;
   return withTempIndex(folder, async (env) => {
     // 先把 HEAD 读进临时索引（有 HEAD 的话），再 add -A：这样删除也能体现，空仓库也不炸
     await gitEnv(folder, ['read-tree', 'HEAD'], env);
-    if ((await gitEnv(folder, ['add', '-A', '--', '.'], env)) == null) return null;
+    if ((await gitEnv(folder, [...RAW_BYTES, 'add', '-A', '--', '.'], env)) == null) return null;
     const tree = await gitEnv(folder, ['write-tree'], env);
     return tree ? tree.trim() : null;
   });
@@ -336,7 +344,7 @@ export async function revertToTurn(projectId, runId) {
   const restore = changed.filter(c => c.status !== 'A').map(c => c.rel);
   const remove = changed.filter(c => c.status === 'A').map(c => c.rel);
   if (restore.length) {
-    const ok = await gitEnv(folder, ['restore', '--source', rec.tree, '--worktree', '--', ...restore], process.env, { timeoutMs: 60000 });
+    const ok = await gitEnv(folder, [...RAW_BYTES, 'restore', '--source', rec.tree, '--worktree', '--', ...restore], process.env, { timeoutMs: 60000 });
     if (ok == null) throw repoError('REVERT_FAILED', 'git restore 失败', 500);
   }
   for (const rel of remove) {

@@ -116,6 +116,32 @@ describe('改道安全网：快照 / 结算 / 回退', () => {
     // 临时索引文件没留下
     expect(fs.readdirSync(path.join(dir, '.git')).filter(n => n.startsWith('nd-index-'))).toEqual([]);
   });
+  // 09-11：用户的 git 开着 core.autocrlf=true（Git for Windows 安装器的默认）时，回退不能改换行符。
+  // 原来快照 add 会把 CRLF 收成 LF、restore 再按 autocrlf 写回 CRLF：LF 的文件回退完变成 CRLF，那不叫还原。
+  // 在仓库配置里打开 autocrlf，Linux 上也复现得出来（外部审计是在 Windows runner 上撞到的）。
+  it('⛔ core.autocrlf=true 的仓库：回退后字节原样（LF 还是 LF，CRLF 还是 CRLF）', async () => {
+    const { recordTurnStart, recordTurnEnd, revertToTurn } = await import('./repo.js');
+    const d = path.join(tmp, 'crlf-site');
+    fs.mkdirSync(d, { recursive: true });
+    const LF = 'export const a = 1;\nexport const b = 2;\n';
+    const CRLF = 'line one\r\nline two\r\n';
+    fs.writeFileSync(path.join(d, 'lf.js'), LF);
+    fs.writeFileSync(path.join(d, 'crlf.txt'), CRLF);
+    git(d, 'init', '-q', '-b', 'main');
+    git(d, 'config', 'core.autocrlf', 'true');
+    git(d, '-c', 'user.email=t@t', '-c', 'user.name=t', 'add', '.');
+    git(d, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'first');
+    const { project } = await openFolder({ path: d });
+    recordTurnStart(project.id, { runId: 'run_crlf', sessionId: 'sess_c' });
+    await new Promise(r => setTimeout(r, 300));
+    fs.writeFileSync(path.join(d, 'lf.js'), 'export const a = 9;\n');
+    fs.writeFileSync(path.join(d, 'crlf.txt'), 'changed\r\n');
+    await recordTurnEnd(project.id, 'run_crlf');
+    const out = await revertToTurn(project.id, 'run_crlf');
+    expect(out.restored.sort()).toEqual(['crlf.txt', 'lf.js']);
+    expect(fs.readFileSync(path.join(d, 'lf.js'), 'utf8')).toBe(LF);
+    expect(fs.readFileSync(path.join(d, 'crlf.txt'), 'utf8')).toBe(CRLF);
+  });
   it('不是仓库项目：开工什么都不记、结算回 null', async () => {
     const { recordTurnStart, recordTurnEnd } = await import('./repo.js');
     recordTurnStart('proj_nope0000_none', { runId: 'x' });
