@@ -220,12 +220,12 @@ function qPoint(p0, c, p1, t) {
  * 抖幅随线长微增但封顶（长线抖 1.6px 已经像手画了，再大就像心电图）。
  * 返回 { d, mid }。
  */
-function pencilGeometry(from, to, seed) {
+function pencilGeometry(from, to, seed, ctrl = null) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const dist = Math.hypot(dx, dy) || 1;
   const lift = Math.min(dist * 0.14, 46);
-  const c = { x: (from.x + to.x) / 2 + (-dy / dist) * lift, y: (from.y + to.y) / 2 + (dx / dist) * lift };
+  const c = ctrl || { x: (from.x + to.x) / 2 + (-dy / dist) * lift, y: (from.y + to.y) / 2 + (dx / dist) * lift };
   const nx = -dy / dist; const ny = dx / dist;
   const rand = rng(seed);
   const segs = Math.max(6, Math.min(28, Math.round(dist / 22)));
@@ -256,13 +256,13 @@ function pencilGeometry(from, to, seed) {
  * 丝线：两颗图钉之间绷着的线会往下垂（重力朝 +y，不管两点怎么摆）。
  * 垂度取线长的一个小比例并封顶；近乎竖直的线几乎不垂（绷直了）。
  */
-function yarnGeometry(from, to) {
+function yarnGeometry(from, to, ctrl = null) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const dist = Math.hypot(dx, dy) || 1;
   const horiz = Math.abs(dx) / dist;          // 越横越垂
   const sag = Math.min(dist * 0.11, 56) * (0.25 + 0.75 * horiz);
-  const c = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 + sag };
+  const c = ctrl || { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 + sag };
   return { d: `M ${from.x} ${from.y} Q ${c.x} ${c.y} ${to.x} ${to.y}`, mid: qPoint(from, c, to, 0.5) };
 }
 
@@ -270,8 +270,10 @@ function yarnGeometry(from, to) {
  * 一条线的几何 —— 按材质派发。ink 走原来的 bindingPath/bindingMidpoint。
  * @returns {{ d: string, mid: {x:number,y:number} }}
  */
-export function bindingGeometry(from, to, material, seedKey = '') {
-  if (material === 'pencil') return pencilGeometry(from, to, hashSeed(seedKey));
-  if (material === 'yarn') return yarnGeometry(from, to);
+export function bindingGeometry(from, to, material, seedKey = '', ctrl = null) {
+  // ctrl：绕开中间卡片的控制点（09-11，lib/line-route.js 的 routeLine 算）；不给就是各材质原来的样子
+  if (material === 'pencil') return pencilGeometry(from, to, hashSeed(seedKey), ctrl);
+  if (material === 'yarn') return yarnGeometry(from, to, ctrl);
+  if (ctrl) return { d: `M ${from.x} ${from.y} Q ${ctrl.x} ${ctrl.y} ${to.x} ${to.y}`, mid: qPoint(from, ctrl, to, 0.5) };
   return { d: bindingPath(from, to), mid: bindingMidpoint(from, to) };
 }

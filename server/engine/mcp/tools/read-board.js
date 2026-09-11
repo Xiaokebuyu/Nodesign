@@ -39,20 +39,21 @@ function describeEntry(board, id, entry, glyph = null, excerpts = null, staleIds
   const who = (b) => describeBy(b || 'agent', view?.by || 'agent', view?.names);
   const mine = (b) => (b || 'agent') === (view?.by || 'agent');
   const sz = estimateSizeOn(board, id, entry);
-  const at = `@(${Math.round(entry.x)},${Math.round(entry.y)}) ${Math.round(sz.w)}x${Math.round(sz.h)}`;
+  // 位置按关系说（09-11）：像素只在 coords:true 时给 —— 读到像素的 agent 会在坐标系里推算（那条「离组 600+px」的误报就是这么来的）
+  const at = view?.coords ? ` @(${Math.round(entry.x)},${Math.round(entry.y)}) ${Math.round(sz.w)}x${Math.round(sz.h)}` : '';
   const g = glyph ? `[${glyph}] ` : '';
   const flags = `${entry.staging ? ' 〔草稿〕' : ''}${entry.tag ? ` #${entry.tag}` : ''}`;
   const ch = excerpts?.get(id);
-  if (ch) return `- ${g}[板书·${who(ch.by)}写的] 「${ch.first}」 ${at} (path: ${id})${ch.anchor ? ` 关于 ${ch.anchor}` : ''}${ch.replyTo ? ` 回应 ${ch.replyTo}` : ''}${flags}`;
+  if (ch) return `- ${g}[板书·${who(ch.by)}写的] 「${ch.first}」${at} (path: ${id})${ch.anchor ? ` 关于 ${ch.anchor}` : ''}${ch.replyTo ? ` 回应 ${ch.replyTo}` : ''}${flags}`;
   if (entry.kind === 'text') {
     const t = String(entry.data?.t || '').replace(/\s+/g, ' ').slice(0, entry.data?.format === 'md' ? 60 : 24);
     const md = entry.data?.format === 'md' ? 'md' : '手写';
-    return `- ${g}[${md}] 「${t}」 ${at} (id: ${id})${entry.by ? ` ·${who(entry.by)}写的` : ''}${flags}`;
+    return `- ${g}[${md}] 「${t}」${at} (id: ${id})${entry.by ? ` ·${who(entry.by)}写的` : ''}${flags}`;
   }
-  if (entry.kind === 'scribble') return `- ${g}[涂鸦] ${at} (id: ${id})${entry.by ? ` ·${who(entry.by)}画的` : ''}${flags}`;
+  if (entry.kind === 'scribble') return `- ${g}[涂鸦]${at} (id: ${id})${entry.by ? ` ·${who(entry.by)}画的` : ''}${flags}`;
   // 过期座位要明说（iss_mt38ucyq：旧路径条目被 agent 当"失效卡"差点建议删素材母版）
   const stale = staleIds?.has(id) ? ' 〔⚠️磁盘上已无此路径 —— 多半被移动/改名了，以磁盘为准，别据此判失效或建议删除〕' : '';
-  return `- ${g}${id} ${at}${entry.by ? ` ·${who(entry.by)}摆的` : ''}${flags}${stale}`;
+  return `- ${g}${id}${at}${entry.by ? ` ·${who(entry.by)}摆的` : ''}${flags}${stale}`;
   // eslint-disable-next-line no-unused-vars -- mine 留给后续按视角过滤用
 }
 
@@ -63,10 +64,10 @@ export function makeReadBoardTool({ projectId, sharedRoot = null }) {
 sharing a #tag), then loose items row by row, then relation lines.
 
 Use this BEFORE moving things (edit_board) or writing/sketching (write_on_board) —
-placement without looking is guessing. Positions are reported as world pixels for
-reading only — when you place or move things you speak in RELATIONS (place:{by,side,with}),
-never pixels. Only seated items appear (files you just wrote are seated automatically
-within a couple of seconds).
+placement without looking is guessing. Positions are described as RELATIONS — reading order,
+how many columns a group has, which group sits right of / below which — the same language you
+place and move things in (place:{by,side,with}); coords:true adds raw world pixels, for debugging
+only. Only seated items appear (files you just wrote are seated automatically within a couple of seconds).
 Items marked 〔草稿〕 are still staging (yours from this turn, half-transparent until
 edit_board commit / end of turn). The user's current viewport (if known) is drawn as a box
 on the minimap and listed with what is inside it.`,
@@ -76,12 +77,13 @@ on the minimap and listed with what is inside it.`,
       tag: z.string().max(40).optional()
         .describe('Only list items/lines carrying this #tag (one group, e.g. a sketch you made)'),
       minimap: z.boolean().optional().describe('Also print an ASCII minimap (off by default — the relative-position summary is usually enough)'),
+      coords: z.boolean().optional().describe('Also print world-pixel positions (debugging only — nothing you call takes pixels)'),
     },
-    async ({ layer, tag: rawTag, minimap }, extra) => {
+    async ({ layer, tag: rawTag, minimap, coords = false }, extra) => {
       const tag = rawTag ? bareTag(rawTag) : rawTag;   // #状态板 也认（查询侧统一剥 #）
       // 视角：谁在读这块板。常驻角色读到自己写的板书才该显示「你写的」，
       // 读到别人的显示那个人的名字（展示名只是渲染，判断一律用 slug）。
-      const view = { by: byOf(extra), names: await listRoleNames(sharedRoot) };
+      const view = { by: byOf(extra), names: await listRoleNames(sharedRoot), coords };
       if (!projectId) {
         return { content: [{ type: 'text', text: 'No project bound.' }], isError: true };
       }
@@ -143,16 +145,16 @@ on the minimap and listed with what is inside it.`,
         const rectOf = new Map(rects.map(r => [r.id, r]));
         const boxes = real.map(g => bboxOfRects(g.members.map(id => rectOf.get(id)).filter(Boolean)));
         const whole = bboxOfRects(rects);
-        if (whole) lines.push(`这一层内容范围：(${Math.round(whole.x)},${Math.round(whole.y)}) ${Math.round(whole.w)}x${Math.round(whole.h)}${vpRect ? `；用户视口 (${Math.round(vpRect.x)},${Math.round(vpRect.y)}) ${Math.round(vpRect.w)}x${Math.round(vpRect.h)}` : ''}`);
+        if (whole && coords) lines.push(`这一层内容范围：(${Math.round(whole.x)},${Math.round(whole.y)}) ${Math.round(whole.w)}x${Math.round(whole.h)}${vpRect ? `；用户视口 (${Math.round(vpRect.x)},${Math.round(vpRect.y)}) ${Math.round(vpRect.w)}x${Math.round(vpRect.h)}` : ''}`);
         if (real.length) {
           lines.push('各组位置（新东西默认排在已有内容的右侧或下方，顺着先左后右、先上后下的阅读顺序）：');
           real.forEach((g, i) => {
             const b = boxes[i]; if (!b) return;
             const tags = [...g.tags].map(t => `#${t}`).join(' ') || `组 ${i + 1}`;
             const cols = columnsOf(g.members.map(id => rectOf.get(id)).filter(Boolean));
-            const bits = [`(${Math.round(b.x)},${Math.round(b.y)}) ${Math.round(b.w)}x${Math.round(b.h)}`, cols.length > 1 ? `${cols.length} 列（${cols.map(c => c.n).join('/')} 件）` : '单列'];
-            if (i > 0 && boxes[0]) bits.push(`在 ${[...real[0].tags].map(t => `#${t}`).join(' ') || '组 1'} 的${relationOf(boxes[0], b)}`);
-            const vr = viewportRelation(vpRect, b); if (vr) bits.push(vr);
+            const bits = [...(coords ? [`(${Math.round(b.x)},${Math.round(b.y)}) ${Math.round(b.w)}x${Math.round(b.h)}`] : []), `${g.members.length} 件`, cols.length > 1 ? `${cols.length} 列（${cols.map(c => c.n).join('/')} 件）` : '单列'];
+            if (i > 0 && boxes[0]) bits.push(`在 ${[...real[0].tags].map(t => `#${t}`).join(' ') || '组 1'} 的${relationOf(boxes[0], b, { px: coords })}`);
+            const vr = viewportRelation(vpRect, b, { px: coords }); if (vr) bits.push(vr);
             lines.push(`  ${tags}：${bits.join('；')}`);
           });
         }
@@ -160,9 +162,15 @@ on the minimap and listed with what is inside it.`,
           const tags = [...g.tags].map(t => `#${t}`).join(' ');
           const staging = g.members.every(id => entryOf.get(id)?.staging);
           lines.push('', `组 ${i + 1}${tags ? ` ${tags}` : ''}（${g.members.length} 件 ${g.edges.length} 线${staging ? '，草稿' : ''}）：`);
+          // 多列的组先按列、再按上下列（09-11：按行读会把两列交错成一串，agent 据此判断顺序就错了）
+          const gcols = columnsOf(g.members.map(id => rectOf.get(id)).filter(Boolean));
+          const colOf = (e) => (gcols.length > 1 ? gcols.reduce((best, c, k) => (Math.abs(c.x - e.x) < Math.abs(gcols[best].x - e.x) ? k : best), 0) : 0);
           const sorted = g.members.map(id => ({ id, entry: entryOf.get(id) }))
-            .sort((a, b) => (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
-          for (const { id, entry } of sorted) lines.push(describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds, view));
+            .sort((a, b) => (colOf(a.entry) - colOf(b.entry)) || (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
+          for (const { id, entry } of sorted) {
+            const line = describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds, view);
+            lines.push(gcols.length > 1 ? line.replace(/^- /, `- 第${colOf(entry) + 1}列 `) : line);
+          }
           for (const bid of g.edges.slice(0, 12)) lines.push(`    ${bindingLine(board.bindings[bid], board)} (line id: ${bid})`);
           if (g.edges.length > 12) lines.push(`    …还有 ${g.edges.length - 12} 条线`);
         });
@@ -172,13 +180,13 @@ on the minimap and listed with what is inside it.`,
         }
         if (loose.length) {
           lines.push('', real.length ? '散件：' : '');
-          let rowY = null;
+          let rowY = null; let rowN = 0;
           const sorted = loose.map(id => ({ id, entry: entryOf.get(id) }))
             .sort((a, b) => (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
           for (const { id, entry } of sorted) {
             if (rowY === null || Math.abs(entry.y - rowY) > ROW_TOLERANCE) {
               rowY = entry.y;
-              lines.push(`— 行 y≈${Math.round(rowY)} —`);
+              lines.push(coords ? `— 行 y≈${Math.round(rowY)} —` : `— 第 ${rowN += 1} 行 —`);
             }
             lines.push(describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds, view));
           }
@@ -189,7 +197,7 @@ on the minimap and listed with what is inside it.`,
         if (folders.length) {
           lines.push('', `文件夹卡：${folders.map(f => {
             const zz = board.zones[f];
-            return `${f}@(${Math.round(zz.x)},${Math.round(zz.y)})`;
+            return coords ? `${f}@(${Math.round(zz.x)},${Math.round(zz.y)})` : f;
           }).join('、')}`);
         }
       }
@@ -212,14 +220,14 @@ on the minimap and listed with what is inside it.`,
             if (roll) {
               const rc = rollCardRect(board, l.tag);
               lines.push(`  #${l.tag}：已收卷${roll.label ? `（「${roll.label}」）` : ''}，${l.count} 件收在卷里`
-                + `${rc ? `，卷卡占位约 @(${rc.x},${rc.y}) ${rc.w}x${rc.h}` : ''}`
+                + `${rc && coords ? `，卷卡占位约 @(${rc.x},${rc.y}) ${rc.w}x${rc.h}` : ''}`
                 + ` —— 座位和文件都在（Read 照常），edit_board unroll 展开；别往收着的线里接新话`);
               continue;
             }
             const dirTxt = '';
             lines.push(l.registered
-              ? `  #${l.tag}：${l.count} 节${l.parent ? `，岔自 ${l.parent}` : ''}，列头 (${l.x},${l.y})`
-                + `${l.frontier ? `，接着写会落 (${l.frontier.x},${l.frontier.y}) 附近` : ''}${l.lastId ? `，最新 ${l.lastId}` : ''}${dirTxt}`
+              ? `  #${l.tag}：${l.count} 节${l.parent ? `，岔自 ${l.parent}` : ''}${coords ? `，列头 (${l.x},${l.y})` : ''}`
+                + `${l.frontier ? (coords ? `，接着写会落 (${l.frontier.x},${l.frontier.y}) 附近` : '，接着写会落在最新一节下面') : ''}${l.lastId ? `，最新 ${l.lastId}` : ''}${dirTxt}`
               : `  #${l.tag}：${l.count} 件（未登记的线，仍可用 chain:true 续写）${dirTxt}`);
           }
         }
@@ -231,7 +239,7 @@ on the minimap and listed with what is inside it.`,
           !(r.x + r.w < vpRect.x || r.x > vpRect.x + vpRect.w || r.y + r.h < vpRect.y || r.y > vpRect.y + vpRect.h))
           .map(r => r.id) : [];
         const bits = [];
-        if (vpRect) bits.push(`视口 (${Math.round(vpRect.x)},${Math.round(vpRect.y)}) ${Math.round(vpRect.w)}x${Math.round(vpRect.h)} 缩放 ${vp.zoom ?? '?'}`);
+        if (vpRect) bits.push(coords ? `视口 (${Math.round(vpRect.x)},${Math.round(vpRect.y)}) ${Math.round(vpRect.w)}x${Math.round(vpRect.h)} 缩放 ${vp.zoom ?? '?'}` : `缩放 ${vp.zoom ?? '?'}`);
         if (vp.openWindow) bits.push(`开着窗：${vp.openWindow}${vp.openPage ? `（${vp.openPage}）` : ''}`);
         if (vp.selected?.length) bits.push(`选中：${vp.selected.slice(0, 8).join('、')}`);
         if (inside.length) bits.push(`视口里有：${inside.slice(0, 12).join('、')}${inside.length > 12 ? ' 等' : ''}`);
@@ -246,7 +254,7 @@ on the minimap and listed with what is inside it.`,
         } catch { /* 关系读不到不挡座次 */ }
       }
 
-      lines.push('', '（口径：稀疏表只列摆过的；层归属为服务端近似；尺寸=存档真值优先、缺了按形态估；'
+      lines.push('', '（口径：稀疏表只列摆过的；位置按关系说，coords:true 才给像素；层归属为服务端近似；尺寸=存档真值优先、缺了按形态估；'
         + '角色精灵贴着该角色最新一条板书（那条四周留了 60px 身位）；带⚠️的条目=座位与磁盘对不上账）');
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     },

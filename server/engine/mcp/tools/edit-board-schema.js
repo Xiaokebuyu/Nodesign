@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
 import { TAG_RE } from '../../../projects/board-sanitize.js';
+import { REFLOW_LAYOUTS } from '../../../lib/board-reflow.js';
 
 /** 弱模型方言垫片：免费档模型给字符串字段裹 {$text:"…"} 壳（27/61 条真实错误，
  *  且读不懂 zod 报文会原样重试到死）。单键 $text 自动剥壳，合法对象碰不到。 */
@@ -45,7 +46,7 @@ export const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('add_edge'), from: ENDPOINT, to: ENDPOINT, type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), label: z.string().max(60).optional(), tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('set_edge'), id: z.string().min(1).max(300), label: z.string().max(60).optional(), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), from: ENDPOINT.optional().describe('re-point the line: new source end'), to: ENDPOINT.optional().describe('re-point the line: new target end') }),
   z.object({ op: z.literal('remove_edge'), id: z.string().min(1).max(300) }),
-  z.object({ op: z.literal('reflow'), tag: z.string().min(1).max(40), layout: z.enum(['column', 'row']).optional().describe('default column: restack the group in reading order with real sizes (use after set_text changes heights)') }),
+  z.object({ op: z.literal('reflow'), tag: z.string().min(1).max(40), layout: z.enum(REFLOW_LAYOUTS).optional().describe('Default: the layout the group was drawn with (column if it never recorded one). Re-lays the group with its current lines and real sizes, keeping its top-left; its flow lines set the order'), cols: z.number().int().min(1).max(8).optional().describe('grid columns') }),
   z.object({ op: z.literal('follow'), group_tag: z.string().min(1).max(40).describe('the group that should follow (e.g. a status panel)'), target_tag: z.string().min(1).max(40).describe('whenever a new item with this tag lands, the group auto-moves beside it and the anchor line re-points'), side: z.enum(['right', 'left', 'above', 'below']).optional(), keep_offset: z.boolean().optional().describe('true = do NOT snap the group beside the target now; leave it where it is and keep that offset from here on (every later hop is a parallel shift anyway)'), label: z.string().max(60).optional() }),
   z.object({ op: z.literal('set_tag'), ids: z.array(z.string().min(1).max(300)).min(1).max(24).describe('canvas ids (paths for files: images, sites, docx, notes — or node handles)'), tag: z.string().max(40).describe('group tag to put them in; "" removes the tag') }),
   z.object({ op: z.literal('unfollow'), group_tag: z.string().min(1).max(40) }),
@@ -82,8 +83,9 @@ ops (run in order; a failing op is reported, the rest still apply):
  add_shape{kind,around,…} (circle/box/underline an EXISTING thing after the fact — the mark
  hugs it and follows when it moves) · set_shape{id,color?,width?} ·
  add_edge{from,to,type?,material?,label?} · set_edge{id,from?,to?,label?,type?,material?}
- (re-point a line in one op) · remove_edge{id} · reflow{tag,layout?} (restack a group after
- text edits changed heights) ·
+ (re-point a line in one op) · remove_edge{id} · reflow{tag,layout?,cols?} (re-lay a group with the
+ layout it was drawn with — a grid stays a grid, a flow stays layered — using its current lines and
+ sizes; its flow lines set the order. Use it after edits instead of moving members one by one) ·
  transform_group{tag,scale?,rotate?} (scale/rotate a whole tagged drawing about its center —
  scribbles truly transform; text/cards just re-seat, reported honestly) ·
  set_tag{ids,tag} (put ANYTHING already on the board into a group — images, sites, docx, cards.

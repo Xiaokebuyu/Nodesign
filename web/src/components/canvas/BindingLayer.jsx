@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { wrapLabel } from '../../lib/label-wrap.js';
 import { PAPER } from '../../lib/paper.js';
 import { FONT_SANS, FONT_SIZE } from '../../lib/theme.js';
+import { objectRects } from '../../lib/board-rects.js';
+import { routeLine, nearLine } from '../../lib/line-route.js';
 import {
   BINDING_STYLES, BINDING_ACCENT, bindingStyle,
   BINDING_MATERIALS, materialOf, bindingGeometry,
@@ -78,6 +80,8 @@ export default function BindingLayer({
 }) {
   const drawn = useMemo(() => {
     const out = [];
+    // epoch 传的就是 positioned（全部摆好的物件），顺手当障碍集：线绕开中间的卡片（09-11，lib/line-route.js）
+    const all = Array.isArray(epoch) ? objectRects(epoch) : [];
     for (const [id, b] of Object.entries(bindings || {})) {
       const style = bindingStyle(b.type);
       if (!style) continue;                       // 未知语义不画（跟服务端同口径）
@@ -91,10 +95,12 @@ export default function BindingLayer({
       if (!pts) continue;
       // 材质轴（2026-08-23）：墨线/手绘/丝线各有各的几何；抖动以线 id 做种子
       const material = materialOf(b);
-      const geo = bindingGeometry(pts.from, pts.to, material, id);
+      const route = routeLine(a, z, material, nearLine(a, z, all.filter((r) => r.id !== b.from && r.id !== b.to)));
+      const ends = route?.detoured ? route : pts;
+      const geo = bindingGeometry(ends.from, ends.to, material, id, route?.detoured ? route.ctrl : null);
       // 贴着的：算出来但平时不画（悬停任一端才亮）—— 见 ADJACENT_PX 头注
       const adjacent = gapBetween(a, z) <= ADJACENT_PX;
-      out.push({ id, b, style, material, adjacent, d: geo.d, mid: geo.mid, from: pts.from, to: pts.to });
+      out.push({ id, b, style, material, adjacent, d: geo.d, mid: geo.mid, from: ends.from, to: ends.to });
     }
     return out;
   }, [bindings, rectOf, epoch]);

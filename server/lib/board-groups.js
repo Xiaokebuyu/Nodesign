@@ -123,8 +123,8 @@ export function asciiMinimap(rects, { cols = 48, rows = 16, viewport = null } = 
 
 export { bboxOf as bboxOfRects } from './rect.js';
 
-/** b 相对 a 在哪（以 a 为参照）：左/右/上/下 + 距离；重叠则说重叠 */
-export function relationOf(a, b) {
+/** b 相对 a 在哪（以 a 为参照）：左/右/上/下（+ 距离，px:false 时不报像素）；重叠则说重叠 */
+export function relationOf(a, b, { px = true } = {}) {
   if (!a || !b) return null;
   const gapX = b.x >= a.x + a.w ? b.x - (a.x + a.w) : (b.x + b.w <= a.x ? a.x - (b.x + b.w) : -1);
   const gapY = b.y >= a.y + a.h ? b.y - (a.y + a.h) : (b.y + b.h <= a.y ? a.y - (b.y + b.h) : -1);
@@ -133,11 +133,11 @@ export function relationOf(a, b) {
   if (horiz) {
     const side = b.x >= a.x + a.w ? '右侧' : '左侧';
     const vAlign = Math.abs(b.y - a.y) < 60 ? '顶齐' : (b.y > a.y ? '偏下' : '偏上');
-    return `${side} ${Math.round(gapX)}px（${vAlign}）`;
+    return `${side}${px ? ` ${Math.round(gapX)}px` : ''}（${vAlign}）`;
   }
   const side = b.y >= a.y + a.h ? '下方' : '上方';
   const hAlign = Math.abs(b.x - a.x) < 60 ? '左齐' : (b.x > a.x ? '偏右' : '偏左');
-  return `${side} ${Math.round(gapY)}px（${hAlign}）`;
+  return `${side}${px ? ` ${Math.round(gapY)}px` : ''}（${hAlign}）`;
 }
 
 /** 组内的列：按左边缘聚类（容差 60px），返回每列的成员数（自左向右） */
@@ -152,12 +152,12 @@ export function columnsOf(rects) {
 }
 
 /** 视口与一块区域的关系 */
-export function viewportRelation(vp, box) {
+export function viewportRelation(vp, box, opts = {}) {
   if (!vp || !box) return null;
   const ix = Math.max(0, Math.min(vp.x + vp.w, box.x + box.w) - Math.max(vp.x, box.x));
   const iy = Math.max(0, Math.min(vp.y + vp.h, box.y + box.h) - Math.max(vp.y, box.y));
   const cover = (ix * iy) / Math.max(1, box.w * box.h);
   if (cover >= 0.95) return '整块在用户视口里';
   if (cover > 0) return `用户视口盖住它约 ${Math.round(cover * 100)}%`;
-  return `在用户视口之外（视口${relationOf(box, vp) || '别处'}）`;
+  return `在用户视口之外（视口${relationOf(box, vp, opts) || '别处'}）`;
 }

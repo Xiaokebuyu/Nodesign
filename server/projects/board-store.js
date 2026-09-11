@@ -173,19 +173,19 @@ export function patchBoard(pid, patch) {
       }
       if (!Object.keys(board.sheets).length) delete board.sheets;
     }
-    // 跟随规则（2026-08-30）：`{ 组tag: {target,side?,label?} | null }`。规则和线分开存
-    // —— 线要求两端此刻都在板上，规则不要求，所以「开场先立规则再写第一章」这条
-    // skill 教了、模型也一直照做的顺序，第一次真的走得通。
-    if (patch?.follows && typeof patch.follows === 'object') {
-      board.follows = board.follows || {};
-      for (const [g, r] of Object.entries(patch.follows)) {
+    // 按组 tag 记的两张表，同一种合并：`{ 组tag: 值 | null }`，合完整表过一遍 sanitize。
+    //  follows（08-30）跟随规则：跟线分开存，线要两端都在板上、规则不要 —— 「先立规则再写第一章」才走得通。
+    //  layouts（2026-09-11）组的布局：write_on_board 画图时登记，edit_board 的 reflow 按它重算。
+    for (const key of ['follows', 'layouts']) {
+      if (!patch?.[key] || typeof patch[key] !== 'object') continue;
+      board[key] = board[key] || {};
+      for (const [g, r] of Object.entries(patch[key])) {
         const gt = sanitizeTag(g);
         if (!gt) continue;
-        if (r === null) { delete board.follows[gt]; continue; }
-        board.follows[gt] = r;
+        if (r === null) delete board[key][gt]; else board[key][gt] = r;
       }
-      const clean = sanitizeBoard({ ...board, follows: board.follows }).follows;
-      if (clean) board.follows = clean; else delete board.follows;
+      const clean = sanitizeBoard({ ...board, [key]: board[key] })[key];
+      if (clean) board[key] = clean; else delete board[key];
     }
     // 待摆产物队列（刀 G）：整表替换（写方只有 board-seater 一个，diff 没意义）
     if (patch?.pending !== undefined) {

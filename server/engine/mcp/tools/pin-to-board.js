@@ -36,7 +36,7 @@ import { applyFollows } from '../../../lib/board-follow.js';
 import { solvePlace, lastOfGroup, describePlacement } from '../../../lib/board-place.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
-import { makeAnchorResolver } from '../../../lib/board-anchor.js';
+import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { PLACE } from './write-on-board-schema.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -176,7 +176,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
             const raw = by0 === 'user' ? (vp?.selected?.[0] || null) : by0;
             if (!raw) return { content: [{ type: 'text', text: "place.by:'user' 但用户此刻没有选中任何东西 —— 用 'view' 或点名一件" }], isError: true };
             const a = await resolveAnchor(raw, boardNow);
-            if (!a) return { content: [{ type: 'text', text: `place.by ${raw} 不在板上（read_board 看一眼现在都有谁）。` }], isError: true };
+            if (!a) return { content: [{ type: 'text', text: `place.by ${raw} 不在板上 —— ${anchorMissHint(raw, boardNow)}。` }], isError: true };
             anchor = a.rect; anchorId = a.anchorId;
           }
           const box = estimateSizeOn(boardNow, objectId, boardNow.objects?.[objectId] || null);

@@ -35,7 +35,8 @@ import { lastOfGroup } from '../../../lib/board-place.js';
 import { heroAfterLine, heroSize } from '../../../lib/board-hero.js';
 import { makePlacer } from './write-on-board-place.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
-import { makeAnchorResolver } from '../../../lib/board-anchor.js';
+import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
+import { lineCrossings } from '../../../lib/line-route.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
 import { STATE_TABLE_TAG, parseStateTable } from '../../../lib/state-table.js';
@@ -127,7 +128,9 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const capW = (u) => (capUnits ? Math.min(u || capUnits, capUnits) : u);
     const vpRectFor = (zone) => (vp && (vp.layer || '') === (zone || '') && vp.camera) ? vp.camera : null;
     // 锚点解析（真 id > tag 包络 > 救援入座）本体在 lib/board-anchor.js（棘轮拆件）
-    const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
+    // 宽认命中要如实报（09-11）：落点描述里点名的是真锚，这里再补一句「按什么认成了谁」
+    const fuzzyNotes = []; const resolveAnchor0 = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
+    const resolveAnchor = async (raw, b) => { const a = await resolveAnchor0(raw, b); if (a?.fuzzy) fuzzyNotes.push(`（锚点按「${a.fuzzy.from}」认成了 ${a.anchorId}：${a.fuzzy.how}）`); return a; };
     // 意图层落位（见 write-on-board-place.js / lib/board-place.js）
     const { placeNote, describeSpot, describeChalkWrite, visibleIn } = makePlacer();
     /**
@@ -148,7 +151,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const raw = by0 === 'user' ? (vp?.selected?.[0] || null) : by0;
       if (!raw) { out.error = "place.by:'user' but the user has nothing selected — use 'view' or name a thing"; return out; }
       const a = await resolveAnchor(raw, b);
-      if (!a) { out.error = `place.by ${raw} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件（read_board 看一眼现在都有谁）。`; return out; }
+      if (!a) { out.error = `place.by ${raw} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件 —— ${anchorMissHint(raw, b)}。`; return out; }
       out.anchor = { id: a.anchorId, rect: a.rect, zone: a.zone, board: a.board };
       return out;
     };
@@ -219,7 +222,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         } else {
           const a = await resolveAnchor(args.open_lane, board);
           if (!a) {
-            return err(`open_lane 的岔出点 ${args.open_lane} 不在板上（read_board 看一眼现在都有谁）。全新话题用 open_lane:'fresh'。`);
+            return err(`open_lane 的岔出点 ${args.open_lane} 不在板上 —— ${anchorMissHint(args.open_lane, board)}。全新话题用 open_lane:'fresh'。`);
           }
           laneFrom = { id: a.anchorId, rect: a.rect };
           zone = a.zone; if (a.board) b2 = a.board;
@@ -244,7 +247,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       if (nearRaw) {
         const a = await resolveAnchor(nearRaw, board);
         if (!a && !parentId) {
-          return err(`锚点 ${nearRaw} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件（read_board 看一眼现在都有谁）。`);
+          return err(`锚点 ${nearRaw} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件 —— ${anchorMissHint(nearRaw, board)}。`);
         }
         if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; if (a.board) b2 = a.board; }
       }
@@ -306,7 +309,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
           ctx?.emit?.(Events.boardFocus(hRect, { tag: args.tag || null, layer: zone, soft: true, actor: by !== 'agent' ? by : null }));
         } catch { /* fail-soft */ }
         return { content: [{ type: 'text', text:
-          `Wrote handwritten note ${hid} — ${describeSpot(placed, { anchorId: placeId, groupTag })}.` }] };
+          `Wrote handwritten note ${hid} — ${describeSpot(placed, { anchorId: placeId, groupTag })}.${fuzzyNotes.join('')}` }] };
       }
 
       // 状态表堵写口（2026-08-30）：这 tag 载重（set_vars/触发器/趋势线都读它），
@@ -363,7 +366,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       if (pl.groupMissing) lines.push(`（place.with:"${pl.groupMissing}" 那组还没有东西，所以这条按视口落位；它自己带了 tag 就是那组的第一条）`);
       if (args.say && !saySpent) lines.push('⚠ say 没有线可落（这条既没 near 也没 reply_to/chain）—— 话没上板。给它一个 near，或者用 edit_board add_edge{label}。');
       else if (args.say) lines.push(`Line says: 「${args.say}」`);
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      return { content: [{ type: 'text', text: [...lines, ...fuzzyNotes].join('\n') }] };
     }
 
     // ───────────────────────── 件数 ≥ 2：一张图（画布原生） ─────────────────────────
@@ -468,7 +471,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     let anchorId = null;
     if (args.near) {
       const a = await resolveAnchor(args.near, board);
-      if (!a) return err(`锚点 ${args.near} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件（read_board 看一眼现在都有谁）。`);
+      if (!a) return err(`锚点 ${args.near} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件 —— ${anchorMissHint(args.near, board)}。`);
       zone = a.zone; anchorId = a.anchorId;
       if (a.board) sketchBase = a.board;
       const e = sketchBase.objects[a.anchorId];
@@ -512,7 +515,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     for (const sh of shapes) {
       objects[idOf.get(sh.key)] = { x: Math.round(sh.rect.x + ox), y: Math.round(sh.rect.y + oy), w: Math.round(sh.rect.w), h: Math.round(sh.rect.h), kind: 'scribble', data: { d: sh.d, color: sh.color, width: sh.width }, ...(sh.hug && idOf.get(sh.hug) ? { hug: idOf.get(sh.hug) } : {}), ...common };
     }
-    const saved = await patchBoard(projectId, { objects, bindings });
+    // 登记这组用的布局：之后 reflow 按同一套模板重算（09-11）
+    const saved = await patchBoard(projectId, { objects, bindings, ...(tag ? { layouts: { [tag]: { layout: tpl, ...(args.cols ? { cols: args.cols } : {}) } } } : {}) });
     const landed = Object.keys(objects).filter(id => saved.objects?.[id]).length;
     if (!landed) return err('草图被 board 拒了（内容或字段不合法）。');
     if (tag && nodes.length) { try { await applyFollows(projectId, { tag, newId: idOf.get(nodes[0].key) }); } catch { /* */ } }
@@ -526,6 +530,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       `ids: ${[...idOf].map(([k, v]) => `${k}=${v}`).join(', ')}`,
       `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
+    lines.push(...lineCrossings(saved, { bindingIds: Object.keys(bindings) }, known));
     if (pl.groupMissing) lines.push(`（place.with:"${pl.groupMissing}" 那组还没有东西，所以按视口落位）`);
     if (args.say) lines.push('⚠ say 只给单条板书（它拉的那根线）；一张图的线上的话写在 edges[].label 里 —— 这次的 say 没上板。');
     if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一屏（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。如果你是按**像素**想的坐标：nodes/shapes（含 path 的 d）全族单位是 24px 的格，数值除以 24 重画一版会正好；确实要这么大就拆成几张 tag 图用线连。`);
@@ -545,6 +550,6 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     lines.push(staging
       ? `Next: look_at_board {tag:"${tag}"} to check it, then edit_board {ops:[{op:"commit",tag:"${tag}"}]} (or it commits at turn end).`
       : `Next: look_at_board ${tag ? `{tag:"${tag}"}` : '{around: one of the ids}'} to check it.`);
-    return { content: [{ type: 'text', text: lines.join('\n') }] };
+    return { content: [{ type: 'text', text: [...lines, ...fuzzyNotes].join('\n') }] };
   };
 }

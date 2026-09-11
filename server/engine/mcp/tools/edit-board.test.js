@@ -186,6 +186,70 @@ describe('08-25 二批：chalk_edit + 挪动如实报（2026-09-05 落点改报�
     expect(g.content[0].text).not.toMatch(/组左上 \(/);
   });
 
+  it('锚点跟 write_on_board 同一份解析：自然叫法宽认并如实报、没座位的文件当场入座、认不出给候选（09-11）', async () => {
+    await fs.writeFile(path.join(sharedRoot, 'assets/c-v2.png'), 'x');   // 盘上有、还没上板；板上有个名字相近的 c.png
+    await patchBoard(pid, { objects: { 'site:etsuko-site': { x: 30000, y: 30000, w: 320, h: 240 } } });
+    const fuzzy = await edit({ ops: [{ op: 'move', id: 'assets/c.png', to: { by: 'etsuko-site/index.html', side: 'right' } }] });
+    expect(fuzzy.content[0].text).toContain('参照按「etsuko-site/index.html」认成了 site:etsuko-site');
+    expect(fuzzy.isError).toBeUndefined();
+    // 真文件先入座，轮不到宽认把它认成名字相近的 c.png
+    const rescued = await edit({ ops: [{ op: 'move', id: 'assets/c.png', to: { by: 'assets/c-v2.png', side: 'below' } }] });
+    expect(rescued.content[0].text).toMatch(/move → below of assets\/c-v2\.png/);
+    expect(rescued.content[0].text).not.toContain('认成了');
+    expect((await readBoard(pid)).objects['assets/c-v2.png']).toBeTruthy();   // 救援入座落了盘
+    const miss = await edit({ ops: [{ op: 'move', id: 'assets/photos.png', to: { by: 'view' } }] });
+    expect(miss.content[0].text).toMatch(/assets\/photos\.png 不在板上 —— 最像的：assets\/photo\.png/);
+  });
+
+  it('move 把一件挪离了自己的组：报文说出来（09-11 案：落点对，是 agent 不知道它离组了）', async () => {
+    await fs.writeFile(path.join(sharedRoot, 'assets/far.png'), 'x');
+    await patchBoard(pid, { objects: { 'assets/far.png': { x: 40000, y: 40000, w: 200, h: 176 } } });
+    await write({ layout: 'column', tag: 'solo', staging: false, nodes: [{ id: 's1', text: '第一件' }, { id: 's2', text: '第二件' }] });
+    const away = await edit({ ops: [{ op: 'move', id: 's2', to: { by: 'assets/far.png', side: 'right' } }] });
+    expect(away.content[0].text).toContain('离开了 #solo');
+    const back = await edit({ ops: [{ op: 'move', id: 's2', to: { by: 's1', side: 'below' } }] });
+    expect(back.content[0].text).not.toContain('离开了');
+  });
+
+  it('reflow 有 flow 线就按线排、报出顺序（09-11 案：两列被按行交错读成一列）；没有线才按位置', async () => {
+    await write({
+      layout: 'column', tag: 'flowy', staging: false,
+      nodes: [{ id: 'f1', text: '一' }, { id: 'f2', text: '二' }, { id: 'f3', text: '三' }],
+      edges: [{ from: 'f1', to: 'f2', type: 'flow' }, { from: 'f2', to: 'f3', type: 'flow' }],
+    });
+    await edit({ ops: [{ op: 'move', id: 'f3', to: { by: 'f1', side: 'right' } }] });   // 摆成两列：位置序变成 f1 f3 f2
+    const r = await edit({ ops: [{ op: 'reflow', tag: 'flowy' }] });
+    expect(r.content[0].text).toMatch(/reflow #flowy 排成一列（按 flow 线的顺序[^）]*）：f1 → f2 → f3；挪了 \d\/3 件/);
+    let board = await readBoard(pid);
+    const y = (lid) => Object.values(board.objects).find((e) => e.tag === 'flowy' && e.data?.lid === lid).y;
+    expect(y('f1') < y('f2') && y('f2') < y('f3')).toBe(true);
+
+    await write({ layout: 'row', tag: 'noline', staging: false, nodes: [{ id: 'g1', text: '甲' }, { id: 'g2', text: '乙' }] });
+    const r2 = await edit({ ops: [{ op: 'reflow', tag: 'noline' }] });
+    expect(r2.content[0].text).toContain('排成一行（按原位置先左后右）');   // 画的时候是 row，reflow 沿用
+  });
+
+  it('set_text 改长之后，同组压在它下面的自动往下推，不用 agent 记得接 reflow（09-11）', async () => {
+    await write({ layout: 'column', tag: 'stack', staging: false, nodes: [{ id: 'k1', text: '短' }, { id: 'k2', text: '下面那条' }] });
+    const long = Array.from({ length: 12 }, (_, i) => `第 ${i} 行`).join('\n');
+    const r = await edit({ tag: 'stack', ops: [{ op: 'set_text', id: 'k1', text: long }] });
+    expect(r.content[0].text).toContain('同组在它正下方的 1 件顺着往下挪');
+    const board = await readBoard(pid);
+    const at = (lid) => Object.values(board.objects).find((e) => e.tag === 'stack' && e.data?.lid === lid);
+    expect(at('k2').y).toBeGreaterThanOrEqual(at('k1').y + at('k1').h);
+  });
+
+  it('reflow 沿用画图时的布局：两列格子改长一条之后重排，还是两列（09-11 桌面会话：组内挪动大半是手工摆回两列）', async () => {
+    await write({ layout: 'grid', cols: 2, tag: 'two', staging: false, nodes: ['一', '二', '三', '四'].map((t, i) => ({ id: `q${i}`, text: t })) });
+    const long = Array.from({ length: 10 }, (_, i) => `第 ${i} 行`).join('\n');
+    const r = await edit({ tag: 'two', ops: [{ op: 'set_text', id: 'q0', text: long }, { op: 'reflow', tag: 'two' }] });
+    expect(r.content[0].text).toMatch(/reflow #two 排成2列的格子/);
+    const board = await readBoard(pid);
+    const at = (lid) => Object.values(board.objects).find((e) => e.tag === 'two' && e.data?.lid === lid);
+    expect(new Set(['q0', 'q1', 'q2', 'q3'].map((l) => at(l).x)).size).toBe(2);
+    expect(at('q2').y).toBeGreaterThanOrEqual(at('q0').y + at('q0').h);   // 变高的那条不压第二行
+  });
+
   it('chalk_edit：写 ui-config 并广播事件', async () => {
     const events = [];
     const t = makeEditBoardTool({ projectId: pid, sharedRoot, ctx: { emit: (e) => events.push(e) } });

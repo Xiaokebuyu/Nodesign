@@ -31,6 +31,10 @@ import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/c
 import { applyFollows } from '../../../lib/board-follow.js';
 import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
 import { placeBeside, overlapIds, solvePlace, lastOfGroup, describePlacement } from '../../../lib/board-place.js';
+import { reflowGroup, pushDownAfterGrow } from '../../../lib/board-reflow.js';
+import { lineCrossings } from '../../../lib/line-route.js';
+import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
+import { seatArtifacts } from '../../runs/board-seater.js';
 import { transformGroup } from '../../../lib/board-transform.js';
 import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
@@ -119,8 +123,9 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
      * @param {Set<string>} exclude  主体自己（和组员）不算障碍
      * @returns {{x,y,how,side,nudged,wanted,pressed,anchorId,groupTag,zone}|{error:string}}
      */
-    const placeTo = (to, box, exclude = new Set()) => {
-      let anchor = null; let anchorId = null; let zone = null; let group = null; let groupTag = null;
+    const resolveAnchor = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });   // 跟 write_on_board / pin_to_board 同一份（09-11 收）
+    const placeTo = async (to, box, exclude = new Set()) => {
+      let anchor = null; let anchorId = null; let zone = null; let group = null; let groupTag = null; let fuzzy = null;
       if (to.with) {
         const g = lastOfGroup({ objects: live }, bareTag(to.with), (id, e) => estimateSizeOn(board, id, e));
         if (!g) return { error: `#${to.with} 里还没有东西，接不上（先 set_tag 或写第一条）` };
@@ -131,19 +136,26 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         const raw = by0 === 'user' ? (vp?.selected?.[0] || null) : by0;
         if (!raw) return { error: "by:'user' 但用户此刻没有选中任何东西 —— 用 'view' 或点名一件" };
         const refId = rid(raw);
-        const r = rectOf(refId);
-        if (!r) return { error: `参照 ${raw} 不在板上` };
-        anchor = r; anchorId = refId; zone = layerOf(refId, live[refId], known);
+        const r = refId && rectOf(refId);
+        if (r) { anchor = r; anchorId = refId; zone = layerOf(refId, live[refId], known); } else {
+          // 精确认不到就走共用解析器（救援入座 + 宽认）；再认不出给候选
+          const now = { ...board, objects: live, zones: liveZones };
+          const a = await resolveAnchor(raw, now);
+          if (!a) return { error: `参照 ${raw} 不在板上 —— ${anchorMissHint(raw, now)}` };
+          if (a.rescued) live[a.anchorId] = a.board.objects[a.anchorId];   // 救援入座已落盘，本调用的当前态补上
+          anchor = a.rect; anchorId = a.anchorId; zone = a.zone; fuzzy = a.fuzzy || null;
+        }
       }
       if (zone === null) zone = vp?.layer || '';
       const viewport = (vp?.camera && (vp.layer || '') === zone) ? vp.camera : null;
       const obstacles = obstaclesNear(zone, exclude);
       const p = solvePlace({ box, anchor, side: to.side || null, group, viewport, obstacles });
       const pressed = overlapIds({ x: p.x, y: p.y, w: box.w, h: box.h }, obstacles);
-      return { ...p, x: Math.round(p.x), y: Math.round(p.y), pressed, anchorId, groupTag, zone };
+      return { ...p, x: Math.round(p.x), y: Math.round(p.y), pressed, anchorId, groupTag, zone, fuzzy };
     };
     const sayWhere = (p) => describePlacement(p, { anchorId: p.anchorId, groupTag: p.groupTag })
-      + (p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : '');
+      + (p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : '')
+      + (p.fuzzy ? `（参照按「${p.fuzzy.from}」认成了 ${p.anchorId}：${p.fuzzy.how}）` : '');
     const report = []; let ok = 0;
     const tagTouched = [];                         // set_tag 这一趟碰过的 [id, tag]（落盘后触发跟随）
     const untag = [];                              // set_tag{tag:''} 要摘的（合并语义表达不了删键，走专用路）
@@ -171,6 +183,14 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         setObj(hid, { ...he, x: he.x + dx, y: he.y + dy });
       }
     };
+    /** 改字变高后，同组压在它正下方的顺着往下推（09-11；排法在 lib/board-reflow.js） */
+    const pushBelow = (i, id, was, newH) => {
+      const tag = live[id]?.tag; if (!tag || !was) return;
+      const others = Object.keys(live).filter((k) => k !== id && live[k]?.tag === tag && Number.isFinite(live[k]?.x) && live[k].kind !== 'scribble').map((k) => ({ id: k, r: rectOf(k) })).filter((m) => m.r);
+      const moves = pushDownAfterGrow({ ...was, h: newH }, was.h, others);
+      for (const { id: k, dy } of moves) { setObj(k, { ...live[k], y: live[k].y + dy }); moveHuggers(k, 0, dy); }
+      if (moves.length) report.push(`· #${i + 1} set_text：它变高了，同组在它正下方的 ${moves.length} 件顺着往下挪（没压字）`);
+    };
 
     for (let i = 0; i < ops.length; i += 1) {
       const o = ops[i];
@@ -193,7 +213,9 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
             try { box2 = await rewriteChalkBody(abs, o.text, e); } catch (ex) {
               fail(ex?.code === 'STATE_TABLE' ? `⛔ ${ex.message}` : `${id} 文件读不到（磁盘上已无此路径？）`); continue;
             }
+            const was = rectOf(id);
             setObj(id, { ...e, w: box2.w, h: box2.h }); ok += 1;
+            pushBelow(i, id, was, box2.h);
             report.push(`· #${i + 1} set_text 重写了板书 ${id} 的正文（线/标注/座位全保留）`);
             continue;
           }
@@ -203,31 +225,43 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           if (o.format) { if (o.format === 'md') data.format = 'md'; else delete data.format; }
           if (o.size) data.size = o.size; if (o.color) data.color = o.color; if (o.font && TEXT_FONTS.includes(o.font)) data.font = o.font;
           const box = textBox(data.t, data.size || 'md', { md: data.format === 'md' });
+          const was = rectOf(id);
           setObj(id, { ...e, data, w: box.w, h: box.h }); ok += 1;
+          pushBelow(i, id, was, box.h);
         } else if (o.op === 'move') {
           const id = rid(o.id); const e = id && live[id];
           // 文件夹卡走自己的分支：它只有坐标，没有 by/seat/tag 那一套（刀 G）
           if (!e && id && isZone(id)) {
             const box = rectOf(id);
-            const p = placeTo(o.to, box, new Set([id]));
+            const p = await placeTo(o.to, box, new Set([id]));
             if (p.error) { fail(p.error); continue; }
             setZone(id, { x: p.x, y: p.y });
             ok += 1;
             report.push(`· #${i + 1} move 文件夹「${id}」→ ${sayWhere(p)}`);
             continue;
           }
-          if (!e) { fail(`${o.id} 不在板上`); continue; }
+          if (!e) { fail(`${o.id} 不在板上 —— ${anchorMissHint(o.id, { ...board, objects: live, zones: liveZones })}`); continue; }
           // seat:'user' 08-28 从「冻结」放开（用户拍板"全部放开试试"）：排位引擎
           // 已经能按用户手感排（inferFlowDir 学票、自动挑侧），硬拒的最大受害者
           // 是用户自己（"帮我挪一下"被 agent 顶回"你自己拖"）。放开但**如实报**：
           // 挪的是他亲手摆的东西，agent 得心里有数、他不认可拖回去就是。
           const wasUser = e.seat === 'user' ? '（该位置原由用户手动设置，现已移动；用户可自行拖回）' : '';
           const box = rectOf(id);
-          const p = placeTo(o.to, box, new Set([id]));
+          const p = await placeTo(o.to, box, new Set([id]));
           if (p.error) { fail(p.error); continue; }
           setObj(id, { ...e, x: p.x, y: p.y, seat: 'agent' });
           moveHuggers(id, p.x - e.x, p.y - e.y);
-          report.push(`· #${i + 1} move → ${sayWhere(p)}${wasUser}`);
+          // 挪完跟自己组的其余成员都不挨着，就说一声（09-11 案：move 到别组那张照片旁边，
+          // 报文只说「right of 照片」，agent 以为落点错了 —— 落点没错，是它离组了）
+          let apart = '';
+          const rest = e.tag ? Object.keys(live).filter((mid) => mid !== id && live[mid]?.tag === e.tag && Number.isFinite(live[mid]?.x) && live[mid].kind !== 'scribble').map(rectOf).filter(Boolean) : [];
+          const gapTo = (m) => Math.max(0, m.x - (p.x + box.w), p.x - (m.x + m.w), m.y - (p.y + box.h), p.y - (m.y + m.h));
+          if (rest.length && Math.min(...rest.map(gapTo)) > UNIT * 3) {
+            const top = Math.min(...rest.map((m) => m.y)); const bottom = Math.max(...rest.map((m) => m.y + m.h));
+            const where = bottom < p.y ? '上方' : top > p.y + box.h ? '下方' : Math.max(...rest.map((m) => m.x + m.w)) < p.x ? '左边' : '右边';
+            apart = `（⚠ 它离开了 #${e.tag}：同组其余 ${rest.length} 件在它${where}，互不挨着）`;
+          }
+          report.push(`· #${i + 1} move → ${sayWhere(p)}${apart}${wasUser}`);
           ok += 1;
         } else if (o.op === 'move_group') {
           const members = Object.entries(live).filter(([, e]) => e.tag === bareTag(o.tag) && Number.isFinite(e?.x));
@@ -236,7 +270,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           const rects = members.map(([id]) => rectOf(id));
           const w = Math.max(...rects.map(r => r.x + r.w)) - bb.x; const h = Math.max(...rects.map(r => r.y + r.h)) - bb.y;
           const memberIds = new Set(members.map(([id]) => id));
-          const p = placeTo(o.to, { w, h }, memberIds);
+          const p = await placeTo(o.to, { w, h }, memberIds);
           if (p.error) { fail(p.error); continue; }
           const dx = Math.round(p.x - bb.x); const dy = Math.round(p.y - bb.y);
           // 08-28 放开：user 座随组平移（相对格局原样保留，学 follow 平移跟随的先例）
@@ -250,7 +284,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           ok += 1;
         } else if (o.op === 'remove') {
           const id = rid(o.id); const e = id && live[id];
-          if (!e) { fail(`${o.id} 不在板上`); continue; }
+          if (!e) { fail(`${o.id} 不在板上 —— ${anchorMissHint(o.id, { ...board, objects: live, zones: liveZones })}`); continue; }
           if (!e.kind) {
             // 板书文件卡：**agent 侧写的**放行（连文件），用户写的和普通产物卡拒。
             // 08-26：agent 侧现在有三类署名（主控 'agent' + 常驻角色 rp-*）。原来死比
@@ -266,7 +300,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         } else if (o.op === 'add_node') {
           const size = (o.size === 'sm' && o.text.length > 40) ? 'md' : (o.size || 'md');
           const box = textBox(o.text, size, { md: o.format === 'md' });
-          const p = placeTo(o.at, box);
+          const p = await placeTo(o.at, box);
           if (p.error) { fail(p.error); continue; }
           const refId = p.anchorId;
           const zone = p.zone;
@@ -283,7 +317,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           // 事后圈重点（08-27 shapes 编辑面）：给**已在板上**的东西补一个手画记号。
           // hug 让它跟着目标走 —— 之前画完的圈是死的，目标一挪就散架。
           const refId = rid(o.around); const r = refId && rectOf(refId);
-          if (!r) { fail(`around ${o.around} 不在板上`); continue; }
+          if (!r) { fail(`around ${o.around} 不在板上 —— ${anchorMissHint(o.around, { ...board, objects: live, zones: liveZones })}`); continue; }
           const seed = `${refId}:m${stamp()}`;
           let sp; let ent;
           if (o.kind === 'underline') {
@@ -323,7 +357,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           if (!(await endpointReal(from, live, board.zones, sharedRoot))) missing.push(o.from);
           if (!(await endpointReal(to, live, board.zones, sharedRoot))) missing.push(o.to);
           if (missing.length) {
-            fail(`端点不在板上也不是存在的工作区路径：${missing.join(' / ')}。read_board 看一眼现在都有谁。`);
+            fail(`端点不在板上也不是存在的工作区路径：${missing.join(' / ')}。${anchorMissHint(missing[0], { ...board, objects: live, zones: liveZones })}`);
             continue;
           }
           const id = `b:a${stamp()}`;
@@ -355,26 +389,33 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         } else if (o.op === 'reflow') {
           const members = Object.entries(live).filter(([, e]) => e.tag === bareTag(o.tag) && Number.isFinite(e?.x) && e.kind !== 'scribble');
           if (!members.length) { fail(`没有 #${o.tag} 的东西`); continue; }
-          const horizontal = o.layout === 'row';
-          const sorted = members.map(([id, e]) => ({ id, e, r: rectOf(id) }))
-            .sort((a, b) => (horizontal ? a.r.x - b.r.x || a.r.y - b.r.y : a.r.y - b.r.y || a.r.x - b.r.x));
-          // 08-28 放开：user 座也进重排 —— 调 reflow 本来就是明确的"求结构"，
-          // 排序按现位置来，用户挑的**顺序**天然保留（他拖到中间的还在中间）。如实报件数。
+          // 09-11：拿这组当初的布局（画图时登记在 board.layouts）按现在的线和尺寸再算一遍；名次有 flow 线按线、
+          // 线外的留原名次，没线按位置。user 座照样进重排（站主：用户拖过的也能被 agent 重排）。排法在 lib/board-reflow.js
+          const rf = reflowGroup(members.map(([id, e]) => ({ id, e, r: rectOf(id) })),
+            { layout: o.layout, cols: o.cols, recorded: board.layouts?.[bareTag(o.tag)], bindings: Object.values(liveBindings) });
+          const sorted = rf.order; const horizontal = rf.layout === 'row';
           const userSeated = sorted.filter(m => m.e.seat === 'user').map(m => m.id);
-          const left = Math.min(...sorted.map(m => m.r.x));
-          const top = Math.min(...sorted.map(m => m.r.y));
-          let cur = horizontal ? left : top;
           for (const m of sorted) {
-            const nx = horizontal ? cur : left;
-            const ny = horizontal ? top : cur;
+            const { x: nx, y: ny } = rf.pos.get(m.id);
             if (nx !== m.e.x || ny !== m.e.y) {
               setObj(m.id, { ...m.e, x: Math.round(nx), y: Math.round(ny) });
               // 圈着这个节点的记号跟着走 —— reflow 之前的病：文字重排、圈留在原地
               moveHuggers(m.id, Math.round(nx) - m.e.x, Math.round(ny) - m.e.y);
             }
-            cur += (horizontal ? m.r.w : m.r.h) + 16;
           }
-          if (userSeated.length) report.push(`· #${i + 1} reflow: 含用户拖过的 ${userSeated.length} 件（顺序按他摆的保留）`);
+          // 报文（09-11 案：reflow 只回「Applied 1/1」，两列的组被按行交错读成一列，agent 以为它照线的顺序排）
+          const name = (m) => m.e.data?.lid || String(m.e.data?.t || m.id).replace(/[#*>\s]+/g, ' ').trim().slice(0, 10);
+          const ids = new Set(sorted.map((m) => m.id));
+          const moved = sorted.filter((m) => live[m.id].x !== m.e.x || live[m.id].y !== m.e.y).length;
+          const zone = layerOf(sorted[0].id, live[sorted[0].id], known);
+          const pressed = [...new Set(sorted.flatMap((m) => overlapIds({ x: live[m.id].x, y: live[m.id].y, w: m.r.w, h: m.r.h }, obstaclesNear(zone, ids))))];
+          const how = rf.byFlow
+            ? `按 flow 线的顺序${sorted.length > rf.onLine ? `，线外的 ${sorted.length - rf.onLine} 件留在原名次` : ''}`
+            : `按原位置${horizontal ? '先左后右' : '先上后下'}`;
+          const shape = { column: '一列', row: '一行', grid: `${rf.cols || '自动'}列的格子`, flow: '分层（根在上）', mindmap: '环形（枢纽居中）' }[rf.layout];
+          report.push(`· #${i + 1} reflow #${bareTag(o.tag)} 排成${shape}（${how}）：${sorted.slice(0, 8).map(name).join(' → ')}${sorted.length > 8 ? ' …' : ''}；挪了 ${moved}/${sorted.length} 件`
+            + (pressed.length ? `（⚠ 排完压住了 ${pressed.slice(0, 3).join('、')}）` : ''));
+          if (userSeated.length) report.push(`· #${i + 1} reflow: 含用户拖过的 ${userSeated.length} 件（${rf.byFlow ? '也按线重排了' : '顺序按他摆的保留'}）`);
           ok += 1;
         } else if (o.op === 'follow') {
           const gTag = bareTag(o.group_tag); const tTag = bareTag(o.target_tag);
@@ -548,6 +589,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
     if (untag.length) { try { await clearTags(projectId, untag); } catch { /* fail-soft */ } }
     // 软删进 .nd/trash/（08-25：删掉的板书要捞得回来，别裸 unlink）
     for (const abs of chalkUnlinks) await trashChalkFile(sharedRoot, abs);
+    report.push(...lineCrossings({ ...board, objects: live, bindings: liveBindings }, { objectIds: Object.keys(objects), bindingIds: Object.keys(bindings) }, known));
     try { ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `改了黑板（${ok} 处）` }); } catch { /* */ }
     return { content: [{ type: 'text', text: `Applied ${ok}/${ops.length} op(s).${report.length ? `\n${report.join('\n')}` : ''}` }] };
   };

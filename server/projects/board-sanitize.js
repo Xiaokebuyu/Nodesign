@@ -446,6 +446,19 @@ export function sanitizeBoard(raw) {
     fCount += 1;
   }
   /**
+   * 组的布局（2026-09-11）：`{ 组tag: { layout, cols? } }`。write_on_board 画图时登记用了
+   * 哪套模板，edit_board 的 reflow 按它重算（没登记的组按 column，跟以前一样）。
+   */
+  const layouts = {};
+  let yCount = 0;
+  for (const [name, l] of Object.entries(raw?.layouts && typeof raw.layouts === 'object' ? raw.layouts : {})) {
+    if (yCount >= 200) break;
+    const tag = sanitizeTag(name);
+    if (!tag || !['free', 'column', 'row', 'grid', 'flow', 'mindmap'].includes(l?.layout)) continue;
+    layouts[tag] = { layout: l.layout, ...(Number.isInteger(l.cols) && l.cols >= 1 && l.cols <= 8 ? { cols: l.cols } : {}) };
+    yCount += 1;
+  }
+  /**
    * 待摆产物（2026-08-30 刀 G）：磁盘上有、但板上还没地方放的工作区相对路径。
    * 入座不再自己铺纸（那是「机器替 agent 定版面」），排不下就进这条队列，
    * 每回合状态块点名，等 agent 规划出地方再落座。
@@ -467,6 +480,7 @@ export function sanitizeBoard(raw) {
     ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}),
     ...(sCount ? { sheets } : {}),
     ...(fCount ? { follows } : {}),
+    ...(yCount ? { layouts } : {}),
     ...(pending.length ? { pending } : {}),
     ...(shelf ? { shelf } : {}),
   };
