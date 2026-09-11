@@ -298,13 +298,20 @@ export const MODELS_BUILTIN = Object.freeze([
   },
   {
     // 真窗口 1M；用户 08-21 深夜拍板压缩窗口 272k（省钱：携带成本 ≈ 1M 的 1/4、缓存失手最坏 $0.12/轮；近 14 天 649 回合只压缩过 11 次）
+    // 09-11 站主要求出口换成 v4.1（Go 目录这天才有 `deepseek-v4.1-flash`，没有单独的 -vision 变体，普通版就收图）。
+    //   实测：文本 / 图（纯色图答对）/ 工具位 / reasoning_effort high 都通，思考字段 reasoning_content，cost 照旧报 0；
+    //   models.dev 上 Go 的标价跟 vision-exp 一样（$0.15/$0.60/$0.003）→ 下面的表价不动。
+    // ⚠️ id 故意**不改**：桌面版按 id 精确匹配 relay 目录，改了 id 没自带钥匙的桌面用户这行会直接消失，
+    //   要等下一版桌面才回来。代次写在 label 上（09-10「出口名跟展示名分开」要的是用户看得见在用哪一代）。
     id: 'deepseek-v4-flash-vision', window: 272_000, brand: 'deepseek',
     standby: 'glm-5.3-flash-merge',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     // 08-21 深夜开闸给所有档（含 basic）：basic 的 $5/天日限 + 表价记账管着它；pro/admin 不限
-    select: { label: 'DeepSeek V4 Flash · 视觉', desc: '响应快 · 支持视觉（单次最多 4 张图片，较早的图片自动省略）· 272k 上下文 · 按用量计入每日额度（高峰 $0.44/$1.32，缓存 $0.014）' },
+    select: { label: 'DeepSeek V4.1 Flash · OpenCode Go', desc: '响应快 · 支持视觉（单次最多 4 张图片，较早的图片自动省略）· 272k 上下文 · 按用量计入每日额度（高峰 $0.44/$1.32，缓存 $0.014）' },
     api: {
-      upstream: 'zenGo', wireModel: 'deepseek-v4-flash-vision-exp',
-      maxImages: 4,   // ⛔ 09-07 实撞 Console Go "At most 4 image(s)"，第 5 张起每发 400；没有替代线，只带最近 4 张（ingress/image-cap.js）
+      upstream: 'zenGo', wireModel: 'deepseek-v4.1-flash',
+      // ⛔ 09-07 实撞 Console Go "At most 4 image(s)"（当时是 vision-exp），第 5 张起每发 400；只带最近 4 张（ingress/image-cap.js）。
+      // ⏸ 09-11 换 v4.1 后 5 张、8 张各打一发都 200 且逐张颜色念得出来；上限没往上探，这个数先不放
+      maxImages: 4,
       sdkAlias: 'claude-opus-4-7[1m]',   // kimi 退役腾出来的 1M 名；窗口由 CLAUDE_CODE_AUTO_COMPACT_WINDOW=272k 钉住
       // 08-26 从 ox-alpha-helper 改过来：Ox 整族下架（上游 401 "Model ox-alpha-free is not supported"），
       // 那条 helper 一起没了。⚠️ 这处失效**完全不出声** —— helper 角色 ingress 不推 onNotice、不报

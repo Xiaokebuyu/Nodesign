@@ -431,8 +431,8 @@ describe('共用 sdkAlias 的内置行（08-25 建；09-08 MiniMax 撤行后样�
   });
 });
 
-describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜）', () => {
-  it('走 zenGo 上游、真名 deepseek-v4-flash-vision-exp、alias opus-4-7[1m]、窗口 272k、helper 是通用 helper 行', () => {
+describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜；09-11 出口换 v4.1）', () => {
+  it('走 zenGo 上游、真名 deepseek-v4.1-flash（id 不改）、alias opus-4-7[1m]、窗口 272k、helper 是通用 helper 行', () => {
     const r = resolveModelRoute('deepseek-v4-flash-vision');
     expect(r.mode).toBe('api');
     expect(r.upstream).toBe(UPSTREAMS.zenGo);
@@ -441,7 +441,7 @@ describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜）', () => 
     expect(r.window).toBe(272_000);
     expect(resolveModelContextWindow(r.sdkAlias)).toBeGreaterThanOrEqual(r.window);
     expect(r.fastModel).toBe('deepseek-v4-flash-helper');   // 08-26 从 ox-alpha-helper 改过来（Ox 整族下架，那条 helper 的失效不出声）
-    expect(resolveWireModel('claude-opus-4-7')?.wireModel).toBe('deepseek-v4-flash-vision-exp');
+    expect(resolveWireModel('claude-opus-4-7')?.wireModel).toBe('deepseek-v4.1-flash');
     expect(resolveWireModel('claude-opus-4-5')).toBe(null);   // 那个 200k 空名没再占
     expect(resolveWireModel('claude-sonnet-4-6[1m]')).toBe(null);   // 3.1-pro 退役腾出的名 = 现在的共用别名，不进全表反查
     expect(resolveWireModel('claude-sonnet-5')).toBe(null);   // 订阅默认名仍不可路由
