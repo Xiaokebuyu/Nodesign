@@ -220,6 +220,8 @@ NoDesign 于 2026 年 4 月启动，目前处于公开测试阶段，版本迭�
 | 外部 Agent 与平台接入 | 规划中，见“开放与扩展” |
 | 互动演出模式 | 实验性功能，尚未完整开放 |
 
+各版本的更新内容见 [CHANGELOG.md](https://github.com/Xiaokebuyu/Nodesign/blob/main/CHANGELOG.md)。
+
 | 平台 | 状态 |
 |---|---|
 | Windows | 桌面版已发布，支持自动更新 |

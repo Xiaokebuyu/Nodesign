@@ -215,6 +215,8 @@ NoDesign started in April 2026 and is in public beta, with frequent releases. As
 | External agent and platform integrations | Planned; see Open platform |
 | Interactive performance mode | Experimental; not yet fully available |
 
+Release notes (in Chinese) are in [CHANGELOG.md](https://github.com/Xiaokebuyu/Nodesign/blob/main/CHANGELOG.md).
+
 | Platform | Status |
 |---|---|
 | Windows | Desktop app released, with automatic updates |
