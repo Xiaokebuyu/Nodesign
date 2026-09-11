@@ -22,6 +22,7 @@ import path from 'path';
 import { getSharedDir, ensureProjectWorkspace, gitRenamesSince } from './workspace.js';
 import { CHALK_DIR, trashChalkFile } from '../lib/chalk.js';
 import { estimateSizeOn } from '../lib/board-kind-sizes.js';
+import { writeFileAtomic } from '../lib/atomic-write.js';   // 锁外有读者：清空再写会被读成空画布（09-12）
 
 export {
   DEFAULT_BOARD_SIZE, MAX_BOARD_BYTES, MAX_OBJECTS, MAX_ZONES, MAX_BINDINGS,
@@ -66,7 +67,7 @@ export async function writeBoard(pid, board) {
     throw err;
   }
   await ensureProjectWorkspace(pid);
-  await fs.writeFile(boardPath(pid), json, 'utf8');
+  await writeFileAtomic(boardPath(pid), json);
 }
 
 /** 全量替换（前端 reset / 兼容旧 PUT）。 */

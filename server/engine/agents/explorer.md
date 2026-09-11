@@ -42,7 +42,6 @@
      写 `'just confirm this URL responds and report HTTP status + Content-Type header'`，
      fetch 完看返回。hotlink 验证 ≤5 条（候选超 5 条主 agent 也用不完）
 - `Read` / `Glob` / `Grep` —— 看本地 `./assets/` 里的素材 / `./spec.json` 决策档案
-- `TodoWrite` —— 3 步以上研究列计划
 
 **工具集外的工具**（用了也无效，且打破子代理边界）：Write / Edit / Bash / screenshot_canvas / export /
 AskUserQuestion —— 你的产物是信息不是修改，跟用户对话由主 agent 负责。研究就是研究。

@@ -46,6 +46,9 @@ export const STAGE_DENY = Object.freeze([
   'CronCreate', 'CronDelete', 'CronList', 'ScheduleWakeup', 'Monitor', 'RemoteTrigger',
   'PushNotification', 'Workflow', 'DesignSync', 'EnterWorktree', 'ExitWorktree',
   'ListMcpResourcesTool', 'ReadMcpResourceTool', 'ReadMcpResourceDirTool',
+  // 任务清单一族：SDK 0.3.268 起对 Claude 5 不再默认给，但喂 SDK 的名字是 opus-4-7 这类别名的 API 行
+  // 还默认有 —— 显式挡掉，两条通路一致（演出的提示词和技能包都用不到它们）
+  'TodoWrite', 'TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList',
   // 宿主机器上挂着的外部 MCP（Canva / Notion / …）—— 我们自己的 nodesign 服务器
   // 走 mcpServers 显式挂，不受这条影响
   'mcp__claude_ai_*', 'mcp__plugin_*', 'mcp__codex*', 'mcp__websearch*',
@@ -111,7 +114,9 @@ export class StageSession {
         ...(o.resume ? { resume: o.resume } : (o.sessionId ? { sessionId: o.sessionId } : {})),
         ...(o.maxBudgetUsd ? { maxBudgetUsd: o.maxBudgetUsd } : {}),
         ...(o.thinking ? { thinking: o.thinking } : {}),
-        systemPrompt: o.systemPrompt,
+        // snapshot:false —— SDK 0.3.267 起默认把系统提示录进转录、resume 沿用录下的那份。
+        // 演出「设定改了就重开」是同 sid resume，靠的正是重开时按新设定重新渲染（见 system-prompts.composeSystemPrompt）
+        ...(o.systemPrompt ? { systemPrompt: { type: 'custom', prompt: o.systemPrompt, snapshot: false } } : {}),
         // 一个都不加载（站主 2026-09-05 拍板）：RP 模式下项目 CLAUDE.md 是设计
         // 工作台的东西，进了戏就是污染。演出要的设定全部写进 systemPrompt，
         // 上一场记住的事由 stage/memory/INDEX.md 接回去。

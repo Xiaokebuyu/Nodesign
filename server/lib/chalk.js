@@ -21,6 +21,7 @@
 import path from 'node:path';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 import { promises as fs } from 'node:fs';
+import { writeFileAtomic } from './atomic-write.js';
 
 export const CHALK_DIR = 'notes/板书';
 const FM_RE = /^---\n([\s\S]{0,800}?)\n---\n?/;
@@ -92,7 +93,7 @@ export async function writeChalkFile(sharedRoot, fileName, content, { overwrite 
     }
   }
   const abs = path.join(dir, name);
-  await fs.writeFile(abs, content, 'utf8');
+  await writeFileAtomic(abs, content);   // 原地重写时画布 / agent 可能正在读（09-12，同 board.json）
   return `${CHALK_DIR}/${name}`;
 }
 

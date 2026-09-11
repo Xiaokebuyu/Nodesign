@@ -17,7 +17,6 @@
  *   run.delta.tool_use         { round, blockId, name, input }
  *   run.delta.tool_input       { round, blockId, name, filePath?, append?, done? }  Edit/Write 入参真流式（节流后的字段尾巴增量，工作台舞台层直播代码用）
  *   run.delta.tool_result      { round, blockId, name, ok, output?, error? }
- *   run.todo.updated           { todos }
  *   run.cancelled              { reason }
  *   run.done                   { finalText, artifactPath?, snapshot }
  *   run.error                  { message, code?, stack? }
@@ -206,7 +205,6 @@ export const Events = {
     // C24：image content blocks（base64）单独传，让前端 <img src="data:..."> 渲染
     ...(images && images.length > 0 ? { images } : {}),
   }),
-  todoUpdated: (todos) => ({ type: 'run.todo.updated', todos }),
   cancelled: (reason) => ({ type: 'run.cancelled', reason }),
   done: (finalText, artifactPath, snapshot) => ({
     type: 'run.done', finalText, artifactPath, snapshot,

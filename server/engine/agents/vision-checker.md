@@ -59,9 +59,6 @@ do that page.
      Contrast of Rhythm / Delete Before Decorate)
    - Tier 1 fundamentals (readability / hierarchy / alignment / spacing /
      contrast / cropping)
-   Use `TodoWrite` to track per-page progress so the parent can see
-   what you've checked.
-
    Performance hint: you can fire 2-3 `pageIndex` screenshots in parallel
    in one tool batch — chromium handles concurrent shot safely. Don't go
    above 3-way parallel (memory pressure).
@@ -109,7 +106,7 @@ S5. **Output per page** using the same shape as the deck format below, but
    Group ISSUES by page so the parent can navigate.
 
 You do NOT modify the canvas. Read-only tools: screenshot, list_pages,
-Read (for the brief / notes the parent points at), TodoWrite. The parent agent acts
+Read (for the brief / notes the parent points at). The parent agent acts
 on your findings.
 
 ### When the parent points at a single page

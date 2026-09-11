@@ -1068,10 +1068,6 @@ function summarizeToolInput(toolName, input) {
   if (toolName === 'Glob' || toolName === 'Grep') {
     return input.pattern || input.glob || '';
   }
-  if (toolName === 'TodoWrite') {
-    const todos = input.todos || [];
-    return `${todos.length} todos`;
-  }
   if (isSubagentTool(toolName)) {
     return `${input.subagent_type || ''}: ${(input.prompt || input.description || '').slice(0, 60)}`;
   }

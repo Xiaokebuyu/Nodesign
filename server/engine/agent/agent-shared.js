@@ -57,7 +57,11 @@ import { TOOL_INPUT_STREAM_FIELDS, toolInputStreams, pumpToolInputStream } from 
 //     永远调不到任何 SDK skill。SDK 文档 sdk.d.ts:1651 那句 "do not need to
 //     add Skill to allowedTools" 只承诺权限层，没承诺可见层。
 export const DEFAULT_TOOL_ALLOWLIST = [
-  'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite', 'Bash',
+  // ⛔ TodoWrite 别再加回来（09-12 实测）：CLI 里已经没有这件工具了 —— 默认工具面 26 件里没有，
+  // 写进这份清单也不会出现（0.3.263 / 0.3.269 两版、Sonnet 5 与 Haiku 4.5 四组都一样），
+  // 模型会去 ToolSearch 找两趟然后放弃。替代品是 TaskCreate/TaskGet/TaskUpdate/TaskList（列进来就有），
+  // 09-12 站主定：这件事整条不要了，现在的模型不靠它也能把步骤说清楚。
+  'Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash',
   'AskUserQuestion',
   'WebFetch',
   'Task',
@@ -343,16 +347,6 @@ function handleAssistantBlocks(ctx, content, skipTextThinking = false) {
         ctx.emit(Events.deltaToolUse(ctx.counters.turns, block.id, block.name, block.input));
         ctx.incrementTool(false);
         if (!ctx.counters.firstTool) ctx.counters.firstTool = block.name;   // 反问率：第一个工具是不是 AskUserQuestion
-
-        // Phase 1：TodoWrite 工具单独再 emit 一条 todoUpdated。
-        // SDK 不会在 type:'system' 里专门推 TodoWrite 状态 —— agent 用工具
-        // 写计划时，input.todos 就是完整的 [{ content, status, activeForm }] 列表
-        // （sdk-tools.d.ts:530 TodoWriteInput）。
-        // tool_use 只够前端展示"调了 TodoWrite"，但拿不到结构化的 todo 列表给
-        // 计划面板用，所以这里平行 emit 一次 run.todo.updated。
-        if (block.name === 'TodoWrite' && block.input && Array.isArray(block.input.todos)) {
-          ctx.emit(Events.todoUpdated(block.input.todos));
-        }
         break;
       // 其他 block 类型（redacted_thinking / image / document）忽略
     }

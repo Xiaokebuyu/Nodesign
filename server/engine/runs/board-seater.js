@@ -40,7 +40,7 @@ import { getViewpoint } from '../../projects/viewpoint-store.js';
 import { parseChalk, CHALK_DIR } from '../../lib/chalk.js';
 import { isReservedFile, HARD_IGNORE_DIRS, RESERVED_DIRS, DRAFTS_DIR } from '../../lib/task-scan.js';
 import { applyFollows } from '../../lib/board-follow.js';
-import { canvasIdForRel } from './board-tasklist.js';
+import { canvasIdForRel } from '../../lib/canvas-id.js';
 import { cardIdForPath } from '../../lib/kinds/index.js';
 
 const MAX_SEATS_PER_RUN = 24;   // 一轮生成几百个文件的（构建产物漏网）也别刷爆板

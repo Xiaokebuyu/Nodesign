@@ -21,7 +21,6 @@
  *   run.tool_use.started            → push tool 消息 status='running'
  *   run.delta.tool_use              → 补 toolInput
  *   run.delta.tool_result           → 补 status / output / error（images 不进快照，太大）
- *   run.todo.updated                → todos 覆盖
  *   run.context_usage               → contextUsage 覆盖
  *   run.done / error / cancelled    → 标记 ended（保留 GRACE 毫秒，见下），不再折叠
  *   run.query.end                   → 清
@@ -115,7 +114,6 @@ export function getLiveTurnSnapshot(sessionId) {
     startedAt: st.startedAt,
     running: !st.endedAt,
     messages: st.messages,
-    todos: st.todos,
     contextUsage: st.contextUsage,
   };
 }
@@ -134,7 +132,6 @@ function fold(evt) {
       startedAt: evt.ts || new Date().toISOString(),
       seq: evt.seq || 0,
       messages: [],
-      todos: [],
       contextUsage: null,
       endedAt: null,
       _msgCounter: 0,
@@ -207,9 +204,6 @@ function fold(evt) {
       if (hit) hit.groupSummary = evt.summary;
       break;
     }
-    case 'run.todo.updated':
-      if (runMatches && Array.isArray(evt.todos)) st.todos = evt.todos;
-      break;
     case 'run.context_usage':
       if (runMatches) st.contextUsage = evt;
       break;

@@ -215,12 +215,17 @@ export function renderAgentCore(v) {
  * 组装 SDK 的 systemPrompt 选项。判据只有通路：
  *   subscription → claude_code 预设 + 平台协议作 append（OAuth 要 Claude Code 身份段）
  *   api          → 自定义：基础约定 + 平台协议
+ *
+ * ⭐ snapshot:false（SDK 0.3.267 起默认把系统提示录进转录、续跑沿用录下的那份，要到压缩才换）。
+ * 我们的提示每次起 query 都按当下重新渲染：日期、模型名与窗口、外审档、序言的修改都靠这个生效，
+ * 换模型行（空闲时订阅 ↔ API 也能换）更是整套换掉。开录制的收益只在「重开时提示变了、缓存又没过期」
+ * 那一下，09-12 评估后不开。
  * @param {{ mode: 'subscription'|'api', prelude: string, core?: string }} args  api 通路 core 必填
  */
 export function composeSystemPrompt({ mode, prelude, core = null }) {
-  if (mode === 'subscription') return { type: 'preset', preset: 'claude_code', append: prelude };
+  if (mode === 'subscription') return { type: 'preset', preset: 'claude_code', append: prelude, snapshot: false };
   if (typeof core !== 'string' || !core) throw new Error('[system-prompts] composeSystemPrompt: api 通路缺 core');
-  return { type: 'custom', prompt: `${core}\n\n${prelude}` };
+  return { type: 'custom', prompt: `${core}\n\n${prelude}`, snapshot: false };
 }
 
 /** 按模型表渲染基础约定（session-loop 用）。表里没有这一行就抛错，不静默渲染假环境块 */

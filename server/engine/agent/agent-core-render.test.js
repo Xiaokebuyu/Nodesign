@@ -42,12 +42,14 @@ describe('composeSystemPrompt：按通路二选一', () => {
   const prelude = renderPrelude('strict', {});
   it('订阅行 = claude_code 预设 + 平台协议作 append（OAuth 要 Claude Code 身份段）', () => {
     const sp = composeSystemPrompt({ mode: 'subscription', prelude });
-    expect(sp).toEqual({ type: 'preset', preset: 'claude_code', append: prelude });
+    expect(sp).toEqual({ type: 'preset', preset: 'claude_code', append: prelude, snapshot: false });
   });
   it('API 行 = 自定义：基础约定在前、平台协议在后', () => {
     const core = renderAgentCore(V);
     const sp = composeSystemPrompt({ mode: 'api', prelude, core });
     expect(sp.type).toBe('custom');
+    // SDK 0.3.267 起不写就默认录进转录、续跑沿用旧提示；两条通路都必须显式关
+    expect(sp.snapshot).toBe(false);
     expect(sp.prompt.startsWith(core)).toBe(true);
     expect(sp.prompt.endsWith(prelude)).toBe(true);
     expect(sp.prompt).not.toContain('claude_code');
