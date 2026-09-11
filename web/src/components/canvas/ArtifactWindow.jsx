@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useDeviceClass } from '../../lib/device-class.js';
 import { useDockYield, yieldInset } from '../../lib/dock-yield.js';
-import { PAPER, PAPER_SHADOW, GRAIN, INK_SURFACE, pinFill, PIN_SHADOW } from '../../lib/paper.js';
+import { PAPER, PAPER_SHADOW, GRAIN, TOOL_SURFACE, pinFill, PIN_SHADOW } from '../../lib/paper.js';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE, RADIUS } from '../../lib/theme.js';
 import { POP_IN } from '../../lib/board-geometry.js';
 import { exportItemsFor } from '../../lib/export-formats.js';
@@ -305,10 +305,10 @@ export function WindowBanner({ children }) {
   );
 }
 
-/** 工具条上的墨色小读数（缩放百分比那种），跟 INK_SURFACE 同一套色 */
+/** 工具条上的墨色小读数（缩放百分比那种），跟 TOOL_SURFACE 同一套色 */
 export const INK_READOUT = {
   fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs,
-  color: INK_SURFACE.text,
+  color: TOOL_SURFACE.text,
 };
 
 /**

@@ -9,7 +9,7 @@ import { versionOfFile } from '../../lib/file-versions.js';
 import ArtifactWindow, { exportToolGroup, INK_READOUT } from './ArtifactWindow.jsx';
 import ToolbarButton, { TOOL_BTN } from '../ui/ToolbarButton.jsx';
 import DocxRegionSelect from './DocxRegionSelect.jsx';
-import { INK_SURFACE, PAPER_SHADOW } from '../../lib/paper.js';
+import { TOOL_SURFACE, PAPER_SHADOW } from '../../lib/paper.js';
 
 /**
  * DocxWindow —— word 文档的产物窗（2026-08-17，跟 DeckWindow / SiteWindow 并列的第三种）
@@ -163,10 +163,10 @@ export default function DocxWindow({
           title="这个文件夹里的文档（多版本并排放，选一份看）"
           style={{
             maxWidth: 180, height: 24, padding: '0 4px',
-            // 工具栏是墨面（INK_SURFACE），控件配色跟着它走 —— 白底 select 压在
+            // 工具栏是墨面（TOOL_SURFACE），控件配色跟着它走 —— 白底 select 压在
             // 墨面药丸上就是「一条工具栏两种物料」（SitePublishControl 踩过的同一课）
-            border: `1px solid ${INK_SURFACE.hair}`,
-            borderRadius: TOOL_BTN.radius, background: 'transparent', color: INK_SURFACE.text,
+            border: `1px solid ${TOOL_SURFACE.hair}`,
+            borderRadius: TOOL_BTN.radius, background: 'transparent', color: TOOL_SURFACE.text,
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, cursor: 'pointer',
           }}
         >

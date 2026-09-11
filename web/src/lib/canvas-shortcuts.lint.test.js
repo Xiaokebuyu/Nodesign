@@ -17,6 +17,8 @@ const SRC = {
   board: fs.readFileSync(path.join(HERE, '../components/canvas/BoardCanvas.jsx'), 'utf8'),
   // 工具栏收放（09-12）：监听住在工具栏自己身上
   toolbar: fs.readFileSync(path.join(HERE, '../components/ui/FloatingToolbar.jsx'), 'utf8'),
+  // 快捷键提示那一列自己的收放
+  corner: fs.readFileSync(path.join(HERE, '../components/canvas/CanvasCorner.jsx'), 'utf8'),
 };
 
 describe('画布快捷键表跟真监听对得上', () => {
@@ -29,7 +31,7 @@ describe('画布快捷键表跟真监听对得上', () => {
   });
 
   it('镜头 / 工具栏监听里的每个键码都在表里（加了新键得来这儿登记，不然没人知道）', () => {
-    for (const [src, min] of [['camera', 5], ['toolbar', 1]]) {
+    for (const [src, min] of [['camera', 5], ['toolbar', 1], ['corner', 1]]) {
       const codes = new Set([...SRC[src].matchAll(/e\.code\s*[!=]==\s*'(\w+)'/g)].map((m) => m[1]));
       expect(codes.size, `${src} 一个键码都没抠到够数，说明监听的写法变了，这条判据得跟着改`).toBeGreaterThanOrEqual(min);
       const listed = SHORTCUTS.filter((s) => s.probe.src === src).flatMap((s) => s.probe.has).join('\n');

@@ -49,6 +49,8 @@ export const SHORTCUTS = [
     probe: { src: 'board', has: ["e.key !== 'Delete' && e.key !== 'Backspace'"] } },
   { id: 'esc', group: 'other', keys: [['Esc']], label: '退一层 / 关掉浮层',
     probe: { src: 'board', has: ["e.key !== 'Escape'"] } },
+  { id: 'hints', group: 'other', keys: [['Mod', '/']], label: '收起 / 展开快捷键提示',
+    probe: { src: 'corner', has: ["e.code !== 'Slash'"] } },
 ];
 
 /** 这两个记号是动作不是键：印成字，不画键帽 */

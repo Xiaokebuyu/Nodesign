@@ -31,7 +31,7 @@ import ExportPicker from '../components/project/ExportPicker.jsx';
 import SessionListModal from '../components/project/SessionListModal.jsx';
 import ElicitationModal from '../components/run/ElicitationModal.jsx';
 import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_SANS, FONT_KAI, FONT_MONO, STAGE } from '../lib/theme.js';
-import { INK_SURFACE } from '../lib/paper.js';
+import { PAPER_SHADOW } from '../lib/paper.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { newId, newUserMessageId } from '../lib/helpers.js';
@@ -2187,9 +2187,11 @@ export default function ProjectWorkspace() {
               zIndex: 130,
               display: 'inline-flex', alignItems: 'center', gap: GAP.sm,
               padding: `${GAP.sm}px ${GAP.lg}px`,
-              border: 'none', borderRadius: RADIUS.md, cursor: 'pointer',
-              background: INK_SURFACE.bg, color: INK_SURFACE.text,
-              boxShadow: INK_SURFACE.shadow,
+              // 09-12：工具面改成纸之后这颗不能再借它的配色（那会变成一张浅纸片，
+              // 一个要人点的动作读不出来）。它是动作按钮，给实墨 + 纸的硬影
+              border: 'none', borderRadius: 0, cursor: 'pointer',
+              background: COLOR.btn, color: COLOR.btnText,
+              boxShadow: PAPER_SHADOW.near,
               fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, letterSpacing: '0.04em',
               animation: 'ndPopIn 160ms cubic-bezier(0.32, 0.72, 0, 1)',
             }}

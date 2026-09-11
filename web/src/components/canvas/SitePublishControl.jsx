@@ -8,8 +8,8 @@
  * ## 配色：墨面，不是纸面（2026-08-13）
  *
  * 它 08-13 从窗口头部的名牌条搬进了那条常驻工具栏，而工具栏是**墨色**的
- * （INK_SURFACE）。搬过去时只是塞了个纸色底的盒子把它裹住 —— 一条工具栏上
- * 两种物料，看着就是没做完。现在整个换到 INK_SURFACE 那套：底色透明、字用
+ * （TOOL_SURFACE）。搬过去时只是塞了个纸色底的盒子把它裹住 —— 一条工具栏上
+ * 两种物料，看着就是没做完。现在整个换到 TOOL_SURFACE 那套：底色透明、字用
  * 墙色、hover 用同一档半透明白。
  *
  * 唯一保留的彩色是**状态色**：已发布那颗绿点、下线确认那一下的红。
@@ -19,7 +19,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Rocket, ExternalLink, Copy, RefreshCw, CloudOff, Loader2 } from 'lucide-react';
 import { GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
-import { INK_SURFACE } from '../../lib/paper.js';
+import { TOOL_SURFACE } from '../../lib/paper.js';
 import ToolbarButton, { TOOL_BTN, toolPillStyle } from '../ui/ToolbarButton.jsx';
 import { Publish } from '../../lib/api.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
@@ -84,7 +84,7 @@ export default function SitePublishControl({ projectId, task, root = null }) {
 
   if (busy) {
     return (
-      <span style={{ ...pill, color: INK_SURFACE.textDim }}>
+      <span style={{ ...pill, color: TOOL_SURFACE.textDim }}>
         <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
         <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
         {site ? '更新中…' : '上线中…'}
@@ -113,7 +113,7 @@ export default function SitePublishControl({ projectId, task, root = null }) {
         href={site.url} target="_blank" rel="noreferrer"
         title={site.url}
         style={{
-          ...pill, textDecoration: 'none', color: INK_SURFACE.text,
+          ...pill, textDecoration: 'none', color: TOOL_SURFACE.text,
           background: 'rgba(120,190,120,0.16)', maxWidth: 190,
         }}
       >

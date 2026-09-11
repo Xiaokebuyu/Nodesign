@@ -585,4 +585,8 @@ export default {
   '收起工具栏': 'Hide toolbar',
   '展开工具栏': 'Show toolbar',
   '收起 / 展开工具栏': 'Hide / show toolbar',
+  '快捷键': 'Shortcuts',
+  '收起快捷键提示': 'Hide the shortcut hints',
+  '展开快捷键提示': 'Show the shortcut hints',
+  '收起 / 展开快捷键提示': 'Hide / show the shortcut hints',
 };

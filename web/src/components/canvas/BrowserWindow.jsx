@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ArrowLeft, RotateCw, Hand, Play, Loader2, Globe, PowerOff, FolderOpen, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { COLOR, CANVAS, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
-import { INK_SURFACE } from '../../lib/paper.js';
+import { TOOL_SURFACE } from '../../lib/paper.js';
 
 /** 地址读数：百分号编码的中日文解回来给人看（tower.jp/search/item/%E7%9B… 没人读得了）；解不动就原样 */
 function displayUrl(u) { try { return decodeURI(u); } catch { return u; } }
@@ -337,9 +337,9 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
           padding: `0 ${GAP.sm}px`, maxWidth: 420, fontFamily: FONT_MONO,
-          // 工具栏是墨面（INK_SURFACE.bg），字必须用面上的纸色 —— 原来写成纸上的墨色
+          // 工具栏是墨面（TOOL_SURFACE.bg），字必须用面上的纸色 —— 原来写成纸上的墨色
           // COLOR.text2，墨字压墨底，整格看着就是一条空的长块（2026-08-22 用户截图报）
-          fontSize: FONT_SIZE.xs, color: INK_SURFACE.text,
+          fontSize: FONT_SIZE.xs, color: TOOL_SURFACE.text,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', userSelect: 'text',
         }} title={addr || ''}>
           <Globe size={12} style={{ flexShrink: 0, opacity: 0.6 }} />

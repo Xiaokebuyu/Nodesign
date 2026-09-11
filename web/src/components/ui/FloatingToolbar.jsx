@@ -3,7 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import EdgeTab, { TAB_HIT, TAB_LEN } from './EdgeTab.jsx';
 import { t } from '../../lib/i18n.js';
 import { isMacPlatform } from '../../lib/canvas-shortcuts.js';
-import { INK_SURFACE } from '../../lib/paper.js';
+import { TOOL_SURFACE, GRAIN } from '../../lib/paper.js';
 import ToolbarButton, { TOOL_BTN } from './ToolbarButton.jsx';
 import { FONT_SANS, FONT_SIZE, GAP } from '../../lib/theme.js';
 import { usePanelState } from '../layout/PanelManager.jsx';
@@ -319,7 +319,17 @@ export default function FloatingToolbar({
         zIndex: zIndex ?? (panel?.zIndex || 400),
         // 收着 = 整条 display:none（不是透明）：底下的东西点得到；StageLayer 量不到它，
         // 舞台卡就落回底边
-        display: open ? 'flex' : 'none', flexDirection: stack, alignItems: 'center', gap: GAP.xs,
+        display: open ? 'flex' : 'none', flexDirection: stack, alignItems: 'center',
+        /**
+         * 09-12 印刷风（站主看样张选的 A「牛皮纸条」）：**整条是一张纸**，不再是几颗
+         * 深色药丸并排。组与组之间由 ToolGroup 画一道浅线，所以这里 gap = 0。
+         * 跟内容分开靠的是实墨描边 + 当前工具那块反白，不靠换一种材质。
+         */
+        gap: 0,
+        background: TOOL_SURFACE.bg,
+        backgroundImage: GRAIN,
+        boxShadow: TOOL_SURFACE.shadow,
+        padding: 4,
         /**
          * 排不下就折行：**不给横向滚动**（整站在手机上只该上下滑）。
          * 按钮一律不缩 —— 触屏上 30px 已经是下限，再小就点不准了。
@@ -346,9 +356,12 @@ export default function FloatingToolbar({
     >
       {/* ⚠️ 判据要带上 `node` 组：只看 items.length 的话，`node` 逃生口
           （站点的「上线」控件）会被整个过滤掉 —— 加了工具却不显示，不报错。 */}
-      {groups.filter(g => g && (g.node || g.items?.length)).map(g => (
-        <ToolGroup key={g.id} group={g} />
-      ))}
+      {(() => {
+        const gs = groups.filter(g => g && (g.node || g.items?.length));
+        return gs.map((g, i) => (
+          <ToolGroup key={g.id} group={g} stack={stack} last={i === gs.length - 1} />
+        ));
+      })()}
       {/* 「收起」：跟其他组同一种墨面容器，永远排在最末 —— 它管的是这条工具栏
           自己，不跟内容组抢位置 */}
       {collapsible && (
@@ -373,28 +386,31 @@ export default function FloatingToolbar({
   );
 }
 
-function ToolGroup({ group }) {
+/** 组与组之间那一道浅线（09-12：整条是一张纸，分组靠线不靠间距） */
+function divider(stack, last) {
+  if (last) return null;
+  return stack === 'column'
+    ? { borderBottom: `1px solid ${TOOL_SURFACE.hair}` }
+    : { borderRight: `1px solid ${TOOL_SURFACE.hair}` };
+}
+
+function ToolGroup({ group, stack = 'row', last = false }) {
   /**
    * 逃生口：`node` 组直接放一段自己的 JSX（站点的「上线」控件走这条）。
    *
-   * 容器跟别的组**一模一样**（墨面 + 同样的圆角内衬）。一度给它单独套过纸色
-   * 底，想省下重写配色的功夫 —— 结果一条工具栏上两种物料，看着就是没做完。
-   * 内容自己按 INK_SURFACE 配色，这里不给它特殊待遇。
+   * 容器跟别的组**一模一样**。一度给它单独套过一层底色，想省下重写配色的功夫 ——
+   * 结果一条工具栏上两种物料，看着就是没做完。内容自己按 TOOL_SURFACE 配色，
+   * 这里不给它特殊待遇。
    */
   if (group.node) {
     return (
       <div style={{
         display: 'flex', alignItems: 'center',
-        background: INK_SURFACE.bg,
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        borderRadius: 14,
-        // 与图标组同高：内衬 4 + 内容撑到一颗按钮的高度（TOOL_BTN.height）。原来只包着文字的
+        // 与图标组同高：内容撑到一颗按钮的高度（TOOL_BTN.height）。原来只包着文字的
         // 自然高度，地址读数 / 站点「上线」控件那一格比旁边的按钮组矮一截（2026-08-22 用户报）
-        padding: `4px ${GAP.sm}px`,
+        padding: `0 ${GAP.sm}px`,
         minHeight: TOOL_BTN.height,
-        boxSizing: 'content-box',
-        boxShadow: INK_SURFACE.shadow,
+        ...divider(stack, last),
       }}>
         {group.node}
       </div>
@@ -410,12 +426,8 @@ function ToolGroup({ group }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: boxed ? GAP.xs : 2,
-      background: INK_SURFACE.bg,
-      backdropFilter: 'blur(8px)',
-      WebkitBackdropFilter: 'blur(8px)',
-      borderRadius: 14,
-      padding: boxed ? `${GAP.xs}px ${GAP.sm}px` : 4,
-      boxShadow: INK_SURFACE.shadow,
+      padding: `0 ${GAP.sm}px`,
+      ...divider(stack, last),
     }}>
       {group.items.map(it => (
         <ToolbarButton

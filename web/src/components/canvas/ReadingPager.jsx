@@ -34,7 +34,7 @@
  * 各画各的，翻页器整个被压在工具栏底下（量到 y 605-652，工具栏占 524-646）。
  * ⭐ 两条底部居中的条撞在一起是**版面问题不是位置问题**，挪几个像素只是把撞车
  * 推迟到下一次有人往工具栏里加东西。所以走工具栏自带的 `node` 组逃生口（漏斗和
- * 站点「上线」控件走的同一条），配色一律 INK_SURFACE —— 一条工具栏上两种物料
+ * 站点「上线」控件走的同一条），配色一律 TOOL_SURFACE —— 一条工具栏上两种物料
  * 看着就是没做完，那条规矩记在 FloatingToolbar 的 ToolGroup 头上。
  *
  * ⚠️ 命中区 40px 宽 —— 08-21 记过「按钮一律不缩，30px 是触屏下限」，翻页是高频
@@ -42,7 +42,7 @@
  */
 import { useMemo, useEffect, useRef, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { INK_SURFACE } from '../../lib/paper.js';
+import { TOOL_SURFACE } from '../../lib/paper.js';
 import { TOOL_BTN } from '../ui/ToolbarButton.jsx';
 import { objectRects } from '../../lib/board-rects.js';
 import { useDeviceEnv, isTouchLane } from '../../lib/device-class.js';
@@ -143,7 +143,7 @@ function Arrow({ dir, disabled, onClick, label }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'transparent', border: 'none', padding: 0,
         borderRadius: TOOL_BTN.radiusIcon,
-        color: disabled ? INK_SURFACE.textDim : INK_SURFACE.text,
+        color: disabled ? TOOL_SURFACE.textDim : TOOL_SURFACE.text,
         opacity: disabled ? 0.45 : 1,
         cursor: disabled ? 'default' : 'pointer',
       }}
@@ -161,7 +161,7 @@ export default function ReadingPager({ index, total, onStep }) {
       <span style={{
         minWidth: 38, textAlign: 'center',
         fontSize: TOOL_BTN.fontSize, letterSpacing: '0.02em',
-        color: INK_SURFACE.text, whiteSpace: 'nowrap', userSelect: 'none',
+        color: TOOL_SURFACE.text, whiteSpace: 'nowrap', userSelect: 'none',
       }}>{at}/{total}</span>
       <Arrow dir={1} disabled={at >= total} onClick={() => onStep(1)} label="下一件" />
     </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { GAP, FONT_SANS, FONT_SIZE } from '../../lib/theme.js';
-import { INK_SURFACE } from '../../lib/paper.js';
+import { TOOL_SURFACE } from '../../lib/paper.js';
 
 /**
  * 工具条上的一颗按钮 —— **全站唯一那一份**。
@@ -18,19 +18,21 @@ import { INK_SURFACE } from '../../lib/paper.js';
  *
  * ## 三种形态，一套身位
  *
- *   纯图标   30×30 正圆（当前工具那种实心圆）
- *   带文字   高 30、左右各 GAP.sm、圆角 9
+ *   纯图标   30×30（09-12 起是方的，不是正圆）
+ *   带文字   高 30、左右各 GAP.sm
  *   `boxed`  带文字且描一圈（有文字的组默认描边，纯图标的不描）
  *
- * 配色一律走 INK_SURFACE：工具条是墨面，别在这儿引入第二套。
+ * 配色一律走 TOOL_SURFACE：工具条是纸面（09-12 印刷风），别在这儿引入第二套。
+ * 当前工具 = 实墨块反白，那是这颗按钮上唯一的重色。
  */
 
 /** 身位。自定义控件要跟按钮并排时按这个来（比如那条链接药丸）。 */
 export const TOOL_BTN = {
   height: 30,
   padH: GAP.sm,
-  radius: 9,        // 带文字的
-  radiusIcon: 999,  // 纯图标的
+  // 09-12 印刷风：直角。圆角 9 / 正圆是墨面时代的形
+  radius: 0,
+  radiusIcon: 0,
   gap: GAP.xs,
   fontSize: FONT_SIZE.xs,
 };
@@ -45,7 +47,7 @@ export const toolPillStyle = {
   height: TOOL_BTN.height, padding: `0 ${TOOL_BTN.padH}px`,
   borderRadius: TOOL_BTN.radius,
   fontFamily: FONT_SANS, fontSize: TOOL_BTN.fontSize,
-  color: INK_SURFACE.text,
+  color: TOOL_SURFACE.text,
   whiteSpace: 'nowrap',
 };
 
@@ -67,13 +69,13 @@ export default function ToolbarButton({
 }) {
   const [hover, setHover] = useState(false);
 
-  const bg = active ? INK_SURFACE.active
-    : (hover && !disabled) ? INK_SURFACE.hover
+  const bg = active ? TOOL_SURFACE.active
+    : (hover && !disabled) ? TOOL_SURFACE.hover
     : 'transparent';
-  const fg = active ? INK_SURFACE.activeText
-    : disabled ? INK_SURFACE.textDim
+  const fg = active ? TOOL_SURFACE.activeText
+    : disabled ? TOOL_SURFACE.textDim
     : (danger && hover) ? '#E08A82'
-    : INK_SURFACE.text;
+    : TOOL_SURFACE.text;
 
   return (
     <button
@@ -92,7 +94,7 @@ export default function ToolbarButton({
         padding: label ? `0 ${TOOL_BTN.padH}px` : 0,
         justifyContent: 'center',
         background: bg,
-        border: boxed && label ? `1px solid ${active ? 'transparent' : INK_SURFACE.hair}` : 'none',
+        border: boxed && label ? `1px solid ${active ? 'transparent' : TOOL_SURFACE.hair}` : 'none',
         borderRadius: label ? TOOL_BTN.radius : TOOL_BTN.radiusIcon,
         color: fg,
         fontFamily: FONT_SANS, fontSize: TOOL_BTN.fontSize,
