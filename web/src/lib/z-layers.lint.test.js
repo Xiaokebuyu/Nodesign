@@ -48,7 +48,6 @@ const ALLOWLIST = new Map([
   ['components/layout/ChatDock.jsx', 1],              // 121 = DOCK+1，⛔ 正是本表禁止的焊死写法
   ['components/layout/FloatingPanel.jsx', 2],         // 100 默认值 + 9998
   ['components/layout/MobileShell.jsx', 3],           // 118/119/120 —— 移动端另起了一套平行档
-  ['components/layout/PanelMenu.jsx', 1],             // 500，在外壳里，跟 BOARD_Z.WINDOW(500) 同号不同义
   ['components/ui/ToastContainer.jsx', 1],            // 1000，外壳缺一档 TOAST
   ['harness.jsx', 1],                                 // 测试外壳，跟 CanvasFrame 抄的同一个 510
   ['lib/theme.js', 1],                                // MODAL.zIndex 600 = READER 档
