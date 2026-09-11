@@ -10,7 +10,9 @@ import net from 'node:net';
 import tls from 'node:tls';
 import { relayConfig, normalizeRelayUrl, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 
-const PROXY_KEYS = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'];
+// Windows 上环境变量名不分大小写：HTTPS_PROXY 和 https_proxy 是同一个变量，两个都列就同一个值报两遍（09-11 CI 抓到）
+const PROXY_KEYS = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
+  ...(process.platform === 'win32' ? [] : ['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'])];
 const isFakeIp = (ip) => /^198\.1[89]\./.test(ip);
 
 function timed(fn, ms) {
