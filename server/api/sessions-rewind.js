@@ -18,6 +18,7 @@ import { jsonlExistsForSession, truncateJsonlAtMessage } from '../projects/sessi
 import { AsyncQueue } from '../lib/async-queue.js';
 import { getProjectBus } from '../ws/broker.js';
 import { platform } from '../runtime/platform.js';
+import { agentInheritedEnv } from '../runtime/agent-env.js';
 
 const GLOBAL_CLAUDE_CONFIG_DIR = platform.claudeConfigDir;
 
@@ -158,7 +159,8 @@ export function mountRewindRoute(router) {
             enableFileCheckpointing: true,
             cwd: sessionRoot,
             // 关键：跟 runSession 一致传 CLAUDE_CONFIG_DIR，否则 SDK 找不到 jsonl
-            env: { ...process.env, CLAUDE_CONFIG_DIR: GLOBAL_CLAUDE_CONFIG_DIR },
+            // 底子用 agentInheritedEnv，跟 runSession 同一份剔除表（09-11 宿主会话身份变量案）
+            env: { ...agentInheritedEnv(), CLAUDE_CONFIG_DIR: GLOBAL_CLAUDE_CONFIG_DIR },
             persistSession: true,
             // 不传 hooks / mcpServers / agents / canUseTool —— 临时 query 不跑 turn
           },

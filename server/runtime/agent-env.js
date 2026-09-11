@@ -2,6 +2,8 @@
  * runtime/agent-env.js —— agent 子进程（会话 CLI、演出进程）从服务端继承哪些环境变量（09-11 收成一份）
  *
  * 此前 session-loop.js 和 stage/env.js 各自解构一遍 process.env 剔掉几个键，两份一样的表。
+ * 读者：会话 CLI（session-loop）、演出进程（stage/env）、会话回退的临时 query（api/sessions-rewind）、
+ * agent 起的长驻进程（process/registry，里面跑的是 agent 写的代码）。再有 agent 侧的子进程，底子也从这里拿。
  *
  * 要剔的有两类：
  *

@@ -20,6 +20,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { getWorkspaceRoot, getAgentCwd } from '../../projects/workspace.js';
 import { getProjectBus } from '../../ws/broker.js';
+import { agentInheritedEnv } from '../../runtime/agent-env.js';
 
 export const MAX_PER_PROJECT = 6;
 const RING_LINES = 400;
@@ -150,9 +151,10 @@ export async function startProcess({ projectId, command, name = null, cwd = null
   e.logStream.on('error', (err) => console.warn(`[process] log stream ${id}: ${err.message}`));
   e.logStream.write(`# ${e.startedAt} $ ${e.command}\n# cwd ${wd}\n`);
 
+  // 进程里跑的是 agent / 用户写的代码：底子跟 agent 的 Bash 一样用 agentInheritedEnv（不带宿主会话的 token、NODE_ENV=production）
   const child = spawn(e.command, {
     cwd: wd,
-    env: { ...process.env, ...env, FORCE_COLOR: '0', NO_COLOR: '1', PWD: wd },
+    env: { ...agentInheritedEnv(), ...env, FORCE_COLOR: '0', NO_COLOR: '1', PWD: wd },
     shell: true,
     windowsHide: true,
     // posix 上自成进程组，停的时候 kill(-pid) 连子孙一起；win32 用 taskkill /T

@@ -51,6 +51,19 @@ describe('registry', () => {
     expect(list.find((x) => x.id === p.id)?.status).toBe('stopped');
   });
 
+  it('服务端带着宿主 Claude Code 会话的变量时，进程里看不到（09-11 案：pm2 被灌过 --update-env）', async () => {
+    process.env.CLAUDE_CODE_MESSAGING_TOKEN = 'leaked';
+    process.env.VSCODE_GIT_IPC_AUTH_TOKEN = 'leaked';
+    try {
+      const { process: p } = await reg.startProcess({ projectId: pid, command: 'node -e "console.log(\'seen=\' + [process.env.CLAUDE_CODE_MESSAGING_TOKEN, process.env.VSCODE_GIT_IPC_AUTH_TOKEN].filter(Boolean).length)"', waitMs: 3000 });
+      await new Promise((r) => setTimeout(r, 300));
+      expect(reg.readProcessLog(pid, p.id).lines.join('\n')).toContain('seen=0');
+    } finally {
+      delete process.env.CLAUDE_CODE_MESSAGING_TOKEN;
+      delete process.env.VSCODE_GIT_IPC_AUTH_TOKEN;
+    }
+  });
+
   it('立刻退出的命令：status 按退出码分 exited / failed，首屏带输出', async () => {
     const ok = await reg.startProcess({ projectId: pid, command: 'node -e "console.log(\'done\')"', waitMs: 3000 });
     expect(['exited', 'running']).toContain(ok.process.status);
