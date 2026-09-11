@@ -10,7 +10,7 @@ Describe what you need, and an agent builds websites, slide decks, Word document
 Select any area of a preview to request a change. Every output is delivered as a standard file.
 
 [![release](https://img.shields.io/github/v/release/Xiaokebuyu/Nodesign?label=release&color=2d2418)](https://github.com/Xiaokebuyu/Nodesign/releases/latest)
-[![npm downloads](https://img.shields.io/npm/dw/%40xiaobuyu%2Fnodesign?color=2d2418)](https://www.npmjs.com/package/@xiaobuyu/nodesign)
+[![npm downloads](https://img.shields.io/npm/dw/%40xiaobuyu%2Fnodesign?color=2d2418&cacheSeconds=3600)](https://www.npmjs.com/package/@xiaobuyu/nodesign)
 [![license](https://img.shields.io/github/license/Xiaokebuyu/Nodesign?color=2d2418)](https://github.com/Xiaokebuyu/Nodesign/blob/main/LICENSE)
 
 [Website](https://nodesign.xiaobuyu.trade/welcome/) · [Web app](https://nodesign.xiaobuyu.trade/login) · [Download for Windows](https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe) · [Examples](#examples) · [FAQ](#faq) · [简体中文](https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md)

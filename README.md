@@ -10,7 +10,7 @@
 在预览上圈选即可修改，产物以标准文件交付。
 
 [![release](https://img.shields.io/github/v/release/Xiaokebuyu/Nodesign?label=release&color=2d2418)](https://github.com/Xiaokebuyu/Nodesign/releases/latest)
-[![npm downloads](https://img.shields.io/npm/dw/%40xiaobuyu%2Fnodesign?color=2d2418)](https://www.npmjs.com/package/@xiaobuyu/nodesign)
+[![npm downloads](https://img.shields.io/npm/dw/%40xiaobuyu%2Fnodesign?color=2d2418&cacheSeconds=3600)](https://www.npmjs.com/package/@xiaobuyu/nodesign)
 [![license](https://img.shields.io/github/license/Xiaokebuyu/Nodesign?color=2d2418)](https://github.com/Xiaokebuyu/Nodesign/blob/main/LICENSE)
 
 [官网](https://nodesign.xiaobuyu.trade/welcome/) · [网页版](https://nodesign.xiaobuyu.trade/login) · [下载 Windows 版](https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe) · [案例](#案例) · [常见问题](#常见问题) · [English](https://github.com/Xiaokebuyu/Nodesign/blob/main/README.en.md)
