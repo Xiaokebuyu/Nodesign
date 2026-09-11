@@ -27,7 +27,7 @@ NoDesign is not a canvas that AI output gets placed on. It is a canvas that hold
 
 ### Local
 
-Requires Node.js 20 or newer:
+Requires Node.js 22.16 or newer:
 
 ```bash
 npx @xiaobuyu/nodesign

@@ -27,7 +27,7 @@ NoDesign 不只是把 AI 生成的结果摆到画布上，而是把生成、检�
 
 ### 本地版
 
-需要 Node.js 20 或更高版本：
+需要 Node.js 22.16 或更高版本：
 
 ```bash
 npx @xiaobuyu/nodesign

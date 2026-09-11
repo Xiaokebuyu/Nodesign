@@ -43,13 +43,8 @@ export const MCP_PATH = '/mcp';
 const TOKEN_FILE = 'mcp-token';
 const startedAt = Date.now();
 let cachedToken = null;
-/** 版本从仓库根 package.json 读：桌面版是 node 直起 server，没有 npm_package_version */
-let cachedVersion = null;
-function appVersion() {
-  if (cachedVersion) return cachedVersion;
-  try { cachedVersion = JSON.parse(fs.readFileSync(path.join(platform.repoRoot, 'package.json'), 'utf8')).version || null; } catch { cachedVersion = process.env.npm_package_version || null; }
-  return cachedVersion;
-}
+/** 版本的唯一来源在 runtime/platform.js（09-11 收拢） */
+const appVersion = () => platform.appVersion;
 
 /** 令牌：首次生成落盘（0600），之后读文件。dataRoot 不可写时退回进程内随机值（本轮有效） */
 export function mcpToken() {

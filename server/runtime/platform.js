@@ -28,6 +28,16 @@ const isLinux = process.platform === 'linux';
 /** 服务端仓库根（server/runtime/platform.js → ../..），.env 就躺在这 */
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const isMac = process.platform === 'darwin';
+
+/**
+ * 应用版本：仓库根 package.json 的 version（09-11 收成一份）。
+ * 此前 health 写死 '0.1.0'，另有三处各读各的 package.json（api/local、诊断 MCP、report_issue）。
+ * 桌面版是 node 直起 server，没有 npm_package_version，所以读文件；读不到才退回它。
+ */
+const appVersion = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version || null; }
+  catch { return process.env.npm_package_version || null; }
+})();
 const isWin = process.platform === 'win32';
 
 /**
@@ -335,6 +345,7 @@ export const platform = {
   isMac,
   isWin,
   repoRoot,
+  appVersion,
   claudeConfigDir,
   claudeAuthPresent,
   LOCAL_CLAUDE_LOGIN_ENABLED,

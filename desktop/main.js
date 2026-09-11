@@ -12,7 +12,7 @@
  *    窗口不闪。代价是多一个进程，值。
  *
  * 2. **子进程用安装包里带的 node.exe 跑，不用 Electron 的 node 模式。** Electron 的 Node 版本
- *    跟着 Electron 走，服务端要的是一个确定的 Node（node:sqlite 要 ≥ 22.13）；带一份真 node
+ *    跟着 Electron 走，服务端要的是一个确定的 Node（node:sqlite 要 ≥ 22.13，它的 timeout 选项要 ≥ 22.16）；带一份真 node
  *    （resources/node/node.exe，desktop.yml 抓的）之后两边彻底解耦，Electron 升级不牵连服务端。
  *    开发态没有那份 node.exe，用 PATH 里的 node。
  *
