@@ -48,7 +48,7 @@ describe('凭据黑名单', () => {
   });
   it('逃生舱里塞进通配条目也会被拒收（丢弃并告警，不进清单）', () => {
     const old = process.env.NODESIGN_DENY_READ_EXTRA;
-    process.env.NODESIGN_DENY_READ_EXTRA = '/tmp/x/*/.cache:/tmp/ok';
+    process.env.NODESIGN_DENY_READ_EXTRA = ['/tmp/x/*/.cache', '/tmp/ok'].join(path.delimiter);   // POSIX 冒号、Windows 分号
     try {
       const l = platform.credentialBlacklist();
       expect(l).toContain('/tmp/ok');
@@ -60,7 +60,7 @@ describe('凭据黑名单', () => {
   });
   it('NODESIGN_DENY_READ_EXTRA 是逃生舱：不改代码也能加拦截目标', () => {
     const old = process.env.NODESIGN_DENY_READ_EXTRA;
-    process.env.NODESIGN_DENY_READ_EXTRA = '/a/b : /c/d';
+    process.env.NODESIGN_DENY_READ_EXTRA = `/a/b ${path.delimiter} /c/d`;
     try {
       expect(platform.credentialBlacklist()).toEqual(expect.arrayContaining(['/a/b', '/c/d']));
     } finally {
