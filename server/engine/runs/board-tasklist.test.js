@@ -17,7 +17,11 @@ const pid = 'proj_tasklist_test';
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 // 事件是异步落盘的：等到断言成立为止，别拿固定毫秒数赌（09-11 Windows runner 上 300ms 不够，红过）。
 // 只有「什么都不该发生」的那种检查还用固定等待 —— 轮询证明不了没发生。
-const SETTLE = { timeout: 5000, interval: 50 };
+// ⚠️ 等待上限必须**小于**单测时限：09-11/12「重启后认领旧便签」在 Windows 反复挂成
+// 「Test timed out in 5000ms」—— 两个上限都是 5 秒，单测先到点，真正的断言失败被吞了。
+// 真因不是慢：board.json 清空再写的那一下被读成空画布，认领不到旧便签，新建了第二张（修在 lib/atomic-write.js）。
+const SETTLE = { timeout: 8000, interval: 50 };
+vi.setConfig({ testTimeout: 15_000 });
 
 describe('board-tasklist（步骤清单镜像成板书）', () => {
   beforeAll(async () => { await ensureProjectWorkspace(pid); _resetBoardTasklist(); });
