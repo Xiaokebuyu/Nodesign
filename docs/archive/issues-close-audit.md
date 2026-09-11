@@ -117,3 +117,13 @@ exit 1 JSON、rembg balanced 偶发、旧路径不存在、iss_msc4620y_0z3r（�
 | iss_mtsow0qn_2490 | closed | 桌面截图 0 width：屏外视图不能截图，浏览器翻回原生视图（c2eb6723） |
 | iss_mtw5kv3x_0ytm | closed | 演出重开时 relay 注销晚于重新登记 →「400 会话没登记」：同 sid 登记带代次、新登记等在路上的注销落地再发（f9d8bd2f，桌面 0.1.40 已发；报告来自 0.1.39；relay-client.test「旧注销已经发出去了」钉住） |
 | iss_mtx1s3tp_2zia / iss_mtx1r624_dpbb | closed | build_docx 不带 preset 报「v must be 1」：v 以顶层为准、tokens.v 可不写（6ad79fab，生产 16:16 重启已上；桌面随 0.1.41） |
+
+## 2026-09-12 随桌面 0.1.41 上线关单（修复提交 71f4a1f8 / a5ea942f，上线核对后改 status）
+
+| id | 判决 | 理由 |
+|---|---|---|
+| iss_mtx2775n_1ruv | closed | 抠图把被主体围住的浅色区域抠穿：caption 每次报「被围住的透明区」、fillHoles 用原图像素补回、预览垫棋盘格（真 rembg 复现：标签中心 alpha 34 → 补后 255） |
+| iss_mtx1s0qr_yh8p | closed | build_docx 块级 / 单元格 color 报 unknown key：收 color，作各 run 的缺省色 |
+| iss_mtx1t956_epk1 | closed | 表格只有粗黑满格：borders 三档预设 + 按边写，不写逐字节不变 |
+| iss_mtx99j0x_78sx | closed | edit_board move 离组 / reflow 打乱：move 离组如实报；reflow 沿用画时布局并按 flow 线排、报出顺序；「手工组别动」开关站主定不加（核过：add_edge 不动坐标、move_group 刚性平移，打乱的是 agent 自己调的 reflow） |
+| iss_mtx1uedf_fy76 | closed | 锚点「品牌手册」不在板上：锚点共用解析器，目录名认成那片已上板的东西，认不出给候选 |
