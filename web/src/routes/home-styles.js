@@ -4,7 +4,7 @@
  * 这里的取舍全在原注释里，一行没动：板面纤维、笔记本红边线、横线只画在
  * textarea 那一层（纸的高度是内容撑的，横线铺满纸必然切半格）。
  */
-import { PAPER_SHADOW, PAPER, P } from '../lib/paper.js';
+import { PAPER_SHADOW, PAPER, P, pinFill, PIN_SHADOW, INK_EDGE } from '../lib/paper.js';
 import { COLOR } from '../lib/theme.js';
 // ⭐ 台面那一段搬进了 desk.jsx（橱窗和 Skill 页要共用），这里仍然把它拼进来 ——
 //    首页只注入一份样式，两条读 CSS 的 lint 也照旧读得到。
@@ -22,23 +22,30 @@ ${DESK_CSS}
 /* 两侧各 292 —— 视口不够宽时先把它们收掉，别把便签本挤成一条缝 */
 @media (max-width: 1320px) { .ndd-side { display: none; } }
 
-/* 直接写在板上的字：不带纸，是记在板子上的账 */
-.ndd-note { color: var(--sketch); transform: rotate(-0.9deg);
-  padding-left: 6px; }
-.ndd-note .t { display: block; font: 700 21px var(--kai); letter-spacing: 0.1em;
-  line-height: 1.3; color: var(--sketch-deep); }
-.ndd-note .rule { display: block; width: 112px; height: 7px; margin: 5px 0 7px; }
-.ndd-note .l { display: block; font: 12.5px var(--kai); line-height: 2.05; }
-.ndd-note .n { font-size: 15px; color: var(--sketch-num); }
+/* 直接写在板上的账（09-12 印刷风：摆正，一条墨线起头、每行一道细线，数字用粗黑体）。
+   颜色仍走 --sketch 那一族：夜里整族翻成粉笔。 */
+.ndd-note { color: var(--sketch); }
+.ndd-note .t { display: block; font: 800 22px var(--display); letter-spacing: -0.01em;
+  line-height: 1.25; color: var(--sketch-deep); padding-bottom: 12px;
+  border-bottom: 1px solid var(--sketch-deep); }
+.ndd-note .rule { display: none; }
+.ndd-note .l { display: block; padding: 6px 0 7px; border-bottom: 1px solid var(--sketch-rule);
+  font: 12.5px var(--kai); letter-spacing: 0.04em; }
+.ndd-note .n { margin: 0 3px; font: 800 18px var(--display); letter-spacing: -0.02em; color: var(--sketch-deep); }
 
-.ndd-side .doodle { display: block; width: 138px; margin: 0 auto; opacity: 0.5; }
-.ndd-side .aside { margin-top: 12px; font: 12.5px var(--kai); line-height: 1.95;
-  color: var(--sketch-soft); transform: rotate(0.7deg); }
+/* 右栏：一道墨线起头的旁注（原来是一只递纸的手的涂鸦，09-12 印刷风撤掉涂鸦） */
+.ndd-side.r { text-align: left; }
+.ndd-side .fig { display: block; width: 170px; height: auto; margin: -14px 0 16px 4px; }
+.ndd-side .aside { margin: 0; padding-left: 18px; border-left: 1px solid var(--sketch-deep);
+  font: 13px var(--kai); line-height: 1.85; color: var(--sketch-soft); }
+.ndd-side .aside b { display: block; margin-bottom: 6px; font: 700 14.5px var(--display);
+  color: var(--sketch-deep); letter-spacing: 0; }
 
 /* ===== 便签本：一句话开工 ===== */
 /* ⭐ 这两处（问候语、分组标题）是直接写在台面上的 —— 颜色必须显式走 --desk-ink，
    夜里才跟着翻粉笔。别指望从 .ndd 继承：那条继承链上还挂着一堆摊在纸上的卡片。 */
-.ndd-greet { color: var(--desk-ink); text-align: center; font: 700 25px var(--kai); letter-spacing: 0.05em;
+.ndd-greet { color: var(--desk-ink); text-align: left; font: 800 30px var(--display); letter-spacing: -0.02em;
+  text-shadow: .026em .018em 0 rgba(178,58,46,0.16);
   /* 纸上沿探出来的那两片页签要占掉约 28px，别贴到问候语上 */
   margin-bottom: 30px; }
 /* ===== 页签：设计 / 演出 =====
@@ -60,9 +67,9 @@ ${DESK_CSS}
 .nd-tabs { position: absolute; right: 30px; bottom: 100%; margin-bottom: -12px;
   display: flex; align-items: flex-end; }
 .nd-tabs > * { appearance: none; border: none; cursor: pointer;
-  font: 700 13px var(--kai); letter-spacing: 0.2em; text-indent: 0.2em;
+  font: 600 12.5px var(--code); letter-spacing: 0.16em; text-indent: 0.16em;
   /* 下缘那 12px 藏在纸后面（= 条的 margin-bottom 那个数），露出来的只有上面这截 */
-  padding: 5px 15px 16px; border-radius: 3px 3px 0 0;
+  padding: 5px 15px 16px; border-radius: 0;
   background: var(--kraft); color: ${P('tabInk',0.8)};
   /* ⭐⭐ 压在后面那片矮一截，所以它接到的光少。
      ⚠️ 这一层从前是写死的 0.07，跟光没关系 —— 于是太阳转过去、天黑下来，
@@ -73,20 +80,29 @@ ${DESK_CSS}
   transition: color 0.26s, background-color 0.26s, box-shadow 0.26s; }
 /* 相邻两片横向压着一点：谁在上面一眼看得出（纯静态，不是位移） */
 .nd-tabs > * + * { margin-left: -6px; }
+/* ⭐ 09-12 印刷风：签也描墨线，只描上边和两侧，而且**只描到纸的上沿为止**（下缘那 12px 埋在纸里，
+   不能在纸面上留两道竖线）—— bottom 那个 12px 就是上面的 margin-bottom。
+   ⭐⭐ 选中那片跟最上面这张纸同体（08-28 定的规矩：接口处没有分界线）：纸的墨线是一圈 box-shadow，
+   签要是压在纸后面，这圈线就从签的根上横切过去 —— 选中那片于是**提到纸的上面**（z 3 > 纸 z 2），
+   它埋进纸里那截用同色同颗粒的底把纸的上沿盖掉，两侧墨线接上纸的墨线，整体读成一张带签的纸。
+   没选那片仍在纸后面（z 1），纸的上沿照旧横过它的根 = "被压着的下一张"。 */
+.nd-tabs > *::before { content: ''; position: absolute; left: 0; right: 0; top: 0; bottom: 12px;
+  border: 1px solid ${INK_EDGE}; border-bottom: 0; pointer-events: none; }
 /* 选中那片 = 最上面这张纸的签：跟纸读同一个 --sheet，压在旁边那片上面 */
 /* ⛔ 选中那片**不加任何自己的光影**：它跟纸是同一张纸，材质必须一模一样。
    09-02 试过给它一道顶边高光，站主的判词是「看起来是被贴上去的」——
    一体的东西之间不该有边界，高光就是边界。受光的差别只体现在**另一片**上。 */
 .nd-tabs > *.on { background-color: var(--sheet); background-image: var(--grain);
-  color: var(--red); box-shadow: none; z-index: 2; }
+  color: var(--red); box-shadow: none; z-index: 3; }
 /* 摸上去只提亮，不动位置 */
 .nd-tabs > *:not(.on):hover { color: var(--ink);
   box-shadow: inset 0 0 0 999px rgba(93,74,44,0.02); }
 .nd-tabs > *:disabled { cursor: default; opacity: 0.55; }
 /* 签在纸后面：整叠自己成一个层叠上下文，签 z1、纸 z2 */
-.ndd-stack { position: relative; max-width: 720px; margin: 0 auto; z-index: 10;
-  transform: rotate(-0.35deg); }
-.ndd-stack > .nd-tabs { z-index: 1; }
+.ndd-stack { position: relative; max-width: 720px; margin: 0 auto; z-index: 10; }
+/* ⚠️ 签条自己**不许**成层叠上下文（z-index: auto）：两片签要分别跟纸比高低 —— 没选的 z1 在纸后面、
+   选中的 z3 在纸上面。签条要是 z1 成了上下文，选中那片就永远出不了纸的下面。 */
+.ndd-stack > .nd-tabs { z-index: auto; }
 
 /* ===== 两种纸的配方（2026-08-28）=====
 
@@ -187,7 +203,7 @@ ${DESK_CSS}
 @keyframes nddCaret { 0%, 49.9% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .ndd-pad textarea { width: 100%; background-color: transparent; border: none; outline: none;
   resize: none; display: block;
-  font: 16.5px var(--kai); line-height: 29px; color: var(--ink);
+  font: 16.5px var(--read); line-height: 29px; color: var(--ink);
   /* 原生 caret 全程让位给上面那根自己画的（唯一例外是组字期间） */
   caret-color: transparent;
   padding: 0; max-height: 290px; min-height: 116px; overflow: auto;
@@ -238,7 +254,7 @@ ${DESK_CSS}
   animation: nddPeelOff 520ms cubic-bezier(0.36, 0, 0.3, 1) forwards; }
 .ndd-peel .lines { background-image: var(--rules); background-size: 100% 29px;
   background-position: 0 0; overflow: hidden;
-  font: 16.5px var(--kai); line-height: 29px; color: var(--ink);
+  font: 16.5px var(--read); line-height: 29px; color: var(--ink);
   white-space: pre-wrap; overflow-wrap: break-word; }
 .ndd-peel .lines .ph { color: var(--pencil); }
 /* 从右边往下扯：先捏住右下角掀起来一点（脱开纸叠），再绕回形针顺时针转下去、
@@ -262,9 +278,9 @@ ${DESK_CSS}
    老老实实待在纸里、被复制品盖住，跟着一起被扯走。
    ⚠️ 别再给它加 z-index 把自己抬出去 —— 抬了就又变成"纸走了工具还钉在原地"。 */
 .ndd-pad .bar { display: flex; align-items: center; gap: 10px; padding-top: 14px; }
-.ndd-pad .tip { font: 11px var(--kai); color: var(--pencil); letter-spacing: 0.02em; }
-.ndd-pad .att { width: 27px; height: 27px; border-radius: 50%; flex-shrink: 0;
-  background: transparent; border: 1px solid rgba(43,33,23,0.2); color: var(--ink-2);
+.ndd-pad .tip { font: 11px var(--code); color: var(--pencil); letter-spacing: 0.04em; }
+.ndd-pad .att { width: 26px; height: 26px; border-radius: 0; flex-shrink: 0;
+  background: transparent; border: 1px solid rgba(31,24,16,0.35); color: var(--ink-2);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   transition: border-color 0.15s, color 0.15s; }
 .ndd-pad .att:hover { border-color: var(--ink); color: var(--ink); }
@@ -286,10 +302,10 @@ ${DESK_CSS}
    像一颗从别处剪来的按钮。只改字与形，**颜色一律不碰** —— 它的底色本来就在
    传达"你选过没有"（选过是实心墨块，跟隔壁开工钮同一支墨），改了就把信号抹平。
    要 !important 是因为组件写的是内联样式。 */
-.ndd-pad .model > button { font: 12.5px var(--kai) !important; letter-spacing: 0.04em;
-  padding: 4px 9px !important; border-radius: 2px !important; }
+.ndd-pad .model > button { font: 12px var(--code) !important; letter-spacing: 0.02em;
+  padding: 4px 9px !important; border-radius: 0 !important; }
 /* 没写字的时候是个空框，写了字才变成实心墨块 —— 淡一档的实心块看着像坏了 */
-.ndd-pad .go { padding: 8px 22px; font: 700 14px var(--kai);
+.ndd-pad .go { padding: 9px 22px; font: 700 14px var(--display);
   letter-spacing: 0.3em; text-indent: 0.3em;
   background: var(--ink); color: ${COLOR.btnText};
   border: 1px solid var(--ink); border-radius: 2px; cursor: pointer;
@@ -299,11 +315,11 @@ ${DESK_CSS}
 
 /* ===== 分区标题 ===== */
 .ndd-head { display: flex; justify-content: space-between; align-items: baseline;
-  margin: 44px 0 24px; }
+  margin: 48px 0 30px; padding-bottom: 12px; border-bottom: 1px solid var(--desk-ink); }
 .ndd-head h2 { position: relative; margin: 0; color: var(--desk-ink);
-  font: 700 20px var(--kai); letter-spacing: 0.08em; }
-.ndd-head h2 svg { position: absolute; left: -2%; bottom: -8px; width: 104%; height: 8px; }
-.ndd-head .n { font: 12.5px var(--kai); color: var(--desk-pencil); letter-spacing: 0.06em; }
+  font: 800 25px var(--display); letter-spacing: -0.02em; text-shadow: .026em .018em 0 rgba(178,58,46,0.14); }
+.ndd-head h2 svg { display: none; }
+.ndd-head .n { font: 12px var(--code); color: var(--desk-pencil); letter-spacing: 0.06em; }
 
 /* ===== 项目卡：钉在板上的纸 =====
    ⛔ 轨道的下限必须写成 min(300px, 100%)、卡自己必须 min-width: 0 —— 两条都是
@@ -317,11 +333,10 @@ ${DESK_CSS}
   gap: 36px 28px; }
 .ndd-card { position: relative; min-width: 0; }
 /* 钉子不在纸里 —— 纸被拿起来的时候钉子不该跟着动 */
-.ndd-card .pin { position: absolute; top: 3px; left: 50%; width: 9px; height: 9px;
-  border-radius: 50%; margin-left: -4.5px; z-index: 6; pointer-events: none;
-  background: radial-gradient(circle at 35% 30%, ${PAPER.pinA}, ${PAPER.pinB} 65%);
-  box-shadow: -1px 2px 3px rgba(43,33,23,0.45); }
-.ndd-card .pin.r { background: radial-gradient(circle at 35% 30%, ${PAPER.pinRedA}, ${PAPER.pinRedB} 65%); }
+.ndd-card .pin { position: absolute; top: -5px; left: 50%; width: 11px; height: 11px;
+  border-radius: 50%; margin-left: -5.5px; z-index: 6; pointer-events: none;
+  background: ${pinFill()}; box-shadow: ${PIN_SHADOW}; }
+.ndd-card .pin.r { background: ${pinFill(true)}; }
 /* 卡片的底色跟着这个项目是哪种纸走（.nd-sheet-* 挂在 .ndd-card 上，
    跟输入栏那一叠读的是同一份配方）—— 桌上于是真的混着两种纸，
    而不是靠一枚徽记去说"这个是演出的" */
@@ -329,14 +344,13 @@ ${DESK_CSS}
   background-color: var(--sheet); background-image: var(--grain);
   box-shadow: ${PAPER_SHADOW.sheet};
   text-decoration: none; color: inherit;
-  transform: rotate(var(--rot, 0deg)); transform-origin: 50% 7px;
   transition: transform 0.28s cubic-bezier(0.25,1,0.5,1), box-shadow 0.28s; }
 /* 挂在最上面那张贴得没那么平 */
 .ndd-card.top > a { box-shadow: ${PAPER_SHADOW.sheetHigh}; }
 /* hover = 从桌上拿起来看：转正、抬起、影子摊开。
    触发点挂在整张卡上而不是 <a> 上 —— ⋯ 按钮是 <a> 的兄弟节点，鼠标移到它上面
    就不在 <a> 里了，纸会当场掉回去 */
-.ndd-card:hover > a { transform: rotate(0deg) translateY(-5px);
+.ndd-card:hover > a { transform: translateY(-3px);
   box-shadow: ${PAPER_SHADOW.sheetHigh}; }
 
 /* 封面 = 贴在纸上的印样，自己有一层薄影 */
@@ -355,7 +369,7 @@ ${DESK_CSS}
    差一点就成了"浮在横线上方"（首页那张便签纸 08-21 栽过同一个坑）。
    顶上空一格再落笔：贴着上沿写不像人写的。 */
 .ndd-shot.empty.chalk { padding: 22px 13px 0; }
-.ndd-shot.empty.chalk p { margin: 0; font: 12.5px var(--kai); line-height: 22px;
+.ndd-shot.empty.chalk p { margin: 0; font: 12.5px var(--read); line-height: 22px;
   color: ${P('ink2',0.85)}; white-space: pre-line; overflow: hidden;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; }
 /* 演出项目那张空白纸是**稿纸**：转旧、红格线、四周一道很淡的版心。
@@ -366,19 +380,17 @@ ${DESK_CSS}
   background-image: repeating-linear-gradient(180deg, transparent 0 21px, ${P('red',0.11)} 21px 22px);
   box-shadow: inset 0 0 0 1px ${P('red',0.16)}; }
 
-.ndd-card .t { margin-top: 12px; font: 700 15.5px var(--kai); letter-spacing: 0.02em;
+.ndd-card .t { margin-top: 12px; font: 15.5px var(--read); letter-spacing: 0.02em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ndd-card .m { margin-top: 5px; display: flex; justify-content: space-between;
-  align-items: baseline; gap: 10px; font: 11.5px var(--kai); color: var(--pencil); }
+  align-items: baseline; gap: 10px; font: 11px var(--code); color: var(--pencil); }
 .ndd-card .m span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 上次停在这：回访第一动作 */
-.ndd-card .last { position: absolute; top: -10px; right: -7px; z-index: 7;
-  padding: 2px 9px; font: 11.5px var(--kai); color: var(--red);
-  background-color: var(--sticky); background-image: var(--grain);
-  box-shadow: ${PAPER_SHADOW.tag};
-  transform: rotate(4deg); pointer-events: none; }
-/* 别人的（09-08 市场精选混进项目区）：同一副纸签，墨色不是红色 —— 红的那张是「你上次停在这」，这张是「这不是你的」 */
-.ndd-card .last.peer { color: var(--ink-2); transform: rotate(-3deg); }
+.ndd-card .last { position: absolute; top: -11px; right: -1px; z-index: 7;
+  padding: 2px 9px; font: 600 11px var(--code); letter-spacing: 0.12em; color: var(--paper);
+  background: var(--red); pointer-events: none; }
+/* 别人的（09-08 市场精选混进项目区）：同一枚签，墨底不是红底 —— 红的那张是「你上次停在这」，这张是「这不是你的」 */
+.ndd-card .last.peer { background: var(--ink-2); }
 /* 精选卡（别人的）右下角「照着来一个」：悬停才显，别抢卡面 */
 .ndd-card .ndd-fork { position: absolute; right: 10px; bottom: 10px; z-index: 7; padding: 4px 10px; border-radius: 999px;
   border: 1px solid var(--ink-3); background: var(--paper); color: var(--ink-1); font: 12px/1.2 var(--font-sans, sans-serif);
@@ -410,9 +422,9 @@ ${DESK_CSS}
   text-decoration: none; color: inherit; transition: background 0.15s; }
 .ndd-rows a:hover { background: rgba(43,33,23,0.03); }
 .ndd-rows .sep { border-top: 1px solid rgba(43,33,23,0.08); }
-.ndd-rows .t { font: 14px var(--kai); white-space: nowrap; overflow: hidden;
+.ndd-rows .t { font: 14px var(--read); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; }
-.ndd-rows .w { margin-top: 2px; font: 11px var(--kai); color: var(--pencil); }
+.ndd-rows .w { margin-top: 2px; font: 11px var(--code); color: var(--pencil); }
 .ndd-rows .del { position: absolute; top: 50%; right: 14px; transform: translateY(-50%);
   width: 25px; height: 25px; border-radius: 50%; z-index: 3;
   background: rgba(255,254,246,0.95); border: 1px solid rgba(43,33,23,0.16);
@@ -424,21 +436,18 @@ ${DESK_CSS}
 .ndd-sheet { position: relative; max-width: 620px; margin: 0 auto;
   padding: 42px 40px 34px; text-align: center;
   background-color: var(--paper); background-image: var(--grain);
-  box-shadow: ${PAPER_SHADOW.mid};
-  transform: rotate(0.4deg); transform-origin: 50% 8px; }
-.ndd-sheet .pin { position: absolute; top: 8px; left: 50%; width: 9px; height: 9px;
-  border-radius: 50%; margin-left: -4.5px;
-  background: radial-gradient(circle at 35% 30%, ${PAPER.pinA}, ${PAPER.pinB} 65%);
-  box-shadow: -1px 2px 3px rgba(43,33,23,0.45); }
-.ndd-sheet .h { font: 700 17px var(--kai); letter-spacing: 0.05em; }
+  box-shadow: ${PAPER_SHADOW.mid}; }
+.ndd-sheet .pin { position: absolute; top: -5px; left: 50%; width: 11px; height: 11px;
+  border-radius: 50%; margin-left: -5.5px; background: ${pinFill()}; box-shadow: ${PIN_SHADOW}; }
+.ndd-sheet .h { font: 800 19px var(--display); letter-spacing: -0.01em; }
 .ndd-sheet .d { margin-top: 10px; font: 13.5px var(--kai); line-height: 1.85; color: var(--ink-2); }
 .ndd-sheet .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
   margin-top: 22px; }
-.ndd-sheet .chips button { padding: 7px 16px; font: 13px var(--kai); color: var(--ink-2);
-  background: transparent; border: 1px solid rgba(43,33,23,0.2); border-radius: 999px;
+.ndd-sheet .chips button { padding: 7px 16px; font: 13px var(--read); color: var(--ink-2);
+  background: transparent; border: 1px solid rgba(31,24,16,0.35); border-radius: 0;
   cursor: pointer; transition: border-color 0.15s, color 0.15s; }
 .ndd-sheet .chips button:hover { border-color: var(--ink); color: var(--ink); }
-.ndd-sheet .retry { margin-top: 20px; padding: 9px 26px; font: 700 14px var(--kai);
+.ndd-sheet .retry { margin-top: 20px; padding: 9px 26px; font: 700 14px var(--display);
   letter-spacing: 0.24em; text-indent: 0.24em;
   background: var(--ink); color: ${COLOR.btnText}; border: none; border-radius: 2px; cursor: pointer; }
 .ndd-quiet { padding: 60px 0; text-align: center; font: 13.5px var(--kai); color: var(--desk-pencil); }
@@ -498,7 +507,7 @@ ${DESK_CSS}
   /* 「接着做」收进封面里，别挂在卡外面（窄屏上它会顶到屏幕边）。
      ⚠️ 靠**左**：08-31 之后 ⋯ 在触屏上常驻（见 lib/use-hover-reveal.js），
      它钉在 top:9 right:9，签再待在右上角就是两块东西叠在一起。 */
-  .ndd-card .last { top: 8px; left: 8px; right: auto; transform: rotate(-2deg); }
+  .ndd-card .last { top: 8px; left: 8px; right: auto; }
   .ndd-rows a { padding: 12px 14px; }
   .ndd-sheet { padding: 26px 18px; }
   .ndd-sheet .chips { gap: 8px; }

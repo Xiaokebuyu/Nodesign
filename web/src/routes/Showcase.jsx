@@ -6,7 +6,7 @@ import { TOP_ACTION_STYLE as iconBtnStyle } from '../components/layout/TopBar.js
 import { Desk } from './desk.jsx';
 import { DayToggle } from './home-light.jsx';
 import { paperCard } from '../lib/paper.js';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS, FONT_DISPLAY, DISPLAY_SHADOW } from '../lib/theme.js';
 import { Me } from '../lib/api.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { useMedia, NARROW } from '../lib/use-media.js';
@@ -97,7 +97,7 @@ export default function Showcase() {
             {/* ⚠️ 这一段写在**台面**上，不在纸上 —— 颜色走 --desk-*，夜里跟着翻粉笔。
                 台面夜里会黑到亮度 12-15%，写死 COLOR.text 的话这行标题就没了（量过 2.54:1）。 */}
             <h1 style={{
-              fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700,
+              fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 800, textShadow: DISPLAY_SHADOW,
               color: 'var(--desk-ink)', letterSpacing: '-0.01em', margin: 0,
             }}>{t('我的橱窗')}</h1>
           </div>

@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { LogOut, LayoutDashboard, Settings, Monitor, UserRound } from 'lucide-react';
-import { COLOR, CHROME, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, FONT_KAI } from '../../lib/theme.js';
-import { GRAIN } from '../../lib/paper.js';
+import { COLOR, CHROME, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, FONT_KAI, FONT_DISPLAY } from '../../lib/theme.js';
+import { GRAIN, INK_EDGE } from '../../lib/paper.js';
+import nMark from '../../assets/brand/n-mark.png';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { useMedia, NARROW } from '../../lib/use-media.js';
 import Popover from '../ui/Popover.jsx';
@@ -242,9 +243,10 @@ function Crumb({ item, last, maxW = 280 }) {
  */
 export const TOP_ACTION_STYLE = {
   display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-  fontSize: FONT_SIZE.lg, color: CHROME.ink2,
+  // 09-12 印刷风：顶栏上的去处用等宽字（同官网导航），方角
+  fontSize: FONT_SIZE.base, color: CHROME.ink2, letterSpacing: '0.04em',
   padding: `${GAP.sm}px ${GAP.lg}px`,
-  borderRadius: RADIUS.lg,
+  borderRadius: 0,
   background: 'transparent',
   textDecoration: 'none',
 };
@@ -263,7 +265,8 @@ export default function TopBar({ breadcrumb = [], actions }) {
       // 读起来像压在板子上的一条搁板，而不是贴上去的胶带
       background: CHROME.bg,
       backgroundImage: GRAIN,
-      borderBottom: `1px solid ${CHROME.border}`,
+      // 09-12 印刷风：下边界是一道实墨线（同官网导航），不再是淡痕 + 落影
+      borderBottom: `1px solid ${INK_EDGE}`,
       display: 'flex',
       alignItems: 'center',
       padding: `0 ${narrow ? 12 : GAP.xl}px`,
@@ -274,22 +277,28 @@ export default function TopBar({ breadcrumb = [], actions }) {
       //    都是绝对定位挂在这条 header 里的，一裁就整条看不见 —— 08-21 加过一次，
       //    手机上表现为"点了没反应"。宽度靠 nowrap + 各自 flexShrink 兜，量过 320/393 都不溢出。
       ...(narrow ? { whiteSpace: 'nowrap' } : null),
-      boxShadow: '0 1px 4px rgba(93,74,44,0.10)',
+      // ⚠️ 这一道 box-shadow 不能删（09-12 二分出来的）：顶栏一点影子都没有时，桌面那层固定定位的
+      //   WebGL 光（.ndd-canopy）在 Chromium 里被少画一截，页面底部露出一条 56px 的白带。
+      //   原因没追到底（像是合成层的问题），给一道几乎看不见的硬边就好；删之前先截一张设置页的底边。
+      boxShadow: '0 1px 0 rgba(31,24,16,0.06)',
       position: 'relative',
       zIndex: 3,
     }}>
-      {/* Logo —— 跟登录墙上那个字标同一套写法（楷体 700 + 0.06em），
-          原来的深色 N 方块撤掉：门口那面墙上没有它，进门之后也不该冒出来 */}
+      {/* Logo —— 09-12 印刷风：跟官网顶栏同一个写法（N 方块 + 粗黑体字标，暂用 README 同款 N，
+          正式图标另行设计）。08-03 撤掉过深色 N 方块（那时门口那面墙上没有它），现在官网、README、
+          应用三处统一用它。 */}
       <Link to="/" style={{
         display: 'flex',
         alignItems: 'center',
-        fontFamily: FONT_KAI,
+        gap: 9,
+        fontFamily: FONT_DISPLAY,
         fontSize: narrow ? 17 : 19,
-        fontWeight: 700,
+        fontWeight: 800,
         ...(narrow ? { flexShrink: 0 } : null),
         color: CHROME.ink,
-        letterSpacing: '0.06em',
+        letterSpacing: '-0.02em',
       }}>
+        <img src={nMark} alt="" width={20} height={20} style={{ borderRadius: 4, display: 'block' }} />
         Nodesign
       </Link>
 
@@ -323,7 +332,7 @@ export default function TopBar({ breadcrumb = [], actions }) {
       {/* Actions */}
       {/* 字体挂在容器上：各路由自己拼 actions，逐个去改必然漏一个。
           按钮只要不显式指定 fontFamily 就跟着顶栏走 */}
-      {actions && <div style={{ display: 'flex', alignItems: 'center', gap: narrow ? 6 : GAP.md, fontFamily: FONT_KAI, ...(narrow ? { flexShrink: 0 } : null) }}>{actions}</div>}
+      {actions && <div style={{ display: 'flex', alignItems: 'center', gap: narrow ? 6 : GAP.md, fontFamily: FONT_MONO, ...(narrow ? { flexShrink: 0 } : null) }}>{actions}</div>}
 
       {/* 用户角标（用户名 · 今日用量 · 登出）*/}
       <UserBadge />

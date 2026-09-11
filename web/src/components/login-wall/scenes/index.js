@@ -1,16 +1,13 @@
-import deck from './deck.jsx';
-import film from './film.jsx';
-import rp from './rp.jsx';
+import coffee from './coffee.jsx';
+import tibet from './tibet.jsx';
+import engine from './engine.jsx';
 
 /**
- * 墙上轮着播的几套构图（2026-08-17）。
+ * 登录页轮着播的三套（2026-09-12 印刷风改版，站主：一套循环太单调，再配两套；
+ * 后两套又按站主意思换成官网案例页里的真实项目）。
  *
- * 顺序就是播放顺序。**每一套都得自成一个能读通的叙事** —— 现在这套是①到⑥
- * 一条红线讲一件作品从一句话到上线，换一套摆放等于换一个故事，不是把纸随机
- * 挪一挪。加新场景之前先想清楚它讲的是哪件事、红线从哪走到哪。
- *
- * 节奏是**全局的**，不在这儿：一轮 ≈ 10 秒（慢慢钉上去 → 站一拍 → 中速摘下来），
- * 数字在 `wall-css.js` 的 `MOTION`。场景可以用 `hold` 单独加长自己站着的那一拍，
- * 但三套现在都用默认值 —— 节奏一致，换的是内容不是速度。
+ * 顺序就是播放顺序。**每一套都得自成一个能读通的叙事**：①到⑥一条红线讲一件作品从一句话到上线。
+ * 三套分别是：新品发布（站点 + 演示稿）/ 深入第三极（演示改成手册站）/ 喷气发动机实验台（3D 教具）。
+ * 每套固定六步（STEPS），轮播的定时器按它算进出场要多久。节奏是全局的，在 wall-css.js 的 MOTION。
  */
-export const SCENES = [deck, film, rp];
+export const SCENES = [coffee, tibet, engine];

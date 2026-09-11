@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { COLOR } from '../../lib/theme.js';
+import { COLOR, FONT_DISPLAY } from '../../lib/theme.js';
 import { X } from 'lucide-react';
 import { GAP, FONT_SIZE, FONT_KAI } from '../../lib/theme.js';
-import { PAPER, GRAIN, PAPER_SHADOW, pinFill } from '../../lib/paper.js';
+import { PAPER, GRAIN, PAPER_SHADOW, pinFill, PIN_SHADOW } from '../../lib/paper.js';
 import { SHELL_Z } from '../../lib/z-layers.js';
 
 /**
@@ -83,7 +83,7 @@ export default function Modal({ show, onClose, title, width = 480, children, clo
           position: 'absolute', top: 9, left: '50%', marginLeft: -4.5,
           width: 9, height: 9, borderRadius: '50%', zIndex: 2, pointerEvents: 'none',
           background: pinFill(),
-          boxShadow: '-1px 2px 3px rgba(43,33,23,0.45)',
+          boxShadow: PIN_SHADOW,
         }} />
 
         {(title || closable) && (
@@ -94,7 +94,7 @@ export default function Modal({ show, onClose, title, width = 480, children, clo
             flexShrink: 0,
           }}>
             <span style={{
-              fontSize: 17, fontWeight: 700, letterSpacing: '0.06em', color: PAPER.ink,
+              fontFamily: FONT_DISPLAY, fontSize: 18, fontWeight: 800, letterSpacing: '-0.01em', color: PAPER.ink,
             }}>{title}</span>
             {closable && (
               <button
@@ -200,7 +200,7 @@ export function ModalFooter({ onCancel, onConfirm, confirmLabel = '确认', canc
         disabled={confirmDisabled}
         style={{
           padding: `${GAP.md - 1}px ${GAP.xxl}px`,
-          fontFamily: FONT_KAI, fontSize: FONT_SIZE.lg, fontWeight: 700,
+          fontFamily: FONT_DISPLAY, fontSize: FONT_SIZE.lg, fontWeight: 700,
           letterSpacing: '0.22em', textIndent: '0.22em',
           color: confirmDisabled ? PAPER.pencil : COLOR.btnText,
           background: confirmDisabled ? 'transparent' : accent,

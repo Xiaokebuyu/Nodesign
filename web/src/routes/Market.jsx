@@ -8,7 +8,7 @@ import { DayToggle } from './home-light.jsx';
 import Modal from '../components/ui/Modal.jsx';
 import MarkdownText from '../components/chat/MarkdownText.jsx';
 import { paperCard, PAPER } from '../lib/paper.js';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS, FONT_DISPLAY, DISPLAY_SHADOW } from '../lib/theme.js';
 import { Market as MarketApi } from '../lib/api-market.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { useMedia, NARROW } from '../lib/use-media.js';
@@ -107,7 +107,7 @@ export default function Market() {
         <header style={{ marginBottom: GAP.xxl + 4 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, marginBottom: GAP.sm }}>
             <Store size={18} color={COLOR.gold} />
-            <h1 style={{ fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700, color: 'var(--desk-ink)', letterSpacing: '-0.01em', margin: 0 }}>{t('Skill 市场')}</h1>
+            <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 800, textShadow: DISPLAY_SHADOW, color: 'var(--desk-ink)', letterSpacing: '-0.02em', margin: 0 }}>{t('Skill 市场')}</h1>
           </div>
           <p style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.base, color: 'var(--desk-ink-2)', lineHeight: 1.6, margin: 0, maxWidth: 680 }}>
             {t('别人探索出来的方法论，连同它做出来的东西的样子。装进自己的 skill 库，下个新会话点名就能用。装之前先看一眼 SKILL.md 全文，装了之后它会整段进你 agent 的上下文。')}

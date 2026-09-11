@@ -6,7 +6,7 @@ import { Desk } from './desk.jsx';
 import { useMedia, NARROW } from '../lib/use-media.js';
 import { DayToggle } from './home-light.jsx';
 import { paperCard } from '../lib/paper.js';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS } from '../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS, FONT_DISPLAY, DISPLAY_SHADOW } from '../lib/theme.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { Plugins, Skills } from '../lib/api.js';
 import { t } from '../lib/i18n.js';
@@ -160,7 +160,7 @@ export default function SkillList() {
         <div style={{ marginBottom: GAP.xl }}>
           {/* ⚠️ 这一段写在**台面**上，不在纸上 —— 颜色走 --desk-*，夜里跟着翻粉笔 */}
           <h1 style={{
-            fontFamily: FONT_KAI, fontSize: FONT_SIZE.h1, fontWeight: 700,
+            fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 800, textShadow: DISPLAY_SHADOW,
             color: 'var(--desk-ink)', marginBottom: GAP.sm,
           }}>我的 Skill</h1>
           <p style={{

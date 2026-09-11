@@ -11,7 +11,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, BarChart3, Palette, Cpu, Package, Info, Plug } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
-import { GAP, FONT_SIZE, FONT_KAI, RADIUS } from '../lib/theme.js';
+import { GAP, FONT_SIZE, FONT_KAI, RADIUS, FONT_DISPLAY, DISPLAY_SHADOW } from '../lib/theme.js';
 import { Local } from '../lib/api.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { t } from '../lib/i18n.js';
@@ -125,7 +125,7 @@ export default function Settings() {
         </nav>
         <div style={{ minWidth: 0 }}>
           <header style={{ marginBottom: GAP.xxl }}>
-            <h1 style={{ margin: 0, fontFamily: FONT_KAI, fontSize: 22, fontWeight: 600, color: 'var(--desk-ink)' }}>{t(cur.label)}</h1>
+            <h1 style={{ margin: 0, fontFamily: FONT_DISPLAY, fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', textShadow: DISPLAY_SHADOW, color: 'var(--desk-ink)' }}>{t(cur.label)}</h1>
             <p style={{ margin: `${GAP.xs}px 0 0`, fontFamily: FONT_KAI, fontSize: FONT_SIZE.base, color: 'var(--desk-ink-2)' }}>{t(cur.desc)}</p>
           </header>
           {cur.id === 'account' && (isLocal

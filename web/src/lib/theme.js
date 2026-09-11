@@ -130,14 +130,18 @@ export const FONT_EMOJI = "'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Em
 // 09-06 起指向 CSS 变量：设置页「外观」能把全站字体切成系统无衬线，切的是 globals.css 里 --nd-font-ui 一处，
 // 不用动这 300 处调用点。真正的楷体字体栈在 globals.css :root 里（FONT_KAI_STACK 留给需要裸字体串的地方）。
 export const FONT_KAI_STACK = `'LXGW WenKai ND', 'LXGW WenKai', '霞鹜文楷', 'LXGW WenKai Screen', ${FONT_EMOJI}, serif`;
+// 门面粗黑体（2026-09-12 印刷风改版）：页面大标题 / 分区标题 / 大数字，配 800 字重。取值同官网 --display。
+export const FONT_DISPLAY = `-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', 'Microsoft YaHei', 'Noto Sans CJK SC', ${FONT_EMOJI}, sans-serif`;
+// 大标题的套印错位：一层淡红错开一点点（官网 h1/h2 同一手）
+export const DISPLAY_SHADOW = '.026em .018em 0 rgba(178,58,46,0.14)';
 export const FONT_KAI = 'var(--nd-font-ui)';
 // 阅读体（08-27）：屏幕优化版文楷，**全量字库**按需分片加载 —— 板书/长文正文用它；
 // 门面字（标题/UI）仍走 FONT_KAI（52KB 子集秒显）。
 export const FONT_READ = `'LXGW WenKai Screen', 'LXGW WenKai ND', '霞鹜文楷', ${FONT_EMOJI}, serif`;
 // 等宽：**机器写的东西**才用（文件名、id、token 数、终端输出、时间码）
 export const FONT_MONO = "'SF Mono', 'Cascadia Code', 'Menlo', monospace";
-// FONT_SANS 指向楷体：269 处正文因此一次性归位。名字保留是为了不动那 269 个调用点，
-// 新代码直接写 FONT_KAI。真需要无衬线的地方（目前没有）再单开一个 token。
+// FONT_SANS 跟 FONT_KAI 是同一个变量（--nd-font-ui）：09-12 起它默认就是黑体，「外观」切楷体时一起换。
+// 人写的内容（用户消息、板书、正文、项目名）不要用它，用 FONT_READ。
 export const FONT_SANS = FONT_KAI;
 
 /**

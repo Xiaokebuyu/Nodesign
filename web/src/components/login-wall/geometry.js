@@ -12,5 +12,8 @@ export const DESIGN_W = 1500;
 export const DESIGN_H = 800;
 export const SAFE_H = 780;
 
+/** 顶栏高度（09-12 印刷风：顶栏不进设计稿、不缩放，稿从它下沿开始） */
+export const NAV_H = 56;
+
 /** 窄到这个宽度以下整面墙收起，只留登记卡 */
 export const NARROW_W = 980;

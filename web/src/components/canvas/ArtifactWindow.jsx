@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { useDeviceClass } from '../../lib/device-class.js';
 import { useDockYield, yieldInset } from '../../lib/dock-yield.js';
-import { PAPER, PAPER_SHADOW, GRAIN, INK_SURFACE, pinFill } from '../../lib/paper.js';
+import { PAPER, PAPER_SHADOW, GRAIN, INK_SURFACE, pinFill, PIN_SHADOW } from '../../lib/paper.js';
 import { COLOR, GAP, FONT_SANS, FONT_SIZE, RADIUS } from '../../lib/theme.js';
 import { POP_IN } from '../../lib/board-geometry.js';
 import { exportItemsFor } from '../../lib/export-formats.js';
@@ -224,7 +224,9 @@ export default function ArtifactWindow({
           height: chromeH, flexShrink: 0, position: 'relative',
           display: 'flex', alignItems: 'center', gap: GAP.sm,
           padding: `0 ${GAP.xs}px 0 ${GAP.md}px`,
-          borderBottom: `1px solid ${PAPER.hair}`,
+          // 09-12 印刷风：跟画布卡头同一条牛皮色页眉（取值同官网 --paper-2 / --rule）
+          background: '#E3D8C0',
+          borderBottom: '1px solid #C7B79A',
         }}>
           {/* 钉纽扣：跟首页那些卡是同一枚钉子（同一段渐变、同一个光向）。
               纯装饰，不吃事件 —— 它说明的是"这张纸是被钉上去的"。 */}
@@ -232,7 +234,7 @@ export default function ArtifactWindow({
             position: 'absolute', left: '50%', top: 6, marginLeft: -4.5,
             width: 9, height: 9, borderRadius: '50%', pointerEvents: 'none',
             background: pinFill(),
-            boxShadow: '-1px 2px 3px rgba(43,33,23,0.45)',
+            boxShadow: PIN_SHADOW,
           }} />
 
           <span style={{

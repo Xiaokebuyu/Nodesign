@@ -144,6 +144,7 @@ export default {
   '我的项目': 'My projects',
   '最近对话': 'Recent chats',
   '正在打开…': 'Opening…',
+  '先给它一句话': 'Start with one sentence',
   '想到什么先写下来。': 'Write down whatever comes to mind.',
   '不用先想清楚，': "You don't have to figure it out first, ",
   '它会问你缺的那部分。': 'it will ask you for the missing pieces.',
@@ -250,8 +251,11 @@ export default {
   // ⚠️ 标题是**一行一个整句**，别再拆成 '想到，' + '做出来' + '，验一遍' 那样拼 ——
   // 中文下碰巧成立，换到别的语言就是词序赌博。英文按英文重写，不直译。
   '与 Agent 共用一块画布': 'One canvas, shared with your agent',
-  '在画布上圈选，直接修改': 'Circle anything on the canvas to change it',
-  '产物、素材与推理过程集中在同一块画布上。': 'Outputs, materials, and reasoning live on a single canvas.',
+  '产物、素材与推理过程集中在同一块画布上。你在画布上圈选、整理与修改，Agent 在画布上制作、检查与说明。': 'Outputs, materials, and reasoning live on a single canvas. You select, organize, and edit on it; the agent builds, reviews, and explains on it.',
+  '官网': 'Website',
+  '文档': 'Docs',
+  '下载 Windows 桌面版': 'Download for Windows',
+  '查看文档': 'Read the docs',
 
   '登录': 'Sign in',
   // ── 顶栏账号徽章（components/layout/TopBar.jsx，09-07 桌面版跟网页版对齐）+ 头像（settings/AccountSection.jsx） ──

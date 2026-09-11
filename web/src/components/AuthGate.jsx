@@ -27,9 +27,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { PAPER } from '../lib/paper.js';
 import { useGlobalStore } from '../stores/globalStore.js';
-import { Underline } from './PaperBits.jsx';
-import { WALL_CSS } from './login-wall/wall-css.js';
-import { DESIGN_W, SAFE_H, NARROW_W } from './login-wall/geometry.js';
+import { WALL_CSS, STEPS } from './login-wall/wall-css.js';
+import { DESIGN_W, SAFE_H, NARROW_W, NAV_H } from './login-wall/geometry.js';
+import nMark from '../assets/brand/n-mark.png';
 import { SCENES } from './login-wall/scenes/index.js';
 import { useSceneCarousel } from './login-wall/useSceneCarousel.js';
 import Scene from './login-wall/Scene.jsx';
@@ -108,7 +108,8 @@ export default function AuthGate({ children }) {
       const h = window.innerHeight;
       setNarrow(w < NARROW_W);
       if (rootRef.current) {
-        rootRef.current.style.setProperty('--s', String(Math.min(w / DESIGN_W, h / SAFE_H)));
+        // 稿从顶栏下沿开始（09-12），竖向可用的是 h - NAV_H
+        rootRef.current.style.setProperty('--s', String(Math.min(w / DESIGN_W, (h - NAV_H) / SAFE_H)));
       }
     };
     fit();
@@ -118,6 +119,7 @@ export default function AuthGate({ children }) {
   // 墙轮着播：只在真正显示墙的时候转（窄屏只有登记卡，没有墙可换）
   const { scene, phase: scenePhase } = useSceneCarousel(SCENES, {
     enabled: phase === 'login' && !narrow,
+    paperCount: STEPS,   // 每套 ①→⑥ 六步（09-12 印刷风）；不传的话按旧墙的 20 张算，进出场会等很久
   });
 
   async function submit(e) {
@@ -212,11 +214,11 @@ export default function AuthGate({ children }) {
       <div className="ndw-tabs">
         <button type="button" className={isRegister ? '' : 'on'}
           onClick={() => { setMode('login'); setError(''); }}>
-          {t('登录')}{!isRegister && <Underline />}
+          {t('登录')}
         </button>
         <button type="button" className={isRegister ? 'on' : ''}
           onClick={() => { setMode('register'); setError(''); }}>
-          {openReg ? t('注册') : t('注册')}{isRegister && <Underline />}
+          {t('注册')}
         </button>
       </div>
       <div className="ndw-field">
@@ -244,6 +246,10 @@ export default function AuthGate({ children }) {
         {busy ? t('正在验证') : isRegister ? t('注册') : t('登录')}
       </button>
       <p className="foot">{openReg ? t('注册即可使用，免费模型对所有用户开放。') : t('当前仅接受邀请注册。')}</p>
+      <div className="alt">
+        <a href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe">{t('下载 Windows 桌面版')} →</a>
+        <a href="/welcome/docs.html">{t('查看文档')} →</a>
+      </div>
     </>
   );
 
@@ -251,42 +257,36 @@ export default function AuthGate({ children }) {
     <div className={`ndw${narrow ? ' narrow' : ''}`} ref={rootRef}>
       <style>{WALL_CSS}</style>
 
-      {/* 语言切换器浮在视口角上，**不进 1500x800 那张设计稿** —— 稿里的东西按 --s
-          缩放，塞进去会被一起缩小，而且会挤到既有构图。门外必须能换语言：
-          英文用户读不懂登录表单的话，站内做得再好也没机会被看到。 */}
-      <div style={{ position: 'fixed', top: 14, right: 16, zIndex: 50 }}>
-        <LanguageSwitcher variant="wall" />
-      </div>
-
+      {/* 顶栏（09-12 印刷风）：不进 1500x800 那张设计稿（稿里的东西按 --s 缩放），横贯整个视口。
+          语言切换器挂在这里 —— 门外必须能换语言，英文用户读不懂登录表单的话，站内做得再好也没机会被看到。 */}
+      <header className="ndw-nav">
+        <a className="brand" href="/welcome/"><img src={nMark} alt="" />Nodesign</a>
+        <nav className="links">
+          {!desktop && <a href="/welcome/">{t('官网')}</a>}
+          {!desktop && <a href="/welcome/docs.html">{t('文档')}</a>}
+          <LanguageSwitcher variant="wall" />
+        </nav>
+      </header>
       {!narrow && (
-        <>
-          <div className="ndw-ghost" style={{ left: '2%', top: '64%', width: 132, height: 96, transform: 'rotate(-2deg)' }} />
-          <div className="ndw-ghost" style={{ left: '90.5%', top: '10%', width: 108, height: 148, transform: 'rotate(1.6deg)' }} />
-          <div className="ndw-ghost" style={{ left: '6.5%', top: '11%', width: 92, height: 70, transform: 'rotate(2.4deg)' }} />
-          <div className="ndw-ghost" style={{ left: '85%', top: '76%', width: 150, height: 104, transform: 'rotate(-1.2deg)' }} />
-        </>
+        <div className="ndw-proof" aria-hidden="true">
+          <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+          <div className="bar"><b /><b /><b /><b /></div>
+          <div className="tag">PROOF · {new Date().getFullYear()}-{String(new Date().getMonth() + 1).padStart(2, '0')}</div>
+        </div>
       )}
       {narrow ? (
         <form className="ndw-card ndw-solo" onSubmit={submit}>
-          <span className="brand">Nodesign</span>
+          <span className="pin" />
           {form}
         </form>
       ) : (
         <div className="ndw-stage">
           {/* 跨场景不变的锚（一）：认得出这是哪儿 */}
           <div className="ndw-head">
-            <div className="row">
-              <span className="ndw-logo">Nodesign</span>
-              <span className="ndw-anno">{t('以画布为中心的 Agent 工作台')}</span>
-            </div>
-            {/* 标题**一行一个整句**，不再拿三段 t() 拼一句（2026-08-28）。
-                拼句在中文下碰巧成立，换到英文就是词序赌博；而且旧版给中间那段
-                加了 nowrap，英文一长直接压进右边场景的照片里。 */}
-            <h1>
-              <span className="l">{t('与 Agent 共用一块画布')}</span>
-              <span className="l u">{t('在画布上圈选，直接修改')}<Underline w={1.8} /></span>
-            </h1>
-            <p className="ndw-sub">{t('产物、素材与推理过程集中在同一块画布上。')}</p>
+            <span className="ndw-anno">{t('以画布为中心的 Agent 工作台')}</span>
+            {/* 标题一个整句（2026-08-28 起不再拿几段 t() 拼一句：拼句在英文下是词序赌博） */}
+            <h1>{t('与 Agent 共用一块画布')}</h1>
+            <p className="ndw-sub">{t('产物、素材与推理过程集中在同一块画布上。你在画布上圈选、整理与修改，Agent 在画布上制作、检查与说明。')}</p>
           </div>
 
           {/* 会换的那一半：一套构图 = 一个场景文件 */}

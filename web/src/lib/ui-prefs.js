@@ -6,12 +6,13 @@
 // localStorage 里还存着 110/125 —— 所以 applyUiPrefs 每次都把它擦回空，saveUiPrefs 也不再把它写回去；
 // 光删入口不归零，已经调过的人永远回不来。桌面壳那一层（Electron zoomFactor）09-07 已同样钉死在 1。
 const KEY = 'nd.ui';
+// 2026-09-12 起默认黑体（印刷风改版：界面黑体、楷体留给人写的内容）
 export const FONTS = [
-  { id: 'kai', label: '楷体（默认）' },
-  { id: 'sans', label: '系统无衬线' },
+  { id: 'sans', label: '黑体（默认）' },
+  { id: 'kai', label: '楷体' },
 ];
 
-const DEFAULTS = { font: 'kai' };
+const DEFAULTS = { font: 'sans' };
 
 export function loadUiPrefs() {
   try {
@@ -30,9 +31,9 @@ export function saveUiPrefs(patch) {
   return next;
 }
 
-/** 字体走根节点 data-font（globals.css 的 --nd-font-ui 按它切）。CSS zoom 一律擦掉（见文件头） */
+/** 字体走根节点 data-font（globals.css 的 --nd-font-ui 按它切，默认黑体不挂属性）。CSS zoom 一律擦掉（见文件头） */
 export function applyUiPrefs(p = loadUiPrefs()) {
   const root = document.documentElement;
-  if (p.font === 'kai') delete root.dataset.font; else root.dataset.font = p.font;
+  if (p.font === 'sans') delete root.dataset.font; else root.dataset.font = p.font;
   if (root.style.zoom) root.style.zoom = '';
 }

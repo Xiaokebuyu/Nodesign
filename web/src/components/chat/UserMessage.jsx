@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Undo2 } from 'lucide-react';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_SANS } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_SANS, FONT_READ } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { PAPER, INK_EDGE } from '../../lib/paper.js';
 import { Sessions } from '../../lib/api.js';
 import { parseAnnotationMessage, annotationTargets } from '../../lib/annotation-message.js';
 import AnnotationNote from './AnnotationNote.jsx';
@@ -155,12 +156,14 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
         {anno && (
           <AnnotationNote desc={anno.desc} what={annoWhat} open={annoOpen} onToggle={() => setAnnoOpen((v) => !v)} />
         )}
+        {/* 09-12 印刷风：用户那句话是压在纸上的一小块牛皮纸（墨线边、无圆角），字是人写的 → 阅读楷体 */}
         <div style={{
-          background: COLOR.btn, color: COLOR.btnText,
-          padding: `${GAP.md}px ${GAP.lg}px`,
-          borderRadius: 14,
-          fontFamily: FONT_SANS, fontSize: FONT_SIZE.base,
-          lineHeight: 1.5,
+          background: PAPER.kraft, color: COLOR.text,
+          border: `1px solid ${INK_EDGE}`,
+          padding: `${GAP.sm + 1}px ${GAP.md + 2}px`,
+          borderRadius: 0,
+          fontFamily: FONT_READ, fontSize: FONT_SIZE.base,
+          lineHeight: 1.65,
           whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
         }}>{anno ? anno.text : message.content}</div>

@@ -71,10 +71,12 @@ describe('楷体字集不许再漏字', () => {
   });
 
   it('⭐ 字体栈里必须留一张全覆盖的网，排在 serif 之前', () => {
-    // 09-06 起真栈在 globals.css 的 --nd-font-ui（设置页「外观」按 data-font 切），theme 的 FONT_KAI 只是 var()
+    // 09-06 起真栈在 globals.css（设置页「外观」按 data-font 切），theme 的 FONT_KAI 只是 var()。
+    // 09-12 界面默认改黑体：楷体栈搬进 --nd-font-kai，[data-font="kai"] 时 --nd-font-ui 指向它
     expect(THEME, 'FONT_KAI 必须指向 CSS 变量，字体切换靠它').toMatch(/export const FONT_KAI = 'var\(--nd-font-ui\)'/);
-    const kai = (CSS.match(/:root\s*\{[^}]*--nd-font-ui:\s*([^;]+);/) || [])[1];
-    expect(kai, '找不到 globals.css 里 :root 的 --nd-font-ui').toBeTruthy();
+    expect(CSS, '楷体档要把 --nd-font-ui 指到 --nd-font-kai').toMatch(/\[data-font="kai"\]\s*\{[^}]*--nd-font-ui:\s*var\(--nd-font-kai\)/);
+    const kai = (CSS.match(/:root\s*\{[^}]*--nd-font-kai:\s*([^;]+);/) || [])[1];
+    expect(kai, '找不到 globals.css 里 :root 的 --nd-font-kai').toBeTruthy();
     expect(kai.indexOf("'LXGW WenKai ND'"), 'ND 必须排第一').toBe(0);
     // 用户自己打的字（项目名/文件名）超出全站字集时，接住它的是 Screen 那份全量字库；
     // 没有这一档就直接掉到 serif = 系统宋体。

@@ -13,7 +13,6 @@ import { Sessions, Assets, Projects } from '../lib/api.js';
 import { timeAgo } from '../lib/helpers.js';
 import { useMedia, NARROW } from '../lib/use-media.js';
 import { useHoverReveal } from '../lib/use-hover-reveal.js';
-import dHand from '../assets/login-wall/doodles/hand.webp';
 import LanguageSwitcher from '../components/ui/LanguageSwitcher.jsx';
 import Popover from '../components/ui/Popover.jsx';
 import { t, getLocale } from '../lib/i18n.js';
@@ -21,6 +20,7 @@ import { sheetClassOf } from './home-sheets.js';
 import { DayToggle } from './home-light.jsx';
 import { Desk } from './desk.jsx';
 import { useFeatured, FeaturedCard } from './home-featured.jsx';
+import HomeFigure from './home-figure.jsx';
 
 /**
  * Home 页 —— 进门之后的那面板子（2026-08-03 改版）
@@ -42,12 +42,6 @@ import { useFeatured, FeaturedCard } from './home-featured.jsx';
  * （GET /api/projects/stats）；拿不到就只留时间，不编。
  */
 
-/** 纸的倾角按 id 定死：每次渲染都一样，不会因为 re-render 抖一下 */
-function tilt(id) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return `${((h % 220) - 110) / 100}deg`;
-}
 
 /** 形态的中文说法沿用产品里已有的叫法：deck 保持英文（用户自己就这么说） */
 const KIND_WORD = { deck: ['份', 'deck'], site: ['个', '站点'] };
@@ -156,12 +150,10 @@ export default function Home() {
               <QuickEntry prefill={prefill} />
             </div>
             <div className="ndd-side r">
-              {/* 涂鸦要跟旁边那句话说同一件事。原来挂的是 tangle（「突然通了」）——
-                  那画的是想通了**之后**那一刻，而这句话说的正好相反：不用先想清楚。
-                  换成 hand（「先给它一句话」）：一只手递出一张写了字的纸，
-                  跟这个输入框要的动作是同一个，也跟左边那本便签是同一套物料。 */}
-              <img className="doodle" src={dHand} alt="" />
-              <p className="aside">{t('想到什么先写下来。')}<br />{t('不用先想清楚，')}<br />{t('它会问你缺的那部分。')}</p>
+              {/* 09-12 印刷风：原来这里是一只递纸的手的涂鸦（「先给它一句话」），涂鸦撤掉，
+                  那句话升成这段旁注的标题 */}
+              <HomeFigure className="fig" />
+              <p className="aside"><b>{t('先给它一句话')}</b>{t('想到什么先写下来。')}<br />{t('不用先想清楚，')}<br />{t('它会问你缺的那部分。')}</p>
             </div>
           </div>
 
@@ -192,7 +184,7 @@ export default function Home() {
                   {projects.map((p, i) => (
                     <ProjectCard key={p.id} project={p} stat={stats?.[p.id]} newest={i === 0} />
                   ))}
-                  {featured.map(f => <FeaturedCard key={f.id} pub={f} tilt={tilt(f.id)} />)}
+                  {featured.map(f => <FeaturedCard key={f.id} pub={f} />)}
                 </div>
               )}
             </>
@@ -426,7 +418,7 @@ function ProjectCard({ project, stat, newest }) {
       ref={cardRef}
       {...hoverProps}
     >
-      <Link to={`/projects/${project.id}/work`} style={{ '--rot': tilt(project.id) }}>
+      <Link to={`/projects/${project.id}/work`}>
         <ThumbnailBox project={project} stat={stat} />
         <div className="t">{project.name}</div>
         <div className="m">

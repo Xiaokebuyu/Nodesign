@@ -46,6 +46,10 @@ import LiveFrame from '../LiveFrame.jsx';
  *   2. 镜头拉太远就不挂（`scale < 0.35` 时预览什么都看不清，纯浪费）
  */
 
+/** 卡头的牛皮色页眉与它下面那道线（09-12 印刷风，取值同官网 --paper-2 / --rule） */
+const CARD_HEAD_BG = '#E3D8C0';
+const CARD_HEAD_RULE = '#C7B79A';
+
 /** 失败占位共用的那张"纸"（内容各家自定，见 ServedImagePreview） */
 const fallbackBox = (box) => ({
   width: box.w, height: box.h, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -399,14 +403,16 @@ export default function ArtifactCard({
 
   return (
     <div title={face.tip} style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* 顶栏：这是什么 + 叫什么 + 一行小字。没有按钮 —— 整张卡就是"打开"。 */}
+      {/* 顶栏：这是什么 + 叫什么 + 一行小字。没有按钮 —— 整张卡就是"打开"。
+          09-12 印刷风：一条牛皮色的页眉、下面一道细线，名字和小字都用等宽（同官网画布示意图的卡头） */}
       <div style={{
         height: ARTIFACT_HEADER_H, flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: GAP.sm,
         padding: `0 ${GAP.sm}px`,
-        borderBottom: `1px solid ${COLOR.borderLt}`,
+        background: CARD_HEAD_BG,
+        borderBottom: `1px solid ${CARD_HEAD_RULE}`,
       }}>
-        <Icon size={12} color={COLOR.sub} style={{ flexShrink: 0 }} />
+        <Icon size={12} color={COLOR.text2} style={{ flexShrink: 0 }} />
         {renaming ? (
           <input
             data-board-action
@@ -430,7 +436,7 @@ export default function ArtifactCard({
           />
         ) : (
           <span style={{
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, fontWeight: 600, color: COLOR.text,
+            fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, fontWeight: 500, color: COLOR.text2,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
           }}>{o.title}</span>
         )}

@@ -8,14 +8,15 @@
  * 默认楷体：整套语言里正文就是楷体，手写在白板上的一句话跟它同源。
  * 等宽只留给机器写的东西（这条规矩全站一致，见 lib/theme.js 的 FONT_MONO）。
  */
-import { FONT_KAI, FONT_MONO, FONT_EMOJI, FONT_READ } from './theme.js';
+import { FONT_KAI_STACK, FONT_MONO, FONT_EMOJI, FONT_READ } from './theme.js';
 
 export const TEXT_FONT_CSS = {
   // 手写（默认）：拉丁字符走 Caveat（龙藏的英文字形糙），中文落龙藏体硬笔字
   // —— "白板上随手写的一句"就该长这样。回落链放楷体：字体还在路上
   // （龙藏 2.9MB swap）或极少数字缺字时不至于跳成黑体。
-  pen: `'Caveat ND', 'Long Cang ND', ${FONT_KAI}`,
-  kai: FONT_KAI,
+  pen: `'Caveat ND', 'Long Cang ND', ${FONT_KAI_STACK}`,
+  // 真楷体栈，不走界面变量：09-12 起界面默认黑体，画布上选「楷体」的字不能跟着变黑体
+  kai: FONT_KAI_STACK,
   // 黑体给的是**真黑体栈**，不是 FONT_SANS —— 那个常量全站指向楷体
   // （theme.js:114），用它的话设置面板里"楷体/黑体"是同一张脸（2026-08-13 修）
   sans: `'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', ${FONT_EMOJI}, system-ui, sans-serif`,

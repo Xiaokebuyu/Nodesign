@@ -98,8 +98,9 @@ export default function ChatPanel({
             fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, fontWeight: 500,
             color: COLOR.text,
             background: 'transparent',
-            border: `1px solid ${CHROME.border}`,
-            borderRadius: RADIUS.md,
+            // 09-12 印刷风：方角、墨线细一档
+            border: '1px solid rgba(31,24,16,0.35)',
+            borderRadius: 0,
             cursor: onOpenSessionList ? 'pointer' : 'default',
             flex: 1,
             minWidth: 0,

@@ -15,9 +15,9 @@
  * 画的，硬塞进统一 schema 只会让每个场景都在跟 schema 打架。墙是**设计**
  * 不是数据。
  */
-import { PAPER_VARS, PAPER, P, PAPER_SHADOW } from '../../lib/paper.js';
+import { PAPER_VARS, P, PAPER_SHADOW, INK_EDGE, pinFill, PIN_SHADOW } from '../../lib/paper.js';
 import { COLOR } from '../../lib/theme.js';
-import { DESIGN_W, DESIGN_H } from './geometry.js';
+import { DESIGN_W, DESIGN_H, SAFE_H, NAV_H } from './geometry.js';
 
 /**
  * 一套墙的节拍（毫秒）。**CSS 和 JS 必须用同一份**：轮播那边要知道「摘完了
@@ -86,25 +86,27 @@ export const FRAME = 32;
 export const stepsFor = (intervalMs) => intervalMs / FRAME + 1;
 
 export const MOTION = {
-  // ⭐ 一张卡自己的动作走 15 格（够顺）；**张与张之间隔 256ms**（8 格）——
-  //    定格感全在这个间隔上：一张钉稳了下一张才上手，不是一整面墙一起抖。
-  enter: 480, stepIn: 256,
+  // ⭐ 一张卡自己的动作走 15 格（够顺）；张与张之间的间隔是定格感所在。
+  //    09-12 印刷风改版：一套只剩 ①→⑥ 六步（原来一面墙二十来张纸），间隔从 256ms 拉到 800ms
+  //    —— 六张按 256 排，1.5 秒就钉完了，读不出"一步接一步"。站主要的就是这个"连续步骤与卡片出现"。
+  enter: 480, stepIn: 800,
   leave: 480, stepOut: 160,    // 摘的时候快一点（手往下捋），错开 5 格
   threadIn: 704,               // 红线画出来（等所有纸钉完才开始）
   inkOut: 320, boardOut: 384,  // 收起时：线先擦、板上的墨最后淡
-  still: 1440,                 // 钉完之后站着不动的那一拍
+  still: 2400,                 // 钉完之后站着不动的那一拍（六步要读完一遍，比原来的 1.44s 长）
   inkIn: 384, inkStep: 96,     // 板上的墨：单个的时长 / 彼此错开
   handStep: 160,               // 手写标签彼此错开
-  sway: 6400, swayStep: 576,   // 风吹纸摆一个来回 / 每张纸错开
 };
+
+/** 每套场景的步数：轮播的定时器按它算进出场要多久（场景文件里 .paper 的个数跟它对账，见 scenes 的测试） */
+export const STEPS = 6;
 
 /**
  * 进场 / 退场各要多久 —— 轮播的定时器按它算，`n` 是这一套有几张纸。
  *
  * ⚠️ 进场的尾巴不是最后一张纸，是**红线那一拨**：它要等所有纸钉完才开始画。
  * 按纸算完就摘 class 的话，线会在半路被掐掉直接跳到全黑。
- * ⚠️ 退场的尾巴也不是纸，是**板上的墨**：涂鸦画在板面上、纸压在它们之上，
- * 所以纸摘光了它们才淡（正好是进场顺序的倒放）。
+ * ⚠️ 退场的尾巴也不是纸，是**板上的墨**：纸摘光了它们才淡（正好是进场顺序的倒放）。
  */
 export const enterMs = (n) => n * MOTION.stepIn + MOTION.threadIn;
 export const leaveMs = (n) => Math.max(
@@ -113,217 +115,163 @@ export const leaveMs = (n) => Math.max(
 );
 
 export const WALL_CSS = `
+/* ===== 09-12 印刷风改版 =====
+   门外这一页跟官网、跟进门之后是同一种纸：平光的印刷纸（纸纤维 + 颗粒）、墨线描边的纸、
+   不模糊的错位影、粗黑体标题、等宽的元数据，红笔只用在编号、连线和「用户圈的那一下」上。
+   软木板、窗光、旧钉眼、涂鸦、歪角、风吹纸摆都退役了（站主 09-12：摆正、去掉涂鸦）。 */
 .ndw {
   ${PAPER_VARS}
   position: fixed; inset: 0; overflow: hidden;
-  font-family: var(--kai); color: var(--ink);
+  font-family: var(--display); color: var(--ink);
   -webkit-font-smoothing: antialiased;
   background:
-    radial-gradient(ellipse 120% 90% at 50% 118%, ${P('dusk2',0.08)}, transparent 55%),
-    linear-gradient(105deg, transparent 50%, ${P('litSlant',0.30)} 51% 58%, transparent 59%, transparent 64%, ${P('litSlant',0.22)} 66% 70%, transparent 71%),
-    radial-gradient(ellipse 90% 70% at 80% 4%, ${P('litWarm',0.22)}, transparent 62%),
-    /* 大块斑驳：板子不是一块匀色板 */
-    radial-gradient(ellipse 46% 40% at 16% 26%, ${P('dusk',0.055)}, transparent 72%),
-    radial-gradient(ellipse 38% 46% at 72% 74%, ${P('dusk',0.05)}, transparent 74%),
-    radial-gradient(ellipse 30% 28% at 94% 20%, ${P('litSoft',0.45)}, transparent 72%),
-    radial-gradient(ellipse 26% 30% at 4% 84%, ${P('dusk',0.045)}, transparent 72%),
-    radial-gradient(ellipse 40% 30% at 10% 66%, rgba(93,74,44,0.045), transparent 70%),
-    radial-gradient(ellipse 34% 26% at 90% 40%, rgba(93,74,44,0.04), transparent 70%),
+    radial-gradient(118% 112% at 50% 45%, transparent 56%, rgba(31,24,16,0.09)),
     var(--grain),
-    repeating-linear-gradient(0deg, rgba(43,33,23,0.03) 0 1px, transparent 1px 28px),
-    repeating-linear-gradient(90deg, rgba(43,33,23,0.03) 0 1px, transparent 1px 28px),
-    repeating-linear-gradient(0deg, rgba(43,33,23,0.022) 0 1px, transparent 1px 140px),
-    repeating-linear-gradient(90deg, rgba(43,33,23,0.022) 0 1px, transparent 1px 140px),
     var(--wall);
 }
-/* 织纹 + 旧钉眼：三层不同周期错开，看不出重复 */
-.ndw::before {
-  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(circle at 37px 51px, ${P('hole',0.17)} 0 1.1px, transparent 1.7px),
-    radial-gradient(circle at 119px 23px, ${P('hole',0.14)} 0 1px, transparent 1.6px),
-    radial-gradient(circle at 61px 137px, ${P('hole',0.12)} 0 1.2px, transparent 1.8px),
-    repeating-linear-gradient(90deg, rgba(43,33,23,0.019) 0 1px, transparent 1px 3px),
-    repeating-linear-gradient(0deg, rgba(43,33,23,0.015) 0 1px, transparent 1px 3px);
-  background-size: 163px 211px, 271px 149px, 197px 313px, auto, auto;
-}
-/* 旧痕：这儿以前挂过东西，取下来了 */
-.ndw-ghost { position: absolute; z-index: 0; pointer-events: none;
-  background: ${P('litCool',0.22)}; border-radius: 1px;
-  box-shadow: 0 0 0 1px rgba(43,33,23,0.02), 0 0 12px 7px ${P('litCool',0.1)}; }
-.ndw-ghost::after { content: ''; position: absolute; left: 50%; top: 5px; width: 3px; height: 3px;
-  margin-left: -1.5px; border-radius: 50%; background: ${P('hole',0.26)}; }
 .ndw * { margin: 0; padding: 0; box-sizing: border-box; }
+.ndw a { color: inherit; }
 
-/* 整面墙 = 一张 1500x800 的设计稿，顶边对齐缩放 */
+/* 印刷记号：四角裁切线、左下色标、右下竖排的校样日期（同官网） */
+.ndw-proof { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
+.ndw-proof i { position: absolute; width: 16px; height: 16px; border: 0 solid var(--pencil); opacity: 0.55; }
+.ndw-proof .tl { top: 72px; left: 20px; border-top-width: 1px; border-left-width: 1px; }
+.ndw-proof .tr { top: 72px; right: 20px; border-top-width: 1px; border-right-width: 1px; }
+.ndw-proof .bl { bottom: 20px; left: 20px; border-bottom-width: 1px; border-left-width: 1px; }
+.ndw-proof .br { bottom: 20px; right: 20px; border-bottom-width: 1px; border-right-width: 1px; }
+.ndw-proof .bar { position: absolute; left: 20px; bottom: 48px; display: flex; gap: 3px; }
+.ndw-proof .bar b { display: block; width: 11px; height: 11px; }
+.ndw-proof .bar b:nth-child(1) { background: #2E6B7A; } .ndw-proof .bar b:nth-child(2) { background: #B23A2E; }
+.ndw-proof .bar b:nth-child(3) { background: #C9A227; } .ndw-proof .bar b:nth-child(4) { background: var(--ink); }
+.ndw-proof .tag { position: absolute; right: 20px; bottom: 48px; font: 10px var(--code); letter-spacing: 0.2em;
+  color: var(--pencil); writing-mode: vertical-rl; }
+
+/* 顶栏：不进 1500x800 的稿（不跟着缩放），横贯整个视口，同官网 */
+.ndw-nav { position: absolute; top: 0; left: 0; right: 0; height: ${NAV_H}px; z-index: 20;
+  display: flex; align-items: center; gap: 28px; padding: 0 40px;
+  background: ${P('wall',0.92)}; border-bottom: 1px solid ${INK_EDGE}; }
+.ndw-nav .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none;
+  font: 800 20px var(--display); letter-spacing: -0.02em; }
+.ndw-nav .brand img { width: 22px; height: 22px; border-radius: 5px; display: block; }
+.ndw-nav .links { margin-left: auto; display: flex; align-items: center; gap: 26px;
+  font: 13px var(--code); letter-spacing: 0.06em; color: var(--ink-2); }
+.ndw-nav .links a { text-decoration: none; }
+.ndw-nav .links a:hover { color: var(--ink); }
+
+/* 整面墙 = 一张 1500x800 的设计稿，从顶栏下沿开始、顶边对齐缩放 */
 .ndw-stage {
-  position: absolute; z-index: 1; left: 50%; top: 0;
+  position: absolute; z-index: 1; left: 50%; top: ${NAV_H}px;
   margin-left: -${DESIGN_W / 2}px;
   width: ${DESIGN_W}px; height: ${DESIGN_H}px;
   transform: scale(var(--s, 1));
   transform-origin: top center;
 }
-/* 随手涂鸦：直接画在板子上，压在所有纸底下。是墙的一部分，不是挂件。
-   素材是真 alpha 不是白底 —— 涂鸦在 .ndw-stage 里，stage 的 transform 开了新的
-   层叠上下文，mix-blend-mode 够不着画在根节点上的板面，白底会原样糊一块上去。
-   每个涂鸦都自带一句手写，字和画是同一次生成的（见 DOODLES 注释） */
-.ndw .doodle { position: absolute; z-index: 1; pointer-events: none;
-  opacity: 0.55; display: block; }
 
-/* ===== 纸 =====
-   层次靠三样：①墨线描边 + 错位影分三档（2026-09-12 印刷纸，档位在 paper.js 的 LIFT；右上打光→影子偏左下）
-   ②纸叠纸（背后垫一张露边的空纸）③底边起拱（单钉吊着的纸会往外弯） */
-.ndw .paper { position: absolute; background-color: var(--paper); background-image: var(--grain);
-  box-shadow: ${PAPER_SHADOW.mid};
-  transform: rotate(var(--rot, 0deg)); transform-origin: 50% 7px; z-index: 2; }
-/* 最远：贴得最平，影子小而紧，再退半档空气感 */
-.ndw .paper.z0 { box-shadow: ${PAPER_SHADOW.far};
-  filter: brightness(0.976) saturate(0.93); }
-/* 最近：影子大而散 */
-.ndw .paper.z2 { box-shadow: ${PAPER_SHADOW.near}; }
-/* 垫在后面那张空纸：只露一道边 */
-.ndw .pstack { z-index: 1; background-color: ${PAPER.stack};
-  box-shadow: ${PAPER_SHADOW.far}; }
-/* 底边起拱：单钉吊着的纸，下缘往外弯，中间背光 */
-.ndw .bow { position: absolute; left: 0; right: 0; bottom: 0; height: 32%; z-index: 3;
-  pointer-events: none;
-  background: radial-gradient(130% 100% at 50% 112%, rgba(43,33,23,0.07), transparent 62%); }
-/* 风吹纸摆也走帧钟（2026-08-28）。
-   原来每张纸自带一个 5.3-8.2s 不等的周期、平滑 ease-in-out —— 那是墙上唯一一个
-   不按快门走的东西。它本身看不见（每格转 0.017deg），但它让"整面墙同一个快门"
-   这件事不成立，而且每秒白白重合成几十次。
-   现在周期统一，相位按第几张纸错开（--i 由 Scene.jsx 在运行时按 DOM 顺序发），
-   于是 40 个手写的 --dur/--delay 一起退休。 */
-/* ⛔ 别用 「alternate」 把来回省成半程（⚠️ 这段 CSS 是 JS 模板字符串，注释里
-   一个反引号就把整个文件炸成 SyntaxError —— 08-28 我踩了三次）。实测（rAF 采样每张纸的 transform）：反向那
-   半程的 jump-none 台阶是**镜像**的，跟正向差半格 —— 于是十五张纸分裂成两套错开
-   的格子，"整面墙同一个快门"当场不成立（量到全墙每 17ms 就有人在跳）。
-   老老实实写三帧三角波：两段各 40 格，一个来回 80 格，所有纸共用一套格子。 */
-@keyframes ndw-sway {
-  0%, 100% { transform: rotate(calc(var(--rot, 0deg) - 0.32deg)); }
-  50%      { transform: rotate(calc(var(--rot, 0deg) + 0.32deg)); }
-}
-.ndw .sway {
-  animation: ndw-sway ${MOTION.sway}ms steps(${stepsFor(MOTION.sway / 2)}, jump-none) infinite;
-  animation-delay: calc(var(--i, 0) * -${MOTION.swayStep}ms);
-}
-@media (prefers-reduced-motion: reduce) { .ndw .sway { animation: none; } }
+/* ===== 一步 = 一整块（纸 + 编号 + 图注）一起钉上去 =====
+   .paper 是动画的单位（Scene.jsx 按 DOM 顺序发 --i）；真正的纸是里面的 .sheet。 */
+.ndw .paper { position: absolute; z-index: 2; }
+.ndw .sheet { position: relative; background-color: var(--paper); background-image: var(--grain);
+  box-shadow: ${PAPER_SHADOW.mid}; }
+.ndw .sheet.near { box-shadow: ${PAPER_SHADOW.near}; }
+.ndw .sheet.sticky { background-color: var(--sticky); }
+.ndw .sheet.term { background: #241D14; box-shadow: 0 0 0 1px #241D14, -2px 5px 0 rgba(31,24,16,0.2);
+  color: #E4DCC8; padding: 12px 14px; }
+.ndw .term .h { font: 600 11px var(--code); color: #9b917c; letter-spacing: 0.12em;
+  border-bottom: 1px solid rgba(228,220,200,0.18); padding-bottom: 6px; margin-bottom: 6px; }
+.ndw .term .l { font: 11.5px/1.9 var(--code); white-space: nowrap; }
+.ndw .term .l i { font-style: normal; color: #9DBF9A; margin-right: 6px; }
+.ndw .term .l span { color: #8A8069; }
+.ndw .term .run { margin-top: 6px; font: 10.5px var(--code); color: #8A8069; }
+/* 卡头：牛皮色页眉（同画布卡头） */
+.ndw .bar { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid #C7B79A;
+  background: #E3D8C0; font: 11px var(--code); color: var(--pencil); white-space: nowrap; }
+.ndw .bar .dot { width: 7px; height: 7px; background: #B23A2E; flex: none; }
+.ndw .bar .name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; }
+.ndw .bar .st { margin-left: auto; }
+.ndw .shot { display: block; width: 100%; height: auto; }
+/* 便签：人说的那句话（楷体，人写的） */
+.ndw .note { padding: 14px 15px 12px; }
+.ndw .note .who { font: 10.5px var(--code); color: var(--pencil); letter-spacing: 0.14em; }
+.ndw .note p { margin-top: 6px; font: 15px/1.65 var(--kai-real); color: var(--ink); }
+.ndw .note .when { margin-top: 8px; font: 10.5px var(--code); color: var(--pencil); }
+/* 板书：直接写在板上（标题粗黑体，正文阅读楷体 —— 09-12 板书改用易读字体） */
+.ndw .chalk .t { font: 800 17px var(--display); letter-spacing: -0.01em; border-bottom: 1px solid var(--ink);
+  padding-bottom: 6px; margin-bottom: 6px; }
+.ndw .chalk ol { list-style: none; font: 14px/1.85 var(--read); color: var(--ink-2); }
+.ndw .chalk li b { font: 400 10.5px var(--code); color: var(--pencil); margin-right: 8px; }
+.ndw .chalk li.del { color: var(--red); text-decoration: line-through; }
+/* 卡里的一段文字（角色卡、试演页） */
+.ndw .txt { padding: 12px 14px; font: 13.5px/1.75 var(--read); color: var(--ink-2); }
+.ndw .txt b { font: 600 10.5px var(--code); color: var(--pencil); letter-spacing: 0.08em; margin-right: 6px; }
+.ndw .txt .say { color: var(--ink); }
+/* 编号：红圈 + 等宽数字 */
+.ndw .no { position: absolute; left: -14px; top: -14px; z-index: 7; width: 28px; height: 28px;
+  border: 1.8px solid var(--red); border-radius: 50%; background: ${P('paper',0.92)};
+  font: 600 13px/24px var(--code); color: var(--red); text-align: center; }
+.ndw .cap { margin-top: 7px; font: 11px var(--code); color: var(--pencil); letter-spacing: 0.06em; white-space: nowrap; }
+.ndw .stamp { position: absolute; z-index: 7; font: 600 12px var(--code); letter-spacing: 0.2em; color: var(--red);
+  border: 1.8px solid var(--red); padding: 3px 9px; transform: rotate(-6deg); background: ${P('paper',0.6)}; }
+/* 钉子：硬边平涂 + 硬影（同首页） */
+.ndw .pin { position: absolute; top: -5px; left: 50%; width: 11px; height: 11px; margin-left: -5.5px;
+  border-radius: 50%; background: ${pinFill()}; box-shadow: ${PIN_SHADOW}; z-index: 6; }
+.ndw .pin.r { background: ${pinFill(true)}; }
+/* ⑤ 用户圈的那一下：红笔直接画在别的纸上（这一步没有自己的纸） */
+.ndw .circle { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.ndw .circle path { fill: none; stroke: var(--red); stroke-width: 2.2; stroke-linecap: round; opacity: 0.92; }
+/* ⑤ 那句红笔字跟着第 5 步一起钉上去（不能用 .hand：.hand 要等所有纸钉完才出来） */
+.ndw .pen-note { position: absolute; font: 17px/1.35 var(--kai-real); color: var(--red); white-space: nowrap; }
+.ndw .pen-note .cap { color: var(--red); opacity: 0.85; }
 
-/* 固定件：一张纸一种，别都用钉 */
-.ndw .pin { position: absolute; top: 6px; left: 50%; width: 9px; height: 9px; border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, ${PAPER.pinA}, ${PAPER.pinB} 65%);
-  box-shadow: -1px 2px 3px rgba(43,33,23,0.45); transform: translateX(-50%); z-index: 6; }
-.ndw .pin.r { background: radial-gradient(circle at 35% 30%, ${PAPER.pinRedA}, ${PAPER.pinRedB} 65%); }
-.ndw .clip { position: absolute; top: -13px; left: var(--cx, 22%); width: 17px; z-index: 6;
-  filter: drop-shadow(-1px 2px 2px rgba(43,33,23,0.32)); }
-.ndw .staple { position: absolute; top: 9px; left: var(--cx, 12px); width: 15px; height: 4px; z-index: 6;
-  transform: rotate(-28deg); background: linear-gradient(180deg, ${PAPER.clipA}, ${PAPER.clipB});
-  box-shadow: -1px 1.5px 1.5px rgba(43,33,23,0.45); }
+/* 线索线：连着相邻两步，等所有步钉完才画上去 */
+.ndw-thread { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+.ndw-thread path { fill: none; stroke: var(--red); stroke-width: 1.8; stroke-linecap: round; opacity: 0.8; }
+.ndw .hand { position: absolute; font: 17px/1.35 var(--kai-real); color: var(--red); z-index: 7; white-space: nowrap; }
 
-/* 瑕疵 */
-.ndw .crease::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
-  background: linear-gradient(112deg, transparent 47.6%, rgba(43,33,23,0.045) 49.1%, rgba(255,255,255,0.22) 49.9%, transparent 51.2%); }
-.ndw .crease-h::before { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
-  background: linear-gradient(178deg, transparent 48%, rgba(43,33,23,0.05) 49.6%, rgba(255,255,255,0.2) 50.4%, transparent 52%); }
-.ndw .wrinkle::after { content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
-  background:
-    linear-gradient(99deg, transparent 20%, rgba(43,33,23,0.035) 30%, transparent 40%),
-    linear-gradient(84deg, transparent 62%, rgba(255,255,255,0.4) 70%, transparent 79%); }
-.ndw .dog::after { content: ''; position: absolute; right: 0; bottom: 0; width: 24px; height: 24px;
-  pointer-events: none; z-index: 4;
-  background: linear-gradient(315deg, var(--wall) 48%, rgba(43,33,23,0.14) 50%, rgba(255,255,254,0.85) 58%, ${P('wall',0.2)} 72%, transparent 78%);
-  box-shadow: -1px -1px 2px rgba(43,33,23,0.05); }
-.ndw .holes { position: absolute; left: 8px; top: 17%; height: 66%; width: 8px; z-index: 4;
-  background-image: radial-gradient(circle at 50% 50%, rgba(43,33,23,0.3) 0 3px, transparent 3.6px);
-  background-size: 8px 33.33%; background-repeat: repeat-y; }
+/* ===== 标题（跨场景不变的锚一）=====
+   ⚠️ 这块地是**壳跟场景之间的约定**：三套场景的第一行纸都从 y=236 往下摆，标题整块不许越过它。 */
+.ndw-head { position: absolute; left: 60px; top: 30px; z-index: 3; width: 760px; }
+.ndw-anno { display: block; font: 11px var(--code); color: var(--pencil); letter-spacing: 0.28em; text-transform: uppercase; }
+.ndw-head h1 { margin-top: 14px; font: 800 50px/1.08 var(--display); letter-spacing: -0.028em;
+  text-shadow: .028em .02em 0 rgba(178,58,46,0.16); }
+.ndw-sub { margin-top: 14px; max-width: 37em; font: 16px/1.8 var(--read); color: var(--ink-2); }
 
-/* 编号：手写红圈，读顺序全靠它 */
-.ndw .no { position: absolute; left: -15px; top: -14px; width: 30px; height: 30px; z-index: 7;
-  display: grid; place-items: center; font: 700 13px var(--kai); color: var(--red); }
-.ndw .no svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-
-/* 线索线 */
-.ndw-thread { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
-.ndw-thread path { fill: none; stroke: var(--red); stroke-width: 2; stroke-linecap: round; opacity: 0.72; }
-.ndw-thread .soft { opacity: 0.5; stroke-width: 1.7; }
-.ndw .hand { position: absolute; font: 13px var(--kai); color: var(--red); z-index: 7; opacity: 0.9;
-  white-space: nowrap; }
-.ndw .hand.p { color: var(--pencil); }
-
-/* 直接写在板上的字：不带纸，压在所有纸之下。
-   ⚠️ 这几档跟首页左栏是**同一支笔**（本来就是从两处收成一份的），08-30 起走
-   PAPER_VARS 里的 --sketch* 变量。登录墙不参与白天黑夜，所以永远拿白天那档
-   —— 夜里换粉笔那条规则只作用在 .ndd 里面。 */
-.ndw .wall { position: absolute; z-index: 1; pointer-events: none; color: var(--sketch); }
-.ndw .wall.lbl { font: 12px var(--kai); letter-spacing: 0.1em; color: var(--sketch-soft); }
-.ndw .wall.blk { font: 12px var(--kai); line-height: 2.05; }
-.ndw .wall.blk .t { display: block; font-weight: 700; font-size: 22px; letter-spacing: 0.1em;
-  line-height: 1.3; color: var(--sketch-deep); }
-.ndw .wall.blk .rule { display: block; width: 118px; height: 7px; margin: 5px 0 5px; }
-.ndw .wall.blk .n { font-size: 15px; color: var(--sketch-num); }
-.ndw .when { display: block; margin-top: 7px; font: 9.5px var(--kai); letter-spacing: 0.08em;
-  color: var(--pencil); }
-
-/* 标题 */
-/* ⚠️ max-width 用**设计稿的 px**不用百分比：整台戏是 1500x800 的稿按 --s 缩放的，
-   这块地的右边界必须挡在场景第一张纸之前（约 520px）。百分比看着一样，但它是
-   跟着舞台走的，改舞台宽度就会悄悄让标题伸进画里 —— 英文标题比中文长一半，
-   08-28 之前就是这么压进右边那张照片的。 */
-/* ⚠️ 这块地是**壳跟场景之间的约定**：三套场景在左上角都得给它让路。标题从一行
-   变两行之后这块地长高了 ~50px，所以整体上提、行距收紧，把长出来的还回去一部分。
-   改这里之前先跑一遍 wall-collide 探针（scratchpad），三套场景逐个对撞，别只看一张图。 */
-.ndw-head { position: absolute; left: 3.5%; top: 3.4%; z-index: 3; max-width: 434px; }
-.ndw-head .row { display: flex; align-items: baseline; gap: 13px; }
-.ndw-logo { font: 700 24px var(--kai); letter-spacing: 0.06em; }
-.ndw-anno { font: 11.5px var(--kai); color: var(--pencil); letter-spacing: 0.16em; }
-.ndw-head h1 { margin-top: 13px; font-size: 30px; font-weight: 700; letter-spacing: 0.04em;
-  line-height: 1.34; }
-/* 一行一句，断行由文案自己决定，不交给宽度去猜。
-   width:max-content 让手绘下划线只画到字尾；max-width:100% 是给长语言留的退路
-   （宁可折行，也不许伸出这块地）。⛔ 别再写 white-space: nowrap —— 那正是英文
-   标题压进场景照片的原因。 */
-.ndw-head h1 .l { display: block; position: relative; width: max-content; max-width: 100%; }
-.ndw-head h1 .u svg { position: absolute; left: -2%; width: 104%; height: 9px; bottom: -6px; }
-.ndw-sub { margin-top: 11px; font-size: 14px; line-height: 1.7; color: var(--ink-2);
-  /* ⚠️ 这一行必须**排得下一行**：标题占两行之后，副标再折行就会压到场景里
-     那句手写标签上（三套场景在左上角都留了地，但留的是旧版那个高度）。 */
-  white-space: nowrap; }
-
-.ndw-card { position: absolute; right: 4%; top: 19%; width: 25%; padding: 34px 36px 26px;
-  background-color: var(--paper); background-image: var(--grain);
-  box-shadow: ${PAPER_SHADOW.near};
-  transform: rotate(-0.4deg); transform-origin: 50% 8px; z-index: 8; }
-.ndw-card h2 { font: 700 21px var(--kai); letter-spacing: 0.05em; }
-.ndw-card .m { margin-top: 4px; font-size: 13px; color: var(--pencil); }
-.ndw-tabs { margin-top: 19px; display: flex; gap: 24px; }
-.ndw-tabs button { background: none; border: none; padding: 0 0 7px; cursor: pointer;
-  font: 15px var(--kai); color: var(--pencil); position: relative; }
-.ndw-tabs button.on { color: var(--ink); font-weight: 700; }
-.ndw-tabs button svg { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 6px; }
-.ndw-field { margin-top: 17px; }
-.ndw-field label { display: block; font: 11px var(--kai); letter-spacing: 0.2em; color: var(--pencil); }
-.ndw-field input { width: 100%; margin-top: 3px; padding: 8px 2px; font-size: 16px; font-family: var(--kai);
-  background: transparent; border: none; border-bottom: 1.5px solid var(--hair); outline: none; color: var(--ink); }
+/* ===== 登记卡（跨场景不变的锚二）：竖向居中在稿的可见区中线上（09-12 站主：原来太高） ===== */
+/* 稿是按 --s 缩放、从顶栏下沿开始的，所以「视口中线」换算回稿里的坐标 = (50vh - 顶栏) / --s */
+.ndw-card { position: absolute; right: 60px; top: calc((50vh - ${NAV_H}px) / var(--s, 1)); transform: translateY(-50%); width: 390px;
+  padding: 32px 34px 26px; background-color: var(--paper); background-image: var(--grain);
+  box-shadow: ${PAPER_SHADOW.near}; z-index: 8; }
+.ndw-card > .pin { top: -5px; }
+.ndw-card h2 { font: 800 23px var(--display); letter-spacing: -0.015em; }
+.ndw-card .m { margin-top: 6px; font: 13.5px var(--display); color: var(--pencil); }
+.ndw-tabs { margin-top: 22px; display: flex; gap: 26px; border-bottom: 1px solid #C7B79A; }
+.ndw-tabs button { background: none; border: none; padding: 0 0 9px; cursor: pointer;
+  font: 700 15px var(--display); color: var(--pencil); }
+.ndw-tabs button.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--red); }
+.ndw-field { margin-top: 20px; }
+.ndw-field label { display: block; font: 11px var(--code); letter-spacing: 0.14em; color: var(--pencil); }
+.ndw-field input { width: 100%; margin-top: 4px; padding: 7px 1px; font: 16px var(--read);
+  background: transparent; border: none; border-bottom: 1px solid ${P('ink',0.45)}; outline: none; color: var(--ink); }
 .ndw-field input::placeholder { color: var(--pencil); }
 .ndw-field input:focus { border-bottom-color: var(--ink); }
-.ndw-err { margin-top: 12px; min-height: 17px; font: 12.5px var(--kai); color: var(--red); }
-.ndw-card button.go { width: 100%; margin-top: 10px; padding: 12px 0; font: 700 16px var(--kai);
-  letter-spacing: 0.35em; text-indent: 0.35em; background: var(--ink); color: ${COLOR.btnText};
+.ndw-err { margin-top: 12px; min-height: 17px; font: 12.5px var(--display); color: var(--red); }
+.ndw-card button.go { width: 100%; margin-top: 10px; padding: 14px 0; font: 700 16px var(--display);
+  letter-spacing: 0.3em; text-indent: 0.3em; background: var(--ink); color: ${COLOR.btnText};
   border: none; border-radius: 3px; cursor: pointer; }
 .ndw-card button.go:disabled { opacity: 0.55; cursor: default; }
-.ndw-card .foot { margin-top: 13px; font: 12px var(--kai); color: var(--pencil); text-align: center; }
-.ndw-stamp { position: absolute; right: 22px; top: 22px; padding: 4px 12px; border: 1.5px solid var(--red);
-  color: var(--red); border-radius: 3px; font: 12px var(--kai); letter-spacing: 0.24em;
-  text-indent: 0.24em; transform: rotate(3deg); opacity: 0.85; }
+.ndw-card .foot { margin-top: 14px; font: 12.5px var(--display); color: var(--pencil); text-align: center; }
+.ndw-card .alt { margin-top: 18px; padding-top: 14px; border-top: 1px solid #D9CDB4; display: flex;
+  justify-content: space-between; font: 11.5px var(--code); color: var(--ink-2); }
+.ndw-card .alt a { text-decoration: none; }
+.ndw-stamp { position: absolute; right: 20px; top: 22px; padding: 2px 8px; border: 1px solid var(--red);
+  color: var(--red); font: 10.5px var(--code); letter-spacing: 0.16em; }
 
-/* ===== 窄屏：整面墙收起，只留登记卡 ===== */
-.ndw.narrow { display: grid; place-items: center; padding: 24px; }
-.ndw.narrow .ndw-stage { display: none; }
+/* ===== 窄屏：整面墙收起，只留登记卡（顶栏还在） ===== */
+.ndw.narrow { display: grid; place-items: center; padding: ${NAV_H + 24}px 24px 24px; }
+.ndw.narrow .ndw-stage, .ndw.narrow .ndw-proof { display: none; }
+.ndw.narrow .ndw-nav { padding: 0 16px; }
 /* 窄屏那张卡沿用 .ndw-card 的全部内部样式，只把定位和宽度改掉 */
-.ndw-solo { position: relative; right: auto; top: auto;
-  width: 100%; max-width: 360px; padding: 32px 30px 24px; }
-.ndw-solo .brand { display: block; font: 700 20px var(--kai);
-  letter-spacing: 0.06em; margin-bottom: 16px; }
+.ndw-solo { position: relative; right: auto; top: auto; transform: none;
+  width: 100%; max-width: 360px; padding: 30px 26px 22px; }
 /* ===== 定格切换（2026-08-17）=====
    用户的原话是「定格动画那种感觉」—— 不是淡入淡出、不是平滑位移，是一帧一帧
    跳的手做感。所以两条动画都走 「steps()」：浏览器只在那几个整数帧上采样，中间
@@ -335,27 +283,26 @@ export const WALL_CSS = `
 /* 钉上去有**过一点再回来**那一下（60% 那帧越过终点）：手一松纸会晃回位。
    6 格里第 4 格落在越冲的位置，最后一格坐回去 —— 这一下比"多给几格"有用得多，
    它是手做感的来源。opacity 在第 2 格就到位，不然第一格看着像闪。 */
+/* 09-12 印刷风：幅度收小（站主：卡片出现时不需要那么大的晃动）—— 纸摆正了，钉上去只需落下一点、
+   轻轻压一下再坐稳；原来 3° / 14px 是给歪着钉、会晃的纸准备的。格数和节拍一格没动。 */
 @keyframes ndw-pin-in {
-  0%       { opacity: 0; transform: rotate(calc(var(--rot, 0deg) + 3deg)) translate(6px, -14px); }
-  33.3333% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) + 1.6deg)) translate(3px, -6px); }
-  66.6667% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) - 0.9deg)) translate(-2px, 3px); }
+  0%       { opacity: 0; transform: rotate(calc(var(--rot, 0deg) + 0.8deg)) translate(2px, -7px); }
+  33.3333% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) + 0.35deg)) translate(1px, -3px); }
+  66.6667% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) - 0.15deg)) translate(0, 1px); }
   100%     { opacity: 1; transform: rotate(var(--rot, 0deg)) translate(0, 0); }
 }
 /* 摘下来先"揭"一下再掉：20% 那帧往回抬一点，像手先把纸从钉子上挑起来 */
 @keyframes ndw-pin-out {
   0%       { opacity: 1; transform: rotate(var(--rot, 0deg)) translate(0, 0); }
-  33.3333% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) + 1.2deg)) translate(2px, -4px); }
-  66.6667% { opacity: 0.6; transform: rotate(calc(var(--rot, 0deg) - 1.7deg)) translate(-4px, 6px); }
-  100%     { opacity: 0; transform: rotate(calc(var(--rot, 0deg) - 4deg)) translate(-9px, 16px); }
+  33.3333% { opacity: 1; transform: rotate(calc(var(--rot, 0deg) + 0.4deg)) translate(1px, -2px); }
+  66.6667% { opacity: 0.6; transform: rotate(calc(var(--rot, 0deg) - 0.6deg)) translate(-2px, 4px); }
+  100%     { opacity: 0; transform: rotate(calc(var(--rot, 0deg) - 1.4deg)) translate(-4px, 9px); }
 }
 /* 板上的字、涂鸦、线索线没有 --rot，单独一套（只跳明暗，不跳位置） */
 @keyframes ndw-ink-in  { from { opacity: 0 } to { opacity: 1 } }
 @keyframes ndw-ink-out { from { opacity: 1 } to { opacity: 0 } }
 
-/* ⚠️ 这两条要压得过 「.ndw .sway」（那是常驻的风吹纸摆，也写在 animation 上）。
-   压得过靠的是特异度：「.ndw-scene.enter .paper」 是 (0,3,0)，「.ndw .sway」 是
-   (0,2,0)。别把它改成 「.ndw-scene .paper.enter」 那种写法 —— 一旦打平，两条
-   动画抢同一个 transform，纸会在切换那一瞬瞬移。 */
+/* （09-12 起没有风吹纸摆了 —— 印刷风的纸摆正、不晃。原来这两条靠特异度压过 .sway，那条规则已经退役。） */
 .ndw-scene.enter .paper {
   animation: ndw-pin-in ${MOTION.enter}ms steps(${stepsFor(MOTION.enter / 3)}, jump-none) both;
   animation-delay: calc(var(--i, 0) * ${MOTION.stepIn}ms);
@@ -376,7 +323,7 @@ export const WALL_CSS = `
    **收起是这一切的倒放**：线先擦掉（它浮在最上面）→ 纸倒序摘 → 板上的墨最后
    淡（它们画在板面上，纸一直压着它们）。顺序反了的话，会看见涂鸦先消失、纸却
    还挂在空板上。 */
-.ndw-scene.enter .doodle, .ndw-scene.enter .wall {
+.ndw-scene.enter .wall {
   animation: ndw-ink-in ${MOTION.inkIn}ms steps(${stepsFor(MOTION.inkIn)}, jump-none) both;
   animation-delay: calc(var(--i, 0) * ${MOTION.inkStep}ms);
 }
@@ -387,7 +334,7 @@ export const WALL_CSS = `
 .ndw-scene.leave .hand, .ndw-scene.leave .ndw-thread {
   animation: ndw-ink-out ${MOTION.inkOut}ms steps(${stepsFor(MOTION.inkOut)}, jump-none) both;
 }
-.ndw-scene.leave .doodle, .ndw-scene.leave .wall {
+.ndw-scene.leave .wall {
   animation: ndw-ink-out ${MOTION.boardOut}ms steps(${stepsFor(MOTION.boardOut)}, jump-none) both;
   animation-delay: calc(var(--pins, 20) * ${MOTION.stepOut}ms);
 }

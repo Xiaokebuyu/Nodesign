@@ -74,9 +74,7 @@ describe('登录墙：所有动效钉在同一格胶片上', () => {
       + JSON.stringify(bad)).toEqual([]);
   });
 
-  it('风吹纸摆也在格子上（它曾经是墙上唯一一个平滑的东西）', () => {
-    expect(CODE, 'sway 又变回平滑的了 —— 那是墙上唯一脱拍的东西').toMatch(/ndw-sway\s+\d+ms\s+steps\(/);
-    expect(CODE, 'sway 不许再读每张纸自带的周期：周期不统一就没法钉在格子上')
-      .not.toMatch(/ndw-sway\s+var\(--dur/);
+  it('风吹纸摆已经退役（09-12 印刷风：纸摆正、不晃），别再加回来一条不在格子上的常驻动画', () => {
+    expect(CODE, '又有风吹纸摆了 —— 印刷风的纸是摆正的').not.toMatch(/ndw-sway/);
   });
 });

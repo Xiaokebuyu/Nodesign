@@ -17,9 +17,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import { useSceneCarousel } from './useSceneCarousel.js';
-import { MOTION, enterMs, leaveMs } from './wall-css.js';
+import { MOTION, enterMs, leaveMs, STEPS } from './wall-css.js';
 
-const PAPERS = 20;
+// 09-12 印刷风：每套 ①→⑥ 六步（原来一面墙二十张）
+const PAPERS = STEPS;
 const SCENES = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
 
 function mount(scenes = SCENES) {

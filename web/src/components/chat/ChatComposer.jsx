@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Square, Upload } from 'lucide-react';
-import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_KAI } from '../../lib/theme.js';
+import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_READ } from '../../lib/theme.js';
 import { PAPER, GRAIN, PAPER_SHADOW } from '../../lib/paper.js';
 import { useDeviceClass, isTouchLane } from '../../lib/device-class.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
@@ -243,7 +243,7 @@ export default function ChatComposer({
             border: 'none',
             outline: 'none',
             resize: 'none',
-            fontFamily: FONT_KAI,
+            fontFamily: FONT_READ,   // 人写的字：阅读楷体（09-12 起界面默认黑体）
             fontSize: FONT_SIZE.base,
             lineHeight: 1.55,
             color: COLOR.text,

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { diffLines } from 'diff';
 import MarkdownText from './MarkdownText.jsx';
-import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, alpha } from '../../lib/theme.js';
+import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, alpha, FONT_READ } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { Turn } from '../../lib/api.js';
 import TimelineNode from './TimelineNode.jsx';
@@ -109,8 +109,9 @@ function Message({ message, projectId, sessionId, onCanvasReload }) {
   return (
     <div style={{
       padding: `${GAP.sm}px ${GAP.lg}px ${GAP.sm}px ${padLeft}px`,
-      fontFamily: FONT_SANS, fontSize: FONT_SIZE.base,
-      color: COLOR.text2, lineHeight: 1.6,
+      // 09-12 印刷风：agent 写给人读的正文用阅读楷体（界面默认黑体之后，正文要显式钉住）
+      fontFamily: FONT_READ, fontSize: FONT_SIZE.base,
+      color: COLOR.text2, lineHeight: 1.7,
     }}>
       {mdContent}
     </div>
@@ -975,8 +976,8 @@ function ThinkingMessage({ content, isStreaming }) {
       iconColor={isStreaming ? COLOR.warn : COLOR.sub}
     >
       <div style={{
-        fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-        color: COLOR.text2, lineHeight: 1.55,
+        fontFamily: FONT_READ, fontSize: FONT_SIZE.sm,
+        color: COLOR.sub, lineHeight: 1.65,
         whiteSpace: 'pre-wrap',
         wordBreak: 'break-word',
       }}>

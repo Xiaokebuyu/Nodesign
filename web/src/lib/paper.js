@@ -14,7 +14,7 @@
  * 光向」，不再是「永远从右上打光」。光源层没挂的地方落回下午那一档。
  */
 
-import { FONT_KAI, alpha } from './theme.js';
+import { FONT_KAI, FONT_KAI_STACK, FONT_DISPLAY, FONT_READ, alpha } from './theme.js';
 import { currentSkin, seasonOf } from './season.js';
 import fibersUrl from '../assets/paper/fibers.webp';
 
@@ -206,7 +206,9 @@ export const P = (name, a) => alpha(PAPER[name], a);
  * @param {boolean} [red] 红头钉（钉最近动过的那张纸）
  */
 export const pinFill = (red = false) =>
-  `radial-gradient(circle at 35% 30%, ${red ? PAPER.pinRedA : PAPER.pinA}, ${red ? PAPER.pinRedB : PAPER.pinB} 65%)`;
+  `radial-gradient(circle at 36% 32%, ${red ? PAPER.pinRedA : PAPER.pinA} 0 34%, ${red ? PAPER.pinRedB : PAPER.pinB} 35%)`;
+/** 钉子的影子（09-12 印刷风：受光面改硬边平涂，影子也是不模糊的一小块，跟纸的错位影同向偏左下） */
+export const PIN_SHADOW = '-1.5px 1.5px 0 rgba(31,24,16,0.32)';
 
 export const PAPER_VARS = `
   --wall: ${PAPER.wall};
@@ -233,6 +235,10 @@ export const PAPER_VARS = `
   --sketch-num: ${P('sketchNum', 0.95)};
   --sketch-rule: ${P('sketch', 0.55)};
   --kai: ${FONT_KAI};
+  /* 09-12 印刷风：--kai 跟着界面字体（默认黑体）；人写的内容用 --read，门面标题用 --display */
+  --kai-real: ${FONT_KAI_STACK};
+  --read: ${FONT_READ};
+  --display: ${FONT_DISPLAY};
   --code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --grain: ${GRAIN};
 `;

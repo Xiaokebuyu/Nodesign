@@ -268,8 +268,13 @@ describe('首页页签跟纸的接缝', () => {
     expect(iTabs < iPad, '页签的 DOM 位置跑到纸后面去了 —— 它会盖在纸上面').toBe(true);
     // z-index 没有单位，num（只认带 px 的）读不出来
     const z = (body) => Number(body.match(/z-index:\s*(-?\d+)/)?.[1]);
-    expect(z(rule('.ndd-stack > .nd-tabs ')), '签的 z 得比纸低')
-      .toBeLessThan(z(rule('.ndd-pad ')));
+    // 09-12 印刷风：纸有一圈墨线，签压在纸后面的话这圈线会从签根上横切过去。所以
+    //   没选那片 < 纸 < 选中那片（选中那片跟纸同体，盖掉它根上那段纸沿），
+    //   而且签条自己不许成层叠上下文，不然两片签只能一起在纸前或纸后。
+    expect(rule('.ndd-stack > .nd-tabs '), '签条成了层叠上下文 —— 两片签没法分别跟纸比高低')
+      .toMatch(/z-index:\s*auto/);
+    expect(z(rule('.nd-tabs > * ')), '没选那片得在纸后面').toBeLessThan(z(rule('.ndd-pad ')));
+    expect(z(on), '选中那片得在纸上面（跟纸同体）').toBeGreaterThan(z(rule('.ndd-pad ')));
   });
 
   /**
