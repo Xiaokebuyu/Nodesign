@@ -1,0 +1,62 @@
+# 固定下载地址：https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe 永远是最新版（09-11）。
+#
+# 为什么要它：R2 是对象存储，没有「最新版」别名；desktop.yml 只留最近 3 个带版本号的安装包，
+# 官网写死 NoDesign-Setup-0.1.34.exe 的按钮在 0.1.37 发出后就 404 了。官网、README 一律指向这个固定名。
+#
+# 做法：读 R2 上的 latest.yml（desktop.yml 最后才传它，它指向的包一定已经在），在桶内把那个包复制成固定名。
+#   - 桶内 CopyObject，不重新上传；
+#   - Cache-Control: no-cache —— CF 边缘默认把 .exe 缓存 4 小时，不设的话发版后几小时内还会下到旧版；
+#   - Content-Disposition 带版本号，用户下到的文件名仍是 NoDesign-Setup-<v>.exe。
+# 触发：desktop 工作流成功跑完后自动跑；也可以在 Actions 页面手动 Run workflow（修复 / 首次补一份）。
+# 秘密与 desktop.yml 的镜像步骤共用：R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY。
+name: desktop-link
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [desktop]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-link
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      AWS_EC2_METADATA_DISABLED: 'true'
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      R2_BUCKET: nodesign-desktop
+      FIXED_KEY: desktop/NoDesign-Setup.exe
+    steps:
+      - name: 把最新安装包复制成固定名
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then echo "没配 R2 秘密，跳过"; exit 0; fi
+          ep="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          aws s3 cp "s3://${R2_BUCKET}/desktop/latest.yml" latest.yml --endpoint-url "$ep" --only-show-errors
+          key=$(sed -n 's/^path:[[:space:]]*//p' latest.yml | tr -d '\r' | head -1)
+          [ -n "$key" ] || { echo "latest.yml 里没有 path:"; exit 1; }
+          src_len=$(aws s3api head-object --bucket "$R2_BUCKET" --key "desktop/$key" --endpoint-url "$ep" --query ContentLength --output text)
+          echo "latest.yml → $key（$src_len 字节）"
+          aws s3api copy-object --bucket "$R2_BUCKET" --key "$FIXED_KEY" \
+            --copy-source "${R2_BUCKET}/desktop/${key}" \
+            --metadata-directive REPLACE \
+            --content-type application/octet-stream \
+            --cache-control no-cache \
+            --content-disposition "attachment; filename=\"${key}\"" \
+            --endpoint-url "$ep" > /dev/null
+          dst_len=$(aws s3api head-object --bucket "$R2_BUCKET" --key "$FIXED_KEY" --endpoint-url "$ep" --query ContentLength --output text)
+          [ "$src_len" = "$dst_len" ] || { echo "回读大小不对：$dst_len vs $src_len"; exit 1; }
+          echo "已复制：$FIXED_KEY ← $key"

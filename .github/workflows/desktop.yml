@@ -8,6 +8,7 @@
 #   - 打 tag：git tag desktop-v0.0.10 && git push origin desktop-v0.0.10
 # 产物：GitHub Releases 里的 v<package.json 的 version>，含 NoDesign-Setup-<v>.exe、.blockmap、latest.yml；
 #       同一批文件镜像到 Cloudflare R2（https://dl.xiaobuyu.trade/desktop/），客户端先从那里拉（09-09）。
+#       跑成功后 desktop-link.yml 把新包复制成固定名 NoDesign-Setup.exe（官网 / README 只链这个名字）。
 # ⛔⛔ **两种触发都直接发布**：最后一步 `gh release edit --draft=false --latest`，手动 dispatch 也不是草稿，
 # electron-updater 立刻把它当更新推给所有人。09-08 曾从一条落后 main 十三个提交的分支手动 dispatch 出 0.1.22，
 # 用户自动更新后丢功能（已回滚）。发之前先 `git log origin/main..HEAD` 对基线，版本号从 package.json 读。
