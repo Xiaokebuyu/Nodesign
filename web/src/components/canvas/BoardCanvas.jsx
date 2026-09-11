@@ -1699,7 +1699,7 @@ export default function BoardCanvas({
         // 连线拾取模式：捕获阶段截胡这一下点击 —— 点中物件/文件夹就是目标，
         // 点空地/点自己 = 取消。stopPropagation 挡住卡片自己的选中/打开。
         onClickCapture={linkFrom ? ((e) => {
-          e.preventDefault(); e.stopPropagation();
+          e.preventDefault(); e.stopPropagation(); cancelPendingClick();   // 掐掉待落的单击，否则标注纸盖住建线浮层（link-pick-cancels-click.lint）
           const tid = e.target.closest?.('[data-board-object]')?.getAttribute('data-board-object')
             || e.target.closest?.('[data-zone-header]')?.getAttribute('data-zone-header')
             || e.target.closest?.('[data-board-zone]')?.getAttribute('data-board-zone')
