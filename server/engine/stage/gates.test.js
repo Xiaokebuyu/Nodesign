@@ -14,6 +14,9 @@ delete process.env.NODESIGN_MODERATION;                                         
 const { assertSayAllowed } = await import('./gates.js');
 const { listFlags } = await import('../../lib/moderation.js');
 const db = (await import('../runs/store.js')).default;
+// 建表的模块自己导入：往 users 插行、查 runs.user_id（projects/store.js 的迁移加的列），不能靠同一个 worker 里别的文件先建（09-11 每个 worker 一个库之后单跑必红）
+await import('../../auth/users-store.js');
+await import('../../projects/store.js');
 
 // 订阅行 = Claude 系列走订阅旋钮；API 行（GLM / DeepSeek 那些）走另一个，默认 off
 const CLAUDE = 'claude-sonnet-5[1m]';
