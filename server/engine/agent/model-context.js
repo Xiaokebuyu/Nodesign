@@ -41,9 +41,10 @@ import { can, localGenApproved, DENIAL } from '../../auth/tier.js';
 import { platform } from '../../runtime/platform.js';
 import { UPSTREAMS_BUILTIN, MODELS_BUILTIN, BRANDS, SHARED_SDK_ALIAS } from './model-table.js';
 import { RENAMED_MODELS, followRename } from './model-renames.js';
+import { toExternalRow, withDefaultAlias, checkRow, mergeRelayRows } from './model-rows.js';
 import { loadSlotConfig } from '../../runtime/slot-config.js';   // 插槽从哪来（本地文件 / 站点库）只在那儿知道
-import { relayModelEntry } from '../../runtime/relay-client.js';
-import { availabilityOf, validateUnavailableSpec } from '../../lib/model-availability.js';
+import { relayModelEntry, relayCatalog, onRelayCatalogChange } from '../../runtime/relay-client.js';
+import { availabilityOf } from '../../lib/model-availability.js';
 import { loadPrefs } from '../../runtime/local-prefs.js';
 
 export { BRANDS, SHARED_SDK_ALIAS };
@@ -54,47 +55,7 @@ export { BRANDS, SHARED_SDK_ALIAS };
 // ⚠️ 在飞请求不受影响：它们手里攥的是行对象本身，行是 frozen 的。
 // ⚠️ 导出的四个是 `let`（ESM 活绑定）。⛔ 别在别处把它们存进模块级 const —— 那份拷贝重建后就是旧表，且不报错。
 
-/** 配置条目 → 表行（字段名一一对应，见 local-config.js 文件头；sdkAlias 不许手填 = 永远走下面的共用别名默认） */
-function toExternalRow(m) {
-  // ⚠️ 剩下的全进 api 段，所以**行级字段必须在这儿点名**（09-10 加 unavailable 时踩到：不点名就落进 api.unavailable，
-  // 钟点闸读 row.unavailable 读不到，静默失效）
-  const { id, label, desc, brand, window, uncensored, unavailable, upstream, wireModel, fastModel, ...api } = m;
-  return Object.freeze({
-    id, window, brand, external: true, ...(uncensored ? { uncensored: true } : {}), ...(unavailable ? { unavailable } : {}),
-    select: Object.freeze({ label, desc }),
-    api: Object.freeze({ upstream, wireModel, fastModel: fastModel || id, ...api }),
-  });
-}
-// sdkAlias 可选（08-25 固化）：API 行不写 = 补上共用别名 SHARED_SDK_ALIAS（内置行、外部插槽同一条路）。
-// 共用别名的行**不进 WIRE_LOOKUP 的 alias 键**，只按 id 可查，靠 ingress/session-routes.js 会话优先路由
-// 分辨（一个会话只认自己那行和自己的 fast 行）；没注册会话的请求用这个 alias 发过来一律 502（探针要带
-// 会话前缀）。独占别名的行才显式写 sdkAlias，语义见 model-table.js 字段说明。
-function withDefaultAlias(row) {
-  if (!row.api || row.api.sdkAlias) return row;
-  return Object.freeze({ ...row, api: Object.freeze({ ...row.api, sdkAlias: SHARED_SDK_ALIAS }) });
-}
-
-/**
- * 一行的自检。分级仍旧：**内置行的错当场炸**（代码错），外部行的错丢行 + 记进 errors。
- * ⚠️ 上游表与 id 索引当参数传：重建时这两样是新的，读闭包里那份会静默拿到旧表。
- */
-function checkRow(row, upstreams, byId) {
-  if (!BRANDS.includes(row.brand)) throw new Error(`[model-context] ${row.id} 的 brand 必须是 BRANDS 之一：${row.brand}`);
-  // 钟点闸（09-10）：写坏了要在这儿炸，不能等到某天窗口生效才发现"这行怎么一直关门"
-  const badHours = validateUnavailableSpec(row.unavailable);
-  if (badHours.length) throw new Error(`[model-context] ${row.id} 的 unavailable 写坏了：${badHours.join('；')}`);
-  if (!row.api) return;
-  if (!upstreams[row.api.upstream]) throw new Error(`[model-context] ${row.id} 指向不存在的 upstream: ${row.api.upstream}`);
-  // alias 必须是本表里的订阅 Claude 名 —— SDK 才认识、窗口才查得到
-  if (!row.api.sdkAlias || !byId.has(row.api.sdkAlias) || byId.get(row.api.sdkAlias).api) throw new Error(`[model-context] ${row.id} 的 sdkAlias 必须是表内订阅模型名：${row.api.sdkAlias}`);
-  const fast = byId.get(row.api.fastModel);
-  if (!fast || !fast.api) throw new Error(`[model-context] ${row.id} 的 fastModel 必须是表内 API 模型：${row.api.fastModel}`);
-  // standby（09-08）：上游连续失败 / 402 时会话级换到的备用行，必须是表内另一条 API 行
-  if (row.standby !== undefined) {
-    const sb = byId.get(row.standby);
-    if (!sb || !sb.api || sb.id === row.id) throw new Error(`[model-context] ${row.id} 的 standby 必须是表内另一条 API 模型：${row.standby}`);
-  }
-}
+// 行的派生（内置 / 插槽 / relay 目录）与自检 09-11 搬去 model-rows.js（本文件顶在 600 行棘轮上）
 
 /**
  * 建一整套索引。**不碰任何模块状态** —— 建坏了往外抛，调用方决定是炸进程（启动时）还是留着旧的（重建时）。
@@ -103,14 +64,18 @@ function checkRow(row, upstreams, byId) {
 function buildIndex() {
   const external = loadSlotConfig();
   const errors = [...external.errors];
-  const upstreams = Object.freeze({ ...UPSTREAMS_BUILTIN, ...external.upstreams });
   // 同名顶替（09-09）：外部插槽的 id 撞上内置 **API** 行 → 内置那行退出表，只剩用户的（本机钥匙优先，
   // 跟 modelSourceFor 一个口径）。订阅 Claude 行在 local-config 校验就拒了，到不了这里。
   const externalIds = new Set(external.models.map((m) => m.id));
   const shadowed = Object.freeze(MODELS_BUILTIN.filter((r) => externalIds.has(r.id) && r.api).map((r) => r.id));
-  const models = Object.freeze(
+  // 本地版第三个来源（09-11）：站主 relay 目录里本机没钥匙的行照目录建（model-rows.js 头注）。hosted 下目录恒空，原样返回
+  const baseUpstreams = Object.freeze({ ...UPSTREAMS_BUILTIN, ...external.upstreams });
+  const relay = mergeRelayRows(
     [...MODELS_BUILTIN.filter((r) => !externalIds.has(r.id) || !r.api), ...external.models.map(toExternalRow)].map(withDefaultAlias),
+    baseUpstreams, relayCatalog(), { keyPresent: (row) => upstreamKeyPresent(row, baseUpstreams) },
   );
+  const { upstreams, models } = relay;
+  const relayErrors = [...relay.errors];
 
   const byId = new Map();
   for (const row of models) {
@@ -126,13 +91,14 @@ function buildIndex() {
   const wireLookup = new Map();
   for (const row of models) {
     try { checkRow(row, upstreams, byId); } catch (err) {
-      if (!row.external) throw err;
-      byId.delete(row.id); errors.push({ where: `models (${row.id})`, message: err.message }); continue;
+      if (!row.external && !row.relay) throw err;
+      byId.delete(row.id); (row.relay ? relayErrors : errors).push({ where: `models (${row.id})`, message: err.message }); continue;
     }
     if (!row.api) continue;
     // 共用别名的行（sdkAlias 没写、派生时补的默认值）只按 id 进反查表：那个别名同时属于好几行，
     // 全表反查分不出谁是谁，只有会话知道（session-routes.resolveSessionWire 主行优先）。
-    const sharesAlias = row.api.sdkAlias === SHARED_SDK_ALIAS;
+    // relay 行也只按 id：它的别名是站点那张表分的，可能跟本地某条有钥匙的行撞；本机 ingress 反正不转它
+    const sharesAlias = row.api.sdkAlias === SHARED_SDK_ALIAS || row.relay;
     const keys = sharesAlias ? [row.id] : [row.id, row.api.sdkAlias, row.api.sdkAlias.replace(/\[1m\]$/i, '')];
     for (const k of keys) {
       const prev = wireLookup.get(k);
@@ -145,7 +111,9 @@ function buildIndex() {
   for (const [oldId, newId] of Object.entries(RENAMED_MODELS)) {
     if (!byId.has(newId)) throw new Error(`[model-context] RENAMED_MODELS 里 ${oldId} 指向不存在的行：${newId}`);
   }
-  return { upstreams, models, byId, wireLookup, errors, shadowed, path: external.path || null };
+  // 站点下发的改名表（09-11）不做这条断言：目标可能是这个账号看不见的行，翻过去查不到 = 跟不认识的名字一样
+  const renames = Object.freeze({ ...RENAMED_MODELS, ...relay.renames });
+  return { upstreams, models, byId, wireLookup, errors, relayErrors, renames, shadowed, path: external.path || null };
 }
 
 /** picker 清单的派生：unavailable 跟着带过来，选择器那行要现算"此刻开不开门、几点回来" */
@@ -155,6 +123,7 @@ const deriveSelectable = (models) => Object.freeze(
 
 function logIndex(idx) {
   if (idx.shadowed.length) console.log(`[model-context] 外部插槽顶替了同名内置行（用本机钥匙）：${idx.shadowed.join(', ')}`);
+  for (const e of idx.relayErrors) console.warn(`[model-context] relay 目录的行没进表 ${e.where}: ${e.message}`);
   if (idx.errors.length) {
     console.warn(`[model-context] 插槽配置有 ${idx.errors.length} 处问题（对应条目已跳过）${idx.path ? `：${idx.path}` : ''}`);
     for (const e of idx.errors) console.warn(`  - ${e.where}: ${e.message}`);
@@ -169,6 +138,7 @@ let BY_ID = INDEX.byId;
 /** wire 名（appModel / sdkAlias / alias 剥 [1m] 后缀形态）→ 行。入口反查用 */
 let WIRE_LOOKUP = INDEX.wireLookup;
 let SHADOWED_BUILTIN_IDS = INDEX.shadowed;
+let RENAMES = INDEX.renames;   // 本地改名表 + 站点目录下发的那份（09-11）
 
 export let UPSTREAMS = INDEX.upstreams;
 /** 外部插槽被整条丢掉的原因（启动日志一份、GET /api/local/config 一份） */
@@ -188,6 +158,7 @@ export function rebuildModelIndex() {
   BY_ID = next.byId;
   WIRE_LOOKUP = next.wireLookup;
   SHADOWED_BUILTIN_IDS = next.shadowed;
+  RENAMES = next.renames;
   UPSTREAMS = next.upstreams;
   MODEL_CONFIG_ERRORS = next.errors;
   MODEL_ROWS = next.models;
@@ -195,6 +166,8 @@ export function rebuildModelIndex() {
   logIndex(next);
   return { models: next.models.length, errors: next.errors };
 }
+// 本地版：relay 目录每换一份就重建（行从目录里长出来，见 model-rows.js）。建不成 = 旧表照跑，只记日志
+onRelayCatalogChange(() => { try { rebuildModelIndex(); } catch (err) { console.warn(`[model-context] 目录更新后重建模型表失败，沿用旧表：${err.message}`); } });
 
 /**
  * 旧 id → 现在的 id。不认识的名字原样返回（"不在表里"仍然由调用方按原来的方式处理）。
@@ -205,7 +178,7 @@ export function rebuildModelIndex() {
 export function canonicalModelId(appModel) {
   if (typeof appModel !== 'string' || !appModel) return appModel;
   if (BY_ID.has(appModel)) return appModel;   // 活着的行优先（用户的同名插槽说了算）
-  return followRename(appModel);              // 多跳与成环在 model-table.js 的 followRename 里
+  return followRename(appModel, RENAMES);     // 多跳与成环在 model-renames.js 的 followRename 里
 }
 
 /**
@@ -304,7 +277,8 @@ export function hasSubscriptionAccess(user) {   // 订阅 Claude 资格 = 档位
   return can(user, 'subscription');
 }
 
-const upstreamKeyPresent = (row) => { if (!row.api) return !!platform.claudeAuthPresent(); const up = UPSTREAMS[row.api.upstream]; return !up || up.authStyle === 'none' || !!up.key || !!(up.keyEnv && process.env[up.keyEnv]); };   // 无 api = 内置 Claude 行：本地版看本机凭据
+// 无 api = 内置 Claude 行：本地版看本机凭据。函数声明（会提升）+ 上游表当参数：buildIndex 在模块加载时就要调它，那时 UPSTREAMS 还没赋值
+function upstreamKeyPresent(row, ups = UPSTREAMS) { if (!row.api) return !!platform.claudeAuthPresent(); const up = ups[row.api.upstream]; return !up || up.authStyle === 'none' || !!up.key || !!(up.keyEnv && process.env[up.keyEnv]); }
 
 /**
  * 这一行的请求从哪走（本地分发版的核心分岔，09-06）：
@@ -319,7 +293,7 @@ export function modelSourceFor(appModel) {
   if (!row) return null;
   if (!platform.isLocal) return 'local';
   if (upstreamKeyPresent(row)) return 'local';
-  const entry = relayModelEntry(appModel);
+  const entry = relayModelEntry(row.id);   // 按行的现名问目录：appModel 可能是改名前存下来的旧 id
   return entry ? 'relay' : null;
 }
 

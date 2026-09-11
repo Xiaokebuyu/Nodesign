@@ -148,12 +148,15 @@ describe('登录换令牌 / 退出', () => {
 });
 
 describe('目录', () => {
-  it('basic 拿到假行（不锁）和订阅行（锁着带原因），只报 id/locked/lockReason', async () => {
+  it('basic 拿到假行（不锁）和订阅行（锁着带原因）；09-11 起 API 行带着桌面建行要用的字段（不带上游地址 / 钥匙 / wireModel）', async () => {
     const user = makeUser({ plan: 'basic' });
     const { token } = mintDevice({ userId: user.id });
     const j = await (await api(token, '/models')).json();
     const fake = j.models.find((m) => m.id === 'fake-anthro');
-    expect(fake).toEqual({ id: 'fake-anthro', locked: false });
+    expect(fake).toMatchObject({ id: 'fake-anthro', locked: false, mode: 'api', label: 'Fake', desc: 'test', window: 200000, fastModel: 'fake-anthro', protocol: 'anthropic', brand: 'custom', prices: { input: 1, output: 2 } });
+    expect(fake.sdkAlias).toBe(resolveModelRoute('fake-anthro').sdkAlias);
+    expect(JSON.stringify(j)).not.toMatch(/fake-wire-model|fake-upstream-key|baseUrl/);
+    expect(j.renames).toBeTypeOf('object');
     const sonnet = j.models.find((m) => m.id === 'claude-sonnet-5[1m]');
     expect(sonnet.locked).toBe(true);
     expect(typeof sonnet.lockReason).toBe('string');
@@ -165,7 +168,7 @@ describe('目录', () => {
     const sonnet = j.models.find((m) => m.id === 'claude-sonnet-5[1m]');
     expect(sonnet.locked).toBe(true);
     expect(sonnet.lockReason).toBe(RELAY_SUBSCRIPTION_CLOSED_REASON);
-    expect(j.models.find((m) => m.id === 'fake-anthro')).toEqual({ id: 'fake-anthro', locked: false });
+    expect(j.models.find((m) => m.id === 'fake-anthro')).toMatchObject({ id: 'fake-anthro', locked: false, mode: 'api' });
     const w = await (await api(token, '/whoami')).json();
     expect(w.capabilities.subscription).toBe(false);
   });

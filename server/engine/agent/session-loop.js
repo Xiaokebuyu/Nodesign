@@ -239,7 +239,7 @@ export async function runSession({
   // 前端完全零反馈（丢状态路径 P5）。现在失败时补 run.error + markRunFailed。
   let wsRoot, baseUrlForBinary, apiKeyForBinary, fastModel, compactWindow, isResume, installed;
   let noticeHandler = null;   // ingress → 会话的通知回调（注销时按身份比对，别误删新会话的）
-  let relaySid = null;        // 在站主 relay 上登记过的 sid（finally 配对注销）
+  let relaySid = null, relayGen = null;   // 在站主 relay 上登记过的 sid + 那次登记的代次（finally 配对注销；代次防同 sid 换模型重启时删掉新登记）
   try {
     wsRoot = await sharedCtx.workspace.ensure();
 
@@ -248,7 +248,7 @@ export async function runSession({
     // （加载 deskskill / cp 模板）才拷。非 deck 会话（便签 / 整理画布）cwd 干净。
 
     // ── 通路由模型表决定：订阅直连 / 进程内 ingress / 站主 relay，全在 session-binding.js ──
-    ({ baseUrl: baseUrlForBinary, apiKey: apiKeyForBinary, fastModel, compactWindow, noticeHandler, relaySid } =
+    ({ baseUrl: baseUrlForBinary, apiKey: apiKeyForBinary, fastModel, compactWindow, noticeHandler, relaySid, relayGen } =
       await bindSessionUpstream({ sessionId, model, ownerId, emit: (ev) => sharedCtx.emit(ev) }));
 
     // 检测 jsonl 是否已存在 —— 决定走 resume（已存在）还是 sessionId（新建）
@@ -285,7 +285,7 @@ export async function runSession({
     // 否则 init 失败的 API 会话在 ingress 的 sessionRoutes 里残留（2026-08-19 评审抓的洞）。
     // 主路径的注销在下方大 try 的 finally；两处都是幂等 delete，不怕重复。
     unregisterIngressSession(sessionId);
-    if (relaySid) { unbindSessionFromRelay(relaySid); relaySid = null; }   // 登记成功后在别的 await 上倒下的，也要注销
+    if (relaySid) { unbindSessionFromRelay(relaySid, relayGen); relaySid = null; }   // 登记成功后在别的 await 上倒下的，也要注销
     unregisterSessionNotice(sessionId, noticeHandler);
     takeUpstreamTruncation(sessionId);   // 别留标记给下一个同 sid 的会话
     unregisterQuerySession(sessionId, sessionToken);
@@ -996,7 +996,7 @@ export async function runSession({
   } finally {
     clearInterval(idleScanTimer);
     unregisterIngressSession(sessionId);   // API 会话的 fast 兜底路由配对注销（订阅会话 noop）
-    if (relaySid) unbindSessionFromRelay(relaySid);   // relay 上的登记配对注销
+    if (relaySid) unbindSessionFromRelay(relaySid, relayGen);   // relay 上的登记配对注销（带代次：同 sid 已重新登记就不发）
     unregisterSessionNotice(sessionId, noticeHandler);   // ingress → 会话的通知通道配对注销（按身份，别删掉新会话的）
     takeUpstreamTruncation(sessionId);     // 半截标记跟会话同生命周期，别留
     clearSessionFlights(sessionId); clearStageStatus(projectId);   // 在飞台账 + 台上一览，都跟会话同寿命

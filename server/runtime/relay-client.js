@@ -94,7 +94,7 @@ async function call(pathname, { method = 'GET', body = null, raw = null, form = 
 // ── 目录：这个账号在 relay 上能用什么 ──
 // 进程级缓存；起动、改钥匙、用户点"刷新"时重拉。选择器是同步读的（selectableModelsFor），
 // 所以这里必须是同步可读的快照，网络在别处发生。
-let catalog = { configured: false, ok: false, at: 0, error: null, whoami: null, models: [] };
+let catalog = { configured: false, ok: false, at: 0, error: null, whoami: null, models: [], renames: {} };
 
 export function relayCatalog() { return catalog; }
 
@@ -103,25 +103,60 @@ export function relayModelEntry(appModel) {
   return catalog.ok ? (catalog.models.find((m) => m.id === appModel) || null) : null;
 }
 
+// 目录换了一份就通知（model-context 据此重建模型表：09-11 起本机没钥匙的行是照目录建的）。
+// 用订阅而不是在这里 import model-context：那边已经 import 这个文件，反过来就成环了
+const listeners = new Set();
+export function onRelayCatalogChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+function setCatalog(next) {
+  catalog = next;
+  for (const fn of listeners) { try { fn(catalog); } catch (err) { console.warn(`[relay-client] 目录变更回调失败：${err.message}`); } }
+}
+
+/**
+ * 目录里「按钟点关门」的锁（lockKind 'closed'）是站点**拉取那一刻**算的，过了关门时段它还锁着。
+ * 这类行站点同时下发了时段（unavailable），本机的钟点闸（selectableModelsFor → availabilityOf）
+ * 会照它现算 —— 所以本机把这一种锁摘掉，别的锁（档位 / 站主停用 / 订阅腿关着）原样留着。
+ * 老站点不发 lockKind，什么都不动。
+ */
+const liveClock = (m) => (m && m.lockKind === 'closed' && m.unavailable ? { ...m, locked: false, lockReason: undefined } : m);
+
 /**
  * 拉 /whoami 与 /models。失败不抛：目录标成 ok:false 带 error，选择器就当 relay 没有行；
  * 设置页把 error 显示出来。令牌无效（401）也是这一类 —— 用户填错令牌不该让服务端起不来。
+ *
+ * keepOnError（后台定时刷新用）：网络层失败 / 站点 5xx 时**保留上一份拉到的目录**。目录里的行 09-11
+ * 起是桌面模型表的一部分，网络抖一下就让它们消失，选择器会空、下一句话会被拦。4xx（令牌吊销之类）照常换掉。
  */
-export async function refreshRelayCatalog() {
+export async function refreshRelayCatalog({ keepOnError = false } = {}) {
   const cfg = relayConfig();
-  if (!cfg) { catalog = { configured: false, ok: false, at: Date.now(), error: null, whoami: null, models: [] }; return catalog; }
+  if (!cfg) { setCatalog({ configured: false, ok: false, at: Date.now(), error: null, whoami: null, models: [], renames: {} }); return catalog; }
   try {
     const [whoami, models] = await Promise.all([call('/whoami'), call('/models')]);
-    catalog = { configured: true, ok: true, at: Date.now(), error: null, whoami, models: Array.isArray(models?.models) ? models.models : [] };
+    const list = Array.isArray(models?.models) ? models.models.map(liveClock) : [];
+    const renames = models?.renames && typeof models.renames === 'object' ? models.renames : {};
+    setCatalog({ configured: true, ok: true, at: Date.now(), error: null, whoami, models: list, renames });
   } catch (err) {
-    catalog = { configured: true, ok: false, at: Date.now(), error: `${err.code ? err.code + ': ' : ''}${err.message}`, whoami: null, models: [] };
+    const error = `${err.code ? err.code + ': ' : ''}${err.message}`;
+    if (keepOnError && catalog.ok && !(err.status >= 400 && err.status < 500)) {
+      console.warn(`[relay-client] 定时刷新目录失败，沿用上一份（${cfg.url}）：${error}`);
+      return catalog;
+    }
+    setCatalog({ configured: true, ok: false, at: Date.now(), error, whoami: null, models: [], renames: {} });
     console.warn(`[relay-client] 拉不到 relay 目录（${cfg.url}）：${catalog.error}`);
   }
   return catalog;
 }
 
-/** 测试用：直接塞一份目录 */
-export function _setRelayCatalog(c) { catalog = c; }
+/** 后台定时重拉目录：站点加的行、改的名字桌面不重启就能看到（09-11）。只在本地版起动时调一次 */
+let refreshTimer = null;
+export function startRelayCatalogRefresh(everyMs = 10 * 60 * 1000) {
+  if (refreshTimer) return;
+  refreshTimer = setInterval(() => { refreshRelayCatalog({ keepOnError: true }).catch(() => {}); }, everyMs);
+  refreshTimer.unref();
+}
+
+/** 测试用：直接塞一份目录（照样通知，模型表跟着重建） */
+export function _setRelayCatalog(c) { setCatalog({ renames: {}, ...c }); }
 
 // ── 会话 ──
 
@@ -132,19 +167,43 @@ export function _setRelayCatalog(c) { catalog = c; }
  * 紧接着的重试都是秒回，所以这里自己重试一次，带 connection: close 绕开可能坏掉的连接池。幂等：服务端按 sid 去重。
  */
 export async function openRelaySession(sid, appModel) {
+  const gen = ++genSeq;
+  relayGens.set(sid, gen);   // 先占代次：旧 query 的注销晚到时看见代次变了，就不发那条会删掉本次登记的 DELETE
+  const pending = closing.get(sid);
+  if (pending) await pending;   // 旧的注销已经发出去了：等它落地再登记，别让它后到站点把新登记删了
+  let r;
   try {
-    return await call('/sessions', { method: 'POST', body: { sid, appModel } });
+    r = await call('/sessions', { method: 'POST', body: { sid, appModel } });
   } catch (err) {
     if (err.code !== 'RELAY_TIMEOUT' && !/fetch failed/i.test(String(err.message))) throw err;
     console.warn(`[relay-client] open session ${String(sid).slice(0, 8)} 第一发 ${err.code || err.message}，换连接重试一次`);
-    return call('/sessions', { method: 'POST', body: { sid, appModel }, headers: { connection: 'close' } });
+    r = await call('/sessions', { method: 'POST', body: { sid, appModel }, headers: { connection: 'close' } });
   }
+  return { ...r, gen };
 }
 
-/** 结束后注销。失败只记日志：服务器有空闲清扫兜底，注销失败不该影响收尾 */
-export async function closeRelaySession(sid) {
-  try { await call(`/sessions/${encodeURIComponent(sid)}`, { method: 'DELETE' }); }
-  catch (err) { console.warn(`[relay-client] 注销会话 ${String(sid).slice(0, 8)} 失败：${err.message}`); }
+/**
+ * 同一个 sid 的登记代次（09-11 验收抓到的竞态）。会话中途换模型会拿**同一个 sid** 重启 query：
+ * 新 query 起动时 POST 登记，旧 query 的 finally 稍后才 DELETE 注销（closeQuerySession 只是标记关闭）。
+ * 两条请求各走各的连接，到站点的先后不保证 —— DELETE 后到就把新登记删了，新 query 第一发 400「会话没登记」。
+ * 所以注销带着**自己那次登记的代次**来：这个 sid 已经有更新的登记就不发。
+ */
+const relayGens = new Map();   // sid → 本机最近一次登记的代次
+const closing = new Map();     // sid → 在路上的那条 DELETE
+let genSeq = 0;
+
+/**
+ * 结束后注销。失败只记日志：服务器有空闲清扫兜底，注销失败不该影响收尾。
+ * @param {string} sid
+ * @param {number|null} [gen]  openRelaySession 给的代次；不传 = 不比代次直接注销（老调用方）
+ */
+export async function closeRelaySession(sid, gen = null) {
+  if (gen != null && relayGens.get(sid) !== gen) return;   // 同 sid 已经重新登记过：这条注销会删掉新的，不发
+  relayGens.delete(sid);
+  const p = call(`/sessions/${encodeURIComponent(sid)}`, { method: 'DELETE' })
+    .catch((err) => { console.warn(`[relay-client] 注销会话 ${String(sid).slice(0, 8)} 失败：${err.message}`); });
+  closing.set(sid, p);
+  try { await p; } finally { if (closing.get(sid) === p) closing.delete(sid); }
 }
 
 // ── 登录 / 退出（桌面版首启那道门；账号密码只经手一次，换回来的是设备令牌） ──

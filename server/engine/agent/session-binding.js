@@ -27,8 +27,8 @@ import { openRelaySession, closeRelaySession, relayBaseUrlFor, relayConfig } fro
  * @param {string|null} args.ownerId  项目 owner（订阅资格断言用）
  * @param {(ev: object) => void} args.emit  往会话里推事件（ingress 的"正在重试"通知）
  * @returns {Promise<{ baseUrl: string|undefined, apiKey: string|undefined, fastModel: string|null, compactWindow: number|null,
- *            noticeHandler: Function|null, relaySid: string|null }>}
- *   调用方要在 finally 里配对：unregisterIngressSession / unregisterSessionNotice(noticeHandler) / relaySid 有值就 unbindSessionFromRelay
+ *            noticeHandler: Function|null, relaySid: string|null, relayGen: number|null }>}
+ *   调用方要在 finally 里配对：unregisterIngressSession / unregisterSessionNotice(noticeHandler) / relaySid 有值就 unbindSessionFromRelay(relaySid, relayGen)
  */
 export async function bindSessionUpstream({ sessionId, model, ownerId, emit }) {
   // ── 通路由模型表决定（2026-08-19 重建，前身是全局 NODESIGN_GATEWAY_URL 开关）──
@@ -39,7 +39,7 @@ export async function bindSessionUpstream({ sessionId, model, ownerId, emit }) {
   // 天然全通：它们的请求同样进入口、同样被反查路由 —— 不再依赖旧版那个
   // 跨会话互写的 NODESIGN_CURRENT_APP_MODEL 进程全局 env。
   const route = resolveModelRoute(model);
-  const out = { baseUrl: undefined, apiKey: undefined, fastModel: null, compactWindow: null, noticeHandler: null, relaySid: null };
+  const out = { baseUrl: undefined, apiKey: undefined, fastModel: null, compactWindow: null, noticeHandler: null, relaySid: null, relayGen: null };
   // 本地分发版第三条路（09-06）：本机没这一行的钥匙、但站主 relay 的目录里有 → 请求发去站主服务器
   if (modelSourceFor(model) === 'relay') {
     Object.assign(out, await bindSessionToRelay(sessionId, model, route));
@@ -84,14 +84,16 @@ export async function bindSessionUpstream({ sessionId, model, ownerId, emit }) {
 
 /** relay 那条路的登记 + 绑定。失败抛错（信息里带服务器的 code 和原话） */
 async function bindSessionToRelay(sessionId, appModel, route) {
+  let reg;
   try {
-    await openRelaySession(sessionId, appModel);
+    reg = await openRelaySession(sessionId, appModel);
   } catch (err) {
     // status 给调用方用（api/stage.js 直接当 HTTP 码回）：relay 那头的判决属于上游不可用，不是本地参数错
     throw Object.assign(new Error(`站主服务不让这个会话开始（${err.code || 'RELAY'}）：${err.message}`), { status: 502 });
   }
   return {
     relaySid: sessionId,
+    relayGen: reg?.gen ?? null,   // 注销时带回去：同 sid 换模型重启过就不注销（见 relay-client closeRelaySession）
     baseUrl: relayBaseUrlFor(sessionId),
     apiKey: relayConfig().token,
     // API 行：跟本地 ingress 一样 fast 必须同表可路由（relay 那头按登记的行改道）；订阅行：SDK 自己认得真名
@@ -100,7 +102,7 @@ async function bindSessionToRelay(sessionId, appModel, route) {
   };
 }
 
-/** relay 登记的配对注销（不等它：失败有服务器空闲清扫兜底） */
-export function unbindSessionFromRelay(sessionId) {
-  closeRelaySession(sessionId);
+/** relay 登记的配对注销（不等它：失败有服务器空闲清扫兜底）。gen = 那次登记的代次，同 sid 已重新登记就不发 */
+export function unbindSessionFromRelay(sessionId, gen = null) {
+  closeRelaySession(sessionId, gen);
 }

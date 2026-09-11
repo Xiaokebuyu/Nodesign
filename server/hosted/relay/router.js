@@ -17,7 +17,7 @@
  *   POST   /login                  { username, password, label } → 账号密码换一枚设备令牌（桌面版登录；不需要令牌）
  *   POST   /logout                 吊销当前这枚令牌（桌面版退出登录）
  *   GET    /whoami                 令牌对应的用户、档位、额度快照（客户端设置页用）
- *   GET    /models                 这个账号在这台服务器上能选的行（两个面的并集；客户端选择器按它过滤）
+ *   GET    /models                 这个账号在这台服务器上能选的行（两个面的并集）+ 桌面建行要用的字段（catalog.js）
  *   POST   /sessions               { sid, appModel } → 201；档位不够当场 403（省得起了 SDK 才知道）
  *   DELETE /sessions/:sid
  *   POST   /__nd/:sid/v1/messages  推理（SDK 的 ANTHROPIC_BASE_URL = <site>/api/relay/__nd/<sid>）
@@ -35,13 +35,14 @@ import { verifyDeviceToken, tokenFromRequest, mintDevice, revokeDevice, listDevi
 import { checkPassword } from '../auth-routes.js';
 import { getUserById } from '../../auth/users-store.js';
 import { openRelaySession, closeRelaySession, lookupRelaySession, startRelaySessionSweeper } from './sessions.js';
-import { decideRelay, relaySubscriptionAllowed, relaySubscriptionDenial, RELAY_SUBSCRIPTION_CLOSED_REASON } from './gates.js';
+import { decideRelay, relaySubscriptionAllowed, relaySubscriptionDenial } from './gates.js';
+import { relayCatalogFor } from './catalog.js';
 import { recordRelayUsage, installRelayUsageSource, relayDailySeries } from './usage.js';
 import { avatarDataUrl, setAvatar, clearAvatar, AVATAR_MAX_UPLOAD } from '../../lib/avatar-store.js';
 import { getActiveNotice } from '../../lib/notice-store.js';
 import { forwardSubscription } from './subscription-leg.js';
 import { handleRequest as forwardViaIngress } from '../../lib/model-ingress.js';
-import { priceTokens, resolveModelRoute, selectableModelsFor, PICKER_SCOPES } from '../../engine/agent/model-context.js';
+import { priceTokens, resolveModelRoute } from '../../engine/agent/model-context.js';
 import { checkQuota } from '../../lib/quota.js';
 import { tierOf } from '../../auth/tier.js';
 import { mountRelayTools, relayToolsFor } from './tools.js';
@@ -155,21 +156,10 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
   // skill 市场（09-08）：桌面版入口，跟网页的 /api/market 同一份处理函数。multipart 自己解，不依赖 express.json
   router.use('/market', createMarketRouter({ userOf: (req) => req.relayUser, source: 'desktop' }));
 
-  // 目录：客户端拿着同一张 model-table，只需要知道"哪些行这个账号能用、哪些锁着"。两个选择器面（canvas / stage）
-  // 的并集，面的过滤客户端自己做。字段只给 id / locked / lockReason，标签和描述客户端表里有。
+  // 目录：这个账号能用哪些行、哪些锁着，09-11 起每条 API 行还带着桌面建这一行要用的字段（站点加行、改名桌面不用跟版）。
+  // 字段清单和为什么在 catalog.js 头注
   router.get('/models', (req, res) => {
-    const byId = new Map();
-    for (const scope of PICKER_SCOPES) {
-      for (const m of selectableModelsFor(req.relayUser, { scope })) {
-        if (byId.has(m.id)) continue;
-        // 订阅行在 relay 上还要过订阅腿的总开关：站内 pro 不锁，桌面版照样锁（原因写明白，客户端选择器直接显示）
-        const subClosed = resolveModelRoute(m.id).mode === 'subscription' && !relaySubscriptionAllowed(req.relayUser);
-        const locked = !!m.locked || subClosed;
-        const lockReason = subClosed && !m.locked ? RELAY_SUBSCRIPTION_CLOSED_REASON : m.lockReason;
-        byId.set(m.id, { id: m.id, locked, ...(locked && lockReason ? { lockReason } : {}) });
-      }
-    }
-    res.json({ models: [...byId.values()] });
+    res.json(relayCatalogFor(req.relayUser));
   });
 
   router.post('/sessions', async (req, res) => {

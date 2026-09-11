@@ -49,3 +49,50 @@ describe('modelSourceFor（local profile）', () => {
     expect(mc.modelSourceFor('nope')).toBeNull();
   });
 });
+
+// 09-11：目录带整行（hosted/relay/catalog.js）→ 桌面照着建行，站点加行 / 改名不用跟发桌面
+describe('目录长出来的行（local profile）', () => {
+  const HELPER = 'deepseek-v4-flash-helper';
+  const KEY_ENV = keyEnvOf(apiRow.id);   // 收集阶段取（表还是内置那份）：被目录顶替后的行挂的是合成上游，查不到 keyEnv
+  const entry = (id, extra = {}) => ({ id, locked: false, mode: 'api', label: `站点的 ${id}`, desc: 'd', brand: 'deepseek', window: 400_000, sdkAlias: mc.SHARED_SDK_ALIAS, fastModel: HELPER, protocol: 'openai-chat', prices: { input: 1, output: 2 }, ...extra });
+  const v2 = () => rc._setRelayCatalog({ configured: true, ok: true, at: 1, error: null, whoami: null, renames: { 'gone-id': 'site-new-row' }, models: [
+    entry('site-new-row'),
+    entry(apiRow.id, { label: '站点改过的名字' }),
+    entry(HELPER, { helper: true, label: undefined }),
+  ] });
+
+  it('本地表里没有的行进了选择器、能路由；改名表里的旧 id 翻得过去', () => {
+    delete process.env[KEY_ENV];
+    v2();
+    const list = mc.selectableModelsFor(LOCAL_OWNER);
+    expect(list.find((m) => m.id === 'site-new-row')).toMatchObject({ label: '站点的 site-new-row', source: 'relay' });
+    expect(list.find((m) => m.id === apiRow.id)?.label).toBe('站点改过的名字');
+    expect(list.some((m) => m.id === HELPER)).toBe(false);   // helper 不进选择器
+    expect(mc.resolveModelRoute('site-new-row')).toMatchObject({ mode: 'api', window: 400_000, sdkAlias: mc.SHARED_SDK_ALIAS, fastModel: HELPER });
+    expect(mc.resolveSdkSpoofModel('site-new-row')).toBe(mc.SHARED_SDK_ALIAS);
+    expect(mc.resolveWireModel('site-new-row')?.protocol).toBe('openai-chat');   // 换模型的协议闸靠它
+    expect(mc.canonicalModelId('gone-id')).toBe('site-new-row');
+    expect(mc.modelSourceFor('gone-id')).toBe('relay');
+    expect(mc.allowedModelsFor(LOCAL_OWNER).some((m) => m.id === 'site-new-row')).toBe(true);
+  });
+
+  it('填上钥匙重建 → 那行变回本机的内置行；拿掉再重建 → 又照目录', () => {
+    const env = KEY_ENV;
+    v2();
+    process.env[env] = 'my-own-key';
+    mc.rebuildModelIndex();
+    expect(mc.modelSourceFor(apiRow.id)).toBe('local');
+    expect(mc.selectableModelsFor(LOCAL_OWNER).find((m) => m.id === apiRow.id)?.label).toBe(apiRow.label);
+    delete process.env[env];
+    mc.rebuildModelIndex();
+    expect(mc.selectableModelsFor(LOCAL_OWNER).find((m) => m.id === apiRow.id)?.label).toBe('站点改过的名字');
+  });
+
+  it('目录没了 → 目录长出来的行跟着没了（不留一条指向站点的死行）', () => {
+    v2();
+    rc._setRelayCatalog({ configured: true, ok: false, at: 2, error: 'x', whoami: null, models: [] });
+    expect(mc.modelSourceFor('site-new-row')).toBeNull();
+    expect(mc.resolveModelRoute('site-new-row').mode).toBe('subscription');   // 不认识的 id 的老口径；turn.js 的白名单先拦
+    expect(mc.selectableModelsFor(LOCAL_OWNER).some((m) => m.id === 'site-new-row')).toBe(false);
+  });
+});

@@ -29,7 +29,7 @@ import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, relayNotice
 import { AVATAR_MAX_UPLOAD } from '../lib/avatar-store.js';
 import { loadPrefs, savePrefs, prefsPath } from '../runtime/local-prefs.js';
 import { listComponents, installComponent, uninstallComponent, applyComponentEnv, componentsLocation, relocateComponents } from '../runtime/components.js';
-import { selectableModelsFor } from '../engine/agent/model-context.js';
+import { selectableModelsFor, rebuildModelIndex } from '../engine/agent/model-context.js';
 import { msg } from '../shared/messages.js';
 import { recordIssue, signatureOf } from '../lib/issues-store.js';
 import { mcpToken, MCP_PATH } from '../mcp-server/diagnostics.js';
@@ -104,7 +104,9 @@ router.put('/env', async (req, res) => {
   try {
     const r = setEnvValues(values);
     // relay 的令牌或地址变了就重拉目录（选择器同步读快照，这里不拉它永远是旧的）
-    if (r.changed.some((k) => k.startsWith('NODESIGN_RELAY_'))) await refreshRelayCatalog();
+    if (r.changed.some((k) => k.startsWith('NODESIGN_RELAY_'))) await refreshRelayCatalog();   // 目录一换模型表跟着重建
+    // 别的钥匙变了也要重建（09-11）：本机没钥匙的内置行是照 relay 目录建的，填上钥匙它得变回本机那行，拿掉钥匙再变回去
+    else if (r.changed.length) { try { rebuildModelIndex(); } catch (err) { console.warn(`[local] 改钥匙后重建模型表失败，沿用旧表：${err.message}`); } }
     // 钥匙变了能力表要重探（钥匙类即时生效；二进制类不变），新会话的工具闸就按新结果。
     // ⚠️ 要在目录之后：webSearch / imageGen 两位现在也看"网关给不给"（relay-tools.js）
     await probeCapabilities({ force: true });

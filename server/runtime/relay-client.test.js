@@ -11,7 +11,10 @@ const fake = http.createServer((req, res) => {
   if (mode === 'html') { res.writeHead(502, { 'content-type': 'text/html' }); res.end('<html>bad gateway</html>'); return; }
   if (mode === 'unauth') { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: '设备令牌无效' }, code: 'DEVICE_TOKEN_INVALID' })); return; }
   if (req.url === '/api/relay/whoami') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ user: { id: 'u1', username: 'alice', tier: 'basic' }, quota: { kind: 'daily', used: 1, limit: 5 } })); return; }
-  if (req.url === '/api/relay/models') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ models: [{ id: 'm-api', locked: false }, { id: 'claude-sonnet-5[1m]', locked: true, lockReason: '要订阅' }] })); return; }
+  if (req.url === '/api/relay/models') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ models: [{ id: 'm-api', locked: false }, { id: 'claude-sonnet-5[1m]', locked: true, lockReason: '要订阅' },
+    // 09-11 目录带整行：一条拉取那一刻正好在关门时段的（本机据 unavailable 现算，锁要摘掉），一条站主停用的（锁留着）
+    { id: 'm-closed', locked: true, lockReason: '关门', lockKind: 'closed', mode: 'api', unavailable: { why: '高峰', tz: 'UTC', windows: ['01:00-04:00'] } },
+    { id: 'm-off', locked: true, lockReason: '停用', lockKind: 'disabled', mode: 'api' }], renames: { 'old-id': 'm-api' } })); return; }
   if (req.method === 'POST' && req.url === '/api/relay/sessions') {
     let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => {
       const j = JSON.parse(b);
@@ -60,7 +63,7 @@ describe('refreshRelayCatalog', () => {
     const c = await rc.refreshRelayCatalog();
     expect(c.ok).toBe(true);
     expect(c.whoami.user.username).toBe('alice');
-    expect(c.models.map((m) => m.id)).toEqual(['m-api', 'claude-sonnet-5[1m]']);
+    expect(c.models.map((m) => m.id)).toEqual(['m-api', 'claude-sonnet-5[1m]', 'm-closed', 'm-off']);
     expect(rc.relayModelEntry('m-api')).toEqual({ id: 'm-api', locked: false });
     expect(rc.relayModelEntry('claude-sonnet-5[1m]').locked).toBe(true);
     expect(rc.relayModelEntry('nope')).toBeNull();
@@ -79,6 +82,27 @@ describe('refreshRelayCatalog', () => {
     const c = await rc.refreshRelayCatalog();
     expect(c.ok).toBe(false);
     expect(c.error).toContain('502');
+  });
+  it('09-11：改名表进快照；按钟点关门的锁摘掉（本机据 unavailable 现算），别的锁留着', async () => {
+    const c = await rc.refreshRelayCatalog();
+    expect(c.renames).toEqual({ 'old-id': 'm-api' });
+    expect(rc.relayModelEntry('m-closed').locked).toBe(false);
+    expect(rc.relayModelEntry('m-closed').unavailable.windows).toEqual(['01:00-04:00']);
+    expect(rc.relayModelEntry('m-off')).toMatchObject({ locked: true, lockReason: '停用' });
+  });
+  it('09-11 后台刷新（keepOnError）：网络层失败 / 5xx 沿用上一份；4xx 照常清掉；每换一份都通知', async () => {
+    const got = [];
+    const off = rc.onRelayCatalogChange((c) => got.push(c.ok));
+    await rc.refreshRelayCatalog();
+    expect(got).toEqual([true]);
+    mode = 'html';   // 502
+    expect((await rc.refreshRelayCatalog({ keepOnError: true })).ok).toBe(true);
+    expect(rc.relayModelEntry('m-api')).toBeTruthy();
+    expect(got).toEqual([true]);   // 没换就不通知
+    mode = 'unauth';
+    expect((await rc.refreshRelayCatalog({ keepOnError: true })).ok).toBe(false);
+    expect(got).toEqual([true, false]);
+    off();
   });
   it('没配令牌：configured:false，不打网络', async () => {
     const t = process.env.NODESIGN_RELAY_TOKEN;
@@ -109,6 +133,25 @@ describe('openRelaySession / closeRelaySession', () => {
   it('close 失败不抛', async () => {
     mode = 'html';
     await expect(rc.closeRelaySession('sid-abcdefgh')).resolves.toBeUndefined();
+  });
+  // 09-11 验收抓到：会话中途换模型 = 同一个 sid 重启 query，新登记先到、旧 query 的注销后到，旧注销把新登记删了
+  it('⭐ 同 sid 重新登记过：拿旧代次注销不发 DELETE；拿新代次才发', async () => {
+    const del = () => seen.filter((x) => x.method === 'DELETE').length;
+    const a = await rc.openRelaySession('sid-regen-01', 'm-api');
+    const b = await rc.openRelaySession('sid-regen-01', 'm-api');   // 换模型重启：同一个 sid
+    expect(b.gen).toBeGreaterThan(a.gen);
+    await rc.closeRelaySession('sid-regen-01', a.gen);   // 旧 query 的 finally 晚到
+    expect(del()).toBe(0);
+    await rc.closeRelaySession('sid-regen-01', b.gen);
+    expect(del()).toBe(1);
+  });
+  it('旧注销已经发出去了：新登记等它落地再发（站点先删后登记）', async () => {
+    const a = await rc.openRelaySession('sid-regen-02', 'm-api');
+    const closing = rc.closeRelaySession('sid-regen-02', a.gen);   // 不等
+    await rc.openRelaySession('sid-regen-02', 'm-api');
+    await closing;
+    const order = seen.filter((x) => x.url.includes('sessions')).map((x) => x.method);
+    expect(order).toEqual(['POST', 'DELETE', 'POST']);
   });
 });
 

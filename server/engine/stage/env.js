@@ -52,5 +52,5 @@ export function releaseUpstream(rt) {
   rt.bound = null;
   try { unregisterIngressSession(rt.sdkSid); } catch { /* 幂等 delete */ }
   if (bound.noticeHandler) { try { unregisterSessionNotice(rt.sdkSid, bound.noticeHandler); } catch { /* */ } }
-  if (bound.relaySid) { try { unbindSessionFromRelay(bound.relaySid); } catch { /* 失败有服务器空闲清扫兜底 */ } }
+  if (bound.relaySid) { try { unbindSessionFromRelay(bound.relaySid, bound.relayGen); } catch { /* 失败有服务器空闲清扫兜底 */ } }
 }
