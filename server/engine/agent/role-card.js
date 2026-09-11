@@ -28,6 +28,7 @@
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { isResidentRole, isSlotType, safeRoleLabel } from './cast.js';
+import { toSlashPath } from '../../lib/workspace-path.js';
 
 const AGENTS_DIR = '.claude/agents';
 const REGISTRY_REL = '.nd/cast.json';
@@ -40,7 +41,10 @@ export async function readCastRegistry(workspaceRoot) {
   try {
     const raw = await fs.readFile(path.join(workspaceRoot, REGISTRY_REL), 'utf8');
     const data = JSON.parse(raw);
-    return data && typeof data.roles === 'object' && data.roles ? data : { version: 1, roles: {} };
+    if (!(data && typeof data.roles === 'object' && data.roles)) return { version: 1, roles: {} };
+    // 卡路径读时归一成正斜杠：09-11 前 Windows 上写进来的是反斜杠，所有读者都按 `/` 比（见 toSlashPath）
+    for (const r of Object.values(data.roles)) if (r && typeof r.card === 'string') r.card = toSlashPath(r.card);
+    return data;
   } catch { return { version: 1, roles: {} }; }
 }
 const FM_RE = /^---\r?\n([\s\S]{0,4000}?)\r?\n---/;

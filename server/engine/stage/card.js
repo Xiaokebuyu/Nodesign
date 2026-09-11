@@ -31,6 +31,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { readCastRegistry } from '../agent/role-card.js';
+import { toSlashPath } from '../../lib/workspace-path.js';
 import { listPlays } from './play.js';
 
 export const ROLES_DIR = '角色';
@@ -167,7 +168,7 @@ export async function resolveCardPath(workspaceRoot, nameOrSlug, { playRoot = nu
   if (!key) return null;
   const tryRel = async (rel) => { try { await fs.access(path.join(workspaceRoot, rel)); return rel; } catch { return null; } };
   if (playRoot) {
-    const hit = await tryRel(path.join(playRoot, ROLES_DIR, folderNameFor(key), CARD_FILE));
+    const hit = await tryRel(path.posix.join(playRoot, ROLES_DIR, folderNameFor(key), CARD_FILE));
     if (hit) return hit;
   }
   const reg = await readCastRegistry(workspaceRoot);
@@ -176,14 +177,14 @@ export async function resolveCardPath(workspaceRoot, nameOrSlug, { playRoot = nu
       const hit = await tryRel(e.card);
       if (hit) return hit;
       // 登记表还指着根上的路径、而卡后来被用户自己挪进了戏的文件夹
-      if (playRoot) { const moved = await tryRel(path.join(playRoot, e.card)); if (moved) return moved; }
+      if (playRoot) { const moved = await tryRel(path.posix.join(playRoot, e.card)); if (moved) return moved; }
     }
   }
-  return tryRel(path.join(ROLES_DIR, folderNameFor(key), CARD_FILE));
+  return tryRel(path.posix.join(ROLES_DIR, folderNameFor(key), CARD_FILE));
 }
 
 /** 卡所在文件夹（工作区相对） */
-export function cardHome(cardRel) { return path.dirname(cardRel); }
+export function cardHome(cardRel) { return path.posix.dirname(toSlashPath(cardRel)); }
 
 /** 读卡给开戏用：名字 / 小字 / 立绘 / 进提示词的正文（人写部分 + 索引块） */
 export async function readCardForStage(workspaceRoot, cardRel) {
@@ -192,7 +193,7 @@ export async function readCardForStage(workspaceRoot, cardRel) {
   const memory = c.memory && !/（还没有）/.test(c.memory) ? c.memory : '';
   return {
     card: cardRel,
-    name: c.fm.name || path.basename(cardHome(cardRel)),
+    name: c.fm.name || path.posix.basename(cardHome(cardRel)),
     slug: c.fm.slug,
     note: c.fm.note || '',
     portrait: c.fm.portrait || null,

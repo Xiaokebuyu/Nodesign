@@ -4,7 +4,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import {
   parseCard, replaceMemoryBlock, renderCard, resolveCardPath, readCardForStage,
-  rewriteCardMemoryIndex, saveCardKeepingMachineBlock, MEM_START, MEM_END,
+  rewriteCardMemoryIndex, saveCardKeepingMachineBlock, MEM_START, MEM_END, cardHome,
 } from './card.js';
 
 /**
@@ -100,5 +100,24 @@ describe('磁盘上的卡', () => {
     expect(raw).not.toContain('旧人设。');
     expect(raw).toContain('[k](记忆/k.md)');
     expect(parseCard(raw).fm.name).toBe('晴可');
+  });
+});
+
+/**
+ * 09-11 Windows 路径案：卡路径是工作区相对路径，所有读者按 `/` 比；09-11 之前 Windows 上是 path.join 写的，
+ * 存量数据里是反斜杠。这里不用真 Windows —— 直接把反斜杠写进盘上的数据，看读的一侧认不认。
+ */
+describe('Windows 写下的旧卡路径（反斜杠）', () => {
+  it('cardHome 认反斜杠，给出来的是正斜杠', () => {
+    expect(cardHome('雨夜\\角色\\程晚\\角色卡.md')).toBe('雨夜/角色/程晚');
+    expect(cardHome('角色/晴可/角色卡.md')).toBe('角色/晴可');
+  });
+
+  it('resolveCardPath：登记表里是反斜杠也找得到，返回正斜杠', async () => {
+    const d = await ws({
+      '角色/晴可/角色卡.md': renderCard({ name: '晴可', persona: 'x' }),
+      '.nd/cast.json': JSON.stringify({ version: 1, roles: { 'rp-qk': { name: '晴可', card: '角色\\晴可\\角色卡.md' } } }),
+    });
+    expect(await resolveCardPath(d, 'rp-qk')).toBe('角色/晴可/角色卡.md');
   });
 });

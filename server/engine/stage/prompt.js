@@ -66,7 +66,7 @@ export async function composeStagePrompt(wsRoot, root, stored) {
     // 立绘：卡 frontmatter 写的相对卡所在目录 / 工作区都认；没写就找同目录的 立绘.*
     let portrait = card.portrait || c.portrait || null;
     if (portrait && !(await exists(path.join(wsRoot, portrait)))) {
-      const alt = path.join(cardHome(rel), portrait);
+      const alt = path.posix.join(cardHome(rel), portrait);
       portrait = (await exists(path.join(wsRoot, alt))) ? alt : null;
     }
     if (!portrait) {

@@ -51,3 +51,14 @@ export function toWorkspaceRel(filePath, workspaceRoot) {
   // 对外一律正斜杠：画布物件 id、board.json 的 key 都是这个口径
   return rel.split(path.sep).join('/');
 }
+
+/**
+ * 已经是工作区相对的路径 → 正斜杠口径。给**读进来的存量数据**用：
+ * 09-11 之前 Windows 上 `path.join` 拼出来的相对路径（`角色\程晚\角色卡.md`）写进了
+ * `.nd/cast.json` / `戏.json`，读的一侧全按 `/` 比（重名闸、显示器剥前缀、白名单），
+ * 于是在 Windows 上一律对不上。写的一侧已改成 `path.posix.join`，读的一侧过这一道兼容旧数据。
+ * 非字符串原样退回。
+ */
+export function toSlashPath(p) {
+  return typeof p === 'string' ? p.replace(/\\/g, '/') : p;
+}

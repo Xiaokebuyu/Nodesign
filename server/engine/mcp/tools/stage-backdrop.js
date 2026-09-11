@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { ensurePlays, patchStageConfig, runtimeOf } from '../../stage/manager.js';
 import { sceneKey, fileUrl } from '../../stage/mechanics.js';
 import { SCENES_DIR, BACKDROPS_DIR, readPlayConfig, writePlayConfig } from '../../stage/play.js';
+import { cardHome } from '../../stage/card.js';
 import { getWorkspaceRoot } from '../../../projects/workspace.js';
 
 export function makeStageBackdropTool({ projectId }) {
@@ -59,7 +60,7 @@ write_scene's scene field); this tool is for when the user wants a specific pict
         const member = (cfg.cast || []).find(c => c.name === String(who || '').trim());
         if (!member) return fail(`portrait 要给 who，且得是在场的人：${(cfg.cast || []).map(c => c.name).join(' / ') || '没有'}`);
         if (!member.card) return fail(`${member.name} 没有角色卡，立绘没地方放。`);
-        const home = path.dirname(member.card);
+        const home = cardHome(member.card);
         const rel = `${home}/立绘${path.extname(clean).toLowerCase()}`;
         await fs.mkdir(path.join(ws, home), { recursive: true });
         await fs.copyFile(src, path.join(ws, rel));

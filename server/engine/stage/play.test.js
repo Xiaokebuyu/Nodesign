@@ -66,3 +66,23 @@ describe('老形状迁移', () => {
     expect(await migrateLegacyPlay(await ws({ 'Y/戏.json': '{}' }))).toBeNull();
   });
 });
+
+/**
+ * 09-11 Windows 路径案：卡路径是工作区相对路径，所有读者按 `/` 比；09-11 之前 Windows 上是 path.join 写的，
+ * 存量数据里是反斜杠。这里不用真 Windows —— 直接把反斜杠写进盘上的数据，看读的一侧认不认。
+ */
+describe('Windows 写下的旧 戏.json（反斜杠路径）', () => {
+  it('readPlayConfig 把 cast 的卡 / 立绘、promptSources 归一成正斜杠（显示器剥前缀、编辑白名单都按 / 比）', async () => {
+    const cfg = {
+      title: '雨夜',
+      cast: [{ name: '程晚', card: '雨夜\\角色\\程晚\\角色卡.md', portrait: '雨夜\\角色\\程晚\\立绘.png' }, { name: '路人' }],
+      promptSources: ['雨夜/台面.md', '雨夜\\角色\\程晚\\角色卡.md'],
+    };
+    const d = await ws({ '雨夜/戏.json': JSON.stringify(cfg) });
+    const got = await readPlayConfig(path.join(d, '雨夜'));
+    expect(got.cast[0].card).toBe('雨夜/角色/程晚/角色卡.md');
+    expect(got.cast[0].portrait).toBe('雨夜/角色/程晚/立绘.png');
+    expect(got.cast[1]).toStrictEqual({ name: '路人' });   // 没有的键不凭空长出来
+    expect(got.promptSources).toEqual(['雨夜/台面.md', '雨夜/角色/程晚/角色卡.md']);
+  });
+});

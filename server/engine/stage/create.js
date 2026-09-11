@@ -50,11 +50,11 @@ export async function createPlay(pid, { title, table, cast, vitals, skin, rules,
     // 卡在根上的 角色/ 里 → 整个家搬进故事的文件夹（卡 / 记忆 / 立绘一起），文件夹才自成一体
     if (!rel.startsWith(`${root}/`)) {
       const home = cardHome(rel);
-      const dest = path.join(root, ROLES_DIR, path.basename(home));
+      const dest = path.posix.join(root, ROLES_DIR, path.posix.basename(home));
       if (!(await exists(path.join(ws, dest)))) {
         await fs.mkdir(path.dirname(path.join(ws, dest)), { recursive: true });
         await fs.rename(path.join(ws, home), path.join(ws, dest));
-        rel = path.join(dest, CARD_FILE);
+        rel = path.posix.join(dest, CARD_FILE);
       }
     }
     castOut.push({ name, card: rel, ...(c?.note ? { note: String(c.note).slice(0, 60) } : {}) });
