@@ -52,6 +52,11 @@ PRUNED=$(find "$LIVE_DIR/assets" -type f -mtime "+$KEEP_DAYS" -print -delete | w
 
 echo "==> 完成：分片 $(find "$LIVE_DIR/assets" -type f | wc -l) 个，清理 $PRUNED 个"
 
+# 官网数字（产品现状 / 单场会话成本等）按当天数据刷新一次（09-11）。每天凌晨另有 crontab 再跑。
+# 失败不挡部署：页面保留构建时的数字。
+echo "==> 刷新官网数字"
+nice -n 10 node scripts/site-stats.mjs --dir="$LIVE_DIR/welcome" || echo "!! site-stats 失败（不影响部署，页面保留原数字）"
+
 # ── 服务端新鲜度闸门 ────────────────────────────────────────────────────
 #
 # **node 不热重载。** 改了服务端不重启，就是拿旧代码验新功能 —— 而且一点

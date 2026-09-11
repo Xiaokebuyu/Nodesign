@@ -93,18 +93,18 @@
       <div>
         <h2 class="reveal is-in">单场会话成本参考</h2>
         <div class="lead reveal is-in" style="--i:1">
-          <p>以下为线上版本近 30 天的实际用量，统计截至 2026 年 9 月 9 日，不含内部账号。费用按线上模型标价折算。自有密钥（BYOK）模式以模型服务商账单为准。</p>
+          <p>以下为线上版本近 30 天的实际用量，统计截至 <span data-stat="asOf">2026 年 9 月 9 日</span>，不含内部账号，每日自动更新。费用按线上模型标价折算。自有密钥（BYOK）模式以模型服务商账单为准。</p>
         </div>
         <div class="usage reveal is-in" style="--i:2">
-          <div class="u"><b>167</b><span>场会话</span></div>
-          <div class="u"><b>4.2 万</b><span>每场 token 中位数（不含缓存读取）</span></div>
-          <div class="u"><b>$0.41</b><span>每场花费中位数</span></div>
-          <div class="u"><b>$1.16</b><span>四分之三会话的费用上限</span></div>
+          <div class="u"><b data-stat="sessions30">167</b><span>场会话</span></div>
+          <div class="u"><b data-stat="medianTokens">4.2 万</b><span>每场 token 中位数（输入与输出，不含缓存）</span></div>
+          <div class="u"><b data-stat="medianCost">$0.41</b><span>每场花费中位数</span></div>
+          <div class="u"><b data-stat="p75Cost">$1.16</b><span>四分之三会话的费用上限</span></div>
         </div>
       </div>
       <aside class="notes reveal is-in" style="--i:1">
         <p><b>统计口径</b>一场会话通常覆盖需求、生成与多轮修改。中位数可降低少数长会话的影响。</p>
-        <p><b>额度参考</b>每日 10 美元额度按中位数约合二十余场会话，图像生成较多时消耗更快。</p>
+        <p><b>额度参考</b>每日 <span data-stat="dailyQuota">10</span> 美元额度按中位数约合 <span data-stat="quotaSessions">二十余</span> 场会话，图像生成较多时消耗更快。</p>
       </aside>
     </div>
   </section>
