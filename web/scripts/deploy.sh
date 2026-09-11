@@ -79,7 +79,8 @@ if [ -n "$SRV_PID" ]; then
   # 的那道闸。⭐ 它还跟文件数量有关（少几个文件时 sort 一次写完就不触发），
   # 所以能装死很久：这仓库为「node 不热重载」中过至少三次，每次都以为是自己忘了。
   NEWEST=$(find ../server -type f \( -name '*.js' -o -name '*.mjs' -o -name '*.md' \) \
-    -not -path '*/node_modules/*' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 || true)
+    -not -path '*/node_modules/*' -not -path '*/projects-data/*' -not -path '*/runs/*' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 || true)
+  # ↑ projects-data / runs 是用户数据：agent 写一条板书（.md）就会让这道闸误报「服务端比进程新」（09-11）
   NEWEST_EPOCH=${NEWEST%% *}
   NEWEST_FILE=${NEWEST#* }
   if [ -n "$NEWEST_EPOCH" ] && [ "${NEWEST_EPOCH%.*}" -gt "$PROC_EPOCH" ]; then
