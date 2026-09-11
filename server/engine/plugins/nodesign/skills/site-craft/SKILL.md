@@ -255,7 +255,7 @@ Read `patterns/page-transitions.md` —— **动手写第一个转场之前先�
 | 演示、横版报告 | 1920×1080（16:9） |
 | 用户明确说了尺寸或比例 | 按他说的 |
 
-**写法**：一个 `.artboard` 容器给定 `width` / `height`，内部绝对布局或 grid，`overflow: hidden`，内容不允许溢出画幅。预览时用 `transform: scale()` 按视口缩放整块，画幅本身的像素不变。导出走站点的单页 HTML；用户要图片时 `screenshot_canvas` 出图。
+**写法**：一个 `.artboard` 容器给定 `width` / `height`，内部绝对布局或 grid，`overflow: hidden`，内容不允许溢出画幅。整块按视口等比缩放、居中，画幅本身的像素不变。**外层缩放骨架照抄 `patterns/fixed-canvas.md`，动手前先 Read**：外层必须是 flex 居中，写成 grid 会让画面在预览窗和全屏里偏到一角并被裁切。导出走站点的单页 HTML；用户要图片时 `screenshot_canvas` 出图。
 
 **演示是多个画幅按顺序排列**：每一屏一个 `<section class="artboard">`，容器 `scroll-snap-type: y mandatory`，每屏 `scroll-snap-align: start`，键盘方向键和滚轮自然翻页。每屏装在单屏内，section 内部不滚动，信息多就拆屏。演示与普通站点的区别只在这一层，风格系统、字号、色彩方法与站点相同。
 
