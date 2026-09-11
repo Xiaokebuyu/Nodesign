@@ -26,7 +26,7 @@ const CSS = readFileSync(resolve(HERE, 'globals.css'), 'utf8');
 const THEME = readFileSync(resolve(HERE, '../lib/theme.js'), 'utf8');
 
 /** 现场读字体文件（python3-fonttools）。缺依赖就红 —— 静默跳过的 lint 等于没有。 */
-const report = JSON.parse(execFileSync('python3', [
+const report = JSON.parse(execFileSync(process.platform === 'win32' ? 'python' : 'python3', [
   resolve(ROOT, 'web/scripts/gen-font-subset.py'), '--report',
 ], { encoding: 'utf8', cwd: ROOT }));
 

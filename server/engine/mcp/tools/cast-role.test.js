@@ -148,3 +148,38 @@ describe('ID_RE 与 ROLE_SLUG_RE 的蕴含关系（08-28 钉死：两处判据�
     }
   });
 });
+
+/**
+ * 09-11 Windows 路径案：卡路径是工作区相对路径，所有读者按 `/` 比；09-11 之前 Windows 上是 path.join 写的，
+ * 存量数据里是反斜杠。这里不用真 Windows —— 直接把反斜杠写进盘上的数据，看读的一侧认不认。
+ */
+describe('Windows 写下的旧登记表（反斜杠卡路径）', () => {
+  it('⛔ 重名闸照样拦：旧数据里的 角色\\<名>\\角色卡.md 也算占用', async () => {
+    const w = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-cast-win-'));
+    const c = (args) => makeCastRoleTool({ workspaceRoot: w, ctx: { emit() {} } }).handler(args, {});
+    const base = { duty: '守门', persona: '原版人设 KEEP-ME' };
+    await c({ ...base, id: 'keeper', name: '守家君' });
+    const regFile = path.join(w, '.nd', 'cast.json');
+    const reg = JSON.parse(fs.readFileSync(regFile, 'utf8'));
+    reg.roles['rp-keeper'].card = path.win32.join('角色', '守家君', '角色卡.md');
+    fs.writeFileSync(regFile, JSON.stringify(reg));
+
+    const r = await c({ ...base, id: 'intruder', name: '守家君', persona: '入侵者人设' });
+    expect(r.isError).toBe(true);
+    expect(fs.readFileSync(path.join(w, '角色', '守家君', '角色卡.md'), 'utf8')).toContain('KEEP-ME');
+    fs.rmSync(w, { recursive: true, force: true });
+  });
+
+  it('readCastRegistry 读出来一律正斜杠；重登一次，盘上的旧数据也跟着改掉', async () => {
+    const w = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-cast-win-'));
+    fs.mkdirSync(path.join(w, '.nd'), { recursive: true });
+    fs.writeFileSync(path.join(w, '.nd', 'cast.json'), JSON.stringify({ version: 1, roles: { 'rp-old': { name: '老人', card: '角色\\老人\\角色卡.md' } } }));
+    expect((await readCastRegistry(w)).roles['rp-old'].card).toBe('角色/老人/角色卡.md');
+
+    await makeCastRoleTool({ workspaceRoot: w, ctx: { emit() {} } }).handler({ id: 'fresh', name: '新人', duty: 'x', persona: 'y' }, {});
+    const onDisk = fs.readFileSync(path.join(w, '.nd', 'cast.json'), 'utf8');
+    expect(onDisk).not.toContain('\\\\');
+    expect(JSON.parse(onDisk).roles['rp-fresh'].card).toBe('角色/新人/角色卡.md');
+    fs.rmSync(w, { recursive: true, force: true });
+  });
+});

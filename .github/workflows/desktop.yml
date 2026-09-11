@@ -45,6 +45,18 @@ jobs:
           npm ci
           npm ci --prefix web
 
+      # 09-11：打包前先在 Windows 上把测试跑一遍，红了就不打包、不发布。
+      # 此前这条流水线只装、建、打、发，桌面版只在 Windows 上发，而测试只在 Linux 开发机上跑过 ——
+      # 一整族 Windows 才有的 bug（凭据 deny 规则不中、角色卡重名闸拦不住、回退改换行符）都是这么漏过去的。
+      # 跟 test.yml 同一条命令；字体 lint 要 fonttools + brotli。
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 测试（红了就不发）
+        run: |
+          python -m pip install --quiet fonttools brotli
+          npm test
+
       - name: 构建前端（进安装包的是 web/dist）
         run: npm run build:web
 

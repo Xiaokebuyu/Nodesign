@@ -8,6 +8,9 @@ process.env.NODESIGN_USER_PLUGINS_DIR = path.join(os.tmpdir(), `nd-crys-plugins-
 const ws = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-crys-ws-'));
 
 const db = (await import('../../runs/store.js')).default;
+// 建表的模块自己导入：往 users 插行、查 runs.user_id（projects/store.js 的迁移加的列），不能靠同一个 worker 里别的文件先建（09-11 每个 worker 一个库之后单跑必红）
+await import('../../../auth/users-store.js');
+await import('../../../projects/store.js');
 const { makeCrystallizeSkillTool } = await import('./crystallize-skill.js');
 const { registerMarketPublisher, _resetMarketPublisher } = await import('../../../lib/market-bridge.js');
 const { getUserPluginsRoot } = await import('../../agent/plugin-loader.js');

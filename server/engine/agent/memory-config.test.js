@@ -5,6 +5,7 @@
 // （crossSessionInbound 跨会话入向闸，调用点写得好好的，到 SDK 手里不存在）。
 // 「调用点写了」和「SDK 收到了」是两件事，只有后者算数。
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
 import { mergeAgentSettings } from './memory-config.js';
 
 describe('mergeAgentSettings', () => {
@@ -22,7 +23,7 @@ describe('mergeAgentSettings', () => {
   it('自动记忆目录还在（老哨兵）', () => {
     const out = mergeAgentSettings({}, { sharedRoot: '/data/proj_x/shared' });
     expect(out.autoMemoryEnabled).toBe(true);
-    expect(out.autoMemoryDirectory).toContain('/data/proj_x/shared');
+    expect(out.autoMemoryDirectory).toContain(path.join('/data/proj_x/shared'));   // Windows 上是反斜杠
   });
 
   it('⭐ 不认识的键当场炸，不静默丢 —— 白名单的代价由加键的人当场付', () => {

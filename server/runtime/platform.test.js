@@ -1,7 +1,9 @@
 // 隔离两道闸的配置层（2026-08-15）：黑名单 / env 洗白 / 结构化工具 deny 规则
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { platform } from './platform.js';
+import { platform, siblingEnvFiles, ruleAbsPath } from './platform.js';
 
 const repoRoot = platform.repoRoot;
 
@@ -15,10 +17,27 @@ describe('凭据黑名单', () => {
       expect(list.some(p => p.endsWith(tail))).toBe(true);
     }
   });
+  // 09-11 前这条断言的是「上一级目录里有个叫 Nodesign 的仓」—— 只在站主这台机器上成立，
+  // checkout 在别处（CI、外部审计的 work\\nodesign）就红；`endsWith('/.env')` 在 Windows 上也永远不中。
+  // 改成造一棵临时的兄弟仓，按规则本身断言。
   it('⭐ 同机兄弟仓的 .env 也要拦 —— 只拦本仓的话，exp 会话能 cat 生产的 .env（真跑抓到过）', () => {
-    const parent = path.dirname(repoRoot);
-    expect(list).toContain(path.join(parent, 'Nodesign', '.env'));
-    expect(list.filter(p => p.endsWith('/.env')).length).toBeGreaterThan(1);
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-siblings-'));
+    try {
+      const me = path.join(parent, 'Nodesign-canvas');
+      const put = (rel) => { const p = path.join(parent, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, 'X=1'); };
+      fs.mkdirSync(me);
+      put('Nodesign/.env'); put('other/.env.local'); put('demo/.env.example'); put('plain/readme.md');
+      const got = siblingEnvFiles(me);
+      expect(got).toContain(path.join(me, '.env'));                      // 本仓自己的（文件在不在都拦）
+      expect(got).toContain(path.join(parent, 'Nodesign', '.env'));      // 生产那份
+      expect(got).toContain(path.join(parent, 'other', '.env.local'));
+      expect(got.some(p => p.endsWith('.env.example'))).toBe(false);
+      expect(got.some(p => p.includes(`${path.sep}plain${path.sep}`))).toBe(false);
+    } finally { fs.rmSync(parent, { recursive: true, force: true }); }
+  });
+  it('真实清单里本仓与每个带 .env 的兄弟仓都在（这台机器上有几个算几个）', () => {
+    for (const p of siblingEnvFiles()) expect(list).toContain(p);
+    expect(list.filter(p => path.basename(p) === '.env').length).toBeGreaterThanOrEqual(1);
   });
   it('.env.example 不拦（示例没秘密，挡着反而碍事）', () => {
     expect(list.some(p => p.endsWith('.env.example'))).toBe(false);
@@ -29,7 +48,7 @@ describe('凭据黑名单', () => {
   });
   it('逃生舱里塞进通配条目也会被拒收（丢弃并告警，不进清单）', () => {
     const old = process.env.NODESIGN_DENY_READ_EXTRA;
-    process.env.NODESIGN_DENY_READ_EXTRA = '/tmp/x/*/.cache:/tmp/ok';
+    process.env.NODESIGN_DENY_READ_EXTRA = ['/tmp/x/*/.cache', '/tmp/ok'].join(path.delimiter);   // POSIX 冒号、Windows 分号
     try {
       const l = platform.credentialBlacklist();
       expect(l).toContain('/tmp/ok');
@@ -41,7 +60,7 @@ describe('凭据黑名单', () => {
   });
   it('NODESIGN_DENY_READ_EXTRA 是逃生舱：不改代码也能加拦截目标', () => {
     const old = process.env.NODESIGN_DENY_READ_EXTRA;
-    process.env.NODESIGN_DENY_READ_EXTRA = '/a/b : /c/d';
+    process.env.NODESIGN_DENY_READ_EXTRA = `/a/b ${path.delimiter} /c/d`;
     try {
       expect(platform.credentialBlacklist()).toEqual(expect.arrayContaining(['/a/b', '/c/d']));
     } finally {
@@ -66,16 +85,26 @@ describe('沙盒内要抹掉的环境变量', () => {
 });
 
 describe('结构化工具 deny 规则', () => {
+  // 09-11：Windows 上 Claude Code 先把路径规范成 POSIX 形式再匹配（C:\\Users\\alice → /c/Users/alice，
+  // 规则写 //c/...，官方 permissions 文档原话）。此前直接拼 `/C:\\...`，桌面版上凭据 deny 一条都不中。
+  it('ruleAbsPath：POSIX 前面补一个斜杠；Windows 盘符转成 //<小写盘符>/ 且反斜杠全换掉', () => {
+    expect(ruleAbsPath('/home/x/.env', false)).toBe('//home/x/.env');
+    expect(ruleAbsPath('C:\\Users\\alice\\.env', true)).toBe('//c/Users/alice/.env');
+    expect(ruleAbsPath('D:\\a\\Nodesign\\Nodesign', true)).toBe('//d/a/Nodesign/Nodesign');
+    expect(ruleAbsPath('C:/x/y', true)).toBe('//c/x/y');
+    expect(ruleAbsPath('/etc/shadow', true)).toBe('//etc/shadow');
+  });
   it('⚠️ 路径必须是双斜杠绝对形式 —— 单斜杠静默失效，实测过', () => {
     const rules = platform.protectedPathRules({ dataRoot: '/var/nodesign-data' });
-    const envRule = rules.find(r => r.startsWith('Read(') && r.includes('/.env'));
-    expect(envRule).toBe(`Read(/${path.join(repoRoot, '.env')})`);
+    const envRule = rules.find(r => r.startsWith('Read(') && r.endsWith('/.env)'));
+    expect(envRule).toBe(`Read(${ruleAbsPath(path.join(repoRoot, '.env'))})`);
     expect(envRule.startsWith('Read(//')).toBe(true);
+    expect(envRule).not.toMatch(/\\/);   // 规则里不许有反斜杠（Windows 上 Claude Code 按 POSIX 形式匹配）
   });
 
   it('三种工具都要盖：Read 防看，Write/Edit 防改', () => {
     const rules = platform.protectedPathRules({ dataRoot: '/var/nodesign-data' });
-    const env = `/${path.join(repoRoot, '.env')}`;
+    const env = ruleAbsPath(path.join(repoRoot, '.env'));
     expect(rules).toContain(`Read(${env})`);
     expect(rules).toContain(`Write(${env})`);
     expect(rules).toContain(`Edit(${env})`);
@@ -83,23 +112,23 @@ describe('结构化工具 deny 规则', () => {
 
   it('数据根在仓库外 → 整个仓库禁写', () => {
     const rules = platform.protectedPathRules({ dataRoot: '/home/x/nodesign-exp-data/projects-data' });
-    expect(rules).toContain(`Write(/${repoRoot}/**)`);
+    expect(rules).toContain(`Write(${ruleAbsPath(repoRoot)}/**)`);
   });
 
   it('⭐ 数据根在仓库里（生产就是 server/projects-data）→ 不许把 agent 自己的工作区封死', () => {
     const rules = platform.protectedPathRules({ dataRoot: path.join(repoRoot, 'server', 'projects-data') });
-    expect(rules).not.toContain(`Write(/${repoRoot}/**)`);
-    expect(rules).not.toContain(`Write(/${path.join(repoRoot, 'server')}/**)`);
+    expect(rules).not.toContain(`Write(${ruleAbsPath(repoRoot)}/**)`);
+    expect(rules).not.toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'server'))}/**)`);
     // 别的顶层目录照封
-    expect(rules).toContain(`Write(/${path.join(repoRoot, 'web')}/**)`);
+    expect(rules).toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'web'))}/**)`);
   });
 
   it('⭐ 逐层下探：只放行通往数据根的那一支，`server/` 里的源码照样禁写', () => {
     const rules = platform.protectedPathRules({ dataRoot: path.join(repoRoot, 'server', 'projects-data') });
     // server/ 整个不能放行 —— 那等于平台源码对 agent 可写
-    expect(rules).toContain(`Write(/${path.join(repoRoot, 'server', 'engine')}/**)`);
-    expect(rules).toContain(`Write(/${path.join(repoRoot, 'server', 'runtime')}/**)`);
+    expect(rules).toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'server', 'engine'))}/**)`);
+    expect(rules).toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'server', 'runtime'))}/**)`);
     // 通往数据根那一支不能被封
-    expect(rules).not.toContain(`Write(/${path.join(repoRoot, 'server', 'projects-data')}/**)`);
+    expect(rules).not.toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'server', 'projects-data'))}/**)`);
   });
 });

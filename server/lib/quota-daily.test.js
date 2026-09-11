@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import crypto from 'node:crypto';
 import db from '../engine/runs/store.js';
+// 建表的模块自己导入：往 users 插行、查 runs.user_id（projects/store.js 的迁移加的列），不能靠同一个 worker 里别的文件先建（09-11 每个 worker 一个库之后单跑必红）
+import '../auth/users-store.js';
+import '../projects/store.js';
 import { dailyCostSeries, registerUsageSource, _resetUsageSources } from './quota.js';
 
 function seed(userId, model, cost, daysAgo) {

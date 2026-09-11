@@ -19,6 +19,19 @@ const RESERVED_PLUGIN_NAMES = new Set([
   'nodesign', 'claude', 'anthropic', 'system', 'builtin', 'default',
 ]);
 
+/** 覆盖安装时旧目录让位的名字标记：`.staging/<name>.old-<时间>`（plugin name 不许有点，撞不上真插件） */
+const ASIDE_MARK = '.old-';
+
+/** 上次没删掉的让位目录尽力清掉；清不掉不算事 */
+async function sweepAsides(stagingRoot) {
+  let names = [];
+  try { names = await fs.readdir(stagingRoot); } catch { return; }
+  for (const n of names) {
+    if (!n.includes(ASIDE_MARK)) continue;
+    await fs.rm(path.join(stagingRoot, n), { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch(() => {});
+  }
+}
+
 export function isValidPluginName(name) {
   return typeof name === 'string'
     && PLUGIN_NAME_RE.test(name)
@@ -62,16 +75,40 @@ export async function installPluginToRoot(buffer, targetRoot, { force } = {}) {
   const tmpDir = path.join(stagingRoot, `${manifest.name}-${Date.now().toString(36)}`);
   await fs.mkdir(tmpDir);
 
+  // ⭐ 覆盖安装不以"删得掉旧的"为前提（09-11，同 e03d44aa 给组件修的那个病）：
+  // 原来是先 rm 旧目录再 rename 新目录 —— Windows 上 rename 随时可能 EPERM（杀软在扫、有文件被攥着），
+  // 那一刻旧版已经没了，"升级失败"变成"插件没了"。现在旧目录先挪进 .staging 让位，
+  // 新目录就位了才去删它；新的就不了位就把旧的挪回来。挪都挪不动 → 旧版原样留着，这次算装失败。
+  const cleanup = (dir) => fs.rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }).catch(() => {});
+  await sweepAsides(stagingRoot);
   try {
     await extractToStaging({ buffer, validation, stagingDir: tmpDir });
-    if (existingManifest) {
-      await fs.rm(targetDir, { recursive: true, force: true });
-    }
-    await fs.rename(tmpDir, targetDir);
   } catch (err) {
-    try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    await cleanup(tmpDir);
     throw err;
   }
+  let aside = null;
+  if (existingManifest) {
+    aside = path.join(stagingRoot, `${manifest.name}${ASIDE_MARK}${Date.now().toString(36)}`);
+    try {
+      await fs.rename(targetDir, aside);
+    } catch (err) {
+      await cleanup(tmpDir);
+      throw err;
+    }
+  }
+  try {
+    await fs.rename(tmpDir, targetDir);
+  } catch (err) {
+    if (aside) {
+      try { await fs.rename(aside, targetDir); } catch (back) {
+        console.error(`[plugin-install] ${manifest.name}：新版就不了位，旧版也挪不回去，旧版留在 ${aside}：`, back?.message || back);
+      }
+    }
+    await cleanup(tmpDir);
+    throw err;
+  }
+  if (aside) await cleanup(aside);   // 清不掉只是占地方，下次安装开头 sweepAsides 再试
 
   return {
     status: existingManifest ? 200 : 201,

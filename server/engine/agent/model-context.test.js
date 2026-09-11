@@ -72,68 +72,75 @@ describe('派生导出（旧签名不变）', () => {
   });
 
   it('订阅闸（08-21）：没订阅资格的账号看得见 Claude 行但 locked；邀请码号/admin 正常；默认模型=glm-5.3-flash-merge（08-30）', () => {
-    const pub = { role: 'user', plan: 'basic' };
-    const sub = { role: 'user', plan: 'pro' };
-    const pubSel = selectableModelsFor(pub);
-    expect(pubSel.find((m) => m.id === 'claude-sonnet-5[1m]')?.locked).toBe(true);
-    expect(pubSel.find((m) => m.id === 'deepseek-v4-flash-vision')?.locked).toBeUndefined();
-    expect(pubSel.find((m) => m.id === 'glm-5.3-flash-merge')?.locked).toBeUndefined();
-    expect(allowedModelsFor(pub).map((m) => m.id)).not.toContain('claude-sonnet-5[1m]');
-    expect(allowedModelsFor(pub).map((m) => m.id)).toContain('glm-5.3-flash-merge');
-    expect(isModelLockedFor(pub, 'claude-opus-5[1m]')).toBe(true);
-    expect(isModelLockedFor(sub, 'claude-opus-5[1m]')).toBe(false);
-    expect(isModelLockedFor(pub, 'gemini-3.7-flash')).toBe(false);   // 看不见的不是 locked，是不存在
-    expect(selectableModelsFor(sub).some((m) => m.locked)).toBe(false);
-    expect(selectableModelsFor({ role: 'admin' }).some((m) => m.locked)).toBe(false);
-    // 默认行的历任：Ox → minimax-m3（08-26）→ zai 官方直连（08-27）→ **merge 网关（08-30，zai 订阅额度耗尽）**
-    // ⛔ minimax-m3 本身 09-08 撤行（GMI 账户 402），下面这些断言换成了别的行
-    for (const u of [pub, sub, { role: 'admin' }, null]) expect(defaultModelFor(u)).toBe('glm-5.3-flash-merge');
-    // ⚠️ 「默认行必须免费」那条老规矩 08-30 被用户拍板破了（详见下面那个 describe 的三条新规矩）
-    expect(modelIsFree('qwen3.8-27b')).toBe(true);   // 09-08 起表里唯一的免费行（本地盒子，不进 picker）
-    expect(modelIsFree('glm-5.3-flash-merge')).toBe(false);   // Merge 网关那条是付费行，走美元日限
-    expect(modelIsFree('claude-sonnet-5[1m]')).toBe(false);
-    expect(modelIsFree('gemini-3.7-flash')).toBe(false);
-    // 会话中途 openai-chat → 别的通路要拦（转换层合成的 thinking 块没 signature，回传会 400）；其它方向放行
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-sonnet-5[1m]')).toMatch(/新建一个会话/);
-    expect(crossLaneSwitchReason('claude-sonnet-5[1m]', 'glm-5.3-flash-merge')).toBeNull();
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'glm-5.3-flash-merge')).toBeNull();
-    // Anthropic 原生透传的行（09-08 前拿 minimax-m3 当例子，它撤了，换 gemini 这条 lament 上游的）：
-    // 从 openai-chat 行切过去同样要拦；反向放行
-    // 09-08 站主撤掉「openai-chat → API 透传行」的拦截（ingress 透传腿剥掉没签名的思考块）；订阅行仍拦
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'gemini-3.7-flash')).toBeNull();
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5[1m]')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
-    expect(crossLaneSwitchReason('gemini-3.7-flash', 'glm-5.3-flash-merge')).toBeNull();
-    // 同为 openai-chat 的两行互切不算跨线（原先钉在 Ox 高/深想两行上，08-26 换成 glm ↔ deepseek 视觉）
-    expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
-    expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
-    expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
-    // ⭐⭐ Merge 网关上那**两条** GLM 行的厂商（08-28 建，08-30 拆两行，09-08 上午点死 particle，晚上撤销点名，
-    //   **09-08 深夜点死 zai**）。不点名时网关来回换家，缓存跟着冷（站主一轮五发两发命中 0）；目录核过 particle
-    //   标价跟 zai 一样没有优惠而缓存从不命中。站主拍板只走 zai，掉线走行上的 standby。
-    //   ⛔ **baseten / wafer 一条都不许出现**：同模型十倍价，进来不报错只在月底账上出现。
-    const design = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
-    const rp = resolveWireModel('glm-5.3-flash-rp')?.bodyExtra?.vendors;
-    const okZai = (v) => Array.isArray(v) && v.length === 1 && v[0] === 'zai';
-    expect(okZai(design), `设计行的厂商现在是 ${JSON.stringify(design)}`).toBe(true);
-    expect(okZai(rp), `演出行的厂商现在是 ${JSON.stringify(rp)}`).toBe(true);
-    // 判据先验一遍：坏写法都得拦下来，否则上面两条是恒真的
-    expect(okZai(['particle']), '点死 particle = 没缓存、每轮慢五倍（09-08 的账）').toBe(false);
-    expect(okZai(['zai', 'particle']), '偏好序 = 静默换家、缓存冷（09-08 晚的账）').toBe(false);
-    expect(okZai(undefined), '不点名 = 网关自己挑，来回换').toBe(false);
-    // ⛔ 8 张裁图闸留着：zai 本身不限张数，但闸在两行上是同一份配置，摘了下次换家又是每发 400
-    for (const id of ['glm-5.3-flash-merge', 'glm-5.3-flash-rp']) {
-      expect(resolveWireModel(id)?.maxImages, `${id} 少了 maxImages`).toBe(8);
-    }
-    // ⭐ 两行除了厂商之外必须逐字一致 —— 写成共用 GLM_MERGE_API 就是为了这条，别把它拆开写
-    const bare = (id) => { const { bodyExtra, ...rest } = MODELS_BUILTIN.find((m) => m.id === id).api; return JSON.stringify(rest); };
-    expect(bare('glm-5.3-flash-rp'), '两行除 bodyExtra 外漂了').toBe(bare('glm-5.3-flash-merge'));
-    const row = (id) => MODELS_BUILTIN.find((m) => m.id === id);
-    expect([row('glm-5.3-flash-rp').window, row('glm-5.3-flash-rp').brand])
-      .toEqual([row('glm-5.3-flash-merge').window, row('glm-5.3-flash-merge').brand]);
-    // ⛔ 演出行不许当默认：默认那条要兜得住所有人
-    expect(row('glm-5.3-flash-rp').select.default).toBeUndefined();
-    expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
+    // ⚠️ 钉住时钟（09-11）：表里有按钟点关门的行（deepseek-v4.1-flash-merge，UTC 01-04 / 06-10），
+    // 关门那几个小时它也是 locked，下面「订阅号一行都不 locked」就随钟点红（一天 7 小时）。
+    // 这条测的是订阅闸，不是钟点闸，所以挑一个所有行都开门的时刻（UTC 12:00 = 北京 20:00）。
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-11T12:00:00Z'));
+    try {
+      const pub = { role: 'user', plan: 'basic' };
+      const sub = { role: 'user', plan: 'pro' };
+      const pubSel = selectableModelsFor(pub);
+      expect(pubSel.find((m) => m.id === 'claude-sonnet-5[1m]')?.locked).toBe(true);
+      expect(pubSel.find((m) => m.id === 'deepseek-v4-flash-vision')?.locked).toBeUndefined();
+      expect(pubSel.find((m) => m.id === 'glm-5.3-flash-merge')?.locked).toBeUndefined();
+      expect(allowedModelsFor(pub).map((m) => m.id)).not.toContain('claude-sonnet-5[1m]');
+      expect(allowedModelsFor(pub).map((m) => m.id)).toContain('glm-5.3-flash-merge');
+      expect(isModelLockedFor(pub, 'claude-opus-5[1m]')).toBe(true);
+      expect(isModelLockedFor(sub, 'claude-opus-5[1m]')).toBe(false);
+      expect(isModelLockedFor(pub, 'gemini-3.7-flash')).toBe(false);   // 看不见的不是 locked，是不存在
+      expect(selectableModelsFor(sub).some((m) => m.locked)).toBe(false);
+      expect(selectableModelsFor({ role: 'admin' }).some((m) => m.locked)).toBe(false);
+      // 默认行的历任：Ox → minimax-m3（08-26）→ zai 官方直连（08-27）→ **merge 网关（08-30，zai 订阅额度耗尽）**
+      // ⛔ minimax-m3 本身 09-08 撤行（GMI 账户 402），下面这些断言换成了别的行
+      for (const u of [pub, sub, { role: 'admin' }, null]) expect(defaultModelFor(u)).toBe('glm-5.3-flash-merge');
+      // ⚠️ 「默认行必须免费」那条老规矩 08-30 被用户拍板破了（详见下面那个 describe 的三条新规矩）
+      expect(modelIsFree('qwen3.8-27b')).toBe(true);   // 09-08 起表里唯一的免费行（本地盒子，不进 picker）
+      expect(modelIsFree('glm-5.3-flash-merge')).toBe(false);   // Merge 网关那条是付费行，走美元日限
+      expect(modelIsFree('claude-sonnet-5[1m]')).toBe(false);
+      expect(modelIsFree('gemini-3.7-flash')).toBe(false);
+      // 会话中途 openai-chat → 别的通路要拦（转换层合成的 thinking 块没 signature，回传会 400）；其它方向放行
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-sonnet-5[1m]')).toMatch(/新建一个会话/);
+      expect(crossLaneSwitchReason('claude-sonnet-5[1m]', 'glm-5.3-flash-merge')).toBeNull();
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'glm-5.3-flash-merge')).toBeNull();
+      // Anthropic 原生透传的行（09-08 前拿 minimax-m3 当例子，它撤了，换 gemini 这条 lament 上游的）：
+      // 从 openai-chat 行切过去同样要拦；反向放行
+      // 09-08 站主撤掉「openai-chat → API 透传行」的拦截（ingress 透传腿剥掉没签名的思考块）；订阅行仍拦
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'gemini-3.7-flash')).toBeNull();
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5[1m]')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
+      expect(crossLaneSwitchReason('gemini-3.7-flash', 'glm-5.3-flash-merge')).toBeNull();
+      // 同为 openai-chat 的两行互切不算跨线（原先钉在 Ox 高/深想两行上，08-26 换成 glm ↔ deepseek 视觉）
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
+      expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
+      expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
+      // ⭐⭐ Merge 网关上那**两条** GLM 行的厂商（08-28 建，08-30 拆两行，09-08 上午点死 particle，晚上撤销点名，
+      //   **09-08 深夜点死 zai**）。不点名时网关来回换家，缓存跟着冷（站主一轮五发两发命中 0）；目录核过 particle
+      //   标价跟 zai 一样没有优惠而缓存从不命中。站主拍板只走 zai，掉线走行上的 standby。
+      //   ⛔ **baseten / wafer 一条都不许出现**：同模型十倍价，进来不报错只在月底账上出现。
+      const design = resolveWireModel('glm-5.3-flash-merge')?.bodyExtra?.vendors;
+      const rp = resolveWireModel('glm-5.3-flash-rp')?.bodyExtra?.vendors;
+      const okZai = (v) => Array.isArray(v) && v.length === 1 && v[0] === 'zai';
+      expect(okZai(design), `设计行的厂商现在是 ${JSON.stringify(design)}`).toBe(true);
+      expect(okZai(rp), `演出行的厂商现在是 ${JSON.stringify(rp)}`).toBe(true);
+      // 判据先验一遍：坏写法都得拦下来，否则上面两条是恒真的
+      expect(okZai(['particle']), '点死 particle = 没缓存、每轮慢五倍（09-08 的账）').toBe(false);
+      expect(okZai(['zai', 'particle']), '偏好序 = 静默换家、缓存冷（09-08 晚的账）').toBe(false);
+      expect(okZai(undefined), '不点名 = 网关自己挑，来回换').toBe(false);
+      // ⛔ 8 张裁图闸留着：zai 本身不限张数，但闸在两行上是同一份配置，摘了下次换家又是每发 400
+      for (const id of ['glm-5.3-flash-merge', 'glm-5.3-flash-rp']) {
+        expect(resolveWireModel(id)?.maxImages, `${id} 少了 maxImages`).toBe(8);
+      }
+      // ⭐ 两行除了厂商之外必须逐字一致 —— 写成共用 GLM_MERGE_API 就是为了这条，别把它拆开写
+      const bare = (id) => { const { bodyExtra, ...rest } = MODELS_BUILTIN.find((m) => m.id === id).api; return JSON.stringify(rest); };
+      expect(bare('glm-5.3-flash-rp'), '两行除 bodyExtra 外漂了').toBe(bare('glm-5.3-flash-merge'));
+      const row = (id) => MODELS_BUILTIN.find((m) => m.id === id);
+      expect([row('glm-5.3-flash-rp').window, row('glm-5.3-flash-rp').brand])
+        .toEqual([row('glm-5.3-flash-merge').window, row('glm-5.3-flash-merge').brand]);
+      // ⛔ 演出行不许当默认：默认那条要兜得住所有人
+      expect(row('glm-5.3-flash-rp').select.default).toBeUndefined();
+      expect(resolveWireModel('glm-5.3-flash-merge')?.helperReasoningEffort).toBe('low');
+    } finally { vi.useRealTimers(); }
   });
 
   it('⛔ hotSwitchLaneReason：运行中订阅 ↔ API 一律拒（env 在起 query 那刻定死，硬切会拿订阅额度跑 API 模型）', () => {

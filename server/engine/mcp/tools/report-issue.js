@@ -22,14 +22,8 @@ import { recordIssue, signatureOf } from '../../../lib/issues-store.js';
 import { getProject } from '../../../projects/store.js';
 import { enqueueIssueUpload } from '../../../runtime/issue-outbox.js';
 import { platform as runtimePlatform } from '../../../runtime/platform.js';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 
-const CLIENT_VERSION = (() => {
-  try { return JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../../package.json'), 'utf8')).version || ''; }
-  catch { return ''; }
-})();
+const CLIENT_VERSION = runtimePlatform.appVersion || '';   // 唯一来源在 runtime/platform.js（09-11）
 
 /**
  * @param {object} deps

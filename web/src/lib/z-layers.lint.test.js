@@ -109,7 +109,7 @@ describe('z-index 层级表', () => {
     const bad = [];
     const shrunk = [];
     for (const file of walk(SRC)) {
-      const rel = path.relative(SRC, file);
+      const rel = path.relative(SRC, file).split(path.sep).join('/');   // ALLOWLIST 的键是正斜杠；Windows 上 relative 给反斜杠（09-11 CI）
       if (rel.startsWith('lib/z-layers')) continue;
       const hits = bareZIndexes(fs.readFileSync(file, 'utf8')).filter((h) => h.value >= THRESHOLD);
       const budget = ALLOWLIST.get(rel) || 0;

@@ -12,8 +12,7 @@
  */
 
 import express from 'express';
-import { readFileSync, statSync, accessSync, constants as fsConstants } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { statSync, accessSync, constants as fsConstants } from 'node:fs';
 import path from 'node:path';
 import { platform } from '../runtime/platform.js';
 import { loadLocalConfig, saveLocalConfig, CONFIG_ENUMS, RESERVED_UPSTREAM_IDS, RESERVED_MODEL_IDS, SHADOWABLE_MODEL_IDS } from '../runtime/local-config.js';
@@ -40,8 +39,6 @@ import localMarketRouter from './local-market.js';
 
 export const RESTART_EXIT_CODE = 75;
 
-const pkg = JSON.parse(readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../package.json'), 'utf8'));
-
 const router = express.Router();
 
 // skill 市场（09-08）：本机只打包 / 落盘 / 转发，货架在站点上。见 local-market.js
@@ -50,7 +47,7 @@ router.use('/market', localMarketRouter);
 router.get('/status', (_req, res) => {
   res.json({
     profile: platform.profile,
-    version: pkg.version,
+    version: platform.appVersion,
     pid: process.pid,
     dataRoot: platform.dataRoot,
     configPath: loadLocalConfig().path,
@@ -293,7 +290,7 @@ router.post('/issues', (req, res) => {
   const source = b.source === 'desktop' ? 'desktop' : 'agent';
   const signature = signatureOf(`${source}|${summary}`);
   recordIssue({ source, kind, summary, detail, signature, userId: null });
-  enqueueIssueUpload({ kind, source, summary, detail, signature, clientVersion: pkg.version, platform: process.platform });
+  enqueueIssueUpload({ kind, source, summary, detail, signature, clientVersion: platform.appVersion, platform: process.platform });
   res.status(201).json({ ok: true });
 });
 router.post('/issues/flush', async (_req, res) => {

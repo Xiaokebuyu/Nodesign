@@ -14,7 +14,8 @@ const BAD_CHARS = new RegExp('[<>:"|?*\\u0000-\\u001f]', 'g');
  * 桥的另一头是我们自己的页面，但"存哪儿"这件事不能由页面说了算 —— 目录归主进程定。
  */
 export function safeFileName(name) {
-  const base = path.basename(String(name || '').replace(/[\\/]+/g, '/')) || '导出';
+  // posix.basename：分隔符上一行已经统一成 `/`；用 path.basename 的话 Windows 上会把 `a:b.zip` 的 `a:` 当盘符剥掉（09-11 CI 抓到）
+  const base = path.posix.basename(String(name || '').replace(/[\\/]+/g, '/')) || '导出';
   return base.replace(BAD_CHARS, '_').slice(0, 180) || '导出';
 }
 

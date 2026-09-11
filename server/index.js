@@ -101,7 +101,7 @@ app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
     service: 'nodesign',
-    version: '0.1.0',
+    version: platform.appVersion || '0.0.0',   // 09-11 前写死 '0.1.0'
     ts: new Date().toISOString(),
   });
 });

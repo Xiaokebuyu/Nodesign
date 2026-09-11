@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import crypto from 'node:crypto';
 import db from '../../engine/runs/store.js';
 import '../../auth/users-store.js';   // 建 users 表：这个文件直接往 users 里插行，不能靠同 worker 里别的文件先建（09-08 单跑必红）
+import '../../projects/store.js';      // runs.user_id 是它的迁移加的（09-11 同理补上）
 import { checkQuota, registerUsageSource, usedCostToday, usedCostTotal, _resetUsageSources } from '../../lib/quota.js';
 import {
   recordRelayUsage, relayCostToday, relayCostTotal, installRelayUsageSource, _resetInstalled,

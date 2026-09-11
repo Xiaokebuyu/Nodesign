@@ -120,6 +120,7 @@ rewriting it.`,
       // 于是 A 的 jot_memory 写进 B 的记忆里，谁都不会发现。堵在写口，不是在
       // roleHomeDir 那头兜（判据别建在模型可写的登记表上）。
       // 同一个 slug 重登（改卡）不受影响 —— 那本来就是同一个人。
+      // 登记表里的旧反斜杠路径由 readCastRegistry 读时归一，这里的比较才在 Windows 上成立
       const claimedBy = Object.entries((await readCastRegistry(workspaceRoot)).roles || {})
         .find(([s2, e2]) => s2 !== slug && typeof e2?.card === 'string'
           && e2.card.replace(/\/角色卡\.md$/, '') === `${rolesRel}/${folder}`);
@@ -150,7 +151,9 @@ rewriting it.`,
       await fs.writeFile(file, cardText, 'utf8');
 
       // 登记表：板书署名与名册 API 的展示名来源（fail-soft：登记坏了不拦上场）
-      const cardRel = path.join(rolesRel, folder, '角色卡.md');
+      // ⚠️ 相对路径用 posix 拼：它进登记表，所有读者按 `/` 比（09-11 前这里是 path.join，Windows 上写出反斜杠，
+      // 上面那道重名闸在 Windows 上从来没拦住过谁）
+      const cardRel = path.posix.join(rolesRel, folder, '角色卡.md');
       try {
         const reg = await readCastRegistry(workspaceRoot);
         reg.roles[slug] = { name: displayName, duty: oneLine(args.duty, 400), card: cardRel };

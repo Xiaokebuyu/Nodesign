@@ -23,6 +23,7 @@
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { toSlashPath } from '../../lib/workspace-path.js';
 
 export const PLAY_CONFIG = '戏.json';
 export const TABLE_FILE = '台面.md';
@@ -66,7 +67,20 @@ export async function listPlays(workspaceRoot) {
 }
 
 export async function readPlayConfig(playAbs) {
-  try { return JSON.parse(await fs.readFile(path.join(playAbs, PLAY_CONFIG), 'utf8')); } catch { return null; }
+  let cfg;
+  try { cfg = JSON.parse(await fs.readFile(path.join(playAbs, PLAY_CONFIG), 'utf8')); } catch { return null; }
+  // 卡 / 立绘 / 提示词来源都是工作区相对路径，读时归一成正斜杠：09-11 前 Windows 上写进来的是反斜杠，
+  // 显示器剥故事前缀、编辑白名单、记忆计数全按 `/` 比，于是「角色」页读不到卡（见 toSlashPath）
+  if (Array.isArray(cfg?.cast)) {
+    cfg.cast = cfg.cast.map((c) => {
+      if (!c || typeof c !== 'object') return c;
+      const o = { ...c };
+      for (const k of ['card', 'portrait']) if (typeof o[k] === 'string') o[k] = toSlashPath(o[k]);
+      return o;
+    });
+  }
+  if (Array.isArray(cfg?.promptSources)) cfg.promptSources = cfg.promptSources.map(toSlashPath);
+  return cfg;
 }
 export async function writePlayConfig(playAbs, cfg) {
   await fs.mkdir(playAbs, { recursive: true });
@@ -163,8 +177,8 @@ export async function migrateLegacyPlay(workspaceRoot) {
   for (const d of [ROLES_DIR, WORLD_DIR, PRESET_DIR]) await moveIfExists(path.join(workspaceRoot, d), path.join(play, d));
   await moveIfExists(path.join(workspaceRoot, '用户内容'), path.join(play, ASSETS_DIR));
   // cast 里的卡路径从 角色/… 改成 <故事>/角色/…；立绘同理
-  const fix = (p) => (typeof p === 'string' && (p.startsWith(`${ROLES_DIR}/`) || p.startsWith('用户内容/'))
-    ? `${name}/${p.replace(/^用户内容\//, `${ASSETS_DIR}/`)}` : p);
+  const fix = (raw) => { const p = toSlashPath(raw); return (typeof p === 'string' && (p.startsWith(`${ROLES_DIR}/`) || p.startsWith('用户内容/'))
+    ? `${name}/${p.replace(/^用户内容\//, `${ASSETS_DIR}/`)}` : p); };
   const next = {
     ...cfg,
     cast: (cfg.cast || []).map(c => ({ ...c, card: fix(c.card), portrait: fix(c.portrait) })),

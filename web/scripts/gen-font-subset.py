@@ -121,6 +121,8 @@ def main():
         return 0
     if args.report:
         import json
+        # Windows 上 stdout 默认是本地代码页（cp1252 / gbk），JSON 里的中文和符号打不出来（09-11 Windows CI）
+        sys.stdout.reconfigure(encoding='utf-8')
         app = cmap_of(FONT_DIR / 'lxgw-nd-app-regular.woff2')
         app_bold = cmap_of(FONT_DIR / 'lxgw-nd-app-bold.woff2')
         first_bold = cmap_of(FONT_DIR / 'lxgw-nd-bold.woff2')

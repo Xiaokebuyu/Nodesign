@@ -8,7 +8,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-sess-folder-'));
+// realpath：SDK 定位转录时先 realpath 再编码目录。Windows runner 的 tmpdir 是 8.3 短名（RUNNER~1），
+// 不展开的话测试写转录用的目录名跟 SDK 找的对不上（09-11 CI）
+const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'nd-sess-folder-')));
 process.env.PROJECTS_DATA_DIR = path.join(tmp, 'data');
 process.env.NODESIGN_CONFIG_DIR = path.join(tmp, 'claude-config');
 const { openFolder } = await import('../projects/folder.js');
