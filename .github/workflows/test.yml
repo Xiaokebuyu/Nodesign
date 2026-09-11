@@ -1,0 +1,46 @@
+# 测试（09-11）：Linux + Windows 各跑一遍 `npm test`（边界闸 + 服务端 + 前端）。只跑测试，不打包不发布。
+#
+# 为什么要 Windows：桌面版只在 Windows 上发，开发机是 Linux。09-11 之前仓库里没有任何一处在 Windows 上跑过测试，
+# 一整族「path.join 在 Windows 上写出反斜杠、读的一侧按 / 比」的 bug（角色卡重名闸、显示器读不到卡）
+# 就是外部审计在 Windows 上跑出来的。desktop.yml 打包前也跑同一条 `npm test`。
+name: test
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24   # 跟 desktop.yml 同一个：桌面版里跑的就是这个大版本
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      - name: 装依赖（根 + web）
+        run: |
+          npm ci
+          npm ci --prefix web
+
+      - name: npm test
+        run: npm test
