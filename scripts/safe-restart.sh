@@ -41,4 +41,8 @@ until probe; do
 done
 
 echo "==> 没有在飞回合，重启 $APP"
-pm2 restart "$APP" --update-env
+# ⛔ 不带 --update-env（09-11）：它会把**调用者 shell 的整套环境**并进应用、并被 pm2 记住，此后每次重启都带着。
+# 从 Claude Code 里跑这个脚本时，那套环境里有 CLAUDECODE / CLAUDE_CODE_SESSION_ID / 跨会话 socket 与 token /
+# ANTHROPIC_SMALL_FAST_MODEL，09-11 在生产和 exp 进程里都查到了。要改应用的环境变量：改 .env 或 ecosystem 配置，
+# 再从干净的环境里 `pm2 start ecosystem.config.cjs --only <应用>`。
+pm2 restart "$APP"

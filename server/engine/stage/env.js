@@ -19,10 +19,11 @@ import { bindSessionUpstream, unbindSessionFromRelay } from '../agent/session-bi
 import { unregisterIngressSession } from '../../lib/model-ingress.js';
 import { unregisterSessionNotice } from '../../lib/ingress/session-notice.js';
 import { platform } from '../../runtime/platform.js';
+import { agentInheritedEnv } from '../../runtime/agent-env.js';
 
 export async function buildEnv(rt, model, owner) {
-  const { NODE_ENV: _a, npm_config_production: _b, npm_config_omit: _c, OLDPWD: _d, ...inherited } = process.env;
-  const env = { ...inherited, PWD: rt.wsRoot, CLAUDE_AGENT_SDK_CLIENT_APP: 'nodesign-stage/0.0.1', CLAUDE_CONFIG_DIR: platform.claudeConfigDir };
+  // 剔哪些继承变量收在 runtime/agent-env.js（服务器运行姿态 + 宿主 Claude Code 会话身份，09-11）
+  const env = { ...agentInheritedEnv(), PWD: rt.wsRoot, CLAUDE_AGENT_SDK_CLIENT_APP: 'nodesign-stage/0.0.1', CLAUDE_CONFIG_DIR: platform.claudeConfigDir };
   // ⛔ 不开工具延迟加载：五件 MCP 工具已 alwaysLoad，开了反而让模型找不到 write_scene（09-05 真栽）
   delete env.ENABLE_TOOL_SEARCH;
 

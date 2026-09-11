@@ -74,6 +74,7 @@ import { unregisterSessionNotice } from '../../lib/ingress/session-notice.js';
 import { clampFirstClause } from '../../lib/quick-summary.js';
 import { AsyncQueue } from '../../lib/async-queue.js';
 import { platform } from '../../runtime/platform.js';
+import { agentInheritedEnv } from '../../runtime/agent-env.js';
 import { renderPrelude, renderAgentCoreFor, composeSystemPrompt } from './system-prompts.js';
 import {
   DEFAULT_TOOL_ALLOWLIST,
@@ -312,11 +313,10 @@ export async function runSession({
   //   - PWD 是 pm2 进程的 cwd（仓库根）；spawn({cwd}) 不更新它，bash 会自校正但
   //     python/node/构建工具读 $PWD 拿到的就是错目录 ——"cwd 被重置到父目录"的
   //     另一半病根。下面显式钉成 cwdRoot。
-  const {
-    NODE_ENV: _dropNodeEnv, npm_config_production: _dropNpmProd,
-    npm_config_omit: _dropNpmOmit, OLDPWD: _dropOldpwd,
-    ...inheritedEnv
-  } = process.env;
+  //   - ⛔ 宿主 Claude Code 会话的身份变量（09-11 案）：pm2 在 Claude Code 里带 --update-env 重启过，
+  //     CLAUDECODE / CLAUDE_CODE_ENTRYPOINT=cli / 旧的 CLAUDE_AGENT_SDK_VERSION 一路漏到 agent 的 CLI，
+  //     而 SDK 只在这两个没设时才填自己的值。剔除的表收在 runtime/agent-env.js 一份（演出进程同用）。
+  const inheritedEnv = agentInheritedEnv();
   const sdkEnv = {
     ...inheritedEnv,
     PWD: cwdRoot,
