@@ -4,22 +4,22 @@
 
 # NoDesign
 
-**An agent workspace for creators**
+**One canvas, shared with your agent**
 
-Describe what you need, and an agent builds websites, slide decks, Word documents, images, and video on an infinite canvas.<br>
-Select any area of a preview to request a change. Every output is delivered as a standard file.
+Outputs, materials, and reasoning live on a single canvas.<br>
+You point, organize, and edit on it; the agent builds, reviews, and explains on it. Every output is a standard file.
 
 [![release](https://img.shields.io/github/v/release/Xiaokebuyu/Nodesign?label=release&color=2d2418)](https://github.com/Xiaokebuyu/Nodesign/releases/latest)
 [![npm downloads](https://img.shields.io/npm/dw/%40xiaobuyu%2Fnodesign?color=2d2418&cacheSeconds=3600)](https://www.npmjs.com/package/@xiaobuyu/nodesign)
 [![license](https://img.shields.io/github/license/Xiaokebuyu/Nodesign?color=2d2418)](https://github.com/Xiaokebuyu/Nodesign/blob/main/LICENSE)
 
-[Website](https://nodesign.xiaobuyu.trade/welcome/) · [Web app](https://nodesign.xiaobuyu.trade/login) · [Download for Windows](https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe) · [Examples](#examples) · [FAQ](#faq) · [简体中文](https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md)
+[Website](https://nodesign.xiaobuyu.trade/welcome/) · [Web app](https://nodesign.xiaobuyu.trade/login) · [Download for Windows](https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe) · [Examples](#examples) · [Roadmap](#open-platform-planned) · [FAQ](#faq) · [简体中文](https://github.com/Xiaokebuyu/Nodesign/blob/main/README.md)
 
 </div>
 
 <br>
 
-![The NoDesign workspace: a website preview, a step checklist on the board, and the agent session panel](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/hero.webp)
+![The NoDesign workspace: outputs, board notes, and relationship lines on the canvas, with the agent session panel on the right](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/hero.webp)
 
 > [!NOTE]
 > The NoDesign interface is primarily in Chinese. An English localization is available in Settings but currently covers only part of the interface. The language of generated outputs follows your request, independent of this setting.
@@ -33,47 +33,42 @@ Select any area of a preview to request a change. Every output is delivered as a
 
 NoDesign charges no subscription fee and adds no markup to model usage. The desktop app and command-line version keep all project files and configuration on your machine.
 
-## Overview
+## The canvas: a shared workspace for you and the agent
 
-NoDesign brings requirements, production, review, and revision into a single infinite canvas. The agent plans the steps, calls tools, and produces outputs, each of which stays on the canvas as an independent object.
+In a chat-based tool, you and the agent share a single text channel: you translate what you see into words, and the agent puts what it makes back into the conversation. NoDesign replaces that channel with a canvas that both of you can read and write.
 
-To revise an output, select an area of its preview and describe the change. Your current view, the selected object, and its component details are sent with the message, so the agent can locate what needs to change, update the underlying file, and verify the result on the canvas.
+### What the canvas does for you: the whole project, and part of every instruction
 
-![Selecting an area on the canvas; the agent receives the target context and edits the file](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-roundtrip.gif)
+- **See**: Outputs, materials, board notes, and relationships sit together on one canvas instead of being buried in a chat history.
+- **Point**: The selected object, the region you mark, and your current view are sent with each message, so "this part" never needs to be described in words.
+- **Organize**: Drag items, group them into folders, and draw labeled links such as source, annotation, next step, comparison, and derived from. Organizing the canvas tells the agent how your materials relate.
+- **Edit**: Double-click text to edit it in place; your edits and marked regions go to the agent together.
 
-## Capabilities
+![The user links the website to the Riverbank packaging image as a source, marks the subscription section, and asks to add "this packaging image"; the agent finds the image through the link and makes the change](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/canvas-user.gif)
 
-### Automated review
+### What the canvas does for the agent: a desktop, eyes, and a blackboard
 
-The agent reviews its work before delivery. It captures pages at desktop, tablet, and mobile widths, reads browser console errors, computed styles, and font loading status, and extracts key frames from scroll-driven animations. When it finds a problem, it continues revising. If several rounds of revision fall short, the agent can invoke a read-only reviewer subagent to audit each page independently.
+- **Desktop**: The agent works directly on the canvas, creating outputs, placing them next to related items, grouping them, and opening them side by side. It describes placement by relationship; the system computes the exact position.
+- **Eyes**: The agent reads the current state of the canvas, including what you have moved or changed, and captures outputs at different widths to review its own results.
+- **Blackboard**: The agent breaks down problems, lays out plans, and compares options on the canvas. Board notes are saved as files; when you edit them, the agent follows the edited version.
+- **Visible progress**: While the agent works, the output being written, the tools in use, and completion status appear on the canvas in real time.
 
-![A website previewed at desktop, tablet, and mobile widths](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-viewport.gif)
+![The agent outlines an 8-slide deck on the board; the user deletes one slide and adds a line on the board; the agent builds a 7-slide deck from the edited outline, places it next to the outline, and links the two](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/canvas-agent.gif)
 
-### Canvas and file sync
+### What the canvas does between you: shared context and project memory
 
-File cards on the canvas correspond to real files in the workspace, and folder cards correspond to real directories. Opening, renaming, organizing, and moving items is reflected in the workspace. Outputs are saved in standard formats, so they can be downloaded, edited in other software, and handed back to the agent for further work.
+- You and the agent read and write the same canvas. Every change you make is visible to the agent in its next turn, and every output the agent produces stays on the canvas, where it can be reviewed, edited, and rolled back.
+- Relationship lines record where material came from and what was derived from what: which image is used on which website, which document a deck was based on. The agent follows these links when working across outputs, so project context never needs to be restated.
+- Project decisions, style guidelines, and preferences carry over between sessions; a successful workflow can be saved as a Skill and published to the Skill marketplace.
 
-![Opening a folder, moving a card into it, and linking two outputs](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-desktop.gif)
+![In a new session, a single request to turn the brand book's brewing parameters into a final slide; the agent locates the brand book and the deck through the canvas and edits across outputs](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/canvas-memory.gif)
 
-### Visible reasoning
+### More capabilities
 
-The agent can sketch, write on a board, and draw relationships between items on the canvas to explain its plan or break down a problem. Board notes are saved as files under `notes/板书/`. Nodes, connections, and text can all be edited by hand, and the agent works from the edited version.
-
-![An analysis of the characters in the play Thunderstorm: groupings, relationship lines, and generated portraits](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-blackboard.gif)
-
-### Cross-output workflows
-
-Websites, slide decks, documents, images, video, and reference material can share one canvas and be handled by the same agent in sequence. For example, research findings can become a Word document, which then becomes a slide deck, a long-form promotional image, and a companion website, without restating the project context at each step.
-
-![Creating a route overview poster from existing material on the canvas](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo.gif)
-
-### Built-in browser
-
-The agent can use a built-in browser to visit and capture web pages, analyze layout, color, typography, and scroll effects, and save useful material to the project. When running locally, the browser can keep its signed-in state. If it encounters a CAPTCHA or a sign-in confirmation, the agent pauses and asks you to take over.
-
-### Memory and Skills
-
-Project decisions, style guidelines, and personal preferences are stored in the workspace, where they can be viewed and edited, and they carry over to new sessions. A completed workflow can be saved as a Skill and reused for similar requests. Skills can be published to the Skill marketplace, and Skills shared by other users can be installed.
+- **Automated review**: Before delivery, the agent captures desktop, tablet, and mobile screenshots and checks console errors, computed styles, and font loading. If several rounds fall short, it can invoke a read-only reviewer subagent to audit each page.
+- **Built-in browser**: The agent visits and captures web pages, analyzes layout, color, typography, and scroll effects, and saves useful material to the project. When running locally, the browser keeps its signed-in state and hands control to you for CAPTCHAs or sign-in confirmations.
+- **Confirm before building**: When a request is missing key details such as format or style, the agent asks first and builds after you confirm, which avoids full rework.
+- **Standard file delivery**: Websites export as ZIP archives, decks as PDF and PPTX, and documents as `.docx`; with Cloudflare configured, websites can be published to the web.
 
 ## Supported outputs
 
@@ -85,16 +80,7 @@ Project decisions, style guidelines, and personal preferences are stored in the 
 | Images | Common image formats | Image generation, background removal, and asset processing |
 | Video | Common video formats | Import, preview, and transcoding |
 
-<table>
-<tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-image.gif" alt="Generating an image and removing its background to produce a transparent PNG"></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-docx.gif" alt="Generating a Word document and reviewing its layout on the canvas"></td>
-</tr>
-<tr>
-<td align="center">Image generation and background removal</td>
-<td align="center">Word document generation and layout review</td>
-</tr>
-</table>
+![Four kinds of output from the Mistridge Coffee project: a brand website on desktop and mobile, an 8-slide launch deck, a 9-page Word brand book, and product images with transparent backgrounds](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/outputs-en.webp)
 
 ## Examples
 
@@ -139,6 +125,22 @@ In Settings, open Models (模型) and choose Use your own API key (使用自己�
 With your own key, requests go directly from your machine to the provider and do not pass through NoDesign servers. The provider bills you directly, and usage does not count toward the hosted quota. With a local model, inference runs entirely on your machine.
 
 Each model configuration includes a health check that verifies five capabilities: text completion, streaming, tool use, image understanding, and token counting.
+
+## Open platform (planned)
+
+The goal is to make the canvas the coordination layer between you, multiple agents, and multiple systems: tasks, files, and progress from each system appear as cards on one canvas; agents operate those systems through CLIs, MCP, and the browser; you review, compare, and decide in one place.
+
+![Planned architecture: CLI agents, MCP services, and online platforms converge on the canvas, where the user reviews and decides](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/open-canvas-en.webp)
+
+Available today: the local version includes an MCP server that lets agents such as Claude Code and Codex read NoDesign's runtime status (health, projects, processes, turns, and logs).
+
+Planned:
+
+- **Command-line tools**: The agent starts and tracks background jobs on external platforms through their CLIs, such as submitting a Kaggle notebook run, with job status and output shown live on the canvas.
+- **Working alongside you in the browser**: While you edit an online page such as a Kaggle notebook, you can ask the agent to review the current code, locate the problem, and edit the page's form fields and code cells directly.
+- **MCP services**: Connect creative software such as Blender and document platforms such as Feishu Docs and Notion, so their scenes, documents, and data can be referenced and edited as objects on the canvas.
+- **Open canvas tools**: CLI agents such as Claude Code and Codex can write outputs and progress to the canvas and share it with NoDesign's own agent.
+- **Centralized decisions**: Outputs from different platforms can be compared, annotated, and approved side by side on one canvas, without switching between systems.
 
 ## FAQ
 
@@ -207,9 +209,10 @@ NoDesign started in April 2026 and is in public beta, with frequent releases. As
 | Slide deck generation and export | Stable |
 | Word documents | Available; pagination may differ from Microsoft Word |
 | Image and video tools | Available; capabilities depend on local dependencies and service configuration |
-| Boards and relationship diagrams | Available; interactions are being refined |
+| Boards and relationship lines | Available; interactions are being refined |
 | Skill marketplace | Available; requires a NoDesign account |
 | Canvas conversations and branching | In development |
+| External agent and platform integrations | Planned; see Open platform |
 | Interactive performance mode | Experimental; not yet fully available |
 
 | Platform | Status |

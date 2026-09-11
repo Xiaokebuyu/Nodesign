@@ -4,22 +4,22 @@
 
 # NoDesign
 
-**面向创作者的 Agent 工作台**
+**与 Agent 共用一块画布**
 
-描述需求，Agent 在无限画布上完成网站、演示稿、Word 文档、图像与视频的制作。<br>
-在预览上圈选即可修改，产物以标准文件交付。
+项目中的产物、素材与推理过程集中在同一块画布上。<br>
+用户在画布上指定、整理与修改，Agent 在画布上制作、检查与说明。产物以标准文件交付。
 
 [![release](https://img.shields.io/github/v/release/Xiaokebuyu/Nodesign?label=release&color=2d2418)](https://github.com/Xiaokebuyu/Nodesign/releases/latest)
 [![npm downloads](https://img.shields.io/npm/dw/%40xiaobuyu%2Fnodesign?color=2d2418&cacheSeconds=3600)](https://www.npmjs.com/package/@xiaobuyu/nodesign)
 [![license](https://img.shields.io/github/license/Xiaokebuyu/Nodesign?color=2d2418)](https://github.com/Xiaokebuyu/Nodesign/blob/main/LICENSE)
 
-[官网](https://nodesign.xiaobuyu.trade/welcome/) · [网页版](https://nodesign.xiaobuyu.trade/login) · [下载 Windows 版](https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe) · [案例](#案例) · [常见问题](#常见问题) · [English](https://github.com/Xiaokebuyu/Nodesign/blob/main/README.en.md)
+[官网](https://nodesign.xiaobuyu.trade/welcome/) · [网页版](https://nodesign.xiaobuyu.trade/login) · [下载 Windows 版](https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe) · [案例](#案例) · [开放与扩展](#开放与扩展规划中) · [常见问题](#常见问题) · [English](https://github.com/Xiaokebuyu/Nodesign/blob/main/README.en.md)
 
 </div>
 
 <br>
 
-![NoDesign 工作区：网站预览、板书步骤清单与 Agent 会话栏](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/hero.webp)
+![NoDesign 工作区：画布上的产物、板书与关系线，右侧为 Agent 会话栏](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/hero.webp)
 
 ## 快速开始
 
@@ -30,47 +30,42 @@
 
 NoDesign 不收取订阅费，也不对模型调用加价。桌面版与命令行版本的项目文件和配置均保存在本机。
 
-## 概述
+## 画布：用户与 Agent 的共同工作台
 
-NoDesign 将需求、制作、检查与修改整合在同一块无限画布中。Agent 根据需求规划步骤、调用工具并生成产物，每件产物以独立对象的形式保留在画布上。
+对话式工具里，用户与 Agent 之间只有一条文字通道：用户要把看到的内容翻译成文字，Agent 要把做出的内容放回对话。NoDesign 用一块双方都能读写的画布取代这条通道。
 
-修改时，在预览上圈选目标区域并输入要求。当前视野、选中对象及其组件信息会随消息一并提交，Agent 据此定位需要修改的内容，更新对应文件，并在画布上完成检查。
+### 画布之于用户：项目全貌，也是指令的一部分
 
-![在画布上圈选区域，Agent 获取目标上下文后修改对应文件](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-roundtrip.gif)
+- **看**：项目中的产物、素材、板书与关系集中在一块画布上，不埋在对话记录里。
+- **指**：选中的对象、圈选的区域与当前视野随消息一并提交，“这里”不需要再用文字描述。
+- **排**：拖动、归入文件夹、连线标注“取材”“批注”“接着”“对照”“改自”。整理画布本身就在向 Agent 说明素材之间的关系。
+- **改**：双击文字直接修改，改动与圈选一起交给 Agent。
 
-## 核心能力
+![用户从网站连一条“取材”线到“江岸”包装图，圈选订阅计划一节并提出“这里配上这张包装图”，Agent 按连线找到这张图完成修改](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/canvas-user.gif)
 
-### 自动检查
+### 画布之于 Agent：桌面、眼睛与黑板
 
-Agent 在交付前检查产物：获取桌面、平板与手机三种宽度的页面截图，读取浏览器控制台错误、最终渲染样式与字体加载状态，并提取滚动动效的关键帧。发现问题后，Agent 继续修改。多轮修改仍未达到预期时，Agent 可调用只读评审子代理，从独立视角逐页复核。
+- **桌面**：Agent 直接在画布上工作，新建产物、放到相关内容旁边、归类、打开并排比较。Agent 只说明位置关系，具体坐标由系统计算。
+- **眼睛**：Agent 读取画布的当前状态，包括用户移动与修改过的内容；也能截取产物在不同宽度下的画面，检查自己的结果。
+- **黑板**：Agent 在画布上拆解问题、列出计划、比较方案。板书以文件保存，用户修改后，Agent 按修改后的内容执行。
+- **进度可见**：Agent 工作时，正在写入的产物、调用的工具与完成状态实时显示在画布上。
 
-![网站在桌面、平板与手机宽度下的预览](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-viewport.gif)
+![Agent 在板书上列出 8 页演示稿结构；用户在板上删去一页、补充一句；Agent 按修改后的结构制作 7 页演示稿，放在结构旁边并以关系线相连](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/canvas-agent.gif)
 
-### 画布与文件同步
+### 画布之于两者之间：共同语境与项目记忆
 
-画布上的文件卡片对应工作区中的真实文件，文件夹卡片对应真实目录。打开、重命名、归类与移动操作会同步至工作区。产物以标准格式保存，可以下载、使用其他软件编辑，并在修改后交由 Agent 继续处理。
+- 双方读写同一块画布。用户的每次整理与修改，Agent 在下一轮都能读到；Agent 的每件产出都留在画布上，可以查看、修改与回退。
+- 关系线记录取材与派生：哪张图用于哪个网站、演示稿依据哪份文档制作。Agent 跨产物工作时据此取材，无需重复说明背景。
+- 项目决策、风格规范与偏好跨会话延续；满意的工作流程可以沉淀为 Skill，并发布到 Skill 市场。
 
-![打开文件夹、将卡片移入文件夹、在两件产物之间建立关系](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-desktop.gif)
+![新开一个会话，只说一句“把品牌手册里的三种冲煮参数整理成一页，加到发布演示稿最后”，Agent 从画布找到手册与演示稿，完成跨产物修改](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/canvas-memory.gif)
 
-### 可视化的推理过程
+### 更多能力
 
-Agent 可以在画布上绘制草图、书写板书，并建立内容之间的关系，用于说明计划和拆解问题。板书以文件形式保存在 `notes/板书/` 目录，节点、连线与文字均支持手动调整，Agent 在后续工作中使用调整后的内容。
-
-![《雷雨》人物关系分析：人物分组、关系线与生成的肖像](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-blackboard.gif)
-
-### 跨产物协作
-
-网站、演示稿、文档、图像、视频与参考资料可以置于同一块画布，由同一个 Agent 连续处理。例如，将调研结果整理为 Word 文档，再据此生成演示稿、宣传长图与配套网站，其间无需重复说明项目背景。
-
-![基于画布上的现有素材制作路线总览海报](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo.gif)
-
-### 内置浏览器
-
-Agent 可以使用内置浏览器访问网页并截图，分析页面的布局、配色、字体与滚动动效，并将所需素材保存至项目。本地运行时，浏览器可保留登录状态；遇到验证码或登录确认时，Agent 会暂停并请求用户接管。
-
-### 记忆与 Skill
-
-项目决策、风格规范与用户偏好保存在工作区中，支持查看和修改，并在新会话中继续生效。完成的工作流程可以沉淀为 Skill，在后续的同类需求中复用。Skill 可以发布到 Skill 市场，也可以安装其他用户分享的 Skill。
+- **自动检查**：交付前获取桌面、平板与手机三种宽度的截图，读取控制台错误、渲染样式与字体加载状态；多轮修改仍未达到预期时，可调用只读评审子代理逐页复核。
+- **内置浏览器**：访问网页并截图，分析布局、配色、字体与滚动动效，并将所需素材保存至项目。本地运行时可保留登录状态，遇到验证码或登录确认时暂停并请求用户接管。
+- **先确认再执行**：需求中缺少画幅、风格等关键信息时，Agent 先提出问题，确认后再制作，减少整版返工。
+- **标准文件交付**：网站整站导出 ZIP，演示稿导出 PDF 与 PPTX，文档导出 `.docx`；配置 Cloudflare 后可发布至公网。
 
 ## 支持的产物
 
@@ -82,16 +77,7 @@ Agent 可以使用内置浏览器访问网页并截图，分析页面的布局�
 | 图像 | 常见图像格式 | 图像生成、背景移除与素材处理 |
 | 视频 | 常见视频格式 | 导入、预览与转码 |
 
-<table>
-<tr>
-<td width="50%"><img src="https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-image.gif" alt="生成图像并移除背景，得到透明 PNG"></td>
-<td width="50%"><img src="https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/demo-docx.gif" alt="生成 Word 文档并在画布上检查排版"></td>
-</tr>
-<tr>
-<td align="center">图像生成与背景移除</td>
-<td align="center">Word 文档生成与排版检查</td>
-</tr>
-</table>
+![雾岭咖啡项目中的四类产物：品牌官网（桌面与手机）、8 页发布演示稿、9 页 Word 品牌手册、透明底产品图](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/outputs.webp)
 
 ## 案例
 
@@ -136,6 +122,22 @@ Agent 可以使用内置浏览器访问网页并截图，分析页面的布局�
 使用自有密钥时，请求由本机直接发送至服务商，不经过 NoDesign 服务器；费用由服务商结算，不计入平台额度。使用本机模型时，模型推理在本机完成。
 
 每个模型配置均提供“体检”功能，用于验证文本对话、流式输出、工具调用、图像理解与 Token 计数五项能力。
+
+## 开放与扩展（规划中）
+
+目标是让画布成为用户与多个 Agent、多个系统之间的协调层：各系统中的任务、文件与进度以卡片形式集中呈现在同一块画布上；Agent 通过 CLI、MCP 与浏览器操作这些系统；用户在画布上统一查看、比较与决策。
+
+![规划中的结构：CLI Agent、MCP 服务与在线平台通过画布汇合，用户在画布上集中查看与决策](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/open-canvas.webp)
+
+现状：本地版已提供 MCP 服务端，Claude Code、Codex 等 Agent 可读取 NoDesign 的运行状态（健康、项目、进程、回合、日志）。
+
+规划中的方向：
+
+- **接入命令行工具**：Agent 通过 CLI 在外部平台发起并跟踪后台任务，例如在 Kaggle 上提交 Notebook 运行，任务状态与输出实时显示在画布上。
+- **协同浏览器中的工作**：用户在浏览器中编辑 Kaggle Notebook 等在线页面时，可以请 Agent 查看当前代码、定位问题，并直接修改页面中的表单与代码单元。
+- **接入 MCP 服务**：连接 Blender 等创作软件，以及飞书文档、Notion 等文档平台，将其中的场景、文档与数据作为画布上的对象引用和编辑。
+- **开放画布工具**：Claude Code、Codex 等 CLI Agent 可以将产物与进度写入画布，与 NoDesign 自身的 Agent 共用同一块工作台。
+- **集中决策**：来自不同平台的产物在同一块画布上并排比较、批注与确认，无需在多个系统之间切换。
 
 ## 常见问题
 
@@ -212,9 +214,10 @@ NoDesign 于 2026 年 4 月启动，目前处于公开测试阶段，版本迭�
 | 演示稿生成与导出 | 稳定 |
 | Word 文档 | 可用；预览分页可能与 Microsoft Word 存在差异 |
 | 图像与视频工具 | 可用；具体能力取决于本机依赖与服务配置 |
-| 板书与关系图 | 可用；交互持续完善中 |
+| 板书与关系线 | 可用；交互持续完善中 |
 | Skill 市场 | 可用；需要登录 NoDesign 账号 |
 | 画布对话与思考分支 | 开发中 |
+| 外部 Agent 与平台接入 | 规划中，见“开放与扩展” |
 | 互动演出模式 | 实验性功能，尚未完整开放 |
 
 | 平台 | 状态 |

@@ -2,8 +2,8 @@
 <html lang="zh-CN"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Nodesign · 面向创作者的 Agent 工作台</title>
-<meta name="description" content="一句话描述需求，agent 完成制作。在预览上圈选，直接修改。网页、海报、文档、可互动的角色，都在同一块画布上完成。">
+<title>Nodesign · 与 Agent 共用一块画布</title>
+<meta name="description" content="Nodesign 是以画布为中心的 Agent 工作台。项目中的产物、素材与推理过程集中在同一块画布上：用户在画布上指定、整理与修改，Agent 在画布上制作、检查与说明。">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
 <link rel="stylesheet" href="https://fonts.loli.net/css2?family=Zhi+Mang+Xing&amp;display=swap">
 <link rel="stylesheet" href="assets/style.css?v=202609091923">
@@ -33,17 +33,17 @@
   </header>
 
   <section class="hero col">
-    <div class="eyebrow reveal">面向创作者的 AGENT 工作台 · 开源</div>
-    <h1 class="reveal" style="--i:1">描述需求，Agent 完成制作</h1>
-    <p class="hero-sub reveal" style="--i:2">描述需求，Agent 在画布上完成网页、图像与 Word 文档的制作。在预览上圈选即可修改。产物以标准文件交付，支持下载、继续编辑与发布。</p>
+    <div class="eyebrow reveal">以画布为中心的 AGENT 工作台 · 开源</div>
+    <h1 class="reveal" style="--i:1">与 Agent 共用一块画布</h1>
+    <p class="hero-sub reveal" style="--i:2">项目中的产物、素材与推理过程集中在同一块画布上。用户在画布上指定、整理与修改，Agent 在画布上制作、检查与说明。产物以标准文件交付，支持下载、继续编辑与发布。</p>
     <div class="hero-cta btn-row reveal" style="--i:3">
       <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
       <a class="btn btn-ghost btn-lg" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe">下载 Windows 桌面版</a>
     </div>
 
     <div class="facts reveal" style="--i:4">
-      <div class="fact"><b>描述需求</b><span>Agent 开始制作</span></div>
-      <div class="fact"><b>圈选</b><span>直接修改</span></div>
+      <div class="fact"><b>画布</b><span>双方共同读写</span></div>
+      <div class="fact"><b>圈选</b><span>指定到元素</span></div>
       <div class="fact"><b>标准文件</b><span>下载 · 编辑 · 发布</span></div>
       <div class="fact"><b>BYOK</b><span>自有密钥 · 不收分成</span></div>
     </div>
@@ -158,9 +158,9 @@
   <div class="col">
     <figcaption>FIG. 01 · 工作区示意，按真实界面绘制。画布展示《雷雨》人物关系板，包括板书节点、两类关系线和生成的肖像。右侧会话栏记录工具调用、思考与回复。</figcaption>
     <div class="cz-notes reveal" style="--i:1">
-      <div><b>画布</b>产物、板书与素材都是画布上的对象，支持拖动、圈选与连线。</div>
+      <div><b>画布</b>用户与 Agent 共同读写的工作台。产物、板书与素材都是画布上的对象，支持拖动、圈选与连线。</div>
       <div><b>会话栏</b>工具调用、文件改动与思考过程逐条记录。</div>
-      <div><b>板书</b>讨论结论记录在画布上，可直接查看。</div>
+      <div><b>板书</b>Agent 的计划与推理写在画布上，用户可以直接修改。</div>
     </div>
     <div class="cz-pair">
       <figure class="cz-shot reveal" style="margin-top:0">
@@ -174,46 +174,74 @@
     </div>
   </div>
 
-  <!-- ============ 20 秒演示 ============ -->
-  <section class="sec col">
-    <div class="sec-num">看</div>
-    <div class="sec-body">
-      <div>
-        <h2 class="reveal">20 秒演示</h2>
-        <div class="lead reveal" style="--i:1">
-          <p>在西藏攻略项目中输入单页路线总览海报的制作需求。Agent 先确认画幅，再生成草稿、截图检查并输出海报。视频来自真实会话，保留完整工具调用记录。</p>
-        </div>
-      </div>
-      <aside class="notes reveal" style="--i:1">
-        <p><b>先确认再执行</b>执行前确认画幅、风格等关键参数，减少整版修改。</p>
-      </aside>
-    </div>
-    <figure class="cz-shot reveal" style="grid-column:2;margin-top:40px">
-      <div class="shot"><video src="assets/demo.mp4" poster="assets/demo-poster.webp" autoplay muted loop playsinline preload="metadata" width="1280" height="800"></video></div>
-      <figcaption>FIG. 04 · 2026-08-22 录制，Sonnet 5。</figcaption>
-    </figure>
-  </section>
-
-  <!-- ============ 01 怎么工作 ============ -->
+  <!-- ============ 01 画布之于用户 ============ -->
   <section class="sec col">
     <div class="sec-num">01</div>
     <div class="sec-body">
       <div>
-        <h2 class="reveal">一次描述，完成整个流程</h2>
+        <h2 class="reveal">项目全貌，也是指令的一部分</h2>
         <div class="lead reveal" style="--i:1">
-          <p>Nodesign 将需求、制作与修改整合在同一块画布中。<strong>Agent 安排步骤、调用工具并生成产物</strong>。产物保留在画布上。</p>
-          <p>修改时可在预览上圈选区域，再输入要求。Agent 生成新版本，并保留旧版本用于回退。</p>
+          <p>对话式工具里，用户与 Agent 之间只有一条文字通道。Nodesign 用一块双方都能读写的画布取代这条通道：<strong>用户在画布上做的每一件事，都会成为下一轮任务的上下文</strong>。</p>
+          <p>选中的对象、圈选的区域与当前视野随消息一并提交；产物之间的连线告诉 Agent 素材从哪里来、要用到哪里。</p>
         </div>
-        <blockquote class="pull reveal" style="--i:2">
-          初稿用于确认方向，细节可后续调整。
-          <cite>迭代方式</cite>
-        </blockquote>
       </div>
       <aside class="notes reveal" style="--i:1">
-        <p><b>Agent 调用工具</b>支持图像生成、背景移除、页面制作、代码执行、资料检索和截图检查。</p>
-        <p><b>产物保留在画布上</b>每件产物都有固定位置，可再次查看。</p>
+        <p><b>看</b>产物、素材、板书与关系集中在一块画布上，不埋在对话记录里。</p>
+        <p><b>指</b>圈选或选中目标，“这里”不需要再用文字描述。</p>
+        <p><b>排</b>拖动、归类、连线标注“取材”“批注”“接着”“对照”“改自”。</p>
+        <p><b>改</b>双击文字直接修改，改动与圈选一起交给 Agent。</p>
       </aside>
     </div>
+    <figure class="cz-shot reveal" style="grid-column:2;margin-top:40px">
+      <div class="shot"><video src="assets/canvas-user.mp4" poster="assets/canvas-user.webp" autoplay muted loop playsinline preload="metadata" width="1600" height="1000"></video></div>
+      <figcaption>FIG. 04 · 用户从网站连一条“取材”线到“江岸”包装图，圈选订阅计划一节并提出“这里配上这张包装图”，Agent 按连线找到这张图完成修改。2026-09-11 录制，Opus 5。</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 02 画布之于 Agent ============ -->
+  <section class="sec col">
+    <div class="sec-num">02</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">Agent 的桌面、眼睛与黑板</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>Agent 直接在画布上工作：新建产物、放到相关内容旁边、连上取材关系，并在画布上检查自己的结果。<strong>Agent 只说明位置关系，具体坐标由系统计算</strong>。</p>
+          <p>需要拆解问题或规划步骤时，Agent 把计划写成板书。板书以文件保存，用户修改后，Agent 按修改后的内容执行。</p>
+        </div>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>桌面</b>新建、摆放、归类、并排比较产物。</p>
+        <p><b>眼睛</b>读取画布当前状态，截取产物在不同宽度下的画面。</p>
+        <p><b>黑板</b>拆解问题、列出计划、比较方案，用户可以直接修改。</p>
+        <p><b>进度可见</b>正在写入的产物、调用的工具与完成状态实时显示在画布上。</p>
+      </aside>
+    </div>
+    <figure class="cz-shot reveal" style="grid-column:2;margin-top:40px">
+      <div class="shot"><video src="assets/canvas-agent.mp4" poster="assets/canvas-agent.webp" autoplay muted loop playsinline preload="metadata" width="1600" height="1000"></video></div>
+      <figcaption>FIG. 05 · Agent 在板书上列出 8 页演示稿结构；用户在板上删去一页、补充一句；Agent 按修改后的结构制作 7 页演示稿，放在结构旁边并以关系线相连。</figcaption>
+    </figure>
+  </section>
+
+  <!-- ============ 03 共同语境 ============ -->
+  <section class="sec col">
+    <div class="sec-num">03</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">共同语境与项目记忆</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>双方读写同一块画布。用户的每次整理与修改，Agent 在下一轮都能读到；Agent 的每件产出都留在画布上，可以查看、修改与回退。</p>
+          <p>关系线记录取材与派生：哪张图用于哪个网站、演示稿依据哪份文档制作。<strong>Agent 跨产物工作时据此取材，无需重复说明背景</strong>。</p>
+        </div>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>跨会话延续</b>项目决策、风格规范与偏好保存在工作区，新会话继续生效。</p>
+        <p><b>沉淀为 Skill</b>满意的工作流程可以保存为 Skill，并发布到 Skill 市场。</p>
+      </aside>
+    </div>
+    <figure class="cz-shot reveal" style="grid-column:2;margin-top:40px">
+      <div class="shot"><video src="assets/canvas-memory.mp4" poster="assets/canvas-memory.webp" autoplay muted loop playsinline preload="metadata" width="1600" height="1000"></video></div>
+      <figcaption>FIG. 06 · 新开一个会话，只说一句“把品牌手册里的三种冲煮参数整理成一页，加到发布演示稿最后”。Agent 从画布找到手册与演示稿，完成跨产物修改。</figcaption>
+    </figure>
   </section>
 
   <!-- ============ 对照 ============ -->
@@ -223,7 +251,7 @@
       <div>
         <h2 class="reveal">同一件事，两条路</h2>
         <div class="lead reveal" style="--i:1">
-          <p>左侧为传统流程，右侧为 Nodesign 流程。</p>
+          <p>左侧为对话式工具的做法，右侧为 Nodesign 的做法。</p>
         </div>
       </div>
       <aside class="notes reveal" style="--i:1">
@@ -232,12 +260,12 @@
     </div>
 
     <table class="cmp reveal" style="grid-column:2">
-      <thead><tr><th></th><th>传统流程</th><th>Nodesign</th></tr></thead>
+      <thead><tr><th></th><th>对话式工具</th><th>Nodesign</th></tr></thead>
       <tbody>
-        <tr><td>描述需求</td><td>写文档、画线框，多轮确认</td><td class="hi">直接描述</td></tr>
-        <tr><td>出第一版</td><td>排期、等待设计稿</td><td class="hi">Agent 生成初稿</td></tr>
-        <tr><td>修改</td><td>标注、截图、再次沟通</td><td class="hi">圈选并输入要求</td></tr>
-        <tr><td>交付</td><td>打包、导出、传文件</td><td class="hi">一条命令发布</td></tr>
+        <tr><td>指明修改位置</td><td>用文字描述位置，或截图说明</td><td class="hi">圈选或选中，随消息提交</td></tr>
+        <tr><td>项目背景</td><td>换工具或换会话后重新说明</td><td class="hi">关系线与项目记忆延续</td></tr>
+        <tr><td>产物</td><td>分散在对话记录与不同平台</td><td class="hi">集中在画布上，以标准文件保存</td></tr>
+        <tr><td>工作过程</td><td>滚动的对话日志</td><td class="hi">板书与画布上的实时进度</td></tr>
       </tbody>
     </table>
   </section>
@@ -245,15 +273,15 @@
   <!-- ============ 02 六个位置 ============ -->
   <section class="dark">
     <div class="col">
-      <div class="eyebrow reveal">02 · 一次会话的六个步骤</div>
+      <div class="eyebrow reveal">04 · 一次会话的六个步骤</div>
       <h2 class="reveal" style="margin-top:22px;--i:1">从需求到可交付产物</h2>
       <p class="lead reveal" style="--i:2">Agent 先提供结构，确认后继续制作。</p>
       <div class="steps reveal" style="--i:3">
         <div><span class="num">①</span><b>描述需求</b><span>输入目标和已有信息。</span></div>
         <div><span class="num">②</span><b>确认结构</b><span>Agent 提供结构，用户确认方向。</span></div>
         <div><span class="num">③</span><b>选择工具</b><span>Agent 选择图像生成、背景移除、页面制作或代码执行工具。</span></div>
-        <div><span class="num">④</span><b>生成产物</b><span>产物保留在画布上。</span></div>
-        <div><span class="num">⑤</span><b>圈选修改</b><span>圈选目标区域并输入要求。</span></div>
+        <div><span class="num">④</span><b>生成产物</b><span>产物放在相关内容旁边，并连上取材线。</span></div>
+        <div><span class="num">⑤</span><b>圈选修改</b><span>圈选目标区域或连线说明取材，再输入要求。</span></div>
         <div><span class="num">⑥</span><b>保存项目</b><span>各版本持续保留，支持回退。</span></div>
       </div>
     </div>
@@ -261,7 +289,7 @@
 
   <!-- ============ 03 能做什么 ============ -->
   <section class="sec col">
-    <div class="sec-num">03</div>
+    <div class="sec-num">05</div>
     <div class="sec-body">
       <div>
         <h2 class="reveal">一块画布，多种产物形态</h2>
@@ -300,11 +328,40 @@
         <ul><li>角色设定档案</li><li>可交互原型</li></ul>
       </div>
     </div>
+    <figure class="cz-shot reveal" style="grid-column:2;margin-top:40px">
+      <div class="shot"><img src="assets/outputs.webp" alt="雾岭咖啡项目中的四类产物：品牌官网（桌面与手机）、8 页发布演示稿、9 页 Word 品牌手册、透明底产品图" width="1800" height="1180" loading="lazy"></div>
+      <figcaption>FIG. 07 · 同一个项目中的四类产物：品牌官网、发布演示稿、Word 品牌手册与透明底产品图，均由 Agent 在同一块画布上完成。</figcaption>
+    </figure>
   </section>
 
   <!-- ============ 04 案例 ============ -->
+  <!-- ============ 06 开放与扩展（规划中） ============ -->
   <section class="sec col">
-    <div class="sec-num">04</div>
+    <div class="sec-num">06</div>
+    <div class="sec-body">
+      <div>
+        <h2 class="reveal">开放与扩展（规划中）</h2>
+        <div class="lead reveal" style="--i:1">
+          <p>目标是让画布成为用户与多个 Agent、多个系统之间的协调层：各系统中的任务、文件与进度以卡片形式集中呈现在同一块画布上；Agent 通过 CLI、MCP 与浏览器操作这些系统；<strong>用户在画布上统一查看、比较与决策</strong>。</p>
+          <p>现状：本地版已提供 MCP 服务端，Claude Code、Codex 等 Agent 可读取 Nodesign 的运行状态。</p>
+        </div>
+      </div>
+      <aside class="notes reveal" style="--i:1">
+        <p><b>命令行工具</b>通过 CLI 在外部平台发起并跟踪后台任务，例如在 Kaggle 上提交 Notebook 运行。</p>
+        <p><b>浏览器协同</b>用户编辑 Kaggle Notebook 等在线页面时，Agent 查看代码、定位问题并直接修改页面中的表单与代码单元。</p>
+        <p><b>MCP 服务</b>连接 Blender 等创作软件，以及飞书文档、Notion 等文档平台。</p>
+        <p><b>开放画布工具</b>Claude Code、Codex 等 CLI Agent 将产物与进度写入画布。</p>
+        <p><b>集中决策</b>不同平台的产物在同一块画布上并排比较、批注与确认。</p>
+      </aside>
+    </div>
+    <figure class="cz-shot reveal" style="grid-column:2;margin-top:40px">
+      <div class="shot"><img src="assets/open-canvas.webp" alt="规划中的结构：CLI Agent、MCP 服务与在线平台通过画布汇合，用户在画布上集中查看与决策" width="1800" height="1100" loading="lazy"></div>
+      <figcaption>FIG. 08 · 规划中的结构示意。各系统的任务、文件与进度集中呈现在同一块画布上。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sec col">
+    <div class="sec-num">07</div>
     <div class="sec-body">
       <div>
         <h2 class="reveal">已发布的作品</h2>
@@ -370,7 +427,7 @@
       <div class="cta-grid">
         <div>
           <h2 class="reveal">开始第一个项目</h2>
-          <p class="hero-sub reveal" style="--i:1">描述需求，Agent 在画布上生成产物。</p>
+          <p class="hero-sub reveal" style="--i:1">在画布上描述需求，Agent 在同一块画布上完成制作。</p>
           <div class="btn-row reveal" style="--i:2;margin-top:32px">
             <a class="btn btn-solid btn-lg" href="/login">免费开始 <span>→</span></a>
             <a class="btn btn-ghost btn-lg" href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe">下载 Windows 桌面版</a>
