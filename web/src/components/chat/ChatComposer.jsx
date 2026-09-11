@@ -163,7 +163,8 @@ export default function ChatComposer({
   };
 
   return (
-    <div style={{
+    /* data-nd-tour：新手引导第 4 步圈的是这张输入纸（lib/canvas-tour.js），标记别删 */
+    <div data-nd-tour="composer" style={{
       padding: GAP.lg,
       borderTop: `1px solid ${CHROME.border}`,
       // ⛔ 这里以前铺 CHROME.bg —— 那是**栏**的色，画的是"输入纸摊在左栏底下"

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Onboarding } from '../lib/api.js';
+import { TOUR_PENDING_KEY } from '../lib/canvas-tour.js';
 
 /**
  * 首页这一侧的「新手示例项目」（2026-09-12）。
@@ -33,7 +34,12 @@ export function useSampleClaim({ hydrated, count, reload }) {
     if (!hydrated || asked.current || count > 0) return;
     asked.current = true;
     Onboarding.claimSample()
-      .then((r) => { if (r?.seeded) reload()?.catch?.(() => {}); })
+      .then((r) => {
+        if (!r?.seeded) return;
+        // 记下「这个项目该走一遍引导」：他点开示例时，画布上那五步自己会跑（CanvasTour）
+        try { localStorage.setItem(TOUR_PENDING_KEY, r.projectId); } catch { /* 记不住就算了 */ }
+        reload()?.catch?.(() => {});
+      })
       .catch(() => { /* 静默 */ });
   }, [hydrated, count, reload]);
 }

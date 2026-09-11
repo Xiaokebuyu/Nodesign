@@ -107,8 +107,10 @@ export default function BindingLayer({
 
   if (!drawn.length) return null;
 
+  // data-nd-tour：新手引导第 3 步圈的就是这一层（lib/canvas-tour.js），标记别删
   return (
     <svg
+      data-nd-tour="links"
       width={width} height={height}
       style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', overflow: 'visible' }}
       aria-hidden="true"
@@ -150,7 +152,7 @@ export default function BindingLayer({
           || (b.by !== 'auto' && b.type !== 'annotates' ? style.label : null);
         const shownLabel = hot ? label : restLabel;
         return (
-          <g key={id} style={{ opacity: ghost }}>
+          <g key={id} data-nd-tour="link" style={{ opacity: ghost }}>
             {/* 丝线的影子：线是绷在纸面上方的，得有一点落影才像实物 */}
             {material === 'yarn' && (
               <path d={d} fill="none" stroke="rgba(43,33,23,0.22)" strokeWidth={width + 0.4}
@@ -199,7 +201,7 @@ export default function BindingLayer({
               const lh = hot ? 14 : 12;
               const y0 = -((rows.length - 1) * lh) / 2;
               return (
-                <g transform={`translate(${mid.x} ${mid.y})`}>
+                <g data-nd-tour="link-label" transform={`translate(${mid.x} ${mid.y})`}>
                   <text
                     textAnchor="middle" dominantBaseline="middle"
                     style={{

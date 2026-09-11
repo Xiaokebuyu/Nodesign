@@ -5,6 +5,7 @@ import { versionOfFile } from '../../lib/file-versions.js';
 import { COLOR } from '../../lib/theme.js';
 import BoardCanvas from './BoardCanvas.jsx';
 import FloatingToolbar from '../ui/FloatingToolbar.jsx';
+import CanvasTour from './CanvasTour.jsx';
 import AnnotatePopover from './AnnotatePopover.jsx';
 import { t } from '../../lib/i18n.js';
 import { BOARD_Z } from '../../lib/z-layers.js';
@@ -487,6 +488,10 @@ export default function CanvasFrame({
           collapsible
           groups={toolbarGroups}
         />
+
+        {/* 新手引导（09-12）：刚领到示例项目的人在这块真画布上走五步。挂在这里是因为
+            它圈的东西横跨画布、聊天栏和左下角那一列，portal 到 body 上量的是视口坐标 */}
+        <CanvasTour projectId={projectId} />
 
         {/* 工具栏评论钮弹出的那张纸：目标 = 开着的这扇窗。「留在画布」不给
             （窗把画布盖着，落一段看不见的字没有意义） */}

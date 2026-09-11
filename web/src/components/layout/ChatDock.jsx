@@ -332,6 +332,8 @@ export default function ChatDock({
         // 只认鼠标：触屏的 pointerleave 在**手指抬起**时也会发，一视同仁的话
         // 在卡里划一下消息就把卡收了
         onPointerLeave={(e) => { if (e.pointerType === 'mouse') armHide(); }}
+        // data-chat-dock：新手引导拿它躲开这张卡（圈和卡片都不该压在它上面）
+        data-chat-dock={open ? side : undefined}
         style={{
           position: 'absolute',
           top: 14, bottom: 14, [side]: EDGE_GAP, width,

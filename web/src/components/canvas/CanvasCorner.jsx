@@ -92,6 +92,16 @@ function Sheet({ mac }) {
           ))}
         </div>
       ))}
+      {/* 走过一遍的人也找得回来（09-12）：引导自己只跑一次，重看的入口在这儿 */}
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new Event('nd:tour-replay'))}
+        style={{
+          marginTop: 10, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
+          fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, color: COLOR.sub,
+          textDecoration: 'underline', textUnderlineOffset: 3,
+        }}
+      >{t('重看新手引导')}</button>
     </div>
   );
 }
