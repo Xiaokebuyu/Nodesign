@@ -42,6 +42,36 @@ describe('resolveSource —— 词典条目当起点', () => {
   });
 });
 
+describe('resolveSource —— 版本号 v（09-11：文档教写在顶层，以前只查 tokens.v）', () => {
+  it('⭐不给 preset、v 只写在顶层（照 token-schema.md 写）也能过', () => {
+    const { tokens } = resolveSource({
+      v: 1,
+      tokens: { fonts: {}, styles: {} },
+      content: [{ t: 'p', text: 'x' }],
+    });
+    expect(tokens.v).toBe(1);
+  });
+
+  it('顶层和 tokens 都不写 v 也能过（v 只有一版）', () => {
+    expect(() => resolveSource({ tokens: { fonts: {}, styles: {} }, content: [{ t: 'p', text: 'x' }] })).not.toThrow();
+  });
+
+  it('顶层 v 写错要指名是顶层', () => {
+    expect(() => resolveSource({ v: 2, preset: '办公标准', content: [{ t: 'p', text: 'x' }] })).toThrow(/顶层 v 只能是 1/);
+  });
+
+  it('tokens.v 写错要指名是 tokens.v，并说明可以不写', () => {
+    try {
+      resolveSource({ v: 1, tokens: { v: 2, fonts: {}, styles: {} }, content: [{ t: 'p', text: 'x' }] });
+      throw new Error('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(DocxSourceError);
+      expect(e.detail).toContain('tokens.v 只能是 1');
+      expect(e.detail).toContain('可以不写');
+    }
+  });
+});
+
 describe('resolveSource —— `_` 注释键', () => {
   it('下划线开头的键被剥掉，不会被闭合 schema 当成未登记字段拒掉', () => {
     const { tokens, content } = resolveSource({

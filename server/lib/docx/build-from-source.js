@@ -153,6 +153,13 @@ export function resolveSource(rawSrc) {
     );
   }
 
+  // 版本号以顶层 v 为准（token-schema.md 教的就是写在顶层）。以前顶层 v 根本没人查，查的是 tokens.v：
+  // 带 preset 时预设自带 v 不出事；不带 preset、照文档把 v 写在顶层的 agent 必撞「v must be 1」，
+  // 以为校验器误报、二分排查白跑多轮 build（09-11 雾岭手册那轮）。现在 tokens.v 可以不写，缺了继承顶层。
+  if (src.v != null && src.v !== 1) {
+    throw new DocxSourceError(`顶层 v 只能是 1（现在是 ${JSON.stringify(src.v)}）`, '这是源文件格式的版本号，目前只有 1 这一版。');
+  }
+
   let tokens;
   if (src.preset) {
     const make = PRESETS[src.preset];
@@ -168,6 +175,7 @@ export function resolveSource(rawSrc) {
     if (!tokens) throw new DocxSourceError('既没给 preset 也没给 tokens，不知道按什么排版');
   }
 
+  if (tokens && typeof tokens === 'object' && tokens.v == null) tokens = { ...tokens, v: 1 };
   const errs = validateTokens(tokens);
   if (errs.length) {
     throw new DocxSourceError('token 没过校验', errs.slice(0, 12).join('\n'));

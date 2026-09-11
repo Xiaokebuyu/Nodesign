@@ -290,7 +290,7 @@ export function indentConflict(ind) {
 
 export function validateTokens(tok) {
   const errs = [];
-  if (tok.v !== 1) errs.push('v must be 1');
+  if (tok.v !== 1) errs.push(`tokens.v 只能是 1（现在是 ${JSON.stringify(tok.v)}）。tokens.v 可以不写，版本号以源文件顶层的 v 为准`);
   const checkSpacing = (where, sp) => {
     if (!sp) return;
     if (sp.lineRule != null && !LINE_RULES.has(sp.lineRule)) {
