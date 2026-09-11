@@ -16,7 +16,9 @@
  *    里四个应用全有。服务端再把 process.env 原样传给 agent 的 CLI，于是每个用户会话都顶着一个
  *    陌生会话的身份在跑。npx 用户在 Claude Code 的终端里起 Nodesign 是同一条路。
  *    这里只剔**身份/运行时**变量，不剔用户可能有意配的 CLAUDE_CODE_* 设置（如输出上限）。
- *    ANTHROPIC_SMALL_FAST_MODEL 也不剔：session-loop 的订阅路有意让 env 覆盖它。
+ *    ANTHROPIC_SMALL_FAST_MODEL 也剔：helper 模型由 session-binding 定（订阅路 = NODESIGN_FAST_MODEL 或主模型，
+ *    API 路 = 表内值），session-loop / stage 拿它盖；继承值只在「API 行表里没配 fastModel」时漏过去，
+ *    而那时漏进去的是宿主的 Claude 模型名，API 路上会 404。要改 helper 模型用 NODESIGN_FAST_MODEL。
  */
 
 const SERVER_POSTURE_KEYS = ['NODE_ENV', 'npm_config_production', 'npm_config_omit', 'OLDPWD'];
@@ -38,6 +40,7 @@ export const HOST_SESSION_ENV_KEYS = [
   'CLAUDE_EFFORT',
   'AI_AGENT',
   'MCP_CONNECTION_NONBLOCKING',
+  'ANTHROPIC_SMALL_FAST_MODEL',
   // 宿主编辑器终端（Cursor / VS Code 远程）的：askpass 指向编辑器那头的 IPC，ELECTRON_RUN_AS_NODE 会让 agent 起的
   // 任何 Electron 程序当成 node 跑。09-11 生产进程里都有（连同一个 git IPC 的 token）
   'ELECTRON_RUN_AS_NODE',

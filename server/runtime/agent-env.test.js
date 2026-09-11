@@ -19,8 +19,11 @@ describe('agentInheritedEnv', () => {
   it('服务器运行姿态照旧剔掉（08-24 案：NODE_ENV=production 让 agent 的 npm install 跳过 devDependencies）', () => {
     for (const k of ['NODE_ENV', 'OLDPWD', 'npm_config_omit']) expect(out).not.toHaveProperty(k);
   });
-  it('其余原样留：PATH / HOME、用户有意配的 CLAUDE_CODE_* 设置、订阅路有意可覆盖的 ANTHROPIC_SMALL_FAST_MODEL', () => {
-    expect(out).toMatchObject({ PATH: '/usr/bin', HOME: '/home/x', CLAUDE_CODE_MAX_OUTPUT_TOKENS: '64000', ANTHROPIC_SMALL_FAST_MODEL: 'claude-haiku-4-5' });
+  it('其余原样留：PATH / HOME、用户有意配的 CLAUDE_CODE_* 设置', () => {
+    expect(out).toMatchObject({ PATH: '/usr/bin', HOME: '/home/x', CLAUDE_CODE_MAX_OUTPUT_TOKENS: '64000' });
+  });
+  it('ANTHROPIC_SMALL_FAST_MODEL 剔掉：helper 模型由 session-binding 定（要改用 NODESIGN_FAST_MODEL），继承值只会在 API 行漏成一个 404 的名字', () => {
+    expect(out).not.toHaveProperty('ANTHROPIC_SMALL_FAST_MODEL');
   });
   it('不改入参', () => { expect(env.NODE_ENV).toBe('production'); expect(env.CLAUDECODE).toBe('leaked'); });
 });
