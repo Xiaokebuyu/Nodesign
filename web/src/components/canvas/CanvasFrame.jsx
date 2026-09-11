@@ -482,10 +482,9 @@ export default function CanvasFrame({
           // ⭐ 原来这里写死 510 并注释「ArtifactWindow 懒加载，为一个数字拖进主包不值」——
           // 那条理由随 z-layers 作废了：它是无依赖的叶子模块，import 不带任何东西进来。
           zIndex={BOARD_Z.TOOLBAR}
-          // 贴边浮现（2026-08-14，用户点名跟 AI 悬浮卡同一套手感）：平时收着，
-          // 鼠标到底缘那条带就出来；末尾的图钉钉住 = 常驻
-          autoHide
-          pinnable
+          // 手动收放（09-12 站主定，替掉 08-14 的贴边自动浮现 + 图钉）：默认展开，
+          // 末尾「收起」→ 底边正中留一枚舌头，Ctrl/⌘+\ 两头切
+          collapsible
           groups={toolbarGroups}
         />
 

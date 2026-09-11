@@ -53,6 +53,9 @@ function tabClip(edge) {
   if (edge === 'left') {
     return `polygon(0 0, 0 100%, calc(100% - ${CUT}px) 100%, 100% calc(100% - ${CUT + 1}px), 100% ${CUT + 1}px, calc(100% - ${CUT}px) 0)`;
   }
+  if (edge === 'bottom') {
+    return `polygon(0 100%, 100% 100%, 100% ${CUT}px, calc(100% - ${CUT + 1}px) 0, ${CUT + 1}px 0, 0 ${CUT}px)`;
+  }
   return `polygon(0 0, 100% 0, 100% calc(100% - ${CUT}px), calc(100% - ${CUT + 1}px) 100%, ${CUT + 1}px 100%, 0 calc(100% - ${CUT}px))`;
 }
 
@@ -69,12 +72,15 @@ function TabMark() {
 }
 
 /**
- * @param {'left'|'right'|'top'} edge 贴在哪条边（决定切角朝内的是哪一侧）
+ * @param {'left'|'right'|'top'|'bottom'} edge 贴在哪条边（决定切角朝内的是哪一侧）
+ *   bottom（09-12）：画布工具栏收起后留在底边正中的那一枚。**它在桌面上也出现** ——
+ *   上面「只在手指设备上出现」那条管的是「鼠标贴边就能唤出」的层；工具栏改成手动收放后
+ *   没有贴边唤出这回事了，舌头就是唯一的回路（另有 Ctrl/⌘+\）。
  * @param {boolean} open 那一层开着没有（只影响影子档：开着=躺在卡上，压平）
  * @param {object} style 位置与位移动画由调用方给 —— 贴纸只管自己长什么样
  */
 export default function EdgeTab({ edge = 'right', open = false, title, onClick, style }) {
-  const vertical = edge !== 'top';
+  const vertical = edge === 'left' || edge === 'right';
   return (
     <button
       type="button"
@@ -94,6 +100,7 @@ export default function EdgeTab({ edge = 'right', open = false, title, onClick, 
         ...(edge === 'right' ? { justifyContent: 'flex-end' } : null),
         ...(edge === 'left' ? { justifyContent: 'flex-start' } : null),
         ...(edge === 'top' ? { alignItems: 'flex-start' } : null),
+        ...(edge === 'bottom' ? { alignItems: 'flex-end' } : null),
         ...style,
       }}
     >

@@ -582,4 +582,7 @@ export default {
   '平移': 'Pan',
   '看全貌': 'Fit all',
   '问 Agent': 'Ask the agent',
+  '收起工具栏': 'Hide toolbar',
+  '展开工具栏': 'Show toolbar',
+  '收起 / 展开工具栏': 'Hide / show toolbar',
 };

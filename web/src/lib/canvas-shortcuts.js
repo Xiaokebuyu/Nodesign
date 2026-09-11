@@ -40,6 +40,8 @@ export const SHORTCUTS = [
     probe: { src: 'board', has: ["t: 'text'"] } },
   { id: 'draw', group: 'tool', keys: [['P']], label: '涂鸦',
     probe: { src: 'board', has: ["p: 'draw'"] } },
+  { id: 'toolbar', group: 'tool', keys: [['Mod', '\\']], label: '收起 / 展开工具栏',
+    probe: { src: 'toolbar', has: ["e.code !== 'Backslash'"] } },
 
   { id: 'ask', group: 'other', keys: [['/']], label: '唤出 Agent', pin: '问 Agent',
     probe: { src: 'board', has: ["e.key === '/'"] } },

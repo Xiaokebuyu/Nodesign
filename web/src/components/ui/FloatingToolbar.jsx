@@ -1,10 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Pin } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
+import EdgeTab, { TAB_HIT, TAB_LEN } from './EdgeTab.jsx';
+import { t } from '../../lib/i18n.js';
+import { isMacPlatform } from '../../lib/canvas-shortcuts.js';
 import { INK_SURFACE } from '../../lib/paper.js';
 import ToolbarButton, { TOOL_BTN } from './ToolbarButton.jsx';
 import { FONT_SANS, FONT_SIZE, GAP } from '../../lib/theme.js';
 import { usePanelState } from '../layout/PanelManager.jsx';
-import { useMedia, NARROW, COARSE } from '../../lib/use-media.js';
+import { useMedia, NARROW } from '../../lib/use-media.js';
 
 /**
  * FloatingToolbar —— 浮在内容之上、可拖动的工具条（2026-08-07）
@@ -44,10 +47,8 @@ const ANCHOR_INSET = 20;
 
 /** dock 到底边时离边缘留多少 */
 const DOCK_INSET = 18;
-/** 底缘这么高的一条算"要去够工具条了" */
-const REVEAL_BAND = 96;
-/** 没人理它多久之后收起来 */
-const AUTOHIDE_DELAY = 1800;
+/** 收放状态按 id 记在这把钥匙下（'0' = 收着）。是用户的一次表态，刷新、换项目都记得 */
+const openKey = (id) => `nd:tb-open:${id || 'x'}`;
 
 /**
  * 按 anchor 算首次落点。要等**量到自己多宽**才算得出来，所以在 layout effect 里做。
@@ -85,17 +86,14 @@ export default function FloatingToolbar({
    */
   dock = null,
   /**
-   * 平时收起，需要时才浮现。三种唤醒：鼠标接近它那条边、`wake` 变化
-   * （相机缩放 / 换工具这类"正在用它"的信号）、以及指针悬在它身上。
+   * 手动收放（2026-09-12 站主定，替掉 08-14 的「贴近底边自动浮现 + 图钉」）：
+   * 末尾一颗「收起」，收起后底边正中贴一枚舌头（EdgeTab），Ctrl/⌘+\ 两头切。
+   * 默认展开；状态按 id 记 localStorage。
+   *
+   * 不要自动浮现的理由：鼠标一路过底边它就冒出来，盖住底下的东西（画布底部的卡、
+   * 左下角的快捷键条）；真要用它时又得先「去够」一下。收不收由人定，比猜准。
    */
-  autoHide = false,
-  /**
-   * 末尾长一枚图钉（2026-08-14，与 AI 悬浮卡同一套语义）：钉住 = 不自动收，
-   * 常驻可见；状态记 localStorage（按 id），换页还记得。只在 autoHide 时有意义。
-   */
-  pinnable = false,
-  /** 值一变就唤出来（传个计数器或状态串） */
-  wake = null,
+  collapsible = false,
   /** 组之间的堆叠方向。参考图是竖着堆两条，所以默认 column */
   stack = 'column',
   /** 限位容器（不传就不限位）。传 ref 或 DOM 元素都行 */
@@ -114,6 +112,12 @@ export default function FloatingToolbar({
   const [dragging, setDragging] = useState(false);
   // 首帧还没量出落点时先藏着：从 (24,24) 跳到底部居中是能看见的一跳
   const [placed, setPlaced] = useState(() => !anchor || !!panel?.position);
+  // 手动收放（见 collapsible 那条）。触屏也一样收得起：舌头的命中区 28×76，手指够得着。
+  // ⚠️ 必须声明在 dock 那个 effect 之前（它的依赖里有 open）：09-12 写在后面，TDZ 当场白屏
+  const [open, setOpen] = useState(() => {
+    if (!collapsible) return true;
+    try { return localStorage.getItem(openKey(id)) !== '0'; } catch { return true; }
+  });
 
   const commit = useCallback((p) => {
     if (panel?.setPosition) panel.setPosition(p);
@@ -172,69 +176,33 @@ export default function FloatingToolbar({
     try { ro = new ResizeObserver(measure); if (boundsRef?.current) ro.observe(boundsRef.current); } catch { /* 老浏览器 */ }
     window.addEventListener('resize', measure);
     return () => { cancelAnimationFrame(raf); ro?.disconnect(); window.removeEventListener('resize', measure); };
-  }, [dock, boundsRef, groups]);
+    // open：收着时 display:none 量不到自己（宽 0），展开那一刻得重量一次
+  }, [dock, boundsRef, groups, open]);
 
-  /**
-   * 按需浮现。默认收着，三种情况露出来：
-   *   ① 鼠标进到容器底缘那一条里（工具条就在那儿，去够它的路上它就出来了）
-   *   ② `wake` 变了 —— 相机缩放、换工具这类"你正在用它"的信号
-   *   ③ 指针悬在它身上（露出来之后不能因为超时又缩回去）
-   * 刚进画布时先亮一会儿再收，否则新用户根本不知道有这么条东西。
-   */
-  // 图钉：钉住 = 关掉 autoHide。按 id 记 localStorage —— 这是用户的一次性表态，
-  // 不是会话状态，刷新页面还得记得。
-  const [pinned, setPinned] = useState(() => {
-    try { return pinnable && localStorage.getItem(`nd:tb-pin:${id || 'x'}`) === '1'; } catch { return false; }
-  });
-  const togglePin = useCallback(() => {
-    setPinned(prev => {
+  /** 窄屏（手机）：一行 420px 排不进 393 的屏，右边直接被切掉。平板宽度够，不用管。 */
+  const narrow = useMedia(NARROW);
+
+  const toggleOpen = useCallback(() => {
+    setOpen((prev) => {
       const next = !prev;
-      try { localStorage.setItem(`nd:tb-pin:${id || 'x'}`, next ? '1' : '0'); } catch { /* 记不住就算了 */ }
+      try { localStorage.setItem(openKey(id), next ? '1' : '0'); } catch { /* 记不住就算了 */ }
       return next;
     });
   }, [id]);
-  /**
-   * 手机/平板上**不自动收**（2026-08-21）。自动收的唯一唤回路是"指针贴近底缘
-   * 96px 那条带"，而触屏根本没有 hover：手指不按下去就没有 pointermove，
-   * 于是工具栏在 1.8 秒之后消失、再也叫不回来 —— 等于工具全没了。
-   */
-  const coarse = useMedia(COARSE);
-  /** 窄屏（手机）：一行 420px 排不进 393 的屏，右边直接被切掉。平板宽度够，不用管。 */
-  const narrow = useMedia(NARROW);
-  const effAutoHide = autoHide && !pinned && !coarse;
-
-  const [revealed, setRevealed] = useState(!effAutoHide);
-  const hoverRef = useRef(false);
-  const hideTimer = useRef(null);
-  const scheduleHide = useCallback(() => {
-    clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => { if (!hoverRef.current) setRevealed(false); }, AUTOHIDE_DELAY);
-  }, []);
+  const modKey = isMacPlatform() ? '⌘' : 'Ctrl';
+  // Ctrl/⌘ + \ 两头切（登记在 lib/canvas-shortcuts.js，左下角清单里看得到）
   useEffect(() => {
-    if (!effAutoHide) {
-      // 刚钉住（或本来就不自动收）：立刻亮出来，把挂着的收起定时器掐掉
-      clearTimeout(hideTimer.current);
-      setRevealed(true);
-      return undefined;
-    }
-    setRevealed(true);
-    scheduleHide();
-    return () => clearTimeout(hideTimer.current);
-  }, [effAutoHide, wake, scheduleHide]);
-  useEffect(() => {
-    if (!effAutoHide) return undefined;
-    const onMove = (e) => {
-      const bounds = boundsRef?.current;
-      if (!bounds) return;
-      const r = bounds.getBoundingClientRect();
-      const nearEdge = e.clientY >= r.bottom - REVEAL_BAND && e.clientY <= r.bottom
-        && e.clientX >= r.left && e.clientX <= r.right;
-      if (nearEdge) { clearTimeout(hideTimer.current); setRevealed(true); }
-      else if (!hoverRef.current) scheduleHide();
+    if (!collapsible) return undefined;
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.code !== 'Backslash') return;
+      const tg = e.target;
+      if (tg && (tg.tagName === 'INPUT' || tg.tagName === 'TEXTAREA' || tg.isContentEditable)) return;
+      e.preventDefault();
+      toggleOpen();
     };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    return () => window.removeEventListener('pointermove', onMove);
-  }, [effAutoHide, boundsRef, scheduleHide]);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [collapsible, toggleOpen]);
 
   const onPointerDown = useCallback((e) => {
     if (dock) return;               // 钉住的不给拖
@@ -338,6 +306,7 @@ export default function FloatingToolbar({
   if (!groups.length) return null;
 
   return (
+    <>
     <div
       ref={elRef}
       data-floating-toolbar={id || ''}
@@ -345,12 +314,12 @@ export default function FloatingToolbar({
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
-      onPointerEnter={() => { hoverRef.current = true; clearTimeout(hideTimer.current); setRevealed(true); }}
-      onPointerLeave={() => { hoverRef.current = false; if (effAutoHide) scheduleHide(); }}
       style={{
         position: 'absolute', left: pos.x, top: pos.y,
         zIndex: zIndex ?? (panel?.zIndex || 400),
-        display: 'flex', flexDirection: stack, alignItems: 'center', gap: GAP.xs,
+        // 收着 = 整条 display:none（不是透明）：底下的东西点得到；StageLayer 量不到它，
+        // 舞台卡就落回底边
+        display: open ? 'flex' : 'none', flexDirection: stack, alignItems: 'center', gap: GAP.xs,
         /**
          * 排不下就折行：**不给横向滚动**（整站在手机上只该上下滑）。
          * 按钮一律不缩 —— 触屏上 30px 已经是下限，再小就点不准了。
@@ -370,12 +339,7 @@ export default function FloatingToolbar({
         cursor: dock ? 'default' : (dragging ? 'grabbing' : 'grab'),
         userSelect: 'none', touchAction: 'none',
         // 拖拽中略透，让底下的内容还看得见落点
-        opacity: dragging ? 0.88 : (revealed ? 1 : 0),
-        // 收起时往下沉一点点：出现/消失是"从边上滑出来"，不是硬闪
-        transform: revealed ? 'translateY(0)' : `translateY(${dock ? 14 : 0}px)`,
-        // 收起时不吃指针，否则画布底部一条永远点不到
-        pointerEvents: revealed ? 'auto' : 'none',
-        transition: 'opacity 220ms ease, transform 220ms cubic-bezier(0.32,0.72,0,1)',
+        opacity: dragging ? 0.88 : 1,
         visibility: (placed && (dock ? !!dockPos : true)) ? 'visible' : 'hidden',
         ...style,
       }}
@@ -385,21 +349,27 @@ export default function FloatingToolbar({
       {groups.filter(g => g && (g.node || g.items?.length)).map(g => (
         <ToolGroup key={g.id} group={g} />
       ))}
-      {/* 图钉：跟其他组同一种墨面容器，永远排在最末 —— 它管的是这条工具栏
+      {/* 「收起」：跟其他组同一种墨面容器，永远排在最末 —— 它管的是这条工具栏
           自己，不跟内容组抢位置 */}
-      {/* 触屏上本来就不自动收，图钉没有意义，还白占一格（手机上格外贵） */}
-      {pinnable && autoHide && !coarse && (
+      {collapsible && (
         <ToolGroup group={{
-          id: '_pin',
+          id: '_collapse',
           variant: 'plain',
-          items: [{
-            id: 'pin', icon: Pin, active: pinned,
-            title: pinned ? '取消固定（贴近底边才浮现）' : '固定工具栏（常驻可见）',
-            onClick: togglePin,
-          }],
+          items: [{ id: 'collapse', icon: ChevronDown, title: `${t('收起工具栏')}（${modKey}+\\）`, onClick: toggleOpen }],
         }} />
       )}
     </div>
+    {/* 收着：底边正中贴一枚舌头（09-12 站主：「贴近屏幕一点，防止遮盖住其他操作条」）。
+        入口必须同时是出口 —— 收得起就得叫得回，不能只剩一个快捷键 */}
+    {collapsible && !open && dock && (
+      <div data-no-pan style={{
+        position: 'absolute', left: '50%', bottom: 0, marginLeft: -TAB_LEN / 2,
+        width: TAB_LEN, height: TAB_HIT, zIndex: zIndex ?? (panel?.zIndex || 400),
+      }}>
+        <EdgeTab edge="bottom" title={`${t('展开工具栏')}（${modKey}+\\）`} onClick={toggleOpen} style={{ left: 0, top: 0 }} />
+      </div>
+    )}
+    </>
   );
 }
 
