@@ -12,7 +12,7 @@
     "server/",
     "web/dist/",
     "README.md",
-    "README.zh-CN.md",
+    "README.en.md",
     "LICENSE",
     "!server/**/*.test.js",
     "!server/**/_probe-*",
