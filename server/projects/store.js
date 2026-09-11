@@ -109,6 +109,14 @@ if (!projectsColNames.has('folder_path')) {
   console.log('[projects/store] projects.folder_path / folder_trust columns added');
 }
 
+// 新手示例项目（2026-09-12）：新用户第一次进来时自动收到一份做好的项目（onboarding/seed.js）。
+// 标出来是因为首页要把它排除在「我的项目」之外 —— 有了它空状态和「找找灵感」就不出现了，
+// 而那两样恰恰是给"还没动手的人"看的。用户删得掉，删了也不再补。
+if (!projectsColNames.has('is_sample')) {
+  db.exec('ALTER TABLE projects ADD COLUMN is_sample INTEGER NOT NULL DEFAULT 0');
+  console.log('[projects/store] projects.is_sample column added');
+}
+
 // 多用户内测（2026-07-30）：runs 计量真列 + 归属。原来 usage 全塞 metadata JSON
 // （且值全 0，absorbResult 断链），配额查询要 sum，promote 成真列
 const RUN_METRIC_COLS = [
@@ -173,6 +181,8 @@ function rowToProject(row) {
     kind: row.kind || 'project',
     mode: row.mode || 'design',
     autoNamed: !!row.auto_named,
+    /** 系统送的示例项目（2026-09-12）：首页不把它算进「我的项目」 */
+    isSample: !!row.is_sample,
     ownerId: row.owner_id || null,
     folderPath: row.folder_path || null,
     // 三态：null 没答过 / true 装载 / false 不装载
@@ -269,6 +279,8 @@ export function createProject({
   ownerId = null,
   folderPath = null,
   id: explicitId = null,
+  /** 新手示例（2026-09-12）：只有 onboarding/seed.js 传 true */
+  isSample = false,
 }) {
   if (!name || typeof name !== 'string') throw new Error('createProject: name 必填');
   // 文件夹项目从 .nodesign/project.json 带 id 进来（换机器接回原身份）；其余一律现生成
@@ -285,8 +297,8 @@ export function createProject({
   const id = explicitId || newProjectId();
   const desc = (typeof description === 'string' && description.trim()) ? description.trim() : null;
   db.prepare(
-    `INSERT INTO projects (id, name, skill_id, description, kind, mode, auto_named, owner_id, folder_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, name.trim(), skillId, desc, kind, mode, autoNamed ? 1 : 0, ownerId, folderPath || null);
+    `INSERT INTO projects (id, name, skill_id, description, kind, mode, auto_named, owner_id, folder_path, is_sample) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, name.trim(), skillId, desc, kind, mode, autoNamed ? 1 : 0, ownerId, folderPath || null, isSample ? 1 : 0);
   return getProject(id);
 }
 

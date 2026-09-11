@@ -1,0 +1,2 @@
+- [雾岭视觉定案](mistridge-visual.md) — 主色/字体/三款豆命名
+- [雾岭官网结构](mistridge-site.md) — 单页结构、风格锚、占位信息

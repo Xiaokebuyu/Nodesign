@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Wrench, LayoutTemplate, MoreHorizontal, Copy, Trash2, Edit2, Store } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
@@ -10,6 +10,7 @@ import { Underline } from '../components/PaperBits.jsx';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 import { Sessions, Assets, Projects } from '../lib/api.js';
+import { ownProjects, useSampleClaim } from './home-sample.js';
 import { timeAgo } from '../lib/helpers.js';
 import { useMedia, NARROW } from '../lib/use-media.js';
 import { useHoverReveal } from '../lib/use-hover-reveal.js';
@@ -79,6 +80,8 @@ function inventory(st) {
 
 export default function Home() {
   const projects = useProjectStore(s => s.projects);
+  // 系统送的示例项目不算「我的项目」；领取和这条规矩都在 home-sample.js
+  const own = ownProjects(projects);
   const hydrated = useProjectStore(s => s.hydrated);
   const hydrating = useProjectStore(s => s.hydrating);
   const error = useProjectStore(s => s.error);
@@ -94,6 +97,9 @@ export default function Home() {
       hydrate({ kind: 'project' }).catch(() => { /* error 由 store 记录 */ });
     }
   }, [hydrated, hydrating, hydrate]);
+
+  // 第一次进来的人领一份做好的示例项目（2026-09-12，服务端幂等）
+  useSampleClaim({ hydrated, count: projects.length, reload: useCallback(() => hydrate({ kind: 'project' }), [hydrate]) });
 
   useEffect(() => {
     let dead = false;
@@ -144,7 +150,7 @@ export default function Home() {
 
           <div className="ndd-top">
             <div className="ndd-side">
-              <BoardNote projects={projects} summary={summary} />
+              <BoardNote projects={own} summary={summary} />
             </div>
             <div className="ndd-mid">
               <QuickEntry prefill={prefill} />
@@ -161,7 +167,7 @@ export default function Home() {
 
           <div className="ndd-head">
             <h2>{t('我的项目')}<Underline w={1.6} color="var(--desk-ink)" /></h2>
-            <span className="n">{projects.length} 个项目</span>
+            <span className="n">{own.length} 个项目</span>
           </div>
 
           {!hydrated && hydrating ? (
@@ -170,7 +176,7 @@ export default function Home() {
             <ErrorState message={error} onRetry={() => hydrate({ kind: 'project' }).catch(() => {})} />
           ) : (
             <>
-              {projects.length === 0 && (
+              {own.length === 0 && (
                 <EmptyState
                   onPick={(text) => {
                     setPrefill({ text, ts: Date.now() });
@@ -181,7 +187,7 @@ export default function Home() {
               {/* 没有项目的新人（09-12 站主）：别人的作品另起一个分区，不挂在「我的项目 · 0 个项目」底下 ——
                   挂在底下的话既跟空状态那张大卡挤成一团（网格没有上边距，钉子和签还往上探），又会被读成
                   「这些是我的」。有项目之后照旧混进自己的网格里（09-08 定的），靠「别人的」签区分。 */}
-              {projects.length === 0 && featured.length > 0 && (
+              {own.length === 0 && featured.length > 0 && (
                 <div className="ndd-head peer">
                   <h2>{t('找找灵感')}<Underline w={1.6} color="var(--desk-ink)" /></h2>
                   <span className="n">{t('点开看看，或照着来一个')}</span>
@@ -190,8 +196,9 @@ export default function Home() {
               {(projects.length > 0 || featured.length > 0) && (
                 <div className="ndd-grid">
                   {/* newest 只在自己的里面算：别人的排在后面，「接着做」不会挂到它们头上 */}
-                  {projects.map((p, i) => (
-                    <ProjectCard key={p.id} project={p} stat={stats?.[p.id]} newest={i === 0} />
+                  {/* 「接着做」只贴在自己最近那张上：示例是系统送的，不是"你上次停在这" */}
+                  {projects.map((p) => (
+                    <ProjectCard key={p.id} project={p} stat={stats?.[p.id]} newest={p.id === own[0]?.id} />
                   ))}
                   {featured.map(f => <FeaturedCard key={f.id} pub={f} />)}
                 </div>
@@ -437,6 +444,8 @@ function ProjectCard({ project, stat, newest }) {
       </Link>
       <span className={`pin${newest ? ' r' : ''}`} />
       {newest && <span className="last">{t('接着做')}</span>}
+      {/* 系统送的那份：同一副纸签，墨底（跟「别人的」同款）—— 它不是你做的 */}
+      {project.isSample && <span className="last peer">{t('示例')}</span>}
 
       {revealed && (
         <button

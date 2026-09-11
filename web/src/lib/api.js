@@ -59,6 +59,9 @@ export const Projects = {
   remove: (pid) => jsonRequest('DELETE', `/api/projects/${pid}`),
 };
 
+/** 新手引导（09-12）：领一份做好的示例项目，判断与幂等都在服务端 → { seeded, reason, projectId } */
+export const Onboarding = { claimSample: () => jsonRequest('POST', '/api/onboarding/sample') };
+
 // ── Skills ──
 export const Skills = {
   list: (projectId) =>

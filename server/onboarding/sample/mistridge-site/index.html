@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>雾岭咖啡 MISTRIDGE · 高黎贡山东坡的小批量烘焙</title>
+<meta name="description" content="雾岭咖啡，云南保山一人经营的小批量烘焙坊。生豆来自高黎贡山东坡三个合作庄园，每周二烘焙。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="mark" href="#top"><b>雾岭</b><span>MISTRIDGE</span></a>
+    <nav class="nav" aria-label="主导航">
+      <a href="#story">故事</a>
+      <a href="#beans">豆单</a>
+      <a href="#brew">冲煮</a>
+      <a href="#contact">联系</a>
+      <a class="nav-cta" href="#subscribe">订阅</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- 首屏 -->
+  <section class="hero">
+    <picture class="hero-img">
+      <source media="(max-width: 760px)" srcset="assets/hero-sm.webp">
+      <img src="assets/hero.webp" alt="清晨的高黎贡山东坡，前景是挂着红果的咖啡树，山谷里铺着薄雾" fetchpriority="high">
+    </picture>
+    <div class="wrap">
+      <div class="hero-copy">
+        <p class="eyebrow" style="color: var(--roast-soft)">Baoshan · Yunnan · Est. 2026</p>
+        <h1>雾岭咖啡<span class="latin">MISTRIDGE</span></h1>
+        <p class="lede">高黎贡山东坡，三块地，三户人家。<br>每周二在保山烘一次，每批不超过十二公斤。</p>
+      </div>
+      <div class="hero-meta">
+        <div>产地<strong>保山 · 隆阳区</strong></div>
+        <div>海拔<strong>1,050 – 1,450 m</strong></div>
+        <div>烘焙日<strong>每周二 · 48 h 内寄出</strong></div>
+        <a class="scroll" href="#story">向下</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 故事 -->
+  <section class="section story" id="story">
+    <div class="wrap">
+      <div class="head reveal">
+        <div>
+          <p class="eyebrow">01 · Story</p>
+          <h2>一座山，<br>三块地</h2>
+        </div>
+        <p class="lead">雾岭是一个人经营的烘焙坊。生豆来自高黎贡山脚下的三个合作庄园，在保山的一间小烘焙室里完成烘焙、分装和寄出。</p>
+      </div>
+
+      <div class="story-body reveal">
+        <p class="aside"><b>关于名字</b>咖啡树开花那几天，早上的雾一直压到半山腰，山脊线浮在雾上面。</p>
+        <div class="story-text">
+          <p>高黎贡山东坡向下一直落到怒江河谷。从江边的潞江坝到半山的百花岭，海拔差出去四百多米，气温、雨量和雾的时长都跟着变。同一个品种种在不同高度，喝起来是不同的咖啡。</p>
+          <p>雾岭的三款主力豆分别来自这条坡上的三个位置：半山的石阶庄园、中段的云台庄园、靠近江岸的林家坡庄园。三块地由三户人家打理，合作最短的也有四季。每年采收季，我们上山住几天，看鲜果成熟度，参与处理批次的挑选，然后按批次收豆。</p>
+          <p>云南咖啡过去多被当作拼配里的基底。我们想做的事情很朴素：把一块地、一个批次的样子老实地烘出来，让人喝得出它来自哪里。</p>
+        </div>
+      </div>
+
+      <figure class="slope reveal">
+        <svg viewBox="0 0 1200 360" role="img" aria-label="高黎贡山东坡剖面：江岸 1050 米、岭线 1280 米、雾起 1450 米">
+          <defs>
+            <linearGradient id="hill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#2F3B34"/>
+              <stop offset="1" stop-color="#252F29"/>
+            </linearGradient>
+            <filter id="blur" x="-20%" y="-100%" width="140%" height="300%"><feGaussianBlur stdDeviation="14"/></filter>
+          </defs>
+          <g stroke="#CFCBC2" stroke-dasharray="3 6" stroke-width="1">
+            <line x1="0" y1="241" x2="1200" y2="241"/>
+            <line x1="0" y1="142" x2="1200" y2="142"/>
+            <line x1="0" y1="76" x2="1200" y2="76"/>
+          </g>
+          <g font-family="IBM Plex Mono, monospace" font-size="13" fill="#7A7A72">
+            <text x="1196" y="236" text-anchor="end">1,100 m</text>
+            <text x="1196" y="137" text-anchor="end">1,300 m</text>
+            <text x="1196" y="71" text-anchor="end">1,500 m</text>
+          </g>
+          <path d="M0,330 C160,318 280,270 380,224 S560,178 640,149 S800,108 880,92 S1100,52 1200,40 L1200,360 L0,360 Z" fill="url(#hill)"/>
+          <g fill="none" stroke="#E6E3DC" stroke-linecap="round">
+            <path d="M560,150 C640,138 700,160 780,146 S900,132 980,142" stroke-width="2" opacity=".55"/>
+            <path d="M620,124 C700,112 760,132 840,118 S960,104 1060,116" stroke-width="1.5" opacity=".4"/>
+            <path d="M760,98 C840,88 900,104 980,92 S1100,80 1180,90" stroke-width="1.2" opacity=".3"/>
+          </g>
+          <text x="1040" y="176" font-family="IBM Plex Mono, monospace" font-size="12" fill="#E6E3DC" opacity=".7" letter-spacing="1">雾带 1,300 – 1,500 m</text>
+          <g font-family="IBM Plex Mono, monospace" font-size="12" text-anchor="middle">
+            <circle cx="880" cy="92" r="13" fill="#F1EFEA" stroke="#2F3B34"/><text x="880" y="96" fill="#2F3B34">01</text>
+            <circle cx="640" cy="149" r="13" fill="#F1EFEA" stroke="#2F3B34"/><text x="640" y="153" fill="#2F3B34">02</text>
+            <circle cx="380" cy="224" r="13" fill="#F1EFEA" stroke="#2F3B34"/><text x="380" y="228" fill="#2F3B34">03</text>
+          </g>
+          <text x="24" y="346" font-family="Noto Sans SC, sans-serif" font-size="13" letter-spacing="3" fill="#E6E3DC" opacity=".7">怒江 · 潞江坝</text>
+        </svg>
+        <ol class="slope-legend">
+          <li><span class="dot">01</span>石阶庄园 · 雾起<small>百花岭 · 1,450 m · 午后常起雾</small></li>
+          <li><span class="dot">02</span>云台庄园 · 岭线<small>芒宽 · 1,280 m · 坡地中段</small></li>
+          <li><span class="dot">03</span>林家坡庄园 · 江岸<small>潞江镇 · 1,050 m · 河谷热、日照足</small></li>
+        </ol>
+      </figure>
+
+      <blockquote class="quote reveal">按批次收豆，按周烘焙。一个批次卖完就下架，不用别的豆子补。</blockquote>
+
+      <ol class="rules reveal">
+        <li><span class="num">01</span><h3>按批次，不按库存</h3><p>每袋标注庄园、处理批次和烘焙日期。批次卖完即下架。</p></li>
+        <li><span class="num">02</span><h3>小批量，按周烘</h3><p>每周二烘焙，单锅不超过 1.5 kg，每周总量不超过 12 kg。</p></li>
+        <li><span class="num">03</span><h3>价格公开</h3><p>生豆收购价高于当季本地商品豆，年度采购记录向订阅用户公开。</p></li>
+        <li><span class="num">04</span><h3>少说形容词</h3><p>风味描述只写杯测时真正喝到的东西。</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 豆单 -->
+  <section class="section beans" id="beans">
+    <div class="wrap">
+      <div class="head reveal">
+        <div>
+          <p class="eyebrow">02 · The Beans</p>
+          <h2>三款主力豆</h2>
+        </div>
+        <p class="lead">按海拔从高到低排列，烘焙从浅到深。风味来自 2025/26 采收季的杯测记录，新批次到货后重新杯测。</p>
+      </div>
+
+      <div class="reveal">
+        <div class="shelf" role="tablist" aria-label="选择豆款">
+          <button class="bag" role="tab" id="t-mistrise" aria-controls="p-mistrise" aria-selected="true">
+            <img src="assets/pack-mistrise.webp" alt="雾起包装：牛皮纸袋，晨雾白标签" width="560" height="1040">
+          </button>
+          <button class="bag" role="tab" id="t-ridgeline" aria-controls="p-ridgeline" aria-selected="false">
+            <img src="assets/pack-ridgeline.webp" alt="岭线包装：牛皮纸袋，岭墨绿标签" width="560" height="1037">
+          </button>
+          <button class="bag" role="tab" id="t-riverbank" aria-controls="p-riverbank" aria-selected="false">
+            <img src="assets/pack-riverbank.webp" alt="江岸包装：牛皮纸袋，焙褐标签" width="560" height="1037">
+          </button>
+        </div>
+        <div class="shelf-names" aria-hidden="true">
+          <span class="on">雾起<small>MIST RISE</small></span>
+          <span>岭线<small>RIDGELINE</small></span>
+          <span>江岸<small>RIVERBANK</small></span>
+        </div>
+
+        <article class="bean" id="p-mistrise" role="tabpanel" aria-labelledby="t-mistrise" data-tone="paper">
+          <div>
+            <span class="no">No.01 · 浅烘</span>
+            <h3>雾起</h3>
+            <span class="en">MIST RISE</span>
+            <p class="notes">white florals, lime zest, black tea</p>
+            <p class="notes-zh">白色花香 · 青柠皮 · 红茶 · 回甘带甜橙</p>
+            <p class="say">石阶庄园在三块地里位置最高，午后常起雾，果实成熟慢，酸质清亮。热的时候偏茶感，放凉后甜度更明显。</p>
+          </div>
+          <div>
+            <dl class="spec">
+              <div><dt>庄园</dt><dd>石阶庄园 · 隆阳区芒宽乡百花岭</dd></div>
+              <div><dt>海拔</dt><dd class="num">1,450 m</dd></div>
+              <div><dt>品种</dt><dd>铁皮卡</dd></div>
+              <div><dt>处理法</dt><dd>水洗 · 发酵 36 小时 · 棚架日晒 18 天</dd></div>
+              <div><dt>烘焙度</dt><dd>浅烘 · Agtron 78 · 一爆后发展 55 秒</dd></div>
+              <div><dt>规格</dt><dd>200 g · ¥78</dd></div>
+            </dl>
+            <p class="fit">适合　手冲 · 冷萃</p>
+          </div>
+        </article>
+
+        <article class="bean" id="p-ridgeline" role="tabpanel" aria-labelledby="t-ridgeline" data-tone="pine" hidden>
+          <div>
+            <span class="no">No.02 · 中浅烘</span>
+            <h3>岭线</h3>
+            <span class="en">RIDGELINE</span>
+            <p class="notes">yellow peach, honey, caramel</p>
+            <p class="notes-zh">黄桃 · 蜂蜜 · 焦糖 · 尾段可可</p>
+            <p class="say">三款里最均衡的一支，也是订阅用户复购最多的。蜜处理带来厚一些的口感和成熟水果的甜，焦糖和可可接住酸质。</p>
+          </div>
+          <div>
+            <dl class="spec">
+              <div><dt>庄园</dt><dd>云台庄园 · 隆阳区芒宽乡</dd></div>
+              <div><dt>海拔</dt><dd class="num">1,280 m</dd></div>
+              <div><dt>品种</dt><dd>波邦</dd></div>
+              <div><dt>处理法</dt><dd>红蜜 · 保留约 60% 果胶 · 非洲床干燥 22 天</dd></div>
+              <div><dt>烘焙度</dt><dd>中浅烘 · Agtron 68 · 一爆后发展 80 秒</dd></div>
+              <div><dt>规格</dt><dd>200 g · ¥72</dd></div>
+            </dl>
+            <p class="fit">适合　手冲 · 意式单品 · 冷萃</p>
+          </div>
+        </article>
+
+        <article class="bean" id="p-riverbank" role="tabpanel" aria-labelledby="t-riverbank" data-tone="roast" hidden>
+          <div>
+            <span class="no">No.03 · 中深烘</span>
+            <h3>江岸</h3>
+            <span class="en">RIVERBANK</span>
+            <p class="notes">dark chocolate, roasted hazelnut, red date</p>
+            <p class="notes-zh">黑巧克力 · 烤榛子 · 红枣 · 甘蔗般的甜</p>
+            <p class="say">来自潞江坝，河谷热，日照足。日晒处理把果实的甜留进豆子，做拿铁时巧克力感清楚，在牛奶里站得住。</p>
+          </div>
+          <div>
+            <dl class="spec">
+              <div><dt>庄园</dt><dd>林家坡庄园 · 隆阳区潞江镇</dd></div>
+              <div><dt>海拔</dt><dd class="num">1,050 m</dd></div>
+              <div><dt>品种</dt><dd>卡蒂姆 P7963</dd></div>
+              <div><dt>处理法</dt><dd>日晒 · 整果干燥 28 天 · 每日翻动四次</dd></div>
+              <div><dt>烘焙度</dt><dd>中深烘 · Agtron 55 · 二爆前出锅</dd></div>
+              <div><dt>规格</dt><dd>200 g · ¥62</dd></div>
+            </dl>
+            <p class="fit">适合　意式 · 加奶饮品 · 冷萃</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- 冲煮 -->
+  <section class="section brew" id="brew">
+    <div class="wrap">
+      <div class="head reveal">
+        <div>
+          <p class="eyebrow">03 · Brewing</p>
+          <h2>冲煮指南</h2>
+        </div>
+        <p class="lead">烘焙后第 7 至 21 天的建议起点。研磨刻度以 Comandante C40 和 EK43 为参照，其他磨豆机按粗细描述调整。</p>
+      </div>
+
+      <div class="reveal">
+        <div class="tabs" role="tablist" aria-label="冲煮方式">
+          <button class="tab" role="tab" id="m-pour" aria-controls="b-pour" aria-selected="true" data-method="pour" data-label="手冲">手冲<small>Pour Over</small></button>
+          <button class="tab" role="tab" id="m-espresso" aria-controls="b-espresso" aria-selected="false" data-method="espresso" data-label="意式">意式<small>Espresso</small></button>
+          <button class="tab" role="tab" id="m-cold" aria-controls="b-cold" aria-selected="false" data-method="cold" data-label="冷萃">冷萃<small>Cold Brew</small></button>
+        </div>
+
+        <div class="brew-grid">
+          <div>
+            <div class="brew-panel" id="b-pour" role="tabpanel" aria-labelledby="m-pour">
+              <div class="table-wrap"><table>
+                <thead><tr><th>参数</th><th>雾起</th><th>岭线</th><th>江岸</th></tr></thead>
+                <tbody>
+                  <tr><th>粉 / 水</th><td>15 / 240 g</td><td>15 / 240 g</td><td>15 / 225 g</td></tr>
+                  <tr><th>粉水比</th><td>1 : 16</td><td>1 : 16</td><td>1 : 15</td></tr>
+                  <tr><th>水温</th><td>93 ℃</td><td>91 ℃</td><td>88 ℃</td></tr>
+                  <tr><th>研磨</th><td><span class="cn">中细</span> · C40 24</td><td><span class="cn">中细</span> · C40 25</td><td><span class="cn">中</span> · C40 27</td></tr>
+                  <tr><th>注水</th><td><span class="cn">闷蒸</span> 40 g / 30 s<br><span class="cn">分三段</span></td><td><span class="cn">闷蒸</span> 40 g / 30 s<br><span class="cn">分三段</span></td><td><span class="cn">闷蒸</span> 35 g / 30 s<br><span class="cn">分两段</span></td></tr>
+                  <tr><th>总时间</th><td>2:10 – 2:30</td><td>2:15 – 2:35</td><td>2:00 – 2:20</td></tr>
+                </tbody>
+              </table></div>
+              <p class="note">滤杯参照 V60 02。酸感尖锐时调细一格或升温 1 ℃；苦涩或收尾发干时调粗一格。</p>
+            </div>
+
+            <div class="brew-panel" id="b-espresso" role="tabpanel" aria-labelledby="m-espresso" hidden>
+              <div class="table-wrap"><table>
+                <thead><tr><th>参数</th><th>雾起</th><th>岭线</th><th>江岸</th></tr></thead>
+                <tbody>
+                  <tr><th>粉量</th><td>18 g</td><td>18 g</td><td>18 g</td></tr>
+                  <tr><th>液重</th><td>42 g · 1:2.3</td><td>38 g · 1:2.1</td><td>36 g · 1:2</td></tr>
+                  <tr><th>水温</th><td>94 ℃</td><td>93 ℃</td><td>91 ℃</td></tr>
+                  <tr><th>时间</th><td>27 – 31 s</td><td>26 – 30 s</td><td>25 – 28 s</td></tr>
+                  <tr><th>压力</th><td>9 bar<br><span class="cn">预浸</span> 5 s</td><td>9 bar</td><td>9 bar</td></tr>
+                  <tr><th>建议</th><td><span class="cn">单饮</span></td><td><span class="cn">单饮 · 澳白</span></td><td><span class="cn">拿铁 · 卡布奇诺</span></td></tr>
+                </tbody>
+              </table></div>
+              <p class="note">意式用豆建议养豆 10 天以上。雾起是浅烘，做浓缩需要更细的研磨和更长的液重比。</p>
+            </div>
+
+            <div class="brew-panel" id="b-cold" role="tabpanel" aria-labelledby="m-cold" hidden>
+              <div class="table-wrap"><table>
+                <thead><tr><th>参数</th><th>雾起</th><th>岭线</th><th>江岸</th></tr></thead>
+                <tbody>
+                  <tr><th>粉 / 水</th><td>80 / 1000 g</td><td>90 / 1000 g</td><td>100 / 1000 g</td></tr>
+                  <tr><th>研磨</th><td><span class="cn">粗</span> · EK 11</td><td><span class="cn">粗</span> · EK 11</td><td><span class="cn">粗</span> · EK 12</td></tr>
+                  <tr><th>环境</th><td><span class="cn">常温水</span><br>4 ℃</td><td><span class="cn">常温水</span><br>4 ℃</td><td><span class="cn">常温水</span><br>4 ℃</td></tr>
+                  <tr><th>浸泡</th><td>14 h</td><td>16 h</td><td>18 h</td></tr>
+                  <tr><th>饮用</th><td><span class="cn">直饮或加冰</span></td><td><span class="cn">1:1 兑冰水</span></td><td><span class="cn">1:1 兑牛奶</span></td></tr>
+                </tbody>
+              </table></div>
+              <p class="note">过滤后冷藏保存，三天内喝完。</p>
+            </div>
+          </div>
+
+          <aside class="calc" aria-label="粉水换算">
+            <h3><span id="calc-method">手冲</span>换算</h3>
+            <p class="hint">输入你的粉量，按手册比例算出用水。</p>
+            <label for="dose">粉量</label>
+            <div class="row"><input id="dose" type="number" inputmode="decimal" min="1" max="500" value="15"><span>g</span></div>
+            <label>豆款</label>
+            <div class="seg">
+              <button type="button" data-bean="mistrise" aria-pressed="false">雾起</button>
+              <button type="button" data-bean="ridgeline" aria-pressed="true">岭线</button>
+              <button type="button" data-bean="riverbank" aria-pressed="false">江岸</button>
+            </div>
+            <output id="calc-out" aria-live="polite"></output>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 订阅 -->
+  <section class="section subscribe" id="subscribe">
+    <div class="wrap">
+      <div class="head reveal">
+        <div>
+          <p class="eyebrow">04 · Subscribe</p>
+          <h2>订阅计划</h2>
+        </div>
+        <p class="lead">每周二烘焙，48 小时内顺丰寄出。订阅按月结算，豆子跟着批次走，当月在售哪几支就寄哪几支。</p>
+        <img class="sub-bag" src="assets/pack-riverbank.webp" alt="江岸包装：牛皮纸袋，焙褐标签" width="560" height="1037" loading="lazy">
+      </div>
+
+      <div class="plans reveal">
+        <div class="plan">
+          <h3>轮换<small>ONE BAG</small></h3>
+          <p>每月 1 袋 200 g，三款轮流寄，一个季度喝完一轮。</p>
+          <span class="price">¥68<small>/ 月</small></span>
+          <a class="go" href="mailto:hello@mistridge.coffee?subject=%E8%AE%A2%E9%98%85%EF%BC%9A%E8%BD%AE%E6%8D%A2">订阅</a>
+        </div>
+        <div class="plan pick">
+          <span class="tag">多数人选这个</span>
+          <h3>常备<small>TWO BAGS</small></h3>
+          <p>每月 2 袋 200 g，自选两款，或交给我们搭配。月中和月底各寄一次，豆子始终在最佳赏味期。</p>
+          <span class="price">¥128<small>/ 月</small></span>
+          <a class="go" href="mailto:hello@mistridge.coffee?subject=%E8%AE%A2%E9%98%85%EF%BC%9A%E5%B8%B8%E5%A4%87">订阅</a>
+        </div>
+        <div class="plan">
+          <h3>焙室<small>THE ROOM</small></h3>
+          <p>每月三款各 1 袋，附当批烘焙曲线与杯测记录，年度采购价格表。</p>
+          <span class="price">¥178<small>/ 月</small></span>
+          <a class="go" href="mailto:hello@mistridge.coffee?subject=%E8%AE%A2%E9%98%85%EF%BC%9A%E7%84%99%E5%AE%A4">订阅</a>
+        </div>
+      </div>
+
+      <div class="terms reveal">
+        <p><b>随时暂停</b>每月 20 日前告知，下个月即暂停或取消，不收额外费用。</p>
+        <p><b>寄送</b>云南省内次日达，省外 2 至 3 天。包邮。</p>
+        <p><b>研磨</b>默认寄整豆。需要代磨请注明冲煮方式，按本页刻度研磨。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 联系 -->
+  <section class="contact" id="contact">
+    <div class="wrap">
+      <div class="contact-grid reveal">
+        <div>
+          <p class="eyebrow">05 · Contact</p>
+          <h2>联系雾岭</h2>
+          <p class="lead">订阅、批发和到访都可以直接写信或加微信。一个人在打理，回复一般在当天晚上。</p>
+        </div>
+        <dl>
+          <div><dt>微信</dt><dd>MISTRIDGE_COFFEE<small>备注「订阅」或「批发」</small></dd></div>
+          <div><dt>邮箱</dt><dd><a href="mailto:hello@mistridge.coffee">hello@mistridge.coffee</a></dd></div>
+          <div><dt>烘焙室</dt><dd>云南省保山市隆阳区<small>到访请提前一天预约</small></dd></div>
+          <div><dt>烘焙日</dt><dd>每周二<small>周三、周四寄出</small></dd></div>
+        </dl>
+      </div>
+      <div class="wordmark" aria-hidden="true">MISTRIDGE</div>
+      <div class="foot">
+        <span>© 2026 雾岭咖啡 MISTRIDGE COFFEE</span>
+        <span>保山 · 高黎贡山东坡</span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="main.js"></script>
+</body>
+</html>

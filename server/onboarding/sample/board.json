@@ -1,0 +1,735 @@
+{
+  "size": {
+    "w": 4000,
+    "h": 2600
+  },
+  "zones": {
+    "记忆": {
+      "x": 10,
+      "y": 10
+    }
+  },
+  "objects": {
+    "品牌手册/雾岭品牌手册.json": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 148,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789136627253
+    },
+    "docx:品牌手册": {
+      "x": 600,
+      "y": 24,
+      "z": 49,
+      "w": 960,
+      "h": 658,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789136656732,
+      "sizedAt": 1789136657882
+    },
+    "记忆/mistridge-visual.md": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 148,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789136765829
+    },
+    "记忆/MEMORY.md": {
+      "x": 24,
+      "y": 188,
+      "z": 1,
+      "w": 200,
+      "h": 148,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789136769528
+    },
+    "notes/板书/20260911-142631-雾岭品牌手册-v1-9-页.md": {
+      "x": 1584,
+      "y": 24,
+      "z": 1,
+      "w": 432,
+      "h": 314,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789136791303,
+      "sizedAt": 1789136792507
+    },
+    "assets/generated/mistridge-pack-mistrise.webp": {
+      "x": 10,
+      "y": 698,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "provisional": true,
+      "seatedBy": "client",
+      "seatedAt": 1789137058060
+    },
+    "assets/generated/mistridge-hero-dawn.webp": {
+      "x": 48,
+      "y": 698,
+      "z": 1,
+      "w": 200,
+      "h": 173,
+      "seat": "auto",
+      "provisional": true,
+      "seatedBy": "client",
+      "seatedAt": 1789137145576,
+      "sizedAt": 1789145222953
+    },
+    "assets/generated/mistridge-pack-ridgeline.webp": {
+      "x": 10,
+      "y": 890,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "provisional": true,
+      "seatedBy": "client",
+      "seatedAt": 1789137231498
+    },
+    "assets/generated/mistridge-pack-riverbank.webp": {
+      "x": 48,
+      "y": 1082,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "provisional": true,
+      "seatedBy": "client",
+      "seatedAt": 1789137282951
+    },
+    "assets/generated/mistridge-pack-mistrise-nobg.webp": {
+      "x": 612,
+      "y": 1290,
+      "z": 1,
+      "w": 200,
+      "h": 173,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789145311472,
+      "sizedAt": 1789145222953
+    },
+    "assets/generated/mistridge-pack-ridgeline-nobg.webp": {
+      "x": 790,
+      "y": 1290,
+      "z": 1,
+      "w": 200,
+      "h": 173,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789145311472,
+      "sizedAt": 1789145222953
+    },
+    "assets/generated/mistridge-pack-riverbank-nobg.webp": {
+      "x": 968,
+      "y": 1290,
+      "z": 28,
+      "w": 200,
+      "h": 173,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789145311472,
+      "sizedAt": 1789145222953
+    },
+    "notes/板书/20260911-143642-包装图-主视觉.md": {
+      "x": -188,
+      "y": 1270,
+      "z": 1,
+      "w": 432,
+      "h": 285,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789137402835,
+      "sizedAt": 1789137404004
+    },
+    "mistridge-site/assets/hero-sm.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789137721698
+    },
+    "mistridge-site/assets/hero.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789137721698
+    },
+    "mistridge-site/assets/pack-mistrise.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789137721698
+    },
+    "mistridge-site/assets/pack-ridgeline.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789137721698
+    },
+    "mistridge-site/assets/pack-riverbank.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789137721698
+    },
+    "mistridge-site/style.css": {
+      "x": 24,
+      "y": 216,
+      "z": 1,
+      "w": 224,
+      "h": 32,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789137874187
+    },
+    "mistridge-site/main.js": {
+      "x": 24,
+      "y": 288,
+      "z": 1,
+      "w": 224,
+      "h": 32,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789137890292
+    },
+    "site:mistridge-site": {
+      "x": 1161,
+      "y": 1175,
+      "z": 30,
+      "w": 640,
+      "h": 428,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789145311472
+    },
+    "记忆/mistridge-site.md": {
+      "x": 24,
+      "y": 376,
+      "z": 1,
+      "w": 200,
+      "h": 148,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789138113390
+    },
+    "notes/板书/20260911-144916-雾岭官网-v1.md": {
+      "x": 1824,
+      "y": 1175,
+      "z": 1,
+      "w": 432,
+      "h": 289,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789146237584,
+      "sizedAt": 1789138157266
+    },
+    "text:amtx3q06r3": {
+      "x": 612,
+      "y": 718,
+      "z": 1,
+      "w": 250,
+      "h": 34,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789139933820,
+      "sizedAt": 1789139947775,
+      "tag": "发布演示结构",
+      "kind": "text",
+      "data": {
+        "t": "发布演示 · 8 页结构（草案）",
+        "format": "md",
+        "font": "kai",
+        "size": "md",
+        "color": "ink",
+        "lid": "__title"
+      }
+    },
+    "text:amtx3q06r4": {
+      "x": 612,
+      "y": 768,
+      "z": 1,
+      "w": 528,
+      "h": 34,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789139933820,
+      "tag": "发布演示结构",
+      "kind": "text",
+      "data": {
+        "t": "**01 封面** · 雾岭咖啡 MISTRIDGE，2025/26 采收季三款新豆发布",
+        "format": "md",
+        "font": "pen",
+        "size": "md",
+        "color": "ink",
+        "lid": "p1"
+      }
+    },
+    "text:amtx3q06r5": {
+      "x": 612,
+      "y": 818,
+      "z": 1,
+      "w": 528,
+      "h": 59,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789139933820,
+      "sizedAt": 1789149881234,
+      "tag": "发布演示结构",
+      "kind": "text",
+      "data": {
+        "t": "**02 一座山，三块地** · 高黎贡山东坡，海拔 1,050 到 1,450 米，三个合作庄园",
+        "format": "md",
+        "font": "pen",
+        "size": "md",
+        "color": "ink",
+        "lid": "p2"
+      }
+    },
+    "text:amtx3q06r6": {
+      "x": 612,
+      "y": 893,
+      "z": 1,
+      "w": 528,
+      "h": 34,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789139933820,
+      "tag": "发布演示结构",
+      "kind": "text",
+      "data": {
+        "t": "**03 我们怎么做** · 按批次收豆，每周二烘焙，单批不超过 12 kg",
+        "format": "md",
+        "font": "pen",
+        "size": "md",
+        "color": "ink",
+        "lid": "p3"
+      }
+    },
+    "text:amtx3q06r7": {
+      "x": 612,
+      "y": 943,
+      "z": 1,
+      "w": 528,
+      "h": 34,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789139933820,
+      "sizedAt": 1789139935436,
+      "tag": "发布演示结构",
+      "kind": "text",
+      "data": {
+        "t": "**04 雾起 MIST RISE** · 1,450 m 铁皮卡水洗浅烘：白花、青柠、红茶",
+        "format": "md",
+        "font": "pen",
+        "size": "md",
+        "color": "ink",
+        "lid": "p4"
+      }
+    },
+    "text:amtx3q06r8": {
+      "x": 612,
+      "y": 1018,
+      "z": 1,
+      "w": 528,
+      "h": 34,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789139933820,
+      "sizedAt": 1789139935436,
+      "tag": "发布演示结构",
+      "kind": "text",
+      "data": {
+        "t": "**05 岭线 RIDGELINE** · 1,280 m 波邦红蜜中浅烘：黄桃、蜂蜜、焦糖",
+        "format": "md",
+        "font": "pen",
+        "size": "md",
+        "color": "ink",
+        "lid": "p5"
+      }
+    },
+    "text:amtx3q06r9": {
+      "x": 612,
+      "y": 1093,
+      "z": 1,
+      "w": 528,
+      "h": 34,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789139933820,
+      "sizedAt": 1789139935436,
+      "tag": "发布演示结构",
+      "kind": "text",
+      "data": {
+        "t": "**06 江岸 RIVERBANK** · 1,050 m 卡蒂姆日晒中深烘：黑巧、榛子、红枣",
+        "format": "md",
+        "font": "pen",
+        "size": "md",
+        "color": "ink",
+        "lid": "p6"
+      }
+    },
+    "text:amtx3q06rb": {
+      "x": 612,
+      "y": 1218,
+      "z": 32,
+      "w": 449,
+      "h": 61,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789139933820,
+      "sizedAt": 1789140160705,
+      "tag": "发布演示结构",
+      "kind": "text",
+      "data": {
+        "t": "**08 订阅与上市** · 三档订阅价、首批发售日期、联系方式，首批限量 300 袋",
+        "format": "md",
+        "font": "pen",
+        "size": "md",
+        "color": "ink",
+        "lid": "p8"
+      }
+    },
+    "mistridge-launch/assets/hero.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789140208995
+    },
+    "mistridge-launch/assets/pack-mistrise.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789140208995
+    },
+    "mistridge-launch/assets/pack-ridgeline.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789140208995
+    },
+    "mistridge-launch/assets/pack-riverbank.webp": {
+      "x": 24,
+      "y": 0,
+      "z": 1,
+      "w": 200,
+      "h": 176,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789140208995
+    },
+    "site:mistridge-launch": {
+      "x": 1161,
+      "y": 707,
+      "z": 46,
+      "w": 640,
+      "h": 428,
+      "seat": "auto",
+      "seatedBy": "seater",
+      "seatedAt": 1789140320394
+    },
+    "notes/板书/20260911-152523-发布演示稿-v1-7-页-16-9.md": {
+      "x": 1825,
+      "y": 707,
+      "z": 1,
+      "w": 432,
+      "h": 239,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789140323153,
+      "sizedAt": 1789140324720
+    },
+    "notes/板书/20260911-153510-第-8-页-冲煮参数.md": {
+      "x": 1825,
+      "y": 947,
+      "z": 1,
+      "w": 432,
+      "h": 184,
+      "zone": "",
+      "by": "agent",
+      "seat": "agent",
+      "seatedBy": "agent",
+      "seatedAt": 1789140910827,
+      "sizedAt": 1789140912429
+    }
+  },
+  "bindings": {
+    "b:amtx1unev0": {
+      "type": "annotates",
+      "from": "notes/板书/20260911-142631-雾岭品牌手册-v1-9-页.md",
+      "to": "docx:品牌手册",
+      "label": "这份手册的版式和待核对项",
+      "by": "agent"
+    },
+    "b:amtx1uovm0": {
+      "type": "derives-from",
+      "from": "docx:品牌手册",
+      "to": "品牌手册/雾岭品牌手册.json",
+      "label": "改这份 JSON 再构建，别直接改 docx",
+      "by": "agent"
+    },
+    "b:auto:df:d4eb87ca3cd5": {
+      "type": "derives-from",
+      "from": "assets/generated/mistridge-pack-mistrise-nobg.webp",
+      "to": "assets/generated/mistridge-pack-mistrise.webp",
+      "by": "auto"
+    },
+    "b:auto:df:d6b7b302b9ec": {
+      "type": "derives-from",
+      "from": "assets/generated/mistridge-pack-ridgeline-nobg.webp",
+      "to": "assets/generated/mistridge-pack-ridgeline.webp",
+      "by": "auto"
+    },
+    "b:auto:df:7759b21d1afb": {
+      "type": "derives-from",
+      "from": "assets/generated/mistridge-pack-riverbank-nobg.webp",
+      "to": "assets/generated/mistridge-pack-riverbank.webp",
+      "by": "auto"
+    },
+    "b:amtx27nby1": {
+      "type": "ref",
+      "from": "assets/generated/mistridge-pack-mistrise.webp",
+      "to": "assets/generated/mistridge-pack-ridgeline.webp",
+      "label": "同一张底图，只换标签色",
+      "by": "agent"
+    },
+    "b:amtx27nby2": {
+      "type": "ref",
+      "from": "assets/generated/mistridge-pack-mistrise.webp",
+      "to": "assets/generated/mistridge-pack-riverbank.webp",
+      "label": "同一张底图，只换标签色",
+      "by": "agent"
+    },
+    "b:amtx27nby3": {
+      "type": "ref",
+      "from": "docx:品牌手册",
+      "to": "assets/generated/mistridge-pack-mistrise.webp",
+      "label": "标签色取自手册主色",
+      "by": "agent"
+    },
+    "b:amtx27r9u1": {
+      "type": "annotates",
+      "from": "notes/板书/20260911-143642-包装图-主视觉.md",
+      "to": "assets/generated/mistridge-pack-ridgeline-nobg.webp",
+      "label": "三张透明底包装，给网站用",
+      "by": "agent"
+    },
+    "b:auto:ref:d535de8e2e84": {
+      "type": "ref",
+      "from": "site:mistridge-site",
+      "to": "mistridge-site/assets/hero.webp",
+      "by": "auto"
+    },
+    "b:auto:ref:6c1283fea78c": {
+      "type": "ref",
+      "from": "site:mistridge-site",
+      "to": "mistridge-site/assets/pack-mistrise.webp",
+      "by": "auto"
+    },
+    "b:auto:ref:5dcc5786a550": {
+      "type": "ref",
+      "from": "site:mistridge-site",
+      "to": "mistridge-site/assets/pack-ridgeline.webp",
+      "by": "auto"
+    },
+    "b:auto:ref:f40f86dde86c": {
+      "type": "ref",
+      "from": "site:mistridge-site",
+      "to": "mistridge-site/assets/pack-riverbank.webp",
+      "by": "auto"
+    },
+    "b:amtx2nwgf2": {
+      "type": "annotates",
+      "from": "notes/板书/20260911-144916-雾岭官网-v1.md",
+      "to": "site:mistridge-site",
+      "label": "官网 v1：单页长滚动",
+      "by": "agent"
+    },
+    "b:amtx2o04l4": {
+      "type": "ref",
+      "from": "docx:品牌手册",
+      "to": "site:mistridge-site",
+      "label": "文案、豆单、冲煮参数和主色都取自手册",
+      "by": "agent"
+    },
+    "b:amtx2o04l5": {
+      "type": "ref",
+      "from": "assets/generated/mistridge-hero-dawn.webp",
+      "to": "site:mistridge-site",
+      "label": "首屏主视觉",
+      "by": "agent"
+    },
+    "b:mtx3dcf1246": {
+      "type": "ref",
+      "from": "site:mistridge-site",
+      "to": "assets/generated/mistridge-pack-riverbank-nobg.webp",
+      "by": "user"
+    },
+    "b:amtx3q06rc": {
+      "type": "flow",
+      "from": "text:amtx3q06r4",
+      "to": "text:amtx3q06r5",
+      "by": "agent",
+      "material": "pencil",
+      "tag": "发布演示结构"
+    },
+    "b:amtx3q06rd": {
+      "type": "flow",
+      "from": "text:amtx3q06r5",
+      "to": "text:amtx3q06r6",
+      "by": "agent",
+      "material": "pencil",
+      "tag": "发布演示结构"
+    },
+    "b:amtx3q06re": {
+      "type": "flow",
+      "from": "text:amtx3q06r6",
+      "to": "text:amtx3q06r7",
+      "by": "agent",
+      "material": "pencil",
+      "tag": "发布演示结构"
+    },
+    "b:amtx3q06rf": {
+      "type": "flow",
+      "from": "text:amtx3q06r7",
+      "to": "text:amtx3q06r8",
+      "by": "agent",
+      "material": "pencil",
+      "tag": "发布演示结构"
+    },
+    "b:amtx3q06rg": {
+      "type": "flow",
+      "from": "text:amtx3q06r8",
+      "to": "text:amtx3q06r9",
+      "by": "agent",
+      "material": "pencil",
+      "tag": "发布演示结构"
+    },
+    "b:amtx3q06rj": {
+      "type": "ref",
+      "from": "text:amtx3q06r4",
+      "to": "docx:品牌手册",
+      "label": "内容取自手册",
+      "by": "agent",
+      "material": "pencil",
+      "tag": "发布演示结构"
+    },
+    "b:auto:ref:5c703ea16d1e": {
+      "type": "ref",
+      "from": "site:mistridge-launch",
+      "to": "mistridge-launch/assets/hero.webp",
+      "by": "auto"
+    },
+    "b:auto:ref:433173cea323": {
+      "type": "ref",
+      "from": "site:mistridge-launch",
+      "to": "mistridge-launch/assets/pack-mistrise.webp",
+      "by": "auto"
+    },
+    "b:auto:ref:4b984f1fffca": {
+      "type": "ref",
+      "from": "site:mistridge-launch",
+      "to": "mistridge-launch/assets/pack-ridgeline.webp",
+      "by": "auto"
+    },
+    "b:auto:ref:f36205a7058f": {
+      "type": "ref",
+      "from": "site:mistridge-launch",
+      "to": "mistridge-launch/assets/pack-riverbank.webp",
+      "by": "auto"
+    },
+    "b:amtx3ycltk": {
+      "type": "annotates",
+      "from": "notes/板书/20260911-152523-发布演示稿-v1-7-页-16-9.md",
+      "to": "site:mistridge-launch",
+      "label": "按你改过的结构做的 7 页",
+      "by": "agent"
+    },
+    "b:amtx3yetx6": {
+      "type": "flow",
+      "from": "text:amtx3q06r3",
+      "to": "site:mistridge-launch",
+      "label": "按这份改过的结构做成 7 页",
+      "by": "agent",
+      "tag": "发布演示结构"
+    },
+    "b:amtx4ay22l": {
+      "type": "annotates",
+      "from": "notes/板书/20260911-153510-第-8-页-冲煮参数.md",
+      "to": "site:mistridge-launch",
+      "label": "数字全部照手册 03 · BREWING 抄",
+      "by": "agent"
+    },
+    "b:amtx4b2wz7": {
+      "type": "ref",
+      "from": "docx:品牌手册",
+      "to": "site:mistridge-launch",
+      "label": "第 8 页冲煮参数取自手册 03 章",
+      "by": "agent"
+    }
+  }
+}

@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>雾岭咖啡 · 2025/26 采收季新豆发布</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400;1,500&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --pine: #2F3B34; --pine-deep: #252F29; --mist: #E6E3DC; --paper: #F1EFEA;
+  --roast: #8A5A3B; --roast-soft: #B98A68;
+  --ink: #232925; --ink-2: #4A524C; --ink-3: #7A7A72; --rule: #CFCBC2;
+  --serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
+  --display: 'Cormorant Garamond', 'Noto Serif SC', serif;
+  --sans: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --mono: 'IBM Plex Mono', 'Noto Sans SC', monospace;
+  --s: 1;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #1b221e; }
+body { font-family: var(--serif); color: var(--ink); -webkit-font-smoothing: antialiased; }
+.deck { height: 100vh; overflow-y: auto; scroll-snap-type: y mandatory; }
+.slot { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; scroll-snap-align: start; }
+.artboard {
+  width: 1920px; height: 1080px; flex: none; position: relative; overflow: hidden;
+  transform: scale(var(--s)); transform-origin: center center; background: var(--paper);
+  padding: 96px 128px;
+}
+h1, h2, h3, p { margin: 0; }
+.eyebrow { font-family: var(--sans); font-size: 18px; font-weight: 500; letter-spacing: .3em; text-transform: uppercase; color: var(--roast); }
+.folio {
+  position: absolute; left: 128px; right: 128px; bottom: 56px;
+  display: flex; justify-content: space-between;
+  font-family: var(--sans); font-size: 15px; letter-spacing: .24em; color: var(--ink-3);
+}
+.folio b { font-family: var(--mono); font-weight: 400; letter-spacing: .08em; }
+.dark { color: var(--mist); }
+.dark .folio { color: rgba(230, 227, 220, .55); }
+.dark .eyebrow { color: var(--roast-soft); }
+
+/* 01 封面 */
+.cover { padding: 0; background: var(--pine-deep); color: var(--mist); }
+.cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 60%; }
+.cover::after { content: ""; position: absolute; inset: 0; background:
+  linear-gradient(90deg, rgba(24, 31, 27, .82) 0%, rgba(24, 31, 27, .5) 36%, rgba(24, 31, 27, 0) 62%),
+  linear-gradient(0deg, rgba(24, 31, 27, .7) 0%, rgba(24, 31, 27, 0) 30%); }
+.cover .in { position: absolute; inset: 0; z-index: 1; padding: 170px 128px 96px; }
+.cover h1 { font-size: 168px; line-height: 1.05; letter-spacing: .05em; font-weight: 600; margin-top: 36px; }
+.cover .latin { display: block; font-family: var(--display); font-weight: 500; font-size: 40px; letter-spacing: .5em; color: rgba(230, 227, 220, .8); margin-top: 22px; }
+.cover .sub { margin-top: 64px; font-size: 44px; line-height: 1.5; letter-spacing: .04em; }
+.cover .sub span { color: var(--roast-soft); }
+.cover .folio { z-index: 1; color: rgba(230, 227, 220, .7); }
+
+/* 02 山 */
+.mountain { display: grid; grid-template-columns: 560px 1fr; gap: 72px; align-items: center; }
+.mountain h2 { font-size: 104px; line-height: 1.2; margin-top: 28px; }
+.mountain .say { margin-top: 44px; font-size: 26px; line-height: 1.8; color: var(--ink-2); letter-spacing: .03em; }
+.mountain svg { width: 100%; height: auto; display: block; }
+
+/* 03 做法 */
+.method { background: var(--pine); }
+.method h2 { font-size: 88px; margin-top: 28px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 120px; border-top: 1px solid rgba(230, 227, 220, .5); }
+.stats div { padding: 48px 56px 0 0; }
+.stats div + div { padding-left: 56px; border-left: 1px solid rgba(230, 227, 220, .18); }
+.stats strong { display: block; font-family: var(--serif); font-size: 128px; font-weight: 600; line-height: 1.1; letter-spacing: .02em; }
+.stats strong.num { font-family: var(--mono); font-weight: 400; letter-spacing: -.02em; }
+.stats p { margin-top: 28px; font-size: 26px; line-height: 1.8; color: rgba(230, 227, 220, .78); letter-spacing: .03em; }
+
+/* 04-06 豆 */
+.bean { display: grid; grid-template-columns: 700px 1fr; gap: 64px; align-items: center; padding-top: 72px; }
+.bean .bag { justify-self: center; height: 860px; width: auto; filter: drop-shadow(0 36px 26px rgba(20, 26, 23, .3)) drop-shadow(0 3px 3px rgba(20, 26, 23, .2)); }
+.bean.t-pine { background: var(--pine); color: var(--mist); }
+.bean.t-roast { background: var(--roast); color: #F4EEE7; }
+.bean.t-roast .eyebrow, .bean.t-roast .folio { color: rgba(244, 238, 231, .7); }
+.bean h2 { font-size: 176px; line-height: 1.05; letter-spacing: .06em; margin-top: 20px; }
+.bean .en { font-family: var(--display); font-size: 40px; letter-spacing: .42em; opacity: .8; display: block; margin-top: 8px; }
+.bean .notes { font-family: var(--display); font-style: italic; font-size: 48px; margin-top: 56px; line-height: 1.3; }
+.bean .notes-zh { font-size: 32px; margin-top: 14px; letter-spacing: .06em; }
+.spec { margin-top: 56px; display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 0; border-top: 1px solid currentColor; }
+.spec div { padding: 22px 48px 0 0; }
+.spec div + div { padding-left: 32px; border-left: 1px solid color-mix(in srgb, currentColor 25%, transparent); }
+.spec dt { font-family: var(--sans); font-size: 16px; letter-spacing: .2em; opacity: .7; }
+.spec dd { margin: 10px 0 0; font-size: 28px; letter-spacing: .03em; }
+.spec dd.num { font-family: var(--mono); font-size: 27px; }
+
+/* 07 订阅与上市 */
+.launch { background: var(--mist); display: grid; grid-template-columns: 820px 1fr; gap: 96px; }
+.launch h2 { font-size: 76px; line-height: 1.25; margin-top: 28px; }
+.launch .date { margin-top: 64px; font-family: var(--mono); font-size: 150px; line-height: 1; letter-spacing: -.03em; color: var(--pine); }
+.launch .date small { font-family: var(--serif); font-size: 40px; letter-spacing: .06em; margin-left: 16px; color: var(--ink-2); }
+.launch .limit { margin-top: 48px; display: inline-flex; align-items: baseline; gap: 18px; border-top: 2px solid var(--roast); padding-top: 22px; font-size: 32px; color: var(--ink); }
+.launch .limit b { font-family: var(--mono); font-weight: 400; font-size: 64px; color: var(--roast); }
+.plans { align-self: center; border-top: 1px solid var(--ink); }
+.plan { display: grid; grid-template-columns: 1fr auto; align-items: baseline; padding: 34px 0; border-bottom: 1px solid var(--rule); }
+.plan h3 { font-size: 40px; }
+.plan h3 small { font-family: var(--sans); font-weight: 400; font-size: 16px; letter-spacing: .26em; color: var(--ink-3); margin-left: 16px; }
+.plan p { grid-column: 1; margin-top: 10px; font-size: 22px; color: var(--ink-2); letter-spacing: .03em; }
+.plan .price { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-family: var(--mono); font-size: 56px; }
+.plan .price small { font-family: var(--sans); font-size: 18px; color: var(--ink-3); margin-left: 6px; }
+.plan.pick h3 { color: var(--roast); }
+.contact { margin-top: 44px; font-family: var(--sans); font-size: 20px; letter-spacing: .12em; color: var(--ink-2); display: flex; gap: 48px; }
+.contact b { font-family: var(--mono); font-weight: 400; color: var(--ink); letter-spacing: .04em; }
+
+/* 08 冲煮参数 */
+.brew { padding-top: 72px; }
+.brew .bt { margin-top: 30px; }
+.brew .bt dl { padding-top: 20px; padding-bottom: 20px; row-gap: 8px; }
+.brew .bt .m { padding: 20px 0; }
+.brew .head { display: flex; justify-content: space-between; align-items: end; }
+.brew h2 { font-size: 72px; margin-top: 20px; }
+.brew .lead { font-family: var(--sans); font-size: 19px; line-height: 1.7; color: var(--ink-3); letter-spacing: .04em; text-align: right; }
+.brew .lead b { font-family: var(--mono); font-weight: 400; color: var(--ink-2); }
+.bt { margin-top: 44px; display: grid; grid-template-columns: 250px repeat(3, 1fr); }
+.bt .bh { padding: 0 0 16px 36px; border-bottom: 5px solid; font-size: 40px; font-weight: 600; letter-spacing: .08em; display: flex; align-items: baseline; gap: 16px; }
+.bt .bh small { font-family: var(--display); font-weight: 500; font-size: 20px; letter-spacing: .3em; color: var(--ink-3); }
+.bt .bh.c1 { border-color: var(--rule); } .bt .bh.c2 { border-color: var(--pine); } .bt .bh.c3 { border-color: var(--roast); }
+.bt .corner { border-bottom: 5px solid transparent; }
+.bt .m { padding: 26px 0; border-bottom: 1px solid var(--rule); }
+.bt .m h3 { font-size: 36px; font-weight: 600; letter-spacing: .06em; }
+.bt .m span { display: block; margin-top: 8px; font-family: var(--display); font-style: italic; font-size: 24px; color: var(--roast); }
+.bt .m em { display: block; margin-top: 14px; font-style: normal; font-family: var(--sans); font-size: 16px; line-height: 1.6; color: var(--ink-3); letter-spacing: .04em; }
+.bt dl { margin: 0; padding: 26px 0 26px 36px; border-bottom: 1px solid var(--rule); border-left: 1px solid var(--rule); display: grid; grid-template-columns: auto 1fr; column-gap: 24px; row-gap: 12px; align-content: start; }
+.bt dt { font-family: var(--sans); font-size: 17px; letter-spacing: .16em; color: var(--ink-3); padding-top: 5px; }
+.bt dd { margin: 0; font-family: var(--mono); font-size: 25px; color: var(--ink); }
+.bt dd i { font-style: normal; font-family: var(--sans); font-size: 19px; color: var(--ink-2); margin-left: 8px; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- 01 -->
+  <section class="slot"><div class="artboard cover" data-page="1">
+    <img src="assets/hero.webp" alt="清晨的高黎贡山东坡，咖啡树与山谷里的薄雾">
+    <div class="in">
+      <p class="eyebrow" style="color: var(--roast-soft)">New Harvest · 2025/26</p>
+      <h1>雾岭咖啡<span class="latin">MISTRIDGE</span></h1>
+      <p class="sub">2025/26 采收季<br><span>三款新豆发布</span></p>
+    </div>
+    <div class="folio"><span>保山 · 高黎贡山东坡</span><b>01 / 08</b></div>
+  </div></section>
+
+  <!-- 02 -->
+  <section class="slot"><div class="artboard mountain" data-page="2">
+    <div>
+      <p class="eyebrow">Origin</p>
+      <h2>一座山，<br>三块地</h2>
+      <p class="say">高黎贡山东坡，从怒江河谷往上四百多米，三户人家各管一块地。</p>
+    </div>
+    <svg viewBox="0 0 1100 620" role="img" aria-label="三个庄园的海拔剖面">
+      <g stroke="#CFCBC2" stroke-dasharray="4 8"><line x1="0" y1="430" x2="1100" y2="430"/><line x1="0" y1="250" x2="1100" y2="250"/><line x1="0" y1="130" x2="1100" y2="130"/></g>
+      <g font-family="IBM Plex Mono, monospace" font-size="20" fill="#7A7A72"><text x="0" y="420">1,100 m</text><text x="0" y="240">1,300 m</text><text x="0" y="120">1,500 m</text></g>
+      <path d="M0,600 C150,580 250,520 340,470 S520,340 590,290 S760,190 830,160 S1000,110 1100,90 L1100,620 L0,620 Z" fill="#2F3B34"/>
+      <g fill="none" stroke="#E6E3DC" stroke-linecap="round"><path d="M520,280 C610,262 680,292 770,270 S900,248 1000,262" stroke-width="3" opacity=".5"/><path d="M620,230 C700,214 770,240 850,222 S980,200 1090,214" stroke-width="2" opacity=".35"/></g>
+      <g font-family="Noto Serif SC, serif" font-size="26" fill="#232925">
+        <circle cx="830" cy="160" r="12" fill="#F1EFEA" stroke="#8A5A3B" stroke-width="3"/><text x="830" y="112" text-anchor="middle">石阶 · 雾起</text>
+        <circle cx="590" cy="290" r="12" fill="#F1EFEA" stroke="#8A5A3B" stroke-width="3"/><text x="590" y="222" text-anchor="middle">云台 · 岭线</text>
+        <circle cx="340" cy="470" r="12" fill="#F1EFEA" stroke="#8A5A3B" stroke-width="3"/><text x="340" y="400" text-anchor="middle">林家坡 · 江岸</text>
+      </g>
+      <g font-family="IBM Plex Mono, monospace" font-size="20" fill="#8A5A3B" text-anchor="middle"><text x="830" y="140">1,450 m</text><text x="590" y="250" dy="6">1,280 m</text><text x="340" y="430">1,050 m</text></g>
+      <text x="190" y="604" font-family="Noto Sans SC, sans-serif" font-size="18" letter-spacing="4" fill="#E6E3DC" opacity=".7">怒江 · 潞江坝</text>
+    </svg>
+    <div class="folio"><span>MISTRIDGE · 产地</span><b>02 / 08</b></div>
+  </div></section>
+
+  <!-- 03 -->
+  <section class="slot"><div class="artboard method dark" data-page="3">
+    <p class="eyebrow">How We Work</p>
+    <h2>我们怎么做</h2>
+    <div class="stats">
+      <div><strong>按批次</strong><p>每袋标注庄园、处理批次和烘焙日期。一个批次卖完就下架。</p></div>
+      <div><strong>每周二</strong><p>一周只烘一次，48 小时内寄出。</p></div>
+      <div><strong class="num">12 kg</strong><p>单批上限。单锅不超过 1.5 kg。</p></div>
+    </div>
+    <div class="folio"><span>MISTRIDGE · 做法</span><b>03 / 08</b></div>
+  </div></section>
+
+  <!-- 04 -->
+  <section class="slot"><div class="artboard bean t-paper" data-page="4">
+    <img class="bag" src="assets/pack-mistrise.webp" alt="雾起包装，晨雾白标签">
+    <div>
+      <p class="eyebrow">No.01 · 浅烘</p>
+      <h2>雾起</h2><span class="en">MIST RISE</span>
+      <p class="notes">white florals, lime zest, black tea</p>
+      <p class="notes-zh">白花 · 青柠 · 红茶</p>
+      <dl class="spec">
+        <div><dt>海拔</dt><dd class="num">1,450 m</dd></div>
+        <div><dt>品种</dt><dd>铁皮卡</dd></div>
+        <div><dt>处理</dt><dd>水洗</dd></div>
+        <div><dt>庄园</dt><dd>石阶</dd></div>
+      </dl>
+    </div>
+    <div class="folio"><span>MISTRIDGE · 新豆 1 / 3</span><b>04 / 08</b></div>
+  </div></section>
+
+  <!-- 05 -->
+  <section class="slot"><div class="artboard bean t-pine dark" data-page="5">
+    <img class="bag" src="assets/pack-ridgeline.webp" alt="岭线包装，岭墨绿标签">
+    <div>
+      <p class="eyebrow">No.02 · 中浅烘</p>
+      <h2>岭线</h2><span class="en">RIDGELINE</span>
+      <p class="notes">yellow peach, honey, caramel</p>
+      <p class="notes-zh">黄桃 · 蜂蜜 · 焦糖</p>
+      <dl class="spec">
+        <div><dt>海拔</dt><dd class="num">1,280 m</dd></div>
+        <div><dt>品种</dt><dd>波邦</dd></div>
+        <div><dt>处理</dt><dd>红蜜</dd></div>
+        <div><dt>庄园</dt><dd>云台</dd></div>
+      </dl>
+    </div>
+    <div class="folio"><span>MISTRIDGE · 新豆 2 / 3</span><b>05 / 08</b></div>
+  </div></section>
+
+  <!-- 06 -->
+  <section class="slot"><div class="artboard bean t-roast dark" data-page="6">
+    <img class="bag" src="assets/pack-riverbank.webp" alt="江岸包装，焙褐标签">
+    <div>
+      <p class="eyebrow">No.03 · 中深烘</p>
+      <h2>江岸</h2><span class="en">RIVERBANK</span>
+      <p class="notes">dark chocolate, hazelnut, red date</p>
+      <p class="notes-zh">黑巧 · 榛子 · 红枣</p>
+      <dl class="spec">
+        <div><dt>海拔</dt><dd class="num">1,050 m</dd></div>
+        <div><dt>品种</dt><dd>卡蒂姆</dd></div>
+        <div><dt>处理</dt><dd>日晒</dd></div>
+        <div><dt>庄园</dt><dd>林家坡</dd></div>
+      </dl>
+    </div>
+    <div class="folio"><span>MISTRIDGE · 新豆 3 / 3</span><b>06 / 08</b></div>
+  </div></section>
+
+  <!-- 07 -->
+  <section class="slot"><div class="artboard launch" data-page="7">
+    <div>
+      <p class="eyebrow">Subscribe &amp; Launch</p>
+      <h2>订阅与上市</h2>
+      <p class="date">10.13<small>周二 首批发售</small></p>
+      <p class="limit">首批限量 <b>300</b> 袋</p>
+      <p class="contact"><span>微信 <b>MISTRIDGE_COFFEE</b></span><span>邮箱 <b>hello@mistridge.coffee</b></span></p>
+    </div>
+    <div class="plans">
+      <div class="plan"><h3>轮换<small>ONE BAG</small></h3><p>每月 1 袋，三款轮流寄</p><span class="price">¥68<small>/ 月</small></span></div>
+      <div class="plan pick"><h3>常备<small>TWO BAGS</small></h3><p>每月 2 袋，自选两款，月中月底各寄一次</p><span class="price">¥128<small>/ 月</small></span></div>
+      <div class="plan"><h3>焙室<small>THE ROOM</small></h3><p>三款各 1 袋，附烘焙曲线与杯测记录</p><span class="price">¥178<small>/ 月</small></span></div>
+    </div>
+    <div class="folio"><span>MISTRIDGE · 保山</span><b>07 / 08</b></div>
+  </div></section>
+
+  <!-- 08 -->
+  <section class="slot"><div class="artboard brew" data-page="8">
+    <div class="head">
+      <div>
+        <p class="eyebrow">Brewing</p>
+        <h2>三种冲法，三款豆</h2>
+      </div>
+      <p class="lead">烘焙后第 <b>7–21</b> 天的建议起点<br>研磨以 Comandante C40 与 EK43 为参照</p>
+    </div>
+    <div class="bt">
+      <div class="corner"></div>
+      <div class="bh c1">雾起<small>MIST RISE</small></div>
+      <div class="bh c2">岭线<small>RIDGELINE</small></div>
+      <div class="bh c3">江岸<small>RIVERBANK</small></div>
+
+      <div class="m"><h3>手冲</h3><span>Pour Over</span><em>V60 02 · 闷蒸 30 s</em></div>
+      <dl><dt>粉水</dt><dd>15 g / 240 g<i>1:16</i></dd><dt>水温</dt><dd>93 ℃</dd><dt>研磨</dt><dd>C40 24 格<i>中细</i></dd><dt>时间</dt><dd>2:10–2:30</dd></dl>
+      <dl><dt>粉水</dt><dd>15 g / 240 g<i>1:16</i></dd><dt>水温</dt><dd>91 ℃</dd><dt>研磨</dt><dd>C40 25 格<i>中细</i></dd><dt>时间</dt><dd>2:15–2:35</dd></dl>
+      <dl><dt>粉水</dt><dd>15 g / 225 g<i>1:15</i></dd><dt>水温</dt><dd>88 ℃</dd><dt>研磨</dt><dd>C40 27 格<i>中</i></dd><dt>时间</dt><dd>2:00–2:20</dd></dl>
+
+      <div class="m"><h3>意式</h3><span>Espresso</span><em>9 bar · 养豆 10 天以上</em></div>
+      <dl><dt>粉液</dt><dd>18 g → 42 g<i>1:2.3</i></dd><dt>水温</dt><dd>94 ℃</dd><dt>萃取</dt><dd>27–31 s<i>预浸 5 s</i></dd><dt>适合</dt><dd><i style="margin:0">单饮</i></dd></dl>
+      <dl><dt>粉液</dt><dd>18 g → 38 g<i>1:2.1</i></dd><dt>水温</dt><dd>93 ℃</dd><dt>萃取</dt><dd>26–30 s</dd><dt>适合</dt><dd><i style="margin:0">单饮 · 澳白</i></dd></dl>
+      <dl><dt>粉液</dt><dd>18 g → 36 g<i>1:2</i></dd><dt>水温</dt><dd>91 ℃</dd><dt>萃取</dt><dd>25–28 s</dd><dt>适合</dt><dd><i style="margin:0">拿铁 · 卡布奇诺</i></dd></dl>
+
+      <div class="m"><h3>冷萃</h3><span>Cold Brew</span><em>常温水 · 4 ℃ 冷藏<br>三天内喝完</em></div>
+      <dl><dt>粉水</dt><dd>80 g / 1,000 g</dd><dt>研磨</dt><dd>EK43 11<i>粗</i></dd><dt>浸泡</dt><dd>14 小时</dd><dt>喝法</dt><dd><i style="margin:0">直饮，或加冰</i></dd></dl>
+      <dl><dt>粉水</dt><dd>90 g / 1,000 g</dd><dt>研磨</dt><dd>EK43 11<i>粗</i></dd><dt>浸泡</dt><dd>16 小时</dd><dt>喝法</dt><dd><i style="margin:0">直饮，或 1:1 兑冰水</i></dd></dl>
+      <dl><dt>粉水</dt><dd>100 g / 1,000 g</dd><dt>研磨</dt><dd>EK43 12<i>粗</i></dd><dt>浸泡</dt><dd>18 小时</dd><dt>喝法</dt><dd><i style="margin:0">1:1 兑牛奶</i></dd></dl>
+    </div>
+    <div class="folio"><span>MISTRIDGE · 冲煮参数</span><b>08 / 08</b></div>
+  </div></section>
+
+</div>
+<script>
+  const fit = () => document.documentElement.style.setProperty('--s', Math.min(innerWidth / 1920, innerHeight / 1080));
+  fit(); addEventListener('resize', fit);
+  const deck = document.querySelector('.deck');
+  const slots = [...document.querySelectorAll('.slot')];
+  addEventListener('keydown', e => {
+    const d = ['ArrowDown', 'ArrowRight', 'PageDown', ' '].includes(e.key) ? 1 : ['ArrowUp', 'ArrowLeft', 'PageUp'].includes(e.key) ? -1 : 0;
+    if (!d) return;
+    e.preventDefault();
+    const i = Math.round(deck.scrollTop / innerHeight);
+    const t = slots[Math.max(0, Math.min(slots.length - 1, i + d))];
+    t.scrollIntoView({ behavior: 'smooth' });
+  });
+</script>
+</body>
+</html>

@@ -41,6 +41,7 @@ import browseRouter from './api/browse.js';
 import publishRouter from './api/publish.js';
 import chataiRouter from './api/chatai.js';
 import recentRouter from './api/recent.js';
+import onboardingRouter from './api/onboarding.js';
 import { userPluginsRouter, projectPluginsRouter } from './api/plugins.js';
 import { authRouter, authGuard } from './auth/middleware.js';
 import { sweepOrphanRuns } from './engine/runs/store.js';
@@ -157,6 +158,8 @@ app.use('/api/projects', chataiRouter);          // 演出端点：页面 → ch
 app.use('/api/projects', projectPluginsRouter);  // 2026-05-18: project 级 plugin 上传/卸载/列表
 // 跨项目聚合：/api/sessions/recent
 app.use('/api', recentRouter);
+// 新手引导（2026-09-12）：第一次进来的人在这儿领一份做好的示例项目
+app.use('/api/onboarding', onboardingRouter);
 // skills 全局
 app.use('/api/skills', skillsRouter);
 // 用户级 plugin（跨 project 全局）

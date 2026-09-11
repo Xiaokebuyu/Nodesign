@@ -1,0 +1,2136 @@
+{
+ "v": 1,
+ "preset": "办公标准",
+ "_版式": "精品咖啡品牌刊物体：宽版心留白、宋体正文固定行距、英文眉题小字母间距、岭墨绿单色点缀、细规则线分节",
+ "tokens": {
+  "page": {
+   "size": "A4",
+   "landscape": false,
+   "marginsTwip": {
+    "top": 1700,
+    "bottom": 1560,
+    "left": 1900,
+    "right": 1700,
+    "header": 850,
+    "footer": 850,
+    "gutter": 0
+   },
+   "docGrid": null
+  },
+  "lang": {
+   "latin": "en-US",
+   "eastAsia": "zh-CN"
+  },
+  "numbering": {
+   "要点": "项目符号"
+  },
+  "fonts": {
+   "正文": {
+    "eastAsia": "宋体",
+    "ascii": "Georgia",
+    "hAnsi": "Georgia",
+    "cs": "Georgia"
+   },
+   "标题": {
+    "eastAsia": "宋体",
+    "ascii": "Georgia",
+    "hAnsi": "Georgia",
+    "cs": "Georgia"
+   },
+   "标签": {
+    "eastAsia": "微软雅黑",
+    "ascii": "Arial",
+    "hAnsi": "Arial",
+    "cs": "Arial"
+   },
+   "引文": {
+    "eastAsia": "楷体",
+    "ascii": "Georgia",
+    "hAnsi": "Georgia",
+    "cs": "Georgia"
+   }
+  },
+  "base": {
+   "sizePt": "五号",
+   "color": "2B2B28",
+   "font": "正文",
+   "spacing": {
+    "line": 20,
+    "lineRule": "exact",
+    "beforePt": 0,
+    "afterPt": 0
+   },
+   "kernPt": 1,
+   "cjk": {
+    "kinsoku": true,
+    "autoSpaceDE": true,
+    "autoSpaceDN": true,
+    "adjustRightInd": true,
+    "snapToGrid": false,
+    "overflowPunct": true,
+    "wordWrap": true
+   }
+  },
+  "styles": {
+   "Normal": {
+    "type": "paragraph",
+    "name": "Normal",
+    "qFormat": true,
+    "run": {
+     "font": "正文",
+     "sizePt": "五号",
+     "color": "2B2B28"
+    },
+    "para": {
+     "align": "both",
+     "indent": {
+      "firstLineChars": 200
+     },
+     "spacing": {
+      "line": 20,
+      "lineRule": "exact"
+     },
+     "widowControl": true
+    }
+   },
+   "Title": {
+    "type": "paragraph",
+    "name": "Title",
+    "basedOn": "Normal",
+    "next": "Normal",
+    "qFormat": true,
+    "run": {
+     "font": "标题",
+     "sizePt": 40,
+     "color": "2F3B34",
+     "spacingTwip": 60
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 50,
+      "lineRule": "exact",
+      "beforePt": 0,
+      "afterPt": 6
+     }
+    }
+   },
+   "眉题": {
+    "type": "paragraph",
+    "name": "眉题",
+    "basedOn": "Normal",
+    "next": "Heading1",
+    "qFormat": true,
+    "run": {
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B",
+     "spacingTwip": 40,
+     "caps": true
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 14,
+      "lineRule": "exact",
+      "beforePt": 0,
+      "afterPt": 6
+     },
+     "keepNext": true
+    }
+   },
+   "Heading1": {
+    "type": "paragraph",
+    "name": "heading 1",
+    "basedOn": "Normal",
+    "next": "导语",
+    "qFormat": true,
+    "uiPriority": 9,
+    "run": {
+     "font": "标题",
+     "sizePt": "小一",
+     "color": "2F3B34",
+     "spacingTwip": 20
+    },
+    "para": {
+     "outlineLevel": 0,
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 34,
+      "lineRule": "exact",
+      "beforePt": 0,
+      "afterPt": 14
+     },
+     "keepNext": true,
+     "borders": {
+      "bottom": {
+       "style": "single",
+       "sizePt8": 4,
+       "color": "2F3B34",
+       "spacePt": 8
+      }
+     }
+    }
+   },
+   "Heading2": {
+    "type": "paragraph",
+    "name": "heading 2",
+    "basedOn": "Normal",
+    "next": "Normal",
+    "qFormat": true,
+    "uiPriority": 9,
+    "run": {
+     "font": "标题",
+     "sizePt": "四号",
+     "bold": true,
+     "color": "2F3B34"
+    },
+    "para": {
+     "outlineLevel": 1,
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 22,
+      "lineRule": "exact",
+      "beforePt": 20,
+      "afterPt": 6
+     },
+     "keepNext": true
+    }
+   },
+   "Heading3": {
+    "type": "paragraph",
+    "name": "heading 3",
+    "basedOn": "Normal",
+    "next": "Normal",
+    "qFormat": true,
+    "uiPriority": 9,
+    "run": {
+     "font": "标签",
+     "sizePt": 9,
+     "bold": true,
+     "color": "8A5A3B",
+     "spacingTwip": 20
+    },
+    "para": {
+     "outlineLevel": 2,
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 16,
+      "lineRule": "exact",
+      "beforePt": 12,
+      "afterPt": 4
+     },
+     "keepNext": true
+    }
+   },
+   "导语": {
+    "type": "paragraph",
+    "name": "导语",
+    "basedOn": "Normal",
+    "next": "Normal",
+    "qFormat": true,
+    "run": {
+     "font": "引文",
+     "sizePt": "小四",
+     "color": "4A524C"
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 24,
+      "lineRule": "exact",
+      "beforePt": 0,
+      "afterPt": 16
+     }
+    }
+   },
+   "Quote": {
+    "type": "paragraph",
+    "name": "Quote",
+    "basedOn": "Normal",
+    "next": "Normal",
+    "qFormat": true,
+    "run": {
+     "font": "引文",
+     "sizePt": "四号",
+     "color": "2F3B34"
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0,
+      "leftChars": 200
+     },
+     "spacing": {
+      "line": 28,
+      "lineRule": "exact",
+      "beforePt": 14,
+      "afterPt": 14
+     },
+     "borders": {
+      "left": {
+       "style": "single",
+       "sizePt8": 12,
+       "color": "8A5A3B",
+       "spacePt": 10
+      }
+     }
+    }
+   },
+   "要点段": {
+    "type": "paragraph",
+    "name": "要点段",
+    "basedOn": "Normal",
+    "next": "要点段",
+    "qFormat": true,
+    "para": {
+     "list": "要点",
+     "contextualSpacing": true,
+     "indent": {
+      "leftChars": 150,
+      "hangingChars": 150
+     },
+     "spacing": {
+      "line": 20,
+      "lineRule": "exact",
+      "afterPt": 2
+     }
+    }
+   },
+   "表文": {
+    "type": "paragraph",
+    "name": "表文",
+    "basedOn": "Normal",
+    "next": "表文",
+    "run": {
+     "sizePt": 9
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 15,
+      "lineRule": "exact",
+      "beforePt": 3,
+      "afterPt": 3
+     }
+    }
+   },
+   "表头": {
+    "type": "paragraph",
+    "name": "表头",
+    "basedOn": "表文",
+    "next": "表文",
+    "run": {
+     "font": "标签",
+     "sizePt": 8,
+     "bold": true,
+     "color": "FFFFFF",
+     "spacingTwip": 10
+    },
+    "para": {
+     "align": "left",
+     "spacing": {
+      "line": 14,
+      "lineRule": "exact",
+      "beforePt": 4,
+      "afterPt": 4
+     }
+    }
+   },
+   "题注": {
+    "type": "paragraph",
+    "name": "题注",
+    "basedOn": "Normal",
+    "next": "Normal",
+    "run": {
+     "font": "标签",
+     "sizePt": 7.5,
+     "color": "7A7A72"
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 13,
+      "lineRule": "exact",
+      "beforePt": 5,
+      "afterPt": 10
+     }
+    }
+   },
+   "页脚": {
+    "type": "paragraph",
+    "name": "页脚文字",
+    "basedOn": "Normal",
+    "run": {
+     "font": "标签",
+     "sizePt": 7.5,
+     "color": "7A7A72",
+     "spacingTwip": 20
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 12,
+      "lineRule": "exact"
+     },
+     "tabs": [
+      {
+       "pos": 8306,
+       "val": "right"
+      }
+     ]
+    }
+   },
+   "规格": {
+    "type": "paragraph",
+    "name": "规格",
+    "basedOn": "Normal",
+    "next": "规格",
+    "run": {
+     "sizePt": 9.5
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 16,
+      "lineRule": "exact",
+      "beforePt": 4,
+      "afterPt": 2
+     },
+     "tabs": [
+      {
+       "pos": 1700,
+       "val": "left"
+      }
+     ],
+     "borders": {
+      "bottom": {
+       "style": "single",
+       "sizePt8": 2,
+       "color": "CFCBC2",
+       "spacePt": 3
+      }
+     },
+     "keepNext": true
+    }
+   },
+   "目录项": {
+    "type": "paragraph",
+    "name": "目录项",
+    "basedOn": "Normal",
+    "next": "目录项",
+    "run": {
+     "sizePt": "小四"
+    },
+    "para": {
+     "align": "left",
+     "indent": {
+      "firstLineChars": 0
+     },
+     "spacing": {
+      "line": 20,
+      "lineRule": "exact",
+      "beforePt": 8,
+      "afterPt": 4
+     },
+     "tabs": [
+      {
+       "pos": 900,
+       "val": "left"
+      },
+      {
+       "pos": 8306,
+       "val": "right"
+      }
+     ],
+     "borders": {
+      "bottom": {
+       "style": "single",
+       "sizePt8": 2,
+       "color": "CFCBC2",
+       "spacePt": 3
+      }
+     }
+    }
+   }
+  }
+ },
+ "footer": [
+  {
+   "t": "p",
+   "style": "页脚",
+   "runs": [
+    {
+     "text": "MISTRIDGE COFFEE · 雾岭咖啡 品牌手册 2026"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "fld": "PAGE"
+    }
+   ]
+  }
+ ],
+ "content": [
+  {
+   "t": "p",
+   "style": "眉题",
+   "spacing": {
+    "beforePt": 150
+   },
+   "text": "BRAND BOOK · VOL. 01 · 2026"
+  },
+  {
+   "t": "p",
+   "style": "Title",
+   "text": "雾岭咖啡"
+  },
+  {
+   "t": "p",
+   "style": "Title",
+   "sizePt": 22,
+   "spacing": {
+    "line": 30,
+    "lineRule": "exact",
+    "afterPt": 28
+   },
+   "runs": [
+    {
+     "text": "MISTRIDGE",
+     "spacingTwip": 120,
+     "color": "8A5A3B"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "导语",
+   "borders": {
+    "top": {
+     "style": "single",
+     "sizePt8": 4,
+     "color": "2F3B34",
+     "spacePt": 12
+    }
+   },
+   "text": "品牌手册：故事、豆单、冲煮参数与视觉规范"
+  },
+  {
+   "t": "p",
+   "style": "题注",
+   "spacing": {
+    "beforePt": 200
+   },
+   "runs": [
+    "云南 · 保山 · 高黎贡山东麓",
+    {
+     "br": true
+    },
+    "小批量烘焙 · 每周一次 · 每批不超过十二公斤"
+   ]
+  },
+  {
+   "t": "pageBreak"
+  },
+  {
+   "t": "p",
+   "style": "眉题",
+   "text": "CONTENTS"
+  },
+  {
+   "t": "p",
+   "style": "Heading1",
+   "outlineLevel": 8,
+   "text": "目录"
+  },
+  {
+   "t": "p",
+   "style": "目录项",
+   "runs": [
+    {
+     "text": "01",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t品牌故事与理念\t"
+    },
+    {
+     "text": "STORY",
+     "font": "标签",
+     "sizePt": 7.5,
+     "color": "7A7A72",
+     "spacingTwip": 30
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "目录项",
+   "runs": [
+    {
+     "text": "02",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t三款主力豆\t"
+    },
+    {
+     "text": "THE BEANS",
+     "font": "标签",
+     "sizePt": 7.5,
+     "color": "7A7A72",
+     "spacingTwip": 30
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "目录项",
+   "runs": [
+    {
+     "text": "03",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t冲煮参数\t"
+    },
+    {
+     "text": "BREWING",
+     "font": "标签",
+     "sizePt": 7.5,
+     "color": "7A7A72",
+     "spacingTwip": 30
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "目录项",
+   "runs": [
+    {
+     "text": "04",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t包装与视觉规范\t"
+    },
+    {
+     "text": "IDENTITY",
+     "font": "标签",
+     "sizePt": 7.5,
+     "color": "7A7A72",
+     "spacingTwip": 30
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "Quote",
+   "spacing": {
+    "beforePt": 60
+   },
+   "text": "山里的咖啡树开花那几天，早上的雾一直压到半山腰。我们的名字从那里来。"
+  },
+  {
+   "t": "pageBreak"
+  },
+  {
+   "t": "p",
+   "style": "眉题",
+   "text": "01 · STORY"
+  },
+  {
+   "t": "p",
+   "style": "Heading1",
+   "text": "品牌故事与理念"
+  },
+  {
+   "t": "p",
+   "style": "导语",
+   "text": "雾岭是一个人经营的烘焙坊。生豆来自高黎贡山脚下的三个合作庄园，在保山的一间小烘焙室里完成烘焙、分装和寄出。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "text": "一座山，三块地"
+  },
+  {
+   "t": "p",
+   "text": "高黎贡山东坡向下一直落到怒江河谷。从江边的潞江坝到半山的百花岭，海拔差出去四百多米，气温、雨量和雾的时长都跟着变。同一个品种种在不同高度，喝起来是不同的咖啡。"
+  },
+  {
+   "t": "p",
+   "text": "雾岭的三款主力豆分别来自这条坡上的三个位置：半山的石阶庄园、中段的云台庄园、靠近江岸的林家坡庄园。三块地由三户人家打理，合作的年头最短的也有四季。每年采收季，我们上山住几天，看鲜果成熟度，参与处理批次的挑选，然后按批次收豆。"
+  },
+  {
+   "t": "p",
+   "text": "云南咖啡过去多被当作拼配里的基底。我们想做的事情很朴素：把一块地、一个批次的样子老实地烘出来，让人喝得出它来自哪里。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "text": "我们守的几件事"
+  },
+  {
+   "t": "p",
+   "style": "要点段",
+   "runs": [
+    {
+     "text": "按批次，不按库存。",
+     "bold": true
+    },
+    "每袋豆子标注庄园、处理批次和烘焙日期。一个批次卖完就下架，不用别的豆子补。"
+   ]
+  },
+  {
+   "t": "p",
+   "style": "要点段",
+   "runs": [
+    {
+     "text": "小批量，按周烘。",
+     "bold": true
+    },
+    "每周二烘焙，单锅不超过一点五公斤，每周总量不超过十二公斤。订单在烘焙后四十八小时内寄出。"
+   ]
+  },
+  {
+   "t": "p",
+   "style": "要点段",
+   "runs": [
+    {
+     "text": "价格公开。",
+     "bold": true
+    },
+    "生豆收购价高于当季本地商品豆收购价，具体价格在年度采购记录里公开给订阅用户。"
+   ]
+  },
+  {
+   "t": "p",
+   "style": "要点段",
+   "runs": [
+    {
+     "text": "少说形容词。",
+     "bold": true
+    },
+    "风味描述只写杯测时真正喝到的东西，不写烘焙师自己也喝不出的词。"
+   ]
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "text": "说话的方式"
+  },
+  {
+   "t": "p",
+   "text": "雾岭对外的文字保持克制：短句，具体的数字，少用感叹号。说庄园时说海拔、品种和人名，说风味时说能对应到食物的东西。任何一段文案里，事实都应当多过形容。"
+  },
+  {
+   "t": "pageBreak"
+  },
+  {
+   "t": "p",
+   "style": "眉题",
+   "text": "02 · THE BEANS"
+  },
+  {
+   "t": "p",
+   "style": "Heading1",
+   "text": "三款主力豆"
+  },
+  {
+   "t": "p",
+   "style": "导语",
+   "text": "三款豆子按海拔从高到低排列，对应三种烘焙深度。风味描述来自 2025/26 采收季的杯测记录，新批次到货后会重新杯测并更新。"
+  },
+  {
+   "t": "p",
+   "style": "Heading3",
+   "text": "NO.01 · MIST RISE"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "spacing": {
+    "beforePt": 0
+   },
+   "text": "雾起",
+   "borders": {
+    "bottom": {
+     "style": "single",
+     "sizePt8": 6,
+     "color": "2F3B34",
+     "spacePt": 4
+    }
+   }
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "庄园",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "石阶庄园 · 隆阳区芒宽乡百花岭"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "海拔",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "1,450 米"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "品种",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "铁皮卡"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "处理法",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "水洗 · 发酵 36 小时 · 棚架日晒干燥 18 天"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "烘焙度",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "浅烘 · Agtron 78（整豆）· 一爆后发展 55 秒"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "风味",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "白色花香、青柠皮、红茶，回甘带甜橙"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "适合",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "手冲 · 冷萃"
+    }
+   ],
+   "keepNext": false
+  },
+  {
+   "t": "p",
+   "spacing": {
+    "beforePt": 8
+   },
+   "text": "石阶庄园在三块地里位置最高，午后常起雾，果实成熟慢，酸质清亮。烘焙时控制发展时间，保留花香和柑橘调，热的时候偏茶感，放凉后甜度更明显。"
+  },
+  {
+   "t": "p",
+   "style": "Heading3",
+   "spacing": {
+    "beforePt": 22
+   },
+   "text": "NO.02 · RIDGELINE"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "spacing": {
+    "beforePt": 0
+   },
+   "text": "岭线",
+   "borders": {
+    "bottom": {
+     "style": "single",
+     "sizePt8": 6,
+     "color": "2F3B34",
+     "spacePt": 4
+    }
+   }
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "庄园",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "云台庄园 · 隆阳区芒宽乡"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "海拔",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "1,280 米"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "品种",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "波邦"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "处理法",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "红蜜处理 · 保留约 60% 果胶 · 非洲床干燥 22 天"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "烘焙度",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "中浅烘 · Agtron 68（整豆）· 一爆后发展 80 秒"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "风味",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "黄桃、蜂蜜、焦糖，尾段可可"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "适合",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "手冲 · 意式单品 · 冷萃"
+    }
+   ],
+   "keepNext": false
+  },
+  {
+   "t": "p",
+   "spacing": {
+    "beforePt": 8
+   },
+   "text": "岭线是三款里最均衡的一支，也是订阅用户复购最多的。蜜处理带来厚一些的口感和成熟水果的甜，烘焙稍往后推，让焦糖和可可接住酸质。"
+  },
+  {
+   "t": "p",
+   "style": "Heading3",
+   "spacing": {
+    "beforePt": 22
+   },
+   "text": "NO.03 · RIVERBANK"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "spacing": {
+    "beforePt": 0
+   },
+   "text": "江岸",
+   "borders": {
+    "bottom": {
+     "style": "single",
+     "sizePt8": 6,
+     "color": "2F3B34",
+     "spacePt": 4
+    }
+   }
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "庄园",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "林家坡庄园 · 隆阳区潞江镇"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "海拔",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "1,050 米"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "品种",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "卡蒂姆 P7963"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "处理法",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "日晒 · 整果干燥 28 天 · 每日翻动四次"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "烘焙度",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "中深烘 · Agtron 55（整豆）· 二爆前出锅"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "风味",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "黑巧克力、烤榛子、红枣，甘蔗般的甜感"
+    }
+   ]
+  },
+  {
+   "t": "p",
+   "style": "规格",
+   "runs": [
+    {
+     "text": "适合",
+     "font": "标签",
+     "sizePt": 8,
+     "color": "8A5A3B"
+    },
+    {
+     "text": "\t"
+    },
+    {
+     "text": "意式 · 加奶饮品 · 冷萃"
+    }
+   ],
+   "keepNext": false
+  },
+  {
+   "t": "p",
+   "spacing": {
+    "beforePt": 8
+   },
+   "text": "江岸来自潞江坝，河谷热，日照足。日晒处理把果实的甜留进豆子，中深烘焙让它在牛奶里站得住。做意式浓缩时油脂细密，做拿铁时巧克力感清楚。"
+  },
+  {
+   "t": "pageBreak"
+  },
+  {
+   "t": "p",
+   "style": "眉题",
+   "text": "03 · BREWING"
+  },
+  {
+   "t": "p",
+   "style": "Heading1",
+   "text": "冲煮参数"
+  },
+  {
+   "t": "p",
+   "style": "导语",
+   "text": "以下参数是烘焙后第 7 至 21 天的建议起点。研磨刻度以 Comandante C40 和 EK43 为参照，其他磨豆机请按粗细描述调整。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "spacing": {
+    "beforePt": 6
+   },
+   "text": "手冲 · Pour Over"
+  },
+  {
+   "t": "table",
+   "widthsTwip": [
+    1906,
+    2134,
+    2133,
+    2133
+   ],
+   "rows": [
+    [
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "参数"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "雾起"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "岭线"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "江岸"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "粉量 / 水量"
+     },
+     {
+      "style": "表文",
+      "text": "15 g / 240 g"
+     },
+     {
+      "style": "表文",
+      "text": "15 g / 240 g"
+     },
+     {
+      "style": "表文",
+      "text": "15 g / 225 g"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "粉水比"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "1 : 16"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "1 : 16"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "1 : 15"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "水温"
+     },
+     {
+      "style": "表文",
+      "text": "93 ℃"
+     },
+     {
+      "style": "表文",
+      "text": "91 ℃"
+     },
+     {
+      "style": "表文",
+      "text": "88 ℃"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "研磨"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "中细 · C40 24 格"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "中细 · C40 25 格"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "中 · C40 27 格"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "注水"
+     },
+     {
+      "style": "表文",
+      "text": "闷蒸 40 g / 30 s，分三段"
+     },
+     {
+      "style": "表文",
+      "text": "闷蒸 40 g / 30 s，分三段"
+     },
+     {
+      "style": "表文",
+      "text": "闷蒸 35 g / 30 s，分两段"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "总时间"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "2:10 – 2:30"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "2:15 – 2:35"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "2:00 – 2:20"
+     }
+    ]
+   ]
+  },
+  {
+   "t": "p",
+   "style": "题注",
+   "text": "滤杯参照 V60 02。酸感尖锐时调细一格或升温 1 ℃；苦涩或收尾发干时调粗一格。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "text": "意式 · Espresso"
+  },
+  {
+   "t": "table",
+   "widthsTwip": [
+    1906,
+    2134,
+    2133,
+    2133
+   ],
+   "rows": [
+    [
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "参数"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "雾起"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "岭线"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "江岸"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "粉量"
+     },
+     {
+      "style": "表文",
+      "text": "18 g"
+     },
+     {
+      "style": "表文",
+      "text": "18 g"
+     },
+     {
+      "style": "表文",
+      "text": "18 g"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "液重"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "42 g（1 : 2.3）"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "38 g（1 : 2.1）"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "36 g（1 : 2）"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "水温"
+     },
+     {
+      "style": "表文",
+      "text": "94 ℃"
+     },
+     {
+      "style": "表文",
+      "text": "93 ℃"
+     },
+     {
+      "style": "表文",
+      "text": "91 ℃"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "萃取时间"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "27 – 31 s"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "26 – 30 s"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "25 – 28 s"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "压力"
+     },
+     {
+      "style": "表文",
+      "text": "9 bar，预浸 5 s"
+     },
+     {
+      "style": "表文",
+      "text": "9 bar"
+     },
+     {
+      "style": "表文",
+      "text": "9 bar"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "建议饮用"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "单饮"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "单饮 · 澳白"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "拿铁 · 卡布奇诺"
+     }
+    ]
+   ]
+  },
+  {
+   "t": "p",
+   "style": "题注",
+   "text": "意式用豆建议养豆 10 天以上。雾起为浅烘，做浓缩需要更细的研磨和更长的液重比。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "text": "冷萃 · Cold Brew",
+   "pageBreakBefore": true
+  },
+  {
+   "t": "table",
+   "widthsTwip": [
+    1906,
+    2134,
+    2133,
+    2133
+   ],
+   "rows": [
+    [
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "参数"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "雾起"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "岭线"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "江岸"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "粉量 / 水量"
+     },
+     {
+      "style": "表文",
+      "text": "80 g / 1,000 g"
+     },
+     {
+      "style": "表文",
+      "text": "90 g / 1,000 g"
+     },
+     {
+      "style": "表文",
+      "text": "100 g / 1,000 g"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "研磨"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "粗 · EK43 刻度 11"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "粗 · EK43 刻度 11"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "粗 · EK43 刻度 12"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "水温 / 环境"
+     },
+     {
+      "style": "表文",
+      "text": "常温水，4 ℃ 冷藏"
+     },
+     {
+      "style": "表文",
+      "text": "常温水，4 ℃ 冷藏"
+     },
+     {
+      "style": "表文",
+      "text": "常温水，4 ℃ 冷藏"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "浸泡时间"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "14 小时"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "16 小时"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "18 小时"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "饮用"
+     },
+     {
+      "style": "表文",
+      "text": "直饮，或加冰"
+     },
+     {
+      "style": "表文",
+      "text": "直饮，或 1 : 1 兑冰水"
+     },
+     {
+      "style": "表文",
+      "text": "1 : 1 兑牛奶"
+     }
+    ]
+   ]
+  },
+  {
+   "t": "p",
+   "style": "题注",
+   "text": "过滤后冷藏保存，三天内喝完。"
+  },
+  {
+   "t": "pageBreak"
+  },
+  {
+   "t": "p",
+   "style": "眉题",
+   "text": "04 · IDENTITY"
+  },
+  {
+   "t": "p",
+   "style": "Heading1",
+   "text": "包装与视觉规范"
+  },
+  {
+   "t": "p",
+   "style": "导语",
+   "text": "视觉的出发点是山间清晨：雾的灰白、林线的深绿、烘焙后豆子的褐。三种颜色，一套字体，一种标签。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "spacing": {
+    "beforePt": 6
+   },
+   "text": "主色"
+  },
+  {
+   "t": "table",
+   "widthsTwip": [
+    1100,
+    1906,
+    1500,
+    1900,
+    1900
+   ],
+   "rows": [
+    [
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "色样"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "名称"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "HEX"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "RGB"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "CMYK（印刷参考）"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "2F3B34",
+      "text": " "
+     },
+     {
+      "style": "表文",
+      "runs": [
+       {
+        "text": "岭墨绿",
+        "bold": true
+       },
+       {
+        "br": true
+       },
+       "主色 · 字标、标题"
+      ]
+     },
+     {
+      "style": "表文",
+      "text": "#2F3B34"
+     },
+     {
+      "style": "表文",
+      "text": "47 59 52"
+     },
+     {
+      "style": "表文",
+      "text": "75 55 70 55"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "E6E3DC",
+      "text": " "
+     },
+     {
+      "style": "表文",
+      "runs": [
+       {
+        "text": "晨雾白",
+        "bold": true
+       },
+       {
+        "br": true
+       },
+       "底色 · 标签纸"
+      ]
+     },
+     {
+      "style": "表文",
+      "text": "#E6E3DC"
+     },
+     {
+      "style": "表文",
+      "text": "230 227 220"
+     },
+     {
+      "style": "表文",
+      "text": "8 8 12 0"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "8A5A3B",
+      "text": " "
+     },
+     {
+      "style": "表文",
+      "runs": [
+       {
+        "text": "焙褐",
+        "bold": true
+       },
+       {
+        "br": true
+       },
+       "点缀 · 编号、批次"
+      ]
+     },
+     {
+      "style": "表文",
+      "text": "#8A5A3B"
+     },
+     {
+      "style": "表文",
+      "text": "138 90 59"
+     },
+     {
+      "style": "表文",
+      "text": "30 60 80 25"
+     }
+    ]
+   ]
+  },
+  {
+   "t": "p",
+   "style": "题注",
+   "text": "色彩面积比约为 晨雾白 70 : 岭墨绿 25 : 焙褐 5。CMYK 值为参考起点，每批印刷前以打样校色为准。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "text": "字体"
+  },
+  {
+   "t": "table",
+   "widthsTwip": [
+    1906,
+    3200,
+    3200
+   ],
+   "rows": [
+    [
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "用途"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "中文"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "西文"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "字标与标题"
+     },
+     {
+      "style": "表文",
+      "text": "思源宋体 SemiBold"
+     },
+     {
+      "style": "表文",
+      "text": "Cormorant Garamond Medium"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "正文与说明"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "思源宋体 Regular"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "Cormorant Garamond Regular"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "参数与批次"
+     },
+     {
+      "style": "表文",
+      "text": "思源黑体 Regular"
+     },
+     {
+      "style": "表文",
+      "text": "IBM Plex Mono Regular"
+     }
+    ]
+   ]
+  },
+  {
+   "t": "p",
+   "style": "题注",
+   "text": "以上字体均为开源授权（SIL OFL），可用于商业印刷与网店。西文字标 MISTRIDGE 统一使用全大写，字距 +200。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "text": "标签版式",
+   "pageBreakBefore": true
+  },
+  {
+   "t": "p",
+   "text": "标签尺寸 80 × 120 mm，贴于 250 g 牛皮纸自立袋正面居中。纸材为晨雾白哑面不干胶，文字单色印岭墨绿，仅豆款编号与批次号使用焙褐。版面自上而下分为五个区："
+  },
+  {
+   "t": "table",
+   "widthsTwip": [
+    1500,
+    1600,
+    5206
+   ],
+   "rows": [
+    [
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "区域"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "高度"
+     },
+     {
+      "style": "表头",
+      "shading": "2F3B34",
+      "text": "内容与字号"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "A · 字标"
+     },
+     {
+      "style": "表文",
+      "text": "22 mm"
+     },
+     {
+      "style": "表文",
+      "text": "雾岭 / MISTRIDGE 字标，居中；下方 0.5 pt 细线"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "B · 豆名"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "30 mm"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "编号（焙褐，8 pt）· 中文豆名（24 pt）· 西文豆名（10 pt）"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "C · 产地"
+     },
+     {
+      "style": "表文",
+      "text": "28 mm"
+     },
+     {
+      "style": "表文",
+      "text": "庄园、海拔、品种、处理法、烘焙度，左对齐两栏，8 pt"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "D · 风味"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "20 mm"
+     },
+     {
+      "style": "表文",
+      "shading": "EFEDE8",
+      "text": "三至四个风味词，思源宋体 10 pt，词间以 · 分隔"
+     }
+    ],
+    [
+     {
+      "style": "表文",
+      "text": "E · 批次"
+     },
+     {
+      "style": "表文",
+      "text": "20 mm"
+     },
+     {
+      "style": "表文",
+      "text": "净含量 200 g、烘焙日期、批次号（焙褐，等宽 8 pt）、保质期与储存说明、生产者信息"
+     }
+    ]
+   ]
+  },
+  {
+   "t": "p",
+   "style": "题注",
+   "text": "四边安全边距 6 mm。烘焙日期和批次号为手写或盖章区，其余内容印刷。"
+  },
+  {
+   "t": "p",
+   "style": "Heading2",
+   "text": "使用禁忌"
+  },
+  {
+   "t": "p",
+   "style": "要点段",
+   "text": "字标不拉伸、不加描边和投影，不放在照片等复杂底图上。"
+  },
+  {
+   "t": "p",
+   "style": "要点段",
+   "text": "不引入第四种主色；季节限定款只允许更换焙褐为当季点缀色。"
+  },
+  {
+   "t": "p",
+   "style": "要点段",
+   "text": "包装上不使用咖啡杯、咖啡豆等通用插图，产地信息本身就是视觉内容。"
+  },
+  {
+   "t": "p",
+   "style": "要点段",
+   "text": "所有对外物料的风味描述与本手册豆单保持一致，更新时同步修改。"
+  }
+ ]
+}

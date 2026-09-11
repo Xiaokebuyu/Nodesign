@@ -20,9 +20,22 @@ describe('新人首页：精选卡另起一个分区', () => {
     const i = HOME.indexOf("t('找找灵感')");
     expect(i, 'Home.jsx 里找不到「找找灵感」分区').toBeGreaterThan(0);
     const before = HOME.slice(Math.max(0, i - 400), i);
-    expect(before, '分区标题得挂在 projects.length === 0 && featured.length > 0 的条件下')
-      .toMatch(/projects\.length === 0 && featured\.length > 0/);
+    expect(before, '分区标题得挂在 own.length === 0 && featured.length > 0 的条件下')
+      .toMatch(/own\.length === 0 && featured\.length > 0/);
     expect(HOME.indexOf('className="ndd-grid"', i), '分区标题得排在精选网格前面').toBeGreaterThan(i);
+  });
+
+  /**
+   * 09-12：新用户第一次进来会收到一份示例项目（server/onboarding/seed.js）。
+   * 要是把它算进「我的项目」，`projects.length === 0` 当场为假 —— 空状态那张大卡和
+   * 「找找灵感」一起消失，新人比改之前**少**看见两样东西。所以首页一律看 own。
+   */
+  it('⭐ 系统送的示例不算「我的项目」：空状态与分区都看 own', () => {
+    const SAMPLE = fs.readFileSync(path.join(HERE, 'home-sample.js'), 'utf8');
+    expect(SAMPLE, 'ownProjects 不再把示例过滤掉').toMatch(/filter\(\(p\) => !p\.isSample\)/);
+    expect(HOME, '首页没用 ownProjects').toMatch(/const own = ownProjects\(projects\)/);
+    expect(HOME, '空状态还在看 projects.length').toMatch(/\{own\.length === 0 && \(\s*<EmptyState/);
+    expect(HOME.match(/projects\.length === 0/g), '还有地方拿 projects.length 当"没有项目"').toBe(null);
   });
 
   it('分区跟上面的空状态大卡拉开距离（不然又挤回去）', () => {

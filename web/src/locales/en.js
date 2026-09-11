@@ -589,4 +589,5 @@ export default {
   '收起快捷键提示': 'Hide the shortcut hints',
   '展开快捷键提示': 'Show the shortcut hints',
   '收起 / 展开快捷键提示': 'Hide / show the shortcut hints',
+  '示例': 'Sample',
 };

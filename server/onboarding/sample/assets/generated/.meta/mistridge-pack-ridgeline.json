@@ -1,0 +1,10 @@
+{
+  "prompt": "Reproduce the reference illustration (the first reference image) with ONE single change.\nTHE ONLY CHANGE: 把正面标签的颜色换成深岭墨绿色 #2F3B34（哑光纸，细边框同色系略浅），标签仍然完全空白无文字\nEverything else must be identical to the reference: the exact same pose and body position; the same framing, camera distance and position of the subject in the frame; the same height and body proportions; the same face and the same expression; the same hairstyle and hair color; the same hand positions, holding the same things (empty hands stay empty); the same top garment — identical cut, color, sleeves, neckline and every detail; the same bottom garment (skirt / trousers) — identical in every detail; the same footwear, identical in every detail; the same socks / legwear (if the reference has none, the result has none); the same accessories — nothing added, nothing removed; the same background; the same lighting and color grading; the same art style and rendering technique.\nDo NOT invent anything that is not in the reference: no added straps, suspenders, belts, hair ornaments, jewelry or extra garments.\nAbsences are part of the reference: whatever the reference does not have, the result must not have.\nDo NOT change the subject's height, body proportions, or position in the frame.",
+  "assetRole": "illustration",
+  "aspectRatio": "4:5",
+  "provider": "codex",
+  "model": "codex",
+  "referenceImageCount": 1,
+  "variationOf": "assets/generated/mistridge-pack-mistrise.webp",
+  "ts": "2026-09-11T14:33:49.571Z"
+}

@@ -1,0 +1,80 @@
+{
+  "_说明": [
+    "这是 build_docx 的源文件。改这份 JSON，然后 build_docx，然后 screenshot 看。",
+    "永远不要直接改构建出来的 .docx —— 下一次 build 会把手改抹掉。",
+    "下划线开头的键是给人看的注释，构建时会被忽略。",
+    "字段全集见 skill 的 references/token-schema.md。"
+  ],
+
+  "_preset说明": "词典条目：办公标准 / 公文 / 学术论文。它是起点不是菜单——要别的版式就在 tokens 里覆写，或删去此行，改为提供完整 token 表。",
+  "preset": "办公标准",
+
+  "_tokens说明": "在 preset 之上覆写。schema 是闭合的：写了没登记过的字段名会直接报错，因为「写了没生效」比「没写」更坏。",
+  "tokens": {
+    "_numbering说明": "自动编号：起个名字挂一个内置梯队（公文条款 / 数字条款 / 圈码 / 项目符号），段落上写 list 引用它。⭐ 不要手动输入 1. 2.：插入新条目时编号不会重排。梯队形状与自定义写法见 references/token-schema.md。",
+    "numbering": { "条款": "公文条款", "要点": "圈码" },
+
+    "page": {
+      "size": "A4",
+      "_marginsTwip说明": "1 厘米 = 567 twip。这里是上下 2.54cm、左右 3.17cm（Word 默认）",
+      "marginsTwip": { "top": 1440, "bottom": 1440, "left": 1800, "right": 1800 }
+    },
+    "_fonts说明": "⭐eastAsia 槽是中文字体的唯一入口。只写 ascii 等于没给中文指定字体，Word 会自动替换为其他字体，结果不可控。请指定 Windows 上必定存在的字体。",
+    "fonts": {
+      "正文": { "eastAsia": "宋体", "ascii": "Times New Roman", "hAnsi": "Times New Roman", "cs": "Times New Roman" },
+      "标题": { "eastAsia": "黑体", "ascii": "Arial", "hAnsi": "Arial", "cs": "Arial" }
+    },
+    "styles": {
+      "Normal": {
+        "type": "paragraph",
+        "name": "Normal",
+        "run": { "font": "正文", "sizePt": "小四" },
+        "para": {
+          "_indent说明": "firstLineChars 200 = 首行缩进两字符，随字号缩放。别用固定磅值。",
+          "indent": { "firstLineChars": 200 },
+          "_spacing说明": "⚠️lineRule='multiple' 时 line 是**倍数**（1.5 = 1.5 倍行距）；'exact'/'atLeast' 时 line 才是磅值。两者混用会得到异常的行高。中文正文传统是「缩进不留白」——首行缩进和段间距二选一，都上会松垮。",
+          "spacing": { "line": 1.5, "lineRule": "multiple" }
+        }
+      },
+      "Heading1": {
+        "type": "paragraph",
+        "name": "heading 1",
+        "basedOn": "Normal",
+        "next": "Normal",
+        "qFormat": true,
+        "run": { "font": "标题", "sizePt": "三号", "bold": true },
+        "para": {
+          "_outlineLevel说明": "⭐必须有它，标题才是真标题：导航窗格认它、TOC 靠它生成。把一行字调大加粗不算标题。",
+          "outlineLevel": 0,
+          "_firstLineChars说明": "⭐标题必须显式清零缩进：basedOn Normal 会继承正文的首行缩进，这是中文文档最常见的排版缺陷之一。",
+          "indent": { "firstLineChars": 0 },
+          "spacing": { "beforePt": 12, "afterPt": 6 }
+        }
+      }
+    }
+  },
+
+  "_content说明": "块类型只有三种：{t:'p'} 段落、{t:'table'} 表格、{t:'pageBreak'} 分页。段落用 text 给纯文本，用 runs 给混合格式。",
+  "content": [
+    { "t": "p", "style": "Heading1", "text": "一、这里是一级标题" },
+    { "t": "p", "style": "Normal", "text": "这里是正文。首行会缩进两个字符，行距是单倍的 1.5 倍。中文和 Latin text 混排时引擎会自动处理间距。" },
+    { "t": "p", "style": "Normal", "runs": [
+      { "text": "runs 写法可以在一段里混格式：" },
+      { "text": "这几个字是粗的", "bold": true },
+      { "text": "，这几个字换了楷体", "font": "标题" },
+      { "text": "。中文不要用斜体，Word 的中文斜体是把字硬拉斜，很难看——强调改用加粗、换字体或着重号。" }
+    ] },
+    { "t": "p", "style": "Normal", "text": "自动编号长这样（改 list 的 name 换梯队）：" },
+    { "t": "p", "style": "Normal", "list": { "name": "条款", "ilvl": 0 }, "text": "第一层用的是「公文条款」梯队" },
+    { "t": "p", "style": "Normal", "list": { "name": "条款", "ilvl": 1 }, "text": "第二层会自己变成（一）（二）" },
+    { "t": "p", "style": "Normal", "list": "要点", "text": "单层梯队可以直接写名字" }
+  ],
+
+  "_块级格式说明": "块上的直接格式**平铺**在块上（align / indent / spacing …），没有 para 包层——写成 \"para\": {…} 不报错但一点效果都没有。字段全集见 references/token-schema.md。",
+
+  "_页眉页脚说明": "字符串 = 一行纯文字；块数组 = 完整控制。页码是域不是你手写的数字：{fld:'PAGE'}，写死 '1' 的页脚在第二页还是 1。",
+  "footer": [
+    { "t": "p", "style": "Normal", "align": "center", "indent": { "firstLineChars": 0 },
+      "runs": [ { "text": "— " }, { "fld": "PAGE" }, { "text": " —" } ] }
+  ]
+}
