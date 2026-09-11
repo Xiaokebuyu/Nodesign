@@ -251,6 +251,62 @@ describe('超链接 —— run 上的 link 键', () => {
     for (const h of new Set(hlinks)) expect(h).not.toContain(`"${footerId}"`);
     await fs.rm(d, { recursive: true, force: true });
   });
+
+  it('块级 / 单元格 color 是各 run 的缺省色，run 自己写了听 run 的（09-11 雾岭手册：unknown key color）', async () => {
+    const src = {
+      preset: '办公标准',
+      content: [
+        { t: 'p', color: 'CC0000', runs: ['红一', { text: '蓝', color: '0000FF' }] },
+        { t: 'table', widthsTwip: [4000, 4000], rows: [[{ text: '红格', color: 'CC0000' }, '无色']] },
+      ],
+    };
+    expect(() => resolveSource(src)).not.toThrow();
+    const d = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-color-'));
+    const srcPath = path.join(d, '染色.json');
+    const out = path.join(d, '染色.docx');
+    await fs.writeFile(srcPath, JSON.stringify(src));
+    await buildFromSource(srcPath, out);
+    const doc = entryData(readZip(await fs.readFile(out)), 'word/document.xml').toString('utf8');
+    expect(doc.match(/<w:color w:val="CC0000"\/>/g)?.length).toBe(2);   // 红一 + 红格
+    expect(doc.match(/<w:color w:val="0000FF"\/>/g)?.length).toBe(1);   // 蓝没被块色盖掉
+    await fs.rm(d, { recursive: true, force: true });
+  });
+
+  it('表格 borders：不写 = 满格细黑线（跟以前一样）；horizontal 只留横线；按边写的对象里没写的边没有线', async () => {
+    const tbl = (borders) => ({ t: 'table', widthsTwip: [4000, 4000], rows: [['a', 'b'], ['c', 'd']], ...(borders ? { borders } : {}) });
+    const d = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-tblbd-'));
+    const srcPath = path.join(d, '边框.json');
+    const out = path.join(d, '边框.docx');
+    await fs.writeFile(srcPath, JSON.stringify({
+      preset: '办公标准',
+      content: [tbl(), tbl('horizontal'), tbl({ top: { sizePt8: 8 }, insideH: { sizePt8: 2, color: 'BFBFBF' } })],
+    }));
+    await buildFromSource(srcPath, out);
+    const doc = entryData(readZip(await fs.readFile(out)), 'word/document.xml').toString('utf8');
+    const bd = [...doc.matchAll(/<w:tblBorders>(.*?)<\/w:tblBorders>/g)].map((m) => m[1]);
+    expect(bd).toHaveLength(3);
+    expect(bd[0]).toBe(['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
+      .map((s) => `<w:${s} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join(''));   // 存量文档逐字节不变
+    expect(bd[1]).toContain('<w:insideH w:val="single" w:sz="4"');
+    expect(bd[1]).toContain('<w:insideV w:val="nil"/>');
+    expect(bd[1]).toContain('<w:left w:val="nil"/>');
+    expect(bd[2]).toContain('<w:insideH w:val="single" w:sz="2" w:space="0" w:color="BFBFBF"/>');
+    expect(bd[2]).toContain('<w:bottom w:val="nil"/>');
+    await fs.rm(d, { recursive: true, force: true });
+  });
+
+  it('表格 borders 写错要报清楚：认不出的预设 / 认不出的边 / 颜色带 # / 线型不存在 / 粗细越界', () => {
+    const errOf = (borders) => {
+      try { resolveSource({ preset: '办公标准', content: [{ t: 'table', widthsTwip: [8000], rows: [['x']], borders }] }); } catch (e) { return `${e.message}\n${e.detail ?? ''}`; }
+      return '';
+    };
+    expect(errOf('三线')).toMatch(/没有「三线」这种写法，可选 grid \/ horizontal \/ none/);
+    expect(errOf({ middle: {} })).toMatch(/unknown key middle/);
+    expect(errOf({ top: { color: '#000000' } })).toMatch(/不带 #/);
+    expect(errOf({ top: { style: 'wavy' } })).toMatch(/style: 可选 single/);
+    expect(errOf({ top: { sizePt8: 200 } })).toMatch(/2 到 96/);
+    expect(errOf({ top: { sizePt8: 8 }, left: null })).toBe('');   // null = 这条边不要线，合法
+  });
 });
 
 describe('buildFromSource —— 落盘', () => {

@@ -21,7 +21,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { PRESETS, validateTokens, indentConflict, PARA_KEYS, RUN_KEYS } from './tokens.js';
-import { buildDocx } from './build.js';
+import { buildDocx, TABLE_BORDER_PRESETS, TABLE_BORDER_SIDES, TABLE_BORDER_STYLES } from './build.js';
 import { lintDocxSource } from './text-lint.js';
 
 /** 深合并：对象递归，其余（含数组）整体替换 —— 数组是有序整体，逐项合并只会得到怪东西 */
@@ -64,9 +64,29 @@ function stripNotes(v) {
  *
  * 「写了没生效」比「写了报错」坏得多：报错你会改，不报错你会以为已经做到了。
  */
-const P_BLOCK_KEYS = new Set(['t', 'style', 'text', 'runs', 'sizePt', 'list', ...PARA_KEYS]);
+// color 跟 sizePt 同理：块上写一次 = 这段每个 run 的缺省值（09-11 雾岭手册：给一格染色只能套一层 runs）
+const P_BLOCK_KEYS = new Set(['t', 'style', 'text', 'runs', 'sizePt', 'color', 'list', ...PARA_KEYS]);
 const RUN_OBJ_KEYS = new Set(['text', 'br', 'fld', 'link', ...RUN_KEYS]);
-const TABLE_BLOCK_KEYS = new Set(['t', 'widthsTwip', 'rows']);
+const TABLE_BLOCK_KEYS = new Set(['t', 'widthsTwip', 'rows', 'borders']);
+const BORDER_LINE_KEYS = new Set(['style', 'sizePt8', 'color']);
+
+/** 表格 borders：预设名或按边的对象。线型写错 Word 会直接说文档损坏，所以这里就拦 */
+function checkTableBorders(spec, where) {
+  const presets = Object.keys(TABLE_BORDER_PRESETS).join(' / ');
+  if (typeof spec === 'string') return TABLE_BORDER_PRESETS[spec] ? [] : [`${where}: 没有「${spec}」这种写法，可选 ${presets}，或按边写对象`];
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return [`${where}: 写 ${presets} 之一，或 {${TABLE_BORDER_SIDES.join(',')}} 对象`];
+  const errs = [];
+  for (const [side, b] of Object.entries(spec)) {
+    if (!TABLE_BORDER_SIDES.includes(side)) { errs.push(`${where}: unknown key ${side}（边只有 ${TABLE_BORDER_SIDES.join(' / ')}）`); continue; }
+    if (b == null) continue;
+    if (typeof b !== 'object' || Array.isArray(b)) { errs.push(`${where}.${side}: 写 {style, sizePt8, color}；这条边不要线就不写`); continue; }
+    for (const k of Object.keys(b)) if (!BORDER_LINE_KEYS.has(k)) errs.push(`${where}.${side}: unknown key ${k}`);
+    if (b.style != null && !TABLE_BORDER_STYLES.includes(b.style)) errs.push(`${where}.${side}.style: 可选 ${TABLE_BORDER_STYLES.join(' / ')}，拿到 ${JSON.stringify(b.style)}`);
+    if (b.color != null && !/^[0-9A-Fa-f]{6}$/.test(String(b.color))) errs.push(`${where}.${side}.color: 写 "RRGGBB"（不带 #），拿到 ${JSON.stringify(b.color)}`);
+    if (b.sizePt8 != null && !(Number.isInteger(b.sizePt8) && b.sizePt8 >= 2 && b.sizePt8 <= 96)) errs.push(`${where}.${side}.sizePt8: 1/8 磅的整数，2 到 96（4 = 半磅）`);
+  }
+  return errs;
+}
 
 /** 超链接目标必须带协议 —— w:hyperlink 走的是 TargetMode="External" 的关系，
  *  相对路径和 #书签是另外两种机制（后者要 w:anchor），这个引擎不做 */
@@ -119,6 +139,7 @@ function validateContent(content, numbering, { noLinks = false } = {}) {
       for (const k of Object.keys(b)) {
         if (!TABLE_BLOCK_KEYS.has(k)) errs.push(`content[${i}]: unknown key ${k}${hint(k)}`);
       }
+      if (b.borders != null) errs.push(...checkTableBorders(b.borders, `content[${i}].borders`));
       for (const [ri, row] of (b.rows ?? []).entries()) {
         for (const [ci, cell] of (row ?? []).entries()) {
           if (cell && typeof cell === 'object') checkPara(cell, `content[${i}].rows[${ri}][${ci}]`);

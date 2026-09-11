@@ -228,12 +228,16 @@ Returns: text caption with output path + image content block (preview the result
         .enum(['general', 'anime'])
         .optional()
         .describe('Model family, orthogonal to quality. "anime" switches fast/balanced to isnet-anime — trained on anime/illustration linework. Use it for generated character art (立绘), stickers, and any 2D illustration; flat-color fills and clean line edges segment noticeably better than the photo-trained default. Keep "general" (default) for photos, product shots, screenshots. Same speed/memory class; "best" ignores style.'),
+      fillHoles: z
+        .boolean()
+        .optional()
+        .describe('Make transparent regions that are fully enclosed by the subject opaque again, restoring the original pixels. The caption reports such holes on every run; turn this on when they are part of the subject (a pale label on a bag, a white highlight, white clothing). Leave it off when they are real see-through gaps (a ring, a mug handle, the space between an arm and the body). Default false.'),
     },
     // 默认 balanced（2026-07-31）：AM 加了分辨率上限之后只比 fast 慢 1.7s、多占
     // 31MB，而 halo 从 34% 降到 10%。默认该给更好的那个，crisp 需求让 agent 显式
     // 降到 fast —— 反过来（默认 fast，需要好边缘时升档）依赖 agent 先看出有 halo，
     // 而它多数时候不会回头看抠完的图。
-    async ({ inputPath, outputName, overwrite = false, quality = 'balanced', style = 'general' }) => {
+    async ({ inputPath, outputName, overwrite = false, quality = 'balanced', style = 'general', fillHoles = false }) => {
       // 0a. 质量上限（小内存机器禁 birefnet，显式拒绝不静默降档）
       const capErr = qualityCapError(quality);
       if (capErr) {
@@ -323,11 +327,21 @@ Returns: text caption with output path + image content block (preview the result
         };
       }
 
-      // 6. 写盘
-      await fs.writeFile(absOut, rgba);
+      // 6. 体检（09-11 白标签案）：数被主体围住的透明区，要补就补；预览垫棋盘格让洞看得见。
+      //    fail-soft：体检本身失败就照旧交原图，别让一个诊断挡住抠图
+      let insp = null;
+      try {
+        const { inspectCutout } = await import('./helpers/alpha-holes.js');
+        insp = await inspectCutout(rgba, { fill: fillHoles, source: inputBuf });
+      } catch (err) { console.warn(`[remove-background] 体检失败（照旧交原图）：${err.message}`); }
+      const outPng = insp?.png ?? rgba;
+
+      // 6b. 写盘
+      await fs.writeFile(absOut, outPng);
       console.log(
-        `[remove-background] ${inputPath} → ${fileName} (${rgba.length}B) in ${elapsed}ms `
-        + `[quality=${quality} model=${qualityCfg.model} alphaMatting=${qualityCfg.alphaMatting}]`,
+        `[remove-background] ${inputPath} → ${fileName} (${outPng.length}B) in ${elapsed}ms `
+        + `[quality=${quality} model=${qualityCfg.model} alphaMatting=${qualityCfg.alphaMatting}`
+        + `${insp?.holes.length ? ` holes=${insp.holes.length}/${insp.holePx}px${insp.filled ? ' filled' : ''}` : ''}]`,
       );
 
       // 7. agent 看到的相对路径（相对 cwd = sessions/<sid>/）
@@ -353,26 +367,23 @@ Returns: text caption with output path + image content block (preview the result
       // 情况下判断这次抠废了 —— 一个 agent 连着十九张图全靠肉眼才发现整条腿被
       // 当成背景切掉了，而它两次报障的共同核心诉求就是这一个数字：
       // 「如果 caption 里有『前景占 18%』，我第一时间就知道腿丢了」。
-      let fgNote = '';
-      try {
-        const { default: sharp } = await import('sharp');
-        const { data, info } = await sharp(rgba).ensureAlpha()
-          .raw().toBuffer({ resolveWithObject: true });
-        let solid = 0;
-        const total = info.width * info.height;
-        for (let i = 3; i < data.length; i += info.channels) if (data[i] > 128) solid++;
-        fgNote = ` foreground=${((solid / total) * 100).toFixed(0)}% of frame`;
-      } catch { /* 量不出来就不报，别因为一个诊断数字挡住抠图 */ }
+      // 09-11 起跟「被主体围住的洞」一起由第 6 步的体检量；体检失败就不报，别因为诊断数字挡住抠图。
+      const fgNote = insp ? ` foreground=${insp.foregroundPct.toFixed(0)}% of frame` : '';
+      const holeNote = !insp?.holes.length ? ''
+        : insp.filled
+          ? ` Filled ${insp.holes.length} enclosed transparent region(s) (${insp.holePx}px) back to opaque using the original pixels.`
+          : ` ⚠ ${insp.holes.length} transparent region(s) are fully enclosed by the subject (largest ${insp.holes[0].size}px ≈ ${(insp.holes[0].size / (insp.foregroundPx + insp.holePx) * 100).toFixed(0)}% of the subject). Pale parts of a subject (labels, highlights, white clothing) often get cut out like this: if they belong to the subject, run again with fillHoles:true; if they are real see-through gaps (a ring, a handle), keep this result.`;
 
       // 落盘了就发 file_changed：入座器靠它排座，前端素材抽屉靠它刷新（09-07 B1：此前是生图族里唯一不发的）
       try { ctx?.emit?.({ type: 'run.file_changed', filePath: agentRelPath, event: 'add' }); } catch { /* */ }
 
-      // 8. 返 caption + image content block 让 agent 直接 vision 看
+      // 8. 返 caption + image content block 让 agent 直接 vision 看（预览垫棋盘格：白底上洞是隐形的）
       const caption = [
         `Removed background from ${inputPath}`,
         `→ ${agentRelPath}`,
-        `(RGBA PNG, ${(rgba.length / 1024).toFixed(1)} KB, ${elapsed}ms,`
-        + ` style=${style || 'general'} quality=${quality} model=${qualityCfg.model}${fgNote})`,
+        `(RGBA PNG, ${(outPng.length / 1024).toFixed(1)} KB, ${elapsed}ms,`
+        + ` style=${style || 'general'} quality=${quality} model=${qualityCfg.model}${fgNote})${holeNote}`,
+        ...(insp ? ['Preview below is on a grey checkerboard: checkerboard = transparent.'] : []),
       ].join(' ');
 
       // MCP image content block 格式：顶层 data + mimeType（不是 Anthropic API 的
@@ -383,7 +394,7 @@ Returns: text caption with output path + image content block (preview the result
           { type: 'text', text: caption },
           {
             type: 'image',
-            data: rgba.toString('base64'),
+            data: (insp?.preview ?? outPng).toString('base64'),
             mimeType: 'image/png',
           },
         ],

@@ -104,3 +104,16 @@ exit 1 JSON、rembg balanced 偶发、旧路径不存在、iss_msc4620y_0z3r（�
 **08-24 第三批**：iss_mt38uih6_ycnm → ack（organize_board 默认附带引用改写：lib/rewrite-refs.js，非搬文件=只改指向被搬条目的引用、自搬文本文件=整体换基准；逐文件上报改动数可核对；9 项单测含端到端）。iss_mt5t487g_bc1v → ack（真因=pin_to_board 按 dirname 硬算把 assets/generated 当 zone 写进座位，前端根本不把它当层渲染 —— 改问 layerOf+board.zones 与渲染同口径；layerOf 只认真实存在的层，存量错标签自愈；arrange 对真跨层仍拒但报错给 cp/relate 指引）。open 只剩 exit 144（等再现，命令已会记进 detail）。
 
 **08-24 部署关单**：feat/issues-cleanup-0824（9 commits，ff 至 0acd73a）已上生产（服务端 restart + 前端 deploy），48 条 ack 全部转 closed。生产 rembg 服务随重启复活并绑实例私有 socket /tmp/nodesign-rembg-4001.sock。open 仅剩 exit 144（等再现，自动层已记命令）。
+
+## 2026-09-11 已修未关单四条（只改 status，经 issues-store.setIssueStatus）
+
+修复都已在 main、生产在跑的就是含它们的 `4c3dbbb6`；桌面端随 0.1.40 带上。
+
+| id | 判决 | 理由 |
+|---|---|---|
+| iss_mttx8sta_27ym | closed | 仓库道 Edit 拒写 cwd：scope guard 补 cwdRoot、相对路径按 cwd 解析（9ac0e6e7） |
+| iss_mtr33277_qs9n | closed | look_at_board 缺 Chromium 未标 UNAVAILABLE：挂 chromium 能力位 + capability-gate.lint（9ac0e6e7） |
+| iss_mtqlyuc5_4a7c | closed | ToolSearch 空结果：ingress 把 tool_reference 块翻成文字（d277c6e1） |
+| iss_mtsow0qn_2490 | closed | 桌面截图 0 width：屏外视图不能截图，浏览器翻回原生视图（c2eb6723） |
+| iss_mtw5kv3x_0ytm | closed | 演出重开时 relay 注销晚于重新登记 →「400 会话没登记」：同 sid 登记带代次、新登记等在路上的注销落地再发（f9d8bd2f，桌面 0.1.40 已发；报告来自 0.1.39；relay-client.test「旧注销已经发出去了」钉住） |
+| iss_mtx1s3tp_2zia / iss_mtx1r624_dpbb | closed | build_docx 不带 preset 报「v must be 1」：v 以顶层为准、tokens.v 可不写（6ad79fab，生产 16:16 重启已上；桌面随 0.1.41） |

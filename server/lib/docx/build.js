@@ -276,8 +276,35 @@ export function buildPara(tokens, block, links) {
   propKids.push(...paraProps(block, ctx));   // 直接格式（block 上的 align/indent/... 覆盖）
   if (propKids.length) pKids.push(sortChildren(elem('w:pPr', [], propKids)));
   const runs = block.runs ?? (block.text != null ? [block.text] : []);
-  for (const r of runs) pKids.push(buildRun(tokens, r, links));
+  // 块级 color = 各 run 的缺省色，run 自己写了就听 run 的
+  const inherit = (r) => (block.color == null ? r
+    : typeof r === 'string' ? { text: r, color: block.color }
+      : (r && typeof r === 'object' && r.color == null ? { ...r, color: block.color } : r));
+  for (const r of runs) pKids.push(buildRun(tokens, inherit(r), links));
   return elem('w:p', [], pKids);
+}
+
+/**
+ * 表格边框（2026-09-11 雾岭手册：以前只有满格黑网格一种，编辑型文档只好把规格表改写成段落 + 制表位）。
+ * 不写 = 'grid'，跟以前逐字节一样；对象写法里没写的边 = 没有线（写 nil，不留给默认表样式猜）。
+ */
+export const TABLE_BORDER_SIDES = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'];
+export const TABLE_BORDER_STYLES = ['single', 'double', 'dotted', 'dashed', 'dotDash', 'thick', 'triple'];
+const line = (sizePt8) => ({ style: 'single', sizePt8, color: '000000' });
+export const TABLE_BORDER_PRESETS = {
+  grid: Object.fromEntries(TABLE_BORDER_SIDES.map((s) => [s, line(4)])),
+  horizontal: { top: line(8), bottom: line(8), insideH: line(4) },   // 只有横线：上下沿 1 磅、行间半磅、没有竖线
+  none: {},
+};
+
+function tableBorders(spec = 'grid') {
+  const sides = typeof spec === 'string' ? TABLE_BORDER_PRESETS[spec] : spec;
+  return elem('w:tblBorders', [], TABLE_BORDER_SIDES.map((s) => {
+    const b = sides[s];
+    return b
+      ? elem(`w:${s}`, [['w:val', b.style ?? 'single'], ['w:sz', b.sizePt8 ?? 4], ['w:space', 0], ['w:color', b.color ?? '000000']])
+      : elem(`w:${s}`, [['w:val', 'nil']]);
+  }));
 }
 
 function buildTable(tokens, block, links) {
@@ -285,9 +312,7 @@ function buildTable(tokens, block, links) {
   const kids = [
     sortChildren(elem('w:tblPr', [], [
       elem('w:tblW', [['w:w', widths.reduce((a, b) => a + b, 0)], ['w:type', 'dxa']]),
-      elem('w:tblBorders', [], ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].map(
-        (s) => elem(`w:${s}`, [['w:val', 'single'], ['w:sz', 4], ['w:space', 0], ['w:color', '000000']]),
-      )),
+      tableBorders(block.borders),
       elem('w:tblLayout', [['w:type', 'fixed']]),
     ])),
     elem('w:tblGrid', [], widths.map((w) => elem('w:gridCol', [['w:w', w]]))),

@@ -258,7 +258,8 @@
 { "t": "p", "para": { "align": "center" } }                          // ❌ 现在会报错
 ```
 
-块上可以直接写 `style.para` 的那 13 个键 + `sizePt`，用于对单独一段做例外处理。
+块上可以直接写 `style.para` 的那 13 个键 + `sizePt` + `color`，用于对单独一段做例外处理。
+`color` 是这段每个 run 的缺省色（run 自己写了 `color` 就听 run 的），给一整段或一格染色不必再套一层 `runs`。
 写成 `"para": {...}` **会被拒**（2026-08-18 起 content 和页眉页脚都过闭合校验）。
 在那之前它是"不报错也不生效"——属于最难发现的一类错误。
 
@@ -289,7 +290,19 @@
   ] }
 ```
 
-- 单元格是字符串（纯文本）或对象（对象的键 = 一个段落块的键 + `shading`）
+- 单元格是字符串（纯文本）或对象（对象的键 = 一个段落块的键 + `shading`；整格文字染色写 `color`）
+- `borders`（可选）管整张表的线：
+  - `"grid"`：不写就是它，满格半磅黑线
+  - `"horizontal"`：只有横线，上下沿 1 磅、行间半磅、没有竖线，适合规格表、编辑型文档
+  - `"none"`：一条线都没有
+  - 按边写对象 `{top, bottom, left, right, insideH, insideV}`，每条边 `{style, sizePt8, color}`，**对象里没写的边就没有线**。
+    `style` 可选 single / double / dotted / dashed / dotDash / thick / triple（默认 single），`sizePt8` 是 1/8 磅的整数（4 = 半磅），`color` 是 `"RRGGBB"`。
+
+  ```jsonc
+  { "t": "table", "widthsTwip": [2400, 5906],
+    "borders": { "top": { "sizePt8": 8 }, "bottom": { "sizePt8": 8 }, "insideH": { "sizePt8": 2, "color": "BFBFBF" } },
+    "rows": [["品牌色", "雾岭绿 #3E5C4A"], ["辅助色", "纸白 #F4F1EA"]] }
+  ```
 - 列宽单位 twip，**总和要等于版心宽度**（A4 默认边距下约 8306 twip），
   否则表格会歪出版心
 
