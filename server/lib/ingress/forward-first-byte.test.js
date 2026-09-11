@@ -69,7 +69,9 @@ describe('上游一直不回首字节', () => {
 
   it('看门狗掐掉第一发后就地重发，第二发正常 → 用户拿到正文，只写过一次 200', async () => {
     process.env.NODESIGN_INGRESS_EARLY_COMMIT_MS = '150';
-    process.env.NODESIGN_INGRESS_FIRST_BYTE_MS = '300';
+    // 看门狗给 1 秒（09-11 前是 300ms）：第二发要在看门狗内回首字节，全量并发跑时 300ms 偶尔不够，
+    // 第二发也被掐 → 重试额度用完 → 断言拿不到正文（单跑 5/5 过、全量掉过一次）。这条测的是"掐了会重发"，不是看门狗多紧
+    process.env.NODESIGN_INGRESS_FIRST_BYTE_MS = '1000';
     process.env.NODESIGN_INGRESS_EMPTY_RETRIES = '1';
     process.env.NODESIGN_INGRESS_RETRY_BUDGET_MS = '10000';
     let n = 0; const held = [];

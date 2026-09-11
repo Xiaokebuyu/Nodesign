@@ -14,5 +14,8 @@ export default defineConfig({
     // 里写两条脏数据；2026-08-17 一天跑了 57 次才被发现。
     // ⚠️ 不能写 ':memory:' —— store.js 对 env 值做 resolve()，会被当成路径字面量。
     env: { DB_PATH: join(tmpdir(), 'nodesign-test.db') },
+    // ↑ 兜底；实际每个 worker 由 setupFiles 改成自己的一份（09-11，见 vitest.server.setup.js）
+    globalSetup: ['vitest.server.global.js'],
+    setupFiles: ['vitest.server.setup.js'],
   },
 });

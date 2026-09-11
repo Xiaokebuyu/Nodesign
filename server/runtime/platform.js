@@ -196,15 +196,15 @@ function credentialBlacklist() {
  * admin 密码全在那份里。同一台机器上并排放着 Nodesign / Nodesign-canvas /
  * SillyTavern / claude-tavern-bridge，每个都有自己的 .env，一个都不能漏。
  */
-function siblingEnvFiles() {
-  const parent = path.dirname(repoRoot);
-  const out = [path.join(repoRoot, '.env')];
+export function siblingEnvFiles(root = repoRoot) {   // 参数只给测试用：造一棵临时的兄弟仓
+  const parent = path.dirname(root);
+  const out = [path.join(root, '.env')];
   let dirs = [];
   try { dirs = fs.readdirSync(parent, { withFileTypes: true }); } catch { return out; }
   for (const d of dirs) {
     if (!d.isDirectory()) continue;
     const dir = path.join(parent, d.name);
-    if (dir === repoRoot) continue;
+    if (dir === root) continue;
     let files = [];
     try { files = fs.readdirSync(dir); } catch { continue; }
     for (const f of files) {

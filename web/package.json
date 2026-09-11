@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "nice -n 15 vitest run",
+    "test": "node ../scripts/nice.mjs vitest run",
     "deploy": "bash scripts/deploy.sh",
     "lens": "node scripts/lens.mjs"
   },

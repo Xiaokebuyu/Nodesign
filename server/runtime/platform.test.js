@@ -1,7 +1,9 @@
 // 隔离两道闸的配置层（2026-08-15）：黑名单 / env 洗白 / 结构化工具 deny 规则
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
-import { platform } from './platform.js';
+import { platform, siblingEnvFiles } from './platform.js';
 
 const repoRoot = platform.repoRoot;
 
@@ -15,10 +17,27 @@ describe('凭据黑名单', () => {
       expect(list.some(p => p.endsWith(tail))).toBe(true);
     }
   });
+  // 09-11 前这条断言的是「上一级目录里有个叫 Nodesign 的仓」—— 只在站主这台机器上成立，
+  // checkout 在别处（CI、外部审计的 work\\nodesign）就红；`endsWith('/.env')` 在 Windows 上也永远不中。
+  // 改成造一棵临时的兄弟仓，按规则本身断言。
   it('⭐ 同机兄弟仓的 .env 也要拦 —— 只拦本仓的话，exp 会话能 cat 生产的 .env（真跑抓到过）', () => {
-    const parent = path.dirname(repoRoot);
-    expect(list).toContain(path.join(parent, 'Nodesign', '.env'));
-    expect(list.filter(p => p.endsWith('/.env')).length).toBeGreaterThan(1);
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-siblings-'));
+    try {
+      const me = path.join(parent, 'Nodesign-canvas');
+      const put = (rel) => { const p = path.join(parent, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, 'X=1'); };
+      fs.mkdirSync(me);
+      put('Nodesign/.env'); put('other/.env.local'); put('demo/.env.example'); put('plain/readme.md');
+      const got = siblingEnvFiles(me);
+      expect(got).toContain(path.join(me, '.env'));                      // 本仓自己的（文件在不在都拦）
+      expect(got).toContain(path.join(parent, 'Nodesign', '.env'));      // 生产那份
+      expect(got).toContain(path.join(parent, 'other', '.env.local'));
+      expect(got.some(p => p.endsWith('.env.example'))).toBe(false);
+      expect(got.some(p => p.includes(`${path.sep}plain${path.sep}`))).toBe(false);
+    } finally { fs.rmSync(parent, { recursive: true, force: true }); }
+  });
+  it('真实清单里本仓与每个带 .env 的兄弟仓都在（这台机器上有几个算几个）', () => {
+    for (const p of siblingEnvFiles()) expect(list).toContain(p);
+    expect(list.filter(p => path.basename(p) === '.env').length).toBeGreaterThanOrEqual(1);
   });
   it('.env.example 不拦（示例没秘密，挡着反而碍事）', () => {
     expect(list.some(p => p.endsWith('.env.example'))).toBe(false);

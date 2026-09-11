@@ -74,7 +74,9 @@ function checkDirection() {
   const bad = [];
   for (const file of walk(serverRoot)) {
     if (file.startsWith(hostedRoot + path.sep)) continue;   // hosted 自己内部随便引
-    const rel = path.relative(repoRoot, file);
+    // 对外一律正斜杠：SEAMS 表和报错信息都是这个口径（Windows 上 path.relative 给的是反斜杠，
+    // 09-11 前那里合法的接缝被当成违规报出来，`npm test` 在 Windows 上第一步就红）
+    const rel = path.relative(repoRoot, file).split(path.sep).join('/');
     const src = fs.readFileSync(file, 'utf8');
     for (const [re, kind] of [[STATIC_RE, 'static'], [DYNAMIC_RE, 'dynamic']]) {
       for (const m of src.matchAll(re)) {
