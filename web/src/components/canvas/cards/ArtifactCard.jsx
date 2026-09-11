@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Presentation, Globe, Map as MapIcon, FileText, Compass, Drama, FolderGit2, Folder, File } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../../../lib/theme.js';
 import { PAPER } from '../../../lib/paper.js';
-import { SITE_VIEWPORTS, DECK_EMBED_W } from '../../../lib/board-geometry.js';
+import { SITE_VIEWPORTS, DECK_EMBED_W, CARD_EDGE } from '../../../lib/board-geometry.js';
 import { ARTIFACT_HEADER_H, ARTIFACT_PREVIEW_H, HERO_SCALE } from '../../../lib/board-kinds.js';
 import { versionOfFile, versionOfSitePage } from '../../../lib/file-versions.js';
 import { formatClock } from '../../../lib/helpers.js';
@@ -395,9 +395,14 @@ export default function ArtifactCard({
 
   if (!face) return null;
 
-  // 主角档：画框跟 sizeOf 同一套算法（board-kinds.js），命中区和视觉必须一致
+  // 主角档：画框跟 sizeOf 同一套算法（board-kinds.js），命中区和视觉必须一致。
+  // 预览区扣掉纸边（09-12）：卡外框 = sizeOf，边线画在框里，预览只剩框内那块。
+  // 不扣的话多出的 2px 盖住右边那道墨线，卡也比 sizeOf 高出 2px
   const hs = o.tier === 'hero' ? HERO_SCALE : 1;
-  const box = { w: Math.round(DECK_EMBED_W * hs), h: Math.round(ARTIFACT_PREVIEW_H[o.type] * hs) };
+  const box = {
+    w: Math.round(DECK_EMBED_W * hs) - 2 * CARD_EDGE,
+    h: Math.round(ARTIFACT_PREVIEW_H[o.type] * hs) - 2 * CARD_EDGE,
+  };
   const Icon = face.icon;
   const live = inView && scale >= PREVIEW_MIN_SCALE;
 

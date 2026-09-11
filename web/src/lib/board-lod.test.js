@@ -83,8 +83,9 @@ describe('⛔ 闸只有一处：九个门面分支都得熄灭', () => {
       .toBe(null);
   });
 
-  it('闸本身还在，而且是从 lodOf 来的', () => {
-    expect(SRC).toMatch(/const far = farFaceOf\(o\) && lodOf\(sz\.w, scale\) !== 'full'/);
+  it('闸本身还在，而且是从 lodOf 来的；电脑上整个不开（09-12 站主定，只留给手机和平板）', () => {
+    expect(SRC).toMatch(/const desktop = useIsDesktop\(\);/);
+    expect(SRC).toMatch(/const far = !desktop && farFaceOf\(o\) && lodOf\(sz\.w, scale\) !== 'full'/);
     expect(SRC).toMatch(/const faceType = far \? null : o\.type/);
     expect(SRC).toMatch(/const faceCard = far \? null : cardOf\(o\)/);
   });

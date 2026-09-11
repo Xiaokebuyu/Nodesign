@@ -4,6 +4,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import ArtifactCard, { ARTIFACT_FACES } from './ArtifactCard.jsx';
 import { sizeOf } from '../../../lib/board-kinds.js';
+import { CARD_EDGE } from '../../../lib/board-geometry.js';
 
 /**
  * 统一方卡的渲染冒烟 + 三张脸的信息量不丢。
@@ -58,9 +59,18 @@ describe('ArtifactCard 渲染冒烟', () => {
 
   it('预览区高度是形态表算出来的那个恒定值（布局按矩形排布，不能是 auto）', () => {
     render(DECK);
-    // 顶栏 + 预览 = 形态表里的 size.h；预览这块自己不能是 auto
+    // 外框 = 形态表里的 size；纸边（CARD_EDGE）画在框里，所以预览 = size.h 扣掉顶栏和上下两道边。
+    // 预览这块自己不能是 auto
     const preview = host.querySelector('div > div:nth-child(2)');
-    expect(preview.style.height).toBe(`${sizeOf(DECK) .h - 28}px`);
+    expect(preview.style.height).toBe(`${sizeOf(DECK).h - 28 - 2 * CARD_EDGE}px`);
+  });
+
+  it('⭐ 预览区宽 = 卡宽扣掉两道纸边（09-12：多出 2px 就盖住右边那道墨线，站主报「显示器一侧墨边不完整」）', () => {
+    render(DECK);
+    expect(host.querySelector('div > div:nth-child(2)').style.width).toBe(`${sizeOf(DECK).w - 2 * CARD_EDGE}px`);
+    const hero = { ...SITE, tier: 'hero' };
+    render(hero);
+    expect(host.querySelector('div > div:nth-child(2)').style.width, '主角档也得扣').toBe(`${sizeOf(hero).w - 2 * CARD_EDGE}px`);
   });
 });
 

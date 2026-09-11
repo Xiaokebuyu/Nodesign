@@ -13,8 +13,19 @@ import BoardObject from './BoardObject.jsx';
  * `lodOf` 断言一条都不会红，画布上却是一片看不见的小字。
  */
 let host; let root;
-beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
-afterEach(() => { act(() => root.unmount()); host.remove(); });
+/**
+ * 09-12 起电脑上不分级（站主定）：下面这些「远处换脸」的断言都是手机 / 平板上的事，
+ * 所以默认把指针换成粗的。happy-dom 里指针一律是 fine，不换就等于在电脑上测。
+ */
+const realMM = window.matchMedia;
+const setPointer = (kind) => {
+  window.matchMedia = (q) => ({
+    matches: q.includes('coarse') ? kind === 'coarse' : false, media: q,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
+  });
+};
+beforeEach(() => { setPointer('coarse'); host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host); });
+afterEach(() => { act(() => root.unmount()); host.remove(); window.matchMedia = realMM; });
 
 const NOTE = {
   id: 'notes/线索板.md', type: 'note', title: '线索板',
@@ -75,5 +86,14 @@ describe('拉远之后卡上画什么', () => {
   it('涂鸦豁免：缩到多小都还画那笔画', () => {
     const el = render({ id: 'ink1', type: 'scribble', data: { d: 'M0 0 L50 50' } }, 0.2);
     expect(el.querySelector('svg path'), '涂鸦被换成名字了 —— 它在形态表里是豁免的').toBeTruthy();
+  });
+});
+
+describe('电脑上不分级（09-12 站主定）', () => {
+  it('⭐ 缩到 0.15 也照画内容，不换成名字、不补色块', () => {
+    setPointer('fine');
+    const el = render(NOTE, 0.15);
+    expect(el.querySelector('[data-text-body]'), '电脑上拉远了还在换脸').toBeTruthy();
+    expect(el.querySelector('[data-far-blank]')).toBeFalsy();
   });
 });

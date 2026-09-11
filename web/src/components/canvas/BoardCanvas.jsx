@@ -22,7 +22,7 @@ import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
 import TransformControls from './TransformControls.jsx';
 import ChalkSizeHandles from './ChalkSizeHandles.jsx';
-import Minimap from './Minimap.jsx';
+import CanvasCorner from './CanvasCorner.jsx';
 import { useBoardCamera } from './useBoardCamera.js';
 import { submitLinkPop, deleteLinkPop } from './link-pop-actions.js';
 import { useBoardGroups } from './useBoardGroups.js';
@@ -1983,7 +1983,7 @@ export default function BoardCanvas({
             422，小地图又开始压工具栏 —— 决定放不放得下的从来是容器，不是屏幕。
             桌面这一轮不动（同样窄的桌面窗口仍然留着它）。 */}
         {!eyeMode && !deckOpen && !winDir && !(touchLane && camera.viewport.w < 560) && (
-          <Minimap
+          <CanvasCorner
             bounds={camera.bounds}
             cam={cam}
             viewport={camera.viewport}

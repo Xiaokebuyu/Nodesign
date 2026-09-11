@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { COLOR } from '../../lib/theme.js';
+import { INK_EDGE } from '../../lib/paper.js';
 import EdgeTab, { TAB_LEN } from '../ui/EdgeTab.jsx';
 import { useMedia, COARSE } from '../../lib/use-media.js';
 import { useDeviceClass, isTouchLane } from '../../lib/device-class.js';
@@ -227,6 +228,9 @@ export default function AppShell({
           // 收起时整条不吃指针，否则画布顶部一条永远点不到
           pointerEvents: shown ? 'auto' : 'none',
           transition: 'opacity 220ms ease',
+          // 给聊天卡让位时顶栏在屏幕中间断开：那一头补一道墨线收口，不然像被裁掉的（09-12）
+          borderRight: topInset?.right > 0 ? `1px solid ${INK_EDGE}` : undefined,
+          borderLeft: topInset?.left > 0 ? `1px solid ${INK_EDGE}` : undefined,
         }}>
           <TopBar breadcrumb={breadcrumb} actions={actions} />
         </div>

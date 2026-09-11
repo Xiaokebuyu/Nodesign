@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { Image as ImageIcon, FileText, Film } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, FONT_READ, CANVAS, alpha } from '../../../lib/theme.js';
 import { PAPER, PAPER_SHADOW, PAPER_DROP, INK_EDGE } from '../../../lib/paper.js';
-import { EASE, POP_IN, CARD_MAX_H } from '../../../lib/board-geometry.js';
+import { EASE, POP_IN, CARD_MAX_H, CARD_EDGE } from '../../../lib/board-geometry.js';
+import { useIsDesktop } from '../../../lib/device-class.js';
 import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview, farFaceOf } from '../../../lib/board-kinds.js';
 import FarFace from './FarFace.jsx';
 import { lodOf } from '../../../lib/board-lod.js';
@@ -130,8 +131,13 @@ function BoardObject({
    * faceCard 而不是 o.type / cardOf(o)，远处它俩恒为 null，于是九个分支一起熄灭。
    * ⛔ 新加一种门面时照抄 faceType，别写回 o.type：写回去的那一种会在拉远时
    * 单独还在渲染，而这种事在自己的屏幕上永远看不见（判据 board-lod.lint.test.js）。
+   *
+   * 09-12 站主定：**电脑上不分级**，只留给手机和平板。电脑屏幕大、滚轮随手就拉近，
+   * 拉远看的就是全貌本身。最重的那份开销（活预览 iframe）另有 ArtifactCard 的
+   * PREVIEW_MIN_SCALE 管着，不靠这里。
    */
-  const far = farFaceOf(o) && lodOf(sz.w, scale) !== 'full';
+  const desktop = useIsDesktop();
+  const far = !desktop && farFaceOf(o) && lodOf(sz.w, scale) !== 'full';
   const faceType = far ? null : o.type;
   const faceCard = far ? null : cardOf(o);
   const inkTransform = isInk && (o.data?.rotation || (o.data?.scale && o.data.scale !== 1))
@@ -168,7 +174,7 @@ function BoardObject({
     borderRadius: isInk ? 4 : RADIUS.xl,
     background: isInk ? (hover ? alpha(CANVAS.brass, 0.10) : 'transparent') : COLOR.bgCard,
     // 印刷纸（2026-09-12）：纸边一道实墨线 + 不模糊的错位影（见 paper.js 的 LIFT）
-    border: isInk ? 'none' : `1px solid ${added ? COLOR.text : INK_EDGE}`,
+    border: isInk ? 'none' : `${CARD_EDGE}px solid ${added ? COLOR.text : INK_EDGE}`,
     // 谱系收叠的纸叠感：两层偏移的「纸边」用 box-shadow 画（填充色一层 +
     // 描边色一层），画在元素底下不占 DOM、不吃指针、不压自家边框。
     // 往左下错：跟错位影同一个方向（下午那份光，右上来光）

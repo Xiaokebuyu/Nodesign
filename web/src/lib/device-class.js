@@ -26,6 +26,7 @@
  * iPad 分屏成一条 320 宽的窄栏时短边 320 → 判成手机，这是对的：那就是个手机版面。
  */
 import { useEffect, useState } from 'react';
+import { useMedia, COARSE } from './use-media.js';
 
 export const PHONE = 'phone';
 export const TABLET = 'tablet';
@@ -98,4 +99,13 @@ export function useDeviceEnv() {
 /** 只要档位名（大多数调用方只关心这个） */
 export function useDeviceClass() {
   return useDeviceEnv().class;
+}
+
+/**
+ * 只问「是不是电脑」（2026-09-12，分级渲染在电脑上关掉）。画布上每张卡都要问，
+ * 用不着 useDeviceEnv 那整套 w/h：它跟着 resize 变，几百张卡会一起重渲。
+ * 判据跟 classifyDevice 同一条（没有粗指针就是电脑），所以只听 pointer 那一条 media query。
+ */
+export function useIsDesktop() {
+  return !useMedia(COARSE);
 }

@@ -1968,7 +1968,9 @@ export default function ProjectWorkspace() {
       // 08-17「两层轮流占屏」那条让顶栏跟着导出/设置一起消失）。改成顶栏给卡让出它那一侧：
       // 感应带和横条都缩到卡之外，卡顶沿那排按钮不被压。
       topSuppressed={artifactWindowOpen}
-      topInset={chatDockOpen ? { [chatDockSide]: chatDockW + 8 } : null}
+      // 09-12：卡外沿再空 8px。聊天卡的墨线往外扩 1px 画、错位影往左探 2px，顶栏贴着卡外沿收
+      // 就正好把卡左上角那截墨线压掉（顶栏 z 900 在卡之上）；断开那头 AppShell 补一道墨线收口
+      topInset={chatDockOpen ? { [chatDockSide]: chatDockW + 16 } : null}
       // ‹ 先退最里面那一层：有窗开着就关窗，否则交给面包屑上一级（MobileTopBar 兜）
       onBack={artifactWindowOpen ? () => closeWindowRef.current?.() : null}
       /**

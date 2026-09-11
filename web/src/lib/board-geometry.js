@@ -27,6 +27,12 @@ export const FOLDER_CARD = { w: 288, h: 240 };
 export const FOLDER_CARD_H = FOLDER_CARD.h;
 export const DECK_EMBED_W = 640;          // deck 内嵌渲染宽度（1920 → 1/3 缩放）
 /**
+ * 纸卡的边线宽（2026-09-12 印刷风：一道实墨线）。BoardObject 画它，ArtifactCard 的预览区扣掉它。
+ * 预览区原来直接写成 DECK_EMBED_W 宽：边线在的时候框里只剩 638，多出的 2px 正好盖住右边那道墨线
+ * （站主报「显示器一侧墨边显示不完整」，站点 / 演示 / Word / 演出卡同一个原因）。
+ */
+export const CARD_EDGE = 1;
+/**
  * 一张卡的高度天花板（2026-08-29 占位契约刀 B→E，站主定「一张纸的 40%」）。
  * 真身与理由在 `server/lib/screen.js` 的 CARD_MAX_H（parity 测试钉着两端一致）。
  *
