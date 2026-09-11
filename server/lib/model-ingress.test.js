@@ -54,11 +54,12 @@ describe('transformForUpstream（Gemini 路：rename + strip thinking + lift）'
     expect(last.source.data).toBe(IMG.source.data);
   });
 
-  it('⭐DeepSeek V4 Flash Vision 行 maxImages=4：第 5 张起最早的换占位文字（09-07 桌面版实撞 Console Go 的 400）', async () => {
-    const wire = resolveWireModel('deepseek-v4-flash-vision');
+  it('⭐maxImages=4 的行：第 5 张起最早的换占位文字（09-07 桌面版在 DeepSeek vision-exp 上实撞 Console Go 的 400）', async () => {
+    // 09-11 视觉行换 v4.1 后撤了上限（60 张实测不 400），机制改用同上游仍限 4 张的 glm-5.3-flash-go 钉
+    const wire = resolveWireModel('glm-5.3-flash-go');
     expect(wire.maxImages).toBe(4);
     const mk = (n) => ({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMG.source.data } });
-    const body = { model: 'deepseek-v4-flash-vision', messages: [
+    const body = { model: 'glm-5.3-flash-go', messages: [
       { role: 'user', content: [mk(1), mk(2)] }, { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
       { role: 'user', content: [mk(3), mk(4), mk(5), { type: 'text', text: 'q' }] },
     ] };
@@ -71,6 +72,11 @@ describe('transformForUpstream（Gemini 路：rename + strip thinking + lift）'
     const body2 = { model: 'claude-opus-4-6', messages: [{ role: 'user', content: [mk(1), mk(2), mk(3), mk(4), mk(5)] }] };
     await transformForUpstream(body2, resolveWireModel('claude-opus-4-6'));
     expect(body2.messages[0].content.filter((b) => b.type === 'image')).toHaveLength(5);
+    // 视觉行 09-11 起不裁
+    expect(resolveWireModel('deepseek-v4-flash-vision').maxImages).toBeNull();
+    const body3 = { model: 'deepseek-v4-flash-vision', messages: [{ role: 'user', content: [mk(1), mk(2), mk(3), mk(4), mk(5), mk(6)] }] };
+    await transformForUpstream(body3, resolveWireModel('deepseek-v4-flash-vision'));
+    expect(body3.messages.flatMap((m) => m.content).filter((b) => b.type === 'image')).toHaveLength(6);
   });
 
   it('enabled8k 档（原 Kimi 路，kimi 行 08-21 深夜删了，逻辑留着）：adaptive 改写成 enabled+budget，已是 enabled 的不动', async () => {

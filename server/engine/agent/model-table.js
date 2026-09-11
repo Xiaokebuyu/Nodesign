@@ -256,6 +256,8 @@ export const MODELS_BUILTIN = Object.freeze([
       maxOutput: 131_072,
       // ⛔ 同一个上游的 deepseek 视觉行 09-07 实撞过 Console Go 的 "At most 4 image(s)"。这条没实测，
       // 按同上游的已知上限先收着：裁图比整发 400 好（lib/ingress/image-cap.js）
+      // ⚠️ 09-11 同上游的 DeepSeek v4.1 打 60 张都不 400 → 那个 4 看着是 vision-exp 自己的上限、不是 Go 的。
+      //   GLM 这行没实测过，要放开先打一发 9 张以上的
       maxImages: 4,
       prices: { input: 0.015, output: 0.05, cacheRead: 0.003, cacheWrite: 0 },
     },
@@ -306,12 +308,13 @@ export const MODELS_BUILTIN = Object.freeze([
     id: 'deepseek-v4-flash-vision', window: 272_000, brand: 'deepseek',
     standby: 'glm-5.3-flash-merge',   // 上游连续失败/402 时会话级换线（ingress/session-routes switchSessionToStandby）
     // 08-21 深夜开闸给所有档（含 basic）：basic 的 $5/天日限 + 表价记账管着它；pro/admin 不限
-    select: { label: 'DeepSeek V4.1 Flash · OpenCode Go', desc: '响应快 · 支持视觉（单次最多 4 张图片，较早的图片自动省略）· 272k 上下文 · 按用量计入每日额度（高峰 $0.44/$1.32，缓存 $0.014）' },
+    select: { label: 'DeepSeek V4.1 Flash · OpenCode Go', desc: '响应快 · 支持视觉 · 272k 上下文 · 按用量计入每日额度（高峰 $0.44/$1.32，缓存 $0.014）' },
     api: {
       upstream: 'zenGo', wireModel: 'deepseek-v4.1-flash',
-      // ⛔ 09-07 实撞 Console Go "At most 4 image(s)"（当时是 vision-exp），第 5 张起每发 400；只带最近 4 张（ingress/image-cap.js）。
-      // ⏸ 09-11 换 v4.1 后 5 张、8 张各打一发都 200 且逐张颜色念得出来；上限没往上探，这个数先不放
-      maxImages: 4,
+      // 不设 maxImages（09-11 站主拍板）。当年那个 4 是 vision-exp 的：09-07 实撞 Console Go "At most 4 image(s)"，第 5 张起每发 400。
+      // v4.1 实测：5 / 8 / 16 / 32 / 60 张全 200；灰图堆里藏两张彩色（中间 + 最后），32 张、60 张两组都找得出来 = 没有静默丢图。
+      // ⚠️ 弱项是**按序号点名**：32 张时说成"第 30 张"、60 张问三个位置的颜色会在思考里打转到 8000 token 截断。
+      //   本站的图是工具回图 + 上下文，不靠序号，撞不到；真撞了先看这里，别急着把上限加回来。
       sdkAlias: 'claude-opus-4-7[1m]',   // kimi 退役腾出来的 1M 名；窗口由 CLAUDE_CODE_AUTO_COMPACT_WINDOW=272k 钉住
       // 08-26 从 ox-alpha-helper 改过来：Ox 整族下架（上游 401 "Model ox-alpha-free is not supported"），
       // 那条 helper 一起没了。⚠️ 这处失效**完全不出声** —— helper 角色 ingress 不推 onNotice、不报
@@ -466,13 +469,15 @@ export const MODELS_BUILTIN = Object.freeze([
     // 也就是这家不校验签名，这个配对是安全的。⛔ 换别的 Anthropic 原生上游做主行时要重探这一项。
     id: 'deepseek-v4-flash-helper', window: 272_000, brand: 'deepseek',
     api: {
-      // ⛔ **必须是 -vision-exp 那个变体**：08-25 实测同池的纯文本版 `deepseek-v4-flash` 一带图就 400
+      // ⛔ **必须是收图的模型**：08-25 实测同池的纯文本版 `deepseek-v4-flash` 一带图就 400
       // （上游原话 invalid_request / "does not support image"），而 helper 行接的**不只是标题** ——
       // auto-compact 要把整段对话（含工具回的截图）交给它，会话级路由还会把一切认不出的名字兜底改道过来。
       // 更坏的是这类失败**不出声**：ingress 对 helper 角色特意不推 onNotice / 不报 onTruncated
       // （model-ingress.js），用户只会觉得"标题没生成、压缩没做成"，日志里也难翻。
       // 对照实测：纯文本版 无图 200 / 有图 400；vision-exp 无图 200 / 有图 200。
-      upstream: 'zenGo', wireModel: 'deepseek-v4-flash-vision-exp',
+      // 09-11 站主要求跟视觉行一起换 v4.1：Go 上的 `deepseek-v4.1-flash` 普通版就收图（纯色图答对、60 张不 400），
+      // reasoning_effort low 实测照收。⚠️ 换回纯文本款之前先拿带图的请求打一发。
+      upstream: 'zenGo', wireModel: 'deepseek-v4.1-flash',
       fastModel: 'deepseek-v4-flash-helper',   // 不写 sdkAlias，走共用别名
       thinking: 'strip',                       // 出口删 thinking 字段，档位由 reasoningEffort 发
       reasoningEffort: 'low',                  // 一句话的活不该想；实测 low 仍会想一两句，够短
