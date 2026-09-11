@@ -4,7 +4,7 @@
  * id 口径 —— agent 传参五花八门，规则漂了就是"摆位工具突然找不到卡"。
  */
 import { describe, it, expect } from 'vitest';
-import { normalizeCanvasId, layerOf } from './canvas-id.js';
+import { normalizeCanvasId, layerOf, canvasIdForRel } from './canvas-id.js';
 
 describe('normalizeCanvasId', () => {
   it('反斜杠 / ./ 前缀 / 首尾斜杠全归一', () => {
@@ -27,6 +27,17 @@ describe('normalizeCanvasId', () => {
   it('空 / 越界拒收', () => {
     expect(normalizeCanvasId('')).toBe(null);
     expect(normalizeCanvasId('../外面.png')).toBe(null);
+  });
+});
+
+// 09-12 从 engine/runs/board-tasklist.test.js 搬来（那个模块随 TodoWrite 一起撤了）
+describe('canvasIdForRel：精确 > deck: > 站点根 > 原样', () => {
+  it('按四条规则找产物卡的地址', () => {
+    const board = { objects: { 'deck:a.html': { x: 0, y: 0 }, 'site:Duvet': { x: 0, y: 0 }, 'assets/x.png': { x: 0, y: 0 } } };
+    expect(canvasIdForRel(board, 'assets/x.png')).toBe('assets/x.png');
+    expect(canvasIdForRel(board, 'a.html')).toBe('deck:a.html');
+    expect(canvasIdForRel(board, 'Duvet/style.css')).toBe('site:Duvet');
+    expect(canvasIdForRel(board, 'new.html')).toBe('deck:new.html');   // 还没上墙的按形态猜
   });
 });
 

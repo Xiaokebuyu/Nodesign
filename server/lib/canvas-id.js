@@ -92,3 +92,24 @@ export function layerOf(id, entry, knownFolders) {
   }
   return d;
 }
+
+/**
+ * 工作区相对路径 → 画布 id（产物卡的地址）：精确 > deck: > 站点 / word 根 > 原样。
+ * 09-12 从 engine/runs/board-tasklist.js 搬来（那个模块随 TodoWrite 一起撤了），
+ * 现在只有入座器在用。还没上墙的按形态猜（seated 之后线自然画出来）。
+ */
+export function canvasIdForRel(board, rel) {
+  const r = String(rel || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  if (!r) return null;
+  const objs = board.objects || {};
+  if (objs[r]) return r;
+  const norm = normalizeCanvasId(r);
+  if (norm && objs[norm]) return norm;
+  for (const id of Object.keys(objs)) {
+    const m = /^(site|docx):(.+)$/.exec(id);
+    if (!m) continue;
+    const root = m[2];
+    if (r === root || r.startsWith(`${root}/`)) return id;
+  }
+  return norm || r;
+}

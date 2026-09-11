@@ -12,7 +12,6 @@ import { EventBus } from '../engine/agent/events.js';
 import { attachDiagnosticsTap } from '../lib/diag-events.js';
 import { attachWorkspaceAudit } from '../lib/workspace-audit.js';
 import { attachLiveTurnTracker } from '../engine/runs/live-turn.js';
-import { attachBoardTasklist } from '../engine/runs/board-tasklist.js';
 import { attachBoardSeater } from '../engine/runs/board-seater.js';
 
 /** @type {Map<string, EventBus>} */
@@ -26,8 +25,6 @@ export function getProjectBus(projectId) {
     // live-turn 快照折叠器：进行中 turn 的事件物化成可恢复状态，
     // WS 重连走"hydrate + ws.live_turn 快照 + 尾随"三段协议。见 live-turn.js
     attachLiveTurnTracker(bus);
-    // 步骤清单镜像成板书 + 每步产物连线（2026-08-23 黑板文化，harness 做不靠 agent 记得）
-    attachBoardTasklist(bus, projectId);
     // 服务端入座（2026-08-25 范式重做④）：本轮新产物 run 收尾一批排座
     attachBoardSeater(bus, projectId);
     // 诊断分接头（09-08）：API 重试 / 每轮用量 / 工具调用起止收进环形账，给本地版 MCP 诊断端点读

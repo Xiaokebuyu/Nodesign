@@ -227,8 +227,8 @@ export default function ProjectWorkspace() {
   // 否则 stale 事件（WS 重放 / 后端慢）会清掉新一 turn 的状态。
   const currentRunIdRef = useRef(null);
   useEffect(() => { currentRunIdRef.current = currentRunId; }, [currentRunId]);
-  // （TodoPanel 2026-08-24 退役：TodoWrite 计划清单已上板成看板贴，侧栏那份撤了；
-  //   run.todo.updated 事件保留不消费 —— 板贴走服务端落盘那条线，跟这里无关）
+  // （TodoPanel 2026-08-24 退役：计划清单曾改上板成看板贴；09-12 连同 TodoWrite 整条撤了 ——
+  //   CLI 里已经没有这件工具，run.todo.updated 也不再有人产出）
   // H1：currentSessionId 来自 URL（urlSid，已在 useParams 上面）
   // title 用 list session 后 match URL sid 拿到
   const [currentSessionTitle, setCurrentSessionTitle] = useState('');
@@ -821,9 +821,6 @@ export default function ProjectWorkspace() {
         if (isStale) break;
         // 整个 session 的 query 死了 —— 清 queue depth + 提示用户
         setQueueDepth(0);
-        break;
-      case 'run.todo.updated':
-        // TodoPanel 08-24 退役：计划看板走画布上的看板贴，这个事件前端不再消费
         break;
       case 'run.done': {
         dropPendingCompactCard();

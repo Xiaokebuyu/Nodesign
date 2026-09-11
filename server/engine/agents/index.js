@@ -134,7 +134,6 @@ export function createAgents({ mainModel, sdkModel, fastModel } = {}) {
     //     2026-07-29 前只能 WebFetch 文本转述"这个站是深色的"，等于瞎子摸象）
     //   - WebFetch（SDK 内置，按 prompt 总结 URL 内容）
     //   - Read / Glob / Grep（看本地 ./assets 和 ./spec.json）
-    //   - TodoWrite（多步研究列计划）
     // 不给：Write/Edit（不写代码）/ Bash（不要 shell shenanigans）/
     //       AskUserQuestion（子代理不直接跟用户说话）/ screenshot/export/
     //       Task（不允许嵌套子代理）
@@ -147,7 +146,7 @@ export function createAgents({ mainModel, sdkModel, fastModel } = {}) {
     //   model: pickAgentModel('explorer', { sdkSpoofMain, subModel }),
     //   tools: [
     //     'mcp__nodesign__web_search', 'mcp__nodesign__screenshot_url',
-    //     'WebFetch', 'Read', 'Glob', 'Grep', 'TodoWrite',
+    //     'WebFetch', 'Read', 'Glob', 'Grep',
     //   ],
     //   // maxTurns 12 的来历：8 轮在真实多维 brief 上会被 SDK 硬掐断流
     //   // （2026-08-05 两次报告全损），提级 + explorer.md「随手记」纪律。
@@ -172,13 +171,12 @@ export function createAgents({ mainModel, sdkModel, fastModel } = {}) {
       // 改成显式声明，保证 vision-checker.md 里写的 mcp__nodesign__screenshot_canvas
       // 真实可调。
       //
-      // 2026-05-10：新增 list_pages（枚举页数 → 决定循环 pageIndex 上界）+
-      // TodoWrite（多步逐页评审编排，让前端可见 vision-checker 在做啥）。
+      // 2026-05-10：新增 list_pages（枚举页数 → 决定循环 pageIndex 上界）。
+      // 09-12 撤掉 TodoWrite：CLI 里已经没有这件工具（详见 agent-shared 的 DEFAULT_TOOL_ALLOWLIST）。
       tools: [
         'mcp__nodesign__screenshot_canvas',
         'mcp__nodesign__list_pages',
         'Read', 'Glob',
-        'TodoWrite',
       ],
       // maxTurns：逐页评审下界估算 = 1 (Read plan) + 1 (list_pages) + 1
       // (fullPage 总览) + N (per-page 截图) + 1-2 (think + report)。N 页 deck
