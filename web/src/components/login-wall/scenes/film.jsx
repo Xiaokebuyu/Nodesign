@@ -13,7 +13,8 @@
  * ⚠️ 两块地不能占：左上角标题区（x 52~560, y 44~180）和右侧登记卡
  * （x 1065~1440, y 152~560）—— 它们是跨场景不变的锚，住在 AuthGate 的壳里。
  */
-import { PAPER, P } from '../../../lib/paper.js';
+import { PAPER, P, PAPER_SHADOW } from '../../../lib/paper.js';
+import { wallWeek, wallRun } from '../wall-date.js';
 import { Ring, Clip } from '../../PaperBits.jsx';
 import artStill from '../../../assets/login-wall/film-still.webp';
 import artSheet from '../../../assets/login-wall/film-sheet.webp';
@@ -44,7 +45,7 @@ export default {
   background-color: var(--sticky);
   background-image: linear-gradient(180deg, rgba(43,33,23,0.05) 0 9px, transparent 9px), var(--grain);
   font: 13px var(--kai); line-height: 1.72; color: var(--ink-2);
-  box-shadow: -1px 3px 5px rgba(93,74,44,0.16), -3px 8px 14px rgba(93,74,44,0.16); }
+  box-shadow: ${PAPER_SHADOW.mid}; }
 .ndw .m1 .who { display: block; margin-bottom: 5px; font: 10px var(--kai); color: var(--pencil); letter-spacing: 0.16em; }
 
 /* ② 分镜表：方格纸上六个小格，这套的「骨架」比第一套那张大一号 */
@@ -125,7 +126,7 @@ export default {
 /* 时间轴：描图纸压在分镜上，量哪一拍不对 */
 .ndw .t-beat { left: 65.5%; top: 74%; width: 10.5%; padding: 12px 12px 14px;
   background-color: ${P('trace',0.72)}; background-image: var(--grain);
-  box-shadow: 0 2px 6px rgba(93,74,44,0.14);
+  box-shadow: ${PAPER_SHADOW.far};
   font: 11.5px var(--kai); line-height: 1.68; color: ${P('traceInk',0.78)}; }
 
 /* 这周做完的：同一个人的墙，这张清单跨场景都在，只是内容跟着走 */
@@ -155,7 +156,7 @@ export default {
     <>
       {/* 板上的字：进度记在墙上，纸只记事 */}
       <div className="wall blk" style={{ left: '36.5%', top: '5.5%', transform: 'rotate(-0.5deg)' }}>
-        <span className="t">八月第二周</span>
+        <span className="t">{wallWeek(1)}</span>
         <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
           <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
             style={{ stroke: 'var(--sketch-rule)' }} strokeWidth="1.4" strokeLinecap="round" />
@@ -265,7 +266,7 @@ export default {
       <div className="paper t-receipt sway" style={{ '--rot': '2.4deg' }}>
         <span className="pin" />
         <div className="h">用量小票</div>
-        RUN 0809-24<br />39镜×50步<br />¥19.60<br />* * *
+        {wallRun(1, '24')}<br />39镜×50步<br />¥19.60<br />* * *
       </div>
 
       <div className="paper t-beat z2 sway" style={{ '--rot': '1.8deg' }}>

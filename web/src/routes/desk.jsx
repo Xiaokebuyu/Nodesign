@@ -95,7 +95,7 @@ export const DESK_CSS = `
     var(--wall);
   background-size:
     auto, auto, auto, auto, auto,
-    auto, auto, auto,
+    auto, auto, auto, auto,
     163px 211px, 271px 149px, 197px 313px, auto, auto,
     auto;
 }

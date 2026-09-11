@@ -8,7 +8,7 @@
  * 默认楷体：整套语言里正文就是楷体，手写在白板上的一句话跟它同源。
  * 等宽只留给机器写的东西（这条规矩全站一致，见 lib/theme.js 的 FONT_MONO）。
  */
-import { FONT_KAI, FONT_MONO, FONT_EMOJI } from './theme.js';
+import { FONT_KAI, FONT_MONO, FONT_EMOJI, FONT_READ } from './theme.js';
 
 export const TEXT_FONT_CSS = {
   // 手写（默认）：拉丁字符走 Caveat（龙藏的英文字形糙），中文落龙藏体硬笔字
@@ -28,6 +28,22 @@ export const TEXT_FONT_CSS = {
 export const TEXT_FONT_LABELS = { pen: '手写', kai: '楷体', sans: '黑体', serif: '宋体', mono: '等宽' };
 
 export const TEXT_SIZE_PX = { sm: 13, md: 16, lg: 22, xl: 30 };
+
+/**
+ * 画布上一段原生文字实际用的字体（2026-09-12）。
+ *
+ * 站主：板书那支手写笔（龙藏体 + Caveat）读不动，换易读的字体。
+ * **agent 写在板上的字一律用阅读楷体**（FONT_READ）：服务端从前给它们缺省填 'pen'，
+ * 存量里分不清是 agent 挑的还是缺省，所以 pen / kai / 没写 三种都按阅读字体渲染；
+ * agent 明确挑了黑体、宋体、等宽的照它挑的。
+ * 用户自己用「文字」工具写的、常驻角色写的，照原样（手写是他们要的那支笔）。
+ * 作者看 pos.by 不看 seat：用户拖过一次，seat 就变成 'user' 了，by 不变。
+ */
+export function boardTextFont(o, fallback = TEXT_FONT_CSS.kai) {
+  const font = o?.data?.font;
+  if ((o?.pos?.by || o?.by) === 'agent' && (!font || font === 'pen' || font === 'kai')) return FONT_READ;
+  return TEXT_FONT_CSS[font] || fallback;
+}
 export const TEXT_SIZE_LABELS = { sm: '小', md: '中', lg: '大', xl: '特大' };
 
 /**

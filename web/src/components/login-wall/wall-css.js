@@ -15,7 +15,7 @@
  * 画的，硬塞进统一 schema 只会让每个场景都在跟 schema 打架。墙是**设计**
  * 不是数据。
  */
-import { PAPER_VARS, PAPER, P } from '../../lib/paper.js';
+import { PAPER_VARS, PAPER, P, PAPER_SHADOW } from '../../lib/paper.js';
 import { COLOR } from '../../lib/theme.js';
 import { DESIGN_W, DESIGN_H } from './geometry.js';
 
@@ -171,19 +171,19 @@ export const WALL_CSS = `
   opacity: 0.55; display: block; }
 
 /* ===== 纸 =====
-   层次靠三样：①阴影分三档且带光向（右上打光→影子一律偏左下，全站同一个方向）
+   层次靠三样：①墨线描边 + 错位影分三档（2026-09-12 印刷纸，档位在 paper.js 的 LIFT；右上打光→影子偏左下）
    ②纸叠纸（背后垫一张露边的空纸）③底边起拱（单钉吊着的纸会往外弯） */
 .ndw .paper { position: absolute; background-color: var(--paper); background-image: var(--grain);
-  box-shadow: -1px 2px 3px rgba(93,74,44,0.15), -3px 6px 12px rgba(93,74,44,0.15);
+  box-shadow: ${PAPER_SHADOW.mid};
   transform: rotate(var(--rot, 0deg)); transform-origin: 50% 7px; z-index: 2; }
 /* 最远：贴得最平，影子小而紧，再退半档空气感 */
-.ndw .paper.z0 { box-shadow: -1px 1px 2px rgba(93,74,44,0.14), -1px 3px 5px rgba(93,74,44,0.09);
+.ndw .paper.z0 { box-shadow: ${PAPER_SHADOW.far};
   filter: brightness(0.976) saturate(0.93); }
 /* 最近：影子大而散 */
-.ndw .paper.z2 { box-shadow: -2px 3px 4px rgba(93,74,44,0.18), -6px 13px 26px rgba(93,74,44,0.22); }
+.ndw .paper.z2 { box-shadow: ${PAPER_SHADOW.near}; }
 /* 垫在后面那张空纸：只露一道边 */
 .ndw .pstack { z-index: 1; background-color: ${PAPER.stack};
-  box-shadow: -1px 2px 4px rgba(93,74,44,0.13), -2px 5px 9px rgba(93,74,44,0.11); }
+  box-shadow: ${PAPER_SHADOW.far}; }
 /* 底边起拱：单钉吊着的纸，下缘往外弯，中间背光 */
 .ndw .bow { position: absolute; left: 0; right: 0; bottom: 0; height: 32%; z-index: 3;
   pointer-events: none;
@@ -291,7 +291,7 @@ export const WALL_CSS = `
 
 .ndw-card { position: absolute; right: 4%; top: 19%; width: 25%; padding: 34px 36px 26px;
   background-color: var(--paper); background-image: var(--grain);
-  box-shadow: -3px 4px 6px rgba(93,74,44,0.2), -9px 18px 34px rgba(93,74,44,0.26);
+  box-shadow: ${PAPER_SHADOW.near};
   transform: rotate(-0.4deg); transform-origin: 50% 8px; z-index: 8; }
 .ndw-card h2 { font: 700 21px var(--kai); letter-spacing: 0.05em; }
 .ndw-card .m { margin-top: 4px; font-size: 13px; color: var(--pencil); }

@@ -274,7 +274,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           const tag = o.tag || defaultTag || (refId ? live[refId]?.tag : null) || p.groupTag || null;
           setObj(id, {
             x: Math.round(p.x), y: Math.round(p.y), z: 1, w: box.w, h: box.h, kind: 'text',
-            data: { t: o.text, ...(o.format === 'md' ? { format: 'md' } : {}), font: TEXT_FONTS.includes(o.font) ? o.font : 'pen', size, color: o.color || 'ink', ...(o.id ? { lid: o.id } : {}) },
+            data: { t: o.text, ...(o.format === 'md' ? { format: 'md' } : {}), font: TEXT_FONTS.includes(o.font) ? o.font : 'kai', size, color: o.color || 'ink', ...(o.id ? { lid: o.id } : {}) },
             zone, by, seat: 'agent', ...(tag ? { tag } : {}),
           });
           if (o.id) local.set(o.id, id);

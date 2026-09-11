@@ -144,17 +144,18 @@ ${DESK_CSS}
      用 box-shadow 画而不是加两个 div：纸的高度是内容撑的，影子自动跟着长。
      顺序 = 从前到后：顶上这张的接触影 → 第二张的纸边 → 它的影 → 第三张 → 它的影，
      最后一层（整叠落在桌上的环境影）写在 box-shadow 里，聚焦时只换那一层。
+     ⭐ 2026-09-12 印刷纸：每张纸的边是一道墨线（填充层收 1px、墨线层不收），不再是柔影。
      ⭐ 2026-09-01：**只有最后那一层跟着太阳走**（PAPER_SHADOW.stack）。--stack 里
      那几层画的是底下几张纸的**边**和它们之间的接触影 —— 纸叠得偏左下是摞纸的
      手法，不是光造成的，太阳转过去它们不该跟着转。 */
   --stack:
-    -1px 2px 3px rgba(93,74,44,0.15),
+    0 0 0 1px rgba(31,24,16,0.9),
     -3px 4px 0 -1px var(--sheet-under),
-    -3px 4px 2px -1px rgba(93,74,44,0.17),
+    -3px 4px 0 0 rgba(31,24,16,0.9),
     -6px 8px 0 -2px var(--sheet),
-    -6px 8px 3px -2px rgba(93,74,44,0.15),
+    -6px 8px 0 -1px rgba(31,24,16,0.9),
     -9px 12px 0 -3px var(--sheet-under),
-    -9px 12px 4px -3px rgba(93,74,44,0.13);
+    -9px 12px 0 -2px rgba(31,24,16,0.9);
   box-shadow: var(--stack), ${PAPER_SHADOW.stack};
   /* 2026-08-20：模型下拉被下面的项目卡盖住。项目卡的图钉/菜单（.pin/.last/.more/
      .ndd-menu，z 6~9）直接参与 .ndd-in 的层叠、DOM 又在纸后面，于是压过来。
@@ -340,7 +341,7 @@ ${DESK_CSS}
 
 /* 封面 = 贴在纸上的印样，自己有一层薄影 */
 .ndd-shot { position: relative; width: 100%; overflow: hidden; background: ${PAPER.shot};
-  box-shadow: 0 1px 2px rgba(93,74,44,0.22), inset 0 0 0 1px rgba(43,33,23,0.07); }
+  box-shadow: inset 0 0 0 1px rgba(31,24,16,0.35); }
 .ndd-shot img { width: 100%; height: 100%; object-fit: cover; object-position: top;
   display: block; border: 0; }
 /* 还没出东西：一张空白的横线纸，不是坏掉的灰块。
@@ -386,9 +387,9 @@ ${DESK_CSS}
 @media (hover: none) { .ndd-card .ndd-fork { opacity: 1; transform: none; } }
 .ndd-card .more { position: absolute; top: 9px; right: 9px; z-index: 8;
   width: 26px; height: 26px; border-radius: 50%;
-  background: rgba(255,254,246,0.94); border: 1px solid rgba(43,33,23,0.16);
+  background: rgba(255,254,246,0.94); border: 1px solid rgba(31,24,16,0.85);
   color: var(--ink-2); display: flex; align-items: center; justify-content: center;
-  cursor: pointer; box-shadow: -1px 2px 4px rgba(93,74,44,0.2); }
+  cursor: pointer; box-shadow: -1px 2px 0 rgba(31,24,16,0.16); }
 .ndd-menu { position: absolute; top: 40px; right: 8px; z-index: 9; min-width: 132px;
   padding: 5px;
   background-color: var(--paper); background-image: var(--grain);

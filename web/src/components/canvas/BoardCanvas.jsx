@@ -7,7 +7,7 @@ import { exportCard } from './card-export.js';
 import { joinRel } from '../../lib/paths.js';
 import { computeDesktopSeating, applySizeFixes } from '../../lib/board-seating.js';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, CANVAS, alpha } from '../../lib/theme.js';
-import { PAPER, PAPER_SHADOW, paperCard } from '../../lib/paper.js';
+import { PAPER, PAPER_SHADOW, paperCard, FIBERS } from '../../lib/paper.js';
 // ⚠️ EASE / POP_IN / packRow / ROW_GAP 2026-08-31 一并从这行摘掉：grep 全文件只剩
 // 这一行和注释里的名字，四个都是早年搬走代码时留下的死引用（不是这次删「整理」造成的）。
 import { DESKTOP_W, FOLDER_CARD, newStackedZoneRect, hitsAt } from '../../lib/board-geometry.js';
@@ -1753,9 +1753,9 @@ export default function BoardCanvas({
             : tool === 'text' ? 'text'
             : 'default',
           background: CANVAS.paper,
-          backgroundImage: `radial-gradient(circle, ${CANVAS.grid} 1px, transparent 1px)`,
-          backgroundSize: `${24 * scale}px ${24 * scale}px`,
-          backgroundPosition: `${cam.x * scale}px ${cam.y * scale}px`,
+          backgroundImage: `radial-gradient(circle, ${CANVAS.grid} 1px, transparent 1px), ${FIBERS}`,   // 纤维随相机平移、不随缩放
+          backgroundSize: `${24 * scale}px ${24 * scale}px, auto`,
+          backgroundPosition: `${cam.x * scale}px ${cam.y * scale}px, ${cam.x * scale}px ${cam.y * scale}px`,
         }}
       >
         {/* 世界层：所有内容都用世界坐标摆，整层由相机一次性变换。

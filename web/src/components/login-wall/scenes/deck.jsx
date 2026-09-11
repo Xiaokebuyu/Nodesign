@@ -27,7 +27,8 @@
  * 加新场景照这个形状写一份即可 —— 壳（板面、标题、登记卡）不用管，
  * 场景只负责「纸摆在哪、上面写什么、线怎么走」。
  */
-import { PAPER, P } from '../../../lib/paper.js';
+import { PAPER, P, PAPER_SHADOW } from '../../../lib/paper.js';
+import { wallWeek, wallRun } from '../wall-date.js';
 import { Ring, Clip } from '../../PaperBits.jsx';
 import artNight from '../../../assets/login-wall/ink-night.webp';
 import artDesk from '../../../assets/login-wall/ink-desk.webp';
@@ -62,7 +63,7 @@ export default {
   background-color: var(--sticky);
   background-image: linear-gradient(180deg, rgba(43,33,23,0.05) 0 9px, transparent 9px), var(--grain);
   font: 13px var(--kai); line-height: 1.72; color: var(--ink-2);
-  box-shadow: -1px 3px 5px rgba(93,74,44,0.16), -3px 8px 14px rgba(93,74,44,0.16); }
+  box-shadow: ${PAPER_SHADOW.mid}; }
 .ndw .who { display: block; margin-bottom: 5px; font: 10px var(--kai); color: var(--pencil); letter-spacing: 0.16em; }
 
 /* ② 骨架 */
@@ -102,7 +103,7 @@ export default {
   background-color: var(--sticky);
   background-image: linear-gradient(180deg, rgba(43,33,23,0.05) 0 8px, transparent 8px), var(--grain);
   font: 12.5px var(--kai); line-height: 1.7; color: var(--red);
-  box-shadow: -1px 3px 5px rgba(93,74,44,0.16), -3px 8px 14px rgba(93,74,44,0.16); }
+  box-shadow: ${PAPER_SHADOW.mid}; }
 
 /* ⑥ 上线 */
 .ndw .b6 { left: 39.5%; top: 61%; width: 15.5%; padding: 13px 15px 14px 22px;
@@ -158,7 +159,7 @@ export default {
 
 .ndw .s-trace { left: 64%; top: 76.5%; width: 8.5%; padding: 13px 12px 15px;
   background-color: ${P('trace',0.72)}; background-image: var(--grain);
-  box-shadow: 0 2px 6px rgba(93,74,44,0.14);
+  box-shadow: ${PAPER_SHADOW.far};
   font: 11.5px var(--kai); line-height: 1.68; color: ${P('traceInk',0.78)}; }
 
 .ndw .s-plane { left: 74%; top: 78%; width: 8%; padding: 7px 7px 5px; }
@@ -177,7 +178,7 @@ export default {
     <>
       {/* 板上的字：进度记在墙上，纸只记事 */}
       <div className="wall blk" style={{ left: '46.5%', top: '6%', transform: 'rotate(-0.6deg)' }}>
-        <span className="t">八月第一周</span>
+        <span className="t">{wallWeek(2)}</span>
         <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
           <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
             style={{ stroke: 'var(--sketch-rule)' }} strokeWidth="1.4" strokeLinecap="round" />
@@ -290,7 +291,7 @@ export default {
       <div className="paper s-receipt sway" style={{ '--rot': '1.9deg' }}>
         <span className="pin" />
         <div className="h">用量小票</div>
-        RUN 0802-17<br />48,212 tok<br />$0.026<br />* * *
+        {wallRun(2, '17')}<br />48,212 tok<br />$0.026<br />* * *
       </div>
 
       <div className="paper s-old dog sway" style={{ '--rot': '1.6deg' }}>

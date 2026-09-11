@@ -13,7 +13,8 @@
  * ⚠️ 选择器不加场景前缀（理由见 deck.jsx 顶上）；左上角标题区和右侧登记卡是
  * 跨场景不变的锚，不能占。
  */
-import { PAPER, P } from '../../../lib/paper.js';
+import { PAPER, P, PAPER_SHADOW } from '../../../lib/paper.js';
+import { wallWeek, wallRun } from '../wall-date.js';
 import { Ring, Clip } from '../../PaperBits.jsx';
 import artFigure from '../../../assets/login-wall/rp-portrait.webp';
 import artStreet from '../../../assets/login-wall/rp-street.webp';
@@ -38,7 +39,7 @@ export default {
   background-color: var(--sticky);
   background-image: linear-gradient(180deg, rgba(43,33,23,0.05) 0 9px, transparent 9px), var(--grain);
   font: 13px var(--kai); line-height: 1.72; color: var(--ink-2);
-  box-shadow: -1px 3px 5px rgba(93,74,44,0.16), -3px 8px 14px rgba(93,74,44,0.16); }
+  box-shadow: ${PAPER_SHADOW.mid}; }
 .ndw .r1 .who { display: block; margin-bottom: 5px; font: 10px var(--kai); color: var(--pencil); letter-spacing: 0.16em; }
 
 /* ② 人设卡：立绘 + 三行档案，索引卡的蓝线 */
@@ -129,7 +130,7 @@ export default {
 /* 一句台词：描图纸压一版 */
 .ndw .p-line { left: 86%; top: 72%; width: 11%; padding: 12px 12px 14px;
   background-color: ${P('trace',0.72)}; background-image: var(--grain);
-  box-shadow: 0 2px 6px rgba(93,74,44,0.14);
+  box-shadow: ${PAPER_SHADOW.far};
   font: 11.5px var(--kai); line-height: 1.68; color: ${P('traceInk',0.78)}; }
 
 /* 用量小票 */
@@ -149,7 +150,7 @@ export default {
   render: () => (
     <>
       <div className="wall blk" style={{ left: '41%', top: '2%', transform: 'rotate(-0.7deg)' }}>
-        <span className="t">八月第三周</span>
+        <span className="t">{wallWeek(0)}</span>
         <svg className="rule" viewBox="0 0 104 7" preserveAspectRatio="none" aria-hidden="true">
           <path d="M1 4 Q 26 2, 52 4.2 T 103 3" fill="none"
             style={{ stroke: 'var(--sketch-rule)' }} strokeWidth="1.4" strokeLinecap="round" />
@@ -265,7 +266,7 @@ export default {
       <div className="paper p-receipt sway" style={{ '--rot': '-2.4deg' }}>
         <span className="pin" />
         <div className="h">用量小票</div>
-        RUN 0817-06<br />19 轮台词<br />$0.31<br />* * *
+        {wallRun(0, '06')}<br />19 轮台词<br />$0.31<br />* * *
       </div>
 
       <div className="paper p-next z0 dog sway" style={{ '--rot': '-0.8deg' }}>

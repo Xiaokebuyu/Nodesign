@@ -277,16 +277,16 @@ export default function AuthGate({ children }) {
           <div className="ndw-head">
             <div className="row">
               <span className="ndw-logo">Nodesign</span>
-              <span className="ndw-anno">{t('面向创作者的 agent 工作台')}</span>
+              <span className="ndw-anno">{t('以画布为中心的 Agent 工作台')}</span>
             </div>
             {/* 标题**一行一个整句**，不再拿三段 t() 拼一句（2026-08-28）。
                 拼句在中文下碰巧成立，换到英文就是词序赌博；而且旧版给中间那段
                 加了 nowrap，英文一长直接压进右边场景的照片里。 */}
             <h1>
-              <span className="l">{t('一句话描述需求，agent 完成制作')}</span>
-              <span className="l u">{t('在预览上圈选，直接修改')}<Underline w={1.8} /></span>
+              <span className="l">{t('与 Agent 共用一块画布')}</span>
+              <span className="l u">{t('在画布上圈选，直接修改')}<Underline w={1.8} /></span>
             </h1>
-            <p className="ndw-sub">{t('网页、海报、文档、可互动的角色，在同一块画布上完成。')}</p>
+            <p className="ndw-sub">{t('产物、素材与推理过程集中在同一块画布上。')}</p>
           </div>
 
           {/* 会换的那一半：一套构图 = 一个场景文件 */}

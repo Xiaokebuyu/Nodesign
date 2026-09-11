@@ -12,6 +12,9 @@
  *      而它旁边的纸在转 —— 一屏之内两个太阳。
  *
  * 所以这里钉的是「三张表对得上」和「兜底逐字节没变」。
+ *
+ * 2026-09-12 起纸是「印」出来的（墨线 + 不模糊的错位影，见 paper.js 的 LIFT），
+ * 兜底整张重立了一次；登录墙的逐像素基线随之重立。
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -27,22 +30,22 @@ const OCCL = fs.readFileSync(path.join(HERE, '../routes/home-occluders.js'), 'ut
 const DESK = fs.readFileSync(path.join(HERE, '../routes/desk.jsx'), 'utf8');
 
 /**
- * 2026-09-01 之前那六条，**逐字节抄在这儿**。
+ * 2026-09-12 印刷纸那一版的兜底，**逐字节抄在这儿**。
  *
- * 它同时是两件事的定义：光源层没挂时该长什么样，以及登录墙的逐像素基线
- * （shot-auth.mjs）为什么可以不用重立。改这张表 = 承认那条基线要重立一次。
+ * 它同时是两件事的定义：光源层没挂时该长什么样（登录墙、画布页），以及登录墙的
+ * 逐像素基线（shot-auth.mjs）。改这张表 = 承认那条基线要重立一次。
  */
 const BEFORE = {
-  far:  '-1px 1px 2px rgba(93,74,44,0.14), -1px 3px 5px rgba(93,74,44,0.09)',
-  mid:  '-1px 2px 3px rgba(93,74,44,0.15), -3px 6px 12px rgba(93,74,44,0.15)',
-  near: '-2px 3px 4px rgba(93,74,44,0.18), -6px 13px 26px rgba(93,74,44,0.22)',
-  stack:     '-3px 6px 12px rgba(93,74,44,0.15)',
-  stackHigh: '-6px 13px 26px rgba(93,74,44,0.22)',
-  tag:       '-1px 2px 3px rgba(93,74,44,0.22)',
-  // 09-01 真渲染那一刀新分出来的两档：数值跟 mid / near 一模一样，
-  // 分出来只为了能单独降成接触影。所以「没挂光源层的地方一个字节没变」照旧成立。
-  sheet:     '-1px 2px 3px rgba(93,74,44,0.15), -3px 6px 12px rgba(93,74,44,0.15)',
-  sheetHigh: '-2px 3px 4px rgba(93,74,44,0.18), -6px 13px 26px rgba(93,74,44,0.22)',
+  far:  '0 0 0 1px rgba(31,24,16,1), -1px 3px 0 rgba(31,24,16,0.16)',
+  mid:  '0 0 0 1px rgba(31,24,16,1), -2px 5px 0 rgba(31,24,16,0.18)',
+  near: '0 0 0 1px rgba(31,24,16,1), -3px 7px 0 rgba(31,24,16,0.2)',
+  // 纸堆：底下几张纸的边由 --stack 自己画，这两档不描边
+  stack:     '-1px 3px 0 rgba(31,24,16,0.16)',
+  stackHigh: '-2px 5px 0 rgba(31,24,16,0.18)',
+  tag:       '0 0 0 1px rgba(31,24,16,0.8), -1px 2px 0 rgba(31,24,16,0.16)',
+  // 数值跟 mid / near 一模一样，分出来只为了能单独降成接触影
+  sheet:     '0 0 0 1px rgba(31,24,16,1), -2px 5px 0 rgba(31,24,16,0.18)',
+  sheetHigh: '0 0 0 1px rgba(31,24,16,1), -3px 7px 0 rgba(31,24,16,0.2)',
 };
 
 describe('⛔ 每一档影子都要有兜底', () => {
@@ -53,10 +56,12 @@ describe('⛔ 每一档影子都要有兜底', () => {
       expect(m[1], `${tier} 的变量名跟 LIFT_VAR 对不上`).toBe(LIFT_VAR[tier]);
       // 兜底得是一条真影子，不能是 none / 空 / 0
       expect(m[2], `${tier} 的兜底不像影子`).toMatch(/px .*rgba\(/);
+      // 印刷纸：错位影不许模糊（模糊半径一律 0）
+      expect(m[2], `${tier} 的兜底带了模糊`).toMatch(/-?\d+px -?\d+px 0 rgba\([^)]*\)$/);
     }
   });
 
-  it('⭐ 兜底逐字节等于太阳开始走之前那一版', () => {
+  it('⭐ 兜底逐字节等于印刷纸那一版', () => {
     for (const [tier, want] of Object.entries(BEFORE)) {
       expect(PAPER_SHADOW[tier], `${tier} 的兜底变了`).toBe(`var(${LIFT_VAR[tier]}, ${want})`);
     }
@@ -167,29 +172,42 @@ describe('castCss 拼出来的是合法的影子', () => {
         for (const t of tiers) {
           const css = castCss(at(h, mo), t);
           expect(css, `${mo}月${h}点 ${t} 出了 NaN：${css}`).not.toMatch(/NaN|undefined/);
+          // 形状：[墨线, ]错位影；错位取整像素、不模糊
           expect(css, `${mo}月${h}点 ${t} 形状不对：${css}`)
-            .toMatch(/^-?[\d.]+px -?[\d.]+px [\d.]+px rgba\(\d+,\d+,\d+,[\d.]+\)(, .+)?$/);
+            .toMatch(/^(0 0 0 1px rgba\(31,24,16,[\d.]+\), )?-?\d+px -?\d+px 0 rgba\(\d+,\d+,\d+,[\d.]+\)$/);
         }
       }
     }
   });
 
-  it('层数跟 LIFT 一样多 —— 少一层就少一层空气感', () => {
+  it('描了墨线的档是两层（墨线 + 错位影），不描的一层', () => {
     for (const t of tiers) {
-      expect(castCss(at(12), t).split('), ').length).toBe(LIFT[t].length);
+      expect(castCss(at(12), t).split('), ').length, t).toBe(LIFT[t][0] ? 2 : 1);
     }
   });
 
-  it('⭐ 白天的影子是暖褐的，只有夜里才往冷里揉', () => {
-    expect(castCss(at(12), 'mid')).toContain('rgba(93,74,44,');
-    expect(castCss(at(22), 'mid')).not.toContain('rgba(93,74,44,');
+  it('⭐ 傍晚的硬影不会被拉成一块挪开的色块（长度收在 1.8 倍以内）', () => {
+    for (const mo of [3, 6, 9, 12]) {
+      for (let h = 0; h < 24; h += 1) {
+        const drop = castCss(at(h, mo), 'near').split('), ').pop();
+        const [x, y] = drop.match(/-?\d+(?=px)/g).map(Number);
+        expect(Math.hypot(x, y), `${mo}月${h}点 near 拉到 ${x},${y}`).toBeLessThanOrEqual(8 * 1.8 + 1);
+      }
+    }
+  });
+
+  it('⭐ 白天的影子是墨色的，只有夜里才往冷里揉', () => {
+    const drop = (h) => castCss(at(h), 'mid').split('), ').pop();
+    expect(drop(12)).toContain('rgba(31,24,16,');
+    expect(drop(22)).not.toContain('rgba(31,24,16,');
   });
 
   it('⭐ 影子跟着太阳换边：早上偏左下，傍晚偏右下', () => {
     // ⚠️ 09-02 桌子定为**朝北**（东在屏幕右边），所以太阳右→左、影子左→右。
     //   理由在 daylight.js 的 sunFrom()。这条守的是"两头必须分处两边"，
     //   朝向要是再改，这里跟着翻一次就行。
-    expect(castCss(at(8), 'near').startsWith('-')).toBe(true);
-    expect(castCss(at(17), 'near').startsWith('-')).toBe(false);
+    const drop = (h) => castCss(at(h), 'near').split('), ').pop();
+    expect(drop(8).startsWith('-')).toBe(true);
+    expect(drop(17).startsWith('-')).toBe(false);
   });
 });

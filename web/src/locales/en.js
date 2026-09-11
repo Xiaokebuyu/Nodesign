@@ -245,13 +245,13 @@ export default {
   '公开测试': 'Public beta',
   '开放注册': 'Registration open',
   '内测阶段，仅限邀请': 'Private beta, invite only',
-  '面向创作者的 agent 工作台': 'An agent workbench for creators',
+  '以画布为中心的 Agent 工作台': 'A canvas-centered agent workbench',
   // h1 分三段是因为中间那段带手绘下划线，中英都是"动词短语 ×3"的结构，逐段对得上
   // ⚠️ 标题是**一行一个整句**，别再拆成 '想到，' + '做出来' + '，验一遍' 那样拼 ——
   // 中文下碰巧成立，换到别的语言就是词序赌博。英文按英文重写，不直译。
-  '一句话描述需求，agent 完成制作': 'Describe it in a sentence; the agent builds it',
-  '在预览上圈选，直接修改': 'Circle anything on the preview to change it',
-  '网页、海报、文档、可互动的角色，在同一块画布上完成。': 'Websites, posters, documents and interactive characters, all on one canvas.',
+  '与 Agent 共用一块画布': 'One canvas, shared with your agent',
+  '在画布上圈选，直接修改': 'Circle anything on the canvas to change it',
+  '产物、素材与推理过程集中在同一块画布上。': 'Outputs, materials, and reasoning live on a single canvas.',
 
   '登录': 'Sign in',
   // ── 顶栏账号徽章（components/layout/TopBar.jsx，09-07 桌面版跟网页版对齐）+ 头像（settings/AccountSection.jsx） ──

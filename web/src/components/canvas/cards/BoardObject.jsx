@@ -1,13 +1,13 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Image as ImageIcon, FileText, Film } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, FONT_READ, CANVAS, alpha } from '../../../lib/theme.js';
-import { PAPER, PAPER_SHADOW } from '../../../lib/paper.js';
+import { PAPER, PAPER_SHADOW, PAPER_DROP, INK_EDGE } from '../../../lib/paper.js';
 import { EASE, POP_IN, CARD_MAX_H } from '../../../lib/board-geometry.js';
 import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview, farFaceOf } from '../../../lib/board-kinds.js';
 import FarFace from './FarFace.jsx';
 import { lodOf } from '../../../lib/board-lod.js';
 import { buildObjectActions } from './object-actions.js';
-import { TEXT_FONT_CSS, TEXT_SIZE_PX } from '../../../lib/text-fonts.js';
+import { TEXT_SIZE_PX, boardTextFont } from '../../../lib/text-fonts.js';
 import MdInk from './MdInk.jsx';
 import ChalkFold from './ChalkFold.jsx';
 import { useChalkFoldGate } from './use-chalk-fold-gate.js';
@@ -167,17 +167,18 @@ function BoardObject({
     zIndex: o.pos.z || 1,
     borderRadius: isInk ? 4 : RADIUS.xl,
     background: isInk ? (hover ? alpha(CANVAS.brass, 0.10) : 'transparent') : COLOR.bgCard,
-    border: isInk ? 'none' : `1px solid ${added ? COLOR.text : COLOR.borderLt}`,
+    // 印刷纸（2026-09-12）：纸边一道实墨线 + 不模糊的错位影（见 paper.js 的 LIFT）
+    border: isInk ? 'none' : `1px solid ${added ? COLOR.text : INK_EDGE}`,
     // 谱系收叠的纸叠感：两层偏移的「纸边」用 box-shadow 画（填充色一层 +
-    // 描边色一层），画在元素底下不占 DOM、不吃指针、不压自家边框
+    // 描边色一层），画在元素底下不占 DOM、不吃指针、不压自家边框。
+    // 往左下错：跟错位影同一个方向（下午那份光，右上来光）
     boxShadow: (() => {
       // 拿在手里的那一档影子比悬停更重：它是「已经拿起来了」在触屏上唯一看得见的
       // 那份反馈（配合下面的 scale(1.03)），而触屏上根本没有悬停这一档。
       const paper = isInk ? null
-        : (grabbed ? '0 10px 26px rgba(43,33,23,0.30)'
-          : hover ? '0 4px 14px rgba(43,33,23,0.12)' : '0 1px 4px rgba(43,33,23,0.05)');
+        : (grabbed ? PAPER_DROP.near : hover ? PAPER_DROP.mid : PAPER_DROP.far);
       const stack = (stackCount > 0 && !stackOpen && !isInk)
-        ? `4px 4px 0 -1px ${COLOR.bgCard}, 4px 4px 0 0 ${COLOR.borderLt}, 8px 8px 0 -1px ${COLOR.bgCard}, 8px 8px 0 0 ${COLOR.borderLt}`
+        ? `-4px 4px 0 -1px ${COLOR.bgCard}, -4px 4px 0 0 ${INK_EDGE}, -8px 8px 0 -1px ${COLOR.bgCard}, -8px 8px 0 0 ${INK_EDGE}`
         : null;
       const parts = [stack, paper].filter(Boolean);
       return parts.length ? parts.join(', ') : 'none';
@@ -375,7 +376,7 @@ function BoardObject({
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
           <MdInk
             text={o.data?.t || ''}
-            fontFamily={TEXT_FONT_CSS[o.data?.font] || FONT_READ}
+            fontFamily={boardTextFont(o, FONT_READ)}
             fontSize={TEXT_SIZE_PX[o.data?.size] || TEXT_SIZE_PX.md}
             color={SCRIBBLE_INK[o.data?.color] || PAPER.ink}
           />
@@ -385,7 +386,7 @@ function BoardObject({
         /* 画布手写文字：没有卡片外观（同涂鸦），就是一段字浮在纸上。
            白名单字体表在 lib/text-fonts.js，跟服务端那份校验对齐。 */
         <div data-text-body style={{
-          fontFamily: TEXT_FONT_CSS[o.data?.font] || TEXT_FONT_CSS.kai,
+          fontFamily: boardTextFont(o),
           fontSize: TEXT_SIZE_PX[o.data?.size] || TEXT_SIZE_PX.md,
           lineHeight: 1.6,
           color: SCRIBBLE_INK[o.data?.color] || PAPER.ink,

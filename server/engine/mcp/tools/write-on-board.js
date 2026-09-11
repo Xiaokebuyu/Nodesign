@@ -383,7 +383,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const size = (n.size === 'sm' && n.text.length > 40) ? 'md' : (n.size || 'md');
       // 缺省 format 按内容侦测：带 markdown 记号标 plain 会把 **加粗** 吐成星号（ldx 案）
       const format = n.format || (looksLikeMd(n.text) ? 'md' : 'plain');
-      nodes.push({ key: n.id, text: n.text, format, size, font: n.font || 'pen', color: n.color || 'ink', at: n.at || null, w: n.w || null });
+      nodes.push({ key: n.id, text: n.text, format, size, font: n.font || 'kai', color: n.color || 'ink', at: n.at || null, w: n.w || null });
     }
     for (const n of nodes) {
       const box = textBox(n.text, n.size, { md: n.format === 'md', wUnits: capW(n.w) });
@@ -505,7 +505,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const p = pos.get(n.key);
       objects[idOf.get(n.key)] = {
         x: Math.round(p.x + ox), y: Math.round(p.y + oy), w: n.w, h: n.h, kind: 'text',
-        data: { t: n.text, ...(n.format === 'md' ? { format: 'md' } : {}), font: TEXT_FONTS.includes(n.font) ? n.font : 'pen', size: n.size, color: n.color, lid: n.key },
+        data: { t: n.text, ...(n.format === 'md' ? { format: 'md' } : {}), font: TEXT_FONTS.includes(n.font) ? n.font : 'kai', size: n.size, color: n.color, lid: n.key },
         ...common,
       };
     }
