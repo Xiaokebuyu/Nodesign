@@ -36,7 +36,11 @@ beforeEach(async () => {
 });
 afterEach(() => { delete process.env.NODESIGN_REMBG_PYTHON; delete process.env.NODESIGN_REMBG_SOCKET; fs.rmSync(dir, { recursive: true, force: true }); });
 
-describe('checkImport', () => {
+// 假 python 是个 #!/bin/sh 脚本，Windows 起不来（spawn 失败）。被测的逻辑（取 traceback 最后一行、成功记号的读写与作废）
+// 跟平台无关，Linux 上盯着；Windows 上真 python 的行为这里测不到。
+const posixOnly = process.platform === 'win32' ? describe.skip : describe;
+
+posixOnly('checkImport', () => {
   it('import 不动：报的是 traceback 最后一行，不是调用栈', async () => {
     process.env.NODESIGN_REMBG_PYTHON = fakePython(dir, { ok: false });
     const r = await mod.checkImport();
@@ -75,7 +79,7 @@ describe('checkImport', () => {
   });
 });
 
-describe('isAvailable', () => {
+posixOnly('isAvailable', () => {
   it('文件全在但 import 不动 → 不可用，理由里带真正的病因', async () => {
     process.env.NODESIGN_REMBG_PYTHON = fakePython(dir, { ok: false });
     const r = await mod.isAvailable();

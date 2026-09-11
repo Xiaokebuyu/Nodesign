@@ -152,7 +152,7 @@ describe('renameBoardPaths：搬进文件夹后显式 zone 字段不能留在旧
     const { renameBoardPaths } = await import('./board-store.js');
     const { layerOf } = await import('../lib/canvas-id.js');
     const p2 = 'proj_boardstore_rename';
-    ensureProjectWorkspace(p2);
+    await ensureProjectWorkspace(p2);   // 09-11 前漏了 await：git init 在后台跑，Windows 上撞上清理报 code=128
     await patchBoard(p2, {
       zones: { '参考图': { x: 10, y: 10 } },
       objects: { 'assets/generated/a.webp': { x: 400, y: 300, zone: '', seat: 'auto' } },
@@ -172,7 +172,7 @@ describe('renameBoardPaths：搬进文件夹后显式 zone 字段不能留在旧
     const { renameBoardPaths } = await import('./board-store.js');
     const { layerOf } = await import('../lib/canvas-id.js');
     const p2 = 'proj_boardstore_rename2';
-    ensureProjectWorkspace(p2);
+    await ensureProjectWorkspace(p2);   // 09-11 前漏了 await：git init 在后台跑，Windows 上撞上清理报 code=128
     await patchBoard(p2, {
       zones: { '参考图': { x: 10, y: 10 } },
       objects: { '参考图/b.webp': { x: 40, y: 30, zone: '参考图', seat: 'auto' } },

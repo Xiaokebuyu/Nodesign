@@ -45,7 +45,8 @@ describe('registry', () => {
     expect(stopped.status).toBe('stopped');
     expect(reg.isRegisteredPort(p.port)).toBe(false);
     const after = reg.readProcessLog(pid, p.id, { tail: 3 });
-    expect(after.lines.join('\n')).toContain('bye');
+    // Windows 上停进程是 taskkill /T /F（连子孙一起强杀），没有 SIGTERM 可接，serve.js 那句 bye 不会打
+    if (process.platform !== 'win32') expect(after.lines.join('\n')).toContain('bye');
     const list = await reg.listProcesses(pid);
     expect(list.find((x) => x.id === p.id)?.status).toBe('stopped');
   });

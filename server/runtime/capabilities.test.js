@@ -15,7 +15,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 describe('whichBinary', () => {
   it('按 PATH 与额外目录找文件；找不到 null；绝对路径直接判存在', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'nd-which-'));
-    const f = path.join(dir, 'fakebin');
+    // Windows 上 which 按 PATHEXT 找（.exe/.cmd…），没扩展名的文件在那边本来就不算可执行文件
+    const f = path.join(dir, process.platform === 'win32' ? 'fakebin.cmd' : 'fakebin');
     writeFileSync(f, '#!/bin/sh\n'); chmodSync(f, 0o755);
     const saved = process.env.PATH;
     process.env.PATH = '/nonexistent-dir';

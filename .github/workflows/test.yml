@@ -37,6 +37,13 @@ jobs:
             package-lock.json
             web/package-lock.json
 
+      # 前端的字体子集 lint 现场读 woff2（fonttools + brotli）；它故意"缺依赖就红"，所以这里得装上
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 字体 lint 的依赖
+        run: python -m pip install --quiet fonttools brotli
+
       - name: 装依赖（根 + web）
         run: |
           npm ci

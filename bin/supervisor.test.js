@@ -48,7 +48,8 @@ describe('createSupervisor', () => {
     expect(sup.running).toBe(true);
     const t0 = Date.now();
     await sup.stop();
-    expect(Date.now() - t0).toBeGreaterThanOrEqual(250);
+    // Windows 上 kill 就是强杀、没有可以忽略的 SIGTERM，stop 立刻收回；只有 POSIX 才走得到「等超时再 SIGKILL」
+    if (process.platform !== 'win32') expect(Date.now() - t0).toBeGreaterThanOrEqual(250);
     expect(sup.running).toBe(false);
   });
 });
