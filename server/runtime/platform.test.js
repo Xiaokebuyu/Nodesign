@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { platform, siblingEnvFiles } from './platform.js';
+import { platform, siblingEnvFiles, ruleAbsPath } from './platform.js';
 
 const repoRoot = platform.repoRoot;
 
@@ -85,16 +85,26 @@ describe('沙盒内要抹掉的环境变量', () => {
 });
 
 describe('结构化工具 deny 规则', () => {
+  // 09-11：Windows 上 Claude Code 先把路径规范成 POSIX 形式再匹配（C:\\Users\\alice → /c/Users/alice，
+  // 规则写 //c/...，官方 permissions 文档原话）。此前直接拼 `/C:\\...`，桌面版上凭据 deny 一条都不中。
+  it('ruleAbsPath：POSIX 前面补一个斜杠；Windows 盘符转成 //<小写盘符>/ 且反斜杠全换掉', () => {
+    expect(ruleAbsPath('/home/x/.env', false)).toBe('//home/x/.env');
+    expect(ruleAbsPath('C:\\Users\\alice\\.env', true)).toBe('//c/Users/alice/.env');
+    expect(ruleAbsPath('D:\\a\\Nodesign\\Nodesign', true)).toBe('//d/a/Nodesign/Nodesign');
+    expect(ruleAbsPath('C:/x/y', true)).toBe('//c/x/y');
+    expect(ruleAbsPath('/etc/shadow', true)).toBe('//etc/shadow');
+  });
   it('⚠️ 路径必须是双斜杠绝对形式 —— 单斜杠静默失效，实测过', () => {
     const rules = platform.protectedPathRules({ dataRoot: '/var/nodesign-data' });
-    const envRule = rules.find(r => r.startsWith('Read(') && r.includes('/.env'));
-    expect(envRule).toBe(`Read(/${path.join(repoRoot, '.env')})`);
+    const envRule = rules.find(r => r.startsWith('Read(') && r.endsWith('/.env)'));
+    expect(envRule).toBe(`Read(${ruleAbsPath(path.join(repoRoot, '.env'))})`);
     expect(envRule.startsWith('Read(//')).toBe(true);
+    expect(envRule).not.toMatch(/\\/);   // 规则里不许有反斜杠（Windows 上 Claude Code 按 POSIX 形式匹配）
   });
 
   it('三种工具都要盖：Read 防看，Write/Edit 防改', () => {
     const rules = platform.protectedPathRules({ dataRoot: '/var/nodesign-data' });
-    const env = `/${path.join(repoRoot, '.env')}`;
+    const env = ruleAbsPath(path.join(repoRoot, '.env'));
     expect(rules).toContain(`Read(${env})`);
     expect(rules).toContain(`Write(${env})`);
     expect(rules).toContain(`Edit(${env})`);
@@ -102,23 +112,23 @@ describe('结构化工具 deny 规则', () => {
 
   it('数据根在仓库外 → 整个仓库禁写', () => {
     const rules = platform.protectedPathRules({ dataRoot: '/home/x/nodesign-exp-data/projects-data' });
-    expect(rules).toContain(`Write(/${repoRoot}/**)`);
+    expect(rules).toContain(`Write(${ruleAbsPath(repoRoot)}/**)`);
   });
 
   it('⭐ 数据根在仓库里（生产就是 server/projects-data）→ 不许把 agent 自己的工作区封死', () => {
     const rules = platform.protectedPathRules({ dataRoot: path.join(repoRoot, 'server', 'projects-data') });
-    expect(rules).not.toContain(`Write(/${repoRoot}/**)`);
-    expect(rules).not.toContain(`Write(/${path.join(repoRoot, 'server')}/**)`);
+    expect(rules).not.toContain(`Write(${ruleAbsPath(repoRoot)}/**)`);
+    expect(rules).not.toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'server'))}/**)`);
     // 别的顶层目录照封
-    expect(rules).toContain(`Write(/${path.join(repoRoot, 'web')}/**)`);
+    expect(rules).toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'web'))}/**)`);
   });
 
   it('⭐ 逐层下探：只放行通往数据根的那一支，`server/` 里的源码照样禁写', () => {
     const rules = platform.protectedPathRules({ dataRoot: path.join(repoRoot, 'server', 'projects-data') });
     // server/ 整个不能放行 —— 那等于平台源码对 agent 可写
-    expect(rules).toContain(`Write(/${path.join(repoRoot, 'server', 'engine')}/**)`);
-    expect(rules).toContain(`Write(/${path.join(repoRoot, 'server', 'runtime')}/**)`);
+    expect(rules).toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'server', 'engine'))}/**)`);
+    expect(rules).toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'server', 'runtime'))}/**)`);
     // 通往数据根那一支不能被封
-    expect(rules).not.toContain(`Write(/${path.join(repoRoot, 'server', 'projects-data')}/**)`);
+    expect(rules).not.toContain(`Write(${ruleAbsPath(path.join(repoRoot, 'server', 'projects-data'))}/**)`);
   });
 });

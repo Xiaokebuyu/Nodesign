@@ -187,7 +187,8 @@ function credentialBlacklist() {
     //     工作区里」判，实测 deny；钩子若静默死，init 契约自检会杀会话兜底。
     // 逃生舱：同机上还有别的东西要拦时不用改代码（冒号分隔绝对路径）。
     // exp 用它拦生产的数据根 —— 两个实例同用户同机器，否则互相读得到。
-    ...(process.env.NODESIGN_DENY_READ_EXTRA || '').split(':').map(s => s.trim()).filter(Boolean),
+    // 分隔符用 path.delimiter：POSIX 上还是冒号，Windows 上是分号（冒号会把 `C:\...` 劈成两半）
+    ...(process.env.NODESIGN_DENY_READ_EXTRA || '').split(path.delimiter).map(s => s.trim()).filter(Boolean),
   ].filter((p) => {
     // 上面那条禁令的代码形态：带通配的条目直接丢弃并吼出来，宁可少拦一条
     // 也不能再把整个 Bash 弄死。尾部 /** 不会出现在这份清单里（protectedPathRules
@@ -255,12 +256,24 @@ function secretEnvVarNames(env = process.env) {
  *   - permissions.deny 规则在 bypassPermissions 下**照样生效** —— 但路径必须写
  *     **双斜杠**绝对形式 `Read(//home/x/**)`。写成单斜杠 `Read(/home/x/**)`
  *     不报错、不生效，静默失效（这一条踩过，别再踩）。
+ *   - ⚠️ Windows（09-11）：Claude Code 先把路径规范成 POSIX 形式再匹配，`C:\Users\alice` 变成
+ *     `/c/Users/alice`，规则要写 `//c/Users/alice`（官方文档 permissions 页原话）。09-11 之前这里
+ *     直接拼出 `Read(/C:\Users\...\.env)`，桌面版上**一条都匹配不上**，凭据 deny 静默失效。
+ *     拼规则一律过 ruleAbsPath。
  */
+export function ruleAbsPath(abs, win = isWin) {
+  if (!win) return `/${abs}`;
+  const m = /^([A-Za-z]):[\\/]*(.*)$/.exec(abs);
+  const rest = (m ? m[2] : abs).replace(/\\/g, '/').replace(/^\/+/, '');
+  return m ? `//${m[1].toLowerCase()}/${rest}` : `//${rest}`;
+}
+
 function protectedPathRules({ dataRoot } = {}) {
   const rules = [];
   for (const p of credentialBlacklist()) {
     // 目录 → `/**`，文件 → 精确匹配；两条都发，多余的那条不会误伤
-    for (const target of [`/${p}`, `/${p}/**`]) {
+    const r = ruleAbsPath(p);
+    for (const target of [r, `${r}/**`]) {
       rules.push(`Read(${target})`, `Write(${target})`, `Edit(${target})`);
     }
   }
@@ -271,7 +284,7 @@ function protectedPathRules({ dataRoot } = {}) {
   // 每层封兄弟、只放行那一支（只封顶层不够：那样整个 server/ 都得放行 =
   // 平台源码对 agent 可写）。exp 的数据根在仓库外，直接封整个仓库。
   for (const child of repoChildrenOutside(dataRoot)) {
-    rules.push(`Write(/${child}/**)`, `Edit(/${child}/**)`);
+    rules.push(`Write(${ruleAbsPath(child)}/**)`, `Edit(${ruleAbsPath(child)}/**)`);
   }
   return rules;
 }
