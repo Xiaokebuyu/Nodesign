@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import crypto from 'node:crypto';
 
 const db = (await import('../../engine/runs/store.js')).default;
+await import('../../auth/users-store.js');   // users 表由它建：往里插行的测试自己导入，别靠别的文件先跑（09-11 测试规则）
 const { relayCatalogFor } = await import('./catalog.js');
 const { RELAY_SUBSCRIPTION_CLOSED_REASON } = await import('./gates.js');
 const { mergeRelayRows, withDefaultAlias } = await import('../../engine/agent/model-rows.js');
