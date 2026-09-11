@@ -61,7 +61,7 @@ export { BRANDS, SHARED_SDK_ALIAS };
  * 建一整套索引。**不碰任何模块状态** —— 建坏了往外抛，调用方决定是炸进程（启动时）还是留着旧的（重建时）。
  * @returns {{upstreams: object, models: object[], byId: Map, wireLookup: Map, errors: object[], shadowed: string[], path: string|null}}
  */
-function buildIndex() {
+function buildIndex({ withRelay = true } = {}) {
   const external = loadSlotConfig();
   const errors = [...external.errors];
   // 同名顶替（09-09）：外部插槽的 id 撞上内置 **API** 行 → 内置那行退出表，只剩用户的（本机钥匙优先，
@@ -71,8 +71,8 @@ function buildIndex() {
   // 本地版第三个来源（09-11）：站主 relay 目录里本机没钥匙的行照目录建（model-rows.js 头注）。hosted 下目录恒空，原样返回
   const baseUpstreams = Object.freeze({ ...UPSTREAMS_BUILTIN, ...external.upstreams });
   const relay = mergeRelayRows(
-    [...MODELS_BUILTIN.filter((r) => !externalIds.has(r.id) || !r.api), ...external.models.map(toExternalRow)].map(withDefaultAlias),
-    baseUpstreams, relayCatalog(), { keyPresent: (row) => upstreamKeyPresent(row, baseUpstreams) },
+    Object.freeze([...MODELS_BUILTIN.filter((r) => !externalIds.has(r.id) || !r.api), ...external.models.map(toExternalRow)].map(withDefaultAlias)),
+    baseUpstreams, withRelay ? relayCatalog() : null, { keyPresent: (row) => upstreamKeyPresent(row, baseUpstreams) },
   );
   const { upstreams, models } = relay;
   const relayErrors = [...relay.errors];
@@ -108,11 +108,12 @@ function buildIndex() {
   }
   // 改过名的行（09-10，表在 model-renames.js）：只对账**目标得是活着的行**（指向不存在的行 = 表写错了，
   // 当场炸，别等用户拿旧 id 撞上）。旧名还活着不算错：那多半是同名插槽，活着的那行说了算。
-  for (const [oldId, newId] of Object.entries(RENAMED_MODELS)) {
-    if (!byId.has(newId)) throw new Error(`[model-context] RENAMED_MODELS 里 ${oldId} 指向不存在的行：${newId}`);
-  }
-  // 站点下发的改名表（09-11）不做这条断言：目标可能是这个账号看不见的行，翻过去查不到 = 跟不认识的名字一样
+  // 站点下发的改名表（09-11）合进来：本地这张的目标可能已被站点再改一次名（那条行照目录退出了表），顺着跟到底再对账。
+  // 站点那张自己的条目不做这条断言：目标可能是这个账号看不见的行，翻过去查不到 = 跟不认识的名字一样
   const renames = Object.freeze({ ...RENAMED_MODELS, ...relay.renames });
+  for (const [oldId, newId] of Object.entries(RENAMED_MODELS)) {
+    if (!byId.has(followRename(newId, renames))) throw new Error(`[model-context] RENAMED_MODELS 里 ${oldId} 指向不存在的行：${newId}`);
+  }
   return { upstreams, models, byId, wireLookup, errors, relayErrors, renames, shadowed, path: external.path || null };
 }
 
@@ -130,8 +131,21 @@ function logIndex(idx) {
   }
 }
 
+/**
+ * 目录参与的那次建不成（09-11）：退回「安装包自带的表 + 按 id 问目录」—— 也就是这套机制之前的老行为，
+ * 把原因记进 relayErrors。没有目录参与的错（内置表 / 插槽）照旧往外抛。
+ */
+function buildIndexSafe() {
+  try { return buildIndex(); } catch (err) {
+    if (!relayCatalog().ok) throw err;
+    const idx = buildIndex({ withRelay: false });
+    idx.relayErrors.push({ where: 'relay', message: `照目录建表失败，这次按安装包自带的表：${err.message}` });
+    return idx;
+  }
+}
+
 // 启动时建一次。内置表的错在这儿炸进程，口径跟 08-22 起一样（代码错就该拦在门口）
-let INDEX = buildIndex();
+let INDEX = buildIndexSafe();
 logIndex(INDEX);
 
 let BY_ID = INDEX.byId;
@@ -153,7 +167,7 @@ export let SELECTABLE_MODELS = deriveSelectable(INDEX.models);
  * @returns {{models: number, errors: {where: string, message: string}[]}}
  */
 export function rebuildModelIndex() {
-  const next = buildIndex();          // 炸了就到此为止，下面一行都不执行
+  const next = buildIndexSafe();      // 炸了就到此为止，下面一行都不执行
   INDEX = next;
   BY_ID = next.byId;
   WIRE_LOOKUP = next.wireLookup;
@@ -307,6 +321,9 @@ export function selectableModelsFor(user, opts) {
     if (!inScope(m, scope)) continue;   // 只在演出面出现的行，画布面看不见也选不了
     const source = modelSourceFor(m.id);
     if (!source) continue;   // 本地版：本机没钥匙、relay 也没有 → 藏起来；hosted 永远 'local'
+    // 「看不见」的闸要在钟点闸**之前**判（09-11 评审抓的）：原来关门时段里 localGen 行会以"锁着"列给 basic，
+    // relay 目录照这份下发就把整行漏给了桌面。relay 来源的行不判本地档位（站点那头判过了）
+    if (source !== 'relay' && m.gate === 'localGen' && !approved) continue;
     // 本地版：用户在设置页藏起来的行带 hidden 标（选择器不列，设置页要列出来给他再打开；不影响能不能用）
     // 存下来的是"当时的 id"：行改过名的话，偏好里还写着旧名（canonicalModelId 翻一下再比）
     const hidden = platform.isLocal && loadPrefs().hiddenModels.some((id) => canonicalModelId(id) === m.id) ? { hidden: true } : {};
@@ -321,7 +338,10 @@ export function selectableModelsFor(user, opts) {
     if (source === 'relay') {
       // relay 那头按站主那边的档位判过了（锁/不锁、原因），本地的 user 是 LOCAL_OWNER（admin），本地档位判断在这一行不适用
       const entry = relayModelEntry(m.id);
-      out.push(entry.locked ? { ...m, locked: true, lockReason: entry.lockReason || SUBSCRIPTION_LOCK_REASON, source, ...hidden } : { ...m, source, ...hidden });
+      // 目录里「按钟点关门」的锁是站点**拉取那一刻**算的。照目录建的行带着站点实际生效的时段，上面那道钟点闸已经
+      // 现算过 → 这一种锁不再照搬（否则过了关门时段还锁着）。不是照目录建的行（本地那份时段可能缺 / 旧）照旧信站点
+      const locked = entry.locked && !(entry.lockKind === 'closed' && BY_ID.get(m.id)?.relay);
+      out.push(locked ? { ...m, locked: true, lockReason: entry.lockReason || SUBSCRIPTION_LOCK_REASON, source, ...hidden } : { ...m, source, ...hidden });
       continue;
     }
     if (m.gate === 'localGen') { if (approved) out.push({ ...m, ...hidden }); continue; }

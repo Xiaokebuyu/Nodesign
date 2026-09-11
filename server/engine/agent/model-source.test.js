@@ -88,6 +88,28 @@ describe('目录长出来的行（local profile）', () => {
     expect(mc.selectableModelsFor(LOCAL_OWNER).find((m) => m.id === apiRow.id)?.label).toBe('站点改过的名字');
   });
 
+  it('⛔ 站点把 helper 和本地改名表的目标都改了名：表照样建得出来，新行在，旧 id 两跳翻到新名字（09-11 评审）', () => {
+    rc._setRelayCatalog({ configured: true, ok: true, at: 3, error: null, whoami: null,
+      renames: { [HELPER]: 'helper-v2', 'deepseek-v4.1-flash': 'dsv41-v2' },
+      models: [entry('site-new-row', { fastModel: 'helper-v2' }), entry('helper-v2', { helper: true, label: undefined }), entry('dsv41-v2', { fastModel: 'helper-v2' })] });
+    expect(mc.selectableModelsFor(LOCAL_OWNER).some((m) => m.id === 'site-new-row')).toBe(true);
+    expect(mc.canonicalModelId('deepseek-flash')).toBe('dsv41-v2');   // 本地改名表 deepseek-flash → v4.1，站点再 → dsv41-v2
+    expect(mc.modelSourceFor('deepseek-flash')).toBe('relay');
+  });
+
+  it('钟点锁：照目录建的行按下发的时段现算（目录里拉取那刻的锁不照搬）；不是照目录建的行照旧信站点的锁', () => {
+    const shut = { why: '高峰', tz: 'UTC', windows: ['00:00-00:01'] };   // 基本不会撞上此刻
+    rc._setRelayCatalog({ configured: true, ok: true, at: 4, error: null, whoami: null, models: [
+      entry('site-new-row', { locked: true, lockKind: 'closed', lockReason: '关门', unavailable: shut }),
+      { id: apiRow.id, locked: true, lockKind: 'closed', lockReason: '关门' },   // 老形状（没有 mode）→ 不照目录建
+    ] });
+    const now = new Date('2026-09-11T12:00:00Z');
+    const list = mc.selectableModelsFor(LOCAL_OWNER, { now });
+    expect(list.find((m) => m.id === 'site-new-row')?.locked).toBeFalsy();
+    expect(list.find((m) => m.id === apiRow.id)).toMatchObject({ locked: true, lockReason: '关门' });
+    expect(mc.selectableModelsFor(LOCAL_OWNER, { now: new Date('2026-09-11T00:00:30Z') }).find((m) => m.id === 'site-new-row')?.locked).toBe(true);
+  });
+
   it('目录没了 → 目录长出来的行跟着没了（不留一条指向站点的死行）', () => {
     v2();
     rc._setRelayCatalog({ configured: true, ok: false, at: 2, error: 'x', whoami: null, models: [] });

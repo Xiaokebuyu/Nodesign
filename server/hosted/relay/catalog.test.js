@@ -65,6 +65,19 @@ describe('目录的形状', () => {
   });
 });
 
+describe('关门时段不漏 localGen 行（09-11 评审）', () => {
+  it('站主给 localGen 行设了关门时段：关门时 basic 的目录里照样没有它（原来会以"锁着"整行下发）', async () => {
+    const { setModelHours } = await import('../../lib/model-switches.js');
+    const gated = MODELS_BUILTIN.find((r) => r.api && r.select?.gate === 'localGen');
+    setModelHours(gated.id, { why: '测试', tz: 'UTC', windows: ['02:00-03:00'] });
+    try {
+      const at = new Date('2026-09-11T02:30:00Z');
+      expect(relayCatalogFor(basic, { now: at }).models.some((m) => m.id === gated.id)).toBe(false);
+      expect(relayCatalogFor(admin, { now: at }).models.find((m) => m.id === gated.id)).toMatchObject({ locked: true, lockKind: 'closed' });
+    } finally { setModelHours(gated.id, undefined); }
+  });
+});
+
 describe('⭐ 桌面照目录建的行，站点的会话路由认得', () => {
   const c = relayCatalogFor(admin);
   const built = mergeRelayRows(MODELS_BUILTIN.map(withDefaultAlias), UPSTREAMS_BUILTIN, { ok: true, ...c }, { keyPresent: () => false });

@@ -112,32 +112,33 @@ function setCatalog(next) {
   for (const fn of listeners) { try { fn(catalog); } catch (err) { console.warn(`[relay-client] 目录变更回调失败：${err.message}`); } }
 }
 
-/**
- * 目录里「按钟点关门」的锁（lockKind 'closed'）是站点**拉取那一刻**算的，过了关门时段它还锁着。
- * 这类行站点同时下发了时段（unavailable），本机的钟点闸（selectableModelsFor → availabilityOf）
- * 会照它现算 —— 所以本机把这一种锁摘掉，别的锁（档位 / 站主停用 / 订阅腿关着）原样留着。
- * 老站点不发 lockKind，什么都不动。
- */
-const liveClock = (m) => (m && m.lockKind === 'closed' && m.unavailable ? { ...m, locked: false, lockReason: undefined } : m);
+// 目录原样存（含锁）。「按钟点关门」那一种锁要不要照搬，按行判：照目录建的行带着站点实际生效的时段，本机会现算；
+// 不是照目录建的行照旧信站点 —— 判据在 model-context.selectableModelsFor，这里不摘（09-11 评审：摘早了会让关门时段漏过去）
+let refreshSeq = 0;   // 并发刷新只认最后开始的那次（老令牌的定时刷新晚回来，不许盖掉退出 / 换号之后的目录）
 
 /**
  * 拉 /whoami 与 /models。失败不抛：目录标成 ok:false 带 error，选择器就当 relay 没有行；
  * 设置页把 error 显示出来。令牌无效（401）也是这一类 —— 用户填错令牌不该让服务端起不来。
  *
- * keepOnError（后台定时刷新用）：网络层失败 / 站点 5xx 时**保留上一份拉到的目录**。目录里的行 09-11
- * 起是桌面模型表的一部分，网络抖一下就让它们消失，选择器会空、下一句话会被拦。4xx（令牌吊销之类）照常换掉。
+ * keepOnError（后台定时刷新用）：失败时**保留上一份拉到的目录**。目录里的行 09-11 起是桌面模型表的一部分，
+ * 网络抖一下 / 站点 5xx / 429 / Cloudflare 质询就让它们消失，选择器会空、下一句话会被拦。
+ * 只有**令牌失效**（401 / DEVICE_TOKEN_INVALID）照常换掉：那时目录本来就不该再用。
  */
 export async function refreshRelayCatalog({ keepOnError = false } = {}) {
+  const seq = ++refreshSeq;
   const cfg = relayConfig();
   if (!cfg) { setCatalog({ configured: false, ok: false, at: Date.now(), error: null, whoami: null, models: [], renames: {} }); return catalog; }
   try {
     const [whoami, models] = await Promise.all([call('/whoami'), call('/models')]);
-    const list = Array.isArray(models?.models) ? models.models.map(liveClock) : [];
+    if (seq !== refreshSeq) return catalog;   // 这期间又开始了一次刷新（登录 / 退出 / 手动刷新）：以那次为准
+    const list = Array.isArray(models?.models) ? models.models : [];
     const renames = models?.renames && typeof models.renames === 'object' ? models.renames : {};
     setCatalog({ configured: true, ok: true, at: Date.now(), error: null, whoami, models: list, renames });
   } catch (err) {
+    if (seq !== refreshSeq) return catalog;
     const error = `${err.code ? err.code + ': ' : ''}${err.message}`;
-    if (keepOnError && catalog.ok && !(err.status >= 400 && err.status < 500)) {
+    const tokenDead = err.status === 401 || err.code === 'DEVICE_TOKEN_INVALID';
+    if (keepOnError && catalog.ok && !tokenDead) {
       console.warn(`[relay-client] 定时刷新目录失败，沿用上一份（${cfg.url}）：${error}`);
       return catalog;
     }
@@ -173,11 +174,16 @@ export async function openRelaySession(sid, appModel) {
   if (pending) await pending;   // 旧的注销已经发出去了：等它落地再登记，别让它后到站点把新登记删了
   let r;
   try {
-    r = await call('/sessions', { method: 'POST', body: { sid, appModel } });
+    try {
+      r = await call('/sessions', { method: 'POST', body: { sid, appModel } });
+    } catch (err) {
+      if (err.code !== 'RELAY_TIMEOUT' && !/fetch failed/i.test(String(err.message))) throw err;
+      console.warn(`[relay-client] open session ${String(sid).slice(0, 8)} 第一发 ${err.code || err.message}，换连接重试一次`);
+      r = await call('/sessions', { method: 'POST', body: { sid, appModel }, headers: { connection: 'close' } });
+    }
   } catch (err) {
-    if (err.code !== 'RELAY_TIMEOUT' && !/fetch failed/i.test(String(err.message))) throw err;
-    console.warn(`[relay-client] open session ${String(sid).slice(0, 8)} 第一发 ${err.code || err.message}，换连接重试一次`);
-    r = await call('/sessions', { method: 'POST', body: { sid, appModel }, headers: { connection: 'close' } });
+    if (relayGens.get(sid) === gen) relayGens.delete(sid);   // 没登记上：代次不留（留着的话同 sid 旧登记的注销会被它挡掉）
+    throw err;
   }
   return { ...r, gen };
 }

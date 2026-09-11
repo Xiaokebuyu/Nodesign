@@ -53,6 +53,7 @@ const { _resetSeen, RELAY_SUBSCRIPTION_CLOSED_REASON, RELAY_SUBSCRIPTION_LEG_ENA
 const { installRelayUsageSource, _resetInstalled } = await import('./usage.js');
 const { _resetUsageSources, checkQuota } = await import('../../lib/quota.js');
 const { resolveModelRoute } = await import('../../engine/agent/model-context.js');
+const { MODELS_BUILTIN } = await import('../../engine/agent/model-table.js');
 
 function makeUser({ role = 'user', plan = 'basic', daily = null, lifetime = null } = {}) {
   const id = 'u_' + crypto.randomBytes(4).toString('hex');
@@ -181,6 +182,16 @@ describe('会话登记', () => {
     const { r } = await openSession(token, 'claude-sonnet-5[1m]');
     expect(r.status).toBe(403);
     expect((await r.json()).code).toBe('SUBSCRIPTION_CLOSED');
+  });
+  // 09-11：以前只信客户端的选择器，桌面拿任何 id 来登记都放行
+  it('这个账号用不了的 API 行（localGen 档）→ 登记当场 403；admin 放行', async () => {
+    const gated = MODELS_BUILTIN.find((m) => m.api && m.select?.gate === 'localGen' && !m.unavailable);
+    const { token } = mintDevice({ userId: makeUser({ plan: 'basic' }).id });
+    const { r } = await openSession(token, gated.id);
+    expect(r.status).toBe(403);
+    expect((await r.json()).code).toBe('MODEL_NOT_ALLOWED');
+    const { token: at } = mintDevice({ userId: makeUser({ role: 'admin' }).id });
+    expect((await openSession(at, gated.id)).r.status).toBe(201);
   });
   it('API 行 → 201，mode=api；没登记就推理 → 400；别人的 sid → 403', async () => {
     const a = makeUser(); const b = makeUser();

@@ -8,6 +8,7 @@ const fake = http.createServer((req, res) => {
   seen.push({ method: req.method, url: req.url, auth: req.headers.authorization });
   if (mode === 'hang') return;   // 不回
   if (mode === 'hang-once') { mode = 'ok'; return; }   // 第一发不回，第二发正常（09-08 连接偶发停顿案）
+  if (mode === '429') { res.writeHead(429, { 'content-type': 'application/json' }); res.end('{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}'); return; }
   if (mode === 'html') { res.writeHead(502, { 'content-type': 'text/html' }); res.end('<html>bad gateway</html>'); return; }
   if (mode === 'unauth') { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: '设备令牌无效' }, code: 'DEVICE_TOKEN_INVALID' })); return; }
   if (req.url === '/api/relay/whoami') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ user: { id: 'u1', username: 'alice', tier: 'basic' }, quota: { kind: 'daily', used: 1, limit: 5 } })); return; }
@@ -83,11 +84,10 @@ describe('refreshRelayCatalog', () => {
     expect(c.ok).toBe(false);
     expect(c.error).toContain('502');
   });
-  it('09-11：改名表进快照；按钟点关门的锁摘掉（本机据 unavailable 现算），别的锁留着', async () => {
+  it('09-11：改名表进快照；目录原样存（钟点锁摘不摘按行判，在 model-context，见 model-source.test.js）', async () => {
     const c = await rc.refreshRelayCatalog();
     expect(c.renames).toEqual({ 'old-id': 'm-api' });
-    expect(rc.relayModelEntry('m-closed').locked).toBe(false);
-    expect(rc.relayModelEntry('m-closed').unavailable.windows).toEqual(['01:00-04:00']);
+    expect(rc.relayModelEntry('m-closed')).toMatchObject({ locked: true, lockKind: 'closed' });
     expect(rc.relayModelEntry('m-off')).toMatchObject({ locked: true, lockReason: '停用' });
   });
   it('09-11 后台刷新（keepOnError）：网络层失败 / 5xx 沿用上一份；4xx 照常清掉；每换一份都通知', async () => {
@@ -98,6 +98,8 @@ describe('refreshRelayCatalog', () => {
     mode = 'html';   // 502
     expect((await rc.refreshRelayCatalog({ keepOnError: true })).ok).toBe(true);
     expect(rc.relayModelEntry('m-api')).toBeTruthy();
+    mode = '429';    // 限流 / CF 质询这类 4xx 也不该清掉
+    expect((await rc.refreshRelayCatalog({ keepOnError: true })).ok).toBe(true);
     expect(got).toEqual([true]);   // 没换就不通知
     mode = 'unauth';
     expect((await rc.refreshRelayCatalog({ keepOnError: true })).ok).toBe(false);

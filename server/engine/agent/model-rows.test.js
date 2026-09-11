@@ -74,6 +74,26 @@ describe('mergeRelayRows', () => {
     expect(row.unavailable).toEqual(hours);
   });
 
+  it('被拒的 helper 条目不拖垮主行：主行的 fastModel 退回指自己（09-11 评审）', () => {
+    const r = merge(cat([api('main-c', { fastModel: 'bad-helper' }), api('bad-helper', { helper: true, label: undefined, sdkAlias: 'claude-future-9[1m]' })]));
+    expect(r.models.find((m) => m.id === 'main-c').api.fastModel).toBe('main-c');
+  });
+
+  it('⛔ 站点改了 helper / 备用行的名字：安装包里指着旧名字的行顺着改名指到新名字（09-11 评审：不改就整张表建不成）', () => {
+    const renames = { [HELPER]: 'helper-v2', 'glm-5.3-flash-merge': 'glm-merge-v2' };
+    const r = merge(cat([api('helper-v2', { helper: true, label: undefined }), api('glm-merge-v2')], renames));
+    expect(r.models.some((m) => m.id === HELPER || m.id === 'glm-5.3-flash-merge')).toBe(false);
+    // 目录里没有、留在表里的内置行：helper 与 standby 都跟过去了
+    const stay = r.models.filter((m) => m.api && !m.relay);
+    expect(stay.length).toBeGreaterThan(0);
+    for (const m of stay) {
+      expect(m.api.fastModel).not.toBe(HELPER);
+      expect(m.standby).not.toBe('glm-5.3-flash-merge');
+    }
+    const withStandby = BASE.find((m) => m.standby === 'glm-5.3-flash-merge');
+    expect(r.models.find((m) => m.id === withStandby.id).standby).toBe('glm-merge-v2');
+  });
+
   it('站点改过名：本地那条旧 id 的内置行（没钥匙、目录里没有）退出表，存量旧 id 才翻得过去；有钥匙的留着', () => {
     const renames = { [VISION]: 'dsv41-go' };
     const r = merge(cat([api('dsv41-go')], renames));

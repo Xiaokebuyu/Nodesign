@@ -107,17 +107,22 @@ export function mergeRelayRows(models, upstreams, catalog, { keyPresent }) {
   const local = new Map(models.map((r) => [r.id, r]));
   // 本机说了算的行：订阅 Claude 行、用户插槽、本机有钥匙的内置 API 行
   const localWins = (r) => !!r && (!r.api || r.external || keyPresent(r));
-  const candidates = entries.filter((e) => !localWins(local.get(e.id)));
-  const relayIds = new Set(candidates.map((e) => e.id));
-  const built = new Map();
-  for (const e of candidates) {
+  // 第一遍只校验：先定下哪些条目建得出来。helper 的指向要按**这份**判 —— 按候选名单判的话，
+  // 一条被拒的 helper 会让所有指着它的主行悬空、在 checkRow 上一起被丢（09-11 评审抓的）
+  const valid = entries.filter((e) => {
+    if (localWins(local.get(e.id))) return false;
     const where = `relay (${e.id})`;
     const alias = local.get(e.sdkAlias);
-    if (!alias || alias.api) { errors.push({ where, message: `站点这行的 sdkAlias ${e.sdkAlias} 本地表里没有（换别名发会被站点改道成 helper），这一行不列` }); continue; }
-    if (!Number.isFinite(e.window) || e.window <= 0) { errors.push({ where, message: `window 不对：${e.window}` }); continue; }
-    // helper：站点给的那行得在合好的表里（目录里一起下发的，或本地本来就有的 API 行）；都没有就指自己，
+    if (!alias || alias.api) { errors.push({ where, message: `站点这行的 sdkAlias ${e.sdkAlias} 本地表里没有（换别名发会被站点改道成 helper），这一行不列` }); return false; }
+    if (!Number.isFinite(e.window) || e.window <= 0) { errors.push({ where, message: `window 不对：${e.window}` }); return false; }
+    return true;
+  });
+  const validIds = new Set(valid.map((e) => e.id));
+  const built = new Map();
+  for (const e of valid) {
+    // helper：站点给的那行得在合好的表里（目录里一起下发并通过校验的，或本地本来就有的 API 行）；都没有就指自己，
     // 站点那头认得出这是主行的名字 —— 标题 / 压缩会按主行的档位跑，贵一点但不会断
-    const fastOk = isStr(e.fastModel) && (relayIds.has(e.fastModel) || local.get(e.fastModel)?.api);
+    const fastOk = isStr(e.fastModel) && (validIds.has(e.fastModel) || local.get(e.fastModel)?.api);
     const select = e.helper || !isStr(e.label) ? null : Object.freeze({
       label: e.label, desc: isStr(e.desc) ? e.desc : '',
       ...(e.only ? { only: e.only } : {}), ...(e.stageDefault ? { stageDefault: true } : {}), ...(e.default ? { default: true } : {}),
@@ -138,12 +143,25 @@ export function mergeRelayRows(models, upstreams, catalog, { keyPresent }) {
   // 站点改过名的行：本地表里那条旧 id 的内置行（没钥匙、目录里也没有）退出表，存量里的旧 id 才会顺着
   // 改名表落到新行上（canonicalModelId 是「活着的行优先」，旧行留着就永远翻不过去）
   const finalIds = new Set([...local.keys(), ...built.keys()]);
-  const retired = (r) => !localWins(r) && !built.has(r.id) && renames[r.id] && finalIds.has(renames[r.id]);
+  const retired = new Map();   // 退出表的旧 id → 新 id
+  for (const r of models) if (!localWins(r) && !built.has(r.id) && renames[r.id] && finalIds.has(renames[r.id])) retired.set(r.id, renames[r.id]);
+  // ⛔ 安装包里别的行还指着退出的那条（fastModel / standby）：顺着改名指到新名字上。不改的话 checkRow 在**内置行**上
+  //   抛错、整张表建不成，之后每次刷新都失败 —— 站点改一次 helper 或备用行的名字，桌面就再也长不出新行（09-11 评审抓的）
+  const follow = (id) => { let cur = id; const seen = new Set(); while (retired.has(cur) && !seen.has(cur)) { seen.add(cur); cur = retired.get(cur); } return cur; };
+  const repoint = (r) => {
+    if (!r.api) return r;
+    const fast = follow(r.api.fastModel);
+    const sb = r.standby === undefined ? undefined : follow(r.standby);
+    if (fast === r.api.fastModel && sb === r.standby) return r;
+    const { standby: _old, ...rest } = r;
+    return Object.freeze({ ...rest, ...(sb !== undefined && sb !== r.id ? { standby: sb } : {}), api: Object.freeze({ ...r.api, fastModel: fast }) });
+  };
+  // 照目录建的行一样要跟：它的 fastModel 可能恰好是一条刚退出的本地行
   const out = [];
   for (const r of models) {
-    if (built.has(r.id)) { out.push(built.get(r.id)); built.delete(r.id); continue; }   // 原位顶替，选择器顺序不乱
-    if (!retired(r)) out.push(r);
+    if (built.has(r.id)) { out.push(repoint(built.get(r.id))); built.delete(r.id); continue; }   // 原位顶替，选择器顺序不乱
+    if (!retired.has(r.id)) out.push(repoint(r));
   }
-  out.push(...built.values());   // 本地表里没有的新行按目录顺序排在后面
+  out.push(...[...built.values()].map(repoint));   // 本地表里没有的新行按目录顺序排在后面
   return { models: Object.freeze(out), upstreams: Object.freeze({ ...upstreams, ...RELAY_UPSTREAMS }), renames, errors };
 }

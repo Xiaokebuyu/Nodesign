@@ -42,7 +42,7 @@ import { avatarDataUrl, setAvatar, clearAvatar, AVATAR_MAX_UPLOAD } from '../../
 import { getActiveNotice } from '../../lib/notice-store.js';
 import { forwardSubscription } from './subscription-leg.js';
 import { handleRequest as forwardViaIngress } from '../../lib/model-ingress.js';
-import { priceTokens, resolveModelRoute } from '../../engine/agent/model-context.js';
+import { priceTokens, resolveModelRoute, allowedModelsFor, modelLockFor, canonicalModelId, PICKER_SCOPES } from '../../engine/agent/model-context.js';
 import { checkQuota } from '../../lib/quota.js';
 import { tierOf } from '../../auth/tier.js';
 import { mountRelayTools, relayToolsFor } from './tools.js';
@@ -172,6 +172,16 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     if (resolveModelRoute(appModel).mode === 'subscription' && !relaySubscriptionAllowed(user)) {
       const d = relaySubscriptionDenial();
       return sendError(res, 403, d.code, d.message);
+    }
+    // API 行：这个账号能不能用这一行，判在服务器（09-11 补）。以前只信客户端的选择器 —— 桌面拿任何 id 来登记都放行，
+    // localGen 档的行、站主停用的行、关门时段里的行都挡不住。跟网页的 turn 同一把尺（allowedModelsFor），两个选择器面取并集。
+    // 按登记时判（一个 query 登记一次），不逐发判：逐发判会在关门那一刻把跑到一半的回合掐断，网页也只在回合开始时判
+    if (resolveModelRoute(appModel).mode === 'api') {
+      const id = canonicalModelId(appModel);
+      if (!PICKER_SCOPES.some((scope) => allowedModelsFor(user, { scope }).some((m) => m.id === id))) {
+        const lock = PICKER_SCOPES.map((scope) => modelLockFor(user, id, { scope })).find(Boolean);
+        return sendError(res, 403, lock ? 'MODEL_LOCKED' : 'MODEL_NOT_ALLOWED', lock?.lockReason || '这个账号不能用这个模型，请在选择器里换一个。');
+      }
     }
     const r = openRelaySession({ sid, appModel, userId: user.id, deviceId: req.relayDevice.id });
     if (!r.ok) return sendError(res, r.status, r.code, r.message);
