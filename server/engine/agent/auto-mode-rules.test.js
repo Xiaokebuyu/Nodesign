@@ -56,5 +56,7 @@ describe('出厂快照有没有漂移', () => {
       return;  // 没装 CLI / 超时 → 跳过
     }
     expect(现行).toBe(DEFAULT_HARD_DENY);
-  });
+    // ⚠️ 起一次 claude CLI：单跑 3 秒出头，全量并发时实测 8.9 秒 —— 默认 5 秒的单测时限不够，
+    // 挂出来的是笼统的「Test timed out」（09-12 升 SDK 时踩到，跟 board-tasklist 同一个模式）。
+  }, 90_000);
 });
