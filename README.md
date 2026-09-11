@@ -19,7 +19,7 @@
 
 <br>
 
-![NoDesign 工作区：画布上的产物、板书与关系线，右侧为 Agent 会话栏](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/hero.webp)
+![雾岭咖啡项目的画布：板书上的演示结构、发布演示稿、官网与透明底包装图，产物之间以关系线相连，右侧为 Agent 会话栏](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/hero.webp)
 
 ## 快速开始
 
@@ -28,7 +28,7 @@
 | [下载安装包](https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe) | [nodesign.xiaobuyu.trade](https://nodesign.xiaobuyu.trade/login) | `npx @xiaobuyu/nodesign` |
 | 推荐长期使用。支持自动更新，可登录 NoDesign 账号使用平台模型，或配置自有密钥（BYOK）。 | 无需安装，注册后即可使用。提供免费模型与每日额度，部分依赖本机环境的功能暂未开放。 | 需要 Node.js 22.16 及以上版本，适用于 Linux、macOS 与自部署场景。 |
 
-NoDesign 不收取订阅费，也不对模型调用加价。桌面版与命令行版本的项目文件和配置均保存在本机。
+桌面版与命令行版本的项目文件和配置均保存在本机。
 
 ## 画布：用户与 Agent 的共同工作台
 
@@ -106,7 +106,7 @@ NoDesign 不收取订阅费，也不对模型调用加价。桌面版与命令�
 
 ### NoDesign 账号
 
-桌面版与命令行版本登录 NoDesign 账号后，即可使用平台提供的 GLM、DeepSeek 等模型。平台每日提供免费额度，无需自备 API Key。
+桌面版与命令行版本登录 NoDesign 账号后，即可使用平台提供的 GLM、DeepSeek 等模型。目前平台每日提供免费额度，无需自备 API Key。
 
 ### 自有密钥（BYOK）
 
@@ -145,7 +145,7 @@ NoDesign 不收取订阅费，也不对模型调用加价。桌面版与命令�
 <summary><b>NoDesign 是否收费？</b></summary>
 <br>
 
-NoDesign 为开源软件，不收取订阅费，也不对模型调用加价。网页版与登录账号的桌面版使用平台提供的免费模型，每日有额度限制。使用自有密钥时，费用由模型服务商按用量结算。
+NoDesign 为开源软件。目前网页版与登录账号的桌面版使用平台提供的免费模型，每日有额度限制。使用自有密钥时，费用由模型服务商按用量直接结算。
 
 </details>
 
@@ -187,11 +187,11 @@ NoDesign 为开源软件，不收取订阅费，也不对模型调用加价。�
 
 | | 桌面版 / 命令行 | 网页版 |
 |---|---|---|
-| 模型 | 登录 NoDesign 账号使用平台模型，或配置自有密钥 | 免费模型，每日额度 |
+| 模型 | 登录 NoDesign 账号使用平台模型，或配置自有密钥 | 平台模型，每日额度 |
 | 数据 | 保存在本机 `.nodesign/`，服务仅监听 `127.0.0.1` | 服务端存储，按用户隔离 |
 | 账号 | 使用自有密钥时无需账号 | 公开注册 |
 | 功能 | 完整功能；截图、Word、背景移除、图像生成等按本机环境自动检测；网站发布需配置 Cloudflare Pages | 支持截图、搜索与图像生成；网站发布暂未开放 |
-| 费用 | 不收取订阅费与分成；自有密钥由服务商计费 | 免费 |
+| 费用 | 平台模型目前免费；自有密钥由服务商计费 | 目前免费 |
 
 </details>
 

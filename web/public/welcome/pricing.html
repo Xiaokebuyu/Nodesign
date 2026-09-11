@@ -3,10 +3,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>定价 · Nodesign</title>
-<meta name="description" content="免费模型对所有用户开放，其余按用量计费。每次会话底部实时显示 token 与金额。">
+<meta name="description" content="线上版本目前免费并设有每日额度；桌面版与自部署版本支持自有密钥（BYOK）。每次会话底部实时显示 token 与金额。">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
 <link rel="stylesheet" href="https://fonts.loli.net/css2?family=Zhi+Mang+Xing&amp;display=swap">
-<link rel="stylesheet" href="assets/style.css?v=202609091923">
+<link rel="stylesheet" href="assets/style.css?v=202609111700">
 <script>document.documentElement.className += ' js';</script>
 </head>
 <body>
@@ -34,8 +34,8 @@
 
   <section class="hero col">
     <div class="eyebrow reveal is-in">定价</div>
-    <h1 class="reveal is-in" style="--i:1">免费使用，按需选择部署方式</h1>
-    <p class="hero-sub reveal is-in" style="--i:2">线上版本免费，并设有每日额度。桌面版与自部署版本支持自有密钥（BYOK）。费用直接结算至模型服务商，平台不收取分成。</p>
+    <h1 class="reveal is-in" style="--i:1">按需选择使用方式</h1>
+    <p class="hero-sub reveal is-in" style="--i:2">线上版本目前免费，并设有每日额度。桌面版与自部署版本支持自有密钥（BYOK），使用自有密钥时费用由模型服务商直接结算。</p>
   </section>
 
   <div class="col">
@@ -48,7 +48,7 @@
         <ul>
           <li>每日额度按模型实际消耗折算，北京时间零点重置</li>
           <li>图像生成每张 0.20 美元，计入同一份每日额度</li>
-          <li>DeepSeek V4 Flash、GLM-5.3-Flash、Gemini 3.7 Flash，Kimi K3 免费</li>
+          <li>可用模型包括 GLM-5.3-Flash、DeepSeek V4.1 Flash 等</li>
           <li>支持画布、板书、记忆与导出</li>
           <li>不含 Claude 模型，不能发布站点到公网</li>
         </ul>
@@ -76,8 +76,8 @@
         <ul>
           <li>通过 <code>npx @xiaobuyu/nodesign</code> 启动</li>
           <li>数据仅存于本地，工作区为普通文件夹</li>
-          <li>使用自有密钥（BYOK），或登录 Claude 订阅</li>
-          <li>需要 Node.js 20 以上</li>
+          <li>使用自有密钥（BYOK），或登录站点账号使用平台模型</li>
+          <li>需要 Node.js 22.16 以上</li>
           <li>源码托管于 GitHub</li>
         </ul>
         <a class="btn btn-ghost" href="https://github.com/Xiaokebuyu/Nodesign">查看 GitHub</a>
@@ -116,8 +116,8 @@
         <div class="faq reveal is-in" style="--i:1">
 
           <details>
-            <summary>免费模型</summary>
-            <div class="ans"><p>Kimi K3 不计费。其他模型按实际用量计入每日额度，每一轮的消耗在会话栏底部实时显示。</p></div>
+            <summary>额度如何计算</summary>
+            <div class="ans"><p>线上版本的模型按实际用量计入每日额度，每一轮的消耗在会话栏底部实时显示。</p></div>
           </details>
 
           <details>
@@ -127,7 +127,7 @@
 
           <details>
             <summary>Claude 支持</summary>
-            <div class="ans"><p>线上版本不提供 Claude。桌面版与自部署版本支持：配置 Anthropic API 密钥，或登录 Claude 订阅。</p></div>
+            <div class="ans"><p>线上版本不提供 Claude。桌面版与自部署版本可以配置 Anthropic API 密钥，或使用 Anthropic 格式的中转服务。</p></div>
           </details>
 
           <details>
@@ -147,7 +147,7 @@
 
           <details>
             <summary>后续定价</summary>
-            <div class="ans"><p>当前免费。线上版本的每日额度可能随成本调整。开源版本遵循 AGPL-3.0，自有密钥（BYOK）模式不收取分成。</p></div>
+            <div class="ans"><p>线上版本目前免费。每日额度与计费方式可能随成本调整。开源版本遵循 AGPL-3.0。</p></div>
           </details>
 
         </div>
@@ -184,7 +184,7 @@
   </footer>
 
 </div>
-<script src="assets/site.js?v=202609091923"></script>
+<script src="assets/site.js?v=202609111700"></script>
 
 
 </body></html>

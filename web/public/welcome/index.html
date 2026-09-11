@@ -6,7 +6,7 @@
 <meta name="description" content="Nodesign 是以画布为中心的 Agent 工作台。项目中的产物、素材与推理过程集中在同一块画布上：用户在画布上指定、整理与修改，Agent 在画布上制作、检查与说明。">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-screen-webfont@1.7.0/style.css">
 <link rel="stylesheet" href="https://fonts.loli.net/css2?family=Zhi+Mang+Xing&amp;display=swap">
-<link rel="stylesheet" href="assets/style.css?v=202609091923">
+<link rel="stylesheet" href="assets/style.css?v=202609111700">
 <script>document.documentElement.className += ' js';</script>
 </head>
 <body>
@@ -45,7 +45,7 @@
       <div class="fact"><b>画布</b><span>双方共同读写</span></div>
       <div class="fact"><b>圈选</b><span>指定到元素</span></div>
       <div class="fact"><b>标准文件</b><span>下载 · 编辑 · 发布</span></div>
-      <div class="fact"><b>BYOK</b><span>自有密钥 · 不收分成</span></div>
+      <div class="fact"><b>BYOK</b><span>自有密钥 · 直连服务商</span></div>
     </div>
   </section>
 
@@ -53,100 +53,85 @@
   <section class="canvas-zone">
     <div class="cz-inner cz-board" aria-label="工作区示意">
 
-      <span class="zone-tag" style="left:2%;top:5.5%">#leiyu-guanxi</span>
-      <div class="chalk chalk-title" style="left:2.4%;top:9.5%">《雷雨》人物关系图</div>
+      <span class="zone-tag" style="left:2%;top:4.5%">#mistridge-launch</span>
+      <div class="chalk chalk-title" style="left:2.4%;top:8.5%">雾岭咖啡 · 新品发布</div>
 
-      <svg class="cz-lines m-hide" viewBox="0 0 1000 700" preserveAspectRatio="none" aria-hidden="true">
-        <!-- 明面关系：灰细线 -->
-        <path d="M178 318 C 240 300, 300 300, 362 318" class="ln"/>
-        <path d="M168 336 C 150 380, 160 410, 185 440" class="ln"/>
-        <path d="M182 336 C 260 380, 320 410, 378 428" class="ln"/>
-        <path d="M372 336 C 375 370, 378 400, 383 426" class="ln"/>
-        <path d="M600 302 C 580 360, 530 420, 496 470" class="ln"/>
-        <!-- 隐秘纠葛：红粗线 -->
-        <path d="M362 332 C 320 380, 260 420, 205 440" class="ln red"/>
-        <path d="M205 456 C 300 515, 400 518, 482 492" class="ln red"/>
-        <path d="M188 314 C 300 262, 470 258, 592 290" class="ln red"/>
-        <!-- 肖像取材线：虚线 -->
-        <path d="M157 218 L 165 308" class="ln dot"/>
-        <path d="M347 218 L 366 308" class="ln dot"/>
-        <path d="M517 218 L 492 466" class="ln dot"/>
-        <path d="M187 528 L 190 456" class="ln dot"/>
-      </svg>
+      <svg class="cz-lines" id="cz-links" aria-hidden="true"></svg>
 
-      <svg class="cz-lines m-only" viewBox="0 0 1000 700" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M160 330 C 250 315, 330 315, 410 330" class="ln"/>
-        <path d="M425 345 C 360 400, 250 460, 165 508" class="ln red"/>
-        <path d="M170 525 C 280 572, 450 572, 555 528" class="ln red"/>
-        <path d="M180 232 L 155 318" class="ln dot"/>
-        <path d="M500 232 L 440 318" class="ln dot"/>
-        <path d="M820 232 L 605 500" class="ln dot"/>
-      </svg>
-      <span class="ln-label m-only" style="left:24%;top:43%">夫妻</span>
-      <span class="ln-label red m-only" style="left:21%;top:58.5%">旧情</span>
-      <span class="ln-label red m-only" style="left:30%;top:81%">相恋 · 实为兄妹</span>
-      <span class="ln-label m-hide" style="left:25.5%;top:42.6%">夫妻</span>
-      <span class="ln-label m-hide red" style="left:36%;top:36.4%">三十年前</span>
-      <span class="ln-label m-hide red" style="left:26.5%;top:55%">旧情</span>
-      <span class="ln-label m-hide red" style="left:31.5%;top:74.4%">相恋 · 实为兄妹</span>
-
-      <figure class="pcard pcard-portrait p1" style="left:9%;top:14%">
-        <img src="assets/portrait-zhoupuyuan.webp" alt="周朴园肖像" width="480" height="320">
-        <figcaption>[portrait] portrait-zhoupuyuan.png</figcaption>
-      </figure>
-      <figure class="pcard pcard-portrait p2" style="left:28%;top:14%">
-        <img src="assets/portrait-fanyi.webp" alt="繁漪肖像" width="480" height="320">
-        <figcaption>[portrait] portrait-fanyi.png</figcaption>
-      </figure>
-      <figure class="pcard pcard-portrait p3" style="left:45%;top:14%">
-        <img src="assets/portrait-sifeng.webp" alt="四凤肖像" width="480" height="320">
-        <figcaption>[portrait] portrait-sifeng.png</figcaption>
-      </figure>
-      <figure class="pcard pcard-portrait p4" style="left:12%;bottom:4%">
-        <img src="assets/portrait-zhouping.webp" alt="周萍肖像" width="480" height="320">
-        <figcaption>[portrait] portrait-zhouping.png</figcaption>
-      </figure>
-
-      <div class="chalk chalk-node n1" style="left:12%;top:44%"><b>周朴园</b><span class="d">矿主 一家之主<br>30 年前始乱终弃了侍萍</span></div>
-      <div class="chalk chalk-node n2" style="left:33%;top:44%"><b>繁漪</b><span class="d">周朴园现任妻子<br>被压抑、渴望自由</span></div>
-      <div class="chalk chalk-node n3" style="left:57%;top:40%"><b>鲁侍萍</b><span class="d">鲁贵妻子<br>30 年前被周朴园抛弃</span></div>
-      <div class="chalk chalk-node n4" style="left:14%;top:61%"><b>周萍</b><span class="d">周朴园长子<br>懦弱、悔恨交加</span></div>
-      <div class="chalk chalk-node n5" style="left:34%;top:60%"><b>周冲</b><span class="d">周朴园幼子<br>天真理想主义</span></div>
-      <div class="chalk chalk-node n6" style="left:45%;top:66%"><b>四凤</b><span class="d">侍萍与鲁贵之女<br>周公馆丫鬟</span></div>
-
-      <article class="pcard pcard-note" style="left:60.5%;top:auto;bottom:6%;width:12.5%">
-        <span class="pcard-tag">决策</span>
-        <h4>视觉规范</h4>
-        <p>肖像采用 1920 年代油画质感。红色关系线表示隐秘纠葛，灰色关系线表示明面关系。</p>
+      <article class="pcard c-manual">
+        <div class="pcard-bar"><span class="pcard-dot"></span><span class="pcard-name">雾岭品牌手册.docx</span><span class="pcard-status">9 页</span></div>
+        <div class="pcard-body"><img src="assets/mr-manual.webp" alt="品牌手册内页：三款主力豆" width="640" height="480"></div>
       </article>
 
-      <div class="minimap" aria-hidden="true"><i style="left:14%;top:26%"></i><i style="left:40%;top:26%"></i><i style="left:62%;top:22%"></i><i style="left:18%;top:70%"></i></div>
+      <article class="pcard c-site">
+        <div class="pcard-bar"><span class="pcard-dot"></span><span class="pcard-name">mistridge-site</span><span class="pcard-status">站点</span></div>
+        <div class="pcard-body"><img src="assets/mr-site.webp" alt="雾岭咖啡官网首屏" width="820" height="513"></div>
+      </article>
+
+      <article class="pcard pcard-note c-note" style="left:52%;top:16%;width:14%">
+        <span class="pcard-tag">决策</span>
+        <h4>视觉规范</h4>
+        <p>岭墨绿、晨雾白、焙褐三色。标签不放文字，按主色区分三款豆。</p>
+      </article>
+
+      <figure class="pcard pcard-bag b1" style="left:3%;top:57%">
+        <img src="assets/mr-bag-mistrise.webp" alt="雾起包装图（透明底）" width="200" height="320">
+        <figcaption>pack-mistrise-nobg.png</figcaption>
+      </figure>
+      <figure class="pcard pcard-bag b2" style="left:9.6%;top:57%">
+        <img src="assets/mr-bag-ridgeline.webp" alt="岭线包装图（透明底）" width="200" height="320">
+        <figcaption>pack-ridgeline-nobg.png</figcaption>
+      </figure>
+      <figure class="pcard pcard-bag b3" style="left:16.2%;top:57%">
+        <img src="assets/mr-bag-riverbank.webp" alt="江岸包装图（透明底）" width="200" height="320">
+        <figcaption>pack-riverbank-nobg.png</figcaption>
+      </figure>
+
+      <article class="pcard c-deck">
+        <div class="pcard-bar"><span class="pcard-dot"></span><span class="pcard-name">mistridge-launch</span><span class="pcard-status">7 页 · 16:9</span></div>
+        <div class="pcard-body"><img src="assets/mr-deck.webp" alt="发布演示稿封面" width="760" height="428"></div>
+      </article>
+
+      <div class="chalk chalk-plan">
+        <div class="t">发布演示 · 7 页结构</div>
+        <ol>
+          <li><b>01</b>封面</li>
+          <li><b>02</b>一座山，三块地</li>
+          <li><b>03</b>我们怎么做</li>
+          <li><b>04–06</b>三款豆各一页</li>
+          <li class="del"><b>07</b>怎么喝<span class="who">用户删去</span></li>
+          <li><b>07</b>订阅与上市<span class="add">，首批限量 300 袋</span></li>
+        </ol>
+      </div>
+
+      <div class="minimap" aria-hidden="true"><i style="left:12%;top:24%"></i><i style="left:34%;top:26%"></i><i style="left:34%;top:62%"></i><i style="left:62%;top:60%"></i></div>
 
       <aside class="chat-panel">
         <div class="chat-h">
-          <span class="pill">《雷雨》人物关系图 ▾</span>
+          <span class="pill">雾岭咖啡 · 新品发布 ▾</span>
           <span class="ico"><span>新对话</span><span>⊙</span><span>◫</span></span>
         </div>
         <div class="chat-body">
-          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">portrait-zhoupuyuan ›</span></span></div>
-          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">portrait-fanyi ›</span></span></div>
-          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">portrait-zhouping ›</span></span></div>
-          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">portrait-sifeng ›</span></span></div>
-          <div class="evt"><span class="glyph">⊕</span><span><span class="path">pin_to_board</span> <span class="arg">4 张 · 画布顶部 ›</span></span></div>
-          <div class="evt"><span class="glyph">⌾</span><span><span class="path">relate_on_board</span> <span class="arg">ref × 4 ›</span></span></div>
-          <div class="evt think"><span class="glyph">◔</span><span>已生成四张肖像。正在添加取材关系线，并排列至画布顶部。</span></div>
-          <div class="evt"><span class="glyph">◫</span><span><span class="path">look_at_board</span> <span class="arg">leiyu-guanxi ›</span></span></div>
+          <div class="evt"><span class="glyph">▣</span><span><span class="path">build_docx</span> <span class="arg">品牌手册/雾岭品牌手册.json ›</span></span></div>
+          <div class="evt"><span class="glyph">▣</span><span><span class="path">generate_image</span> <span class="arg">mistridge-pack × 3 ›</span></span></div>
+          <div class="evt"><span class="glyph">✂</span><span><span class="path">remove_background</span> <span class="arg">透明底 × 3 ›</span></span></div>
+          <div class="evt"><span class="glyph">✎</span><span><span class="path">Write</span> <span class="arg">mistridge-site/index.html ›</span></span></div>
+          <div class="evt"><span class="glyph">◫</span><span><span class="path">screenshot_canvas</span> <span class="arg">1440 / 390 ›</span></span></div>
+          <div class="evt"><span class="glyph">✎</span><span><span class="path">write_on_board</span> <span class="arg">发布演示 · 8 页结构 ›</span></span></div>
+          <div class="evt think"><span class="glyph">◔</span><span>板上的结构已被修改：删去「怎么喝」，订阅页补充「首批限量 300 袋」。按修改后的结构制作 7 页。</span></div>
+          <div class="evt"><span class="glyph">✎</span><span><span class="path">Write</span> <span class="arg">mistridge-launch/index.html ›</span></span></div>
+          <div class="evt"><span class="glyph">⌾</span><span><span class="path">edit_board</span> <span class="arg">接着 · 取材 ›</span></span></div>
           <div class="evt done"><span class="glyph">✓</span><span>DONE</span></div>
           <div class="reply">
-            <p>《雷雨》人物关系图已添加至画布。周公馆与鲁家分组排列。灰色关系线表示夫妻、父子和母女关系。红色关系线表示繁漪与周萍、周萍与四凤、周朴园与侍萍的关系。</p>
-            <p>已为周朴园、繁漪、周萍和四凤生成 1920 年代油画风格肖像，并添加取材关系线。</p>
+            <p>发布演示稿已完成，共 7 页，16:9。已按板上修改后的结构制作：删去「怎么喝」，订阅页加入「首批限量 300 袋」。</p>
+            <p>演示稿放在结构右侧，并连回品牌手册与包装图。</p>
           </div>
         </div>
         <div class="composer">
           <div class="ph">描述需求…</div>
           <div class="row">
             <span class="plus">＋</span>
-            <span class="model">Sonnet 5 ▾</span>
+            <span class="model">Opus 5 ▾</span>
             <span class="send">发送</span>
           </div>
         </div>
@@ -154,9 +139,56 @@
 
     </div>
   </section>
+  <script>
+  /* 首屏画布的关系线：按卡片的实际位置实时画（09-11）。以前是 viewBox 百分比写死，
+     卡片高度随宽度变，窗口一矮线就连不到卡上。某张卡在窄屏被隐藏（尺寸为 0）就跳过那条线。 */
+  (function () {
+    var board = document.querySelector('.cz-board'), svg = document.getElementById('cz-links');
+    if (!board || !svg) return;
+    var LINKS = [
+      { from: '.c-manual', fa: 'r', to: '.c-site', ta: 'l', cls: 'dot', label: '取材' },
+      { from: '.c-manual', fa: 'b', to: '.c-deck', ta: 't', cls: 'dot', label: '取材' },
+      { from: '.pcard-bag.b3', fa: 't', to: '.c-site', ta: 'b', cls: 'dot', label: '取材' },
+      { from: '.chalk-plan', fa: 'l', to: '.c-deck', ta: 'r', cls: '', label: '接着' }
+    ];
+    var N = { l: [-1, 0], r: [1, 0], t: [0, -1], b: [0, 1] };
+    function pt(el, side, B) {
+      var r = el.getBoundingClientRect(); if (!r.width || !r.height) return null;
+      var x = r.left - B.left, y = r.top - B.top;
+      return side === 'l' ? [x, y + r.height / 2] : side === 'r' ? [x + r.width, y + r.height / 2]
+           : side === 't' ? [x + r.width / 2, y] : [x + r.width / 2, y + r.height];
+    }
+    function draw() {
+      var B = board.getBoundingClientRect();
+      svg.setAttribute('viewBox', '0 0 ' + B.width + ' ' + B.height);
+      svg.innerHTML = '';
+      board.querySelectorAll('.ln-label.auto').forEach(function (n) { n.remove(); });
+      LINKS.forEach(function (L) {
+        var f = board.querySelector(L.from), t = board.querySelector(L.to); if (!f || !t) return;
+        var p0 = pt(f, L.fa, B), p3 = pt(t, L.ta, B); if (!p0 || !p3) return;
+        var d = Math.hypot(p3[0] - p0[0], p3[1] - p0[1]), k = Math.min(90, d / 2);
+        var p1 = [p0[0] + N[L.fa][0] * k, p0[1] + N[L.fa][1] * k], p2 = [p3[0] + N[L.ta][0] * k, p3[1] + N[L.ta][1] * k];
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M' + p0 + ' C' + p1 + ' ' + p2 + ' ' + p3);
+        path.setAttribute('class', 'ln' + (L.cls ? ' ' + L.cls : ''));
+        svg.appendChild(path);
+        if (L.label) {   // 标签落在曲线中点（t = 0.5）
+          var mx = (p0[0] + 3 * p1[0] + 3 * p2[0] + p3[0]) / 8, my = (p0[1] + 3 * p1[1] + 3 * p2[1] + p3[1]) / 8;
+          var s = document.createElement('span'); s.className = 'ln-label auto'; s.textContent = L.label;
+          s.style.left = mx + 'px'; s.style.top = my + 'px'; s.style.transform = 'translate(-50%,-50%)';
+          board.appendChild(s);
+        }
+      });
+    }
+    draw();
+    window.addEventListener('load', draw);
+    board.querySelectorAll('img').forEach(function (im) { if (!im.complete) im.addEventListener('load', draw); });
+    if (window.ResizeObserver) new ResizeObserver(draw).observe(board); else window.addEventListener('resize', draw);
+  })();
+  </script>
 
   <div class="col">
-    <figcaption>FIG. 01 · 工作区示意，按真实界面绘制。画布展示《雷雨》人物关系板，包括板书节点、两类关系线和生成的肖像。右侧会话栏记录工具调用、思考与回复。</figcaption>
+    <figcaption>FIG. 01 · 工作区示意，按真实界面绘制。画布展示雾岭咖啡项目：品牌手册、官网、发布演示稿、透明底包装图，以及板书上被用户修改过的演示结构。右侧会话栏记录工具调用、思考与回复。</figcaption>
     <div class="cz-notes reveal" style="--i:1">
       <div><b>画布</b>用户与 Agent 共同读写的工作台。产物、板书与素材都是画布上的对象，支持拖动、圈选与连线。</div>
       <div><b>会话栏</b>工具调用、文件改动与思考过程逐条记录。</div>
@@ -463,7 +495,7 @@
   </footer>
 
 </div>
-<script src="assets/site.js?v=202609091923"></script>
+<script src="assets/site.js?v=202609111700"></script>
 
 
 </body></html>

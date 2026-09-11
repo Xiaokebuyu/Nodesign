@@ -19,7 +19,7 @@ You point, organize, and edit on it; the agent builds, reviews, and explains on 
 
 <br>
 
-![The NoDesign workspace: outputs, board notes, and relationship lines on the canvas, with the agent session panel on the right](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/hero.webp)
+![The Mistridge Coffee canvas: the deck outline on the board, the launch deck, the website, and transparent product images connected by relationship lines, with the agent session panel on the right](https://raw.githubusercontent.com/Xiaokebuyu/Nodesign/main/docs/hero.webp)
 
 > [!NOTE]
 > The NoDesign interface is primarily in Chinese. An English localization is available in Settings but currently covers only part of the interface. The language of generated outputs follows your request, independent of this setting.
@@ -31,7 +31,7 @@ You point, organize, and edit on it; the agent builds, reviews, and explains on 
 | [Download installer](https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe) | [nodesign.xiaobuyu.trade](https://nodesign.xiaobuyu.trade/login) | `npx @xiaobuyu/nodesign` |
 | Recommended for regular use. Updates automatically. Sign in with a NoDesign account to use hosted models, or bring your own API key (BYOK). | No installation required. Free models with a daily quota. Some features that depend on the local environment are not available. | Requires Node.js 22.16 or later. Suited to Linux, macOS, and self-hosted setups. |
 
-NoDesign charges no subscription fee and adds no markup to model usage. The desktop app and command-line version keep all project files and configuration on your machine.
+The desktop app and command-line version keep all project files and configuration on your machine.
 
 ## The canvas: a shared workspace for you and the agent
 
@@ -109,7 +109,7 @@ Other work produced in NoDesign includes a 15-page Tibet travel deck that accomp
 
 ### NoDesign account
 
-After signing in with a NoDesign account, the desktop app and command-line version can use hosted models such as GLM and DeepSeek. A free daily quota is included, and no API key is required.
+After signing in with a NoDesign account, the desktop app and command-line version can use hosted models such as GLM and DeepSeek. A free daily quota is currently included, and no API key is required.
 
 ### Bring your own key (BYOK)
 
@@ -148,7 +148,7 @@ Planned:
 <summary><b>Is NoDesign free?</b></summary>
 <br>
 
-NoDesign is open source. It charges no subscription fee and adds no markup to model usage. The web app, and the desktop app when signed in, use hosted free models with a daily quota. With your own API key, the model provider bills you for usage.
+NoDesign is open source. The web app, and the desktop app when signed in, currently use hosted free models with a daily quota. With your own API key, the model provider bills you directly for usage.
 
 </details>
 
@@ -182,11 +182,11 @@ The desktop app and command-line version store data in the `.nodesign` folder in
 
 | | Desktop app / command line | Web app |
 |---|---|---|
-| Models | Hosted models with a NoDesign account, or your own API key | Free models with a daily quota |
+| Models | Hosted models with a NoDesign account, or your own API key | Hosted models with a daily quota |
 | Data | Stored locally in `.nodesign/`; service listens only on `127.0.0.1` | Stored on the server, isolated per user |
 | Account | Not required when using your own key | Open registration |
 | Features | Full feature set; screenshots, Word, background removal, image generation, and more are detected from the local environment; website publishing requires Cloudflare Pages | Screenshots, search, and image generation; website publishing not yet available |
-| Cost | No subscription or markup; your provider bills your own key | Free |
+| Cost | Hosted models are currently free; your provider bills your own key | Currently free |
 
 </details>
 
