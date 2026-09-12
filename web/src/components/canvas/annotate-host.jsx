@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import AnnotatePopover from './AnnotatePopover.jsx';
-import { soleRoleTarget } from '../../lib/role-direct.js';
+import { soleRoleTarget } from '../../lib/role-target.js';
 
 /**
  * 标注浮层的落点（2026-09-12 站主定：跟被标注的东西相对固定，不跟用户的画面跑）。
@@ -27,7 +27,7 @@ export function AnnotateHost({ annotate, at, onClose, onAnnotate, keepAnnotation
       x={at.x} y={at.y}
       target={annotate.target}
       // 这批标注是不是全指着同一个常驻角色 —— 是的话这句话**直达它**，
-      // 不经过主 agent。判据跟真正发送时走的是同一个函数（lib/role-direct.js），
+      // 不经过主 agent。判据跟真正发送时走的是同一个函数（lib/role-target.js），
       // 不能在这儿另写一份：文案说"说给墨璃"而实际发给了主控，比不显示更糟。
       roleTarget={soleRoleTarget(targets)}
       onClose={onClose}
