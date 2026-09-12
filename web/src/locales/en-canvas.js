@@ -59,4 +59,35 @@ export default {
   '工具和快捷键在这里': 'Tools and shortcuts live here',
   '底边正中是工具栏，左下角是常用快捷键。看完回首页，在那句输入框里写一句，就是你自己的第一个项目。':
     'The toolbar sits at the bottom, the common shortcuts at the lower left. When you are done, go back home and write one line to start your own first project.',
+  // ── 圈选说事（RegionSelect.jsx / DocxRegionSelect.jsx，09-12）──
+  '已攒 #{n}': 'Saved #{n}',
+  '框住 {n} 个元素': '{n} elements inside the box',
+  '等 {n} 个': 'and {n} in all',
+  '这一块想说什么…（可以不写，框本身就是话）': 'What do you want to say about this area… (optional, the box already says something)',
+  '记下这一块，接着圈下一块；攒够了从右下角那条浮钮一起发': 'Note this area down and box the next one; send them together from the button at the lower right',
+  '攒着（已 {n}）': 'Save for later ({n})',
+  '不攒，这一块现在就发给 agent 起一轮（已攒的一起带上）': 'Do not save it: send this area to the agent now and start a turn (anything already saved comes along)',
+  '截图中…': 'Taking the screenshot…',
+  '重画': 'Draw it again',
+
+  // ── 浏览器窗底下的采集架（BrowserShelf.jsx，09-12）──
+  '采到的东西 · {sites} 个站 · {files} 件': 'Collected · {sites} sites · {files} items',
+  '{dir}（{n} 件）': '{dir} ({n} items)',
+  '{dir}/ · {n} 件': '{dir}/ · {n} items',
+  '没有截图': 'No screenshot',
+  '原图': 'Original',
+  '关闭（Esc）': 'Close (Esc)',
+  '另开标签页看原图': 'Open the original in a new tab',
+
+  // ── 物件动作条（cards/object-actions.js，09-12）──
+  '已在托盘': 'Already in the tray',
+  '加入上下文': 'Add to context',
+  '阅读': 'Read',
+  '详情': 'Details',
+  '打开': 'Open',
+  '编排设置': 'Orchestration settings',
+  '收回成缩略图': 'Back to a thumbnail',
+  '展开：按原比例整张铺在画布上': 'Expand: lay the whole thing on the canvas at its own aspect ratio',
+  '导出这张卡': 'Export this card',
+  '标注（发给 agent / 留在画布）': 'Annotate (send to the agent / leave it on the canvas)',
 };

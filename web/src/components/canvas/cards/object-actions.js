@@ -15,6 +15,7 @@ import {
   Plus, BookOpen, ExternalLink, SlidersHorizontal, Trash2, Download, MessageSquarePlus, Maximize2, Minimize2,
 } from 'lucide-react';
 import { actionsOf } from '../../../lib/board-kinds.js';
+import { t } from '../../../lib/i18n.js';
 
 /**
  * @param {object} o 画布物件
@@ -24,24 +25,24 @@ import { actionsOf } from '../../../lib/board-kinds.js';
  */
 export function buildObjectActions(o, h = {}) {
   const DEFS = {
-    add: { icon: Plus, title: h.added ? '已在托盘' : '加入上下文', fn: h.onAdd },
-    read: { icon: BookOpen, title: '阅读', fn: h.onOpenViewer },
-    detail: { icon: ExternalLink, title: '详情', fn: h.onDetail },
+    add: { icon: Plus, title: h.added ? t('已在托盘') : t('加入上下文'), fn: h.onAdd },
+    read: { icon: BookOpen, title: t('阅读'), fn: h.onOpenViewer },
+    detail: { icon: ExternalLink, title: t('详情'), fn: h.onDetail },
     // .md 两条路都给：「阅读」是渲染过的（双击也走这条），「打开」是原始文件
-    open: { icon: ExternalLink, title: '打开', fn: h.onOpenFile },
+    open: { icon: ExternalLink, title: t('打开'), fn: h.onOpenFile },
     // 编排.yaml：图形设置页（双击也走这条），「打开」仍留给原始文件
-    orchestrate: { icon: SlidersHorizontal, title: '编排设置', fn: h.onOrchestrate },
-    delete: { icon: Trash2, title: '删除', fn: h.onDeleteNote, danger: true },
+    orchestrate: { icon: SlidersHorizontal, title: t('编排设置'), fn: h.onOrchestrate },
+    delete: { icon: Trash2, title: t('删除'), fn: h.onDeleteNote, danger: true },
   };
   return [
     ...actionsOf(o).map((id) => DEFS[id]).filter(Boolean),
     // 照片展开模式（09-12）：缩略图只露 4:3 的一角，展开按原比例整张铺在画布上；入口同时是出口
     ...(h.onToggleExpand
-      ? [{ icon: h.expanded ? Minimize2 : Maximize2, title: h.expanded ? '收回成缩略图' : '展开：按原比例整张铺在画布上', fn: h.onToggleExpand }]
+      ? [{ icon: h.expanded ? Minimize2 : Maximize2, title: h.expanded ? t('收回成缩略图') : t('展开：按原比例整张铺在画布上'), fn: h.onToggleExpand }]
       : []),
-    ...(h.onExport ? [{ icon: Download, title: '导出这张卡', fn: h.onExport }] : []),
+    ...(h.onExport ? [{ icon: Download, title: t('导出这张卡'), fn: h.onExport }] : []),
     ...(h.onAnnotate
-      ? [{ icon: MessageSquarePlus, title: '标注（发给 agent / 留在画布）', fn: h.onAnnotate, anchored: true }]
+      ? [{ icon: MessageSquarePlus, title: t('标注（发给 agent / 留在画布）'), fn: h.onAnnotate, anchored: true }]
       : []),
   ];
 }

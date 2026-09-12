@@ -561,5 +561,20 @@ export default {
   '整理完先讲要点给我听，然后用 crystallize_skill 存下来。存完说清楚你写了什么边界，写歪了我当场改。':
     'Walk me through the main points first, then save it with crystallize_skill. Once saved, tell me plainly what boundary you wrote, so I can correct it on the spot if it is off.',
 
+  // ── 会话卡顶栏（components/chat/ChatPanel.jsx，09-12）──
+  '切换会话 / 翻历史对话（重命名、复刻、删除也在这）': 'Switch sessions / browse past conversations (rename, fork and delete live here too)',
+  '新对话': 'New conversation',
+  '已固定：点一下取消（鼠标离开后自动收起，贴屏幕左右边缘唤回）': 'Pinned: click to unpin, after which it hides when the pointer leaves and comes back at the screen edge',
+  '固定这张卡（一直开着，不自动收起）': 'Pin this card (stays open, never hides on its own)',
+  '收起（鼠标贴屏幕左右边缘唤回）': 'Hide (move the pointer to the left or right screen edge to bring it back)',
+  '连接已关闭 · 请刷新页面': 'Connection closed · please refresh the page',
+  '正在重连服务器…（已收到的事件不会丢，重连后会补 replay）': 'Reconnecting to the server… (nothing already received is lost; a replay follows once reconnected)',
+  '已排队 {n} 条 · agent 跑完当前会自动处理': '{n} queued · the agent takes the next one when the current turn ends',
+
+  // ── 会话列表弹窗（components/project/SessionListModal.jsx，09-12）──
+  '操作': 'Actions',
+  '设置标签': 'Set a tag',
+  '结束会话（释放 agent，历史保留）': 'End this session (releases the agent, keeps the history)',
+
   ...canvas,
 };

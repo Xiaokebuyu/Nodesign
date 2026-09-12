@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { FolderOpen, ChevronDown, X, ExternalLink, FileText } from 'lucide-react';
 import { COLOR, CANVAS, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { Assets } from '../../lib/api.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * BrowserShelf.jsx — 浏览器窗底下那条「采到的东西」的架子 + 窗内看图层（2026-09-12 从 BrowserWindow 拆出）
@@ -33,10 +34,10 @@ export function CapturePreview({ projectId, file, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.text }}>
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</span>
             <a
-              href={Assets.artifactFileUrl(projectId, file.rel)} target="_blank" rel="noreferrer" title="另开标签页看原图"
+              href={Assets.artifactFileUrl(projectId, file.rel)} target="_blank" rel="noreferrer" title={t('另开标签页看原图')}
               style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, color: COLOR.text2, textDecoration: 'none' }}
-            ><ExternalLink size={12} /> 原图</a>
-            <button type="button" onClick={() => onClose()} title="关闭（Esc）"
+            ><ExternalLink size={12} /> {t('原图')}</a>
+            <button type="button" onClick={() => onClose()} title={t('关闭（Esc）')}
               style={{ background: 'transparent', border: 0, cursor: 'pointer', color: COLOR.text2, padding: 2, display: 'inline-flex' }}
             ><X size={14} /></button>
           </div>
@@ -75,7 +76,7 @@ export function CaptureShelf({ projectId, sites, onPreview }) {
           }}
         >
           <FolderOpen size={12} />
-          采到的东西 · {sites.length} 个站 · {sites.reduce((n, x) => n + x.count, 0)} 件
+          {t('采到的东西 · {sites} 个站 · {files} 件', { sites: sites.length, files: sites.reduce((n, x) => n + x.count, 0) })}
           <ChevronDown size={12} style={{
             marginLeft: 'auto', opacity: 0.6,
             transform: shelfOpen ? 'none' : 'rotate(-90deg)', transition: 'transform .18s ease',
@@ -87,7 +88,7 @@ export function CaptureShelf({ projectId, sites, onPreview }) {
               <div key={st.site} style={{ flexShrink: 0, width: 150 }}>
                 <button
                   type="button"
-                  title={`${st.dir}（${st.count} 件）`}
+                  title={t('{dir}（{n} 件）', { dir: st.dir, n: st.count })}
                   onClick={() => setOpenSite(openSite === st.site ? null : st.site)}
                   style={{
                     display: 'block', width: '100%', padding: 0, cursor: 'pointer',
@@ -110,7 +111,7 @@ export function CaptureShelf({ projectId, sites, onPreview }) {
                     <div style={{
                       height: 84, display: 'flex', alignItems: 'center', justifyContent: 'center',
                       color: COLOR.sub, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xxs,
-                    }}>没有截图</div>
+                    }}>{t('没有截图')}</div>
                   )}
                   <div style={{
                     padding: '3px 5px', textAlign: 'left',
@@ -127,7 +128,7 @@ export function CaptureShelf({ projectId, sites, onPreview }) {
         {shelfOpen && openSiteData && (
           <div style={{ padding: `0 ${GAP.md}px ${GAP.sm}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xxs, color: COLOR.sub }}>
             <div style={{ fontFamily: FONT_MONO, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {openSiteData.dir}/ · {openSiteData.count} 件
+              {t('{dir}/ · {n} 件', { dir: openSiteData.dir, n: openSiteData.count })}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {openSiteData.files.filter(f => f.category !== 'text').map(f => (

@@ -8,6 +8,7 @@ import { useGlobalStore } from '../../stores/globalStore.js';
 import { timeAgo } from '../../lib/helpers.js';
 import { useHoverReveal } from '../../lib/use-hover-reveal.js';
 import { SHELL_Z } from '../../lib/z-layers.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * SessionListModal —— 项目内 session 历史列表（S4）
@@ -318,7 +319,7 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
             setMenuPos({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
             onMenuToggle();
           }}
-          title="操作"
+          title={t('操作')}
           style={{
             position: 'absolute',
             top: GAP.md, right: GAP.md,
@@ -350,12 +351,12 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
             zIndex: SHELL_Z.MODAL_STACKED,
           }}>
           <MenuItem icon={<GitBranch size={12} />} label="Fork" onClick={onFork} />
-          <MenuItem icon={<Edit2 size={12} />} label="重命名" onClick={onRename} />
-          <MenuItem icon={<TagIcon size={12} />} label="设置标签" onClick={onTag} />
+          <MenuItem icon={<Edit2 size={12} />} label={t('重命名')} onClick={onRename} />
+          <MenuItem icon={<TagIcon size={12} />} label={t('设置标签')} onClick={onTag} />
           {isCurrent && onCloseCurrent && (
-            <MenuItem icon={<XCircle size={12} />} label="结束会话（释放 agent，历史保留）" onClick={onCloseCurrent} />
+            <MenuItem icon={<XCircle size={12} />} label={t('结束会话（释放 agent，历史保留）')} onClick={onCloseCurrent} />
           )}
-          <MenuItem icon={<Trash2 size={12} />} label="删除" onClick={onDelete} danger />
+          <MenuItem icon={<Trash2 size={12} />} label={t('删除')} onClick={onDelete} danger />
         </div>
       ), document.body)}
     </div>

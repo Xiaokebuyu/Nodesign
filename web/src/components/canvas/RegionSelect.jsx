@@ -5,6 +5,7 @@ import { serializeStableAnchor } from '../../lib/html-utils.js';
 import { pickRegionElements, pickRegionContainer, normalizeRect, isMeaningfulRegion } from '../../lib/region-pick.js';
 import { COLOR, GAP, RADIUS, FONT_SANS, FONT_MONO, FONT_SIZE } from '../../lib/theme.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * RegionSelect —— 在预览上圈一块地方说事（2026-08-07）
@@ -70,7 +71,7 @@ export default function RegionSelect({
   // 容器滚动 / 窗口缩放会让 base 变，浮层得跟着重算
   useEffect(() => {
     if (!active) return undefined;
-    const onAny = () => setTick(t => t + 1);
+    const onAny = () => setTick(n => n + 1);
     window.addEventListener('resize', onAny);
     return () => window.removeEventListener('resize', onAny);
   }, [active]);
@@ -243,7 +244,7 @@ export default function RegionSelect({
           <span style={{
             position: 'absolute', left: -2, top: -20, padding: '1px 7px', borderRadius: RADIUS.sm,
             background: COLOR.btn, color: COLOR.btnText, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, whiteSpace: 'nowrap',
-          }}>已攒 #{i + 1}</span>
+          }}>{t('已攒 #{n}', { n: i + 1 })}</span>
         </div>
       ))}
       {shown && (
@@ -267,7 +268,7 @@ export default function RegionSelect({
               fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, whiteSpace: 'nowrap',
               pointerEvents: 'none',
             }}>
-              框住 {pending.elements.length} 个元素
+              {t('框住 {n} 个元素', { n: pending.elements.length })}
             </div>
           )}
         </>
@@ -285,7 +286,7 @@ export default function RegionSelect({
         >
           <div style={{ fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub, lineHeight: 1.5 }}>
             {pending.elements.slice(0, 3).map(e => `<${e.tag}>${e.text ? ` ${e.text.slice(0, 14)}` : ''}`).join('、')}
-            {pending.elements.length > 3 ? ` 等 ${pending.elements.length} 个` : ''}
+            {pending.elements.length > 3 ? ` ${t('等 {n} 个', { n: pending.elements.length })}` : ''}
           </div>
           <textarea
             value={text}
@@ -295,7 +296,7 @@ export default function RegionSelect({
               // ⌘↵ 跟标注浮层的默认动作一致：攒着（09-12）
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); queue(); }
             }}
-            placeholder="这一块想说什么…（可以不写，框本身就是话）"
+            placeholder={t('这一块想说什么…（可以不写，框本身就是话）')}
             style={{
               width: '100%', boxSizing: 'border-box', minHeight: 64, resize: 'vertical',
               fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text, lineHeight: 1.6,
@@ -308,7 +309,7 @@ export default function RegionSelect({
             <button
               onClick={queue}
               disabled={sending}
-              title="记下这一块，接着圈下一块；攒够了从右下角那条浮钮一起发"
+              title={t('记下这一块，接着圈下一块；攒够了从右下角那条浮钮一起发')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
                 padding: `5px ${GAP.lg}px`, borderRadius: RADIUS.pill, border: 'none',
@@ -317,12 +318,12 @@ export default function RegionSelect({
                 cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.7 : 1,
               }}
             >
-              <Layers size={12} /> 攒着{queued.length ? `（已 ${queued.length}）` : ''}
+              <Layers size={12} /> {queued.length ? t('攒着（已 {n}）', { n: queued.length }) : t('攒着')}
             </button>
             <button
               onClick={send}
               disabled={sending}
-              title="不攒，这一块现在就发给 agent 起一轮（已攒的一起带上）"
+              title={t('不攒，这一块现在就发给 agent 起一轮（已攒的一起带上）')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
                 padding: `5px ${GAP.md}px`, borderRadius: RADIUS.pill,
@@ -331,8 +332,8 @@ export default function RegionSelect({
               }}
             >
               {sending
-                ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> 截图中…</>
-                : <><Send size={12} /> 发给 agent</>}
+                ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> {t('截图中…')}</>
+                : <><Send size={12} /> {t('发给 agent')}</>}
               <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
             </button>
             <button
@@ -344,7 +345,7 @@ export default function RegionSelect({
                 fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, cursor: 'pointer',
               }}
             >
-              <X size={11} /> 重画
+              <X size={11} /> {t('重画')}
             </button>
             <span style={{ marginLeft: 'auto', fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, color: COLOR.dim }}>
               ⌘↵

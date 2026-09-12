@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Send, X, Loader2, Layers } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SANS, FONT_MONO, FONT_SIZE } from '../../lib/theme.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * DocxRegionSelect —— 在 word 文档的**页图**上圈一块说事（2026-08-19）
@@ -163,7 +164,7 @@ export default function DocxRegionSelect({
           <span style={{
             position: 'absolute', left: -2, top: -20, padding: '1px 7px', borderRadius: RADIUS.sm,
             background: COLOR.btn, color: COLOR.btnText, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, whiteSpace: 'nowrap',
-          }}>已攒 #{i + 1}</span>
+          }}>{t('已攒 #{n}', { n: i + 1 })}</span>
         </div>
       ))}
       {shown && (
@@ -195,7 +196,7 @@ export default function DocxRegionSelect({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); queue(); }
             }}
-            placeholder="这一块想说什么…（可以不写，框本身就是话）"
+            placeholder={t('这一块想说什么…（可以不写，框本身就是话）')}
             style={{
               width: '100%', boxSizing: 'border-box', minHeight: 56, resize: 'vertical',
               fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text, lineHeight: 1.6,
@@ -207,7 +208,7 @@ export default function DocxRegionSelect({
             <button
               onClick={queue}
               disabled={sending}
-              title="记下这一块，接着圈下一块；攒够了从右下角那条浮钮一起发"
+              title={t('记下这一块，接着圈下一块；攒够了从右下角那条浮钮一起发')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
                 padding: `5px ${GAP.lg}px`, borderRadius: RADIUS.pill, border: 'none',
@@ -216,12 +217,12 @@ export default function DocxRegionSelect({
                 cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.7 : 1,
               }}
             >
-              <Layers size={12} /> 攒着{queued.length ? `（已 ${queued.length}）` : ''}
+              <Layers size={12} /> {queued.length ? t('攒着（已 {n}）', { n: queued.length }) : t('攒着')}
             </button>
             <button
               onClick={send}
               disabled={sending}
-              title="不攒，这一块现在就发给 agent 起一轮（已攒的一起带上）"
+              title={t('不攒，这一块现在就发给 agent 起一轮（已攒的一起带上）')}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
                 padding: `5px ${GAP.md}px`, borderRadius: RADIUS.pill,
@@ -230,8 +231,8 @@ export default function DocxRegionSelect({
               }}
             >
               {sending
-                ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> 截图中…</>
-                : <><Send size={12} /> 发给 agent</>}
+                ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> {t('截图中…')}</>
+                : <><Send size={12} /> {t('发给 agent')}</>}
               <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
             </button>
             <button
@@ -243,7 +244,7 @@ export default function DocxRegionSelect({
                 fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, cursor: 'pointer',
               }}
             >
-              <X size={11} /> 重画
+              <X size={11} /> {t('重画')}
             </button>
             <span style={{ marginLeft: 'auto', fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, color: COLOR.dim }}>
               ⌘↵

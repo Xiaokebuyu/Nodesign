@@ -4,6 +4,7 @@ import MessageList from './MessageList.jsx';
 import ChatComposer from './ChatComposer.jsx';
 import ContextMeter from './ContextMeter.jsx';
 import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_KAI } from '../../lib/theme.js';
+import { t } from '../../lib/i18n.js';
 
 /**
  * Chat Panel — 左栏整体壳
@@ -88,7 +89,7 @@ export default function ChatPanel({
         <button
           onClick={onOpenSessionList}
           disabled={!onOpenSessionList}
-          title={onOpenSessionList ? '切换会话 / 翻历史对话（重命名、复刻、删除也在这）' : ''}
+          title={onOpenSessionList ? t('切换会话 / 翻历史对话（重命名、复刻、删除也在这）') : ''}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
             padding: `${GAP.xs}px ${GAP.sm}px`,
@@ -120,7 +121,7 @@ export default function ChatPanel({
             letterSpacing: 0,
             textTransform: 'none',
           }}>
-            {sessionTitle || '新对话'}
+            {sessionTitle || t('新对话')}
           </span>
           <ChevronDown size={12} strokeWidth={1.75} color={COLOR.sub} style={{ flexShrink: 0 }} />
         </button>
@@ -138,7 +139,7 @@ export default function ChatPanel({
           <button
             onClick={onTogglePin}
             data-pin-toggle={pinned ? 'on' : 'off'}
-            title={pinned ? '已固定：点一下取消（鼠标离开后自动收起，贴屏幕左右边缘唤回）' : '固定这张卡（一直开着，不自动收起）'}
+            title={pinned ? t('已固定：点一下取消（鼠标离开后自动收起，贴屏幕左右边缘唤回）') : t('固定这张卡（一直开着，不自动收起）')}
             style={{
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               width: 26, height: 26, marginLeft: GAP.xs,
@@ -160,7 +161,7 @@ export default function ChatPanel({
         {onCollapse && (
           <button
             onClick={onCollapse}
-            title="收起（鼠标贴屏幕左右边缘唤回）"
+            title={t('收起（鼠标贴屏幕左右边缘唤回）')}
             style={{
               display: 'inline-flex', alignItems: 'center',
               padding: `${GAP.xs}px ${GAP.xs}px`,
@@ -205,8 +206,8 @@ export default function ChatPanel({
             animation: wsStatus === 'reconnecting' ? 'pulse 1.5s ease-in-out infinite' : 'none',
           }} />
           {wsStatus === 'closed'
-            ? '连接已关闭 · 请刷新页面'
-            : '正在重连服务器…（已收到的事件不会丢，重连后会补 replay）'}
+            ? t('连接已关闭 · 请刷新页面')
+            : t('正在重连服务器…（已收到的事件不会丢，重连后会补 replay）')}
         </div>
       )}
 
@@ -227,7 +228,7 @@ export default function ChatPanel({
             width: 6, height: 6, borderRadius: RADIUS.round,
             background: COLOR.warn,
           }} />
-          已排队 {queueDepth} 条 · agent 跑完当前会自动处理
+          {t('已排队 {n} 条 · agent 跑完当前会自动处理', { n: queueDepth })}
         </div>
       )}
       {/* 上下文指示：composer 上沿的一条 hairline，60% 以下零像素（见 ContextMeter） */}
