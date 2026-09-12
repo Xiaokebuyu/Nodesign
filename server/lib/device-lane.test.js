@@ -182,7 +182,10 @@ describe('单列版式下沉到布局引擎', () => {
   it('⛔ 封顶要对**两条产出路径**都成立（板书和草图）', () => {
     // 第一次真会话只封了草图：草图乖乖 336，板书照旧 432（三档回落的上限 18×24）。
     // 这条钉的是「一个封顶函数、两处调用」这个形状 —— 加第三种产出时别再漏一条。
-    const src = fs.readFileSync(path.join(HERE, '../engine/mcp/tools/write-on-board.js'), 'utf8');
+    // 09-12 起板书那条路（含 capUnits 的定义）住在 write-on-board-resolve.js（落板与流式预解算共用），
+    // 草图那条路仍在 write-on-board.js —— 两个文件合起来看这个形状
+    const src = ['../engine/mcp/tools/write-on-board.js', '../engine/mcp/tools/write-on-board-resolve.js']
+      .map((f) => fs.readFileSync(path.join(HERE, f), 'utf8')).join('\n');
     const uses = src.match(/capW\(/g) || [];
     expect(uses.length, 'capW 少于两处调用 —— 板书或草图有一条没过封顶').toBeGreaterThanOrEqual(2);
     expect(src, '封顶得从 fit.column 来，别在某一条路上写死').toMatch(/capUnits = fit\.column/);
