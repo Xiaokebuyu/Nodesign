@@ -398,7 +398,26 @@ function useToolbarClearance(deps) {
 }
 
 export function StageDock({ dockPanels, dockChips, onDismiss }) {
-  const [dockRef, bottom] = useToolbarClearance([dockPanels.length, dockChips.length]);
+  /**
+   * 提问卡可收起（2026-09-12 站主）：它最宽 62vw、最高 52vh 钉在画布底部正中，用户想先
+   * 看看画布再答就被它挡着。收起后降成 dock 那排里的一枚 chip（入口必须同时是出口），
+   * 点 chip 再展开；聊天时间轴里的「在这里答」是第二个入口。收起只是本地状态，
+   * 卡本身（useStageState）不动，答完 / run 结束照旧清理。
+   */
+  const [collapsed, setCollapsed] = useState(() => new Set());
+  const panelIds = dockPanels.map(c => c.blockId).join('|');
+  useEffect(() => {
+    // 卡没了（答完、run 结束）就把它从收起集合里去掉，别留着影响下一张同 id 的卡
+    setCollapsed(prev => {
+      const alive = new Set([...prev].filter(id => dockPanels.some(c => c.blockId === id)));
+      return alive.size === prev.size ? prev : alive;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelIds]);
+  const shownPanels = dockPanels.filter(c => !collapsed.has(c.blockId));
+  const collapsedQuestions = dockPanels.filter(c => c.kind === 'question' && collapsed.has(c.blockId));
+  const toggle = (id, on) => setCollapsed(prev => { const next = new Set(prev); if (on) next.add(id); else next.delete(id); return next; });
+  const [dockRef, bottom] = useToolbarClearance([shownPanels.length, dockChips.length + collapsedQuestions.length]);
   if (dockPanels.length === 0 && dockChips.length === 0) return null;
   return (
     <div ref={dockRef} data-stage="dock" style={{
@@ -406,16 +425,33 @@ export function StageDock({ dockPanels, dockChips, onDismiss }) {
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: GAP.sm,
       zIndex: 80, pointerEvents: 'none', maxWidth: '74%',
     }}>
-      {[...dockPanels.filter(c => c.kind !== 'question'), ...dockPanels.filter(c => c.kind === 'question')]
+      {[...shownPanels.filter(c => c.kind !== 'question'), ...shownPanels.filter(c => c.kind === 'question')]
         .slice(-3).map((card) => (
           <div key={card.blockId} style={{ pointerEvents: 'auto', width: card.kind === 'question' ? 'min(640px, 62vw)' : 'min(560px, 56vw)' }}>
             {card.kind === 'question'
-              ? <QuestionStageCard card={card} onDismiss={() => onDismiss(card.blockId)} />
+              ? <QuestionStageCard card={card} onDismiss={() => onDismiss(card.blockId)} onCollapse={() => toggle(card.blockId, true)} />
               : <StageCardBody card={card} onDismiss={() => onDismiss(card.blockId)} />}
           </div>
         ))}
-      {dockChips.length > 0 && (
+      {(dockChips.length > 0 || collapsedQuestions.length > 0) && (
         <div style={{ display: 'flex', gap: GAP.sm, flexWrap: 'wrap', justifyContent: 'center', pointerEvents: 'auto' }}>
+          {collapsedQuestions.map((card) => (
+            <button
+              key={card.blockId}
+              type="button"
+              data-stage="chip" data-stage-kind="question-collapsed"
+              onClick={() => toggle(card.blockId, false)}
+              title="展开回答"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px',
+                borderRadius: RADIUS.pill, border: `1.5px solid ${alpha(CANVAS.brass, 0.65)}`,
+                background: COLOR.bg, color: COLOR.text, cursor: 'pointer',
+                fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, animation: POP_IN,
+              }}
+            >
+              {card.status === 'running' ? '有一个问题等你答 · 点开' : '问题已答 · 点开看'}
+            </button>
+          ))}
           {dockChips.map((card) => (
             <StageChip key={card.blockId} card={card} onDismiss={() => onDismiss(card.blockId)} />
           ))}
@@ -587,7 +623,7 @@ function AutoScrollPre({ text, running, color, placeholder }) {
 
 /** agent 提问直接在画布里答：复用聊天栏的 wizard 卡（同一个 /answer 端点，
  *  谁先答谁生效，另一张随 tool_result 变已答态）*/
-function QuestionStageCard({ card, onDismiss }) {
+function QuestionStageCard({ card, onDismiss, onCollapse }) {
   const status = card.status === 'ok' ? 'success' : card.status === 'fail' ? 'error' : 'running';
   return (
     <div
@@ -610,6 +646,16 @@ function QuestionStageCard({ card, onDismiss }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>
           <span style={{ width: 9, height: 9, border: `1.5px solid ${COLOR.borderLt}`, borderTopColor: COLOR.text, borderRadius: RADIUS.round, animation: 'ndSpin 800ms linear infinite' }} />
           agent 正在整理问题…
+        </div>
+      )}
+      {card.status === 'running' && onCollapse && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: GAP.sm }}>
+          <button onClick={onCollapse} title="先收起来看画布，dock 里留一枚 chip，点它再答" style={{
+            display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+            border: `1px solid ${COLOR.borderLt}`, borderRadius: RADIUS.md,
+            background: 'transparent', color: COLOR.sub, cursor: 'pointer',
+            padding: `${GAP.xs}px ${GAP.sm + 2}px`, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs,
+          }}>稍后再答</button>
         </div>
       )}
       {card.status === 'fail' && (

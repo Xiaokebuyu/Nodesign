@@ -124,6 +124,11 @@ export const useProjectStore = create((set, get) => ({
     return e;
   },
 
+  /** 只改本地（服务端已经改过、通过 WS 通知我们的场合），不发 PATCH */
+  patchLocal: (id, patch) => {
+    set((s) => ({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+  },
+
   updateProject: async (id, patch) => {
     // 本地先乐观更新（status 类瞬时字段不走 PATCH）
     set((s) => ({

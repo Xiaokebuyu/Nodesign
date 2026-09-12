@@ -82,7 +82,7 @@ import {
   handleSDKMessage,
   detectArtifact,
 } from './agent-shared.js'; import { claudeDebugOptions, onClaudeStderr } from './debug-file.js';
-import { autoNameProjectFromSession } from '../../projects/auto-name.js';
+import { settleSessionTitle } from '../../projects/session-title.js';
 // 合流并集（2026-08-13）：commitWorkspace/taskManifest 是扁平化这边的，
 // getUserById/levelFor 是 main 的每用户内容尺度旋钮（78ceaac）；
 // main 的 listTasks 已随任务层退役，不再引入
@@ -694,13 +694,8 @@ export async function runSession({
       //   产出方式是起一发写死 claude-haiku-4-5 的一次性会话，不跟随会话模型，
       //   本地/API 会话照样烧订阅额度且不进记账。闲时精灵改回写问候语，那是
       //   recap 缺席时本来就走的分支。理由全文见 lib/quick-summary.js 文件头。）
-      // 首页大输入框建出来的项目名是垫的：第一轮跑完拿 SDK helper 写的会话摘要
-      // 正名一次（只一次，用户改过名就不动）。失败不影响 turn。
-      autoNameProjectFromSession(projectId, sessionId)
-        .then((name) => {
-          if (name) sharedCtx.emit({ type: 'project.renamed', projectId, name });
-        })
-        .catch((err) => console.warn('[auto-name]', err.message));
+      // 会话标题（SDK helper 异步写的）：盯几次，推 session.titled + 项目正名。见 session-title.js
+      settleSessionTitle(projectId, sessionId, (e) => sharedCtx.emit(e));
     } else if (status === 'cancelled') {
       // 取消掉的 turn 也烧了 token —— counters 一样落库（配额视角是漏收）
       mergeRunMetadata(runId, {

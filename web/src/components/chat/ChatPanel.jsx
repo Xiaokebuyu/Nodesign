@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, XCircle, SquarePen, History, PanelRightClose, Pin, PinOff } from 'lucide-react';
+import { ChevronDown, History, PanelRightClose, Pin } from 'lucide-react';
 import MessageList from './MessageList.jsx';
 import ChatComposer from './ChatComposer.jsx';
 import ContextMeter from './ContextMeter.jsx';
@@ -36,12 +36,9 @@ export default function ChatPanel({
   onStop,
   sessionTitle,
   onOpenSessionList,
-  onCloseSession,            // streamInput 重构：用户主动结束当前 session（终结 query）
-  onNewChat,                 // 开新对话（原画布工具槽的"新任务"，本质是对话通道操作）
   onCollapse,                // 收起悬浮卡（ChatDock 递进来；贴屏缘唤回）
   pinned = false,            // 悬浮卡固定态（固定 = 不自动收）
   onTogglePin,               // 切换固定（ChatDock 递进来，记 localStorage）
-  hasActiveSession = false,  // 有 currentSessionId 才显示"结束会话"入口
   projectId,                   // Phase B 批次 2：rewindFiles 走 /api/projects/:pid/sessions/:sid/rewind
   sessionId,
   onCanvasReload,              // 回调：rewindFiles 成功后让 iframe bump reloadToken
@@ -128,71 +125,33 @@ export default function ChatPanel({
           <ChevronDown size={12} strokeWidth={1.75} color={COLOR.sub} style={{ flexShrink: 0 }} />
         </button>
 
-        {/* 开新对话：原来在画布工具槽叫"新任务"（名不副实——它开的是对话通道，
-            不是任务文件夹）。2026-07-28 挪到会话头，跟结束会话并排 */}
-        {hasActiveSession && onNewChat && (
-          <button
-            onClick={onNewChat}
-            title="开新对话（当前会话保留，随时从会话列表回来）"
-            style={headerBtn}
-            onMouseEnter={e => { e.currentTarget.style.background = CHROME.hover; e.currentTarget.style.color = COLOR.text2; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = COLOR.sub; }}
-          >
-            <SquarePen size={12} strokeWidth={1.75} />
-            新对话
-          </button>
-        )}
-
-        {/* 结束本会话：streamInput query 终结 + URL 跳回 /work（前端 state 由 effect reset）。
-            2026-07-30 想把它收进会话下拉（低频 + 不可逆，跟高频的「新对话」并排容易误点），
-            但它同时是**释放 agent 进程的唯一显式出口**，而内测有每用户并发上限：
-            埋起来 → 用户留一堆活会话 → 撞 429 BUSY 且不知道为什么。等空闲自动回收
-            落地后再移。眼下只降级成图标，不跟「新对话」争视觉重量。 */}
-        {hasActiveSession && onCloseSession && (
-          <button
-            onClick={onCloseSession}
-            title="结束当前会话（终结 agent，历史保留，可从会话列表找回）"
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-              padding: `${GAP.xs}px ${GAP.sm}px`,
-              fontFamily: FONT_KAI, fontSize: FONT_SIZE.md, color: COLOR.sub,
-              background: 'transparent', border: 'none', borderRadius: RADIUS.sm,
-              cursor: 'pointer',
-              letterSpacing: '0.04em',
-              transition: 'background 0.15s, color 0.15s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = CHROME.hover;
-              e.currentTarget.style.color = COLOR.text2;
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = COLOR.sub;
-            }}
-          >
-            <XCircle size={13} strokeWidth={1.75} />
-          </button>
-        )}
+        {/* 「新对话」「结束会话」两颗按钮 2026-09-12 撤掉（站主定）：新会话从会话列表
+            弹窗的「+ 新会话」开；结束会话收进同一个弹窗当前会话的菜单里。原注释担心的
+            「藏起来撞 429」已由 WS 断开 60s 自动回收（server/ws/index.js）兜住。 */}
 
         {/* 图钉（2026-08-13 悬浮卡）：固定 = 不自动收；取消固定 = 鼠标离卡
             300ms 自动收、贴屏缘唤回。状态记 localStorage，卡顶那枚装饰钉纽扣
-            跟着它出现/消失。 */}
+            跟着它出现/消失。
+            09-12 做成看得出来的开关：两态都是钉子图标（PinOff 那道斜杠读起来像
+            「禁用」），钉住 = 实墨反白块，没钉 = 墨线描边；比旁边的「收起」大一档。 */}
         {onTogglePin && (
           <button
             onClick={onTogglePin}
-            title={pinned ? '取消固定（鼠标离开后自动收起，贴屏幕左右边缘唤回）' : '固定（一直开着，不自动收起）'}
+            data-pin-toggle={pinned ? 'on' : 'off'}
+            title={pinned ? '已固定：点一下取消（鼠标离开后自动收起，贴屏幕左右边缘唤回）' : '固定这张卡（一直开着，不自动收起）'}
             style={{
-              display: 'inline-flex', alignItems: 'center',
-              padding: `${GAP.xs}px ${GAP.xs}px`,
-              color: pinned ? COLOR.text2 : COLOR.sub,
-              background: 'transparent', border: 'none',
-              borderRadius: RADIUS.sm, cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 26, height: 26, marginLeft: GAP.xs,
+              color: pinned ? COLOR.btnText : COLOR.text2,
+              background: pinned ? COLOR.btn : 'transparent',
+              border: `1px solid ${pinned ? COLOR.btn : 'rgba(31,24,16,0.35)'}`,
+              borderRadius: 0, cursor: 'pointer', padding: 0,
               transition: 'background 0.15s, color 0.15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = CHROME.hover; e.currentTarget.style.color = COLOR.text2; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = pinned ? COLOR.text2 : COLOR.sub; }}
+            onMouseEnter={e => { if (!pinned) e.currentTarget.style.background = CHROME.hover; }}
+            onMouseLeave={e => { if (!pinned) e.currentTarget.style.background = 'transparent'; }}
           >
-            {pinned ? <Pin size={13} strokeWidth={1.75} /> : <PinOff size={13} strokeWidth={1.75} />}
+            <Pin size={15} strokeWidth={pinned ? 2 : 1.75} />
           </button>
         )}
 

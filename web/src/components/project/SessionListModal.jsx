@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, GitBranch, Edit2, Tag as TagIcon, Trash2, MoreHorizontal, Check } from 'lucide-react';
+import { Plus, GitBranch, Edit2, Tag as TagIcon, Trash2, MoreHorizontal, Check, XCircle } from 'lucide-react';
 import Modal from '../ui/Modal.jsx';
 import { COLOR, GAP, RADIUS, SHADOW, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { Sessions } from '../../lib/api.js';
@@ -26,6 +26,7 @@ export default function SessionListModal({
   projectId,
   currentSessionId,
   onSwitch,
+  onCloseSession,   // 结束当前会话（终结 agent 进程，历史保留）。09-12 从聊天卡顶栏收进来
 }) {
   const showToast = useGlobalStore(s => s.showToast);
   const confirm = useGlobalStore(s => s.confirm);
@@ -121,6 +122,12 @@ export default function SessionListModal({
     }
   };
 
+  const handleCloseCurrent = async () => {
+    setMenuOpenSid(null);
+    await onCloseSession?.();
+    onClose?.();
+  };
+
   const handleDelete = async (s) => {
     setMenuOpenSid(null);
     const title = s.customTitle || s.summary || s.sessionId.slice(0, 8);
@@ -202,6 +209,7 @@ export default function SessionListModal({
                 onFork={() => handleFork(s)}
                 onRename={() => handleRename(s)}
                 onTag={() => handleTag(s)}
+                onCloseCurrent={onCloseSession ? handleCloseCurrent : null}
                 onDelete={() => handleDelete(s)}
               />
             ))}
@@ -212,7 +220,7 @@ export default function SessionListModal({
   );
 }
 
-function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, onSwitch, onFork, onRename, onTag, onDelete }) {
+function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, onSwitch, onFork, onRename, onTag, onCloseCurrent, onDelete }) {
   const { revealed, hoverProps } = useHoverReveal({ onLeave: () => { if (!menuOpen) onMenuClose?.(); } });
   // 菜单曾经是 absolute 挂在行里 → 被列表的 overflow 裁掉，得滚动才看得见，
   // 而一滚鼠标离开行菜单又关了。改成 fixed + 按钮实际坐标（2026-07-28）
@@ -344,6 +352,9 @@ function SessionRow({ session, isCurrent, menuOpen, onMenuToggle, onMenuClose, o
           <MenuItem icon={<GitBranch size={12} />} label="Fork" onClick={onFork} />
           <MenuItem icon={<Edit2 size={12} />} label="重命名" onClick={onRename} />
           <MenuItem icon={<TagIcon size={12} />} label="设置标签" onClick={onTag} />
+          {isCurrent && onCloseCurrent && (
+            <MenuItem icon={<XCircle size={12} />} label="结束会话（释放 agent，历史保留）" onClick={onCloseCurrent} />
+          )}
           <MenuItem icon={<Trash2 size={12} />} label="删除" onClick={onDelete} danger />
         </div>
       ), document.body)}

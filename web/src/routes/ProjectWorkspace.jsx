@@ -1089,8 +1089,15 @@ export default function ProjectWorkspace() {
         // 首轮跑完服务端用会话摘要给项目正名（首页大输入框建的项目）
         if (evt.projectId && evt.projectId !== id) break;
         if (!evt.name) break;
-        useProjectStore.getState().patchLocal?.(id, { name: evt.name });
-        hydrateOne(id).catch(() => { /* 拉不到就等下次 */ });
+        useProjectStore.getState().patchLocal(id, { name: evt.name });
+        break;
+      }
+
+      case 'session.titled': {
+        // SDK helper 的会话摘要落盘了（server/projects/session-title.js 盯到的）。
+        // 以前只在 run.done 那一拍 refetch，多半赶在它落盘之前，要刷新才看得到。
+        if (evt.sessionId && evt.sessionId !== currentSessionId) break;
+        if (evt.title) setCurrentSessionTitle(evt.title);
         break;
       }
 
@@ -2224,14 +2231,6 @@ export default function ProjectWorkspace() {
             onStop={currentRunId ? handleStop : null}
             sessionTitle={currentSessionTitle}
             onOpenSessionList={() => setSessionListOpen(true)}
-            onCloseSession={handleCloseSession}
-            onNewChat={() => {
-              // 新对话 = 清指针（本地即时 + 服务端广播，别的标签页跟着走）
-              sessionIdRef.current = null;
-              setCurrentSessionId(null);
-              updateProject(id, { activeSessionId: null });
-            }}
-            hasActiveSession={!!currentSessionId}
             systemInfo={systemInfo}
             contextUsage={contextUsage}
             onCompact={handleCompact}
@@ -2280,6 +2279,7 @@ export default function ProjectWorkspace() {
         onClose={() => setSessionListOpen(false)}
         projectId={id}
         currentSessionId={currentSessionId}
+        onCloseSession={handleCloseSession}
         onSwitch={(sid) => {
           // 切会话 = 改服务端指针（唯一真相源），本地先行、WS 重连自动重 hydrate。
           // 以前这里 navigate 到 /sessions/:sid —— URL 真相源时代的舞蹈，已收敛。

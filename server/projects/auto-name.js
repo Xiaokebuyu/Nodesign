@@ -10,38 +10,28 @@
  * 自动清零）永远不动。
  */
 
-import path from 'node:path';
-import { getSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import { getProject, updateProject } from './store.js';
-import { getProjectWorkspace } from './workspace.js';
-import { withConfigDir } from '../lib/sdk-session.js';
-import { platform } from '../runtime/platform.js';
+import { readSessionTitle } from './session-title.js';
 
 const MAX_NAME = 40;
 
 /**
  * @param {string} projectId
  * @param {string} sessionId
+ * @param {string} [title]  调用方已经读到的会话标题（session-title.js 的读数）；不给就自己读一次
  * @returns {Promise<string|null>} 改成了什么名字；没改返 null
  */
-export async function autoNameProjectFromSession(projectId, sessionId) {
+export async function autoNameProjectFromSession(projectId, sessionId, title = null) {
   if (!projectId || !sessionId) return null;
   let project;
   try { project = getProject(projectId); } catch { return null; }
   if (!project || !project.autoNamed) return null;
 
-  const sessionRoot = path.join(getProjectWorkspace(projectId), 'sessions', sessionId);
-  let info;
-  try {
-    info = await withConfigDir(platform.claudeConfigDir, () =>
-      getSessionInfo(sessionId, { dir: sessionRoot }),
-    );
-  } catch {
-    return null;   // 读不到就下轮再说，auto_named 还留着
-  }
-
-  const summary = String(info?.customTitle || info?.summary || '').trim();
-  if (!summary) return null;
+  // 09-12 之前这里自己拼 `<项目>/sessions/<sid>` 去读 —— 那是 08-08 扁平化前的老家，
+  // 之后一直读不到，首页建的项目名永远停在「第一句话前 24 字」。现在走 session-title.js。
+  // 自己读时只认 helper 写的（第一句话兜底不算，见 session-title.js）
+  const summary = String(title || (await readSessionTitle(projectId, sessionId).then(r => (r?.fromHelper ? r.title : ''))) || '').trim();
+  if (!summary) return null;   // 读不到就下轮再说，auto_named 还留着
   const name = summary.length > MAX_NAME ? summary.slice(0, MAX_NAME) + '…' : summary;
   if (name === project.name) {
     updateProject(projectId, { autoNamed: false });   // 同名也算定了，别每轮再问
