@@ -35,6 +35,7 @@ import { layerOf } from './canvas-id.js';
 import { estimateSizeOn, zoneRects, RUNTIME_SINGLETONS } from './board-kind-sizes.js';
 import { inflateSpriteSeats, rollCardRect } from './board-place.js';
 import { getViewpoint } from '../projects/viewpoint-store.js';
+import { reservationsIn } from './board-reservations.js';
 
 /**
  * 这个座位背后的文件还在磁盘上吗（2026-09-05）。
@@ -92,6 +93,9 @@ export function obstaclesIn(board, zone = '', { objects = null, exclude = null, 
         if (!skip.has(id)) rects.push({ id, x: r.x, y: r.y, w: r.w, h: r.h });
       });
     }
+    // 服务端自己预解算的直播板书座（board-reservations.js）：跟视点上报的同一块地同 id，只算一次
+    const seen = new Set(rects.map((r) => r.id));
+    for (const r of reservationsIn(projectId, zone)) if (!skip.has(r.id) && !seen.has(r.id)) rects.push(r);
   }
   // 每层还住着不在 objects 里的占面积物件：文件夹卡按**所在层**取
   //（子文件夹卡住在父层里，2026-08-30 跨层幻影案之前这儿把它们全当根层矩形，

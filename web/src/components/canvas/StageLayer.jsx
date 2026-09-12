@@ -103,7 +103,8 @@ export function useStageState({
               // 位置（08-29 刀 C）：agent 给的纸内坐标，随 text 的第一拍一起到 ——
               // 有它就能把字直接流到真位置，而不是先写在一块空地上再跳过去。
               // reset（批里换了一条）时跟着换成新那条的位置。
-              spot: evt.reset ? (evt.spot || null) : (c.spot || evt.spot || null),
+              // solved = 服务端预解算出的真落点（09-12），后到也要盖过前端的近似
+              spot: evt.reset ? (evt.spot || null) : (evt.spot?.solved ? evt.spot : (c.spot || evt.spot || null)),
               // reset = 批里换了一条板书：另起一张（不清的话两条正文粘一起）
               text: evt.reset ? (evt.append || '') : c.text + (evt.append || ''),
             },

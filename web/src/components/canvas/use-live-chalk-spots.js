@@ -15,10 +15,23 @@ import { sheetSpotToWorld } from '../../lib/board-geometry.js';
 
 const MAX_TRACKED = 12;
 
+/**
+ * 服务端预解算的真落点（spot.solved，2026-09-12）盖过前端近似：一条直播框只升级一次，
+ * 之后的近似不再覆盖它。hMin = 服务端按已流出正文估的高（预留的面积），框先立到那么大。
+ */
+export function mergeLiveSpot(prev, spot) {
+  const s = spot?.solved;
+  if (!s || !Number.isFinite(s.x) || !Number.isFinite(s.y)) return prev;
+  if (prev?.solved) return prev;
+  return { x: Math.round(s.x), y: Math.round(s.y), w: s.w || null, hMin: s.h || null, placed: true, solved: true };
+}
+
 export function useLiveChalkSpots({ sheets, layout, camera, scrollRef }) {
   const spotsRef = useRef(new Map());
   return (blockId, spot) => {
     const m = spotsRef.current;
+    const upgraded = mergeLiveSpot(m.get(blockId), spot);
+    if (upgraded && upgraded !== m.get(blockId)) m.set(blockId, upgraded);
     if (!m.has(blockId)) {
       const real = sheetSpotToWorld(sheets, spot, layout);
       if (real) {

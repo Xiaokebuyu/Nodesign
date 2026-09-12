@@ -142,5 +142,16 @@ export function pumpToolInputStream(ctx, st, flush) {
     ...(reset ? { reset: true } : {}),
     ...(flush ? { done: true } : {}),
   }));
+  // 预解算（2026-09-12）：位置字段一闭合就按落板同一套代码解真落点，再发一拍带 solved 的 spot；
+  // 正文继续流时按已流出的字更新预留高度（工具那头注册在 ctx.spotPreviewers，见 write-on-board.js）
+  const pv = !st.batch ? ctx.spotPreviewers?.[st.name] : null;
+  if (pv && spot) {
+    Promise.resolve(pv.solve?.(host, st.id)).then((solved) => {
+      if (!solved) return;
+      ctx.emit(Events.deltaToolInput(ctx.counters.turns, st.id, st.name, { spot: { ...spot, solved } }));
+    }).catch(() => { /* 预解算失败：前端用自己的近似 */ });
+  } else if (pv && append && st.spotSent) {
+    try { pv.grow?.(st.id, text); } catch { /* fail-soft */ }
+  }
 }
 
