@@ -435,7 +435,8 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
             continue;
           }
           const from = members.sort((a, b) => a[1].y - b[1].y)[0][0];   // 组里最上面那件当代表
-          const to = targets.sort((a, b) => (a[1].y + (a[1].h || 0)) - (b[1].y + (b[1].h || 0))).pop()[0];   // 最下面 = 最新
+          const bottomOf = ([id, e]) => e.y + estimateSizeOn(board, id, e).h;   // 无落盘 h 的按形态表估
+          const to = targets.sort((a, b) => bottomOf(a) - bottomOf(b)).pop()[0];   // 最下面 = 最新
           if (from === to) { fail('组代表和目标是同一件（请检查 group_tag 与 target_tag 是否颠倒）'); continue; }
           const existing = Object.entries(liveBindings).find(([, b]) => b.follow === bareTag(o.target_tag) && live[b.from]?.tag === bareTag(o.group_tag));
           const id = existing ? existing[0] : `b:a${stamp()}`;

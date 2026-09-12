@@ -33,6 +33,13 @@ describe('laneSummaries：符号地图', () => {
     expect(laneSummaries(board).find((x) => x.tag === '野线').registered).toBe(false);
   });
 
+  it('条目没落盘 h 的按形态表估 frontier（图 176、产物卡 388），不是一律 120', () => {
+    const board = { objects: { 'a.png': { tag: 't', x: 0, y: 0 }, 'site:x': { tag: 'u', x: 0, y: 0 } }, lanes: { t: { x: 0, y: 0 }, u: { x: 0, y: 0 } } };
+    const by = Object.fromEntries(laneSummaries(board).map(l => [l.tag, l]));
+    expect(by.t.frontier.y).toBeGreaterThanOrEqual(176);   // image 200×176
+    expect(by.u.frontier.y).toBeGreaterThanOrEqual(388);   // site 卡 28+400
+  });
+
   it('空线（注册了还没落任何一条）frontier = 列头', () => {
     const l = laneSummaries({ lanes: { 新线: { x: 500, y: 40, w: 480 } }, objects: {} })[0];
     expect(l.count).toBe(0);

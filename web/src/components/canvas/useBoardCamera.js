@@ -1,8 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   IDENTITY_CAMERA, ZOOM_MIN, ZOOM_MAX, ROAM_MARGIN, CAMERA_PADDING, CAMERA_ORIGIN,
-  constrainCamera, zoomAtScreenPoint, stepZoom, fitBox, boxExpand, screenToWorld,
-} from '../../lib/board-camera.js';
+  constrainCamera, zoomAtScreenPoint, stepZoom, fitBox, boxExpand, screenToWorld, worldToScreen } from '../../lib/board-camera.js';
 import { onBlankCanvas, onChrome } from '../../lib/board-hit.js';
 import { useTouchGestures } from './useTouchGestures.js';
 import { useDeviceClass } from '../../lib/device-class.js';
@@ -408,6 +407,15 @@ export function useBoardCamera({ paneRef, contentBox, enabled = true, fingerPans
     return screenToWorld({ x: clientX - r.left, y: clientY - r.top }, camRef.current);
   }, [paneRef]);
 
+  /** 世界坐标 → 屏幕（client）坐标：toWorld 的反函数，给钉在世界点上的 fixed 浮层用 */
+  const toScreen = useCallback((worldX, worldY) => {
+    const el = paneRef.current;
+    if (!el) return { x: worldX, y: worldY };
+    const r = el.getBoundingClientRect();
+    const s = worldToScreen({ x: worldX, y: worldY }, camRef.current);
+    return { x: s.x + r.left, y: s.y + r.top };
+  }, [paneRef]);
+
   zoomToFitRef.current = zoomToFit;
   zoomByRef.current = zoomBy;
   zoomToRef.current = zoomTo;
@@ -431,7 +439,7 @@ export function useBoardCamera({ paneRef, contentBox, enabled = true, fingerPans
     },
     noteTakeover,
     onPointerDown, onPointerMove, onPointerUp,
-    flyTo, flyToBox, flyToPoint, jumpToPoint, zoomToFit, zoomBy, zoomTo, toWorld,
+    flyTo, flyToBox, flyToPoint, jumpToPoint, zoomToFit, zoomBy, zoomTo, toWorld, toScreen,
     panByScreen,
   };
 }

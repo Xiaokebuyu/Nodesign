@@ -52,8 +52,7 @@ import { staleControlIds } from '../../lib/board-controls.js';
 import TextDraft from './TextDraft.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import LinkPopover from './LinkPopover.jsx';
-import AnnotatePopover from './AnnotatePopover.jsx';
-import { soleRoleTarget } from '../../lib/role-target.js';
+import { AnnotateHost, useAnnotateScreenPos } from './annotate-host.jsx';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';
@@ -1511,6 +1510,9 @@ export default function BoardCanvas({
   const zoomByStable = useCallback((d) => cameraRef.current.zoomBy(d), []);
   const zoomToStable = useCallback((z) => cameraRef.current.zoomTo(z), []);
 
+  // 标注浮层钉在打开那一刻的世界点上，跟着相机走（annotate-host.jsx）
+  const annotScreen = useAnnotateScreenPos(annotate, camApiRef);
+
   // 工具栏常驻评论钮（08-25 用户提）：选中集优先，否则对整块画布说一句
   const openCanvasNote = useCallback(() => {
     const sel = selectedIdsRef.current;
@@ -2024,22 +2026,9 @@ export default function BoardCanvas({
 
       {/* 就地标注（E3）：写一句话 → 发送 → agent 立刻起一轮 */}
       {annotate && (
-        <AnnotatePopover
-          x={annotate.x} y={annotate.y} target={annotate.target}
-          // 这批标注是不是全指着同一个常驻角色 —— 是的话这句话**直达它**，
-          // 不经过主 agent。判据跟真正发送时走的是同一个函数（lib/role-direct.js），
-          // 不能在这儿另写一份：文案说"说给墨璃"而实际发给了主控，比不显示更糟。
-          roleTarget={soleRoleTarget(annotate.targets?.length ? annotate.targets : [annotate.target])}
-          onClose={() => setAnnotate(null)}
-          onSubmit={(text, opts) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text, toMain: !!opts?.toMain })}
-          // 攒着：同一条回调，多一个 queue 标记 —— 落点在 ProjectWorkspace
-          // （pending-changes buffer 和那条浮钮都住在那儿）
-          onQueue={(text) => onAnnotate?.({ target: annotate.target, targets: annotate.targets, text, queue: true })}
-          onKeep={(text) => keepAnnotation(
-            annotate.targets?.length ? annotate.targets.map(t => t.id) : [annotate.target.id],
-            camApiRef.current?.toWorld(annotate.x, annotate.y),
-            text,
-          )}
+        <AnnotateHost
+          annotate={annotate} at={annotScreen} onClose={() => setAnnotate(null)}
+          onAnnotate={onAnnotate} keepAnnotation={keepAnnotation} toWorld={camApiRef.current?.toWorld}
         />
       )}
 

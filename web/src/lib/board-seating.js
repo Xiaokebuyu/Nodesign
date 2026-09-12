@@ -19,13 +19,14 @@
  */
 import { DESKTOP_W, MARGIN_X, ROW_GAP, packRow } from './board-geometry.js';
 import { nextShelfSpot, hasShelf } from './board-shelf.js';
-import { sizeOf } from './board-kinds.js';
+import { sizeOf, ARTIFACT_PREVIEW_H } from './board-kinds.js';
 import { lineageFolds } from './lineage.js';
 import { pickHero } from './hero.js';
 import { orderWithGroups } from './relation-order.js';
 
-/** 尺寸要回写给服务端的形态（产物卡：主角档会变大，服务端估不准） */
-const ARTIFACT_TYPES = new Set(['deck', 'site', 'docx', 'browse', 'repo']);
+/** 尺寸要回写给服务端的形态（产物卡：主角档会变大，服务端估不准）。
+ *  从 ARTIFACT_PREVIEW_H 派生而不是手写 —— 手写那份 09-12 之前漏了 stage（写死表家族第 6 处） */
+const ARTIFACT_TYPES = new Set(Object.keys(ARTIFACT_PREVIEW_H));
 
 /**
  * @param {object} deps

@@ -39,8 +39,11 @@ export function useMeasuredSize(ref, o, onMeasured, deps = []) {
     if (o?.data?.rotation || (o?.data?.scale && o.data.scale !== 1)) return;
     const el = ref.current;
     const measure = () => {
+      // 远景档（LOD）卡体不渲染子元素，根元素只剩 2px 边框 —— 量到的不是真高。2026-09-12 之前
+      // 这里只挡 0，2px 照样落盘，服务端占位表里那张卡就塌成 2px，别的东西直接压上来。
+      if (el.dataset?.far === '1') return;
       const h = Math.round(el.offsetHeight);
-      if (!h) return;
+      if (!h || h < 8) return;
       const plain = o.type === 'text' && o.data?.format !== 'md';
       const w0 = o.pos?.w || 0;
       const patch = {};

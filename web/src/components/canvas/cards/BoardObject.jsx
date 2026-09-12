@@ -305,6 +305,8 @@ function BoardObject({
 
   return (
     <div
+      // 远景档（手机/平板）卡体一个子元素都不渲染：标上让 useMeasuredSize 别把 2px 当真高回写
+      data-far={far ? '1' : undefined}
       ref={rootRef}
       data-board-object={o.id}
       data-board-type={o.type}

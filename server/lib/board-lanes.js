@@ -21,6 +21,7 @@
  */
 
 import { UNIT } from './rect.js';
+import { estimateSizeOn } from './board-kind-sizes.js';
 
 /**
  * 符号地图：板上现在有哪些线。已注册的报起点/节数/frontier/岔自谁；
@@ -32,7 +33,8 @@ export function laneSummaries(board) {
   for (const [id, e] of Object.entries(board?.objects || {})) {
     if (!e?.tag || !Number.isFinite(e.y)) continue;
     if (!members.has(e.tag)) members.set(e.tag, []);
-    members.get(e.tag).push({ id, y: e.y, bottom: e.y + (e.h || 5 * UNIT) });
+    // 条目没落盘 h 的按形态表估（图 176 / 产物卡 388+ / 便签 148），别一律按 120 算 frontier
+    members.get(e.tag).push({ id, y: e.y, bottom: e.y + (Number.isFinite(e.h) ? e.h : estimateSizeOn(board, id, e).h) });
   }
   const out = [];
   const seen = new Set();

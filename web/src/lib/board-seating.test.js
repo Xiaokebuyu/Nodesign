@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { computeDesktopSeating } from './board-seating.js';
-import { sizeOf } from './board-kinds.js';
+import { sizeOf, ARTIFACT_PREVIEW_H } from './board-kinds.js';
 
 const folderCardOf = (id, pos) => ({
   id, kind: 'folder', x: pos?.x ?? 0, y: pos?.y ?? 0, w: 288, h: 240,
@@ -173,5 +173,7 @@ describe('临时座与尺寸回写（2026-09-05：服务端求解器为准）', 
     expect(r.sizeFixes['site:x'].w).toBeGreaterThan(640);
     expect(r.sizeFixes['deck:y']).toBeUndefined();              // 存的跟渲染一致，不写
     expect(r.sizeFixes['p.png']).toBeUndefined();               // 图片不回写
+    // 产物形态表从注册表派生：stage 曾漏（09-12），演出卡的尺寸从不回写
+    expect(Object.keys(ARTIFACT_PREVIEW_H)).toContain('stage');
   });
 });
