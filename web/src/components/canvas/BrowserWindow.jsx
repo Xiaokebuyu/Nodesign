@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ArrowLeft, RotateCw, Hand, Play, Loader2, Globe, PowerOff, FolderOpen, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, RotateCw, Hand, Play, Loader2, Globe, PowerOff, FolderOpen, ChevronDown, Maximize2, Minimize2, X, ExternalLink, FileText } from 'lucide-react';
 import { COLOR, CANVAS, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { TOOL_SURFACE } from '../../lib/paper.js';
 
@@ -118,6 +118,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
   // 采到的东西（按站分组）。跟画面同一个端点来的（`GET /browse` 就是那张卡的载荷）
   const [sites, setSites] = useState([]);
   const [openSite, setOpenSite] = useState(null);
+  const [preview, setPreview] = useState(null);   // 采到的某张图在窗内放大看：{ rel, name }
   const [shelfOpen, setShelfOpen] = useState(true);
   /**
    * 画面尺寸档（09-08 站主：agent 一开浏览器就展开大屏怼脸，默认先给缩略图）。
@@ -136,7 +137,14 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
   const takeoverRef = useRef(false);
   takeoverRef.current = takeover;
   const overlayOpenRef = useRef(false);
-  overlayOpenRef.current = overlayOpen;
+  // 桌面版原生视图画在所有 HTML 之上：窗内看图期间也要把它停到屏外，否则图被压在视图底下
+  overlayOpenRef.current = overlayOpen || !!preview;
+  useEffect(() => {
+    if (!preview) return undefined;
+    const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setPreview(null); } };
+    window.addEventListener('keydown', key, true);
+    return () => window.removeEventListener('keydown', key, true);
+  }, [preview]);
 
   const send = useCallback((obj) => {
     const ws = wsRef.current;
@@ -401,6 +409,11 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
     },
   ], [addr, takeover, send, projectId, onClose, native, agentBusy, help, liveHelp, expanded]);
 
+  const openSiteData = useMemo(
+    () => (openSite ? sites.find(s => s.site === openSite && Array.isArray(s.files)) || null : null),
+    [sites, openSite],
+  );
+
   const stateLine = {
     connecting: '连接中…',
     live: null,
@@ -512,11 +525,47 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         )}
       </div>
 
+      {preview && (
+        <div
+          onClick={() => setPreview(null)}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 2, background: 'rgba(43,33,23,0.55)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            padding: GAP.md, boxSizing: 'border-box',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: 'flex', flexDirection: 'column', gap: GAP.sm, maxWidth: '100%', maxHeight: '100%', minHeight: 0,
+              background: CANVAS.paper, padding: GAP.sm, borderRadius: 2, boxShadow: '0 6px 22px rgba(43,39,35,.28)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.text }}>
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{preview.name}</span>
+              <a
+                href={Assets.artifactFileUrl(projectId, preview.rel)} target="_blank" rel="noreferrer" title="另开标签页看原图"
+                style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, color: COLOR.text2, textDecoration: 'none' }}
+              ><ExternalLink size={12} /> 原图</a>
+              <button type="button" onClick={() => setPreview(null)} title="关闭（Esc）"
+                style={{ background: 'transparent', border: 0, cursor: 'pointer', color: COLOR.text2, padding: 2, display: 'inline-flex' }}
+              ><X size={14} /></button>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img
+                src={Assets.artifactFileUrl(projectId, preview.rel)} alt={preview.name}
+                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', border: `1px solid ${COLOR.border}` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── 它采回来的东西：一站一文件夹（存放格式按站点产物那条范式）── */}
       {!!sites.length && (
         <div style={{
           flexShrink: 0, borderTop: `1px solid ${COLOR.border}`,
-          background: COLOR.bgCard, maxHeight: shelfOpen ? 220 : 30, overflow: 'hidden',
+          background: COLOR.bgCard, maxHeight: shelfOpen ? 320 : 30, overflow: shelfOpen ? 'auto' : 'hidden',
           transition: 'max-height .18s ease',
         }}>
           <button
@@ -572,19 +621,53 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     }}>{st.site}</div>
                   </button>
-                  {openSite === st.site && (
-                    <div style={{
-                      paddingTop: 3, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xxs,
-                      color: COLOR.sub, lineHeight: 1.6,
-                    }}>
-                      {/* 路径给出来就够了：文件在工作区里，agent 下个会话直接引用它 */}
-                      <span style={{ fontFamily: FONT_MONO }}>{st.dir}/</span>
-                      <br />
-                      {st.count} 件（截图 / 调色板 / 字体 / 结构 / CSS，类别在文件名里）
-                    </div>
-                  )}
                 </div>
               ))}
+            </div>
+          )}
+          {/* 点开一站：图按缩略图列出来，点一张在窗内放大；文本档（调色板 / 字体 / 结构 / CSS）
+              点了另开标签页看原件。路径仍然给出来，agent 下个会话直接引用它。 */}
+          {shelfOpen && openSiteData && (
+            <div style={{ padding: `0 ${GAP.md}px ${GAP.sm}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xxs, color: COLOR.sub }}>
+              <div style={{ fontFamily: FONT_MONO, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {openSiteData.dir}/ · {openSiteData.count} 件
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {openSiteData.files.filter(f => f.category !== 'text').map(f => (
+                  <button
+                    key={f.rel}
+                    type="button"
+                    title={f.name}
+                    onClick={() => setPreview({ rel: f.rel, name: f.name })}
+                    style={{ padding: 0, border: `1px solid ${COLOR.border}`, borderRadius: 2, background: CANVAS.paper, cursor: 'zoom-in', overflow: 'hidden' }}
+                  >
+                    <img
+                      alt={f.name}
+                      loading="lazy"
+                      src={Assets.artifactFileUrl(projectId, f.rel)}
+                      style={{ width: 96, height: 60, objectFit: 'cover', objectPosition: 'top center', display: 'block' }}
+                    />
+                  </button>
+                ))}
+                {openSiteData.files.filter(f => f.category === 'text').map(f => (
+                  <a
+                    key={f.rel}
+                    href={Assets.artifactFileUrl(projectId, f.rel)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={f.name}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4, maxWidth: 180,
+                      padding: '3px 6px', border: `1px solid ${COLOR.border}`, borderRadius: 2,
+                      background: CANVAS.paper, color: COLOR.text2, textDecoration: 'none',
+                      fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs,
+                    }}
+                  >
+                    <FileText size={11} style={{ flexShrink: 0 }} />
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</span>
+                  </a>
+                ))}
+              </div>
             </div>
           )}
         </div>

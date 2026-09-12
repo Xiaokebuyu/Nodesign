@@ -88,15 +88,26 @@ export async function browseCard(projectId) {
  * 只 readdir 两层（站目录 + 里面的文件），不进 `.meta/`。封面取第一张 screenshot ——
  * 卡面和窗里的分组头都用它。读不到就当没有：采集清单列不出来不该让整张卡消失。
  */
+const MAX_FILES_PER_SITE = 60;
+/** 文件名表明类别（一站一文件夹那条范式）：截图 / 其它图 / 文本（调色板、字体、结构、CSS） */
+export function categoryOf(name) {
+  if (/\.screenshot\.(webp|png)$/i.test(name)) return 'screenshot';
+  if (/\.(png|jpe?g|webp|gif|svg|avif)$/i.test(name)) return 'image';
+  return 'text';
+}
+
 async function collectedSites(projectId) {
   const root = path.join(getSharedDir(projectId), CAPTURE_DIR);
   let ents;
   try { ents = await fs.readdir(root, { withFileTypes: true }); } catch { return []; }
-  const groups = new Map();   // 站名 → { site, count, cover, dir }
+  const groups = new Map();   // 站名 → { site, count, cover, dir, files }
   const add = (site, dir, file) => {
-    const g = groups.get(site) || { site, count: 0, cover: null, dir };
+    const g = groups.get(site) || { site, count: 0, cover: null, dir, files: [] };
     g.count += 1;
     if (!g.cover && /\.screenshot\.(webp|png)$/i.test(file)) g.cover = `${dir}/${file}`;
+    // 2026-09-12：清单也带上（原来数完个数就丢，窗里点开一站只能看到一行路径，
+    // 用户报「采到的东西点不开」）。每站封 60 件，够看不撑爆 /artifacts。
+    if (g.files.length < MAX_FILES_PER_SITE) g.files.push({ name: file, rel: `${dir}/${file}`, category: categoryOf(file) });
     groups.set(site, g);
   };
 
