@@ -26,6 +26,7 @@
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
+import { Events } from '../../agent/events.js';
 import { z } from 'zod';
 import { withBrowser, peek, hold, _limits } from '../../browse/registry.js';
 import { requestHelp } from '../../browse/handover.js';
@@ -459,9 +460,8 @@ become unusable within days.`,
             ids: { sessionId, runId: ctx?.runId ?? null },
             normalize: normalizeShot,
           });
-          for (const f of r.files) {
-            try { ctx?.emit?.({ type: 'run.file_changed', filePath: f.rel, event: 'add' }); } catch { /* */ }
-          }
+          // 采集件不发 run.file_changed（见 events.js referenceCaptured 的注释：精灵会失锚漂移）
+          try { ctx?.emit?.(Events.referenceCaptured(r.files.map(f => f.rel))); } catch { /* */ }
           const lines = [`从 ${r.data.title || r.data.url} 采下来了：`];
           for (const f of r.files) lines.push(`  ${f.rel}（${(f.bytes / 1024).toFixed(0)} KB，${f.kind}）`);
           if (r.data.palette?.length) {

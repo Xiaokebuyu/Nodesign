@@ -218,15 +218,21 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
 
   useEffect(() => { if (url) setAddr(url); }, [url]);
 
-  // 采集清单：进窗拉一次。**不跟着帧刷** —— 采集是低频动作（agent 主动调
-  // browser_capture 才有），跟着画面刷等于每秒问一遍磁盘。
+  // 采集清单：进窗拉一次，之后只在 agent 采到东西时（run.reference_captured →
+  // window 'nd-reference-captured'）再拉。**不跟着帧刷** —— 跟着画面刷等于每秒问一遍磁盘。
+  const [captureTick, setCaptureTick] = useState(0);
+  useEffect(() => {
+    const on = () => setCaptureTick(k => k + 1);
+    window.addEventListener('nd-reference-captured', on);
+    return () => window.removeEventListener('nd-reference-captured', on);
+  }, []);
   useEffect(() => {
     let alive = true;
     Browse.state(projectId)
       .then(r => { if (alive) setSites(Array.isArray(r?.sites) ? r.sites : []); })
       .catch(() => {});
     return () => { alive = false; };
-  }, [projectId]);
+  }, [projectId, captureTick]);
 
   // ── 接手：鼠标/键盘 → WS ──
   useEffect(() => {

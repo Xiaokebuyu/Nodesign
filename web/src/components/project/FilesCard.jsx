@@ -41,6 +41,11 @@ export default function FilesCard({ projectId }) {
   }, [projectId]);
 
   useEffect(() => { refresh(); }, [refresh]);
+  // agent 采到东西（run.reference_captured）→ 参考素材那一栏重拉
+  useEffect(() => {
+    window.addEventListener('nd-reference-captured', refresh);
+    return () => window.removeEventListener('nd-reference-captured', refresh);
+  }, [refresh]);
 
   /** 复用：input picker 和 drag-drop 都走这条 — 同条 Assets.upload 路径 → shared/assets/ */
   const uploadFiles = useCallback(async (fileList) => {

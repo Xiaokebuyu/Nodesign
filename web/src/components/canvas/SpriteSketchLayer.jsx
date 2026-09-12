@@ -31,7 +31,16 @@ import { BOARD_Z } from '../../lib/z-layers.js';
 /** 手写字显影用的那条 —— 身体那几条在 sprite-figures.jsx（谁的动画归谁管） */
 const KEYFRAMES = `
   @keyframes ndInkIn { to { opacity: 1; } }
+  @keyframes ndInkOut { to { opacity: 0; } }
 `;
+
+/** 抹掉一句要多久：倒序逐字，比写快（写是 22~60ms/字） */
+export function eraseDurationMs(text) {
+  const n = Array.from(String(text || '')).length;
+  if (!n) return 0;
+  const per = Math.min(40, Math.max(12, Math.round(700 / n)));
+  return n * per + 120;
+}
 
 /**
  * 逐字显影。笔迹用**画布手写那套栈**（TEXT_FONT_CSS.pen：拉丁走 Caveat、
@@ -39,10 +48,12 @@ const KEYFRAMES = `
  * （2026-08-14 用户点名：之前用楷体，太工整像印出来的）。
  * per-char 延迟随长度收缩：整句写完 ≤ ~1.8s，长句不拖堂。
  */
-function Handwriting({ text, delay = MARK_DRAW_MS, size = 26, maxWidth = 340 }) {
+function Handwriting({ text, delay = MARK_DRAW_MS, size = 26, maxWidth = 340, phase = 'in' }) {
   const chars = useMemo(() => Array.from(String(text || '')), [text]);
   if (!chars.length) return null;
   const per = Math.min(60, Math.max(22, Math.round(1600 / chars.length)));
+  const perOut = Math.min(40, Math.max(12, Math.round(700 / chars.length)));
+  const erasing = phase === 'out';
   return (
     <div style={{
       fontFamily: TEXT_FONT_CSS.pen, fontSize: size, lineHeight: 1.45,
@@ -55,9 +66,12 @@ function Handwriting({ text, delay = MARK_DRAW_MS, size = 26, maxWidth = 340 }) 
             key={`${i}:${ch}`}
             style={{
               display: 'inline-block',
-              opacity: 0,
+              opacity: erasing ? 1 : 0,
               transform: `rotate(${(j - 3) * 0.8}deg) translateY(${(j % 3) - 1}px)`,
-              animation: `ndInkIn 90ms steps(2, end) ${delay + i * per}ms forwards`,
+              // 写：从第一个字起逐字显影；抹：从最后一个字起倒序隐去（反向打字机）
+              animation: erasing
+                ? `ndInkOut 70ms steps(2, end) ${(chars.length - 1 - i) * perOut}ms forwards`
+                : `ndInkIn 90ms steps(2, end) ${delay + i * per}ms forwards`,
             }}
           >{ch === ' ' ? ' ' : ch}</span>
         );
@@ -67,8 +81,36 @@ function Handwriting({ text, delay = MARK_DRAW_MS, size = 26, maxWidth = 340 }) 
 }
 
 /**
+ * 换句子（2026-09-12 站主定）：旧句先倒序抹掉，再正向写新句 —— 不是零帧替换。
+ * 首次出场沿用 MARK_DRAW_MS（等身体画完）；之后写新句不再等，抹的那段就是停顿。
+ * 抹到一半又来新句：目标直接换成最新那句，抹完写它（不排队）。
+ */
+export function HandwritingSwap({ text, size, maxWidth }) {
+  const [shown, setShown] = useState(text);
+  const [phase, setPhase] = useState('in');
+  const firstRef = useRef(true);
+  useEffect(() => {
+    if (text === shown) return undefined;
+    if (!shown) { setShown(text); setPhase('in'); return undefined; }   // 空 → 有：直接写
+    setPhase('out');
+    const t = setTimeout(() => { firstRef.current = false; setShown(text); setPhase('in'); }, eraseDurationMs(shown));
+    return () => clearTimeout(t);
+  }, [text, shown]);
+  return (
+    <Handwriting
+      key={`${phase}:${shown}`}
+      text={shown}
+      phase={phase}
+      delay={firstRef.current ? MARK_DRAW_MS : 0}
+      size={size}
+      maxWidth={maxWidth}
+    />
+  );
+}
+
+/**
  * 精灵本体：图标 + 手写行。`drawKey` 变化 = 整体重画（换了地方/重新出场）；
- * 只有 `text` 变 = 图标原地不动、那行字重写 —— 像在同一页上划掉重写。
+ * 只有 `text` 变 = 图标原地不动、那行字抹掉重写 —— 像在同一页上划掉重写。
  */
 export function SpriteSketch({ brand, drawKey = 0, text, size = 44, maxWidth = 340, active = false, quiet = false, nameTag = null, onMarkClick, onMarkDragMove, onMarkDragEnd }) {
   return (
@@ -89,7 +131,7 @@ export function SpriteSketch({ brand, drawKey = 0, text, size = 44, maxWidth = 3
       {(nameTag || !quiet) && (
         <div style={{ paddingTop: Math.round(size * 0.04), minWidth: 0 }}>
           {nameTag}
-          {!quiet && <Handwriting key={text} text={text} maxWidth={maxWidth} />}
+          {!quiet && <HandwritingSwap text={text} maxWidth={maxWidth} />}
         </div>
       )}
     </div>
@@ -277,7 +319,12 @@ export function findFrameSpot(at, obstacles) {
  *     离开视野 3 秒才追过来重新落位重画；视口全被占就不出现。
  *     **活跃与否不影响这条链** —— 活跃只换图标（转轮）和台词。
  */
-export function AmbientSpriteLayer({ agentActive = false, workAnchor = null, cam, viewport, obstacles, text, quiet = false, onAsk, frameCards = [], renderFrameCard }) {
+export function AmbientSpriteLayer({ agentActive = false, workAnchor = null, cam, viewport, obstacles: rawObstacles, text, quiet = false, onAsk, frameCards = [], renderFrameCard }) {
+  // obstacles 按内容指纹稳定引用（2026-09-12）：浏览器卡每次换页都触发全量重拉，产物列表
+  // 引用每次都变，下面几个 effect / memo 全部重算，精灵的相位被反复重置。内容没变就沿用旧引用。
+  const obstacleKey = (rawObstacles || []).map(o => `${o.id || ''}:${o.x},${o.y},${o.w},${o.h}`).join(';');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const obstacles = useMemo(() => rawObstacles || [], [obstacleKey]);
   // 身份跟着会话模型走（08-21）：跑 DeepSeek 就是鲸，跑 Ox 就是 OpenCode 方块。
   // 画布不传这个 prop —— 它自己就住在项目路由里，见 lib/model-brand.js
   const brand = useCurrentModelBrand();
@@ -293,16 +340,28 @@ export function AmbientSpriteLayer({ agentActive = false, workAnchor = null, cam
   const userPinnedRef = useRef(false);
   const [dragging, setDragging] = useState(false);
 
+  const wasAnchoredRef = useRef(false);
   useEffect(() => {
     if (workAnchor || !viewport?.w || !cam?.z) {
       // 贴着目标时槽位冻结：回到无目标态再说
       clearTimeout(offTimer.current); offTimer.current = null;
       clearTimeout(healTimer.current); healTimer.current = null;
+      wasAnchoredRef.current = !!workAnchor;
       return undefined;
     }
+    const justLeftAnchor = wasAnchoredRef.current;
+    wasAnchoredRef.current = false;
     if (!slot) {
       const first = findAmbientSlot(cam, viewport, obstacles);
       if (first) { setDrawKey(k => k + 1); setSlot(first); }
+      return undefined;
+    }
+    // 从贴目标回到槽位态：冻结前那个槽是目标出现**之前**算的，此时多半已被压（浏览器卡
+    // 正好开在视口中上）—— 直接重找，别沿用旧槽再等 400ms 自愈来回蹦
+    if (justLeftAnchor && !userPinnedRef.current
+        && (obstacles || []).some(o => hitRect({ x: slot.x, y: slot.y, w: SPRITE_W, h: SPRITE_H }, o))) {
+      const next = findAmbientSlot(cam, viewport, obstacles);
+      if (next) { setDrawKey(k => k + 1); setSlot(next); }
       return undefined;
     }
     /**
@@ -480,7 +539,8 @@ export function useSpriteAmbient({ presence, stageCards, spriteLine }) {
   const [phraseTick, setPhraseTick] = useState(0);
   useEffect(() => {
     if (!mainActive) return undefined;
-    const t = setInterval(() => setPhraseTick(k => k + 1), 4200);
+    // 5.6s（原 4.2s）：换句要先抹旧句再写新句（≤2.6s），留 3s 给人读
+    const t = setInterval(() => setPhraseTick(k => k + 1), 5600);
     return () => clearInterval(t);
   }, [mainActive]);
 

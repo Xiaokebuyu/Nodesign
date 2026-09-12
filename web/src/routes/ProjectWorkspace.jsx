@@ -41,6 +41,7 @@ import { serializeForAI } from '../lib/element-semantics.js';
 import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges, Browse } from '../lib/api.js';
 import { handleAuxEvent } from '../lib/aux-events.js';
 import { exportFromMenu, downloadFromUrl } from '../components/canvas/card-export.js';
+import { trailingThrottle } from '../lib/trailing-throttle.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
 import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult } from '../lib/chat-stream.js';
@@ -143,6 +144,8 @@ export default function ProjectWorkspace() {
     if (listBumpTimerRef.current) clearTimeout(listBumpTimerRef.current);
     listBumpTimerRef.current = setTimeout(() => setListVersion(v => v + 1), 500);
   }, []);
+  // 高频扳机（run.browser_opened 每次换页一条）用 4s 尾沿节流版
+  const bumpListThrottled = useMemo(() => trailingThrottle(bumpListSoon, 4000), [bumpListSoon]);
 
   /**
    * 进程面板「在画布上看」（09-08）：把 dev server 的地址开进 agent 浏览器（同一只 chromium，
@@ -1153,8 +1156,16 @@ export default function ProjectWorkspace() {
       case 'run.browser_opened':
         if (!isStale) setBrowseWin({ url: evt.url || null, help: null });
         // 桌面上那张浏览器卡也要跟着换页（它吃 GET /browse，靠 reload 拉）——
-        // 不 bump 的话卡会一直停在上一页，直到别的什么事情触发了重拉
-        if (!isStale) bumpListSoon();
+        // 不 bump 的话卡会一直停在上一页；browser_computer 每次换页都发一条，按 4s 合流
+        if (!isStale) bumpListThrottled();
+        break;
+
+      case 'run.reference_captured':
+        // 浏览器采集落盘（不走 run.file_changed，见服务端 events.js）：卡面计数 + 架子/素材抽屉重拉
+        if (!isStale) {
+          bumpListSoon();
+          window.dispatchEvent(new Event('nd-reference-captured'));
+        }
         break;
 
       case 'run.browser_help':

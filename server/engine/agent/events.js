@@ -268,6 +268,10 @@ export const Events = {
 
   // C4 FileChanged hook → 前端 reload iframe
   fileChanged: (filePath, event) => ({ type: 'run.file_changed', filePath, event }),
+  // 浏览器采集落盘（2026-09-12）：采集件（assets/references/web/**）刻意不上画布，所以**不走**
+  // run.file_changed —— 那条会让精灵去找一张不存在的卡，失锚后掉回视口默认槽位，正压在浏览器卡上，
+  // 下一条真事件又拉回来，看起来就是「精灵在浏览器卡上来回漂」。前端只用它刷采集清单。
+  referenceCaptured: (files) => ({ type: 'run.reference_captured', files }),
   // 用户仓库里的文件被 agent 写了（09-08 存量仓库道）：路径是**仓库相对**，不是画布 id ——
   // 画布上没有这个文件的卡，精灵走到仓库卡上、仓库窗的树刷新。
   repoFileChanged: (rel, event) => ({ type: 'repo.file_changed', rel, event }),

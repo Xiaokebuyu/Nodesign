@@ -78,6 +78,15 @@ describe('resolveObjectId — 文件落到哪张卡', () => {
     expect(resolveObjectId('伊蕾娜手账研究站/style.css')).toBe('伊蕾娜手账研究站/style.css');
   });
 
+  it('保留目录里的东西不上画布 → null（09-12：采集件当 id 会让精灵失锚漂移）', () => {
+    expect(resolveObjectId('assets/references/web/example.com/home.screenshot.webp', ROOTS)).toBeNull();
+    expect(resolveObjectId('exports/x.zip', ROOTS)).toBeNull();
+    expect(resolveObjectId('agent-memory/notes.md', ROOTS)).toBeNull();
+    // assets 顶层和 generated/ notes/ 两个子目录照旧是卡
+    expect(resolveObjectId('assets/photo.png', ROOTS)).toBe('assets/photo.png');
+    expect(resolveObjectId('assets/notes/n.md', ROOTS)).toBe('assets/notes/n.md');
+  });
+
   it('工作区根自己 / 空路径 → null（没有对应的卡）', () => {
     expect(resolveObjectId('', ROOTS)).toBe(null);
     expect(resolveObjectId('./', ROOTS)).toBe(null);

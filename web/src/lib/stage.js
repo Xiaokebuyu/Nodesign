@@ -102,7 +102,21 @@ export function resolveObjectId(filePath, artifactRoots) {
     }
   }
   if (/\.html?$/i.test(p)) return `deck:${p}`;
+  // 裸路径当 id 的前提是桌面上真有这张卡。保留目录里的东西不上画布（server/lib/task-scan.js
+  // RESERVED_DIRS；assets 只有顶层和 generated/ notes/ 两个子目录入座，见 board-seater.seatable）。
+  // 2026-09-12 之前这里对 `assets/references/web/…` 也返回裸路径 → 在场者拿到一个永远解析不出
+  // 矩形的 targetId，精灵失锚掉回默认槽位。返回 null 走 pendingFile 那条路，位置留在原地。
+  if (!seatablePath(p)) return null;
   return p;
+}
+
+/** 与 server/engine/runs/board-seater.js 的 seatable() 同口径：哪些路径会在桌面上渲成卡 */
+export function seatablePath(p) {
+  const segs = String(p).split('/');
+  const top = segs[0];
+  if (top === 'assets') return segs.length === 2 || (segs.length === 3 && (segs[1] === 'generated' || segs[1] === 'notes'));
+  if (top === 'exports' || top === 'node_modules' || top === 'agent-memory') return false;
+  return true;
 }
 
 /**
