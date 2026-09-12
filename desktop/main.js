@@ -173,7 +173,7 @@ function serverRuntime() {
 function createSplash() {
   splash = new BrowserWindow({
     width: 420, height: 260, frame: false, resizable: false,
-    center: true, show: true, backgroundColor: '#faf8f4',
+    center: true, show: true, backgroundColor: '#FFFEF6',
   });
   splash.loadFile(path.join(here, 'splash.html'));
 }
@@ -196,7 +196,7 @@ function createMainWindow() {
   win = new BrowserWindow({
     width: bounds.width, height: bounds.height, minWidth: MIN_SIZE.width, minHeight: MIN_SIZE.height,
     ...(bounds.x != null ? { x: bounds.x, y: bounds.y } : { center: true }),
-    show: false, backgroundColor: '#faf8f4',
+    show: false, backgroundColor: '#FFFEF6',
     autoHideMenuBar: true,   // 菜单栏不显示（加速键仍生效；Alt 能临时叫出来）
     webPreferences: {
       // 页面是 http://127.0.0.1 上的普通网页，保持默认的浏览器安全模型：

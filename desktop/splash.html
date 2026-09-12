@@ -2,26 +2,47 @@
 <meta charset="utf-8" />
 <title>NoDesign</title>
 <style>
-  /* 冷启动要建库、探能力，能到十几秒。这一屏的作用只有一个：让用户知道点上了。 */
+  /* 冷启动要建库、探能力，能到十几秒。这一屏的作用只有一个：让用户知道点上了。
+     2026-09-12 起按站内印刷风画（web/src/lib/paper.js 的纸色 / 墨色，globals.css 的黑体栈）：
+     一张纸、实墨描边、不模糊的错位影、黑体标题、等宽提示。颜色是抄过来的字面量 ——
+     这一屏在服务端起来之前就要显示，读不到站内的 token。改 paper.js 的 BASE 时同步这里。 */
+  :root {
+    --paper: #FFFEF6;   /* PAPER.paper */
+    --kraft: #E2D3B4;   /* PAPER.kraft：分区浅线 */
+    --ink: #2B2117;     /* PAPER.ink */
+    --ink2: #5F5142;    /* PAPER.ink2 */
+    --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', 'Noto Sans CJK SC', sans-serif;
+    --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  }
   html, body { margin: 0; height: 100%; overflow: hidden; }
   body {
-    background: #faf8f4;
-    color: #3a352e;
-    font: 14px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 18px;
+    background: var(--paper);
+    color: var(--ink);
+    font: 14px/1.6 var(--font-sans);
+    display: flex; align-items: center; justify-content: center;
     -webkit-user-select: none; user-select: none;
     -webkit-app-region: drag;
   }
-  .name { font-size: 22px; letter-spacing: .18em; font-weight: 500; }
-  .hint { font-size: 12px; color: #8a8175; }
-  .bar { width: 168px; height: 2px; background: #e8e2d8; border-radius: 2px; overflow: hidden; }
-  .bar i { display: block; width: 40%; height: 100%; background: #c8783c; border-radius: 2px;
+  /* 纸：实墨描边 + 错位硬影（paper.js castCss 的口径，不模糊） */
+  .sheet {
+    box-sizing: border-box; width: 340px; padding: 26px 28px 22px;
+    background: var(--paper);
+    box-shadow: 0 0 0 1px var(--ink), 4px 4px 0 0 var(--ink);
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .head { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--kraft); padding-bottom: 10px; }
+  .name { font-family: var(--font-sans); font-size: 24px; font-weight: 800; letter-spacing: .06em; }
+  .ver  { font-family: var(--font-mono); font-size: 11px; color: var(--ink2); letter-spacing: .04em; }
+  .hint { font-family: var(--font-mono); font-size: 12px; color: var(--ink2); }
+  /* 进度：一道墨线在纸上来回走 */
+  .bar { position: relative; height: 2px; background: var(--kraft); overflow: hidden; }
+  .bar i { position: absolute; left: 0; top: 0; width: 34%; height: 100%; background: var(--ink);
            animation: slide 1.25s ease-in-out infinite; }
-  @keyframes slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(260%); } }
+  @keyframes slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(310%); } }
   @media (prefers-reduced-motion: reduce) { .bar i { animation: none; width: 100%; } }
 </style>
-<div class="name">NoDesign</div>
-<div class="bar"><i></i></div>
-<div class="hint">正在启动本地服务</div>
+<div class="sheet">
+  <div class="head"><span class="name">NoDesign</span><span class="ver">DESKTOP</span></div>
+  <div class="bar"><i></i></div>
+  <div class="hint">正在启动本地服务</div>
+</div>
