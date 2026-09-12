@@ -12,7 +12,7 @@
  * 导出排它前面。
  */
 import {
-  Plus, BookOpen, ExternalLink, SlidersHorizontal, Trash2, Download, MessageSquarePlus,
+  Plus, BookOpen, ExternalLink, SlidersHorizontal, Trash2, Download, MessageSquarePlus, Maximize2, Minimize2,
 } from 'lucide-react';
 import { actionsOf } from '../../../lib/board-kinds.js';
 
@@ -35,6 +35,10 @@ export function buildObjectActions(o, h = {}) {
   };
   return [
     ...actionsOf(o).map((id) => DEFS[id]).filter(Boolean),
+    // 照片展开模式（09-12）：缩略图只露 4:3 的一角，展开按原比例整张铺在画布上；入口同时是出口
+    ...(h.onToggleExpand
+      ? [{ icon: h.expanded ? Minimize2 : Maximize2, title: h.expanded ? '收回成缩略图' : '展开：按原比例整张铺在画布上', fn: h.onToggleExpand }]
+      : []),
     ...(h.onExport ? [{ icon: Download, title: '导出这张卡', fn: h.onExport }] : []),
     ...(h.onAnnotate
       ? [{ icon: MessageSquarePlus, title: '标注（发给 agent / 留在画布）', fn: h.onAnnotate, anchored: true }]

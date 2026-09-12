@@ -1,13 +1,14 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Image as ImageIcon, FileText, Film } from 'lucide-react';
+import { FileText, Film } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, FONT_READ, CANVAS, alpha } from '../../../lib/theme.js';
 import { PAPER, PAPER_SHADOW, PAPER_DROP, INK_EDGE } from '../../../lib/paper.js';
 import { EASE, POP_IN, CARD_MAX_H, CARD_EDGE } from '../../../lib/board-geometry.js';
 import { useIsDesktop } from '../../../lib/device-class.js';
-import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview, farFaceOf } from '../../../lib/board-kinds.js';
+import { SIZES, sizeOf, chromeOf, cardOf, isTextPreview, farFaceOf, isExpandedImage } from '../../../lib/board-kinds.js';
 import FarFace from './FarFace.jsx';
 import { lodOf } from '../../../lib/board-lod.js';
 import { buildObjectActions } from './object-actions.js';
+import { ImageFace } from './ImageFace.jsx';
 import { TEXT_SIZE_PX, boardTextFont } from '../../../lib/text-fonts.js';
 import MdInk from './MdInk.jsx';
 import ChalkFold from './ChalkFold.jsx';
@@ -53,6 +54,7 @@ const PREVIEW_MAX_H = CARD_MAX_H - 44;
 /** 单个画布物件（按 type 分派卡片渲染 + 通用 hover 动作条）*/
 function BoardObject({
   o, projectId, currentSessionId, fileVersions, added, animateLayout = false, agentActive = false,
+  onToggleExpand = null,   // 照片展开 / 收回（09-12），BoardCanvas 算尺寸
   vanishing = false,
   groupTarget = false, selected = false, noteCount = 0,
   /**
@@ -140,6 +142,7 @@ function BoardObject({
   const far = !desktop && farFaceOf(o) && lodOf(sz.w, scale) !== 'full';
   const faceType = far ? null : o.type;
   const faceCard = far ? null : cardOf(o);
+  const expandedImage = isExpandedImage(o);   // 照片展开模式（lib/image-expand.js）：定高 + 卡面 contain + 动作按钮
   const inkTransform = isInk && (o.data?.rotation || (o.data?.scale && o.data.scale !== 1))
     ? `rotate(${o.data?.rotation || 0}deg) scale(${o.data?.scale ?? 1})`
     : '';
@@ -170,6 +173,8 @@ function BoardObject({
      * height={sz.h}，图片是固定长宽比，板书的真尺寸落盘时就估好了 —— 那三档实测都对得上。
      */
     ...(o.type === 'file' && isTextPreview(o) && sz.h > 0 ? { height: sz.h } : null),
+    // 展开的照片同理定高：脚印（sizeOf）和渲染必须是同一个数
+    ...(expandedImage ? { height: sz.h } : null),
     zIndex: o.pos.z || 1,
     borderRadius: isInk ? 4 : RADIUS.xl,
     background: isInk ? (hover ? alpha(CANVAS.brass, 0.10) : 'transparent') : COLOR.bgCard,
@@ -249,7 +254,7 @@ function BoardObject({
   // 是这个仓库最贵的一课 —— 就算眼下只剩这一条 hover 工具条在消费）。
   const actions = buildObjectActions(o, {
     added, onAdd, onOpenViewer, onOpenFile, onDetail, onOrchestrate, onDeleteNote,
-    onExport, onAnnotate,
+    onExport, onAnnotate, onToggleExpand, expanded: expandedImage,
   });
 
   // 工具条挂在卡片上沿之外。这里有两个坑，都踩过：
@@ -338,22 +343,7 @@ function BoardObject({
         />
       )}
 
-      {faceType === 'image' && (
-        <div>
-          <div style={{ aspectRatio: '4 / 3', overflow: 'hidden', borderRadius: '10px 10px 0 0', background: '#f4f2ee' }}>
-            <img
-              src={thumbSrcOf(projectId, o)} alt={o.name} loading="lazy" draggable={false}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: GAP.xs, padding: `${GAP.xs}px ${GAP.sm}px` }}>
-            <ImageIcon size={10} color={COLOR.sub} />
-            <span style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {o.meta?.assetRole ? `[${o.meta.assetRole}] ` : ''}{o.name}
-            </span>
-          </div>
-        </div>
-      )}
+      {faceType === 'image' && <ImageFace o={o} projectId={projectId} expanded={expandedImage} />}
 
       {/* 运动环绕光圈（2026-08-08）：一段亮弧沿着卡的外沿转。
           conic-gradient 的**起始角**转一圈 + mask 只留边框那一环 —— 比逐帧画
@@ -589,12 +579,6 @@ function NoteFaces({ o }) {
  * 二十张就是几 MB 的白烧。走 `?w=` 响应式档（服务端 imageVariant，webp 也能缩，
  * 2026-08-01 修过），实测同一张 149KB → 12KB。
  */
-export function thumbSrcOf(projectId, item) {
-  if (item.hasThumb) {
-    const base = item.name.replace(/\.[^.]+$/, '');
-    return Assets.artifactFileUrl(projectId, `assets/generated/.thumbnails/${base}.thumb.webp`);
-  }
-  return `${Assets.artifactFileUrl(projectId, item.path)}?w=480`;
-}
+export { thumbSrcOf } from './ImageFace.jsx';
 
 export default BoardObject;

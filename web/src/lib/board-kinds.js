@@ -380,6 +380,11 @@ export function traitsOf(o) {
  * 左上角那一块能拖，笔画其余部分看得见摸不着（靠 `overflow:visible` 才画得出
  * 来），鼠标落上去直接穿透去平移画布。写了没人读的字段就是这么坑人的。
  */
+/** 照片是否处在展开模式（sizeOf / 卡面渲染 / 动作按钮三处同一判据） */
+export function isExpandedImage(o) {
+  return o?.type === 'image' && o?.pos?.sized === 'user' && o.pos.w > 0 && o.pos.h > 0;
+}
+
 export function sizeOf(o) {
   const k = kindOf(o);
   // 板书（文件本体）也带落盘尺寸：agent 写入时按正文估好写进 layout.w/h
@@ -395,6 +400,10 @@ export function sizeOf(o) {
   }
   // 文本类文件卡带预览体（08-24），身位=note（服务端 estimateSize 同口径，parity 钉着）
   if (o?.type === 'file' && isTextPreview(o)) return KINDS.note.size;
+  // 照片「展开模式」（2026-09-12 站主定）：按原图比例整张铺在画布上。判据是 sized:'user'
+  // （服务端 sanitize 认的盖章位），**脚印跟着变** —— 08-13 退役的老展开态只变渲染不变
+  // sizeOf，是所有防遮盖逻辑的噪声源，这里不能再犯。
+  if (isExpandedImage(o)) return { w: o.pos.w, h: o.pos.h };
   // ⚠️ 这里曾经是 `(o.pos.expanded && k.sizeExpanded) || k.size`。展开态退役后
   // 存量数据里的 `expanded: true` 必须**读都不读** —— 读了老卡就会带着
   // 640×388 的隐形脚印参与命中和落点计算，渲染却只有 200 宽。

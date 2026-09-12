@@ -14,14 +14,14 @@ import { DESKTOP_W, FOLDER_CARD, newStackedZoneRect, hitsAt } from '../../lib/bo
 import { useLiveChalkSpots } from './use-live-chalk-spots.js';
 import { useObjectClick } from './useObjectClick.js';
 import {
-  SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, isDirArtifact, titleOf,
-} from '../../lib/board-kinds.js';
+  SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, isDirArtifact, titleOf } from '../../lib/board-kinds.js';
 import { passesFilter, isArchivePath } from '../../lib/board-filter-axes.js';
 import { deriveBoardObjects } from '../../lib/board-objects.js';
 import BoardObject from './cards/BoardObject.jsx';
 import FolderCard from './cards/FolderCard.jsx';
 import TransformControls from './TransformControls.jsx';
 import ChalkSizeHandles from './ChalkSizeHandles.jsx';
+import { imageExpandPatch } from '../../lib/image-expand.js';
 import CanvasCorner from './CanvasCorner.jsx';
 import { useBoardCamera } from './useBoardCamera.js';
 import { submitLinkPop, deleteLinkPop } from './link-pop-actions.js';
@@ -1513,6 +1513,9 @@ export default function BoardCanvas({
   // 标注浮层钉在打开那一刻的世界点上，跟着相机走（annotate-host.jsx）
   const annotScreen = useAnnotateScreenPos(annotate, camApiRef);
 
+  // 照片展开 / 收回（09-12）：尺寸算术在 lib/image-expand.js，落盘走 patchLayout（脚印跟着变）
+  const toggleImageExpand = useCallback((obj) => patchLayout(obj.id, imageExpandPatch(obj)), [patchLayout]);
+
   // 工具栏常驻评论钮（08-25 用户提）：选中集优先，否则对整块画布说一句
   const openCanvasNote = useCallback(() => {
     const sel = selectedIdsRef.current;
@@ -1615,6 +1618,7 @@ export default function BoardCanvas({
         onOpenFile={() => openFile(obj)}
         onOrchestrate={() => openOrchestrate(obj)}
         onDetail={() => setDetail(obj)}
+        onToggleExpand={obj.type === 'image' ? () => toggleImageExpand(obj) : null}
         onDeleteNote={() => handleDeleteNote(obj)}
         onFocus={() => focusDeck(obj)}
         // 标注：浮层从按钮底下长出来（at 是按钮的屏幕坐标），

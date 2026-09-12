@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Send, X, Loader2 } from 'lucide-react';
+import { Send, X, Loader2, Layers } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SANS, FONT_MONO, FONT_SIZE } from '../../lib/theme.js';
 import { PAPER_SHADOW } from '../../lib/paper.js';
 
@@ -32,13 +32,14 @@ export default function DocxRegionSelect({
 }) {
   const [drag, setDrag] = useState(null);        // { from:{x,y}, to:{x,y} } 显示坐标
   const [pending, setPending] = useState(null);  // { box } 画完待确认
+  const [queued, setQueued] = useState([]);      // 已攒下的框（虚线记号；正文已进 pending-changes）
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
 
   const cancel = useCallback(() => { setDrag(null); setPending(null); setText(''); }, []);
 
   // 退出圈选模式 / 换页换文档（active 由父层在那时收回）都把半成品清掉
-  useEffect(() => { if (!active) cancel(); }, [active, cancel]);
+  useEffect(() => { if (!active) { cancel(); setQueued([]); } }, [active, cancel]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -88,27 +89,43 @@ export default function DocxRegionSelect({
     setPending({ box });
   };
 
-  const send = async () => {
-    if (!pending || sending) return;
+  const payloadOf = () => {
     const img = imgRef?.current;
-    if (!img || !img.naturalWidth || !img.clientWidth) return;
+    if (!img || !img.naturalWidth || !img.clientWidth) return null;
     const scale = img.naturalWidth / img.clientWidth;
     const b = pending.box;
+    return {
+      region: {
+        x: Math.round(b.x * scale), y: Math.round(b.y * scale),
+        w: Math.round(b.w * scale), h: Math.round(b.h * scale),
+      },
+      viewport: { width: img.naturalWidth, height: img.naturalHeight },
+      text: text.trim(),
+    };
+  };
+
+  const send = async () => {
+    if (!pending || sending) return;
+    const payload = payloadOf();
+    if (!payload) return;
     setSending(true);
     try {
-      await onSubmit?.({
-        region: {
-          x: Math.round(b.x * scale), y: Math.round(b.y * scale),
-          w: Math.round(b.w * scale), h: Math.round(b.h * scale),
-        },
-        viewport: { width: img.naturalWidth, height: img.naturalHeight },
-        text: text.trim(),
-      });
+      await onSubmit?.(payload);
       cancel();
       onExit?.();
     } finally {
       setSending(false);
     }
+  };
+
+  /** 攒着（09-12）：进 buffer 不起轮，框留记号，接着圈下一块 */
+  const queue = () => {
+    if (!pending || sending) return;
+    const payload = payloadOf();
+    if (!payload) return;
+    onSubmit?.({ ...payload, queue: true })?.catch?.(() => {});
+    setQueued(q => [...q, { box: pending.box }]);
+    cancel();
   };
 
   const live = drag ? norm(drag.from, drag.to) : null;
@@ -138,6 +155,17 @@ export default function DocxRegionSelect({
         touchAction: 'none', borderRadius: 2,
       }}
     >
+      {queued.map((q, i) => (
+        <div key={i} style={{
+          position: 'absolute', left: q.box.x, top: q.box.y, width: q.box.w, height: q.box.h,
+          border: `2px dashed ${COLOR.btn}`, borderRadius: RADIUS.sm, pointerEvents: 'none', boxSizing: 'border-box',
+        }}>
+          <span style={{
+            position: 'absolute', left: -2, top: -20, padding: '1px 7px', borderRadius: RADIUS.sm,
+            background: COLOR.btn, color: COLOR.btnText, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, whiteSpace: 'nowrap',
+          }}>已攒 #{i + 1}</span>
+        </div>
+      ))}
       {shown && (
         <div style={{
           position: 'absolute',
@@ -165,7 +193,7 @@ export default function DocxRegionSelect({
             autoFocus
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); queue(); }
             }}
             placeholder="这一块想说什么…（可以不写，框本身就是话）"
             style={{
@@ -177,8 +205,9 @@ export default function DocxRegionSelect({
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm }}>
             <button
-              onClick={send}
+              onClick={queue}
               disabled={sending}
+              title="记下这一块，接着圈下一块；攒够了从右下角那条浮钮一起发"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
                 padding: `5px ${GAP.lg}px`, borderRadius: RADIUS.pill, border: 'none',
@@ -187,8 +216,21 @@ export default function DocxRegionSelect({
                 cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.7 : 1,
               }}
             >
+              <Layers size={12} /> 攒着{queued.length ? `（已 ${queued.length}）` : ''}
+            </button>
+            <button
+              onClick={send}
+              disabled={sending}
+              title="不攒，这一块现在就发给 agent 起一轮（已攒的一起带上）"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+                padding: `5px ${GAP.md}px`, borderRadius: RADIUS.pill,
+                border: `1px solid ${COLOR.borderLt}`, background: 'transparent', color: COLOR.text2,
+                fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.7 : 1,
+              }}
+            >
               {sending
-                ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> 发送中…</>
+                ? <><Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> 截图中…</>
                 : <><Send size={12} /> 发给 agent</>}
               <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
             </button>

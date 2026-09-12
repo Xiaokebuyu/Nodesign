@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, X, Loader2 } from 'lucide-react';
+import { Send, X, Loader2, Layers } from 'lucide-react';
 import { overlayBase } from '../../lib/overlay-rect.js';
 import { serializeStableAnchor } from '../../lib/html-utils.js';
 import { pickRegionElements, pickRegionContainer, normalizeRect, isMeaningfulRegion } from '../../lib/region-pick.js';
@@ -59,6 +59,9 @@ export default function RegionSelect({
 }) {
   const [drag, setDrag] = useState(null);        // { from:{x,y}, to:{x,y} } overlay 坐标
   const [pending, setPending] = useState(null);  // 画完待确认
+  // 已攒下的框（2026-09-12 一次多个截图标注）：只留个虚框做记号，正文已进 pending-changes。
+  // 不退出圈选模式，接着画下一块；右下角那条浮钮攒够了一起发
+  const [queued, setQueued] = useState([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [, setTick] = useState(0);
@@ -74,7 +77,7 @@ export default function RegionSelect({
 
   // 退出圈选模式时把半成品清掉，免得下次进来还挂着上次的框
   useEffect(() => {
-    if (!active) { setDrag(null); setPending(null); setText(''); }
+    if (!active) { setDrag(null); setPending(null); setText(''); setQueued([]); }
   }, [active]);
 
   const cancel = useCallback(() => {
@@ -171,22 +174,34 @@ export default function RegionSelect({
     });
   };
 
+  const payloadOf = () => ({
+    region: pending.region,
+    viewport: pending.viewport,
+    container: pending.container,
+    elements: pending.elements,
+    text: text.trim(),
+  });
+
   const send = async () => {
     if (!pending || sending) return;
     setSending(true);
     try {
-      await onSubmit?.({
-        region: pending.region,
-        viewport: pending.viewport,
-        container: pending.container,
-        elements: pending.elements,
-        text: text.trim(),
-      });
+      await onSubmit?.(payloadOf());
       cancel();
       onExit?.();
     } finally {
       setSending(false);
     }
+  };
+
+  /** 攒着：进 buffer 不起轮，框留个记号，接着圈下一块。服务端要裁图（几秒），不等它——面板立刻让位 */
+  const queue = () => {
+    if (!pending || sending) return;
+    const box = pending.box;
+    const n = pending.elements.length;
+    onSubmit?.({ ...payloadOf(), queue: true })?.catch?.(() => {});
+    setQueued(q => [...q, { box, n }]);
+    cancel();
   };
 
   const live = drag ? normalizeRect(drag.from, drag.to) : null;
@@ -219,6 +234,18 @@ export default function RegionSelect({
         touchAction: 'none',
       }}
     >
+      {/* 已攒下的框：虚线记号 + 序号，不压暗 */}
+      {queued.map((q, i) => (
+        <div key={i} style={{
+          position: 'absolute', left: q.box.x, top: q.box.y, width: q.box.w, height: q.box.h,
+          border: `2px dashed ${COLOR.btn}`, borderRadius: RADIUS.sm, pointerEvents: 'none', boxSizing: 'border-box',
+        }}>
+          <span style={{
+            position: 'absolute', left: -2, top: -20, padding: '1px 7px', borderRadius: RADIUS.sm,
+            background: COLOR.btn, color: COLOR.btnText, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, whiteSpace: 'nowrap',
+          }}>已攒 #{i + 1}</span>
+        </div>
+      ))}
       {shown && (
         <>
           {/* 框外压暗，框内透亮 —— 用四条边比 clip-path 稳 */}
@@ -265,7 +292,8 @@ export default function RegionSelect({
             autoFocus
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+              // ⌘↵ 跟标注浮层的默认动作一致：攒着（09-12）
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); queue(); }
             }}
             placeholder="这一块想说什么…（可以不写，框本身就是话）"
             style={{
@@ -276,15 +304,30 @@ export default function RegionSelect({
             }}
           />
           <div style={{ display: 'flex', alignItems: 'center', gap: GAP.sm }}>
+            {/* 主钮 = 攒着（跟标注浮层一致，09-12）：攒够了从右下角那条浮钮一起发；「发给 agent」= 这一块现在就说 */}
             <button
-              onClick={send}
+              onClick={queue}
               disabled={sending}
+              title="记下这一块，接着圈下一块；攒够了从右下角那条浮钮一起发"
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
                 padding: `5px ${GAP.lg}px`, borderRadius: RADIUS.pill, border: 'none',
                 background: COLOR.btn, color: COLOR.btnText,
                 fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, fontWeight: 600,
                 cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.7 : 1,
+              }}
+            >
+              <Layers size={12} /> 攒着{queued.length ? `（已 ${queued.length}）` : ''}
+            </button>
+            <button
+              onClick={send}
+              disabled={sending}
+              title="不攒，这一块现在就发给 agent 起一轮（已攒的一起带上）"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+                padding: `5px ${GAP.md}px`, borderRadius: RADIUS.pill,
+                border: `1px solid ${COLOR.borderLt}`, background: 'transparent', color: COLOR.text2,
+                fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, cursor: sending ? 'default' : 'pointer', opacity: sending ? 0.7 : 1,
               }}
             >
               {sending

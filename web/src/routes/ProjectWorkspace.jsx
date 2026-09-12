@@ -42,6 +42,7 @@ import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges, Browse } from 
 import { handleAuxEvent } from '../lib/aux-events.js';
 import { exportFromMenu, downloadFromUrl } from '../components/canvas/card-export.js';
 import { trailingThrottle } from '../lib/trailing-throttle.js';
+import { makeRegionCommentHandler } from '../lib/region-comment.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
 import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult } from '../lib/chat-stream.js';
@@ -1696,36 +1697,9 @@ export default function ProjectWorkspace() {
       console.warn('[pending-changes] push comment failed:', err.message);
     }
   };
-  /**
-   * 圈选评论（2026-08-07）—— 跟点选评论进同一条 pending-changes buffer，
-   * 差别是它多带一张服务端截的区域图。
-   *
-   * **发完直接起一轮**，不像点选评论那样只攒着等下一条消息：用户刚画完框、
-   * 按了「发给 agent」，那个动作本身就是"现在就说这件事"。攒着不动的话
-   * 他会以为没发出去。消息里只写一句指路，具体内容 agent 自己去
-   * get_pending_changes 拉 —— 那边有图有元素清单，比塞进聊天里省得多。
-   */
-  const handleRegionComment = async ({ region, viewport, container, elements, text, path, docxPage }) => {
-    // 无会话闸门 2026-08-13 撤除：没有会话时 handleSend 自己会起一条新的
-    if (!path) {
-      showToast('这份产物没有任务路径，圈选暂时用不了', 'error');
-      return;
-    }
-    const rel = path;
-    await PendingChanges.regionComment(id, {
-      path: rel, region, viewport, container, elements, text,
-      // docx 圈的是页图，得说清第几页（服务端按它去页图缓存裁）
-      ...(docxPage ? { docxPage } : {}),
-    });
-    const what = docxPage ? `第 ${docxPage} 页`
-      : elements.length
-        ? `${elements.slice(0, 3).map(e => `<${e.tag}>`).join('')}${elements.length > 3 ? ' 等' : ''}`
-        : '一块区域';
-    useGlobalStore.getState().openChatDock();   // 对话在悬浮卡里流，收起时唤出来
-    await handleSend(text
-      ? `我在 ${rel} 上圈了一块（${what}）：${text}`
-      : `我在 ${rel} 上圈了一块（${what}），看一下 —— 截图和框住的${docxPage ? '区域' : '元素'}都在 pending changes 里。`);
-  };
+  // 圈选评论：进 pending-changes buffer，默认攒着 / 也能当场起一轮（lib/region-comment.js）。
+  // 不用 useMemo：这一段在早退之后，加 hook 会崩（同 unsentComments 那条注释）
+  const handleRegionComment = makeRegionCommentHandler({ projectId: id, setComments, showToast, handleSend });
 
   /**
    * 就地标注（2026-08-13，E3）：右键画布物件/文件夹 → 浮层写一句 → 直接起
@@ -1847,8 +1821,10 @@ export default function ProjectWorkspace() {
     const where = paths.length ? paths.join('、') : '打开的产物';
     // 措辞不写死"元素标注"：这条 buffer 现在同时装画布标注（指到一件东西）和
     // 元素标注（指到文档里的某个元素），说成一种会让 agent 去找不存在的元素
-    const kindWord = unsentComments.every(c => c.board) ? '标注'
-      : (unsentComments.some(c => c.board) ? '标注（有的指着画布上的东西，有的指着页面元素）' : '元素标注');
+    const hasRegion = unsentComments.some(c => c.kind === 'region-comment');
+    const kindWord = (unsentComments.every(c => c.board) ? '标注'
+      : (unsentComments.some(c => c.board) ? '标注（有的指着画布上的东西，有的指着页面元素）' : '元素标注'))
+      + (hasRegion ? '（其中有圈选截图）' : '');
     useGlobalStore.getState().openChatDock();
     // sentAt 标记在 handleSend 开头统一做
     await handleSend(`我在 ${where} 上留了 ${n} 条${kindWord}，内容和锚点都在 pending changes 里，逐条处理一下。`);

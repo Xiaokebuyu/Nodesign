@@ -237,10 +237,10 @@ export default function DocxWindow({
 
   // 圈选提交：坐标已被 DocxRegionSelect 换算成页图像素，这里补上"哪份文档、
   // 第几页"。elements/container 传空不传缺 —— 服务端合同里它们是数组/对象槽位
-  const submitRegion = useCallback(async ({ region, viewport, text }) => {
+  const submitRegion = useCallback(async ({ region, viewport, text, queue }) => {
     await onRegionComment?.({
       region, viewport, elements: [], container: null, text,
-      path: cur, docxPage: page,
+      path: cur, docxPage: page, ...(queue ? { queue: true } : {}),
     });
   }, [onRegionComment, cur, page]);
 
