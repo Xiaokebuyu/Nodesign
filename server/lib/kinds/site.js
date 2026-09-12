@@ -132,7 +132,9 @@ export default {
   entryFile: ENTRY,
   view: 'site',
   injectFit: false,         // 整屏翻页脚本会把长页改造成翻页器；stripFitScripts 的启发式也会误删站点动画
-  exportFormats: ['site', 'html', 'handoff'],
+  // 2026-09-12 站主定：站点只有整站打包（zip）和工程包，单页自包含 HTML 撤掉
+  // （用户拿到的永远是一个目录，单页内联图片那份跟真站对不上）。deck 仍用 html。
+  exportFormats: ['site', 'handoff'],
   referenceDoc: { file: 'site-reference', title: '站点技术参考' },
   // 目录型实例判据（卡即文件夹）：单页（_drafts）是一个文件，其余站都是一棵树。
   // 「这张卡是不是文件夹」全仓只问 isDirArtifact（kinds/index.js），别在调用点自判

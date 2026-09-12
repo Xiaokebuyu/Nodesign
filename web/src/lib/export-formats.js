@@ -9,8 +9,7 @@ import { FileCode, FileText, Presentation, Globe, Hammer, FileDown, Package } fr
  * 每个格式长什么样。抄成两份的话，加一种格式就会出现"菜单里有、工具栏里没有"。
  */
 const FORMAT_META = {
-  html:    { icon: FileCode,     label: 'Standalone HTML',    desc: '单文件，可双击打开',
-             siteLabel: '单页自包含 HTML',  siteDesc: '只当前入口页，图片内联' },
+  html:    { icon: FileCode,     label: 'Standalone HTML',    desc: '单文件，可双击打开' },
   pdf:     { icon: FileText,     label: 'PDF',                desc: 'playwright print 1920×1080（矢量文字 + 4K-ready）',
              // docx 的 PDF 是 LibreOffice 转的，跟 Word 里「另存为 PDF」不是一回事
              docxDesc: 'LibreOffice 转（目录不更新、中文是替身字体）——正式稿请在 Word 里导' },
@@ -37,7 +36,7 @@ export function defaultFormatFor(cardKind) {
 // 服务端没给格式表时的兜底（旧数据 / 聚焦的不是任务）
 const FALLBACK_FORMATS = {
   deck: ['html', 'pdf', 'pptx', 'handoff'],
-  site: ['site', 'html', 'handoff'],
+  site: ['site', 'handoff'],
   docx: ['raw', 'pdf'],
   image: ['raw', 'zip'],
   video: ['raw', 'zip'],

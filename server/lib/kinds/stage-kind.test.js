@@ -44,6 +44,11 @@ describe('能力位与契约', () => {
     expect(KINDS.stage.exportFormats).toEqual([]);
     expect(formatAllowed('stage', 'site')).toBe(false);
   });
+  it('站点只有整站打包和工程包：单页 HTML 已撤（2026-09-12），deck 仍保留 html', () => {
+    expect(KINDS.site.exportFormats).toEqual(['site', 'handoff']);
+    expect(formatAllowed('site', 'html')).toBe(false);
+    expect(formatAllowed('deck', 'html')).toBe(true);
+  });
   it('入口扩展名不跟 html / docx / json 撞；前缀表从注册表派生', () => {
     expect(KINDS.stage.entryFile).toMatch(/\.jsonl$/);
     expect(Object.keys(KINDS).map(id => `${id}:`)).toContain('stage:');

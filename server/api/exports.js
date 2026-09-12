@@ -310,6 +310,7 @@ router.get(['/:pid/exports/html', '/:pid/sessions/:sid/exports/html'], async (re
     // → cwd/canvas.html）。任务模型下 deck 不在 cwd，写死 cwd 会永远导出空（2026-07-28）
     const target = await resolveCanvasTarget(sessionRoot, req.query.path, req.params.sid);
     if (!target.ok) return res.status(404).json({ error: target.message });
+    if (rejectFormat(res, target, 'html', '单页 HTML')) return;
     const file = target.absPath;
     let html;
     try {

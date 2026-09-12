@@ -67,7 +67,7 @@ export async function exportCard(projectId, obj) {
  *
  * 不在表里的（html / pdf / pptx）要跑 playwright / esbuild 烘焙管线，仍走老路由。
  */
-const CARD_PIPELINE = { handoff: 'handoff', site: 'zip', zip: 'zip', raw: 'raw', md: 'md' };
+export const CARD_PIPELINE = { handoff: 'handoff', site: 'zip', zip: 'zip', raw: 'raw', md: 'md' };
 
 /**
  * 顶栏导出菜单的下载动作。

@@ -6,6 +6,7 @@ import { Assets, Exports } from '../../lib/api.js';
 import { deliverFile } from '../../lib/deliver-file.js';
 import { groupArtifacts } from '../../lib/export-groups.js';
 import { exportItemsFor } from '../../lib/export-formats.js';
+import { CARD_PIPELINE } from '../canvas/card-export.js';
 
 /**
  * ExportPicker — 按**产物类型**导出（2026-08-17）
@@ -95,7 +96,9 @@ export default function ExportPicker({ open, onClose, projectId, initialType = n
       const ids = [...picked];
       const { blob, filename, skipped } = BAKE_FORMATS.has(format)
         ? await Exports.download(projectId, format, relOfCardId(ids[0]))
-        : await Exports.cards(projectId, ids, format);
+        // 菜单里的格式 id 和按卡导出管线的格式不是一套词（'site' → 'zip'），映射表
+        // 跟顶栏那条路共用一份，别在这里再抄一份（原来直接把 'site' 发过去，必 400）
+        : await Exports.cards(projectId, ids, CARD_PIPELINE[format] || format);
       const name = filename || '导出';
       const { path } = await deliverFile(blob, name);   // 桌面版由主进程写盘，见 lib/deliver-file.js
       onToast?.(path ? `已保存：${path}` : `已下载：${name}`, 'success');
