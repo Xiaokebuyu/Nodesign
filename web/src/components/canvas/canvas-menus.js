@@ -43,7 +43,7 @@ export function buildBoardMenu(ctx, act) {
         onClick: () => addable.forEach(act.handleAdd),
       },
       {
-        id: 'ask', icon: MessageSquarePlus, label: '标注给 agent', hint: '发送即处理',
+        id: 'ask', icon: MessageSquarePlus, label: '标注给 agent', hint: '默认先攒着，一起发',
         onClick: () => act.setAnnotate({
           x: mx, y: my,
           target: { kind: 'multi', id: sel[0], title: `${sel.length} 件`, typeLabel: '选中' },
@@ -101,7 +101,7 @@ export function buildBoardMenu(ctx, act) {
         { id: 'grp-erase', icon: Eraser, label: `擦掉整组 #${groupTagOf(obj)}`, danger: true, hint: '黑板擦', onClick: () => act.eraseGroup(groupTagOf(obj)) },
       ] : []),
       // E3：就地标注 —— 在东西上写完一句，按发送 agent 立刻来。
-      { id: 'ask', icon: MessageSquarePlus, label: '标注给 agent', hint: '发送即处理', onClick: () => act.setAnnotate({
+      { id: 'ask', icon: MessageSquarePlus, label: '标注给 agent', hint: '默认先攒着，一起发', onClick: () => act.setAnnotate({
         x: mx, y: my,
         target: act.annotTargetOf(obj),
       }) },
@@ -123,7 +123,7 @@ export function buildBoardMenu(ctx, act) {
       // 了一整天没人发现（都在双击）。B3 抽菜单时因为动作句柄提前求值当场炸出。
       { id: 'enter', icon: FolderOpen, label: '进入', onClick: () => act.openFolder(zoneId) },
       { id: 'new', icon: FolderPlus, label: '在里面新建文件夹', onClick: () => act.createFolderAt(zoneId, null) },
-      { id: 'ask', icon: MessageSquarePlus, label: '标注给 agent', hint: '发送即处理', onClick: () => act.setAnnotate({
+      { id: 'ask', icon: MessageSquarePlus, label: '标注给 agent', hint: '默认先攒着，一起发', onClick: () => act.setAnnotate({
         x: mx, y: my,
         target: { kind: 'folder', id: zoneId, path: zoneId, title: zoneId.split('/').pop() || zoneId, typeLabel: '文件夹' },
       }) },

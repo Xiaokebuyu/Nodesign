@@ -1535,7 +1535,7 @@ export default function BoardCanvas({
     const anyStaging = members.some(o => o.staging || o.pos?.staging);
     const items = [
       { id: 'grp-sel', icon: Group, label: `选中整组 #${tag}`, onClick: () => selectGroup(tag) },
-      { id: 'grp-note', icon: MessageSquarePlus, label: '标注这组给 agent', hint: '发送即处理', onClick: () => setAnnotate({
+      { id: 'grp-note', icon: MessageSquarePlus, label: '标注这组给 agent', hint: '默认先攒着，一起发', onClick: () => setAnnotate({
         x: e.clientX, y: e.clientY, target: annotTargetOf(members[0]), targets: members.map(o => annotTargetOf(o)),
       }) },
       ...(anyStaging ? [{ id: 'grp-commit', icon: Check, label: '落定这组草稿', onClick: () => commitGroup(tag) }] : []),

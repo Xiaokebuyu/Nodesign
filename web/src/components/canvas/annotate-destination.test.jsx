@@ -62,6 +62,31 @@ describe('去向开关', () => {
     expect(onSubmit).toHaveBeenCalledWith('你还好吗', { toMain: false });
   });
 
+  it('⭐ 默认动作是攒着（09-12）：能攒且不是说给角色时，Enter 走 onQueue，实心主钮也是它', () => {
+    const onSubmit = vi.fn();
+    const onQueue = vi.fn();
+    const el = render({ onSubmit, onQueue });
+    type(el, '这里再收一收');
+    const ta = el.querySelector('textarea');
+    act(() => { ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(onQueue).toHaveBeenCalledWith('这里再收一收');
+    expect(onSubmit).not.toHaveBeenCalled();
+    const buttons = [...el.querySelectorAll('button')];
+    const solid = buttons.filter((b) => b.style.background && b.style.background !== 'transparent');
+    expect(solid.map((b) => b.textContent.trim())).toEqual(['攒着']);
+  });
+
+  it('说给角色的话没有攒这条路：主钮仍是「说给它」，Enter 走 onSubmit', () => {
+    const onSubmit = vi.fn();
+    const onQueue = vi.fn();
+    const el = render({ roleTarget, onSubmit, onQueue });
+    type(el, '你还好吗');
+    const ta = el.querySelector('textarea');
+    act(() => { ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); });
+    expect(onSubmit).toHaveBeenCalledWith('你还好吗', { toMain: false });
+    expect(onQueue).not.toHaveBeenCalled();
+  });
+
   it('不是角色写的东西：没有第二个去处，不出开关', () => {
     const el = render({});
     expect(chip(el, '主持人')).toBeUndefined();

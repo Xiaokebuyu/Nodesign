@@ -290,7 +290,7 @@ export default function CanvasFrame({
       id: 'wincomment',
       items: [{
         id: 'comment', icon: MessageSquarePlus, label: t('评论'),
-        title: t('对这扇窗里的东西说一句：发给 agent 立刻处理，或先攒着从右下角一起发'),
+        title: t('对这扇窗里的东西说一句：默认先攒着从右下角一起发，也能这一条就发给 agent'),
         onClick: openWinNote,
       }],
     }];

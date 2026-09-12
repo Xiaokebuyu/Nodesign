@@ -407,6 +407,8 @@ export default {
   '先记下，攒够了从右下角那条浮钮一次发给 agent':
     'Note it down now. Send them to the agent together later, from the button at the bottom right.',
   '发给 agent': 'Send to the agent',
+  '攒着': 'Save for later',
+  '这一条不攒，现在就发给 agent 起一轮': 'Do not save this one. Send it to the agent now and start a turn.',
 
   // ── 画布窗口（components/canvas/CanvasFrame.jsx）──
   '幻灯': 'Deck',
@@ -415,8 +417,8 @@ export default {
   '浏览器画面': 'Browser view',
   '浏览器': 'Browser',
   '评论': 'Comment',
-  '对这扇窗里的东西说一句：发给 agent 立刻处理，或先攒着从右下角一起发':
-    'Say something about what is in this window: send it to the agent now, or save it and send them together from the bottom right.',
+  '对这扇窗里的东西说一句：默认先攒着从右下角一起发，也能这一条就发给 agent':
+    'Say something about what is in this window. By default it is saved and sent together from the bottom right; you can also send this one now.',
 
   // ── 相对时间（lib/helpers.js 的 timeAgo）──
   // 全站 8 个文件在印它：首页每张卡、橱窗、会话列表、控制台。英文要单复数，

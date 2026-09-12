@@ -33,6 +33,23 @@ import { t } from '../../lib/i18n.js';
 
 const POP_W = 320;
 
+const plainStyle = (text) => ({
+  display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+  padding: `${GAP.xs}px ${GAP.sm}px`,
+  border: 'none', borderRadius: RADIUS.sm, background: 'transparent',
+  color: text.trim() ? COLOR.sub : COLOR.borderLt,
+  cursor: text.trim() ? 'pointer' : 'default',
+  fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+});
+const primaryStyle = (text) => ({
+  display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
+  padding: `${GAP.xs}px ${GAP.md}px`,
+  border: 'none', borderRadius: RADIUS.sm,
+  background: text.trim() ? COLOR.text : COLOR.borderLt,
+  color: PAPER.paper, cursor: text.trim() ? 'pointer' : 'default',
+  fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
+});
+
 export default function AnnotatePopover({ x, y, target, roleTarget = null, onSubmit, onKeep, onQueue, onClose }) {
   const ref = useRef(null);
   const [text, setText] = useState('');
@@ -45,6 +62,12 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
    */
   const [toMain, setToMain] = useState(false);
   const sayTo = roleTarget && !toMain ? roleTarget : null;
+  /**
+   * 默认动作（2026-09-12 站主定）：**攒着**。一次改稿往往是好几处标注，逐条立刻
+   * 发出去会起好几轮；攒够了从右下角那条浮钮一次发。Enter 和实心主钮都归它。
+   * 例外：说给角色的话没有「攒」这条路（攒着的一律当场外话给主持人），仍以「说给它」为主。
+   */
+  const queueIsPrimary = !!onQueue && !sayTo;
   const [flip, setFlip] = useState({ x: false, y: false });
 
   useEffect(() => {
@@ -142,7 +165,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
           if (e.key === 'Enter' && !e.shiftKey) {
             if (isImeEnter(e)) return;
             e.preventDefault();
-            submit();
+            if (queueIsPrimary) queue(); else submit();
           }
         }}
         placeholder={sayTo
@@ -165,18 +188,13 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             onClick={keep}
             disabled={!text.trim()}
             title={t('不发消息，只在画布上留一条连到它的标注')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-              padding: `${GAP.xs}px ${GAP.sm}px`,
-              border: 'none', borderRadius: RADIUS.sm, background: 'transparent',
-              color: text.trim() ? COLOR.sub : COLOR.borderLt,
-              cursor: text.trim() ? 'pointer' : 'default',
-              fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-            }}
+            style={plainStyle(text)}
           >
             <PenLine size={12} /> 留在画布
           </button>
         )}
+        {/* 主钮实心、次钮朴素 —— 一张纸上两个同样重的按钮，用户每次都要停下来读
+            一遍才知道按哪个。谁是主钮见 queueIsPrimary。 */}
         {onQueue && (
           <button
             onClick={queue}
@@ -184,29 +202,16 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             title={sayTo
               ? `攒着的会当成场外的话发给主持人，不转给${sayTo.who}——要说给它就用右边那颗`
               : t('先记下，攒够了从右下角那条浮钮一次发给 agent')}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-              padding: `${GAP.xs}px ${GAP.sm}px`,
-              border: 'none', borderRadius: RADIUS.sm, background: 'transparent',
-              color: text.trim() ? COLOR.sub : COLOR.borderLt,
-              cursor: text.trim() ? 'pointer' : 'default',
-              fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-            }}
+            style={queueIsPrimary ? primaryStyle(text) : plainStyle(text)}
           >
-            <Layers size={12} /> 攒着
+            <Layers size={12} /> {t('攒着')}
           </button>
         )}
         <button
           onClick={submit}
           disabled={!text.trim()}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: GAP.xs,
-            padding: `${GAP.xs}px ${GAP.md}px`,
-            border: 'none', borderRadius: RADIUS.sm,
-            background: text.trim() ? COLOR.text : COLOR.borderLt,
-            color: PAPER.paper, cursor: text.trim() ? 'pointer' : 'default',
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm,
-          }}
+          title={queueIsPrimary ? t('这一条不攒，现在就发给 agent 起一轮') : undefined}
+          style={queueIsPrimary ? plainStyle(text) : primaryStyle(text)}
         >
           <Send size={12} /> {sayTo ? `说给${sayTo.who}` : t('发给 agent')}
         </button>
