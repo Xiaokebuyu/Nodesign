@@ -39,6 +39,7 @@ import {
   resolveCanvasTarget, KIND_SITE, ENTRY_FILE, formatAllowed,
 } from '../lib/artifact-target.js';
 import { makeCardsExportHandler } from './exports/cards.js';
+import { rejectFormat } from './exports/reject-format.js';
 import { can } from '../lib/kinds/index.js';
 import { docxToPdfResponse } from './exports/docx-pdf.js';
 import { prepareExportPage, injectViewportFit } from './exports/export-page.js';
@@ -562,20 +563,6 @@ router.get(['/:pid/exports/pptx', '/:pid/sessions/:sid/exports/pptx'], async (re
     }
   } catch (err) { next(err); }
 });
-
-/**
- * 形态 × 格式守卫（注册表驱动）：不适用的格式提前 400，不白烧 playwright /
- * esbuild。以前是 if kind === site 的散装判断，第三种形态进来就得再改一轮 ——
- * 现在各形态可用的格式表在 kinds/ 注册条目里，这里只查表。
- */
-function rejectFormat(res, target, formatId, label) {
-  if (formatAllowed(target.kind, formatId)) return false;
-  res.status(400).json({
-    error: `${target.relPath} 是 ${target.kind} —— ${label} 导出不适用于这种形态。`
-      + (target.kind === KIND_SITE ? '站点请用「整站打包」（/exports/site）或导出菜单里的站点 zip。' : ''),
-  });
-  return true;
-}
 
 /**
  * GET /:pid/sessions/:sid/exports/site —— 整站打包
