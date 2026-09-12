@@ -22,7 +22,7 @@
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
-import { byOf } from '../actor.js';
+import { byOf, toolUseIdOf } from '../actor.js';
 import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
@@ -117,8 +117,10 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
     let board = await readBoard(projectId);
     const known = new Set(Object.keys(board.zones || {}));
-    // 这一层上谁占着地方（含文件夹卡/卷卡/精灵身位，见 lib/board-obstacles.js）
-    const obstaclesOf = (b, zone) => obstaclesIn(b, zone, { projectId, sharedRoot });
+    // 这一层上谁占着地方（含文件夹卡/卷卡/精灵身位，见 lib/board-obstacles.js）。
+    // 直播中的板书框随视点上报进了障碍集（同轮下一次落位看得见它）；自己这条的直播框要剔掉
+    const selfLive = toolUseIdOf(extra) ? [`live:${toolUseIdOf(extra)}`] : [];
+    const obstaclesOf = (b, zone) => obstaclesIn(b, zone, { projectId, sharedRoot, exclude: selfLive });
     const vp = getViewpoint(projectId);
     const fit = fitFor(vp);
     // 车道封顶（08-28）：触屏档一件不许超过一屏宽。**板书和草图两条路都要过它** ——
@@ -282,6 +284,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       const placed = placeNote(b2, {
         box, anchorRect: placeRect, side: args.place?.side || null, groupRect, replyRect,
         obstacles, vpRect, column: fit.column,
+        apart: laneFrom === 'fresh',   // 全新话题：视口满了另起一片，不接旧线尾（board-place.apartOf）
       });
 
       // ── 手写字本体（ink:'hand'）：画布原生 text 节点，不落文件 ──

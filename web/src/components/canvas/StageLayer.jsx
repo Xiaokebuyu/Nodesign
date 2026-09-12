@@ -579,7 +579,7 @@ export function ChalkLiveInk({ card, spot }) {
   // 并不是真的属于它，画个框反而是撒谎。
   const placed = spot.placed && running;
   return (
-    <div data-stage="chalk-live" data-placed={spot.placed ? '1' : undefined} style={{
+    <div data-stage="chalk-live" data-placed={spot.placed ? '1' : undefined} data-block-id={card.blockId} style={{
       position: 'absolute', left: spot.x, top: spot.y, width: spot.w || 432, zIndex: 3,
       ...(spot.hMin ? { minHeight: spot.hMin } : null),
       pointerEvents: 'none', padding: '4px 6px', opacity: card.status === 'fail' ? 0.3 : 0.88,

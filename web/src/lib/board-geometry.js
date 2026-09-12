@@ -72,8 +72,17 @@ export function sheetSpotToWorld(_sheets, spot, layout = null) {
     const parent = rectOf(spot.reply_to);
     return parent ? { x: Math.round(parent.x), y: Math.round(parent.y + parent.h + SLOT_GAP), w } : null;
   }
-  // chain 接的是"同 tag 里你自己最新那条"，前端不知道是哪条；批内第二条起同理
-  if (spot.chain) return null;
+  // chain 接的是「同 tag 里你自己最新那条」：服务端按 id（时间戳）取最新；这里同口径取同 tag
+  // 下 id 最大的那条板书（2026-09-12 起 spot 带 tag）。没 tag 的 chain 仍算不出来（服务端会挑
+  // 全板最新的自己那条，前端不知道作者）。批内第二条起同理
+  if (spot.chain) {
+    if (!spot.tag) return null;
+    const ids = Object.entries(table)
+      .filter(([id, e]) => id.startsWith('notes/板书/') && e?.tag === spot.tag && Number.isFinite(e?.x))
+      .map(([id]) => id).sort();
+    const last = ids.length ? rectOf(ids[ids.length - 1]) : null;
+    return last ? { x: Math.round(last.x), y: Math.round(last.y + last.h + SLOT_GAP), w } : null;
+  }
   if (Number.isFinite(spot.batchIdx) && spot.batchIdx > 0) return null;
   // 续组：同 tag 最靠下那件的正下方
   if (spot.place?.with) {

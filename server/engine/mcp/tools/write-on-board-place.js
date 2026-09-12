@@ -19,13 +19,13 @@ export function makePlacer() {
   /**
    * @returns {{x,y,how,side,nudged,wanted,pressed:string[]}}
    */
-  const placeNote = (b, { box, anchorRect = null, side = null, groupRect = null, replyRect = null, obstacles = [], vpRect = null, column = false }) => {
+  const placeNote = (b, { box, anchorRect = null, side = null, groupRect = null, replyRect = null, obstacles = [], vpRect = null, column = false, apart = false }) => {
     let placed;
     if (replyRect) {
       const p = placeBelow(replyRect, box, obstacles);
       placed = { ...p, how: 'thread', side: 'below', nudged: false, wanted: null };
     } else {
-      placed = solvePlace({ box, anchor: anchorRect, side, group: groupRect, viewport: vpRect, obstacles, column });
+      placed = solvePlace({ box, anchor: anchorRect, side, group: groupRect, viewport: vpRect, obstacles, column, apart });
     }
     const pressed = overlapIds({ x: placed.x, y: placed.y, w: box.w, h: box.h }, obstacles);
     return { ...placed, x: Math.round(placed.x), y: Math.round(placed.y), pressed };

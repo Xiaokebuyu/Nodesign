@@ -137,6 +137,18 @@ describe('面积账三补（2026-09-05）', () => {
     _resetViewpoints();
   });
 
+  it('⭐ 直播板书框（occupied 带 id）也是障碍；写板工具按 exclude 剔掉自己那块（2026-09-12）', async () => {
+    const { setViewpoint, _resetViewpoints } = await import('../projects/viewpoint-store.js');
+    _resetViewpoints();
+    setViewpoint('proj_obs_live', { camera: { x: 0, y: 0, w: 1000, h: 800 }, layer: '', occupied: [
+      { id: 'toolu_A', x: 100, y: 100, w: 336, h: 120 }, { x: 500, y: 500, w: 200, h: 176 },
+    ] });
+    const b = { objects: {}, zones: {}, rolls: {} };
+    expect(obstaclesIn(b, '', { projectId: 'proj_obs_live' }).map(o => o.id)).toEqual(['live:toolu_A', 'ph:2']);
+    expect(obstaclesIn(b, '', { projectId: 'proj_obs_live', exclude: ['live:toolu_A'] }).map(o => o.id)).toEqual(['ph:2']);
+    _resetViewpoints();
+  });
+
   it('⭐ 卷卡宽度算上「N 件 · 点开」那句：比只算标签宽出一截', () => {
     const b = { objects: { a: { x: 0, y: 0, tag: 'g' }, b: { x: 0, y: 100, tag: 'g' } }, zones: {}, rolls: { g: { label: '第一章' } } };
     const r = obstaclesIn(b, '').find(o => o.id === 'roll:g');

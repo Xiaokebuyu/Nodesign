@@ -86,7 +86,11 @@ export function obstaclesIn(board, zone = '', { objects = null, exclude = null, 
   if (projectId) {
     const vp = getViewpoint(projectId);
     if (vp && (vp.layer || '') === (zone || '')) {
-      (vp.occupied || []).forEach((r, i) => rects.push({ id: `ph:${i + 1}`, ...r }));
+      // 带 id 的是直播板书框（toolUseId）：写板工具落板时按 exclude 剔掉自己那块
+      (vp.occupied || []).forEach((r, i) => {
+        const id = r.id ? `live:${r.id}` : `ph:${i + 1}`;
+        if (!skip.has(id)) rects.push({ id, x: r.x, y: r.y, w: r.w, h: r.h });
+      });
     }
   }
   // 每层还住着不在 objects 里的占面积物件：文件夹卡按**所在层**取

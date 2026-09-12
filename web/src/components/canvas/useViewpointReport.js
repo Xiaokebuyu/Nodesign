@@ -41,10 +41,12 @@ export function useViewpointReport({ projectId, cam, viewport, layer = '', openW
       openWindow: openWindow || null,
       selected: (selectedIds || []).slice(0, 24),
       // 只有浏览器知道的占地（2026-09-05）：生图幻影 —— 服务端落位要躲它
-      occupied: (occupied || []).slice(0, 24).map((r) => ({ x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) })),
+      occupied: (occupied || []).slice(0, 32).map((r) => ({
+        x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h), ...(r.id ? { id: String(r.id) } : {}),
+      })),
       device: { class: device.class, w: device.w, h: device.h, dpr: device.dpr, coarse: device.coarse },
     };
-    const occKey = payload.occupied.map((r) => `${r.x},${r.y},${r.w},${r.h}`).join(';');
+    const occKey = payload.occupied.map((r) => `${r.id || ''}:${r.x},${r.y},${r.w},${r.h}`).join(';');
     // 变化判据：相机挪超过 1/8 视口、缩放变、窗/选中变、换机器/转屏、幻影增减
     const key = `${Math.round(camera.x / Math.max(1, camera.w / 8))}:${Math.round(camera.y / Math.max(1, camera.h / 8))}:${payload.zoom}:${payload.layer}:${payload.openWindow}:${payload.selected.join(',')}:${device.class}:${device.w}x${device.h}:${occKey}`;
     const st = lastRef.current;

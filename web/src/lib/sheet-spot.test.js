@@ -35,10 +35,19 @@ describe('sheetSpotToWorld（关系 → 直播落点）', () => {
   it('⭐ place.with 续组：同 tag 最靠下那件的正下方', () => {
     expect(sheetSpotToWorld(null, { place: { with: '章节' } }, layout)).toMatchObject({ x: 3000, y: 3200 + 90 + 24 });
   });
+  it('⭐ chain + tag：接同 tag 下 id 最大（最新）那条板书的正下方（09-12，跟服务端同口径）', () => {
+    const lay = {
+      ...layout,
+      'notes/板书/a-1.md': { x: 100, y: 100, w: 336, h: 80, tag: '线甲' },
+      'notes/板书/a-2.md': { x: 100, y: 300, w: 336, h: 60, tag: '线甲' },
+    };
+    expect(sheetSpotToWorld(null, { chain: true, tag: '线甲' }, lay)).toMatchObject({ x: 100, y: 300 + 60 + 24 });
+  });
   it('算不出来必须 null：view / user / chain / 批内第二条 / 锚不在板上 / 没有 spot', () => {
     expect(sheetSpotToWorld(null, { place: { by: 'view' } }, layout)).toBeNull();
     expect(sheetSpotToWorld(null, { place: { by: 'user' } }, layout)).toBeNull();
-    expect(sheetSpotToWorld(null, { chain: true, place: { by: 'assets/a.png' } }, layout)).toBeNull();
+    expect(sheetSpotToWorld(null, { chain: true, place: { by: 'assets/a.png' } }, layout)).toBeNull();   // 没 tag 算不出
+    expect(sheetSpotToWorld(null, { chain: true, tag: '不存在的线' }, layout)).toBeNull();
     expect(sheetSpotToWorld(null, { place: { by: 'assets/a.png' }, batchIdx: 1 }, layout)).toBeNull();
     expect(sheetSpotToWorld(null, { place: { by: '虚空' } }, layout)).toBeNull();
     expect(sheetSpotToWorld(null, null, layout)).toBeNull();

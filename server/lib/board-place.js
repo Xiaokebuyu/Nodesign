@@ -155,6 +155,14 @@ function scanViewport(vp, box, obstacles, margin = UNIT) {
   return null;
 }
 
+/** 另起一片：整块内容的右沿再隔三格，顶对齐视口顶（没视口就对齐内容顶）。空板就落视口原点 */
+function apartOf(obstacles, box, viewport, gap) {
+  if (!obstacles.length) return { x: Math.round((viewport?.x ?? 0) + gap), y: Math.round((viewport?.y ?? 0) + gap) };
+  const right = Math.max(...obstacles.map((o) => o.x + o.w));
+  const top = Math.min(...obstacles.map((o) => o.y));
+  return { x: Math.round(right + gap * 3), y: Math.round(viewport ? viewport.y + gap : top) };
+}
+
 /** 内容底边（一层里所有障碍的最低点）与左沿 */
 function contentEdges(obstacles, fallback = { x: UNIT, y: 0 }) {
   if (!obstacles.length) return { left: fallback.x, bottom: fallback.y };
@@ -179,7 +187,7 @@ function contentEdges(obstacles, fallback = { x: UNIT, y: 0 }) {
  *   how ∈ beside | thread | in-view | below-view | near | below-content
  *   nudged=true 表示没落在偏好的那一侧或滑开了；wanted 是偏好的那一侧
  */
-export function solvePlace({ box, anchor = null, side = null, group = null, viewport = null, obstacles = [], column = false, gap = UNIT }) {
+export function solvePlace({ box, anchor = null, side = null, group = null, viewport = null, obstacles = [], column = false, gap = UNIT, apart = false }) {
   const wanted = side && SIDES.includes(side) ? side : null;
   // 续写：组尾正下方接楼（同一条线永远往下长）
   if (group) {
@@ -202,6 +210,9 @@ export function solvePlace({ box, anchor = null, side = null, group = null, view
   if (viewport) {
     const p = scanViewport(viewport, box, obstacles);
     if (p) return { ...p, how: 'in-view', side: null, nudged: false, wanted };
+    // 全新话题（open_lane:'fresh'，2026-09-12）：视口满了就在整块内容右侧另起一片，跟旧主题隔开
+    // 三格 —— 新主题不该接在旧线尾下面（那样读起来像续写）。手机档一列到底，不横向开
+    if (apart && !column) return { ...apartOf(obstacles, box, viewport, gap), how: 'apart', side: null, nudged: true, wanted };
     // 视口里没有整块空地：贴着视口内容的底边往下（用户往下一滚就看见）
     const inView = obstacles.filter((o) => overlaps(o, viewport));
     const bottom = inView.length ? Math.max(...inView.map((o) => o.y + o.h)) : viewport.y + viewport.h;
@@ -226,6 +237,7 @@ export function describePlacement(placed, { anchorId = null, groupTag = null } =
     case 'near': return `near ${who} (no free side, nearest open spot)`;
     case 'in-view': return "in the user's current view, on free ground";
     case 'below-view': return "just below what the user is looking at (their view had no free ground)";
+    case 'apart': return 'in a fresh area to the right of everything (new topic; their view had no free ground — tell the user where it is)';
     case 'below-content': return anchorId ? `below everything, under ${who}` : 'below all current content';
     default: return placed.how || 'placed';
   }

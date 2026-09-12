@@ -91,3 +91,20 @@ describe('原语', () => {
     expect(last.id).toBe('c');
   });
 });
+
+describe('全新话题另起一片（open_lane:fresh，2026-09-12）', () => {
+  it('视口满了 + apart → 整块内容右沿再隔三格、顶对齐视口顶，how=apart', () => {
+    const vp = { x: 0, y: 0, w: 400, h: 300 };
+    const obstacles = [{ id: 'a', x: 24, y: 24, w: 360, h: 260 }, { id: 'b', x: 500, y: 600, w: 100, h: 100 }];
+    const p = solvePlace({ box: { w: 336, h: 120 }, viewport: vp, obstacles, apart: true });
+    expect(p.how).toBe('apart');
+    expect(p.x).toBe(600 + 24 * 3);
+    expect(p.y).toBe(24);
+  });
+  it('视口有空地时 apart 不生效（仍落视口）；手机档不横向开', () => {
+    const vp = { x: 0, y: 0, w: 800, h: 600 };
+    expect(solvePlace({ box: { w: 100, h: 100 }, viewport: vp, obstacles: [], apart: true }).how).toBe('in-view');
+    const full = [{ id: 'a', x: 0, y: 0, w: 400, h: 300 }];
+    expect(solvePlace({ box: { w: 336, h: 120 }, viewport: { x: 0, y: 0, w: 400, h: 300 }, obstacles: full, apart: true, column: true }).how).toBe('below-view');
+  });
+});

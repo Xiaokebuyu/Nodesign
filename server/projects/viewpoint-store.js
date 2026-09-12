@@ -57,9 +57,12 @@ function sanitizeViewpoint(raw, userId) {
     openPage: str(raw.openPage, 120),
     selected: Array.isArray(raw.selected) ? raw.selected.filter(s => typeof s === 'string' && s.length <= 300).slice(0, 24) : [],
     // 只有浏览器知道的占地（2026-09-05）：生图幻影这类不落盘的东西。落位把它们当障碍。
-    occupied: Array.isArray(raw.occupied) ? raw.occupied.slice(0, 24).map((r) => ({
+    // id（2026-09-12）：直播中的板书框带 toolUseId 上报，write_on_board 落板时排除自己那块
+    //（否则它把自己的直播框当障碍，永远落不到预告的位置）。生图幻影没有 id。
+    occupied: Array.isArray(raw.occupied) ? raw.occupied.slice(0, 32).map((r) => ({
       x: num(r?.x, -1e6, 1e6), y: num(r?.y, -1e6, 1e6), w: num(r?.w, 1, 1e5), h: num(r?.h, 1, 1e5),
-    })).filter((r) => Object.values(r).every((v) => v !== null)) : [],
+      ...(typeof r?.id === 'string' && r.id.length <= 120 ? { id: r.id } : {}),
+    })).filter((r) => ['x', 'y', 'w', 'h'].every((k) => r[k] !== null)) : [],
     at: Date.now(),
   };
 }

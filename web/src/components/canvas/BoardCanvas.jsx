@@ -12,6 +12,7 @@ import { PAPER, PAPER_SHADOW, paperCard, FIBERS } from '../../lib/paper.js';
 // 这一行和注释里的名字，四个都是早年搬走代码时留下的死引用（不是这次删「整理」造成的）。
 import { DESKTOP_W, FOLDER_CARD, newStackedZoneRect, hitsAt } from '../../lib/board-geometry.js';
 import { useLiveChalkSpots } from './use-live-chalk-spots.js';
+import { useOccupiedForServer, useLiveChalkMeasure } from '../../lib/live-chalk-occupancy.js';
 import { useObjectClick } from './useObjectClick.js';
 import {
   SIZES, sizeOf, actionsOf, isFileBacked, dragMovesFile, chromeOf, cardOf, annotTargetOf, cardIdOf, isDirArtifact, titleOf } from '../../lib/board-kinds.js';
@@ -608,6 +609,7 @@ export default function BoardCanvas({
   // usePhantoms 管（声明在 useStageState 之后，它要吃 stageCards）。
   const phantomsRef = useRef(new Map());
   const phantomOccupied = usePhantomOccupied(phantomsRef);   // 幻影占地给视点上报用（服务端落位要躲它）
+  const occupiedForServer = useOccupiedForServer(phantomOccupied);   // + 直播板书框（lib/live-chalk-occupancy.js）
   const phantomObstaclesRef = useRef([]);
   const phantomBottomRef = useRef(0);
 
@@ -739,7 +741,7 @@ export default function BoardCanvas({
   // ⚠️ 08-31 起没人接它的返回值（开关下架），但这一句必须照旧调用：视点上报和镜头跟随都在里面
   useBlackboardWiring({
     projectId, cam, viewport: camera.viewport, winDir, openWindow, selectedIds,
-    occupied: phantomOccupied,   // 生图幻影：不落盘，服务端落位只能从视点上报里知道它
+    occupied: occupiedForServer,   // 生图幻影 + 直播板书框：不落盘，服务端落位只能从视点上报里知道它们
     camRef: camApiRef, positionedRef, focusRequest,
   });
 
@@ -1379,6 +1381,7 @@ export default function BoardCanvas({
     (e) => Number.isFinite(e?.x) && Math.abs(e.x - spot.x) < 12 && Math.abs(e.y - spot.y) < 12,
   );
 
+  useLiveChalkMeasure();   // 直播板书框的真实矩形 → occupied（服务端落位躲它；写板工具剔掉自己那块）
   const { anchoredCards, dockPanels, dockChips, spriteCards, chalkCards } = splitStageCards({
     stageCards, positioned, visibleIdSet, visibleZones, focusZone: '',
   });
