@@ -9,14 +9,21 @@ function safeBaseName(s) {
     .slice(0, 64);
 }
 
+/** 同一毫秒里第几个名字（进程内单调）。只在没给 outputName 时参与 */
+let nameSeq = 0;
+
 export function buildOutputName(outputName, assetRole) {
   if (outputName) {
     const safe = safeBaseName(outputName);
     if (safe) return safe;
   }
+  // ⛔ 09-13 查实：批量（prompts[]）不给 outputName 时，4 个并发请求在同一个 tick 里算名字（generateOne 在第一个 await
+  // 之前就定名），`gen-<毫秒>-<用途>` 撞车 —— 复现 4 张只出 2 个不同的名字，后写的覆盖先写的，画布上少图。
+  // 加一段进程内递增序号：同一毫秒也不会重名；老名字形状（gen-<毫秒>-…）不变，按前缀找图的地方照旧认得
   const ts = Date.now();
   const role = safeBaseName(assetRole || 'image');
-  return `gen-${ts}-${role}`;
+  nameSeq = (nameSeq + 1) % 1_000_000;
+  return `gen-${ts}-${nameSeq}-${role}`;
 }
 
 

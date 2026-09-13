@@ -43,8 +43,23 @@ describe('fanOutImages', () => {
     const mixed = await fanOutImages({ prompts: ['a', 'b'], variationOf: 'x.png' }, {}, one);
     expect(mixed.isError).toBe(true);
   });
-  it('输出命名：给了名字就清洗，没给就 gen-<ts>-<role>', () => {
+  it('输出命名：给了名字就清洗，没给就 gen-<ts>-<seq>-<role>（09-13 加序号防同毫秒撞名）', () => {
     expect(buildOutputName('封面 图/1', 'hero')).toBe('1');   // 非 ASCII 段换成 -，首尾 - 去掉
-    expect(buildOutputName('', 'hero')).toMatch(/^gen-\d+-hero$/);
+    expect(buildOutputName('', 'hero')).toMatch(/^gen-\d+-\d+-hero$/);
   });
 });
+
+describe('buildOutputName 不撞名（09-13）', () => {
+  it('⭐ 批量不给 outputName：并发的 N 张在同一毫秒里定名也各不相同', async () => {
+    const names = [];
+    const one = async ({ outputName, assetRole }) => { names.push(buildOutputName(outputName, assetRole)); await new Promise((r) => setTimeout(r, 2)); return { content: [] }; };
+    await fanOutImages({ prompts: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], assetRole: 'hero' }, {}, one);
+    expect(names).toHaveLength(8);
+    expect(new Set(names).size).toBe(8);
+    for (const n of names) expect(n).toMatch(/^gen-\d+-\d+-hero$/);
+  });
+  it('给了 outputName 照旧用它（批量时加 -i 的逻辑不变）', () => {
+    expect(buildOutputName('cover art', 'hero')).toBe('cover-art');
+  });
+});
+
