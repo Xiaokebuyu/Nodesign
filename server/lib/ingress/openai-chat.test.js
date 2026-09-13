@@ -108,6 +108,26 @@ const ev = (sse) => sse.split('\n\n').filter(Boolean).map(b => {
 });
 
 describe('OpenAIToAnthropicSSE', () => {
+  it('上游回头续写已闭合的 tool_call 计数（CLI 块闭合即派发，续上的参数进不去）；正常顺序计 0', async () => {
+    const c = (tool_calls) => `data: ${JSON.stringify({ id: 'r', choices: [{ index: 0, delta: { tool_calls } }] })}\n\n`;
+    const end = `data: ${JSON.stringify({ id: 'r', choices: [{ index: 0, finish_reason: 'tool_calls', delta: {} }] })}\n\ndata: [DONE]\n\n`;
+    const interleaved = new OpenAIToAnthropicSSE();
+    await collect(interleaved, [
+      c([{ index: 0, id: 'call_a', function: { name: 'f', arguments: '{"x":' } }]),
+      c([{ index: 1, id: 'call_b', function: { name: 'g', arguments: '{}' } }]),
+      c([{ index: 0, function: { arguments: '1}' } }]),
+      end,
+    ]);
+    expect(interleaved.reopenedToolCalls).toBe(1);
+    const inOrder = new OpenAIToAnthropicSSE();
+    await collect(inOrder, [
+      c([{ index: 0, id: 'call_a', function: { name: 'f', arguments: '{"x":' } }]),
+      c([{ index: 0, function: { arguments: '1}' } }]),
+      c([{ index: 1, id: 'call_b', function: { name: 'g', arguments: '{}' } }]),
+      end,
+    ]);
+    expect(inOrder.reopenedToolCalls).toBe(0);
+  });
   it('reasoning→thinking 块，text 块，tool_calls 增量→tool_use+input_json_delta，末 chunk usage → message_delta；[DONE] 后的尾巴忽略', async () => {
     const id = 'abc';
     const c = (delta, extra = {}) => `data: ${JSON.stringify({ id, model: 'ox', choices: [{ index: 0, delta, ...extra }] })}\n\n`;

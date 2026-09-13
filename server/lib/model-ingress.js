@@ -43,7 +43,7 @@ import { failStreaks, exhaustedErrorBody } from './ingress/upstream-fail-streak.
 import { armIdleWatchdog } from './ingress/stream-watchdog.js'; import { dumpRequestShape } from './ingress/request-dump.js';   // 后者是量具
 import { noteUpstreamBilling, openaiTokens } from './ingress/upstream-billing.js';
 import { noteUpstreamTruncation } from './ingress/upstream-truncation.js';
-import { noticeSession } from './ingress/session-notice.js';
+import { noticeSession } from './ingress/session-notice.js'; import { noteToolCallReopened } from './ingress/tool-call-reopen.js';
 import { tapAnthropicUsage } from './ingress/anthropic-usage.js';
 import { capImages } from './ingress/image-cap.js';
 
@@ -275,7 +275,7 @@ export async function handleRequest(req, res, bodyBuf, opts = {}) {
       onNotice: (text) => {
         if (routed.role === 'helper') return;   // helper 的重发用户不需要知道
         noticeSession(sessionTag, { key: 'upstream_retry', text, priority: 'warn' });
-      } });
+      }, onToolCallReopened: (n) => noteToolCallReopened({ wire: wireFwd, sidShort, sessionTag, n }) });   // 上游回头续写已闭合的 tool_call → 问题库
     return;
   }
   const outBody = Buffer.from(JSON.stringify(parsed), 'utf8');
