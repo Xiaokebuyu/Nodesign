@@ -29,6 +29,8 @@ export const Admin = {
 
   users: () => jsonRequest('GET', '/api/admin/users'),
   patchUser: (id, patch) => jsonRequest('PATCH', `/api/admin/users/${id}`, patch),
+  /** 强制下线：网页登录 + 桌面设备令牌（09-13 auth-v2） */
+  revokeSessions: (id) => jsonRequest('POST', `/api/admin/users/${id}/revoke-sessions`),
   /** 设计 / 演出各自的项目数、回合数、花费（后端已排掉站主自己） */
   modes: () => jsonRequest('GET', '/api/admin/modes'),
   invites: () => jsonRequest('GET', '/api/admin/invites'),

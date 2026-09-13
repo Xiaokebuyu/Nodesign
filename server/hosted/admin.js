@@ -10,6 +10,7 @@
  *   GET    /api/admin/users            用户列表 + 今日用量
  *   GET    /api/admin/modes            设计 / 演出 两个模式各自的用量（不含站主）
  *   PATCH  /api/admin/users/:id        {disabled?, dailyCostLimitUsd?, lifetimeCostLimitUsd?} 封禁/调限额
+ *   POST   /api/admin/users/:id/revoke-sessions  强制下线（网页会话 + 桌面设备令牌，账号不停用）
  *   GET    /api/admin/issues           harness 问题库（按次数降序）+ 按工具聚合
  *   PATCH  /api/admin/issues/:id       {status} open|ack|ignored|closed
  *   DELETE /api/admin/issues/:id       删掉一条
@@ -23,6 +24,8 @@
 
 import express from 'express';
 import { revokeUserSessions } from './auth/sessions-store.js';
+import { revokeUserDevices } from './relay/devices.js';
+import { originAllowed } from '../auth/origin-guard.js';
 import { createInvite, listInvites, getInvite, updateInvite } from './users-write.js';
 import { getUserById, listUsers, updateUser } from '../auth/users-store.js';
 import { modeStats } from '../projects/store.js';
@@ -43,6 +46,12 @@ function adminGuard(req, res, next) {
 }
 
 router.use(adminGuard);
+// 改状态的管理接口挡外站（09-13 fable）：*.share 子域的发布页跟控制台同站，SameSite=Lax 的会话 cookie 照发，
+// 不读 body 的 POST（比如强制下线）一个自动提交的表单就能打中。跟 auth-routes / account-routes 同一道闸
+router.use((req, res, next) => {
+  if (req.method !== 'GET' && !originAllowed(req)) return res.status(403).json({ error: 'forbidden origin', code: 'FORBIDDEN_ORIGIN' });
+  next();
+});
 
 // 站点模型管理台（09-10）：清单 + 总闸。单独一个文件，它会长（站点插槽的增删改也要落在那儿）
 router.use('/models', modelAdminRouter);
@@ -137,6 +146,16 @@ router.patch('/users/:id', (req, res) => {
   // 停用 = 所有网页登录立刻失效、已打开的连接断开（设备令牌在 verifyDeviceToken 里按 disabled 判，不用逐台吊）
   if (patch.disabled === true) revokeUserSessions(user.id);
   res.json({ user: updated });
+});
+
+// 强制下线（09-13 auth-v2）：网页登录全部作废、已打开的连接断开、桌面设备令牌全部吊销。账号不停用，本人重新登录即可
+router.post('/users/:id/revoke-sessions', (req, res) => {
+  const user = getUserById(req.params.id);
+  if (!user) return res.status(404).json({ error: 'user not found' });
+  if (user.role === 'admin') return res.status(400).json({ error: '不对 admin 账号执行强制下线' });
+  const sessions = revokeUserSessions(user.id);
+  const devices = revokeUserDevices(user.id);
+  res.json({ ok: true, sessionsRevoked: sessions, devicesRevoked: devices });
 });
 
 // ── 站内公告（2026-07-31）──

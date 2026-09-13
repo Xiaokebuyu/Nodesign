@@ -201,14 +201,14 @@ describe('Google 登录', () => {
     expect(r.cookies.some((c) => /^nd_auth=s1\./.test(c))).toBe(false);
     expect(findIdentity('google', profile.claims.sub)).toBeNull();
     const token = r.location.split('#oauth_pending=')[1];
-    const info = await (await call(`/api/auth/oauth/pending/${token}`)).json();
+    const info = await (await call('/api/auth/oauth/pending/lookup', { method: 'POST', body: { token } })).json();
     expect(info).toMatchObject({ provider: 'google', email: expect.stringMatching(/^o\*\*\*@corp\.example$/) });
     const code = lastCodeFor(email);
-    expect((await call(`/api/auth/oauth/pending/${token}/verify`, { method: 'POST', body: { code: code === '000000' ? '111111' : '000000' } })).status).toBe(400);
-    const ok = await call(`/api/auth/oauth/pending/${token}/verify`, { method: 'POST', body: { code } });
+    expect((await call('/api/auth/oauth/pending/verify', { method: 'POST', body: { token, code: code === '000000' ? '111111' : '000000' } })).status).toBe(400);
+    const ok = await call('/api/auth/oauth/pending/verify', { method: 'POST', body: { token, code } });
     expect(ok.status).toBe(200);
     expect(findIdentity('google', profile.claims.sub).user_id).toBe(user.id);
-    expect((await call(`/api/auth/oauth/pending/${token}/verify`, { method: 'POST', body: { code } })).status).toBe(404);
+    expect((await call('/api/auth/oauth/pending/verify', { method: 'POST', body: { token, code } })).status).toBe(404);
   });
   it('带 hd 的 Workspace 邮箱算可信（对没密码的号自动关联）', async () => {
     const email = newEmail('corp2.example');

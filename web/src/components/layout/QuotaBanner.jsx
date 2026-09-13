@@ -23,6 +23,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, BANNER } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { t } from '../../lib/i18n.js';
 
 const TIERS = [100, 90, 75];
 const AUTO_HIDE_MS = 12_000;
@@ -35,11 +36,17 @@ function dayKeyShanghai() {
 }
 
 const quotaSeenKey = (tier) => `nd-quota-banner:${dayKeyShanghai()}:${tier}`;
+// 绑定邮箱提示（09-13 auth-v2）：关掉后 7 天内不再提
+const BIND_EMAIL_KEY = 'nd-bind-email-dismissed-at';
+const BIND_EMAIL_QUIET_MS = 7 * 24 * 3600 * 1000;
+function bindEmailQuiet() {
+  try { return Date.now() - Number(localStorage.getItem(BIND_EMAIL_KEY) || 0) < BIND_EMAIL_QUIET_MS; } catch { return false; }
+}
 // 公告的已读不带日期：一条公告关掉就是永久关掉，跨天不该复活
 const noticeSeenKey = (id) => `nd-notice-seen:${id}`;
 
 function tierFor(pct) {
-  for (const t of TIERS) if (pct >= t) return t;
+  for (const tier of TIERS) if (pct >= tier) return tier;
   return null;
 }
 
@@ -102,15 +109,30 @@ export default function QuotaBanner() {
       .catch(() => { /* fail-soft */ });
   }, [push]);
 
+  // 老账号没绑邮箱：忘了密码没法自助找回。只在网页版、邮箱登录已开放（SES 脱离沙盒，/api/auth/methods 的 emailAuth）时提
+  useEffect(() => {
+    if (!authUser || authUser.email || useGlobalStore.getState().authProfile === 'local' || bindEmailQuiet()) return;
+    fetch('/api/auth/methods').then((r) => (r.ok ? r.json() : null)).then((m) => {
+      if (!m?.emailAuth) return;
+      push({
+        key: 'bind-email', kind: 'notice', bg: LEVEL_BG.info, sticky: true, onDismiss: () => {
+          try { localStorage.setItem(BIND_EMAIL_KEY, String(Date.now())); } catch { /* 下次还会提 */ }
+        },
+        text: t('这个账号还没有绑定邮箱。绑定后可以用邮箱登录，并在忘记密码时自助找回。'),
+        action: { label: t('去绑定'), href: '/settings' },
+      });
+    }).catch(() => {});
+  }, [authUser, push]);
+
   useEffect(() => {
     if (!authUser) return undefined;
     pull();
-    const t = setInterval(pull, 60_000);
+    const timer = setInterval(pull, 60_000);
     const onFocus = () => pull();
     window.addEventListener('focus', onFocus);
     window.addEventListener('nd-usage-refresh', onFocus);
     return () => {
-      clearInterval(t);
+      clearInterval(timer);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('nd-usage-refresh', onFocus);
     };
@@ -126,6 +148,7 @@ export default function QuotaBanner() {
 
   const dismiss = (b) => {
     if (b.seenKey) markSeen(b.seenKey);
+    b.onDismiss?.();
     setBanners((cur) => cur.filter((x) => x.key !== b.key));
   };
 
@@ -162,6 +185,9 @@ export default function QuotaBanner() {
           }}
         >
           <span style={{ flex: 1 }}>{b.text}</span>
+          {b.action && (
+            <a href={b.action.href} style={{ color: COLOR.bgWhite, textDecoration: 'underline', textUnderlineOffset: 3, flexShrink: 0 }}>{b.action.label}</a>
+          )}
           <button
             onClick={() => dismiss(b)}
             title="关闭"

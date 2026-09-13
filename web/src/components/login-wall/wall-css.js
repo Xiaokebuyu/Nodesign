@@ -262,6 +262,25 @@ export const WALL_CSS = `
 .ndw-card .alt { margin-top: 18px; padding-top: 14px; border-top: 1px solid #D9CDB4; display: flex;
   justify-content: space-between; font: 11.5px var(--code); color: var(--ink-2); }
 .ndw-card .alt a { text-decoration: none; }
+/* 09-13 auth-v2 第三批：第三方登录按钮、「或」分隔、登录名回显、次要链接（login-wall/AuthCard.jsx） */
+.ndw-oauth { margin-top: 20px; display: grid; gap: 10px; }
+.ndw-provider { display: flex; align-items: center; justify-content: center; gap: 10px; height: 44px;
+  border: 1px solid ${P('ink',0.8)}; border-radius: 3px; background: transparent; color: var(--ink);
+  font: 600 14.5px var(--display); text-decoration: none; }
+.ndw-provider:hover { background: ${P('ink',0.05)}; }
+.ndw-provider i { display: inline-flex; width: 18px; height: 18px; }
+.ndw-provider svg { width: 18px; height: 18px; }
+.ndw-or { margin-top: 18px; display: flex; align-items: center; gap: 12px; font: 11px var(--code); color: var(--pencil); letter-spacing: 0.14em; }
+.ndw-or::before, .ndw-or::after { content: ''; flex: 1; border-top: 1px solid #D9CDB4; }
+.ndw-who { margin-top: 14px; display: flex; align-items: baseline; gap: 10px; font: 14px var(--read); color: var(--ink-2); }
+.ndw-who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ndw-who a, .ndw-links a, .ndw-legal a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: ${P('ink',0.35)}; }
+.ndw-links { margin-top: 12px; display: flex; justify-content: space-between; gap: 12px; font: 12.5px var(--display); color: var(--pencil); }
+.ndw-links a.off { color: var(--pencil); text-decoration: none; cursor: default; }
+.ndw-note { margin-top: 10px; font: 12px/1.6 var(--display); color: var(--pencil); }
+.ndw-info { margin-top: 10px; min-height: 16px; font: 12.5px var(--display); color: var(--ink-2); }
+.ndw-info:empty { min-height: 0; margin-top: 0; }
+.ndw-legal { margin-top: 10px; font: 11.5px/1.6 var(--display); color: var(--pencil); }
 .ndw-stamp { position: absolute; right: 20px; top: 22px; padding: 2px 8px; border: 1px solid var(--red);
   color: var(--red); font: 10.5px var(--code); letter-spacing: 0.16em; }
 
