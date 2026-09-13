@@ -280,7 +280,7 @@ router.put('/:pid/sessions/:sid/model', async (req, res, next) => {
     if (why) return res.status(409).json({ error: why, code: 'LANE_SWITCH' });
     // 同时改思考等级（09-13）：先写档位再换模型 —— 换模型会关掉空闲 query，下次起会话从配置读到新档
     if ('effort' in (req.body || {})) {
-      const r = await applySessionEffort({ sid: req.params.sid, metaDir, model: target, effort: req.body.effort ?? null });
+      const r = await applySessionEffort({ sid: req.params.sid, metaDir, model: target, effort: req.body.effort ?? null, live: target === before.model });
       if (!r.ok) return res.status(r.status).json(r.body);
     }
     const result = await applySessionModel(req.params.sid, metaDir, raw, 'picker');

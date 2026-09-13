@@ -13,11 +13,11 @@ import { isEffortLevel } from '../engine/agent/model-effort.js';
 import { getQuerySession } from '../engine/runs/active-runs.js';
 
 /**
- * @param {{ sid: string, metaDir: string, model: string, effort: string|null }} args  model = 这个会话此刻（或刚切到）的模型
+ * @param {{ sid: string, metaDir: string, model: string, effort: string|null, live?: boolean }} args  model = 这个会话此刻（或刚切到）的模型；live=false 只落盘
  * @param {{ getQuerySession?: Function, write?: Function }} [deps]  测试注入
  * @returns {Promise<{ ok: true, effort: string|null, applied: boolean } | { ok: false, status: number, body: object }>}
  */
-export async function applySessionEffort({ sid, metaDir, model, effort }, deps = {}) {
+export async function applySessionEffort({ sid, metaDir, model, effort, live = true }, deps = {}) {
   const lookup = deps.getQuerySession || getQuerySession;
   const write = deps.write || writeSessionEffort;
   if (effort !== null && !isEffortLevel(effort)) {
@@ -30,7 +30,9 @@ export async function applySessionEffort({ sid, metaDir, model, effort }, deps =
   await write(metaDir, effort);
   let applied = false;
   const qs = lookup(sid);
-  if (qs?.query && typeof qs.query.applyFlagSettings === 'function' && !qs.abortController?.signal?.aborted) {
+  // live=false：这次同时在换模型（09-13 fable 审查 P2-1）。跑着的 query 还是旧模型，按新模型换算的档位不该塞给它；
+  // 换模型那条路会让空闲 query 重启（或等这一轮结束后下次起会话），届时从配置读到新档
+  if (live && qs?.query && typeof qs.query.applyFlagSettings === 'function' && !qs.abortController?.signal?.aborted) {
     try {
       await qs.query.applyFlagSettings({ effortLevel: effortForModel(model, effort).sdk });
       applied = true;

@@ -40,4 +40,11 @@ describe('applySessionEffort', () => {
     expect(r).toEqual({ ok: true, effort: 'low', applied: false });
     expect(broken.write).toHaveBeenCalled();
   });
+  it('live=false（同时在换模型）→ 只落盘，不把新模型的档位塞给还在跑旧模型的 query（fable P2-1）', async () => {
+    const d = deps();
+    const r = await applySessionEffort({ sid: 's1', metaDir: '/m', model: 'claude-opus-5[1m]', effort: 'max', live: false }, d);
+    expect(r).toEqual({ ok: true, effort: 'max', applied: false });
+    expect(d.write).toHaveBeenCalledWith('/m', 'max');
+    expect(d.query.applyFlagSettings).not.toHaveBeenCalled();
+  });
 });

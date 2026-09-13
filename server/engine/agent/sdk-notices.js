@@ -5,7 +5,7 @@
  * 返回 true = 认识并处理了。字段口径以 sdk.d.ts 为准（SDK 0.3.269）。
  *
  * 分三档：
- *   - 要让人知道的：informational（通用横幅）、拒答两条（进问题库 + toast）
+ *   - 要让人知道的：informational（仅 warning 级且不是钩子发的才弹）、拒答两条（进问题库 + toast）
  *   - 要留痕的：permission_denied（自动拒绝，auto 分类器 / deny 规则；PreToolUse 钩子的拒绝不在其内）、
  *     worker_shutting_down（CLI 自报要退，区分「我们关的」和「它自己要关」）、conversation_reset
  *   - 先看内容再定用途的：active_goal / post_turn_summary / task_summary / autocompact_state /
@@ -20,7 +20,8 @@ const SAMPLE_ONCE = new Set([
   'commands_changed', 'background_tasks_changed',
 ]);
 
-const INFO_PRIORITY = { warning: 'warn', notice: 'medium', suggestion: 'low', info: 'low' };
+/** 钩子 systemMessage 被 CLI 包成 informational 时的前缀：「<事件名>[:<工具名>] says:」（09-13 探针原文） */
+const HOOK_SAYS = /^[A-Z][A-Za-z]+(?::\S+)? says:/;
 
 function sampleOnce(ctx, key, msg) {
   if (!ctx._sdkSampled) ctx._sdkSampled = new Set();
@@ -40,10 +41,18 @@ function sampleOnce(ctx, key, msg) {
 export function handleSdkNotice(ctx, msg, { record = recordIssue } = {}) {
   const key = msg?.type === 'system' ? msg.subtype : msg?.type;
   switch (key) {
-    case 'informational':
-      if (msg.content) ctx.emit(Events.notification('sdk_informational', msg.content, INFO_PRIORITY[msg.level] || 'low'));
-      if (msg.prevent_continuation) console.warn(`[run ${ctx.runId}] SDK informational 且阻止继续: ${String(msg.content).slice(0, 200)}`);
+    case 'informational': {
+      // ⛔ 09-13 fable 审查抓的：钩子返回的 systemMessage 会被 CLI 转成 informational（content 形如
+      // 「PostToolUse:mcp__nodesign__x says: …」「Stop says: …」），而我们四处钩子（上下文用量警告 / 画布校验 /
+      // 站点校验 / PreCompact）的 systemMessage 全是写给模型的 <system-reminder>。一律 toast 等于把给模型的话弹给用户。
+      // 所以：钩子发的只记日志；其余只有 warning 才弹（SDK 文档：info 只进 transcript），notice / suggestion 记日志。
+      const text = String(msg.content || '');
+      const fromHook = HOOK_SAYS.test(text);
+      if (text && !fromHook && msg.level === 'warning') ctx.emit(Events.notification('sdk_informational', text, 'warn'));
+      else if (text && msg.level !== 'info') console.log(`[run ${ctx.runId}] SDK informational(${msg.level}${fromHook ? ', hook' : ''}): ${text.slice(0, 200)}`);
+      if (msg.prevent_continuation) console.warn(`[run ${ctx.runId}] SDK informational 且阻止继续: ${text.slice(0, 200)}`);
       return true;
+    }
 
     case 'model_refusal_fallback':
     case 'model_refusal_no_fallback': {

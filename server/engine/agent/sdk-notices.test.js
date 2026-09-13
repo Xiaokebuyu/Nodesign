@@ -11,10 +11,24 @@ describe('handleSdkNotice', () => {
     expect(ctx.emitted).toEqual([]);
   });
 
-  it('informational → toast，按 level 映射优先级', () => {
+  it('informational：只有 warning 级且不是钩子发的才弹 toast', () => {
     const ctx = mkCtx();
-    expect(handleSdkNotice(ctx, { type: 'system', subtype: 'informational', content: '钩子拦下了这句话', level: 'warning' })).toBe(true);
-    expect(ctx.emitted[0]).toMatchObject({ type: 'run.notification', key: 'sdk_informational', text: '钩子拦下了这句话', priority: 'warn' });
+    expect(handleSdkNotice(ctx, { type: 'system', subtype: 'informational', content: '上游限流，稍后重试', level: 'warning' })).toBe(true);
+    expect(ctx.emitted[0]).toMatchObject({ type: 'run.notification', key: 'sdk_informational', text: '上游限流，稍后重试', priority: 'warn' });
+  });
+
+  it('⛔ 钩子的 systemMessage（CLI 包成「X says:」）不弹给用户，不论 level（09-13 fable 审查 P1）', () => {
+    const ctx = mkCtx();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    for (const [content, level] of [
+      ['PostToolUse:mcp__nodesign__write_on_board says: <system-reminder>上下文 85%</system-reminder>', 'notice'],
+      ['Stop says: <system-reminder>x</system-reminder>', 'warning'],
+      ['PreCompact says: 这是 NoDesign 创作会话。', 'notice'],
+    ]) handleSdkNotice(ctx, { type: 'system', subtype: 'informational', content, level });
+    handleSdkNotice(ctx, { type: 'system', subtype: 'informational', content: '普通提示', level: 'notice' });
+    handleSdkNotice(ctx, { type: 'system', subtype: 'informational', content: '只进 transcript', level: 'info' });
+    log.mockRestore();
+    expect(ctx.emitted).toEqual([]);
   });
 
   it('拒答自动换模型 → 问题库（固定签名）+ toast', () => {
