@@ -88,6 +88,7 @@ import { makeRollFilmTool } from './tools/roll-film.js';
 import { makePaintStillTool } from './tools/paint-still.js';
 import { makeLookupTagsTool } from './tools/lookup-tags.js';
 import { withConcurrencyHint, assertConcurrencyNames } from './tool-concurrency.js';
+import { withSearchHint } from './tool-search-hints.js';
 
 /**
  * 创建 Nodesign 的 MCP server，绑定当前 run 的依赖。
@@ -416,6 +417,9 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
     // 名单与判据在 tool-concurrency.js 一份
     withConcurrencyHint(t)
   )).map((t) => (
+    // 延迟加载工具的检索关键词（2026-09-13）：名字说不出用途的补英文同义词，表与判据在 tool-search-hints.js
+    withSearchHint(t)
+  )).map((t) => (
     // 本机能力闸（08-22）：缺 chromium / LibreOffice / 钥匙 的工具，描述前缀「不可用 + 装法」、调用期拦住。
     // 对照表在 capability-gate.js 一份；没探过（单测）原样放行
     withCapabilityGate(t)
@@ -456,5 +460,6 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   server.toolNames = tools.map((t) => t.name);
   // 并行只读的实际名单（同一份 tools 上取；lint 与探针对账用）
   server.readOnlyToolNames = tools.filter((t) => t.annotations?.readOnlyHint === true).map((t) => t.name);
+  server.searchHintToolNames = tools.filter((t) => t._meta?.['anthropic/searchHint']).map((t) => t.name);
   return server;
 }
