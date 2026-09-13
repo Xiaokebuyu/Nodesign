@@ -71,7 +71,13 @@ export function agentInheritedEnv(env = process.env) {
  *   重试。跟「不可用不自动换线、出口名跟展示名分开」的定案冲突（[[nodesign-api-model-routing]]）。
  *   09-13 查链路：模型表没有 Fable 行、spoof 别名都是 opus/sonnet 名，API 通路陌生名会被 ingress 改道 fast 行，
  *   眼下触发不了；关掉是防以后加行时静默换线。拒答本身由 sdk-notices.js 记问题库 + toast。
+ * - MCP_TOOL_TIMEOUT：单次 MCP 工具调用的上限（对进程内 sdk 型 server 也生效，09-13 探针实测 3s 即掐）。
+ *   CLI 默认约 27.8 小时。取值要盖住最长的合法调用：roll_film 一批最多 16 镜 × 每镜 900s = 4 小时，再加 30 分钟余量。
+ *   agent-env.test.js 对着 roll-film.js 的常量钉住，改镜数或单镜超时要一起改这里。
+ * - 不设 CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS：CLI 默认直连 180s / 自定义地址 300s，已经长于 ingress 的 60s 早提交，
+ *   显式设短只会让 CLI 更早放弃并重发。
  */
 export const AGENT_CLI_POLICY_ENV = Object.freeze({
   CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: '1',
+  MCP_TOOL_TIMEOUT: String(16 * 900_000 + 30 * 60_000),
 });

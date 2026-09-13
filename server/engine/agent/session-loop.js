@@ -432,6 +432,9 @@ export async function runSession({
       })(),
     }),
     plugins: installed.plugins,
+    // 插件清单走 stdin 初始化请求而不是每个插件一个 --plugin-dir（2026-09-13）：桌面版在 Windows 上，
+    // 命令行上限 32767 字符，用户装的插件没有数量上限。09-13 探针：plugins_applied=true，skills 照常装载
+    pluginDelivery: 'initialize',
     skills: modeSkillsFor(installed.skills, projectMode),   // 按模式筛+对账（拆件见 mode-profile）
 
     // 2026-05-18 安全：关 inline shell execution。SDK 默认允许 skill / slash command 内
@@ -551,12 +554,9 @@ export async function runSession({
 
     thinking: pickThinkingConfig(model),
     effort: 'medium',
-    // streamInput 模式 query 横跨整个 session，maxTurns 是**全局累计**（每条
-    // user message 起一轮 agent loop，turn 数不重置）。15 太低 —— 用户聊几
-    // 轮就触顶导致 'error_max_turns' 误中断。改 50 给复杂 deck（多页 +
-    // 多次自检 + 子代理）足够余量；env override 给极端情况用
-    maxTurns: Number(process.env.NODESIGN_MAX_TURNS)
-      || 50,
+    // maxTurns 不传（2026-09-13 站主定）。09-13 真跑探针：SDK 0.3.269 下它按**每条用户消息**计数、不是整会话累计，
+    // 旧注释写的「全局累计」是老版本现象。单条消息内的保护剩循环检测提醒（post-loop-guard）与用户手动停止。
+    // 生产 / exp 的 .env 里还留着 NODESIGN_MAX_TURNS=50，这里已不读，那一行失效。子代理各自的 maxTurns 在 agents/index.js。
 
     // 不传 resume —— streamInput 模式 SDK 内存保 history，不依赖 jsonl
     enableFileCheckpointing: true,

@@ -213,7 +213,6 @@ chmod 600 .env  # 限只 owner 读写，防误暴露
 |---|---|---|---|
 | `NODESIGN_MODEL` | 主 agent 用的 model | `kimi-k2.6` | 跟默认 |
 | `PORT` | server 监听端口 | `4001` | 跟默认；冲突时改 |
-| `NODESIGN_MAX_TURNS` | streamInput query 全局 turn 上限 | `50` | `50-80`（复杂 deck）|
 | `NODESIGN_MAX_BUDGET_USD` | 单 query 预算 | `5` | `5-10`（看模型 / 用户）|
 | `ENGINE_MAX_CONCURRENT_LLM` | 并发 LLM 调上限 | `5` | 跟默认 |
 | `ENGINE_MAX_QUEUE_DEPTH` | 队列深度 | `3` | 跟默认 |

@@ -43,3 +43,13 @@ describe('AGENT_CLI_POLICY_ENV（产品口径的 CLI 行为开关）', () => {
     }
   });
 });
+
+describe('MCP_TOOL_TIMEOUT 盖得住最长的合法调用', () => {
+  it('≥ roll_film 一批最多镜数 × 单镜超时（改镜数或单镜超时要同步改 agent-env.js）', async () => {
+    const { AGENT_CLI_POLICY_ENV } = await import('./agent-env.js');
+    const { MAX_SHOTS, PER_SHOT_TIMEOUT_MS } = await import('../engine/mcp/tools/roll-film.js');
+    expect(Number(AGENT_CLI_POLICY_ENV.MCP_TOOL_TIMEOUT)).toBeGreaterThanOrEqual(MAX_SHOTS * PER_SHOT_TIMEOUT_MS);
+    // 判据自检：常量真从 schema 那头来（不是两个都写死 16 恰好对上）
+    expect(MAX_SHOTS).toBe(16);
+  });
+});
