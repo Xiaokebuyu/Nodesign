@@ -155,6 +155,17 @@ export function mergeLiveTurnSnapshot(messages, snapMessages, runId) {
 }
 
 /**
+ * 历史里「没拿到结果、标成被中断」的工具（session-to-messages.js），界面上同 id 的卡还在 running → 留界面那张。
+ * 它多半不是被中断，是这一轮还在跑、结果还没进 jsonl（09-13 fable 审查 P2-4：WS hydrate 失败改走 HTTP 时，
+ * 这份历史晚于在飞快照回来，会把在跑的卡盖成红色的「被中断」）。
+ */
+export function keepLiveTools(current, display) {
+  const running = new Map(current.filter((m) => m.role === 'tool' && m.status === 'running').map((m) => [m.id, m]));
+  if (!running.size) return display;
+  return display.map((m) => (m.role === 'tool' && m.interrupted && running.has(m.id) ? running.get(m.id) : m));
+}
+
+/**
  * hydrate 合并：
  * - display 空而 current 有内容（jsonl 还没 flush）→ 信任 current 不替换
  * - display 缺乐观 user msg（还在 inputQueue 没落 JSONL）→ 保留 orphan
@@ -168,6 +179,7 @@ export function mergeLiveTurnSnapshot(messages, snapMessages, runId) {
  */
 export function mergeHydrated(messages, display) {
   if (display.length === 0 && messages.length > 0) return messages;
+  display = keepLiveTools(messages, display);
   const displayUserIds = new Set(display.filter(m => m.role === 'user').map(m => m.id));
   const displayUserContents = new Set(
     display.filter(m => m.role === 'user').map(m => (m.content || '').trim())

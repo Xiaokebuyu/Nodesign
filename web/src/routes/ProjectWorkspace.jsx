@@ -45,7 +45,7 @@ import { trailingThrottle } from '../lib/trailing-throttle.js';
 import { makeRegionCommentHandler } from '../lib/region-comment.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
-import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult } from '../lib/chat-stream.js';
+import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult, keepLiveTools } from '../lib/chat-stream.js';
 import { bumpFileVersion, versionOfFile } from '../lib/file-versions.js';
 
 // 事件分流判据（名单+过期规则）2026-08-14 抽进 lib/event-router.js 配单测 ——
@@ -477,8 +477,8 @@ export default function ProjectWorkspace() {
       try {
         const { messages: sessionMsgs = [] } = await Sessions.read(id, currentSessionId);
         if (cancelled) return;
-        const display = sessionMessagesToDisplay(sessionMsgs);
-        setMessages(prev => {
+        const rawDisplay = sessionMessagesToDisplay(sessionMsgs);
+        setMessages(prev => { const display = keepLiveTools(prev, rawDisplay);   // 在跑的卡别被历史盖成「被中断」（chat-stream.js）
           if (wsHydratedSidRef.current === currentSessionId) {
             if (import.meta.env.DEV) console.info('[H1] WS hydrate 已接管，跳过 HTTP 兜底');
             return prev;

@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   appendTextDelta, clearThinkingStreaming, reduceChatEvent,
-  mergeLiveTurnSnapshot, mergeHydrated,
+  mergeLiveTurnSnapshot, mergeHydrated, keepLiveTools,
 } from './chat-stream.js';
 
 describe('appendTextDelta', () => {
@@ -130,3 +130,23 @@ describe('mergeHydrated', () => {
     expect(mergeHydrated(cur, display)).toBe(display);
   });
 });
+
+describe('keepLiveTools（09-13 fable 审查 P2-4）', () => {
+  const interrupted = { id: 't1', role: 'tool', toolName: 'Write', status: 'error', interrupted: true, toolError: '没有拿到结果' };
+  it('界面上同 id 的卡还在 running → 留界面那张；没在跑的照历史', () => {
+    const current = [{ id: 't1', role: 'tool', toolName: 'Write', status: 'running' }, { id: 't2', role: 'tool', status: 'success' }];
+    const display = [interrupted, { ...interrupted, id: 't2' }, { id: 'u1', role: 'user', content: 'hi' }];
+    const out = keepLiveTools(current, display);
+    expect(out[0]).toMatchObject({ id: 't1', status: 'running' });
+    expect(out[0].interrupted).toBeUndefined();
+    expect(out[1]).toMatchObject({ id: 't2', interrupted: true });
+    expect(out[2]).toBe(display[2]);
+  });
+  it('没有在跑的卡 → 原样返回同一个数组；mergeHydrated 也走这条', () => {
+    const display = [interrupted];
+    expect(keepLiveTools([], display)).toBe(display);
+    const merged = mergeHydrated([{ id: 't1', role: 'tool', status: 'running' }], display);
+    expect(merged[0]).toMatchObject({ status: 'running' });
+  });
+});
+
