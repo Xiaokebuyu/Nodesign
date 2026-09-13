@@ -14,13 +14,46 @@
  *
  * ## 做法
  *
- * 我们改不了 SDK 那个类型，但 `task_notification` 上带着 **`output_file`** ——
- * 子代理的完整转录 JSONL。所以：报告看起来是空的时候，把转录路径递给主 agent，
- * 让它 Read 一遍把结论捞出来。**从"整轮白烧"变成"多读一个文件"。**
+ * 我们改不了 SDK 那个类型，但子代理的完整对话记录在盘上。报告看起来是空的时候：
+ *   1. （2026-09-13 起）服务端直接用 SDK 的 getSubagentMessages 把它最后几段回复取回来，拼进
+ *      additionalContext —— 主 agent 零额外回合。09-13 探针：task_notification 的 task_id 就是 agentId，
+ *      output_file 指向 tasks/<id>.output 而不是 subagents/ 下的转录，所以不从路径抠 id；
+ *      session_id / cwd 取钩子入参。实测读一份 188KB 子代理转录 7~44ms。
+ *   2. 取不回（没 task_id、读不到、子代理一个字没写）才退回老路：把转录路径递给主 agent 让它自己 Read。
  *
  * ⚠️ 判据故意保守（只在摘要短得不像报告时才提示）：把这句话贴在每次正常的
  * 子代理返回后面是噪音，而噪音会训练 agent 忽略提示。
  */
+
+import { getSubagentMessages } from '@anthropic-ai/claude-agent-sdk';
+import { withConfigDir } from '../../../lib/sdk-session.js';
+import { platform } from '../../../runtime/platform.js';
+
+/** 取回的正文最多拼多少字（够装一份报告，又不至于把主 agent 的上下文冲掉） */
+const RECOVER_MAX_CHARS = 6000;
+
+/** 从 SDK SessionMessage 数组里取最后几段 assistant 文本（按原顺序），总长不超过 maxChars */
+export function lastAssistantTexts(messages, maxChars = RECOVER_MAX_CHARS) {
+  const picked = [];
+  let total = 0;
+  for (let i = (messages || []).length - 1; i >= 0 && total < maxChars; i -= 1) {
+    const m = messages[i];
+    if (m?.type !== 'assistant') continue;
+    const content = m.message?.content;
+    const text = (Array.isArray(content) ? content : [])
+      .filter((c) => c?.type === 'text' && typeof c.text === 'string').map((c) => c.text).join('\n').trim();
+    if (!text) continue;
+    const room = maxChars - total;
+    picked.unshift(text.length > room ? `…${text.slice(text.length - room)}` : text);
+    total += Math.min(text.length, room);
+  }
+  return picked.join('\n\n');
+}
+
+async function readSubagentTail({ sessionId, agentId, dir }) {
+  const msgs = await withConfigDir(platform.claudeConfigDir, () => getSubagentMessages(sessionId, agentId, dir ? { dir } : {}));
+  return lastAssistantTexts(msgs);
+}
 
 /** tool_use_id → 最近一次 task_notification（agent-shared 在收到时写进来） */
 const lastNotification = new Map();
@@ -30,6 +63,7 @@ export function recordTaskNotification(msg) {
   if (!msg?.tool_use_id) return;
   lastNotification.set(msg.tool_use_id, {
     status: msg.status,
+    taskId: msg.task_id || null,          // = 子代理的 agentId（09-13 探针）
     summary: msg.summary || '',
     outputFile: msg.output_file || null,
     toolUses: msg.usage?.tool_uses ?? null,
@@ -49,7 +83,7 @@ let missing = 0;
 /** 报告"看起来是空的"的判据 —— 短于这个就不像一份报告 */
 const SUSPICIOUS_LEN = 200;
 
-export function makePostToolUseSubagentReportRecovery() {
+export function makePostToolUseSubagentReportRecovery({ readTail = readSubagentTail } = {}) {
   return async (input) => {
     const id = input?.tool_use_id;
     if (!id) return {};
@@ -88,7 +122,18 @@ export function makePostToolUseSubagentReportRecovery() {
       lines.push('它**确实干了活**，但最终报告没回传 —— SDK 的子代理触到轮次上限时'
         + '返回的错误类型不带 result 字段，最后那条消息会整个丢掉。');
     }
-    if (note.outputFile) {
+    let recovered = '';
+    if (note.taskId && input?.session_id) {
+      try {
+        recovered = await readTail({ sessionId: input.session_id, agentId: note.taskId, dir: input.cwd });
+      } catch (err) {
+        console.warn(`[subagent-report] 取回子代理 ${note.taskId} 的对话失败，退回让主 agent 自己读：${err?.message}`);
+      }
+    }
+    if (recovered.trim().length > note.summary.trim().length) {
+      lines.push('下面是服务端从它的对话记录里取回的最后几段回复，**据此继续，不要整轮重派**：');
+      lines.push(`<subagent_last_replies>\n${recovered}\n</subagent_last_replies>`);
+    } else if (note.outputFile) {
       lines.push(`完整转录在 \`${note.outputFile}\`。**Read 它取回结论，不要整轮重派** ——`
         + '相关 token 已消耗，重跑只会再次消耗。转录是 JSONL，从后往前读最快。');
     } else {
