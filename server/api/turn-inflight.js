@@ -42,3 +42,30 @@ export function lruPut(requestId, rec) {
   requestLru.set(requestId, { ...rec, ts: Date.now() });
 }
 
+/**
+ * 登记 in-flight 并兜住所有早退（09-13 fable 审查第三轮 P1-1）。
+ * 登记之后 turn.js 还有一串早退（跨租户 404、回退中 409、模型锁 403、额度 429…），以前只有外审 451 和 catch
+ * 两处记得 reject + 清条目；其余早退后，同 requestId 的重发会一直 await 一个永远不 settle 的承诺（前端 jsonRequest 无超时），
+ * 条目也泄漏。这里在**服务端结束响应**的那一刻兜底：还没 resolve 就 reject 并清条目，重发 fallthrough 自己重跑。
+ * ⚠️ 挂 res.end 而不是 'close'：客户端弱网先断开第一发时 'close' 会提前触发，重发就绕过去重多跑一轮。
+ * @param {string} requestId
+ * @param {{ end: Function }} res
+ * @returns {{ resolve: (v: object) => void, reject: (err: Error) => void }}
+ */
+export function registerInflight(requestId, res) {
+  let settled = false; let rs; let rj;
+  const p = new Promise((a, b) => { rs = a; rj = b; });
+  p.catch(() => {});   // 防 unhandled rejection
+  inflightTurns.set(requestId, p);
+  const drop = () => { if (inflightTurns.get(requestId) === p) inflightTurns.delete(requestId); };
+  const end = res.end;
+  res.end = function patchedEnd(...args) {
+    if (!settled) { settled = true; rj(new Error('turn ended without a run')); drop(); }
+    return end.apply(this, args);
+  };
+  return {
+    resolve: (v) => { if (settled) return; settled = true; rs(v); setTimeout(drop, INFLIGHT_RETENTION_MS); },
+    reject: (err) => { if (settled) return; settled = true; rj(err); drop(); },
+  };
+}
+

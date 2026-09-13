@@ -47,7 +47,7 @@ import {
 } from '../engine/runs/active-runs.js';
 import { pushUserMessage, getQueueDepth } from '../engine/runs/turn-relay.js';
 import { applySessionModel, resolveSessionModel } from '../engine/agent/session-model.js'; import { applySessionEffort } from './session-effort.js';
-import { lruGet, lruPut, inflightTurns, INFLIGHT_RETENTION_MS } from './turn-inflight.js';
+import { lruGet, lruPut, inflightTurns, registerInflight } from './turn-inflight.js';
 import { allowedModelsFor, modelLockFor, defaultModelFor, modelIsFree, hasSubscriptionAccess, resolveModelRoute, canonicalModelId } from '../engine/agent/model-context.js';
 import { modelSwitchRejection } from '../engine/agent/model-switch-rules.js';   // 换模型的闸 09-10 拆出去了
 import { AsyncQueue } from '../lib/async-queue.js';
@@ -148,11 +148,8 @@ router.post('/:pid/turn', async (req, res, next) => {
           }
         } catch { /* first POST failed → fall through 让本 POST 重新跑 */ }
       }
-      // 注册 in-flight Promise，后到的同 requestId POST 会 await 这个
-      const p = new Promise((rs, rj) => { inflightResolve = rs; inflightReject = rj; });
-      inflightTurns.set(requestId, p);
-      // 防 promise unhandled rejection 警告：失败时也 attach catch
-      p.catch(() => {});
+      // 注册 in-flight Promise，后到的同 requestId POST 会 await 这个；下面任何早退结束响应时自动 reject 并清条目（turn-inflight.js）
+      ({ resolve: inflightResolve, reject: inflightReject } = registerInflight(requestId, res));
     }
     // permissionMode 请求字段保留兼容老前端，但不再参与决定（plan mode 08-21 整体移除）：
     // 启动 mode 一律 platform 默认（生产 bypassPermissions / exp auto）。
@@ -371,10 +368,7 @@ router.post('/:pid/turn', async (req, res, next) => {
     // entry（让 LRU 接管后续 dedup 查询）。
     if (typeof requestId === 'string' && requestId) {
       lruPut(requestId, { pid: project.id, runId: run.id, sessionId: sid, userMessageId: userMsgUuid });
-      if (inflightResolve) {
-        inflightResolve({ pid: project.id, runId: run.id, sessionId: sid, userMessageId: userMsgUuid });
-      }
-      setTimeout(() => inflightTurns.delete(requestId), INFLIGHT_RETENTION_MS);
+      if (inflightResolve) inflightResolve({ pid: project.id, runId: run.id, sessionId: sid, userMessageId: userMsgUuid });   // 5s 后清条目在 resolve 里
     }
 
     // 立即返回，agent 后台跑
