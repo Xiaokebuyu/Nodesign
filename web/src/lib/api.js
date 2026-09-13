@@ -411,7 +411,7 @@ export const Turn = {
    *   - 显式 null → 新建 session（用户点"+ 新会话"后第一次发）
    * permissionMode：保留字段兼容，后端已忽略（plan mode 2026-08-21 整体移除，一律 platform 默认）
    */
-  send: async ({ pid, chat, attachments = [], skillId, sessionId, permissionMode, requestId, raw, model, userMessageUuid }) => {
+  send: async ({ pid, chat, attachments = [], skillId, sessionId, permissionMode, requestId, raw, model, effort, userMessageUuid }) => {
     // Phase A.6（2026-05-07）：requestId 幂等防重发。
     // 弱网下用户可能点两次发送或 fetch 超时自动重试。后端 LRU 同 requestId 直接返
     // 已存在的 { runId, sessionId } 不重复创建 session/run。
@@ -421,7 +421,7 @@ export const Turn = {
     if (permissionMode) body.permissionMode = permissionMode;
     // 模型选择（2026-07-29）：随消息下发，服务端写 session-config 并在空闲时
     // 重启 query 生效。不传 = 跟随该会话已有配置 / 服务端默认
-    if (model) body.model = model;
+    if (model) body.model = model; if (effort) body.effort = effort;   // effort：新会话带思考等级偏好（09-13）
     if (raw === true) body.raw = true;   // 斜杠命令直达（/compact 等），跳过消息装饰
     // 这条用户消息的 uuid（2026-08-30）：调用方先生成、乐观气泡拿它当 id，服务端
     // 原样盖到 SDKUserMessage.uuid 上、CLI 原样写进 jsonl。于是「回到此处」「从这里
@@ -499,8 +499,8 @@ export const Sessions = {
    *  model = 生效值；override = 会话自己选过的（null 表示跟随全局默认）。 */
   model: (pid, sid) => jsonRequest('GET', `/api/projects/${pid}/sessions/${sid}/model`),
   /** 设这个会话的模型；传 null 清掉覆盖回到全局默认。服务端顺带让空闲 query 重启。 */
-  setModel: (pid, sid, model) =>
-    jsonRequest('PUT', `/api/projects/${pid}/sessions/${sid}/model`, { model: model ?? null }),
+  setModel: (pid, sid, model, effort) =>   // model 传 undefined = 只改思考等级（09-13）；effort 传 null = 回到模型默认档
+    jsonRequest('PUT', `/api/projects/${pid}/sessions/${sid}/model`, { ...(model !== undefined ? { model: model ?? null } : {}), ...(effort !== undefined ? { effort } : {}) }),
   /** 按需查这个 session 现在装了多少上下文（composer [+] 菜单展开时打）。
    *  query 活着就是 SDK 现问的权威值（live:true）；已经结束则是最后记住的一次；
    *  两者都没有 → null（从没跑过 turn / 服务端重启过）。 */

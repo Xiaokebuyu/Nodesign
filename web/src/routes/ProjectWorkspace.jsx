@@ -640,6 +640,7 @@ export default function ProjectWorkspace() {
           // session-config，picker 直接改那边。每条消息都捎上本地偏好的话，在另一台
           // 机器上为这个会话选的模型会被本机的旧偏好悄悄改回去。
           model: sidForRequest ? undefined : (useGlobalStore.getState().modelPref || undefined),
+          effort: sidForRequest ? undefined : (useGlobalStore.getState().effortPrefs?.[useGlobalStore.getState().modelPref] || undefined),   // 思考等级偏好同理（09-13）
         });
         setCurrentRunId(runId);
         setActiveRun({ pid: id, runId });  // A4.3：让 AskUserQuestionView 直 POST /answer
@@ -1396,6 +1397,7 @@ export default function ProjectWorkspace() {
         sessionId: sidForRequest,
         // 同上：已有会话时不带 model（真相在 session-config，picker 直接改那边）
         model: sidForRequest ? undefined : (useGlobalStore.getState().modelPref || undefined),
+        effort: sidForRequest ? undefined : (useGlobalStore.getState().effortPrefs?.[useGlobalStore.getState().modelPref] || undefined),   // 思考等级偏好同理（09-13）
       });
       // 追加修（2026-08-05）：只有此刻没有 turn 在跑才立即认领新 runId。
       // agent 跑着时追加，服务端是把这条排进 inputQueue，当前流上的事件还都

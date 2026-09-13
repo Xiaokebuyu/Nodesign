@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Check, Loader2, Lock } from 'lucide-react';
+import { Check, Loader2, Lock, ChevronRight } from 'lucide-react';
 import { COLOR, GAP, RADIUS, SHADOW, FONT_SANS, FONT_MONO, FONT_SIZE } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { Sessions, Me } from '../../lib/api.js';
@@ -39,6 +39,16 @@ import { t } from '../../lib/i18n.js';
  * 这不是损失（想要哪个直接点哪个），但**如果以后清单变长、或者 NODESIGN_MODEL
  * 要当成一个能被跟随的档位**，这一档得连同它的语义一起加回来，别只加个按钮。
  */
+
+/**
+ * 思考等级（2026-09-13 站主：嵌进模型选择器，指针移到某个模型上自动再展开一层）。
+ * 服务端清单里可调的行带 efforts（从低到高）/ defaultEffort，算法在 server/engine/agent/model-effort.js 一份；
+ * 这里只负责展示和发请求：有会话 → PUT 会话（空闲时服务端 applyFlagSettings 当场生效）；没会话 → 按模型记本地偏好，
+ * 新建会话时随 body.effort 带过去。
+ */
+const effortLabel = (l) => ({ low: t('低'), medium: t('中'), high: t('高'), xhigh: t('更高'), max: t('最高') }[l] || l);
+/** 二级菜单宽度：右边放不下放左边，两边都放不下（手机）就在行下方展开 */
+const FLYOUT_W = 132;
 
 /** 重档模型（按钮画成实心的那一档）—— 判 id 不判位置，清单换序不会跟着错 */
 const isHeavy = (id) => /opus/i.test(String(id || ''));
@@ -104,6 +114,8 @@ export default function ModelPicker({
 }) {
   const modelPref = useGlobalStore(s => s.modelPref);
   const setModelPref = useGlobalStore(s => s.setModelPref);
+  const effortPrefs = useGlobalStore(s => s.effortPrefs);
+  const setEffortPref = useGlobalStore(s => s.setEffortPref);
   const showToast = useGlobalStore(s => s.showToast);
   const confirmDialog = useGlobalStore(s => s.confirm);
   const [open, setOpen] = useState(false);
@@ -161,8 +173,14 @@ export default function ModelPicker({
    * （remote 回了个空 model 之类），不是设计里的一条路。
    */
   const effective = (hasSession ? remote?.model : modelPref) || options[0]?.id || null;
+  /** 现在的思考等级：有会话看服务端算好的；没会话看本地偏好（不在这个模型的可选档里就用它的默认档）。不可调的模型 → null */
+  const effectiveOpt = options.find((o) => o.id === effective);
+  const localEffort = effortPrefs?.[effective];
+  const effectiveEffort = !effectiveOpt?.efforts ? null
+    : hasSession ? (remote?.effort || effectiveOpt.defaultEffort || null)
+      : (effectiveOpt.efforts.includes(localEffort) ? localEffort : effectiveOpt.defaultEffort || null);
 
-  const select = useCallback(async (id) => {
+  const select = useCallback(async (id, effort) => {
     setOpen(false);
     // 看得见选不了的订阅行（08-21 公开注册号）：弹框说清楚是更高档位，不发请求。
     // 口径（08-21 深夜）：pro 不对外分发，留着锁行只是让人知道有更高档，文案不给任何"去哪里拿资格"的路径
@@ -181,11 +199,28 @@ export default function ModelPicker({
       });
       return;
     }
-    if (!hasSession) { setModelPref(id); return; }
-    // 点的就是正在跑的那个 → 什么也不做。别拿"覆盖字段是不是空"当判据：override
+    if (!hasSession) { setModelPref(id); if (effort) setEffortPref(id, effort); return; }
+    // 点的就是正在跑的那个 → 模型不动。别拿"覆盖字段是不是空"当判据：override
     // 为 null 时写一次会让 changed=true，服务端顺手把空闲的 query 关掉重开，
     // 而模型压根没变 —— 用户只是点了一下确认。
-    if (id === effective) return;
+    // 只换思考等级（09-13）：不换模型就不作废缓存，不弹代价提示，服务端当场 applyFlagSettings
+    if (id === effective) {
+      if (!effort || effort === effectiveEffort) return;
+      const prevRemote = remote;
+      setSaving(true);
+      setRemote((r) => ({ ...(r || {}), effort }));
+      try {
+        const r = await Sessions.setModel(projectId, sessionId, undefined, effort);
+        setRemote((cur) => ({ ...(cur || {}), effort: r.effort ?? effort }));
+        setEffortPref(id, effort);
+      } catch (err) {
+        setRemote(prevRemote);
+        showToast(`${t('切换思考等级失败')}：${err.message}`, 'error');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     // 大上下文切模型要重新过一遍缓存，先把代价说清楚再让他按
     if (contextTokens >= WARN_FROM_TOKENS) {
       const est = contextTokens * COLD_START_USD_PER_TOKEN;
@@ -206,17 +241,18 @@ export default function ModelPicker({
     // 乐观更新：点完立刻变，失败再退回去
     setRemote(r => ({ ...(r || {}), override: id, model: id || r?.default || null }));
     try {
-      const r = await Sessions.setModel(projectId, sessionId, id);
+      const r = await Sessions.setModel(projectId, sessionId, id, effort);
       setRemote(r);
       // 本地偏好跟着走：下次在别处新建会话时用同一个选择
       setModelPref(id);
+      if (effort) setEffortPref(id, effort);
     } catch (err) {
       setRemote(prev);
       showToast(`切换模型失败：${err.message}`, 'error');
     } finally {
       setSaving(false);
     }
-  }, [hasSession, effective, remote, projectId, sessionId, setModelPref, showToast, contextTokens, options, confirmDialog]);
+  }, [hasSession, effective, effectiveEffort, remote, projectId, sessionId, setModelPref, setEffortPref, showToast, contextTokens, options, confirmDialog]);
 
   const full = none ? t('未配置模型') : shortLabel(effective, options);
   // compact = 调用方说"这儿地方窄"。⭐ 由调用方判而不是这儿读视口：真正约束它的是
@@ -260,6 +296,8 @@ export default function ModelPicker({
           cursor: busy ? 'not-allowed' : 'pointer',
           opacity: busy ? 0.5 : 1,
           transition: 'all 0.15s',
+          // 宽度失控（09-13 站主）：长模型名 + 档位后缀会把工具栏撑开，按钮封顶、名字省略
+          maxWidth: 240, minWidth: 0,
         }}
       >
         {/* 图标是**这个模型出自谁家**的标（ui/ModelMark.jsx），不是通用 CPU 图标：接了
@@ -268,12 +306,14 @@ export default function ModelPicker({
         {saving
           ? <Loader2 size={11} style={{ animation: 'nd-model-spin 0.9s linear infinite' }} />
           : <ModelMark brand={brand} size={12} color={heavy ? COLOR.btnText : undefined} />}
-        {label}
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{label}</span>
+        {effectiveEffort && <span data-testid="effort-badge" style={{ flexShrink: 0, opacity: 0.75, fontWeight: 400 }}>· {effortLabel(effectiveEffort)}</span>}
       </button>
 
       <Popover open={open} anchorRef={ref} onClose={close} placement={menuPlacement === 'down' ? 'down' : 'up'} align="left" role="listbox">
         <div style={{
-          minWidth: 240,
+          // 宽度失控（09-13）：原来只有 minWidth，最长那行描述多长菜单就多宽。封顶，描述折行
+          width: Math.min(320, (typeof window !== 'undefined' ? window.innerWidth : 360) - 32), boxSizing: 'border-box',
           background: COLOR.bgWhite,
           borderRadius: 2,
           boxShadow: SHADOW.pop,
@@ -295,6 +335,10 @@ export default function ModelPicker({
               desc={o.locked ? `${o.lockReason || t('仅限 Pro 档')} · ${o.desc}` : o.desc}
               locked={!!o.locked}
               onClick={() => select(o.id)}
+              efforts={o.locked ? null : o.efforts}
+              defaultEffort={o.defaultEffort}
+              currentEffort={effective === o.id ? effectiveEffort : (effortPrefs?.[o.id] || null)}
+              onPickEffort={(level) => select(o.id, level)}
             />
           ))}
           <div style={{
@@ -313,32 +357,103 @@ export default function ModelPicker({
   );
 }
 
-function Option({ active, label, desc, locked = false, onClick }) {
+function Option({ active, label, desc, locked = false, onClick, efforts = null, defaultEffort = null, currentEffort = null, onPickEffort }) {
+  const [sub, setSub] = useState(false);
+  const [side, setSide] = useState('right');
+  const rowRef = useRef(null);
+  const tunable = Array.isArray(efforts) && efforts.length > 1;
+  // 有鼠标的设备指针移上去就展开；触屏没有 hover，点行尾的箭头展开（点行本身仍是选这个模型）
+  const canHover = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: hover)').matches;
+  const openSub = () => {
+    if (!tunable) return;
+    const r = rowRef.current?.getBoundingClientRect?.();
+    const vw = typeof window !== 'undefined' ? window.innerWidth : 0;
+    if (r && vw) setSide(r.right + FLYOUT_W <= vw - 8 ? 'right' : (r.left - FLYOUT_W >= 8 ? 'left' : 'inline'));
+    setSub(true);
+  };
   return (
-    <button
-      onClick={onClick}
-      style={{
-        width: '100%',
-        display: 'flex', alignItems: 'flex-start', gap: GAP.sm,
-        padding: `${GAP.sm}px ${GAP.md}px`,
-        background: 'transparent', border: 'none', borderRadius: RADIUS.sm,
-        cursor: 'pointer', textAlign: 'left',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(43,33,23,0.04)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+    <div
+      ref={rowRef}
+      style={{ position: 'relative' }}
+      onMouseEnter={canHover ? openSub : undefined}
+      onMouseLeave={canHover ? () => setSub(false) : undefined}
     >
-      <span style={{ width: 13, flexShrink: 0, marginTop: GAP.xxs }}>
-        {active && <Check size={12} color={COLOR.text} />}
-        {!active && locked && <Lock size={11} color={COLOR.sub} />}
-      </span>
-      <span style={{ flex: 1 }}>
-        <span style={{ display: 'block', fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, fontWeight: 500, color: locked ? COLOR.sub : COLOR.text }}>
-          {label}
+      <button
+        onClick={onClick}
+        style={{
+          width: '100%',
+          display: 'flex', alignItems: 'flex-start', gap: GAP.sm,
+          padding: `${GAP.sm}px ${GAP.md}px`,
+          background: sub ? 'rgba(43,33,23,0.04)' : 'transparent', border: 'none', borderRadius: RADIUS.sm,
+          cursor: 'pointer', textAlign: 'left',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(43,33,23,0.04)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+      >
+        <span style={{ width: 13, flexShrink: 0, marginTop: GAP.xxs }}>
+          {active && <Check size={12} color={COLOR.text} />}
+          {!active && locked && <Lock size={11} color={COLOR.sub} />}
         </span>
-        <span style={{ display: 'block', fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub, marginTop: 1 }}>
-          {desc}
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontFamily: FONT_MONO, fontSize: FONT_SIZE.sm, fontWeight: 500, color: locked ? COLOR.sub : COLOR.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {label}
+          </span>
+          <span style={{ display: 'block', fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub, marginTop: 1 }}>
+            {desc}
+          </span>
         </span>
-      </span>
-    </button>
+        {tunable && (
+          <span
+            role="button"
+            aria-label={t('思考等级')}
+            data-testid="effort-toggle"
+            onClick={(e) => { e.stopPropagation(); if (sub) setSub(false); else openSub(); }}
+            style={{ flexShrink: 0, alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 2, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}
+          >
+            {currentEffort ? effortLabel(currentEffort) : null}
+            <ChevronRight size={11} color={COLOR.sub} />
+          </span>
+        )}
+      </button>
+      {tunable && sub && (
+        <div
+          role="menu"
+          data-testid="effort-menu"
+          style={side === 'inline'
+            ? { padding: `0 ${GAP.md}px ${GAP.xs}px ${GAP.md + 13 + GAP.sm}px`, display: 'flex', flexWrap: 'wrap', gap: GAP.xs }
+            : {
+              position: 'absolute', top: 0, [side === 'right' ? 'left' : 'right']: '100%', width: FLYOUT_W,
+              background: COLOR.bgWhite, borderRadius: 2, boxShadow: SHADOW.pop, padding: GAP.xs, zIndex: 1,
+            }}
+        >
+          {side !== 'inline' && (
+            <div style={{ padding: `${GAP.xxs}px ${GAP.sm}px`, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{t('思考等级')}</div>
+          )}
+          {efforts.map((level) => {
+            const on = currentEffort === level;
+            return (
+              <button
+                key={level}
+                role="menuitemradio"
+                aria-checked={on}
+                onClick={(e) => { e.stopPropagation(); onPickEffort?.(level); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: GAP.xs, width: side === 'inline' ? 'auto' : '100%',
+                  padding: `${GAP.xs}px ${GAP.sm}px`, border: side === 'inline' ? `1px solid ${on ? COLOR.text : COLOR.borderMd}` : 'none',
+                  borderRadius: RADIUS.sm, background: 'transparent', cursor: 'pointer', textAlign: 'left',
+                  fontFamily: FONT_SANS, fontSize: FONT_SIZE.sm, color: COLOR.text,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(43,33,23,0.04)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                {side !== 'inline' && <span style={{ width: 12, flexShrink: 0 }}>{on && <Check size={11} color={COLOR.text} />}</span>}
+                <span style={{ flex: 1 }}>{effortLabel(level)}</span>
+                {level === defaultEffort && <span style={{ fontSize: FONT_SIZE.xs, color: COLOR.sub }}>{t('默认')}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
