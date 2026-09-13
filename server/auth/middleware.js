@@ -3,7 +3,7 @@
  *
  * - GET  /api/auth/status   → {required, authed, user, profile}（前端 AuthGate 用，永远放行；本地版靠它知道没有登录墙）
  * - PUT  /api/auth/locale   → 记住界面语言（登录用户写账号；本地版 LOCAL_OWNER 不在表里，写了也是 noop）
- * - POST /api/auth/logout   → 清 cookie
+ * - POST /api/auth/logout   → 退出登录（hosted 吊销会话行；本地版只清 cookie）
  * - authGuard：其余 /api/* 无有效身份一律 401；有则挂 req.user（本地版由 session.requestUser 给 LOCAL_OWNER）
  *
  * 登录 / 注册（带暴力破解防护、开放注册的 IP 限流）只有多用户站才有，在 server/hosted/auth-routes.js，
@@ -12,7 +12,7 @@
  */
 
 import express from 'express';
-import { authEnabled, requestUser, cookieClear } from './session.js';
+import { authEnabled, requestAuth, requestUser, logoutRequest } from './session.js';
 import { openRegistrationEnabled, updateUser } from './users-store.js';
 import { relayCatalog, relayConfig, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 import { loadPrefs } from '../runtime/local-prefs.js';
@@ -21,7 +21,11 @@ import { platform } from '../runtime/platform.js';
 import { msg } from '../shared/messages.js';
 
 // locale：界面语言偏好，null = 没表过态（前端这时落浏览器语言，见 lib/i18n.js detect）
-export const publicUser = (u) => (u ? { id: u.id, username: u.username, role: u.role, locale: u.locale ?? null } : null);
+export const publicUser = (u) => (u ? {
+  id: u.id, username: u.username, role: u.role, locale: u.locale ?? null,
+  // 09-13 auth-v2：账号页 / 老用户补绑提示用。只回给本人（status / 登录响应），别塞进公开接口
+  email: u.email ?? null, hasPassword: u.hasPassword ?? true,
+} : null);
 
 /** 本地版：站点账号登录态（AuthGate 据此决定首启是不是先要登录）。loggedIn = .env 里有令牌；whoami 拉到了才有身份 */
 export function desktopLoginState() {
@@ -39,7 +43,9 @@ export function desktopLoginState() {
 export const authRouter = express.Router();
 
 authRouter.get('/status', (req, res) => {
-  const user = requestUser(req);
+  const auth = requestAuth(req);
+  auth?.onResponse?.(res);   // 续期 / 旧 token 换发成服务端会话（hosted/auth/sessions-store.js）
+  const user = auth?.user ?? null;
   // profile：前端据此藏 SaaS 那套界面（账号徽记 / 额度横幅 / 管理入口）。local = 本地单租户分发版
   res.json({
     required: authEnabled(), authed: !!user, user: publicUser(user), openRegistration: openRegistrationEnabled(), profile: platform.profile,
@@ -68,16 +74,18 @@ authRouter.put('/locale', (req, res) => {
   res.json({ ok: true, locale: locale ?? null });
 });
 
-authRouter.post('/logout', (_req, res) => {
-  res.setHeader('Set-Cookie', cookieClear());
+authRouter.post('/logout', (req, res) => {
+  logoutRequest(req, res);   // hosted：吊销当前会话行 + 断开它的 WebSocket；本地版：只清 cookie
   res.json({ ok: true });
 });
 
 /** 挂在业务路由之前的守卫：验身份 + 挂 req.user */
 export function authGuard(req, res, next) {
-  const user = requestUser(req);
-  if (user) {
-    req.user = user;
+  const auth = requestAuth(req);
+  if (auth?.user) {
+    auth.onResponse?.(res);
+    req.user = auth.user;
+    req.auth = auth;   // sessionId / kind：账号页判「刚登录过」、列会话时标出当前这条
     return next();
   }
   res.status(401).json({ error: 'unauthorized', code: 'AUTH_REQUIRED' });

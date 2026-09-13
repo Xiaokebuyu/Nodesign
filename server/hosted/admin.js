@@ -22,6 +22,7 @@
  */
 
 import express from 'express';
+import { revokeUserSessions } from './auth/sessions-store.js';
 import { createInvite, listInvites, getInvite, updateInvite } from './users-write.js';
 import { getUserById, listUsers, updateUser } from '../auth/users-store.js';
 import { modeStats } from '../projects/store.js';
@@ -132,7 +133,10 @@ router.patch('/users/:id', (req, res) => {
     }
     patch[key] = v === null ? null : Number(v);
   }
-  res.json({ user: updateUser(user.id, patch) });
+  const updated = updateUser(user.id, patch);
+  // 停用 = 所有网页登录立刻失效、已打开的连接断开（设备令牌在 verifyDeviceToken 里按 disabled 判，不用逐台吊）
+  if (patch.disabled === true) revokeUserSessions(user.id);
+  res.json({ user: updated });
 });
 
 // ── 站内公告（2026-07-31）──

@@ -15,8 +15,15 @@ import { mountRelay } from './relay/router.js';
 import { hostedAuthRouter } from './auth-routes.js';
 import { bootstrapAuth } from './users-write.js';
 import { authEnabled } from '../auth/users-store.js';
+import { installSessionBackend } from '../auth/session.js';
+import { resolveRequest, logoutRequest } from './auth/sessions-store.js';
+import { warnIfMailUnconfigured } from './auth/mailer.js';
 
 export function mountHostedEarly(app) {
+  // 服务端会话（09-13 auth-v2）：内核的 requestAuth 从这一刻起按会话表解析身份。放在最早的钩子里，
+  // 保证 relay、WS 升级、任何请求进来之前后端已经装好
+  installSessionBackend({ resolve: resolveRequest, logout: logoutRequest });
+  warnIfMailUnconfigured();
   // 外审没有 OPENAI_API_KEY 就整道跳过（fail-open）—— 那条告警 lib/moderation.js 加载时已经喊过，这里不重复。
   mountRelay(app, '/api/relay');
 }
@@ -54,6 +61,8 @@ export async function mountHostedLate(app) {
   setPluginOriginPolicy(marketOriginPolicy);
   app.use('/api/admin', adminRouter);
   app.use('/api/me/devices', devicesRouter);   // 跟内核的 /api/me 各管各的前缀，先后无所谓
+  const { default: accountRouter } = await import('./auth/account-routes.js');
+  app.use('/api/me/account', accountRouter);   // 账号与安全（09-13 auth-v2）
   // skill 市场（09-08）：网页入口。桌面版的入口在 relay/router.js 里挂的 /api/relay/market，同一份处理函数
   app.use('/api/market', createMarketRouter({ userOf: (req) => req.user, source: 'web' }));
 }
