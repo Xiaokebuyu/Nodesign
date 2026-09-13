@@ -33,7 +33,18 @@ describe('web_search 之后的调查协议（PostToolBatch）', () => {
 
   it('装配：挂在 PostToolBatch，PostToolUse 里不再有 web_search 条目（不许两处都注）', () => {
     const hooks = createHooks({});
-    expect(hooks.PostToolBatch?.[0]?.hooks?.length).toBe(1);
+    // 09-13 同一条目里还挂着按轮数的循环检测（post-loop-guard.js），两个钩子并行跑、各自的 additionalContext 模型都收得到（真跑探针）
+    expect(hooks.PostToolBatch?.[0]?.hooks?.length).toBe(2);
     expect((hooks.PostToolUse || []).some((e) => /web_search/.test(e.matcher || ''))).toBe(false);
+  });
+
+  it('装配：循环检测挂在 PostToolBatch（一条消息里并行 6 次同一工具不算循环，连续 6 轮才算）', async () => {
+    const hooks = createHooks({});
+    const run = async (b) => Promise.all(hooks.PostToolBatch[0].hooks.map((h) => h(b)));
+    const six = batch(...Array(6).fill('mcp__nodesign__read_board'));
+    expect((await run(six)).every((o) => !o?.hookSpecificOutput)).toBe(true);
+    for (let i = 2; i <= 5; i++) await run(batch('mcp__nodesign__read_board'));
+    const outs = await run(batch('mcp__nodesign__read_board'));
+    expect(outs.map((o) => o?.hookSpecificOutput?.additionalContext || '').join('')).toContain('连续 6 轮');
   });
 });

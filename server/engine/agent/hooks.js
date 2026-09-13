@@ -69,7 +69,7 @@ import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.
 import { createRoleRoster } from './cast.js';
 import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './hooks/resident-role-lifecycle.js';
 import { makePostToolUseSlotAliasHandler } from './hooks/slot-alias.js';
-import { makePostToolUseLoopGuard } from './hooks/post-loop-guard.js';
+import { makePostToolBatchLoopGuard } from './hooks/post-loop-guard.js';
 import { makePostToolBatchWebSearchProtocol } from './hooks/post-web-search.js';
 import { makePreToolUsePerformanceLogGuard } from './hooks/pre-performance-log-guard.js';
 import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-guard.js';
@@ -292,8 +292,6 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // PostToolUse —— 按 MCP 工具名分别注 additionalContext，引导 agent 利用
     // 工具结果。matcher 字段是 SDK 标准（与 PreToolUse 'Bash' 同语义）。
     PostToolUse: [
-      // 循环检测（09-08 诊断埋点）：同一工具连调 6 次记 auto 问题 + 提醒 agent 换办法（post-loop-guard.js）
-      { hooks: [makePostToolUseLoopGuard({ projectId, sessionId })] },
       // 演员位实例学名（2026-08-28 重构）：hook input 没有实例名字段，名字只在
       // 派发/唤醒的 tool_result 里露面 —— 从那里学 agentId→实例名（slot-alias.js）。
       // 收件箱、板书署名、退场标记全靠这张表把 rp-actor 解析回具体角色。
@@ -398,7 +396,9 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
 
     // PostToolBatch —— 同一条消息的全部工具结束后触发一次（2026-09-13）。上网调查协议从 PostToolUse 挪来：
     // 一条消息连发几次 web_search 只注一次（第一批整份协议，之后一句「下一步必须打开候选」）
-    PostToolBatch: [{ hooks: [makePostToolBatchWebSearchProtocol()] }],
+    // 循环检测（09-08 诊断埋点，09-13 从 PostToolUse 挪来按轮数）：同一工具连调 6 轮记 auto 问题 + 提醒换办法。
+    // 按次数数的话，一条消息里并行 6 张图就会被误报成循环（post-loop-guard.js）
+    PostToolBatch: [{ hooks: [makePostToolBatchWebSearchProtocol(), makePostToolBatchLoopGuard({ projectId, sessionId })] }],
 
     // 审计型（2026-09-13，hooks/sdk-audit.js）：只留痕不改行为。StopFailure 按错误类型进问题库；
     // Notification 记类型；模型切换记来源，CLI 自动切（source=auto）进问题库。
