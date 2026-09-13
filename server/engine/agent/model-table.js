@@ -439,6 +439,9 @@ export const MODELS_BUILTIN = Object.freeze([
       // 全站共用一把 nvapi 钥匙，这也是它先 gate localGen 的原因之一。想改回快档就是这一个字段。
       // helper 那行走自己的档（deepseek-v4-flash-helper 的 low），不受这里影响。
       reasoningEffort: 'max',
+      // 用户可选的思考等级（09-13 实测）：上游严格校验，medium 回 400「supported values are low, high, and max」；
+      // 同题 low 82-94s 出结果，high / max 各两发 240s 内都没回 → 档位真在起作用。默认仍 max
+      efforts: ['low', 'high', 'max'],
       prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },   // 开发者档不计费，真限流的是速率不是钱
     },
   },
