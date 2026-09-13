@@ -62,3 +62,16 @@ export function agentInheritedEnv(env = process.env) {
   }
   return out;
 }
+
+/**
+ * 产品口径的 CLI 行为开关（2026-09-13）：会跑回合的 agent CLI 都盖上（会话 CLI、演出进程）。
+ * 跟上面的「剔除表」是两件事：那边管不许漏进去什么，这边管我们主动定的行为。
+ *
+ * - CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK：CLI 默认在（Fable 级）模型拒答时把会话自动换到 claude-opus-4-8 / claude-opus-5
+ *   重试。跟「不可用不自动换线、出口名跟展示名分开」的定案冲突（[[nodesign-api-model-routing]]）。
+ *   09-13 查链路：模型表没有 Fable 行、spoof 别名都是 opus/sonnet 名，API 通路陌生名会被 ingress 改道 fast 行，
+ *   眼下触发不了；关掉是防以后加行时静默换线。拒答本身由 sdk-notices.js 记问题库 + toast。
+ */
+export const AGENT_CLI_POLICY_ENV = Object.freeze({
+  CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: '1',
+});

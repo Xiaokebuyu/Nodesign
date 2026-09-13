@@ -31,6 +31,8 @@
  *   run.files_persisted        { files: [{ filename, file_id }], failed }  agent 写完文件
  *   run.memory_recall          { mode, memories }                          自动 memory 召回
  *   run.notification           { key, text, priority }                     系统通知（弹 toast）
+ *   run.permission_denied      { toolName, toolUseId, reasonType, reason }  工具调用被自动拒绝（留痕）
+ *   run.conversation_reset     { newConversationId }                       SDK 会话重置
  *   run.session_state          { state: 'idle' | 'running' | 'requires_action' }
  *   run.system_init            { agents, tools, mcp_servers, model, ... }  init 元信息
  *   run.hook.started           { hookName, hookEvent }                     hook 生命周期（仅 includeHookEvents）
@@ -260,6 +262,9 @@ export const Events = {
     type: 'run.notification', key, text, priority, color, timeoutMs,
   }),
   sessionState: (state) => ({ type: 'run.session_state', state }),
+  // 09-13 接上的 SDK 消息（sdk-notices.js）：自动拒绝留痕、会话重置
+  permissionDenied: (info) => ({ type: 'run.permission_denied', ...info }),
+  conversationReset: (newConversationId) => ({ type: 'run.conversation_reset', newConversationId }),
   systemInit: (info) => ({ type: 'run.system_init', info }),
   hookStarted: (hookName, hookEvent) => ({ type: 'run.hook.started', hookName, hookEvent }),
   hookResponse: (hookName, hookEvent, outcome, output, exitCode) => ({

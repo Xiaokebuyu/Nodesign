@@ -100,6 +100,7 @@ import { makePostToolUseCanvasValidationHandler } from './hooks/canvas-validate.
 import { makePostToolUseSiteValidationHandler } from './hooks/site-validate.js';
 import { makePostToolUseFailureHandler } from './hooks/failure.js';
 import { makePostToolUseSubagentReportRecovery } from './hooks/post-subagent-report.js';
+import { makeStopFailureAudit, makeNotificationAudit, makeModelSwitchAudit } from './hooks/sdk-audit.js';
 
 /**
  * 工厂：根据当前 run 上下文 + workspace 路径生成 hooks 配置。
@@ -390,6 +391,14 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // 那个只 emit 事件不返输出，两者不抢 systemMessage。见 resident-role-lifecycle.js
       hooks: [makeSubagentStopHandler({ ctx, sessionId }), makeSubagentStopRoleNotice({ projectId })],
     }],
+
+    // 审计型（2026-09-13，hooks/sdk-audit.js）：只留痕不改行为。StopFailure 按错误类型进问题库；
+    // Notification 记类型；模型切换记来源，CLI 自动切（source=auto）进问题库。
+    // ⛔ SessionEnd 不挂：09-13 真跑探针，query.close() 与输入流正常结束两种收场都不触发 SDK 回调型钩子。
+    StopFailure: [{ hooks: [makeStopFailureAudit({ projectId, sessionId })] }],
+    Notification: [{ hooks: [makeNotificationAudit({ sessionId })] }],
+    PreModelSwitch: [{ hooks: [makeModelSwitchAudit({ projectId, sessionId })] }],
+    PostModelSwitch: [{ hooks: [makeModelSwitchAudit({ projectId, sessionId })] }],
   });
 }
 

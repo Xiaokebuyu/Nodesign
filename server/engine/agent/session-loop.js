@@ -74,7 +74,7 @@ import { unregisterSessionNotice } from '../../lib/ingress/session-notice.js';
 import { clampFirstClause } from '../../lib/quick-summary.js';
 import { AsyncQueue } from '../../lib/async-queue.js';
 import { platform } from '../../runtime/platform.js';
-import { agentInheritedEnv } from '../../runtime/agent-env.js';
+import { agentInheritedEnv, AGENT_CLI_POLICY_ENV } from '../../runtime/agent-env.js';
 import { renderPrelude, renderAgentCoreFor, composeSystemPrompt } from './system-prompts.js';
 import {
   DEFAULT_TOOL_ALLOWLIST,
@@ -319,6 +319,7 @@ export async function runSession({
   const inheritedEnv = agentInheritedEnv();
   const sdkEnv = {
     ...inheritedEnv,
+    ...AGENT_CLI_POLICY_ENV,   // 产品口径的 CLI 行为开关（拒答不自动换模型等，见 runtime/agent-env.js）
     PWD: cwdRoot,
     ANTHROPIC_BASE_URL: baseUrlForBinary,
     // 订阅模型：apiKeyForBinary = process.env 原值（通常 undefined）——binary 见到
