@@ -157,7 +157,7 @@ export function mergeLiveTurnSnapshot(messages, snapMessages, runId) {
 /**
  * 历史里「没拿到结果、标成被中断」的工具（session-to-messages.js），界面上同 id 的卡还在 running → 留界面那张。
  * 它多半不是被中断，是这一轮还在跑、结果还没进 jsonl（09-13 fable 审查 P2-4：WS hydrate 失败改走 HTTP 时，
- * 这份历史晚于在飞快照回来，会把在跑的卡盖成红色的「被中断」）。
+ * 这份历史晚于在飞快照回来，会把在跑的卡盖成红色的「被中断」）。只用在 ProjectWorkspace 的 HTTP 兜底那一处，不进 mergeHydrated。
  */
 export function keepLiveTools(current, display) {
   const running = new Map(current.filter((m) => m.role === 'tool' && m.status === 'running').map((m) => [m.id, m]));
@@ -179,7 +179,8 @@ export function keepLiveTools(current, display) {
  */
 export function mergeHydrated(messages, display) {
   if (display.length === 0 && messages.length > 0) return messages;
-  display = keepLiveTools(messages, display);
+  // ⛔ 这里不调 keepLiveTools（09-13 fable 审查第三轮 P2-1）：WS hydrate 之后在飞快照会按同 id 覆盖回 running；
+  // 服务重启后重连时没有快照，历史里的「被中断」才是对的，留界面那张会把卡钉死在「在跑」
   const displayUserIds = new Set(display.filter(m => m.role === 'user').map(m => m.id));
   const displayUserContents = new Set(
     display.filter(m => m.role === 'user').map(m => (m.content || '').trim())

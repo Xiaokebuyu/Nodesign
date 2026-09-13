@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { PARALLEL_SAFE_TOOLS, SERIAL_TOOLS, assertConcurrencyNames } from './tool-concurrency.js';
 import { TOOL_CAPABILITIES } from './capability-gate.js';
 import { createNodesignMcpServer } from './index.js';
@@ -38,9 +39,17 @@ const GATED_LAUNCH = new RegExp(String.raw`gatedBrowser\s*\(\s*(?:async\s*)?\(\s
 /** 本地模块 import：静态（单双引号）与动态 */
 const LOCAL_IMPORT = /(?:from\s*|import\s*\(\s*)['"](\.{1,2}\/[^'"]+\.js)['"]/g;
 
-/** 剥注释再匹配：注释里写着的 exclusive: true / 示例调用不算数（09-13 fable 审查 P2-2）。`://` 不当行注释 */
+/**
+ * 剥注释再匹配：注释里写着的 exclusive: true / 示例调用不算数（09-13 fable 审查 P2-2）。
+ * 注释位置用 babel 解析拿（09-13 第三轮 P2-2：正则版把模板串里的 `/**` 当块注释起点，后面的真调用会被剥掉假绿）。
+ * parser 只装在 web 下；找不到就让测试红，不退回正则。
+ */
+const babelParse = createRequire(path.join(here, '../../../web/package.json'))('@babel/parser').parse;
 function stripComments(src) {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+  const ast = babelParse(src, { sourceType: 'module', plugins: ['jsx'], errorRecovery: true, allowReturnOutsideFunction: true });
+  let out = ''; let at = 0;
+  for (const c of ast.comments || []) { out += src.slice(at, c.start); at = c.end; }
+  return out + src.slice(at);
 }
 
 function fileOfTool(name) {
@@ -124,6 +133,8 @@ describe('tool-concurrency 并行表', () => {
     expect(count('const b = await gatedBrowser(async () => chromium.launch({ headless: true }), { key: projectId });')).toBe(0);
     expect(count('// 示例：gatedBrowser(() => launchPerceptionBrowser())\nconst u = `http://127.0.0.1`; const b = await launchPerceptionBrowser();')).toBe(1);
     expect(stripComments('/* exclusive: true */ acquire({})')).not.toMatch(/exclusive: true/);
+    // 模板串里的 `/**` 不是注释起点，后面的裸调用照样数得到（第三轮 P2-2 的现成样本在 perception-page.js）
+    expect(count('const r = `${ORIGIN}/**`; const b = await launchPerceptionBrowser(); // tail */')).toBe(1);
     expect([...`import('./a.js'); import x from "../b.js";`.matchAll(LOCAL_IMPORT)].map((m) => m[1])).toEqual(['./a.js', '../b.js']);
   });
 

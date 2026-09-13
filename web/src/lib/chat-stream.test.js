@@ -142,11 +142,13 @@ describe('keepLiveTools（09-13 fable 审查 P2-4）', () => {
     expect(out[1]).toMatchObject({ id: 't2', interrupted: true });
     expect(out[2]).toBe(display[2]);
   });
-  it('没有在跑的卡 → 原样返回同一个数组；mergeHydrated 也走这条', () => {
+  it('没有在跑的卡 → 原样返回同一个数组', () => {
     const display = [interrupted];
     expect(keepLiveTools([], display)).toBe(display);
-    const merged = mergeHydrated([{ id: 't1', role: 'tool', status: 'running' }], display);
-    expect(merged[0]).toMatchObject({ status: 'running' });
+  });
+  it('⛔ mergeHydrated（WS 路径）不保留界面上的 running：服务重启后重连没有在飞快照，历史的「被中断」才对（第三轮 P2-1）', () => {
+    const merged = mergeHydrated([{ id: 't1', role: 'tool', status: 'running' }], [interrupted]);
+    expect(merged[0]).toMatchObject({ id: 't1', interrupted: true });
   });
 });
 
