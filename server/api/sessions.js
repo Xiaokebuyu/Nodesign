@@ -25,7 +25,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { validateProjectId, getProject, setActiveSession } from '../projects/store.js';
 import { guardProject, modelUserFor } from './_guard.js';
-import { closeQuerySession, hasActiveQuerySession, getQuerySession } from '../engine/runs/active-runs.js';
+import { closeQuerySession, hasActiveQuerySession, getQuerySession, querySessionBelongsElsewhere } from '../engine/runs/active-runs.js';
 import {
   getProjectWorkspace,
   getWorkspaceRoot,
@@ -53,6 +53,10 @@ import { mountRewindRoute } from './sessions-rewind.js';
 import { jsonlExistsForSession, truncateJsonlAtLastUserMessage } from '../projects/session-jsonl.js';
 
 const router = express.Router();
+// 跨租户（09-13）：这个文件（含挂进来的 rewind）所有 /:pid/sessions/:sid/* 路由，sid 若有活口会话但属于别的项目，
+// 一律当不存在 —— 关闭 / 删除 / 回退 / 改模型 / 读上下文都拿 sid 查全局句柄表（active-runs querySessionInProject）
+router.use('/:pid/sessions/:sid', (req, res, next) => (querySessionBelongsElsewhere(req.params.sid, req.params.pid)
+  ? res.status(404).json({ error: 'session not found', code: 'SESSION_NOT_FOUND' }) : next()));
 
 // 「回到某条消息之前」整块住在 sessions-rewind.js（行数棘轮，2026-08-30 拆出）
 mountRewindRoute(router);

@@ -28,6 +28,7 @@ import { userOwnsProject } from '../api/_guard.js';
 import {
   getCurrentTurnRunId,
   hasActiveQuerySession,
+  querySessionBelongsElsewhere,
   closeQuerySession,
   markSessionActivity,
 } from '../engine/runs/active-runs.js';
@@ -227,6 +228,8 @@ export function setupWS(httpServer) {
       try { validateSessionId(sid); }
       catch { sid = null; }
     }
+    // 跨租户（09-13）：sid 有活口会话但属于别的项目 → 当没带 sid（不给在飞回合快照、不计入那个会话的订阅引用）
+    if (sid && querySessionBelongsElsewhere(sid, pid)) sid = null;
 
     wss.handleUpgrade(req, socket, head, (ws) => {
       handleProjectWS(ws, pid, since, sid);

@@ -176,6 +176,7 @@ export async function runSession({
     abortController: sessionAbortController,
     inputQueue,
     initialPermissionMode: initialModeNormalized,
+    projectId,   // API / WS 入口按 sid + pid 取句柄（active-runs querySessionInProject）
   });
   // 关键 race guard：registerQuerySession 拒绝重复注册（同 sid 已活跃）→ 这次
   // runSession 是冗余调用（前端 race / 后端 fallback / resume race），直接 early

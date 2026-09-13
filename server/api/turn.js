@@ -43,7 +43,7 @@ import {
 import { createRun } from '../engine/runs/store.js';
 import { runSession } from '../engine/agent/session-loop.js';
 import {
-  cancelRun, provideAnswer, getQuery, provideElicitation, hasActiveQuerySession, getQuerySession, closeQuerySession, setSessionPermissionMode,
+  cancelRun, provideAnswer, getQuery, provideElicitation, hasActiveQuerySession, getQuerySession, closeQuerySession, setSessionPermissionMode, querySessionBelongsElsewhere,
 } from '../engine/runs/active-runs.js';
 import { pushUserMessage, getQueueDepth } from '../engine/runs/turn-relay.js';
 import { applySessionModel, resolveSessionModel } from '../engine/agent/session-model.js'; import { applySessionEffort } from './session-effort.js';
@@ -182,6 +182,8 @@ router.post('/:pid/turn', async (req, res, next) => {
     const isNewSession = !resumeSessionId;
     const sid = isNewSession ? randomUUID() : resumeSessionId;
     validateSessionId(sid);
+    // 跨租户（09-13）：客户端给的 sid 有活口会话但属于别的项目 → 当它不存在，不许往别人的会话里推消息
+    if (querySessionBelongsElsewhere(sid, project.id)) return res.status(404).json({ error: 'session not found', code: 'SESSION_NOT_FOUND' });
 
     // 守卫：临时 rewind query 在跑时拒绝同 sid 新 turn —— 防止两个 SDK subprocess
     // 同时写同一 jsonl。临时 query ~3-5s，用户重试一次就 OK。

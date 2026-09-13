@@ -16,17 +16,17 @@
  */
 import { Router } from 'express';
 import { guardProject } from './_guard.js';
-import { getCurrentTurnRunId, getQuerySession } from '../engine/runs/active-runs.js';
+import { getCurrentTurnRunId, querySessionInProject } from '../engine/runs/active-runs.js';
 import { getRun } from '../engine/runs/store.js';   // runs 表行带 projectId（跟 guardRunInProject 同一个来源）
 
 const TASK_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** 纯逻辑（依赖可注入，单测不起 express / 不碰库） */
-export async function stopSessionTask({ pid, sid, taskId }, deps = { getCurrentTurnRunId, getQuerySession, getRun }) {
+export async function stopSessionTask({ pid, sid, taskId }, deps = { getCurrentTurnRunId, getQuerySession: (s, p) => querySessionInProject(s, p), getRun }) {
   if (!TASK_ID_RE.test(String(taskId || ''))) return { status: 400, body: { error: 'invalid task id', code: 'BAD_TASK_ID' } };
   const runId = deps.getCurrentTurnRunId(sid);
   const run = runId ? deps.getRun(runId) : null;
-  const rec = deps.getQuerySession(sid);
+  const rec = deps.getQuerySession(sid, pid);   // 句柄本身也按项目取（09-13），不只靠当前回合的 runId
   if (!run || run.projectId !== pid || typeof rec?.query?.stopTask !== 'function') {
     return { status: 404, body: { error: 'no active turn in this session', code: 'NO_ACTIVE_TURN' } };
   }
