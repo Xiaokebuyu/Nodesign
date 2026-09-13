@@ -8,6 +8,9 @@
  * `i18n-catalog.lint.test.js` 会拦。
  */
 import canvas from './en-canvas.js';
+import auth from './en-auth.js';
+// 设置 → 账户 →「账号与安全」（settings/AccountSecurity.jsx）：本文件已近行数棘轮上限，词条放 en-account.js
+import account from './en-account.js';
 
 export default {
   // ── 板书中段折叠（components/canvas/cards/ChalkFold.jsx，09-09）──
@@ -246,7 +249,6 @@ export default {
   // 整面墙是"纸桌面 + 来访登记卡"的隐喻，英文保留这层温度，不改写成通用 SaaS 措辞。
   // ⚠️ 三个场景（login-wall/scenes/*.jsx）的故事文案**没翻**：那是 1500x800 固定
   // 设计稿，文案框宽度写死到 11.5% 这种量级，英文塞进去必然溢出。见 README 的缺口一节。
-  '登录或注册': 'Sign in or register',
   '公开测试': 'Public beta',
   '开放注册': 'Registration open',
   '内测阶段，仅限邀请': 'Private beta, invite only',
@@ -283,10 +285,7 @@ export default {
   '设置密码，至少 8 位': 'Set a password, at least 8 characters',
   // 「核 对 中」那几个空格是中文两三字词的字间距手法，英文不需要
   '正在验证': 'Verifying',
-  '注册即可使用，免费模型对所有用户开放。': 'Register to start. Free models are open to every account.',
-  '当前仅接受邀请注册。': 'Registration is currently by invitation only.',
   '登录失败 ({status})': 'Sign-in failed ({status})',
-  '注册失败 ({status})': 'Registration failed ({status})',
   '网络错误，请重试': 'Network error. Try again.',
 
   // ── 项目 ⋯ 菜单（components/project/ProjectActionsMenu.jsx）──
@@ -577,4 +576,6 @@ export default {
   '结束会话（释放 agent，历史保留）': 'End this session (releases the agent, keeps the history)',
 
   ...canvas,
+  ...account,
+  ...auth,
 };

@@ -1,10 +1,11 @@
-// 设置 → 账户：本地版 = 站点账号（身份卡 / 档位 / 今日额度 / 这台设备 / 退出）；hosted = 当前账号 + 设备页 + 登出
+// 设置 → 账户：本地版 = 站点账号（身份卡 / 档位 / 今日额度 / 这台设备 / 退出）；hosted = 当前账号 + 设备页 + 登出 + 账号与安全（AccountSecurity.jsx）
 import { useState } from 'react';
 import { COLOR, GAP, FONT_SIZE, FONT_KAI } from '../../lib/theme.js';
 import { Local } from '../../lib/api.js';
 import { Panel, Row, Block, Badge, Button, Progress, Mono, Note } from './ui.jsx';
 import { TextInput } from '../local/primitives.jsx';
 import { t } from '../../lib/i18n.js';
+import AccountSecurity from './AccountSecurity.jsx';
 
 const TIER_LABEL = { basic: 'Basic', pro: 'Pro', trial: 'Trial', admin: 'Admin' };
 
@@ -159,6 +160,7 @@ export function HostedAccount({ authUser, usage, showToast }) {
   };
   const clearAvatar = async () => { await fetch('/api/me/avatar', { method: 'DELETE' }); setAvatarAt(''); window.dispatchEvent(new Event('nd-usage-refresh')); };
   return (
+    <>
     <Panel>
       <Identity name={authUser?.username || '—'} tier={usage?.tier} showToast={showToast}
         avatar={at ? `/api/me/avatar?v=${encodeURIComponent(at)}` : null} onPut={putAvatar} onClear={clearAvatar}
@@ -168,5 +170,7 @@ export function HostedAccount({ authUser, usage, showToast }) {
         <Button size="sm" variant="ghost" onClick={() => { window.location.href = '/devices'; }}>{t('管理设备')}</Button>
       </Row>
     </Panel>
+    <AccountSecurity showToast={showToast} />
+    </>
   );
 }

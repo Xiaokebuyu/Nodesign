@@ -2,12 +2,14 @@
  * server/hosted/auth/oauth-routes.js — Google / GitHub 登录与关联（挂在 /api/auth，authGuard 之前）
  *
  *   GET  /oauth/providers                      → { providers: ['google', 'github'] }（只列配好了的）
+ *   GET  /methods                              → { providers, emailAuth, openRegistration }（登录页 / 账号页用）
  *   GET  /oauth/:provider/start?intent=&return= → 302 到服务商。intent = login（默认）| link（账号页关联，要刚验证过身份）
  *   GET  /oauth/:provider/callback             → 服务商跳回来。成功 302 到 return；失败 302 到 /login?oauth_error=<code>（码见 ERROR_CODES）；
  *                                                要邮箱验证码确认的 302 到 /login#oauth_pending=<token>
  *                                                （关联流程失败回 /settings?oauth_error=<code>）
- *   GET  /oauth/pending/:token                 → 待确认关联的概况（邮箱打码 + 服务商），登录页据此显示验证码框
- *   POST /oauth/pending/:token/verify { code } → 输入发到该邮箱的验证码，确认关联并登录
+ *   POST /oauth/pending/lookup { token }       → 待确认关联的概况（邮箱打码 + 服务商），登录页据此显示验证码框
+ *   POST /oauth/pending/verify { token, code } → 输入发到该邮箱的验证码，确认关联并登录
+ *   （令牌只走 body：它从 # 片段来，放进请求路径就又进访问日志了，fable 09-13）
  *
  * ## 临时 cookie
  *
@@ -118,6 +120,19 @@ const maskEmail = (e) => String(e).replace(/^(.)[^@]*(@.*)$/, '$1***$2');
 export function mountOAuth(router, { registerQuota }) {
   router.get('/oauth/providers', (_req, res) => {
     res.json({ providers: enabledProviders() });
+  });
+
+  // 登录页 / 账号页要知道这个站开了哪些登录方式（09-13 第三批）。
+  // emailAuth：邮箱注册、验证码登录、找回密码、绑定邮箱这几条要不要露给用户。SES 还在沙盒时真实邮箱收不到信，
+  // 所以默认关，脱离沙盒后 .env 设 NODESIGN_EMAIL_AUTH=1 打开（接口本身一直在，只是界面不露）
+  router.get('/methods', (_req, res) => {
+    res.json({
+      providers: enabledProviders(),
+      emailAuth: process.env.NODESIGN_EMAIL_AUTH === '1',
+      openRegistration: /^(1|true|yes)$/i.test(String(process.env.NODESIGN_OPEN_REGISTRATION || '')),
+      // 找不回密码时的去处（没绑邮箱的用户名老账号；设计方案 §5.3）。没配就不显示
+      supportEmail: /^[^\s@]+@[^\s@]+$/.test(String(process.env.NODESIGN_SUPPORT_EMAIL || '')) ? process.env.NODESIGN_SUPPORT_EMAIL : null,
+    });
   });
 
   router.get('/oauth/:provider/start', async (req, res) => {
@@ -240,16 +255,16 @@ export function mountOAuth(router, { registerQuota }) {
     return finishLogin(user, provider, 'register');
   });
 
-  router.get('/oauth/pending/:token', (req, res) => {
+  router.post('/oauth/pending/lookup', (req, res) => {
     sweepPending();
-    const hit = pendingLinks.get(sha256(req.params.token));
+    const hit = typeof req.body?.token === 'string' ? pendingLinks.get(sha256(req.body.token)) : null;
     if (!hit) return res.status(404).json({ error: msg(req, '第三方登录的确认已过期，请重新登录'), code: 'PENDING_EXPIRED' });
     res.json({ provider: hit.provider, email: maskEmail(hit.email) });
   });
 
-  router.post('/oauth/pending/:token/verify', (req, res) => {
+  router.post('/oauth/pending/verify', (req, res) => {
     sweepPending();
-    const key = sha256(req.params.token);
+    const key = sha256(typeof req.body?.token === 'string' ? req.body.token : '');
     const hit = pendingLinks.get(key);
     if (!hit) return res.status(404).json({ error: msg(req, '第三方登录的确认已过期，请重新登录'), code: 'PENDING_EXPIRED' });
     const v = verifyCode({ email: hit.email, purpose: 'link', code: req.body?.code });

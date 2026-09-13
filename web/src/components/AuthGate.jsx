@@ -4,7 +4,8 @@
  * 挂载时查 /api/auth/status：
  *   - required=false（dev 模式）或已有有效身份 → 渲染 app，并把 user 挂到
  *     globalStore（顶栏显示用户名 / 登出、admin 判定都从那读）
- *   - 否则渲染登录页；「邀请码注册」tab 给内测新用户自助开号
+ *   - 否则渲染登录页：网页版的登记卡是 login-wall/AuthCard.jsx（邮箱 / 用户名 / Google / GitHub，09-13 auth-v2），
+ *     桌面版首启门的账号密码表单留在这个文件里
  *
  * 全局 401：api.js jsonRequest 收到 401 时派发 `nd:unauthorized` window 事件，
  * 这里监听 → 回登录态（解决 cookie 过期后散落报错、WS 4401 停止重连后卡死）。
@@ -36,14 +37,13 @@ import Scene from './login-wall/Scene.jsx';
 import { hasExplicitLocale, t } from '../lib/i18n.js';
 import LanguageSwitcher from './ui/LanguageSwitcher.jsx';
 import { runTurnstileProbe } from '../lib/turnstile-probe.js';
+import AuthCard from './login-wall/AuthCard.jsx';
 
 export default function AuthGate({ children }) {
   // checking | login | ok
   const [phase, setPhase] = useState('checking');
-  const [mode, setMode] = useState('login');   // login | register
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
   const [openReg, setOpenReg] = useState(false);   // 服务端 /api/auth/status 的 openRegistration：没邀请码也能开号（08-21）
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -128,47 +128,20 @@ export default function AuthGate({ children }) {
     paperCount: STEPS,   // 每套 ①→⑥ 六步（09-12 印刷风）；不传的话按旧墙的 20 张算，进出场会等很久
   });
 
+  // 桌面版首启门的登录（网页那份在 login-wall/AuthCard.jsx）
   async function submit(e) {
     e.preventDefault();
     if (busy || !username || !password) return;
-    if (mode === 'register' && !inviteCode && !openReg) return;
     setBusy(true);
     setError('');
-    if (desktop) {
-      try {
-        const res = await fetch('/api/local/relay/login', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password, ...(siteUrl.trim() ? { url: siteUrl.trim() } : {}) }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok) { if (!desktop.setupDone) { location.replace('/setup'); return; } setPhase('ok'); }
-        else setError(data.error || t('登录失败 ({status})', { status: res.status }));
-      } catch {
-        setError(t('网络错误，请重试'));
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
     try {
-      const res = await fetch(`/api/auth/${mode}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(mode === 'register'
-          ? { username, password, inviteCode }
-          : { username, password }),
+      const res = await fetch('/api/local/relay/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, ...(siteUrl.trim() ? { url: siteUrl.trim() } : {}) }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        useGlobalStore.getState().setAuthUser?.(data.user || null);
-        setPhase('ok');
-      } else {
-        // t() 的 key 必须是字面量，lint 才看得见（见 i18n-catalog.lint.test.js）
-        const fail = mode === 'register'
-          ? t('注册失败 ({status})', { status: res.status })
-          : t('登录失败 ({status})', { status: res.status });
-        setError(data.error || fail);
-      }
+      if (res.ok) { if (!desktop.setupDone) { location.replace('/setup'); return; } setPhase('ok'); }
+      else setError(data.error || t('登录失败 ({status})', { status: res.status }));
     } catch {
       setError(t('网络错误，请重试'));
     } finally {
@@ -176,11 +149,14 @@ export default function AuthGate({ children }) {
     }
   }
 
+  // 网页登录卡（AuthCard）登录 / 注册成功后回调
+  const authed = (user) => {
+    useGlobalStore.getState().setAuthUser?.(user || null);
+    setPhase('ok');
+  };
+
   if (phase === 'ok') return children;
   if (phase === 'checking') return <div className="nd-shell" style={{ background: PAPER.wall }} />;
-
-  const isRegister = mode === 'register';
-
 
   const form = desktop ? (
     <>
@@ -213,51 +189,7 @@ export default function AuthGate({ children }) {
         <a href="#site" onClick={(e) => { e.preventDefault(); setShowSite((v) => !v); }}>{showSite ? t('用官方站') : t('换个站点')}</a>
       </p>
     </>
-  ) : (
-    <>
-      <h2>{t('登录或注册')}</h2>
-      <div className="m">{openReg ? t('开放注册') : t('内测阶段，仅限邀请')}</div>
-      <div className="ndw-tabs">
-        <button type="button" className={isRegister ? '' : 'on'}
-          onClick={() => { setMode('login'); setError(''); }}>
-          {t('登录')}
-        </button>
-        <button type="button" className={isRegister ? 'on' : ''}
-          onClick={() => { setMode('register'); setError(''); }}>
-          {t('注册')}
-        </button>
-      </div>
-      <div className="ndw-field">
-        <label htmlFor="ndw-u">{t('用户名 · USERNAME')}</label>
-        <input id="ndw-u" value={username} placeholder={t('请输入用户名')} autoFocus
-          autoComplete="username" onChange={(e) => setUsername(e.target.value)} />
-      </div>
-      <div className="ndw-field">
-        <label htmlFor="ndw-p">{t('密码 · PASSWORD')}</label>
-        <input id="ndw-p" type="password" value={password}
-          placeholder={isRegister ? t('设置密码，至少 8 位') : t('请输入密码')}
-          autoComplete={isRegister ? 'new-password' : 'current-password'}
-          onChange={(e) => setPassword(e.target.value)} />
-      </div>
-      {/* 开放注册时不显示邀请码（09-08 站主：登录页别再挂邀请码字样）；后端仍收 inviteCode，关闭开放注册就回到受邀模式 */}
-      {isRegister && !openReg && (
-        <div className="ndw-field">
-          <label htmlFor="ndw-i">{t('邀请码 · INVITE')}</label>
-          <input id="ndw-i" value={inviteCode} placeholder="nd-xxxxxxxx"
-            onChange={(e) => setInviteCode(e.target.value)} />
-        </div>
-      )}
-      <p className="ndw-err">{error}</p>
-      <button className="go" type="submit" disabled={busy}>
-        {busy ? t('正在验证') : isRegister ? t('注册') : t('登录')}
-      </button>
-      <p className="foot">{openReg ? t('注册即可使用，免费模型对所有用户开放。') : t('当前仅接受邀请注册。')}</p>
-      <div className="alt">
-        <a href="https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe">{t('下载 Windows 桌面版')} →</a>
-        <a href="/welcome/docs.html">{t('查看文档')} →</a>
-      </div>
-    </>
-  );
+  ) : null;
 
   return (
     <div className={`ndw${narrow ? ' narrow' : ''}`} ref={rootRef}>
@@ -284,10 +216,16 @@ export default function AuthGate({ children }) {
         </div>
       )}
       {narrow ? (
-        <form className="ndw-card ndw-solo" onSubmit={submit}>
-          <span className="pin" />
-          {form}
-        </form>
+        desktop ? (
+          <form className="ndw-card ndw-solo" onSubmit={submit}>
+            <span className="pin" />
+            {form}
+          </form>
+        ) : (
+          <AuthCard className="ndw-card ndw-solo" openReg={openReg} onAuthed={authed}>
+            <span className="pin" />
+          </AuthCard>
+        )
       ) : (
         <div className="ndw-stage">
           {/* 跨场景不变的锚（一）：认得出这是哪儿 */}
@@ -302,11 +240,18 @@ export default function AuthGate({ children }) {
           <Scene scene={scene} phase={scenePhase} />
 
           {/* 跨场景不变的锚（二）：线索的终点，门 */}
-          <form className="ndw-card" onSubmit={submit}>
-            <span className="pin" />
-            <div className="ndw-stamp">{desktop ? t('桌面版') : t('公开测试')}</div>
-            {form}
-          </form>
+          {desktop ? (
+            <form className="ndw-card" onSubmit={submit}>
+              <span className="pin" />
+              <div className="ndw-stamp">{t('桌面版')}</div>
+              {form}
+            </form>
+          ) : (
+            <AuthCard className="ndw-card" openReg={openReg} onAuthed={authed}>
+              <span className="pin" />
+              <div className="ndw-stamp">{t('公开测试')}</div>
+            </AuthCard>
+          )}
         </div>
       )}
     </div>

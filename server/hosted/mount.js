@@ -18,12 +18,14 @@ import { authEnabled } from '../auth/users-store.js';
 import { installSessionBackend } from '../auth/session.js';
 import { resolveRequest, logoutRequest } from './auth/sessions-store.js';
 import { warnIfMailUnconfigured } from './auth/mailer.js';
+import { startAuthRetention } from './auth/retention.js';
 
 export function mountHostedEarly(app) {
   // 服务端会话（09-13 auth-v2）：内核的 requestAuth 从这一刻起按会话表解析身份。放在最早的钩子里，
   // 保证 relay、WS 升级、任何请求进来之前后端已经装好
   installSessionBackend({ resolve: resolveRequest, logout: logoutRequest });
   warnIfMailUnconfigured();
+  startAuthRetention();   // 登录会话、安全事件、验证码记录按隐私政策第 8 节的期限清理
   // 外审没有 OPENAI_API_KEY 就整道跳过（fail-open）—— 那条告警 lib/moderation.js 加载时已经喊过，这里不重复。
   mountRelay(app, '/api/relay');
 }

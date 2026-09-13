@@ -1,8 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  LayoutDashboard, Users, Ticket, Megaphone, AlertTriangle, ShieldAlert, Store, Cpu,
-  Copy, Pencil, Ban, RotateCcw, Send, X, Trash2,
-} from 'lucide-react';
+import { LayoutDashboard, Users, Ticket, Megaphone, AlertTriangle, ShieldAlert, Store, Cpu, Copy, Pencil, Ban, RotateCcw, Send, X, Trash2, LogOut } from 'lucide-react';
 import AppShell from '../components/layout/AppShell.jsx';
 import { Desk } from './desk.jsx';
 import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_KAI, FONT_MONO, FONT_SANS, BANNER } from '../lib/theme.js';
@@ -237,6 +234,7 @@ function UserRow({ u, reload }) {
   const showToast = useGlobalStore(s => s.showToast);
   const [editing, setEditing] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const trial = u.lifetimeCostLimitUsd != null;
   const isAdmin = u.role === 'admin';
 
@@ -256,10 +254,20 @@ function UserRow({ u, reload }) {
     if (!u.disabled && !confirmStop) { setConfirmStop(true); return; }
     try {
       await Admin.patchUser(u.id, { disabled: !u.disabled });
-      showToast(u.disabled ? `已恢复 ${u.username}` : `已停用 ${u.username}（最迟 60s 生效）`, 'success');
+      showToast(u.disabled ? `已恢复 ${u.username}` : `已停用 ${u.username}（网页登录已立即失效）`, 'success');
       reload();
     } catch (err) { showToast(`操作失败：${err.message}`, 'error'); }
     setConfirmStop(false);
+  };
+
+  // 强制下线（09-13 auth-v2）：网页登录全部作废 + 桌面设备令牌吊销，账号不停用
+  const forceSignOut = async () => {
+    if (!confirmSignOut) { setConfirmSignOut(true); return; }
+    try {
+      const r = await Admin.revokeSessions(u.id);
+      showToast(`已让 ${u.username} 下线（网页登录 ${r.sessionsRevoked} 个，桌面设备 ${r.devicesRevoked} 台）`, 'success');
+    } catch (err) { showToast(`操作失败：${err.message}`, 'error'); }
+    setConfirmSignOut(false);
   };
 
   return (
@@ -289,7 +297,7 @@ function UserRow({ u, reload }) {
             <ModLevelChip u={u} />
           </div>
           <div style={{ fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.sub, marginTop: 3 }}>
-            {u.inviteCode || '创始'} · 注册于 {timeAgo(u.createdAt) || u.createdAt}
+            {u.email || '未绑定邮箱'} · {u.inviteCode || '创始'} · 注册于 {timeAgo(u.createdAt) || u.createdAt}
           </div>
         </div>
 
@@ -318,6 +326,17 @@ function UserRow({ u, reload }) {
           <IconBtn title={isAdmin ? '外审设置' : '限额与外审'} onClick={() => setEditing(v => !v)}><Pencil size={13} /></IconBtn>
           {!isAdmin && (
             <>
+              {confirmSignOut ? (
+                <button
+                  onClick={forceSignOut}
+                  style={{
+                    padding: `0 ${GAP.md}px`, height: 26, borderRadius: RADIUS.md, border: 0, cursor: 'pointer',
+                    background: COLOR.error, color: COLOR.bgWhite, fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs,
+                  }}
+                >确认下线？</button>
+              ) : (
+                <IconBtn title="强制下线（网页与桌面版）" onClick={forceSignOut}><LogOut size={13} /></IconBtn>
+              )}
               {confirmStop ? (
                 <button
                   onClick={toggleDisabled}
