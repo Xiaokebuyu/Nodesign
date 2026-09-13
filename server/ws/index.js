@@ -24,7 +24,7 @@ import { platform } from '../runtime/platform.js';
 import { getProjectBus } from './broker.js';
 import { requestAuth } from '../auth/session.js';
 import { trackSocket } from './auth-sockets.js';
-import { originAllowed } from '../auth/origin-guard.js';
+import { originAllowed, hostAllowed } from '../auth/origin-guard.js';
 import { userOwnsProject } from '../api/_guard.js';
 import {
   getCurrentTurnRunId,
@@ -164,7 +164,8 @@ export function setupWS(httpServer) {
     // 同 eTLD+1 = 同站，Lax 照发（真跑验过，见 auth/origin-guard.js 文件头）。
     // 这里**不学下面那个 4401 的握手后再关**：那套是为了让我们自己的前端看得见
     // 原因好停止重连；外站页面不需要体面的错误，403 直接掐在升级前最省。
-    if (!originAllowed(req)) {
+    // 本地版另判 Host（DNS rebinding，见 auth/origin-guard.js hostAllowed）
+    if (!hostAllowed(req) || !originAllowed(req)) {
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       return socket.destroy();
     }

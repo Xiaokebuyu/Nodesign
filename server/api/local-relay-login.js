@@ -4,8 +4,9 @@
  * 挂在 /api/local/relay 下（api/local.js）：
  *
  *   POST   /browser-login          { url? } → { state, authorizeUrl }   发起「在浏览器中登录」；页面拿 authorizeUrl 开系统浏览器
- *   GET    /browser-login/:state   → { status: pending | done | cancelled | failed | expired, error }   页面每秒多问一次
- *   DELETE /browser-login/:state   页面上点「取消」
+ *   GET    /browser-login/:state   → { status: pending | done | superseded | cancelled | failed | expired, error }   页面每秒多问一次
+ *                                   superseded = 别的一条等待先成功了（本机已经登录），页面照「完成」处理
+ *   DELETE /browser-login/:state   页面上点「取消」→ { ok, busy, status }；busy 或已经 done / superseded = 取消晚了，页面接着等结果
  *   GET    /callback?code&state    站点确认页点「允许」后浏览器跳回这里（回一张小 HTML 页）
  *
  * 流程与站点侧见 hosted/auth/desktop-auth.js 头注。本机这半的几条规矩（方案 §5.7）：
@@ -43,6 +44,10 @@ function sweep(now = Date.now()) {
  * url 只在用户明确指定了站点时写（没指定 = 沿用 .env 里已有的，可能是 exp），不是清掉。
  */
 export async function applyRelayToken({ token, url = null }) {
+  // 站点回的东西先验形状：自建 / 被冒充的站点回个怪值，别让它写进 .env（setEnvValues 遇到换行才会抛，别的都照写）
+  if (typeof token !== 'string' || !/^ndk_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) {
+    throw Object.assign(new Error('站点返回的设备令牌格式不对'), { code: 'BAD_RESPONSE' });
+  }
   setEnvValues({ NODESIGN_RELAY_TOKEN: token, ...(url ? { NODESIGN_RELAY_URL: normalizeRelayUrl(url) } : {}) });
   clearRelayTokenInvalid();
   await refreshRelayCatalog();
@@ -97,8 +102,8 @@ router.post('/browser-login', (req, res) => {
   const state = crypto.randomBytes(24).toString('base64url');
   const verifier = crypto.randomBytes(48).toString('base64url');
   const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-  const waiting = [...pendings.entries()].filter(([, p]) => p.status === 'pending');
-  if (waiting.length >= MAX_PENDING) pendings.delete(waiting[0][0]);
+  const waiting = [...pendings.entries()].filter(([, p]) => p.status === 'pending' && !p.busy);
+  if (waiting.length >= MAX_PENDING) pendings.delete(waiting[0][0]);   // 正在换令牌的那条不删
   pendings.set(state, { verifier, url, urlExplicit: !!rawUrl, createdAt: Date.now(), status: 'pending', error: null, busy: false, finishedAt: 0 });
   const q = new URLSearchParams({ port: String(port), state, challenge, device: os.hostname().slice(0, 60) });
   res.status(201).json({ state, authorizeUrl: `${url}/desktop-auth?${q}` });
@@ -113,8 +118,9 @@ router.get('/browser-login/:state', (req, res) => {
 
 router.delete('/browser-login/:state', (req, res) => {
   const p = pendings.get(req.params.state);
-  if (p && p.status === 'pending' && !p.busy) { p.status = 'cancelled'; p.finishedAt = Date.now(); }
-  res.json({ ok: true });
+  if (p?.busy) return res.json({ ok: false, busy: true, status: p.status });
+  if (p && p.status === 'pending') { p.status = 'cancelled'; p.finishedAt = Date.now(); }
+  res.json({ ok: p?.status === 'cancelled', busy: false, status: p?.status || 'expired' });
 });
 
 router.get('/callback', async (req, res) => {
@@ -125,7 +131,8 @@ router.get('/callback', async (req, res) => {
     return sendPage(req, res, 400, { ok: false, title: msg(req, '登录请求无效或已过期'), body: msg(req, '请回到 NoDesign，重新点击「在浏览器中登录」。') });
   }
   if (req.query.error) {
-    if (!p.busy) { p.status = 'cancelled'; p.finishedAt = Date.now(); }
+    if (p.busy) return sendPage(req, res, 409, { ok: false, title: msg(req, '正在完成登录'), body: msg(req, '请回到 NoDesign 查看结果。') });
+    p.status = 'cancelled'; p.finishedAt = Date.now();
     return sendPage(req, res, 200, { ok: false, title: msg(req, '已取消登录'), body: msg(req, '可以关闭此页面。') });
   }
   const code = typeof req.query.code === 'string' ? req.query.code : '';
@@ -137,7 +144,7 @@ router.get('/callback', async (req, res) => {
     if (relayConfig()) await relayLogout();   // 本机原来还有一枚令牌（另一条等待先成功过）：换号前吊销旧的，失败只记日志
     await applyRelayToken({ token: r.token, url: p.urlExplicit ? p.url : null });
     const now = Date.now();
-    for (const other of pendings.values()) if (other.status === 'pending') { other.status = 'cancelled'; other.finishedAt = now; }
+    for (const other of pendings.values()) if (other !== p && other.status === 'pending') { other.status = 'superseded'; other.finishedAt = now; }
     p.status = 'done'; p.error = null; p.finishedAt = now;
     return sendPage(req, res, 200, { ok: true, title: msg(req, '已登录 NoDesign'), body: msg(req, '可以关闭此页面，回到 NoDesign 继续使用。') });
   } catch (err) {

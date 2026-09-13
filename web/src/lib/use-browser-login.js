@@ -45,7 +45,8 @@ export function useBrowserLogin({ onDone }) {
       if (r.status === 'pending') { setAttemptError(r.error || ''); return; }
       setLoginState(null);
       setAttemptError('');
-      if (r.status === 'done') {
+      // superseded：别的一条等待先成功了（比如刷新前发起的那次在浏览器里点了允许），本机已经登录，一样算完成
+      if (r.status === 'done' || r.status === 'superseded') {
         window.nodesignDesktop?.focusWindow?.()?.catch?.(() => {});
         doneRef.current?.();
       } else if (r.status === 'failed') {
@@ -61,12 +62,18 @@ export function useBrowserLogin({ onDone }) {
   const start = async (url) => {
     setError('');
     setAttemptError('');
+    // npx 版在普通浏览器里：window.open 要在点击的同一拍里调，等 fetch 回来再开会被弹窗拦截（Safari 尤其）。
+    // 先开一个空白窗口占住，地址回来再填进去。桌面版走壳的桥，不需要用户手势
+    const pre = window.nodesignDesktop?.openExternal ? null : window.open('about:blank', '_blank');
+    if (pre) { try { pre.opener = null; } catch { /* 跨源后不可写，无妨 */ } }
     try {
       const r = await request('POST', '/api/local/relay/browser-login', url ? { url } : {});
       setAuthorizeUrl(r.authorizeUrl);
       setLoginState(r.state);
-      openUrl(r.authorizeUrl);
+      if (pre && !pre.closed) pre.location.href = r.authorizeUrl;
+      else openUrl(r.authorizeUrl);
     } catch (err) {
+      if (pre && !pre.closed) pre.close();
       setError(err.status ? err.message : t('网络错误，请重试'));
     }
   };
@@ -77,7 +84,11 @@ export function useBrowserLogin({ onDone }) {
     const s = loginState;
     setLoginState(null);
     setAttemptError('');
-    if (s) request('DELETE', `/api/local/relay/browser-login/${encodeURIComponent(s)}`).catch(() => {});
+    if (!s) return;
+    // 取消晚了一步（浏览器那边正在换令牌，或已经换完）：接着等结果，别让令牌落了盘界面却停在登录门
+    request('DELETE', `/api/local/relay/browser-login/${encodeURIComponent(s)}`)
+      .then((r) => { if (r?.busy || r?.status === 'done' || r?.status === 'superseded') setLoginState(s); })
+      .catch(() => {});
   };
 
   return { waiting: !!loginState, authorizeUrl, error, attemptError, start, reopen, cancel };

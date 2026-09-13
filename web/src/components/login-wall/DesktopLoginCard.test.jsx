@@ -68,6 +68,14 @@ describe('DesktopLoginCard', () => {
     expect(bridge.focusWindow).toHaveBeenCalled();
   });
 
+  it('本条等待被另一次成功的登录取代（superseded）：同样算完成', async () => {
+    await mount();
+    await submit();
+    statuses.push({ status: 'superseded', error: null });
+    await wait(1300);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
   it('等待中点「重新打开浏览器」再开同一个地址；「取消」通知本地服务端并回到初始', async () => {
     await mount();
     await submit();

@@ -88,12 +88,16 @@ export default function AuthGate({ children }) {
 
   useEffect(() => { loadStatus(); }, []);
 
-  // 桌面版：令牌被站点判失效后本地服务端会清掉它（server/api/local-relay-login.js），这里定时看一眼，回登录门
+  // 桌面版：登录状态可能在这个页面之外变（fable 09-13 审查中-1），定时和回到窗口时看一眼：
+  //   在应用里 → 令牌被站点判失效、本地服务端清掉了（server/api/local-relay-login.js）→ 回登录门
+  //   在登录门 → 另一次浏览器登录已经落了令牌（刷新前发起的那次、取消晚了一步、另一个窗口）→ 进应用
   const isDesktop = !!desktop;
   useEffect(() => {
-    if (!isDesktop || phase !== 'ok') return undefined;
+    if (!isDesktop || (phase !== 'ok' && phase !== 'login')) return undefined;
     const check = () => fetch('/api/auth/status').then((r) => r.json()).then((s) => {
-      if (s.profile === 'local' && s.desktop && !s.desktop.loggedIn) { setDesktop(s.desktop); setPhase('login'); }
+      if (s.profile !== 'local' || !s.desktop) return;
+      if (phase === 'ok' && !s.desktop.loggedIn) { setDesktop(s.desktop); setPhase('login'); }
+      if (phase === 'login' && s.desktop.loggedIn) applyStatus(s);
     }).catch(() => {});
     const id = setInterval(check, 60_000);
     window.addEventListener('focus', check);

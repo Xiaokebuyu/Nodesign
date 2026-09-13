@@ -19,6 +19,8 @@
  * playwright、curl）。它们手里本来就有 cookie，拦它们不多一分安全，只拆工具链。
  */
 
+import { profile } from '../runtime/profile.js';
+
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '[::1]', '0.0.0.0']);
 
 /** host 去掉端口（IPv6 的 [::1]:5173 也要认） */
@@ -65,6 +67,27 @@ export function originAllowed(req) {
   // vite dev 代理把 Host 改写成了 localhost:4001，而页面在 localhost:5173
   if (isLoopback(originHost) && isLoopback(host)) return true;
   return extraHosts().has(originHost);
+}
+
+/**
+ * 本地版（桌面 / npx）的 Host 闸（09-13 auth-v2 第四批，fable 审查中-2）。
+ *
+ * 本地服务只听 127.0.0.1，但**不看 Host 头就挡不住 DNS rebinding**：远程页面 evil.com 把自己的域名解析改指 127.0.0.1，
+ * 页面 origin 是 http://evil.com:PORT、Host 也是 evil.com:PORT —— 对 originAllowed 来说是同源，连 CORS 预检都不用，
+ * 就能 PUT /api/local/env 改写站点地址与令牌、借「在浏览器中登录」把本机接到它自己的 relay 上。
+ * 所以本地版只认回环名与 IP 字面量（IP 没经过 DNS，谈不上 rebinding），外加 ND_ALLOWED_ORIGINS 白名单。
+ * hosted 在 nginx 后面，Host 由 nginx 定，不走这道。
+ *
+ * @returns {boolean}
+ */
+export function hostAllowed(req, { isLocal = profile.isLocal } = {}) {
+  if (!isLocal) return true;
+  const host = String(req?.headers?.host || '').toLowerCase();
+  if (!host) return true;                // 不带 Host 的只可能是非浏览器客户端
+  const b = bare(host).replace(/^\[|\]$/g, '');
+  if (LOOPBACK.has(b)) return true;
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(b) || b.includes(':')) return true;
+  return extraHosts().has(host) || extraHosts().has(bare(host));
 }
 
 /** 测试用：改过 env 之后清掉白名单缓存 */

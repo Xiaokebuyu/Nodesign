@@ -44,10 +44,31 @@
     <div class="log">
       <!-- changelog:begin（由 CHANGELOG.md 生成：node web/scripts/changelog-page.mjs，别手改） -->
       <article class="log-item reveal">
+        <div class="log-date">2026-09-13<span class="log-ver">桌面 0.1.43</span></div>
+        <div class="log-body">
+          <h3>在浏览器中登录</h3>
+          <ul>
+            <li>登录页新增「在浏览器中登录」：在系统浏览器中打开 NoDesign 站点，可使用邮箱、Google 或 GitHub 登录，点击「允许」后自动回到桌面版；账号密码登录保留，输入框同时接受邮箱与用户名</li>
+            <li>在站点上退出这台设备或重设密码后，桌面版回到登录页并提示登录已失效</li>
+            <li>新的桌面设备登录后，绑定了邮箱的账号会收到安全通知</li>
+            <li>包含 9 月 13 日网页版的 Agent 运行改进（见下方「网页版」）</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
         <div class="log-date">2026-09-13<span class="log-ver">网页版</span></div>
         <div class="log-body">
           <h3>账号安全升级（第一阶段）</h3>
           <ul>
+            <li>模型选择器新增思考等级（二级菜单），会话进行中也可以调整</li>
+            <li>子代理可在时间轴上单独停止，本轮其余工作继续</li>
+            <li>同一条消息里的联网搜索、图像生成、截图与只读工具并行执行</li>
+            <li>刷新页面或重新连接后，正在生成的工具内容继续显示在画布上</li>
+            <li>历史记录中没有返回结果的工具显示为执行中断，不再显示为成功</li>
+            <li>批量生成图像且未指定文件名时，文件不再互相覆盖</li>
+            <li>长任务不再受回合数上限中断；压缩上下文时保留用户的原始要求与未完成事项</li>
+            <li>加强会话隔离：会话只能在所属项目中访问与操作</li>
             <li>登录页支持使用 Google 或 GitHub 账号继续；首次使用会自动创建账号，邮箱与已有账号相同时需先验证邮箱再关联</li>
             <li>登录改为先输入邮箱或用户名，再按账号情况进入下一步；用户名注册的账号照常登录</li>
             <li>设置页新增「账号与安全」：修改用户名与密码、关联或解除 Google / GitHub、查看网页登录记录并退出指定设备或其他所有设备</li>

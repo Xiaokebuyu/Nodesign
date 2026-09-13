@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
-import { originAllowed } from './auth/origin-guard.js';
+import { originAllowed, hostAllowed } from './auth/origin-guard.js';
 
 import { setupWS } from './ws/index.js';
 import { primeOwnAddresses } from './lib/ssrf-guard.js';
@@ -87,6 +87,11 @@ console.log(summarizeCapabilities());
 const PORT = Number(process.env.PORT || 4001);
 
 const app = express();
+
+// 本地版 Host 闸：挡 DNS rebinding（判据与理由在 auth/origin-guard.js hostAllowed）。放在一切路由之前，WS 升级另在 ws/index.js 判
+if (platform.isLocal) {
+  app.use((req, res, next) => (hostAllowed(req) ? next() : res.status(403).json({ error: 'forbidden host', code: 'FORBIDDEN_HOST' })));
+}
 
 // cors：origin:true 是「反射任何来源」，配 credentials 等于把 REST 也交给同站
 // 攻击面（见 auth/origin-guard.js）。收成同一份判据。

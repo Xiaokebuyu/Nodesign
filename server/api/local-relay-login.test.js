@@ -29,6 +29,7 @@ const fake = http.createServer((req, res) => {
       const ok = challenge && crypto.createHash('sha256').update(j.verifier || '').digest('base64url') === challenge;
       if (j.code === 'evil') return send(400, { type: 'error', error: { type: 'invalid_request_error', message: '<img src=x onerror=alert(1)>' }, code: 'INVALID_CODE' });
       if (!ok) return send(400, { type: 'error', error: { type: 'invalid_request_error', message: '授权已失效' }, code: 'INVALID_CODE' });
+      if (process.env.__ND_FAKE_BAD_TOKEN) return send(201, { token: 'not a device token', device: { id: 'd1' }, user: { id: 'u1' } });
       return send(201, { token: `ndk_${crypto.randomBytes(3).toString('hex')}.s`, device: { id: 'd1', label: 'x' }, user: { id: 'u1', username: 'alice', tier: 'basic' } });
     }
     if (req.url === '/api/relay/whoami') return send(200, { user: { id: 'u1', username: 'alice', tier: 'basic' }, quota: { kind: 'daily', used: 0, limit: 5 } });
@@ -103,7 +104,7 @@ describe('回调', () => {
     expect(r.headers.get('referrer-policy')).toBe('no-referrer');
     expect(await r.text()).toContain('已登录 NoDesign');
     expect(await status(a.state)).toMatchObject({ status: 'done' });
-    expect(await status(b.state)).toMatchObject({ status: 'cancelled' });
+    expect(await status(b.state)).toMatchObject({ status: 'superseded' });   // 页面照「完成」处理：本机已经登录
     expect(relayConfig()?.token).toMatch(/^ndk_/);
     expect(fs.readFileSync(path.join(dataDir, '.env'), 'utf8')).toContain(`NODESIGN_RELAY_TOKEN=${relayConfig().token}`);
     // 同一次回调再来一遍（浏览器刷新）：不再换令牌
@@ -146,6 +147,35 @@ describe('回调', () => {
 
   it('不认识的 state 查状态：expired', async () => {
     expect(await status('nope')).toMatchObject({ status: 'expired' });
+  });
+});
+
+describe('审查补的边角（fable 09-13）', () => {
+  it('站点回的令牌形状不对：不写 .env，这次算失败', async () => {
+    const a = await start();
+    const code = allow(a.challenge);
+    process.env.__ND_FAKE_BAD_TOKEN = '1';
+    try {
+      const r = await callback({ code, state: a.state });
+      expect(r.status).toBe(400);
+      expect(await r.text()).toContain('格式不对');
+    } finally { delete process.env.__ND_FAKE_BAD_TOKEN; }
+    expect(relayConfig()).toBeNull();
+  });
+});
+
+describe('取消撞上正在换令牌', () => {
+  it('换码进行中或刚换完点取消：不许出现「告诉页面已取消、令牌却落了盘」', async () => {
+    const a = await start();
+    const slow = callback({ code: allow(a.challenge), state: a.state });
+    await new Promise((r) => setTimeout(r, 5));
+    const d = await (await fetch(`${base}/api/local/relay/browser-login/${a.state}`, { method: 'DELETE' })).json();
+    expect((await slow).status).toBe(200);
+    // 时序三种：DELETE 早于换码（已取消、回调无效）、换码中（busy）、换码后（done）。不变量：
+    // 回「取消成功」就不许有令牌落盘；令牌落了盘，DELETE 就必须告诉页面接着等（busy 或 status done）
+    const final = await status(a.state);
+    if (d.ok) { expect(final.status).toBe('cancelled'); expect(relayConfig()).toBeNull(); }
+    else { expect(d.busy || d.status === 'done').toBe(true); expect(final.status).toBe('done'); expect(relayConfig()?.token).toMatch(/^ndk_/); }
   });
 });
 

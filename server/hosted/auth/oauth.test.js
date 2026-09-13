@@ -131,7 +131,8 @@ async function oauthFlow(provider, profile, { cookie = '', intent = 'login', ret
   if (provider === 'github') tokens.set('unused', profile);
   let state = auth.searchParams.get('state');
   let flow = flowCookie;
-  if (tamper === 'state') state = 'x' + state.slice(1);
+  // 首字符换成一个一定不同的字符（原来写死 'x'：state 本身以 x 开头时等于没改，1/64 概率假红）
+  if (tamper === 'state') state = (state[0] === 'x' ? 'y' : 'x') + state.slice(1);
   if (tamper === 'no_cookie') flow = [];
   if (tamper === 'bad_sig') flow = flowCookie.map((c) => c.replace(/\.[^.]+$/, '.AAAA'));
   const cb = await call(`/api/auth/oauth/${provider}/callback?code=${code}&state=${encodeURIComponent(state)}`, { cookie: joinCookies(cookie, flow) });
