@@ -27,6 +27,7 @@ import { checkNewPassword } from './password-policy.js';
 import { startSession, revokeUserSessions } from './sessions-store.js';
 import { revokeUserDevices } from '../relay/devices.js';
 import { recordAuthEvent } from './audit.js';
+import { listIdentities } from './identities-store.js';
 
 const identifyWindow = makeRateWindow({ limit: 30, windowMs: 60_000 });
 
@@ -78,7 +79,9 @@ export function mountAuthFlows(router, { registerQuota, ipLockedMinutes, recordI
     const user = getUserByEmail(email);
     if (!user) return res.json({ kind: 'email', exists: false, next: 'register', openRegistration: openRegistrationEnabled() });
     // 停用的号不单独说：跟正常号一样分流，登录那一步照常失败
-    res.json({ kind: 'email', exists: true, next: user.hasPassword ? 'password' : 'code', methods: { password: user.hasPassword, emailCode: true } });
+    // providers：这个号关联了哪几家第三方登录（只第三方登录的号，登录页据此提示「这个账号通过 Google 登录」）
+    const providers = listIdentities(user.id).map((i) => i.provider);
+    res.json({ kind: 'email', exists: true, next: user.hasPassword ? 'password' : 'code', methods: { password: user.hasPassword, emailCode: true, providers } });
   });
 
   router.post('/register/start', async (req, res) => {

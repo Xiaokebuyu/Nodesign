@@ -47,6 +47,10 @@ export default {
   '用户名已被使用': 'That username is taken',
   '用户名 2-32 位，仅限字母数字下划线连字符和中文': 'Usernames are 2 to 32 characters: letters, digits, underscores, hyphens or Chinese characters',
   '没有这条登录记录': 'No such sign-in session',
+  '第三方登录的确认已过期，请重新登录': 'This sign-in confirmation has expired. Sign in again.',
+  '这个第三方账号已经关联了别的账号': 'This third-party account is already linked to another account',
+  '没有关联这个登录方式': 'This sign-in method is not linked',
+  '这是这个账号唯一的登录方式，先设置密码再解除': 'This is the only way to sign in to this account. Set a password before unlinking it.',
 
   // ── 模型与配额（turn.js / sessions.js / turn-model-switch.js / chatai.js）──
   '该模型仅限 Pro 档，当前不对外开放': 'This model is Pro tier only and is not currently open to the public',

@@ -1,4 +1,4 @@
-# auth-v2 上线清单（第一批：服务端地基）
+# auth-v2 上线清单（第一批：服务端地基；第二批：Google / GitHub 登录）
 
 设计方案：`~/claude-report-file/0913-auth/登录体系升级-设计方案.md`。本清单只管部署动作。
 
@@ -16,6 +16,20 @@
 ⚠️ `NODESIGN_LEGACY_TOKEN_UNTIL` 的取舍：过渡期内，能发布站点的账号（pro 档）可以从 `*.share` 子域往旧 cookie 名里投自己的旧登录状态，
 让没登录的访客被登进攻击者的账号（fable 09-13 代码评审，只能缩短窗口不能消除）。反过来，不给过渡期时，150 个没绑邮箱的老用户里
 忘了密码的人就再也登不回来。建议：给 14 天，同时上线「绑定邮箱」提示条，让老用户在还登着的时候把邮箱绑上。
+
+### 第二批新增（Google / GitHub）
+
+| 键 | 生产 | exp（8443） |
+|---|---|---|
+| `NODESIGN_PUBLIC_ORIGIN` | `https://nodesign.xiaobuyu.trade` | `https://nodesign.xiaobuyu.trade:8443` |
+| `NODESIGN_GOOGLE_CLIENT_ID` / `NODESIGN_GOOGLE_CLIENT_SECRET` | Google Cloud Console 的 Web 客户端 | 同一个客户端 |
+| `NODESIGN_GITHUB_CLIENT_ID` / `NODESIGN_GITHUB_CLIENT_SECRET` | GitHub OAuth App | 同一个 App |
+
+在服务商那边登记的回调地址（一字不差）：
+
+- Google「已获授权的重定向 URI」：`https://nodesign.xiaobuyu.trade/api/auth/oauth/google/callback`，exp 另加 `https://nodesign.xiaobuyu.trade:8443/api/auth/oauth/google/callback`（Google 是否接受带端口的地址未确认，登记不上就只做生产）
+- GitHub「Authorization callback URL」：`https://nodesign.xiaobuyu.trade/api/auth/oauth/github/callback`；exp 的地址加在同一个 App 的其他回调地址里
+- Google 同意屏幕：应用名 NoDesign、授权域名 `xiaobuyu.trade`、scope 只要 `openid` `email` `profile`；隐私政策与服务条款页在第三批上线后再提交品牌验证
 
 ## 2. nginx：首页分流认新 cookie 名
 

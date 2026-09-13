@@ -9,6 +9,7 @@
  *   POST   /email/start            { email }                 → 往新邮箱发验证码（要刚验证过身份）
  *   POST   /email/verify           { email, code }           → 绑定 / 更换邮箱，通知发到旧地址
  *   PUT    /username               { username }
+ *   DELETE /identities/:provider                              → 解除 Google / GitHub 关联（要刚验证过身份，且至少留一种登录方式）
  *   GET    /sessions                                         → 网页登录列表（桌面设备在 /api/me/devices）
  *   DELETE /sessions/:id
  *   POST   /sessions/revoke-others                           → 退出其他所有网页登录 + 所有桌面设备（要刚验证过身份）
@@ -31,6 +32,7 @@ import { checkNewPassword } from './password-policy.js';
 import { listActiveSessions, getSession, revokeSession, revokeUserSessions, markAuthenticated } from './sessions-store.js';
 import { revokeUserDevices } from '../relay/devices.js';
 import { recordAuthEvent } from './audit.js';
+import { listIdentities, unlinkIdentity, PROVIDERS } from './identities-store.js';
 
 export const RECENT_AUTH_MS = 5 * 60 * 1000;
 
@@ -80,7 +82,26 @@ router.use((req, res, next) => {
 
 router.get('/', (req, res) => {
   const user = getUserById(req.user.id);
-  res.json({ user: publicUser(user), emailVerifiedAt: user.emailVerifiedAt, recentAuth: recentlyAuthenticated(req), sessionId: req.auth?.sessionId ?? null });
+  res.json({
+    user: publicUser(user), emailVerifiedAt: user.emailVerifiedAt, recentAuth: recentlyAuthenticated(req), sessionId: req.auth?.sessionId ?? null,
+    identities: listIdentities(user.id).map((i) => ({ provider: i.provider, email: i.email, createdAt: i.created_at })),
+  });
+});
+
+router.delete('/identities/:provider', (req, res) => {
+  const provider = String(req.params.provider);
+  if (!PROVIDERS.includes(provider)) return res.status(404).json({ error: msg(req, '没有关联这个登录方式'), code: 'NOT_LINKED' });
+  if (needRecentAuth(req, res)) return;
+  const user = getUserById(req.user.id);
+  const linked = listIdentities(user.id).map((i) => i.provider);
+  if (!linked.includes(provider)) return res.status(404).json({ error: msg(req, '没有关联这个登录方式'), code: 'NOT_LINKED' });
+  // 解除之后还得进得来：有密码，或者还关联着另一家
+  if (!user.hasPassword && linked.length < 2) {
+    return res.status(400).json({ error: msg(req, '这是这个账号唯一的登录方式，先设置密码再解除'), code: 'LAST_LOGIN_METHOD' });
+  }
+  unlinkIdentity(user.id, provider);
+  recordAuthEvent('identity_unlink', { userId: user.id, req, detail: { provider } });
+  res.json({ ok: true });
 });
 
 router.post('/reauth', (req, res) => {

@@ -29,6 +29,7 @@ import { startSession } from './auth/sessions-store.js';
 import { recordAuthEvent } from './auth/audit.js';
 import { mountAuthFlows } from './auth/flows-routes.js';
 import { mountTurnstileProbe } from './auth/turnstile-probe.js';
+import { mountOAuth } from './auth/oauth-routes.js';
 
 const MAX_FAILS = 10;
 const DUMMY_HASH = `scrypt$16384$${'0'.repeat(32)}$${'0'.repeat(128)}`;
@@ -168,7 +169,8 @@ export const registerQuota = {
 };
 
 mountAuthFlows(hostedAuthRouter, { registerQuota, ipLockedMinutes, recordIpFail });
-mountTurnstileProbe(hostedAuthRouter);   // Turnstile 测量期（先量后定），没配 site key 时整段不跑
+mountTurnstileProbe(hostedAuthRouter);
+mountOAuth(hostedAuthRouter, { registerQuota });   // Google / GitHub（09-13 第二批），没配 client id 的那家不出现   // Turnstile 测量期（先量后定），没配 site key 时整段不跑
 
 /** 测试用 */
 export function _resetAuthThrottles() {

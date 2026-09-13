@@ -206,6 +206,18 @@ export const registerWithEmail = db.transaction(({ email, passwordHash, inviteCo
   return createUser({ username: name, passwordHash, email: mail, role: 'user', ...terms });
 });
 
+/**
+ * 第三方登录首次进来建号（09-13 auth-v2 第二批）：不带邀请码，走开放注册（关着就拒），落 basic 档，没有密码。
+ * email 只在服务商确认过（verified）时才传进来，记为已验证。
+ */
+export const registerViaOAuth = db.transaction(({ email, usernameSeed }) => {
+  const terms = signupTermsInTx('');
+  const mail = email ? normalizeEmail(email) : null;
+  if (!mail) throw Object.assign(new Error('邮箱格式不对'), { code: 'BAD_EMAIL' });   // 第三方号没有密码，没邮箱就找不回来
+  if (getUserByEmail(mail)) throw Object.assign(new Error('这个邮箱已经注册过了'), { code: 'EMAIL_TAKEN' });
+  return createUser({ username: deriveUsername(usernameSeed || mail), email: mail, role: 'user', ...terms });
+});
+
 export const registerUser = db.transaction(({ username, password, inviteCode }) => {
   if (!validUsername(username)) {
     throw Object.assign(new Error('用户名 2-32 位，仅限字母数字下划线连字符和中文'), { code: 'BAD_USERNAME' });

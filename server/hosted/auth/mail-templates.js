@@ -72,6 +72,10 @@ const NOTICE_TEXT = {
     'zh-CN': ['你的 NoDesign 账号邮箱已更换', '你的 NoDesign 账号绑定的邮箱刚刚从这个地址换成了另一个地址。之后的验证码和通知会发到新地址。'],
     en: ['Your NoDesign email address was changed', 'The email address on your NoDesign account was just changed from this address to another one. Codes and notices will go to the new address.'],
   },
+  identity_linked: {
+    'zh-CN': ['你的 NoDesign 账号关联了新的登录方式', '你的 NoDesign 账号刚刚关联了一个第三方登录方式（Google 或 GitHub），之后可以用它直接登录。'],
+    en: ['A sign-in method was linked to your NoDesign account', 'A third-party sign-in method (Google or GitHub) was just linked to your NoDesign account and can now be used to sign in.'],
+  },
   email_added: {
     'zh-CN': ['邮箱已绑定到你的 NoDesign 账号', '这个邮箱刚刚绑定到你的 NoDesign 账号，之后可以用它登录和找回密码。'],
     en: ['Email added to your NoDesign account', 'This email address was just added to your NoDesign account. You can now use it to sign in and recover your password.'],
