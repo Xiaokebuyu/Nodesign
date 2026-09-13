@@ -39,7 +39,7 @@ export async function acquireArtifactPage({
     const { entry, release: unlock } = await lockSession(projectId);
     // 量帧时间的在会话页上测也要独占浏览器槽位：会话浏览器不占槽，但同时开着的一次性浏览器照样抢 CPU。
     // 顺序固定（先会话锁、后槽位），一次性工具只拿槽位不拿会话锁，不会互等
-    const unslot = exclusive ? await browserSlots.acquire(Infinity) : () => {};
+    const unslot = exclusive ? await browserSlots.acquire(Infinity, projectId) : () => {};
     const release = () => { unslot(); unlock(); };
     if (target?.absPath && entry.target.absPath !== target.absPath) {
       release();
@@ -61,7 +61,7 @@ export async function acquireArtifactPage({
     };
   }
 
-  const browser = await gatedBrowser(() => launchPerceptionBrowser(), { exclusive });
+  const browser = await gatedBrowser(() => launchPerceptionBrowser(), { exclusive, key: projectId });
   try {
     const opened = await openArtifactPage(browser, {
       projectId, workspaceRoot, absPath: target.absPath, viewport, deviceScaleFactor, waitUntil, timeout,

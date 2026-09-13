@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeSlotPool } from './slot-pool.js';
 
-const tick = () => new Promise((r) => setImmediate(r));
+const tick = () => new Promise((r) => setTimeout(r, 0));
 
 describe('makeSlotPool', () => {
   it('同时持有的槽位不超过 size，还一个放一个', async () => {
@@ -61,5 +61,37 @@ describe('makeSlotPool', () => {
     const rel = await pool.acquire(99);
     expect(pool.used).toBe(3);
     rel();
+  });
+
+  it('⭐ 按来源轮转（09-13 fable 审查 P1-2）：A 一口气排 6 个，B 后到的 1 个只等 A 正在跑的那一个', async () => {
+    const pool = makeSlotPool(1);
+    const order = [];
+    const job = (key, name) => pool.run(async () => { order.push(name); await tick(); }, 1, key);
+    const all = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'].map((n) => job('A', n));
+    await tick();   // a1 已经在跑，a2..a6 在排队
+    all.push(job('B', 'b1'));
+    all.push(job('C', 'c1'));
+    all.push(job('B', 'b2'));
+    await Promise.all(all);
+    expect(order.slice(0, 4)).toEqual(['a1', 'b1', 'c1', 'a2']);
+    expect(order.indexOf('b2')).toBeLessThan(order.indexOf('a4'));
+    // 同一来源内部仍是先来先服务
+    expect(order.filter((n) => n.startsWith('a'))).toEqual(['a1', 'a2', 'a3', 'a4', 'a5', 'a6']);
+    expect(pool.used).toBe(0);
+    expect(pool.waiting).toBe(0);
+  });
+
+  it('轮转不饿死独占：轮到的独占拿不到时整体等，别的来源的小请求不插队', async () => {
+    const pool = makeSlotPool(2);
+    const order = [];
+    const r = await pool.acquire(1, 'A');
+    const px = pool.acquire(Infinity, 'B').then((rel) => { order.push('B-exclusive'); return rel; });
+    const ps = pool.acquire(1, 'C').then((rel) => { order.push('C-small'); return rel; });
+    await tick();
+    expect(order).toEqual([]);
+    r();
+    (await px)();
+    (await ps)();
+    expect(order).toEqual(['B-exclusive', 'C-small']);
   });
 });

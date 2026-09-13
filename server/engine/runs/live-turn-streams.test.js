@@ -50,4 +50,19 @@ describe('live-turn 快照里的直播入参', () => {
     bus.publish({ ...S, type: 'run.done' });
     expect(getLiveTurnSnapshot('sess-stream-3')).toMatchObject({ running: false, streams: [] });
   });
+
+  it('超过上限：不再累加、清掉已攒文本、不进快照；结果到了也清（09-13 fable 审查 P2-5）', () => {
+    const bus = makeBus();
+    const S = { sessionId: 'sess-stream-4', runId: 'run_4' };
+    bus.publish({ ...S, type: 'run.start' });
+    const big = 'x'.repeat(250_000);
+    bus.publish({ ...S, type: 'run.delta.tool_input', blockId: 'bb', name: 'Write', append: big });
+    expect(getLiveTurnSnapshot('sess-stream-4').streams).toHaveLength(1);
+    bus.publish({ ...S, type: 'run.delta.tool_input', blockId: 'bb', name: 'Write', append: big });
+    bus.publish({ ...S, type: 'run.delta.tool_input', blockId: 'bb', name: 'Write', append: 'tail' });
+    expect(getLiveTurnSnapshot('sess-stream-4').streams).toEqual([]);
+    bus.publish({ ...S, type: 'run.delta.tool_input', blockId: 'bc', name: 'Edit', append: 'y' });
+    bus.publish({ ...S, type: 'run.delta.tool_result', blockId: 'bc', ok: true, output: 'ok' });
+    expect(getLiveTurnSnapshot('sess-stream-4').streams).toEqual([]);
+  });
 });

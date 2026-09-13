@@ -21,12 +21,27 @@ const toolsDir = path.join(here, 'tools');
 const TOOL_NAME = /\btool\(\s*'([a-z_]+)'/g;
 const BATCH_NAME = /\bname:\s*'([a-z]+_batch)'/g;
 
-/** 量帧时间的工具：并行表里必须独占浏览器槽位（helpers/browser-slots.js） → 源码文件 */
-const TIMING = { trace_motion: 'trace-motion.js', profile_scroll: 'profile-scroll.js' };
+/** 量帧时间的工具：并行表里必须独占浏览器槽位（helpers/browser-slots.js） → [源码文件, 独占写法] */
+const TIMING = {
+  trace_motion: ['trace-motion.js', /exclusive: true/],
+  profile_scroll: ['profile-scroll.js', /exclusive: true/],
+  // 胶片条是 screenshot_canvas 的一个模式
+  screenshot_canvas: ['screenshot.js', /exclusive: Array\.isArray\(frames\) && frames\.length > 0/],
+};
 /** 开浏览器的原语本身（它就是被包的那一下），扫描时跳过 */
 const LAUNCH_PRIMITIVE = path.join(toolsDir, 'helpers', 'perception-page.js');
-const LAUNCH = /\b(?:launchPerceptionBrowser\(\)|chromium\.launch\()/g;
-const GATED_LAUNCH = /gatedBrowser\(\(\) => (?:launchPerceptionBrowser\(\)|chromium\.launch\()/g;
+/** 槽位闸自己（它的 gatedBrowser 定义不是调用） */
+const GATE_SELF = path.join(toolsDir, 'helpers', 'browser-slots.js');
+const OPEN = String.raw`(?:launchPerceptionBrowser\s*\(|chromium\s*\.\s*launch(?:PersistentContext)?\s*\()`;
+const LAUNCH = new RegExp(OPEN, 'g');
+const GATED_LAUNCH = new RegExp(String.raw`gatedBrowser\s*\(\s*(?:async\s*)?\(\s*\)\s*=>\s*(?:await\s*)?` + OPEN, 'g');
+/** 本地模块 import：静态（单双引号）与动态 */
+const LOCAL_IMPORT = /(?:from\s*|import\s*\(\s*)['"](\.{1,2}\/[^'"]+\.js)['"]/g;
+
+/** 剥注释再匹配：注释里写着的 exclusive: true / 示例调用不算数（09-13 fable 审查 P2-2）。`://` 不当行注释 */
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/.*$/gm, '$1');
+}
 
 function fileOfTool(name) {
   const re = new RegExp(`\\btool\\(\\s*'${name}'`);
@@ -40,13 +55,19 @@ function ungatedLaunches(entry) {
   const walk = (file) => {
     if (seen.has(file) || !existsSync(file)) return;
     seen.add(file);
-    const src = readFileSync(file, 'utf8');
+    const src = stripComments(readFileSync(file, 'utf8'));
     if (file !== LAUNCH_PRIMITIVE) {
       const all = (src.match(LAUNCH) || []).length;
       const gated = (src.match(GATED_LAUNCH) || []).length;
-      if (all !== gated) out.push([path.relative(toolsDir, file), all - gated]);
+      if (all !== gated) out.push([path.relative(toolsDir, file), `${all - gated} 处没过槽位闸`]);
     }
-    for (const m of src.matchAll(/from '(\.{1,2}\/[^']+\.js)'/g)) {
+    if (file !== GATE_SELF) {
+      // 按项目轮转排队（09-13 fable 审查 P1-2）：每处拿槽位都要带来源
+      const takes = (src.match(/\bgatedBrowser\s*\(|\bbrowserSlots\.acquire\s*\(/g) || []).length;
+      const keyed = (src.match(/key:\s*projectId|browserSlots\.acquire\([^)]*,\s*projectId\)/g) || []).length;
+      if (takes > keyed) out.push([path.relative(toolsDir, file), `${takes - keyed} 处拿槽位没带项目 key`]);
+    }
+    for (const m of src.matchAll(LOCAL_IMPORT)) {
       const next = path.resolve(path.dirname(file), m[1]);
       if (next.startsWith(toolsDir + path.sep)) walk(next);
     }
@@ -89,15 +110,21 @@ describe('tool-concurrency 并行表', () => {
       const { out } = ungatedLaunches(file);
       expect(out, `${name}：并行 = 同时拉起多只 chromium；开浏览器要写成 gatedBrowser(() => …)（helpers/browser-slots.js）`).toEqual([]);
     }
-    for (const [name, file] of Object.entries(TIMING)) {
+    for (const [name, [file, proof]] of Object.entries(TIMING)) {
       expect(PARALLEL_SAFE_TOOLS.has(name)).toBe(true);
-      expect(readFileSync(path.join(toolsDir, file), 'utf8'), `${name} 量帧时间，要独占浏览器槽位`).toMatch(/exclusive: true/);
+      expect(stripComments(readFileSync(path.join(toolsDir, file), 'utf8')), `${name} 量帧时间，要独占浏览器槽位`).toMatch(proof);
     }
     // 判据自检：扫描真的顺着 import 走到了 acquire-page.js，而且那里是包了闸的；拆掉闸扫描能看出来
     const { seen } = ungatedLaunches(fileOfTool('query_elements'));
     expect([...seen].map((f) => path.basename(f))).toContain('acquire-page.js');
-    const naked = "const b = await launchPerceptionBrowser();\nconst c = await gatedBrowser(() => launchPerceptionBrowser());";
-    expect((naked.match(LAUNCH) || []).length - (naked.match(GATED_LAUNCH) || []).length).toBe(1);
+    const count = (src) => { const t = stripComments(src); return (t.match(LAUNCH) || []).length - (t.match(GATED_LAUNCH) || []).length; };
+    expect(count("const b = await launchPerceptionBrowser();\nconst c = await gatedBrowser(() => launchPerceptionBrowser());")).toBe(1);
+    expect(count('const b = await chromium.launchPersistentContext(dir, {});')).toBe(1);
+    expect(count('const b = await launchPerceptionBrowser({ x: 1 });')).toBe(1);
+    expect(count('const b = await gatedBrowser(async () => chromium.launch({ headless: true }), { key: projectId });')).toBe(0);
+    expect(count('// 示例：gatedBrowser(() => launchPerceptionBrowser())\nconst u = `http://127.0.0.1`; const b = await launchPerceptionBrowser();')).toBe(1);
+    expect(stripComments('/* exclusive: true */ acquire({})')).not.toMatch(/exclusive: true/);
+    expect([...`import('./a.js'); import x from "../b.js";`.matchAll(LOCAL_IMPORT)].map((m) => m[1])).toEqual(['./a.js', '../b.js']);
   });
 
   it('装配出来的 server：打了 readOnlyHint 的恰好是并行表里注册上的那些', () => {

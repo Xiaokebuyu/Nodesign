@@ -129,7 +129,7 @@ anyway after 12s and the caption says so. Only http/https and public hosts.`,
           headless: true,
           args: FIDELITY_LAUNCH_ARGS,
           proxy: { server: `http://127.0.0.1:${proxyPort}`, bypass: '' },
-        }));
+        }), { key: projectId });
         const rasterScale = detail === 'high' ? 1 : RASTER_SCALE;
         const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: rasterScale, colorScheme: 'light' });
         const guard = await attachSsrfGuard(ctx, undefined, { proxied: true });

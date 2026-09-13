@@ -40,14 +40,14 @@ describe('gatedBrowser', () => {
     const a = await gatedBrowser(async () => fakeBrowser(c), { pool });
     let exclusiveOpenedWith = null;
     const px = gatedBrowser(async () => { exclusiveOpenedWith = c.open; return fakeBrowser(c); }, { pool, exclusive: true });
-    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setTimeout(r, 0));
     expect(exclusiveOpenedWith).toBe(null);
     await a.close();
     const x = await px;
     expect(exclusiveOpenedWith).toBe(0);
     let otherOpened = false;
     const po = gatedBrowser(async () => { otherOpened = true; return fakeBrowser(c); }, { pool });
-    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setTimeout(r, 0));
     expect(otherOpened).toBe(false);
     await x.close();
     await (await po).close();

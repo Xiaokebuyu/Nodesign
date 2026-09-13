@@ -321,7 +321,7 @@ memory (记忆/, type: project) so later sessions inherit it.`,
         .string()
         .max(64)
         .optional()
-        .describe('Output filename without extension. Auto-generated if omitted (gen-<timestamp>-<role>).'),
+        .describe('Output filename without extension. Auto-generated if omitted (gen-<timestamp>-<seq>-<role>).'),
       thinkingLevel: z
         .enum(['minimal', 'high'])
         .optional()

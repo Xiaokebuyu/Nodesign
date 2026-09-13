@@ -73,7 +73,7 @@ Lighter than read_page (which returns full outerHTML of one page).`,
 
       let browser;
       try {
-        browser = await gatedBrowser(() => launchPerceptionBrowser());
+        browser = await gatedBrowser(() => launchPerceptionBrowser(), { key: projectId });
         // 走 http（与用户预览同源），不再 file://；理由见 helpers/perception-page.js
         const opened = await openArtifactPage(browser, {
           projectId, workspaceRoot, absPath: canvasPath,

@@ -200,7 +200,7 @@ raw percentage to the user as if it were their experience.`,
       let browser;
       try {
         // 量帧时间：独占全部浏览器槽位，别的 chromium 同时在跑量出来的卡顿是假的（browser-slots.js）
-        browser = await gatedBrowser(() => launchPerceptionBrowser(), { exclusive: true });
+        browser = await gatedBrowser(() => launchPerceptionBrowser(), { exclusive: true, key: projectId });
         const opened = await openArtifactPage(browser, {
           projectId, workspaceRoot, absPath: target.absPath, viewport,
         });

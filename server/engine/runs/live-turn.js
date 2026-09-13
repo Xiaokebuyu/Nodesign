@@ -38,6 +38,7 @@ const MAX_TOOL_TEXT = 16_000;
  * 边写边直播在画布舞台层。以前快照里没有这一段 —— 流到一半刷新 / 重连，直播卡要么没有，要么从重连后到的
  * 第一个增量开始（只剩后半截）。快照带上累加到快照 seq 为止的全文，前端据此把直播卡续上。
  * 上限给得比工具输出宽：截断后续增量会接在截断处，直播文本就错位了；超过上限的就不进快照（前端等完整入参兜底）。
+ * 超过上限后不再累加、清掉已攒的文本（09-13 fable 审查 P2-5：失控的 Write 流几 MB 不该在内存里攒到回合结束）。
  */
 const MAX_STREAM_TEXT = 400_000;
 // 3s：够盖住"读 jsonl 的几百毫秒"这个错位窗口，又短到收尾后的重连基本不会
@@ -123,7 +124,7 @@ export function getLiveTurnSnapshot(sessionId) {
     running: !st.endedAt,
     messages: st.messages,
     // 收尾那一轮的尾巴不带直播：工具都结束了，前端只该合并消息
-    streams: st.endedAt ? [] : Object.values(st.streams || {}).filter((x) => x.text.length <= MAX_STREAM_TEXT),
+    streams: st.endedAt ? [] : Object.values(st.streams || {}).filter((x) => !x.over),
     contextUsage: st.contextUsage,
   };
 }
@@ -192,11 +193,14 @@ function fold(evt) {
         ...(evt.parentToolUseId ? { parentToolUseId: evt.parentToolUseId } : {}),
       };
       // 跟前端 StageLayer 的累加同构：reset = 批里换了一条（另起）；spot 带 solved 的后到也盖过
+      const text = base.over ? '' : base.text + (evt.append || '');
+      const over = base.over || text.length > MAX_STREAM_TEXT;
       st.streams[evt.blockId] = {
         ...base,
         filePath: base.filePath || evt.filePath || null,
         spot: evt.spot?.solved ? evt.spot : (base.spot || evt.spot || null),
-        text: base.text + (evt.append || ''),
+        text: over ? '' : text,
+        ...(over ? { over: true } : {}),
       };
       break;
     }
@@ -217,6 +221,8 @@ function fold(evt) {
     }
     case 'run.delta.tool_result': {
       if (!runMatches) break;
+      // 有的路不发 tool_use（或不带 blockId）：结果到了也清掉这一段直播，别攒到回合结束
+      if (evt.blockId) delete st.streams[evt.blockId];
       const tool = st.messages.find(m => m.role === 'tool' && m.id === evt.blockId);
       if (tool) {
         tool.status = evt.ok ? 'success' : 'error';

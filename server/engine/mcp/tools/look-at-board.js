@@ -94,7 +94,7 @@ Costs a few seconds and ~1.7k tokens; don't call it in a loop.`,
       return withGate(async () => {
       let browser = null;
       try {
-        browser = await gatedBrowser(() => launchPerceptionBrowser());
+        browser = await gatedBrowser(() => launchPerceptionBrowser(), { key: projectId });
         const context = await browser.newContext({ viewport: VIEW, deviceScaleFactor: 1 });
         if (authEnabled()) {
           const ownerId = getProject(projectId)?.ownerId;

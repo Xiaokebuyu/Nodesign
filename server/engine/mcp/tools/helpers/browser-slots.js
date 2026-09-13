@@ -17,7 +17,9 @@
  *   - 服务端 API 的导出 / 封面 / 圈选截图（api/exports.js、lib/cover.js、lib/region-shot.js）：
  *     用户在等页面响应，不该排在 agent 的截图后面。
  *
- * 用法：gatedBrowser(() => launchPerceptionBrowser(), { exclusive })。返回的 browser.close() 顺带还槽；
+ * 排队按项目轮转（lib/slot-pool.js）：一个项目一条消息发一串截图，别的项目最多等正在跑的那一个。
+ *
+ * 用法：gatedBrowser(() => launchPerceptionBrowser(), { exclusive, key: projectId })。返回的 browser.close() 顺带还槽；
  * 浏览器崩了（disconnected）也还。还槽幂等。调用方照旧在 finally 里 close。
  */
 import { makeSlotPool } from '../../../../lib/slot-pool.js';
@@ -34,11 +36,11 @@ export const browserSlots = makeSlotPool(perceptionBrowserSlots());
 /**
  * @template B
  * @param {() => Promise<B>} launch  真正开浏览器的那一下
- * @param {{ exclusive?: boolean, pool?: ReturnType<typeof makeSlotPool> }} [opts]
+ * @param {{ exclusive?: boolean, key?: string, pool?: ReturnType<typeof makeSlotPool> }} [opts]  key = 排队来源（项目 id）
  * @returns {Promise<B>}
  */
-export async function gatedBrowser(launch, { exclusive = false, pool = browserSlots } = {}) {
-  const release = await pool.acquire(exclusive ? Infinity : 1);
+export async function gatedBrowser(launch, { exclusive = false, key = '', pool = browserSlots } = {}) {
+  const release = await pool.acquire(exclusive ? Infinity : 1, key);
   let browser;
   try {
     browser = await launch();

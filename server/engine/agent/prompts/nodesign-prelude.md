@@ -253,7 +253,7 @@ Edit/Write canvas 后系统会自动运行一致性校验（anchor 唯一、layo
 
 **同一条消息里的多个调用**：每个调用写完就开始执行，所有返回在整条消息结束后一起回来。搜索（`web_search`）、出图（`generate_image`）、读取（`read_board` / `read_user_view` / `read_page` / `read_document` / `look_at_board`）在同一条消息里会**同时执行**，所以互不依赖的几件事放进同一条消息发出：几个角度的搜索、设置不同的几张图（设置相同的一组仍用 `prompts`）。并发有上限，超出的自动排队：出图每个会话同时 4 张，开浏览器的工具由机器限量。其余调用（写板、改文件、发布、交付、起停进程、浏览器操作）按书写顺序逐个执行。需要先看某个返回才能决定的调用，放到下一条消息。
 <!-- nd:mode:design:start -->
-截图与量具（`screenshot_canvas` / `screenshot_url` / `list_pages` / `query_elements` / `get_computed_styles` / `explain_style` / `trace_motion` / `profile_scroll`）同样会同时执行：几页、几种设备的检查放进同一条消息。测时间的（`trace_motion`、`profile_scroll`、胶片条）会等其他浏览器关掉再开，数值不受并行影响。
+截图与量具（`screenshot_canvas` / `screenshot_url` / `list_pages` / `query_elements` / `get_computed_styles` / `explain_style` / `trace_motion` / `profile_scroll`）同样会同时执行：几页、几种设备的检查放进同一条消息。测时间的（`trace_motion`、`profile_scroll`、胶片条）会等其他截图量具的浏览器关掉再开；产物会话和浏览通道的常驻浏览器不在此列。
 <!-- nd:mode:design:end -->
 
 <!-- nd:mode:design:start -->
