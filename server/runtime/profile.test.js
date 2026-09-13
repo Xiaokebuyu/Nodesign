@@ -26,7 +26,8 @@ function probe(env, code) {
 }
 const DUMP = `import { profile } from './profile.js'; console.log(JSON.stringify({ ...profile, env: { DB_PATH: process.env.DB_PATH, PROJECTS_DATA_DIR: process.env.PROJECTS_DATA_DIR, WORKSPACE_DIR: process.env.WORKSPACE_DIR, FOO: process.env.FOO } }));`;
 
-describe('runtime/profile', () => {
+// 每条都 spawnSync 一个子进程 import 整个 users-store / store.js：Windows CI 上冷启动能过 5 秒默认超时（09-14 假红）
+describe('runtime/profile', { timeout: 30_000 }, () => {
   it('不设 NODESIGN_PROFILE = hosted：不动任何 env、不绑环回、不托管前端', () => {
     const r = probe({}, DUMP);
     expect(r.status, r.stderr).toBe(0);

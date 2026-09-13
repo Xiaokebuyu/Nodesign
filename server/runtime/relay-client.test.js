@@ -10,6 +10,8 @@ const fake = http.createServer((req, res) => {
   if (mode === 'hang-once') { mode = 'ok'; return; }   // 第一发不回，第二发正常（09-08 连接偶发停顿案）
   if (mode === '429') { res.writeHead(429, { 'content-type': 'application/json' }); res.end('{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}'); return; }
   if (mode === 'html') { res.writeHead(502, { 'content-type': 'text/html' }); res.end('<html>bad gateway</html>'); return; }
+  // /models 晚 50ms 回：Windows CI 上两发并发请求一先一后到，这里在 Linux 上稳定复现那个时序（09-14）
+  if (mode === 'unauth' && req.url === '/api/relay/models') { setTimeout(() => { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: '设备令牌无效' }, code: 'DEVICE_TOKEN_INVALID' })); }, 50); return; }
   if (mode === 'unauth') { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: '设备令牌无效' }, code: 'DEVICE_TOKEN_INVALID' })); return; }
   if (req.url === '/api/relay/whoami') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ user: { id: 'u1', username: 'alice', tier: 'basic' }, quota: { kind: 'daily', used: 1, limit: 5 } })); return; }
   if (req.url === '/api/relay/models') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ models: [{ id: 'm-api', locked: false }, { id: 'claude-sonnet-5[1m]', locked: true, lockReason: '要订阅' },
@@ -77,6 +79,17 @@ describe('refreshRelayCatalog', () => {
     expect(c.configured).toBe(true);
     expect(c.error).toContain('DEVICE_TOKEN_INVALID');
     expect(rc.relayModelEntry('m-api')).toBeNull();
+  });
+  it('刷新返回之后不再有迟到的请求：两发都落地才返回（Promise.all 早退会让晚到的 401 盖到之后的登录上，09-14 Windows CI）', async () => {
+    const got = [];
+    const off = rc.onRelayTokenInvalid((tok) => got.push(tok));
+    mode = 'unauth';   // /whoami 立刻 401，/models 晚 50ms 401
+    await rc.refreshRelayCatalog();
+    const atReturn = got.length;
+    await new Promise((r) => setTimeout(r, 120));
+    expect(got.length).toBe(atReturn);
+    rc.clearRelayTokenInvalid();
+    off();
   });
   it('站点回 DEVICE_TOKEN_INVALID：通知收口方（带着失效的那枚令牌）并记下时间；429 / HTML 401 页不算', async () => {
     const got = [];

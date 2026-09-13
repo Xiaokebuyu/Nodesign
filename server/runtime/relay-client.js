@@ -149,7 +149,12 @@ export async function refreshRelayCatalog({ keepOnError = false } = {}) {
   const cfg = relayConfig();
   if (!cfg) { setCatalog({ configured: false, ok: false, at: Date.now(), error: null, whoami: null, models: [], renames: {} }); return catalog; }
   try {
-    const [whoami, models] = await Promise.all([call('/whoami'), call('/models')]);
+    // allSettled 而不是 all：all 在第一个失败时就返回，另一发还在路上，它晚到的 401 会在这次刷新结束之后才触发令牌失效，
+    // 盖到之后的登录 / 刷新上（09-14 Windows CI 抓到的时序）。两发都落地再判
+    const settled = await Promise.allSettled([call('/whoami'), call('/models')]);
+    const failed = settled.find((x) => x.status === 'rejected');
+    if (failed) throw failed.reason;
+    const [whoami, models] = settled.map((x) => x.value);
     if (seq !== refreshSeq) return catalog;   // 这期间又开始了一次刷新（登录 / 退出 / 手动刷新）：以那次为准
     const list = Array.isArray(models?.models) ? models.models : [];
     const renames = models?.renames && typeof models.renames === 'object' ? models.renames : {};

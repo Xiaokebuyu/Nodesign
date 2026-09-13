@@ -20,9 +20,10 @@ const RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY']);
 /**
  * @param {string} file   目标绝对路径（目录要已存在）
  * @param {string|Buffer} data
- * @param {{ encoding?: BufferEncoding, retries?: number }} [opts]  retries 次退避总计约 1.3 秒
+ * @param {{ encoding?: BufferEncoding, retries?: number }} [opts]  retries 次退避总计约 5 秒
+ *   （09-14 从 7 次约 1.3 秒放宽：Windows CI 上读者连续打开文件时 1.3 秒不够，board-store.race 偶发 EPERM）
  */
-export async function writeFileAtomic(file, data, { encoding = 'utf8', retries = 7 } = {}) {
+export async function writeFileAtomic(file, data, { encoding = 'utf8', retries = 9 } = {}) {
   const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
   await fs.writeFile(tmp, data, encoding);
   for (let i = 0; ; i += 1) {
