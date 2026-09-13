@@ -13,6 +13,8 @@ const src = (f) => readFileSync(path.join(root, f), 'utf8');
 describe('会话句柄的跨租户守卫', () => {
   it('turn / sessions（含 rewind 挂载）/ ws 入口都过了守卫；task-stop 按项目取句柄', () => {
     expect(src('api/turn.js')).toMatch(/if \(querySessionBelongsElsewhere\(sid, project\.id\)\) return res\.status\(404\)/);
+    // 客户端给的 sid 不是本项目的会话 → 不许拿它新建（09-13 fable 审查 P1-3，判据在 session-ownership.js）
+    expect(src('api/turn.js')).toMatch(/if \(!isNewSession && !\(await clientSessionBelongsToProject\(project\.id, sid\)\)\) return res\.status\(404\)/);
     expect(src('api/sessions.js')).toMatch(/router\.use\('\/:pid\/sessions\/:sid', \(req, res, next\) => \(querySessionBelongsElsewhere\(req\.params\.sid, req\.params\.pid\)/);
     expect(src('api/sessions.js')).toMatch(/mountRewindRoute\(router\)/);   // rewind 挂在同一个 router 上才吃得到上面那道
     expect(src('ws/index.js')).toMatch(/if \(sid && querySessionBelongsElsewhere\(sid, pid\)\) sid = null;/);
