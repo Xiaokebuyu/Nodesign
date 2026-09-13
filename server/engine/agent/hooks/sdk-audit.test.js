@@ -37,3 +37,13 @@ describe('sdk-audit 钩子', () => {
     expect(hooks.SessionEnd).toBeUndefined();
   });
 });
+
+describe('PreCompact 追加保留指令', () => {
+  it('返回 systemMessage（CLI 追加到压缩指令后），装配里挂上了', async () => {
+    const { makePreCompactHandler, PRE_COMPACT_INSTRUCTIONS } = await import('./lifecycle.js');
+    const out = await makePreCompactHandler()({ hook_event_name: 'PreCompact', trigger: 'auto', custom_instructions: null });
+    expect(out).toEqual({ systemMessage: PRE_COMPACT_INSTRUCTIONS });
+    expect(PRE_COMPACT_INSTRUCTIONS).toContain('原话');
+    expect(createHooks({}).PreCompact?.[0]?.hooks?.length).toBe(1);
+  });
+});

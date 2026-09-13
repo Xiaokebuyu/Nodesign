@@ -86,6 +86,7 @@ import {
   makeSessionStartHandler,
   makeStopReflectionHandler,
   makePostCompactHandler,
+  makePreCompactHandler,
   makeSubagentStartHandler,
   makeSubagentStopHandler,
 } from './hooks/lifecycle.js';
@@ -262,6 +263,11 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // （08-29 起的演出收尾闸「没给按钮不许收工」09-06 退役：故事在显示器上演，选项归演出进程的 write_scene。）
     Stop: [{
       hooks: [makeStopReflectionHandler({ ctx, workspaceRoot })],
+    }],
+
+    // PreCompact —— 给压缩器追加「用户原话里的要求 / 做到哪一步 / 答应了没做的 / 没回答的问题」别压丢（2026-09-13，lifecycle.js）
+    PreCompact: [{
+      hooks: [makePreCompactHandler()],
     }],
 
     // PostCompact —— compact 后把摘要写入 spec.json 长期记忆
