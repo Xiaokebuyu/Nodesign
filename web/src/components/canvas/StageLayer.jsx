@@ -4,6 +4,7 @@ import { COLOR, GAP, RADIUS, FONT_MONO, FONT_KAI, FONT_SIZE, TERM, CANVAS, alpha
 import { PAPER } from '../../lib/paper.js';
 import MdInk from './cards/MdInk.jsx';
 import { stageKindOf, resolveObjectId, zoneOfObjectId, fileNameOf, chipHintOf, toolLabelOf } from '../../lib/stage.js';
+import { restoreStageCards } from '../../lib/stage-restore.js';
 import { ZONE, STAGE_CARD_W, POP_IN } from '../../lib/board-geometry.js';
 import { sizeOf } from '../../lib/board-kinds.js';
 import { AskUserQuestionView } from '../chat/Message.jsx';
@@ -80,6 +81,13 @@ export function useStageState({
         // 子代理的话不上精灵 —— 主精灵只替主 agent 说话
         if (evt.parentToolUseId || !evt.text) return;
         setSpriteLine({ text: evt.text });
+        break;
+      }
+      case 'ws.live_turn': {
+        // 重连 / 刷新：快照里正在流的入参续回直播卡（09-13，lib/stage-restore.js）
+        setStageCards(prev => restoreStageCards(prev, evt.streams, {
+          kindOf: stageKindOf, resolve: (fp) => resolveObjectId(fp, artifactRoots), newCard: newStageCard,
+        }));
         break;
       }
       case 'run.tool_use.started': {

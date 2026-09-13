@@ -21,6 +21,7 @@
  *   run.tool_use.started            → push tool 消息 status='running'
  *   run.delta.tool_use              → 补 toolInput
  *   run.delta.tool_result           → 补 status / output / error（images 不进快照，太大）
+ *   run.delta.tool_input            → streams[blockId] 累加正在流的入参（画布直播用，见下）；完整入参到了就清
  *   run.context_usage               → contextUsage 覆盖
  *   run.done / error / cancelled    → 标记 ended（保留 GRACE 毫秒，见下），不再折叠
  *   run.query.end                   → 清
@@ -32,6 +33,13 @@
  */
 
 const MAX_TOOL_TEXT = 16_000;
+/**
+ * 正在流的入参（2026-09-13，流式与并行现状调查缺口 2）：Edit / Write 的代码、write_on_board 的板书正文
+ * 边写边直播在画布舞台层。以前快照里没有这一段 —— 流到一半刷新 / 重连，直播卡要么没有，要么从重连后到的
+ * 第一个增量开始（只剩后半截）。快照带上累加到快照 seq 为止的全文，前端据此把直播卡续上。
+ * 上限给得比工具输出宽：截断后续增量会接在截断处，直播文本就错位了；超过上限的就不进快照（前端等完整入参兜底）。
+ */
+const MAX_STREAM_TEXT = 400_000;
 // 3s：够盖住"读 jsonl 的几百毫秒"这个错位窗口，又短到收尾后的重连基本不会
 // 落在里面（快照不带 tool_result 的图片，长时间用快照顶替 hydrate 会丢缩略图）。
 const ENDED_GRACE_MS = 3_000;
@@ -114,6 +122,8 @@ export function getLiveTurnSnapshot(sessionId) {
     startedAt: st.startedAt,
     running: !st.endedAt,
     messages: st.messages,
+    // 收尾那一轮的尾巴不带直播：工具都结束了，前端只该合并消息
+    streams: st.endedAt ? [] : Object.values(st.streams || {}).filter((x) => x.text.length <= MAX_STREAM_TEXT),
     contextUsage: st.contextUsage,
   };
 }
@@ -132,6 +142,7 @@ function fold(evt) {
       startedAt: evt.ts || new Date().toISOString(),
       seq: evt.seq || 0,
       messages: [],
+      streams: {},   // blockId → { blockId, name, filePath, spot, text, parentToolUseId }（正在流的入参）
       contextUsage: null,
       endedAt: null,
       _msgCounter: 0,
@@ -173,8 +184,26 @@ function fold(evt) {
         });
       }
       break;
+    case 'run.delta.tool_input': {
+      if (!runMatches || !evt.blockId) break;
+      const cur = st.streams[evt.blockId];
+      const base = cur && !evt.reset ? cur : {
+        blockId: evt.blockId, name: evt.name, filePath: null, spot: null, text: '',
+        ...(evt.parentToolUseId ? { parentToolUseId: evt.parentToolUseId } : {}),
+      };
+      // 跟前端 StageLayer 的累加同构：reset = 批里换了一条（另起）；spot 带 solved 的后到也盖过
+      st.streams[evt.blockId] = {
+        ...base,
+        filePath: base.filePath || evt.filePath || null,
+        spot: evt.spot?.solved ? evt.spot : (base.spot || evt.spot || null),
+        text: base.text + (evt.append || ''),
+      };
+      break;
+    }
     case 'run.delta.tool_use': {
       if (!runMatches) break;
+      // 完整入参到了：直播那段不再需要从快照续（前端拿完整入参补全文）
+      if (evt.blockId) delete st.streams[evt.blockId];
       const existing = st.messages.find(m => m.role === 'tool' && m.id === evt.blockId);
       if (existing) existing.toolInput = evt.input;
       else if (evt.blockId) {

@@ -789,6 +789,7 @@ export default function ProjectWorkspace() {
         // running=false = 刚收尾那轮的尾巴（server 留了几秒 grace 防收尾瞬间重连
         // 内容重复）。只认消息，不要把界面切回"正在跑"。
         if (evt.runId && evt.running !== false) {
+          if (evt.streams?.length) stageRef.current?.onEvent?.({ type: 'ws.live_turn', streams: evt.streams });   // 画布直播卡续上（09-13）
           setIsStreaming(true);
           currentRunIdRef.current = evt.runId;   // 同步落 ref：紧跟其后的 delta 不被 stale guard 吞
           setCurrentRunId(evt.runId);
