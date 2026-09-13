@@ -90,3 +90,63 @@ describe('接线（不是只测函数本身）', () => {
     expect(out.hookSpecificOutput?.additionalContext).toMatch(/wire\.jsonl/);
   });
 });
+
+describe('09-13 服务端直接取回子代理最后几段回复（getSubagentMessages）', () => {
+  const note = (id, extra = {}) => recordTaskNotification({
+    tool_use_id: id, task_id: `agent_${id}`, status: 'completed', output_file: `/tmp/tasks/agent_${id}.output`,
+    summary: '开始研究。', usage: { total_tokens: 40000, tool_uses: 12 }, ...extra,
+  });
+  const input = (id) => ({ tool_use_id: id, session_id: 'sess-1', cwd: '/work/proj' });
+
+  it('⭐ 取回了 → 正文直接拼进 additionalContext，不再让主 agent 自己去读转录', async () => {
+    const calls = [];
+    const h = makePostToolUseSubagentReportRecovery({ readTail: async (a) => { calls.push(a); return '结论：A 组三款都支持离线导出。'.padEnd(300, '。'); } });
+    note('r1');
+    const text = (await h(input('r1'))).hookSpecificOutput.additionalContext;
+    expect(calls[0]).toEqual({ sessionId: 'sess-1', agentId: 'agent_r1', dir: '/work/proj' });
+    expect(text).toMatch(/<subagent_last_replies>[\s\S]*A 组三款都支持离线导出[\s\S]*<\/subagent_last_replies>/);
+    expect(text).not.toMatch(/Read 它取回结论/);
+  });
+
+  it('读失败 → 退回老路（递转录路径）', async () => {
+    const warn = console.warn; console.warn = () => {};
+    const h = makePostToolUseSubagentReportRecovery({ readTail: async () => { throw new Error('ENOENT'); } });
+    note('r2');
+    const text = (await h(input('r2'))).hookSpecificOutput.additionalContext;
+    console.warn = warn;
+    expect(text).toMatch(/agent_r2\.output/);
+    expect(text).toMatch(/Read 它取回结论/);
+  });
+
+  it('子代理自己也没写出比摘要更多的字 → 退回老路，不贴一段空标签', async () => {
+    const h = makePostToolUseSubagentReportRecovery({ readTail: async () => '开始研究。' });
+    note('r3');
+    const text = (await h(input('r3'))).hookSpecificOutput.additionalContext;
+    expect(text).not.toMatch(/subagent_last_replies/);
+    expect(text).toMatch(/Read 它取回结论/);
+  });
+
+  it('没有 task_id（旧 SDK / 非子代理任务）→ 不尝试读，老路', async () => {
+    let called = false;
+    const h = makePostToolUseSubagentReportRecovery({ readTail: async () => { called = true; return 'x'.repeat(500); } });
+    note('r4', { task_id: undefined });
+    await h(input('r4'));
+    expect(called).toBe(false);
+  });
+});
+
+describe('lastAssistantTexts', () => {
+  const a = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+  it('按原顺序取最后几段 assistant 文本，跳过 user 与纯工具调用', async () => {
+    const { lastAssistantTexts } = await import('./post-subagent-report.js');
+    const msgs = [a('第一段'), { type: 'user', message: { content: 'tool result' } },
+      { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read' }] } }, a('第二段')];
+    expect(lastAssistantTexts(msgs)).toBe('第一段\n\n第二段');
+  });
+  it('超长时保留结尾（结论通常在最后）并截到上限', async () => {
+    const { lastAssistantTexts } = await import('./post-subagent-report.js');
+    const out = lastAssistantTexts([a('开头'.repeat(100)), a(`${'x'.repeat(50)}结论在这`)], 20);
+    expect(out.endsWith('结论在这')).toBe(true);
+    expect(out.length).toBeLessThanOrEqual(21);
+  });
+});

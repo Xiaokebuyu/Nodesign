@@ -137,6 +137,28 @@ export function makeStopReflectionHandler({ ctx, workspaceRoot }) {
  * auto-memory（系统提示明写"存记忆要在本轮回复里完成"），spec.json 不再当记忆载体。
  * run.compact_persisted 事件随之停发（前端消费已同批拆）。
  */
+/**
+ * PreCompact —— 给压缩器追加「这些别压丢」（2026-09-13）。
+ *
+ * 回调型钩子返回的 systemMessage 会被 CLI **追加**到本次压缩指令后面（二进制 eAe：原指令 + 换行 + 新指令，
+ * 不是替换）。09-13 真跑探针：/compact 时钩子触发，追加的要求进了压缩器上下文。
+ *
+ * 只写「压缩后没人会补回来」的那部分：工作区文件、板面、产物清单在 PostCompact 之后由
+ * UserPromptSubmit 整份重新注入（resetTurnMemory），摘要里逐条罗列只是占地方。
+ */
+export const PRE_COMPACT_INSTRUCTIONS = [
+  '这是 NoDesign 创作会话。摘要里请保留：',
+  '1. 用户明确提出的要求、否决和偏好，尽量保留原话（例如「不要紫色」「标题换成宋体」）；',
+  '2. 当前任务做到哪一步、下一步打算做什么；',
+  '3. 已经答应用户、但还没做完的事；',
+  '4. 向用户提过、还没得到回答的问题。',
+  '工作区文件、板面和产物清单在压缩后会自动重新提供，摘要里不必逐条列出。',
+].join('\n');
+
+export function makePreCompactHandler() {
+  return async () => ({ systemMessage: PRE_COMPACT_INSTRUCTIONS });
+}
+
 export function makePostCompactHandler({ ctx: _ctx, workspaceRoot: _ws, sessionId }) {
   return async (_input, _toolUseId, _options) => {
     try {

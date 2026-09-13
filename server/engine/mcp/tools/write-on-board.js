@@ -83,7 +83,18 @@ To change what is already on the board use edit_board — do not redraw.
 Keep the chat reply to one line pointing here.`;
 
 export function makeWriteOnBoardTool({ projectId, sharedRoot, sessionId, ctx }) {
-  const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
+  const inner = makeHandler({ projectId, sharedRoot, sessionId, ctx });
+  // 预留座在这次调用**结束之后**才释放（2026-09-13）。CLI 在块闭合时就派发执行，下一条板书的位置字段
+  // 可能在这条落盘途中闭合、立刻预解算；以前落位一算完就取走预留，写文件到写板之间那段 await 里
+  // 这块地既不在预留表也不在板上，下一条会解到同一处。成功（已落板）、报错、提前返回一律走这里。
+  const handler = async (args, extra) => {
+    try {
+      return await inner(args, extra);
+    } finally {
+      const id = toolUseIdOf(extra);
+      if (id) takeReservation(projectId, id);
+    }
+  };
   // 流式预解算（2026-09-12）：agent-shared 在位置字段闭合那一拍调 solve，正文继续流时调 grow。
   // 挂在 ctx 上是因为流的那头只有 ctx（tool-input-stream.js），工具的依赖都在这一头。
   if (ctx && typeof ctx === 'object') {
@@ -189,7 +200,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
 
       // 预告过的位置优先（2026-09-12）：流式时服务端已按同一套解算给过前端一个落点，直播框就立在
       // 那儿。落盘时只要那块地还空着就落回去，字不再跳；被占了（同轮别的东西先落了）才重解
-      const rsv = takeReservation(projectId, toolUseIdOf(extra));
+      const rsv = getReservation(projectId, toolUseIdOf(extra));   // 只读不取：释放在工厂那层的 finally
       if (rsv && (rsv.zone || '') === (zone || '') && !overlapIds({ x: rsv.x, y: rsv.y, w: box.w, h: box.h }, obstacles).length) {
         placed = { ...placed, x: rsv.x, y: rsv.y, pressed: [] };
       }

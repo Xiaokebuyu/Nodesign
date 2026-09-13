@@ -107,3 +107,16 @@ describe('⭐ 桌面照目录建的行，站点的会话路由认得', () => {
     }
   });
 });
+
+describe('思考等级（09-13）', () => {
+  it('可调的 API 行带 efforts（跟站点 model-effort 同一份），不可调的不带', async () => {
+    const { effortChoicesFor } = await import('../../engine/agent/model-effort.js');
+    const { MODEL_ROWS } = await import('../../engine/agent/model-context.js');
+    const entries = apiEntries(relayCatalogFor(admin));
+    expect(entries.some((e) => Array.isArray(e.efforts))).toBe(true);   // 判据自检
+    for (const e of entries) {
+      const choices = effortChoicesFor(MODEL_ROWS.find((r) => r.id === e.id));
+      if (choices) expect(e.efforts, e.id).toEqual(choices); else expect(e, e.id).not.toHaveProperty('efforts');
+    }
+  });
+});

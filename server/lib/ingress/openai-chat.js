@@ -311,6 +311,9 @@ export class OpenAIToAnthropicSSE extends Transform {
     //   this.usageTotal = **所有发**的累计 → 进 onBilling。记账问的是"真烧了多少"，失败那发也烧了。
     this.usageTotal = null;
     this.sawStreamError = false;   // 流中途发过 error 事件：这条流已经死了，不许再重发也不许再收尾
+    // 上游回头续写一个**已经闭合**的 tool_call 的次数（2026-09-13 计数，逻辑未改）。CLI 在块闭合那一刻就按当时的
+    // 参数派发执行（StreamingToolExecutor），之后续上的参数进不去 —— 那一步是按半截参数跑的。先量有没有真发生过
+    this.reopenedToolCalls = 0;
   }
   _emit(event, data) { this.push(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); }
   _ensureStart(chunk) {
@@ -362,6 +365,7 @@ export class OpenAIToAnthropicSSE extends Transform {
         this.toolBlocks.set(key, idx);
       } else if (this.open?.kind !== 'tool' || this.open.index !== this.toolBlocks.get(key)) {
         // 上游交错回到旧的 tool_call（少见）：Anthropic 块一旦 stop 不能再开，只能并进当前块号
+        this.reopenedToolCalls += 1;
         this._closeOpen();
         this.open = { kind: 'tool', index: this.toolBlocks.get(key) };
       }

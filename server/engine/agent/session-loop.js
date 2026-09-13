@@ -64,9 +64,9 @@ import { assertInitContract } from './init-contract.js';
 import { clearSessionFlights } from './subagent-flight.js'; import { clearStageStatus } from './stage-status.js';
 import { createRoleRoster } from './cast.js';
 import { createAgents } from '../agents/index.js';
-import { resolveSdkSpoofModel, pickThinkingConfig, isUncensoredModel, resolveModelRoute } from './model-context.js';
+import { resolveSdkSpoofModel, pickThinkingConfig, isUncensoredModel, resolveModelRoute, effortForModel } from './model-context.js';
 import { bindSessionUpstream, unbindSessionFromRelay } from './session-binding.js';
-import { resolveSessionModel } from './session-model.js';
+import { resolveSessionModel, readSessionEffort } from './session-model.js';
 import { unregisterIngressSession } from '../../lib/model-ingress.js';
 import { takeUpstreamBilling } from '../../lib/ingress/upstream-billing.js';
 import { takeUpstreamTruncation } from '../../lib/ingress/upstream-truncation.js';
@@ -74,7 +74,7 @@ import { unregisterSessionNotice } from '../../lib/ingress/session-notice.js';
 import { clampFirstClause } from '../../lib/quick-summary.js';
 import { AsyncQueue } from '../../lib/async-queue.js';
 import { platform } from '../../runtime/platform.js';
-import { agentInheritedEnv } from '../../runtime/agent-env.js';
+import { agentInheritedEnv, AGENT_CLI_POLICY_ENV } from '../../runtime/agent-env.js';
 import { renderPrelude, renderAgentCoreFor, composeSystemPrompt } from './system-prompts.js';
 import {
   DEFAULT_TOOL_ALLOWLIST,
@@ -176,6 +176,7 @@ export async function runSession({
     abortController: sessionAbortController,
     inputQueue,
     initialPermissionMode: initialModeNormalized,
+    projectId,   // API / WS 入口按 sid + pid 取句柄（active-runs querySessionInProject）
   });
   // 关键 race guard：registerQuerySession 拒绝重复注册（同 sid 已活跃）→ 这次
   // runSession 是冗余调用（前端 race / 后端 fallback / resume race），直接 early
@@ -219,6 +220,7 @@ export async function runSession({
   // 持久）> env 全局默认。这条链现在只写在 session-model.js 一处 —— 以前它在这里、
   // turn.js、canvas.js 各有一份写法不同的复制品，对不上的时候没人发现。
   const { model: resolvedModel } = await resolveSessionModel(sessionMetaRoot);
+  const sessionEffort = await readSessionEffort(sessionMetaRoot);   // 用户选的思考等级（09-13），按模型行换算见 model-effort.js
   const model = resolvedModel;
   const sdkModel = resolveSdkSpoofModel(model);
 
@@ -319,6 +321,7 @@ export async function runSession({
   const inheritedEnv = agentInheritedEnv();
   const sdkEnv = {
     ...inheritedEnv,
+    ...AGENT_CLI_POLICY_ENV,   // 产品口径的 CLI 行为开关（拒答不自动换模型等，见 runtime/agent-env.js）
     PWD: cwdRoot,
     ANTHROPIC_BASE_URL: baseUrlForBinary,
     // 订阅模型：apiKeyForBinary = process.env 原值（通常 undefined）——binary 见到
@@ -431,6 +434,9 @@ export async function runSession({
       })(),
     }),
     plugins: installed.plugins,
+    // 插件清单走 stdin 初始化请求而不是每个插件一个 --plugin-dir（2026-09-13）：桌面版在 Windows 上，
+    // 命令行上限 32767 字符，用户装的插件没有数量上限。09-13 探针：plugins_applied=true，skills 照常装载
+    pluginDelivery: 'initialize',
     skills: modeSkillsFor(installed.skills, projectMode),   // 按模式筛+对账（拆件见 mode-profile）
 
     // 2026-05-18 安全：关 inline shell execution。SDK 默认允许 skill / slash command 内
@@ -549,13 +555,10 @@ export async function runSession({
     forwardSubagentText: true,
 
     thinking: pickThinkingConfig(model),
-    effort: 'medium',
-    // streamInput 模式 query 横跨整个 session，maxTurns 是**全局累计**（每条
-    // user message 起一轮 agent loop，turn 数不重置）。15 太低 —— 用户聊几
-    // 轮就触顶导致 'error_max_turns' 误中断。改 50 给复杂 deck（多页 +
-    // 多次自检 + 子代理）足够余量；env override 给极端情况用
-    maxTurns: Number(process.env.NODESIGN_MAX_TURNS)
-      || 50,
+    effort: effortForModel(model, sessionEffort).sdk,   // 不可调的行仍是 medium（跟以前一样）
+    // maxTurns 不传（2026-09-13 站主定）。09-13 真跑探针：SDK 0.3.269 下它按**每条用户消息**计数、不是整会话累计，
+    // 旧注释写的「全局累计」是老版本现象。单条消息内的保护剩循环检测提醒（post-loop-guard）与用户手动停止。
+    // 生产 / exp 的 .env 里还留着 NODESIGN_MAX_TURNS=50，这里已不读，那一行失效。子代理各自的 maxTurns 在 agents/index.js。
 
     // 不传 resume —— streamInput 模式 SDK 内存保 history，不依赖 jsonl
     enableFileCheckpointing: true,

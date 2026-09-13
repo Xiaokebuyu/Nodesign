@@ -27,3 +27,29 @@ describe('agentInheritedEnv', () => {
   });
   it('不改入参', () => { expect(env.NODE_ENV).toBe('production'); expect(env.CLAUDECODE).toBe('leaked'); });
 });
+
+describe('AGENT_CLI_POLICY_ENV（产品口径的 CLI 行为开关）', () => {
+  it('拒答不自动换模型', async () => {
+    const { AGENT_CLI_POLICY_ENV } = await import('./agent-env.js');
+    expect(AGENT_CLI_POLICY_ENV.CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK).toBe('1');
+  });
+  it('会跑回合的两个 CLI 起点都盖上了（会话 CLI、演出进程）', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+    for (const f of ['engine/agent/session-loop.js', 'engine/stage/env.js']) {
+      expect(fs.readFileSync(path.join(root, f), 'utf8'), `${f} 没展开 AGENT_CLI_POLICY_ENV`).toMatch(/\.\.\.AGENT_CLI_POLICY_ENV/);
+    }
+  });
+});
+
+describe('MCP_TOOL_TIMEOUT 盖得住最长的合法调用', () => {
+  it('≥ roll_film 一批最多镜数 × 单镜超时（改镜数或单镜超时要同步改 agent-env.js）', async () => {
+    const { AGENT_CLI_POLICY_ENV } = await import('./agent-env.js');
+    const { MAX_SHOTS, PER_SHOT_TIMEOUT_MS } = await import('../engine/mcp/tools/roll-film.js');
+    expect(Number(AGENT_CLI_POLICY_ENV.MCP_TOOL_TIMEOUT)).toBeGreaterThanOrEqual(MAX_SHOTS * PER_SHOT_TIMEOUT_MS);
+    // 判据自检：常量真从 schema 那头来（不是两个都写死 16 恰好对上）
+    expect(MAX_SHOTS).toBe(16);
+  });
+});

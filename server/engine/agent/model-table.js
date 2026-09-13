@@ -73,6 +73,7 @@ const GLM_MERGE_API = Object.freeze({
     // 08-27 实测这家 low|medium|high|max **四档都收**（thinking 字数 922/981/1753/1843），
     // 比 zen 系宽（那边没有 medium）。取 high 跟另外两条 glm 行一致。
     reasoningEffort: 'high',
+    efforts: ['low', 'medium', 'high', 'max'],   // 用户可选的思考等级（09-13，model-effort.js）；依据就是上面 08-27 那组实测
     maxOutput: 131_072,             // 131072 实测直接吃下
     // ⚠️ 这家的思考文本字段叫 **thinking / thinking_signature**，不是 zen 系的 reasoning_content
     // （08-27 第一趟真 SDK 循环"看到 thinking 块：false"就是这么来的）。转换层两处已改成
@@ -253,6 +254,7 @@ export const MODELS_BUILTIN = Object.freeze([
       fastModel: 'deepseek-v4-flash-helper',
       thinking: 'strip',
       reasoningEffort: 'high',    // zen 系没有 medium 档，跟另外两条 glm 行取一致
+      efforts: ['low', 'high', 'max'],   // 用户可选的思考等级（09-13）：zen 系 low|high|max 三档
       maxOutput: 131_072,
       // ⛔ 同一个上游的 deepseek 视觉行 09-07 实撞过 Console Go 的 "At most 4 image(s)"。这条没实测，
       // 按同上游的已知上限先收着：裁图比整发 400 好（lib/ingress/image-cap.js）
@@ -322,6 +324,7 @@ export const MODELS_BUILTIN = Object.freeze([
       fastModel: 'deepseek-v4-flash-helper',
       thinking: 'strip',
       reasoningEffort: 'high',
+      efforts: ['low', 'high', 'max'],   // 用户可选的思考等级（09-13）：zen 系三档；low 在同上游 helper 行上实测照收
       maxOutput: 128_000,
       prices: { input: 0.44, output: 1.32, cacheRead: 0.014, cacheWrite: 0 },
     },

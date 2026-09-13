@@ -105,3 +105,12 @@ describe('mergeRelayRows', () => {
     expect(merge(cat([api('other')], renames)).models.some((m) => m.id === VISION)).toBe(true);
   });
 });
+
+describe('mergeRelayRows × 思考等级（09-13）', () => {
+  it('目录带 efforts → 建出来的行 api.efforts 照抄；不带或写坏 → 不带（这一行不可调）', () => {
+    const r = merge(cat([api('tunable', { efforts: ['low', 'high', 'max'] }), api('fixed'), api('bad', { efforts: 'high' })]));
+    expect(r.models.find((m) => m.id === 'tunable').api.efforts).toEqual(['low', 'high', 'max']);
+    expect(r.models.find((m) => m.id === 'fixed').api).not.toHaveProperty('efforts');
+    expect(r.models.find((m) => m.id === 'bad').api).not.toHaveProperty('efforts');
+  });
+});

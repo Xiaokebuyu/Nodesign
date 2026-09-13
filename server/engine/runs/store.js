@@ -402,6 +402,16 @@ export function _truncateRunsTable() {
   db.prepare('DELETE FROM runs').run();
 }
 
+/**
+ * 这个会话 id 在哪些项目里跑过回合（去重）。session_id 列 07-31 才加，更早的行是 NULL，查不到不代表没有。
+ * 跨租户判据用（api/session-ownership.js）：客户端带来一个 sid，它的历史回合在别的项目里 = 不是这个项目的会话。
+ * @returns {string[]}
+ */
+export function projectIdsForSession(sessionId) {
+  if (!sessionId) return [];
+  return db.prepare('SELECT DISTINCT project_id FROM runs WHERE session_id = ? AND project_id IS NOT NULL').all(sessionId).map((r) => r.project_id);
+}
+
 export default db;
 
 /**

@@ -139,7 +139,8 @@ frames:[...] (filmstrip contact sheet).`,
       const dur = durationMs ?? 2000;
       let acq;
       try {
-        acq = await acquireArtifactPage({ projectId, workspaceRoot, target, live, viewport: vp });
+        // 量逐帧数值：独占全部浏览器槽位（helpers/browser-slots.js）
+        acq = await acquireArtifactPage({ projectId, workspaceRoot, target, live, viewport: vp, exclusive: true });
         const page = acq.page;
         const opened = acq;
         if (acq.live) vp = acq.viewport;

@@ -45,7 +45,7 @@ import { trailingThrottle } from '../lib/trailing-throttle.js';
 import { makeRegionCommentHandler } from '../lib/region-comment.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
-import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult } from '../lib/chat-stream.js';
+import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult, keepLiveTools } from '../lib/chat-stream.js';
 import { bumpFileVersion, versionOfFile } from '../lib/file-versions.js';
 
 // 事件分流判据（名单+过期规则）2026-08-14 抽进 lib/event-router.js 配单测 ——
@@ -477,8 +477,8 @@ export default function ProjectWorkspace() {
       try {
         const { messages: sessionMsgs = [] } = await Sessions.read(id, currentSessionId);
         if (cancelled) return;
-        const display = sessionMessagesToDisplay(sessionMsgs);
-        setMessages(prev => {
+        const rawDisplay = sessionMessagesToDisplay(sessionMsgs);
+        setMessages(prev => { const display = keepLiveTools(prev, rawDisplay);   // 在跑的卡别被历史盖成「被中断」（chat-stream.js）
           if (wsHydratedSidRef.current === currentSessionId) {
             if (import.meta.env.DEV) console.info('[H1] WS hydrate 已接管，跳过 HTTP 兜底');
             return prev;
@@ -640,6 +640,7 @@ export default function ProjectWorkspace() {
           // session-config，picker 直接改那边。每条消息都捎上本地偏好的话，在另一台
           // 机器上为这个会话选的模型会被本机的旧偏好悄悄改回去。
           model: sidForRequest ? undefined : (useGlobalStore.getState().modelPref || undefined),
+          effort: sidForRequest ? undefined : (useGlobalStore.getState().effortPrefs?.[useGlobalStore.getState().modelPref] || undefined),   // 思考等级偏好同理（09-13）
         });
         setCurrentRunId(runId);
         setActiveRun({ pid: id, runId });  // A4.3：让 AskUserQuestionView 直 POST /answer
@@ -788,6 +789,7 @@ export default function ProjectWorkspace() {
         // running=false = 刚收尾那轮的尾巴（server 留了几秒 grace 防收尾瞬间重连
         // 内容重复）。只认消息，不要把界面切回"正在跑"。
         if (evt.runId && evt.running !== false) {
+          if (evt.streams?.length) stageRef.current?.onEvent?.({ type: 'ws.live_turn', streams: evt.streams });   // 画布直播卡续上（09-13）
           setIsStreaming(true);
           currentRunIdRef.current = evt.runId;   // 同步落 ref：紧跟其后的 delta 不被 stale guard 吞
           setCurrentRunId(evt.runId);
@@ -1396,6 +1398,7 @@ export default function ProjectWorkspace() {
         sessionId: sidForRequest,
         // 同上：已有会话时不带 model（真相在 session-config，picker 直接改那边）
         model: sidForRequest ? undefined : (useGlobalStore.getState().modelPref || undefined),
+        effort: sidForRequest ? undefined : (useGlobalStore.getState().effortPrefs?.[useGlobalStore.getState().modelPref] || undefined),   // 思考等级偏好同理（09-13）
       });
       // 追加修（2026-08-05）：只有此刻没有 turn 在跑才立即认领新 runId。
       // agent 跑着时追加，服务端是把这条排进 inputQueue，当前流上的事件还都

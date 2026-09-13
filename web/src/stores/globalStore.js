@@ -155,6 +155,18 @@ export const useGlobalStore = create((set) => ({
     set({ modelPref: model || DEFAULT_MODEL_ID });
   },
 
+  // 思考等级偏好（09-13）：按模型记 { [modelId]: 'low'|'medium'|'high'|'xhigh'|'max' }，只用于**新建会话**时随 body.effort 带过去；
+  // 会话建起来之后档位的真相在 session-config.json，picker 直接改那边（跟 modelPref 同一个道理）。
+  effortPrefs: (() => {
+    try { return JSON.parse(localStorage.getItem('nodesign:effortPrefs') || '{}') || {}; } catch { return {}; }
+  })(),
+  setEffortPref: (model, effort) => set((state) => {
+    const next = { ...state.effortPrefs };
+    if (effort) next[model] = effort; else delete next[model];
+    try { localStorage.setItem('nodesign:effortPrefs', JSON.stringify(next)); } catch { /* ignore */ }
+    return { effortPrefs: next };
+  }),
+
   // 当前会话跑在**谁家**的模型上（ui/ModelMark.jsx 的 brand）。picker 一问到清单就写这里，
   // 画布精灵读它换身份 —— 精灵和 picker 隔着整棵树，又不该各自去问一遍接口。
   // ⚠️ 只是个显示用的转发，不是模型的真相源：真相在服务端 session-config，

@@ -43,14 +43,15 @@ import {
 import { createRun } from '../engine/runs/store.js';
 import { runSession } from '../engine/agent/session-loop.js';
 import {
-  cancelRun, provideAnswer, getQuery, provideElicitation, hasActiveQuerySession, getQuerySession, closeQuerySession, setSessionPermissionMode,
+  cancelRun, provideAnswer, getQuery, provideElicitation, hasActiveQuerySession, getQuerySession, closeQuerySession, setSessionPermissionMode, querySessionBelongsElsewhere,
 } from '../engine/runs/active-runs.js';
 import { pushUserMessage, getQueueDepth } from '../engine/runs/turn-relay.js';
-import { applySessionModel, resolveSessionModel } from '../engine/agent/session-model.js';
+import { applySessionModel, resolveSessionModel } from '../engine/agent/session-model.js'; import { applySessionEffort } from './session-effort.js';
 import { lruGet, lruPut, inflightTurns, INFLIGHT_RETENTION_MS } from './turn-inflight.js';
 import { allowedModelsFor, modelLockFor, defaultModelFor, modelIsFree, hasSubscriptionAccess, resolveModelRoute, canonicalModelId } from '../engine/agent/model-context.js';
 import { modelSwitchRejection } from '../engine/agent/model-switch-rules.js';   // 换模型的闸 09-10 拆出去了
 import { AsyncQueue } from '../lib/async-queue.js';
+import { clientSessionBelongsToProject } from './session-ownership.js';
 import { checkQuota, checkFreeQuota, checkConcurrency, fmtUsd } from '../lib/quota.js';
 import { shouldModerate, moderateText, recordViolation, levelFor } from '../lib/moderation.js';
 import { getProjectBus } from '../ws/broker.js';
@@ -182,6 +183,11 @@ router.post('/:pid/turn', async (req, res, next) => {
     const isNewSession = !resumeSessionId;
     const sid = isNewSession ? randomUUID() : resumeSessionId;
     validateSessionId(sid);
+    // 跨租户（09-13）：客户端给的 sid 有活口会话但属于别的项目 → 当它不存在，不许往别人的会话里推消息；
+    // 客户端给的 sid 不是本项目的会话（别的项目跑过 / 哪儿都没见过）→ 同样当不存在，不许拿它新建（抢注会把本人锁在门外，见 session-ownership.js）。
+    // project.activeSessionId 那条兜底也要过：PATCH /projects/:pid 允许客户端直接写这个指针
+    if (querySessionBelongsElsewhere(sid, project.id)) return res.status(404).json({ error: 'session not found', code: 'SESSION_NOT_FOUND' });
+    if (!isNewSession && !(await clientSessionBelongsToProject(project.id, sid))) return res.status(404).json({ error: 'session not found', code: 'SESSION_NOT_FOUND' });
 
     // 守卫：临时 rewind query 在跑时拒绝同 sid 新 turn —— 防止两个 SDK subprocess
     // 同时写同一 jsonl。临时 query ~3-5s，用户重试一次就 OK。
@@ -319,6 +325,8 @@ router.post('/:pid/turn', async (req, res, next) => {
       }
       await applySessionModel(sid, getSessionMetaDir(project.id, sid), requestedModel, 'turn');
     }
+    // 新会话带思考等级偏好（09-13，首页 / Hub 那条路；会话建起来之后改档走 PUT /sessions/:sid/model）。档位不适用于这个模型就忽略
+    if (isNewSession && req.body && 'effort' in req.body) await applySessionEffort({ sid, metaDir: getSessionMetaDir(project.id, sid), model: (await resolveSessionModel(getSessionMetaDir(project.id, sid))).model, effort: req.body.effort ?? null });
 
     const pendingSummary = isNewSession ? { count: 0, summary: '' } : await readPendingSummary(sessionRoot);
     // raw：纯文本直达 SDK，不加任何装饰块 —— 斜杠命令（/compact 等）要求消息

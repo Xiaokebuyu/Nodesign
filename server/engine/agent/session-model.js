@@ -26,6 +26,7 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import { getQuerySession, closeQuerySession } from '../runs/active-runs.js';
 import { canonicalModelId } from './model-context.js';
+import { isEffortLevel } from './model-effort.js';
 
 const CONFIG_NAME = 'session-config.json';
 
@@ -170,4 +171,27 @@ export async function applySessionModel(sessionId, sessionRoot, model, reason = 
     );
   }
   return { ...result, restarted };
+}
+
+/**
+ * 会话的思考等级（2026-09-13）。存在 session-config.json 的 effort 字段，跟 model 同一份文件、同一把锁。
+ * 存的是用户选的原值；换到不收这一档的模型时由 model-effort.js 就近换算，文件不改（换回来还是原来那档）。
+ * @returns {Promise<string|null>} 没选过 / 写坏了 → null
+ */
+export async function readSessionEffort(sessionRoot) {
+  const cfg = await readSessionConfigFile(sessionRoot);
+  return isEffortLevel(cfg.effort) ? cfg.effort : null;
+}
+
+/** 写 / 清会话的思考等级。null = 清掉（回到模型默认档） */
+export async function writeSessionEffort(sessionRoot, effort) {
+  const wanted = isEffortLevel(effort) ? effort : null;
+  return withConfigLock(sessionRoot, async () => {
+    const cfg = await readSessionConfigFile(sessionRoot);
+    if ((isEffortLevel(cfg.effort) ? cfg.effort : null) === wanted) return { effort: wanted, changed: false };
+    const next = { ...cfg, updatedAt: new Date().toISOString() };
+    if (wanted) next.effort = wanted; else delete next.effort;
+    await fs.writeFile(configPath(sessionRoot), JSON.stringify(next, null, 2), 'utf8');
+    return { effort: wanted, changed: true };
+  });
 }

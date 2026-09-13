@@ -21,11 +21,13 @@
  *   protocol                   这行上游说哪种协议（桌面换模型的协议闸要用）
  *   prices                     表价（桌面自己那本展示账用；真账在站点）
  *   unavailable                **实际生效**的关门时段（站主在管理台覆盖过就是他那份），桌面的钟点闸照它现算
+ *   efforts                    用户可选的思考等级（09-13，model-effort.js）；只有可调的 API 行带
  *   renames（顶层）             改名表：桌面存量里的旧 id 顺着它落到新行上
  */
 
 import { selectableModelsFor, resolveModelRoute, PICKER_SCOPES, MODEL_ROWS, UPSTREAMS } from '../../engine/agent/model-context.js';
 import { RENAMED_MODELS } from '../../engine/agent/model-renames.js';
+import { effortChoicesFor } from '../../engine/agent/model-effort.js';
 import { effectiveHoursOf } from '../../lib/model-availability.js';
 import { relaySubscriptionAllowed, RELAY_SUBSCRIPTION_CLOSED_REASON } from './gates.js';
 
@@ -41,6 +43,8 @@ function apiContract(row) {
     protocol: UPSTREAMS[route.upstreamId]?.protocol || 'anthropic',
     ...(row.api.prices ? { prices: row.api.prices } : {}),
     ...(hours ? { unavailable: hours } : {}),
+    // 用户可选的思考等级（09-13）：桌面照着给选择器；真正换算在站点的 ingress（按请求体 effort），老桌面不认这个字段也无害
+    ...(effortChoicesFor(row) ? { efforts: effortChoicesFor(row) } : {}),
   };
 }
 

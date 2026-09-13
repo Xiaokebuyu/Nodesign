@@ -75,6 +75,7 @@ export function retryBudgetMs(env = process.env) {
  *   onBilling({costUsd,usage})  上游自报的费用/用量（含重发那几发，账要算它们）
  *   onTruncated(reason|null)  这次往返是不是「说到一半被掐」→ session-loop 续接
  *   onNotice(text)  想让用户看见的一句话（就地重发时说一声，别让人对着不动的绿点干等）
+ *   onToolCallReopened(n)  上游回头续写已闭合的 tool_call 的次数（>0 才调）→ 问题库计数
  */
 /**
  * 没带会话前缀的请求（探针 / 体检 / 手打 curl）用的会话 ID：一个进程一个，稳定但不冒充任何真会话。
@@ -107,7 +108,7 @@ export function upstreamHeaders({ wire, key, wantStream, target, bodyLength, ses
 /** onOutcome 可返回要改写的状态码（ingress 换线后把 401/402/403 改成 503 让 CLI 重试）；只认 4xx/5xx 整数，别的返回值一律忽略 */
 const asStatus = (v) => (Number.isInteger(v) && v >= 400 && v <= 599 ? v : undefined);
 
-export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag = null, target, path, agent, timing = null, onOutcome = () => {}, onBilling = () => {}, onTruncated = () => {}, onNotice = () => {} }) {
+export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag = null, target, path, agent, timing = null, onOutcome = () => {}, onBilling = () => {}, onTruncated = () => {}, onNotice = () => {}, onToolCallReopened = () => {} }) {
   const wantStream = !!parsed.stream;
   const label = wire.upstream?.label || wire.upstreamId;
   const body = toOpenAIChatRequest(parsed, { reasoningEffort: wire.reasoningEffort, maxOutput: wire.maxOutput, bodyExtra: wire.bodyExtra });
@@ -125,12 +126,13 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
    * 09-08 深夜桌面 DSv4.1 首字节 23s 的案子：count_tokens 对照排除了上传、直打上游排除了模型本身，
    * 剩下这段没有任何量具能看见 —— 这行就是为它加的。
    */
-  const timingLine = (ok, reason, { attempts, sentAt, firstByteAt, firstChunkAt, usage }) => {
+  const timingLine = (ok, reason, { attempts, sentAt, firstByteAt, firstChunkAt, usage, reopen = 0 }) => {
     const u = usage || {};
     const seg = (a, b) => (a && b ? `${b - a}ms` : '-');
     console.log(`[ingress-timing] sid=${sidShort} upstream=${wire.upstreamId} model=${wire.wireModel} ok=${ok}${reason ? ` reason=${String(reason).slice(0, 60)}` : ''}`
       + ` body=${Math.round(outBody.length / 1024)}KB up=${seg(timing?.arrivedAt, timing?.bodyAt)} prep=${seg(timing?.bodyAt, t0)}`
       + ` head=${seg(sentAt, firstByteAt)} first=${seg(sentAt, firstChunkAt)} total=${seg(sentAt, Date.now())} attempts=${attempts ?? 1}`
+      + (reopen ? ` reopen=${reopen}` : '')
       + ` in=${u.prompt_tokens ?? '-'} out=${u.completion_tokens ?? '-'} cr=${u.prompt_tokens_details?.cached_tokens ?? '-'} rt=${u.completion_tokens_details?.reasoning_tokens ?? '-'}`);
   };
 
@@ -195,7 +197,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       if (outcomeReported) return undefined;
       outcomeReported = true;
       if (upstreamFault !== null) upstreamHealth.note(wire.upstreamId, { ok, reason, status, ms: firstByteAt ? firstByteAt - sentAt : null });
-      timingLine(ok, reason, { attempts: xf.attempts, sentAt, firstByteAt, firstChunkAt, usage: xf.usageTotal });
+      timingLine(ok, reason, { attempts: xf.attempts, sentAt, firstByteAt, firstChunkAt, usage: xf.usageTotal, reopen: xf.reopenedToolCalls });
       return asStatus(onOutcome(ok, reason, status));
     };
 
@@ -238,6 +240,7 @@ export function forwardOpenAIChat({ parsed, wire, key, res, sidShort, sessionTag
       if (dead) return;                            // 账在 res 'close' 那里已经结过了
       report(!xf.failReason, xf.failReason || '');
       onTruncated(xf.truncated);
+      if (xf.reopenedToolCalls > 0) onToolCallReopened(xf.reopenedToolCalls);
       // ⭐ 记账用**累计**（失败那几发也烧了上游的 token）；给 CLI 的 message_delta 用最后一发（见 openai-chat.js）
       if (xf.cost != null || xf.usageTotal) onBilling({ costUsd: xf.cost, usage: xf.usageTotal });
     });

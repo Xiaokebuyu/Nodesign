@@ -33,6 +33,7 @@ import assetsRouter from './api/assets.js';
 import turnRouter from './api/turn.js';
 import exportsRouter from './api/exports.js';
 import sessionsRouter from './api/sessions.js';
+import taskStopRouter from './api/task-stop.js';
 import instructionRouter from './api/instruction.js';
 import boardRouter from './api/board.js';
 import stageRouter from './api/stage.js';
@@ -148,6 +149,7 @@ app.use('/api/projects', assetsRouter);
 app.use('/api/projects', turnRouter);
 app.use('/api/projects', exportsRouter);
 app.use('/api/projects', sessionsRouter);
+app.use('/api/projects', taskStopRouter);       // 单停一个子代理，不打断整轮（09-13）
 app.use('/api/projects', instructionRouter);
 app.use('/api/projects', boardRouter);
 app.use('/api/projects', stageRouter);        // 用户从画布对角色说的话落在画布上

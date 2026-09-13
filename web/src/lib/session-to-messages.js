@@ -26,17 +26,20 @@
  * - assistant text block → { role: 'assistant', content }
  * - assistant thinking block → { role: 'thinking', content }
  * - assistant tool_use → { role: 'tool', toolName, toolInput, status: 'success' }
- *   （状态后面 tool_result 来时覆盖）
+ *   （状态后面 tool_result 来时覆盖；整份转录里都没有它的 tool_result → 标成被中断的失败，见文末）
  * - user tool_result block → 找 toolUseId 关联的 tool message 更新 status/output/error/images
  *
  * 跳过：queue-operation / attachment / file-history-snapshot / last-prompt
  *       （SDK 内部运维消息，前端不展示）
  */
 
+import { t } from './i18n.js';
+
 export function sessionMessagesToDisplay(sessionMessages) {
   if (!Array.isArray(sessionMessages)) return [];
   const display = [];
   const toolIndexById = new Map();
+  const resolvedToolIds = new Set();
 
   for (const sm of sessionMessages) {
     if (!sm || typeof sm !== 'object') continue;
@@ -73,6 +76,7 @@ export function sessionMessagesToDisplay(sessionMessages) {
           const idx = toolIndexById.get(block.tool_use_id);
           if (idx == null) continue;
           const tool = display[idx];
+          resolvedToolIds.add(block.tool_use_id);
           tool.status = block.is_error ? 'error' : 'success';
           const c = block.content;
           if (block.is_error) {
@@ -151,6 +155,7 @@ export function sessionMessagesToDisplay(sessionMessages) {
           const idx = toolIndexById.get(block.tool_use_id);
           if (idx == null) break;
           const tool = display[idx];
+          resolvedToolIds.add(block.tool_use_id);
           tool.status = block.is_error ? 'error' : 'success';
           const c = block.content;
           if (block.is_error) {
@@ -179,6 +184,17 @@ export function sessionMessagesToDisplay(sessionMessages) {
     }
   }
 
+  // 没拿到结果的工具（2026-09-13，流式与并行现状调查缺口 3）：以前默认 success，被中断的回合刷新后
+  // 历史里显示「成功」。CLI 正常停止会给被打断的工具补一条 is_error 的结果（上面那支已经覆盖），走到这里的
+  // 是进程被关 / 服务重启这类连补结果都没来得及写的情况。还在跑的回合不受影响：紧随其后的 ws.live_turn
+  // 快照对本轮权威，会用同 id 的 running 工具卡把这里替换掉（chat-stream.mergeLiveTurnSnapshot）。
+  for (const [id, idx] of toolIndexById) {
+    if (resolvedToolIds.has(id)) continue;
+    const tool = display[idx];
+    tool.status = 'error';
+    tool.interrupted = true;
+    tool.toolError = t('没有拿到结果：这一轮在它执行完之前被中断了（停止、断线或服务重启）');
+  }
   return display;
 }
 

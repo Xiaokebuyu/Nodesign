@@ -24,7 +24,9 @@ import { boxConfig, runBox, sshArgs, scpArgs, localBoxEnabled, BOX_OFF_MSG } fro
 
 const H3_REPO = process.env.NODESIGN_H3_REPO || '/home/wangang-dev/projects/minimax-h3-modal';
 const MODAL_BIN = process.env.NODESIGN_MODAL_BIN || path.join(os.homedir(), '.local/bin/modal');
-const PER_SHOT_TIMEOUT_MS = Number(process.env.NODESIGN_FILM_TIMEOUT_MS) || 900_000;
+export const PER_SHOT_TIMEOUT_MS = Number(process.env.NODESIGN_FILM_TIMEOUT_MS) || 900_000;
+/** 一批最多几镜（schema 与 runtime/agent-env.js 的 MCP_TOOL_TIMEOUT 共用） */
+export const MAX_SHOTS = 16;
 
 function frameCount(durationS) {
   const f = Math.max(5, Math.round(durationS * 24));
@@ -258,7 +260,7 @@ and move on.`,
         first_frame: z.string().optional(),
         last_frame: z.string().optional(),
         steps: z.number().int().min(4).max(8).optional().describe('default 8; 4 = fast draft'),
-      })).min(1).max(16).describe('shots rendered serially in one batch'),
+      })).min(1).max(MAX_SHOTS).describe('shots rendered serially in one batch'),
       seed: z.number().int().default(1101).describe('ONE seed shared by the whole batch (film discipline)'),
     },
     (args) => rollFilm(deps, args),

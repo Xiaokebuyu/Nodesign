@@ -43,7 +43,7 @@ import { failStreaks, exhaustedErrorBody } from './ingress/upstream-fail-streak.
 import { armIdleWatchdog } from './ingress/stream-watchdog.js'; import { dumpRequestShape } from './ingress/request-dump.js';   // 后者是量具
 import { noteUpstreamBilling, openaiTokens } from './ingress/upstream-billing.js';
 import { noteUpstreamTruncation } from './ingress/upstream-truncation.js';
-import { noticeSession } from './ingress/session-notice.js';
+import { noticeSession } from './ingress/session-notice.js'; import { noteToolCallReopened } from './ingress/tool-call-reopen.js'; import { wireReasoningEffort } from '../engine/agent/model-effort.js';
 import { tapAnthropicUsage } from './ingress/anthropic-usage.js';
 import { capImages } from './ingress/image-cap.js';
 
@@ -258,7 +258,7 @@ export async function handleRequest(req, res, bodyBuf, opts = {}) {
   if (wire.protocol === 'openai-chat') {
     const target = new URL(wire.upstream.baseUrl);
     // helper 请求降档：主行想多少归主行，helper 一句话的活用 helperReasoningEffort（默认 low）
-    const wireFwd = routed.role === 'helper' && wire.helperReasoningEffort ? { ...wire, reasoningEffort: wire.helperReasoningEffort } : wire;
+    const wireFwd = routed.role === 'helper' && wire.helperReasoningEffort ? { ...wire, reasoningEffort: wire.helperReasoningEffort } : { ...wire, reasoningEffort: wireReasoningEffort(wire, parsed) };   // 主行：用户选的思考等级（请求体 output_config.effort）按本行可收的档换算（model-effort.js）
     forwardOpenAIChat({ parsed, wire: wireFwd, key, res, sidShort, sessionTag, target, timing: opts.timing, path: joinPath(target.pathname, '/chat/completions'), agent: agentFor(wire, target.protocol === 'https:'), onOutcome: noteOutcome,
       // 上游自报费用按会话 × appModel 累加（helper 请求记到 helper 行头上），session-loop 结账时取走
       onBilling: customBilling
@@ -275,7 +275,7 @@ export async function handleRequest(req, res, bodyBuf, opts = {}) {
       onNotice: (text) => {
         if (routed.role === 'helper') return;   // helper 的重发用户不需要知道
         noticeSession(sessionTag, { key: 'upstream_retry', text, priority: 'warn' });
-      } });
+      }, onToolCallReopened: (n) => noteToolCallReopened({ wire: wireFwd, sidShort, sessionTag, n }) });   // 上游回头续写已闭合的 tool_call → 问题库
     return;
   }
   const outBody = Buffer.from(JSON.stringify(parsed), 'utf8');

@@ -87,6 +87,8 @@ import { makeStartProcessTool, makeReadProcessLogTool, makeStopProcessTool, make
 import { makeRollFilmTool } from './tools/roll-film.js';
 import { makePaintStillTool } from './tools/paint-still.js';
 import { makeLookupTagsTool } from './tools/lookup-tags.js';
+import { withConcurrencyHint, assertConcurrencyNames } from './tool-concurrency.js';
+import { withSearchHint } from './tool-search-hints.js';
 
 /**
  * 创建 Nodesign 的 MCP server，绑定当前 run 的依赖。
@@ -393,6 +395,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   // 时这里当场炸，不让下架条目静默空转（判据本身要先验一遍）。
   assertModeProfileNames(builtTools.map((t) => t.name));
   assertAlwaysLoadNames(builtTools.map((t) => t.name));
+  assertConcurrencyNames(builtTools.map((t) => t.name));
 
   const tools = builtTools.filter((t) => (
     // 本机能力缺席且该工具是 unregister 档 → 整件不注册（连名字都不进上下文）。
@@ -409,6 +412,13 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
     ALWAYS_LOAD_TOOLS.has(t.name)
       ? { ...t, _meta: { ...t._meta, 'anthropic/alwaysLoad': true } }
       : t
+  )).map((t) => (
+    // 并行只读标记（2026-09-13）：CLI 只凭 readOnlyHint 决定同一条消息里的调用能不能同时跑。
+    // 名单与判据在 tool-concurrency.js 一份
+    withConcurrencyHint(t)
+  )).map((t) => (
+    // 延迟加载工具的检索关键词（2026-09-13）：名字说不出用途的补英文同义词，表与判据在 tool-search-hints.js
+    withSearchHint(t)
   )).map((t) => (
     // 本机能力闸（08-22）：缺 chromium / LibreOffice / 钥匙 的工具，描述前缀「不可用 + 装法」、调用期拦住。
     // 对照表在 capability-gate.js 一份；没探过（单测）原样放行
@@ -448,5 +458,8 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   // 同一份 tools 数组上取，不另立第二份清单 —— 第二真相源会漂移。session-loop
   // 收到 system:init 时拿它跟 SDK 实际注册进会话的工具对账。
   server.toolNames = tools.map((t) => t.name);
+  // 并行只读的实际名单（同一份 tools 上取；lint 与探针对账用）
+  server.readOnlyToolNames = tools.filter((t) => t.annotations?.readOnlyHint === true).map((t) => t.name);
+  server.searchHintToolNames = tools.filter((t) => t._meta?.['anthropic/searchHint']).map((t) => t.name);
   return server;
 }

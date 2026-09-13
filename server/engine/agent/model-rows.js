@@ -135,6 +135,8 @@ export function mergeRelayRows(models, upstreams, catalog, { keyPresent }) {
         upstream: relayUpstreamOf(e.protocol), wireModel: e.id, sdkAlias: e.sdkAlias,
         fastModel: fastOk ? e.fastModel : e.id, thinking: 'strip',
         ...(isPrices(e.prices) ? { prices: Object.freeze({ ...e.prices }) } : {}),
+        // 思考等级（09-13）：站点说这行收哪几档，桌面选择器照着给；换算在站点 ingress，这里只是展示依据
+        ...(Array.isArray(e.efforts) && e.efforts.every(isStr) ? { efforts: Object.freeze([...e.efforts]) } : {}),
       }),
     }));
   }

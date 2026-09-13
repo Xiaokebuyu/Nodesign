@@ -13,6 +13,7 @@
  */
 
 import { Events } from './events.js';
+import { handleSdkNotice } from './sdk-notices.js';
 import { callerOf } from './actor-trail.js';
 import { handleTaskMessage } from './task-events.js';
 import { listWorkspaceArtifacts } from '../../lib/artifact-target.js';
@@ -200,6 +201,7 @@ export function handleSDKMessage(ctx, msg) {
       break;
 
     default:
+      if (handleSdkNotice(ctx, msg)) break;   // conversation_reset / active_goal 等顶层 type（sdk-notices.js）
       // 兜底：未识别的新 type 留个调试痕迹，方便 SDK 升级时发现
       console.warn(`[run ${ctx.runId}] unknown SDK message type:`, msg.type);
       break;
@@ -322,6 +324,7 @@ function handleSystemMessage(ctx, msg) {
       break;
 
     default:
+      if (handleSdkNotice(ctx, msg)) break;   // informational / 拒答 / permission_denied 等（sdk-notices.js）
       console.warn(`[run ${ctx.runId}] unknown system subtype:`, msg.subtype);
       break;
   }

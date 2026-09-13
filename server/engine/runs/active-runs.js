@@ -460,7 +460,7 @@ export function listActiveRuns() {
  *   防止"closeQuerySession 已让位 + 新 session register 后，旧 session-loop finally
  *   误删新 entry"的 race（grace timer 关 session 后用户立即重发的真实场景）。
  */
-export function registerQuerySession(sessionId, { abortController, inputQueue, initialPermissionMode = 'bypassPermissions' } = {}) {
+export function registerQuerySession(sessionId, { abortController, inputQueue, initialPermissionMode = 'bypassPermissions', projectId = null } = {}) {
   if (!sessionId || !abortController || !inputQueue) return false;
   // 关键去重：同 sid 已注册就拒绝（旧 record .set 覆盖会让旧 abortController + inputQueue
   // 失去引用，旧 SDK binary 仍在跑变孤儿 → 跟新 binary 并行 Write 同 canvas.html
@@ -485,6 +485,7 @@ export function registerQuerySession(sessionId, { abortController, inputQueue, i
   const token = Symbol('querySession');
   activeQuerySessions.set(sessionId, {
     abortController,
+    projectId,   // 这个会话属于哪个项目（09-13）：API 层按「sid + pid」取句柄的依据，见 querySessionInProject
     query: null,
     inputQueue,
     currentRunId: null,
@@ -563,6 +564,27 @@ export function attachSessionQuery(sessionId, query) {
  * @param {string} sessionId
  * @returns {ActiveQuerySession | undefined}
  */
+/**
+ * 按「会话 + 项目」取活口句柄（2026-09-13，fable 审查 P2-4 引出的跨租户洞）。
+ *
+ * 这张表 key 只有 sid，而 API 的 sid 来自客户端：turn.js 推消息、会话关闭 / 删除、回退（活口路径会 rewindFiles）、
+ * 单停子代理、WS 订阅都拿客户端给的 sid 直接查表 —— 知道别人会话 id 就能往别人的会话里插消息、回滚别人的文件、
+ * 看别人在飞回合的快照。凡是 API / WS 入口一律走这里：项目对不上等于这个会话不存在。
+ * 注册时没带 projectId 的记录（探针 / 单测直连）不拦，线上唯一的注册点 session-loop 一定带。
+ * @returns {object|null}
+ */
+export function querySessionInProject(sessionId, projectId) {
+  const rec = getQuerySession(sessionId);
+  if (!rec) return null;
+  if (rec.projectId && rec.projectId !== projectId) return null;
+  return rec;
+}
+
+/** 同上的布尔版：这个 sid 有活口会话，但**不属于**这个项目（入口据此拒） */
+export function querySessionBelongsElsewhere(sessionId, projectId) {
+  return hasActiveQuerySession(sessionId) && !querySessionInProject(sessionId, projectId);
+}
+
 export function getQuerySession(sessionId) {
   return activeQuerySessions.get(sessionId);
 }

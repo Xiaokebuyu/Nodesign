@@ -25,7 +25,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk';
 import { validateProjectId, getProject, setActiveSession } from '../projects/store.js';
 import { guardProject, modelUserFor } from './_guard.js';
-import { closeQuerySession, hasActiveQuerySession, getQuerySession } from '../engine/runs/active-runs.js';
+import { closeQuerySession, hasActiveQuerySession, getQuerySession, querySessionBelongsElsewhere } from '../engine/runs/active-runs.js';
 import {
   getProjectWorkspace,
   getWorkspaceRoot,
@@ -43,8 +43,9 @@ import { platform } from '../runtime/platform.js';
 import { getProjectBus } from '../ws/broker.js';
 import { getLastContextUsage } from '../engine/runs/live-turn.js';
 import { Events } from '../engine/agent/events.js';
-import { resolveSessionModel, applySessionModel, defaultModel } from '../engine/agent/session-model.js';
-import { selectableModelsFor, allowedModelsFor, modelLockFor, defaultModelFor, canonicalModelId } from '../engine/agent/model-context.js';
+import { resolveSessionModel, applySessionModel, defaultModel, readSessionEffort } from '../engine/agent/session-model.js';
+import { applySessionEffort } from './session-effort.js';
+import { selectableModelsFor, allowedModelsFor, modelLockFor, defaultModelFor, canonicalModelId, effortForModel } from '../engine/agent/model-context.js';
 import { modelSwitchRejection } from '../engine/agent/model-switch-rules.js';   // 换模型的闸 09-10 拆出去了
 
 
@@ -52,6 +53,10 @@ import { mountRewindRoute } from './sessions-rewind.js';
 import { jsonlExistsForSession, truncateJsonlAtLastUserMessage } from '../projects/session-jsonl.js';
 
 const router = express.Router();
+// 跨租户（09-13）：这个文件（含挂进来的 rewind）所有 /:pid/sessions/:sid/* 路由，sid 若有活口会话但属于别的项目，
+// 一律当不存在 —— 关闭 / 删除 / 回退 / 改模型 / 读上下文都拿 sid 查全局句柄表（active-runs querySessionInProject）
+router.use('/:pid/sessions/:sid', (req, res, next) => (querySessionBelongsElsewhere(req.params.sid, req.params.pid)
+  ? res.status(404).json({ error: 'session not found', code: 'SESSION_NOT_FOUND' }) : next()));
 
 // 「回到某条消息之前」整块住在 sessions-rewind.js（行数棘轮，2026-08-30 拆出）
 mountRewindRoute(router);
@@ -220,7 +225,10 @@ router.get('/:pid/sessions/:sid/model', async (req, res, next) => {
     // 没覆盖时按钮上显示的就是它。admin 代看 basic 项目时清单也按 owner（订阅行 locked），跟 turn.js 一致
     const modelUser = modelUserFor(req, project);
     const userDefault = defaultModelFor(modelUser) || fallback;
-    res.json({ model: override || userDefault, override, default: userDefault, options: selectableModelsFor(modelUser) });
+    const current = override || userDefault;
+    // effort：这个会话此刻实际生效的思考等级（选过就按模型换算，没选过是模型默认档）；这一行不可调 → null
+    const { choices, sdk } = effortForModel(current, await readSessionEffort(getSessionMetaDir(req.params.pid, req.params.sid)));
+    res.json({ model: current, override, default: userDefault, options: selectableModelsFor(modelUser), effort: choices ? sdk : null });
   } catch (err) { next(err); }
 });
 
@@ -230,6 +238,15 @@ router.put('/:pid/sessions/:sid/model', async (req, res, next) => {
     const project = guardProject(req, res);
     if (!project) return;
 
+    // 只改思考等级（09-13）：body 里没有 model 键就不走下面整条换模型的闸，按会话当前模型校验档位
+    if (req.body && !('model' in req.body) && 'effort' in req.body) {
+      const metaDir = getSessionMetaDir(req.params.pid, req.params.sid);
+      await ensureSessionWorkspace(req.params.pid, req.params.sid);
+      const { model: current } = await resolveSessionModel(metaDir);
+      const r = await applySessionEffort({ sid: req.params.sid, metaDir, model: current, effort: req.body.effort ?? null });
+      if (!r.ok) return res.status(r.status).json(r.body);
+      return res.json({ model: current, effort: effortForModel(current, r.effort).choices ? effortForModel(current, r.effort).sdk : null, applied: r.applied });
+    }
     // canonicalModelId：前端可能还记着改名前的 id（09-10 起行会改名，表在 model-table.js 的
     // RENAMED_MODELS）。在**进门这一处**翻成现名，后面的白名单、换线闸、落盘都只看得到现名
     const raw = typeof req.body?.model === 'string' ? canonicalModelId(req.body.model) : req.body?.model;
@@ -265,9 +282,16 @@ router.put('/:pid/sessions/:sid/model', async (req, res, next) => {
       hasHistory: await jsonlExistsForSession(getSessionWorkspace(req.params.pid, req.params.sid), req.params.sid),
     });
     if (why) return res.status(409).json({ error: why, code: 'LANE_SWITCH' });
+    // 同时改思考等级（09-13）：先写档位再换模型 —— 换模型会关掉空闲 query，下次起会话从配置读到新档
+    if ('effort' in (req.body || {})) {
+      const r = await applySessionEffort({ sid: req.params.sid, metaDir, model: target, effort: req.body.effort ?? null, live: target === before.model });
+      if (!r.ok) return res.status(r.status).json(r.body);
+    }
     const result = await applySessionModel(req.params.sid, metaDir, raw, 'picker');
     const { fallback } = await resolveSessionModel(metaDir);
+    const eff = effortForModel(result.model, await readSessionEffort(metaDir));
     res.json({
+      effort: eff.choices ? eff.sdk : null,
       model: result.model,
       override: result.override,
       default: fallback,
