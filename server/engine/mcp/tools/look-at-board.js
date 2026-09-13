@@ -24,6 +24,7 @@ import { getUserById } from '../../../auth/users-store.js';
 import { COOKIE_NAME, mintToken, authEnabled } from '../../../auth/session.js';
 import { platform } from '../../../runtime/platform.js';
 import { launchPerceptionBrowser, PERCEPTION_ORIGIN } from './helpers/perception-page.js';
+import { gatedBrowser } from './helpers/browser-slots.js';
 import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { normalizeCanvasId, bareTag } from '../../../lib/canvas-id.js';
@@ -31,7 +32,9 @@ import { normalizeCanvasId, bareTag } from '../../../lib/canvas-id.js';
 const VIEW = { width: 1400, height: 900 };
 const READY_TIMEOUT_MS = 25_000;
 // 并发闸：一次只开一台 chromium 看板（1 vCPU 机器多会话同时看板 = 多个浏览器进程；fable 08-23 P2）。
-// 排队不拒绝，等前一个看完。
+// 排队不拒绝，等前一个看完。09-13 起开浏览器还要过进程级槽位（helpers/browser-slots.js，跟截图类工具共用）；
+// 这条留着：看板打开的是整个前端应用，比截一个产物页重得多，本地版两个槽位时也只许一只在看板。
+// 先过这条再拿槽位，顺序固定，不会互等。
 let gate = Promise.resolve();
 const withGate = (fn) => { const run = gate.then(fn, fn); gate = run.catch(() => {}); return run; };
 
@@ -91,7 +94,7 @@ Costs a few seconds and ~1.7k tokens; don't call it in a loop.`,
       return withGate(async () => {
       let browser = null;
       try {
-        browser = await launchPerceptionBrowser();
+        browser = await gatedBrowser(() => launchPerceptionBrowser());
         const context = await browser.newContext({ viewport: VIEW, deviceScaleFactor: 1 });
         if (authEnabled()) {
           const ownerId = getProject(projectId)?.ownerId;

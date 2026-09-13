@@ -3,7 +3,7 @@
  * 并发上限 IMAGE_CONCURRENCY，一张失败不拖累其余，全败才 isError。
  */
 import { describe, it, expect, vi } from 'vitest';
-import { fanOutImages, IMAGE_CONCURRENCY, buildOutputName } from './generate-image-support.js';
+import { fanOutImages, IMAGE_CONCURRENCY, buildOutputName, makeImagePool } from './generate-image-support.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -32,6 +32,27 @@ describe('fanOutImages', () => {
     expect(texts.filter((t) => /^ok /.test(t))).toEqual(prompts.map((p, i) => `ok ${p} cat-${i + 1}`));
     expect(r.content.filter((c) => c.type === 'image')).toHaveLength(6);
     expect(one.mock.calls.every(([a]) => a.aspectRatio === '1:1' && !('prompts' in a))).toBe(true);
+  });
+  it('⭐ 09-13 会话出图池：同一条消息里并行的几次调用（单张 + 批量）共用上限，加起来也不超过 IMAGE_CONCURRENCY', async () => {
+    let inflight = 0; let peak = 0;
+    const one = async (a) => {
+      inflight += 1; peak = Math.max(peak, inflight);
+      await sleep(15);
+      inflight -= 1;
+      return { content: [{ type: 'text', text: a.prompt }] };
+    };
+    const pool = makeImagePool();
+    const calls = [
+      fanOutImages({ prompts: ['a1', 'a2', 'a3', 'a4', 'a5'] }, {}, one, pool),
+      fanOutImages({ prompts: ['b1', 'b2', 'b3'] }, {}, one, pool),
+      fanOutImages({ prompt: 'c' }, {}, one, pool),
+      fanOutImages({ prompt: 'd' }, {}, one, pool),
+    ];
+    const rs = await Promise.all(calls);
+    expect(peak).toBe(IMAGE_CONCURRENCY);
+    expect(pool.used).toBe(0);
+    expect(rs[2].content[0].text).toBe('c');
+    expect(rs[0].content.filter((x) => /^a\d$/.test(x.text)).map((x) => x.text)).toEqual(['a1', 'a2', 'a3', 'a4', 'a5']);
   });
   it('一张失败不拖累其余；全败才 isError；不跟 variationOf 混用', async () => {
     const one = vi.fn(async (a) => { if (a.prompt === 'bad') throw new Error('boom'); return { content: [{ type: 'text', text: 'ok' }] }; });

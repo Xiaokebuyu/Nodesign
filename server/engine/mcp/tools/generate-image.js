@@ -22,7 +22,7 @@ import {
 import { buildVariationPrompt, PRESERVE_KEYS } from './helpers/codex-imagegen.js';
 import { produceImage, extForMime } from './image-produce.js';
 import { imageRoute, relayGenerateImage } from './relay-tools.js';
-import { fanOutImages, buildOutputName } from './generate-image-support.js';
+import { fanOutImages, buildOutputName, makeImagePool } from './generate-image-support.js';
 
 // Thumbnail 配置（env 可调）。**原图不动**——保留 Gemini 输出的全分辨率（通常
 // 1080×1920+ PNG，6-8MB）让用户最终交付不损失质量。仅生成低清 thumbnail 给
@@ -163,6 +163,7 @@ async function resolveReferenceImage(relPath, workspaceRoot, sharedRoot) {
  * @param {import('../../agent/context.js').AgentContext} [deps.ctx]
  */
 export function makeGenerateImageTool({ workspaceRoot, sharedRoot = null, ctx } = {}) {
+  const imagePool = makeImagePool();   // 本会话同时出图的上限，单张 / 批量 / 同一条消息里的并行调用共用
   return tool(
     'generate_image',
     `Generate a high-quality image.
@@ -176,8 +177,11 @@ imageSize / thinkingLevel / responseModalities / model / useGrounding are
 Gemini-gateway-only and SILENTLY IGNORED — do not spend effort on them.
 PDF referenceImages are NOT supported (images only). 'prompt' produces exactly
 ONE image; there is no "3 variations in one prompt". For a SET, pass 'prompts'
-(2-8): they are generated concurrently in one call (4 at a time) and each lands
-on the canvas as it finishes — do not chain single calls one after another.
+(2-8): they are generated concurrently in one call and each lands on the canvas
+as it finishes. Images that need different aspectRatio / referenceImages: put
+several generate_image calls in the SAME message; they run concurrently too.
+Up to 4 images render at once per session. Do not chain single calls across
+turns one after another.
 Expect ~45-60s per image — prefer one good anchor shot over many speculative variants.
 
 BEFORE YOU CALL — is the subject a real, specific thing? A named IP / character
@@ -337,7 +341,7 @@ memory (记忆/, type: project) so later sessions inherit it.`,
         .optional()
         .describe('Gemini-gateway-only; ignored on the current backend.'),
     },
-    async (args, extra) => fanOutImages(args, extra, generateOne),
+    async (args, extra) => fanOutImages(args, extra, generateOne, imagePool),
   );
 
   /** 出一张图（原来的 handler 本体）。批量时被 fanOutImages 并发调用 N 次 */

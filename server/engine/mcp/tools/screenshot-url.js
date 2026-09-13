@@ -22,6 +22,7 @@ import { attachPageDiagnostics, runBeforeShot, normalizeShot, FIDELITY_LAUNCH_AR
 import { checkUrl, attachSsrfGuard } from '../../../lib/ssrf-guard.js';
 import { denyText } from './browse.js';
 import { startBrowseProxy } from '../../../lib/browse-proxy.js';
+import { gatedBrowser } from './helpers/browser-slots.js';
 import { isRegisteredLoopback } from '../../process/registry.js';
 
 const RASTER_SCALE = 0.6;
@@ -124,11 +125,11 @@ anyway after 12s and the caption says so. Only http/https and public hosts.`,
         // 解析并验过的那个 IP（顺带根除 DNS 重绑定）。
         // `bypass: ''`：默认会放过 loopback，那正是最要拦的。
         const { port: proxyPort } = await startBrowseProxy();
-        browser = await chromium.launch({
+        browser = await gatedBrowser(() => chromium.launch({
           headless: true,
           args: FIDELITY_LAUNCH_ARGS,
           proxy: { server: `http://127.0.0.1:${proxyPort}`, bypass: '' },
-        });
+        }));
         const rasterScale = detail === 'high' ? 1 : RASTER_SCALE;
         const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: rasterScale, colorScheme: 'light' });
         const guard = await attachSsrfGuard(ctx, undefined, { proxied: true });

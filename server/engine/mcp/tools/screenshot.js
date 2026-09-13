@@ -263,6 +263,8 @@ Do NOT use this tool when:
         acq = await acquireArtifactPage({
           projectId, workspaceRoot, target, live,
           viewport: vp, deviceScaleFactor: rasterScale,
+          // 胶片条量真实帧间距：独占全部浏览器槽位（helpers/browser-slots.js）
+          exclusive: Array.isArray(frames) && frames.length > 0,
         });
         const page = acq.page;
         const opened = acq;   // degradedNote / viaHttp 的口径不变
@@ -384,7 +386,8 @@ Do NOT use this tool when:
           if (saveVideo) {
             try {
               const base = path.basename(canvasPath, path.extname(canvasPath));
-              const rel = `exports/motion/${base}-${new Date().toISOString().slice(11, 19).replace(/:/g, '')}.webm`;
+              // 带毫秒：09-13 起截图可以并行，同一页同一秒录两段会互相覆盖
+              const rel = `exports/motion/${base}-${new Date().toISOString().slice(11, 23).replace(/[:.]/g, '')}.webm`;
               const { bytes } = await encodeWebm(rec.shots, path.join(workspaceRoot, rel));
               videoNote = `video saved: ${rel} (${(bytes / 1024).toFixed(0)}KB, real frame timing — jank preserved) — deliver_files to hand it to the user`;
             } catch (err) {

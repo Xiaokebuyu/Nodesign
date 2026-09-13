@@ -3,28 +3,34 @@
  *
  * CLI 的 StreamingToolExecutor 在每个 tool_use 块闭合时就派发执行，不等整条消息写完。
  * 能不能跟同一条消息里的其他调用**同时**跑，只看 MCP annotations 的 readOnlyHint：
- * 标了 = isConcurrencySafe，没标一律串行。Nodesign 在此之前一个都没标，于是
- * read_board + look_at_board + read_user_view 写在同一条消息里也是排队一个个跑。
+ * 标了 = isConcurrencySafe，没标一律串行（排在前面所有调用跑完之后）。
  *
- * readOnlyHint 在 CLI（SDK 0.3.269 内置二进制读码）里还有两处作用，登记前要知道：
- *   - 计划模式下不拦（没标的 MCP 工具在计划模式返回 "Cannot call X while in plan mode"）；
- *   - 调用结束后跳过一个给写操作用的监听回调。
- * 除此之外只进遥测。
+ * ⚠️ 有意偏离文档（09-13 第二批，站主定「除了高危操作都鼓励并行」）：SDK 文档说 annotations 要跟 handler
+ * 的真实行为一致，readOnlyHint 就该只标只读工具。我们把它当「可以并行」的开关用，给会落盘的
+ * web_search / generate_image / 截图类也打了标。偏离的代价逐条核过（SDK 0.3.269 内置二进制读码）：
+ *   - 计划模式下不拦（没标的 MCP 工具在计划模式返回 "Cannot call X while in plan mode"）——
+ *     Nodesign 计划模式基本不用，打标的这几件在计划模式里跑也不改用户的产物；
+ *   - 调用结束后跳过一个给写操作用的监听回调（远程会话同步用，我们不走那条路）；
+ *   - 其余只进遥测。
+ * 以后 CLI 若给 readOnlyHint 挂上真正的权限语义（比如只读工具免审批、只读模式放行），这张表要重新过一遍。
  *
  * 两张表合起来必须覆盖全部工具（tool-concurrency.lint.test.js 钉着）：新工具不许默认落在
  * 「没想过」这一格。判据：
- *   PARALLEL_READ_TOOLS —— 不写文件、不改板、不发 file_changed、不改进程内共享状态，
- *                         而且并行时不会同时拉起多个 chromium（生产机 1 核 8G 无 swap）。
- *   SERIAL_TOOLS        —— 其余全部，包括「只是看」但会自起浏览器、落盘或共用一把锁的。
+ *   PARALLEL_SAFE_TOOLS —— 同时跑不会互相踩：
+ *     · 不改板面、不改用户正在看的视图、不改进程内共享状态；
+ *     · 落盘的话，名字不会撞（按内容哈希 / 进程内序号 / 带毫秒），而且落下的是新文件不是改旧文件；
+ *     · 吃资源的有闸：开 chromium 的过 helpers/browser-slots.js（进程级槽位），出图的过会话出图池；
+ *     · 不是高危操作（发布、删改文件、起停进程、花钱没上限的）。
+ *   SERIAL_TOOLS —— 其余全部。
  * 拿不准放 SERIAL：放错到 SERIAL 只是慢，放错到 PARALLEL 是并发 bug。
  * 范围只是 nodesign 这台 MCP server；演出进程那台（engine/stage/tools.js）另算，没动。
  */
 
-export const PARALLEL_READ_TOOLS = new Set([
+export const PARALLEL_SAFE_TOOLS = new Set([
   // 纯读板面 / 视点（readBoard 只读文件，失败回空板，不回写）
   'read_board', 'read_user_view',
-  // 自起 chromium，但模块级有一条串行闸（look-at-board.js 的 withGate），同时最多一只浏览器
-  'look_at_board',
+  // 纯读产物文件的一页（regex 切 section，不起浏览器）
+  'read_page',
   // 只发一个外网查询，不落盘
   'lookup_tags',
   // 纯 JS 抽文本，不起外部进程、不写缓存
@@ -33,6 +39,16 @@ export const PARALLEL_READ_TOOLS = new Set([
   'get_pending_changes',
   // 只读进程注册表与日志（写记录的是 start/stop）
   'list_processes', 'read_process_log',
+  // 搜索：参考图按 URL 哈希定名（reference-download.js），同一张图并行下载写的是同一份字节；发 file_changed 是新增
+  'web_search',
+  // 出图：会话出图池封顶（generate-image-support.js makeImagePool）；没给 outputName 时名字带进程内序号不撞。
+  // 给了同一个 outputName 的两次并行调用会互相覆盖 —— 跟串行时后一张覆盖前一张结果一样，不算新问题
+  'generate_image',
+  // 感知量具：一次性模式开 chromium 过进程级槽位（helpers/browser-slots.js，托管 1 只 / 本地 2 只），
+  // 量帧时间的（trace_motion、profile_scroll、胶片条）独占全部槽位；live:true 走产物会话的项目锁，天然排队。
+  // look_at_board 另有一条自己的串行闸（打开的是整个前端应用）
+  'look_at_board', 'screenshot_canvas', 'screenshot_url', 'list_pages', 'query_elements',
+  'get_computed_styles', 'explain_style', 'trace_motion', 'profile_scroll',
 ]);
 
 export const SERIAL_TOOLS = new Set([
@@ -41,19 +57,16 @@ export const SERIAL_TOOLS = new Set([
   'build_docx', 'deliver_files', 'export_handoff', 'publish_site', 'crystallize_skill',
   'expose_tweaks', 'set_vars', 'highlight', 'navigate_to_page', 'clear_pending_changes',
   'jot_memory', 'cast_role', 'report_issue', 'open_stage', 'stage_backdrop', 'roll_dice',
+  // 切用户正在看的那一页（setActiveDeck + 前端跳页），两个并行就是抢镜头
+  'preview_deck',
   // 首次调用会把旧形状 stage/ 迁进文件夹（manager.js ensurePlays），有写入
   'stage_status',
   // 会把角色卡 / 世界书导出成文件
   'read_tavern_json',
-  // 生图 / 视频 / 抠图：落盘，且吃额度或 GPU
-  'generate_image', 'paint_still', 'roll_film', 'remove_background',
-  // 落参考图并发 file_changed
-  'web_search',
+  // 本地 GPU 盒子（一台机器一张卡）/ 抠图（rembg 子进程吃内存）
+  'paint_still', 'roll_film', 'remove_background',
   // 起停进程
   'start_process', 'stop_process',
-  // 感知量具：非 live 模式每次自起一只 chromium，并行 = 同时拉起多只
-  'screenshot_canvas', 'screenshot_url', 'read_page', 'list_pages', 'query_elements',
-  'get_computed_styles', 'explain_style', 'trace_motion', 'profile_scroll', 'preview_deck',
   // 浏览通道 / 产物会话：同一项目共用一把锁，标了也是排队，没有收益；而且多数会改页面状态
   'browser_navigate', 'browser_read', 'browser_click', 'browser_screenshot', 'browser_capture',
   'browser_request_help', 'browser_computer', 'browser_find', 'browser_batch',
@@ -62,7 +75,7 @@ export const SERIAL_TOOLS = new Set([
 
 /** 装配时打标：只动 annotations，其余字段原样 */
 export function withConcurrencyHint(toolDef) {
-  if (!PARALLEL_READ_TOOLS.has(toolDef?.name)) return toolDef;
+  if (!PARALLEL_SAFE_TOOLS.has(toolDef?.name)) return toolDef;
   return { ...toolDef, annotations: { ...toolDef.annotations, readOnlyHint: true } };
 }
 
@@ -73,10 +86,10 @@ export function withConcurrencyHint(toolDef) {
  */
 export function assertConcurrencyNames(registeredNames) {
   const have = new Set(registeredNames);
-  const ghosts = [...PARALLEL_READ_TOOLS].filter((n) => !have.has(n));
+  const ghosts = [...PARALLEL_SAFE_TOOLS].filter((n) => !have.has(n));
   if (ghosts.length) {
     throw new Error(`[tool-concurrency] 并行表里有注册表不存在的名字: ${ghosts.join(', ')} —— 改名后表没跟上，这些工具在静默串行`);
   }
-  const both = [...PARALLEL_READ_TOOLS].filter((n) => SERIAL_TOOLS.has(n));
+  const both = [...PARALLEL_SAFE_TOOLS].filter((n) => SERIAL_TOOLS.has(n));
   if (both.length) throw new Error(`[tool-concurrency] 同时登记在并行表和串行表: ${both.join(', ')}`);
 }
