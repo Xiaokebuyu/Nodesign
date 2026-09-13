@@ -7,6 +7,7 @@
  *                             模型表是加载时冻结的，改动要 POST /restart 才生效，响应里 needsRestart 说这件事
  *   POST /api/local/restart   优雅退出并以 RESTART_EXIT_CODE 退，bin/nodesign.js 的 supervisor 拉起新进程
  *   *    /api/local/market/…  skill 市场（经 relay 转站点；本机打包 / 落盘），见 local-market.js
+ *   *    /api/local/relay/browser-login、/relay/callback  在浏览器中登录站点账号（09-13），见 local-relay-login.js
  *
  * 请求者恒为 LOCAL_OWNER（admin）；这里不再做权限判断——hosted 下整组路由不存在。
  */
@@ -24,7 +25,7 @@ import { probeCapabilities } from '../runtime/capabilities.js';
 import { envView, setEnvValues, envPath } from '../runtime/local-env.js';
 import { probeModel } from '../lib/ingress/slot-probe.js';
 import os from 'node:os';
-import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, relayNotice, relayPutAvatar, relayDeleteAvatar, relayConfig, normalizeRelayUrl, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
+import { relayCatalog, refreshRelayCatalog, relayLogin, relayLogout, relayNotice, relayPutAvatar, relayDeleteAvatar, relayConfig, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 import { AVATAR_MAX_UPLOAD } from '../lib/avatar-store.js';
 import { loadPrefs, savePrefs, prefsPath } from '../runtime/local-prefs.js';
 import { listComponents, installComponent, uninstallComponent, applyComponentEnv, componentsLocation, relocateComponents } from '../runtime/components.js';
@@ -36,6 +37,7 @@ import { enqueueIssueUpload, flushIssueOutbox } from '../runtime/issue-outbox.js
 import { openFolder, inspectFolderTrust } from '../projects/folder.js';
 import { getProject } from '../projects/store.js';
 import localMarketRouter from './local-market.js';
+import localRelayLoginRouter, { applyRelayToken } from './local-relay-login.js';
 
 export const RESTART_EXIT_CODE = 75;
 
@@ -43,6 +45,8 @@ const router = express.Router();
 
 // skill 市场（09-08）：本机只打包 / 落盘 / 转发，货架在站点上。见 local-market.js
 router.use('/market', localMarketRouter);
+// 在浏览器中登录（09-13 auth-v2 第四批）：发起 / 轮询 / 取消 / 回调
+router.use('/relay', localRelayLoginRouter);
 
 router.get('/status', (_req, res) => {
   res.json({
@@ -209,14 +213,11 @@ router.put('/prefs', (req, res) => {
 router.post('/relay/login', async (req, res) => {
   const { username, password, url } = req.body || {};
   if (typeof username !== 'string' || !username.trim() || typeof password !== 'string' || !password) {
-    return res.status(400).json({ error: msg(req, '请填写用户名和密码') });
+    return res.status(400).json({ error: msg(req, '请填写邮箱或用户名，以及密码') });
   }
   try {
     const r = await relayLogin({ url: url || process.env.NODESIGN_RELAY_URL || null, username: username.trim(), password, label: os.hostname() });
-    // 只在用户填了站点地址时才动它：没填 = 沿用 .env 里已有的（可能是 exp），不是清掉
-    setEnvValues({ NODESIGN_RELAY_TOKEN: r.token, ...(url ? { NODESIGN_RELAY_URL: normalizeRelayUrl(url) } : {}) });
-    await refreshRelayCatalog();
-    await probeCapabilities({ force: true });   // 登录后网关代跑的搜索 / 生图就"可用"了，引导页和工具闸都按这个
+    await applyRelayToken({ token: r.token, url: url || null });
     res.json({ ok: true, relay: relayView(), keys: envView(), capabilities: capabilitySnapshot() });
   } catch (err) {
     const status = err.status === 401 ? 401 : err.status === 429 ? 429 : err.status === 409 ? 409 : 502;

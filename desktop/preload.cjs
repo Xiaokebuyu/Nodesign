@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('nodesignDesktop', {
   openPath: (p) => ipcRenderer.invoke('nd:open-path', String(p || '')),
   /** 用系统浏览器打开外链 */
   openExternal: (url) => ipcRenderer.invoke('nd:open-external', String(url || '')),
+  /** 把主窗口带到前面（09-13：在浏览器里登录完，应用自己回到前台） */
+  focusWindow: () => ipcRenderer.invoke('nd:focus-window'),
   /**
    * 导出直接落盘（09-10）：页面把字节交过来，主进程自己 fs 写 —— 不经 Chromium 的下载通道，
    * 于是文件不带 Mark-of-the-Web（09-09 那案：下载出来的 zip 五次都落盘了又被拿走）。

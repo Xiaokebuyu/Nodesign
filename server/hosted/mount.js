@@ -65,6 +65,8 @@ export async function mountHostedLate(app) {
   app.use('/api/me/devices', devicesRouter);   // 跟内核的 /api/me 各管各的前缀，先后无所谓
   const { default: accountRouter } = await import('./auth/account-routes.js');
   app.use('/api/me/account', accountRouter);   // 账号与安全（09-13 auth-v2）
+  const { createDesktopAuthRouter } = await import('./auth/desktop-auth.js');
+  app.use('/api/me/desktop-auth', createDesktopAuthRouter());   // 桌面版「在浏览器中登录」的确认页（09-13 第四批）
   // skill 市场（09-08）：网页入口。桌面版的入口在 relay/router.js 里挂的 /api/relay/market，同一份处理函数
   app.use('/api/market', createMarketRouter({ userOf: (req) => req.user, source: 'web' }));
 }

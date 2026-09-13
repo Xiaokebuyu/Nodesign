@@ -54,7 +54,8 @@ import { mountMcpDiagnostics, healthReport } from './mcp-server/diagnostics.js';
 import { desktopLoginState } from './auth/middleware.js';
 import { stopAllProcesses } from './engine/process/registry.js';
 import { platform } from './runtime/platform.js';
-import { refreshRelayCatalog, relayRevokedPublicationIds, startRelayCatalogRefresh } from './runtime/relay-client.js';
+import { refreshRelayCatalog, relayRevokedPublicationIds, startRelayCatalogRefresh, onRelayTokenInvalid } from './runtime/relay-client.js';
+import { handleRelayTokenInvalid } from './api/local-relay-login.js';
 import { setPluginOriginPolicy } from './lib/plugin-origin.js';
 import { startIssueOutbox } from './runtime/issue-outbox.js';
 import { probeCapabilities, summarizeCapabilities } from './runtime/capabilities.js';
@@ -71,6 +72,8 @@ if (platform.isLocal) applyComponentEnv();
 if (platform.isLocal) await sweepStaleComponentDirs();
 // 站主 relay 的目录（配了令牌才拉；没配 / 拉不到都不阻止起动，选择器就只剩本机钥匙的行）。
 // ⚠️ 在能力探测之前：联网搜索 / 生图两位要看"网关给不给"（relay-tools.js），目录没拉就探成"没有"
+// 站点判定本机令牌失效 → 清令牌回登录页（09-13 第四批）。先挂上再拉目录：起动这一拉就可能发现令牌已被吊销
+if (platform.isLocal) onRelayTokenInvalid((token) => { handleRelayTokenInvalid(token).catch((err) => console.warn(`[relay] 清除失效令牌失败：${err.message}`)); });
 const relay = platform.isLocal ? await refreshRelayCatalog() : null;
 // 之后每 10 分钟后台重拉一次（失败沿用上一份）：站点加的模型行、改的名字不用重启就到（09-11，见 engine/agent/model-rows.js）
 if (platform.isLocal) startRelayCatalogRefresh();

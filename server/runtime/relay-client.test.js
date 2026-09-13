@@ -78,6 +78,29 @@ describe('refreshRelayCatalog', () => {
     expect(c.error).toContain('DEVICE_TOKEN_INVALID');
     expect(rc.relayModelEntry('m-api')).toBeNull();
   });
+  it('站点回 DEVICE_TOKEN_INVALID：通知收口方（带着失效的那枚令牌）并记下时间；429 / HTML 401 页不算', async () => {
+    const got = [];
+    const off = rc.onRelayTokenInvalid((tok) => got.push(tok));
+    mode = '429';
+    await rc.refreshRelayCatalog();
+    expect(got).toEqual([]);
+    mode = 'unauth';
+    await rc.refreshRelayCatalog();
+    expect(got[0]).toBe('ndk_test.secret');
+    expect(rc.relayTokenInvalidAt()).toBeGreaterThan(0);
+    rc.clearRelayTokenInvalid();
+    // 令牌已经换了（重新登录）：旧请求晚到的 401 不算
+    got.length = 0;
+    const cur = process.env.NODESIGN_RELAY_TOKEN;
+    process.env.NODESIGN_RELAY_TOKEN = 'ndk_other.secret';
+    const p = rc.refreshRelayCatalog();
+    process.env.NODESIGN_RELAY_TOKEN = 'ndk_newer.secret';
+    await p;
+    expect(got).toEqual([]);
+    expect(rc.relayTokenInvalidAt()).toBe(0);
+    process.env.NODESIGN_RELAY_TOKEN = cur;
+    off();
+  });
   it('上游回的是 HTML（nginx 502 页）：不炸，error 带状态码', async () => {
     mode = 'html';
     const c = await rc.refreshRelayCatalog();

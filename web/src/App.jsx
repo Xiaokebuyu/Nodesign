@@ -9,6 +9,7 @@ import AdminConsole from './routes/AdminConsole.jsx';
 import Settings from './routes/Settings.jsx';
 import Setup from './routes/Setup.jsx';
 import Devices from './routes/Devices.jsx';
+import DesktopAuth from './routes/DesktopAuth.jsx';
 import ToastContainer from './components/ui/ToastContainer.jsx';
 import GlobalDialogs from './components/ui/GlobalDialogs.jsx';
 import QuotaBanner from './components/layout/QuotaBanner.jsx';
@@ -41,6 +42,7 @@ const router = createBrowserRouter([
   // 本地分发版设置（08-22）：钥匙 / 模型插槽 / 本机能力 / 重启。hosted 下后端没有 /api/local，页面只会看到空态
   { path: '/settings', element: <Settings /> },
   { path: '/setup', element: <Setup /> },              // 本地版首启引导（装组件）
+  { path: '/desktop-auth', element: <DesktopAuth /> },  // hosted：桌面版「在浏览器中登录」的确认页（09-13）
   { path: '/devices', element: <Devices /> },          // hosted：桌面版设备令牌（本地版没有账号，这页 404 也无妨）
 ]);
 

@@ -252,6 +252,18 @@ describe('Google 登录', () => {
     const weird = await call(`/api/auth/oauth/google/callback?error=server_on_fire&state=${state2}`, { cookie: joinCookies(cookiesOf(start2)) });
     expect(weird.headers.get('location')).toBe('/login?oauth_error=provider_error');
   });
+  it('从别的页面发起（桌面版登录确认页）：成功回原页；失败 / 要输验证码也回原页，原页参数不丢（09-13 第四批）', async () => {
+    const ret = '/desktop-auth?port=45678&state=abcdefghijklmnop&challenge=' + 'c'.repeat(43);
+    const ok = await oauthFlow('google', google({ email: newEmail('gmail.com') }), { ret });
+    expect(ok.location).toBe(ret);
+    const bad = await oauthFlow('google', google({ email: newEmail('gmail.com') }), { ret, tamper: 'state' });
+    expect(bad.location).toBe(`${ret}&oauth_error=state_mismatch`);
+    const off = await call(`/api/auth/oauth/nope/start?return=${encodeURIComponent(ret)}`);
+    expect(off.headers.get('location')).toBe(`${ret}&oauth_error=provider_unavailable`);
+    // 首页发起的照旧回 /login
+    const home = await oauthFlow('google', google({ email: newEmail('gmail.com') }), { tamper: 'state' });
+    expect(home.location).toBe('/login?oauth_error=state_mismatch');
+  });
   it('攻击：没 state cookie、state 被改、cookie 签名被改、回调重放，一律 state_mismatch，不建号不登录', async () => {
     for (const tamper of ['no_cookie', 'state', 'bad_sig']) {
       const email = newEmail('gmail.com');

@@ -15,6 +15,7 @@
  * ## 端点
  *
  *   POST   /login                  { username, password, label } → 账号密码换一枚设备令牌（桌面版登录；不需要令牌）
+ *   POST   /token                  { code, verifier } → 浏览器登录的授权码换设备令牌（09-13 第四批；不需要令牌，按 IP 限频）
  *   POST   /logout                 吊销当前这枚令牌（桌面版退出登录）
  *   GET    /whoami                 令牌对应的用户、档位、额度快照（客户端设置页用）
  *   GET    /models                 这个账号在这台服务器上能选的行（两个面的并集）+ 桌面建行要用的字段（catalog.js）
@@ -33,6 +34,8 @@
 import express from 'express';
 import { verifyDeviceToken, tokenFromRequest, mintDevice, revokeDevice, listDevices, MAX_DEVICES } from './devices.js';
 import { checkPassword } from '../auth-routes.js';
+import { redeemDesktopCode, noteNewDevice } from '../auth/desktop-auth.js';
+import { clientIp } from '../auth/client-ip.js';
 import { getUserById } from '../../auth/users-store.js';
 import { openRelaySession, closeRelaySession, lookupRelaySession, startRelaySessionSweeper } from './sessions.js';
 import { decideRelay, relaySubscriptionAllowed, relaySubscriptionDenial } from './gates.js';
@@ -83,6 +86,20 @@ function deviceAuth(req, res, next) {
   next();
 }
 
+// /token 的 IP 限频：授权码 256 位随机、查到即删，猜不中；这一道挡的是拿这个口子刷 CPU 和日志
+const TOKEN_WINDOW_MS = 10 * 60 * 1000;
+const TOKEN_MAX_PER_IP = 30;
+const tokenHits = new Map();   // ip → [时间戳]
+function tokenRateLimited(req, now = Date.now()) {
+  const ip = clientIp(req) || 'unknown';
+  const recent = (tokenHits.get(ip) || []).filter((t) => now - t < TOKEN_WINDOW_MS);
+  recent.push(now);
+  tokenHits.set(ip, recent);
+  if (tokenHits.size > 5000) for (const [k, v] of tokenHits) if (!v.some((t) => now - t < TOKEN_WINDOW_MS)) tokenHits.delete(k);
+  return recent.length > TOKEN_MAX_PER_IP;
+}
+export function _resetRelayTokenLimit() { tokenHits.clear(); }
+
 export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub = forwardSubscription, moderate = undefined, tools = {} } = {}) {
   const router = express.Router();
 
@@ -100,6 +117,25 @@ export function createRelayRouter({ forwardApi = forwardViaIngress, forwardSub =
     const active = listDevices(user.id).filter((d) => !d.revoked);
     if (active.length >= MAX_DEVICES) return sendError(res, 409, 'TOO_MANY_DEVICES', `在用设备数量已达上限（${MAX_DEVICES} 台），请在站点「桌面版设备」中吊销一台后重试`);
     const { device, token } = mintDevice({ userId: user.id, label: label || null });
+    noteNewDevice(req, user, device, 'password');
+    res.status(201).json({ token, device: { id: device.id, label: device.label }, user: { id: user.id, username: user.username, tier: tierOf(user) } });
+  });
+
+  // 桌面版「在浏览器中登录」的最后一步：本地服务拿授权码 + PKCE verifier 换设备令牌（码在 hosted/auth/desktop-auth.js 签）。
+  // 也在 deviceAuth 之前；响应形状与 /login 相同，本地服务端两条登录路共用一段落盘逻辑
+  router.post('/token', async (req, res) => {
+    if (tokenRateLimited(req)) return sendError(res, 429, 'RATE_LIMITED', '请求过于频繁，请稍后再试');
+    let body;
+    try { body = JSON.parse((await readRawBody(req, 8 * 1024)).toString('utf8') || '{}'); }
+    catch { return sendError(res, 400, 'BAD_JSON', '请求体不是 JSON'); }
+    const r = redeemDesktopCode({ code: body?.code, verifier: body?.verifier });
+    if (!r.ok) return sendError(res, 400, 'INVALID_CODE', '授权已失效，请回到 NoDesign 重新发起登录');
+    const user = r.user;
+    if (listDevices(user.id).filter((d) => !d.revoked).length >= MAX_DEVICES) {
+      return sendError(res, 409, 'TOO_MANY_DEVICES', `在用设备数量已达上限（${MAX_DEVICES} 台），请在站点设置中退出一台设备后重试`);
+    }
+    const { device, token } = mintDevice({ userId: user.id, label: r.label });
+    noteNewDevice(req, user, device, 'browser');
     res.status(201).json({ token, device: { id: device.id, label: device.label }, user: { id: user.id, username: user.username, tier: tierOf(user) } });
   });
 

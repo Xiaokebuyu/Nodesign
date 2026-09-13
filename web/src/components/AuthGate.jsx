@@ -5,10 +5,12 @@
  *   - required=false（dev 模式）或已有有效身份 → 渲染 app，并把 user 挂到
  *     globalStore（顶栏显示用户名 / 登出、admin 判定都从那读）
  *   - 否则渲染登录页：网页版的登记卡是 login-wall/AuthCard.jsx（邮箱 / 用户名 / Google / GitHub，09-13 auth-v2），
- *     桌面版首启门的账号密码表单留在这个文件里
+ *     桌面版首启门是 login-wall/DesktopLoginCard.jsx（在浏览器中登录 + 账号密码，09-13 第四批）
  *
  * 全局 401：api.js jsonRequest 收到 401 时派发 `nd:unauthorized` window 事件，
  * 这里监听 → 回登录态（解决 cookie 过期后散落报错、WS 4401 停止重连后卡死）。
+ * 桌面版没有 401 这条路（本机接口恒放行）：站点吊销了设备令牌，本地服务端清掉令牌，这里每分钟和回到窗口时
+ * 查一次 /api/auth/status，发现 loggedIn 变 false 就回登录门。
  *
  * cookie 是 HttpOnly + 30 天，同源 fetch 自动携带。
  *
@@ -38,21 +40,16 @@ import { hasExplicitLocale, t } from '../lib/i18n.js';
 import LanguageSwitcher from './ui/LanguageSwitcher.jsx';
 import { runTurnstileProbe } from '../lib/turnstile-probe.js';
 import AuthCard from './login-wall/AuthCard.jsx';
+import DesktopLoginCard from './login-wall/DesktopLoginCard.jsx';
 
 export default function AuthGate({ children }) {
   // checking | login | ok
   const [phase, setPhase] = useState('checking');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [openReg, setOpenReg] = useState(false);   // 服务端 /api/auth/status 的 openRegistration：没邀请码也能开号（08-21）
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
   const [narrow, setNarrow] = useState(false);
-  // 本地分发版（桌面版 / npx）的首启门：站点账号没登录就先登录。账号密码交给本地服务端，它去站点换
-  // 设备令牌（/api/local/relay/login），从此这台机器走站点的模型和额度。"我自己带钥匙"是那道门旁的小门。
+  // 本地分发版（桌面版 / npx）的首启门：站点账号没登录就先登录（DesktopLoginCard），本地服务端去站点换
+  // 设备令牌，从此这台机器走站点的模型和额度。
   const [desktop, setDesktop] = useState(null);   // /api/auth/status 的 desktop 字段（只有 local 档位有）
-  const [siteUrl, setSiteUrl] = useState('');       // 桌面登录：站点地址（空 = 官方站；自建实例 / exp 才填）
-  const [showSite, setShowSite] = useState(false);
   const rootRef = useRef(null);
 
   const applyStatus = (s) => {
@@ -84,12 +81,24 @@ export default function AuthGate({ children }) {
     }
   };
 
+  const loadStatus = () => fetch('/api/auth/status')
+    .then((r) => r.json())
+    .then(applyStatus)
+    .catch(() => setPhase('login'));
+
+  useEffect(() => { loadStatus(); }, []);
+
+  // 桌面版：令牌被站点判失效后本地服务端会清掉它（server/api/local-relay-login.js），这里定时看一眼，回登录门
+  const isDesktop = !!desktop;
   useEffect(() => {
-    fetch('/api/auth/status')
-      .then((r) => r.json())
-      .then(applyStatus)
-      .catch(() => setPhase('login'));
-  }, []);
+    if (!isDesktop || phase !== 'ok') return undefined;
+    const check = () => fetch('/api/auth/status').then((r) => r.json()).then((s) => {
+      if (s.profile === 'local' && s.desktop && !s.desktop.loggedIn) { setDesktop(s.desktop); setPhase('login'); }
+    }).catch(() => {});
+    const id = setInterval(check, 60_000);
+    window.addEventListener('focus', check);
+    return () => { clearInterval(id); window.removeEventListener('focus', check); };
+  }, [isDesktop, phase]);
 
   // Turnstile 测量期（09-13「先量后定」）：网页登录墙亮出来时静默量一次，不拦人；服务端没配 site key 时什么都不做
   useEffect(() => {
@@ -128,27 +137,6 @@ export default function AuthGate({ children }) {
     paperCount: STEPS,   // 每套 ①→⑥ 六步（09-12 印刷风）；不传的话按旧墙的 20 张算，进出场会等很久
   });
 
-  // 桌面版首启门的登录（网页那份在 login-wall/AuthCard.jsx）
-  async function submit(e) {
-    e.preventDefault();
-    if (busy || !username || !password) return;
-    setBusy(true);
-    setError('');
-    try {
-      const res = await fetch('/api/local/relay/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, ...(siteUrl.trim() ? { url: siteUrl.trim() } : {}) }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) { if (!desktop.setupDone) { location.replace('/setup'); return; } setPhase('ok'); }
-      else setError(data.error || t('登录失败 ({status})', { status: res.status }));
-    } catch {
-      setError(t('网络错误，请重试'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   // 网页登录卡（AuthCard）登录 / 注册成功后回调
   const authed = (user) => {
     useGlobalStore.getState().setAuthUser?.(user || null);
@@ -158,38 +146,6 @@ export default function AuthGate({ children }) {
   if (phase === 'ok') return children;
   if (phase === 'checking') return <div className="nd-shell" style={{ background: PAPER.wall }} />;
 
-  const form = desktop ? (
-    <>
-      <h2>{t('登录 NoDesign')}</h2>
-      <div className="m">{t('使用站点账号登录后，本机即可使用站点提供的模型与额度')}</div>
-      <div className="ndw-field">
-        <label htmlFor="ndw-u">{t('用户名 · USERNAME')}</label>
-        <input id="ndw-u" value={username} placeholder={t('请输入用户名')} autoFocus
-          autoComplete="username" onChange={(e) => setUsername(e.target.value)} />
-      </div>
-      <div className="ndw-field">
-        <label htmlFor="ndw-p">{t('密码 · PASSWORD')}</label>
-        <input id="ndw-p" type="password" value={password} placeholder={t('请输入密码')}
-          autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} />
-      </div>
-      {showSite && (
-        <div className="ndw-field">
-          <label htmlFor="ndw-s">{t('站点地址 · SITE')}</label>
-          <input id="ndw-s" value={siteUrl} placeholder={desktop.url || ''}
-            onChange={(e) => setSiteUrl(e.target.value)} />
-        </div>
-      )}
-      <p className="ndw-err">{error || (desktop.error ? t('连不上站点：{err}', { err: desktop.error }) : '')}</p>
-      <button className="go" type="submit" disabled={busy}>
-        {busy ? t('正在验证') : t('登录')}
-      </button>
-      <p className="foot">
-        <a href={siteUrl.trim() || desktop.url || '#'} target="_blank" rel="noreferrer">{t('没有账号？前往站点注册')}</a>
-        {' · '}
-        <a href="#site" onClick={(e) => { e.preventDefault(); setShowSite((v) => !v); }}>{showSite ? t('用官方站') : t('换个站点')}</a>
-      </p>
-    </>
-  ) : null;
 
   return (
     <div className={`ndw${narrow ? ' narrow' : ''}`} ref={rootRef}>
@@ -217,10 +173,9 @@ export default function AuthGate({ children }) {
       )}
       {narrow ? (
         desktop ? (
-          <form className="ndw-card ndw-solo" onSubmit={submit}>
+          <DesktopLoginCard className="ndw-card ndw-solo" desktop={desktop} onDone={loadStatus}>
             <span className="pin" />
-            {form}
-          </form>
+          </DesktopLoginCard>
         ) : (
           <AuthCard className="ndw-card ndw-solo" openReg={openReg} onAuthed={authed}>
             <span className="pin" />
@@ -241,11 +196,10 @@ export default function AuthGate({ children }) {
 
           {/* 跨场景不变的锚（二）：线索的终点，门 */}
           {desktop ? (
-            <form className="ndw-card" onSubmit={submit}>
+            <DesktopLoginCard className="ndw-card" desktop={desktop} onDone={loadStatus}>
               <span className="pin" />
               <div className="ndw-stamp">{t('桌面版')}</div>
-              {form}
-            </form>
+            </DesktopLoginCard>
           ) : (
             <AuthCard className="ndw-card" openReg={openReg} onAuthed={authed}>
               <span className="pin" />

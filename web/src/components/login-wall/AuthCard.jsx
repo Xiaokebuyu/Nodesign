@@ -64,6 +64,12 @@ async function post(path, body) {
 
 const PROVIDER_LABEL = { google: 'Google', github: 'GitHub' };
 
+/** 第三方登录的起点：不在首页 / 登录页上发起时带上当前页，登录完回到这里（桌面版登录确认页 /desktop-auth 靠它） */
+export function oauthStartHref(provider, here = `${location.pathname}${location.search}`) {
+  const back = here === '/' || here.startsWith('/login') ? '' : `?return=${encodeURIComponent(here)}`;
+  return `/api/auth/oauth/${provider}/start${back}`;
+}
+
 /**
  * @param {{ openReg: boolean, onAuthed: (user) => void, className: string, children?: any }} props
  *   className / children：外层表单的样式与装饰（钉子、印章），由 AuthGate 按宽窄屏给
@@ -94,7 +100,12 @@ export default function AuthCard({ openReg, onAuthed, className, children }) {
     const q = new URLSearchParams(location.search);
     const oauthError = q.get('oauth_error');
     const pendingToken = /(?:^#|&)oauth_pending=([^&]+)/.exec(location.hash)?.[1];
-    if (oauthError || pendingToken) history.replaceState(null, '', location.pathname);
+    // 只摘掉回跳带来的那两样：从 /desktop-auth?port=… 这类页面发起的登录，原页参数要留着
+    if (oauthError || pendingToken) {
+      q.delete('oauth_error');
+      const rest = q.toString();
+      history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : ''));
+    }
     if (oauthError) setError(oauthErrorText(oauthError));
     if (pendingToken) {
       // 令牌只放 body：放进请求路径就会进 nginx / Cloudflare 的访问日志
@@ -240,7 +251,7 @@ export default function AuthCard({ openReg, onAuthed, className, children }) {
   const providerButtons = (list) => list.length > 0 && (
     <div className="ndw-oauth">
       {list.map((p) => (
-        <a key={p} className="ndw-provider" href={`/api/auth/oauth/${p}/start`}>
+        <a key={p} className="ndw-provider" href={oauthStartHref(p)}>
           <i>{p === 'google' ? GOOGLE_ICON : GITHUB_ICON}</i>
           {p === 'google' ? t('使用 Google 继续') : t('使用 GitHub 继续')}
         </a>

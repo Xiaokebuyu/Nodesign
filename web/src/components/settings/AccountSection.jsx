@@ -6,6 +6,7 @@ import { Panel, Row, Block, Badge, Button, Progress, Mono, Note } from './ui.jsx
 import { TextInput } from '../local/primitives.jsx';
 import { t } from '../../lib/i18n.js';
 import AccountSecurity from './AccountSecurity.jsx';
+import { useBrowserLogin } from '../../lib/use-browser-login.js';
 
 const TIER_LABEL = { basic: 'Basic', pro: 'Pro', trial: 'Trial', admin: 'Admin' };
 
@@ -116,15 +117,21 @@ export function LocalAccount({ relay, onChange, showToast }) {
   );
 }
 
-/** 登录表单（设置页里那份；首启门在 AuthGate） */
+/** 登录表单（设置页里那份；首启门在 login-wall/DesktopLoginCard.jsx）：在浏览器中登录为主，账号密码在下面 */
 export function RelayLoginForm({ relay, onDone, showToast }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const browser = useBrowserLogin({
+    onDone: async () => {
+      try { onDone?.(await Local.relayRefresh()); showToast?.(t('已登录'), 'info'); }
+      catch (e) { setErr(e.message); }
+    },
+  });
   const submit = async () => {
-    if (!username.trim() || !password) { setErr(t('请填写用户名和密码')); return; }
+    if (!username.trim() || !password) { setErr(t('请填写邮箱或用户名，以及密码')); return; }
     setBusy(true); setErr('');
     try {
       const r = await Local.relayLogin({ username: username.trim(), password, ...(url.trim() ? { url: url.trim() } : {}) });
@@ -133,11 +140,24 @@ export function RelayLoginForm({ relay, onDone, showToast }) {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: GAP.md, maxWidth: 420 }}>
-      <TextInput value={username} onChange={setUsername} placeholder={t('用户名')} mono={false} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md, flexWrap: 'wrap' }}>
+        {browser.waiting ? (<>
+          <Button variant="primary" onClick={browser.reopen}>{t('重新打开浏览器')}</Button>
+          <Button variant="ghost" onClick={browser.cancel}>{t('取消')}</Button>
+          <Note>{t('已在浏览器中打开 NoDesign 站点。登录并点击「允许」后，这里会自动继续。')}</Note>
+        </>) : (<>
+          <Button variant="primary" onClick={() => browser.start(url.trim() || undefined)}>{t('在浏览器中登录')}</Button>
+          <Note>{t('可以使用邮箱、Google 或 GitHub 登录')}</Note>
+        </>)}
+      </div>
+      {browser.attemptError && <Note tone="bad">{t('上一次尝试没有完成：{err}', { err: browser.attemptError })}</Note>}
+      {browser.error && <Note tone="bad">{browser.error}</Note>}
+      <Note>{t('或使用账号密码登录')}</Note>
+      <TextInput value={username} onChange={setUsername} placeholder={t('邮箱或用户名')} mono={false} />
       <TextInput value={password} onChange={setPassword} placeholder={t('密码')} type="password" mono={false} />
       <TextInput value={url} onChange={setUrl} placeholder={t('站点地址（可选，默认为官方站点）')} />
       <div style={{ display: 'flex', alignItems: 'center', gap: GAP.md }}>
-        <Button variant="primary" onClick={submit} disabled={busy}>{busy ? t('登录中…') : t('登录')}</Button>
+        <Button onClick={submit} disabled={busy}>{busy ? t('登录中…') : t('登录')}</Button>
         <Note>{t('没有账号？')} <a href={relay?.url || '#'} target="_blank" rel="noreferrer" style={{ color: COLOR.text }}>{t('去站点注册')}</a></Note>
       </div>
       {err && <Note tone="bad">{err}</Note>}

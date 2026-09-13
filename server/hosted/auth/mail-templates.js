@@ -76,6 +76,10 @@ const NOTICE_TEXT = {
     'zh-CN': ['你的 NoDesign 账号关联了新的登录方式', '你的 NoDesign 账号刚刚关联了一个第三方登录方式（Google 或 GitHub），之后可以用它直接登录。'],
     en: ['A sign-in method was linked to your NoDesign account', 'A third-party sign-in method (Google or GitHub) was just linked to your NoDesign account and can now be used to sign in.'],
   },
+  device_added: {
+    'zh-CN': ['你的 NoDesign 账号在新的桌面设备上登录', '你的 NoDesign 账号刚刚在一台新的桌面设备上登录。可以在站点设置中查看和退出桌面设备。'],
+    en: ['New desktop sign-in to your NoDesign account', 'Your NoDesign account was just signed in on a new desktop device. You can review and sign out desktop devices in the site settings.'],
+  },
   email_added: {
     'zh-CN': ['邮箱已绑定到你的 NoDesign 账号', '这个邮箱刚刚绑定到你的 NoDesign 账号，之后可以用它登录和找回密码。'],
     en: ['Email added to your NoDesign account', 'This email address was just added to your NoDesign account. You can now use it to sign in and recover your password.'],

@@ -14,7 +14,7 @@
 import express from 'express';
 import { authEnabled, requestAuth, requestUser, logoutRequest } from './session.js';
 import { openRegistrationEnabled, updateUser } from './users-store.js';
-import { relayCatalog, relayConfig, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
+import { relayCatalog, relayConfig, relayTokenInvalidAt, DEFAULT_RELAY_URL } from '../runtime/relay-client.js';
 import { loadPrefs } from '../runtime/local-prefs.js';
 import { LOCALES, isLocale } from '../shared/locales.js';
 import { platform } from '../runtime/platform.js';
@@ -30,8 +30,11 @@ export const publicUser = (u) => (u ? {
 /** 本地版：站点账号登录态（AuthGate 据此决定首启是不是先要登录）。loggedIn = .env 里有令牌；whoami 拉到了才有身份 */
 export function desktopLoginState() {
   const c = relayCatalog();
+  const loggedIn = !!relayConfig();
   return {
-    loggedIn: !!relayConfig(),
+    loggedIn,
+    // 令牌是被站点判失效清掉的（不是用户自己退出）：登录页据此说明「登录已失效」
+    expired: !loggedIn && relayTokenInvalidAt() > 0,
     catalogOk: c.ok,
     error: c.error,
     url: process.env.NODESIGN_RELAY_URL || DEFAULT_RELAY_URL,

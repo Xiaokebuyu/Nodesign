@@ -77,6 +77,9 @@ async function call(pathname, { method = 'GET', body = null, raw = null, form = 
     let json = null;
     try { json = text ? JSON.parse(text) : null; } catch { /* 非 JSON（nginx 的 502 页之类） */ }
     account(res.status);
+    // 站点明确说这枚令牌不作数了（吊销 / 找回密码 / 账号停用）：通知收口方清掉本机令牌、回登录页。
+    // 只认我们自己 relay 的 JSON 码 —— nginx / Cloudflare 回的 401 页不算，别因为一次网关抽风把人登出
+    if (auth && res.status === 401 && json?.code === 'DEVICE_TOKEN_INVALID') noteTokenInvalid(cfg.token);
     if (!res.ok) {
       const message = json?.error?.message || json?.error || `HTTP ${res.status}`;
       throw Object.assign(new Error(message), { status: res.status, code: json?.code || `HTTP_${res.status}`, quota: json?.quota || null, body: json });
@@ -89,6 +92,23 @@ async function call(pathname, { method = 'GET', body = null, raw = null, form = 
   } finally {
     clearTimeout(timer);
   }
+}
+
+// ── 令牌失效（09-13 auth-v2 第四批）──
+// 以前只要 .env 里有令牌就当已登录，站点那头吊销了本机也不知道，界面一直在、每一发都 401。
+// 这里只负责「发现」：记下时间点、通知收口方（api/local-relay-login.js 的 handleRelayTokenInvalid 清 .env、刷目录）。
+// 比对令牌是为了不误伤：退出重登 / 浏览器登录刚换了新令牌，旧令牌的请求晚回来的 401 不算数
+let tokenInvalidAt = 0;
+const invalidListeners = new Set();
+export function onRelayTokenInvalid(fn) { invalidListeners.add(fn); return () => invalidListeners.delete(fn); }
+/** 本机令牌上一次被站点判失效的时间（0 = 没有，或之后已重新登录） */
+export function relayTokenInvalidAt() { return tokenInvalidAt; }
+export function clearRelayTokenInvalid() { tokenInvalidAt = 0; }
+function noteTokenInvalid(deadToken) {
+  if ((process.env.NODESIGN_RELAY_TOKEN || '').trim() !== deadToken) return;
+  if (!tokenInvalidAt) console.warn('[relay-client] 站点判定本机设备令牌已失效（已吊销、重设过密码或账号停用）');
+  tokenInvalidAt = Date.now();
+  for (const fn of invalidListeners) { try { fn(deadToken); } catch (err) { console.warn(`[relay-client] 令牌失效回调失败：${err.message}`); } }
 }
 
 // ── 目录：这个账号在 relay 上能用什么 ──
@@ -221,6 +241,15 @@ export async function closeRelaySession(sid, gen = null) {
  */
 export async function relayLogin({ url = null, username, password, label }) {
   return call('/login', { method: 'POST', auth: false, url, body: { username, password, label } });
+}
+
+/**
+ * 浏览器登录的最后一步：授权码 + PKCE verifier 换设备令牌（09-13 第四批；站点侧 hosted/relay/router.js 的 /token）。
+ * 不需要已有令牌。失败抛错带 code（INVALID_CODE / TOO_MANY_DEVICES / RATE_LIMITED / RELAY_TIMEOUT）。
+ * @returns {Promise<{ token: string, device: object, user: object }>}
+ */
+export async function relayExchangeCode({ url = null, code, verifier }) {
+  return call('/token', { method: 'POST', auth: false, url, body: { code, verifier }, timeoutMs: 15_000 });
 }
 
 /** 站内公告 + 当前额度（桌面版横幅 60s 一拉） */

@@ -100,6 +100,15 @@ function errorCode(raw) {
   return ERROR_CODES.has(c) ? c : 'provider_error';
 }
 
+/**
+ * 登录流程失败 / 要输验证码时回哪一页：从别的页面发起的（比如桌面版登录确认页 /desktop-auth?…）回原页，
+ * 未登录时 AuthGate 在任何路径都显示登录墙，错误照样显示、原页参数不丢；从首页发起的回 /login
+ */
+function loginPageFor(returnTo) {
+  const r = typeof returnTo === 'string' ? returnTo.split('#')[0] : '';
+  return r && r !== '/' ? r : '/login';
+}
+
 function withQuery(path, key, value) {
   return `${path}${path.includes('?') ? '&' : '?'}${key}=${encodeURIComponent(value)}`;
 }
@@ -139,7 +148,7 @@ export function mountOAuth(router, { registerQuota }) {
     const provider = String(req.params.provider);
     const intent = req.query.intent === 'link' ? 'link' : 'login';
     const returnTo = safeReturnTo(req.query.return, intent === 'link' ? '/settings' : '/');
-    const fail = (code) => res.redirect(302, withQuery(intent === 'link' ? '/settings' : '/login', 'oauth_error', errorCode(code)));
+    const fail = (code) => res.redirect(302, withQuery(intent === 'link' ? '/settings' : loginPageFor(returnTo), 'oauth_error', errorCode(code)));
     if (!PROVIDERS.includes(provider) || !providerEnabled(provider)) return fail('provider_unavailable');
     if (!startWindow.take(clientIp(req)).ok) return fail('rate_limited');
 
@@ -165,7 +174,7 @@ export function mountOAuth(router, { registerQuota }) {
     const provider = String(req.params.provider);
     const flow = readFlowCookie(req);
     res.setHeader('Set-Cookie', clearFlowCookie(req));   // 一次性：不管成败都清
-    const errorPath = flow?.i === 'link' ? '/settings' : '/login';
+    const errorPath = flow?.i === 'link' ? '/settings' : loginPageFor(flow?.r);
     const fail = (code) => res.redirect(302, withQuery(errorPath, 'oauth_error', errorCode(code)));
     if (!flow || flow.p !== provider || !PROVIDERS.includes(provider) || flow.ru !== redirectUri(req, provider)) return fail('state_mismatch');
 
@@ -240,7 +249,7 @@ export function mountOAuth(router, { registerQuota }) {
         return fail(sent.status === 429 ? 'rate_limited' : 'mail_failed');
       }
       // 放 # 片段里：浏览器不把片段发给服务器，不进 nginx / Cloudflare 的访问日志
-      return res.redirect(302, `/login#oauth_pending=${token}`);
+      return res.redirect(302, `${loginPageFor(flow.r)}#oauth_pending=${token}`);
     }
 
     if (registerQuota.exhausted(req)) return fail('register_rate_limited');

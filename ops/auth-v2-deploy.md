@@ -1,4 +1,4 @@
-# auth-v2 上线清单（第一批：服务端地基；第二批：Google / GitHub 登录）
+# auth-v2 上线清单（第一批：服务端地基；第二批：Google / GitHub 登录；第四批：桌面版在浏览器中登录）
 
 设计方案：`~/claude-report-file/0913-auth/登录体系升级-设计方案.md`。本清单只管部署动作。
 
@@ -53,12 +53,31 @@ if ($nd_has_session = 0) { return 302 /welcome/; }
 ⛔ 备份文件别放 `sites-enabled/`（会被 include，duplicate 报错）。改完 `sudo nginx -t` 再 reload。
 **必须和服务端同时上线**：服务端先上、nginx 没改，已登录用户访问根路径会被送去官网。
 
+### 第四批新增（桌面版在浏览器中登录）
+
+确认页 `/desktop-auth` 禁止被别的页面嵌入。前端组件已判断 `window.top`，nginx 再加一层响应头（与服务端同时上线，不加也不影响功能）：
+
+```nginx
+location = /desktop-auth {
+    try_files /index.html =404;
+    add_header Cache-Control "no-cache";
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Content-Security-Policy "frame-ancestors 'none'" always;
+    add_header X-Frame-Options "DENY" always;
+}
+```
+
+没有新的环境变量。授权码只在进程内存里（60 秒），重启服务端时正在确认的用户需要在桌面版里重新点一次。
+
 ## 3. 上线后行为变化（给公告用）
 
 - 设了过渡期：网页用户不需要重新登录，旧登录状态第一次访问时自动换成新会话，到期后没换过的需要重新登录。
 - 没设过渡期：所有网页用户重新登录一次。
 - 登录框接受邮箱或用户名；「账号或密码错误」统一提示。
 - 桌面版不受影响（0.1.42 及以前用账号密码换设备令牌的接口不变）。
+- 桌面 0.1.43 起：首启门主按钮是「在浏览器中登录」（邮箱 / Google / GitHub 都可用），账号密码登录保留；站点上吊销设备或找回密码后，桌面版回到登录门并说明登录已失效。
+- 新桌面设备登录（浏览器登录、账号密码登录、网页签发令牌三条路）会给绑定了邮箱的账号发安全通知。
 
 ## 4. 验证
 

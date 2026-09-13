@@ -11,7 +11,7 @@ export default {
   // ── 登录 / 注册（auth/middleware.js）──
   // 英文用户的第一站。这几条说不对，后面做得再好也没机会被看到。
   '用户名或密码错误': 'Incorrect username or password',
-  '请填写用户名和密码': 'Both username and password are required',
+  '请填写邮箱或用户名，以及密码': 'Enter your email or username, and your password',
   '要一个绝对路径': 'Needs an absolute path',
   '这个文件夹不存在或写不进去：{dir}': "This folder doesn't exist or isn't writable: {dir}",
   '模型 {id} 不在可选清单里': 'Model {id} is not in the available list',
@@ -21,6 +21,19 @@ export default {
   'locale 需为 {allowed} 或 null': 'locale must be one of {allowed}, or null',
 
   // ── 账号体系 auth-v2（hosted/auth/*，09-13）──
+  // 桌面版在浏览器中登录（hosted/auth/desktop-auth.js、api/local-relay-login.js，09-13 第四批）
+  '登录链接无效，请回到 NoDesign 桌面版重新发起': 'This sign-in link is invalid. Go back to the NoDesign desktop app and start again.',
+  '在用设备数量已达上限（{n} 台），请先在设置中退出一台设备': 'You already have {n} devices signed in. Sign out of one in Settings first.',
+  '站点地址无效': 'Invalid site address',
+  '登录请求无效或已过期': 'This sign-in request is invalid or has expired',
+  '请回到 NoDesign，重新点击「在浏览器中登录」。': 'Go back to NoDesign and click "Sign in with browser" again.',
+  '已取消登录': 'Sign-in canceled',
+  '可以关闭此页面。': 'You can close this page.',
+  '正在完成登录': 'Finishing sign-in',
+  '请回到 NoDesign 查看结果。': 'Go back to NoDesign to see the result.',
+  '已登录 NoDesign': 'Signed in to NoDesign',
+  '可以关闭此页面，回到 NoDesign 继续使用。': 'You can close this page and go back to NoDesign.',
+  '登录没有完成': 'Sign-in did not complete',
   '账号或密码错误': 'Incorrect email, username or password',
   '请填写邮箱或用户名': 'Enter your email or username',
   '操作太频繁，稍等一会儿再试': 'Too many requests. Wait a moment and try again.',

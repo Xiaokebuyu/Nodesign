@@ -10,6 +10,8 @@
 
 import express from 'express';
 import { mintDevice, listDevices, getDevice, revokeDevice, MAX_DEVICES } from './relay/devices.js';
+import { noteNewDevice } from './auth/desktop-auth.js';
+import { getUserById } from '../auth/users-store.js';
 const router = express.Router();
 
 router.get('/', (req, res) => {
@@ -21,6 +23,7 @@ router.post('/', (req, res) => {
   const active = listDevices(req.user.id).filter((d) => !d.revoked);
   if (active.length >= MAX_DEVICES) return res.status(409).json({ error: `最多 ${MAX_DEVICES} 台在用的设备，先吊销一台`, code: 'TOO_MANY_DEVICES' });
   const { device, token } = mintDevice({ userId: req.user.id, label: label || null });
+  noteNewDevice(req, getUserById(req.user.id), device, 'web');
   res.status(201).json({ device: pub(device), token });
 });
 

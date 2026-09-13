@@ -556,6 +556,14 @@ ipcMain.handle('nd:save-export', async (_e, filename, data) => {
   return { path: target, size };
 });
 
+ipcMain.handle('nd:focus-window', () => {
+  if (!win || win.isDestroyed()) return false;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  return true;
+});
+
 ipcMain.handle('nd:open-external', async (_e, url) => {
   const u = String(url || '');
   if (!/^https?:\/\//.test(u)) throw new Error('只能打开 http(s) 链接');

@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { oauthErrorText } from './AuthCard.jsx';
+import { oauthErrorText, oauthStartHref } from './AuthCard.jsx';
 
 const ROUTES = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../server/hosted/auth/oauth-routes.js');
 const LINK_ONLY = new Set(['login_required', 'reauth_required', 'session_changed', 'provider_already_linked']);
@@ -25,5 +25,14 @@ describe('oauthErrorText', () => {
       if (LINK_ONLY.has(code) || GENERIC.has(code)) continue;
       expect(oauthErrorText(code), code).not.toBe(fallback);
     }
+  });
+});
+
+describe('oauthStartHref', () => {
+  it('从别的页面发起（桌面版登录确认页）带上当前页；首页和登录页不带（09-13 第四批）', () => {
+    const here = '/desktop-auth?port=4001&state=abcdefghijklmnop&challenge=x';
+    expect(oauthStartHref('google', here)).toBe(`/api/auth/oauth/google/start?return=${encodeURIComponent(here)}`);
+    expect(oauthStartHref('github', '/')).toBe('/api/auth/oauth/github/start');
+    expect(oauthStartHref('github', '/login?oauth_error=x')).toBe('/api/auth/oauth/github/start');
   });
 });
