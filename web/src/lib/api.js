@@ -449,6 +449,8 @@ export const Turn = {
    */
   cancel: ({ pid, runId }) =>
     jsonRequest('POST', `/api/projects/${pid}/runs/${runId}/cancel`, {}),
+  // 单停一个子代理、不打断整轮（09-13）；taskId 来自 run.task.* 事件，404 = 回合或任务已结束
+  stopTask: ({ pid, sid, taskId }) => jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/tasks/${encodeURIComponent(taskId)}/stop`, {}),   // path-compose-ok：三段都是 id、永不为空
 
   /**
    * A4.2：把用户在 AskUserQuestionView 卡片里点的答案回传后端。

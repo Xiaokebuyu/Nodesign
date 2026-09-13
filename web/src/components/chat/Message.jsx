@@ -9,6 +9,7 @@ import { COLOR, GAP, RADIUS, FONT_SIZE, FONT_MONO, FONT_SANS, alpha, FONT_READ }
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { Turn } from '../../lib/api.js';
 import TimelineNode from './TimelineNode.jsx';
+import TaskStopButton from './TaskStopButton.jsx';
 import { getToolIcon, isSubagentTool } from './tool-icons.js';
 import UserMessage from './UserMessage.jsx';
 import { useTimelinePosition } from './TimelineGroupContext.js';
@@ -84,6 +85,7 @@ function Message({ message, projectId, sessionId, onCanvasReload }) {
         // C28：subagent 调用时 SDK 推 task_* events，前端绑到 Task tool message
         agentType={message.agentType}
         taskStatus={message.taskStatus}
+        taskId={message.taskId} projectId={projectId} sessionId={sessionId}
         taskSummary={message.taskSummary}
         taskSummaryLog={message.taskSummaryLog}
         taskDescription={message.taskDescription}
@@ -1302,6 +1304,7 @@ function VisionCheckerCard({ text }) {
 function ToolMessage({
   toolName, toolInput, toolOutput, toolError, toolImages, status, elapsed,
   agentType, taskStatus, taskSummary, taskSummaryLog, taskDescription, taskLastTool, subagentResult,
+  taskId, projectId, sessionId,
 }) {
   const [open, setOpen] = useState(false);
 
@@ -1461,6 +1464,7 @@ function ToolMessage({
             }}
           />
         </button>
+        {isRunning && !isRole && <TaskStopButton projectId={projectId} sessionId={sessionId} taskId={taskId} />}
 
         {open && (
           <div style={{ marginTop: GAP.sm, display: 'flex', flexDirection: 'column', gap: GAP.sm }}>
