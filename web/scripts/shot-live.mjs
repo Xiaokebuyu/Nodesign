@@ -9,7 +9,7 @@
  *   --out=/tmp/shot.png --wait=3000 --viewport=1600x950
  *   --probe="document.querySelectorAll('[data-board-object]').length"
  *
- * 登录：自动读 .env 的 NODESIGN_AUTH_PASSWORD 以 admin 登录拿 nd_auth cookie
+ * 登录：自动读 .env 的 NODESIGN_AUTH_PASSWORD 以 admin 登录拿会话 cookie
  * （也可 ND_TOKEN 环境变量直给）。输出 JSON：{ out, errors, probe } ——
  * errors 收 pageerror / console.error / 所有 4xx+ 响应（带 URL，破案主力）。
  *
@@ -79,9 +79,12 @@ if (DEV) {
 }
 
 let token = process.env.ND_TOKEN || null;
+// 会话 cookie 名（09-13 auth-v2）：基名读 .env 的 NODESIGN_SESSION_COOKIE；https 入口上服务端只认 __Host-<基名>
+const envText = (() => { try { return readFileSync(path.join(ROOT, '.env'), 'utf8'); } catch { return ''; } })();
+const COOKIE_BASE = /^NODESIGN_SESSION_COOKIE=(.*)$/m.exec(envText)?.[1]?.trim() || 'nd_auth';
 if (!token) {
   // 用 .env 的 admin 密码换 cookie（服务端口从 .env PORT 读，默认 4002）
-  const env = readFileSync(path.join(ROOT, '.env'), 'utf8');
+  const env = envText;
   const pw = /^NODESIGN_AUTH_PASSWORD=(.*)$/m.exec(env)?.[1];
   const port = /^PORT=(.*)$/m.exec(env)?.[1] || '4002';
   if (!pw) { console.error('拿不到 NODESIGN_AUTH_PASSWORD，也没给 ND_TOKEN'); process.exit(1); }
@@ -89,13 +92,16 @@ if (!token) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: 'admin', password: pw }),
   });
-  token = /nd_auth=([^;]+)/.exec(res.headers.get('set-cookie') || '')?.[1];
+  token = new RegExp(`(?:^|[ ,])${COOKIE_BASE}=([^;]+)`).exec(res.headers.get('set-cookie') || '')?.[1];
   if (!token) { console.error(`登录失败 (${res.status})`); process.exit(1); }
 }
 
 const browser = await chromium.launch({ args: LAUNCH_ARGS });
 const ctx = await browser.newContext(ctxOpts);
-await ctx.addCookies([{ name: 'nd_auth', value: token, url: BASE }]);
+{
+  const secure = BASE.startsWith('https:');
+  await ctx.addCookies([{ name: secure ? `__Host-${COOKIE_BASE}` : COOKIE_BASE, value: token, url: BASE, secure }]);
+}
 const page = await ctx.newPage();
 // ⭐ 界面语言钉死：playwright 默认 en-US，站点跟着走 —— 不钉的话同一轮里
 // 有的图中文有的图英文，拿去比对直接作废（08-30 踩过）。

@@ -20,13 +20,13 @@
  *
  * ## 凭什么能走 http
  *
- * MCP 工具的 handler 跟 express server 跑在**同一个进程**里，而 token 是无状态
- * HMAC：`mintToken(ownerId)` 当场铸一个、塞进 chromium 的 cookie jar 即可。
+ * MCP 工具的 handler 跟 express server 跑在**同一个进程**里：进程内签一枚短期内部凭证
+ * （`mintInternalCookie(ownerId)`，auth/internal-credentials.js，09-13 前是无状态 v2 token）塞进 chromium 的 cookie jar 即可。
  * 拿到的权限跟项目所有者在浏览器里一模一样——不是新开一道后门，是走用户那道门。
  * （web/scripts/shot-live.mjs 早就是这么干的，这里只是把它收进产品代码。）
  *
  * ⚠️ 铸出来的 token 只进本机 chromium 的 cookie jar，不写日志、不进返回文本。
- * ⚠️ 前提是**调用方跟 HTTP server 同进程**（共用 NODESIGN_AUTH_SECRET）。独立脚本
+ * ⚠️ 前提是**调用方跟 HTTP server 同进程**（内部凭证只存在本进程内存里）。独立脚本
  *    里直接调这个 helper 会铸出对不上号的 token，服务端回 401 —— 那是环境问题不是
  *    产品 bug，跑验证脚本记得 `node --env-file=.env`。
  */
@@ -34,7 +34,8 @@
 import path from 'node:path';
 import { fileUrl } from '../../../../lib/file-url.js';
 import { getProject } from '../../../../projects/store.js';
-import { COOKIE_NAME, mintToken, authEnabled } from '../../../../auth/session.js';
+import { authEnabled } from '../../../../auth/session.js';
+import { mintInternalCookie } from '../../../../auth/internal-credentials.js';
 import { getUserById } from '../../../../auth/users-store.js';
 
 // ── 渲染层保真（2026-08-07 立，2026-08-18 从 screenshot.js 挪来收成一份）──
@@ -171,7 +172,7 @@ export async function openArtifactPage(browser, {
     if (authEnabled()) {
       // 项目所有者的身份 —— guardProject 只认 owner 或 admin
       const ownerId = getProject(projectId)?.ownerId;
-      // ⚠️ 光有 ownerId 不够：`mintToken` 只把 id 烤进签名，而 `requestUser` 会
+      // ⚠️ 光有 ownerId 不够：内部凭证只记 id，而 `requestUser` 会
       // **重新查库**并拒掉 disabled / 已删除的用户。于是账号一被停用，六个感知工具
       // 全部报「artifact-file returned HTTP 401」—— 一句完全指不到根因的话
       // （真因是账号状态，跟文件、路径、权限配置都无关）。这里提前认出来，
@@ -180,7 +181,7 @@ export async function openArtifactPage(browser, {
       const owner = ownerId ? getUserById(ownerId) : null;
       if (ownerId && owner && !owner.disabled) {
         await context.addCookies([{
-          name: COOKIE_NAME, value: mintToken(ownerId), url: PERCEPTION_ORIGIN,
+          ...mintInternalCookie(ownerId), url: PERCEPTION_ORIGIN, httpOnly: true,   // 产物页里的脚本读不走它
         }]);
       } else {
         const why = !ownerId ? 'project owner unknown'

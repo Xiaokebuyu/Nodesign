@@ -76,6 +76,11 @@ export function revokeDevice(id) {
   return db.prepare('UPDATE relay_devices SET revoked = 1 WHERE id = ?').run(id).changes > 0;
 }
 
+/** 吊销某账号全部设备（找回密码、「退出所有其他设备」）。返回吊销的台数 */
+export function revokeUserDevices(userId) {
+  return db.prepare('UPDATE relay_devices SET revoked = 1 WHERE user_id = ? AND revoked = 0').run(userId).changes;
+}
+
 /**
  * 校验令牌。任何一步不对都返回 null，**不区分原因** —— 对着调用方区分
  * "设备不存在"和"密钥不对"，等于告诉试探的人他猜对了一半。

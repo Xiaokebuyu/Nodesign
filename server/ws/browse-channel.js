@@ -18,7 +18,8 @@
  */
 
 import { WebSocketServer } from 'ws';
-import { requestUser } from '../auth/session.js';
+import { requestAuth } from '../auth/session.js';
+import { trackSocket } from './auth-sockets.js';
 import { originAllowed } from '../auth/origin-guard.js';
 import { userOwnsProject } from '../api/_guard.js';
 import { getProject, validateProjectId } from '../projects/store.js';
@@ -165,12 +166,14 @@ export function createBrowseWS() {
         return socket.destroy();
       }
       // 鉴权跟主通道同一套，也同一个 4401（外人不该分得清"没登录"和"不是你的项目"）
-      const user = requestUser(req);
+      const auth = requestAuth(req);
+      const user = auth?.user ?? null;
       const project = getProject(pid);
       if (!user || !userOwnsProject(user, project)) {
         return wss.handleUpgrade(req, socket, head, (ws) => ws.close(4401, 'unauthorized'));
       }
       wss.handleUpgrade(req, socket, head, (ws) => {
+        trackSocket(ws, auth);   // 能注入键鼠的通道：会话一吊销就断（auth-sockets.js）
         ws.binaryType = 'nodebuffer';
         handleConn(ws, pid);
       });

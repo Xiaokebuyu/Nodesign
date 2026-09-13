@@ -12,7 +12,7 @@
 import crypto from 'node:crypto';
 import db from '../engine/runs/store.js';
 import { PLANS, basicDefaultDailyUsd } from '../auth/tier.js';
-import { getUserById, getUserByUsername, countUsers, openRegistrationEnabled } from '../auth/users-store.js';
+import { getUserById, getUserByUsername, getUserByEmail, normalizeEmail, countUsers, openRegistrationEnabled, invalidateUserCache } from '../auth/users-store.js';
 
 // ── 密码 ──
 
@@ -49,18 +49,74 @@ function newUserId() {
   return `u_${Date.now().toString(36)}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
-/** 登录用：要拿 hash 比对，不走 rowToUser（hash 不出模块） */
-export function getCredential(username) {
-  const row = db.prepare('SELECT id, password_hash, disabled FROM users WHERE username = ?').get(username);
-  return row ? { id: row.id, passwordHash: row.password_hash, disabled: !!row.disabled } : null;
+/** 仅第三方登录、还没设过密码的号存这个占位值：verifyPassword 的格式校验对它恒失败 */
+export const NO_PASSWORD = '!';
+
+/**
+ * 登录用：要拿 hash 比对，不走 rowToUser（hash 不出模块）。
+ * identifier 含 @ 按邮箱查，否则按用户名查（不区分大小写，09-13 起有唯一索引兜着）。
+ */
+export function getCredential(identifier) {
+  if (typeof identifier !== 'string' || !identifier.trim()) return null;
+  const id = identifier.trim();
+  const row = id.includes('@')
+    ? db.prepare('SELECT id, password_hash, disabled, email FROM users WHERE email = ?').get(normalizeEmail(id) || '')
+    : db.prepare('SELECT id, password_hash, disabled, email FROM users WHERE username = ? COLLATE NOCASE').get(id);
+  return row ? { id: row.id, passwordHash: row.password_hash, disabled: !!row.disabled, email: row.email || null } : null;
 }
 
-export function createUser({ username, password, role = 'user', inviteCode = null, lifetimeCostLimitUsd = null, dailyCostLimitUsd = null, plan = 'basic' }) {
+export function createUser({ username, password = null, passwordHash = null, email = null, role = 'user', inviteCode = null, lifetimeCostLimitUsd = null, dailyCostLimitUsd = null, plan = 'basic' }) {
   if (!PLANS.includes(plan)) throw new Error(`createUser: plan 需为 ${PLANS.join('/')}，收到 '${plan}'`);
   const id = newUserId();
-  db.prepare(`INSERT INTO users (id, username, password_hash, role, invite_code, lifetime_cost_limit_usd, daily_cost_limit_usd, plan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, username, hashPassword(password), role, inviteCode, lifetimeCostLimitUsd, dailyCostLimitUsd, plan);
+  const hash = passwordHash || (password ? hashPassword(password) : NO_PASSWORD);
+  const mail = email ? normalizeEmail(email) : null;
+  if (email && !mail) throw new Error('createUser: 邮箱格式不对');
+  db.prepare(`INSERT INTO users (id, username, password_hash, role, invite_code, lifetime_cost_limit_usd, daily_cost_limit_usd, plan, email, email_verified_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, username, hash, role, inviteCode, lifetimeCostLimitUsd, dailyCostLimitUsd, plan, mail, mail ? new Date().toISOString() : null);
   return getUserById(id);
+}
+
+/** 设新密码（调用方先过 password-policy） */
+export function setPassword(userId, password) {
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), userId);
+  invalidateUserCache(userId);
+}
+
+/** 绑定 / 更换邮箱（已验证过的）。被别的号占用时抛 EMAIL_TAKEN */
+export function setEmail(userId, email) {
+  const mail = normalizeEmail(email);
+  if (!mail) throw Object.assign(new Error('邮箱格式不对'), { code: 'BAD_EMAIL' });
+  const owner = getUserByEmail(mail);
+  if (owner && owner.id !== userId) throw Object.assign(new Error('这个邮箱已经注册过了'), { code: 'EMAIL_TAKEN' });
+  db.prepare('UPDATE users SET email = ?, email_verified_at = ? WHERE id = ?').run(mail, new Date().toISOString(), userId);
+  invalidateUserCache(userId);
+  return getUserById(userId);
+}
+
+/** 改用户名（显示名，也仍可用来登录）。撞名抛 USERNAME_TAKEN */
+export function setUsername(userId, username) {
+  if (!validUsername(username)) throw Object.assign(new Error('用户名 2-32 位，仅限字母数字下划线连字符和中文'), { code: 'BAD_USERNAME' });
+  const other = getUserByUsername(username);
+  if (other && other.id !== userId) throw Object.assign(new Error('用户名已被使用'), { code: 'USERNAME_TAKEN' });
+  db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username, userId);
+  invalidateUserCache(userId);
+  return getUserById(userId);
+}
+
+/**
+ * 从邮箱前缀 / 第三方昵称派生一个可用的用户名：只留合法字符，不够 2 位补 user，撞名追加数字。
+ * 用户注册完可以在账号页改。
+ */
+export function deriveUsername(seed) {
+  let base = String(seed || '').split('@')[0].replace(/[^A-Za-z0-9_一-鿿-]/g, '').slice(0, 24);
+  if (base.length < 2) base = `user${base}`;
+  if (!getUserByUsername(base)) return base;
+  for (let i = 0; i < 20; i += 1) {
+    const candidate = `${base}${crypto.randomInt(10, 10_000)}`;
+    if (!getUserByUsername(candidate)) return candidate;
+  }
+  return `user${crypto.randomBytes(4).toString('hex')}`;
 }
 
 // ── 邀请码 ──
@@ -109,6 +165,47 @@ export function defaultInviteDailyUsd(env = process.env) {
  *     不开生图、不开发布；能力表在 auth/tier.js）
  * 单事务（used_count+1 与 INSERT 原子，两人同抢最后一个名额只有一个成）。失败抛带 .code 的 Error。
  */
+/**
+ * 注册前的邀请码预检（不消耗）：邮箱注册在发验证码之前先判一次，码无效就别让人白等一封信。
+ * 真正消耗在 registerWithEmail 的事务里再判一次（中间可能被别人用掉）。
+ * @returns {{ ok: true } | { ok: false, code: string, message: string }}
+ */
+export function precheckSignup(inviteCode) {
+  const code = String(inviteCode || '').trim();
+  if (!code) {
+    return openRegistrationEnabled() ? { ok: true } : { ok: false, code: 'BAD_INVITE', message: '邀请码无效' };
+  }
+  const inv = getInvite(code);
+  if (!inv) return { ok: false, code: 'BAD_INVITE', message: '邀请码无效' };
+  if (inv.expires_at && new Date(inv.expires_at).getTime() < Date.now()) return { ok: false, code: 'INVITE_EXPIRED', message: '邀请码已过期' };
+  if (inv.used_count >= inv.max_uses) return { ok: false, code: 'INVITE_EXHAUSTED', message: '邀请码已用完' };
+  return { ok: true };
+}
+
+/** 事务内：按邀请码决定档位与额度，带码的顺手消耗 */
+function signupTermsInTx(inviteCode) {
+  const code = String(inviteCode || '').trim();
+  const pre = precheckSignup(code);
+  if (!pre.ok) throw Object.assign(new Error(pre.message), { code: pre.code });
+  if (!code) return { inviteCode: null, plan: 'basic', dailyCostLimitUsd: basicDefaultDailyUsd(), lifetimeCostLimitUsd: null };
+  const inv = getInvite(code);
+  db.prepare('UPDATE invites SET used_count = used_count + 1 WHERE code = ?').run(inv.code);
+  return { inviteCode: inv.code, plan: 'pro', dailyCostLimitUsd: defaultInviteDailyUsd(), lifetimeCostLimitUsd: inv.grant_lifetime_usd ?? null };
+}
+
+/**
+ * 邮箱注册（09-13 auth-v2）：验证码核验通过之后调。密码在发码时就已经哈希好存进验证码的 payload，
+ * 这里直接落哈希；用户名从邮箱前缀派生，注册完可改。
+ */
+export const registerWithEmail = db.transaction(({ email, passwordHash, inviteCode = '', username = null }) => {
+  const mail = normalizeEmail(email);
+  if (!mail) throw Object.assign(new Error('邮箱格式不对'), { code: 'BAD_EMAIL' });
+  if (getUserByEmail(mail)) throw Object.assign(new Error('这个邮箱已经注册过了'), { code: 'EMAIL_TAKEN' });
+  const terms = signupTermsInTx(inviteCode);
+  const name = username && validUsername(username) && !getUserByUsername(username) ? username : deriveUsername(mail);
+  return createUser({ username: name, passwordHash, email: mail, role: 'user', ...terms });
+});
+
 export const registerUser = db.transaction(({ username, password, inviteCode }) => {
   if (!validUsername(username)) {
     throw Object.assign(new Error('用户名 2-32 位，仅限字母数字下划线连字符和中文'), { code: 'BAD_USERNAME' });

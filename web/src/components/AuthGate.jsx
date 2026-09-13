@@ -35,6 +35,7 @@ import { useSceneCarousel } from './login-wall/useSceneCarousel.js';
 import Scene from './login-wall/Scene.jsx';
 import { hasExplicitLocale, t } from '../lib/i18n.js';
 import LanguageSwitcher from './ui/LanguageSwitcher.jsx';
+import { runTurnstileProbe } from '../lib/turnstile-probe.js';
 
 export default function AuthGate({ children }) {
   // checking | login | ok
@@ -89,6 +90,11 @@ export default function AuthGate({ children }) {
       .then(applyStatus)
       .catch(() => setPhase('login'));
   }, []);
+
+  // Turnstile 测量期（09-13「先量后定」）：网页登录墙亮出来时静默量一次，不拦人；服务端没配 site key 时什么都不做
+  useEffect(() => {
+    if (phase === 'login' && !desktop) runTurnstileProbe('login');
+  }, [phase, desktop]);
 
   // 全局 401（api.js 派发）→ 回登录态。WS 4401 断连后接口一定跟着 401，同一条路收口
   useEffect(() => {

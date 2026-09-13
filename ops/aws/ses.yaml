@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  NoDesign transactional email - SES domain identity with Easy DKIM, custom MAIL FROM,
+  a configuration set with reputation metrics and bounce/complaint suppression, and a
+  send-only IAM user. DNS lives on Cloudflare, so DKIM/MAIL FROM records are applied
+  from the stack outputs (see ops/aws/README.md).
+
+Parameters:
+  SendingDomain:
+    Type: String
+    Default: nodesign.xiaobuyu.trade
+    AllowedPattern: "^[a-z0-9.-]+\\.[a-z]{2,}$"
+    Description: Domain identity used as the From domain (subdomain, so the apex Workspace mail records stay untouched)
+  MailFromSubdomain:
+    Type: String
+    Default: mail
+    AllowedPattern: "^[a-z0-9-]+$"
+    Description: Label prepended to SendingDomain for the custom MAIL FROM domain (SPF alignment)
+  FromLocalPart:
+    Type: String
+    Default: noreply
+    AllowedPattern: "^[a-z0-9._-]+$"
+    Description: Local part of the only From address the IAM user may send as
+
+Resources:
+  TransactionalConfigSet:
+    Type: AWS::SES::ConfigurationSet
+    Properties:
+      Name: !Sub "${AWS::StackName}-transactional"
+      ReputationOptions:
+        ReputationMetricsEnabled: true
+      SendingOptions:
+        SendingEnabled: true
+      SuppressionOptions:
+        SuppressedReasons:
+          - BOUNCE
+          - COMPLAINT
+
+  DomainIdentity:
+    Type: AWS::SES::EmailIdentity
+    Properties:
+      EmailIdentity: !Ref SendingDomain
+      ConfigurationSetAttributes:
+        ConfigurationSetName: !Ref TransactionalConfigSet
+      DkimAttributes:
+        SigningEnabled: true
+      DkimSigningAttributes:
+        NextSigningKeyLength: RSA_2048_BIT
+      MailFromAttributes:
+        MailFromDomain: !Sub "${MailFromSubdomain}.${SendingDomain}"
+        BehaviorOnMxFailure: USE_DEFAULT_VALUE
+
+  SenderUser:
+    Type: AWS::IAM::User
+    Properties:
+      Policies:
+        - PolicyName: send-transactional-only
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: SendFromNodesignIdentityOnly
+                Effect: Allow
+                Action:
+                  - ses:SendEmail
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SendingDomain}"
+                  - !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:configuration-set/${TransactionalConfigSet}"
+                Condition:
+                  StringEquals:
+                    ses:FromAddress: !Sub "${FromLocalPart}@${SendingDomain}"
+
+Outputs:
+  ConfigurationSetName:
+    Description: Pass as ConfigurationSetName on every SendEmail call
+    Value: !Ref TransactionalConfigSet
+  SenderUserName:
+    Description: IAM user for the app server; create its access key in the console and write it to .env yourself
+    Value: !Ref SenderUser
+  FromAddress:
+    Description: The only From address the sender user is allowed to use
+    Value: !Sub "${FromLocalPart}@${SendingDomain}"
+  DkimRecord1:
+    Description: CNAME name|value for Cloudflare (DNS only, not proxied)
+    Value: !Sub "${DomainIdentity.DkimDNSTokenName1}|${DomainIdentity.DkimDNSTokenValue1}"
+  DkimRecord2:
+    Description: CNAME name|value for Cloudflare (DNS only, not proxied)
+    Value: !Sub "${DomainIdentity.DkimDNSTokenName2}|${DomainIdentity.DkimDNSTokenValue2}"
+  DkimRecord3:
+    Description: CNAME name|value for Cloudflare (DNS only, not proxied)
+    Value: !Sub "${DomainIdentity.DkimDNSTokenName3}|${DomainIdentity.DkimDNSTokenValue3}"
+  MailFromDomain:
+    Description: Needs MX 10 feedback-smtp.<region>.amazonses.com and TXT "v=spf1 include:amazonses.com ~all"
+    Value: !Sub "${MailFromSubdomain}.${SendingDomain}"

@@ -40,11 +40,14 @@ const res = await fetch(`http://localhost:${port}/api/auth/login`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ username: 'admin', password: pw }),
 });
-const token = /nd_auth=([^;]+)/.exec(res.headers.get('set-cookie') || '')?.[1];
+// 会话 cookie 名（09-13 auth-v2）：基名读 .env 的 NODESIGN_SESSION_COOKIE；https 入口上服务端只认 __Host-<基名>
+const COOKIE_BASE = /^NODESIGN_SESSION_COOKIE=(.*)$/m.exec(env)?.[1]?.trim() || 'nd_auth';
+const token = new RegExp(`(?:^|[ ,])${COOKIE_BASE}=([^;]+)`).exec(res.headers.get('set-cookie') || '')?.[1];
 
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const ctx = await browser.newContext({ ...devices['iPhone 13'] });
-await ctx.addCookies([{ name: 'nd_auth', value: token, url: BASE }]);
+const secure = BASE.startsWith('https:');
+await ctx.addCookies([{ name: secure ? `__Host-${COOKIE_BASE}` : COOKIE_BASE, value: token, url: BASE, secure }]);
 const page = await ctx.newPage();
 const cdp = await ctx.newCDPSession(page);
 

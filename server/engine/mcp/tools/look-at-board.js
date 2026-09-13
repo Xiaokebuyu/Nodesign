@@ -21,7 +21,8 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { getProject } from '../../../projects/store.js';
 import { getUserById } from '../../../auth/users-store.js';
-import { COOKIE_NAME, mintToken, authEnabled } from '../../../auth/session.js';
+import { authEnabled } from '../../../auth/session.js';
+import { mintInternalCookie } from '../../../auth/internal-credentials.js';
 import { platform } from '../../../runtime/platform.js';
 import { launchPerceptionBrowser, PERCEPTION_ORIGIN } from './helpers/perception-page.js';
 import { readBoard } from '../../../projects/board-store.js';
@@ -97,7 +98,7 @@ Costs a few seconds and ~1.7k tokens; don't call it in a loop.`,
           const ownerId = getProject(projectId)?.ownerId;
           const owner = ownerId ? getUserById(ownerId) : null;
           if (!ownerId || !owner || owner.disabled) return err('look_at_board：项目所有者账号不可用（不存在或已停用），拿不到看画布的身份。');
-          await context.addCookies([{ name: COOKIE_NAME, value: mintToken(ownerId), url: origin }]);
+          await context.addCookies([{ ...mintInternalCookie(ownerId), url: origin, httpOnly: true }]);   // 进程内短期凭证（auth/internal-credentials.js）
         }
         const page = await context.newPage();
         const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 });

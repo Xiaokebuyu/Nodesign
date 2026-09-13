@@ -22,7 +22,8 @@ import { getSessionWorkspace, validateSessionId } from '../projects/workspace.js
 import { withConfigDir } from '../lib/sdk-session.js';
 import { platform } from '../runtime/platform.js';
 import { getProjectBus } from './broker.js';
-import { requestUser } from '../auth/session.js';
+import { requestAuth } from '../auth/session.js';
+import { trackSocket } from './auth-sockets.js';
 import { originAllowed } from '../auth/origin-guard.js';
 import { userOwnsProject } from '../api/_guard.js';
 import {
@@ -171,7 +172,8 @@ export function setupWS(httpServer) {
     // 拒 upgrade —— 浏览器拿不到 upgrade 阶段的状态码，只见 close 1006，前端
     // ws-client 会无限指数退避重连。改为完成握手后 close(4401)，前端把它列为
     // fatal code → 停止重连并回登录页。
-    const user = requestUser(req);
+    const auth = requestAuth(req);
+    const user = auth?.user ?? null;
 
     let url;
     try {
@@ -229,6 +231,7 @@ export function setupWS(httpServer) {
     }
 
     wss.handleUpgrade(req, socket, head, (ws) => {
+      trackSocket(ws, auth);   // 会话被吊销时由 hosted 主动断开（auth-sockets.js）
       handleProjectWS(ws, pid, since, sid);
     });
   });

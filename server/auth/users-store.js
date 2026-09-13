@@ -117,6 +117,29 @@ if (!userCols.has('locale')) {
   console.log('[users-store] users.locale column added');
 }
 
+// 09-13 auth-v2：邮箱是账号主标识（只存验证过的，小写）；sessions_valid_after = 「全部下线」的时间点，
+// 早于它签发的旧 v2 token 一律不认（会话行另有 revoked_at，这一列管的是没有行可吊销的旧 token）。
+if (!userCols.has('email')) {
+  db.exec('ALTER TABLE users ADD COLUMN email TEXT');
+  console.log('[users-store] users.email column added');
+}
+if (!userCols.has('email_verified_at')) {
+  db.exec('ALTER TABLE users ADD COLUMN email_verified_at TEXT');
+  console.log('[users-store] users.email_verified_at column added');
+}
+if (!userCols.has('sessions_valid_after')) {
+  db.exec('ALTER TABLE users ADD COLUMN sessions_valid_after TEXT');
+  console.log('[users-store] users.sessions_valid_after column added');
+}
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL');
+// 用户名仍能用来登录，不许出现只差大小写的两个号（存量 09-13 查过没有撞的）。万一撞了建不上索引：
+// 喊一嗓子但别让服务起不来，改名由站主处理
+try {
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_nocase ON users(username COLLATE NOCASE)');
+} catch (err) {
+  console.warn(`[users-store] ⚠️ 用户名不区分大小写的唯一索引没建上（存量有只差大小写的重名）：${err.message}`);
+}
+
 const inviteCols = new Set(db.prepare('PRAGMA table_info(invites)').all().map(c => c.name));
 if (!inviteCols.has('grant_lifetime_usd')) {
   db.exec('ALTER TABLE invites ADD COLUMN grant_lifetime_usd REAL');
@@ -141,6 +164,10 @@ function rowToUser(row) {
     disabled: !!row.disabled,
     locale: row.locale || null,                      // 界面语言偏好；null = 没表过态，前端落浏览器语言
     inviteCode: row.invite_code || null,
+    email: row.email || null,                        // 只存验证过的邮箱；null = 老号没绑
+    emailVerifiedAt: row.email_verified_at || null,
+    hasPassword: /^scrypt\$/.test(row.password_hash || ''),   // 仅第三方登录的号存占位值 '!'
+    sessionsValidAfter: row.sessions_valid_after || null,
     createdAt: row.created_at,
   };
 }
@@ -163,7 +190,26 @@ export function getUserById(id) {
 }
 
 export function getUserByUsername(username) {
-  return rowToUser(db.prepare('SELECT * FROM users WHERE username = ?').get(username));
+  return rowToUser(db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username));
+}
+
+/** 邮箱统一小写、去空白；不是合法形状返回 null */
+export function normalizeEmail(raw) {
+  if (typeof raw !== 'string') return null;
+  const e = raw.trim().toLowerCase();
+  // 只收 ASCII：国际化邮箱地址（IDN / SMTPUTF8）发信链路支持参差，先不收
+  if (e.length > 254 || !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(e)) return null;
+  return e;
+}
+
+export function getUserByEmail(email) {
+  const e = normalizeEmail(email);
+  return e ? rowToUser(db.prepare('SELECT * FROM users WHERE email = ?').get(e)) : null;
+}
+
+/** hosted 的写侧直接改了库之后调（updateUser 自己会清） */
+export function invalidateUserCache(id) {
+  userCache.delete(id);
 }
 
 export function listUsers() {
