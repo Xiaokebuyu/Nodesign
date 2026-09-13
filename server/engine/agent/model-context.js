@@ -46,6 +46,7 @@ import { loadSlotConfig } from '../../runtime/slot-config.js';   // 插槽从哪
 import { relayModelEntry, relayCatalog, onRelayCatalogChange } from '../../runtime/relay-client.js';
 import { availabilityOf } from '../../lib/model-availability.js';
 import { loadPrefs } from '../../runtime/local-prefs.js';
+import { effortChoicesFor, defaultEffortFor, sdkEffortFor } from './model-effort.js';
 
 export { BRANDS, SHARED_SDK_ALIAS };
 
@@ -119,8 +120,10 @@ function buildIndex({ withRelay = true } = {}) {
 
 /** picker 清单的派生：unavailable 跟着带过来，选择器那行要现算"此刻开不开门、几点回来" */
 const deriveSelectable = (models) => Object.freeze(
-  models.filter((m) => m.select).map((m) => Object.freeze({ id: m.id, brand: m.brand, ...m.select, ...(m.unavailable ? { unavailable: m.unavailable } : {}) })),
+  models.filter((m) => m.select).map((m) => Object.freeze({ id: m.id, brand: m.brand, ...m.select, ...(m.unavailable ? { unavailable: m.unavailable } : {}), ...effortFields(m) })),
 );
+/** 选择器要的思考等级字段（model-effort.js 一份算法）：可调的行才带 */
+const effortFields = (m) => { const efforts = effortChoicesFor(m); return efforts ? { efforts, defaultEffort: defaultEffortFor(m) } : {}; };
 
 function logIndex(idx) {
   if (idx.shadowed.length) console.log(`[model-context] 外部插槽顶替了同名内置行（用本机钥匙）：${idx.shadowed.join(', ')}`);
@@ -205,6 +208,8 @@ function rowOf(appModel) {
   return BY_ID.get(appModel) || BY_ID.get(canonicalModelId(appModel));
 }
 
+/** 思考等级（09-13）：按 appModel 查行（改名只在 rowOf 知道）再问 model-effort.js。choices=null 表示这行不可调 */
+export const effortForModel = (appModel, sessionEffort) => ({ choices: effortChoicesFor(rowOf(appModel)), sdk: sdkEffortFor(rowOf(appModel), sessionEffort) });
 /** 当前进程里真正生效的外部行 id（配置页据此判「已生效 / 要重启」） */
 export function externalModelIds() {
   return [...BY_ID.values()].filter((r) => r.external).map((r) => r.id);
@@ -501,7 +506,7 @@ export function resolveWireModel(bodyModel) {
     thinking: row.api.thinking || 'strip',
     liftImages: !!row.api.liftImages,
     protocol: UPSTREAMS[row.api.upstream]?.protocol || 'anthropic',
-    reasoningEffort: row.api.reasoningEffort || null,
+    reasoningEffort: row.api.reasoningEffort || null, efforts: effortChoicesFor(row),   // efforts：用户可选档（ingress 按请求体 effort 换算）
     // helper 请求（标题生成 / auto 分类器 / 摘要 —— 凡 body.model 不是会话主行的）用的档位：
     // 行内可写 helperReasoningEffort 显式指定，没写就 'low'（Ox 实测 low=0 reasoning token）。
     // 主 agent 想多少是主行的事，helper 一句话的活不该跟着 high/max 想几分钟

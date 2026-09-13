@@ -64,9 +64,9 @@ import { assertInitContract } from './init-contract.js';
 import { clearSessionFlights } from './subagent-flight.js'; import { clearStageStatus } from './stage-status.js';
 import { createRoleRoster } from './cast.js';
 import { createAgents } from '../agents/index.js';
-import { resolveSdkSpoofModel, pickThinkingConfig, isUncensoredModel, resolveModelRoute } from './model-context.js';
+import { resolveSdkSpoofModel, pickThinkingConfig, isUncensoredModel, resolveModelRoute, effortForModel } from './model-context.js';
 import { bindSessionUpstream, unbindSessionFromRelay } from './session-binding.js';
-import { resolveSessionModel } from './session-model.js';
+import { resolveSessionModel, readSessionEffort } from './session-model.js';
 import { unregisterIngressSession } from '../../lib/model-ingress.js';
 import { takeUpstreamBilling } from '../../lib/ingress/upstream-billing.js';
 import { takeUpstreamTruncation } from '../../lib/ingress/upstream-truncation.js';
@@ -219,6 +219,7 @@ export async function runSession({
   // 持久）> env 全局默认。这条链现在只写在 session-model.js 一处 —— 以前它在这里、
   // turn.js、canvas.js 各有一份写法不同的复制品，对不上的时候没人发现。
   const { model: resolvedModel } = await resolveSessionModel(sessionMetaRoot);
+  const sessionEffort = await readSessionEffort(sessionMetaRoot);   // 用户选的思考等级（09-13），按模型行换算见 model-effort.js
   const model = resolvedModel;
   const sdkModel = resolveSdkSpoofModel(model);
 
@@ -553,7 +554,7 @@ export async function runSession({
     forwardSubagentText: true,
 
     thinking: pickThinkingConfig(model),
-    effort: 'medium',
+    effort: effortForModel(model, sessionEffort).sdk,   // 不可调的行仍是 medium（跟以前一样）
     // maxTurns 不传（2026-09-13 站主定）。09-13 真跑探针：SDK 0.3.269 下它按**每条用户消息**计数、不是整会话累计，
     // 旧注释写的「全局累计」是老版本现象。单条消息内的保护剩循环检测提醒（post-loop-guard）与用户手动停止。
     // 生产 / exp 的 .env 里还留着 NODESIGN_MAX_TURNS=50，这里已不读，那一行失效。子代理各自的 maxTurns 在 agents/index.js。
