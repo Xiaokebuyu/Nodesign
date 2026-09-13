@@ -11,6 +11,10 @@ import { fromHeader } from './mailer.js';
 import { codeMail, noticeMail } from './mail-templates.js';
 import { mintInternalCookie, verifyInternalToken, revokeInternalTokensFor } from '../../auth/internal-credentials.js';
 import { trackSocket, closeUserSockets, _socketCount } from '../../ws/auth-sockets.js';
+import { createSession, revokeSession } from './sessions-store.js';
+import { recordAuthEvent } from './audit.js';
+import { pruneAuthRecords, RETENTION } from './retention.js';
+import db from '../../engine/runs/store.js';
 
 const uniqEmail = () => `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}@example.com`;
 const MIN = 60_000;
@@ -204,5 +208,28 @@ describe('auth-sockets', () => {
     expect(closeUserSockets('u_ws')).toBe(1);
     expect(b.closed).toBe(4401);
     expect(_socketCount('u_ws')).toBe(0);
+  });
+});
+
+describe('保存期限（隐私政策第 8 节）', () => {
+  it('失效满 180 天的会话、满 180 天的安全事件、满 30 天的验证码被删；有效会话和新记录不动', () => {
+    const now = Date.now();
+    const old = now - RETENTION.sessionsMs - 60_000;
+    const live = createSession({ userId: 'u_ret_live', req: { headers: {} }, method: 'password', now });
+    const expiredLong = createSession({ userId: 'u_ret_old', req: { headers: {} }, method: 'password', now: old - 30 * 24 * 3600 * 1000 });
+    const revokedRecent = createSession({ userId: 'u_ret_rev', req: { headers: {} }, method: 'password', now });
+    revokeSession(revokedRecent.sessionId, now - 1000);
+    recordAuthEvent('login_ok', { userId: 'u_ret_evt' });
+    db.prepare('INSERT INTO auth_events (user_id, type, created_at) VALUES (?, ?, ?)').run('u_ret_evt_old', 'login_ok', old);
+    const email = uniqEmail();
+    issueCode({ email, purpose: 'login', now: now - RETENTION.codesMs - 60_000 });
+    pruneAuthRecords(now);
+    const ids = db.prepare('SELECT id FROM auth_sessions WHERE id IN (?, ?, ?)').all(live.sessionId, expiredLong.sessionId, revokedRecent.sessionId).map((r) => r.id);
+    expect(ids).toContain(live.sessionId);
+    expect(ids).toContain(revokedRecent.sessionId);
+    expect(ids).not.toContain(expiredLong.sessionId);
+    expect(db.prepare("SELECT COUNT(*) n FROM auth_events WHERE user_id = 'u_ret_evt_old'").get().n).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) n FROM auth_events WHERE user_id = 'u_ret_evt'").get().n).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) n FROM email_codes WHERE email = ?').get(email).n).toBe(0);
   });
 });

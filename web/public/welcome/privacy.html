@@ -36,7 +36,6 @@
   .legal-table table{width:100%;min-width:560px;border-collapse:collapse;font-size:14.5px;line-height:1.75}
   .legal-table th{padding:8px 14px 8px 0;border-bottom:1px solid var(--ink);text-align:left;font-family:var(--display);font-weight:700;color:var(--ink)}
   .legal-table td{padding:10px 14px 10px 0;border-bottom:1px solid var(--rule);vertical-align:top}
-  .ph{padding:0 .2em;background:rgba(178,58,46,.12);color:var(--red);font-style:normal}
   @media (max-width:860px){
     .legal{grid-template-columns:minmax(0,1fr);margin-top:56px}
     .legal-toc{position:static;margin-bottom:36px;padding-bottom:24px;border-bottom:1px solid var(--rule)}
@@ -70,7 +69,7 @@
     <div class="eyebrow reveal">法律</div>
     <h1 class="reveal" style="--i:1">隐私政策</h1>
     <p class="hero-sub reveal" style="--i:2">本政策说明我们在提供 Nodesign 服务时收集哪些信息、如何使用与共享这些信息，以及您可以如何管理这些信息。</p>
-    <p class="legal-meta reveal" style="--i:3">生效日期：<span class="ph">【待定】</span></p>
+    <p class="legal-meta reveal" style="--i:3">生效日期：2026 年 9 月 13 日</p>
   </section>
 
   <div class="col">
@@ -100,7 +99,7 @@
 
         <section id="scope">
           <h2><span class="n">1</span>适用范围</h2>
-          <p>本政策由 <span class="ph">【运营方名称】</span>（以下简称“我们”）制定，适用于我们以 Nodesign（亦写作 NoDesign）名义提供的以下服务（以下统称“本服务”）：</p>
+          <p>本政策由 Nodesign 项目组（以下简称“我们”）制定，适用于我们以 Nodesign（亦写作 NoDesign）名义提供的以下服务（以下统称“本服务”）：</p>
           <ul>
             <li>网站 nodesign.xiaobuyu.trade，包括官网页面与网页版应用；</li>
             <li>Windows 桌面版在登录 Nodesign 账号后使用的在线功能，包括平台模型、联网搜索与图像生成；</li>
@@ -233,7 +232,7 @@
           </div>
           <p><strong>AI 模型服务提供方。</strong>截至本政策起草时，平台为普通账号提供的模型为智谱 GLM 系列与 DeepSeek 系列，经由 DeepSeek 官方接口、OpenCode（Zen / Go）、Merge 模型网关与基元律动（TokenRhythm）等接口服务调用；模型网关可能将请求转交给实际提供推理的服务商。部分账号可以使用 Anthropic 的 Claude 模型；个别经单独开通的账号还可以使用经 NVIDIA 接口或第三方中转服务提供的模型。平台模型列表可能调整，您可在应用内的模型选择器中查看当前可用的模型。</p>
           <p><strong>图像生成与网页搜索。</strong>本服务已接入的图像生成通道包括 OpenAI 的图像生成服务，以及经第三方接口网关调用的 Google Gemini 图像模型；已接入的网页搜索服务包括 Tavily、Exa、百度智能云千帆与智谱。实际调用的服务取决于配置与请求内容。</p>
-          <p>上述服务提供方按照其各自的政策处理所收到的信息。除本节与第 6 节所述情形外，在法律法规要求或有权机关依法要求，或为处理违规行为、保护用户与公众安全所必需时，我们可能提供相关信息。<span class="ph">【待确认】</span></p>
+          <p>上述服务提供方按照其各自的政策处理所收到的信息。除本节与第 6 节所述情形外，在法律法规要求或有权机关依法要求，或为处理违规行为、保护用户与公众安全所必需时，我们可能提供相关信息。</p>
         </section>
 
         <section id="public">
@@ -259,11 +258,13 @@
           <h2><span class="n">8</span>保存期限</h2>
           <ul>
             <li>账号信息与您的内容：在账号存续期间保存；</li>
-            <li>网页登录会话：有效期 30 天，到期或退出后失效；已失效会话的记录保存期限为 <span class="ph">【待定】</span>；</li>
-            <li>邮箱验证码：签发后 10 分钟内有效，使用后即失效；</li>
-            <li>账号安全事件、用量记录、违规摘录、诊断信息与访问日志：保存期限为 <span class="ph">【待定】</span>。</li>
+            <li>网页登录会话：有效期 30 天，到期或退出后失效；已失效会话的记录保存 180 天；</li>
+            <li>邮箱验证码：签发后 10 分钟内有效，使用后即失效；验证码记录保存 30 天；</li>
+            <li>账号安全事件：保存 180 天；</li>
+            <li>访问日志：保存不超过 180 天；</li>
+            <li>用量记录、违规摘录与诊断信息：在账号存续期间保存，用于额度计算、违规处理与故障排查。</li>
           </ul>
-          <p>目前服务尚未对上述记录设置自动清理周期。删除项目时，服务端会删除该项目的工作区文件；其他数据的删除可按第 10 节提出申请。</p>
+          <p>登录会话记录、验证码记录与账号安全事件到达保存期限后，由服务端自动删除。删除项目时，服务端会删除该项目的工作区文件；其他数据的删除可按第 10 节提出申请。</p>
         </section>
 
         <section id="security">
@@ -277,7 +278,7 @@
             <li>对登录、验证码发送与核验、注册设置频率限制；</li>
             <li>不同账号的项目工作区相互隔离。</li>
           </ul>
-          <p>任何系统都无法保证绝对安全。如您发现账号存在异常，请立即修改密码或通过邮箱找回密码，并通过 <span class="ph">【联系邮箱】</span> 联系我们。</p>
+          <p>任何系统都无法保证绝对安全。如您发现账号存在异常，请立即修改密码或通过邮箱找回密码，并通过 <a href="mailto:support@xiaobuyu.trade">support@xiaobuyu.trade</a> 联系我们。</p>
         </section>
 
         <section id="rights">
@@ -290,7 +291,7 @@
             <li>删除项目，下线已发布的站点，撤回在作品市场的发布；</li>
             <li>使用桌面版并配置自有密钥（BYOK），使模型请求不经过我们的服务器。</li>
           </ul>
-          <p>目前本服务未提供自助注销账号的功能。如需注销账号、删除账号数据，或查询、获取、更正您的个人信息，请通过 <span class="ph">【联系邮箱】</span> 提出申请。我们将在核实您的身份后处理，处理时限为 <span class="ph">【待定】</span>。</p>
+          <p>目前本服务未提供自助注销账号的功能。如需注销账号、删除账号数据，或查询、获取、更正您的个人信息，请通过 <a href="mailto:support@xiaobuyu.trade">support@xiaobuyu.trade</a> 提出申请。我们将在核实您的身份后，于收到申请之日起 15 个工作日内处理。</p>
         </section>
 
         <section id="desktop">
@@ -306,7 +307,7 @@
 
         <section id="minors">
           <h2><span class="n">12</span>未成年人</h2>
-          <p>本服务不面向未满 14 周岁的儿童，我们不会有意收集其个人信息。如果您是未满 14 周岁儿童的监护人，并发现其向我们提供了个人信息，请通过 <span class="ph">【联系邮箱】</span> 联系我们删除。<span class="ph">【待确认】</span></p>
+          <p>本服务不面向未满 14 周岁的儿童，我们不会有意收集其个人信息。如果您是未满 14 周岁儿童的监护人，并发现其向我们提供了个人信息，请通过 <a href="mailto:support@xiaobuyu.trade">support@xiaobuyu.trade</a> 联系我们删除。</p>
         </section>
 
         <section id="changes">
@@ -316,7 +317,7 @@
 
         <section id="contact">
           <h2><span class="n">14</span>联系我们</h2>
-          <p>运营方：<span class="ph">【运营方名称】</span><br>联系邮箱：<span class="ph">【联系邮箱】</span></p>
+          <p>运营方：Nodesign 项目组<br>联系邮箱：<a href="mailto:support@xiaobuyu.trade">support@xiaobuyu.trade</a></p>
           <p>产品问题与功能建议也可以通过 <a href="https://github.com/Xiaokebuyu/Nodesign/issues">GitHub Issues</a> 提交。GitHub Issues 是公开的，请不要在其中填写个人信息。</p>
         </section>
 
