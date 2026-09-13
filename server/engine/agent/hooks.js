@@ -70,7 +70,7 @@ import { createRoleRoster } from './cast.js';
 import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './hooks/resident-role-lifecycle.js';
 import { makePostToolUseSlotAliasHandler } from './hooks/slot-alias.js';
 import { makePostToolUseLoopGuard } from './hooks/post-loop-guard.js';
-import { makePostToolUseWebSearchProtocol } from './hooks/post-web-search.js';
+import { makePostToolBatchWebSearchProtocol } from './hooks/post-web-search.js';
 import { makePreToolUsePerformanceLogGuard } from './hooks/pre-performance-log-guard.js';
 import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-guard.js';
 import { PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
@@ -286,8 +286,6 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
     // PostToolUse —— 按 MCP 工具名分别注 additionalContext，引导 agent 利用
     // 工具结果。matcher 字段是 SDK 标准（与 PreToolUse 'Bash' 同语义）。
     PostToolUse: [
-      // 上网调查协议（09-08 站主：搜集信息浅尝辄止）：web_search 之后第一次注整份协议，之后每次一句「下一步必须打开候选」
-      { matcher: 'mcp__nodesign__web_search', hooks: [makePostToolUseWebSearchProtocol()] },
       // 循环检测（09-08 诊断埋点）：同一工具连调 6 次记 auto 问题 + 提醒 agent 换办法（post-loop-guard.js）
       { hooks: [makePostToolUseLoopGuard({ projectId, sessionId })] },
       // 演员位实例学名（2026-08-28 重构）：hook input 没有实例名字段，名字只在
@@ -391,6 +389,10 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // 那个只 emit 事件不返输出，两者不抢 systemMessage。见 resident-role-lifecycle.js
       hooks: [makeSubagentStopHandler({ ctx, sessionId }), makeSubagentStopRoleNotice({ projectId })],
     }],
+
+    // PostToolBatch —— 同一条消息的全部工具结束后触发一次（2026-09-13）。上网调查协议从 PostToolUse 挪来：
+    // 一条消息连发几次 web_search 只注一次（第一批整份协议，之后一句「下一步必须打开候选」）
+    PostToolBatch: [{ hooks: [makePostToolBatchWebSearchProtocol()] }],
 
     // 审计型（2026-09-13，hooks/sdk-audit.js）：只留痕不改行为。StopFailure 按错误类型进问题库；
     // Notification 记类型；模型切换记来源，CLI 自动切（source=auto）进问题库。
