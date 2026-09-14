@@ -21,7 +21,7 @@
 | **静默忽略的参数** | `imageSize` / `thinkingLevel` / `responseModalities` / `model` / `useGrounding` —— 传了不报错、也没有任何效果，别浪费心思 |
 | **PDF 参考不支持** | 只吃图：png / jpg / jpeg / webp / gif |
 | **~45-60s 一张** | 一张对齐好的 anchor 胜过一堆试探性变体 |
-| **不支持透明背景** | 永远会填一个底色。要透明走 `remove_background`（§ M） |
+| **透明背景要在 prompt 里写明，以返回为准** | prompt 里写 `transparent background` 通常能拿到 RGBA（返回文字会写「含透明像素」）；没写就会填底色。拿不到或边缘不干净再走 `remove_background`（§ M） |
 
 落档 `assets/generated/<name>.png`，HTML 里引 `<img src="assets/generated/<name>.png">`（softlink 透明）。
 
@@ -30,7 +30,8 @@
 `aspectRatio` 会作为指令转给 codex，由它去拨图像工具的尺寸参数。但 **gpt-image-2 自身
 的硬约束是长短边比 ≤ 3:1**（另有单边 ≤ 3840px、边长为 16 的倍数）。所以：
 
-- ✅ 原生做得到：`1:1` `3:2` `2:3` `4:3` `3:4` `4:5` `5:4` `16:9` `9:16` `21:9`（2.33:1）
+- ✅ 在约束内：`1:1` `3:2` `2:3` `4:3` `3:4` `4:5` `5:4` `16:9` `9:16` `21:9`（2.33:1）
+- ⚠️ 在约束内也不保证拿到：09-13 实测全新生成要 `21:9` 两次回的都是 16:9。返回文字写的是**量出来的尺寸**，对不上会警告；超宽就拿那张走 `variationOf` 扩画布（实测拿到 2046×768）
 - ❌ 超出 3:1 拿不到：`4:1` `1:4` `8:1` `1:8` —— 枚举里有、传了也不报错，但出不来原生长条
 
 要顶部公告条 / 侧边装饰带这种极端长条：用 `16:9` 出图，再在 HTML 里 `object-fit: cover`
@@ -376,7 +377,7 @@ Step 3: 给角色起名锚定（"Maya, character from Reference 1"）
 - **跨页一致** —— 缺 referenceImages 锚，每页独立生成必漂
 
 **另外两条**：
-- icon / sticker 会带底色（不支持透明）—— 明确写 `white background` 或事后走 § M
+- icon / sticker 没说要透明就会带底色 —— 要透明在 prompt 里写 `transparent background`，拿不到再走 § M
 - 同一个 prompt 连 reroll 3 次以上收益递减；改关键参数或回头问用户方向更有效
 
 ### 已知失败模式（final 接受前必扫）
@@ -406,7 +407,7 @@ Step 3: 给角色起名锚定（"Maya, character from Reference 1"）
 
 ## M. remove_background —— 独立工具抠透明背景
 
-gpt-image-2 不支持透明背景（永远填一个底色），跟画布底色冲突时图会直接糊在上面。
+生图没拿到透明、或者图本来就是不透明的（用户上传的照片、以前生的图），跟画布底色冲突时图会直接糊在上面。
 `mcp__nodesign__remove_background({ inputPath })` 调 server 端 rembg 抠掉背景，输出 RGBA PNG。
 
 **为什么是独立工具不是生图的 flag**：要抠的不止刚生的图——用户上传的产品照、之前生过的图、

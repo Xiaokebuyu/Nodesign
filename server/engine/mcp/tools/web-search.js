@@ -45,9 +45,9 @@ function formatMarkdown(query, provider, hits, { images = [] } = {}) {
     });
     if (images.length === 0) {
       lines.push(
-        '> Snippets carry no layout, type or colour. For anything visual, browser_navigate the promising '
-        + 'URLs and browse their inner pages; for text, WebFetch the URL. To see pictures of a subject or a '
-        + 'style, re-run with include_images: true.',
+        '> To read a page, WebFetch the URL. Snippets carry no layout, type or colour: for visual reference, '
+        + 'a login wall or content that needs clicking, browser_navigate the promising URLs and browse their '
+        + 'inner pages. To see pictures of a subject or a style, re-run with include_images: true.',
         '',
       );
     }
@@ -92,7 +92,7 @@ queries prefer baidu, English queries prefer tavily.
 Use this tool when:
 - You need current information (latest design trends, library docs, recent events)
 - You need to verify a fact or find a citation
-- You need to find a URL to then GO LOOK AT: for anything visual, follow up with browser_navigate and browse the site's inner pages — snippets carry no layout, type or colour. (Or WebFetch for text.)
+- You need to find a URL to then open: to read its text (facts, docs, articles, data), WebFetch it — that is the default. Open the browser (browser_navigate) only for visual reference (layout, type, colour, motion — snippets carry none), login / verification walls, content that needs clicking or paging, or when WebFetch comes back empty.
 - You need to SEE something: set include_images=true (see below). Two cases — a real, specific subject you are about to draw with generate_image (named IP / character / person / product model / niche brand), and a style or creative tradition you want to look at before designing in it.
 
 DO NOT:

@@ -197,14 +197,29 @@ export async function seatArtifacts(projectId, rels) {
     if (parentId) { bindings[`b:a${stamp()}`] = { type: 'flow', from: parentId, to: id, by: by || 'agent', material: 'pencil', ...(tag ? { tag } : {}) }; lines += 1; }
   }
 
+  // 收编（09-14 问题库：站点目录里的 data.js / sheet.css / render.js 各占一个散件座位）：
+  // agent 先写资源、后写 index.html 且分在不同批时，资源到的那一刻目录还不是站，只能按裸路径入座；
+  // 站点卡坐下之后这些座位就归它 —— 画布本来就不画它们（assets.js 把整个站点目录认领给站点卡），
+  // 留着只剩 read_board 里的散件和一堵看不见的墙。早先按 deck:<站>/x.html 猜出来的座位同理。
+  let absorbed = 0;
+  for (const cardId of Object.keys(live)) {
+    const dir = cardId.startsWith('site:') ? cardId.slice(5) : '';
+    if (!dir || !live[cardId]) continue;
+    for (const [k, e] of Object.entries(live)) {
+      const bare = k.replace(/^deck:/, '');
+      if (!e || e.kind || /^[a-z]+:/.test(bare) || !bare.startsWith(`${dir}/`)) continue;
+      objects[k] = null; delete live[k]; absorbed += 1;
+    }
+  }
+
   // 队列整表写回：**必须无条件写**，哪怕这一批一件都没坐下 ——
   // 队列清空也是一次状态变化（旧 pending 这一轮上了架，队列该空）。
   stillPending.push(...overflow);
   const pendingChanged = JSON.stringify(queued) !== JSON.stringify(stillPending);
   const zoned = Object.keys(zonesPatch).length;
-  if (seated || pendingChanged || zoned) {
+  if (seated || absorbed || pendingChanged || zoned) {
     await patchBoard(projectId, {
-      ...(seated ? { objects, bindings } : {}),
+      ...(seated || absorbed ? { objects, bindings } : {}),
       ...(zoned ? { zones: zonesPatch } : {}),
       ...(pendingChanged ? { pending: stillPending } : {}),
     });
@@ -213,7 +228,7 @@ export async function seatArtifacts(projectId, rels) {
   for (const [id, e] of Object.entries(objects)) {
     if (e?.tag) { try { await applyFollows(projectId, { tag: e.tag, newId: id }); } catch { /* */ } }
   }
-  return { seated, lines, pending: stillPending.length };
+  return { seated, lines, pending: stillPending.length, absorbed };
 }
 
 /**

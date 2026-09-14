@@ -52,7 +52,8 @@ function describeEntry(board, id, entry, glyph = null, excerpts = null, staleIds
   }
   if (entry.kind === 'scribble') return `- ${g}[涂鸦]${at} (id: ${id})${entry.by ? ` ·${who(entry.by)}画的` : ''}${flags}`;
   // 过期座位要明说（iss_mt38ucyq：旧路径条目被 agent 当"失效卡"差点建议删素材母版）
-  const stale = staleIds?.has(id) ? ' 〔⚠️磁盘上已无此路径 —— 多半被移动/改名了，以磁盘为准，别据此判失效或建议删除〕' : '';
+  // 09-14：确实删掉了的要给出口（edit_board remove 只摘座位），但「搬走了」那种仍以磁盘为准、别据此去删文件
+  const stale = staleIds?.has(id) ? ' 〔⚠️磁盘上已无此路径 —— 被移动/改名的以磁盘上的新位置为准，别据此去删任何文件；确实删掉了就 edit_board remove 摘掉这个座位（只摘座位）〕' : '';
   return `- ${g}${id}${at}${entry.by ? ` ·${who(entry.by)}摆的` : ''}${flags}${stale}`;
   // eslint-disable-next-line no-unused-vars -- mine 留给后续按视角过滤用
 }

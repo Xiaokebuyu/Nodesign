@@ -59,17 +59,25 @@ import { handleRelayTokenInvalid } from './api/local-relay-login.js';
 import { setPluginOriginPolicy } from './lib/plugin-origin.js';
 import { startIssueOutbox } from './runtime/issue-outbox.js';
 import { probeCapabilities, summarizeCapabilities } from './runtime/capabilities.js';
-import { applyComponentEnv, sweepStaleComponentDirs } from './runtime/components.js';
+import { applyComponentEnv, sweepStaleComponentDirs, rescueComponentsFromAppDir } from './runtime/components.js';
 
 // 启动时 dump 平台决策（让运维一眼看到 OS / HOME / claudeConfigDir / sandbox / preflight）
 // 跨平台坑排查的第一信号
 platform.dump();
 // 本机能力位（git / chromium / LibreOffice / 钥匙…）：启动探一遍，工具注册（mcp/capability-gate.js）与
-// GET /api/local/status 都读它。探测是异步的（playwright 要 import），在 listen 之前等它
+// GET /api/local/status 都读它。探测是异步的（playwright 要 import），在 listen 之前等它（本地版有上限，见下）
 // 本地分发版：先把装好的组件目录挂进 PATH（runtime/components.js），能力表才探得到它们
 if (platform.isLocal) applyComponentEnv();
-// 上次更新时删不掉的旧组件目录，趁常驻进程还没起来再清一次（09-10 EPERM 案）
-if (platform.isLocal) await sweepStaleComponentDirs();
+// 两件可能上 GB 的磁盘活放后台串着跑，**不挡 listen**（09-14 问题库：桌面壳等服务端就绪有上限，一台机 60 秒没起来）：
+//   ① 上次更新时删不掉的旧组件目录再清一次（09-10 EPERM 案）。rembg 常驻 python 只用记录指着的那个目录，并发不冲突
+//   ② 老版本允许把组件放进安装目录（每次更新被删一遍，09-14）：搬回默认位置，搬完重探能力表
+if (platform.isLocal) {
+  (async () => {
+    await sweepStaleComponentDirs();
+    const r = await rescueComponentsFromAppDir();
+    if (r?.status === 'done') await probeCapabilities({ force: true });
+  })().catch((err) => console.warn(`[components] 起动后台清理失败：${err.message}`));
+}
 // 站主 relay 的目录（配了令牌才拉；没配 / 拉不到都不阻止起动，选择器就只剩本机钥匙的行）。
 // ⚠️ 在能力探测之前：联网搜索 / 生图两位要看"网关给不给"（relay-tools.js），目录没拉就探成"没有"
 // 站点判定本机令牌失效 → 清令牌回登录页（09-13 第四批）。先挂上再拉目录：起动这一拉就可能发现令牌已被吊销
@@ -81,8 +89,12 @@ if (platform.isLocal) startRelayCatalogRefresh();
 if (platform.isLocal) setPluginOriginPolicy((origin) => relayRevokedPublicationIds().has(origin.publicationId));
 // 客户端上报发件箱：启动补发积压（含桌面壳写的），之后定时（本地版才有；hosted 里是空操作）
 startIssueOutbox();
-await probeCapabilities();
-console.log(summarizeCapabilities());
+// 本地版最多等能力探测 15 秒：rembg 首次 import 最多 30 秒、冷 import playwright 也慢（09-14 起动超时）。
+// 没探完的那几位 capabilityState 是 null = 按「不知道」不拦，探完自然补上；hosted 照旧等全
+const probing = probeCapabilities();
+if (platform.isLocal) await Promise.race([probing, new Promise((r) => setTimeout(r, 15_000).unref?.())]);
+else await probing;
+probing.then(() => console.log(summarizeCapabilities())).catch(() => {});
 
 const PORT = Number(process.env.PORT || 4001);
 

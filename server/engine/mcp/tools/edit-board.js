@@ -24,7 +24,7 @@ import { promises as fs } from 'node:fs';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { byOf } from '../actor.js';
 import { z } from 'zod';
-import { readBoard, patchBoard, chalkAbsPath, TEXT_FONTS } from '../../../projects/board-store.js';
+import { readBoard, patchBoard, chalkAbsPath, TEXT_FONTS, forwardId } from '../../../projects/board-store.js';
 import { commitStaging, removeByTag, clearTags } from '../../../projects/board-tags.js';
 import { estimateSizeOn, FOLDER_CARD } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/canvas-id.js';
@@ -37,7 +37,7 @@ import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { transformGroup } from '../../../lib/board-transform.js';
 import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
-import { obstaclesIn } from '../../../lib/board-obstacles.js';
+import { obstaclesIn, seatBacked } from '../../../lib/board-obstacles.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
 import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
@@ -294,7 +294,9 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
               if (abs) chalkUnlinks.push(abs);
               delete live[id]; objects[id] = null; ok += 1; continue;
             }
-            fail(`${id} 是${id.startsWith(`${CHALK_DIR}/`) ? '用户的板书' : '产物卡'}，不能从黑板删；整组擦用 erase_group`); continue;
+            // 09-14 问题库：rm 掉文件的产物卡（read_board 标 ⚠️ 那种）谁都清不掉。文件已经不在、也不在改名窗口里 → 只摘座位，不碰任何文件
+            if (!id.startsWith(`${CHALK_DIR}/`) && sharedRoot && !seatBacked(id, e, sharedRoot) && forwardId(projectId, id) === id) { delete live[id]; objects[id] = null; ok += 1; continue; }
+            fail(`${id} 是${id.startsWith(`${CHALK_DIR}/`) ? '用户的板书' : '产物卡（文件还在磁盘上）'}，不能从黑板删；整组擦用 erase_group`); continue;
           }
           delete live[id]; objects[id] = null; ok += 1;
         } else if (o.op === 'add_node') {

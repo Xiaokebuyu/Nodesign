@@ -15,6 +15,9 @@ describe('web_search 之后的调查协议（PostToolBatch）', () => {
     const second = (await h(batch('mcp__nodesign__web_search'))).hookSpecificOutput.additionalContext;
     expect(second).not.toContain('首次注入');
     expect(second).toContain('打开至少一个候选');
+    // 09-14 站主：查资料默认 WebFetch，浏览器只留给看样子 / 登录墙 / 要点击的内容
+    expect(first).toContain('WebFetch');
+    expect(second).toContain('WebFetch');
     expect(second.length).toBeLessThan(300);
   });
 

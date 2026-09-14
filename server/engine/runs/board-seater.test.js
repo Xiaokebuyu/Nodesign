@@ -85,6 +85,26 @@ describe('board-seater（入座下沉服务端）', () => {
     expect(overlap).toBe(false);
   });
 
+  it('09-14 问题库：资源先到按裸路径入座，index.html 后到坐下站点卡时把它们收编掉', async () => {
+    await fs.mkdir(path.join(root, '全景'), { recursive: true });
+    await fs.writeFile(path.join(root, '全景/data.js'), 'export default 1', 'utf8');
+    await fs.writeFile(path.join(root, '全景/sheet.css'), 'body{}', 'utf8');
+    await seatArtifacts(pid, ['全景/data.js']);
+    await seatArtifacts(pid, ['全景/sheet.css']);
+    let board = await readBoard(pid);
+    expect(board.objects['全景/data.js']).toBeTruthy();        // 当时还不是站：裸座位是合法的
+    await fs.writeFile(path.join(root, '全景/index.html'), '<!doctype html><h1>全景</h1>', 'utf8');
+    const r = await seatArtifacts(pid, ['全景/index.html']);
+    expect(r.absorbed).toBe(2);
+    board = await readBoard(pid);
+    expect(board.objects['site:全景']).toBeTruthy();
+    expect(board.objects['全景/data.js']).toBeUndefined();
+    expect(board.objects['全景/sheet.css']).toBeUndefined();
+    await fs.access(path.join(root, '全景/data.js'));           // 文件不动
+    // 别的目录里的散件不受牵连
+    expect(board.objects['小说/第一章.md']).toBeTruthy();
+  });
+
   it('幂等：已有座位不动', async () => {
     const before = (await readBoard(pid)).objects['小说/第一章.md'];
     const { seated } = await seatArtifacts(pid, ['小说/第一章.md']);

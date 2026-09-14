@@ -79,7 +79,8 @@ ops (run in order; a failing op is reported, the rest still apply):
  move{id,to} · move_group{tag,to} (a tagged panel is ONE thing — move the whole panel
  with its tag, never its members one by one; pair with reflow to re-stack it) ·
  remove{id} (agent-written board
- notes included: file + seat + lines go together) · add_node{id?,text,at:{by,side?},…} ·
+ notes included: file + seat + lines go together; an artifact card whose file is already gone
+ from disk — read_board marks it ⚠️ — loses only its seat) · add_node{id?,text,at:{by,side?},…} ·
  add_shape{kind,around,…} (circle/box/underline an EXISTING thing after the fact — the mark
  hugs it and follows when it moves) · set_shape{id,color?,width?} ·
  add_edge{from,to,type?,material?,label?} · set_edge{id,from?,to?,label?,type?,material?}

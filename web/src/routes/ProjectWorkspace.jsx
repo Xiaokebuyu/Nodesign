@@ -42,7 +42,7 @@ import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges, Browse } from 
 import { handleAuxEvent } from '../lib/aux-events.js';
 import { exportFromMenu, downloadFromUrl } from '../components/canvas/card-export.js';
 import { trailingThrottle } from '../lib/trailing-throttle.js';
-import { makeRegionCommentHandler } from '../lib/region-comment.js';
+import { makeRegionCommentHandler, waitRegionShots } from '../lib/region-comment.js';
 import { openProjectWS } from '../lib/ws-client.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
 import { reduceChatEvent, clearThinkingStreaming, mergeLiveTurnSnapshot, mergeHydrated, attachSubagentResult, keepLiveTools } from '../lib/chat-stream.js';
@@ -53,6 +53,7 @@ import { bumpFileVersion, versionOfFile } from '../lib/file-versions.js';
 import { STAGE_EVENTS, CHAT_STREAM_EVENTS, isStaleEvent } from '../lib/event-router.js';
 import { usePendingEdits } from '../hooks/usePendingEdits.js';
 import { useBrowseWindow } from '../hooks/useBrowseWindow.js';
+import { onAgentBrowse, onTurnEnd } from '../lib/browse-window.js';
 
 export default function ProjectWorkspace() {
   // 会话真相源收敛（2026-08-13 E1b）：**服务端指针**（projects.active_session_id）
@@ -846,6 +847,7 @@ export default function ProjectWorkspace() {
         setThinkingTokens(null);
         // 收尾：清 thinking 流式光标（run 结束后最后一条 thinking 不该一直闪）
         setMessages(prev => clearThinkingStreaming(prev));
+        setBrowseWin(onTurnEnd);   // agent 弹出来、人没碰过的浏览器窗替人收掉（lib/browse-window.js）
         // 双保险：万一 PostToolUse 那一发没到（SDK 边角问题），收尾时补拉一次
         // **清单**。不再无条件 bump 所有 iframe —— 没有文件变过就不该重载，
         // 那正是"每次动作完都刷一次"的来源。
@@ -893,6 +895,7 @@ export default function ProjectWorkspace() {
         setCurrentRunId(null);
         setActiveRun(null);
         setThinkingTokens(null);
+        setBrowseWin(onTurnEnd);
         setMessages(prev => [...clearThinkingStreaming(prev), {
           id: newId('msg'),
           role: 'assistant',
@@ -1157,7 +1160,7 @@ export default function ProjectWorkspace() {
       // 浏览器（2026-08-18）：agent 开始浏览 / 举手求助 —— 低频信号走这条 WS，
       // 像素和输入走专用通道 /ws/projects/:pid/browser
       case 'run.browser_opened':
-        if (!isStale) setBrowseWin({ url: evt.url || null, help: null });
+        if (!isStale) setBrowseWin(prev => onAgentBrowse(prev, evt.url));
         // 桌面上那张浏览器卡也要跟着换页（它吃 GET /browse，靠 reload 拉）——
         // 不 bump 的话卡会一直停在上一页；browser_computer 每次换页都发一条，按 4s 合流
         if (!isStale) bumpListThrottled();
@@ -1360,6 +1363,8 @@ export default function ProjectWorkspace() {
     // 光有附件也算一条消息（2026-08-17，issue #1 第 8 条）。空文字 + 空托盘才是空消息。
     const body = (text || '').trim();
     if (!body && attachments.length === 0) return;
+    // 攒着的圈选还在截图：等它们写进 buffer 再起轮，否则 agent 拉到的缺条目缺图（lib/region-comment.js）
+    await waitRegionShots(id, showToast);
     // 任何一条消息发出去，攒着的元素评论就随行了（agent 每轮都拉 pending
     // changes）—— 标 sentAt 只为让「发给 agent（N 条标注）」那颗浮钮的计数
     // 归零，不影响橙色框（那个跟 status 走，agent clear 时才消）。

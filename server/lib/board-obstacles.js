@@ -44,7 +44,7 @@ import { reservationsIn } from './board-reservations.js';
  * 落位照旧绕着它走 —— 板上有一堵看不见的墙，东西被推得比该在的位置远。
  * 画布原生件（kind: text/scribble）和 browse 单例没有文件本体，一律算在。
  */
-function seatBacked(id, entry, sharedRoot) {
+export function seatBacked(id, entry, sharedRoot) {
   if (!sharedRoot) return true;
   if (entry?.kind) return true;
   const s = String(id || '');

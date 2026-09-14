@@ -58,7 +58,7 @@ export default function ComponentsSection({ onStatus }) {
         <Row label={t('当前')} desc={loc?.location?.custom ? t('自定义位置') : t('默认：数据目录下的 components')} first>
           <Mono copy>{loc?.location?.dir || '…'}</Mono>
         </Row>
-        <Row label={t('换到')} desc={relocation?.status === 'moving' ? t('正在搬：{done} / {total}', { done: relocation.done, total: relocation.total }) : relocation?.status === 'error' ? t('上次搬运失败：{err}', { err: relocation.error }) : t('比如 D:\\NoDesign\\components')} stack>
+        <Row label={t('换到')} desc={relocation?.status === 'moving' ? t('正在搬：{done} / {total}', { done: relocation.done, total: relocation.total }) : relocation?.status === 'error' ? t('上次搬运失败：{err}', { err: relocation.error }) : t('比如 D:\\NoDesignData\\components。别放进应用的安装目录，更新时会被一起删掉')} stack>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             {desktop()?.pickFolder && <Button size="sm" onClick={pickAndRelocate} disabled={relocation?.status === 'moving'}>{t('选一个文件夹')}</Button>}
             <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder={t('或直接填绝对路径')} style={{ minWidth: 260, padding: '4px 8px', font: 'inherit' }} />

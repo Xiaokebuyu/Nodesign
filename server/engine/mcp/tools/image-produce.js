@@ -131,9 +131,10 @@ export async function produceImage({
     if (refs.some((r) => r.mimeType === 'application/pdf')) {
       throw stageError('codex', 'codex provider 不支持 PDF reference（-i 只收图片）。先把 PDF 内容转述进 prompt，或截图后当图片 reference。');
     }
-    const bridgePrompt = buildCodexBridgePrompt({ prompt, aspectRatio, absOut: codexOutAbs, refCount: refs.length, variation: isVariation });
+    // 每一趟尝试落各自的临时路径，成功才 rename 成 codexOutAbs（helpers/codex-imagegen.js 09-14）
+    const makePrompt = (absOut) => buildCodexBridgePrompt({ prompt, aspectRatio, absOut, refCount: refs.length, variation: isVariation });
     try {
-      await runCodexImageGen({ bridgePrompt, refPaths: refs.map((r) => r.abs), cwd: path.dirname(codexOutAbs), signal, expectFile: codexOutAbs });
+      await runCodexImageGen({ makePrompt, refPaths: refs.map((r) => r.abs), cwd: path.dirname(codexOutAbs), signal, expectFile: codexOutAbs });
     } catch (err) {
       throw stageError('codex', err?.message || String(err));
     }

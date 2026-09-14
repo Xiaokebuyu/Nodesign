@@ -21,7 +21,7 @@ export function makePostToolBatchWebSearchProtocol() {
     count += 1;
     const body = count === 1
       ? `<system-reminder>\n[上网调查协议 — 首次注入]\n\n${loadToolPrompt('web-research-protocol')}\n</system-reminder>`
-      : '<system-reminder>[上网调查] 搜索结果只是候选清单。下一步不能是回答用户：打开至少一个候选（browser_navigate + browser_read），找的东西写进 assets/references/web/<站>.notes.md。</system-reminder>';
+      : '<system-reminder>[上网调查] 搜索结果只是候选清单。先打开至少一个候选再回答：读文字用 WebFetch；要看版面配色动效、要登录或点击翻页才开浏览器。找的东西写进 assets/references/web/<站>.notes.md。</system-reminder>';
     return { hookSpecificOutput: { hookEventName: 'PostToolBatch', additionalContext: body } };
   };
 }

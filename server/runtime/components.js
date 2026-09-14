@@ -111,7 +111,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 async function rmDir(dir, { attempts = 4 } = {}) {
   for (let i = 1; ; i++) {
-    try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); return; }
+    // 异步版：组件目录上万个小文件，同步删会把起动 / 整个服务端卡在这里（09-14 桌面起动超时）
+    try { await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); return; }
     catch (err) {
       if (i >= attempts) throw err;
       await sleep(300 * i);
@@ -228,6 +229,21 @@ export async function listComponents() {
 
 let relocation = null;   // { status:'moving'|'done'|'error', from, to, done, total, error? }
 
+/**
+ * 应用安装目录（桌面打包版由壳传 NODESIGN_APP_DIR；命令行版 / 开发态没有）。
+ * ⛔ 组件不能放在它里面（09-14 站主报「自定义位置每次更新都要重装」）：NSIS 更新时旧版卸载器把
+ * `$INSTDIR` 整个挪进临时目录再 `RMDir /r`（electron-builder uninstaller.nsh 的 isUpdated 分支），
+ * 放在里面的组件和 `<id>.json` 记录一起没。选安装目录时选 `D:\` 会被补成 `D:\NoDesign`，
+ * 而设置页原来的示例正是 `D:\NoDesign\components` —— 两者一撞就是每次更新删一遍。
+ */
+export function isInsideAppDir(dir) {
+  const app = process.env.NODESIGN_APP_DIR;
+  if (!app || !path.isAbsolute(app) || typeof dir !== 'string' || !dir) return false;
+  const norm = (p) => { const r = path.resolve(p); return process.platform === 'win32' ? r.toLowerCase() : r; };
+  const a = norm(app); const d = norm(dir);
+  return d === a || d.startsWith(a + path.sep);
+}
+
 export function componentsLocation() {
   return { dir: getComponentsRoot(), defaultDir: defaultComponentsRoot, custom: getComponentsRoot() !== defaultComponentsRoot };
 }
@@ -246,6 +262,9 @@ export async function relocateComponents(dir, { move = true } = {}) {
     throw Object.assign(new Error('正在装组件，装完再换位置'), { code: 'BUSY' });
   }
   if (relocation?.status === 'moving') throw Object.assign(new Error('正在搬，等它完'), { code: 'BUSY' });
+  if (isInsideAppDir(to)) {
+    throw Object.assign(new Error('不能放在应用的安装目录里：每次更新都会把安装目录整个换掉，放在里面的组件会被一起删掉。换一个安装目录之外的位置'), { code: 'INSIDE_APP_DIR' });
+  }
   // 目标必须能写；不能是数据目录本身 / 组件目录的子目录
   if (to === path.resolve(profile.dataRoot) || (from && to.startsWith(from + path.sep))) throw Object.assign(new Error('不能选这个位置'), { code: 'BAD_DIR' });
   fs.mkdirSync(to, { recursive: true });
@@ -260,9 +279,10 @@ export async function relocateComponents(dir, { move = true } = {}) {
         // 目录名不再一定等于 id（09-10 起是 <id>-<sha8>），按记录走；记录里没有就退回老布局
         const srcDir = rec?.dir && fs.existsSync(rec.dir) ? rec.dir : path.join(from, id);
         const dstDir = path.join(to, path.basename(srcDir));
+        // ⚠️ 用异步版：组件包合计上 GB，同步 cpSync 会把整个服务端卡住直到搬完（09-14 起动自救也走这里）
         if (fs.existsSync(srcDir)) {
-          fs.rmSync(dstDir, { recursive: true, force: true });
-          fs.cpSync(srcDir, dstDir, { recursive: true });
+          await fs.promises.rm(dstDir, { recursive: true, force: true });
+          await fs.promises.cp(srcDir, dstDir, { recursive: true });
         }
         if (rec) {
           const swap = (v) => (typeof v === 'string' && v.startsWith(from) ? to + v.slice(from.length) : v);
@@ -270,7 +290,7 @@ export async function relocateComponents(dir, { move = true } = {}) {
           fs.writeFileSync(path.join(to, `${id}.json`), JSON.stringify(next, null, 2) + '\n');
         }
         // 新目录写好了再删旧的：中途断电最多是两份，不会一份都没有
-        fs.rmSync(srcDir, { recursive: true, force: true });
+        await fs.promises.rm(srcDir, { recursive: true, force: true });
         fs.rmSync(path.join(from, `${id}.json`), { force: true });
         relocation.done++;
       }
@@ -283,6 +303,34 @@ export async function relocateComponents(dir, { move = true } = {}) {
     }
   })();
   return { ok: true, relocation, location: componentsLocation() };
+}
+
+/**
+ * 起动自救：老版本允许把组件放进安装目录，这里把它们搬回默认位置。
+ * ⛔ **别在 listen 之前等它**：组件包上 GB、跨盘就是整份复制，而桌面壳等服务端就绪有上限（desktop/main.js waitHealth）。
+ * server/index.js 放在 listen 之外的后台链里跑，搬完重探能力表；搬的过程中组件照旧从老位置用。
+ * 已经被更新删空了的，只把 prefs 指回默认位置 —— 用户重装一次就落在安全的地方。
+ * 搬不动（被占用等）不阻止起动：组件照旧能用，下次起动再试。
+ */
+export async function rescueComponentsFromAppDir() {
+  if (!profile.isLocal) return null;
+  const dir = loadPrefs().componentsDir;
+  if (!dir || !isInsideAppDir(dir)) return null;
+  if (!listInstalledIds().length) {
+    savePrefs({ componentsDir: null });
+    console.warn(`[components] 组件目录在安装目录里（${dir}），里面已经空了，改回默认位置 ${defaultComponentsRoot}`);
+    return { moved: 0 };
+  }
+  console.warn(`[components] 组件目录在安装目录里（${dir}），更新时会被删掉，搬回默认位置 ${defaultComponentsRoot}`);
+  try {
+    await relocateComponents(defaultComponentsRoot);
+    while (relocation?.status === 'moving') await new Promise((r) => setTimeout(r, 200));
+  } catch (err) {
+    console.warn(`[components] 搬不动，下次起动再试：${err.message}`);
+    return { error: err.message };
+  }
+  if (relocation?.status !== 'done') console.warn(`[components] 搬运失败，下次起动再试：${relocation?.error}`);
+  return { moved: relocation?.done || 0, status: relocation?.status };
 }
 
 // ── 安装 ──

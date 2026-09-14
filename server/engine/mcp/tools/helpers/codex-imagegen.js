@@ -11,6 +11,8 @@
  */
 
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 
 export const CODEX_BIN = process.env.NODESIGN_CODEX_BIN || 'codex';
@@ -106,26 +108,45 @@ export function buildCodexBridgePrompt({ prompt, aspectRatio, absOut, refCount, 
 }
 
 /**
- * 跑一次 codex exec 生图，以目标文件落盘为成功标准（codex 的文本回复不可信），
- * 失败自动重试一次。abort signal / 超时都 SIGKILL 子进程。
+ * 杀整棵进程树。⛔ 09-14 实证：`codex` 是 npm 的 node 外壳，真正干活的是它 spawn 的原生二进制，
+ * 外壳只转发 SIGINT/SIGTERM/SIGHUP —— 对外壳发 SIGKILL 只杀掉外壳，原生 codex 成孤儿接着跑，
+ * 重试那趟成功之后它又往同一路径写，生产上把一张已经交付的图截成了 0 字节。
+ * POSIX 下 spawn 时开独立进程组（detached），杀 -pid；Windows 走 taskkill /T。
  */
-export async function runCodexImageGen({ bridgePrompt, refPaths, cwd, signal, expectFile, timeoutMs = CODEX_IMAGE_TIMEOUT_MS }) {
-  const args = ['exec', '--skip-git-repo-check', '-s', 'workspace-write', '-C', cwd];
-  if (CODEX_IMAGE_MODEL) args.push('-m', CODEX_IMAGE_MODEL);
-  if (CODEX_IMAGE_EFFORT) args.push('-c', `model_reasoning_effort="${CODEX_IMAGE_EFFORT}"`);
-  args.push(bridgePrompt);
-  for (const p of refPaths) args.push('-i', p);
+function killTree(child) {
+  if (!child?.pid) return;
+  try {
+    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    else process.kill(-child.pid, 'SIGKILL');
+  } catch {
+    try { child.kill('SIGKILL'); } catch { /* 已经没了 */ }
+  }
+}
 
-  const runOnce = () => new Promise((resolve, reject) => {
-    const child = spawn(CODEX_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
+/** codex 最后一句像是拒绝 / 做不到：同样的请求再跑一次也是一样，不重试 */
+const REFUSAL_RE = /(can['’]?t|cannot|unable to|not able to|won['’]?t|policy|safety|not allowed|refus|无法|不能|拒绝|违反|不允许|抱歉)/i;
+
+/**
+ * 跑一次 codex exec 生图，以目标文件落盘为成功标准（codex 的文本回复不可信），失败自动重试一次。
+ *
+ * 09-14 三处加固（问题库：生产 ×4、桌面 relay 两轮各 ×3 都只报「target file missing」）：
+ *   - 每次尝试写各自的临时文件（同目录的点文件），成功后 rename 到 expectFile —— 残留的上一趟碰不到交付物；
+ *   - 超时 / 中止杀整棵进程树（killTree）；
+ *   - `-o` 让 codex 把最后一句话写进文件，缺图时带进报错；像拒绝的不重试。
+ * @param {object} o
+ * @param {(absOut: string) => string} o.makePrompt  按这一趟的落盘路径生成桥接 prompt
+ */
+export async function runCodexImageGen({ makePrompt, refPaths, cwd, signal, expectFile, timeoutMs = CODEX_IMAGE_TIMEOUT_MS }) {
+  const runOnce = (args) => new Promise((resolve, reject) => {
+    const child = spawn(CODEX_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'], env: process.env, detached: process.platform !== 'win32' });
     let stderrTail = '';
     child.stdout.on('data', () => { /* 排空防背压 */ });
     child.stderr.on('data', (d) => { stderrTail = (stderrTail + d.toString()).slice(-2000); });
     const killTimer = setTimeout(() => {
-      try { child.kill('SIGKILL'); } catch { /* */ }
+      killTree(child);
       reject(new Error(`codex exec timeout after ${Math.round(timeoutMs / 1000)}s`));
     }, timeoutMs);
-    const onAbort = () => { try { child.kill('SIGKILL'); } catch { /* */ } };
+    const onAbort = () => killTree(child);
     signal?.addEventListener?.('abort', onAbort, { once: true });
     child.on('error', (err) => { clearTimeout(killTimer); reject(err); });
     child.on('close', (code) => {
@@ -138,14 +159,32 @@ export async function runCodexImageGen({ bridgePrompt, refPaths, cwd, signal, ex
   });
 
   for (let attempt = 1; attempt <= 2; attempt++) {
+    const tag = `${process.pid}-${Date.now().toString(36)}-${attempt}`;
+    const attemptOut = path.join(path.dirname(expectFile), `.codex-${tag}-${path.basename(expectFile)}`);
+    const lastMsgFile = path.join(os.tmpdir(), `nd-codex-last-${tag}.txt`);
+    const args = ['exec', '--skip-git-repo-check', '-s', 'workspace-write', '-C', cwd, '-o', lastMsgFile];
+    if (CODEX_IMAGE_MODEL) args.push('-m', CODEX_IMAGE_MODEL);
+    if (CODEX_IMAGE_EFFORT) args.push('-c', `model_reasoning_effort="${CODEX_IMAGE_EFFORT}"`);
+    args.push(makePrompt(attemptOut));
+    for (const p of refPaths) args.push('-i', p);
+    let refused = false;
     try {
-      await runOnce();
-      const st = await fs.stat(expectFile).catch(() => null);
-      if (st && st.size > 0) return;
-      throw new Error(`codex finished but target file missing/empty: ${expectFile}`);
+      await runOnce(args);
+      const st = await fs.stat(attemptOut).catch(() => null);
+      if (st && st.size > 0) {
+        await fs.rename(attemptOut, expectFile);
+        return;
+      }
+      const last = (await fs.readFile(lastMsgFile, 'utf8').catch(() => '')).trim().replace(/\s+/g, ' ');
+      refused = !!last && REFUSAL_RE.test(last);
+      throw new Error(`codex finished but target file missing/empty: ${expectFile}`
+        + (last ? `；codex 最后说：「${last.slice(0, 300)}」` : '；codex 没有留下回复'));
     } catch (err) {
-      if (attempt === 2 || signal?.aborted) throw err;
+      if (attempt === 2 || signal?.aborted || refused) throw err;
       console.warn(`[generate-image] codex attempt ${attempt} failed (${err.message}), retrying once`);
+    } finally {
+      await fs.rm(attemptOut, { force: true }).catch(() => {});
+      await fs.rm(lastMsgFile, { force: true }).catch(() => {});
     }
   }
 }
