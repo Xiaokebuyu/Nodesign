@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { serverTmpPath } from '../../../../lib/server-tmp.js';
@@ -136,6 +137,17 @@ function killTree(child) {
   }
 }
 
+/**
+ * codex 自己留下的东西要自己收（09-14 实测生产一天攒下约 400M 会话记录 + 一两百 M 图片副本，全出自这里）：
+ *   - --ephemeral：不落 ~/.codex/sessions 与 thread_history。带上之后一张图跑完 sessions 零文件、thread_history 零行。
+ *   - generated_images/<thread_id>/ 的图片副本 --ephemeral 管不住 → 加 --json，从首条 thread.started 事件拿 thread_id，
+ *     进程退出（成败都算）后删掉那个目录。按 thread_id 删，并发的几路生图互不误伤。
+ * 两个参数 codex 0.99.0 起才同时有，桌面版用户自己装的老版本会报 unexpected argument —— 认出来就一起去掉重跑，不占重试次数。
+ */
+const EPHEMERAL_UNSUPPORTED = /unexpected argument '--(ephemeral|json)'/;
+const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+const THREAD_ID_RE = /^[0-9a-f-]{36}$/;
+
 /** codex 最后一句像是拒绝 / 做不到：同样的请求再跑一次也是一样，不重试 */
 const REFUSAL_RE = /(can['’]?t|cannot|unable to|not able to|won['’]?t|policy|safety|not allowed|refus|无法|不能|拒绝|违反|不允许|抱歉)/i;
 
@@ -150,10 +162,24 @@ const REFUSAL_RE = /(can['’]?t|cannot|unable to|not able to|won['’]?t|policy
  * @param {(absOut: string) => string} o.makePrompt  按这一趟的落盘路径生成桥接 prompt
  */
 export async function runCodexImageGen({ makePrompt, refPaths, cwd, signal, expectFile, timeoutMs = CODEX_IMAGE_TIMEOUT_MS }) {
+  let ephemeral = true;
   const runOnce = (args) => new Promise((resolve, reject) => {
-    const child = spawn(CODEX_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'], env: process.env, detached: process.platform !== 'win32' });
+    const argv = ephemeral ? ['exec', '--ephemeral', '--json', ...args.slice(1)] : args;
+    const child = spawn(CODEX_BIN, argv, { stdio: ['ignore', 'pipe', 'pipe'], env: process.env, detached: process.platform !== 'win32' });
     let stderrTail = '';
-    child.stdout.on('data', () => { /* 排空防背压 */ });
+    let stdoutHead = '';
+    let threadId = null;
+    child.stdout.on('data', (d) => {
+      // 只在开头找 thread.started，找到或读满 8KB 就只排空防背压
+      if (!ephemeral || threadId || stdoutHead.length > 8000) return;
+      stdoutHead += d.toString();
+      for (const line of stdoutHead.split('\n')) {
+        try {
+          const ev = JSON.parse(line);
+          if (ev.type === 'thread.started' && THREAD_ID_RE.test(ev.thread_id)) { threadId = ev.thread_id; break; }
+        } catch { /* 半行或非 JSON */ }
+      }
+    });
     child.stderr.on('data', (d) => { stderrTail = (stderrTail + d.toString()).slice(-2000); });
     const killTimer = setTimeout(() => {
       killTree(child);
@@ -165,8 +191,15 @@ export async function runCodexImageGen({ makePrompt, refPaths, cwd, signal, expe
     child.on('close', (code) => {
       clearTimeout(killTimer);
       signal?.removeEventListener?.('abort', onAbort);
+      if (threadId) {
+        fs.rm(path.join(CODEX_HOME, 'generated_images', threadId), { recursive: true, force: true }).catch(() => {});
+      }
       if (signal?.aborted) return reject(new Error('aborted'));
-      if (code !== 0) return reject(new Error(`codex exec exited ${code}: ${stderrTail.slice(-300) || 'no stderr'}`));
+      if (code !== 0) {
+        const err = new Error(`codex exec exited ${code}: ${stderrTail.slice(-300) || 'no stderr'}`);
+        err.ephemeralUnsupported = ephemeral && EPHEMERAL_UNSUPPORTED.test(stderrTail);
+        return reject(err);
+      }
       resolve();
     });
   });
@@ -194,6 +227,12 @@ export async function runCodexImageGen({ makePrompt, refPaths, cwd, signal, expe
       throw new Error(`codex finished but target file missing/empty: ${expectFile}`
         + (last ? `；codex 最后说：「${last.slice(0, 300)}」` : '；codex 没有留下回复'));
     } catch (err) {
+      if (err.ephemeralUnsupported) {
+        console.warn('[generate-image] codex CLI 不认 --ephemeral/--json（低于 0.99.0），去掉后重跑');
+        ephemeral = false;
+        attempt--;
+        continue;
+      }
       if (attempt === 2 || signal?.aborted || refused) throw err;
       console.warn(`[generate-image] codex attempt ${attempt} failed (${err.message}), retrying once`);
     } finally {
