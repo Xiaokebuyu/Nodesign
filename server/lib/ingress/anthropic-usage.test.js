@@ -31,6 +31,16 @@ describe('createAnthropicUsageScanner：流式', () => {
   });
 });
 
+describe('createAnthropicUsageScanner：多字节字切在 chunk 边界（09-15）', () => {
+  it('message_start 那行带中文、被切成一字节一块，照样读出用量', () => {
+    const line = `event: message_start\ndata: ${JSON.stringify({ type: 'message_start', message: { id: '中文编号', usage: { input_tokens: 12, cache_read_input_tokens: 3 } } })}\n\n`
+      + `event: message_delta\ndata: ${JSON.stringify({ type: 'message_delta', delta: { stop_reason: 'end_turn' }, usage: { output_tokens: 7 } })}\n\n`;
+    const s = createAnthropicUsageScanner({ stream: true });
+    for (const b of Buffer.from(line, 'utf8')) s.feed(Buffer.from([b]));
+    expect(s.finish()).toEqual({ input: 12, output: 7, cacheRead: 3, cacheCreate: 0 });
+  });
+});
+
 describe('createAnthropicUsageScanner：非流式', () => {
   it('从响应体顶层 usage 取', () => {
     const s = createAnthropicUsageScanner({ stream: false });

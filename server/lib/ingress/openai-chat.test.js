@@ -108,6 +108,25 @@ const ev = (sse) => sse.split('\n\n').filter(Boolean).map(b => {
 });
 
 describe('OpenAIToAnthropicSSE', () => {
+  it('⛔ 中文 / emoji 切在任意字节边界上都不出 U+FFFD（09-15：逐 chunk toString 把「鹿紫云一」解成「鹿���云一」写进用户文件）', async () => {
+    const id = 'u8';
+    const text = '鹿紫云一 😀 第188章';
+    const args = JSON.stringify({ file_path: '细纲.md', content: text });
+    const whole = Buffer.from(
+      `data: ${JSON.stringify({ id, choices: [{ index: 0, delta: { content: text } }] })}\n\n`
+      + `data: ${JSON.stringify({ id, choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'Write', arguments: args } }] } }] })}\n\n`
+      + `data: ${JSON.stringify({ id, choices: [{ index: 0, finish_reason: 'tool_calls', delta: {} }] })}\n\ndata: [DONE]\n\n`, 'utf8');
+    // 每一个字节位置都切一刀（两段），再加一种一字节一块的极端切法
+    const cuts = [...Array.from({ length: whole.length - 1 }, (_, i) => [whole.subarray(0, i + 1), whole.subarray(i + 1)]),
+      Array.from(whole, (b) => Buffer.from([b]))];
+    for (const parts of cuts) {
+      const sse = await collect(new OpenAIToAnthropicSSE(), parts);
+      expect(sse).not.toContain('�');
+      const events = ev(sse);
+      expect(events.find((x) => x.d.delta?.type === 'text_delta').d.delta.text).toBe(text);
+      expect(JSON.parse(events.find((x) => x.d.delta?.type === 'input_json_delta').d.delta.partial_json).content).toBe(text);
+    }
+  });
   it('上游回头续写已闭合的 tool_call 计数（CLI 块闭合即派发，续上的参数进不去）；正常顺序计 0', async () => {
     const c = (tool_calls) => `data: ${JSON.stringify({ id: 'r', choices: [{ index: 0, delta: { tool_calls } }] })}\n\n`;
     const end = `data: ${JSON.stringify({ id: 'r', choices: [{ index: 0, finish_reason: 'tool_calls', delta: {} }] })}\n\ndata: [DONE]\n\n`;

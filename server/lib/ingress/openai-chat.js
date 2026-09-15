@@ -36,6 +36,7 @@
  *   会话直接判死 —— 现有的 content_filter→end_turn 在 Claude Code 语境下才是对的
  */
 import { Transform } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 import { toolReferenceText } from './tool-reference.js';
 export { toolReferenceText };
 import { upstreamCostOf } from './upstream-billing.js';
@@ -288,6 +289,9 @@ export class OpenAIToAnthropicSSE extends Transform {
     this.model = model;
     this.label = label;        // 上游的人话名字（错误文案用；CLI 会把 message 原样显示给用户）
     this.buf = '';
+    // ⛔ 按字节解码要跨 chunk 记住半个字（09-15）：直接 chunk.toString('utf8') 会把切在网络分块边界上的中文 / emoji
+    // 解成 U+FFFD。坏字进了 tool_use 的 JSON 照样合法，Write/Edit 把乱码写进用户文件（生产 deepseek 行 372 条里 32 条中招）
+    this.decoder = new StringDecoder('utf8');
     this.started = false;
     this.done = false;
     this.blockIndex = -1;      // 最后分配的块号
@@ -465,6 +469,7 @@ export class OpenAIToAnthropicSSE extends Transform {
    */
   beginAttempt() {
     this.buf = '';
+    this.decoder = new StringDecoder('utf8');   // 上一发断在半个字上的残字节不能拼进新一发
     this.finish = null;
     this.doneSeen = false;
     this.attemptUsage = null;
@@ -494,7 +499,7 @@ export class OpenAIToAnthropicSSE extends Transform {
   }
 
   _transform(chunk, _enc, cb) {
-    this.buf += chunk.toString('utf8');
+    this.buf += this.decoder.write(chunk);
     let nl;
     while ((nl = this.buf.indexOf('\n')) >= 0) {
       const line = this.buf.slice(0, nl).replace(/\r$/, '');
