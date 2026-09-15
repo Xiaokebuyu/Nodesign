@@ -38,6 +38,18 @@ export const FONTCONF = join(HERE, 'fonts', 'nodesign-cjk.conf');
 const SOFFICE_TIMEOUT = 120_000;
 const PDFTOPPM_TIMEOUT = 60_000;
 
+/**
+ * Windows 上缺 DLL 时 soffice 根本起不来：退出码 0xC0000135（STATUS_DLL_NOT_FOUND；Git Bash 里显示成 127），零输出。
+ * 09-15 案里 agent 只拿到一行「Command failed: …soffice.com …」，自己排查了五步才确定不是沙盒的事 —— 把真话写进报错。
+ */
+const DLL_NOT_FOUND = new Set([3221225781, -1073741515]);
+export function explainSofficeFailure(err) {
+  if (!DLL_NOT_FOUND.has(err?.code)) return err;
+  err.message = 'soffice 起不来：缺 VC++ 运行库 DLL（退出码 0xC0000135）。重启应用会把 LibreOffice 组件包自带的运行库补到 program 目录；'
+    + `仍然不行就在设置里重装 LibreOffice 组件，或安装 Microsoft Visual C++ 2015-2022 x64 运行库。原始错误：${err.message}`;
+  return err;
+}
+
 async function exists(p) {
   try { await fs.access(p); return true; } catch { return false; }
 }
@@ -72,7 +84,7 @@ export async function renderDocx(docxPath, opts = {}) {
       // Windows 上拼出来的 `file://C:\…` 会让 LO 弹「bootstrap.ini 已经损坏」后退 1（见 lib/file-url.js）
       `-env:UserInstallation=${fileUrl(join(scratch, 'loprofile'))}`,
       '--headless', '--convert-to', 'pdf', '--outdir', scratch, inFile,
-    ], { env, timeout: opts.timeoutMs ?? SOFFICE_TIMEOUT });
+    ], { env, timeout: opts.timeoutMs ?? SOFFICE_TIMEOUT }).catch((err) => { throw explainSofficeFailure(err); });
 
     const pdf = join(scratch, 'in.pdf');
     if (!await exists(pdf)) throw new Error('soffice produced no pdf');
