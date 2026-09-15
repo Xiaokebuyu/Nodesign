@@ -13,7 +13,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { detectKind, digest, fetchEntries, extractCardFromPng, listBookEntries } from '../../../lib/tavern-json.js';
+import { detectKind, digest, fetchEntries, extractCardFromPng, listBookEntries, skippedEntriesReport } from '../../../lib/tavern-json.js';
 import { listPlays, WORLD_DIR } from '../../stage/play.js';
 
 const MAX_FETCH_CHARS = 24_000;
@@ -193,6 +193,8 @@ no place here; jailbreak sections are pointless on this platform.`,
           // 只有正则键（/…/i）的条目：worldbook.parseKeys 不认正则，落盘后永远不会触发（09-07 演出线对账 D7）—— 报出来别算进「触发 N 条」
           const isRegexKey = (k) => /^\/.*\/[a-z]*$/.test(String(k).trim());
           const 只正则 = live.filter((e) => !e.常驻 && (e.触发 || []).length > 0 && (e.触发 || []).every(isRegexKey)).length;
+          // 跳过的停用条目逐条点名，被 getwi 调用的排前（09-15 iss_mth9t0r5_ikgh：分阶段人设差点整份丢掉）
+          const 跳过 = skippedEntriesReport(all);
           for (const e of live) {
             const sub = e.常驻 ? `${dirRel}/常驻` : dirRel;
             await fs.mkdir(path.join(root, sub), { recursive: true });
@@ -212,7 +214,8 @@ no place here; jailbreak sections are pointless on this platform.`,
             `Exported ${live.length} entries → ${dirRel}/：触发 ${触发数 - 只正则} 条（一条一文件，frontmatter 带 keys —— `
             + `机器按关键词自动送给演出进程，玩家在开场页能逐条关，他在问答里说不要的用 open_stage.lore.off 预关）；常驻 ${常驻数} 条在 ${dirRel}/常驻/`
             + `（逐条人工过：真世界观挑十条以内进 open_stage.table 的「世界」节，MVU/状态栏/CoT/回复格式这类酒馆引擎件不搬 —— `
-            + `平台有自己的对应物：vitals / panels 记状态，roll 掷骰，remember 记事）。停用条目已跳过。`
+            + `平台有自己的对应物：vitals / panels 记状态，roll 掷骰，remember 记事）。`
+            + (跳过 ? `\n${跳过}` : '')
             + (只正则 ? `\n⚠️ 另有 ${只正则} 条只有正则键（/…/），这里按关键词匹配不认正则，它们落了盘但永远不会触发；要用就把关键词改成字面词写进 frontmatter 的 keys。` : '') }] };
         }
 

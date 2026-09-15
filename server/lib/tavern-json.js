@@ -200,3 +200,39 @@ export function listBookEntries(doc) {
     正文: String(e.content || ''),
   }));
 }
+
+/**
+ * 被启用条目里的 EJS `getwi(…, '条目名')` 点名的条目名（09-15，问题库 iss_mth9t0r5_ikgh）。
+ * 酒馆大卡常把分阶段人设标成「停用」，再由一条启用条目按变量 `getwi` 动态拉进来 —— 那里的「停用」是「不常驻」，
+ * 不是「不要」。getwi 的参数有 (标题) 与 (世界书, 标题) 两种写法，条目名取调用里最后一个字符串字面量。
+ */
+export function getwiTargets(entries) {
+  const names = new Set();
+  for (const e of entries) {
+    if (e.停用) continue;
+    for (const call of String(e.正文 || '').matchAll(/getwi\s*\(([^)]*)\)/g)) {
+      const lits = [...call[1].matchAll(/(['"`])((?:(?!\1).)+)\1/g)].map((m) => m[2]);
+      if (lits.length) names.add(lits[lits.length - 1].trim());
+    }
+  }
+  return names;
+}
+
+/**
+ * export_book 跳过的停用条目逐条点名：名字 + 字数 + 开头几个字；被 getwi 调用的排前面并标出来。
+ * 以前只回一句「停用条目已跳过」，agent 没先看 digest 就不知道丢了什么。没有跳过的返回空串。
+ */
+export function skippedEntriesReport(entries, { max = 40 } = {}) {
+  const skipped = entries.filter((e) => e.停用 && e.正文.trim());
+  if (!skipped.length) return '';
+  const called = getwiTargets(entries);
+  const hot = (e) => called.has(String(e.名字).trim());
+  const rows = [...skipped.filter(hot), ...skipped.filter((e) => !hot(e))];
+  const peek = (t) => t.replace(/\s+/g, ' ').trim().slice(0, 30);
+  const lines = rows.slice(0, max).map((e) => (hot(e)
+    ? `- ⭐「${e.名字}」${e.正文.length} 字 —— 被启用条目里的 getwi() 按条件调用，很可能是核心内容：用 mode="fetch" 取正文，按它的用途手动落盘`
+    : `- 「${e.名字}」${e.正文.length} 字：${peek(e.正文)}…`));
+  if (rows.length > max) lines.push(`- 余下 ${rows.length - max} 条见 mode="digest"`);
+  const hotCount = rows.filter(hot).length;
+  return `停用条目 ${skipped.length} 条没导出（酒馆里「停用」常常只是「不常驻」，不等于不要${hotCount ? `；其中 ${hotCount} 条被 getwi 调用` : ''}）：\n${lines.join('\n')}`;
+}
