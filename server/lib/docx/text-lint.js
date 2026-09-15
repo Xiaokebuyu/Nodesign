@@ -25,8 +25,9 @@ function textOfPara(b) {
   if (typeof b?.text === 'string') return b.text;
   const parts = [];
   for (const r of b?.runs ?? []) {
-    if (typeof r === 'string') parts.push(r);
-    else if (r && typeof r.text === 'string') parts.push(r.text);
+    if (typeof r === 'string') { parts.push(r); continue; }
+    if (r?.tab) parts.push('\t');   // <w:tab/> 排在这个 run 的文字前面（build.js buildRun）
+    if (r && typeof r.text === 'string') parts.push(r.text);
     else if (r?.br) parts.push('\n');
     // fld（页码域）没有文字形态，跳过
   }

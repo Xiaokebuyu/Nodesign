@@ -233,8 +233,12 @@
 ```
 
 - `text` 和 `runs` 二选一。`runs` 里字符串 = 纯文本 run，对象 = 带格式的 run
-- run 对象的键 = 上面 **style.run 那 14 个** + `text` + `br` + `fld` + `link`
+- run 对象的键 = 上面 **style.run 那 14 个** + `text` + `br` + `tab` + `fld` + `link`
 - `br`: `true` 换行；`"page"` 分页符；`"column"` 分栏符
+- `tab`: `true` 跳到下一个制表位（落在这个 run 的文字前面）。制表位的位置和对齐方式在段落的
+  `tabs` 里定义。「标题左、日期右」这种行：
+  `{ "t": "p", "tabs": [{ "pos": 9500, "val": "right" }], "runs": ["项目经历标题", { "tab": true, "text": "2024.03 – 2025.06" }] }`
+  （`pos` 取版心宽度，单位 twip）。别用 `"text": "\t"` 硬凑
 - `fld`: 域。目前只有 `"PAGE"`（当前页码）和 `"NUMPAGES"`（总页数），
   **写在页脚里**，别手打数字——手打的"1"在第二页还是 1
 - `link`: 超链接目标，配着 `text` 用。要带协议的完整地址

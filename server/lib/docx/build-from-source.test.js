@@ -354,3 +354,34 @@ describe('buildFromSource —— 落盘', () => {
     await expect(buildFromSource('/nope/文档.json', '/nope/文档.docx')).rejects.toThrow(/读不到源文件/);
   });
 });
+
+describe('制表符 —— run 上的 tab 键（09-15：「标题左、日期右」原来只能 text:"\\t" 硬凑）', () => {
+  const src = (content) => ({ preset: '办公标准', content });
+
+  it('tab 只收 true，报错指到段落 tabs', () => {
+    try {
+      resolveSource(src([{ t: 'p', runs: [{ tab: 'right' }] }]));
+      throw new Error('本该抛');
+    } catch (e) {
+      expect(e.detail).toMatch(/runs\[0\]\.tab: 只能写 true/);
+      expect(e.detail).toMatch(/tabs/);
+    }
+    expect(() => resolveSource(src([{ t: 'p', tabs: [{ pos: 9000, val: 'right' }], runs: ['标题', { tab: true, text: '2024' }] }]))).not.toThrow();
+  });
+
+  it('构建出的 docx：run 里 <w:tab/> 排在 <w:t> 前面，段落带右对齐制表位', async () => {
+    const d = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-tab-'));
+    const srcPath = path.join(d, '简历.json');
+    const out = path.join(d, '简历.docx');
+    await fs.writeFile(srcPath, JSON.stringify(src([
+      { t: 'p', tabs: [{ pos: 9000, val: 'right' }], runs: ['项目经历', { tab: true, text: '2024.03 – 2025.06', bold: true }] },
+      { t: 'p', runs: [{ tab: true }] },
+    ])));
+    await buildFromSource(srcPath, out);
+    const doc = entryData(readZip(await fs.readFile(out)), 'word/document.xml').toString('utf8');
+    expect(doc).toMatch(/<w:tabs><w:tab w:val="right" w:pos="9000"\/><\/w:tabs>/);
+    expect(doc).toMatch(/<w:r><w:rPr>(?:(?!<\/w:r>).)*<\/w:rPr><w:tab\/><w:t>2024\.03 – 2025\.06<\/w:t><\/w:r>/);
+    expect(doc).toMatch(/<w:r><w:tab\/><\/w:r>/);
+    await fs.rm(d, { recursive: true, force: true });
+  });
+});
