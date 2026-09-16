@@ -12,6 +12,7 @@
  */
 
 import { mountRelay } from './relay/router.js';
+import { createSesEventsRouter } from './auth/ses-events.js';
 import { hostedAuthRouter } from './auth-routes.js';
 import { bootstrapAuth } from './users-write.js';
 import { authEnabled } from '../auth/users-store.js';
@@ -28,6 +29,9 @@ export function mountHostedEarly(app) {
   startAuthRetention();   // 登录会话、安全事件、验证码记录按隐私政策第 8 节的期限清理
   // 外审没有 OPENAI_API_KEY 就整道跳过（fail-open）—— 那条告警 lib/moderation.js 加载时已经喊过，这里不重复。
   mountRelay(app, '/api/relay');
+  // SES 退信 / 投诉回调（SNS）。跟 relay 一样要在 express.json 之前：SNS 发的是 text/plain，
+  // 全局 JSON 解析器不认它；它也不带 cookie，过不了 authGuard。自己验 SNS 签名 + token
+  app.use('/api/ses/events', createSesEventsRouter());
 }
 
 /**

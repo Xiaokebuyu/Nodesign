@@ -4,26 +4,31 @@
  *   网页登录会话：失效（到期或吊销）满 180 天删除
  *   账号安全事件（auth_events）：满 180 天删除
  *   验证码记录与验证码错误计数：满 30 天删除（限频只看 24 小时，留 30 天够排查）
+ *   退信 / 投诉事件流水（email_feedback）：满 180 天删除。⛔ 抑制名单 email_suppression 不清，
+ *     删了就会重新往已知的死地址发信
  *
  * 起动时跑一次，之后每天一次。改期限要同时改 web/public/welcome/privacy.html 第 8 节。
  */
 
 import db from '../../engine/runs/store.js';
+import { pruneFeedback } from './mail-suppression.js';
 
 export const RETENTION = {
   sessionsMs: 180 * 24 * 3600 * 1000,
   eventsMs: 180 * 24 * 3600 * 1000,
   codesMs: 30 * 24 * 3600 * 1000,
+  feedbackMs: 180 * 24 * 3600 * 1000,
 };
 
-/** @returns {{ sessions: number, events: number, codes: number, failures: number }} */
+/** @returns {{ sessions: number, events: number, codes: number, failures: number, feedback: number }} */
 export function pruneAuthRecords(now = Date.now()) {
   const sessions = db.prepare(`DELETE FROM auth_sessions WHERE COALESCE(revoked_at, expires_at) < ? AND (revoked_at IS NOT NULL OR expires_at < ?)`)
     .run(now - RETENTION.sessionsMs, now).changes;
   const events = db.prepare('DELETE FROM auth_events WHERE created_at < ?').run(now - RETENTION.eventsMs).changes;
   const codes = db.prepare('DELETE FROM email_codes WHERE created_at < ?').run(now - RETENTION.codesMs).changes;
   const failures = db.prepare('DELETE FROM email_code_failures WHERE at < ?').run(now - RETENTION.codesMs).changes;
-  return { sessions, events, codes, failures };
+  const feedback = pruneFeedback(now - RETENTION.feedbackMs);
+  return { sessions, events, codes, failures, feedback };
 }
 
 let timer = null;
@@ -32,7 +37,7 @@ export function startAuthRetention() {
   const run = () => {
     try {
       const r = pruneAuthRecords();
-      if (r.sessions || r.events || r.codes || r.failures) console.log(`[auth-retention] 已删除过期记录 ${JSON.stringify(r)}`);
+      if (r.sessions || r.events || r.codes || r.failures || r.feedback) console.log(`[auth-retention] 已删除过期记录 ${JSON.stringify(r)}`);
     } catch (err) {
       console.warn(`[auth-retention] 清理失败：${err.message}`);
     }

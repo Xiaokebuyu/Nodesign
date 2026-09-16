@@ -47,6 +47,8 @@ export default {
   '验证码错误次数太多，{min} 分钟后再试': 'Too many wrong codes. Try again in {min} minutes.',
   '验证码不对或已过期': 'The code is wrong or has expired',
   '验证码邮件没有发出去，请稍后再试': 'The code email could not be sent. Try again later.',
+  '这个邮箱退信了，收不到验证码，请换一个邮箱': 'This address bounced and can no longer receive codes. Use a different email address.',
+  '这个邮箱把我们的邮件标记过垃圾邮件，收不到验证码了，请换一个邮箱': 'This address marked our email as spam, so we no longer send to it. Use a different email address.',
   '密码至少 8 位': 'Password must be at least 8 characters',
   '密码最长 128 位': 'Password can be at most 128 characters',
   '这个密码太常见了，换一个': 'This password is too common. Choose another one.',

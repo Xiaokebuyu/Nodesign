@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
   NoDesign transactional email - SES domain identity with Easy DKIM, custom MAIL FROM,
-  a configuration set with reputation metrics and bounce/complaint suppression, and a
+  a configuration set with reputation metrics and bounce/complaint suppression, an SNS
+  event destination that posts bounce and complaint callbacks to the app, and a
   send-only IAM user. DNS lives on Cloudflare, so DKIM/MAIL FROM records are applied
   from the stack outputs (see ops/aws/README.md).
 
@@ -16,11 +17,23 @@ Parameters:
     Default: mail
     AllowedPattern: "^[a-z0-9-]+$"
     Description: Label prepended to SendingDomain for the custom MAIL FROM domain (SPF alignment)
+  EventsEndpointUrl:
+    Type: String
+    Default: ""
+    NoEcho: true
+    Description: >-
+      HTTPS endpoint that receives bounce and complaint callbacks, token query string included
+      (NoEcho because the token is the endpoint's credential).
+      Leave empty on the first deploy: the app needs the topic ARN from this stack before it can
+      accept the subscription confirmation. Deploy again with the URL once the app is restarted.
   FromLocalPart:
     Type: String
     Default: noreply
     AllowedPattern: "^[a-z0-9._-]+$"
     Description: Local part of the only From address the IAM user may send as
+
+Conditions:
+  HasEventsEndpoint: !Not [!Equals [!Ref EventsEndpointUrl, ""]]
 
 Resources:
   TransactionalConfigSet:
@@ -50,6 +63,82 @@ Resources:
         MailFromDomain: !Sub "${MailFromSubdomain}.${SendingDomain}"
         BehaviorOnMxFailure: USE_DEFAULT_VALUE
 
+  # Standard topic only: SES event publishing does not support FIFO topics. No SSE either -
+  # an encrypted topic needs a KMS key policy that lets SES use the key, and a missing grant
+  # there fails silently at publish time. The payload is bounce metadata, not message content.
+  EventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub "${AWS::StackName}-events"
+      DisplayName: NoDesign SES delivery events
+
+  # Scoped to this configuration set and this account: a service principal without source
+  # conditions lets any SES configuration set in any account publish here (confused deputy).
+  EventsTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref EventsTopic
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowSesEventPublishing
+            Effect: Allow
+            Principal:
+              Service: ses.amazonaws.com
+            Action: sns:Publish
+            Resource: !Ref EventsTopic
+            Condition:
+              StringEquals:
+                AWS:SourceAccount: !Ref AWS::AccountId
+                AWS:SourceArn: !Sub "arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:configuration-set/${TransactionalConfigSet}"
+
+  # DELIVERY and SEND are left out on purpose: one row per sent message buys nothing here and
+  # every row carries a recipient address. REJECT means our own content was refused (virus),
+  # DELIVERY_DELAY is the soft failure worth seeing before it turns into a bounce.
+  EventsDestination:
+    Type: AWS::SES::ConfigurationSetEventDestination
+    DependsOn: EventsTopicPolicy
+    Properties:
+      ConfigurationSetName: !Ref TransactionalConfigSet
+      EventDestination:
+        Name: bounces-and-complaints
+        Enabled: true
+        MatchingEventTypes:
+          - BOUNCE
+          - COMPLAINT
+          - REJECT
+          - DELIVERY_DELAY
+        SnsDestination:
+          TopicARN: !Ref EventsTopic
+
+  # Creating this subscription makes SNS POST a SubscriptionConfirmation to the endpoint right
+  # away. The endpoint confirms it only after checking the signature and the topic ARN, so the
+  # app must already run with NODESIGN_SES_EVENTS_TOKEN and NODESIGN_SES_EVENTS_TOPIC_ARN set.
+  #
+  # The default HTTP/S policy retries only 3 times, 20 seconds apart, and SNS discards the
+  # message afterwards, so a one-minute restart would lose events. SNS retries 5xx and 429 only.
+  # Worst case if every backoff step hit maxDelayTarget: 2*5 + 4*300 + 6*300 = 3010 s, under
+  # the 3600 s hard limit for HTTP/S. No dead-letter queue: an event lost after that window is
+  # recovered the next time we send to the address, because the SES account-level suppression
+  # list rejects the send and publishes another Bounce (OnAccountSuppressionList).
+  EventsSubscription:
+    Condition: HasEventsEndpoint
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref EventsTopic
+      Protocol: https
+      Endpoint: !Ref EventsEndpointUrl
+      DeliveryPolicy:
+        healthyRetryPolicy:
+          numRetries: 12
+          numNoDelayRetries: 0
+          minDelayTarget: 5
+          numMinDelayRetries: 2
+          maxDelayTarget: 300
+          numMaxDelayRetries: 6
+          backoffFunction: exponential
+
   SenderUser:
     Type: AWS::IAM::User
     Properties:
@@ -73,6 +162,9 @@ Outputs:
   ConfigurationSetName:
     Description: Pass as ConfigurationSetName on every SendEmail call
     Value: !Ref TransactionalConfigSet
+  EventsTopicArn:
+    Description: Write this to NODESIGN_SES_EVENTS_TOPIC_ARN in the server .env
+    Value: !Ref EventsTopic
   SenderUserName:
     Description: IAM user for the app server; create its access key in the console and write it to .env yourself
     Value: !Ref SenderUser

@@ -6,6 +6,7 @@
  */
 
 import { issueCode, discardCode, supersedeOlderCodes } from './email-codes.js';
+import { suppressionFor } from './mail-suppression.js';
 import { sendMail } from './mailer.js';
 import { codeMail, noticeMail } from './mail-templates.js';
 import { clientIp } from './client-ip.js';
@@ -27,6 +28,12 @@ export function codeErrorResponse(req, r) {
       return { status: 429, body: { error: msg(req, '验证码错误次数太多，{min} 分钟后再试', { min: minutes(r.retryAfterMs) }), code: r.code, retryAfterMs: r.retryAfterMs } };
     case 'CODE_INVALID':
       return { status: 400, body: { error: msg(req, '验证码不对或已过期'), code: r.code } };
+    case 'EMAIL_SUPPRESSED':
+      // 退信 / 投诉过的地址（mail-suppression.js）。AWS 账号级抑制也会拦，但那边拦的表现是
+      // 发信成功返回、信不送达，用户只会看到"已发送"然后永远收不到，所以在这里就说清楚
+      return { status: 400, body: { error: r.reason === 'complaint'
+        ? msg(req, '这个邮箱把我们的邮件标记过垃圾邮件，收不到验证码了，请换一个邮箱')
+        : msg(req, '这个邮箱退信了，收不到验证码，请换一个邮箱'), code: r.code } };
     case 'MAIL_SEND_FAILED':
       return { status: 502, body: { error: msg(req, '验证码邮件没有发出去，请稍后再试'), code: r.code } };
     default:
@@ -51,6 +58,8 @@ export function passwordErrorResponse(req, code) {
  * @returns {Promise<{ ok: true } | { ok: false, status: number, body: object }>}
  */
 export async function sendCode(req, { email, purpose, payload = null, locale = null }) {
+  const blocked = suppressionFor(email);
+  if (blocked) return { ok: false, ...codeErrorResponse(req, { code: 'EMAIL_SUPPRESSED', reason: blocked.reason }) };
   const issued = issueCode({ email, purpose, payload, ip: clientIp(req) });
   if (!issued.ok) return { ok: false, ...codeErrorResponse(req, issued) };
   const mail = codeMail({ code: issued.code, purpose, locale: locale || localeOf(req) });
@@ -70,6 +79,8 @@ export async function sendCode(req, { email, purpose, payload = null, locale = n
  */
 export function noticeMailSafe({ to, kind, locale }) {
   if (!to) return;
+  // 已知收不到信的地址不再发：白发一封，还给发信信誉再记一次退信
+  if (suppressionFor(to)) return;
   sendMail({ to, ...noticeMail({ kind, locale }) }).catch((err) => {
     console.warn(`[mail] 安全通知 ${kind} 没发出去：${err.message}`);
   });
