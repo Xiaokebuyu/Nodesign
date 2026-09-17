@@ -57,7 +57,7 @@ region use browser_computer zoom.
 
 FILMSTRIP — the eye for the site's MOTION. A still cannot show how a hero
 reveals, how cards stagger in, how parallax layers slide, whether scrolling is
-hijacked into a smooth-scroll. Pass frames (2-30 ms offsets, e.g. [0,150,300,600,1000]
+hijacked into a smooth-scroll. Pass frames (2-30 ms offsets within a 30s window, e.g. [0,150,300,600,1000]
 for one move, 12-30 spread over a long scroll) and
 ONE of: scrollBy (px of REAL wheel scrolling spread over the recording — use
 this for scroll-driven motion, it is what a visitor does), trigger (JS that
@@ -74,7 +74,8 @@ the workspace for the user.`,
       selector: z.string().optional().describe('Capture only the first element matching this CSS selector.'),
       scrollTo: z.union([z.number(), z.string()]).optional()
         .describe("Scroll the viewport here first: pixels, a percentage like '50%', or a CSS selector. Real scroll, so entry animations and sticky headers behave as a visitor sees them."),
-      frames: z.array(z.number().min(0).max(15000)).min(2).max(30).optional()
+      // 上限与 screenshot_canvas 对齐（09-17，问题库 iss_mu0i9kth_dwe2：同一个录制器，这边 15s、那边 30s，传 16500 被整个拒掉）
+      frames: z.array(z.number().min(0).max(30000)).min(2).max(30).optional()
         .describe('FILMSTRIP: capture the viewport at these ms offsets (t=0 = when scrollBy/trigger/click starts) and return one timestamped contact sheet. 2-30 offsets; the sheet has a fixed pixel budget (~2.3MP, ≈3-3.7k tokens), so more cells = smaller cells — 6-10 to read detail, 12-16 for a whole sequence, 20-30 for long scroll choreographies where rhythm matters more than detail (zoom a cell region afterwards). Place them where the motion lives; include 0.'),
       scrollBy: z.number().min(-8000).max(8000).optional()
         .describe('FILMSTRIP: pixels of real wheel scrolling dispatched over the recording window (positive = down). The natural way to record scroll-driven motion on a site you did not write.'),

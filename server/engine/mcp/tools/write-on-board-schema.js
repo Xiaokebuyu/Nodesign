@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import { BINDING_TYPE_IDS, BINDING_MATERIALS } from '../../../lib/binding-types.js';
-import { TAG_RE } from '../../../projects/board-sanitize.js';
+import { TAG_RE, TAG_RE_MESSAGE } from '../../../projects/board-sanitize.js';
 import { CHALK_DIR } from '../../../lib/chalk.js';
 import { STENCIL_NAMES } from '../../../lib/sketch-stencils.js';
 
@@ -26,7 +26,10 @@ export const NODES = z.array(z.object({
   font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(),
   color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
   at: GRID_PT.optional().describe('Grid position (layout free); top-left of the node'),
-  w: z.number().min(3).max(120).optional().describe('Width in grid units (prefer ≤22 = 528px: paragraphs read better growing down than wide)'),
+  // 越界报文写明单位（09-17，问题库 iss_mtfs1kc6_e5ib：传 240 是按像素想的，原报文只说 ≤120）
+  w: z.number().min(3, 'w is in grid units (1 unit = 24px): at least 3')
+    .max(120, 'w is in grid units (1 unit = 24px), not pixels — 240px is w:10; max 120')
+    .optional().describe('Width in grid units (prefer ≤22 = 528px: paragraphs read better growing down than wide)'),
 })).max(MAX_NODES);
 
 export const SHAPES = z.array(z.object({
@@ -76,7 +79,7 @@ export const PLACE = z.object({
     .describe("Put it next to THIS: a canvas id / #tag / board-note path, 'user' = what the user has selected, 'view' = free ground in the user's current view (the default when nothing is given)"),
   side: z.enum(['right', 'left', 'below', 'above']).optional()
     .describe('Preferred side of `by`. A preference, not an order: if that side is taken it goes to the nearest free side and the return says so'),
-  with: z.string().regex(TAG_RE).optional()
+  with: z.string().regex(TAG_RE, TAG_RE_MESSAGE).optional()
     .describe('Continue THIS group: lands right under the last note of that #tag (a running thread grows downward)'),
 }).describe('WHERE, in relations — no pixels. Omit it to land in the user\'s view');
 
@@ -99,7 +102,7 @@ export const WRITE_SCHEMA = {
     .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights)'),
   open_lane: z.string().max(300).optional()
     .describe("Open a NEW thread line named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it, lands beside it), or 'fresh' for a brand-new topic (lands in the user's view). Requires tag; continue with {tag, chain:true}."),
-  tag: z.string().regex(TAG_RE).optional()
+  tag: z.string().regex(TAG_RE, TAG_RE_MESSAGE).optional()
     .describe('Group tag. A 1-piece write stays untagged unless you pass one; ≥2 pieces auto-tag sk-<stamp>'),
   ink: z.enum(['chalk', 'hand']).optional()
     .describe("Single note body: 'chalk' (default) = a real file under notes/板书 (Read/Edit later; chain/reply threads live on these); 'hand' = canvas-native handwritten text — a light remark like the user's own handwriting, no file, no threading"),

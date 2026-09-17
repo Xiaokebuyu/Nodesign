@@ -10,6 +10,10 @@ describe('board-sanitize 黑板字段', () => {
     expect(sanitizeTag('<x>')).toBeNull();
     expect(sanitizeTag('x'.repeat(41))).toBeNull();
     expect(sanitizeTag(7)).toBeNull();
+    // 09-17：人名里的间隔号收下（与 state-table 键同口径），其它标点照拒
+    expect(sanitizeTag('莉莉·安')).toBe('莉莉·安');
+    expect(sanitizeTag('a#b')).toBeNull();
+    expect(sanitizeTag('a,b')).toBeNull();
   });
 
   it('物件：tag/staging 合法才落字段；plain 不落 format，md 落', () => {

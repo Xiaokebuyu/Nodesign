@@ -85,7 +85,10 @@ const TEXT_FORMATS = ['plain', 'md'];
  * 字段 —— 读侧按它过滤、渲染侧按它画包络、staging 落定按它成批。字符集收紧
  * 是因为它会进 DOM 属性和 URL 查询串。
  */
-const TAG_RE = /^[\w\u4e00-\u9fff\u3040-\u30ff-]{1,40}$/;
+// 09-17 收间隔号「·」（问题库 iss_mtf8kh77_1i8p：人名分组「莉莉·安」被拒；state-table 的键早就收它）
+const TAG_RE = /^[\w\u4e00-\u9fff\u3040-\u30ff\u00b7-]{1,40}$/;
+/** schema 报错用的人话（原来直接打印正则） */
+const TAG_RE_MESSAGE = 'tag: 1-40 chars of letters, digits, _, -, · or CJK — no spaces, no #, no other punctuation';
 /**
  * 画布 id 的路径安全（2026-08-23 fable 审出 P0）：id 大多是工作区相对路径，下游有人拿它拼
  * 文件路径（removeByTag 删板书、chalkExcerpts 读板书）。拒掉 `..` 段、绝对路径、反斜杠、NUL；
@@ -100,7 +103,7 @@ export function isSafeCanvasId(id) {
   return !p.split('/').some(seg => seg === '..');
 }
 
-export { TAG_RE };
+export { TAG_RE, TAG_RE_MESSAGE };
 export function sanitizeTag(v) {
   return typeof v === 'string' && TAG_RE.test(v) ? v : null;
 }
