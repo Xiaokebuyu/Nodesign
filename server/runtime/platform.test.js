@@ -27,7 +27,10 @@ describe('凭据黑名单', () => {
       const put = (rel) => { const p = path.join(parent, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, 'X=1'); };
       fs.mkdirSync(me);
       put('Nodesign/.env'); put('other/.env.local'); put('demo/.env.example'); put('plain/readme.md');
+      put('Nodesign-wt/server/db/nodesign.db'); put('plain/server/index.js');
       const got = siblingEnvFiles(me);
+      expect(got).toContain(path.join(parent, 'Nodesign-wt', 'server', 'db'));   // 09-17：兄弟 checkout 的站点库副本
+      expect(got.some(p => p.startsWith(path.join(parent, 'plain', 'server')))).toBe(false);
       expect(got).toContain(path.join(me, '.env'));                      // 本仓自己的（文件在不在都拦）
       expect(got).toContain(path.join(parent, 'Nodesign', '.env'));      // 生产那份
       expect(got).toContain(path.join(parent, 'other', '.env.local'));

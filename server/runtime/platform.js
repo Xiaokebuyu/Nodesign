@@ -251,6 +251,8 @@ export function siblingEnvFiles(root = repoRoot) {   // 参数只给测试用：
       if (f === '.env.example' || f === '.env.sample') continue;  // 示例文件没秘密，留着给人看
       out.push(path.join(dir, f));
     }
+    // 兄弟 checkout 的站点库（09-17）：同机的 worktree / exp 各有一份 server/db，里面可能是生产数据的副本
+    if (files.includes('server') && fs.existsSync(path.join(dir, 'server', 'db'))) out.push(path.join(dir, 'server', 'db'));
   }
   return out;
 }
