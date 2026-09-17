@@ -45,9 +45,11 @@ function parseSseData(line) {
  * @param {{ stream: boolean }} opts
  * @returns {{ feed(chunk: Buffer|string): void, finish(): object|null }}
  */
+import { StringDecoder } from 'node:string_decoder';
 export function createAnthropicUsageScanner({ stream }) {
   const acc = {};
   let buf = '';
+  const decoder = new StringDecoder('utf8');
   const chunks = [];   // 非流式攒整个 body（上限之内）
   let bytes = 0;
   const NONSTREAM_MAX = 4 * 1024 * 1024;   // 非流式 body 超过这个就不解析了（响应体不该这么大，防被喂爆）
@@ -62,7 +64,7 @@ export function createAnthropicUsageScanner({ stream }) {
   return {
     feed(chunk) {
       if (stream) {
-        buf += chunk.toString('utf8');
+        buf += decoder.write(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));   // 跨 chunk 记住半个字（09-15，同 openai-chat.js）
         let nl;
         while ((nl = buf.indexOf('\n')) >= 0) {
           scanLine(buf.slice(0, nl).replace(/\r$/, ''));

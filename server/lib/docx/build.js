@@ -249,6 +249,8 @@ function buildRun(tokens, r, links) {
     ]);
   }
   if (r.br) kids.push(elem('w:br', r.br === true ? [] : [['w:type', r.br]]));
+  // 跳到下一个制表位（09-15）：段落 tabs 定义得出右对齐位，没有它就跳不过去 —— 简历「标题左、日期右」只能拿 text:"\t" 硬凑
+  if (r.tab) kids.push(elem('w:tab'));
   if (r.text != null) {
     const t = String(r.text);
     const attrs = /^\s|\s$/.test(t) ? [['xml:space', 'preserve']] : [];

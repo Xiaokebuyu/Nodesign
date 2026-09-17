@@ -28,6 +28,7 @@ export { sourcesFor, probeSource, pickSource, downloadFile, extractZip, DEFAULT_
 // 装/卸 rembg 之前要停它的常驻 python（见 COMPONENT_HOLDERS）
 import { startRembgService, stopRembgService } from '../services/rembg-launcher.js';
 import { loadPrefs, savePrefs } from './local-prefs.js';
+import { ensureLibreOfficeCrt } from './bundled-crt.js';
 
 export const COMPONENTS_MANIFEST_URL = process.env.NODESIGN_COMPONENTS_MANIFEST
   || 'https://github.com/Xiaokebuyu/Nodesign/releases/download/components-win64/manifest.json';
@@ -193,6 +194,8 @@ export function componentEnv() {
 
 /** 把 componentEnv 写进 process.env（幂等：PATH 里已有的目录不重复加） */
 export function applyComponentEnv() {
+  // 起动和每次装完都走这里：旧包的 LibreOffice 在这时补上运行库（见 bundled-crt.js）
+  ensureLibreOfficeCrt(readInstalled('libreoffice')?.dir);
   const { binDirs, env } = componentEnv();
   const cur = (process.env.PATH || '').split(path.delimiter);
   const add = binDirs.filter((d) => !cur.includes(d));

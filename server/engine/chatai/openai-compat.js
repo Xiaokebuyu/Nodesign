@@ -25,6 +25,7 @@ const DEFAULT_TIMEOUT_MS = 180_000;
 const SENTINEL_RE = /\s*\[done\]\s*$/;
 const HOLD = 12;   // 压住末尾这么多字符不发；中转站分片本来就粗（一句话四片），看不出延迟
 
+import { StringDecoder } from 'node:string_decoder';
 export function stripSentinel(text) {
   return String(text ?? '').replace(SENTINEL_RE, '');
 }
@@ -124,9 +125,10 @@ export async function callOpenAICompat({
   let usage = {};
   let finish = null;
   let buf = '';
+  const decoder = new StringDecoder('utf8');
   try {
     for await (const chunk of res.body) {
-      buf += Buffer.from(chunk).toString('utf8');
+      buf += decoder.write(Buffer.from(chunk));   // 跨 chunk 记住半个字，别把中文切成 U+FFFD（09-15）
       const lines = buf.split('\n');
       buf = lines.pop() ?? '';
       for (const line of lines) {

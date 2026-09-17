@@ -72,6 +72,17 @@ jobs:
           7z x (Get-ChildItem zhuque -Filter *.zip | Select-Object -First 1).FullName -ozhuque-x | Out-Null
           Get-ChildItem zhuque-x -Recurse -Include *.ttf, *.otf | Copy-Item -Destination $fonts
           Get-ChildItem $fonts | ForEach-Object { Write-Host ("font {0} {1:N0} bytes" -f $_.Name, $_.Length) }
+          # ⛔ VC++ 运行库要放到 soffice 旁边（09-15 案：一台没装运行库的机器上 soffice 退出码 127、零输出）。
+          # 管理安装把 MSI 的运行库合并模块铺在包根的 System64\（真装时它们进 System32），program\ 里一个都没有，
+          # 而 sal3.dll / mergedlo.dll 要 MSVCP140*、VCRUNTIME140*。跑器自己装着运行库，所以在这里起 soffice 证明不了什么，
+          # 判据只能是「包里 program\ 有没有」。已装旧包的机器由 server/runtime/bundled-crt.js 就地补。
+          $prog = Join-Path $root 'program'
+          Get-ChildItem (Join-Path $root 'System64') -Filter *.dll | Copy-Item -Destination $prog -Force
+          foreach ($d in 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            $f = Get-Item (Join-Path $prog $d) -EA SilentlyContinue
+            if (-not $f) { throw "program\ 里缺 $d —— 没装 VC++ 运行库的机器上 soffice 起不来" }
+            Write-Host ("  {0}  {1}" -f $d, $f.VersionInfo.FileVersion)
+          }
           7z a -tzip -mx=5 "$PWD\out\libreoffice.zip" "$root\*" | Out-Null
 
       # 嵌入式 Python + pip + rembg(cpu) + 模型：让 rembg 自己把两个模型下到 U2NET_HOME，文件名由它定
@@ -139,7 +150,7 @@ jobs:
         run: |
           # rembg 版本号带上 +crt：09-10 起包里自带 VC++ 运行库，装过旧包的用户界面上要看得出这是不同的一份
           # （"有更新"那个判据认的是 sha256，见 runtime/components.js；版本号只是给人看的）
-          @{ git = $env:GIT_VER; ffmpeg = $env:FFMPEG_VER; poppler = $env:POPPLER_VER; libreoffice = $env:LO_VER; rembg = "py$env:PY_VER+crt" } | ConvertTo-Json | Set-Content out/versions.json
+          @{ git = $env:GIT_VER; ffmpeg = $env:FFMPEG_VER; poppler = $env:POPPLER_VER; libreoffice = "$env:LO_VER+crt"; rembg = "py$env:PY_VER+crt" } | ConvertTo-Json | Set-Content out/versions.json
           node desktop/components/build-manifest.mjs out $env:RELEASE_TAG
           Get-Content out/manifest.json
 

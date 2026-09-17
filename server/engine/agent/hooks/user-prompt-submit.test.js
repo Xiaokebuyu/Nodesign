@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { renderTurnState, makeUserPromptSubmitHandler } from './user-prompt-submit.js';
+import { renderTurnState, makeUserPromptSubmitHandler, binaryDocHint } from './user-prompt-submit.js';
 import { resetTurnMemory, diffItems, fingerprint } from './turn-state-memory.js';
 import { renderChalk, CHALK_DIR } from '../../../lib/chalk.js';
 import { STATE_TABLE_TAG } from '../../../lib/state-table.js';
@@ -180,5 +180,19 @@ describe('⭐ 条件触发器：端到端真跑（求值点=注入点）', () =>
     expect(r).toMatch(/没有比较符/);
     resetTurnMemory(sid);
     await fs.rm(ws, { recursive: true, force: true });
+  });
+});
+
+describe('binaryDocHint（09-15：沙盒里 soffice 起不来）', () => {
+  it('Linux + 沙盒：不教 soffice，指 read_document / screenshot_canvas', () => {
+    const h = binaryDocHint({ os: 'linux', sandbox: true });
+    expect(h).toMatch(/read_document/);
+    expect(h).toMatch(/screenshot_canvas/);
+    expect(h).not.toMatch(/soffice --headless/);
+    expect(h).not.toMatch(/UserInstallation/);
+  });
+  it('没开沙盒（本地版 / npx）照旧给 soffice 配方；Windows 给真 file URL 形状', () => {
+    expect(binaryDocHint({ os: 'linux', sandbox: false })).toMatch(/soffice --headless[\s\S]*file:\/\/\/tmp\/lo-/);
+    expect(binaryDocHint({ os: 'win32', sandbox: true })).toMatch(/file:\/\/\/C:\/Users\//);
   });
 });

@@ -1,6 +1,6 @@
 // 酒馆导出 JSON 的解析（2026-08-15）：认形态、摘结构、按需取正文
 import { describe, it, expect } from 'vitest';
-import { detectKind, digest, fetchEntries } from './tavern-json.js';
+import { detectKind, digest, fetchEntries, listBookEntries, getwiTargets, skippedEntriesReport } from './tavern-json.js';
 
 const 预设 = {
   temperature: 1, top_p: 1, openai_max_tokens: 30000, reasoning_effort: 'min',
@@ -163,6 +163,9 @@ describe('read_tavern_json export_book', () => {
     expect(cst).toContain('constant: true');
     const all = await fs.readdir(path.join(tmp, '世界书'));
     expect(all.some(n => n.includes('停用'))).toBe(false);
+    // 跳过的要点名，不再只是一句「已跳过」
+    expect(r.content[0].text).toContain('停用条目 1 条没导出');
+    expect(r.content[0].text).toContain('- 「停用的」2 字：别搬…');
   });
 
   it('out 目录不许越界', async () => {
@@ -175,5 +178,38 @@ describe('read_tavern_json export_book', () => {
     const t = makeReadTavernJsonTool({ workspaceRoot: tmp, sharedRoot: tmp });
     const r = await t.handler({ path: 'b.json', mode: 'export_book', out: '../逃逸' });
     expect(r.isError).toBe(true);
+  });
+});
+
+describe('export_book 跳过的停用条目要点名（09-15）', () => {
+  // 酒馆大卡的真实结构：分阶段人设标停用，一条启用条目按变量 getwi 拉进来
+  const 大卡 = { entries: [
+    { uid: 1, comment: '分阶段人设', key: [], constant: true, content: "<%_ if (love === 1) { _%>\n<%- await getwi(null, '晴可_礼貌期') %>\n<%_ } else { _%><%- await getwi(\"晴可_冷淡期\") %><%_ } _%>" },
+    { uid: 2, comment: '晴可_礼貌期', key: [], enabled: false, content: '她说话客气，但每句都留一道门。'.repeat(20) },
+    { uid: 3, comment: '晴可_冷淡期', key: [], disable: true, content: '只回单字。' },
+    { uid: 4, comment: 'initvar', key: [], enabled: false, content: 'love: 0' },
+    { uid: 5, comment: '空停用', key: [], enabled: false, content: '   ' },
+  ] };
+  const all = listBookEntries(大卡);
+
+  it('getwi 两种写法（带世界书参数 / 只给标题）都认得出条目名；停用条目里的 getwi 不算', () => {
+    expect([...getwiTargets(all)].sort()).toEqual(['晴可_冷淡期', '晴可_礼貌期']);
+    expect(getwiTargets([{ 停用: true, 正文: "getwi('x')" }]).size).toBe(0);
+  });
+
+  it('逐条点名：被调用的排前并标 ⭐、给字数；其余给开头几个字；空正文不算', () => {
+    const r = skippedEntriesReport(all);
+    const lines = r.split('\n');
+    expect(lines[0]).toMatch(/停用条目 3 条没导出.*其中 2 条被 getwi 调用/);
+    expect(lines[1]).toMatch(/^- ⭐「晴可_礼貌期」300 字/);
+    expect(lines[2]).toMatch(/^- ⭐「晴可_冷淡期」/);
+    expect(lines[3]).toBe('- 「initvar」7 字：love: 0…');
+    expect(r).not.toMatch(/空停用/);
+  });
+
+  it('没有跳过的返回空串；超过上限只列前 N 条并指 digest', () => {
+    expect(skippedEntriesReport(listBookEntries(世界书))).toBe('');
+    const many = Array.from({ length: 5 }, (_, i) => ({ 名字: `e${i}`, 停用: true, 正文: 'x' }));
+    expect(skippedEntriesReport(many, { max: 2 })).toMatch(/余下 3 条见 mode="digest"/);
   });
 });

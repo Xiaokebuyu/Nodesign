@@ -66,7 +66,7 @@ function stripNotes(v) {
  */
 // color 跟 sizePt 同理：块上写一次 = 这段每个 run 的缺省值（09-11 雾岭手册：给一格染色只能套一层 runs）
 const P_BLOCK_KEYS = new Set(['t', 'style', 'text', 'runs', 'sizePt', 'color', 'list', ...PARA_KEYS]);
-const RUN_OBJ_KEYS = new Set(['text', 'br', 'fld', 'link', ...RUN_KEYS]);
+const RUN_OBJ_KEYS = new Set(['text', 'br', 'tab', 'fld', 'link', ...RUN_KEYS]);
 const TABLE_BLOCK_KEYS = new Set(['t', 'widthsTwip', 'rows', 'borders']);
 const BORDER_LINE_KEYS = new Set(['style', 'sizePt8', 'color']);
 
@@ -120,6 +120,7 @@ function validateContent(content, numbering, { noLinks = false } = {}) {
       for (const k of Object.keys(r)) {
         if (!RUN_OBJ_KEYS.has(k)) errs.push(`${where}.runs[${i}]: unknown key ${k}`);
       }
+      if (r.tab != null && r.tab !== true) errs.push(`${where}.runs[${i}].tab: 只能写 true（跳到下一个制表位；位置和对齐方式在段落的 tabs 里定义）`);
       if (r.link != null) {
         if (noLinks) {
           errs.push(`${where}.runs[${i}].link: 页眉页脚里暂不支持超链接（要单独的关系表，还没做）`);
