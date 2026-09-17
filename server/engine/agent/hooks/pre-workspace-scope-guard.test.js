@@ -264,7 +264,7 @@ describe('软链真身（09-17：Read / Write 是进程内工具，跟着 agent 
     expect(realPathLoose(path.join(ws, 'cfglink', 'settings.json'))).toBe(path.join(ws, '.claude', 'settings.json'));
     expect(realPathLoose(path.join(ws, 'otherlink', 'no', 'such.md'))).toBe(path.join(other, 'no', 'such.md'));
     expect(realPathLoose('/definitely/not/here')).toBe(path.resolve('/definitely/not/here'));   // Windows 上会补盘符
-    expect(realPathLoose(path.join(ws, 'homelink', 'a.md'))).toBe(path.join(outside, 'a.md'));   // 悬空软链
+    expect(realPathLoose(path.join(ws, 'homelink', 'a.md'))).toBe(path.join(path.resolve(outside), 'a.md'));   // 悬空软链（Windows 会补盘符）
   });
   it('⭐ 经软链写 .claude/settings.json、plugin 目录 → 按真身拒', () => {
     expect(chk('cfglink/settings.json', 'Write')).toMatch(/会话开局装载的配置/);
