@@ -24,6 +24,7 @@ describe('browser_screenshot 与 screenshot_canvas 的 frames 上限一致（iss
     const read = (f) => fs.readFileSync(new URL(f, import.meta.url), 'utf8');
     const max = (src) => src.match(/frames:\s*z\s*\.?array\(z\.number\(\)\.min\(0\)\.max\((\d+)\)\)/)?.[1];
     expect(max(read('./browse-screenshot.js'))).toBe('30000');
-    expect(max(read('./screenshot.js').replace(/\n\s*\./g, '.'))).toBe('30000');
+    // 09-17：screenshot_canvas 的 schema 拆去 screenshot-schema.js（行数棘轮）
+    expect(max(read('./screenshot-schema.js').replace(/\n\s*\./g, '.'))).toBe('30000');
   });
 });

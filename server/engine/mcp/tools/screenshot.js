@@ -6,19 +6,21 @@
  * 胶片条（frames + trigger/click/scrollBy + 元素探针）的录制器是 helpers/motion-lab.js
  * + helpers/motion-scroll.js，跟浏览通道的 browser_screenshot 共用一份。
  * 归一化 / 诊断 / 保真探针在 helpers/shot-pipeline.js。docx 走 screenshot-docx.js。
+ * 描述与入参 schema、参数组合合同在 screenshot-schema.js；probe（页面求值带回文字）在 helpers/shot-probe.js，
+ * docx 页图落盘（saveTo）在 helpers/save-shots.js（09-17）。
  */
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
 import { resolveDeckSize, extractDeckAspect } from '../../../shared/deck.js';
-import { resolveCanvasTarget, CANVAS_PATH_DESC, KIND_SITE, requireBrowsable,
-} from '../../../lib/artifact-target.js';
+import { resolveCanvasTarget, KIND_SITE, requireBrowsable } from '../../../lib/artifact-target.js';
 import { can } from '../../../lib/kinds/index.js';
 import { screenshotDocx } from './screenshot-docx.js';
 import { SITE_DEVICE_W } from './helpers/perception-page.js';
-import { acquireArtifactPage, LIVE_PARAM_DESC } from './helpers/acquire-page.js';
+import { acquireArtifactPage } from './helpers/acquire-page.js';
+import { SCREENSHOT_CANVAS_DESCRIPTION, SCREENSHOT_CANVAS_SCHEMA, argConflict } from './screenshot-schema.js';
+import { runProbe, probeLines, probeOnlyText } from './helpers/shot-probe.js';
 import { normalizeShot, detectPaintTransform, runWaitFor, runBeforeShot, shotWithFallback, longPageSheet, clipShotWithFallback } from './helpers/shot-pipeline.js';
 import { recordMotion, pickNearestFrames, composeSheet, encodeWebm, motionCaptionLines } from './helpers/motion-lab.js';
 import { wheelScroll, elementMotionReport, elementMotionLines } from './helpers/motion-scroll.js';
@@ -36,177 +38,20 @@ const RASTER_SCALE = 0.6;
 export function makeScreenshotCanvasTool({ workspaceRoot, projectId, sessionId, ctx }) {
   return tool(
     'screenshot_canvas',
-    `Take a screenshot of the artifact you are working on — a site page (any
-.html inside a site folder; the folder's artifact root is whatever holds its
-index.html — hand-written pages or a build output dir), a deck (.html), or a
-.docx (rendered to page images) — and return it as an image. Use this to
-visually inspect what you wrote: spacing, contrast, hierarchy, layout, alignment.
-
-The tool detects the artifact kind from the path. Each call is a FRESH load
-(reproducible). To look at a page in its current interactive state (menus open,
-game mid-play) use live:true against the artifact session (artifact_open).
-
-DECK — default viewport = the deck-aspect declared on canvas wrap (16:9 → 1920×1080,
-9:16 → 1080×1920, 16:10 → 1920×1200, 4:3 → 1440×1080). Target one page with pageIndex.
-
-SITE — there is no fixed aspect. Default viewport is desktop 1440×900 and the whole
-page is captured (fullPage). Use the device param to check a breakpoint: desktop=1440,
-tablet=834, mobile=390. **Checking mobile means rendering AT 390px wide**, not shrinking
-a desktop shot — that is the only way to see whether your media queries actually fire.
-pageIndex does not apply to sites; pass path to screenshot a specific page file.
-
-**Targeting (cheapest → most expensive)**:
-- pageIndex: capture only section[data-page="N"] — **prefer this for per-page checks** (~30-50KB image)
-- selector: capture only the first element matching this CSS selector
-- (default, no targeting): capture viewport only (~30-50KB)
-- fullPage=true: capture full scrollable page — **N× more expensive for N-page deck**
-  (~150-300KB for 9 pages). Only use for true deck-wide overview; otherwise prefer
-  pageIndex loop or dispatch the vision-checker subagent (subagent context is
-  isolated, your main context stays small).
-
-Targeted captures (selector / pageIndex) override fullPage.
-
-Returns: image content block (you see it directly via vision) plus a text caption
-with size info AND page diagnostics: console errors/warnings and failed resource
-loads (CDN scripts, fonts, images). "console clean, all requests OK" means your
-CDN libs actually loaded — no more guessing whether GSAP/Lenis are alive.
-
-beforeShot: the screenshot environment never scrolls, so scroll-linked animations
-(ScrollTrigger, IntersectionObserver reveals) leave elements at opacity:0 and they
-vanish from the shot. Pass beforeShot:"scrollToBottom" to scroll through the whole
-page and back to top first — every scroll trigger fires, then the shot is taken.
-Or pass a JS snippet (async/await OK) to click/hover/setup any state before capture.
-Do NOT delete entrance animations just to make screenshots work — use beforeShot.
-
-Slow-booting pages (3D scenes, heavy asset loads): pass waitFor:"window.__yourReadyFlag"
-to poll until the app is ready (own 15s budget), keep beforeShot for the setup itself
-(10s budget). The caption reports how long each phase took.
-
-Console output: the caption carries warnings/errors by default; pass console:'all'
-to also read your own console.log output from the page (grouped, capped).
-
-FILMSTRIP — the eye for ANIMATION. A single still cannot show easing, overshoot,
-hard cuts between tweens, or "the whole move played off-screen". Pass
-frames (2-30 ms offsets within a 30s window, e.g. [0,120,240,400,700]) + trigger:"window.game.reload()" (JS that
-starts the move) and you get ONE contact sheet: the same viewport at each of those
-moments, timestamped. One image = one motion curve — judge attack, overshoot,
-settle and cuts directly. click:"#start" performs a REAL trusted click instead
-(needed for pointer lock / AudioContext / anything gated on a user gesture);
-combine both if the move needs click-then-call. scrollBy:<px> drives REAL wheel
-scrolling spread over the recording (the way to record scroll-driven motion: reveals,
-parallax, snap, sticky), and an ELEMENT PROBE lists which elements moved / faded /
-scaled during the recording, by how much and when (fixed layers, parallax and
-entrances are told apart). The caption also reports frame
-health (fps / p95 / worst frame — catches per-frame decay bugs and jank) and an
-audio event log (every media.play() / bufferSource.start() with its timestamp —
-you cannot hear, but you CAN see when sound was attempted). Pass saveVideo:true
-to also encode the full recording as a .webm under exports/motion/ — you cannot
-watch it, but deliver_files hands it to the user for final judgement.
-For NUMERIC motion data (exact positions/rotations per frame, overshoot %, settle
-time, hard-cut detection) use the trace_motion tool instead — ToolSearch it.
-
-Use this tool when:
-- You finished writing or editing a page / deck and want to verify it looks right
-- The user asks "what does it look like" or "show me the result"
-- You suspect a layout bug and want to see the rendered output
-- You want a closeup of one specific page or element (use pageIndex / selector)
-
-Do NOT use this tool when:
-- the file doesn't exist yet (write it first)
-- You haven't actually changed the design since the last screenshot`,
-    {
-      viewport: z
-        .object({
-          width: z.number().int().min(320).max(3840),
-          height: z.number().int().min(240).max(2160),
-        })
-        .optional()
-        .describe('Browser viewport size; defaults to the deck-aspect declared on canvas wrap (16:9=1920×1080, 9:16=1080×1920, 16:10=1920×1200, 4:3=1440×1080)'),
-      fullPage: z
-        .boolean()
-        .optional()
-        .describe('Capture full scrollable page instead of just viewport (default false — N× more expensive for N-page deck). Ignored if selector or pageIndex is given.'),
-      selector: z
-        .string()
-        .optional()
-        .describe('If given, capture only the first element matching this CSS selector (overrides fullPage). Works on continuously-animating elements too (WebGL canvas etc.) — the capture crops the element box, it does not wait for the element to stop repainting. Plain CSS only — no playwright syntax (:has-text, >>, nth=), ASCII quotes not HTML entities (&quot; breaks the parse)'),
-      detail: z
-        .enum(['normal', 'high'])
-        .optional()
-        .describe("Raster detail. 'normal' (default) renders at 0.6x pixels — ~45% cheaper in context, enough for layout/spacing/palette checks. 'high' = full resolution, use only when you must read small text."),
-      pageIndex: z
-        .number()
-        .int()
-        .min(1)
-        .optional()
-        .describe('DECK ONLY. If given, capture only section[data-page="N"] (overrides fullPage)'),
-      device: z
-        .enum(['desktop', 'tablet', 'mobile'])
-        .optional()
-        .describe('SITE ONLY. Render at a real device width to check responsive behaviour: desktop=1440, tablet=834, mobile=390. Ignored for decks.'),
-      waitFor: z
-        .string()
-        .optional()
-        .describe("JS expression polled every 100ms until truthy BEFORE beforeShot runs (own 15s budget). Use for slow-booting pages: waitFor:\"window.__game\" waits for the app to be ready, then beforeShot only does the setup. Timeout doesn't block the shot — the caption tells you the condition never became truthy."),
-      beforeShot: z
-        .string()
-        .optional()
-        .describe("Run before capture: 'scrollToBottom' scrolls through the page and back (fires all scroll-linked animations — ScrollTrigger / IntersectionObserver reveals), or pass a JS snippet evaluated in page context (await supported, 10s timeout). Don't burn this budget waiting for boot — pair with waitFor. Errors don't block the shot, they're reported in the caption. Do not reload or navigate inside it (location.reload / location.href =): the capture then fails. To shoot a stored setting (language, theme), switch it through the page's own control instead."),
-      scrollTo: z
-        .union([z.number(), z.string()])
-        .optional()
-        .describe("Scroll the REAL viewport here, then capture one viewport-sized frame. Accepts a pixel number, a percentage string ('50%', '100%'), or a CSS selector to scroll into view. Use this — not fullPage — to check anything scroll-driven: reveal animations, scroll-snap landing points, parallax offsets, sticky headers. fullPage cannot show these because it expands the viewport to the whole document instead of scrolling (innerHeight never changes, so scroll handlers never fire the way they do for the user). Implies fullPage=false."),
-      settleMs: z
-        .number()
-        .int()
-        .min(0)
-        .max(10000)
-        .optional()
-        .describe('Extra wait after scrolling before the shot (0-10000 ms, default 350; larger values run as 10000) — long CSS transitions may need more.'),
-      console: z
-        .enum(['warn', 'all'])
-        .optional()
-        .describe("Console capture level for the caption. Default 'warn' returns only warnings/errors (the count of filtered log lines is reported). Pass 'all' to also get console.log/info/debug output — the only way to read your own debug logging from the page."),
-      frames: z
-        .array(z.number().min(0).max(30000))
-        .min(1)
-        .max(30)
-        .optional()
-        .describe('FILMSTRIP mode: capture the viewport at these millisecond offsets (t=0 is the moment click/trigger fires) and return ONE timestamped contact sheet. 2-30 offsets. The sheet has a FIXED pixel budget (~2.3MP, ≈3-3.7k tokens whatever the count), so more cells = smaller cells: 6-10 to read detail, 12-16 for a whole choreography, 20-30 only for long sequences where rhythm matters more than detail (crop with selector/pageIndex or zoom afterwards). Place them where the motion lives (dense during the move, one late frame to confirm settle). Include 0 to see the starting pose. With selector/pageIndex the cells are cropped to that element (it must be inside the viewport).'),
-      trigger: z
-        .string()
-        .optional()
-        .describe('FILMSTRIP: JS snippet that STARTS the motion, evaluated in page context at t=0 (await OK). E.g. "window.game.startReload()" or dispatching a keydown. Runs after waitFor/beforeShot. Omit to record whatever is already animating.'),
-      click: z
-        .string()
-        .optional()
-        .describe('FILMSTRIP: CSS selector to REAL-click at t=0 (trusted user gesture — required for pointer lock, AudioContext, autoplay). Fires before trigger if both are given.'),
-      saveVideo: z
-        .boolean()
-        .optional()
-        .describe('FILMSTRIP: also encode the full recording as .webm under exports/motion/ (real timing preserved, jank and all). You cannot watch it — use deliver_files to hand it to the user.'),
-      scrollBy: z.number().min(-8000).max(8000).optional()
-        .describe('FILMSTRIP: pixels of REAL wheel scrolling dispatched over the recording window (positive = down; -8000 to 8000, values outside run at the nearest limit). Use this for scroll-driven motion (reveal / parallax / snap / sticky) — it is what a visitor does; trigger/click are for JS-started moves. Can combine with trigger/click.'),
-      elements: z.boolean().optional()
-        .describe('FILMSTRIP: run the element probe (default true): per-frame position/opacity/scale of the elements likely to move, reported as who moved, how much, when. Set false to save a little CPU.'),
-      pages: z
-        .string()
-        .optional()
-        .describe('WORD (.docx) ONLY. Which pages to render: "3", "2-5", or "all". Defaults to the first 2 pages; max 6 per call. Ignored for decks and sites.'),
-      path: z
-        .string()
-        .optional()
-        .describe(CANVAS_PATH_DESC),
-      live: z.boolean().optional().describe(LIVE_PARAM_DESC),
-    },
-    async ({ viewport, fullPage, selector, pageIndex, detail, device, waitFor, beforeShot, pages, scrollTo, settleMs, console: consoleLevel, frames, trigger, click, saveVideo, scrollBy, elements, path: relPath, live }) => {
+    SCREENSHOT_CANVAS_DESCRIPTION,
+    SCREENSHOT_CANVAS_SCHEMA,
+    async ({ viewport, fullPage, selector, pageIndex, detail, device, waitFor, beforeShot, pages, scrollTo, settleMs, console: consoleLevel, frames, trigger, click, saveVideo, scrollBy, elements, probe, shot: wantShot, saveTo, path: relPath, live }) => {
       // 任务模型（2026-07-28）：deck 住 tasks/<任务>/canvas.html。寻址统一走
       // canvas-target（显式 path → 本会话当前 deck → cwd/canvas.html → 唯一任务 deck）
       const target = await resolveCanvasTarget(workspaceRoot, relPath, sessionId);
       if (!target.ok) return { content: [{ type: 'text', text: target.message }], isError: true };
       // 形态分流按**能力位**不按形态名：能渲染的（docx）走 LibreOffice 页图管线，
       // 能浏览的（deck / site）继续往下走 playwright。加第四种形态时改注册表不改这里。
-      if (can(target.kind, 'renderable')) return screenshotDocx(target, { pages, detail });
+      // probe / shot / saveTo 跟形态、胶片条的组合不静默忽略：不适用就拒并说明（09-17）
+      const docx = can(target.kind, 'renderable');
+      const conflict = argConflict(docx ? 'docx' : 'page', { probe, shot: wantShot, saveTo, frames });
+      if (conflict) return { content: [{ type: 'text', text: conflict }], isError: true };
+      if (docx) return screenshotDocx(target, { pages, detail, saveTo, shot: wantShot, workspaceRoot, projectId, ctx });
       const notBrowsable = requireBrowsable(target);
       if (notBrowsable) return { content: [{ type: 'text', text: notBrowsable }], isError: true };
       const canvasPath = target.absPath;
@@ -326,11 +171,25 @@ Do NOT use this tool when:
           }
         }
 
+        // ── probe（09-17，iss_mtvtvqs2_0ad4）：waitFor / beforeShot / scrollTo+settle 之后、截图之前求值，
+        // 读到的就是截图那一刻的状态。胶片条没有「那一刻」，在录制结束后跑（见下）。shot:false 到此为止，只回文字
+        const filming = Array.isArray(frames) && frames.length > 0;
+        let probeRes = null;
+        if (probe && !filming) {
+          probeRes = await runProbe(page, probe);
+          timing.push(`probe ${(probeRes.ms / 1000).toFixed(1)}s`);
+        }
+        if (wantShot === false) {
+          const notes = [opened.viaHttp ? 'Loaded over http, same origin as the user preview.' : null,
+            gotoNote, scrollNote, waitForNote, beforeShotNote];
+          return { content: [{ type: 'text', text: probeOnlyText({ relPath: target.relPath, viewport: vp, live: acq.live, probeRes, notes, timing, diagSummary: diag.summary() }) }] };
+        }
+
         // ── 胶片条（2026-08-19，iss_mszv782a_toab）──
         // 动画的好坏在时间轴上，静帧看不见缓动/过冲/硬切。CDP screencast 录一段
         // （渲染进程每次重绘推一帧、帧带 epoch 时间戳 —— page.screenshot 连拍一张
         // 100~300ms，压不进 120ms 帧距），按请求时刻取最近帧，拼一张 contact sheet。
-        if (frames && frames.length) {
+        if (filming) {
           const wanted = [...frames].sort((a, b) => a - b);
           const durationMs = Math.max(300, Math.round(Math.max(...wanted)));
 
@@ -366,7 +225,8 @@ Do NOT use this tool when:
             shotMaxH: Math.max(240, Math.round(vp.height * rasterScale)),
           });
           const y1 = await page.evaluate(() => window.scrollY).catch(() => y0);
-          const probe = elements !== false ? elementMotionReport(rec.elems, { scrolledPx: y1 - y0 }) : null;
+          const motion = elements !== false ? elementMotionReport(rec.elems, { scrolledPx: y1 - y0 }) : null;
+          const endProbe = probe ? await runProbe(page, probe) : null;   // 录制结束时的状态（09-17）
           if (rec.shots.length === 0) {
             return {
               content: [{
@@ -409,7 +269,8 @@ Do NOT use this tool when:
               + `viewport ${vp.width}x${vp.height} (t=0 = the moment click/trigger fired; labels show requested vs captured time)`,
             cells,
             ...(cropNote ? [cropNote] : []),
-            ...(probe ? elementMotionLines(probe) : []),
+            ...(endProbe ? probeLines(endProbe).map((l, i) => (i ? l : l.replace(/^probe /, 'probe (after the recording) '))) : []),
+            ...(motion ? elementMotionLines(motion) : []),
             ...motionCaptionLines(rec),
             ...(videoNote ? [videoNote] : []),
             ...(gotoNote ? [gotoNote] : []),
@@ -554,6 +415,7 @@ Do NOT use this tool when:
           `Screenshot of ${target.relPath} (layout ${vp.width}x${vp.height} @${rasterScale}x raster, ${captureMode})`
           + (shotDegraded ? '（常规截图等稳定帧超时——页面在持续动画（WebGL/rAF），已改抓当前帧：画面是真实的某一瞬间，动画中间态属正常）' : '')
           + (longPageNote ? `（${longPageNote}）` : ''),
+          ...probeLines(probeRes),
         ];
         // 加载通道写进 caption：agent 不用再靠"把 location.protocol 写进 DOM 再截一张"
         // 去反推自己被什么方式打开了（问题库 iss_msxk2oci_0v0v 就是这么查了四轮）

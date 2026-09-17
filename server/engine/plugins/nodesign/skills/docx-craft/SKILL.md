@@ -200,3 +200,7 @@ screenshot_canvas →  看版式
 `raw` 就是那个 .docx 本身 —— **它就是交付物**，不是"导出的副产品"，这跟 deck /
 站点反过来。`pdf` 走 LibreOffice，是快速预览用的；要发出去的正式 PDF 让用户在
 Word 里导（域和字体都对）。
+
+用户要**页图**（PNG）时：`screenshot_canvas` 传 `saveTo:"交付/<文档名>页图"`（只落盘不看图再加
+`shot:false`），页图写进这个文件夹，再用 `deliver_files` 交这个文件夹（整夹打成一个 zip）。
+页图就是第五节那套渲染，字体失真一并告诉用户。

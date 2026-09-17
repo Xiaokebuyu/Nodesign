@@ -121,7 +121,9 @@ ${ACTIONS_DOC}
 One action per call. For a sequence (click field → type → Enter → look) use
 artifact_batch. To MEASURE the state you reached (easing filmstrip, computed
 styles, cascade), call screenshot_canvas / trace_motion / get_computed_styles /
-explain_style / query_elements with live:true.`,
+explain_style / query_elements with live:true. To READ a value from page JS
+(scroll position, game state, a fetch result), call screenshot_canvas with
+live:true, probe:"<expression>", shot:false — this tool has no eval.`,
     COMPUTER_SCHEMA,
     async (a) => {
       try {

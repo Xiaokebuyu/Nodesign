@@ -295,7 +295,7 @@ export function attachPageDiagnostics(page, opts = {}) {
  * 十几次超时还误判功能坏了（iss_msz236jw_9eui）。"等页面就位"这半件事
  * 已经拆给 waitFor 参数（runWaitFor，独立计时），beforeShot 只该剩设置动作。
  */
-const BEFORE_SHOT_TIMEOUT_MS = 10000;
+export const BEFORE_SHOT_TIMEOUT_MS = 10000;   // probe 同口径（09-17，helpers/shot-probe.js）
 
 /**
  * waitFor：截图前轮询一个页面表达式直到为真（独立 15s 预算，不挤占 beforeShot）。

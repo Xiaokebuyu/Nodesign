@@ -20,10 +20,12 @@
  */
 
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { checkCjkFonts } from '../../../lib/cjk-fonts.js';
 import { execFileSync } from 'node:child_process';
 import { renderDocx, cleanupRender } from '../../../lib/docx/render.js';
 import { normalizeShot } from './helpers/shot-pipeline.js';
+import { checkSaveDir, saveShotFiles, pageImageName, saveLines } from './helpers/save-shots.js';
 
 /** 一次最多回几页 —— 40 页文档全渲回来是上下文炸弹 */
 const MAX_PAGES = 6;
@@ -61,10 +63,15 @@ export function parsePageRange(pages) {
 
 /**
  * @param {{absPath:string, relPath:string}} target  已解析的产物目标
- * @param {{pages?:string, detail?:'normal'|'high'}} opts
+ * @param {{pages?:string, detail?:'normal'|'high', saveTo?:string, shot?:boolean,
+ *   workspaceRoot?:string, projectId?:string, ctx?:object}} opts
+ *   saveTo（09-17，iss_mt9n6bm2_nthg）：本次渲出的页图同时写进这个工作区目录；shot:false 时只落盘不回图
  * @returns {Promise<{content:Array, isError?:boolean}>}  MCP 工具返回体
  */
 export async function screenshotDocx(target, opts = {}) {
+  // saveTo 的词法判定放在渲染之前：路径不合法就别白渲一轮
+  const dir = opts.saveTo ? checkSaveDir(opts.workspaceRoot, opts.saveTo) : null;
+  if (dir && !dir.ok) return { content: [{ type: 'text', text: dir.message }], isError: true };
   try {
     await fs.access(target.absPath);
   } catch {
@@ -130,6 +137,23 @@ export async function screenshotDocx(target, opts = {}) {
       + '**multiple 行距下的页数和分页位置也不能**（排满的页真 Word 会多出页；'
       + '页数敏感的文档行距用 exact/atLeast 磅值，两边就一样高了）。',
     );
+
+    // 落盘用渲染出来的原 PNG（分辨率即本次 dpi），不另渲；临时目录在 finally 里才删，所以要在这之前写
+    if (dir) {
+      const width = String(total ?? (from + res.pngs.length - 1)).length;
+      const base = path.basename(target.relPath, path.extname(target.relPath));
+      const items = res.pngs.map((file, i) => ({ name: pageImageName(base, from + i, width), file }));
+      const saved = await saveShotFiles({ workspaceRoot: opts.workspaceRoot, projectId: opts.projectId, dirRel: dir.rel, items, ctx: opts.ctx });
+      if (!saved.ok) {
+        const partial = saved.saved?.length ? `\n（这之前已写入：${saved.saved.join(', ')}）` : '';
+        return { content: [{ type: 'text', text: `${caption[0]}\n${saved.message}${partial}` }], isError: true };
+      }
+      caption.push(...saveLines(saved, dir.rel));
+    }
+    if (opts.shot === false) {
+      caption.push('（shot:false：页图只落盘，没有回图）');
+      return { content: [{ type: 'text', text: caption.join('\n') }] };
+    }
 
     // 跟全站眼睛同口径（08-21）：过 normalizeShot → 视觉档尺寸 + webp q82。视觉模型按像素
     // 网格计 token，PNG 原图多出来的字节它看不见；公文页 PNG 260KB → webp 97KB，放大

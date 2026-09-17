@@ -49,6 +49,8 @@ export const PARALLEL_SAFE_TOOLS = new Set([
   // 感知量具：一次性模式开 chromium 过进程级槽位（helpers/browser-slots.js，托管 1 只 / 本地 2 只），
   // 量帧时间的（trace_motion、profile_scroll、胶片条）独占全部槽位；live:true 走产物会话的项目锁，天然排队。
   // look_at_board 另有一条自己的串行闸（打开的是整个前端应用）
+  // screenshot_canvas 的 saveTo（09-17）把 docx 页图写进 agent 指定的目录：逐级 mkdir 容忍 EEXIST、逐个原子写，
+  // 两次并行写到同名文件 = 串行时后一次覆盖前一次（返回里报覆盖），同 generate_image 的 outputName，不算新问题
   'look_at_board', 'screenshot_canvas', 'screenshot_url', 'list_pages', 'query_elements',
   'get_computed_styles', 'explain_style', 'trace_motion', 'profile_scroll',
 ]);

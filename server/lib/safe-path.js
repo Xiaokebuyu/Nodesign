@@ -17,6 +17,36 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
+import { RESERVED_DIRS } from './task-scan.js';
+
+/**
+ * 按用户/agent 给的相对路径动工作区时共用的三道词法闸（越界 / 保留目录 / `.` 打头的顶层目录）。
+ *
+ * 09-08 在 api/assets/entries.js 立（删除类路由），09-17 挪到这里：screenshot_canvas 的
+ * saveTo（问题库 iss_mt9n6bm2_nthg）也要按同一份判据落盘，引擎侧不该为此 import api 层。
+ * entries.js 从这里引用，行为不变。
+ *
+ * ⚠️ 第三道（`.` 打头的顶层目录）原来只有 `/rename` 和 `POST /folders` 查了，
+ * `DELETE /folders` **漏了** —— 于是 `DELETE /folders/.git` 能一路走到 `fs.rm`。
+ * 抄守卫要抄正确性不是抄形状，所以合成一份，调用点共用。
+ * 只管词法；软链穿透另走下面的 safeResolveRead / safeResolveWrite。
+ *
+ * @param {string} rel   工作区相对路径（正斜杠）
+ * @param {string} root  工作区根（已 resolve）
+ * @returns {string|null} 出错原因；`null` = 放行
+ */
+export function guardRel(rel, root) {
+  const abs = path.resolve(root, rel);
+  if (!abs.startsWith(root + path.sep)) return 'path escapes workspace';
+  // ⛔ 09-08 评审：拿**归一化之后**的相对路径逐段查，不拿原始入参的第一段。原写法只看 `rel.split('/')[0]`，
+  //   而 Express 只归一化字面的 `..`，编码斜杠不归一 —— `DELETE /folders/a%2f..%2f.git` 到这里 rel='a/../.git'，
+  //   seg0='a' 放行、abs 却是 <root>/.git，直接进 fs.rm。归一化后 relN='.git'，每一段都查一遍。
+  const relN = path.relative(root, abs).split(path.sep);
+  if (!relN.length || !relN[0]) return 'path escapes workspace';
+  if (relN.includes('..')) return 'path escapes workspace';
+  if (RESERVED_DIRS.has(relN[0]) || relN[0].startsWith('.')) return 'reserved directory';
+  return null;
+}
 
 /** 词法层：拼出绝对路径并确认字面上没跑出去。跑出去返回 null */
 function lexical(rootAbs, rel) {
