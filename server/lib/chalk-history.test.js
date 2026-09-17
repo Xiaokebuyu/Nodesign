@@ -12,6 +12,7 @@ import { archiveChalkBody, historyPathFor, historyCount, historyCounts } from '.
 import { rewriteChalkBody } from './chalk-rewrite.js';
 import { renderChalk, parseChalk } from './chalk.js';
 import { seatable } from '../engine/runs/board-seater.js';
+import { userAnnotationsOn, annotationNote } from './chalk-annotations.js';
 
 let dir; let abs;
 const write = (body, extra = {}) => fs.writeFile(abs, renderChalk({ body, by: 'agent', at: '2026-09-17T10:00:00.000Z', ...extra }), 'utf8');
@@ -43,6 +44,33 @@ describe('archiveChalkBody', () => {
     expect(m.get('配色讨论.md')).toBe(1);
     expect(m.has('没写过.md')).toBe(false);
     expect(m.size).toBe(1);
+  });
+});
+
+describe('userAnnotationsOn（改写时把用户的蓝字一起归档）', () => {
+  const board = () => ({
+    objects: {
+      'notes/板书/卡.md': { x: 0, y: 0 },
+      'text:u1': { x: 500, y: 0, kind: 'text', data: { t: '这里换个说法' } },
+      'text:a1': { x: 500, y: 300, kind: 'text', data: { t: 'agent 自己的注' } },
+    },
+    bindings: {
+      b1: { type: 'annotates', from: 'text:u1', to: 'notes/板书/卡.md', by: 'user' },
+      b2: { type: 'annotates', from: 'text:a1', to: 'notes/板书/卡.md', by: 'agent' },
+      b3: { type: 'contrast', from: 'text:u1', to: 'notes/板书/卡.md', by: 'user' },
+    },
+  });
+
+  it('只收用户写的 annotates 蓝字：agent 自己的注与别的线型都不算', () => {
+    const r = userAnnotationsOn(board(), 'notes/板书/卡.md');
+    expect(r.ids).toEqual(['text:u1']);
+    expect(r.edgeIds).toEqual(['b1']);
+    expect(annotationNote(r.texts)).toBe('这里换个说法');
+  });
+
+  it('没有标注就没有那一行说明', () => {
+    expect(annotationNote([])).toBeNull();
+    expect(userAnnotationsOn(board(), '别的卡').ids).toEqual([]);
   });
 });
 

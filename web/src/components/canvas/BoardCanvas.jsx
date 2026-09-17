@@ -820,7 +820,7 @@ export default function BoardCanvas({
       ? { x: Math.max(...rects.map(r => r.x + r.w)) + 24, y: Math.min(...rects.map(r => r.y)) }
       : fallbackAt;
     if (!at) return;
-    const noteId = handleCreateText(t, at);
+    const noteId = handleCreateText(t, at, { color: 'blue' });   // 蓝＝用户说的话（09-17 板书树，墨是 agent 的）
     if (!noteId) return;
     // 文字落好了才连线 —— 端点必须真实存在，否则画布上留一条通向虚空的线
     const stamp = `${Date.now().toString(36)}${Math.floor(performance.now() % 1000)}`;

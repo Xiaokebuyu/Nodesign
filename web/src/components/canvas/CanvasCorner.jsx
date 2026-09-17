@@ -20,6 +20,18 @@ import { PAPER, PAPER_SHADOW, INK_EDGE } from '../../lib/paper.js';
  * - 收起后留那颗小钮：入口必须同时是出口，不能只剩一个快捷键（Ctrl/⌘+/ 两头切）。
  * 表和判据在 lib/canvas-shortcuts.js。
  */
+/**
+ * 颜色图例（2026-09-17 板书树）：站主定「要颜色，红色最重要，图例要的」，位置定在快捷键这一处。
+ * 调查里三类以上来源共同的一条是「颜色含义要事先约定」，对我们的翻译就是这张表 ——
+ * 用户不看它也能用，但至少有处可查。⚠️ 金（#C9A227）在纸上对比度只有 2.11，不写正文、不进这张表。
+ */
+const LEGEND = [
+  { key: 'ink', color: PAPER.ink, label: '正文、过程' },
+  { key: 'red', color: PAPER.red, label: '最重要：结论、先看这里' },
+  { key: 'pencil', color: PAPER.pencil, label: '材料、引用、草稿' },
+  { key: 'blue', color: PAPER.blue, label: '用户写的：标注、提问' },
+];
+
 /** 画布比这窄就只留一颗小钮：竖列右端约 360，底边工具栏左端 = 画布宽/2 − 243 */
 const COMPACT_BELOW = 1200;
 /** 收放状态（'0' = 只留小钮）。跟工具栏一样是用户的一次表态，刷新还记得 */
@@ -106,8 +118,19 @@ function Sheet({ mac }) {
   );
 }
 
+/** 一行：一道颜色 + 它的含义 */
+function LegendRow({ color, label }) {
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+      <span aria-hidden style={{ width: 14, height: 3, borderRadius: 2, background: color, flex: '0 0 auto' }} />
+      <span>{t(label)}</span>
+    </span>
+  );
+}
+
 function KeyStrip({ compact }) {
   const [sheet, setSheet] = useState(false);
+  const [legend, setLegend] = useState(false);
   const [open, setOpen] = useState(() => {
     try { return localStorage.getItem(OPEN_KEY) !== '0'; } catch { return true; }
   });
@@ -184,6 +207,15 @@ function KeyStrip({ compact }) {
             onClick={() => setSheet((v) => !v)}
             style={{ ...linkBtn, textAlign: 'left', textDecoration: 'underline', textUnderlineOffset: 3 }}
           >{sheet ? t('收起') : t('全部快捷键')}</button>
+          {/* 颜色图例：默认收着，点开四行。板上的颜色是有约定的，这里是那份约定唯一能查的地方 */}
+          <button
+            type="button"
+            data-canvas-legend
+            aria-expanded={legend}
+            onClick={() => setLegend((v) => !v)}
+            style={{ ...linkBtn, textAlign: 'left', textDecoration: 'underline', textUnderlineOffset: 3 }}
+          >{legend ? t('收起颜色') : t('颜色是什么意思')}</button>
+          {legend && LEGEND.map((l) => <LegendRow key={l.key} color={l.color} label={l.label} />)}
         </div>
       ) : (
         <button

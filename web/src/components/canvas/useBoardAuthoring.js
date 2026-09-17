@@ -43,7 +43,7 @@ export function useBoardAuthoring({
    *
    * 字体走设置里选的默认值（fontPref），跟涂鸦一样只活在 board.json。
    */
-  const handleCreateText = useCallback((text, at) => {
+  const handleCreateText = useCallback((text, at, { color = 'ink' } = {}) => {
     const t = String(text || '').trim();
     if (!t) return null;
     const id = `text:${Date.now().toString(36)}${Math.floor(performance.now() % 1000)}`;
@@ -57,7 +57,7 @@ export function useBoardAuthoring({
       x: Math.round(at.x), y: Math.round(at.y), z: ++zMaxRef.current,
       w: box.w, h: box.h,
       kind: 'text',
-      data: { t, font: canvasFont.font, size: canvasFont.size, color: 'ink' },
+      data: { t, font: canvasFont.font, size: canvasFont.size, color },
       ...(zid ? { zone: zid } : {}),
     });
     return id;

@@ -137,7 +137,7 @@ function sanitizeCanvasData(kind, data) {
       ...(format === 'md' ? { format } : {}),
       font: TEXT_FONTS.includes(data?.font) ? data.font : 'kai',
       size: TEXT_SIZES.includes(data?.size) ? data.size : 'md',
-      color: ['ink', 'red', 'pencil', 'brass'].includes(data?.color) ? data.color : 'ink',
+      color: ['ink', 'red', 'pencil', 'brass', 'blue'].includes(data?.color) ? data.color : 'ink',
       // lid = sketch_on_board 里那个局部 id（linfan / zhangwei…）。留着它，
       // edit_sketch 才能按 agent 当初起的名字找回这个节点 —— 否则局部 id 一落定
       // 就作废，加条线得先去翻上一次调用的返回。这层是白名单重建，不列就丢。
@@ -151,7 +151,7 @@ function sanitizeCanvasData(kind, data) {
   if (!d || !/^[\dMLQCZ ,.\-eE]+$/.test(d)) return null;
   return {
     d,
-    color: ['ink', 'red', 'pencil', 'brass'].includes(data.color) ? data.color : 'ink',
+    color: ['ink', 'red', 'pencil', 'brass', 'blue'].includes(data.color) ? data.color : 'ink',
     width: clampNum(data.width, 1, 24, 2),
     ...sanitizeTransform(data),
   };

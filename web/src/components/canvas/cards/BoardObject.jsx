@@ -37,6 +37,7 @@ const SCRIBBLE_INK = {
   red: PAPER.red,
   pencil: PAPER.pencil,
   brass: CANVAS.brass,
+  blue: PAPER.blue,     // 用户的笔（09-17）
 };
 
 /**

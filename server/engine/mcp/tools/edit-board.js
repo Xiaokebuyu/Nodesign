@@ -33,6 +33,7 @@ import { reflowGroup, pushDownAfterGrow } from '../../../lib/board-reflow.js';
 import { lineCrossings } from '../../../lib/line-route.js';
 import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
 import { boardLineage } from '../../../lib/lineage.js';
+import { userAnnotationsOn, annotationNote } from '../../../lib/chalk-annotations.js';
 import { makeEndpointResolver } from '../../../lib/board-endpoint.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { transformGroup } from '../../../lib/board-transform.js';
@@ -202,14 +203,20 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
             // 落盘 + 量高收成一份（lib/chalk-rewrite.js，2026-08-30）：set_vars 做的是
             // 同一件事，抄第二份必然漏掉「用户拖出来的留白留得住」那条 —— 三条语义里
             // 只有它漏了不报错，只是用户的排版悄悄没了。
+            // 回复即改写、改写即存档（09-17 板书树）：贴在这张卡上的用户蓝字标注跟旧正文一起进历史，
+            // 板上撤掉 —— 那句话已经被这次改写答掉了，留着只会攒成版面上的杂物。
+            const ann = userAnnotationsOn({ objects: live, bindings: liveBindings }, id);
             let box2;
-            try { box2 = await rewriteChalkBody(abs, o.text, e); } catch (ex) {
+            try { box2 = await rewriteChalkBody(abs, o.text, e, { note: annotationNote(ann.texts) }); } catch (ex) {
               fail(ex?.code === 'STATE_TABLE' ? `⛔ ${ex.message}` : `${id} 文件读不到（磁盘上已无此路径？）`); continue;
             }
+            for (const aid of ann.ids) { delete live[aid]; objects[aid] = null; }
+            for (const bid of ann.edgeIds) { bindings[bid] = null; delete liveBindings[bid]; }
             const was = rectOf(id);
             setObj(id, { ...e, w: box2.w, h: box2.h }); ok += 1;
             pushBelow(i, id, was, box2.h);
-            report.push(`· #${i + 1} set_text 重写了板书 ${id} 的正文（线/标注/座位全保留）`);
+            report.push(`· #${i + 1} set_text 重写了板书 ${id} 的正文（线/座位保留）`
+              + (ann.ids.length ? `，用户的 ${ann.ids.length} 条标注已随旧正文归档进 .history（板上撤掉）` : ''));
             continue;
           }
           if (!e || e.kind !== 'text') { fail(`${o.id} 不是文字节点，也不是你的板书文件`); continue; }

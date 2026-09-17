@@ -99,6 +99,30 @@ describe('edit_board move 的 to.by', () => {
   });
 });
 
+describe('改写即归档用户标注（刀四）', () => {
+  it('⭐ agent 改写板书 → 用户的蓝字标注和线一起撤掉，原文进 .history，返回里说明', async () => {
+    const { renderChalk } = await import('../../../lib/chalk.js');
+    const { historyPathFor } = await import('../../../lib/chalk-history.js');
+    const dir = path.join(root, 'notes', '板书');
+    await fs.mkdir(dir, { recursive: true });
+    const rel = 'notes/板书/配色.md';
+    await fs.writeFile(path.join(dir, '配色.md'), renderChalk({ body: '先按暖褐走', by: 'agent' }));
+    await patchBoard(pid, {
+      objects: { [rel]: card(5000, 0), 'text:u9': { x: 5500, y: 0, w: 200, h: 60, kind: 'text', data: { t: '换成冷灰试试' } } },
+      bindings: { bu9: { type: 'annotates', from: 'text:u9', to: rel, by: 'user' } },
+    });
+    const res = await edit({ ops: [{ op: 'set_text', id: rel, text: '改成冷灰，理由是照片偏冷' }] });
+    expect(res.isError).toBeFalsy();
+    expect(res.content[0].text).toContain('1 条标注已随旧正文归档');
+    const after = await readBoard(pid);
+    expect(after.objects['text:u9']).toBeUndefined();
+    expect(after.bindings.bu9).toBeUndefined();
+    const hist = await fs.readFile(historyPathFor(path.join(dir, '配色.md')), 'utf8');
+    expect(hist).toContain('先按暖褐走');
+    expect(hist).toContain('> 用户当时标注：换成冷灰试试');
+  });
+});
+
 describe('pin_to_board', () => {
   it('钉的是叠住的旧版 → 返回说明它仍在现役版身后、要点开才看得见', async () => {
     const pin = makePinToBoardTool({ projectId: pid, sharedRoot: root, ctx: { emit: () => {} } });

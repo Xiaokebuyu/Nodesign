@@ -338,7 +338,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
         '【黑板模式：开】用户此刻在画布上专注思考。这一轮默认这么做：贴着他在看的东西写（place:{by:…}，缺省落他视口）；'
         + '想事情就画成图（write_on_board 给 nodes/edges，小改动用 edit_board 原地改别重画）；'
         + '做完一件东西在它旁边写一条板书（near= 连线说明它说的是谁）；'
-        + '用户标注了板上的东西就接在那条下面回（reply_to=）。侧栏照常回复，但板上已经写的别大段重复。'
+        + '用户标注了板上的板书就改写那条本身（edit_board set_text，把回答并进正文，旧版和他的标注机器会归档）。侧栏照常回复，但板上已经写的别大段重复。'
         + '尺寸守规范（一张图一屏、正文 md 起、一条板书说一件事）；画完 look_at_board 看一眼再收。' });
     }
   } catch { /* 读失败：不注入 */ }
