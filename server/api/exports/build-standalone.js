@@ -25,7 +25,7 @@ import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
+import { makeServerTmpDir } from '../../lib/server-tmp.js';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { fitInjectionBlock } from '../standalone-fit.js';
@@ -438,7 +438,7 @@ function esmShHttpPlugin(importmapImports) {
  */
 export async function extractTailwindCss(rawHtml, agentFontFamily = null) {
   // 写 raw html 到 tmpfile，tailwindcss CLI 扫描它的 class
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-tw-'));
+  const tmpDir = await makeServerTmpDir('nd-tw-');
   const htmlPath = path.join(tmpDir, 'src.html');
   const cfgPath = path.join(tmpDir, 'tailwind.config.js');
   const inputCssPath = path.join(tmpDir, 'in.css');

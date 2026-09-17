@@ -29,6 +29,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import { platform } from '../../runtime/platform.js';
+import { ensureServerTmpRoot } from '../../lib/server-tmp.js';
 import { autoModeSettings } from './auto-mode-rules.js';
 import { MCP_ALLOW_RULE } from '../mcp/server-name.js';
 import { PLUGIN_ROOT } from './skill.js';
@@ -299,6 +300,9 @@ export function buildIsolationOptions({ cwdRoot, sharedRoot, npmCacheDir, agentT
         denyRead: [
           ...platform.credentialBlacklist(), dataRoot, ...(agentTmpRoot ? [agentTmpRoot] : []),
           path.join(platform.claudeConfigDir, 'projects'),
+          // 服务端临时文件根（09-17）：导出、发布、docx 渲页等装着某个用户内容的临时目录都在这下面。
+          // /tmp 不能整个遮（见 hostPrivateRoots 注释），所以服务端改为统一落在这个固定名字的根里再遮。
+          ensureServerTmpRoot(),
           ...(fence ? hostPrivateRoots() : []),
         ],
         allowRead: [

@@ -22,7 +22,7 @@ import { promises as fs } from 'node:fs';
 import { loProfileFontSubstitutionXcu } from '../cjk-fonts.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { tmpdir } from 'node:os';
+import { makeServerTmpDir } from '../server-tmp.js';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fileUrl } from '../file-url.js';
@@ -50,7 +50,8 @@ async function exists(p) {
  *   失败的话这里已经收干净了，调用方不用管。
  */
 export async function renderDocx(docxPath, opts = {}) {
-  const scratch = await fs.mkdtemp(join(tmpdir(), 'ndocx-'));
+  // 渲页目录装着用户的文档，落在服务端私有临时根（沙盒遮读，09-17）；仍在系统临时目录下，LO 的管道位置不受影响
+  const scratch = await makeServerTmpDir('ndocx-');
   const t0 = Date.now();
   try {
     const inFile = join(scratch, 'in.docx');       // 军规2：ASCII 文件名

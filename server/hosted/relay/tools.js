@@ -15,7 +15,7 @@
  * 拒绝走 sendError（Anthropic 错误形状 + code），客户端把 message 原样给 agent。
  */
 import fs from 'node:fs/promises';
-import os from 'node:os';
+import { makeServerTmpDir } from '../../lib/server-tmp.js';
 import path from 'node:path';
 import { tierDenialForOwner } from '../../engine/mcp/tools/tier-gate.js';
 import { runWebSearch, ProviderError, PROVIDERS } from '../../engine/mcp/tools/web-search-providers.js';
@@ -91,7 +91,7 @@ export function mountRelayTools(router, { sendError, readRawBody, produce = prod
     if (!Array.isArray(refs) || refs.length > REF_MAX) return sendError(res, 400, 'BAD_REFS', `refs 最多 ${REF_MAX} 张`);
 
     // 参考图落成临时文件（produceImage 两条分支都按路径读；codex 还要 -i 附件）
-    const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'relay-img-'));
+    const tmp = await makeServerTmpDir('relay-img-');
     let out = null;
     // ⚠️ 出图要一两分钟，Cloudflare 免费版 100 秒没字节就 524。参数都验过之后先把 200 头发出去，每 15 秒一个空格
     // （JSON.parse 认前导空白），结果最后整段发；这之后的失败也只能是 200 + 错误形状，客户端按 type:'error' 认。

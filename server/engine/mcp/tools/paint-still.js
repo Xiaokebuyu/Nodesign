@@ -21,7 +21,7 @@
  * 但 agent 可以自己去看那些文件挑废图（2026-08-18 解禁），审美判断仍归用户。
  */
 
-import os from 'node:os';
+import { makeServerTmpDir, serverTmpPath } from '../../../lib/server-tmp.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
@@ -103,7 +103,7 @@ async function pushRef({ box, root, relPath, jobId, slot, signal }) {
   if (mk.code !== 0) return { err: `服务器建 refs 目录失败：${(mk.err || '').slice(-200)}` };
   let src = abs; let tmp = null;
   if (shrunk) {
-    tmp = path.join(os.tmpdir(), `h3ref-${jobId}-${slot}.png`);
+    tmp = serverTmpPath(`h3ref-${jobId}-${slot}.png`);
     await fs.writeFile(tmp, shrunk);
     src = tmp;
   }
@@ -274,7 +274,7 @@ export async function paintStills(
         // batch 的 N 张全取回来，别只拿第一张（08-11 前就是丢了后面全部）。
         // 多源拼进一次 scp —— 逐张各开连接的老写法，握手开销能跟生成时间打平（08-11 实测）
         if (!failMsg && remotePaths.length) {
-          const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), `h3pull-${still.jobId}-`));
+          const tmpDir = await makeServerTmpDir(`h3pull-${still.jobId}-`);
           const pull = await runBox(box, 'scp',
             [...scpArgs(box), ...remotePaths.map((r) => `${box.target}:${r}`), tmpDir],
             { timeoutMs: 60_000 + 20_000 * remotePaths.length });

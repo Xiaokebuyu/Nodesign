@@ -11,6 +11,7 @@
  */
 
 import os from 'node:os';
+import { makeServerTmpDir, serverTmpPath } from '../../../lib/server-tmp.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
@@ -156,7 +157,7 @@ export async function rollFilm(
       if (backend === 'modal') {
         if (shot._abs_first_frame) job.first_frame = shot._abs_first_frame;
         if (shot._abs_last_frame) job.last_frame = shot._abs_last_frame;
-        const jp = path.join(os.tmpdir(), `nd-${shot.jobId}.json`);
+        const jp = serverTmpPath(`nd-${shot.jobId}.json`);
         await fs.writeFile(jp, JSON.stringify([job]));
         const r = await runModal(['run', 'h3_comfy.py', '--jobs-file', jp], { cwd: H3_REPO, signal, timeoutMs: PER_SHOT_TIMEOUT_MS });
         fs.unlink(jp).catch(() => { /* */ });
@@ -176,7 +177,7 @@ export async function rollFilm(
           job[slot] = `~/${remote}`;
         }
         if (!failMsg) {
-          const jl = path.join(os.tmpdir(), `nd-${shot.jobId}.json`);
+          const jl = serverTmpPath(`nd-${shot.jobId}.json`);
           await fs.writeFile(jl, JSON.stringify([job]));
           const upJ = await runBox(box, 'scp', [...scpArgs(box), jl, `${box.target}:nd_jobs/${shot.jobId}.json`], { timeoutMs: 30_000, signal });
           fs.unlink(jl).catch(() => { /* */ });
@@ -185,7 +186,7 @@ export async function rollFilm(
             const gen = await runBox(box, 'ssh', [...sshArgs(box), `python3 ~/h3box.py video ~/nd_jobs/${shot.jobId}.json`], { timeoutMs: PER_SHOT_TIMEOUT_MS, signal });
             if (gen.code !== 0 || !gen.out.includes('success')) failMsg = `渲染失败（exit ${gen.code}）：${(gen.err || gen.out).slice(-600)}`;
             else {
-              const pd = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-film-'));
+              const pd = await makeServerTmpDir('nd-film-');
               const pull = await runBox(box, 'scp', [...scpArgs(box), `${box.target}:outputs/${shot.jobId}_*.mp4`, pd], { timeoutMs: 120_000, signal });
               const got = pull.code === 0 ? (await fs.readdir(pd)).filter((f) => f.endsWith('.mp4')) : [];
               if (got.length) localMp4 = path.join(pd, got[0]);

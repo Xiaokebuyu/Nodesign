@@ -11,7 +11,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
+import { makeServerTmpDir } from '../../lib/server-tmp.js';
 import { fileUrl } from '../../lib/file-url.js';
 import { resolveDeckSize, extractDeckAspect } from '../../shared/deck.js';
 import { fitInjectionBlock } from '../standalone-fit.js';
@@ -42,7 +42,7 @@ export async function prepareExportPage(browser, filePath, opts = {}) {
   if (isHybridHtml(html)) {
     try {
       const baked = await buildStandaloneHtml(html, { sessionRoot: opts.sessionRoot, baseDir: path.dirname(filePath) });
-      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-export-'));
+      const tmpDir = await makeServerTmpDir('nd-export-');
       const tmpFile = path.join(tmpDir, 'baked.html');
       await fs.writeFile(tmpFile, baked, 'utf8');
       loadPath = tmpFile;

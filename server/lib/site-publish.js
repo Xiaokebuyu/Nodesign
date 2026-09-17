@@ -17,7 +17,7 @@
 
 import { promises as fs } from 'fs';
 import path from 'path';
-import os from 'os';
+import { makeServerTmpDir } from './server-tmp.js';
 import { can, DENIAL } from '../auth/tier.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
@@ -108,7 +108,7 @@ async function resolveSiteRoot(pid, key, root) {
 
 /** staging：与整站 zip 同语义（产物根 + .ndignore + assets 副本 + 相对路径改写） */
 async function stageSite(pid, { taskDir, root, rootAbs }) {
-  const stage = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-publish-'));
+  const stage = await makeServerTmpDir('nd-publish-');
   const ignore = await loadIgnore(taskDir);
   const files = await walkTaskFiles(rootAbs, { maxDepth: 6, ignore, ignoreBase: taskDir });
   let staged = 0;

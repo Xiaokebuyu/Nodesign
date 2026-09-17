@@ -256,3 +256,11 @@ describe('plugin 目录不许 Bash 写 + additionalDirectories（09-17）', () =
 
   it('清理', () => { fs.rmSync(tmp, { recursive: true, force: true }); });
 });
+
+describe('服务端临时文件根（09-17）', () => {
+  it('Bash 沙盒遮读 nd-srv 根（导出、发布、docx 渲页的临时目录都在里面）', async () => {
+    const { SERVER_TMP_ROOT } = await import('../../lib/server-tmp.js');
+    const { sandbox } = buildIsolationOptions({ cwdRoot: '/w', sharedRoot: null, npmCacheDir: '/data/.npm-cache', dataRoot: '/data', env: {} });
+    expect(sandbox.filesystem.denyRead).toContain(SERVER_TMP_ROOT);
+  });
+});

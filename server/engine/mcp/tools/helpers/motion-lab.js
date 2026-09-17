@@ -24,8 +24,8 @@
  */
 
 import path from 'node:path';
-import os from 'node:os';
 import { promises as fs } from 'node:fs';
+import { makeServerTmpDir } from '../../../../lib/server-tmp.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -502,7 +502,7 @@ export async function composeSheet(picked, { crop = null, cropRefW = null } = {}
  */
 export async function encodeWebm(shots, outAbs) {
   if (shots.length < 2) throw new Error('need at least 2 captured frames to encode video');
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-motion-'));
+  const tmp = await makeServerTmpDir('nd-motion-');
   try {
     const lines = ['ffconcat version 1.0'];
     for (let i = 0; i < shots.length; i += 1) {
