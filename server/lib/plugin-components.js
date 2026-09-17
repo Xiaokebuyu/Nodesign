@@ -51,6 +51,17 @@ export function componentError(bad) {
  * （loader 那边还有一份），是把能造成分歧的形态在上传口全拒：重复 key、多行标量（| >）、非 key: value 的行、
  * 块内再出现 ---。合规的 SKILL.md 本来就长不成那样。
  */
+/**
+ * ── frontmatter 键白名单（09-17）──
+ *
+ * CLI 认的 skill frontmatter 不只是说明文字：`hooks:` 会在 skill 被调用时把命令挂进 CLI 宿主进程，
+ * 在沙盒外执行（09-17 SDK 探针实测：单行 flow 写法 `hooks: {"PreToolUse": [...]}` 就能触发，
+ * 而上面那条严格形态检查放得过单行写法）；`allowed-tools` / `model` / `context` / `agent` 等键也会改变
+ * 调用时的权限与执行方式。我们的 skill 只需要说明文字，所以只收这几个键（09-17 扫过内置、全部已装、
+ * 市场存档共 41 份 SKILL.md，只用到 name / description / version）。
+ */
+export const SKILL_FRONTMATTER_KEYS = new Set(['name', 'description', 'version', 'license', 'author']);
+
 export function frontmatterStrictErrors(rawText) {
   const m = /^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)/.exec(rawText);
   if (!m) return ['缺 YAML frontmatter（文件要以 --- 开头、--- 结尾的一段 key: value 开场）'];
@@ -63,6 +74,9 @@ export function frontmatterStrictErrors(rawText) {
     const km = /^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/.exec(t);
     if (!km || line !== line.trimStart()) { errors.push(`frontmatter 只接受顶层 \`key: value\`，这一行不是：\`${t.slice(0, 60)}\``); continue; }
     const [, key, value] = km;
+    if (!SKILL_FRONTMATTER_KEYS.has(key)) {
+      errors.push(`frontmatter 不支持 \`${key}\`（只收 ${[...SKILL_FRONTMATTER_KEYS].join(' / ')}；hooks、allowed-tools 一类会改变执行方式的键一律不收）`);
+    }
     if (seen.has(key)) errors.push(`frontmatter 里 \`${key}\` 出现了两次`);
     seen.add(key);
     if (/^[|>]/.test(value)) errors.push(`frontmatter \`${key}\` 用了多行标量（| 或 >），改成一行`);

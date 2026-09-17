@@ -1,0 +1,10 @@
+# agent 会话的全局 git 配置（09-17，托管版；由 agent/isolation.js 以 GIT_CONFIG_GLOBAL 指过来）
+#
+# 为什么不是 ~/.gitconfig：托管版的沙盒把家目录整个遮读，agent 的 `git commit` 读不到身份会失败；
+# 而遮读之前用的是站主本人的姓名与邮箱，会写进用户仓库的提交记录。这里给一个中性身份，
+# 仓库自己的 user.name / user.email 仍然优先。这份文件不放任何凭据助手。
+[user]
+	name = NoDesign Agent
+	email = agent@nodesign.local
+[init]
+	defaultBranch = main

@@ -7,6 +7,8 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import { mergeAgentSettings } from './memory-config.js';
+import { buildIsolationOptions } from './isolation.js';
+import { platform } from '../../runtime/platform.js';
 
 describe('mergeAgentSettings', () => {
   it('isolation 那侧的键原样带过来', () => {
@@ -38,5 +40,19 @@ describe('mergeAgentSettings', () => {
     expect(out.skipWebFetchPreflight).toBe(true);
     expect(out.crossSessionInbound).toBe('refuse');
     expect(out.autoMemoryDirectory).toBeTruthy();
+  });
+
+  it('⭐ 读围栏开关（09-17）经真实的隔离配置合并后还在 settings.permissions 里（托管版有、本地版无）', () => {
+    const iso = buildIsolationOptions({ cwdRoot: '/w', sharedRoot: '/w', npmCacheDir: '/n', dataRoot: '/d', env: {} });
+    const out = mergeAgentSettings(iso.settings, { skipWebFetchPreflight: true, sharedRoot: '/w', crossSessionInbound: 'refuse' });
+    expect(out.permissions.blockReadsOutsideWorkingDirectories).toBe(platform.isLocal ? undefined : true);
+    expect(out.permissions.deny.length).toBeGreaterThan(0);
+    expect(out.permissions.allow.length).toBeGreaterThan(0);
+    expect(out.autoMemoryDirectory).toBeTruthy();
+  });
+
+  it('⭐ 隔离那侧的键被第二参同名键盖掉时当场炸（09-17 出口断言）', () => {
+    expect(() => mergeAgentSettings({ skipWebFetchPreflight: false }, { skipWebFetchPreflight: true }))
+      .toThrow(/skipWebFetchPreflight.*被覆盖/);
   });
 });

@@ -21,4 +21,10 @@ describe('session-loop sdkOptions', () => {
     expect(src).toMatch(/pluginDelivery:\s*'initialize'/);
     expect(code(path.join(here, '..', 'stage', 'session.js'))).toMatch(/pluginDelivery:\s*'initialize'/);
   });
+  it('读围栏与 plugin 写闸的装配（09-17）：additionalDirectories 走 isolation 的同一个函数、带上本项目 tmp；隔离配置拿到已装 plugin；项目级 plugin 根先建好', () => {
+    expect(src).toMatch(/additionalDirectories:\s*agentAdditionalDirectories\(\{[^}]*agentTmpDir:\s*agentDirs\.agentTmpDir[^}]*installedPlugins:\s*installed/);
+    expect(src).toMatch(/buildIsolationOptions\(\{[^}]*installedPlugins:\s*installed/);
+    expect(src).toMatch(/prepareAgentDirs\(\{[^}]*sharedRoot/);
+    expect(src).toMatch(/settings:\s*mergeAgentSettings\(isolation\.settings/);
+  });
 });

@@ -98,6 +98,19 @@ export function claudeAuthPresent() {
 const sandboxEnabled = process.env.NODESIGN_SANDBOX === 'on';
 
 /**
+ * 工作区外的读一律遮住（09-17，只在托管版）
+ *
+ * 09-17 调查坐实：原来的读闸是黑名单（凭据 / 站点库 / 数据根），家目录里其余的东西 ——
+ * 站主的报告目录、备份、个人文档、~/.nodesign 本地库、宿主 Claude Code 的 /tmp 目录 —— Bash 与 Read 都读得到。
+ * 改成白名单两层同开：
+ *   - Bash：isolation.js 把家目录与宿主 Claude Code 的 /tmp/claude-<uid> 整个遮读，再按 homeReadAllowlist() 开天窗；
+ *   - Read / Grep / Glob：settings.permissions.blockReadsOutsideWorkingDirectories，
+ *     工作目录（cwd + SDK 顶层 additionalDirectories）以外一律拒，所有权限模式都生效。
+ * 桌面本地版不开：沙盒本来不跑；文件夹项目的 cwd 是用户自己的仓库、单租户，没有要防的邻居。
+ */
+const fenceOutsideReads = !profile.isLocal;
+
+/**
  * 权限模式 & auto 模式分类器
  *
  * 历史上一直是 `bypassPermissions`（没有人能回答权限弹窗，只能全放）。
@@ -364,6 +377,7 @@ function dump() {
     home: os.homedir(),
     claudeConfigDir,
     sandboxEnabled,
+    fenceOutsideReads,   // 读围栏（09-17）：true = Bash 家目录遮读 + blockReadsOutsideWorkingDirectories
     skipWebFetchPreflight,
     // 沙盒真开没开一眼看到，另外报一下两道闸各盖了多少条 —— 归零就是配错了
     protectedPaths: credentialBlacklist().length,
@@ -393,6 +407,7 @@ export const platform = {
   claudeAuthPresent,
   LOCAL_CLAUDE_LOGIN_ENABLED,
   sandboxEnabled,
+  fenceOutsideReads,
   permissionModeDefault,
   autoModeEnabled,
   autoModeModel,

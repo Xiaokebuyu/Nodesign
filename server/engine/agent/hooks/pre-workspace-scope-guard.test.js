@@ -1,6 +1,9 @@
 // 项目边界闸（2026-08-15）：结构化工具跨项目读写 → 拒
-import { describe, it, expect } from 'vitest';
-import { checkWorkspaceScope, makePreToolUseWorkspaceScopeGuard, encodeCwdForTranscripts } from './pre-workspace-scope-guard.js';
+import { describe, it, expect, afterAll } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { checkWorkspaceScope, makePreToolUseWorkspaceScopeGuard, encodeCwdForTranscripts, realPathLoose, CLI_CONFIG_PATHS } from './pre-workspace-scope-guard.js';
 
 const dataRoot = '/data/projects-data';
 const workspaceRoot = '/data/projects-data/proj_aaa/shared';
@@ -98,8 +101,10 @@ describe('角色文件不许模型手写（2026-08-26 fable 验收 P1）', () =>
   });
 
   it('⛔ 别拦连带面：.claude 下别的东西、记忆目录、工作区正常文件都放行', () => {
-    expect(deny('.claude/skills/x/SKILL.md')).toBeNull();
+    // .claude/skills 09-17 起托管版拒（见下面「CLI 装载的配置」那组）；桌面版照旧放行
+    expect(checkWorkspaceScope({ file_path: '.claude/skills/x/SKILL.md' }, { workspaceRoot, dataRoot, toolName: 'Write', hosted: false })).toBeNull();
     expect(deny('.claude/agent-memory/rp-moli/x.md')).toBeNull();
+    expect(deny('.claude/CLAUDE.md')).toBeNull();
     expect(deny('记忆/角色/墨璃/日记.md')).toBeNull();
     expect(deny('notes/板书/a.md')).toBeNull();
   });
@@ -199,5 +204,90 @@ describe('Claude 配置目录（09-17：全站会话转录原来给出绝对路�
   });
   it('不传 configDir 时行为不变（老调用点）', () => {
     expect(checkWorkspaceScope({ file_path: `${configDir}/history.jsonl` }, { ...ctx, toolName: 'Read' })).toBeNull();
+  });
+});
+
+describe('会在沙盒外执行的配置不许模型手写（09-17）', () => {
+  const w = (p, extra = {}) => checkWorkspaceScope({ file_path: p }, { workspaceRoot, dataRoot, toolName: 'Write', ...extra });
+  it('⭐ 项目级 plugin 根：Write / Edit / 绝对路径 / ../ 绕回来，全拒；桌面版同样拒', () => {
+    expect(w('.claude/plugins/evil/hooks/hooks.json')).toMatch(/plugin 目录不能手写/);
+    expect(w(`${workspaceRoot}/.claude/plugins/evil/.claude-plugin/plugin.json`)).toMatch(/plugin 目录不能手写/);
+    expect(checkWorkspaceScope({ file_path: '.claude/plugins/x/skills/a/SKILL.md' }, { workspaceRoot, dataRoot, toolName: 'Edit' })).toMatch(/plugin 目录不能手写/);
+    expect(w('notes/../.claude/plugins/x.json')).toMatch(/plugin 目录不能手写/);
+    expect(w('.claude/plugins/evil/hooks/hooks.json', { hosted: false })).toMatch(/plugin 目录不能手写/);
+    // 仓库道两个根都拦
+    const cwdRoot = '/home/u/Desktop/repo';
+    expect(checkWorkspaceScope({ file_path: `${cwdRoot}/.claude/plugins/p/hooks/hooks.json` },
+      { workspaceRoot: `${cwdRoot}/.nodesign`, cwdRoot, dataRoot, toolName: 'Write' })).toMatch(/plugin 目录不能手写/);
+  });
+  it('只拦写：读 plugin 目录照常（skill 附件要读）', () => {
+    expect(checkWorkspaceScope({ file_path: '.claude/plugins/x/skills/a/SKILL.md' }, { workspaceRoot, dataRoot, toolName: 'Read' })).toBeNull();
+  });
+  it('⭐ CLI 装载的配置（settings.json 钩子、同名 skill 顶替）托管版全拒', () => {
+    for (const rel of CLI_CONFIG_PATHS) expect(w(rel), rel).toMatch(/会话开局装载的配置/);
+    expect(w('.claude/skills/site-craft/SKILL.md')).toMatch(/会话开局装载的配置/);
+    expect(w('.claude/hooks/x.sh')).toMatch(/会话开局装载的配置/);
+    expect(checkWorkspaceScope({ file_path: '.claude/settings.json' }, { workspaceRoot, dataRoot, toolName: 'Edit' })).toMatch(/会话开局装载的配置/);
+  });
+  it('桌面版（没有沙盒）不拦用户仓库里的这些配置；前缀相同的兄弟名不算', () => {
+    for (const rel of CLI_CONFIG_PATHS) expect(w(rel, { hosted: false }), rel).toBeNull();
+    expect(w('.claude/settings.json.bak')).toBeNull();
+    expect(w('.claude/skills-notes.md')).toBeNull();
+    expect(w('.mcp.json.txt')).toBeNull();
+  });
+});
+
+describe('软链真身（09-17：Read / Write 是进程内工具，跟着 agent 在工作区里建的软链走）', () => {
+  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'nd-scope-link-')));
+  const data = path.join(base, 'data');
+  const ws = path.join(data, 'proj_a', 'shared');
+  const other = path.join(data, 'proj_b', 'shared');
+  // 替身：工作区、数据根、临时目录之外的位置（不存在 —— 悬空软链也要能解到真身）
+  const outside = `/nd-scope-outside-${process.pid}`;
+  fs.mkdirSync(path.join(ws, '.claude'), { recursive: true });
+  fs.mkdirSync(other, { recursive: true });
+  fs.writeFileSync(path.join(other, 'secret.md'), 'x');
+  fs.symlinkSync(other, path.join(ws, 'otherlink'));
+  fs.symlinkSync(path.join(ws, '.claude'), path.join(ws, 'cfglink'));
+  fs.symlinkSync(outside, path.join(ws, 'homelink'));
+  fs.symlinkSync(path.join(ws, 'real-dir-that-is-mine'), path.join(ws, 'selflink'));
+  fs.mkdirSync(path.join(ws, 'real-dir-that-is-mine'));
+  afterAll(() => fs.rmSync(base, { recursive: true, force: true }));
+  const chk = (p, toolName, extra = {}) => checkWorkspaceScope({ file_path: p }, { workspaceRoot: ws, dataRoot: data, toolName, ...extra });
+
+  it('realPathLoose：不存在的尾巴接回真身后面', () => {
+    expect(realPathLoose(path.join(ws, 'cfglink', 'settings.json'))).toBe(path.join(ws, '.claude', 'settings.json'));
+    expect(realPathLoose(path.join(ws, 'otherlink', 'no', 'such.md'))).toBe(path.join(other, 'no', 'such.md'));
+    expect(realPathLoose('/definitely/not/here')).toBe('/definitely/not/here');
+    expect(realPathLoose(path.join(ws, 'homelink', 'a.md'))).toBe(path.join(outside, 'a.md'));   // 悬空软链
+  });
+  it('⭐ 经软链写 .claude/settings.json、plugin 目录 → 按真身拒', () => {
+    expect(chk('cfglink/settings.json', 'Write')).toMatch(/会话开局装载的配置/);
+    expect(chk('cfglink/plugins/e/hooks/hooks.json', 'Write')).toMatch(/plugin 目录不能手写/);
+    expect(chk('cfglink/agents/rp-x.md', 'Write')).toMatch(/角色文件不能手写/);
+  });
+  it('⭐ 经软链读写别的项目 → 拒', () => {
+    expect(chk('otherlink/secret.md', 'Read')).toMatch(/别的项目|工作区外面/);
+    expect(chk('otherlink/new.md', 'Write')).toMatch(/别的项目|工作区外面|只能落在/);
+  });
+  it('⭐ 经软链指到工作区外（家目录替身）→ 托管版读写都拒；桌面版读不管', () => {
+    expect(chk('homelink/notes.md', 'Read')).toMatch(/工作区外面/);
+    expect(chk('homelink/notes.md', 'Write')).toMatch(/工作区外面|只能落在/);
+    expect(chk('homelink/notes.md', 'Read', { hosted: false })).toBeNull();
+    expect(chk('homelink/notes.md', 'Write', { hosted: false })).toMatch(/只能落在/);
+  });
+  it('指回工作区自己的软链、普通文件照常', () => {
+    expect(chk('selflink/a.md', 'Write')).toBeNull();
+    expect(chk('selflink/a.md', 'Read')).toBeNull();
+    expect(chk('plain.md', 'Write')).toBeNull();
+  });
+  it('⭐ 临时目录里的软链指到别处 → 写拒（真身也得在临时目录里）', () => {
+    const tmpLinkDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-scope-tmp-'));
+    try {
+      fs.symlinkSync(path.join(outside, 'victim.txt'), path.join(tmpLinkDir, 'lnk'));
+      fs.writeFileSync(path.join(tmpLinkDir, 'plain.txt'), 'x');
+      expect(chk(path.join(tmpLinkDir, 'lnk'), 'Write', { hosted: false })).toMatch(/只能落在/);
+      expect(chk(path.join(tmpLinkDir, 'plain.txt'), 'Write')).toBeNull();
+    } finally { fs.rmSync(tmpLinkDir, { recursive: true, force: true }); }
   });
 });

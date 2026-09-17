@@ -72,6 +72,34 @@ describe('frontmatter 严格形态', () => {
     expect(frontmatterStrictErrors('name: a\n')).toHaveLength(1);
   });
 
+  it('⭐ 键白名单（09-17）：hooks（单行 flow 写法）/ allowed-tools / model 一律拒；name / description / version / license / author 放行', () => {
+    const hook = '---\nname: a\ndescription: x\nhooks: {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "id"}]}]}\n---\n';
+    expect(frontmatterStrictErrors(hook).join(' ')).toMatch(/不支持 `hooks`/);
+    expect(frontmatterStrictErrors('---\nname: a\ndescription: x\nallowed-tools: Bash\n---\n').join(' ')).toMatch(/allowed-tools/);
+    expect(frontmatterStrictErrors('---\nname: a\ndescription: x\nmodel: opus\n---\n').join(' ')).toMatch(/model/);
+    expect(frontmatterStrictErrors('---\nname: a\ndescription: x\nhooks : {}\n---\n').join(' ')).toMatch(/hooks/);          // 冒号前带空格
+    expect(frontmatterStrictErrors('---\nname: a\ndescription: x\n"hooks": {}\n---\n').length).toBeGreaterThan(0);            // 引号键
+    expect(frontmatterStrictErrors('---\r\nname: a\r\ndescription: x\r\nhooks: {}\r\n---\r\n').join(' ')).toMatch(/hooks/);   // CRLF
+    expect(frontmatterStrictErrors('---\nname: a\ndescription: x\nversion: 1.0.0\nlicense: MIT\nauthor: someone\n---\n')).toEqual([]);
+  });
+
+  it('⭐ 上传口：frontmatter 带 hooks 的单 SKILL.md / skill zip / plugin zip 三种形态都被拒', async () => {
+    const hookMd = '---\nname: hooked\ndescription: x\nhooks: {"SessionStart": [{"hooks": [{"type": "command", "command": "id"}]}]}\n---\n# x\n';
+    const single = await validateSkillUpload(Buffer.from(hookMd));
+    expect(single.ok).toBe(false);
+    expect(single.errors.join(' ')).toMatch(/hooks/);
+    const sz = new JSZip();
+    sz.file('SKILL.md', hookMd);
+    const skillZip = await validateSkillUpload(await sz.generateAsync({ type: 'nodebuffer' }));
+    expect(skillZip.ok).toBe(false);
+    const pz = new JSZip();
+    pz.file('.claude-plugin/plugin.json', JSON.stringify({ name: 'hooked', version: '0.1.0' }));
+    pz.file('skills/hooked/SKILL.md', hookMd);
+    const pluginZip = await validateSkillUpload(await pz.generateAsync({ type: 'nodebuffer' }));
+    expect(pluginZip.ok).toBe(false);
+    expect(pluginZip.errors.join(' ')).toMatch(/hooks/);
+  });
+
   it('上传口：重复 description 的 SKILL.md 被拒（validator 与 SDK 的 YAML 会读出不同的那份）', async () => {
     const v = await validateSkillUpload(Buffer.from('---\nname: dup\ndescription: A\ndescription: B\n---\n# x\n'));
     expect(v.ok).toBe(false);

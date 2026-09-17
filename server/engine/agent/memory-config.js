@@ -83,5 +83,12 @@ export function mergeAgentSettings(isolationSettings, extra = {}) {
   if (crossSessionInbound && settings.crossSessionInbound !== crossSessionInbound) {
     throw new Error('[memory-config] settings.crossSessionInbound 被吞了 —— 跨会话入向闸会静默失效');
   }
+  // 隔离那半的每个键原样到出口（09-17）：permissions 里现在还有读围栏开关 blockReadsOutsideWorkingDirectories，
+  // 哪天有人在上面的字面量里加了同名的 permissions / sandbox 键，这里当场炸，不让它静默盖掉
+  for (const key of Object.keys(isolationSettings || {})) {
+    if (settings[key] !== isolationSettings[key]) {
+      throw new Error(`[memory-config] isolation settings 的 \`${key}\` 被覆盖了 —— 隔离配置会静默失效`);
+    }
+  }
   return settings;
 }

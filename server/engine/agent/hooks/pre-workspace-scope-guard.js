@@ -16,6 +16,9 @@
  *   - **Claude 配置目录**（09-17）：读写都拒，只放行本项目自己的转录那一格
  *     （CLI 把大输出落在 `<配置目录>/projects/<编码后的 cwd>/<会话>/tool-results/` 里让模型 Read）。
  *     别的项目、别的用户的会话转录都在这个目录下，原来只要给出绝对路径就读得到。
+ *   - **会在沙盒外执行的配置**（09-17）：工作区里的 `.claude/plugins`（各形态都拒）与 CLI 装载的
+ *     `.claude/settings.json`、`.claude/skills` 等（CLI_CONFIG_PATHS，托管版拒；桌面版没有沙盒，
+ *     Bash 本来什么都能做，拒 Write 不增加安全、只挡用户在自己仓库里的正常修改）。
  *
  * 边界（故意窄，别自己脑补更严）：
  *   - 凭据不归它管（那是 platform.protectedPathRules 的活，两边别互相假设）。
@@ -27,9 +30,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../cast.js';
+import { platform } from '../../../runtime/platform.js';
 
 const TARGET_FIELDS = ['file_path', 'path', 'notebook_path'];
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+/**
+ * 工作区里 CLI 会装载、执行或据以放权的配置（相对工作区根，09-17）。
+ * 取自 CLI 沙盒自己对工作目录的写保护清单（09-17 bwrap 参数实测），去掉与装载无关的 shell 启动文件等；
+ * `.claude/agents`、`.claude/plugins` 各有专门的报文，在上面单独判。`.claude/agent-memory` 与 `.claude/CLAUDE.md` 不在其中。
+ */
+export const CLI_CONFIG_PATHS = [
+  '.claude/settings.json', '.claude/settings.local.json',
+  '.claude/skills', '.claude/commands', '.claude/hooks',
+  '.claude/workflows', '.claude/routines', '.claude/output-styles',
+  '.claude/scheduled_tasks.json', '.claude/launch.json', '.claude/loop.md',
+  '.mcp.json',
+];
 
 function insideDir(abs, dir) {
   return abs === dir || abs.startsWith(dir.endsWith(path.sep) ? dir : dir + path.sep);
@@ -38,6 +55,27 @@ function insideDir(abs, dir) {
 /** 临时目录（沙盒会把 TMPDIR 指到自己那份，两个都认） */
 function tempDirs() {
   return [process.env.TMPDIR, os.tmpdir(), '/tmp'].filter(Boolean).map(d => path.resolve(d));
+}
+
+/**
+ * 路径的真实位置：从最近一个已存在的祖先取 realpath，再把后面还不存在的段接回去（新建文件也能判到软链真身）。
+ * 悬空软链（目标还不存在）realpath 解不了，顺着链接目标接着解。读不出来就原样返回。
+ */
+export function realPathLoose(p, depth = 0) {
+  const rest = [];
+  let cur = p;
+  for (;;) {
+    try { return path.join(fs.realpathSync(cur), ...rest); } catch { /* 这一段不存在或读不了 */ }
+    try {
+      if (depth < 16 && fs.lstatSync(cur).isSymbolicLink()) {
+        return realPathLoose(path.join(path.resolve(path.dirname(cur), fs.readlinkSync(cur)), ...rest), depth + 1);
+      }
+    } catch { /* 不是软链或读不了，往上走 */ }
+    const parent = path.dirname(cur);
+    if (parent === cur) return p;
+    rest.unshift(path.basename(cur));
+    cur = parent;
+  }
 }
 
 /** CLI 给会话转录目录起名的规则：cwd 绝对路径里所有非字母数字字符换成 '-'（session-loop.js 同口径） */
@@ -57,7 +95,7 @@ function globPatternTarget(toolName, toolInput) {
 /**
  * @returns {null | string} null=放行；string=拒绝理由
  */
-export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, dataRoot, toolName, pluginsBaseRoot = null, ownPluginsRoot = null, configDir = null } = {}) {
+export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, dataRoot, toolName, pluginsBaseRoot = null, ownPluginsRoot = null, configDir = null, hosted = !platform.isLocal } = {}) {
   if (!workspaceRoot) return null;
   const ws = path.resolve(workspaceRoot);
   // 仓库道（09-07 起 cwd 与画布真相分开）：agent 站在用户的文件夹 cwdRoot，画布在 <folder>/.nodesign = ws。
@@ -75,36 +113,68 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, 
   const ownTranscripts = cfg ? ownRoots.map((r) => path.join(cfg, 'projects', encodeCwdForTranscripts(r))) : [];
   const targets = TARGET_FIELDS.map((f) => toolInput?.[f]);
   targets.push(globPatternTarget(toolName, toolInput));
+  const ownReal = ownRoots.map(realPathLoose);
+  const inOwn = (p) => ownRoots.some((r) => insideDir(p, r)) || ownReal.some((r) => insideDir(p, r));
+  const tmps = [...new Set(tempDirs().flatMap((d) => [d, realPathLoose(d)]))];
   for (const v of targets) {
     if (typeof v !== 'string' || !v) continue;
     const abs = path.resolve(cwd || ws, v);   // 相对路径按 agent 站的地方解析（SDK cwd；没分开时就是工作区）
-    if (cfg && insideDir(abs, cfg) && !ownRoots.some((r) => insideDir(abs, r))
-      && !ownTranscripts.some((d) => insideDir(abs, d))) {
-      return '这个路径在平台的会话记录目录里，里面是所有项目的对话与配置，不对 agent 开放。'
-        + '本会话落盘的大输出（tool-results）照常能读；要找本项目以前做过的事，看工作区里的文件和画布。';
+    // 软链真身（09-17）：agent 能在工作区与自己的 tmp 里用 Bash 建软链，而 Read / Write 是进程内工具，
+    // 不进沙盒、跟着软链走 —— 只判字面路径，下面每一条都能绕过去（写到 .claude/settings.json、
+    // 写到家目录、读别的项目）。所以位置规则对字面与真身各判一次，任一命中就拒。
+    const real = realPathLoose(abs);
+    for (const p of real === abs ? [abs] : [abs, real]) {
+      if (cfg && insideDir(p, cfg) && !ownRoots.some((r) => insideDir(p, r))
+        && !ownTranscripts.some((d) => insideDir(p, d))) {
+        return '这个路径在平台的会话记录目录里，里面是所有项目的对话与配置，不对 agent 开放。'
+          + '本会话落盘的大输出（tool-results）照常能读；要找本项目以前做过的事，看工作区里的文件和画布。';
+      }
+      // 别人的 skill 库（2026-09-08 市场线）：用户级 plugin 根按 userId 分目录，可它在数据根之外，
+      // 下面那条「数据根内越界」管不到 —— 于是 A 的 agent 能 Read 走 B 结晶的方法论。
+      // 自己那一支放行（SDK 本来就要读它、附件也在里面），别人的一律拒，读写同判。
+      if (pluginsBase && insideDir(p, pluginsBase) && !(ownPlugins && insideDir(p, ownPlugins))) {
+        return '这个路径在别人的 skill 库里。你自己装的 skill 在 ' + (ownPlugins || '你的 skill 目录')
+          + ' —— 别人的方法论不是公共资料，要用请让对方发布到市场再安装。';
+      }
+      // ⛔ 角色文件是**判据本身**，不许模型手写（2026-08-26 fable 验收）。
+      //
+      // 派发闸靠读 `.claude/agents/<slug>.md` 的 tools 行决定放不放行，可那份文件
+      // 模型自己能改 —— 于是闸校验的和 CLI 真正使用的**不是同一份内容**：
+      //   ① TOCTOU：写宽版 → 结束回合（CLI 缓存了宽版）→ 覆写成窄版 → 同回合派发。
+      //      我们现读磁盘拿窄版放行，CLI 用回合开工的宽版快照 → 角色真拿到外发/花钱工具。
+      //   ② 解析器分歧：重复的 `tools:` 键，我们的正则取第一处、CLI 的 YAML 取最后一处。
+      // 两条都不是对主 agent 提权（它本来就有这些工具），但这条线的正常用法是**导入
+      // 酒馆卡/世界书**——外来文本能借主 agent 的手造出一个拿着外发工具的角色。
+      // 修法只能是「让判据不可被它改」：正门 cast_role 走服务端 fs（不过这道闸），
+      // 模型这侧一律拒。⚠️ Bash 不归这道闸管，那半靠沙盒（isolation.js）。
+      if (isWrite && ownRoots.some((r) => insideDir(p, path.join(r, '.claude', 'agents')))) {
+        return '角色文件不能手写 —— 用 cast_role。'
+          + '那个目录里的文件同时是「这个角色能用哪些工具」的判据，'
+          + '手写等于自己给自己发权限，所以一律拒绝（改已有角色也走 cast_role）。';
+      }
+      // ⛔ 项目级 plugin 根不许模型写（09-17）：这里的 plugin 下个会话由 CLI 宿主进程加载，
+      // 里面的 hooks 在沙盒外执行（探针实测），导入内容里的注入指令能借 agent 的手造一个出来。
+      // 正规安装（/skills 页面、SystemTab、市场、crystallize_skill）都是服务端 fs，不经过这道闸。
+      // Bash 那半在 isolation.js 的 denyWrite；加载时的组件校验在 plugin-loader.js。
+      if (isWrite && ownRoots.some((r) => insideDir(p, path.join(r, '.claude', 'plugins')))) {
+        return 'plugin 目录不能手写 —— plugin 只能从 /skills 页面安装（上传或从市场装）。'
+          + '想把一套做法沉淀下来，用 crystallize_skill；这个目录里的文件会在下个会话被当作程序组件加载，所以一律拒绝。';
+      }
+      // ⛔ CLI 从工作区装载的配置（09-17）：settingSources:['project'] 下 .claude/settings.json 里的 hooks
+      // 会在下个会话开局于沙盒外执行；.claude/skills/<名>/SKILL.md 与已装 skill 同名时会顶替它被调用，
+      // frontmatter 里的 hooks 同样在沙盒外执行（两条都是 SDK 探针实测）。bypassPermissions 下 CLI 自己的
+      // 受保护路径检查对 Write/Edit 不生效，所以这里拒；Bash 那半 CLI 的沙盒自带写保护（同一份清单）。
+      // 项目设置由服务端 workspace.js 合并写入，不经过这道闸。
+      if (isWrite && hosted) {
+        const hit = CLI_CONFIG_PATHS.find((rel) => ownRoots.some((r) => insideDir(p, path.join(r, rel))));
+        if (hit) {
+          return `${hit} 是 Claude Code 在会话开局装载的配置（设置、钩子、skill、命令），不能由 agent 手写，一律拒绝。`
+            + '要沉淀做法用 crystallize_skill；项目的长期约定写进根目录 CLAUDE.md。';
+        }
+      }
     }
-    // 别人的 skill 库（2026-09-08 市场线）：用户级 plugin 根按 userId 分目录，可它在数据根之外，
-    // 下面那条「数据根内越界」管不到 —— 于是 A 的 agent 能 Read 走 B 结晶的方法论。
-    // 自己那一支放行（SDK 本来就要读它、附件也在里面），别人的一律拒，读写同判。
-    if (pluginsBase && insideDir(abs, pluginsBase) && !(ownPlugins && insideDir(abs, ownPlugins))) {
-      return '这个路径在别人的 skill 库里。你自己装的 skill 在 ' + (ownPlugins || '你的 skill 目录')
-        + ' —— 别人的方法论不是公共资料，要用请让对方发布到市场再安装。';
-    }
-    // ⛔ 角色文件是**判据本身**，不许模型手写（2026-08-26 fable 验收）。
-    //
-    // 派发闸靠读 `.claude/agents/<slug>.md` 的 tools 行决定放不放行，可那份文件
-    // 模型自己能改 —— 于是闸校验的和 CLI 真正使用的**不是同一份内容**：
-    //   ① TOCTOU：写宽版 → 结束回合（CLI 缓存了宽版）→ 覆写成窄版 → 同回合派发。
-    //      我们现读磁盘拿窄版放行，CLI 用回合开工的宽版快照 → 角色真拿到外发/花钱工具。
-    //   ② 解析器分歧：重复的 `tools:` 键，我们的正则取第一处、CLI 的 YAML 取最后一处。
-    // 两条都不是对主 agent 提权（它本来就有这些工具），但这条线的正常用法是**导入
-    // 酒馆卡/世界书**——外来文本能借主 agent 的手造出一个拿着外发工具的角色。
-    // 修法只能是「让判据不可被它改」：正门 cast_role 走服务端 fs（不过这道闸），
-    // 模型这侧一律拒。⚠️ Bash 不归这道闸管，那半靠沙盒（isolation.js）。
-    if (isWrite && ownRoots.some((r) => insideDir(abs, path.join(r, '.claude', 'agents')))) {
-      return '角色文件不能手写 —— 用 cast_role。'
-        + '那个目录里的文件同时是「这个角色能用哪些工具」的判据，'
-        + '手写等于自己给自己发权限，所以一律拒绝（改已有角色也走 cast_role）。';
+    if (hosted && real !== abs && inOwn(abs) && !inOwn(real)) {
+      return '这个路径经软链指到了你的工作区外面，读写都按真实位置算 —— 一律拒绝。直接用工作区里的真实文件。';
     }
     // 接续权的文件面（2026-08-27 编排）：角色写的板书文件，主 agent 不许 Edit/Write。
     // 板上那半（reply_to/chain）在 write-on-board 闸；这里堵的是「直接改文件正文」——
@@ -120,13 +190,15 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, 
         }
       } catch { /* 新建/读不到 → 放行 */ }
     }
-    if (ownRoots.some((r) => insideDir(abs, r))) continue;         // 自己的工作区 / 自己的仓库，放行
+    if (inOwn(abs) && inOwn(real)) continue;         // 自己的工作区 / 自己的仓库，放行
     if (isWrite) {
-      if (tempDirs().some(d => insideDir(abs, d))) continue;   // 临时文件随便写
+      if (tmps.some((d) => insideDir(abs, d)) && tmps.some((d) => insideDir(real, d))) continue;   // 临时文件随便写（真身也得在临时目录里）
       return `${toolName} 只能落在你自己的工作区里（${ownRoots.join(' 或 ')}），或者临时目录。`
         + '产物、草稿、附件全都归工作区管；往外写一律拒绝。';
     }
-    if (!root || !insideDir(abs, root)) continue;   // 数据根之外的读不归这道闸管
+    // 数据根之外的读不归这道闸管；字面与真身分开判（字面在自己工作区、真身在别处的，由上面 hosted 那条管）
+    const intoOther = (p) => insideDir(p, root) && !inOwn(p);
+    if (!root || !(intoOther(abs) || intoOther(real))) continue;
     return '这个路径在别的项目的工作区里，不是你这个项目的东西。'
       + `你的工作区是 ${ws} —— 用相对路径就好，越过它去读写别人的项目一律拒绝。`;
   }

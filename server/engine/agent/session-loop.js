@@ -56,7 +56,7 @@ import {
 // session-loop 不再直接依赖 skill.js；skillId 参数仅作兼容保留。
 import { loadInstalledPlugins } from './plugin-loader.js';
 import { createHooks } from './hooks.js';
-import { buildIsolationOptions, prepareAgentDirs, sandboxShimEnv } from './isolation.js';
+import { buildIsolationOptions, prepareAgentDirs, sandboxShimEnv, agentAdditionalDirectories } from './isolation.js';
 import { MEMORY_EXTRA_GUIDELINES, mergeAgentSettings, memoryDirFor } from './memory-config.js';
 import { createNodesignMcpServer } from '../mcp/index.js';
 import { MCP_SERVER_NAME } from '../mcp/server-name.js';
@@ -306,7 +306,7 @@ export async function runSession({
   const projectMode = (projectId ? getProject(projectId)?.mode : null) || 'design';
   const nodesignServer = createNodesignMcpServer({ workspaceRoot: wsRoot, sharedRoot, projectId, sessionId, ctx: sharedCtx, roleRoster, projectMode });
   // npm 缓存 + 沙盒可写 tmp（$TMPDIR / pip 缓存）：细节与教训见 isolation.js
-  const agentDirs = await prepareAgentDirs({ dataRoot: PROJECTS_DATA_ROOT, projectId, sessionId });
+  const agentDirs = await prepareAgentDirs({ dataRoot: PROJECTS_DATA_ROOT, projectId, sessionId, sharedRoot });
 
   // ⛔ 服务器自己的运行姿态不许漏进 agent 环境（08-24 案）：
   //   - NODE_ENV=production（pm2 注的）会让 agent 沙盒里的 npm install 静默跳过
@@ -373,10 +373,9 @@ export async function runSession({
     //   - 每个已装 plugin 根：让 agent 能 Read patterns / references 等 SKILL.md 附件
     //     （SDK Skill 工具只加载 SKILL.md body 自身，附件靠 agent 主动 Read，
     //      要求路径在 sandbox 范围内 — 详见 memory nodesign_sdk_plugin_routes.md）
-    additionalDirectories: [
-      ...(sharedRoot ? [sharedRoot] : []),
-      ...installed.plugins.map(p => p.path),
-    ],
+    // 09-17 起还有本项目沙盒 tmp（读围栏下 Read 要读 agent 在 tmp 里生成的图）；这些目录同时是沙盒的可写目录，
+    // 列哪些、哪些要关回只读，都在 isolation.js 的 agentAdditionalDirectories / pluginWriteFence
+    additionalDirectories: agentAdditionalDirectories({ cwdRoot, sharedRoot, agentTmpDir: agentDirs.agentTmpDir, installedPlugins: installed }),
     env: sdkEnv,
 
     // sdkModel = appModel spoofing alias（kimi-k2.6 → claude-opus-4-7[1m]）。
@@ -584,7 +583,7 @@ export async function runSession({
     // 静默互吞八天（autoMemory*/skipWebFetchPreflight 全丢）。合并+出口断言在
     // memory-config.js 的 mergeAgentSettings。
     ...(() => {
-      const isolation = buildIsolationOptions({ cwdRoot, sharedRoot, ...agentDirs, dataRoot: PROJECTS_DATA_ROOT, env: sdkEnv });
+      const isolation = buildIsolationOptions({ cwdRoot, sharedRoot, ...agentDirs, dataRoot: PROJECTS_DATA_ROOT, env: sdkEnv, installedPlugins: installed });
       return {
         ...isolation,
         settings: mergeAgentSettings(isolation.settings, {
