@@ -197,13 +197,18 @@ function IssueRow({ issue, onAct }) {
               lineHeight: 1.65, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
             }}>
               {issue.detail || '（无详情）'}
+              {issue.lastDetail && (
+                <div style={{ marginTop: GAP.md, paddingTop: GAP.md, borderTop: `1px solid ${COLOR.borderLt}` }}>
+                  <b style={{ color: COLOR.text3 }}>最近一次：</b>{issue.lastDetail}
+                </div>
+              )}
               {issue.expectation && (
                 <div style={{ marginTop: GAP.md, paddingTop: GAP.md, borderTop: `1px solid ${COLOR.borderLt}` }}>
                   <b style={{ color: COLOR.text3 }}>期望：</b>{issue.expectation}
                 </div>
               )}
               <div style={{ marginTop: GAP.md, color: COLOR.dim }}>
-                首次 {issue.firstSeen} · {issue.projectId || '无项目'} · {issue.sessionId || '无会话'}
+                首次 {issue.firstSeen} · 最近 {issue.lastSeen} · 最近一次在 {issue.projectId || '无项目'} · {issue.sessionId || '无会话'}
               </div>
             </div>
           )}

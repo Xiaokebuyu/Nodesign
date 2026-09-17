@@ -51,6 +51,10 @@ db.exec(`
     db.exec("UPDATE issues SET kind = 'bug' WHERE source = 'auto'");
     console.log('[issues] kind column added (auto 存量回填为 bug)');
   }
+  // last_detail（09-17）：同签名再出现时只加计数的话，detail 永远停在第一次。
+  // 「Exit code 144」那条 08-17 建行时还没记命令，之后 9 次的命令一条都没留下；
+  // 桌面上报的版本号 / 设备名写在 detail 头里，后来是哪台机哪个版本也查不到。
+  if (!cols.has('last_detail')) db.exec('ALTER TABLE issues ADD COLUMN last_detail TEXT');
 }
 
 /**
@@ -95,14 +99,18 @@ export function recordIssue({
     ).get(key.source, key.toolName, key.sig);
 
     if (existing) {
+      // detail 保留第一次，最近一次的进 last_detail（桌面上报的设备 / 版本头也在里面）；user_id 仍记第一次
+      const d = detail ? String(detail).slice(0, 4000) : null;
       db.prepare(`UPDATE issues
                   SET count = count + 1, last_seen = datetime('now'),
                       project_id = COALESCE(?, project_id),
                       session_id = COALESCE(?, session_id),
                       run_id = COALESCE(?, run_id),
+                      detail = COALESCE(detail, ?),
+                      last_detail = COALESCE(?, last_detail),
                       status = CASE WHEN status = 'closed' THEN 'open' ELSE status END
                   WHERE id = ?`)
-        .run(projectId ?? null, sessionId ?? null, runId ?? null, existing.id);
+        .run(projectId ?? null, sessionId ?? null, runId ?? null, d, d, existing.id);
       return { id: existing.id, count: existing.count + 1 };
     }
 
@@ -133,6 +141,7 @@ function rowToIssue(r) {
     signature: r.signature,
     summary: r.summary,
     detail: r.detail,
+    lastDetail: r.last_detail && r.last_detail !== r.detail ? r.last_detail : null,
     expectation: r.expectation,
     projectId: r.project_id,
     sessionId: r.session_id,

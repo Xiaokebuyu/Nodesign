@@ -60,7 +60,9 @@ describe('POST /issues', () => {
     expect(row.userId).toBe(u.id);
     expect(row.count).toBe(2);
     expect(row.detail.startsWith('[桌面版 v0.1.6 win32 · 设备 Alpha]')).toBe(true);
-    expect(row.detail).not.toContain('另一台也撞了');   // 聚合只加计数，正文留第一份
+    expect(row.detail).not.toContain('另一台也撞了');   // 正文留第一份
+    expect(row.lastDetail.startsWith('[桌面版 v0.1.6 win32 · 设备 Beta]')).toBe(true);   // 最近一次的现场另存
+    expect(row.lastDetail).toContain('另一台也撞了');
 
     const d = await post(a.token, { kind: 'bug', source: 'desktop', summary: '更新模块没起来：failed:ENOENT', detail: 'electron-updater load failed' });
     expect(d.status).toBe(201);
