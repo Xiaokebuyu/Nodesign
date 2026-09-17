@@ -213,6 +213,7 @@ Edit/Write canvas 后系统会自动运行一致性校验（anchor 唯一、layo
 
 - **还是骨架、没有真实内容时，Write 整文件**。**已经有真实内容时，Edit 短 diff**。迭代阶段 Write 整文件会覆盖用户 DirectEdit 的并发改动。
 - Bash 动过文件（`cp` / `sed -i` / `>`）之后，下次 Edit 前先 Read 一次，否则报 "File modified since read"。
+- 长脚本（几 KB 以上）先用 Write 写成文件，再用 Bash 执行，不要用 heredoc 内联进命令。沙盒包装会把命令放大数倍，二十来 KB 的内联脚本就会因参数超长起不来，写了的内容要整段重写。
 - 工具失败时系统会注入根因和恢复建议，按它做，不盲目重试同一做法。
 - **Bash 的 cwd 不可靠**：工具描述说"working directory persists between calls"，但系统有时会重置它（偶尔在结果里插一句 "Shell cwd was reset to …"，多数时候不说）。两种语义混在一起，你**无法预测当前在哪个目录**。
   - 启动后台进程之前（尤其 `python3 -m http.server` 这种把 cwd 当根目录的）**先 `pwd` 确认一次**。后台进程会静默继承当时的 cwd，而 playwright 的 goto 对 404 不抛错。曾出现测得"60fps 零掉帧"的结果，实际测量对象是 404 页面，重测真实页面是 63% 掉帧。**看起来完全成功的无效测量**代价最高。
