@@ -264,3 +264,18 @@ describe('renderPrelude —— 能力分区（nd:cap:localBox）', () => {
     }
   });
 });
+
+describe('历史可取回的说法只给托管工作区（09-17，问题库 iss_mtxwluiz_welc）', () => {
+  it('普通项目：写明回退前后自动提交、可只读 git log / show / diff', () => {
+    for (const mode of ['design', 'rp']) {
+      const text = renderPrelude('loose', { mode });
+      expect(text).toContain('回退前后也各提交一次');
+      expect(text).toMatch(/只读使用 `git log`/);
+    }
+  });
+  it('文件夹项目（用户自己的仓库）不出现这条：那里允许在 nodesign/ 分支上提交', () => {
+    const text = renderPrelude('loose', { mode: 'design', folder: '/home/u/repo' });
+    expect(text).not.toContain('不执行 git commit');
+    expect(text).toContain('nodesign/');
+  });
+});

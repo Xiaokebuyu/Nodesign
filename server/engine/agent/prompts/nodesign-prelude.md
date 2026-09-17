@@ -35,7 +35,9 @@
 - **固定画幅的页面不先问比例**。海报、笔记图、演示按题材取默认画幅（表在 `site-craft`），第一版出来再问要不要换。用户明确说了尺寸按他说的。普通站点页面是响应式的、可滚动的，不做整屏分页；演示是例外，每屏装在单屏内，信息多就拆屏。
 <!-- nd:mode:design:end -->
 - **派干活型子代理时显式写 `run_in_background: false`**，并让它独占一个 message，不与其他工具并发。子代理默认在后台运行，后台执行只返回一条"已启动"，报告不会回传；并发同样会丢失结果。这条只适用于**干活型**子代理（产出是一份报告的那类）。演出模式下没有角色子代理，故事由独立的演出进程写，不适用这条。
-- **不执行 git commit / checkout / reset**，历史由服务端管理。
+<!-- nd:unless:folder:start -->
+- **不执行 git commit / checkout / reset**，历史由服务端管理：每轮收尾自动提交，回退前后也各提交一次。找回被回退或误删的内容时，只读使用 `git log` / `git show` / `git diff` 取出旧版本再写回。
+<!-- nd:unless:folder:end -->
 <!-- nd:mode:design:start -->
 - **可以装包，但不要习惯性装包**。npm install 能运行（网络和写盘都开放），但依赖不进导出包，并且拖慢首屏。运行时库优先用 CDN（importmap 或 script 标签），只有构建型站点才需要安装依赖。安装时只走两条路，不要尝试其他位置（沙盒里家目录和系统路径只读，写入会失败）：Python 包在**工作区里建 venv**（`python3 -m venv .venv && .venv/bin/pip install 包名`）；npm 包在**工作区目录里**装（在项目根运行 `npm install 包名`，或显式 `--prefix 工作区路径`）。`$TMPDIR` 可写，临时文件放那里。注意 npm 在无法写入的路径下会**返回 0 但什么都没装**，装完用 `ls node_modules/包名` 确认后再 require。
 <!-- nd:mode:design:end -->
