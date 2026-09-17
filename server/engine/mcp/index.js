@@ -69,6 +69,7 @@ import { makeReadBoardTool } from './tools/read-board.js';
 import { makeWriteOnBoardTool } from './tools/write-on-board.js';
 import { makeLookAtBoardTool } from './tools/look-at-board.js';
 import { makeReadUserViewTool } from './tools/read-user-view.js';
+import { makeReadUserMessagesTool } from './tools/read-user-messages.js';
 import { makeOrganizeBoardTool } from './tools/organize-board.js';
 import { makeReadDocumentTool } from './tools/read-document.js';
 import { makeReadTavernJsonTool } from './tools/read-tavern-json.js';
@@ -281,6 +282,11 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // bug / friction / idea 三类走同一张 issues 表。跟 PostToolUseFailure 的
       // 自动记录分工：自动层记"发生了什么"，这层补"为什么难受、期望怎样"。
       makeReportIssueTool({ projectId, sessionId, ctx }),
+
+      // read_user_messages — 用户在本项目发过的原话（09-17，数据丢失调查 1b）。回退会从对话里删掉
+      // 那条消息，原文只剩 runs.brief；只读、只限本项目（projectId 取这里绑定的，不收模型传入）。
+      // deferred：用得上的场景少，prelude 与检索关键词点了名。两种模式都注册。
+      makeReadUserMessagesTool({ projectId, sessionId }),
 
       // 进程卡四件（2026-09-07 桌面端·缝三）：起 / 看 / 停 / 列。capability `processes`
       // 是 unregister 档 —— 托管版和开着沙盒的 exp 连名字都不给，那边「绝不起 dev server」照旧。

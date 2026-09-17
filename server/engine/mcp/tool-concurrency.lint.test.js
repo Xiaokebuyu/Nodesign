@@ -149,6 +149,8 @@ describe('tool-concurrency 并行表', () => {
       expect([...server.readOnlyToolNames].sort()).toEqual(expected);
       // 判据自检：至少板面两件在任何模式下都注册着，名单不会因为全被下架而空着"过"
       expect(expected).toEqual(expect.arrayContaining(['read_board', 'look_at_board', 'web_search', 'generate_image']));
+      // 09-17：读用户原话的只读件两种模式都在，且确实打了 readOnlyHint
+      expect(server.readOnlyToolNames).toContain('read_user_messages');
     }
   });
 

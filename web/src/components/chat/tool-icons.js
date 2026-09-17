@@ -11,7 +11,7 @@ import {
   FileCode2, FileOutput, FilePlus, FileSearch2, FileText, Focus,
   FolderInput, FolderOpen, FolderTree, Gauge, Globe, Hammer,
   Hand, HelpCircle, Highlighter, ImagePlus, Inbox, LayoutDashboard,
-  LayoutList, LifeBuoy, ListChecks, ListOrdered, Microscope,
+  LayoutList, LifeBuoy, ListChecks, ListOrdered, MessageSquareQuote, Microscope,
   MousePointerClick, Move, Navigation, Paintbrush, Palette, Pencil,
   Pin, Pointer, Presentation, Rocket, Route, Ruler,
   ScanEye, ScanSearch, Scissors, Search, Sliders, Sparkles,
@@ -74,6 +74,7 @@ export const TOOL_ICONS = {
   'mcp__nodesign__look_at_board': ScanEye,
   'mcp__nodesign__read_user_view': Binoculars,
   // ── 反馈 / 决策 ──
+  'mcp__nodesign__read_user_messages': MessageSquareQuote,   // 09-17 翻用户在本项目说过的原话
   'mcp__nodesign__get_pending_changes': Inbox,
   'mcp__nodesign__clear_pending_changes': Trash2,
   'mcp__nodesign__report_issue': Bug,

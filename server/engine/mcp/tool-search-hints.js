@@ -36,6 +36,8 @@ export const TOOL_SEARCH_HINTS = Object.freeze({
   organize_board: 'folder tidy move files canvas group',
   pin_to_board: 'show bring front canvas place item',
   read_user_view: 'viewport what user sees selection camera zoom',
+  // 09-17：用户要「整合我说过的话」、回退后找原话时要搜得到
+  read_user_messages: 'history previous earlier prompts said wrote original wording recall chat rollback rewind interrupted',
   report_issue: 'bug feedback harness maintainer problem',
   web_search: 'internet google lookup research find online',
   read_tavern_json: 'sillytavern character card lorebook preset import',

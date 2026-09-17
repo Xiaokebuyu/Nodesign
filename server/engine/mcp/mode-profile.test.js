@@ -37,6 +37,7 @@ describe('mode-profile —— rp 模式的注册面', () => {
       'browser_navigate', 'browser_batch', 'screenshot_url', 'web_search',
       'get_pending_changes', 'clear_pending_changes',   // DirectEdit 是用户输入通道，不是设计产线
       'navigate_to_page', 'highlight', 'deliver_files', 'report_issue',
+      'read_user_messages',   // 09-17：用户原话的读取口，演出项目里回退、中断同样会丢原文
     ]) {
       expect(rp.has(n), `rp 模式不该藏：${n}`).toBe(true);
     }

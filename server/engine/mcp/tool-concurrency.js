@@ -35,6 +35,8 @@ export const PARALLEL_SAFE_TOOLS = new Set([
   'lookup_tags',
   // 纯 JS 抽文本，不起外部进程、不写缓存
   'read_document',
+  // 只 SELECT runs 表（本项目的用户原话，09-17），不写库、不落盘
+  'read_user_messages',
   // 只读 DirectEdit 缓冲；清空是另一件工具 clear_pending_changes
   'get_pending_changes',
   // 只读进程注册表与日志（写记录的是 start/stop）
