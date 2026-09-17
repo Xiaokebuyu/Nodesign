@@ -10,7 +10,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { buildCodexBridgePrompt, runCodexImageGen } from './helpers/codex-imagegen.js';
+import { buildCodexBridgePrompt, runCodexImageGen, codexImageBudgetMs } from './helpers/codex-imagegen.js';
 import { whichBinary } from '../../../runtime/which.js';
 
 const DEFAULT_NODESK_URL = 'https://llm-gateway-api.nodesk.tech';
@@ -134,7 +134,10 @@ export async function produceImage({
     // 每一趟尝试落各自的临时路径，成功才 rename 成 codexOutAbs（helpers/codex-imagegen.js 09-14）
     const makePrompt = (absOut) => buildCodexBridgePrompt({ prompt, aspectRatio, absOut, refCount: refs.length, variation: isVariation });
     try {
-      await runCodexImageGen({ makePrompt, refPaths: refs.map((r) => r.abs), cwd: path.dirname(codexOutAbs), signal, expectFile: codexOutAbs });
+      await runCodexImageGen({
+        makePrompt, refPaths: refs.map((r) => r.abs), cwd: path.dirname(codexOutAbs), signal, expectFile: codexOutAbs,
+        timeoutMs: codexImageBudgetMs(prompt),
+      });
     } catch (err) {
       throw stageError('codex', err?.message || String(err));
     }

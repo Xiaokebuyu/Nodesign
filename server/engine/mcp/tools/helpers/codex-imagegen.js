@@ -28,6 +28,19 @@ export const CODEX_IMAGE_EFFORT = process.env.NODESIGN_CODEX_IMAGE_EFFORT ?? 'lo
 export const CODEX_IMAGE_TIMEOUT_MS = Number(process.env.NODESIGN_CODEX_IMAGE_TIMEOUT_MS) || 300_000;
 
 /**
+ * 一趟 codex 生图的时间预算随提示词变长（09-17）。codex 的模型要把提示词逐字写进生图调用，
+ * 实测 10001 字的中文提示词光写就用了约 3 分钟（出图本身二十来秒）。3500 字以内仍是 300 秒；
+ * 更长的按每字 30ms 加（8000 字 → 360 秒，1 万字 → 420 秒）。relay 与桌面两道外层各在此基础上 +30 秒、+60 秒，
+ * 三道仍然错开。
+ */
+export function codexImageBudgetMs(promptText = '') {
+  const chars = [...String(promptText ?? '')].length;
+  return Math.max(CODEX_IMAGE_TIMEOUT_MS, 120_000 + chars * 30);
+}
+export const relayProduceBudgetMs = (promptText) => codexImageBudgetMs(promptText) + 30_000;
+export const relayLegBudgetMs = (promptText) => codexImageBudgetMs(promptText) + 60_000;
+
+/**
  * 变体模式的 preserve 词表。键是 agent 传的枚举值，值是展开进 prompt 的英文短语。
  * 短语必须把"缺席也是要保持的"写死（no socks 的参考图，结果也必须 no socks）——
  * 这是实战里最容易漂的一类。

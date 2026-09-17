@@ -12,6 +12,7 @@
 import { relayConfig, relayTools, relayToolCall } from '../../../runtime/relay-client.js';
 import { hasAnySearchKey } from './web-search-providers.js';
 import { localImageRoute } from './image-produce.js';
+import { relayLegBudgetMs } from './helpers/codex-imagegen.js';
 
 /** @returns {'local' | 'relay' | null} */
 export function searchRoute() {
@@ -44,7 +45,8 @@ export async function relayWebSearch({ query, provider, count, includeImages }) 
  */
 export async function relayGenerateImage(payload) {
   try {
-    const r = await relayToolCall('generate_image', payload, { timeoutMs: 6 * 60_000 });   // 三道预算的最外层（codex 300s < relay 330s < 这里 360s）
+    // 三道预算的最外层：codex 预算 < relay +30s < 这里 +60s（随提示词长度变长，见 helpers/codex-imagegen.js）
+    const r = await relayToolCall('generate_image', payload, { timeoutMs: relayLegBudgetMs(payload?.prompt) });
     // 网关为了穿 Cloudflare 的 100 秒先发了 200 头，之后的失败是 200 + 错误形状
     if (r?.type === 'error') return { error: `generate_image failed (relay ${r.code || ''}): ${r.error?.message || '未知错误'}` };
     return r?.error ? { error: String(r.error) } : r;

@@ -20,6 +20,7 @@ import path from 'node:path';
 import { tierDenialForOwner } from '../../engine/mcp/tools/tier-gate.js';
 import { runWebSearch, ProviderError, PROVIDERS } from '../../engine/mcp/tools/web-search-providers.js';
 import { produceImage, localImageRoute } from '../../engine/mcp/tools/image-produce.js';
+import { relayProduceBudgetMs } from '../../engine/mcp/tools/helpers/codex-imagegen.js';
 import { MODELS, DEFAULT_MODEL } from '../../engine/mcp/tools/generate-image.js';
 import { checkQuota, imageChargeUsd } from '../../lib/quota.js';
 import { DENIAL, can } from '../../auth/tier.js';
@@ -121,7 +122,7 @@ export function mountRelayTools(router, { sendError, readRawBody, produce = prod
       try {
         produced = await produce({
           route, prompt, aspectRatio, imageSize, thinkingLevel, responseModalities, useGrounding: !!useGrounding, modelId,
-          refs: files, isVariation: !!isVariation, codexOutAbs: path.join(tmp, 'out.png'), signal: AbortSignal.timeout(330_000),   // > codex 300s，< 桌面腿 360s（helpers/codex-imagegen.js 头注）
+          refs: files, isVariation: !!isVariation, codexOutAbs: path.join(tmp, 'out.png'), signal: AbortSignal.timeout(relayProduceBudgetMs(prompt)),   // > codex 预算，< 桌面腿（helpers/codex-imagegen.js 的 codexImageBudgetMs）
         });
       } catch (err) {
         return failStreaming(502, 'IMAGE_FAILED', `generate_image ${err.stage === 'extract' ? 'failed' : `${err.stage || route} error`}: ${err.message}`);
