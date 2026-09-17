@@ -161,8 +161,13 @@ describe('项目总线：删除时停掉入座器与对账的计时器', () => {
     const bus = getProjectBus(p.id);
     bus.publish({ type: 'run.file_changed', runId: 'run_bus0002', filePath: '新产物.md', event: 'change' });
     bus.publish({ type: 'run.done', runId: 'run_bus0002' });
-    await wait(300);
-    expect((await readBoard(p.id)).objects['新产物.md']).toBeTruthy();
+    // 轮询而不是固定等 300ms：全量测试并行跑时入座会慢（09-17 出现过一次固定等待落空）；真卡住的话 3 秒后照样红
+    let seated = false;
+    for (let t = 0; t < 30 && !seated; t += 1) {
+      await wait(100);
+      seated = !!(await readBoard(p.id)).objects['新产物.md'];
+    }
+    expect(seated).toBe(true);
     disposeProjectBus(p.id);
   });
 });
