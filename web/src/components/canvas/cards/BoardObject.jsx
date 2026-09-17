@@ -94,8 +94,8 @@ function BoardObject({
   // board.json 里压根没有 w/h，read_board 报的是形态表猜值。涂鸦不量 —— 它的
   // w/h 就是路径包围盒，本来就是真值。
   const measured = o.type !== 'scribble';
-  // 板书中段折起（ChalkFold）：展开不回写高度、回写不超天花板，规矩见 use-chalk-fold-gate.js
-  const { chalkCapH, onFoldOpenChange, onMeasuredGated } = useChalkFoldGate({ o, measured, onMeasured });
+  // 板书中段折起（ChalkFold）：卡高恒等于天花板，展开走浮层不回写，规矩见 use-chalk-fold-gate.js
+  const { chalkCapH, onMeasuredGated } = useChalkFoldGate({ o, measured, onMeasured });
   useMeasuredSize(rootRef, o, onMeasuredGated, [o.data?.t, o.text, o.data?.size, o.data?.format]);
   // 板书 MdInk 的 origin 要引用稳定（MdInk 已 memo：相机平移时 200 张板书别再
   // 每帧重跑 markdown 解析 —— 08-25 性能探针 17fps 案）
@@ -422,7 +422,7 @@ function BoardObject({
           {/* 过长的板书把中段折起来（09-09 重启）：卡高收在 CARD_MAX_H 里，头尾都在，中缝点开看全文 */}
           <ChalkFold
             maxH={chalkCapH - 8}
-            lineH={TEXT_SIZE_PX.md * 1.6} contentKey={o.text || ''} onOpenChange={onFoldOpenChange}
+            lineH={TEXT_SIZE_PX.md * 1.6} contentKey={o.text || ''}
             render={() => (
               <MdInk
                 text={o.text || ''} fontFamily={FONT_READ} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}

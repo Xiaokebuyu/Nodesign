@@ -44,10 +44,9 @@ export function makePlacer() {
       `Wrote board note ${rel} — ${describeSpot(placed, { anchorId, groupTag })}.`,
       `Visible in the user's viewport: ${visibleIn(rect, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
-    // 折叠如实报：卡高封顶到 CARD_MAX_H，超出的折在卡里
-    if (box.capped) {
-      lines.push(`⚠ Long for one card (capped at ${box.h}px): the head and the tail stay visible, the middle is folded (the reader clicks the seam to unfold). A board note explains one thing — if this is real content, it belongs in an artifact (docx / site / deck); if it is several points, write several notes.`);
-    }
+    // 折叠不进返回（2026-09-17 板书树刀三，站主：「尺寸不该是 agent 写内容时要考虑的部分」）。
+    // 卡高恒等于天花板、超出的折在卡里、点开走浮层，全是机器的事；真会话里 42% 的板书会命中封顶，
+    // 每次多 288 字的警告换不来任何 agent 该做的动作。
     // 收卷提醒（2026-08-27 收纳器）：落进收着的组 = 用户看不见这条新话
     {
       const rolledInto = [args.tag, boardBefore.objects?.[parentId]?.tag, boardBefore.objects?.[anchorId]?.tag]

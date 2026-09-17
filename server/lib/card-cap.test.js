@@ -56,14 +56,12 @@ describe('工具层封顶折叠（2026-09-05：不再拒收，板书说一件事
     write1 = (a) => makeWriteOnBoardTool({ projectId: pid, sharedRoot, sessionId: 'cap', ctx }).handler(a, {});
   });
 
-  it('⭐ 写一整章 → 照写，卡高封顶在 CARD_MAX_H，返回如实报折叠并教「一条板书说一件事」', async () => {
+  it('⭐ 写一整章 → 照写，卡高封顶在 CARD_MAX_H；⭐ 09-17 起返回里不再提折叠（尺寸是机器的事）', async () => {
     const before = await countObjects();
     const r = await write1({ text: long });
     expect(r.isError).toBeUndefined();
     const txt = r.content[0].text;
-    expect(txt).toMatch(/Long for one card/);
-    expect(txt).toMatch(/folded/);
-    expect(txt).toMatch(/artifact/);
+    expect(txt).not.toMatch(/Long for one card|folded|capped/i);
     expect(await countObjects()).toBe(before + 1);
     const board = await readBoard(pid);
     const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/')).sort().pop();
