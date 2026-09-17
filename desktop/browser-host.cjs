@@ -37,6 +37,18 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
   const clampZoom = (z) => Math.max(0.2, Math.min(3, z));
 
   /**
+   * 视图的 webContents，已关就回 null。
+   * ⛔ Electron 44 里 `webContents.close()` 之后 `view.webContents` 是 **undefined**，不是一个
+   *    isDestroyed() 为真的对象（09-17 用 44.2.0 实测）。applyZoom 排下的 300ms 复查在视图关掉后
+   *    照样触发，直接 `.isDestroyed()` 抛在定时器里 = 主进程未捕获异常，站主桌面弹「A JavaScript
+   *    error occurred in the main process」。凡是经 entry 取 webContents 的地方都走这里。
+   */
+  const liveWc = (entry) => {
+    const wc = entry && entry.view && entry.view.webContents;
+    return wc && !wc.isDestroyed() ? wc : null;
+  };
+
+  /**
    * 让页面的 CSS 视口等于 entry.viewport（工具层写死的 1366×768，坐标契约就靠它）。
    *
    * ⛔ **判据是页面自己量的 innerWidth，不是 getZoomFactor**（2026-09-10 改）。
@@ -57,8 +69,8 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
    * ⭐ 换成**代次闸**：读数只有在「这中间没有再 layout 过」时才算数，荡不起来。
    */
   function applyZoom(entry, verify = 2) {
-    const wc = entry.view.webContents;
-    if (wc.isDestroyed()) return;
+    const wc = liveWc(entry);
+    if (!wc) return;
     const w = (entry.bounds && entry.bounds.width) || entry.viewport.width;
     const zoom = clampZoom(w / entry.viewport.width);
     entry.zoomApplied = zoom;   // 基准用**我们设下去的值**，不回读（回读那个数不可信）
@@ -72,10 +84,11 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
    * @param {number} seq 派这次复查时的布局代次；对不上说明中间又摆过一次，这个读数已经过期
    */
   function checkViewport(entry, left, seq) {
-    const wc = entry.view.webContents;
-    if (wc.isDestroyed() || entry.seq !== seq) return;
+    const wc = liveWc(entry);
+    if (!wc || entry.seq !== seq) return;
     wc.executeJavaScript('({w:window.innerWidth,h:window.innerHeight})', true).then((vp) => {
       if (!vp || !(vp.w > 0) || entry.seq !== seq) return;    // 读的过程中又摆了 → 这个数不作数
+      if (liveWc(entry) !== wc) return;                         // 读的过程中视图关了
       const want = entry.viewport.width;
       entry.cssViewport = { width: vp.w, height: vp.h };
       if (Math.abs(vp.w - want) <= Math.max(2, want * 0.01)) return;    // 1% 以内算到位
@@ -116,7 +129,7 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
   async function createView({ projectId, proxyPort, viewport }) {
     const vp = { width: Number(viewport?.width) || 1366, height: Number(viewport?.height) || 768 };
     const existing = views.get(projectId);
-    if (existing && !existing.view.webContents.isDestroyed()) return { viewId: existing.id, marker: existing.marker, reused: true };
+    if (existing && liveWc(existing)) return { viewId: existing.id, marker: existing.marker, reused: true };
     const s = ses();
     if (proxyPort && proxyApplied !== proxyPort) {
       // 出网闸在服务端的代理层；<-loopback> = 连 localhost 也走代理，让闸看见（跟 headless 那条的 bypass:'' 同义）
@@ -182,15 +195,16 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
   });
   // 接手：把键盘焦点交给视图（否则按了手形按钮之后敲键盘打进的是主窗口）
   ipcMain.handle('nd:browser-focus', (_e, projectId) => {
-    const entry = views.get(String(projectId || ''));
-    if (!entry || entry.view.webContents.isDestroyed()) { log(`[browser-host] focus ${projectId} 没有视图`); return { ok: false }; }
-    try { entry.view.webContents.focus(); } catch { /* */ }
+    const wc = liveWc(views.get(String(projectId || '')));
+    if (!wc) { log(`[browser-host] focus ${projectId} 没有视图`); return { ok: false }; }
+    try { wc.focus(); } catch { /* */ }
     log(`[browser-host] focus ${projectId}`);
     return { ok: true };
   });
   ipcMain.handle('nd:browser-state', (_e, projectId) => {
     const entry = views.get(String(projectId || ''));
-    return entry ? { live: true, url: entry.view.webContents.getURL(), blocked: entry.blocked } : { live: false };
+    const wc = liveWc(entry);
+    return wc ? { live: true, url: wc.getURL(), blocked: entry.blocked } : { live: false };
   });
 
   // 主窗自己的缩放变了（正常不会：main.js 把倍率钉在 1，这里兜 zoom-changed 拨回那一瞬）→ 重排
@@ -218,18 +232,18 @@ function createBrowserHost({ getWindow, log, cdpPort }) {
             if (req.method === 'DELETE' && m[1]) return reply(200, { ok: destroyView(m[1]) });
             if (req.method === 'GET' && !m[1]) {
               return reply(200, { views: [...views.values()].map(e => {
-                const dead = e.view.webContents.isDestroyed();
+                const wc = liveWc(e);
                 const bounds = e.view.getBounds();
-                const zoom = dead ? null : e.view.webContents.getZoomFactor();
+                const zoom = wc ? wc.getZoomFactor() : null;
                 // ⭐ cssViewport = bounds ÷ zoom —— 这就是页面自己量到的 innerWidth/innerHeight，
                 //    也是 agent 那边坐标契约的那个数。它不等于 viewport 就是共视对不上位，
                 //    别再靠肉眼看截图猜（09-10：「画面缩到一角」「坐标定位不到」是同一个数错了）。
                 const cssViewport = e.cssViewport || ((zoom && bounds.width) ? { width: Math.round(bounds.width / zoom), height: Math.round(bounds.height / zoom) } : null);
-                return { id: e.id, projectId: e.projectId, url: e.view.webContents.getURL(), placed: !!e.rect, rect: e.rect, bounds, zoom, cssViewport, want: e.viewport, ok: !!cssViewport && cssViewport.width === e.viewport.width, blocked: e.blocked };
+                return { id: e.id, projectId: e.projectId, url: wc ? wc.getURL() : null, placed: !!e.rect, rect: e.rect, bounds, zoom, cssViewport, want: e.viewport, ok: !!cssViewport && cssViewport.width === e.viewport.width, blocked: e.blocked };
               }) });
             }
             // 诊断：这张视图现在长什么样（PNG base64）。站主远程看共视对不对位时用
-            if (req.method === 'GET' && m[1]) { const e = byId.get(m[1]); if (!e) return reply(404, { error: 'no such view' }); const img = await e.view.webContents.capturePage(); return reply(200, { png: img.toPNG().toString('base64'), size: img.getSize() }); }
+            if (req.method === 'GET' && m[1]) { const wc = liveWc(byId.get(m[1])); if (!wc) return reply(404, { error: 'no such view' }); const img = await wc.capturePage(); return reply(200, { png: img.toPNG().toString('base64'), size: img.getSize() }); }
             reply(405, { error: 'method' });
           } catch (err) { reply(500, { error: err.message }); }
         });
