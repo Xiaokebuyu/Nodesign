@@ -162,7 +162,7 @@ Do NOT use this tool when:
         .min(0)
         .max(10000)
         .optional()
-        .describe('Extra wait after scrolling before the shot (default 350ms) — long CSS transitions may need more.'),
+        .describe('Extra wait after scrolling before the shot (0-10000 ms, default 350; larger values run as 10000) — long CSS transitions may need more.'),
       console: z
         .enum(['warn', 'all'])
         .optional()
@@ -186,7 +186,7 @@ Do NOT use this tool when:
         .optional()
         .describe('FILMSTRIP: also encode the full recording as .webm under exports/motion/ (real timing preserved, jank and all). You cannot watch it — use deliver_files to hand it to the user.'),
       scrollBy: z.number().min(-8000).max(8000).optional()
-        .describe('FILMSTRIP: pixels of REAL wheel scrolling dispatched over the recording window (positive = down). Use this for scroll-driven motion (reveal / parallax / snap / sticky) — it is what a visitor does; trigger/click are for JS-started moves. Can combine with trigger/click.'),
+        .describe('FILMSTRIP: pixels of REAL wheel scrolling dispatched over the recording window (positive = down; -8000 to 8000, values outside run at the nearest limit). Use this for scroll-driven motion (reveal / parallax / snap / sticky) — it is what a visitor does; trigger/click are for JS-started moves. Can combine with trigger/click.'),
       elements: z.boolean().optional()
         .describe('FILMSTRIP: run the element probe (default true): per-frame position/opacity/scale of the elements likely to move, reported as who moved, how much, when. Set false to save a little CPU.'),
       pages: z

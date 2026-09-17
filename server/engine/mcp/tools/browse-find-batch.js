@@ -60,7 +60,7 @@ as an error telling you to find again.`,
     {
       query: z.string().min(1).max(120)
         .describe('What to find, in the words shown on the element plus an optional role word. E.g. "search", "Sign in button", "下一页 链接".'),
-      limit: z.number().int().min(1).max(20).optional().describe('Max matches to return (default 20).'),
+      limit: z.number().int().min(1).max(20).optional().describe('Max matches to return (1-20, default 20; larger values run as 20).'),
     },
     async ({ query, limit }) => {
       try {

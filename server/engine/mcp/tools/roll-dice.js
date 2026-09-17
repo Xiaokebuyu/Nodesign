@@ -39,12 +39,12 @@ Failure buys information or a cost; success buys a new problem — never a flat 
     {
       label: z.string().min(1).max(60)
         .describe('What this check is, shown to the user (e.g. "斥候·侦查" or "哥布林·突袭")'),
-      sides: z.number().int().min(2).max(1000).default(20).optional().describe('Die faces (default 20)'),
-      n: z.number().int().min(1).max(20).default(1).optional().describe('How many dice (default 1)'),
-      modifier: z.number().int().min(-100).max(100).default(0).optional().describe('Flat bonus/malus added to the total'),
+      sides: z.number().int().min(2).max(1000).default(20).optional().describe('Die faces (2-1000, default 20; values outside run at the nearest limit)'),
+      n: z.number().int().min(1).max(20).default(1).optional().describe('How many dice (1-20, default 1; larger values run as 20)'),
+      modifier: z.number().int().min(-100).max(100).default(0).optional().describe('Flat bonus/malus added to the total (-100 to 100, values outside run at the nearest limit)'),
       advantage: z.enum(['none', 'adv', 'dis']).default('none').optional()
         .describe('adv = roll twice keep high, dis = keep low (n must be 1)'),
-      dc: z.number().int().min(1).max(1000).optional().describe('Difficulty class; result line says success/failure'),
+      dc: z.number().int().min(1).max(1000).optional().describe('Difficulty class (1-1000); result line says success/failure'),
     },
     async (args, _extra) => {
       if (!projectId) return { content: [{ type: 'text', text: 'No project bound.' }], isError: true };

@@ -174,7 +174,7 @@ canvas/WebGL UIs and anything you'd otherwise have to click by pixel. Refs die
 on reload/navigation.`,
     {
       query: z.string().min(1).max(120).describe('Words shown on the element plus an optional role word.'),
-      limit: z.number().int().min(1).max(20).optional().describe('Max matches (default 20).'),
+      limit: z.number().int().min(1).max(20).optional().describe('Max matches (1-20, default 20; larger values run as 20).'),
     },
     async ({ query, limit }) => {
       try {

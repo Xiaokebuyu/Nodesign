@@ -29,6 +29,7 @@
 
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { withParamSanitizer } from './param-sanitizer.js';
+import { compileNumericBounds } from './numeric-bounds.js';
 import { withImageDiet } from './image-diet.js';
 import { withCapabilityGate, shouldRegisterTool } from './capability-gate.js';
 import { shouldRegisterForMode, assertModeProfileNames } from './mode-profile.js';
@@ -165,6 +166,12 @@ function assertAlwaysLoadNames(registeredNames) {
  * 全进程共享一份：同一份 schema 跟项目无关。
  */
 export const TOOL_PARAM_KEYS = new Map();
+
+/**
+ * 工具名 → 数值参数边界骨架（numeric-bounds.js）。装配时从同一份 zod schema 转出（09-17），
+ * PreToolUse 的越界夹紧钩子读它。没有任何有边界数值参数的工具不进表。
+ */
+export const TOOL_NUMERIC_BOUNDS = new Map();
 
 export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, sessionId, ctx, roleRoster = null, projectMode = 'design' } = {}) {
   // 浏览通道里能被 browser_batch 串起来的七件：先建一次，batch 拿**同一批实例**
@@ -440,6 +447,12 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   // 工具自己**永远看不见**模型多传了什么 —— 真会话里 write_on_board 被塞过 20 次
   // `facts`（整份剧情事实），一次都没留下痕迹。只有钩子拿得到原始 tool_input。
   for (const t of tools) TOOL_PARAM_KEYS.set(t.name, new Set(Object.keys(t.inputSchema || {})));
+  // 数值边界台账（09-17）：越界值由 MCP server 侧 zod 直接拒掉，工具体不执行、包装层也看不见，
+  // 只有 PreToolUse 钩子能在那之前按边界夹紧。边界从 zod schema 转出，不另抄一份
+  for (const t of tools) {
+    const b = compileNumericBounds(t.inputSchema);
+    if (b) TOOL_NUMERIC_BOUNDS.set(t.name, b); else TOOL_NUMERIC_BOUNDS.delete(t.name);
+  }
 
   // 角色工具白名单的启动期对账（2026-08-26）：cast_role 会把白名单里的短名写进
   // 角色文件的 frontmatter，名字写错**不会报错**，只会让角色少一只手（CLI 当那个

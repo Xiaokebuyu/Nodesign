@@ -39,7 +39,7 @@ animate a glow ring on it.`,
         .min(200)
         .max(10000)
         .optional()
-        .describe('How long the pulse lasts; default 1500ms'),
+        .describe('How long the pulse lasts (200-10000 ms, default 1500; values outside run at the nearest limit)'),
     },
     async ({ selector, durationMs }) => {
       try {

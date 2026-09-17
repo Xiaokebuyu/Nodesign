@@ -67,7 +67,7 @@ Costs a few seconds and ~1.7k tokens; don't call it in a loop.`,
     {
       tag: z.string().max(40).optional(),
       around: z.string().max(300).optional(),
-      margin: z.number().min(0).max(2000).optional().describe('World px of margin around `around` (default 160)'),
+      margin: z.number().min(0).max(2000).optional().describe('World px of margin around `around` (0-2000, default 160; larger values run as 2000)'),
       view: z.object({ x: z.number(), y: z.number(), w: z.number().min(50), h: z.number().min(50) }).optional(),
     },
     async ({ tag: rawTag, around, margin, view }) => {

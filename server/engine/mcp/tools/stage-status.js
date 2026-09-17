@@ -21,7 +21,7 @@ current situation instead of what you set up at the start. Beats are the stage's
 re-narrate them to the user, he has just read them.`,
     {
       title: z.string().max(60).optional().describe('故事的文件夹名（画布上那张卡的标题）。项目里只有一个时可不传'),
-      beats: z.number().int().min(0).max(12).default(3).describe('带回最近几段正文（每段截到 600 字）。只要数值和记忆就传 0'),
+      beats: z.number().int().min(0).max(12).default(3).describe('带回最近几段正文（0-12 段，超过 12 按 12；每段截到 600 字）。只要数值和记忆就传 0'),
     },
     async ({ title, beats }) => {
       const fail = (msg) => ({ content: [{ type: 'text', text: msg }], isError: true });

@@ -289,7 +289,7 @@ Pass a selector to read one region instead of the whole page (e.g. "main",
     {
       selector: z.string().optional().describe('Read only this element (first match). Plain CSS only.'),
       maxChars: z.number().int().min(200).max(20000).optional()
-        .describe('Cap on the text returned (default 4000). Text is truncated, never silently dropped.'),
+        .describe('Cap on the text returned (200-20000, default 4000; values outside run at the nearest limit). Text is truncated, never silently dropped.'),
       links: z.boolean().optional().describe('Include the link list (default true).'),
     },
     async ({ selector, maxChars, links }) => {

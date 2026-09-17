@@ -403,9 +403,9 @@ export const COMPUTER_SCHEMA = {
   modifiers: z.string().optional()
     .describe('Modifier chord held during a click or scroll: shift / ctrl / alt / cmd, joined with + (e.g. "ctrl+shift").'),
   scroll_direction: z.enum(['up', 'down', 'left', 'right']).optional().describe('For scroll.'),
-  scroll_amount: z.number().int().min(1).max(10).optional().describe('For scroll: wheel notches, default 3.'),
-  repeat: z.number().int().min(1).max(100).optional().describe('For key: press the sequence this many times, default 1.'),
-  duration: z.number().min(0).max(30).optional().describe('Seconds, for wait and hold_key (max 30).'),
+  scroll_amount: z.number().int().min(1).max(10).optional().describe('For scroll: wheel notches (1-10, default 3; larger values run as 10).'),
+  repeat: z.number().int().min(1).max(100).optional().describe('For key: press the sequence this many times (1-100, default 1; larger values run as 100).'),
+  duration: z.number().min(0).max(30).optional().describe('Seconds, for wait and hold_key (0-30; larger values run as 30).'),
 };
 
 /** 动作抛的 Playwright 内部错 → agent 能行动的话（两个 computer 工具共用） */

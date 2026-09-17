@@ -184,7 +184,7 @@ raw percentage to the user as if it were their experience.`,
       device: z.enum(['desktop', 'tablet', 'mobile']).optional()
         .describe('Viewport preset (default desktop 1440×900). Mobile is where jank shows up worst.'),
       frames: z.number().int().min(30).max(300).optional()
-        .describe('How many wheel steps to scroll across (default 120 ≈ a 2-second scroll at 60Hz). Real wheel events are dispatched at ~60Hz, the same rate a trackpad fires — so wheel handlers, scroll hijacking and smooth-scroll libraries are all in the measurement.'),
+        .describe('How many wheel steps to scroll across (30-300, default 120 ≈ a 2-second scroll at 60Hz; values outside run at the nearest limit). Real wheel events are dispatched at ~60Hz, the same rate a trackpad fires — so wheel handlers, scroll hijacking and smooth-scroll libraries are all in the measurement.'),
     },
     async ({ path: relPath, device, frames: framesArg }) => {
       const asText = (text) => ({ content: [{ type: 'text', text }] });

@@ -18,7 +18,8 @@
  */
 import { TOOL_PARAM_KEYS } from '../../mcp/index.js';
 
-const BATCH_TOOLS = new Set(['mcp__nodesign__board_batch', 'mcp__nodesign__browser_batch', 'mcp__nodesign__artifact_batch']);
+// 09-17 起越界夹紧钩子（pre-numeric-clamp.js）也读这两样，导出共用
+export const BATCH_TOOLS = new Set(['mcp__nodesign__board_batch', 'mcp__nodesign__browser_batch', 'mcp__nodesign__artifact_batch']);
 /** batch 自己的旋钮，不算未知 */
 const BATCH_OWN = new Set(['actions', 'screenshotAfter']);
 
@@ -31,10 +32,12 @@ const BATCH_OWN = new Set(['actions', 'screenshotAfter']);
  * 带前缀的键，把这个洞盖住了（判据本身要先验一遍，量具错得比 bug 还多）。
  */
 const PREFIX = 'mcp__nodesign__';
-function schemaOf(name) {
+/** 按工具名查装配台账，带不带前缀都认 */
+export function lookupToolTable(map, name) {
   if (typeof name !== 'string') return null;
-  return TOOL_PARAM_KEYS.get(name) || TOOL_PARAM_KEYS.get(name.startsWith(PREFIX) ? name.slice(PREFIX.length) : `${PREFIX}${name}`) || null;
+  return map.get(name) || map.get(name.startsWith(PREFIX) ? name.slice(PREFIX.length) : `${PREFIX}${name}`) || null;
 }
+const schemaOf = (name) => lookupToolTable(TOOL_PARAM_KEYS, name);
 function unknownKeysOf(name, input) {
   const own = schemaOf(name);
   if (!own || !own.size || !input || typeof input !== 'object') return [];

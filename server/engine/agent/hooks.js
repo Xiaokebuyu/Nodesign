@@ -65,6 +65,7 @@ import {
 import { makePreToolUseBoardNeighborhoodInjector } from './hooks/pre-board-neighborhood.js';
 import { makePreToolUseBoardDirtyInjector } from './hooks/pre-board-dirty.js';
 import { makePreToolUseUnknownParamsProbe } from './hooks/pre-unknown-params.js';
+import { makePreToolUseNumericClamp } from './hooks/pre-numeric-clamp.js';
 import { makePreToolUseSendMessageRecipientGuard } from './hooks/pre-peer-guard.js';
 import { createRoleRoster } from './cast.js';
 import { makePostToolUseFailureRoleRelease, makeSubagentStopRoleNotice, makeSubagentStartRoleAlias } from './hooks/resident-role-lifecycle.js';
@@ -248,6 +249,13 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
       // 看不见 —— 只有钩子拿得到原始 tool_input。挂全部 nodesign 工具。
       matcher: 'mcp__nodesign__.*',
       hooks: [makePreToolUseUnknownParamsProbe()],
+    }, {
+      // 数值越界按边界执行（09-17，站主拍板）：zod 在 MCP server 侧直接拒越界值，工具体不执行，
+      // 只有这里能在那之前夹紧并告诉模型。⚠️ nodesign 工具的输入改写只许有这一个 handler，
+      // 且返回值不带 permissionDecision（别的钩子返回的 allow 会把带 allow 的改写抹掉，探针实测），
+      // 见 hooks/pre-numeric-clamp.js
+      matcher: 'mcp__nodesign__.*',
+      hooks: [makePreToolUseNumericClamp()],
     }, {
       matcher: 'Write',
       hooks: [

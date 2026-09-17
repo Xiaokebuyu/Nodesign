@@ -33,7 +33,7 @@ stop_process. Processes die when NoDesign quits. Up to ${MAX_PER_PROJECT} per pr
       command: z.string().min(1).max(500).describe('Shell command, e.g. "npm run dev" or "node server.js"'),
       name: z.string().max(80).optional().describe('Short label shown to the user (default: the command)'),
       cwd: z.string().max(400).optional().describe('Working directory relative to the project folder (default: the project folder)'),
-      wait_ms: z.number().int().min(0).max(60000).optional().describe('How long to wait for a URL/port before returning (default 8000)'),
+      wait_ms: z.number().int().min(0).max(60000).optional().describe('How long to wait for a URL/port before returning (0-60000 ms, default 8000; larger values run as 60000)'),
     },
     async (args) => {
       if (!projectId) return text('No project bound.', true);
@@ -59,7 +59,7 @@ export function makeReadProcessLogTool({ projectId }) {
     'Read the latest output of a process started with start_process (last N lines, default 100).',
     {
       id: z.string().min(1).max(40).describe('Process id from start_process / list_processes'),
-      tail: z.number().int().min(1).max(400).optional().describe('How many trailing lines (default 100)'),
+      tail: z.number().int().min(1).max(400).optional().describe('How many trailing lines (1-400, default 100; larger values run as 400)'),
     },
     async (args) => {
       if (!projectId) return text('No project bound.', true);

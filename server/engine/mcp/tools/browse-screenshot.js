@@ -78,7 +78,7 @@ the workspace for the user.`,
       frames: z.array(z.number().min(0).max(30000)).min(2).max(30).optional()
         .describe('FILMSTRIP: capture the viewport at these ms offsets (t=0 = when scrollBy/trigger/click starts) and return one timestamped contact sheet. 2-30 offsets; the sheet has a fixed pixel budget (~2.3MP, ≈3-3.7k tokens), so more cells = smaller cells — 6-10 to read detail, 12-16 for a whole sequence, 20-30 for long scroll choreographies where rhythm matters more than detail (zoom a cell region afterwards). Place them where the motion lives; include 0.'),
       scrollBy: z.number().min(-8000).max(8000).optional()
-        .describe('FILMSTRIP: pixels of real wheel scrolling dispatched over the recording window (positive = down). The natural way to record scroll-driven motion on a site you did not write.'),
+        .describe('FILMSTRIP: pixels of real wheel scrolling dispatched over the recording window (positive = down; -8000 to 8000, values outside run at the nearest limit). The natural way to record scroll-driven motion on a site you did not write.'),
       trigger: z.string().optional().describe('FILMSTRIP: JS evaluated in page context at t=0 to start a move (await OK).'),
       click: z.string().optional().describe('FILMSTRIP: CSS selector to REAL-click at t=0 (e.g. a menu button, a tab).'),
       elements: z.boolean().optional().describe('FILMSTRIP: also run the element probe (default true). Set false to save a little CPU.'),

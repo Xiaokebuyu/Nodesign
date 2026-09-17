@@ -54,3 +54,21 @@ describe('createHooks —— actor-stamp 的真实覆盖面', () => {
     }
   });
 });
+
+describe('createHooks —— 数值越界夹紧的真实覆盖面（09-17）', () => {
+  const cfg = createHooks({});
+  const clampedBy = (toolName) => (cfg.PreToolUse || []).filter((e) => (
+    !e.matcher || new RegExp(`^(?:${e.matcher})$`).test(toolName)
+  )).flatMap((e) => e.hooks || []).filter((h) => h.name === 'numericClamp').length;
+
+  it('凡 nodesign MCP 工具都挂且只挂一次（两份改写会互相替换）', () => {
+    for (const short of ['browser_find', 'screenshot_canvas', 'write_on_board', 'browser_batch', 'artifact_batch', 'some_future_tool']) {
+      expect(clampedBy(`mcp__nodesign__${short}`), short).toBe(1);
+    }
+  });
+  it('只圈 nodesign 命名空间', () => {
+    for (const name of ['Grep', 'Agent', 'Bash', 'mcp__websearch__web_search']) {
+      expect(clampedBy(name), name).toBe(0);
+    }
+  });
+});

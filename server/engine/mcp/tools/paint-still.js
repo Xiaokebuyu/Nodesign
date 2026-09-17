@@ -400,7 +400,7 @@ breakage; do not burn high-detail on every frame.`,
         seed: z.number().int().optional().describe('omit for fresh random per still; batch uses seed, seed+1, ...'),
         name: z.string().regex(/^[\w一-鿿぀-ヿ-]{1,40}$/).default('still'),
         batch: z.number().int().min(1).max(8).optional()
-          .describe('variations of this same prompt in one pass (default 1). Use 4-8 to roll for a keeper.'),
+          .describe('variations of this same prompt in one pass (1-8, default 1; larger values run as 8). Use 4-8 to roll for a keeper.'),
         lora: z.string().optional()
           .describe('LoRA filename(s) in the box loras/ dir, comma-separated for stacking. Only names from the cookbook or given by the user.'),
         lora_strength: z.string().optional()
@@ -409,12 +409,12 @@ breakage; do not burn high-detail on every frame.`,
         init_image: z.string().optional()
           .describe('img2img base, workspace-relative path. Redraws ON TOP of this image. SDXL models only.'),
         denoise: z.number().min(0.1).max(1).optional()
-          .describe('with init_image only. Default 0.6. Lower = closer to the original (0.3 = light touch-up, 0.8 = loose reinterpretation).'),
+          .describe('with init_image only. Range 0.1-1, default 0.6. Lower = closer to the original (0.3 = light touch-up, 0.8 = loose reinterpretation).'),
         control_image: z.string().optional()
           .describe('ControlNet reference, workspace-relative. Locks POSE/STRUCTURE while the prompt decides everything else.'),
         control_type: z.enum(['openpose', 'depth', 'canny', 'lineart', 'scribble', 'none'])
           .optional().describe('what to extract from control_image. Default openpose. "none" = image is already a processed control map.'),
-        control_strength: z.number().min(0).max(2).optional().describe('default 0.7'),
+        control_strength: z.number().min(0).max(2).optional().describe('0-2, default 0.7'),
         ref_image: z.string().optional()
           .describe('IP-Adapter reference(s), workspace-relative, comma-separated for UP TO 5. Transfers the CHARACTER LOOK into a new picture — the one for "draw my character somewhere else". Feeding 2-4 shots of the same character from different angles is markedly more consistent than one.'),
         ref_weight: z.string().optional()

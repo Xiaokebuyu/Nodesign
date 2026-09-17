@@ -73,7 +73,7 @@ frames:[...] (filmstrip contact sheet).`,
       path: z.string().optional().describe(CANVAS_PATH_DESC),
       live: z.boolean().optional().describe(LIVE_PARAM_DESC),
       scrollBy: z.number().min(-8000).max(8000).optional()
-        .describe('Pixels of REAL wheel scrolling dispatched over the recording window (positive = down): trace scroll-driven motion (ScrollTrigger scrub, parallax, reveals) the way a visitor triggers it. Can combine with trigger/click.'),
+        .describe('Pixels of REAL wheel scrolling dispatched over the recording window (positive = down; -8000 to 8000, values outside run at the nearest limit): trace scroll-driven motion (ScrollTrigger scrub, parallax, reveals) the way a visitor triggers it. Can combine with trigger/click.'),
       elements: z.boolean().optional()
         .describe('Also run the element probe (default true): which elements moved / faded / scaled during the recording, by how much and when — the no-expression way to see who moves.'),
       expressions: z
@@ -86,7 +86,7 @@ frames:[...] (filmstrip contact sheet).`,
         .min(300)
         .max(15000)
         .optional()
-        .describe('How long to record after the trigger (default 2000ms). Cover the whole move plus a settle margin.'),
+        .describe('How long to record after the trigger (300-15000 ms, default 2000; values outside run at the nearest limit). Cover the whole move plus a settle margin.'),
       trigger: z
         .string()
         .optional()

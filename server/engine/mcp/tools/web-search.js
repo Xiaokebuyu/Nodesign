@@ -131,7 +131,7 @@ the session, so keep it to 2-3 image queries per turn; count is fine at 5-10.`,
         .min(1)
         .max(10)
         .optional()
-        .describe('Max text results to return (default 5). Image count follows the same value.'),
+        .describe('Max text results to return (1-10, default 5; larger values run as 10). Image count follows the same value.'),
       include_images: z
         .boolean()
         .optional()
