@@ -11,9 +11,9 @@
  */
 
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { serverTmpPath } from '../../../../lib/server-tmp.js';
 
 export const CODEX_BIN = process.env.NODESIGN_CODEX_BIN || 'codex';
 /**
@@ -161,7 +161,8 @@ export async function runCodexImageGen({ makePrompt, refPaths, cwd, signal, expe
   for (let attempt = 1; attempt <= 2; attempt++) {
     const tag = `${process.pid}-${Date.now().toString(36)}-${attempt}`;
     const attemptOut = path.join(path.dirname(expectFile), `.codex-${tag}-${path.basename(expectFile)}`);
-    const lastMsgFile = path.join(os.tmpdir(), `nd-codex-last-${tag}.txt`);
+    // codex 的最后一句回复里是用户的生图意图，落在服务端私有临时根（沙盒遮读，09-17）
+    const lastMsgFile = serverTmpPath(`nd-codex-last-${tag}.txt`);
     const args = ['exec', '--skip-git-repo-check', '-s', 'workspace-write', '-C', cwd, '-o', lastMsgFile];
     if (CODEX_IMAGE_MODEL) args.push('-m', CODEX_IMAGE_MODEL);
     if (CODEX_IMAGE_EFFORT) args.push('-c', `model_reasoning_effort="${CODEX_IMAGE_EFFORT}"`);
