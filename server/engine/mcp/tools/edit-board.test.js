@@ -107,6 +107,19 @@ describe('edit_board（吞四件 + 新能力）', () => {
     expect(r.content[0].text).toContain('用户的板书');
   });
 
+  it('remove：文件已被 rm 掉的产物卡只摘座位（09-14 幽灵卡案）；文件还在的产物卡照旧拒', async () => {
+    await fs.mkdir(path.join(sharedRoot, '还在的站'), { recursive: true });
+    await fs.writeFile(path.join(sharedRoot, '还在的站', 'index.html'), '<h1>x</h1>');
+    await patchBoard(pid, { objects: { 'site:删掉的站': { x: 0, y: 900, seat: 'auto' }, 'site:还在的站': { x: 700, y: 900, seat: 'auto' } } });
+    const r = await edit({ ops: [{ op: 'remove', id: 'site:删掉的站' }, { op: 'remove', id: 'site:还在的站' }] });
+    expect(r.content[0].text).toContain('✗ #2');
+    expect(r.content[0].text).toContain('文件还在磁盘上');
+    const board = await readBoard(pid);
+    expect(board.objects['site:删掉的站']).toBeUndefined();
+    expect(board.objects['site:还在的站']).toBeDefined();
+    await fs.access(path.join(sharedRoot, '还在的站', 'index.html'));   // 文件一个没动
+  });
+
   it('add_edge：端点校验下沉（不存在拒；磁盘真身收）', async () => {
     await fs.writeFile(path.join(sharedRoot, '真实文件.md'), 'x', 'utf8');
     const bad = await edit({ ops: [{ op: 'add_edge', from: '真实文件.md', to: '虚空端点' }] });

@@ -63,6 +63,7 @@ let win = null;
 let splash = null;
 /** 数据目录（页面桥 nd:open-path 只放行它之内的路径） */
 let dataDirPath = null;
+let serverLogBoot = null;   // { file, offset }：这次起动的服务端输出从 server.log 哪里开始
 let tray = null;
 let sup = null;
 let appUrl = null;
@@ -87,6 +88,8 @@ async function boot() {
   env.NODESIGN_PROFILE = env.NODESIGN_PROFILE || 'local';
   env.NODESIGN_HOST = HOST;
   env.NODESIGN_OPEN = '0';            // 浏览器由我们开，服务端别自己开
+  // 安装目录：服务端据此拒绝把组件放进来（更新时安装器会把它整个删掉，09-14）。开发态没有安装目录
+  if (app.isPackaged) env.NODESIGN_APP_DIR = path.dirname(app.getPath('exe'));
 
   let port;
   try {
@@ -121,6 +124,8 @@ async function boot() {
   settleUpdateLedger(dataDir);
   windowStatePath = path.join(dataDir, 'window.json');
   const logFd = openServerLog(dataDir);
+  // 记下这次起动从 server.log 的哪个字节开始写：起动失败时只把**这一次**的起动输出带进上报（不带以前会话的日志）
+  try { serverLogBoot = { file: path.join(dataDir, 'logs', 'server.log'), offset: typeof logFd === 'number' ? fs.fstatSync(logFd).size : 0 }; } catch { serverLogBoot = null; }
   sup = createSupervisor({
     serverEntry,
     env,
@@ -135,8 +140,9 @@ async function boot() {
   });
   sup.start();
 
-  const ok = await waitHealth(appUrl, { timeoutMs: 60_000, alive: () => sup.running });
-  if (!ok) return fatal(new Error('服务端 60 秒内没有就绪。'));
+  // 60 → 120 秒（09-14 问题库：0.1.43 一台机 60 秒没就绪）。服务端那边也把磁盘清理和慢探测挪到了 listen 之后，这里是兜底
+  const ok = await waitHealth(appUrl, { timeoutMs: 120_000, alive: () => sup.running });
+  if (!ok) return fatal(new Error('服务端 120 秒内没有就绪。'));
 
   installAppMenu();
   createMainWindow();
@@ -637,12 +643,24 @@ function openDesktopLog(dataDir) {
 }
 
 let fatalShown = false;
+/** 这一次起动写进 server.log 的最后一段（卡在哪一步全靠它；以前的上报只有壳子自己的栈，看不出服务端停在哪） */
+function bootLogTail(max = 1800) {
+  try {
+    if (!serverLogBoot) return '';
+    const buf = fs.readFileSync(serverLogBoot.file);
+    const text = buf.subarray(Math.min(serverLogBoot.offset, buf.length)).toString('utf8').trim();
+    return text.length > max ? `…${text.slice(-max)}` : text;
+  } catch { return ''; }
+}
+
 function fatal(err) {
   log(`启动失败：${err?.stack || err}`);
   // 同一次失败会从两条路到这里（health 超时 + 子进程 onExit），只弹一次
   if (fatalShown) return;
   fatalShown = true;
-  reportShellIssue('bug', `桌面版启动失败：${String(err?.message || err).slice(0, 120)}`, String(err?.stack || err));
+  const tail = bootLogTail();
+  reportShellIssue('bug', `桌面版启动失败：${String(err?.message || err).slice(0, 120)}`,
+    `${String(err?.stack || err).slice(0, 800)}${tail ? `\n--- server.log（本次起动）---\n${tail}` : ''}`);
   splash?.destroy(); splash = null;
   dialog.showErrorBox('NoDesign 启动失败', String(err?.message || err));
   quitting = true;

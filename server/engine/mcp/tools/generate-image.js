@@ -21,6 +21,7 @@ import {
 } from '../../../lib/image-variant.js';
 import { buildVariationPrompt, PRESERVE_KEYS } from './helpers/codex-imagegen.js';
 import { produceImage, extForMime } from './image-produce.js';
+import { describeImageFacts } from './helpers/image-facts.js';
 import { imageRoute, relayGenerateImage } from './relay-tools.js';
 import { fanOutImages, buildOutputName, makeImagePool } from './generate-image-support.js';
 
@@ -209,8 +210,10 @@ PROMPT WRITING:
     with creative additions they did not ask for.
   - For photorealism use camera language: 85mm lens, wide-angle, macro,
     golden-hour lighting, three-point softbox, etc.
-  - For icons / stickers: explicitly say "white background" (transparent is
-    not supported; use remove_background afterwards if you need alpha).
+  - For icons / stickers / sprites that need alpha: on the codex route, write
+    "transparent background" in the prompt — it usually comes back RGBA (the
+    result caption says so). If it doesn't, or on the gateway route, use
+    remove_background afterwards.
   - For text-in-image: quote the exact text and state the font style
     ("clean sans-serif", "bold serif headline").
   - Do NOT write size or ratio into the prompt body ("in 4K", "16:9
@@ -554,10 +557,11 @@ memory (记忆/, type: project) so later sessions inherit it.`,
       } catch { /* fail-safe */ }
 
       // 8. 返回 CallToolResult — text caption + image content block
+      const facts = await describeImageFacts(imgBuf, aspectRatio);   // 量出来的尺寸 / 比例落差 / 透明（09-14，不回显请求）
       const captionParts = [
         `Generated ${fileName}`,
         `at ${agentRelPath}`,
-        `(${aspectRatio}, ${provider === 'codex' ? 'codex-imagegen' : provider}, ${(imgBuf.length / 1024).toFixed(1)} KB)`,
+        `(${facts || aspectRatio}, ${provider === 'codex' ? 'codex-imagegen' : provider}, ${(imgBuf.length / 1024).toFixed(1)} KB)`,
       ];
       if (webp) {
         captionParts.push(`— 页面里引 ${webp.rel}（${(webp.bytes / 1024).toFixed(0)} KB，`

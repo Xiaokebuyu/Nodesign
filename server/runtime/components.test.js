@@ -151,6 +151,43 @@ describe('components', () => {
     expect(c.readInstalled('tool').binDirs[0].startsWith(path.join(dataDir, 'components'))).toBe(true);
   });
 
+  it('安装目录（09-14 更新时整个被删）：换位置拒绝放进去；起动时已在里面的搬回默认位置', async () => {
+    const appDir = path.join(dataDir, 'NoDesign');
+    process.env.NODESIGN_APP_DIR = appDir;
+    try {
+      await expect(c.relocateComponents(path.join(appDir, 'components'))).rejects.toMatchObject({ code: 'INSIDE_APP_DIR' });
+      await expect(c.relocateComponents(appDir)).rejects.toMatchObject({ code: 'INSIDE_APP_DIR' });
+      expect(c.isInsideAppDir(path.join(dataDir, 'NoDesignData', 'components'))).toBe(false);   // 同名前缀不算在里面
+
+      // 模拟老版本留下的状态：已装的在安装目录里（绕过闸，照老版本那样搬进去）
+      await c.installComponent('tool'); await waitJob('tool');
+      delete process.env.NODESIGN_APP_DIR;
+      const inside = path.join(appDir, 'components');
+      await c.relocateComponents(inside);
+      for (let i = 0; i < 100 && (await c.listComponents()).relocation?.status === 'moving'; i++) await new Promise((res) => setTimeout(res, 50));
+      expect((await c.listComponents()).location.dir).toBe(inside);
+      process.env.NODESIGN_APP_DIR = appDir;
+
+      const r = await c.rescueComponentsFromAppDir();
+      expect(r.status).toBe('done');
+      const { location } = await c.listComponents();
+      expect(location.custom).toBe(false);
+      expect(c.readInstalled('tool').binDirs[0].startsWith(path.join(dataDir, 'components'))).toBe(true);
+      expect(fs.readdirSync(inside).filter((f) => f.endsWith('.json'))).toEqual([]);
+
+      // 已经被更新删空了：只把位置指回默认
+      const { savePrefs, loadPrefs } = await import('./local-prefs.js');
+      fs.mkdirSync(inside, { recursive: true });
+      savePrefs({ componentsDir: inside });
+      expect(await c.rescueComponentsFromAppDir()).toEqual({ moved: 0 });
+      expect(loadPrefs().componentsDir).toBeNull();
+      // 不在安装目录里的不动
+      expect(await c.rescueComponentsFromAppDir()).toBeNull();
+    } finally {
+      delete process.env.NODESIGN_APP_DIR;
+    }
+  });
+
   it('卸载：目录和记录都没了', async () => {
     await c.installComponent('tool'); await waitJob('tool');
     const dir = c.readInstalled('tool').dir;

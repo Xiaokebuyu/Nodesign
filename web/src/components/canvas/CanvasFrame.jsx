@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } fro
 import { MessageSquarePlus } from 'lucide-react';
 import { Assets } from '../../lib/api.js';
 import { versionOfFile } from '../../lib/file-versions.js';
+import { onBrowserGone, onUserEngaged } from '../../lib/browse-window.js';
 import { COLOR } from '../../lib/theme.js';
 import BoardCanvas from './BoardCanvas.jsx';
 import FloatingToolbar from '../ui/FloatingToolbar.jsx';
@@ -223,6 +224,9 @@ export default function CanvasFrame({
    * "上报"变成无限循环（2026-08-18 真踩到，一小时才定位）。
    */
   const closeBrowse = useCallback(() => onBrowse?.(null), [onBrowse]);
+  // 同理要稳定：人在窗里动过 → 归人；实例被回收 → agent 弹的窗一起收（lib/browse-window.js）
+  const engageBrowse = useCallback(() => onBrowse?.(onUserEngaged), [onBrowse]);
+  const browseGone = useCallback(() => onBrowse?.(onBrowserGone), [onBrowse]);
   const closeRepo = useCallback(() => setRepoWin(null), []);
 
   const winSigRef = useRef('');
@@ -468,6 +472,8 @@ export default function CanvasFrame({
               url={browseWin.url}
               help={browseWin.help}
               onClose={closeBrowse}
+              onEngage={engageBrowse}
+              onBrowserGone={browseGone}
               onToolbarGroups={reportWinGroups}
             />
           </Suspense>

@@ -11,6 +11,27 @@ import { PendingChanges } from './api.js';
 import { newId } from './helpers.js';
 import { useGlobalStore } from '../stores/globalStore.js';
 
+/**
+ * 在飞的圈选 POST（按项目）。09-14 站主报「攒着再发，疑似不截图」：服务端**截完图才写进 buffer**
+ * （全进程串行、每张起一只 chromium，一张几秒），而登记计数不等它 —— 攒完立刻点发送，
+ * agent 的 get_pending_changes 读到的是缺条目、缺图的 buffer。所以起轮之前先等这些落地。
+ */
+const inflight = new Map();   // projectId → Set<Promise>
+const SHOT_WAIT_MS = 60_000;
+
+/** 发消息前调：有在飞的圈选就等它们写进 buffer（封顶 60 秒，超时照发）。没有就立刻返回 */
+export async function waitRegionShots(projectId, showToast) {
+  const set = inflight.get(projectId);
+  if (!set?.size) return;
+  showToast?.(`还有 ${set.size} 张圈选截图在生成，好了就发…`, 'info');
+  let timer;
+  await Promise.race([
+    Promise.allSettled([...set]),
+    new Promise((r) => { timer = setTimeout(r, SHOT_WAIT_MS); }),
+  ]);
+  clearTimeout(timer);
+}
+
 export function makeRegionCommentHandler({ projectId: id, setComments, showToast, handleSend }) {
   return async ({ region, viewport, container, elements, text, path, docxPage, queue = false }) => {
     // 无会话闸门 2026-08-13 撤除：没有会话时 handleSend 自己会起一条新的
@@ -29,12 +50,15 @@ export function makeRegionCommentHandler({ projectId: id, setComments, showToast
       }]);
     }
     try {
-      await PendingChanges.regionComment(id, {
+      const post = PendingChanges.regionComment(id, {
         ...(cid ? { id: cid } : {}),
         path: rel, region, viewport, container, elements, text,
         // docx 圈的是页图，得说清第几页（服务端按它去页图缓存裁）
         ...(docxPage ? { docxPage } : {}),
       });
+      if (!inflight.has(id)) inflight.set(id, new Set());
+      inflight.get(id).add(post);
+      try { await post; } finally { inflight.get(id)?.delete(post); }
     } catch (err) {
       if (cid) setComments(arr => arr.filter(c => c.id !== cid));
       showToast(`圈选没记下来：${err.message}`, 'error');

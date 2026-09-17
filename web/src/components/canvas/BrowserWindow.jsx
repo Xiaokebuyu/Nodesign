@@ -107,7 +107,7 @@ function relPos(canvasEl, evt) {
   };
 }
 
-export default function BrowserWindow({ projectId, url, help, onClose, onToolbarGroups }) {
+export default function BrowserWindow({ projectId, url, help, onClose, onEngage, onBrowserGone, onToolbarGroups }) {
   const [status, setStatus] = useState('connecting');   // connecting|live|idle|error|closed
   const [note, setNote] = useState(null);
   const [addr, setAddr] = useState(url || '');
@@ -135,6 +135,9 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
   const wsRef = useRef(null);
   const takeoverRef = useRef(false);
   takeoverRef.current = takeover;
+  // 实例被回收时通知外面（agent 弹的窗要一起收，lib/browse-window.js）；走 ref，别让 WS 为它重连
+  const goneRef = useRef(onBrowserGone);
+  goneRef.current = onBrowserGone;
   const overlayOpenRef = useRef(false);
   // 桌面版原生视图画在所有 HTML 之上：窗内看图期间也要把它停到屏外，否则图被压在视图底下
   overlayOpenRef.current = overlayOpen || !!preview;
@@ -155,6 +158,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
    * 起完**重新订阅**：WS 还连着，但服务端那边当时 peek 是空的，得再问一次。
    */
   const openBrowser = useCallback(async () => {
+    onEngage?.();
     setOpening(true);
     setNote(null);
     try {
@@ -167,7 +171,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
       setStatus('error');
       setNote(err?.message || '打不开');
     } finally { setOpening(false); }
-  }, [projectId, send]);
+  }, [projectId, send, onEngage]);
 
   // ── WS 生命周期 ──
   useEffect(() => {
@@ -201,7 +205,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
       if (msg.type === 'released') setLiveHelp(null);
       if (msg.type === 'idle') { setStatus('idle'); setNote(msg.reason); }
       if (msg.type === 'error') { setStatus('error'); setNote(msg.reason); }
-      if (msg.type === 'closed') { setStatus('closed'); setNote(msg.reason); }
+      if (msg.type === 'closed') { setStatus('closed'); setNote(msg.reason); goneRef.current?.(); }
       if (msg.type === 'url') setAddr(msg.url || '');
     };
 
@@ -363,8 +367,8 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
     {
       id: 'nav',
       items: [
-        { id: 'back', icon: ArrowLeft, title: '后退', onClick: () => send({ type: 'nav', action: 'back' }) },
-        { id: 'reload', icon: RotateCw, title: '刷新', onClick: () => send({ type: 'nav', action: 'reload' }) },
+        { id: 'back', icon: ArrowLeft, title: '后退', onClick: () => { onEngage?.(); send({ type: 'nav', action: 'back' }); } },
+        { id: 'reload', icon: RotateCw, title: '刷新', onClick: () => { onEngage?.(); send({ type: 'nav', action: 'reload' }); } },
       ],
     },
     {
@@ -390,7 +394,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         id: 'zoom',
         icon: expanded ? Minimize2 : Maximize2,
         title: expanded ? '缩小 —— 让画面回到缩略图大小' : '放大 —— 铺满这扇窗',
-        onClick: () => setExpanded(v => !v),
+        onClick: () => { onEngage?.(); setExpanded(v => !v); },
       }],
     },
     {
@@ -407,12 +411,13 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         disabled: !!(native && agentBusy && !takeover && !(help || liveHelp)),
         onClick: () => {
           if (native && agentBusy && !takeover && !(help || liveHelp)) return;
+          onEngage?.();
           if (takeover) { send({ type: 'release' }); setTakeover(false); }
           else { setTakeover(true); native?.focus?.(projectId)?.catch?.(() => {}); }
         },
       }],
     },
-  ], [addr, takeover, send, projectId, onClose, native, agentBusy, help, liveHelp, expanded]);
+  ], [addr, takeover, send, projectId, onClose, onEngage, native, agentBusy, help, liveHelp, expanded]);
 
   const stateLine = {
     connecting: '连接中…',
@@ -467,7 +472,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
         {!native && <canvas
           ref={canvasRef}
           tabIndex={takeover ? 0 : -1}
-          onDoubleClick={() => setExpanded(v => !v)}
+          onDoubleClick={() => { onEngage?.(); setExpanded(v => !v); }}
           title={takeover
             ? '接手中：点一下这块画面再打字（键盘只在这里生效）'
             : (expanded ? '双击缩小' : '双击放大')}
@@ -527,7 +532,7 @@ export default function BrowserWindow({ projectId, url, help, onClose, onToolbar
 
       {preview && <CapturePreview projectId={projectId} file={preview} onClose={() => setPreview(null)} />}
       {/* 它采回来的东西：一站一文件夹（BrowserShelf.jsx） */}
-      <CaptureShelf projectId={projectId} sites={sites} onPreview={setPreview} />
+      <CaptureShelf projectId={projectId} sites={sites} onPreview={(f) => { onEngage?.(); setPreview(f); }} />
     </ArtifactWindow>
   );
 }
