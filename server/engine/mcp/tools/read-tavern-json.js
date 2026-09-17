@@ -127,7 +127,7 @@ no place here; jailbreak sections are pointless on this platform.`,
       mode: z.enum(['digest', 'fetch', 'export_book']).optional()
         .describe('digest = structure only (default); fetch = full text of picked entries; export_book = write every enabled lorebook entry to workspace files (triggered ones one file each with keys in frontmatter, constant ones under 常驻/) — the mechanical half of an import, judgment stays yours'),
       entries: z.array(z.string()).optional()
-        .describe('For mode="fetch": entry names (partial match ok) or ids'),
+        .describe('For mode="fetch": what to pull, as the digest names them — lorebook/preset entry names (partial match ok) or ids; for a character card also its fields by key, e.g. ["first_mes", "description", "alternate_greetings[0]", "角色-新手战士"]. The digest only shows a preview of long fields; fetch returns them in full'),
       out: z.string().max(120).optional()
         .describe('For mode="export_book": target folder, workspace-relative (default 世界书)'),
     },
