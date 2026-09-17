@@ -77,8 +77,8 @@ GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions �
   **镜像**：清单里 `mirrors` 指站点的 `/dl/components-win64/`（`server/scripts/sync-components-mirror.sh` 从 release 同步，
   nginx 加一个 `/dl/` 的 location）；下载前官方与镜像各测 512KB，官方通且不比最快镜像慢太多用官方，否则用镜像。
   Chromium 走 playwright 自己的 CDN，探不通切 npmmirror。
-- **图标只是占位**。`desktop/build/icon.png` 和 `desktop/assets/tray.png` 是站点 favicon 那个
-  深底 N 字（sharp 渲的），能用，想换就换掉这两个文件。
+- **图标**（2026-09-17 换成 N2）：`desktop/build/icon.png`（1024 原图）、`desktop/build/icon.ico`（安装包用，48px 及以下是小尺寸版）、
+  `desktop/assets/tray.png`（托盘，小尺寸版）。原图的铅笔与纸纹是 SVG 滤镜在 Chrome 里渲的，换图时直接用导出的 PNG，不要自己从 SVG 转。
 - **在 Windows 上一次都没跑过**。CI 打出来的包（Releases 草稿 v0.0.10，231MB）本机拆开看过：
   `resources/node/node.exe`、`resources/app/{server,web/dist,bin,desktop}`、SDK 的 claude.exe 都在，hosted/ 和测试没带；但双击装、起服务端、开窗口这三步没验过。
 - **站点那半要先部署**。桌面版默认走 relay，而 relay 在这条分支的 hosted 代码里，线上还没有。

@@ -72,7 +72,7 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: desktop/build/icon.png          # 1024² PNG，electron-builder 自己转 .ico（多尺寸）
+  icon: desktop/build/icon.ico          # 多尺寸 .ico：48px 及以下是小尺寸版，64px 起是原图（直接从 1024 原图缩，小尺寸会糊）
   # 没有代码签名证书时这两行留空即可，代价是首次运行会被 SmartScreen 拦一道
   # "未知发布者"，用户要点两次。买了 OV/EV 证书再填。
   # certificateFile:
