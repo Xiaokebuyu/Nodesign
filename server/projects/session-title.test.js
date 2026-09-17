@@ -40,10 +40,15 @@ describe('会话标题', () => {
     expect(await readSessionTitle(project.id, sid)).toEqual({ title: '帮我做个书店站', fromHelper: false });
 
     // 退避盯读：第一次读到兜底，第二次读到 helper 标题，第三次同一标题不再回调
+    // helper 标题在第一次回调之后才写：原来靠「等 30ms 再写」，Windows 慢机上第一次读还没发生标题就已写入（09-17 发版前测试红过）
     const seen = [];
-    const p = watchSessionTitle(project.id, sid, { onTitle: (t, m) => seen.push([t, m.fromHelper]), delays: [10, 60, 40] });
-    await new Promise(r => setTimeout(r, 30));
-    writeTranscript(cwd, [...base, { type: 'summary', summary: '蘑菇书店站点', leafUuid: 'a1' }]);
+    const p = watchSessionTitle(project.id, sid, {
+      onTitle: (t, m) => {
+        seen.push([t, m.fromHelper]);
+        if (seen.length === 1) writeTranscript(cwd, [...base, { type: 'summary', summary: '蘑菇书店站点', leafUuid: 'a1' }]);
+      },
+      delays: [10, 60, 40],
+    });
     const last = await p;
     expect(last).toBe('蘑菇书店站点');
     expect(seen).toEqual([['帮我做个书店站', false], ['蘑菇书店站点', true]]);
