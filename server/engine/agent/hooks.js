@@ -76,6 +76,7 @@ import { makePreToolUseWorkspaceScopeGuard } from './hooks/pre-workspace-scope-g
 import { PROJECTS_DATA_ROOT } from '../../projects/workspace.js';
 import { getUserPluginsBaseRoot, getUserPluginsRoot } from './plugin-loader.js';
 import { getProject } from '../../projects/store.js';
+import { platform } from '../../runtime/platform.js';
 import { makeUserPromptSubmitHandler } from './hooks/user-prompt-submit.js';
 import {
   makeFileChangedHandler,
@@ -162,6 +163,8 @@ export function createHooks({ ctx, workspaceRoot, sharedRoot, sessionId, project
         // 别人的 skill 库也拒（09-08）：自己那支按项目 owner 算，跟 plugin-loader 同口径
         pluginsBaseRoot: getUserPluginsBaseRoot(),
         ownPluginsRoot: projectId ? getUserPluginsRoot(getProject(projectId)?.ownerId) : null,
+        // 全站会话转录（09-17）：只放行本项目那一格
+        configDir: platform.claudeConfigDir,
       })],
     }, {
       matcher: 'Task|Agent',

@@ -13,6 +13,10 @@
  *   - **读**（Read/Grep/Glob）：只拦数据根内部的越界。仓库、plugin/skill 目录、
  *     /tmp 照读不误 —— 那是干活要用的（skill 附件就在仓库里）。
  *
+ *   - **Claude 配置目录**（09-17）：读写都拒，只放行本项目自己的转录那一格
+ *     （CLI 把大输出落在 `<配置目录>/projects/<编码后的 cwd>/<会话>/tool-results/` 里让模型 Read）。
+ *     别的项目、别的用户的会话转录都在这个目录下，原来只要给出绝对路径就读得到。
+ *
  * 边界（故意窄，别自己脑补更严）：
  *   - 凭据不归它管（那是 platform.protectedPathRules 的活，两边别互相假设）。
  *   - 自己出错就放行（fail-open）—— 闸崩了不该把整个会话堵死。
@@ -36,10 +40,24 @@ function tempDirs() {
   return [process.env.TMPDIR, os.tmpdir(), '/tmp'].filter(Boolean).map(d => path.resolve(d));
 }
 
+/** CLI 给会话转录目录起名的规则：cwd 绝对路径里所有非字母数字字符换成 '-'（session-loop.js 同口径） */
+export function encodeCwdForTranscripts(cwd) {
+  return path.resolve(cwd).replace(/[^a-zA-Z0-9]/g, '-');
+}
+
+/** Glob 的 pattern 可以是绝对路径（此时不带 path 字段），取第一个通配符之前的目录当目标 */
+function globPatternTarget(toolName, toolInput) {
+  if (toolName !== 'Glob') return null;
+  const pat = toolInput?.pattern;
+  if (typeof pat !== 'string' || !path.isAbsolute(pat)) return null;
+  const cut = pat.search(/[*?[{]/);
+  return cut < 0 ? pat : path.dirname(pat.slice(0, cut) + 'x');
+}
+
 /**
  * @returns {null | string} null=放行；string=拒绝理由
  */
-export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, dataRoot, toolName, pluginsBaseRoot = null, ownPluginsRoot = null } = {}) {
+export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, dataRoot, toolName, pluginsBaseRoot = null, ownPluginsRoot = null, configDir = null } = {}) {
   if (!workspaceRoot) return null;
   const ws = path.resolve(workspaceRoot);
   // 仓库道（09-07 起 cwd 与画布真相分开）：agent 站在用户的文件夹 cwdRoot，画布在 <folder>/.nodesign = ws。
@@ -49,14 +67,22 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, 
   const cwd = cwdRoot ? path.resolve(cwdRoot) : null;
   const ownRoots = cwd && cwd !== ws ? [ws, cwd] : [ws];
   const isWrite = WRITE_TOOLS.has(toolName);
-  if (!isWrite && !dataRoot && !pluginsBaseRoot) return null;
+  if (!isWrite && !dataRoot && !pluginsBaseRoot && !configDir) return null;
   const root = dataRoot ? path.resolve(dataRoot) : null;
   const pluginsBase = pluginsBaseRoot ? path.resolve(pluginsBaseRoot) : null;
   const ownPlugins = ownPluginsRoot ? path.resolve(ownPluginsRoot) : null;
-  for (const field of TARGET_FIELDS) {
-    const v = toolInput?.[field];
+  const cfg = configDir ? path.resolve(configDir) : null;
+  const ownTranscripts = cfg ? ownRoots.map((r) => path.join(cfg, 'projects', encodeCwdForTranscripts(r))) : [];
+  const targets = TARGET_FIELDS.map((f) => toolInput?.[f]);
+  targets.push(globPatternTarget(toolName, toolInput));
+  for (const v of targets) {
     if (typeof v !== 'string' || !v) continue;
     const abs = path.resolve(cwd || ws, v);   // 相对路径按 agent 站的地方解析（SDK cwd；没分开时就是工作区）
+    if (cfg && insideDir(abs, cfg) && !ownRoots.some((r) => insideDir(abs, r))
+      && !ownTranscripts.some((d) => insideDir(abs, d))) {
+      return '这个路径在平台的会话记录目录里，里面是所有项目的对话与配置，不对 agent 开放。'
+        + '本会话落盘的大输出（tool-results）照常能读；要找本项目以前做过的事，看工作区里的文件和画布。';
+    }
     // 别人的 skill 库（2026-09-08 市场线）：用户级 plugin 根按 userId 分目录，可它在数据根之外，
     // 下面那条「数据根内越界」管不到 —— 于是 A 的 agent 能 Read 走 B 结晶的方法论。
     // 自己那一支放行（SDK 本来就要读它、附件也在里面），别人的一律拒，读写同判。
@@ -107,11 +133,11 @@ export function checkWorkspaceScope(toolInput, { workspaceRoot, cwdRoot = null, 
   return null;
 }
 
-export function makePreToolUseWorkspaceScopeGuard({ workspaceRoot, cwdRoot = null, dataRoot, pluginsBaseRoot = null, ownPluginsRoot = null }) {
+export function makePreToolUseWorkspaceScopeGuard({ workspaceRoot, cwdRoot = null, dataRoot, pluginsBaseRoot = null, ownPluginsRoot = null, configDir = null }) {
   return async (input) => {
     try {
       const reason = checkWorkspaceScope(input?.tool_input, {
-        workspaceRoot, cwdRoot, dataRoot, toolName: input?.tool_name, pluginsBaseRoot, ownPluginsRoot,
+        workspaceRoot, cwdRoot, dataRoot, toolName: input?.tool_name, pluginsBaseRoot, ownPluginsRoot, configDir,
       });
       if (!reason) return {};
       return {

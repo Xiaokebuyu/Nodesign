@@ -1,6 +1,6 @@
 // 项目边界闸（2026-08-15）：结构化工具跨项目读写 → 拒
 import { describe, it, expect } from 'vitest';
-import { checkWorkspaceScope, makePreToolUseWorkspaceScopeGuard } from './pre-workspace-scope-guard.js';
+import { checkWorkspaceScope, makePreToolUseWorkspaceScopeGuard, encodeCwdForTranscripts } from './pre-workspace-scope-guard.js';
 
 const dataRoot = '/data/projects-data';
 const workspaceRoot = '/data/projects-data/proj_aaa/shared';
@@ -167,5 +167,37 @@ describe('仓库道（09-09，问题库 iss_mttx8sta_27ym）：cwdRoot 是用户
   });
   it('没传 cwdRoot（普通项目）行为不变', () => {
     expect(checkWorkspaceScope({ file_path: '/home/u/Desktop/投递台账/log.mjs' }, { ...ctx, toolName: 'Edit' })).toMatch(/只能落在/);
+  });
+});
+
+describe('Claude 配置目录（09-17：全站会话转录原来给出绝对路径就读得到）', () => {
+  const configDir = '/home/x/.claude';
+  const c = { ...ctx, configDir };
+  const own = `${configDir}/projects/${encodeCwdForTranscripts(workspaceRoot)}`;
+  it('编码规则与 CLI 一致：非字母数字一律换成 -', () => {
+    expect(encodeCwdForTranscripts('/home/wangang-dev/projects/Nodesign/server/projects-data/proj_mu17j78p_3cl9/shared'))
+      .toBe('-home-wangang-dev-projects-Nodesign-server-projects-data-proj-mu17j78p-3cl9-shared');
+  });
+  it('本项目那一格放行（CLI 落盘的大输出要用 Read 读）', () => {
+    expect(checkWorkspaceScope({ file_path: `${own}/sess-1/tool-results/b5rq.txt` }, { ...c, toolName: 'Read' })).toBeNull();
+  });
+  it('⭐ 别的项目的转录、输入历史、文件备份、配置 —— Read / Grep / Glob 都拒', () => {
+    const other = `${configDir}/projects/-data-projects-data-proj-bbb-shared/s.jsonl`;
+    expect(checkWorkspaceScope({ file_path: other }, { ...c, toolName: 'Read' })).toMatch(/会话记录目录/);
+    expect(checkWorkspaceScope({ path: `${configDir}/projects` }, { ...c, toolName: 'Grep' })).toMatch(/会话记录目录/);
+    expect(checkWorkspaceScope({ file_path: `${configDir}/history.jsonl` }, { ...c, toolName: 'Read' })).toMatch(/会话记录目录/);
+    expect(checkWorkspaceScope({ file_path: `${configDir}/file-history/s/abc@v1` }, { ...c, toolName: 'Read' })).toMatch(/会话记录目录/);
+  });
+  it('前缀相同的兄弟格不算自己（proj-aaa-shared-evil）', () => {
+    expect(checkWorkspaceScope({ file_path: `${own}-evil/s.jsonl` }, { ...c, toolName: 'Read' })).toMatch(/会话记录目录/);
+  });
+  it('⭐ Glob 用绝对路径写在 pattern 里（不带 path）也拦', () => {
+    expect(checkWorkspaceScope({ pattern: `${configDir}/projects/**/*.jsonl` }, { ...c, toolName: 'Glob' })).toMatch(/会话记录目录/);
+    expect(checkWorkspaceScope({ pattern: '/data/projects-data/proj_bbb/**' }, { ...c, toolName: 'Glob' })).toMatch(/别的项目/);
+    expect(checkWorkspaceScope({ pattern: '**/*.md' }, { ...c, toolName: 'Glob' })).toBeNull();
+    expect(checkWorkspaceScope({ pattern: `${workspaceRoot}/**/*.md` }, { ...c, toolName: 'Glob' })).toBeNull();
+  });
+  it('不传 configDir 时行为不变（老调用点）', () => {
+    expect(checkWorkspaceScope({ file_path: `${configDir}/history.jsonl` }, { ...ctx, toolName: 'Read' })).toBeNull();
   });
 });

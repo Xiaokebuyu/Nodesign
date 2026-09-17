@@ -39,6 +39,23 @@ describe('凭据黑名单', () => {
     for (const p of siblingEnvFiles()) expect(list).toContain(p);
     expect(list.filter(p => path.basename(p) === '.env').length).toBeGreaterThanOrEqual(1);
   });
+  it('⭐ 平台私有数据也拦（09-17：沙盒里的 Bash 读得到站点库与各会话的历史）', () => {
+    const db = path.resolve(process.env.DB_PATH || path.join(repoRoot, 'server', 'db', 'nodesign.db'));
+    expect(list).toEqual(expect.arrayContaining([
+      db, `${db}-wal`, `${db}-shm`,
+      path.join(repoRoot, 'server', 'db'),
+      path.join(repoRoot, 'logs'),
+      platform.cacheRoot,
+      path.join(platform.claudeConfigDir, 'history.jsonl'),
+      path.join(platform.claudeConfigDir, 'file-history'),
+    ]));
+    // 转录目录不能进这份清单：它会变成 permissions.deny，Read 就读不了本会话落盘的大输出
+    expect(list).not.toContain(path.join(platform.claudeConfigDir, 'projects'));
+    // 也不能把数据根或仓库整个盖住（本项目工作区在里面）
+    expect(list).not.toContain(platform.repoRoot);
+    expect(list).not.toContain(path.join(repoRoot, 'server', 'projects-data'));
+    expect(list).not.toContain(os.tmpdir());   // 库在临时目录时（测试）只拦库文件本身，不拦整个 /tmp
+  });
   it('.env.example 不拦（示例没秘密，挡着反而碍事）', () => {
     expect(list.some(p => p.endsWith('.env.example'))).toBe(false);
   });

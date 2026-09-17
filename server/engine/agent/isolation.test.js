@@ -83,3 +83,12 @@ describe('MCP 工具整服务放行（2026-08-25）', () => {
     expect(settings.permissions.deny.length).toBeGreaterThan(0);
   });
 });
+
+describe('全站会话转录（09-17）', () => {
+  it('Bash 整个遮住 <配置目录>/projects，本会话工作区照常可读', () => {
+    const { sandbox } = buildIsolationOptions({ cwdRoot: '/w', sharedRoot: null, npmCacheDir: '/data/.npm-cache', dataRoot: '/data', env: {} });
+    expect(sandbox.filesystem.denyRead).toContain(path.join(platform.claudeConfigDir, 'projects'));
+    expect(sandbox.filesystem.denyRead).toContain(path.join(platform.claudeConfigDir, 'history.jsonl'));
+    expect(sandbox.filesystem.allowRead).toContain('/w');
+  });
+});

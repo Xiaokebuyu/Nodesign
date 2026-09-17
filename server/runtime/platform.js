@@ -151,10 +151,38 @@ const PROJECTS_DATA_ROOT_FOR_DENY = path.resolve(
   process.env.PROJECTS_DATA_DIR || process.env.PROJECTS_DATA_ROOT || path.join(repoRoot, 'server', 'projects-data'),
 );
 
+/**
+ * 平台自己的私有数据（09-17）：站点库、pm2 日志、服务端缓存、Claude 配置目录里跨会话的记录。
+ *
+ * 09-15 读配置时发现、09-17 按生产同一份清单用 sandbox-runtime 复现坐实：数据根之外原来只拦凭据，
+ * 沙盒里的 Bash 能读站点库（全部用户的邮箱、密码哈希、回合摘要）、别的项目的会话转录与文件备份；
+ * Read 工具那道钩子按设计只管数据根以内，同样读得到。这里的条目两层都生效（Bash 的 denyRead、
+ * 结构化工具的 permissions.deny）。
+ *
+ * 全站转录目录 `<配置目录>/projects` 不在这里：CLI 把大输出落在本会话那一格的 tool-results 里、
+ * 让模型用 Read 去读，而 permissions.deny 写不出「除了自己这格」。那半由 isolation.js（Bash 整个遮住）
+ * 和 pre-workspace-scope-guard.js（Read 只放行本项目那一格）分担。
+ */
+function platformPrivatePaths() {
+  const db = path.resolve(process.env.DB_PATH || path.join(repoRoot, 'server', 'db', 'nodesign.db'));
+  return [
+    db, `${db}-wal`, `${db}-shm`,
+    path.join(repoRoot, 'server', 'db'),        // 生产默认位置，手动备份的库副本也在这
+    path.join(repoRoot, 'logs'),                // pm2 日志：带着各用户回合的摘要与报错
+    profile.cacheRoot,                          // docx 页图 / 封面 / 图片变体，按内容哈希分目录，不分用户
+    path.join(claudeConfigDir, '.claude.json'),
+    path.join(claudeConfigDir, 'history.jsonl'),   // 全部会话的输入历史
+    path.join(claudeConfigDir, 'file-history'),    // SDK 回退用的文件备份，各项目的文件内容都在里面
+    path.join(claudeConfigDir, 'paste-cache'),
+    path.join(claudeConfigDir, 'backups'),
+  ];
+}
+
 function credentialBlacklist() {
   const home = os.homedir();
   return [
     ...siblingEnvFiles(),                 // ⭐ 本仓 + 同机其它仓的 .env（见下）
+    ...platformPrivatePaths(),
     path.join(home, '.ssh'),
     path.join(home, '.aws'),
     path.join(home, '.gnupg'),

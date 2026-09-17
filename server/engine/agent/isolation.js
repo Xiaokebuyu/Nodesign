@@ -148,7 +148,12 @@ export function buildIsolationOptions({ cwdRoot, sharedRoot, npmCacheDir, agentT
         // 看文件名 —— 文件名不是秘密，接受」。
         // agentTmpRoot（/tmp/nd）同 dataRoot 一个待遇：根整个遮住、自己的子目录
         // 开天窗 —— 不遮的话 /tmp/nd/<别的项目>/ 就是跨项目读通道
-        denyRead: [...platform.credentialBlacklist(), dataRoot, ...(agentTmpRoot ? [agentTmpRoot] : [])],
+        // 全站会话转录（09-17）：别的项目、别的用户的对话都在 <配置目录>/projects 下。Bash 整个遮住；
+        // Read 工具读本会话大输出的那一格由 pre-workspace-scope-guard 放行（Bash 不需要读它）
+        denyRead: [
+          ...platform.credentialBlacklist(), dataRoot, ...(agentTmpRoot ? [agentTmpRoot] : []),
+          path.join(platform.claudeConfigDir, 'projects'),
+        ],
         allowRead: [cwdRoot, npmCacheDir, ...(agentTmpDir ? [agentTmpDir] : [])],
       },
       credentials: {
