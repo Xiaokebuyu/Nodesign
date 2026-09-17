@@ -17,8 +17,10 @@ describe('armIdleWatchdog', () => {
   it('有字节在流就不咬（data 重置计时）', async () => {
     const s = new PassThrough();
     let fired = 0;
-    armIdleWatchdog(s, { idleMs: 60, checkMs: 10, onIdle: () => { fired += 1; } });
-    for (let i = 0; i < 5; i += 1) { s.write('x'); await sleep(25); }
+    // 09-17：原来 idleMs 60、每 25ms 写一次，余量只有 2.4 倍，并发跑测试时事件循环一卡就越线（出现过 279ms 失败）。
+    // 总时长必须超过 idleMs（否则没有「重置」也不会咬，用例验不出东西），间隔要远小于它
+    armIdleWatchdog(s, { idleMs: 150, checkMs: 10, onIdle: () => { fired += 1; } });
+    for (let i = 0; i < 12; i += 1) { s.write('x'); await sleep(20); }
     expect(fired).toBe(0);
     s.end();
   });
