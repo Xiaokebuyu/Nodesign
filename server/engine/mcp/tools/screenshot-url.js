@@ -21,7 +21,7 @@ import { z } from 'zod';
 import { attachPageDiagnostics, runBeforeShot, normalizeShot, FIDELITY_LAUNCH_ARGS, detectPaintTransform } from './helpers/shot-pipeline.js';
 import { checkUrl, attachSsrfGuard } from '../../../lib/ssrf-guard.js';
 import { denyText } from './browse.js';
-import { startBrowseProxy } from '../../../lib/browse-proxy.js';
+import { startBrowseProxy, blockedCount, blockedSince } from '../../../lib/browse-proxy.js';
 import { gatedBrowser } from './helpers/browser-slots.js';
 import { isRegisteredLoopback } from '../../process/registry.js';
 
@@ -58,6 +58,31 @@ function validateUrl(raw) {
     return { ok: false, message: `refusing to screenshot private/internal address: ${host}` };
   }
   return { ok: true, url: u };
+}
+
+/**
+ * goto 失败 → 带拒因的报错（09-17，问题库 iss_mu039zaz_vydt）。
+ *
+ * 预检（checkUrl）过了、导航时却被闸拒，playwright 只给 `net::ERR_ACCESS_DENIED`（CDP 那道
+ * Fetch.failRequest 的结果），原因不在报错里。那次是站点发布 6 秒后截图：解析还没生效，agent
+ * 只能看到一个像策略拦截的错误码。拒因从闸的记账里取（本次导航期间新增的那几条），按 kind 复用
+ * browse 的 denyText；代理那道的记账是全进程共用的，按主机过滤。
+ *
+ * @param {string} rawUrl
+ * @param {Error} err
+ * @param {{records?: object[], proxyRecords?: object[], projectId?: string, host: string}} o
+ */
+export function navFailText(rawUrl, err, { records = [], proxyRecords = [], projectId, host }) {
+  const msg = String(err?.message || err).split('\n')[0];
+  const lines = [`Failed to load ${rawUrl}: ${msg}`];
+  const rec = records[0]
+    || proxyRecords.find((r) => String(r.target || '').replace(/:\d+$/, '').toLowerCase() === host);
+  if (rec) {
+    lines.push(`网络闸的拒因：${rec.reason}`, ...denyText(rec, projectId, rec.url || `https://${host}/`));
+  } else if (/ERR_ACCESS_DENIED/.test(msg)) {
+    lines.push('网络闸拒了这次导航，但没有留下拒因记录；稍后重试一次，仍然失败就换一个地址。');
+  }
+  return lines.join('\n');
 }
 
 /**
@@ -138,15 +163,18 @@ anyway after 12s and the caption says so. Only http/https and public hosts.`,
         const diag = attachPageDiagnostics(page);
 
         let gotoNote = null;
+        const since = guard.blocked.length;
+        const proxySince = blockedCount();
         try {
           await page.goto(check.url.href, { waitUntil: 'networkidle', timeout: 12000 });
         } catch (err) {
-          // 超时（页面已部分渲染）→ 照截；真导航失败（DNS/refused）→ 报错
+          // 超时（页面已部分渲染）→ 照截；真导航失败（DNS/refused/闸拒）→ 报错，闸拒要带拒因
           if (!/Timeout/i.test(String(err?.message))) {
-            return {
-              content: [{ type: 'text', text: `Failed to load ${rawUrl}: ${err?.message || err}` }],
-              isError: true,
-            };
+            const text = navFailText(rawUrl, err, {
+              records: guard.blocked.slice(since), proxyRecords: blockedSince(proxySince),
+              projectId, host: check.url.hostname.toLowerCase(),
+            });
+            return { content: [{ type: 'text', text }], isError: true };
           }
           gotoNote = 'network never settled (12s) — captured current render state';
         }

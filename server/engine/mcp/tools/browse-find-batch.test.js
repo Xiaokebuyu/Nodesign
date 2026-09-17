@@ -128,6 +128,7 @@ describe('browser_batch', () => {
 describe('refs 文本', () => {
   it('stale 错误是可执行的一句话', () => {
     expect(staleRefText('ref_3')).toMatch(/ref_3 is stale.*browser_find again/);
+    expect(staleRefText('ref_3', 'artifact_find')).toMatch(/ref_3 is stale.*Call artifact_find again/);
   });
   it('formatMatches：空结果给下一步，非空带 ref/角色/坐标', () => {
     expect(formatMatches({ matches: [], candidates: 12 }, 'buy').join('\n')).toMatch(/没找到.*12 个/);

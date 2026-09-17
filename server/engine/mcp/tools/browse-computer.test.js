@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { _limits } from '../../browse/registry.js';
 import { API_IMAGE_LIMITS } from './helpers/shot-pipeline.js';
-import { ACTIONS, parseChords, parseModifiers, checkCoord, liveFrame, viewportShot, BROWSE_FRAME } from './browse-computer.js';
+import { ACTIONS, parseChords, parseModifiers, checkCoord, liveFrame, viewportShot, BROWSE_FRAME, runAction } from './browse-computer.js';
 
 // 存桌面卡预览那一步要写盘，跟这组测的东西无关，挡掉
 vi.mock('../../browse/state.js', () => ({ saveFrame: async () => {}, recordVisit: async () => {} }));
@@ -160,4 +160,37 @@ describe('viewportShot：图和坐标空间是同一张', () => {
     expect([out.width, out.height]).toEqual([1366, 768]);
     expect(f.scale).toBeCloseTo(1, 5);
   }, 20000);
+});
+
+/**
+ * ref 失效的文案指回调用方自己那一族的 find 工具（09-17）：artifact_computer 也走 runAction，
+ * 原来写死「Call browser_find again」，把 agent 指到浏览通道那只浏览器上去找。
+ */
+describe('失效 ref 的文案按调用方的 find 工具说', () => {
+  // ref 查不到：handleForRef 拿到的句柄不是元素
+  const stalePage = () => ({
+    evaluateHandle: async () => ({ asElement: () => null, dispose: async () => {} }),
+    mouse: { move: async () => {}, click: async () => {} },
+    keyboard: { down: async () => {}, up: async () => {} },
+  });
+  const frame = { w: 1152, h: 720, scale: 0.8 };
+  const shot = async () => ({ content: [] });
+
+  it.each(['left_click', 'hover', 'scroll_to', 'left_mouse_down'])('artifact 那一族（%s）→ artifact_find', async (action) => {
+    const r = await runAction(stalePage(), { action, ref: 'ref_9', scroll_direction: 'down' }, { frame, shot, findTool: 'artifact_find' });
+    expect(r.isError).toBe(true);
+    expect(r.content[0].text).toContain('ref_9 is stale');
+    expect(r.content[0].text).toContain('Call artifact_find again');
+    expect(r.content[0].text).not.toContain('browser_find');
+  });
+
+  it('left_click_drag 的终点 ref 也一样', async () => {
+    const r = await runAction(stalePage(), { action: 'left_click_drag', start_coordinate: [10, 10], ref: 'ref_2' }, { frame, shot, findTool: 'artifact_find' });
+    expect(r.content[0].text).toContain('Call artifact_find again');
+  });
+
+  it('浏览通道不传 → 仍是 browser_find', async () => {
+    const r = await runAction(stalePage(), { action: 'left_click', ref: 'ref_1' }, { frame: BROWSE_FRAME, shot });
+    expect(r.content[0].text).toContain('Call browser_find again');
+  });
 });

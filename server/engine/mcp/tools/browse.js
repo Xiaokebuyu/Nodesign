@@ -30,11 +30,11 @@ import { Events } from '../../agent/events.js';
 import { z } from 'zod';
 import { withBrowser, peek, hold, _limits } from '../../browse/registry.js';
 import { requestHelp } from '../../browse/handover.js';
-import { checkUrl } from '../../../lib/ssrf-guard.js';
+import { checkUrl, dnsFailText } from '../../../lib/ssrf-guard.js';
 import { listPublishedByProject } from '../../../lib/publish-store.js';
 import { normalizeShot } from './helpers/shot-pipeline.js';
 import { capture } from '../../browse/capture.js';
-import { collectPage, formatPage } from '../../browse/page-digest.js';
+import { collectPage, formatPage, formatMissing } from '../../browse/page-digest.js';
 import { recordVisit } from '../../browse/state.js';
 import { notePageError } from '../../browse/page-log.js';
 import { formatMotionInventory } from '../../motion/inventory.js';
@@ -53,15 +53,20 @@ const asText = (text, isError = false) => ({ content: [{ type: 'text', text }], 
 export function denyText(pre, projectId, url) {
   const lines = [];
   if (pre.kind === 'dns') {
-    lines.push('这是域名解析失败（域名可能不存在、拼错或已下线），不是出网策略拦截。');
+    // 09-17：超时与 NXDOMAIN 分开说（ssrf-guard.dnsFailText）
+    lines.push(dnsFailText(pre.dns));
     try {
       const domain = process.env.NODESIGN_PUBLISH_DOMAIN;
       const host = new URL(url).hostname.toLowerCase();
       if (domain && (host === domain || host.endsWith(`.${domain}`))) {
         const sites = projectId ? listPublishedByProject(projectId) : [];
-        lines.push(sites.length
-          ? `这个地址不是本项目当前的线上地址。本项目现在的线上地址：${sites.map(s => s.url).join('、')}`
-          : '这个域名形如本站的发布域，但本项目当前没有任何已发布的站点记录。');
+        const mine = sites.find((s) => siteHosts(s).includes(host));
+        if (mine) lines.push(ownSiteDnsText(mine));
+        else {
+          lines.push(sites.length
+            ? `这个地址不是本项目当前的线上地址。本项目现在的线上地址：${sites.map(s => s.url).join('、')}`
+            : '这个域名形如本站的发布域，但本项目当前没有任何已发布的站点记录。');
+        }
       }
     } catch { /* 提示查不出来就只说 DNS 那一句，别把拒因本身弄丢 */ }
   } else {
@@ -70,14 +75,40 @@ export function denyText(pre, projectId, url) {
   return lines;
 }
 
+/** 一条发布记录能被访问到的主机名：自定义域与 url 的主机各算一个 */
+const siteHosts = (s) => {
+  const out = [];
+  if (s.customDomain) out.push(String(s.customDomain).toLowerCase());
+  try { out.push(new URL(s.url).hostname.toLowerCase()); } catch { /* */ }
+  return out;
+};
+/** 刚发布的窗口：Cloudflare 挂自定义域到各地解析生效，实测要几十秒到几分钟 */
+const FRESH_PUBLISH_MS = 10 * 60 * 1000;
+
+/**
+ * 撞的就是本项目自己登记的线上地址却解析不到（09-17，iss_mu039zaz_vydt：发布 6 秒后截图被拒）。
+ * 刚发布 → 解析还在生效，等半分钟；发布很久了 → 不是"等一等"能解决的，交给用户。
+ */
+function ownSiteDnsText(site, now = Date.now()) {
+  const at = Date.parse(`${String(site.lastPublishedAt || site.createdAt || '').replace(' ', 'T')}Z`);
+  if (Number.isFinite(at) && now - at < FRESH_PUBLISH_MS) {
+    const min = Math.floor((now - at) / 60000);
+    return `这是本项目${min < 1 ? '刚刚' : ` ${min} 分钟前`}发布的站点，域名解析还在生效，半分钟后重试即可。`;
+  }
+  return '这是本项目登记的线上地址，但本机此刻解析不到它：稍后重试一次；一直解析不到就告诉用户（发布记录可能已失效）。';
+}
+
 /** 被闸拦掉的东西要如实报，但别把一页的几十个第三方追踪器全倒出来 */
 function blockedNote(guard, since) {
   const fresh = guard.blocked.slice(since);
   if (!fresh.length) return null;
   const shown = fresh.slice(0, 4).map(b => `  ${b.url.slice(0, 90)} ← ${b.reason}`);
-  return `⛔ 网络闸拦掉了 ${fresh.length} 个请求（内网/本机地址一律禁，这是硬边界，不是可配置项）：\n`
+  // 全是解析失败时别说「硬边界」（09-17：解析失败不是策略拦截）
+  const why = fresh.every(b => b.kind === 'dns') ? '域名解析失败，不是出网策略拦截' : '内网/本机地址一律禁，这是硬边界，不是可配置项';
+  return `⛔ 网络闸拦掉了 ${fresh.length} 个请求（${why}）：\n`
     + shown.join('\n') + (fresh.length > 4 ? `\n  …还有 ${fresh.length - 4} 个` : '');
 }
+export const _denyInternals = { ownSiteDnsText, blockedNote, FRESH_PUBLISH_MS };
 
 /** 页面的一句话现状 —— 每个工具的返回值都带上，agent 不用再问"我现在在哪" */
 async function where(page) {
@@ -170,9 +201,13 @@ The user has a browser card on their desktop and can watch, or take over.`,
               await page.waitForURL(before, { timeout: 8000 }).catch(() => {});
             }
             const restored = (() => { try { return page.url() === before; } catch { return false; } })();
+            // 闸记账里第一条是这次导航被拒的那一跳；解析失败不能说成「指向了内网」（09-17）
+            const fresh = guard.blocked.slice(since);
+            const dnsDeny = fresh[0]?.kind === 'dns' ? fresh[0] : null;
             return asText([
-              '没打开 —— 这个地址在跳转中途指向了内网，被网络闸拦下。',
-              gate,
+              dnsDeny ? `没打开 —— 导航时域名解析失败：${dnsDeny.reason}` : '没打开 —— 这个地址在跳转中途指向了内网，被网络闸拦下。',
+              ...(dnsDeny ? denyText(dnsDeny, projectId, dnsDeny.url) : []),
+              dnsDeny && fresh.length === 1 ? null : gate,
               restored ? `已退回你原来那一页：${await where(page)}`
                 : '⚠️ 也没能退回原来那一页，现在这个标签是空的 —— 重新 browser_navigate 一个地址。',
             ].filter(Boolean).join('\n'), true);
@@ -265,7 +300,8 @@ Pass a selector to read one region instead of the whole page (e.g. "main",
           const since = guard.blocked.length;
           const data = await collectPage(page, { selector: selector || null, links: wantLinks });
 
-          if (data.missing) return asText(`选择器没匹配到元素：${selector}`, true);
+          // 09-17：没命中时带上页面实有的地标，给出下一步（page-digest.formatMissing）
+          if (data.missing) return asText(formatMissing(selector, data).join('\n'), true);
 
           return asText([
             `页面：${await where(page)}`,

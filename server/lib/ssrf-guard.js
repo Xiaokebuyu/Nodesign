@@ -310,6 +310,26 @@ const PDF_VIEWER_ORIGIN = 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/'
 const HOST_TTL_MS = 30_000;
 const hostCache = new Map();   // host → { at, verdict }
 
+/**
+ * DNS 失败按实际错误分档（09-17）：原来超时也说「域名可能不存在」，agent 会据此放弃一个
+ * 其实只是解析慢了一拍的站。getaddrinfo 的 EAI_AGAIN 是「暂时失败」（DNS 没应答），
+ * 我们自己的竞速超时抛 'dns timeout'；只有 ENOTFOUND / ENODATA（NXDOMAIN、无地址记录）才是「不存在」。
+ * @returns {'timeout'|'nxdomain'|'other'}
+ */
+export function dnsFailKind(err) {
+  const code = String(err?.code || '');
+  if (code === 'EAI_AGAIN' || code === 'ETIMEOUT' || /dns timeout/i.test(String(err?.message || ''))) return 'timeout';
+  if (code === 'ENOTFOUND' || code === 'ENODATA') return 'nxdomain';
+  return 'other';
+}
+
+/** DNS 失败的那一句（browse 工具与出网代理的 403 页共用，别各写一份） */
+export function dnsFailText(dnsKind) {
+  if (dnsKind === 'timeout') return '这是域名解析超时（DNS 暂时没有应答），不是出网策略拦截；通常重试一次即可。';
+  if (dnsKind === 'nxdomain') return '这是域名解析失败（域名可能不存在、拼错或已下线），不是出网策略拦截。';
+  return '这是域名解析失败（不是出网策略拦截），原因见上一行的错误码。';
+}
+
 export async function checkUrl(raw, { timeoutMs = 4000 } = {}) {
   let u;
   try { u = new URL(String(raw)); } catch { return { ok: false, reason: `not a valid URL: ${raw}` }; }
@@ -347,9 +367,9 @@ export async function checkUrl(raw, { timeoutMs = 4000 } = {}) {
   } catch (err) {
     // kind:'dns' 给上层分文案用：解析失败不是策略拦截，别让调用方把这两种拒
     // 混着说（agent 上报时曾据「硬边界」措辞推出一整套错误的排障理论）
-    return { ok: false, reason: `cannot resolve ${host}: ${err.message}`, kind: 'dns' };
+    return { ok: false, reason: `cannot resolve ${host}: ${err.message}`, kind: 'dns', dns: dnsFailKind(err) };
   }
-  if (!addrs.length) return { ok: false, reason: `${host} resolved to nothing`, kind: 'dns' };
+  if (!addrs.length) return { ok: false, reason: `${host} resolved to nothing`, kind: 'dns', dns: 'nxdomain' };
 
   // ⭐ **任一**地址落在禁止段就整个拒。多 A 记录里混一条 127.0.0.1 是标准的
   // DNS-rebinding 起手式，"挑一个能用的"等于自己把门打开。
@@ -383,14 +403,16 @@ export async function checkUrl(raw, { timeoutMs = 4000 } = {}) {
  * 弹窗）一律立刻关掉** —— 一个没装闸的页面就是一个洞，宁可功能少一点。
  *
  * @param {import('playwright').BrowserContext} context
- * @param {(ev: {url: string, reason: string, stage: string}) => void} [onBlocked]
+ * @param {(ev: {url: string, reason: string, stage: string, kind: string, dns?: string}) => void} [onBlocked]
  * @returns {Promise<{ blocked: Array, armPage: (page) => Promise<void> }>}
  */
 export async function attachSsrfGuard(context, onBlocked, { proxied = false, scope = 'context' } = {}) {
   const blocked = [];
   const armed = new WeakSet();
-  const note = (url, reason, stage) => {
-    const rec = { url: String(url).slice(0, 300), reason, stage };
+  // kind / dns 跟 checkUrl 的判定一起记（09-17，iss_mu039zaz_vydt）：导航被拒时 playwright 只给
+  // ERR_ACCESS_DENIED，调用方要从这里读出是解析失败还是策略拦截，才能说对下一步
+  const note = (url, reason, stage, { kind = 'policy', dns = null } = {}) => {
+    const rec = { url: String(url).slice(0, 300), reason, stage, kind, ...(dns ? { dns } : {}) };
     blocked.push(rec);
     if (blocked.length > 200) blocked.shift();
     try { onBlocked?.(rec); } catch { /* 记账不能变成新故障源 */ }
@@ -409,12 +431,12 @@ export async function attachSsrfGuard(context, onBlocked, { proxied = false, sco
       try {
         const verdict = await checkUrl(url);
         if (verdict.ok) return await cdp.send('Fetch.continueRequest', { requestId: id });
-        note(url, verdict.reason, 'request');
+        note(url, verdict.reason, 'request', verdict);
         return await cdp.send('Fetch.failRequest', { requestId: id, errorReason: 'AccessDenied' });
       } catch (err) {
         if (/closed|Target|detached|Session/i.test(err?.message || '')) return;   // 正常竞态
         // 判不出来就**拒**（fail-closed）：安全闸不能因为自己出错而放行
-        note(url, `guard error, denied by default: ${err?.message || err}`, 'request');
+        note(url, `guard error, denied by default: ${err?.message || err}`, 'request', { kind: 'guard-error' });
         try { await cdp.send('Fetch.failRequest', { requestId: id, errorReason: 'Failed' }); } catch { /* */ }
       }
     });

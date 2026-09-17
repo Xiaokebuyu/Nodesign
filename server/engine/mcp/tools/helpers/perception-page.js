@@ -37,6 +37,7 @@ import { getProject } from '../../../../projects/store.js';
 import { authEnabled } from '../../../../auth/session.js';
 import { mintInternalCookie } from '../../../../auth/internal-credentials.js';
 import { getUserById } from '../../../../auth/users-store.js';
+import { isServablePath } from '../../../../lib/artifact-file-path.js';
 
 // ── 渲染层保真（2026-08-07 立，2026-08-18 从 screenshot.js 挪来收成一份）──
 // Chromium 的强制暗色（Auto Dark）会在 paint 层反转颜色，而页面自己的 JS
@@ -120,6 +121,27 @@ export function degradedNote(opened) {
 }
 
 /**
+ * 预览通道服不出这个文件 → 一句可执行的话；服得出 / 不归预览通道管（工作区外）→ null。
+ *
+ * 09-17（问题库 iss_mtdfvijv_pn5h）：artifact-file 按白名单拒点开头的目录（`.claude/` 之类，
+ * 见 lib/artifact-file-path.js，这条白名单是有意的，别放宽）。agent 把临时检查页放进
+ * `.scratch/` 之后，感知工具照样起浏览器去开，拿回的只有「HTTP 403」—— 猜不到是目录名的事。
+ * 判据跟路由同一份 isServablePath，在起浏览器之前问。
+ */
+export function previewPathProblem(workspaceRoot, absPath) {
+  if (!workspaceRoot || !absPath) return null;
+  const root = path.resolve(workspaceRoot);
+  const abs = path.resolve(absPath);
+  const rel = path.relative(root, abs);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  if (isServablePath(root, abs)) return null;
+  const rp = rel.split(path.sep).join('/');
+  return `${rp} cannot be opened: paths with a folder or file name starting with "." (like .scratch/) `
+    + 'are not served by the preview channel — the user preview cannot open them either. Put temporary '
+    + 'check pages in a folder whose name does not start with "." and delete them when done.';
+}
+
+/**
  * 打开一个产物页面，返回 { page, context, url, note }。
  *
  * - `note` 非空表示**没能走成 http**（退回了 file://），调用方应把它写进 caption：
@@ -140,6 +162,8 @@ export async function openArtifactPage(browser, {
   projectId, workspaceRoot, absPath,
   viewport, deviceScaleFactor = 1, timeout = 15000, waitUntil = 'networkidle',
 }) {
+  const unservable = previewPathProblem(workspaceRoot, absPath);
+  if (unservable) throw new Error(unservable);
   const contextOpts = { colorScheme: 'light', deviceScaleFactor };
   if (viewport) contextOpts.viewport = viewport;
   // ⭐ `?nd=raw` 只挂在**主文档**的 URL 上，页面里 `<img src="assets/x.png">` 发出去的
@@ -210,7 +234,10 @@ export async function openArtifactPage(browser, {
       // 401/403/404 会渲成一张 JSON 错误页 —— 截它等于给 agent 一张假产物
       const status = resp?.status();
       if (status && status >= 400) {
-        throw new Error(`artifact-file returned HTTP ${status} for ${decodeURIComponent(url.replace(PERCEPTION_ORIGIN, ''))}`);
+        // 09-17：路由回的 JSON 里 error 字段才是原因（not a servable path / path escapes workspace…），
+        // 只报状态码等于让 agent 去猜
+        const why = await resp.json().then((b) => (typeof b?.error === 'string' ? b.error : null)).catch(() => null);
+        throw new Error(`artifact-file returned HTTP ${status}${why ? ` (${why})` : ''} for ${decodeURIComponent(url.replace(PERCEPTION_ORIGIN, ''))}`);
       }
       return resp;
     },

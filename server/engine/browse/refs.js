@@ -173,9 +173,13 @@ export async function handleForRef(page, ref) {
   return el;
 }
 
-/** 规格里那句可执行的 stale 错误文本（agent 读了知道下一步是什么） */
-export const staleRefText = (ref) =>
-  `Error: ${ref} is stale or not found on the current page. Call browser_find again to get fresh references.`;
+/**
+ * 规格里那句可执行的 stale 错误文本（agent 读了知道下一步是什么）。
+ * findTool 按调用方给（09-17）：artifact_computer 也走这句，写死 browser_find 会把 agent 指到
+ * 另一个浏览器（浏览通道）上去找，那边根本没有这一页。
+ */
+export const staleRefText = (ref, findTool = 'browser_find') =>
+  `Error: ${ref} is stale or not found on the current page. Call ${findTool} again to get fresh references.`;
 
 /** find 结果 → 给 agent 的行 */
 export function formatMatches(r, query) {

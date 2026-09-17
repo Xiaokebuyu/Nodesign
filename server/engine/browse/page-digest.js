@@ -26,8 +26,8 @@
  * @param {import('playwright').Page} page
  * @param {{selector?: string|null, links?: boolean}} opts
  */
-export function collectPage(page, { selector = null, links = true } = {}) {
-  return page.evaluate(({ sel, want }) => {
+export async function collectPage(page, { selector = null, links = true } = {}) {
+  const data = await page.evaluate(({ sel, want }) => {
     const root = sel ? document.querySelector(sel) : (document.querySelector('main') || document.body);
     if (!root) return { missing: true };
     const headings = [...root.querySelectorAll('h1,h2,h3')]
@@ -80,6 +80,41 @@ export function collectPage(page, { selector = null, links = true } = {}) {
       },
     };
   }, { sel: selector, want: links });
+  // 选择器没命中：顺手带回页面上实有的地标，agent 下一次能直接挑一个用（09-17）
+  if (data?.missing) data.landmarks = await page.evaluate(pageLandmarks).catch(() => []);
+  return data;
+}
+
+/**
+ * 页面上实有的地标元素（最多 8 个，带数量）。⚠️ 会被 page.evaluate 序列化进浏览器执行，
+ * 不能引用模块里的任何东西；参数只给单测传假 document 用。
+ * @returns {{sel: string, count: number}[]}
+ */
+export function pageLandmarks(doc = document) {
+  const out = [];
+  for (const sel of ['main', '[role="main"]', 'article', 'section', 'header', 'nav', 'aside', 'footer']) {
+    const n = doc.querySelectorAll(sel).length;
+    if (n) out.push({ sel, count: n });
+  }
+  // 带 id 的容器（#app / #pricing 这类最常被猜错的）；id 只收能直接写进 selector 的
+  const BLOCK = /^(DIV|SECTION|MAIN|ARTICLE|ASIDE|NAV|HEADER|FOOTER|UL|OL|FORM|TABLE)$/;
+  for (const el of doc.querySelectorAll('body [id]')) {
+    if (out.length >= 8) break;
+    if (BLOCK.test(el.tagName) && /^[A-Za-z][\w-]*$/.test(el.id)) out.push({ sel: `#${el.id}`, count: 1 });
+  }
+  return out.slice(0, 8);
+}
+
+/** 选择器没命中时给 agent 的几行：说没命中 + 实有地标 + 另一条路（读全页） */
+export function formatMissing(selector, data) {
+  const lm = data?.landmarks || [];
+  return [
+    `选择器没匹配到元素：${selector}`,
+    lm.length
+      ? `这一页实有的地标元素（括号里是数量，可直接当 selector）：${lm.map((l) => `${l.sel}（${l.count}）`).join('、')}`
+      : '这一页没有 main / article / section 这类地标元素，也没有带 id 的容器。',
+    '或者去掉 selector 读全页。',
+  ];
 }
 
 /** 区标只在非 content 时打 —— 正文链接是默认情况，标了全是噪音 */

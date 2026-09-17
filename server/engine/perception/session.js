@@ -41,13 +41,23 @@ import path from 'node:path';
 import { mutex } from 'async-mutex-lite';
 import { resolveCanvasTarget, KIND_SITE, requireBrowsable } from '../../lib/artifact-target.js';
 import { resolveDeckSize, extractDeckAspect } from '../../shared/deck.js';
-import { openArtifactPage, launchPerceptionBrowser, SITE_DEVICE_W } from '../mcp/tools/helpers/perception-page.js';
+import { openArtifactPage, launchPerceptionBrowser, SITE_DEVICE_W, previewPathProblem } from '../mcp/tools/helpers/perception-page.js';
 import { attachPageDiagnostics, API_IMAGE_LIMITS } from '../mcp/tools/helpers/shot-pipeline.js';
 
 const MAX_RESIDENT = Number(process.env.ND_ARTIFACT_SESSION_MAX) > 0
   ? Math.floor(Number(process.env.ND_ARTIFACT_SESSION_MAX)) : 1;
 const IDLE_MS = Number(process.env.ND_ARTIFACT_SESSION_IDLE_MS || 0) || 3 * 60 * 1000;
 const GOTO_TIMEOUT_MS = 15000;
+
+/**
+ * 没有会话时的报错（09-17）：agent 隔几分钟回来用 live:true，会话已被空闲回收，只看到「没开」会以为
+ * 自己没开过或开失败了。回收时长按 IDLE_MS 的实际值说（环境变量可改），别写死。
+ */
+export function noSessionText(idleMs = IDLE_MS) {
+  const idle = idleMs >= 60_000 ? `${Math.round(idleMs / 60_000)} minutes` : `${Math.round(idleMs / 1000)} seconds`;
+  return 'No artifact session is open for this project — call artifact_open first (or drop live:true to take a fresh one-shot look). '
+    + `An open session is closed automatically after about ${idle} idle; just artifact_open again (the page state starts over).`;
+}
 
 /** projectId → entry */
 const live = new Map();
@@ -141,6 +151,9 @@ export async function openSession({ projectId, workspaceRoot, sessionId, relPath
     if (live.size >= MAX_RESIDENT && !(await evictOne())) {
       throw Object.assign(new Error(`产物会话已满（${live.size}/${MAX_RESIDENT} 都在用）—— 这台机器 1 个 CPU 核，常驻上限是硬的；等一会儿再试。`), { status: 503 });
     }
+    // 预览通道服不出的路径（点开头的目录）不起浏览器（09-17，iss_mtdfvijv_pn5h）
+    const unservable = previewPathProblem(workspaceRoot, target.absPath);
+    if (unservable) throw new Error(unservable);
     const t0 = Date.now();
     const browser = await launchPerceptionBrowser();
     let opened;
@@ -197,7 +210,7 @@ export async function withSession(projectId, fn) {
     const entry = peekSession(projectId);
     if (!entry) {
       if (live.has(projectId)) await closeSession(projectId, 'page was closed underneath us');
-      throw new Error('No artifact session is open for this project — call artifact_open first (or drop live:true to take a fresh one-shot look).');
+      throw new Error(noSessionText());
     }
     entry.busy = true;
     try { touch(entry); return await fn(entry); } finally { entry.busy = false; touch(entry); }
@@ -212,7 +225,7 @@ export function lockSession(projectId) {
     mutex(`artifact-session:${projectId}`, async () => {
       const entry = peekSession(projectId);
       if (!entry) {
-        reject(new Error('No artifact session is open for this project — call artifact_open first (or drop live:true to take a fresh one-shot look).'));
+        reject(new Error(noSessionText()));
         return;
       }
       entry.busy = true;

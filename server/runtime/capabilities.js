@@ -25,7 +25,9 @@ import { whichBinary } from './which.js';
 import { checkCjkFonts } from '../lib/cjk-fonts.js';
 import { platform } from './platform.js';
 import { loadPrefs } from './local-prefs.js';
-export { whichBinary };
+// 缺 Chromium 的装法按本地 / 托管分两句（09-17），一份文案两个读者（这里和 api/exports.js）
+import { chromiumFix } from './chromium-fix.js';
+export { whichBinary, chromiumFix };
 
 const isWin = process.platform === 'win32';
 
@@ -49,7 +51,7 @@ export const CAPABILITY_DEFS = Object.freeze([
     fix: isWin ? '装 Git for Windows（git-scm.com），装完重开终端' : 'apt/brew install git',
     probe: () => bin('git') },
   { id: 'chromium', kind: 'binary', level: 'feature', label: 'Chromium（playwright）', uses: '截图自检 / 页面感知 / 浏览器工具 / PDF·PPTX 导出 / 封面',
-    fix: 'npx playwright install chromium',
+    fix: () => chromiumFix(),
     probe: async () => {
       let pw;
       try { pw = await import('playwright'); } catch (err) { return { available: false, detail: `playwright 包加载失败：${err.message}` }; }

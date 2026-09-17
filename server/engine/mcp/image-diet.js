@@ -76,8 +76,10 @@ export function withImageDiet(toolDef, deps = {}) {
     }));
     if (before - after > 1024 * 1024) {
       try {
+        // kind:'friction'（09-17，iss_mtyjejeh_oqdr / iss_mtulw2gk_xim8）：这是信息性记账，不传 kind 时
+        // auto 来源默认记成 bug，进了未关清单。聚合靠显式 signature（按工具名），摘要里的 MB 数不影响聚合
         recordIssue({
-          source: 'auto', toolName: toolDef.name,
+          source: 'auto', toolName: toolDef.name, kind: 'friction',
           summary: `${toolDef.name} 一次回了 ${(before / 1048576).toFixed(1)}MB 图（减重后 ${(after / 1048576).toFixed(1)}MB）`,
           detail: '图片减重层（mcp/image-diet.js）在出口压过了；原图落盘不受影响。这条只是记「谁在塞大图」。',
           projectId: deps.projectId, sessionId: deps.sessionId, signature: `image-diet|${toolDef.name}`,

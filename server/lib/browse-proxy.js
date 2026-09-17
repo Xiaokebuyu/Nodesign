@@ -36,7 +36,7 @@
 import http from 'node:http';
 import net from 'node:net';
 import dns from 'node:dns/promises';
-import { blockReason } from './ssrf-guard.js';
+import { blockReason, dnsFailKind, dnsFailText } from './ssrf-guard.js';
 import { isRegisteredLoopback } from '../engine/process/registry.js';
 
 /** 允许连的端口。80/443 之外的公网端口极少是设计参考站，而放开等于多一片攻击面。 */
@@ -48,8 +48,8 @@ let server = null;
 let port = 0;
 const blocked = [];
 
-function note(target, reason) {
-  blocked.push({ target, reason, at: Date.now() });
+function note(target, reason, { kind = 'policy', dns = null } = {}) {
+  blocked.push({ target, reason, at: Date.now(), kind, ...(dns ? { dns } : {}) });
   if (blocked.length > 200) blocked.shift();
 }
 
@@ -82,9 +82,9 @@ async function resolveAllowed(host, portNum) {
     // ⚠️ kind:'dns' 是给 denyBody 分文案用的：解析失败**不是策略拦截**。
     // 第一版对 NXDOMAIN 也甩「内网与本机地址是硬边界」，agent 上报时据此
     // 推理出一整套"代理有两个解析器"的错误理论 —— 错误提示比没提示更贵。
-    return { deny: `cannot resolve ${bare}: ${err.message}`, kind: 'dns' };
+    return { deny: `cannot resolve ${bare}: ${err.message}`, kind: 'dns', dns: dnsFailKind(err) };
   }
-  if (!addrs.length) return { deny: `${bare} resolved to nothing`, kind: 'dns' };
+  if (!addrs.length) return { deny: `${bare} resolved to nothing`, kind: 'dns', dns: 'nxdomain' };
   // **任一**地址落在禁止段就整个拒 —— 多 A 记录里混一条内网是标准起手式，
   // "挑一个能用的"等于自己开门
   for (const a of addrs) {
@@ -96,12 +96,13 @@ async function resolveAllowed(host, portNum) {
 
 // 按拒因分文案：DNS 解析失败要说清"这个域名现在指不到任何地方"，
 // 策略拦截才配那句硬边界 —— 两种拒混着说，agent 会朝错误的方向排障。
-const denyTail = (kind) => (kind === 'dns'
-  ? '这是域名解析失败（域名可能不存在、拼错或已下线），不是出网策略拦截。'
+// 09-17：DNS 超时与 NXDOMAIN 再分开说（dnsFailText，跟 browse 工具同一份）
+const denyTail = (kind, dns) => (kind === 'dns'
+  ? dnsFailText(dns)
   : '内网与本机地址是硬边界，不是可配置项。');
 
-const denyBody = (reason, kind) => {
-  const body = `拒绝出网：${reason}\n\n${denyTail(kind)}`;
+const denyBody = (reason, kind, dns) => {
+  const body = `拒绝出网：${reason}\n\n${denyTail(kind, dns)}`;
   return `HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain; charset=utf-8\r\n`
     + `Content-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`;
 };
@@ -121,9 +122,9 @@ export async function startBrowseProxy() {
     const p = Number(u.port || (u.protocol === 'https:' ? 443 : 80));
     const verdict = await resolveAllowed(u.hostname, p);
     if (verdict.deny) {
-      note(`${u.hostname}:${p}`, verdict.deny);
+      note(`${u.hostname}:${p}`, verdict.deny, verdict);
       res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-      return res.end(`拒绝出网：${verdict.deny}\n\n${denyTail(verdict.kind)}`);
+      return res.end(`拒绝出网：${verdict.deny}\n\n${denyTail(verdict.kind, verdict.dns)}`);
     }
     // 连**验过的那个 IP**，Host 头保留原主机名（虚拟主机才认得出）
     const upstream = http.request({
@@ -149,8 +150,8 @@ export async function startBrowseProxy() {
     const p = Number(rawPort || 443);
     const verdict = await resolveAllowed(rawHost || '', p);
     if (verdict.deny) {
-      note(`${rawHost}:${p}`, verdict.deny);
-      socket.write(denyBody(verdict.deny, verdict.kind));
+      note(`${rawHost}:${p}`, verdict.deny, verdict);
+      socket.write(denyBody(verdict.deny, verdict.kind, verdict.dns));
       return socket.destroy();
     }
     const up = net.connect({ host: verdict.ip, port: p }, () => {

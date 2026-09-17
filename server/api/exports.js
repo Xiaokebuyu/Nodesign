@@ -25,6 +25,7 @@
 
 import express from 'express';
 import { launchPerceptionBrowser } from '../engine/mcp/tools/helpers/perception-page.js';
+import { chromiumFix } from '../runtime/chromium-fix.js';   // 09-17：本地版没有 npx，装法按形态给
 import { promises as fs } from 'fs';
 import path from 'path';
 import JSZip from 'jszip';
@@ -393,7 +394,7 @@ router.get(['/:pid/exports/pdf', '/:pid/sessions/:sid/exports/pdf'], async (req,
       browser = await launchPerceptionBrowser();
     } catch (err) {
       return res.status(500).json({
-        error: 'playwright chromium not installed — run `npx playwright install chromium`',
+        error: `playwright chromium not installed — to install: ${chromiumFix()}`,
         details: err.message,
       });
     }
@@ -502,7 +503,7 @@ router.get(['/:pid/exports/pptx', '/:pid/sessions/:sid/exports/pptx'], async (re
       browser = await launchPerceptionBrowser();
     } catch (err) {
       return res.status(500).json({
-        error: 'playwright chromium not installed — run `npx playwright install chromium`',
+        error: `playwright chromium not installed — to install: ${chromiumFix()}`,
         details: err.message,
       });
     }

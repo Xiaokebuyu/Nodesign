@@ -4,11 +4,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, chmodSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { whichBinary, CAPABILITY_DEFS } from './capabilities.js';
+import { whichBinary, CAPABILITY_DEFS, chromiumFix } from './capabilities.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,6 +31,47 @@ describe('whichBinary', () => {
     for (const d of CAPABILITY_DEFS) {
       expect(d.fix, d.id).toBeTruthy(); expect(d.uses, d.id).toBeTruthy(); expect(['required', 'feature']).toContain(d.level);
     }
+  });
+});
+
+/**
+ * 缺 Chromium 的装法（09-17，iss_mtudxax7_86c5 / iss_mu0e6ur9_irvd）：本地版（npx / 桌面）没有 npx 可用、
+ * playwright 官方源国内不通，要指向「设置 → 组件」；托管版保持原文。形态在模块加载时定，所以两种各起一个子进程。
+ */
+describe('Chromium 装法按形态给', () => {
+  it('chromiumFix：本地 → 设置 → 组件；托管 → npx 原文', () => {
+    expect(chromiumFix(true)).toBe('设置 → 组件 → Chromium 安装');
+    expect(chromiumFix(false)).toBe('npx playwright install chromium');
+  });
+  it('能力表 chromium 行的 fix 跟着运行形态走（local / hosted 子进程）', { timeout: 30_000 }, () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'nd-cfix-'));
+    const code = `
+      import { CAPABILITY_DEFS } from './capabilities.js';
+      const d = CAPABILITY_DEFS.find((x) => x.id === 'chromium');
+      console.log(JSON.stringify({ fix: typeof d.fix === 'function' ? d.fix() : d.fix }));`;
+    const base = { ...process.env }; delete base.VITEST;
+    const run = (profile) => {
+      const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: here, env: { ...base, NODESIGN_PROFILE: profile, NODESIGN_DATA_DIR: dir }, encoding: 'utf8', timeout: 30_000 });
+      expect(r.status, r.stderr).toBe(0);
+      return JSON.parse(r.stdout.trim().split('\n').pop()).fix;
+    };
+    expect(run('local')).toBe('设置 → 组件 → Chromium 安装');
+    expect(run('hosted')).toBe('npx playwright install chromium');
+  });
+  it('装法文案只有一份：服务端源码里别处不再写死 npx playwright install', () => {
+    const root = path.resolve(here, '..');
+    const offenders = [];
+    const walk = (d) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        if (['node_modules', 'projects-data', 'db', 'ops', 'scripts'].includes(e.name) || e.name.startsWith('.')) continue;
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) { walk(p); continue; }
+        if (!e.name.endsWith('.js') || e.name.includes('.test.') || p.endsWith(path.join('runtime', 'chromium-fix.js'))) continue;
+        if (/npx playwright install/.test(readFileSync(p, 'utf8'))) offenders.push(path.relative(root, p));
+      }
+    };
+    walk(root);
+    expect(offenders).toEqual([]);
   });
 });
 

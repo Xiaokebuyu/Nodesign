@@ -19,7 +19,7 @@ import { can } from '../../../lib/kinds/index.js';
 import { screenshotDocx } from './screenshot-docx.js';
 import { SITE_DEVICE_W } from './helpers/perception-page.js';
 import { acquireArtifactPage, LIVE_PARAM_DESC } from './helpers/acquire-page.js';
-import { normalizeShot, detectPaintTransform, attachPageDiagnostics, runWaitFor, runBeforeShot, shotWithFallback, longPageSheet, clipShotWithFallback } from './helpers/shot-pipeline.js';
+import { normalizeShot, detectPaintTransform, runWaitFor, runBeforeShot, shotWithFallback, longPageSheet, clipShotWithFallback } from './helpers/shot-pipeline.js';
 import { recordMotion, pickNearestFrames, composeSheet, encodeWebm, motionCaptionLines } from './helpers/motion-lab.js';
 import { wheelScroll, elementMotionReport, elementMotionLines } from './helpers/motion-scroll.js';
 
@@ -265,12 +265,13 @@ Do NOT use this tool when:
           viewport: vp, deviceScaleFactor: rasterScale,
           // 胶片条量真实帧间距：独占全部浏览器槽位（helpers/browser-slots.js）
           exclusive: Array.isArray(frames) && frames.length > 0,
+          diagnostics: { console: consoleLevel },   // 由出口在 goto 之前挂（09-17 iss_mt886uc1_7rne：拿到页面再挂，加载期失败全漏）
         });
         const page = acq.page;
         const opened = acq;   // degradedNote / viaHttp 的口径不变
         // live 页的视口是会话的，不是本次参数的 —— 下面所有按 vp 算的东西都得按真视口
         if (acq.live) { vp.width = acq.viewport.width; vp.height = acq.viewport.height; }
-        const diag = attachPageDiagnostics(page, { console: consoleLevel });
+        const diag = acq.diag;
         let gotoNote = [opened.note, acq.gotoNote, acq.liveNote].filter(Boolean).join(' | ') || null;
 
         // 三段各自计时（waitFor / beforeShot / settle），caption 报用时 ——
@@ -517,8 +518,9 @@ Do NOT use this tool when:
         // 的对应位置：一个静止时藏在视口下方的转场帘幕（translateY(100%)）会出现
         // 在页面中段，看上去就是一大块盖住内容的色块；sticky 页头会横穿版面。
         // 两个 agent 都把它当成真的布局 bug 去查了 computed style。一行字的事。
+        // selector / pageIndex 截的是元素自己的盒子，不涉及展开视口，这条警告是误导（09-17 iss_mtw1ulg7_mi21）
         let fixedNote = null;
-        if (fp) {
+        if (fp && !targetSelector) {
           try {
             const found = await page.evaluate(() => {
               const out = [];
@@ -539,7 +541,8 @@ Do NOT use this tool when:
                 + ' In a fullPage shot they are painted at their position within the EXPANDED viewport,'
                 + ' not where the user sees them — a full-screen overlay parked below the fold will appear'
                 + ' mid-page and look like it covers the content. Do not debug layout from that;'
-                + ' use scrollTo to see their real position.';
+                + ' use scrollTo to see their real position. A full-screen modal / sheet does not move with'
+                + ' scrolling — capture it with selector (its own box) instead.';
             }
           } catch { /* 诊断挂了不挡截图 */ }
         }

@@ -134,7 +134,7 @@ explain_style / query_elements with live:true.`,
           page.on('request', onReq);
           let r;
           try {
-            r = await runAction(page, a, { frame: entry.frame, shot: (_p, lead) => sessionShot(entry, lead) });
+            r = await runAction(page, a, { frame: entry.frame, shot: (_p, lead) => sessionShot(entry, lead), findTool: 'artifact_find' });
           } catch (err) {
             page.off('request', onReq);
             return asText(actionErrorText(a.action, err), true);

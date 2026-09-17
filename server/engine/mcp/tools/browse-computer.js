@@ -149,10 +149,10 @@ const moveTo = async (page, x, y) => { await page.mouse.move(x, y); cursors.set(
 /**
  * coordinate / ref → {x,y(页面像素), sx,sy(截图像素), viaRef}。ref 会先滚进视口再取几何中心。
  */
-async function resolveTarget(page, { coordinate, ref }, frame, { required = true } = {}) {
+async function resolveTarget(page, { coordinate, ref }, frame, { required = true, findTool } = {}) {
   if (ref) {
     const h = await handleForRef(page, ref);
-    if (!h) return { error: staleRefText(ref) };
+    if (!h) return { error: staleRefText(ref, findTool) };
     await h.scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
     const box = await h.boundingBox();
     if (!box) return { error: `Error: ${ref} has no visible box on the page (hidden or zero-size).` };
@@ -265,8 +265,10 @@ async function zoomShot(page, region, frame, lead) {
  * @param {object} a  工具入参
  * @param {{frame:{w:number,h:number,scale:number}, shot:(page:any, lead:string)=>Promise<any>}} env
  */
-export async function runAction(page, a, { frame, shot }) {
+export async function runAction(page, a, { frame, shot, findTool = 'browser_find' }) {
   const { action } = a;
+  // ref 失效时指回调用方自己那一族的 find 工具（09-17：artifact_computer 曾被指到 browser_find）
+  const find = { findTool };
   if (action === 'screenshot') return shot(page, 'screenshot');
   if (action === 'zoom') return zoomShot(page, a.region, frame, '');
   if (action === 'wait') {
@@ -295,14 +297,14 @@ export async function runAction(page, a, { frame, shot }) {
   if (action === 'scroll_to') {
     if (!a.ref) return asText('Error: scroll_to needs a ref (from the find tool).', true);
     const h = await handleForRef(page, a.ref);
-    if (!h) return asText(staleRefText(a.ref), true);
+    if (!h) return asText(staleRefText(a.ref, findTool), true);
     await h.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' }));
     await page.waitForTimeout(200);
     const box = await h.boundingBox();
     return asText(box ? `scrolled ${a.ref} into view — now at (${toShot(box.x + box.width / 2, frame)}, ${toShot(box.y + box.height / 2, frame)})` : `scrolled toward ${a.ref} (it has no visible box)`);
   }
   if (action === 'scroll') {
-    const t = await resolveTarget(page, a, frame, { required: false });
+    const t = await resolveTarget(page, a, frame, { required: false, ...find });
     if (t.error) return asText(t.error, true);
     const dir = a.scroll_direction;
     if (!['up', 'down', 'left', 'right'].includes(dir)) return asText('Error: scroll needs scroll_direction up|down|left|right.', true);
@@ -325,9 +327,9 @@ export async function runAction(page, a, { frame, shot }) {
   // ── 指针动作 ──
   const mods = parseModifiers(a.modifiers);
   if (action === 'left_click_drag') {
-    const from = await resolveTarget(page, { coordinate: a.start_coordinate }, frame, { required: true });
+    const from = await resolveTarget(page, { coordinate: a.start_coordinate }, frame, { required: true, ...find });
     if (from.error) return asText(from.error.replace('this action needs a coordinate', 'left_click_drag needs start_coordinate'), true);
-    const to = await resolveTarget(page, a, frame);
+    const to = await resolveTarget(page, a, frame, find);
     if (to.error) return asText(to.error, true);
     await withModifiers(page, mods, async () => {
       await moveTo(page, from.x, from.y);
@@ -339,13 +341,13 @@ export async function runAction(page, a, { frame, shot }) {
     return asText(`dragged (${from.sx}, ${from.sy}) → (${to.sx}, ${to.sy})`);
   }
   if (action === 'left_mouse_down' || action === 'left_mouse_up') {
-    const t = await resolveTarget(page, a, frame, { required: false });
+    const t = await resolveTarget(page, a, frame, { required: false, ...find });
     if (t.error) return asText(t.error, true);
     await moveTo(page, t.x, t.y);
     if (action === 'left_mouse_down') await page.mouse.down(); else await page.mouse.up();
     return asText(`${action} at (${t.sx}, ${t.sy})`);
   }
-  const t = await resolveTarget(page, a, frame);
+  const t = await resolveTarget(page, a, frame, find);
   if (t.error) return asText(t.error, true);
   const at = `(${t.sx}, ${t.sy})${t.viaRef ? ` = ${t.viaRef}` : ''}`
     + (t.coveredBy ? ` — ⚠ that point is covered by <${t.coveredBy}>: the ${action} landed on it, not on ${t.viaRef} (overlay / curtain / modal? dismiss it first or screenshot to see)` : '');

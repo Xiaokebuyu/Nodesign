@@ -119,6 +119,37 @@ const DIAG_MAX_ENTRIES = 15;
 const DIAG_MAX_TEXT = 300;
 const DIAG_MAX_LOGS = 10;   // console:'all' 时 log 级单独一桶，别把真错误挤出去
 
+// ── 子资源 content-type 核对（09-17，问题库 iss_mt886uc1_7rne）──
+// 只看 status<400 判不出「取不到」：vite 产物 base 没设成 './' 时，/assets/x.js 落到
+// 回退页上，回的是 200 + text/html，caption 照样报 all requests OK。按请求类型核
+// content-type，只抓**明显不对**的组合（没给 content-type 的不算，浏览器会嗅探）：
+//   - 四类都不该是 HTML（SPA / 404 回退页）
+//   - 样式表只认 text/css（标准模式下 Chrome 拒绝应用其它类型）
+//   - 字体 / 图片不该是文本、JSON、脚本
+const HTML_MIME = /^(text\/html|application\/xhtml\+xml)$/;
+const MIME_WRONG = {
+  script: (m) => HTML_MIME.test(m) || /^(text\/(css|csv)|image\/|audio\/|video\/|font\/)/.test(m),
+  stylesheet: (m) => m !== 'text/css',
+  font: (m) => HTML_MIME.test(m) || /^(text\/|image\/|application\/(json|javascript))/.test(m),
+  image: (m) => HTML_MIME.test(m) || /^(text\/(css|javascript)|application\/(json|javascript))/.test(m),
+};
+
+/**
+ * 一条 2xx 响应的 content-type 跟它的请求类型对不上 → 返回归一化后的 MIME；对得上 / 不核 → null。
+ * @param {string} resourceType  playwright request.resourceType()
+ * @param {string} contentType   响应头原文（可带 ;charset）
+ * @param {number} status
+ * @param {string} [url]         只核 http(s)；data: / blob: 不核
+ */
+export function mimeMismatch(resourceType, contentType, status, url = 'http:') {
+  const wrong = MIME_WRONG[resourceType];
+  if (!wrong || status < 200 || status >= 300 || status === 204) return null;
+  if (!/^https?:/i.test(String(url))) return null;
+  const mime = String(contentType || '').split(';')[0].trim().toLowerCase();
+  if (!mime) return null;
+  return wrong(mime) ? mime : null;
+}
+
 /**
  * @param {import('playwright').Page} page
  * @param {object} [opts]
@@ -170,27 +201,49 @@ export function attachPageDiagnostics(page, opts = {}) {
     if (logEntries.length < DIAG_MAX_LOGS) logEntries.push(entry);
   };
 
-  page.on('console', (msg) => {
-    const type = msg.type();
-    if (type === 'error' || type === 'warning') { noteConsole(type, msg.text()); return; }
-    if (wantAll) noteLog(type, msg.text());
-    else filteredLogs += 1;
-  });
-  page.on('pageerror', (err) => noteConsole('pageerror', err?.message || err));
-  page.on('requestfailed', (req) => noteFailed(req.method(), req.url(), req.failure()?.errorText || 'failed'));
-  page.on('response', (res) => {
-    if (res.status() < 400) return;
-    noteFailed(res.request().method(), res.url(), `HTTP ${res.status()}`);
-  });
+  // content-type 不对的逐条列（不按主机聚合）：每一条都是一个具体缺失的文件
+  const wrongMime = [];
+  let wrongMimeTotal = 0;
+
+  const handlers = {
+    console: (msg) => {
+      const type = msg.type();
+      if (type === 'error' || type === 'warning') { noteConsole(type, msg.text()); return; }
+      if (wantAll) noteLog(type, msg.text());
+      else filteredLogs += 1;
+    },
+    pageerror: (err) => noteConsole('pageerror', err?.message || err),
+    requestfailed: (req) => noteFailed(req.method(), req.url(), req.failure()?.errorText || 'failed'),
+    response: (res) => {
+      const status = res.status();
+      if (status >= 400) { noteFailed(res.request().method(), res.url(), `HTTP ${status}`); return; }
+      let type = null; let ct = '';
+      try { type = res.request().resourceType(); ct = res.headers()['content-type'] || ''; } catch { return; }
+      const mime = mimeMismatch(type, ct, status, res.url());
+      if (!mime) return;
+      wrongMimeTotal += 1;
+      if (wrongMime.length < DIAG_MAX_ENTRIES) {
+        wrongMime.push({ method: res.request().method(), url: res.url().slice(0, DIAG_MAX_TEXT), status, mime, type });
+      }
+    },
+  };
+  for (const [evt, h] of Object.entries(handlers)) page.on(evt, h);
 
   return {
+    /**
+     * 摘掉监听（09-17）：产物会话的常驻页面会被 live:true 反复挂诊断，不摘就一次次累积在同一页上。
+     * 一次性浏览器随关随清，不调也行。
+     */
+    detach() {
+      for (const [evt, h] of Object.entries(handlers)) { try { page.off?.(evt, h); } catch { /* */ } }
+    },
     /** 汇成 caption 附加段。干净时给正向确认（"不知道有没有挂"跟"确认没挂"是两回事）。 */
     summary() {
       const failed = [...failedGroups.values()];
       // 被滤掉的 log 条数必须可见 —— "没显示"和"没发生"是两回事
       const filteredNote = filteredLogs > 0
         ? `${filteredLogs} log-level line(s) filtered — pass console:'all' to see them` : null;
-      if (!consoleEntries.length && !failed.length && !logEntries.length) {
+      if (!consoleEntries.length && !failed.length && !logEntries.length && !wrongMimeTotal) {
         return filteredNote
           ? `console clean (${filteredNote}), all requests OK`
           : 'console clean, all requests OK';
@@ -218,6 +271,14 @@ export function attachPageDiagnostics(page, opts = {}) {
           // 每组给一条样本 URL；同主机同原因的其余只报数
           lines.push(`  ${f.method} ${f.url} — ${f.detail}${f.count > 1 ? ` (×${f.count} from ${f.host})` : ''}`);
         }
+      }
+      if (wrongMimeTotal) {
+        lines.push(`wrong content-type (${wrongMimeTotal}) — the request "succeeded" but the file it expected was not served:`);
+        for (const w of wrongMime) {
+          lines.push(`  ${w.method} ${w.url} → ${w.status} ${w.mime} (expected ${w.type})`
+            + (HTML_MIME.test(w.mime) ? ' — an HTML fallback/error page was served in place of a missing file; check the path (absolute /assets/… vs relative ./assets/…)' : ''));
+        }
+        if (wrongMimeTotal > wrongMime.length) lines.push(`  …and ${wrongMimeTotal - wrongMime.length} more`);
       }
       return lines.join('\n');
     },

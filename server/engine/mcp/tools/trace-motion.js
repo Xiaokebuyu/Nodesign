@@ -24,7 +24,7 @@ import { resolveCanvasTarget, CANVAS_PATH_DESC, KIND_SITE, requireBrowsable } fr
 import { resolveDeckSize, extractDeckAspect } from '../../../shared/deck.js';
 import { degradedNote } from './helpers/perception-page.js';
 import { acquireArtifactPage, LIVE_PARAM_DESC } from './helpers/acquire-page.js';
-import { runWaitFor, runBeforeShot, attachPageDiagnostics, normalizeShot } from './helpers/shot-pipeline.js';
+import { runWaitFor, runBeforeShot, normalizeShot } from './helpers/shot-pipeline.js';
 import { recordMotion, seriesReport, chartSvg, fmtNum, motionCaptionLines } from './helpers/motion-lab.js';
 import { wheelScroll, elementMotionReport, elementMotionLines } from './helpers/motion-scroll.js';
 import { promises as fs } from 'node:fs';
@@ -140,11 +140,12 @@ frames:[...] (filmstrip contact sheet).`,
       let acq;
       try {
         // 量逐帧数值：独占全部浏览器槽位（helpers/browser-slots.js）
-        acq = await acquireArtifactPage({ projectId, workspaceRoot, target, live, viewport: vp, exclusive: true });
+        // 诊断由出口在 goto 之前挂（09-17 iss_mt886uc1_7rne：拿到页面再挂，加载期的失败请求与控制台错误全漏）
+        acq = await acquireArtifactPage({ projectId, workspaceRoot, target, live, viewport: vp, exclusive: true, diagnostics: {} });
         const page = acq.page;
         const opened = acq;
         if (acq.live) vp = acq.viewport;
-        const diag = attachPageDiagnostics(page);
+        const diag = acq.diag;
 
         const waitForNote = waitFor ? await runWaitFor(page, waitFor) : null;
         const beforeShotNote = beforeShot ? await runBeforeShot(page, beforeShot) : null;
