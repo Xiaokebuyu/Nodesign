@@ -28,7 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { updateCheckMessage, isSuspendError } from './update-message.js';
+import { updateCheckMessage, isSuspendError, installFailedNotice, MANUAL_INSTALLER_URL } from './update-message.js';
 import { resolveWindowBounds, MIN_SIZE } from './window-state.js';
 import { exportDirFrom, uniqueTarget } from './export-target.js';
 
@@ -379,6 +379,11 @@ function settleUpdateLedger(dataDir) {
       else {
         log(`[updater] ✗ 退出时静默安装没装上：期望 ${p?.to}，现在跑的是 ${now}（${p?.from} 退出于 ${p?.at}）`);
         reportShellIssue('bug', `退出时静默安装没装上：期望 ${p?.to}，实际 ${now}`, JSON.stringify(p));
+        // 不等窗口：服务端这次可能也起不来（安装回滚留下残缺目录），提示要赶在启动失败的弹窗之前
+        const n = installFailedNotice(p, now);
+        dialog.showMessageBox({ type: 'warning', title: n.title, message: n.message, detail: n.detail, buttons: n.buttons, defaultId: 0, cancelId: 1 })
+          .then(({ response }) => { if (response === 0) shell.openExternal(MANUAL_INSTALLER_URL); })
+          .catch((e) => log(`[updater] 安装失败提示弹不出来：${e?.message || e}`));
       }
     }
   } catch (e) { log(`[updater] 更新台账读不了：${e?.message || e}`); }

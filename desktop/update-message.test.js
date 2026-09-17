@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { updateCheckMessage, isSuspendError } from './update-message.js';
+import { updateCheckMessage, isSuspendError, installFailedNotice, MANUAL_INSTALLER_URL } from './update-message.js';
 
 describe('updateCheckMessage', () => {
   it('有更新：说版本号和在后台下', () => {
@@ -23,5 +23,21 @@ describe('isSuspendError', () => {
   it('真正的网络故障不算', () => {
     expect(isSuspendError(new Error('net::ERR_CONNECTION_RESET'))).toBe(false);
     expect(isSuspendError(undefined)).toBe(false);
+  });
+});
+
+describe('installFailedNotice', () => {
+  it('说清应当是哪版、现在是哪版，并给出手动安装的路', () => {
+    const n = installFailedNotice({ from: '0.1.34', to: '0.1.39' }, '0.1.34');
+    expect(n.message).toContain('0.1.39');
+    expect(n.message).toContain('0.1.34');
+    expect(n.detail).toMatch(/覆盖安装/);
+    expect(n.buttons[0]).toBe('下载安装包');
+  });
+  it('台账缺字段也能出一句完整的话', () => {
+    expect(installFailedNotice(null, '0.1.40').message).toMatch(/新版本.*0\.1\.40/);
+  });
+  it('下载地址是官网同一个固定名（发版工作流覆盖的那个）', () => {
+    expect(MANUAL_INSTALLER_URL).toBe('https://dl.xiaobuyu.trade/desktop/NoDesign-Setup.exe');
   });
 });
