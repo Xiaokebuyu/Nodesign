@@ -57,3 +57,38 @@ export function lineageFolds(ids, bindings, openTips = new Set()) {
   }
   return { hidden, stacks };
 }
+
+/**
+ * 每一摞里有哪些旧版（2026-09-17）：从链尾出发沿改自边（不分方向）走遍它那一组，
+ * 先走到的离现役版近，顺序即「新的在前」。组内旧版之间可能有环，单向走会漏，所以按连通走。
+ * hidden / stacks 取**全部收起**时 lineageFolds 的结果（点开的摞也要知道成员）。
+ * @returns {Map<string, string[]>} 链尾 → 旧版
+ */
+export function lineageMembers(bindings, hidden, stacks) {
+  const inStack = (id) => hidden.has(id) || stacks.has(id);
+  const adj = new Map();
+  const link = (a, b) => { if (!adj.has(a)) adj.set(a, []); adj.get(a).push(b); };
+  for (const b of Object.values(bindings || {})) {
+    if (b?.type !== 'derives-from' || !inStack(b.from) || !inStack(b.to)) continue;
+    link(b.from, b.to); link(b.to, b.from);
+  }
+  const olds = new Map();
+  for (const tip of stacks.keys()) {
+    const order = [];
+    const seen = new Set([tip]);
+    let frontier = [tip];
+    while (frontier.length) {
+      const next = [];
+      for (const id of frontier) {
+        for (const o of adj.get(id) || []) {
+          if (seen.has(o) || !hidden.has(o)) continue;
+          seen.add(o); order.push(o); next.push(o);
+        }
+      }
+      frontier = next;
+    }
+    olds.set(tip, order);
+  }
+  return olds;
+}
+// ── END-MIRROR（server/lib/lineage.js 逐字镜像到这里为止）──

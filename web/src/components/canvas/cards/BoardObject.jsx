@@ -489,6 +489,18 @@ function BoardObject({
         </div>
       )}
 
+      {o.stackOf && (
+        <span
+          title={`${o.stackOf} 的旧版；收起后回到它身后`}
+          style={{
+            position: 'absolute', bottom: -8, left: -6, pointerEvents: 'auto',
+            background: COLOR.bg, color: COLOR.text4, border: `1px dashed ${COLOR.borderLt}`,
+            borderRadius: RADIUS.md, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, padding: '1px 6px',
+          }}
+        >
+          旧版 {o.stackIndex}/{o.stackTotal}
+        </span>
+      )}
       {stackCount > 0 && (
         <button
           data-board-action

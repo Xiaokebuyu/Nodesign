@@ -13,10 +13,10 @@ const df = (from, to) => ({ type: 'derives-from', from, to, by: 'agent' });
 const seat = (x = 0, y = 0) => ({ x, y });
 
 describe('lineage 镜像', () => {
-  it('lineageFolds 函数体与 web/src/lib/lineage.js 逐字一致', () => {
+  it('lineageFolds / lineageMembers 函数体与 web/src/lib/lineage.js 逐字一致', () => {
     const be = fs.readFileSync(new URL('./lineage.js', import.meta.url), 'utf8');
     const fe = fs.readFileSync(new URL('../../web/src/lib/lineage.js', import.meta.url), 'utf8');
-    expect(slice(be).length).toBeGreaterThan(200);
+    expect(slice(be)).toContain('export function lineageMembers');
     expect(slice(be)).toBe(slice(fe));
   });
 

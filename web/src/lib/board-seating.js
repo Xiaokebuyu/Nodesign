@@ -20,9 +20,35 @@
 import { DESKTOP_W, MARGIN_X, ROW_GAP, packRow } from './board-geometry.js';
 import { nextShelfSpot, hasShelf } from './board-shelf.js';
 import { sizeOf, ARTIFACT_PREVIEW_H } from './board-kinds.js';
-import { lineageFolds } from './lineage.js';
+import { lineageFolds, lineageMembers } from './lineage.js';
 import { pickHero } from './hero.js';
 import { orderWithGroups } from './relation-order.js';
+
+/** 点开的摞里旧版之间、旧版与现役版之间的间距 */
+const FAN_GAP = 24;
+
+/**
+ * 点开的摞（2026-09-17 站主定「不占位，点开时临时摊开」）：旧版不占自己的座位
+ * （服务端落位也不再把它们当障碍），点开时临时排在现役版右边一行，收起就回去。
+ * 只改这一趟渲染用的 pos，座位表里存的仍是它们原来的座，不回写。
+ */
+function fanOpenStacks(visItems, ids, bindings, openTips) {
+  const all = lineageFolds(ids, bindings);
+  const members = lineageMembers(bindings, all.hidden, all.stacks);
+  const byId = new Map(visItems.map(it => [String(it.id), it]));
+  let z = Math.max(1, ...visItems.map(it => it.pos.z || 1));
+  for (const tipId of openTips) {
+    const tip = byId.get(tipId);
+    if (!tip) continue;
+    const olds = (members.get(tipId) || []).map(id => byId.get(id)).filter(Boolean);
+    let x = tip.pos.x + sizeOf(tip).w + FAN_GAP;
+    olds.forEach((it, i) => {
+      it.pos = { ...it.pos, x, y: tip.pos.y, z: (z += 1) };
+      Object.assign(it, { stackOf: tipId, stackIndex: i + 1, stackTotal: olds.length });
+      x += sizeOf(it).w + FAN_GAP;
+    });
+  }
+}
 
 /** 尺寸要回写给服务端的形态（产物卡：主角档会变大，服务端估不准）。
  *  从 ARTIFACT_PREVIEW_H 派生而不是手写 —— 手写那份 09-12 之前漏了 stage（写死表家族第 6 处） */
@@ -215,6 +241,9 @@ export function computeDesktopSeating({
       };
     }
   }
+  // 摊开放在最后：上面的落座 / 回写都按原来的座算，摊开的位置只给这一趟渲染
+  const openTips = [...folds.stacks].filter(([, st]) => st.open).map(([tip]) => tip);
+  if (openTips.length) fanOpenStacks(visItems, items.map(it => String(it.id)), bindings, openTips);
   return { positioned: visItems, folderView: folders, contentBottom: bottom, seatFixes, noteFixes, sizeFixes };
 }
 

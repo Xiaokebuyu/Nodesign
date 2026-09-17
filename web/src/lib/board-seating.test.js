@@ -110,6 +110,37 @@ describe('computeDesktopSeating', () => {
     expect(open.positioned).toHaveLength(2);
   });
 
+  it('⭐ 点开的摞（09-17）：旧版临时排在现役版右边一行、标第几个，不回写座位；收起后回原座', () => {
+    const items = [
+      { id: 'deck:v1.html', type: 'deck' },
+      { id: 'deck:v2.html', type: 'deck' },
+      { id: 'deck:v3.html', type: 'deck' },
+    ];
+    const layout = {
+      'deck:v1.html': { x: 0, y: 2000, z: 1 },
+      'deck:v2.html': { x: 3000, y: 0, z: 1 },
+      'deck:v3.html': { x: 100, y: 500, z: 4 },
+    };
+    const bindings = {
+      b1: { type: 'derives-from', from: 'deck:v2.html', to: 'deck:v1.html' },
+      b2: { type: 'derives-from', from: 'deck:v3.html', to: 'deck:v2.html' },
+    };
+    const open = seat({ dirIndex: dirIndexOf(items), layout, bindings, lineageOpen: new Set(['deck:v3.html']) });
+    const at = (id) => open.positioned.find(o => o.id === id);
+    const tip = at('deck:v3.html'); const v2 = at('deck:v2.html'); const v1 = at('deck:v1.html');
+    expect(v2.pos.y).toBe(500);
+    expect(v1.pos.y).toBe(500);
+    expect(v2.pos.x).toBeGreaterThan(tip.pos.x);
+    expect(v1.pos.x).toBeGreaterThan(v2.pos.x);
+    expect(v2.pos.z).toBeGreaterThan(4);
+    expect([v2.stackIndex, v1.stackIndex, v1.stackTotal, v1.stackOf]).toEqual([1, 2, 2, 'deck:v3.html']);
+    expect(open.seatFixes).toEqual({});
+    expect(layout['deck:v2.html']).toEqual({ x: 3000, y: 0, z: 1 });   // 座位表没被改
+    const closed = seat({ dirIndex: dirIndexOf(items), layout, bindings });
+    expect(closed.positioned.map(o => o.id)).toEqual(['deck:v3.html']);
+    expect(closed.positioned[0].stackOf).toBeUndefined();
+  });
+
   it('幻影座位过户：claimSeat 命中的图坐幻影的位置并落盘', () => {
     const r = seat({
       dirIndex: dirIndexOf([{ id: 'assets/generated/n.webp', type: 'image', }]),

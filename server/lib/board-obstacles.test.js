@@ -37,6 +37,19 @@ describe('obstaclesIn —— 一层上谁占着地方', () => {
     expect(folder).toMatchObject({ x: 500, y: 500, w: FOLDER_CARD.w, h: FOLDER_CARD.h });
   });
 
+  it('⭐ 叠在现役版身后的旧版不占地（09-17）；拆掉改自线它就回来占地', () => {
+    const stacked = {
+      ...board,
+      objects: { ...board.objects, 'v1.png': { x: 0, y: 400, w: 200, h: 176 }, 'v2.png': { x: 300, y: 400, w: 200, h: 176 } },
+      bindings: { l: { type: 'derives-from', from: 'v2.png', to: 'v1.png', by: 'agent' } },
+    };
+    const ids = obstaclesIn(stacked, '').map(o => o.id);
+    expect(ids).toContain('v2.png');
+    expect(ids).not.toContain('v1.png');
+    const unlinked = obstaclesIn({ ...stacked, bindings: {} }, '').map(o => o.id);
+    expect(unlinked).toContain('v1.png');
+  });
+
   it('文件夹层里没有文件夹卡（卡本身住在根层桌面上）', () => {
     const ids = obstaclesIn(board, '角色').map(o => o.id);
     expect(ids).toEqual(['角色/卡.md']);

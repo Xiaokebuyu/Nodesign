@@ -5,7 +5,7 @@
  * 在这之前服务端对此一无所知：read_board 照常逐件列出被藏起来的旧版，锚点能落到一张
  * 用户看不见的卡旁边，agent 看到的板和用户看到的板不是同一块。
  *
- * **镜像不是重写**：下面 lineageFolds 的函数体必须与前端逐字相同，lineage.test.js
+ * **镜像不是重写**：下面 lineageFolds / lineageMembers 的函数体必须与前端逐字相同，lineage.test.js
  * 读两份源码比对（npm 包不带 web/src，不能 import 过来；同 board-hero.js 的做法）。
  *
  * 服务端不知道用户点开了哪一摞（展开态只活在浏览器里），一律按默认的收起算。
@@ -52,6 +52,40 @@ export function lineageFolds(ids, bindings, openTips = new Set()) {
   }
   return { hidden, stacks };
 }
+
+/**
+ * 每一摞里有哪些旧版（2026-09-17）：从链尾出发沿改自边（不分方向）走遍它那一组，
+ * 先走到的离现役版近，顺序即「新的在前」。组内旧版之间可能有环，单向走会漏，所以按连通走。
+ * hidden / stacks 取**全部收起**时 lineageFolds 的结果（点开的摞也要知道成员）。
+ * @returns {Map<string, string[]>} 链尾 → 旧版
+ */
+export function lineageMembers(bindings, hidden, stacks) {
+  const inStack = (id) => hidden.has(id) || stacks.has(id);
+  const adj = new Map();
+  const link = (a, b) => { if (!adj.has(a)) adj.set(a, []); adj.get(a).push(b); };
+  for (const b of Object.values(bindings || {})) {
+    if (b?.type !== 'derives-from' || !inStack(b.from) || !inStack(b.to)) continue;
+    link(b.from, b.to); link(b.to, b.from);
+  }
+  const olds = new Map();
+  for (const tip of stacks.keys()) {
+    const order = [];
+    const seen = new Set([tip]);
+    let frontier = [tip];
+    while (frontier.length) {
+      const next = [];
+      for (const id of frontier) {
+        for (const o of adj.get(id) || []) {
+          if (seen.has(o) || !hidden.has(o)) continue;
+          seen.add(o); order.push(o); next.push(o);
+        }
+      }
+      frontier = next;
+    }
+    olds.set(tip, order);
+  }
+  return olds;
+}
 // ── END-MIRROR ──
 
 /**
@@ -73,32 +107,8 @@ export function boardLineage(board) {
   const bindings = board?.bindings || {};
   const { hidden, stacks } = lineageFolds(ids, bindings);
   const tipOf = new Map();
-  const olds = new Map();
-  if (!hidden.size) return { hidden, tipOf, olds };
-  // 成员归属：从链尾出发沿改自边（不分方向）走遍它那一组。组内可能有旧版之间的环，
-  // 顺着「新→旧」单向走会漏掉，所以按连通走；先走到的离现役版近，顺序即「新的在前」。
-  const inStack = (id) => hidden.has(id) || stacks.has(id);
-  const adj = new Map();
-  const link = (a, b) => { if (!adj.has(a)) adj.set(a, []); adj.get(a).push(b); };
-  for (const b of Object.values(bindings)) {
-    if (b?.type !== 'derives-from' || !inStack(b.from) || !inStack(b.to)) continue;
-    link(b.from, b.to); link(b.to, b.from);
-  }
-  for (const tip of stacks.keys()) {
-    const order = [];
-    const seen = new Set([tip]);
-    let frontier = [tip];
-    while (frontier.length) {
-      const next = [];
-      for (const id of frontier) {
-        for (const o of adj.get(id) || []) {
-          if (seen.has(o) || !hidden.has(o)) continue;
-          seen.add(o); order.push(o); tipOf.set(o, tip); next.push(o);
-        }
-      }
-      frontier = next;
-    }
-    olds.set(tip, order);
-  }
+  if (!hidden.size) return { hidden, tipOf, olds: new Map() };
+  const olds = lineageMembers(bindings, hidden, stacks);
+  for (const [tip, list] of olds) for (const o of list) tipOf.set(o, tip);
   return { hidden, tipOf, olds };
 }

@@ -37,6 +37,7 @@ import { inflateSpriteSeats, rollCardRect } from './board-place.js';
 import { getViewpoint } from '../projects/viewpoint-store.js';
 import { reservationsIn } from './board-reservations.js';
 import { KIND_PREFIX_RE } from './kinds/index.js';
+import { boardLineage } from './lineage.js';
 
 /**
  * 这个座位背后的文件还在磁盘上吗（2026-09-05）。
@@ -79,9 +80,11 @@ export function obstaclesIn(board, zone = '', { objects = null, exclude = null, 
   const objs = objects || board?.objects || {};
   const known = new Set(Object.keys(board?.zones || {}));
   const skip = exclude instanceof Set ? exclude : new Set(exclude || []);
+  // 叠在现役版身后的旧版不占地（09-17 站主定）：前端点开时把它们临时排在现役版旁边，原来的座空着
+  const stacked = zone ? null : boardLineage({ ...board, objects: objs }).hidden;
   const rects = [];
   for (const [id, e] of Object.entries(objs)) {
-    if (skip.has(id) || !Number.isFinite(e?.x)) continue;
+    if (skip.has(id) || !Number.isFinite(e?.x) || stacked?.has(id)) continue;
     if (layerOf(id, e, known) !== zone) continue;
     if (!seatBacked(id, e, sharedRoot)) continue;
     rects.push({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) });
