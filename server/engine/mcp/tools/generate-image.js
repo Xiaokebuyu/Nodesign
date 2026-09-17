@@ -267,8 +267,7 @@ WHEN NOT TO USE:
 After a generation that settles style direction, record the settled anchor as a
 memory (记忆/, type: project) so later sessions inherit it.`,
     {
-      // 上限 3500 → 8000（09-17）：3500 是自定的，不是上游的。gpt-image 模型的上限是 32000 字符，codex 不另设限；
-      // 实测 10001 字中文提示词原样送达并出图。代价是时间（codex 要逐字写一遍），超时随长度放宽，见 codexImageBudgetMs
+      // 上限 3500 → 8000（09-17）：上游 gpt-image 是 32000 字符、codex 不另设限，实测 1 万字原样出图；超时见 codexImageBudgetMs
       prompt: z
         .string()
         .min(4)
