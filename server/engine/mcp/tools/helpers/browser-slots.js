@@ -14,8 +14,10 @@
  * 不归这里管的（别顺手接进来）：
  *   - 产物会话 / 浏览通道的常驻浏览器（engine/perception/session.js、engine/browse/registry.js）：
  *     常驻占着槽会把一次性工具饿死，它们各自有按项目的锁；
- *   - 服务端 API 的导出 / 封面 / 圈选截图（api/exports.js、lib/cover.js、lib/region-shot.js）：
+ *   - 服务端 API 的导出 / 首页封面 / 圈选截图（api/exports.js、lib/cover.js 的默认调用、lib/region-shot.js）：
  *     用户在等页面响应，不该排在 agent 的截图后面。
+ *     例外（09-17）：画布拉远时的远景缩略图（lib/artifact-thumb.js 经 cover.js 注入 launch）**过这道闸**——
+ *     一块板一次能请求几十张，是后台补图，排在 agent 的截图后面是有意的。
  *
  * 排队按项目轮转（lib/slot-pool.js）：一个项目一条消息发一串截图，别的项目最多等正在跑的那一个。
  *
