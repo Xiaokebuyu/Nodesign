@@ -11,6 +11,7 @@
  */
 import { DECK_EMBED_W, ARTIFACT_HEADER_H, ARTIFACT_PREVIEW_H } from './board-kind-sizes.js';
 import { layerOf } from './canvas-id.js';
+import { boardLineage } from './lineage.js';
 
 // ── 以下到 END-MIRROR 与 web/src/lib/hero.js 逐字一致 ──
 const ELIGIBLE = new Set(['deck', 'site', 'docx']);
@@ -52,14 +53,15 @@ const TYPE_RE = /^(deck|site|docx):/;
 
 /**
  * 这块板此刻的主角 id（只看桌面根层，与前端入座同口径）：board.hero 显式覆盖，
- * 否则按关系线推。前端还会把谱系收叠藏起来的旧版排除在外 —— 那些卡本来就被
- * 改自边重罚，结果一致，这里不重复实现收叠。
+ * 否则按关系线推。谱系收叠藏起来的旧版不参与（前端在主角判断之前就把它们摘了；
+ * 09-17 起服务端也摘 —— 改自边的重罚在多数板上结果一样，并列判定时不一样）。
  */
 export function boardHeroId(board) {
   const known = new Set(Object.keys(board?.zones || {}));
+  const { hidden } = boardLineage(board);
   const items = [];
   for (const [id, e] of Object.entries(board?.objects || {})) {
-    if (!Number.isFinite(e?.x) || e.kind) continue;
+    if (!Number.isFinite(e?.x) || e.kind || hidden.has(id)) continue;
     if (layerOf(id, e, known) !== '') continue;
     const m = TYPE_RE.exec(id);
     if (m) items.push({ id, type: m[1] });

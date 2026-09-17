@@ -32,6 +32,7 @@ import { placeBeside, overlapIds, solvePlace, lastOfGroup, describePlacement } f
 import { reflowGroup, pushDownAfterGrow } from '../../../lib/board-reflow.js';
 import { lineCrossings } from '../../../lib/line-route.js';
 import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
+import { boardLineage } from '../../../lib/lineage.js';
 import { makeEndpointResolver } from '../../../lib/board-endpoint.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { transformGroup } from '../../../lib/board-transform.js';
@@ -125,7 +126,9 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         const raw = by0 === 'user' ? (vp?.selected?.[0] || null) : by0;
         if (!raw) return { error: "by:'user' 但用户此刻没有选中任何东西 —— 用 'view' 或点名一件" };
         const refId = rid(raw);
-        const r = refId && rectOf(refId);
+        // 叠在身后的旧版（09-17）不按它自己的座位算：交给共用解析器锚到身前那张，并如实报
+        const stackedOld = refId && boardLineage({ ...board, objects: live, zones: liveZones }).hidden.has(refId);
+        const r = refId && !stackedOld && rectOf(refId);
         if (r) { anchor = r; anchorId = refId; zone = layerOf(refId, live[refId], known); } else {
           // 精确认不到就走共用解析器（救援入座 + 宽认）；再认不出给候选
           const now = { ...board, objects: live, zones: liveZones };

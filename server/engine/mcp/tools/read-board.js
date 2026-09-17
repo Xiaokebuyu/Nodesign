@@ -22,6 +22,7 @@ import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewpor
 import { laneSummaries } from '../../../lib/board-lanes.js';
 import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
 import { rollCardRect } from '../../../lib/board-place.js';
+import { boardLineage } from '../../../lib/lineage.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -42,7 +43,10 @@ function describeEntry(board, id, entry, glyph = null, excerpts = null, staleIds
   // 位置按关系说（09-11）：像素只在 coords:true 时给 —— 读到像素的 agent 会在坐标系里推算（那条「离组 600+px」的误报就是这么来的）
   const at = view?.coords ? ` @(${Math.round(entry.x)},${Math.round(entry.y)}) ${Math.round(sz.w)}x${Math.round(sz.h)}` : '';
   const g = glyph ? `[${glyph}] ` : '';
-  const flags = `${entry.staging ? ' 〔草稿〕' : ''}${entry.tag ? ` #${entry.tag}` : ''}`;
+  // 谱系收叠（09-17）：旧版叠在这张身后，用户看不见；点名给出，要看旧版直接 Read 路径
+  const olds = view?.stacks?.get(id);
+  const stacked = olds?.length ? ` 〔身后叠着 ${olds.length} 个旧版：${olds.slice(0, 4).join('、')}${olds.length > 4 ? ' 等' : ''}〕` : '';
+  const flags = `${entry.staging ? ' 〔草稿〕' : ''}${entry.tag ? ` #${entry.tag}` : ''}${stacked}`;
   const ch = excerpts?.get(id);
   if (ch) return `- ${g}[板书·${who(ch.by)}写的] 「${ch.first}」${at} (path: ${id})${ch.anchor ? ` 关于 ${ch.anchor}` : ''}${ch.replyTo ? ` 回应 ${ch.replyTo}` : ''}${flags}`;
   if (entry.kind === 'text') {
@@ -101,6 +105,9 @@ on the minimap and listed with what is inside it.`,
         byLayer.get(l).push({ id, entry });
       }
 
+      // 根层的谱系收叠跟前端同口径（默认收起）：被叠住的旧版不逐件列，挂在现役版那一行
+      const lineage = want ? null : boardLineage(board);
+      view.stacks = lineage?.olds;
       const lines = [];
       const excerpts = await chalkExcerpts(getSharedDir(projectId), (byLayer.get(want) || []).map(it => it.id));
       const items = (byLayer.get(want) || [])
@@ -110,6 +117,7 @@ on the minimap and listed with what is inside it.`,
         .filter(({ entry }) => tag || !entry.tag || !board.rolls?.[entry.tag])
         // 板书条目但文件已经没了 = 幽灵座位，别列给 agent（删文件那条路会清座位，这是兜底）
         .filter(({ id }) => !id.startsWith(`${CHALK_DIR}/`) || excerpts.has(id))
+        .filter(({ id }) => !lineage?.hidden.has(id))
         .sort((a, b) => (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
       const entryOf = new Map(items.map(it => [it.id, it.entry]));
       // 座位 vs 磁盘对账（iss_mt38ucyq）：文件挪走后旧座位可能还挂几十秒
@@ -256,6 +264,7 @@ on the minimap and listed with what is inside it.`,
       }
 
       lines.push('', '（口径：稀疏表只列摆过的；位置按关系说，coords:true 才给像素；层归属为服务端近似；尺寸=存档真值优先、缺了按形态估；'
+        + '改自链的旧版叠在现役版身后不单列；'
         + '角色精灵贴着该角色最新一条板书（那条四周留了 60px 身位）；带⚠️的条目=座位与磁盘对不上账）');
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     },

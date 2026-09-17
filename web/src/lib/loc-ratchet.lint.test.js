@@ -28,7 +28,8 @@ const GRANDFATHERED = {
   // 08-17 导出重做：exportCard handler 迁去 canvas/card-export.js，
   // annotTargetOf 收进 board-kinds.js（它的形状要跟右键菜单一字不差，抄两份会分叉）
   // 08-31 撤「整理」（tidyBoard 整块 + 四个死 import）：2169 → 2123
-  'web/src/components/canvas/BoardCanvas.jsx': 2123,
+  // 09-17 谱系展开集搬去 useLineageOpen.js：2119 → 2113
+  'web/src/components/canvas/BoardCanvas.jsx': 2113,
   // 08-17 导出重做：顶栏导出动作迁去 canvas/card-export.js 的 exportFromMenu
   'web/src/routes/ProjectWorkspace.jsx': 2408,
   // server/engine/agent/hooks.js 2026-08-14 拆完出表（1975 → 组装层 ~330，走 600 通用上限）

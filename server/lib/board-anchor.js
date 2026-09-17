@@ -25,6 +25,7 @@
 import { layerOf, normalizeCanvasId, tagEnvelope } from './canvas-id.js';
 import { estimateSizeOn, FOLDER_CARD } from './board-kind-sizes.js';
 import { KINDS } from './kinds/index.js';
+import { boardLineage } from './lineage.js';
 
 const PREFIX_RE = /^(deck|site|docx|doc|stage|text|scribble):/;
 /** 目录型卡的前缀（注册表里声明了 directory 的形态）：这种卡的地址就是一个目录 */
@@ -43,8 +44,10 @@ export function cleanAnchorName(raw) {
     .trim();
 }
 
-/** 板上能当锚的名字：文件夹、有座位的物件（画布文字节点只收带局部 id 的）、tag */
+/** 板上能当锚的名字：文件夹、有座位的物件（画布文字节点只收带局部 id 的）、tag。
+ *  叠在身后的旧版（09-17 谱系收叠）名字照收，id 换成它身前那张现役版 —— 用户看得见的是那张 */
 function anchorables(b) {
+  const { tipOf } = boardLineage(b);
   const out = [];
   for (const z of Object.keys(b?.zones || {})) out.push({ id: z, label: z });
   const tags = new Set();
@@ -52,12 +55,13 @@ function anchorables(b) {
     if (!Number.isFinite(e?.x) || id.startsWith('scribble:')) continue;
     if (e.tag) tags.add(e.tag);
     if (id.startsWith('text:')) { if (e.data?.lid) out.push({ id, label: e.data.lid }); continue; }
-    out.push({ id, label: bareOf(id) });
+    out.push({ id: tipOf.get(id) || id, label: bareOf(id) });
   }
   for (const t of tags) out.push({ id: `#${t}`, label: t });
   return out;
 }
 
+const uniqueIds = (xs) => [...new Map(xs.map((a) => [a.id, a])).values()];
 const bigrams = (t) => { const g = new Set(); for (let i = 0; i < t.length - 1; i += 1) g.add(t.slice(i, i + 2)); if (t.length === 1) g.add(t); return g; };
 function similarity(a, b) {
   const x = stem(a); const y = stem(b);
@@ -74,7 +78,8 @@ export function suggestAnchors(raw, b, n = 3) {
   const c = cleanAnchorName(raw);
   return anchorables(b)
     .map((a) => ({ id: a.id, s: Math.max(similarity(c, a.label), similarity(c, a.id)) }))
-    .filter((a) => a.s >= 0.34).sort((p, q) => q.s - p.s).slice(0, n).map((a) => a.id);
+    .filter((a) => a.s >= 0.34).sort((p, q) => q.s - p.s)
+    .map((a) => a.id).filter((id, i, all) => all.indexOf(id) === i).slice(0, n);
 }
 
 /** 锚点认不出时报错的后半句：有像的就点名，没有就指 read_board */
@@ -147,6 +152,12 @@ export function makeAnchorResolver({ projectId, known, readBoard, seatArtifacts 
     }
     const nid = normalizeCanvasId(raw);
     const e = nid ? b.objects?.[nid] : null;
+    // 点名的是叠在身后的旧版（09-17）：用户看不见它，贴着它写等于写在一块空地旁边 —— 锚到身前那张
+    const tip = e && boardLineage(b).tipOf.get(nid);
+    if (tip && Number.isFinite(b.objects?.[tip]?.x)) {
+      const te = b.objects[tip];
+      return { anchorId: tip, zone: layerOf(tip, te, known), rect: { x: te.x, y: te.y, ...estimateSizeOn(b, tip, te) }, board: b, fuzzy: { from: raw, how: `${nid} 是叠在 ${tip} 身后的旧版` } };
+    }
     if (e && Number.isFinite(e.x)) {
       return { anchorId: nid, zone: layerOf(nid, e, known), rect: { x: e.x, y: e.y, ...estimateSizeOn(b, nid, e) }, board: b };
     }
@@ -202,7 +213,8 @@ export function makeAnchorResolver({ projectId, known, readBoard, seatArtifacts 
     if (rescued) return rescued;
 
     // 目录名：这个目录下已上板的东西整片当锚（最右那件当代表，跟 tag 包络同一条规则）
-    const under = Object.entries(b.objects || {}).filter(([id, e]) => Number.isFinite(e?.x) && bareOf(id).startsWith(`${c.replace(/\/+$/, '')}/`));
+    const { hidden } = boardLineage(b);
+    const under = Object.entries(b.objects || {}).filter(([id, e]) => Number.isFinite(e?.x) && !hidden.has(id) && bareOf(id).startsWith(`${c.replace(/\/+$/, '')}/`));
     if (under.length) {
       let x1 = Infinity; let y1 = Infinity; let x2 = -Infinity; let y2 = -Infinity; let anchorId = null; let right = -Infinity;
       for (const [id, e] of under) {
@@ -216,8 +228,8 @@ export function makeAnchorResolver({ projectId, known, readBoard, seatArtifacts 
     // 唯一同名，其次唯一包含（两个以上就不猜，交给候选）
     const pool = anchorables(b);
     const k = stem(c);
-    const same = pool.filter((a) => stem(a.label) === k);
-    const contains = k.length >= 2 ? pool.filter((a) => { const s = stem(a.label); return s.length >= 2 && (s.includes(k) || k.includes(s)); }) : [];
+    const same = uniqueIds(pool.filter((a) => stem(a.label) === k));
+    const contains = k.length >= 2 ? uniqueIds(pool.filter((a) => { const s = stem(a.label); return s.length >= 2 && (s.includes(k) || k.includes(s)); })) : [];
     const pick = same.length === 1 ? [same[0], '同名'] : (!same.length && contains.length === 1 ? [contains[0], '名字包含'] : null);
     if (pick) return tag(await exact(pick[0].id, b, { rescue: false }), pick[1]);
     return null;

@@ -37,6 +37,7 @@ import { solvePlace, lastOfGroup, describePlacement } from '../../../lib/board-p
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
+import { boardLineage } from '../../../lib/lineage.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { PLACE } from './write-on-board-schema.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
@@ -196,11 +197,14 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
           // 产物也能当跟随目标（2026-08-31）：带 tag 落板 = 这个 tag 有新成员。fail-soft。
           if (tag) { try { await applyFollows(projectId, { tag: bareTag(tag), newId: objectId }); } catch { /* */ } }
           const where = describePlacement(spot, { anchorId, groupTag });
+          // 钉的是改自链里的旧版（09-17）：它照旧叠在现役版身后，用户点开那张的 ⧉ 才看得见
+          const tipNow = boardLineage({ ...boardNow, objects: { ...boardNow.objects, [objectId]: { ...prev, x: spot.x, y: spot.y } } }).tipOf.get(objectId);
           try {
             ctx?.emit?.({ type: 'board.updated', sessionId: null, objectId, zoneId: '', summary: `已把 ${objectId} 摆到桌面上` });
           } catch { /* emit fail-safe */ }
           return { content: [{ type: 'text', text: `Placed ${objectId} — ${where}.${zoneId ? ` (Moved out of ${zoneId} to the workspace root; the file now lives at ${objectId.replace(/^(deck:|site:)/, '')}.)` : ''}`
-            + (nextPending.length !== (boardNow.pending || []).length ? ` It is no longer waiting for a spot (${nextPending.length} still are).` : '') }] };
+            + (nextPending.length !== (boardNow.pending || []).length ? ` It is no longer waiting for a spot (${nextPending.length} still are).` : '')
+            + (tipNow ? ` It is an older version stacked behind ${tipNow}, so the user sees it only after expanding that card's ⧉ badge.` : '') }] };
         }
         const { zone: placedZone, placed } = await pinToZone(projectId, { objectId, zoneId });
 

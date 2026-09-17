@@ -128,6 +128,25 @@ router.post('/:pid/board/erase', express.json({ limit: '16kb' }), async (req, re
 });
 
 /**
+ * 谱系收叠被点开 / 收起（2026-09-17）：只打一行日志，给「旧版多久被看一次」留个数。
+ * 不落库、不进板上动静（agent 不需要知道用户翻了旧版）。日志里的 [lineage-toggle] 就是量尺。
+ */
+export function lineageToggleRecord(pid, user, body) {
+  const tip = typeof body?.tip === 'string' ? body.tip.slice(0, 300) : '';
+  if (!tip) return null;
+  const count = Math.max(0, Math.min(999, Math.round(Number(body?.count) || 0)));
+  return { pid, user: user || null, tip, count, open: body?.open === true };
+}
+
+router.post('/:pid/board/lineage-toggle', express.json({ limit: '4kb' }), (req, res) => {
+  if (!guard(req, res)) return;
+  const rec = lineageToggleRecord(req.params.pid, req.user?.id, req.body);
+  if (!rec) return res.status(400).json({ error: 'tip required' });
+  console.log(`[lineage-toggle] ${JSON.stringify(rec)}`);
+  res.json({ ok: true });
+});
+
+/**
  * 连接图导出（2026-08-23 黑板）：?format=json|mermaid|svg&tag=&layer=
  * 真相是 board.json，这里只派生。download=1 时带附件头。
  */

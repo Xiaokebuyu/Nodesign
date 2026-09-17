@@ -65,6 +65,7 @@ import { useMarquee } from './useMarquee.js';
 import { useZoneGestures } from './useZoneGestures.js';
 import { useCanvasTools, pointsToPath, pointsBounds, pathPoints, translatePath } from './useCanvasTools.js';
 import { useBoardData } from './useBoardData.js';
+import { useLineageOpen } from './useLineageOpen.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import {
   ProjectPanelOverlay, MarkdownViewerOverlay, ImageDetailOverlay,
@@ -592,15 +593,8 @@ export default function BoardCanvas({
 
   // ⚠️ 这三条声明必须在下面那个入座 memo **之前** —— memo 依赖 lineageOpen，
   // 声明在后就是渲染时 TDZ 整页白屏（这文件的第五颗同型雷，_hook-order-check
-  // 拦下的）。谱系收叠：用户点开的链尾集合（默认全折叠，版面上只留现役版）。
-  const [lineageOpen, setLineageOpen] = useState(() => new Set());
-  const toggleLineage = useCallback((tipId) => {
-    setLineageOpen(prev => {
-      const next = new Set(prev);
-      if (next.has(tipId)) next.delete(tipId); else next.add(tipId);
-      return next;
-    });
-  }, []);
+  // 拦下的）。谱系收叠：用户点开的链尾集合（useLineageOpen.js；点开 / 收起顺带计数）。
+  const [lineageOpen, toggleLineage] = useLineageOpen(projectId, { readOnly: eyeMode });
   /** 悬停中的卡（路线5）：BindingLayer 点亮连着它的线 */
   const [hoverCardId, setHoverCardId] = useState(null);
 
@@ -1634,7 +1628,7 @@ export default function BoardCanvas({
         // 谱系收叠（路线3）：桌面上才有叠（窗里是"看里面"，全铺开）
         stackCount={win ? 0 : (obj.stackCount || 0)}
         stackOpen={!!obj.stackOpen}
-        onToggleStack={() => toggleLineage(obj.id)}
+        onToggleStack={() => toggleLineage(obj.id, obj.stackCount)}
         onHoverCard={win ? undefined : setHoverCardId}
       />
     );
