@@ -18,11 +18,13 @@ import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn, RUNTIME_SINGLETONS } from '../../../lib/board-kind-sizes.js';
 import { layerOf, bareTag } from '../../../lib/canvas-id.js';
 import { relationsDigest, bindingLine } from '../../../lib/board-relations.js';
-import { groupObjects, asciiMinimap, bboxOfRects, relationOf, columnsOf, viewportRelation } from '../../../lib/board-groups.js';
+import { asciiMinimap, bboxOfRects } from '../../../lib/board-groups.js';
 import { laneSummaries } from '../../../lib/board-lanes.js';
-import { capacityOf, DEFAULT_CHALK_W } from '../../../lib/sketch-layout.js';
+
 import { rollCardRect } from '../../../lib/board-place.js';
 import { boardLineage } from '../../../lib/lineage.js';
+import { outlineOf } from '../../../lib/board-outline.js';
+import { historyCounts } from '../../../lib/chalk-history.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { chalkExcerpts, CHALK_DIR } from '../../../lib/chalk.js';
 import { getSharedDir } from '../../../projects/workspace.js';
@@ -44,9 +46,10 @@ function describeEntry(board, id, entry, glyph = null, excerpts = null, staleIds
   const at = view?.coords ? ` @(${Math.round(entry.x)},${Math.round(entry.y)}) ${Math.round(sz.w)}x${Math.round(sz.h)}` : '';
   const g = glyph ? `[${glyph}] ` : '';
   // 谱系收叠（09-17）：旧版叠在这张身后，用户看不见；点名给出，要看旧版直接 Read 路径
+  const hist = view?.history?.get(id);
   const olds = view?.stacks?.get(id);
   const stacked = olds?.length ? ` 〔身后叠着 ${olds.length} 个旧版：${olds.slice(0, 4).join('、')}${olds.length > 4 ? ' 等' : ''}〕` : '';
-  const flags = `${entry.staging ? ' 〔草稿〕' : ''}${entry.tag ? ` #${entry.tag}` : ''}${stacked}`;
+  const flags = `${entry.staging ? ' 〔草稿〕' : ''}${entry.tag ? ` #${entry.tag}` : ''}${hist ? ` 〔历史 ${hist} 版〕` : ''}${stacked}`;
   const ch = excerpts?.get(id);
   if (ch) return `- ${g}[板书·${who(ch.by)}写的] 「${ch.first}」${at} (path: ${id})${ch.anchor ? ` 关于 ${ch.anchor}` : ''}${ch.replyTo ? ` 回应 ${ch.replyTo}` : ''}${flags}`;
   if (entry.kind === 'text') {
@@ -65,8 +68,11 @@ function describeEntry(board, id, entry, glyph = null, excerpts = null, staleIds
 export function makeReadBoardTool({ projectId, sharedRoot = null }) {
   return tool(
     'read_board',
-    `Read the workbench canvas: an ASCII minimap, then GROUPS (things linked by lines or
-sharing a #tag), then loose items row by row, then relation lines.
+    `Read the workbench canvas as an OUTLINE: what hangs under what (a reply under the note it
+answers, a note under the thing it is about, the next beat of a thread under the previous one),
+then relation lines. Notes that were rewritten carry 〔历史 N 版〕 — the older wording lives in
+notes/板书/.history/<same name>; read the first 60 lines of that file (or Grep it) only when the
+user asks about it or you need their earlier words.
 
 Use this BEFORE moving things (edit_board) or writing/sketching (write_on_board) —
 placement without looking is guessing. Positions are described as RELATIONS — reading order,
@@ -109,7 +115,8 @@ on the minimap and listed with what is inside it.`,
       const lineage = want ? null : boardLineage(board);
       view.stacks = lineage?.olds;
       const lines = [];
-      const excerpts = await chalkExcerpts(getSharedDir(projectId), (byLayer.get(want) || []).map(it => it.id));
+      const root0 = getSharedDir(projectId);
+      const excerpts = await chalkExcerpts(root0, (byLayer.get(want) || []).map(it => it.id));
       const items = (byLayer.get(want) || [])
         .filter(({ entry }) => !tag || entry.tag === tag)
         // 收卷（2026-08-27 收纳器）：收着的组不逐件列 —— 版图里压成一行，这是 agent
@@ -119,10 +126,13 @@ on the minimap and listed with what is inside it.`,
         .filter(({ id }) => !id.startsWith(`${CHALK_DIR}/`) || excerpts.has(id))
         .filter(({ id }) => !lineage?.hidden.has(id))
         .sort((a, b) => (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
-      const entryOf = new Map(items.map(it => [it.id, it.entry]));
+      // 改写过的板书标「历史 N 版」（09-17 刀二）：旧正文在 .history/ 同名文件里
+      const histByName = await historyCounts(path.resolve(root0, CHALK_DIR),
+        items.map(({ id }) => id).filter(id => id.startsWith(`${CHALK_DIR}/`)).map(id => id.slice(CHALK_DIR.length + 1)));
+      view.history = new Map([...histByName].map(([name, n]) => [`${CHALK_DIR}/${name}`, n]));
       // 座位 vs 磁盘对账（iss_mt38ucyq）：文件挪走后旧座位可能还挂几十秒
       // （改名对账/前端回写有时差）。查一遍真身，过期的在条目上点名。
-      const root = getSharedDir(projectId);
+      const root = root0;
       const staleIds = new Set();
       await Promise.all(items.map(async ({ id, entry }) => {
         if (entry.kind === 'text' || entry.kind === 'scribble' || RUNTIME_SINGLETONS.has(id)) return;
@@ -138,7 +148,7 @@ on the minimap and listed with what is inside it.`,
       const mini = asciiMinimap(rects, { viewport: vpRect });
       const glyphOf = new Map(mini ? mini.legend : []);
 
-      lines.push(want ? `文件夹「${want}」的座次${tag ? `（只看 #${tag}）` : ''}：` : `桌面（根层）的座次${tag ? `（只看 #${tag}）` : ''}：`);
+      lines.push(want ? `文件夹「${want}」的大纲（谁挂在谁下面）${tag ? `（只看 #${tag}）` : ''}：` : `桌面（根层）的大纲（谁挂在谁下面）${tag ? `（只看 #${tag}）` : ''}：`);
       if (!items.length) {
         lines.push('（这一层还没有摆过的东西）');
       } else {
@@ -146,59 +156,14 @@ on the minimap and listed with what is inside it.`,
           lines.push(`小地图（一格≈${mini.cell}px，左上=(${mini.bbox.x},${mini.bbox.y})，范围 ${mini.bbox.w}x${mini.bbox.h}${vpRect ? '，┌┐└┘ 框=用户视口' : ''}）：`);
           lines.push(mini.grid);
         }
-        // 组：连通分量 + tag；≥2 件的才叫组，单件归「散件」按行列
-        const groups = groupObjects(items.map(it => it.id), board.bindings || {}, id => entryOf.get(id)?.tag || null);
-        const real = groups.filter(g => g.members.length >= 2);
-        const loose = groups.filter(g => g.members.length < 2).flatMap(g => g.members);
-        // 相对位置总览：每组的包围盒、列数、相对前一组/用户视口在哪（阅读顺序：先左后右、先上后下）
-        const rectOf = new Map(rects.map(r => [r.id, r]));
-        const boxes = real.map(g => bboxOfRects(g.members.map(id => rectOf.get(id)).filter(Boolean)));
+        // 大纲（09-17 板书树刀一）：按父子关系印，先根后子、同辈按阅读序。
+        // 座次表回答「谁在哪」，回答不了「这块板在说什么、说到哪」，而且随时间变长。
         const whole = bboxOfRects(rects);
         if (whole && coords) lines.push(`这一层内容范围：(${Math.round(whole.x)},${Math.round(whole.y)}) ${Math.round(whole.w)}x${Math.round(whole.h)}${vpRect ? `；用户视口 (${Math.round(vpRect.x)},${Math.round(vpRect.y)}) ${Math.round(vpRect.w)}x${Math.round(vpRect.h)}` : ''}`);
-        if (real.length) {
-          lines.push('各组位置（新东西默认排在已有内容的右侧或下方，顺着先左后右、先上后下的阅读顺序）：');
-          real.forEach((g, i) => {
-            const b = boxes[i]; if (!b) return;
-            const tags = [...g.tags].map(t => `#${t}`).join(' ') || `组 ${i + 1}`;
-            const cols = columnsOf(g.members.map(id => rectOf.get(id)).filter(Boolean));
-            const bits = [...(coords ? [`(${Math.round(b.x)},${Math.round(b.y)}) ${Math.round(b.w)}x${Math.round(b.h)}`] : []), `${g.members.length} 件`, cols.length > 1 ? `${cols.length} 列（${cols.map(c => c.n).join('/')} 件）` : '单列'];
-            if (i > 0 && boxes[0]) bits.push(`在 ${[...real[0].tags].map(t => `#${t}`).join(' ') || '组 1'} 的${relationOf(boxes[0], b, { px: coords })}`);
-            const vr = viewportRelation(vpRect, b, { px: coords }); if (vr) bits.push(vr);
-            lines.push(`  ${tags}：${bits.join('；')}`);
-          });
-        }
-        real.forEach((g, i) => {
-          const tags = [...g.tags].map(t => `#${t}`).join(' ');
-          const staging = g.members.every(id => entryOf.get(id)?.staging);
-          lines.push('', `组 ${i + 1}${tags ? ` ${tags}` : ''}（${g.members.length} 件 ${g.edges.length} 线${staging ? '，草稿' : ''}）：`);
-          // 多列的组先按列、再按上下列（09-11：按行读会把两列交错成一串，agent 据此判断顺序就错了）
-          const gcols = columnsOf(g.members.map(id => rectOf.get(id)).filter(Boolean));
-          const colOf = (e) => (gcols.length > 1 ? gcols.reduce((best, c, k) => (Math.abs(c.x - e.x) < Math.abs(gcols[best].x - e.x) ? k : best), 0) : 0);
-          const sorted = g.members.map(id => ({ id, entry: entryOf.get(id) }))
-            .sort((a, b) => (colOf(a.entry) - colOf(b.entry)) || (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
-          for (const { id, entry } of sorted) {
-            const line = describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds, view);
-            lines.push(gcols.length > 1 ? line.replace(/^- /, `- 第${colOf(entry) + 1}列 `) : line);
-          }
-          for (const bid of g.edges.slice(0, 12)) lines.push(`    ${bindingLine(board.bindings[bid], board)} (line id: ${bid})`);
-          if (g.edges.length > 12) lines.push(`    …还有 ${g.edges.length - 12} 条线`);
-        });
-        if (groups.cross?.length) {
-          lines.push('', '组间线：');
-          for (const bid of groups.cross.slice(0, 12)) lines.push(`    ${bindingLine(board.bindings[bid], board)} (line id: ${bid})`);
-        }
-        if (loose.length) {
-          lines.push('', real.length ? '散件：' : '');
-          let rowY = null; let rowN = 0;
-          const sorted = loose.map(id => ({ id, entry: entryOf.get(id) }))
-            .sort((a, b) => (a.entry.y - b.entry.y) || (a.entry.x - b.entry.x));
-          for (const { id, entry } of sorted) {
-            if (rowY === null || Math.abs(entry.y - rowY) > ROW_TOLERANCE) {
-              rowY = entry.y;
-              lines.push(coords ? `— 行 y≈${Math.round(rowY)} —` : `— 第 ${rowN += 1} 行 —`);
-            }
-            lines.push(describeEntry(board, id, entry, glyphOf.get(id), excerpts, staleIds, view));
-          }
+        const rows = outlineOf(items, { excerpts, bindings: board.bindings || {} });
+        for (const r of rows) {
+          const line = describeEntry(board, r.id, r.entry, glyphOf.get(r.id), excerpts, staleIds, view);
+          lines.push(`${'  '.repeat(Math.min(r.depth, 8))}${line}`);
         }
       }
       if (!want && !tag) {
@@ -263,8 +228,8 @@ on the minimap and listed with what is inside it.`,
         } catch { /* 关系读不到不挡座次 */ }
       }
 
-      lines.push('', '（口径：稀疏表只列摆过的；位置按关系说，coords:true 才给像素；层归属为服务端近似；尺寸=存档真值优先、缺了按形态估；'
-        + '改自链的旧版叠在现役版身后不单列；'
+      lines.push('', '（口径：稀疏表只列摆过的；缩进=谁挂在谁下面（回应/注/同一条线的后一节）；位置按关系说，coords:true 才给像素；'
+        + '层归属为服务端近似；尺寸=存档真值优先、缺了按形态估；改自链的旧版叠在现役版身后不单列；'
         + '角色精灵贴着该角色最新一条板书（那条四周留了 60px 身位）；带⚠️的条目=座位与磁盘对不上账）');
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     },

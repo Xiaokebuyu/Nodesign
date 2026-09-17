@@ -50,6 +50,24 @@ describe('read_board', () => {
   });
 });
 
+describe('read_board 标「历史 N 版」（刀二）', () => {
+  it('改写过的板书在大纲里标版本数，没改过的不标', async () => {
+    const { rewriteChalkBody } = await import('../../../lib/chalk-rewrite.js');
+    const { renderChalk } = await import('../../../lib/chalk.js');
+    const dir = path.join(root, 'notes', '板书');
+    await fs.mkdir(dir, { recursive: true });
+    const one = path.join(dir, '改过的.md'); const two = path.join(dir, '没改过的.md');
+    await fs.writeFile(one, renderChalk({ body: '第一版', by: 'agent' }));
+    await fs.writeFile(two, renderChalk({ body: '只写过一次', by: 'agent' }));
+    await rewriteChalkBody(one, '第二版', { w: 432 });
+    await rewriteChalkBody(one, '第三版', { w: 432 });
+    await patchBoard(pid, { objects: { 'notes/板书/改过的.md': card(3000, 0), 'notes/板书/没改过的.md': card(3000, 400) } });
+    const text = (await read()).content[0].text;
+    expect(text).toMatch(/「第三版」[^\n]*〔历史 2 版〕/);
+    expect(text).toMatch(/「只写过一次」(?![^\n]*历史)/);
+  });
+});
+
 describe('锚点解析', () => {
   const resolver = () => makeAnchorResolver({
     projectId: pid, known: new Set(), readBoard, seatArtifacts: async () => ({ seated: 0 }),

@@ -1,5 +1,5 @@
-// read_board 按关系说位置（09-11）：像素只在 coords:true 时给；多列的组先按列再按上下列。
-// 起因：读到像素的 agent 会在坐标系里推算（「离组 600+px」的误报），按行读又把两列交错成一串。
+// read_board 按关系说位置（09-11）：像素只在 coords:true 时给。
+// 09-17 板书树刀一：分组座次表换成大纲（谁挂在谁下面），同 tag 的成员挂在组长下面。
 import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -31,23 +31,23 @@ beforeAll(async () => {
 });
 
 describe('read_board 按关系说位置', () => {
-  it('默认不给像素；组的概况说件数、列数、谁在谁的哪一侧', async () => {
+  it('默认不给像素；大纲按缩进说谁挂在谁下面', async () => {
     const text = (await call()).content[0].text;
     expect(text).not.toMatch(/@\(-?\d+,-?\d+\)/);
     expect(text).not.toContain('内容范围');
-    expect(text).toMatch(/#两列：4 件；2 列（2\/2 件）/);
-    expect(text).toMatch(/#右组：2 件；单列；在 #两列 的右侧（顶齐）/);
+    expect(text).toContain('大纲（谁挂在谁下面）');
+    expect(text).toMatch(/^- \[手写\] 「甲」[^\n]*#两列$/m);       // 组长在第一层
+    expect(text).toMatch(/^ {2}- \[手写\] 「乙」[^\n]*#两列$/m);    // 成员挂在组长下面，只缩一层
+    expect(text).toMatch(/^- \[手写\] 「右一」[^\n]*#右组$/m);      // 另一个组自成一支
     expect(text).not.toMatch(/右侧 \d+px/);
   });
 
-  it('两列的组先列完第一列再列第二列，每件标第几列（不再按行交错）', async () => {
+  it('tag= 点名只列那一组，仍是大纲形状', async () => {
     const text = (await call({ tag: '两列' })).content[0].text;
-    const at = (s) => text.indexOf(s);
-    expect(at('「甲」')).toBeLessThan(at('「丙」'));
-    expect(at('「丙」')).toBeLessThan(at('「乙」'));
-    expect(at('「乙」')).toBeLessThan(at('「丁」'));
-    expect(text).toMatch(/- 第1列 \[手写\] 「甲」/);
-    expect(text).toMatch(/- 第2列 \[手写\] 「丁」/);
+    const at = (s2) => text.indexOf(s2);
+    expect(at('「甲」')).toBeLessThan(at('「乙」'));
+    expect(text).not.toContain('「右一」');
+    expect(text).toMatch(/^ {2}- \[手写\] 「丁」/m);
   });
 
   it('coords:true 才给像素', async () => {

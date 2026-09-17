@@ -23,6 +23,7 @@ import { promises as fs } from 'node:fs';
 import { parseChalk, renderChalk } from './chalk.js';
 import { STATE_TABLE_TAG, parseStateTable } from './state-table.js';
 import { UNIT, textBox } from './sketch-layout.js';
+import { archiveChalkBody } from './chalk-history.js';
 
 /**
  * 重写一条板书文件的正文，并算出它在板上的新尺寸。
@@ -30,10 +31,13 @@ import { UNIT, textBox } from './sketch-layout.js';
  * @param {string} abs      板书文件的绝对路径
  * @param {string} body     新正文
  * @param {object} entry    这条板书在 board.json 里的条目（要 w / h / sized / by）
+ * @param {object} [opts]
+ * @param {boolean} [opts.archive=true]  改写前把旧正文记进伴生历史文件（板书树刀二）
+ * @param {string}  [opts.note]          附在那一版上的一行说明（例如用户当时的标注原话）
  * @returns {Promise<{ w:number, h:number }>} 新的盒子（宽沿用、高按正文重算）
  * @throws  文件读不到 / 写不进时抛，调用方自己决定怎么说
  */
-export async function rewriteChalkBody(abs, body, entry = {}) {
+export async function rewriteChalkBody(abs, body, entry = {}, { archive = true, note = null } = {}) {
   const parsed = parseChalk(await fs.readFile(abs, 'utf8'));
   const c = parsed.chalk || {};
   // 状态表堵写口（2026-08-30）：这条板书是载重的（set_vars/nd:triggers/draw_trend
@@ -46,6 +50,12 @@ export async function rewriteChalkBody(abs, body, entry = {}) {
       ex.code = 'STATE_TABLE';
       throw ex;
     }
+  }
+  // 改写即存档（2026-09-17 板书树刀二）：旧正文进伴生历史文件，agent 不参与。
+  // 状态表不记 —— 它表示的是「此刻的值」，历史在 git 里，每轮都变会把历史撑成流水账。
+  // 存档失败不挡改写：历史是附带品，丢一版也不该让用户的这次修改写不进去。
+  if (archive && c.tag !== STATE_TABLE_TAG && String(parsed.body || '').trim() !== String(body || '').trim()) {
+    try { await archiveChalkBody(abs, parsed.body, { note }); } catch { /* 历史记不上不挡正文落盘 */ }
   }
   await fs.writeFile(abs, renderChalk({
     body,
