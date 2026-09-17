@@ -23,7 +23,8 @@ beforeAll(async () => {
   dir = path.join(tmp, 'files');
   await fs.mkdir(dir, { recursive: true });
 });
-afterAll(async () => { await fs.rm(tmp, { recursive: true, force: true }); });
+// Windows 上测试库文件还开着（09-17 起 helpers 经工作区的存在性检查会打开库），删不掉就留给系统清，别让收尾把整套判红
+afterAll(async () => { await fs.rm(tmp, { recursive: true, force: true }).catch((e) => { if (!['EBUSY', 'EPERM'].includes(e?.code)) throw e; }); });
 
 describe('decorateFilePreview', () => {
   it('⭐ json → 结构裁剪，产出仍是合法 json（前端才画得出树）', async () => {

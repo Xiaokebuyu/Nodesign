@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { sandboxShimEnv, buildIsolationOptions, homeReadAllowlist, agentAdditionalDirectories, AGENT_GITCONFIG } from './isolation.js';
 import { PLUGIN_ROOT } from './skill.js';
 import { platform } from '../../runtime/platform.js';
@@ -160,7 +160,7 @@ describe('读围栏（09-17）', () => {
     const { sandbox } = buildIsolationOptions(base);
     const { denyRead, allowRead } = sandbox.filesystem;
     expect(denyRead).toContain(home);
-    expect(denyRead).toContain(`/tmp/claude-${process.getuid()}`);
+    if (typeof process.getuid === 'function') expect(denyRead).toContain(`/tmp/claude-${process.getuid()}`);   // Windows 没有 uid
     for (const p of homeReadAllowlist()) expect(allowRead).toContain(p);
     for (const p of ['/w', '/data/.npm-cache', '/tmp/nd/proj_a']) expect(allowRead).toContain(p);
     // 数据根、别的项目 tmp、全站转录仍在 denyRead（嵌套：家目录遮 → 仓库开 → 数据根再遮 → 工作区再开）
@@ -184,8 +184,8 @@ describe('读围栏（09-17）', () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nd-iso-local-'));
     const here = path.dirname(fileURLToPath(import.meta.url));
     const script = `
-      const { buildIsolationOptions, prepareAgentDirs } = await import(${JSON.stringify(path.join(here, 'isolation.js'))});
-      const { platform } = await import(${JSON.stringify(path.join(here, '../../runtime/platform.js'))});
+      const { buildIsolationOptions, prepareAgentDirs } = await import(${JSON.stringify(pathToFileURL(path.join(here, 'isolation.js')).href)});
+      const { platform } = await import(${JSON.stringify(pathToFileURL(path.join(here, '../../runtime/platform.js')).href)});
       const o = buildIsolationOptions({ cwdRoot: '/w', sharedRoot: '/w', npmCacheDir: '/n', dataRoot: '/d', env: {} });
       const d = await prepareAgentDirs({ dataRoot: ${JSON.stringify(dataDir)}, projectId: 'p', sessionId: 's', sharedRoot: ${JSON.stringify(path.join(dataDir, 'ws'))} });
       const fs = await import('node:fs');

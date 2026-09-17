@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SERVER_TMP_ROOT, ensureServerTmpRoot, makeServerTmpDir, serverTmpPath } from './server-tmp.js';
 
 describe('server-tmp', () => {
@@ -29,7 +30,7 @@ describe('⛔ 服务端代码不把临时目录直接建在 /tmp 根上', () => 
     'engine/mcp/tools/h3box-ssh.js',
     'engine/runs/store.js',   // 只在 VITEST 且没给 DB_PATH 时落临时库
   ]);
-  const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');   // URL.pathname 在 Windows 上是 /D:/…
   const walk = (dir, out = []) => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       if (['node_modules', 'projects-data', 'market-data', '.cache', 'db', 'server', '.venv-rembg'].includes(e.name)) continue;

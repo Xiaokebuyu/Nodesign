@@ -180,8 +180,13 @@ describe('Claude 配置目录（09-17：全站会话转录原来给出绝对路�
   const c = { ...ctx, configDir };
   const own = `${configDir}/projects/${encodeCwdForTranscripts(workspaceRoot)}`;
   it('编码规则与 CLI 一致：非字母数字一律换成 -', () => {
-    expect(encodeCwdForTranscripts('/home/wangang-dev/projects/Nodesign/server/projects-data/proj_mu17j78p_3cl9/shared'))
-      .toBe('-home-wangang-dev-projects-Nodesign-server-projects-data-proj-mu17j78p-3cl9-shared');
+    if (process.platform === 'win32') {
+      // Windows 上是带盘符的绝对路径：冒号和反斜杠同样换成 -
+      expect(encodeCwdForTranscripts('C:\\Users\\u\\.nodesign\\projects\\proj_a\\shared')).toBe('C--Users-u--nodesign-projects-proj-a-shared');
+    } else {
+      expect(encodeCwdForTranscripts('/home/wangang-dev/projects/Nodesign/server/projects-data/proj_mu17j78p_3cl9/shared'))
+        .toBe('-home-wangang-dev-projects-Nodesign-server-projects-data-proj-mu17j78p-3cl9-shared');
+    }
   });
   it('本项目那一格放行（CLI 落盘的大输出要用 Read 读）', () => {
     expect(checkWorkspaceScope({ file_path: `${own}/sess-1/tool-results/b5rq.txt` }, { ...c, toolName: 'Read' })).toBeNull();
@@ -258,7 +263,7 @@ describe('软链真身（09-17：Read / Write 是进程内工具，跟着 agent 
   it('realPathLoose：不存在的尾巴接回真身后面', () => {
     expect(realPathLoose(path.join(ws, 'cfglink', 'settings.json'))).toBe(path.join(ws, '.claude', 'settings.json'));
     expect(realPathLoose(path.join(ws, 'otherlink', 'no', 'such.md'))).toBe(path.join(other, 'no', 'such.md'));
-    expect(realPathLoose('/definitely/not/here')).toBe('/definitely/not/here');
+    expect(realPathLoose('/definitely/not/here')).toBe(path.resolve('/definitely/not/here'));   // Windows 上会补盘符
     expect(realPathLoose(path.join(ws, 'homelink', 'a.md'))).toBe(path.join(outside, 'a.md'));   // 悬空软链
   });
   it('⭐ 经软链写 .claude/settings.json、plugin 目录 → 按真身拒', () => {
