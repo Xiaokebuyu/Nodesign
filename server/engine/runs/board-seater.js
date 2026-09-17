@@ -41,7 +41,9 @@ import { parseChalk, CHALK_DIR } from '../../lib/chalk.js';
 import { isReservedFile, HARD_IGNORE_DIRS, RESERVED_DIRS, DRAFTS_DIR } from '../../lib/task-scan.js';
 import { applyFollows } from '../../lib/board-follow.js';
 import { canvasIdForRel } from '../../lib/canvas-id.js';
-import { cardIdForPath } from '../../lib/kinds/index.js';
+import { cardIdForPath, KIND_PREFIX_RE } from '../../lib/kinds/index.js';
+import { isCanvasFolder } from '../../lib/folder-claims.js';
+import { dirCardOn } from '../../lib/board-anchor.js';
 
 const MAX_SEATS_PER_RUN = 24;   // 一轮生成几百个文件的（构建产物漏网）也别刷爆板
 
@@ -76,9 +78,28 @@ const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 
 /**
  * 给一批相对路径排座（幂等：已有座位的跳过）。导出给测试与手动对账用。
- * @returns {Promise<{seated: number, lines: number}>}
+ *
+ * 09-17（问题库 iss_mt9cmke6_pset）：返回里带上**点名的每条路径最后落在哪张卡上**。救援入座
+ * （lib/board-anchor.js）原来按 `deck:<路径>` / 裸路径回查，而这里按注册表落的是 `site:X`、
+ * `site:_drafts/x.html`、`docx:x.docx` —— 查不到就报「磁盘上也没有这个文件」，第二次调用才成功。
+ *   ids      rel → 卡 id（这一批坐下的，或那张卡本来就有座位）
+ *   missing  真去磁盘上查过、文件不在的 rel（只有这一类才配说「磁盘上没有」）
+ *   skipped  不上画布的 rel（seatable 不收的位置，或普通目录 —— 目录是文件夹卡，不是文件卡）
+ * @returns {Promise<{seated: number, lines: number, pending: number, ids: object, missing: string[], skipped: string[]}>}
  */
 export async function seatArtifacts(projectId, rels) {
+  const trace = { asked: new Set(rels), relId: new Map(), deadIds: new Set(), missing: [], skipped: [], live: {} };
+  const out = await seatBatch(projectId, rels, trace);
+  const ids = {};
+  for (const rel of trace.asked) {
+    const id = trace.relId.get(rel);
+    if (id && !trace.deadIds.has(id) && Number.isFinite(trace.live[id]?.x)) ids[rel] = id;
+  }
+  return { ...out, ids, missing: trace.missing, skipped: [...rels.filter((r) => !seatable(r)), ...trace.skipped] };
+}
+
+/** 一批排座的本体；trace 收集回报用的中间量（rel → 卡 id、文件不在 / 不该坐的卡、本批的 live） */
+async function seatBatch(projectId, rels, trace) {
   const sharedRoot = getSharedDir(projectId);
   const board = await readBoard(projectId);
   // 待摆队列先并进来（刀 G）：上一批排不下的，这一批 agent 可能已经规划出地方了。
@@ -95,6 +116,7 @@ export async function seatArtifacts(projectId, rels) {
   const objects = {}; const bindings = {};
   // 本批内后来者要避开先来者：live 副本随排随更新
   const live = { ...board.objects };
+  trace.live = live;
   // 暂存架（2026-08-30）：批内原点算一次（架立了就不挪）；本批内后来者靠
   // live 障碍矩形自然码在先来者下面。
   const rootCam = (vp?.camera && !vp.layer) ? vp.camera : null;
@@ -106,6 +128,7 @@ export async function seatArtifacts(projectId, rels) {
   // newStackedZoneRect 只给没坐标的排位，这里写了它就不再排。判据与 seatable
   // 同一套精神：保留目录（assets/notes/…）和隐藏目录不是用户的文件夹。
   const zonesPatch = {};
+  const noFolder = new Set();
   const zoneRects = Object.entries(board.zones || {})
     .filter(([, z]) => Number.isFinite(z?.x) && Number.isFinite(z?.y))
     .map(([, z]) => ({ x: z.x, y: z.y, w: FOLDER_BOX.w, h: FOLDER_BOX.h }));
@@ -113,8 +136,12 @@ export async function seatArtifacts(projectId, rels) {
     const segs = rel.split('/');
     if (segs.length < 2 || !seatable(rel)) continue;
     const top = segs[0];
-    if (RESERVED_DIRS.has(top) || zonesPatch[top]) continue;
+    if (RESERVED_DIRS.has(top) || zonesPatch[top] || noFolder.has(top)) continue;
     if (board.zones?.[top] && Number.isFinite(board.zones[top].x)) continue;
+    // 站点 / word 文件夹 / 构建目录不是文件夹卡（09-17 iss_mtp465ds_ctko）：原来不问就建，
+    // 建出来的坐标前端不画，锚点解析却先认它 —— 「X（site）」被认成一层隐形文件夹。判据与 /artifacts 同一份
+    // 先看板上有没有同名的目录型卡（便宜），没有再按扫描口径判（要读 manifest）
+    if (dirCardOn({ objects: live }, top) || !(await isCanvasFolder(sharedRoot, top).catch(() => false))) { noFolder.add(top); continue; }
     const rootRects = Object.entries(live)
       .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === '')
       .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));
@@ -126,6 +153,7 @@ export async function seatArtifacts(projectId, rels) {
   }
 
   const seenIds = new Set();
+  const { asked, relId, deadIds } = trace;   // 回报用：rel → 卡 id；文件不在 / 不该坐的卡
   for (const rel of uniq) {
     let id = canvasIdForRel({ objects: live, zones: board.zones }, rel);
     if (!id) continue;
@@ -137,6 +165,7 @@ export async function seatArtifacts(projectId, rels) {
     if (!live[id]) {
       try { const canon = await cardIdForPath(sharedRoot, rel); if (canon) id = canon; } catch { /* 按猜的来 */ }
     }
+    relId.set(rel, id);
     if (seenIds.has(id)) continue;
     seenIds.add(id);
     // 已有座位就不动 —— 除非那是前端抢先排的临时座（provisional，见 board-sanitize）：
@@ -148,7 +177,11 @@ export async function seatArtifacts(projectId, rels) {
     // 封顶截流：没轮到的留在队列里下批再来（暂存架永远有地方，这是唯一的排队原因）
     if (seated >= MAX_SEATS_PER_RUN) { stillPending.push(rel); continue; }
     // 文件还在才入座（本轮建又删的别复活）
-    try { await fs.access(path.join(sharedRoot, rel)); } catch { continue; }
+    let st = null;
+    try { st = await fs.stat(path.join(sharedRoot, rel)); } catch { deadIds.add(id); if (asked.has(rel)) trace.missing.push(rel); continue; }
+    // 普通目录不当文件卡坐（09-17）：前端把它画成文件夹卡（zones），裸路径座位是一张画不出来的幽灵。
+    // 站点 / word 文件夹 / 演出这类目录型产物有形态前缀，照常入座。
+    if (st.isDirectory() && !KIND_PREFIX_RE.test(id)) { deadIds.add(id); if (asked.has(rel)) trace.skipped.push(rel); continue; }
 
     let box = estimateSizeOn(board, id, null);
     let anchorRect = null; let replyRect = null;

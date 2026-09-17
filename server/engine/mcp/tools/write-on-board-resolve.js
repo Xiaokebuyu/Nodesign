@@ -14,7 +14,7 @@ import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { lastOfGroup } from '../../../lib/board-place.js';
 import { heroAfterLine, heroSize } from '../../../lib/board-hero.js';
 import { makePlacer } from './write-on-board-place.js';
-import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
+import { makeAnchorResolver, anchorMissHint, anchorMissWhy } from '../../../lib/board-anchor.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { CHALK_DIR } from '../../../lib/chalk.js';
 import { ROLE_SLUG_RE } from '../../agent/cast.js';
@@ -41,6 +41,7 @@ export async function makeChalkEnv({ projectId, sharedRoot, by, exclude = [] }) 
   // 宽认命中要如实报（09-11）：落点描述里点名的是真锚，这里再补一句「按什么认成了谁」
   const fuzzyNotes = []; const resolveAnchor0 = makeAnchorResolver({ projectId, known, readBoard, seatArtifacts });
   const resolveAnchor = async (raw, b) => { const a = await resolveAnchor0(raw, b); if (a?.fuzzy) fuzzyNotes.push(`（锚点按「${a.fuzzy.from}」认成了 ${a.anchorId}：${a.fuzzy.how}）`); return a; };
+  resolveAnchor.missOf = resolveAnchor0.missOf;   // 认不出时的前半句按救援入座的真实结局说（09-17）
   // 意图层落位（见 write-on-board-place.js / lib/board-place.js）
   const { placeNote, describeSpot, describeChalkWrite, visibleIn } = makePlacer();
   /**
@@ -61,7 +62,7 @@ export async function makeChalkEnv({ projectId, sharedRoot, by, exclude = [] }) 
     const raw = by0 === 'user' ? (vp?.selected?.[0] || null) : by0;
     if (!raw) { out.error = "place.by:'user' but the user has nothing selected — use 'view' or name a thing"; return out; }
     const a = await resolveAnchor(raw, b);
-    if (!a) { out.error = `place.by ${raw} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件 —— ${anchorMissHint(raw, b)}。`; return out; }
+    if (!a) { out.error = `place.by ${raw} 不在板上：${anchorMissWhy(resolveAnchor, raw)} —— ${anchorMissHint(raw, b)}。`; return out; }
     out.anchor = { id: a.anchorId, rect: a.rect, zone: a.zone, board: a.board };
     return out;
   };
@@ -156,7 +157,7 @@ export async function resolveChalkSpot(env, args, body) {
   if (nearRaw) {
     const a = await resolveAnchor(nearRaw, board);
     if (!a && !parentId) {
-      return fail(`锚点 ${nearRaw} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件 —— ${anchorMissHint(nearRaw, board)}。`);
+      return fail(`锚点 ${nearRaw} 不在板上：${anchorMissWhy(resolveAnchor, nearRaw)} —— ${anchorMissHint(nearRaw, board)}。`);
     }
     if (a) { anchorId = a.anchorId; anchorRect = a.rect; if (!parentId) zone = a.zone; if (a.board) b2 = a.board; }
   }

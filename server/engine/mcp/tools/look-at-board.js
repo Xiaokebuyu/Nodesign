@@ -15,6 +15,13 @@
  *
  * 代价：1 vCPU 上一张图几秒钟 + 一阵 CPU；token 按像素算（1400×900 ≈ 1.7k），
  * 所以按需调用，不做每回合自动注入。
+ *
+ * 09-17 两处（问题库）：
+ *   - around 接共用锚点解析（iss_mtjevkfs_n9dm）：原来只做 normalizeCanvasId + 精确查座位，`X（site）`、
+ *     `xx/index.html`、还没座位的真文件一律报「还没有座位」，对不存在的文件也这么说。现在跟 write_on_board 同口径。
+ *   - 截图超时兜底（iss_mtcl9nps_7q15）：page.screenshot 等稳定帧 / 字体，画布上有持续动画时可能等满
+ *     默认 30s 直接失败。先给 15s，超时改走 CDP Page.captureScreenshot 抓当前帧（同 helpers/shot-pipeline.js
+ *     shotWithFallback 的做法，本体在 look-at-board-frame.js，不跨文件引用那个管线）。
  */
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
@@ -26,9 +33,8 @@ import { mintInternalCookie } from '../../../auth/internal-credentials.js';
 import { platform } from '../../../runtime/platform.js';
 import { launchPerceptionBrowser, PERCEPTION_ORIGIN } from './helpers/perception-page.js';
 import { gatedBrowser } from './helpers/browser-slots.js';
-import { readBoard } from '../../../projects/board-store.js';
-import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
-import { normalizeCanvasId, bareTag } from '../../../lib/canvas-id.js';
+import { bareTag } from '../../../lib/canvas-id.js';
+import { captureBoardShot, frameAround } from './look-at-board-frame.js';
 
 const VIEW = { width: 1400, height: 900 };
 const READY_TIMEOUT_MS = 25_000;
@@ -76,13 +82,9 @@ Costs a few seconds and ~1.7k tokens; don't call it in a loop.`,
       let box = view || null;
       let what = 'whole board';
       if (!box && around) {
-        const board = await readBoard(projectId);
-        const id = normalizeCanvasId(around);
-        const e = id ? board.objects?.[id] : null;
-        if (!e || !Number.isFinite(e.x)) return err(`${around} 还没有座位（read_board 里看不到就框不上）。`);
-        const sz = estimateSizeOn(board, id, e); const m = margin ?? 160;
-        box = { x: e.x - m, y: e.y - m, w: sz.w + m * 2, h: sz.h + m * 2 };
-        what = `around ${id}`;
+        const f = await frameAround(projectId, around, margin ?? 160);
+        if (f.error) return err(f.error);
+        box = f.box; what = f.what;
       }
       if (tag && !box) what = `group #${tag}`;
       if (box) what = `${what === 'whole board' ? 'rect' : what} (${Math.round(box.x)},${Math.round(box.y)}) ${Math.round(box.w)}x${Math.round(box.h)}`;
@@ -111,11 +113,12 @@ Costs a few seconds and ~1.7k tokens; don't call it in a loop.`,
         } catch {
           return err('画布页没在 25s 内就绪（data-eye-ready 没出现）。通常为入口地址错误或鉴权失败；本次截图终止。');
         }
-        const png = await page.screenshot({ type: 'png', fullPage: false });
+        const { buf: png, degraded } = await captureBoardShot(page);
         const data = png.toString('base64');
         // 眼睛模式页面会把相机摆到的真实矩形写在 dataset 里（如果前端给了就报）
         const shown = await page.evaluate(() => document.documentElement.dataset.eyeView || null).catch(() => null);
         const text = `Board view: ${what}${shown ? ` — camera showed world rect ${shown}` : ''}. ${VIEW.width}x${VIEW.height} px. `
+          + (degraded ? '（页面迟迟等不到稳定帧，这是超时后直接抓的当前帧，动画中的东西可能停在半途。）' : '')
           + 'Half-transparent items are still staging. Lines: red with pins = yarn, wobbly = pencil, plain = ink.';
         return { content: [{ type: 'text', text }, { type: 'image', data, mimeType: 'image/png' }] };
       } catch (e) {

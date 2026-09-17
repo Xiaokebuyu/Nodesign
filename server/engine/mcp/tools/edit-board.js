@@ -19,8 +19,6 @@
  * 绝对坐标与位移两种写法退役：agent 报不准像素，见那个文件的头注）。
  */
 
-import path from 'node:path';
-import { promises as fs } from 'node:fs';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { byOf } from '../actor.js';
 import { z } from 'zod';
@@ -34,6 +32,7 @@ import { placeBeside, overlapIds, solvePlace, lastOfGroup, describePlacement } f
 import { reflowGroup, pushDownAfterGrow } from '../../../lib/board-reflow.js';
 import { lineCrossings } from '../../../lib/line-route.js';
 import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
+import { makeEndpointResolver } from '../../../lib/board-endpoint.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { transformGroup } from '../../../lib/board-transform.js';
 import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
@@ -61,18 +60,8 @@ export function makeEditBoardTool({ projectId, sharedRoot, sessionId = null, ctx
   );
 }
 
-/** 端点存在性（add_edge/set_edge 共用；08-28 起 write_on_board 的图内边也用它 ——
- *  两个入口对「悬空边」的容忍度曾不对称）：板上有座位 / zones 命中 / 磁盘上真有这个路径。 */
-export async function endpointReal(id, live, zones, sharedRoot) {
-  if (live[id]) return true;
-  if (zones && zones[id] !== undefined) return true;
-  // （doc: 无条件放行分支 08-27 审计拆除：doc:brand/_root 已于 08-24 退役，全仓
-  //   无写方；留着它,手滑把 docx: 打成 doc: 就能绕过存在性闸产出悬空线）
-  if (!sharedRoot) return false;
-  const bare = id.replace(/^(deck|site|docx|text|scribble):/, '');
-  if (!bare || bare.includes('..')) return false;
-  try { await fs.access(path.join(sharedRoot, bare)); return true; } catch { return false; }
-}
+// 端点存在性（add_edge / set_edge / write_on_board 图内边共用）09-17 起换成 lib/board-endpoint.js 的归一 + 校验：
+// 原来的 endpointReal 只问「板上有座 / 磁盘上有这个路径」，裸目录名、`X（site）` 这类写法要么拒、要么存成画不出来的端点。
 
 function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
   return async ({ tag: defaultTag, ops }, extra) => {
@@ -173,6 +162,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
     const zonesPatch = {};
     const isZone = (id) => Object.prototype.hasOwnProperty.call(liveZones, id);
     const setZone = (id, z) => { liveZones[id] = z; zonesPatch[id] = z; };
+    const resolveEnd = makeEndpointResolver({ projectId, sharedRoot, readBoard, seatArtifacts, board, live, zones: liveZones, local: rid });   // 线的端点（09-17）
     /** 贴身记号跟随（08-27 shapes 编辑面）：挪一件东西时，圈着它的涂鸦一起走。
      *  except = 这次已经被挪过的 id 集（整组拖时组员别被挪两次）。 */
     const moveHuggers = (nodeId, dx, dy, except = null) => {
@@ -300,7 +290,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         } else if (o.op === 'add_node') {
           const size = (o.size === 'sm' && o.text.length > 40) ? 'md' : (o.size || 'md');
           const box = textBox(o.text, size, { md: o.format === 'md' });
-          const p = await placeTo(o.at, box);
+          const p = await placeTo(o.at || { by: 'view' }, box);   // at 可省（09-17 iss_mtfh3t44_kjdf）：跟 write_on_board 不给 place 一样落进用户视野
           if (p.error) { fail(p.error); continue; }
           const refId = p.anchorId;
           const zone = p.zone;
@@ -349,38 +339,33 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
           if (o.width) data.width = o.width;
           setObj(id, { ...e, data }); ok += 1;
         } else if (o.op === 'add_edge') {
-          const from = rid(o.from) || normalizeCanvasId(o.from);
-          const to = rid(o.to) || normalizeCanvasId(o.to);
-          if (!from || !to || from === to) { fail(`端点不合法：${o.from} → ${o.to}`); continue; }
-          // relate 下沉来的闸：两端都必须真实存在（板上有座 / doc: / 磁盘真身）
-          const missing = [];
-          if (!(await endpointReal(from, live, board.zones, sharedRoot))) missing.push(o.from);
-          if (!(await endpointReal(to, live, board.zones, sharedRoot))) missing.push(o.to);
-          if (missing.length) {
-            fail(`端点不在板上也不是存在的工作区路径：${missing.join(' / ')}。${anchorMissHint(missing[0], { ...board, objects: live, zones: liveZones })}`);
-            continue;
-          }
+          // 两端先归一再校验（09-17，lib/board-endpoint.js）：认完必须是画布上画得出来的东西，否则拒并给候选
+          const fe = await resolveEnd(o.from); const te = await resolveEnd(o.to);
+          if (fe.error || te.error) { fail(`端点认不出：${[fe.error, te.error].filter(Boolean).join('；')}`); continue; }
+          const from = fe.id; const to = te.id;
+          if (from === to) { fail(`两端是同一件：${o.from} → ${o.to}`); continue; }
           const id = `b:a${stamp()}`;
           const tag = o.tag || defaultTag || live[from]?.tag || live[to]?.tag || null;
           const binding = { type: o.type || 'link', from, to, by, ...(o.material && o.material !== 'ink' ? { material: o.material } : {}), ...(o.label ? { label: o.label } : {}), ...(tag ? { tag } : {}) };
           bindings[id] = binding; liveBindings[id] = binding;
-          report.push(`+ edge ${id}`); ok += 1;
+          report.push(`+ edge ${id}${[fe, te].filter((x) => x.how).map((x) => `（${x.id}：${x.how}）`).join('')}`); ok += 1;
         } else if (o.op === 'set_edge') {
           const b = liveBindings[o.id];
           if (!b) { fail(`线 ${o.id} 不存在`); continue; }
           const nb = { ...b };
-          if (o.label !== undefined) { if (o.label) nb.label = o.label; else delete nb.label; }
+          // 清字 / 回默认墨线写空值而不是 delete（09-17）：patchBoard 对线是合并语义，缺席的键会被旧值补回来
+          if (o.label !== undefined) nb.label = o.label || '';
           if (o.type) nb.type = o.type;
-          if (o.material) { if (o.material === 'ink') delete nb.material; else nb.material = o.material; }
-          // 改端点（08-25 RP 案：「状态锚在这一章」每章 remove+add 两次 → 一条命令重指）
+          if (o.material) nb.material = o.material === 'ink' ? '' : o.material;
+          // 改端点（08-25 RP 案：「状态锚在这一章」每章 remove+add 两次 → 一条命令重指）；归一同 add_edge
           let bad = null;
           for (const end of ['from', 'to']) {
             if (o[end] === undefined) continue;
-            const nid = rid(o[end]) || normalizeCanvasId(o[end]);
-            if (!nid || !(await endpointReal(nid, live, board.zones, sharedRoot))) { bad = o[end]; break; }
-            nb[end] = nid;
+            const r = await resolveEnd(o[end]);
+            if (r.error) { bad = r.error; break; }
+            nb[end] = r.id;
           }
-          if (bad) { fail(`新端点不在板上也不是存在的路径：${bad}`); continue; }
+          if (bad) { fail(`新端点认不出：${bad}`); continue; }
           if (nb.from === nb.to) { fail('改完两端相同（自环）'); continue; }
           bindings[o.id] = nb; liveBindings[o.id] = nb; ok += 1;
         } else if (o.op === 'remove_edge') {
@@ -485,8 +470,11 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
            * **都是按 tag 找成员**，所以"给图片设 follow"以前根本无从下手。
            */
           const tag = bareTag(o.tag || '');
-          const hit = []; const miss = [];
+          const hit = []; const miss = []; let lines = 0;
           for (const raw of o.ids) {
+            // 关系线也有组（09-17 iss_mttyszj1_rrp6）：binding.tag 决定 erase_group 擦不擦它、commit{tag} 落不落它
+            const lb = liveBindings[String(raw).trim()];
+            if (lb) { const nb = { ...lb, tag }; bindings[String(raw).trim()] = nb; liveBindings[String(raw).trim()] = nb; lines += 1; continue; }
             const id = rid(raw);
             const e = id && live[id];
             if (!e) { miss.push(raw); continue; }
@@ -494,10 +482,10 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
             else { const n = { ...e }; delete n.tag; live[id] = n; untag.push(id); }
             hit.push(id);
           }
-          if (!hit.length) { fail(`一件都不在板上：${miss.join('、')}`); continue; }
+          if (!hit.length && !lines) { fail(`一件都不在板上：${miss.join('、')}`); continue; }
           ok += 1;
           tagTouched.push(...hit.map(id => [id, tag]));
-          report.push(`· #${i + 1} set_tag：${hit.length} 件${tag ? ` → #${tag}` : ' 去掉了标签'}`
+          report.push(`· #${i + 1} set_tag：${hit.length} 件${lines ? `、${lines} 条线` : ''}${tag ? ` → #${tag}` : ' 去掉了标签'}`
             + `${miss.length ? `（${miss.length} 件不在板上：${miss.slice(0, 3).join('、')}）` : ''}`);
         } else if (o.op === 'unfollow') {
           const gTag = bareTag(o.group_tag);

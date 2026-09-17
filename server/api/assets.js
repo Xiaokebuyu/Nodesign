@@ -21,9 +21,9 @@ import {
 import { patchBoard, readBoard, reconcileBoardRenames, pruneDanglingBindings, forwardId, forwardPath, renameBoardPaths } from '../projects/board-store.js';
 import { moveEntry, MoveError } from '../projects/move-entry.js';
 import { reconcileAutoRefsThrottled } from '../lib/auto-relations.js';
-import { taskManifest, ENTRY_FILE, KIND_SITE, docxClaimedFiles, isDirArtifact } from '../lib/artifact-target.js';
-import { RESERVED_DIRS, HARD_IGNORE_DIRS, DRAFTS_DIR, isReservedFile, loadIgnore } from '../lib/task-scan.js';
-import { OUTPUT_DIRS } from '../lib/kinds/site.js';
+import { taskManifest, ENTRY_FILE, KIND_SITE, docxClaimedFiles } from '../lib/artifact-target.js';
+import { RESERVED_DIRS, isReservedFile, loadIgnore } from '../lib/task-scan.js';
+import { claimedSubdirs, folderNameAllowed, FOLDER_MAX_DEPTH } from '../lib/folder-claims.js';
 import { ensurePlays, dropStage } from '../engine/stage/manager.js';
 import { listReferences } from '../lib/reference-assets.js';
 import { resolveArtifactFile, isServablePath } from '../lib/artifact-file-path.js';
@@ -187,15 +187,8 @@ const ARTIFACT_MIME = {
 // 「什么算图片 / 视频」的真相源在 lib/kinds/file-kinds.js（2026-08-17 从这里挪过去）——
 // 导出按卡类型收产物时也要问同一个问题，抄两份会分叉成「画布认、导出不认」。
 
-/**
- * 文件夹递归深度上限。
- *
- * 3 层是给用户的（prelude 里也是这么跟 agent 说的："层级别超过两三层"）——
- * 再深就得点进去好几下才看得见东西，桌面这个隐喻本身就失效了。这不是防御性
- * 的深度限制，构建目录 / node_modules 那类由 RESERVED_DIRS + HARD_IGNORE_DIRS
- * 挡在外面，跟深度无关。
- */
-const FOLDER_MAX_DEPTH = 3;
+// 文件夹递归深度上限 FOLDER_MAX_DEPTH 与「哪些子目录算文件夹」的判据 09-17 收进 lib/folder-claims.js
+// （入座器建文件夹坐标时要问同一份，见那个文件的头注）
 
 /**
  * 「这个文件夹是真没了，还是只是这一瞬看不见」的两次判定。
@@ -432,41 +425,14 @@ router.get('/:pid/artifacts', async (req, res, next) => {
 
       if (depth >= FOLDER_MAX_DEPTH) return;
 
-      // 这个目录里，哪些子目录**已经被上面那份 manifest 认领**了。
-      //
-      // 一个站点目录既能被父目录扫成一件产物（`site:伊蕾娜手账研究站`），又能被
-      // 当成一个文件夹递归进去 —— 不去重的话它在桌面上出现两次：一张站点卡 +
-      // 一张同名文件夹卡，点哪个都对一半。认领了就跳过：**它是产物，不是容器**，
-      // 里面的 `assets/` `pages/` 是这个站的内部结构，不是并列的文件夹。
-      const claimed = new Set();
-      for (const a of list) {
-        for (const p of [a.root, a.srcRoot, a.file, a.entryRel]) {
-          const seg = String(p || '').split('/')[0];
-          if (seg && seg !== p) claimed.add(seg);       // 只有带下级路径的才算认领
-          else if (seg && isDirArtifact(a)) claimed.add(seg);   // 顶层段整段认领：只有目录型产物有资格（判据问注册表）
-        }
-        // 根站（root='' srcRoot=''）：上面四个字段全切不出认领段，可它的 pages
-        // 跨着子目录（'posts/chapter-1.html'）。那些子目录是站点内部结构，不是
-        // 并列容器 —— 不认领的话它们会被递归成独立任务、页面被 deck 解析器
-        // 再收编一遍，同一份文件在桌面上出现两个身份（站点页 + deck 卡），
-        // 而且卡还打不开（实测 proj_mss59y9l_8ems，2026-08-14）。
-        // 只在根站场景做：非根站的 root 目录本身已被认领，内部结构扫不到。
-        if (a.kind === KIND_SITE && !a.single && !a.root && !a.srcRoot) {
-          for (const pg of (a.pages || [])) {
-            const seg = String(pg).split('/')[0];
-            if (seg && seg !== pg) claimed.add(seg);
-          }
-        }
-      }
+      // 这个目录里，哪些子目录**已经被上面那份 manifest 认领**了（认领了 = 它是产物，不是容器）。
+      // 判据本体在 lib/folder-claims.js（09-17 收出：入座器建文件夹坐标要问同一份）
+      const claimed = claimedSubdirs(list);
 
       let entries = [];
       try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
       for (const e of entries) {
-        if (!e.isDirectory() || e.name.startsWith('.')) continue;
-        if (RESERVED_DIRS.has(e.name) || HARD_IGNORE_DIRS.has(e.name)) continue;
-        if (e.name === DRAFTS_DIR) continue;      // 站点试作，由 site 解析器管
-        // 构建目录不当独立站/收纳夹（site:dist 案）；递归也吃根 .ndignore（与页面清单同规则）
-        if (OUTPUT_DIRS.includes(e.name) || rootIgnore(under(rel, e.name), true)) continue;
+        if (!e.isDirectory() || !folderNameAllowed(e.name, under(rel, e.name), rootIgnore)) continue;
         if (claimed.has(e.name)) continue;        // 已经是一件产物了
         folders.push(under(rel, e.name));
         await collect(path.join(dir, e.name), under(rel, e.name), depth + 1);

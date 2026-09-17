@@ -14,13 +14,27 @@ const unwrapText = (v) => (v && typeof v === 'object' && !Array.isArray(v)
   && typeof v.$text === 'string' && Object.keys(v).length === 1) ? v.$text : v;
 const ENDPOINT = z.preprocess(unwrapText, z.string().min(1).max(300));
 
+/** 退役的像素写法（09-05 起位置只收关系）。带了就明说，不让 strictObject 只回一句 Unrecognized key */
+const PIXEL_KEYS = ['x', 'y', 'dx', 'dy', 'gap'];
+export const PIXEL_KEYS_MESSAGE = 'Positions take relations only (by / side / with) — pixel coordinates (x, y, dx, dy) and gap are no longer accepted. '
+  + "Say WHERE: {by:'<id|#tag|user|view>', side?:'right|left|above|below'} or {with:'<tag>'}. / 位置现在只收关系（by / side / with），不收像素坐标与 gap";
+
 /**
  * 落位意图（2026-09-05）：move / move_group / add_node 都只收关系，像素由
  * lib/board-place.js 解。旧方言 `ref` 当 `by` 认（垫片，不是静默丢）。
+ * 09-17（问题库 iss_mtfh3t44_kjdf 参数族）：旧写法里的 x/y/dx/dy/gap 原来只得到 `Unrecognized key: "gap"`，
+ * agent 读不出「现在只收关系」，换个像素写法接着试。这里给一句明确的报错；不静默丢 —— 丢掉 gap
+ * 等于只执行了半个意图（feedback：入参不许静默丢）。
  */
 export const TO = z.preprocess(
-  (v) => {
-    if (v && typeof v === 'object' && !Array.isArray(v) && typeof v.ref === 'string' && v.by === undefined) {
+  (v, ctx) => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return v;
+    const pixel = PIXEL_KEYS.filter((k) => k in v);
+    if (pixel.length) {
+      ctx.addIssue({ code: 'custom', message: `${PIXEL_KEYS_MESSAGE}（收到了：${pixel.join(', ')}）` });
+      return z.NEVER;
+    }
+    if (typeof v.ref === 'string' && v.by === undefined) {
       const { ref, ...rest } = v; return { ...rest, by: ref };
     }
     return v;
@@ -40,15 +54,15 @@ export const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('move'), id: z.string().min(1).max(300), to: TO }),
   z.object({ op: z.literal('move_group'), tag: z.string().min(1).max(40), to: TO }),
   z.object({ op: z.literal('remove'), id: z.string().min(1).max(300) }),
-  z.object({ op: z.literal('add_node'), id: z.string().regex(/^[A-Za-z0-9_-]{1,24}$/).optional().describe('local handle for later ops of this call'), text: z.string().min(1).max(8000), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), at: TO, tag: z.string().max(40).optional() }),
+  z.object({ op: z.literal('add_node'), id: z.string().regex(/^[A-Za-z0-9_-]{1,24}$/).optional().describe('local handle for later ops of this call'), text: z.string().min(1).max(8000), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), at: TO.optional().describe("Omit = into the user's view (same default as write_on_board)"), tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('add_shape'), kind: z.enum(['rect', 'ellipse', 'circle', 'underline']), around: z.string().min(1).max(300).describe('canvas id to wrap/underline — the mark HUGS it and follows when it moves'), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), width: z.number().min(1).max(12).optional(), tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('set_shape'), id: z.string().min(1).max(300), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), width: z.number().min(1).max(12).optional() }),
-  z.object({ op: z.literal('add_edge'), from: ENDPOINT, to: ENDPOINT, type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), label: z.string().max(60).optional(), tag: z.string().max(40).optional() }),
+  z.object({ op: z.literal('add_edge'), from: ENDPOINT.describe('canvas id as read_board prints it (site:…, docx:…, a path, a folder, a node handle) — must be something drawn on the board'), to: ENDPOINT.describe('same as from'), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), label: z.string().max(60).optional(), tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('set_edge'), id: z.string().min(1).max(300), label: z.string().max(60).optional(), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), from: ENDPOINT.optional().describe('re-point the line: new source end'), to: ENDPOINT.optional().describe('re-point the line: new target end') }),
   z.object({ op: z.literal('remove_edge'), id: z.string().min(1).max(300) }),
   z.object({ op: z.literal('reflow'), tag: z.string().min(1).max(40), layout: z.enum(REFLOW_LAYOUTS).optional().describe('Default: the layout the group was drawn with (column if it never recorded one). Re-lays the group with its current lines and real sizes, keeping its top-left; its flow lines set the order'), cols: z.number().int().min(1).max(8).optional().describe('grid columns') }),
   z.object({ op: z.literal('follow'), group_tag: z.string().min(1).max(40).describe('the group that should follow (e.g. a status panel)'), target_tag: z.string().min(1).max(40).describe('whenever a new item with this tag lands, the group auto-moves beside it and the anchor line re-points'), side: z.enum(['right', 'left', 'above', 'below']).optional(), keep_offset: z.boolean().optional().describe('true = do NOT snap the group beside the target now; leave it where it is and keep that offset from here on (every later hop is a parallel shift anyway)'), label: z.string().max(60).optional() }),
-  z.object({ op: z.literal('set_tag'), ids: z.array(z.string().min(1).max(300)).min(1).max(24).describe('canvas ids (paths for files: images, sites, docx, notes — or node handles)'), tag: z.string().max(40).describe('group tag to put them in; "" removes the tag') }),
+  z.object({ op: z.literal('set_tag'), ids: z.array(z.string().min(1).max(300)).min(1).max(24).describe('canvas ids (paths for files: images, sites, docx, notes — or node handles), or line ids b:… (a tagged line is erased with its group)'), tag: z.string().max(40).describe('group tag to put them in; "" removes the tag') }),
   z.object({ op: z.literal('unfollow'), group_tag: z.string().min(1).max(40) }),
   z.object({ op: z.literal('commit'), tag: z.string().max(40).optional().describe('make staging solid; omit tag = everything staging') }),
   z.object({ op: z.literal('erase_group'), tag: z.string().min(1).max(40).describe('delete the whole tagged group (notes/shapes/lines; artifact cards only lose the tag)') }),

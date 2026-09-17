@@ -46,12 +46,13 @@ pointers in this order: selected > open window > items near the viewport centre.
           for (const r of inside.slice(0, 20)) {
             const e = board.objects[r.id];
             const flags = `${e.staging ? ' 〔草稿〕' : ''}${e.tag ? ` #${e.tag}` : ''}`;
-            lines.push(`- ${describeEndpoint(r.id, board)} @(${Math.round(r.x)},${Math.round(r.y)}) ${Math.round(r.w)}x${Math.round(r.h)} (id: ${r.id})${flags}`);
+            lines.push(`- ${describeEndpoint(r.id, board, { withId: false })} @(${Math.round(r.x)},${Math.round(r.y)}) ${Math.round(r.w)}x${Math.round(r.h)} (id: ${r.id})${flags}`);
           }
           if (inside.length > 20) lines.push(`…还有 ${inside.length - 20} 件`);
         }
         lines.push(`视口中心 = (${Math.round(cx)},${Math.round(cy)})；想让用户不用动镜头就看到，就把东西摆进这个矩形。`);
       }
+      // 选中行印能回填的 id（09-17 iss_mtgcjmnf_tye4：`X（site）` 被抄回去当端点）；上面那行自带 (id: …)，用不带 id 的写法
       if (vp.selected?.length) lines.push(`选中：${vp.selected.map(id => describeEndpoint(id, board)).join('、')}`);
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     },

@@ -60,7 +60,7 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 function nodeTitle(n, board) {
   if (n.kind === 'text') return String(n.text || '').replace(/^#+\s*/gm, '').replace(/\s+/g, ' ').trim().slice(0, 60);
   if (n.kind === 'scribble') return '（涂鸦）';
-  return describeEndpoint(n.id, board).replace(/（[a-z]+）$/, '');
+  return describeEndpoint(n.id, board, { withId: false }).replace(/（[a-z]+）$/, '');   // 给人看的图：不带 id（09-17 摘要改印 id 之后分开）
 }
 
 export function toMermaid(g, board) {

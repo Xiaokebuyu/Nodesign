@@ -111,6 +111,9 @@ describe('edit_board（吞四件 + 新能力）', () => {
     await fs.writeFile(path.join(sharedRoot, '真实文件.md'), 'x', 'utf8');
     const bad = await edit({ ops: [{ op: 'add_edge', from: '真实文件.md', to: '虚空端点' }] });
     expect(bad.isError).toBe(true);
+    // 座位要有文件撑着（09-17 起文件已不在的座位不收：前端不画那张卡，线画不出来）
+    await fs.mkdir(path.join(sharedRoot, 'assets'), { recursive: true });
+    await fs.writeFile(path.join(sharedRoot, 'assets/photo.png'), 'x');
     await patchBoard(pid, { objects: { 'assets/photo.png': { x: 10, y: 10 } } });
     const good = await edit({ ops: [{ op: 'add_edge', from: '真实文件.md', to: 'assets/photo.png', type: 'ref' }] });
     expect(good.isError).toBeUndefined();
@@ -384,6 +387,7 @@ describe('schema 垫片：$text 剥壳 + 关系落位', () => {
   it('⭐ add_edge 端点 {$text:"…"} 剥壳（弱模型方言，真会话重试到死案）：线真的画上', async () => {
     const p = parse({ ops: [{ op: 'add_edge', from: 'a', to: { $text: 'b' }, type: 'link' }] });
     expect(p.ops[0].to).toBe('b');
+    for (const f of ['端a.png', '端b.png']) await fs.writeFile(path.join(sharedRoot, 'assets', f), 'x');   // 座位要有文件撑着（09-17）
     await patchBoard(pid, { objects: {
       'assets/端a.png': { x: 40000, y: 40000, w: 100, h: 80 },
       'assets/端b.png': { x: 40200, y: 40000, w: 100, h: 80 },

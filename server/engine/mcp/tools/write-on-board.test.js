@@ -315,6 +315,8 @@ describe("ink:'hand'（08-27 收编 create_on_board）+ 草图 hug", () => {
 
 describe('图的落位走纸（2026-08-29：产物锚自动落位退役，线照画）', () => {
   it('edges 连到已有产物：线照画，图落在纸上（位置不再追着产物跑）', async () => {
+    await fs.mkdir(path.join(sharedRoot, 'assets'), { recursive: true });
+    await fs.writeFile(path.join(sharedRoot, 'assets/被评的稿.png'), 'x');   // 座位要有文件撑着（09-17 端点校验）
     await patchBoard(pid, { objects: { 'assets/被评的稿.png': { x: 9000, y: 9000, w: 200, h: 176 } } });
     const r = await call({
       nodes: [{ id: 'p1', text: '优点：构图稳' }, { id: 'p2', text: '缺点：主体太小' }, { id: 'v', text: '判语：改第二版' }],

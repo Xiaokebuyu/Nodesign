@@ -77,6 +77,9 @@ describe('board-seater（入座下沉服务端）', () => {
     expect(e).toBeTruthy();
     expect(e.zone ?? '').toBe('');
     expect(e.w).toBe(640);
+    // 09-17 iss_mtp465ds_ctko：站点目录不建文件夹坐标（前端不画那层，锚点解析却先认它）
+    expect(board.zones['第二站']).toBeUndefined();
+    expect(board.zones['小说']).toBeTruthy();   // 真文件夹照建
     // 它现在是障碍：下一件东西不会压在它身上
     await fs.writeFile(path.join(root, '再来一张.png'), Buffer.alloc(10), 'utf8');
     await seatArtifacts(pid, ['再来一张.png']);
@@ -162,5 +165,49 @@ describe('临时座重解（2026-09-05：前端 packRow 抢先排的座只是"�
     const overlap = !(e.x + e.w <= deck.x || deck.x + deck.w <= e.x || e.y + e.h <= deck.y || deck.y + deck.h <= e.y);
     expect(overlap).toBe(false);
     expect(b.objects['assets/用户摆的.png']).toMatchObject({ x: 60, y: 60, seat: 'user' });
+  });
+});
+
+/**
+ * 09-17（iss_mt9cmke6_pset）：入座器回报点名路径落在哪张卡上 —— 救援入座按这个 id 回查。
+ * 以及两条跟着查出来的：普通目录不当文件卡坐；子文件夹里的产物 id 不丢文件夹前缀。
+ */
+describe('入座回报 ids / missing / skipped（09-17）', () => {
+  it('⭐ 点名路径 → 实际落座的卡 id（站点 / 单页站 / 散放 docx / 子文件夹 deck / 本来就有座位的站点成员）', async () => {
+    const pid3 = 'proj_seater_ids';
+    await ensureProjectWorkspace(pid3);
+    const r3 = getSharedDir(pid3);
+    const put = async (rel, body = 'x') => { await fs.mkdir(path.dirname(path.join(r3, rel)), { recursive: true }); await fs.writeFile(path.join(r3, rel), body); };
+    await put('官网/index.html', '<html><body>x</body></html>');
+    await put('官网/style.css', 'a{}');
+    await put('_drafts/首发.html', '<html><body>y</body></html>');
+    await put('报告v2.docx', 'PKfake');
+    await put('小说/插页.html', '<html><body>z</body></html>');
+    const r = await seatArtifacts(pid3, ['官网/index.html', '_drafts/首发.html', '报告v2.docx', '小说/插页.html', '没了.md', 'exports/x.zip']);
+    expect(r.ids).toEqual({
+      '官网/index.html': 'site:官网',
+      '_drafts/首发.html': 'site:_drafts/首发.html',
+      '报告v2.docx': 'docx:报告v2.docx',
+      '小说/插页.html': 'deck:小说/插页.html',
+    });
+    expect(r.missing).toEqual(['没了.md']);
+    expect(r.skipped).toEqual(['exports/x.zip']);
+    const board = await readBoard(pid3);
+    for (const id of Object.values(r.ids)) expect(Number.isFinite(board.objects[id]?.x), id).toBe(true);
+    expect(board.objects['deck:插页.html']).toBeUndefined();   // 子文件夹 deck 曾被拼成根上的幽灵
+    // 站点成员：卡本来就有座位（seated=0）也回报
+    const again = await seatArtifacts(pid3, ['官网/style.css']);
+    expect(again.seated).toBe(0);
+    expect(again.ids).toEqual({ '官网/style.css': 'site:官网' });
+  });
+
+  it('⭐ 普通目录不当文件卡坐（前端画的是文件夹卡），回报 skipped', async () => {
+    const pid4 = 'proj_seater_dir';
+    await ensureProjectWorkspace(pid4);
+    await fs.mkdir(path.join(getSharedDir(pid4), '素材夹'), { recursive: true });
+    const r = await seatArtifacts(pid4, ['素材夹']);
+    expect(r.seated).toBe(0);
+    expect(r.skipped).toEqual(['素材夹']);
+    expect((await readBoard(pid4)).objects['素材夹']).toBeUndefined();
   });
 });

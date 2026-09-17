@@ -36,6 +36,7 @@ import { estimateSizeOn, zoneRects, RUNTIME_SINGLETONS } from './board-kind-size
 import { inflateSpriteSeats, rollCardRect } from './board-place.js';
 import { getViewpoint } from '../projects/viewpoint-store.js';
 import { reservationsIn } from './board-reservations.js';
+import { KIND_PREFIX_RE } from './kinds/index.js';
 
 /**
  * 这个座位背后的文件还在磁盘上吗（2026-09-05）。
@@ -44,12 +45,14 @@ import { reservationsIn } from './board-reservations.js';
  * 落位照旧绕着它走 —— 板上有一堵看不见的墙，东西被推得比该在的位置远。
  * 画布原生件（kind: text/scribble）和 browse 单例没有文件本体，一律算在。
  */
-function seatBacked(id, entry, sharedRoot) {
+export function seatBacked(id, entry, sharedRoot) {
   if (!sharedRoot) return true;
   if (entry?.kind) return true;
   const s = String(id || '');
   if (RUNTIME_SINGLETONS.has(s)) return true;
-  const bare = s.replace(/^(deck|site|docx|text|scribble):/, '');
+  // 形态前缀从注册表取（09-17）：原来写死 deck/site/docx，`stage:<故事>/stage` 被当成盘上一个叫
+  // 「stage:…」的文件去查 —— 演出卡恒判「文件不在」，落位看不见它，回合末清幽灵座位时还会被误剪
+  const bare = s.replace(KIND_PREFIX_RE, '').replace(/^(text|scribble):/, '');
   if (!bare || bare.includes('..')) return true;
   try { fs.accessSync(path.join(sharedRoot, bare)); return true; } catch { return false; }
 }

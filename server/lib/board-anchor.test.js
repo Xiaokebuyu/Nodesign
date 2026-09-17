@@ -3,7 +3,7 @@
  * 这些真案原样当夹具：只收唯一命中、命中要带 fuzzy（调用方如实报）、认不出给候选。
  */
 import { describe, it, expect } from 'vitest';
-import { makeAnchorResolver, suggestAnchors, anchorMissHint, cleanAnchorName } from './board-anchor.js';
+import { makeAnchorResolver, suggestAnchors, anchorMissHint, anchorMissWhy, cleanAnchorName } from './board-anchor.js';
 
 const card = (x, y, extra = {}) => ({ x, y, w: 200, h: 120, ...extra });
 const board = () => ({
@@ -76,5 +76,72 @@ describe('认不出时给候选', () => {
     expect(cleanAnchorName('「品牌手册」')).toBe('品牌手册');
     expect(cleanAnchorName('#story')).toBe('story');
     expect(cleanAnchorName('a/b.png')).toBe('a/b.png');
+  });
+});
+
+/**
+ * 09-17 救援入座回查（iss_mt9cmke6_pset）：入座器按注册表落的是 `site:_drafts/x.html` / `docx:x.docx` / `site:X`，
+ * 回查要按它返回的 ids 查；按 `deck:<路径>` / 裸路径猜的老路径第一次调用必失败、第二次才成功。
+ */
+describe('救援入座按实际落座的 id 回查（09-17）', () => {
+  /** 模拟入座器：点名的路径按 table 落座，返回 ids；盘上没有的回 missing */
+  const seatingResolver = (table, { onDisk = Object.keys(table), skipped = [] } = {}) => {
+    const b = board();
+    return makeAnchorResolver({
+      projectId: 'p', known: new Set(['参考图']),
+      readBoard: async () => b,
+      seatArtifacts: async (_pid, [rel]) => {
+        if (skipped.includes(rel)) return { seated: 0, ids: {}, missing: [], skipped: [rel] };
+        if (!onDisk.includes(rel)) return { seated: 0, ids: {}, missing: [rel], skipped: [] };
+        const id = table[rel]; const had = !!b.objects[id];
+        b.objects[id] = b.objects[id] || card(1500, 0);
+        return { seated: had ? 0 : 1, ids: { [rel]: id }, missing: [], skipped: [] };
+      },
+    });
+  };
+
+  it('⭐ 单页站 / 散放 docx：第一次调用就锚上入座器落的那张卡', async () => {
+    const r = seatingResolver({ '_drafts/首发.html': 'site:_drafts/首发.html', '报告v2.docx': 'docx:报告v2.docx' });
+    const a = await r('_drafts/首发.html', board());
+    expect(a?.anchorId).toBe('site:_drafts/首发.html');
+    expect(a.rescued).toBe(true);
+    expect((await r('报告v2.docx', board()))?.anchorId).toBe('docx:报告v2.docx');
+  });
+
+  it('⭐ 站点目录里的文件：卡本来就有座位（seated=0）也认得回来，并说明认成了谁', async () => {
+    const r = seatingResolver({ 'etsuko-site/css/a.css': 'site:etsuko-site' });
+    const a = await r('etsuko-site/css/a.css', board());
+    expect(a?.anchorId).toBe('site:etsuko-site');
+    expect(a.fuzzy.how).toContain('归这张卡');
+  });
+
+  it('⭐ 认不出时的说法按入座器的真实结局：真查过不在才说「磁盘上也没有」', async () => {
+    const r = seatingResolver({}, { onDisk: [], skipped: ['exports/交付.zip'] });
+    expect(await r('量子纠缠', board())).toBeNull();
+    expect(anchorMissWhy(r, '量子纠缠')).toContain('磁盘上也没有');
+    expect(await r('exports/交付.zip', board())).toBeNull();
+    expect(anchorMissWhy(r, 'exports/交付.zip')).not.toContain('磁盘上也没有');
+    expect(anchorMissWhy(r, 'exports/交付.zip')).toContain('不作为一张卡上画布');
+    // 没去入座（没有路径可入座）：不对磁盘下断言
+    expect(anchorMissWhy(r, '从没问过的')).toBe('既没有座位，也不是任何 tag');
+  });
+});
+
+describe('同名目录是站点卡时认卡，不认文件夹坐标（09-17 iss_mtp465ds_ctko）', () => {
+  it('⭐ 「十三机兵（site）」「十三机兵」都认成 site:十三机兵，不是那层前端不画的文件夹', async () => {
+    const b = board();
+    b.zones['十三机兵'] = { x: 5000, y: 5000 };
+    b.objects['site:十三机兵'] = card(0, 900);
+    const r = resolver();
+    for (const raw of ['十三机兵（site）', '十三机兵']) {
+      const a = await r(raw, b);
+      expect(a.anchorId, raw).toBe('site:十三机兵');
+      expect(a.folder, raw).toBeUndefined();
+    }
+    expect((await r('参考图', b)).folder).toBe(true);   // 真文件夹照旧
+  });
+
+  it('括注里写着 id 的整段抄回（摘要印的手写字）：认那个 id', async () => {
+    expect((await resolver()('手写字「第一拍」（text:a1）', board()))?.anchorId).toBe('text:a1');
   });
 });

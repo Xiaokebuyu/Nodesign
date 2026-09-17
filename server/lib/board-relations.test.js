@@ -43,14 +43,34 @@ describe('endpointMatchesRel —— 端点命中', () => {
 });
 
 describe('describeEndpoint —— 给 agent 看的端点描述', () => {
-  it('根站的空 rel 有专门措辞（空串是身份不是没有值）', () => {
-    expect(describeEndpoint('site:', {})).toBe('工作区根上的site');
-    expect(describeEndpoint('site:鉴赏页', {})).toBe('鉴赏页（site）');
+  it('⭐ 09-17：印出来的每个端点都能原样抄回去当 id（iss_mtgcjmnf_tye4：`X（site）` 抄回 add_edge 认不出）', () => {
+    expect(describeEndpoint('site:鉴赏页', {})).toBe('site:鉴赏页');
+    expect(describeEndpoint('site:', {})).toBe('site:（工作区根上的site）');
+    expect(describeEndpoint('docx:报告', {})).toBe('docx:报告');
   });
 
-  it('手写字带内容摘录，裸路径原样', () => {
-    const board = { objects: { 'text:t1': { kind: 'text', data: { t: '这版更暗' } } } };
-    expect(describeEndpoint('text:t1', board)).toBe('手写字「这版更暗」');
+  it('手写字带内容摘录和 id，涂鸦带 id，裸路径原样', () => {
+    const board = { objects: { 'text:t1': { kind: 'text', data: { t: '这版更暗' } }, 'scribble:s1': { kind: 'scribble' } } };
+    expect(describeEndpoint('text:t1', board)).toBe('手写字「这版更暗」（text:t1）');
+    expect(describeEndpoint('scribble:s1', board)).toBe('一笔涂鸦 scribble:s1（笔画内容要看得截图画布）');
     expect(describeEndpoint('assets/a.png', board)).toBe('assets/a.png');
+  });
+
+  it('给人看的出口（withId:false）保留旧措辞：根站的空 rel 有专门说法', () => {
+    expect(describeEndpoint('site:', {}, { withId: false })).toBe('工作区根上的site');
+    expect(describeEndpoint('site:鉴赏页', {}, { withId: false })).toBe('鉴赏页（site）');
+  });
+
+  it('⭐ 印出来的写法经锚点解析都认得回来（摘要是 agent 的输入）', async () => {
+    const { makeAnchorResolver } = await import('./board-anchor.js');
+    const board = { zones: {}, objects: {
+      'site:鉴赏页': { x: 0, y: 0 }, 'site:': { x: 300, y: 0 },
+      'text:t1': { x: 600, y: 0, kind: 'text', data: { t: '这版更暗' } },
+      'scribble:s1': { x: 900, y: 0, kind: 'scribble' },
+    } };
+    const r = makeAnchorResolver({ projectId: 'p', known: new Set(), readBoard: async () => board, seatArtifacts: async () => ({ seated: 0, ids: {}, missing: [], skipped: [] }) });
+    for (const id of Object.keys(board.objects)) {
+      expect((await r(describeEndpoint(id, board), board))?.anchorId, describeEndpoint(id, board)).toBe(id);
+    }
   });
 });

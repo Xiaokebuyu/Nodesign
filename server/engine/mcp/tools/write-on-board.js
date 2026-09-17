@@ -26,7 +26,7 @@ import { byOf, toolUseIdOf } from '../actor.js';
 import { readBoard, patchBoard, TEXT_FONTS } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
-import { endpointReal } from './edit-board.js';
+import { makeEndpointResolver } from '../../../lib/board-endpoint.js';
 import { BINDING_TYPE_IDS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fitFor } from '../../../lib/sketch-layout.js';
 import { CARD_MAX_H } from '../../../lib/screen.js';
@@ -36,7 +36,7 @@ import { heroAfterLine, heroSize } from '../../../lib/board-hero.js';
 import { makeChalkEnv, resolveChalkSpot } from './write-on-board-resolve.js';
 import { reserveSpot, updateReservation, getReservation, takeReservation } from '../../../lib/board-reservations.js';
 import { buildSketchShapes, SKETCH_COLORS as COLORS } from '../../../lib/sketch-shapes.js';
-import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
+import { makeAnchorResolver, anchorMissHint, anchorMissWhy } from '../../../lib/board-anchor.js';
 import { lineCrossings } from '../../../lib/line-route.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { renderChalk, chalkFileName, writeChalkFile, CHALK_DIR } from '../../../lib/chalk.js';
@@ -358,16 +358,14 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const built = buildSketchShapes(shapesIn, { rectOfNode, isTaken: (id) => localIds.has(id), tag });
     if (built.error) return err(built.error);
     const shapes = built.shapes;
-    // ── 线：端点校验跟 edit_board add_edge 同一道闸（endpointReal） ──
+    // ── 线：端点归一与校验跟 edit_board add_edge 同一份（lib/board-endpoint.js，09-17） ──
     const idOf = new Map();
     for (const n of nodes) idOf.set(n.key, `text:a${stamp()}`);
     for (const sh of shapes) idOf.set(sh.key, `scribble:a${stamp()}`);
-    const resolveEnd = async (raw) => {
-      if (idOf.has(raw)) return idOf.get(raw);
-      const cid = normalizeCanvasId(raw);
-      if (!cid) return null;
-      return (await endpointReal(cid, board.objects || {}, board.zones, sharedRoot)) ? cid : null;
-    };
+    board.objects = board.objects || {};
+    const outerEnd = makeEndpointResolver({ projectId, sharedRoot, readBoard, seatArtifacts, board, live: board.objects, zones: board.zones || {} });
+    const endErrors = [];   // 认不出的端点为什么认不出（报文里给第一条，带候选）
+    const resolveEnd = async (raw) => { if (idOf.has(raw)) return idOf.get(raw); const r = await outerEnd(raw); if (r.error) endErrors.push(r.error); return r.id || null; };
     const bindings = {};
     const badEdges = [];
     for (const e of edgesIn) {
@@ -392,7 +390,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     let anchorId = null;
     if (args.near) {
       const a = await resolveAnchor(args.near, board);
-      if (!a) return err(`锚点 ${args.near} 不在板上：既没有座位、不是任何 tag，磁盘上也没有这个文件 —— ${anchorMissHint(args.near, board)}。`);
+      if (!a) return err(`锚点 ${args.near} 不在板上：${anchorMissWhy(resolveAnchor, args.near)} —— ${anchorMissHint(args.near, board)}。`);
       zone = a.zone; anchorId = a.anchorId;
       if (a.board) sketchBase = a.board;
       const e = sketchBase.objects[a.anchorId];
@@ -462,7 +460,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
         + `补 edges（谁连谁、什么关系，布局会按结构分层摆）；这些如果本是一条思路，`
         + `改走 {tag, chain:true} 让它长成线。`);
     }
-    if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}`);
+    if (badEdges.length) lines.push(`Skipped ${badEdges.length} edge(s) with unknown endpoints: ${badEdges.slice(0, 6).join(', ')}${endErrors.length ? `（${endErrors[0]}）` : ''}`);
     // 触屏档宽是硬约束（横向滑动没人受得了），所以话要说在宽上
     if (world.w > fit.w || world.h > fit.h) lines.push(fit.column
       ? `⚠ Too big for a ${fit.lane} screen (${fit.screen.w}x${fit.screen.h}px). Keep each sketch ≤${fit.w} wide — anything wider means sideways scrolling. Stack the next one below, don't put it to the side.`

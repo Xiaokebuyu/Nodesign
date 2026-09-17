@@ -7,15 +7,22 @@
  * 没前缀的 id 就是文件的相对路径（图片 / 散文件 / 便签 / 视频）；`scribble:` 这类画布原生物件没有磁盘身份，跳过。
  * 只把「板上有、磁盘没有」当问题记（signature 按项目归并）；「磁盘有、板上没有」只报数 —— 入座是 run 收尾才做的，
  * 中途看到差异是常态。
+ *
+ * 09-17（问题库 iss_mu3kqljp_6ycd / iss_mu0mx6q6_jx75 / iss_mtyisspu_ds3r / iss_mtx1v74x_9p5v / iss_mtg7ls2w_w80i）：
+ * 对完账还要**处理**文件已删掉的产物 / 文件卡座位（ghostSeats → pruneGhostSeats）。此前这里只记问题：rm 掉的文件
+ * 座位一直留着，前端不画，read_board 照报、落位照绕，谁也清不掉。口径照 api/assets.js 的 confirmDeadZones：
+ * 连着两次对账都不在、且不在改名窗口里才剪；剪座位走 patchBoard 的 null，连着它的线由那里的端点级联一并清掉。
+ * 板书（notes/板书/，有自己的删除路径）和手写字 / 涂鸦（没有文件本体）不在范围内。
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { readBoard } from '../projects/board-store.js';
+import { readBoard, patchBoard, forwardId, reconcileBoardRenames } from '../projects/board-store.js';
 import { getSharedDir } from '../projects/workspace.js';
 import { walkTaskFiles, RESERVED_DIRS } from './task-scan.js';
 import { recordIssue } from './issues-store.js';
-import { obstaclesIn } from './board-obstacles.js';
+import { obstaclesIn, seatBacked } from './board-obstacles.js';
 import { estimateSizeOn, RUNTIME_SINGLETONS } from './board-kind-sizes.js';
+import { CHALK_DIR } from './chalk.js';
 
 const KIND_PREFIX = /^(deck|site|docx|stage):(.+)$/;
 const NATIVE_PREFIX = /^[a-z_-]+:.+/i;   // `C:` 这种冒号后面没东西的不是原生物件，是 Windows 盘符漏进来的影子
@@ -51,7 +58,48 @@ export async function auditWorkspace(projectId, { sharedRoot = getSharedDir(proj
     unseated.push(f.rel);
   }
   const overlaps = boardOverlaps(b, { sharedRoot });
-  return { projectId, sharedRoot, objects: ids.length, zones: zones.length, checked: checked.length, dangling, unseated: unseated.slice(0, 50), unseatedCount: unseated.length, files: files.length, overlaps: overlaps.slice(0, 40), overlapCount: overlaps.length };
+  const ghosts = ghostSeats(b, sharedRoot);
+  return { projectId, sharedRoot, objects: ids.length, zones: zones.length, checked: checked.length, dangling, ghostSeats: ghosts, unseated: unseated.slice(0, 50), unseatedCount: unseated.length, files: files.length, overlaps: overlaps.slice(0, 40), overlapCount: overlaps.length };
+}
+
+/**
+ * 文件已经不在磁盘上的产物 / 文件卡座位（09-17）。「文件还在不在」跟落位障碍集是同一个判据
+ * （board-obstacles.seatBacked）：那边不画、不绕的，这边才剪。板书、画布原生件、运行时单例不算。
+ */
+export function ghostSeats(board, sharedRoot) {
+  const out = [];
+  for (const [id, e] of Object.entries(board?.objects || {})) {
+    if (!e || e.kind || id.startsWith(`${CHALK_DIR}/`)) continue;
+    if (!seatBacked(id, e, sharedRoot)) out.push(id);
+  }
+  return out;
+}
+
+/** pid → Set(上一次对账时的幽灵座位)。跟 assets.js 的 zoneSuspects 同一个两次判定 */
+const seatSuspects = new Map();
+
+/**
+ * 剪掉连着两次对账都没有文件撑着的座位（09-17）。
+ *
+ * 先跑一次 git 改名对账：agent 这一轮 `mv` 走的文件，在这一步被认成改名（座位换成新名字），
+ * 而不是被当成删除剪掉 —— 回合末的 commit 已经落了，对账看得见。改名窗口里的（转发表有记录）一律不碰。
+ * 两次判定之间文件又回来了（agent 重新写了它），第二次就不在嫌疑名单里，不剪。
+ *
+ * @returns {Promise<{pruned: string[], suspects: string[]}>}
+ */
+export async function pruneGhostSeats(projectId, { sharedRoot = getSharedDir(projectId), reconcile = reconcileBoardRenames } = {}) {
+  await reconcile(projectId).catch(() => {});
+  const board = await readBoard(projectId);
+  const ghosts = ghostSeats(board, sharedRoot).filter((id) => forwardId(projectId, id) === id);
+  const prev = seatSuspects.get(projectId) || new Set();
+  const dead = ghosts.filter((id) => prev.has(id));
+  const suspects = ghosts.filter((id) => !dead.includes(id));
+  if (suspects.length) seatSuspects.set(projectId, new Set(suspects)); else seatSuspects.delete(projectId);
+  if (dead.length) {
+    await patchBoard(projectId, { objects: Object.fromEntries(dead.map((id) => [id, null])) });
+    console.log(`[board] ${projectId} 清掉 ${dead.length} 个文件已不在的座位: ${dead.slice(0, 3).join(', ')}`);
+  }
+  return { pruned: dead, suspects };
 }
 
 const OVERLAP_MIN = 8;   // 挨着的卡差一两像素不算压（行距取整会产生 1px 叠边）
@@ -93,9 +141,21 @@ export function boardOverlaps(board, { sharedRoot = null, layers = null } = {}) 
   return out;
 }
 
-/** 挂在项目 bus 上：run 收尾后对一次账，板上有磁盘没有的记一条 auto 问题（同项目归并） */
-export function attachWorkspaceAudit(bus, projectId, { audit = auditWorkspace, record = recordIssue, delayMs = 1500 } = {}) {
-  let timer = null;
+/**
+ * 挂在项目 bus 上：run 收尾后对一次账，板上有磁盘没有的记一条 auto 问题（同项目归并），
+ * 文件已删的座位走 pruneGhostSeats。
+ *
+ * 第二次判定不等下一个回合（09-17，iss_mtg7ls2w_w80i「rm 后当轮即清」）：第一次对账留下嫌疑的，
+ * confirmMs 后再判一次 —— 两次都在回合结束之后，中间隔着回合末的 commit 与改名对账，
+ * 「搬走了」在第一次之前就已被认出来，剩下的是真删掉的。
+ * 会被自动剪掉的座位不再记问题（删文件是正常操作，每次都报一条会训练人忽略真警报）。
+ */
+export function attachWorkspaceAudit(bus, projectId, { audit = auditWorkspace, record = recordIssue, prune = pruneGhostSeats, delayMs = 1500, confirmMs = 10_000 } = {}) {
+  let timer = null; let confirmTimer = null;
+  const confirm = async () => {
+    confirmTimer = null;
+    try { await prune(projectId); } catch (err) { console.warn('[workspace-audit] prune', projectId, err?.message || err); }
+  };
   return bus.subscribe('*', (evt) => {
     if (evt?.type !== 'run.done' && evt?.type !== 'run.error') return;
     if (timer) clearTimeout(timer);
@@ -103,13 +163,20 @@ export function attachWorkspaceAudit(bus, projectId, { audit = auditWorkspace, r
       timer = null;
       try {
         const r = await audit(projectId);
-        if (!r.dangling.length) return;
-        record({
-          source: 'auto', kind: 'bug', toolName: 'workspace-audit',
-          summary: `画布上 ${r.dangling.length} 张卡对应的文件磁盘上不存在`,
-          detail: r.dangling.slice(0, 20).join('\n'), signature: `workspace-audit|${projectId}`, projectId, sessionId: evt.sessionId || null,
-        });
+        const ghosts = new Set(r.ghostSeats || []);
+        const real = r.dangling.filter((id) => !ghosts.has(id));
+        if (real.length) {
+          record({
+            source: 'auto', kind: 'bug', toolName: 'workspace-audit',
+            summary: `画布上 ${real.length} 张卡对应的文件磁盘上不存在`,
+            detail: real.slice(0, 20).join('\n'), signature: `workspace-audit|${projectId}`, projectId, sessionId: evt.sessionId || null,
+          });
+        }
       } catch (err) { console.warn('[workspace-audit]', projectId, err?.message || err); }
+      try {
+        const p = await prune(projectId);
+        if (p?.suspects?.length && !confirmTimer) { confirmTimer = setTimeout(confirm, confirmMs); confirmTimer.unref?.(); }
+      } catch (err) { console.warn('[workspace-audit] prune', projectId, err?.message || err); }
     }, delayMs);
     timer.unref?.();
   });

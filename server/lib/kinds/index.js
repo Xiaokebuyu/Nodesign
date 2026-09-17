@@ -202,7 +202,12 @@ export async function cardIdForPath(workspaceRoot, rel) {
     if (!manifest) continue;
     const a = artifactOfPath(manifest, relInTask);
     if (!a) continue;
-    const id = cardIdOf(taskId, a);
+    // cardIdOf 吃的是 /artifacts 那种**工作区相对**的字段（assets.js 的 under()），manifest 给的是任务相对的。
+    // 09-17 前这里原样传，子文件夹里的产物全拼错：`小说/插页.html` 拼成 `deck:插页.html`（根上的幽灵座位，
+    // 回查也查不到它）。stage 条目例外：cardIdOf 自己拼任务前缀。
+    const under = (p) => (p && taskId ? `${taskId}/${p}` : p);
+    const wa = a.kind === 'stage' ? a : { ...a, file: under(a.file), entryRel: under(a.entryRel), root: under(a.root) };
+    const id = cardIdOf(taskId, wa);
     if (id) return id;
   }
   return null;

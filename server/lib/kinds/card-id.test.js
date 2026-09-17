@@ -67,6 +67,16 @@ describe('cardIdForPath：路径到卡 id 走产物扫描，不猜扩展名', ()
     expect(await cardIdForPath(dir, '数据.json')).toBe(null);
   });
 
+  it('⭐ 子文件夹里的产物拼工作区相对 id，不丢文件夹前缀（09-17：`小说/插页.html` 曾拼成 `deck:插页.html`）', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-cardid4-'));
+    await fs.mkdir(path.join(dir, '小说'), { recursive: true });
+    await fs.writeFile(path.join(dir, '小说', '插页.html'), '<html><body>x</body></html>');
+    await fs.mkdir(path.join(dir, '作品集', '官网'), { recursive: true });
+    await fs.writeFile(path.join(dir, '作品集', '官网', 'index.html'), '<html></html>');
+    expect(await cardIdForPath(dir, '小说/插页.html')).toBe('deck:小说/插页.html');
+    expect(await cardIdForPath(dir, '作品集/官网/index.html')).toBe('site:作品集/官网');
+  });
+
   it('越界路径不解析', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-cardid3-'));
     expect(await cardIdForPath(dir, '../外面.docx')).toBe(null);

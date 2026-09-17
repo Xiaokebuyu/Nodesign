@@ -34,22 +34,30 @@ const KIND_PREFIXES = Object.keys(KINDS).map(id => `${id}:`);
 const DIR_KIND_PREFIXES = Object.entries(KINDS)
   .filter(([, def]) => def.directory).map(([id]) => `${id}:`);
 
-/** 端点 id → 给 agent 看的一小段描述 */
-export function describeEndpoint(end, board) {
+/**
+ * 端点 id → 给 agent 看的一小段描述。
+ *
+ * ⭐ 09-17（问题库 iss_mtgcjmnf_tye4）：这里印出来的东西 agent 会原样抄回 add_edge / move / near 当 id，
+ * 所以**每个端点都带着能回填的 id**。此前产物卡印成 `鉴赏页（site）`、手写字只印内容，抄回去一条都认不出
+ * （write_on_board 的 by 后来靠宽认接住了，线的端点没有）。
+ * withId:false 给人看的出口用（导出的图里节点标题不要 id）。
+ */
+export function describeEndpoint(end, board, { withId = true } = {}) {
   const obj = board?.objects?.[end];
   if (obj?.kind === 'text') {
     const t = String(obj.data?.t || '').replace(/\s+/g, ' ').trim().slice(0, 48);
-    return `手写字「${t}」`;
+    return withId ? `手写字「${t}」（${end}）` : `手写字「${t}」`;
   }
-  if (obj?.kind === 'scribble') return '一笔涂鸦（笔画内容要看得截图画布）';
+  if (obj?.kind === 'scribble') return withId ? `一笔涂鸦 ${end}（笔画内容要看得截图画布）` : '一笔涂鸦（笔画内容要看得截图画布）';
   for (const p of KIND_PREFIXES) {
     if (end.startsWith(p)) {
       const rel = end.slice(p.length);
       const kind = p.slice(0, -1);
-      return rel ? `${rel}（${kind}）` : `工作区根上的${kind}`;
+      if (!withId) return rel ? `${rel}（${kind}）` : `工作区根上的${kind}`;
+      return rel ? end : `${end}（工作区根上的${kind}）`;
     }
   }
-  return end;   // 裸文件路径或文件夹路径
+  return end;   // 裸文件路径或文件夹路径：本身就是 id
 }
 
 /** 一条边 → 一行中文。方向用箭头表达，无向用平线。 */
