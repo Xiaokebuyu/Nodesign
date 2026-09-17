@@ -74,7 +74,10 @@ export async function collectPage(page, { selector = null, links = true } = {}) 
       headings, linkList,
       textScope: sel || (document.querySelector('main') ? 'main' : 'body'),
       counts: {   // ⚠️ 这几个数是**整页**的，别跟着正文 root 缩（原来标着"页面结构"其实是 main 里的）
-        sections: document.querySelectorAll('section, article').length,
+        // section 与 article 分开数、另报 main（09-17）：合并计数让 agent 以为有 <article> 可选，猜选择器落空（问题库三例）
+        sections: document.querySelectorAll('section').length,
+        articles: document.querySelectorAll('article').length,
+        mains: document.querySelectorAll('main, [role="main"]').length,
         images: document.querySelectorAll('img').length,
         forms: document.querySelectorAll('form').length,
       },
@@ -141,7 +144,7 @@ export function formatPage(data, { compact = false, cap } = {}) {
   const headings = data.headings.slice(0, maxHeadings);
 
   return [
-    `结构（整页）：${data.counts.sections} 个 section/article · ${data.counts.images} 张图 · ${data.counts.forms} 个表单`,
+    `结构（整页）：${data.counts.sections} 个 section · ${data.counts.articles ?? 0} 个 article · ${data.counts.mains ?? 0} 个 main · ${data.counts.images} 张图 · ${data.counts.forms} 个表单`,
     compact ? null
       : `正文读的是 <${data.textScope}>${data.textScope === 'main' ? '（导航/页脚的文字不在里面，但它们的链接在下面）' : ''}`,
     headings.length ? `\n标题层级：\n${headings.join('\n')}` : null,

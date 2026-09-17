@@ -51,3 +51,17 @@ describe('collectPage 没命中', () => {
     expect(text).toContain('去掉 selector 读全页');
   });
 });
+
+describe('formatPage 结构行（09-17）', () => {
+  it('section、article、main 分开报数：合并计数会让 agent 以为有 <article> 可选', async () => {
+    const { formatPage } = await import('./page-digest.js');
+    const line = formatPage({
+      counts: { sections: 3, articles: 0, mains: 0, images: 2, forms: 1 },
+      text: 'x', textScope: 'body', headings: [], linkList: [],
+    })[0];
+    expect(line).toContain('3 个 section');
+    expect(line).toContain('0 个 article');
+    expect(line).toContain('0 个 main');
+    expect(line).not.toContain('section/article');
+  });
+});

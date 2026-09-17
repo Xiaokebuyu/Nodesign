@@ -284,8 +284,10 @@ visible text and their region tag, so you can tell a real content link from a
 footer legal link — and content links are the ones worth following. A good
 site's substance is on its inner pages, not its front page.
 
-Pass a selector to read one region instead of the whole page (e.g. "main",
-"article", ".pricing") when the page is long and you only need one part.`,
+Pass a selector to read one region when the page is long and you only need one
+part — only a selector you have seen on this page (browser_find / query_elements /
+an earlier read). Many sites have no <main> or <article>; if unsure, omit selector
+and use maxChars.`,
     {
       selector: z.string().optional().describe('Read only this element (first match). Plain CSS only.'),
       maxChars: z.number().int().min(200).max(20000).optional()

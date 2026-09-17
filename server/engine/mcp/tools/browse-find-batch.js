@@ -257,6 +257,7 @@ land in assets/references/web/ with provenance. Coordinates you write in a
 batch refer to the screenshot you saw BEFORE the call; refs from an earlier
 browser_find are fine as long as the page has not navigated. Batchable tools:
 ${names.join(', ')}. browser_batch cannot be nested.
+A ref from a find in the SAME batch is a guess: if the find matches nothing, or a different element ranks first, the click fails or hits the wrong thing. Chain it only when the target is certain; otherwise find in one call, read the list, then batch the clicks.
 Example: [{"name":"browser_find","input":{"query":"search"}},{"name":"browser_computer","input":{"action":"left_click","ref":"ref_1"}},{"name":"browser_computer","input":{"action":"type","text":"hello"}},{"name":"browser_computer","input":{"action":"key","text":"Enter"}}]`,
   });
 }

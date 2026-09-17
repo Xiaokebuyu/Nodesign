@@ -72,6 +72,7 @@ to it inside pages are not rewritten; pull images out before you reference them.
 
 Paths are workspace-relative, exactly as they are on disk. Accepted forms:
 - any file path: 'assets/generated/hero.webp', 'notes/灵感.md', '稿件/数据.csv'
+  Under assets/ only the top level, assets/generated/ and assets/notes/ show on the canvas; deeper files (e.g. assets/references/web/…) must be copied into a folder first
 - a deck: 'deck:<path>.html'   a site: 'site:<dir>'
   (a bare '<path>.html' is read as a deck)`,
     {

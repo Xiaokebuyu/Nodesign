@@ -151,7 +151,7 @@ Do NOT use this tool when:
       beforeShot: z
         .string()
         .optional()
-        .describe("Run before capture: 'scrollToBottom' scrolls through the page and back (fires all scroll-linked animations — ScrollTrigger / IntersectionObserver reveals), or pass a JS snippet evaluated in page context (await supported, 10s timeout). Don't burn this budget waiting for boot — pair with waitFor. Errors don't block the shot, they're reported in the caption."),
+        .describe("Run before capture: 'scrollToBottom' scrolls through the page and back (fires all scroll-linked animations — ScrollTrigger / IntersectionObserver reveals), or pass a JS snippet evaluated in page context (await supported, 10s timeout). Don't burn this budget waiting for boot — pair with waitFor. Errors don't block the shot, they're reported in the caption. Do not reload or navigate inside it (location.reload / location.href =): the capture then fails. To shoot a stored setting (language, theme), switch it through the page's own control instead."),
       scrollTo: z
         .union([z.number(), z.string()])
         .optional()

@@ -272,6 +272,7 @@ screenshot is appended at the end unless the last item already produced an
 image (or screenshotAfter:false). Measuring tools inside a batch need
 live:true in their input or they will open their own fresh page. Coordinates
 refer to the screenshot you saw BEFORE the call. Batchable: ${names.join(', ')}.
+A ref from a find in the SAME batch is a guess: if the find matches nothing, or a different element ranks first, the click fails or hits the wrong thing. Chain it only when the target is certain; otherwise find in one call, read the list, then batch the clicks.
 Example: [{"name":"artifact_open","input":{}},{"name":"artifact_find","input":{"query":"start button"}},{"name":"artifact_computer","input":{"action":"left_click","ref":"ref_1"}},{"name":"artifact_computer","input":{"action":"key","text":"ArrowRight","repeat":10}},{"name":"screenshot_canvas","input":{"live":true,"frames":[0,120,240,480]}}]`,
   });
 }

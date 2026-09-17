@@ -54,7 +54,7 @@ The table is plain markdown living in a note the user can see and edit:
   | 好感度_苏绵 | 3 |
 
 Values you set here show up at the top of your NEXT turn, so you do not have to carry
-them in your head. Keys: letters/digits/CJK/_/-/·, max ${KEY_MAX} chars. Values are
+them in your head. Keys: letters/digits/CJK/_/-/·, no spaces, max ${KEY_MAX} chars. Values are
 single-line, max ${VALUE_MAX} chars — long text belongs in the note body, not a cell.
 
 If there is no state table yet, this tool creates nothing: write one first with
@@ -81,7 +81,9 @@ write_on_board (tag: "${STATE_TABLE_TAG}"), then set values here.`,
           return fail(`板上有 ${found.rels.length} 条 tag 是「${STATE_TABLE_TAG}」的板书：${found.rels.join('、')}。`
             + `状态表只能存在一条 —— 请先修改多余条目的 tag 或将其移除（edit_board remove）；存在多条时不会自动选择。`);
         }
-        return fail(`板上还没有状态表。先用 write_on_board 落一条（\`tag: "${STATE_TABLE_TAG}"\`），`
+        // 09-17（问题库 iss_mtfwdmba_k6j6）：按板书自身 frontmatter 的 tag 找；原文案没说，agent 去改标题、改画布分组都找不到
+        return fail(`没有找到 tag 为「${STATE_TABLE_TAG}」的板书（按板书自身的 tag 查找：标题或正文写「${STATE_TABLE_TAG}」不算，`
+          + `edit_board set_tag 改的是画布分组也不算）。先用 write_on_board 落一条，带上 \`tag: "${STATE_TABLE_TAG}"\`，`
           + `正文里放一张两列的表：\n\n| 键 | 值 |\n| --- | --- |\n| 好感度_苏绵 | 3 |\n\n然后再来 set_vars。`);
       }
 
