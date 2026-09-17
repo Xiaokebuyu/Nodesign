@@ -34,6 +34,7 @@ import { lineCrossings } from '../../../lib/line-route.js';
 import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
 import { boardLineage } from '../../../lib/lineage.js';
 import { userAnnotationsOn, annotationNote } from '../../../lib/chalk-annotations.js';
+import { placeByIntent, describeYield } from '../../../lib/board-yield.js';
 import { makeEndpointResolver } from '../../../lib/board-endpoint.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { transformGroup } from '../../../lib/board-transform.js';
@@ -142,11 +143,13 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       if (zone === null) zone = vp?.layer || '';
       const viewport = (vp?.camera && (vp.layer || '') === zone) ? vp.camera : null;
       const obstacles = obstaclesNear(zone, exclude);
+      const forced = placeByIntent({ anchor, box, side: to.side || null, obstacles, exclude, apply: (id, at2) => { const e2 = live[id]; if (e2) setObj(id, { ...e2, ...at2 }); } });
+      if (forced) return { ...forced, anchorId, groupTag, zone, fuzzy };   // 路权归 agent（09-17）：点名哪一侧就按那儿落、挡路的让开，让不开退回求解器
       const p = solvePlace({ box, anchor, side: to.side || null, group, viewport, obstacles });
       const pressed = overlapIds({ x: p.x, y: p.y, w: box.w, h: box.h }, obstacles);
       return { ...p, x: Math.round(p.x), y: Math.round(p.y), pressed, anchorId, groupTag, zone, fuzzy };
     };
-    const sayWhere = (p) => describePlacement(p, { anchorId: p.anchorId, groupTag: p.groupTag })
+    const sayWhere = (p) => describePlacement(p, { anchorId: p.anchorId, groupTag: p.groupTag }) + describeYield(p.yielded)
       + (p.pressed?.length ? `（⚠ 压住了 ${p.pressed.slice(0, 3).join('、')}）` : '')
       + (p.fuzzy ? `（参照按「${p.fuzzy.from}」认成了 ${p.anchorId}：${p.fuzzy.how}）` : '');
     const report = []; let ok = 0;

@@ -132,6 +132,26 @@ describe('pin_to_board', () => {
   });
 });
 
+describe('让路（agent 路权）', () => {
+  it('⭐ 点名「放到 X 右边」→ 就落在右边，挡路的挪开，返回点名挪了谁', async () => {
+    // ⚠️ 障碍集会剔掉磁盘上已不存在的座位（seatBacked），夹具必须真写文件，否则挡路的那张根本不算障碍
+    for (const f of ['锚.png', '挡路.png', '被挤的.png']) await fs.writeFile(path.join(root, f), 'x');
+    await patchBoard(pid, { objects: { '锚.png': card(8000, 0), '挡路.png': card(8240, 0), '被挤的.png': card(9000, 3000) } });
+    const res = await edit({ ops: [{ op: 'move', id: '被挤的.png', to: { by: '锚.png', side: 'right' } }] });
+    expect(res.isError).toBeFalsy();
+    const after = await readBoard(pid);
+    // 落在锚的右边（锚宽 200，间距一格）
+    expect(after.objects['被挤的.png'].x).toBeGreaterThanOrEqual(8200);
+    expect(after.objects['被挤的.png'].y).toBe(0);
+    // 原来占着那块地的被挪开了（方向取位移最小的那一个，所以只断言「不再重叠」）
+    const a = after.objects['被挤的.png']; const b = after.objects['挡路.png'];
+    const apart = (b.x + 200 <= a.x) || (a.x + 200 <= b.x) || (b.y + 176 <= a.y) || (a.y + 176 <= b.y);
+    expect(apart, `挡路.png 还压在 (${a.x},${a.y}) 上：(${b.x},${b.y})`).toBe(true);
+    expect(b.x !== 8240 || b.y !== 0).toBe(true);
+    expect(res.content[0].text).toContain('挪开了');
+  });
+});
+
 describe('主角判断', () => {
   it('叠住的旧版不参与：唯一的站点是旧版、现役版是图片 → 没有主角（前端同样没有）', () => {
     const board = {
