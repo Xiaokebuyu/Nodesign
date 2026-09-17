@@ -7,6 +7,7 @@
  * 两个版本都还对）。
  */
 
+import fs from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { renderPrelude } from './system-prompts.js';
 import { isUncensoredModel } from './model-context.js';
@@ -216,6 +217,22 @@ describe('renderPrelude —— 项目模式分区', () => {
   it('认不出的 mode 落 design（存量项目全是 design，多给不少给）', () => {
     expect(renderPrelude('loose', { mode: 'weird' })).toBe(renderPrelude('loose', { mode: 'design' }));
     expect(renderPrelude('loose', {})).toBe(renderPrelude('loose', { mode: 'design' }));
+  });
+
+  // 09-17（修问题库 iss_mtuhruna_yg6c 时顺带发现）：六条底线那节写着「按 story-import 的落点表
+  // 写进 CLAUDE.md」，是 08-30 代演路的遗留；09-05 b1206370 退役代演路后 story-import 改成
+  // 「⛔ 不写项目 CLAUDE.md」，预设落 <故事>/预设/。两份提示词互相打架，模型只能二选一地猜。
+  it('提到 story-import 的句子不许再教「写进 CLAUDE.md」（与 story-import 现行落点表一致）', () => {
+    const skill = fs.readFileSync(new URL('../plugins/nodesign/skills/story-import/SKILL.md', import.meta.url), 'utf8');
+    // 现行规则以 skill 为准；skill 哪天改口，这条要跟着重核，不能只改一边
+    expect(skill).toContain('不写项目 CLAUDE.md');
+    for (const mode of ['design', 'rp']) {
+      const out = renderPrelude('loose', { mode });
+      const bad = out.split(/[。\n]/)
+        .filter((s) => s.includes('story-import') && s.includes('CLAUDE.md') && !s.includes('不写项目 CLAUDE.md'));
+      expect(bad, `${mode} 渲染里仍有把 story-import 落点指向 CLAUDE.md 的句子`).toEqual([]);
+      expect(out).toContain('`<故事>/预设/`');
+    }
   });
 
   it('模式分区与底线分区正交：rp × uncensored 同时切也各自干净', () => {

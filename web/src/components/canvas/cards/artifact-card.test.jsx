@@ -1,8 +1,20 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import ArtifactCard, { ARTIFACT_FACES } from './ArtifactCard.jsx';
+
+// 活预览换成不带 src 的 iframe：happy-dom 会真去拉 src（打到 localhost:3000 再报一串
+// NetworkError）。只有下面滚轮那组会挂上活预览（其余用例的 IntersectionObserver 不回调），
+// 它们要的只是「卡里有个 iframe、frameRef 指着它」。
+vi.mock('../LiveFrame.jsx', async () => {
+  const { createElement } = await import('react');
+  return {
+    default: ({ title, frameRef, style }) => createElement('iframe', {
+      title, style, ref: (n) => { if (frameRef) frameRef.current = n; },
+    }),
+  };
+});
 import { sizeOf } from '../../../lib/board-kinds.js';
 import { CARD_EDGE } from '../../../lib/board-geometry.js';
 
@@ -103,5 +115,125 @@ describe('每张脸的信息量一个都不能丢', () => {
   it('每种形态的图标互不相同（站点和浏览器都想用 Globe，撞过一次）', () => {
     const icons = Object.values(ARTIFACT_FACES).map(f => f.icon);
     expect(new Set(icons).size).toBe(icons.length);
+  });
+});
+
+/**
+ * 预览态滚轮的接线（09-17，问题库 iss_mtuhruna_yg6c）。判定逻辑的细目在
+ * lib/card-wheel.test.js；这里只钉组件有没有按判定去吞 / 放 / 滚。
+ *
+ * 以前一律 preventDefault 再 `contentWindow.scrollBy`：演出显示器的文档不滚，
+ * 于是内容不动、事件又被吞，画布也不平移。
+ *
+ * happy-dom 默认没有 IntersectionObserver 回调，这里换一个一挂上就报「在视口里」的，
+ * 滚轮监听才会装上；iframe 的文档换成假对象（只要命中点、样式、滚动尺寸）。
+ */
+describe('预览态滚轮：找得到可滚容器才吞，找不到交还画布', () => {
+  let savedIO;
+  beforeEach(() => {
+    savedIO = globalThis.IntersectionObserver;
+    globalThis.IntersectionObserver = class {
+      constructor(cb) { this.cb = cb; }
+      observe() { this.cb([{ isIntersecting: true }]); }
+      disconnect() {}
+    };
+  });
+  afterEach(() => { globalThis.IntersectionObserver = savedIO; });
+
+  const STAGE = { id: 'stage:夜班', type: 'stage', title: '夜班', root: '夜班', stage: { beats: 3, cast: [] } };
+
+  const el = (ov, { top = 0, sh = 100, ch = 100 } = {}, parent = null) => ({
+    ov, scrollTop: top, scrollHeight: sh, clientHeight: ch, parentElement: parent, scrollBy: vi.fn(),
+  });
+
+  /** 演出显示器：body overflow:hidden，正文在 .beats 里滚 */
+  function stageDoc({ beatsTop = 0 } = {}) {
+    const html = el('visible', { sh: 540, ch: 540 });
+    const body = el('hidden', { sh: 540, ch: 540 }, html);
+    const beats = el('auto', { top: beatsTop, sh: 2000, ch: 496 }, body);
+    const p = el('visible', {}, beats);
+    return { html, body, beats, hit: p };
+  }
+
+  /** 普通站点：文档自己滚 */
+  function siteDoc() {
+    const html = el('visible', { sh: 3000, ch: 800 });
+    const body = el('visible', { sh: 2984, ch: 2984 }, html);
+    const p = el('visible', {}, body);
+    return { html, body, hit: p };
+  }
+
+  function mount(o, d) {
+    act(() => root.render(<ArtifactCard o={o} projectId="p1" fileVersions={{}} scale={1} />));
+    const box = host.querySelector('div > div:nth-child(2)');
+    const frame = box.querySelector('iframe');
+    expect(frame, '视口内应挂上活预览').toBeTruthy();
+    const doc = {
+      defaultView: { getComputedStyle: (x) => ({ overflowY: x.ov }) },
+      documentElement: d.html, body: d.body, scrollingElement: d.html,
+      elementFromPoint: () => d.hit,
+    };
+    Object.defineProperty(frame, 'contentDocument', { configurable: true, get: () => doc });
+    Object.defineProperty(frame, 'offsetWidth', { configurable: true, get: () => 960 });
+    Object.defineProperty(frame, 'offsetHeight', { configurable: true, get: () => 540 });
+    frame.getBoundingClientRect = () => ({ left: 0, top: 0, width: 640, height: 360 });
+    const reached = vi.fn();
+    host.addEventListener('wheel', reached);
+    return { box, reached };
+  }
+
+  /** happy-dom 的 WheelEvent 继承 UIEvent，不认 clientX / ctrlKey 这些鼠标字段 —— 手动挂上 */
+  const wheel = (target, { deltaY, ...mouse }) => {
+    const e = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY });
+    Object.assign(e, { clientX: 10, clientY: 10, ctrlKey: false, metaKey: false, shiftKey: false, ...mouse });
+    target.dispatchEvent(e);
+    return e;
+  };
+
+  it('⭐ 演出卡：滚的是显示器里的 .beats，事件不再冒到画布', () => {
+    const d = stageDoc();
+    const { box, reached } = mount(STAGE, d);
+    const e = wheel(box, { deltaY: 100 });
+    expect(e.defaultPrevented).toBe(true);
+    expect(d.beats.scrollBy).toHaveBeenCalledWith(0, 100);
+    expect(reached).not.toHaveBeenCalled();
+  });
+
+  it('⭐ 演出卡：正文已到底、文档本身又不滚 → 不吞，画布收得到这一下', () => {
+    const d = stageDoc({ beatsTop: 2000 - 496 });
+    const { box, reached } = mount(STAGE, d);
+    const e = wheel(box, { deltaY: 100 });
+    expect(e.defaultPrevented).toBe(false);
+    expect(reached).toHaveBeenCalledTimes(1);
+    for (const x of [d.html, d.body, d.beats]) expect(x.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it('站点卡原有行为：长页照旧吞掉并滚文档（scrollingElement.scrollBy）', () => {
+    const d = siteDoc();
+    const { box, reached } = mount(SITE, d);
+    const e = wheel(box, { deltaY: 80 });
+    expect(e.defaultPrevented).toBe(true);
+    expect(d.html.scrollBy).toHaveBeenCalledWith(0, 80);
+    expect(reached).not.toHaveBeenCalled();
+  });
+
+  it('Ctrl+滚轮照旧交给相机缩放', () => {
+    const d = siteDoc();
+    const { box, reached } = mount(SITE, d);
+    const e = wheel(box, { deltaY: 80, ctrlKey: true });
+    expect(e.defaultPrevented).toBe(false);
+    expect(reached).toHaveBeenCalledTimes(1);
+    expect(d.html.scrollBy).not.toHaveBeenCalled();
+  });
+
+  it('滚到头的同一串尾巴吞掉不滚（不溢出去平移画布）', () => {
+    const d = stageDoc({ beatsTop: 2000 - 496 - 50 });
+    const { box, reached } = mount(STAGE, d);
+    expect(wheel(box, { deltaY: -40 }).defaultPrevented).toBe(true);   // 先往上滚一下，锁住
+    d.beats.scrollTop = 2000 - 496;                                     // 再到底
+    const tail = wheel(box, { deltaY: 100 });
+    expect(tail.defaultPrevented).toBe(true);
+    expect(reached).not.toHaveBeenCalled();
+    expect(d.beats.scrollBy).toHaveBeenCalledTimes(1);
   });
 });

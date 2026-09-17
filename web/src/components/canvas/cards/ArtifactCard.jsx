@@ -10,6 +10,7 @@ import { Assets, Stage, Repo } from '../../../lib/api.js';
 import { useRepoStore } from '../../../stores/repoStore.js';
 import { joinRel } from '../../../lib/paths.js';
 import { freezeWin, thawWin } from '../../../lib/frame-freeze.js';
+import { wheelTargetInFrame, hasRoomY, decideCardWheel, scrollTargetBy } from '../../../lib/card-wheel.js';
 import LiveFrame from '../LiveFrame.jsx';
 
 /**
@@ -371,22 +372,36 @@ export default function ArtifactCard({
    * 原生监听 wheel 且无条件 preventDefault，卡内滚动的默认行为被整个吃掉。
    * 修法只能也用**原生监听**：DOM 冒泡先到后代，这里 stopPropagation 就拦住了
    * 相机（React 合成事件走根委托，拦不到人家的原生监听）。
-   *   - Ctrl/⌘+滚轮放行：那是缩放手势，属于相机
-   *   - site：转发进 iframe（同源，contentWindow.scrollBy）
+   *   - Ctrl/⌘+滚轮放行：那是缩放手势，属于相机；Shift+滚轮放行（画布约定的左右平移）
+   *   - site / stage：转发进 iframe
    *   - deck：16:9 整幅在框里，没有可滚的，不拦（滚轮照旧平移画布）
+   *
+   * 09-17（iss_mtuhruna_yg6c）：以前一律先吞事件再 `contentWindow.scrollBy`，演出显示器的
+   * 文档不滚（body overflow:hidden，滚的是里面的 .beats 等），于是内容不动、画布也不动。
+   * 现在按指针找 iframe 里这一下真滚得动的容器，找不到或已到头就不吞，相机照常平移。
+   * 判定与锁定窗口见 lib/card-wheel.js。
    */
   const wheelMode = face?.wheel && inView && scale >= PREVIEW_MIN_SCALE ? face.wheel : null;
+  const wheelLatchRef = useRef(null);
   useEffect(() => {
     const el = boxRef.current;
     if (!el || !wheelMode) return undefined;
     const onWheel = (e) => {
-      if (e.ctrlKey || e.metaKey) return;
+      // 非 iframe 脸（预览区自己带滚动条）只滚这个框本身，不往父文档里找
+      const target = wheelMode === 'iframe'
+        ? wheelTargetInFrame(frameRef.current, e)
+        : (hasRoomY(el, e.deltaY) ? el : null);
+      const now = performance.now();
+      const verdict = decideCardWheel({
+        ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
+        deltaY: e.deltaY, target, now, lastConsumedAt: wheelLatchRef.current,
+      });
+      if (verdict === 'pass') return;
       e.stopPropagation();
       e.preventDefault();
-      if (wheelMode === 'iframe') {
-        try { frameRef.current?.contentWindow?.scrollBy(0, e.deltaY); } catch { /* 跨源不滚 */ }
-      } else {
-        el.scrollTop += e.deltaY;
+      wheelLatchRef.current = now;
+      if (verdict === 'scroll') {
+        try { scrollTargetBy(target, e.deltaY); } catch { /* 文档刚被换掉：这一下不滚 */ }
       }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
