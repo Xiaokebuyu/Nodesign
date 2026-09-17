@@ -30,6 +30,7 @@ import { resolveArtifactFile, isServablePath } from '../lib/artifact-file-path.j
 import { USER_UPLOAD_DIR, ensureUploadDir, uploadRefPath, listUploadedAssets, deleteUploadedAsset } from '../lib/user-uploads.js';
 import { getProjectCover } from '../lib/cover.js';
 import { makeDocxPageHandler, makeDocxPdfHandler } from './assets/docx-page.js';
+import { makeArtifactThumbHandler } from './assets/artifact-thumb.js';
 import { mountNotesRoutes } from './assets/notes.js';
 import { mountEntryRoutes } from './assets/entries.js';
 import { safeSegment, decorateNoteText, decorateFilePreview, PREVIEW_EXTS } from './assets/helpers.js';
@@ -528,6 +529,8 @@ router.get('/:pid/artifacts', async (req, res, next) => {
 // .docx 页图（画布缩略图 + 产物窗翻页共用一份缓存）。实现在 assets/docx-page.js —— 
 router.get('/:pid/docx-page', makeDocxPageHandler({ getSharedDir, guardProject }));
 router.get('/:pid/docx-pdf', makeDocxPdfHandler({ getSharedDir, guardProject }));   // 整份 PDF，同一份缓存
+// 画布拉远时站点 / deck 卡上的服务端截图（09-17，iss_mu0v5pa5_3ojg）。实现在 assets/artifact-thumb.js + lib/artifact-thumb.js
+router.get('/:pid/artifact-thumb', makeArtifactThumbHandler({ getSharedDir, guardProject }));
 
 router.get('/:pid/cover', async (req, res, next) => {
   try {

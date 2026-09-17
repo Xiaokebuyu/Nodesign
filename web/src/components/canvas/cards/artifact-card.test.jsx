@@ -237,3 +237,113 @@ describe('预览态滚轮：找得到可滚容器才吞，找不到交还画布'
     expect(d.beats.scrollBy).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * 拉远以后的服务端缩略图（09-17，问题库 iss_mu0v5pa5_3ojg）。
+ *
+ * 原来 scale < 0.35 时只画横线纸 + 图标，电脑上拉远看全貌是满屏空白纸。现在 deck / 站点在
+ * 「进了视口、活预览不挂」时叠一张 /artifact-thumb 的图，占位垫在底下（加载中 / 失败时露出来）。
+ */
+describe('远景缩略图', () => {
+  let savedIO;
+  let inView = true;
+  beforeEach(() => {
+    inView = true;
+    savedIO = globalThis.IntersectionObserver;
+    globalThis.IntersectionObserver = class {
+      constructor(cb) { this.cb = cb; }
+      observe() { this.cb([{ isIntersecting: inView }]); }
+      disconnect() {}
+    };
+  });
+  afterEach(() => { globalThis.IntersectionObserver = savedIO; });
+
+  const mountAt = (o, scale, fileVersions = {}) => {
+    act(() => root.render(<ArtifactCard o={o} projectId="p1" fileVersions={fileVersions} scale={scale} />));
+    return host.querySelector('div > div:nth-child(2)');
+  };
+  const thumbOf = (box) => box.querySelector('img[data-far-thumb]');
+  const params = (img) => new URL(img.getAttribute('src'), 'http://x').searchParams;
+  const fire = (el, type) => act(() => { el.dispatchEvent(new Event(type)); });
+
+  it('⭐ 站点卡拉远（0.2）且在视口里：请求缩略图，占位图标垫在底下，图加载完才显出', () => {
+    const box = mountAt(SITE, 0.2, { '研究站/style.css': 2, '研究站/about.html': 5 });
+    const img = thumbOf(box);
+    expect(img, '应挂上缩略图').toBeTruthy();
+    expect(img.getAttribute('src').startsWith('/api/projects/p1/artifact-thumb?')).toBe(true);
+    expect(params(img).get('path')).toBe('研究站/index.html');
+    expect(params(img).get('kind')).toBe('site');
+    // 版本号同活预览：本页 html + 产物根下非 html（about.html 不算）
+    expect(params(img).get('v')).toBe('2');
+    expect(box.querySelector('svg'), '占位图标仍在').toBeTruthy();
+    expect(box.querySelector('iframe')).toBeNull();
+    expect(img.style.opacity).toBe('0');
+    fire(img, 'load');
+    expect(thumbOf(box).style.opacity).toBe('1');
+  });
+
+  it('⭐ 根站（base 为空串）的入口不带前导斜杠', () => {
+    const box = mountAt({ ...SITE, base: '', task: '' }, 0.2);
+    expect(params(thumbOf(box)).get('path')).toBe('index.html');
+  });
+
+  it('⭐ 截图失败（204 / 出错）→ 撤掉图只留占位；地址换了（agent 改了产物）再试一次', () => {
+    let box = mountAt(SITE, 0.2);
+    fire(thumbOf(box), 'error');
+    expect(thumbOf(box)).toBeNull();
+    expect(box.querySelector('svg')).toBeTruthy();
+    // 同一地址重渲染不重试
+    box = mountAt(SITE, 0.25);
+    expect(thumbOf(box)).toBeNull();
+    // 版本号变了 → 新地址 → 重新请求
+    box = mountAt(SITE, 0.25, { '研究站/style.css': 1 });
+    expect(thumbOf(box)).toBeTruthy();
+    expect(params(thumbOf(box)).get('v')).toBe('1');
+  });
+
+  it('已显出的图在地址变化时不闪回占位', () => {
+    let box = mountAt(SITE, 0.2);
+    fire(thumbOf(box), 'load');
+    box = mountAt(SITE, 0.2, { '研究站/index.html': 1 });
+    expect(params(thumbOf(box)).get('v')).toBe('1');
+    expect(thumbOf(box).style.opacity).toBe('1');
+  });
+
+  it('⭐ deck 卡拉远：按 deckFile 请求，kind=deck，整页 contain', () => {
+    const box = mountAt(DECK, 0.1, { '稿件/主稿.html': 4 });
+    const img = thumbOf(box);
+    expect(params(img).get('path')).toBe('稿件/主稿.html');
+    expect(params(img).get('kind')).toBe('deck');
+    expect(params(img).get('v')).toBe('4');
+    expect(img.style.objectFit).toBe('contain');
+  });
+
+  it('⭐ 镜头够近（≥ 0.35）→ 活预览，不请求缩略图', () => {
+    const box = mountAt(SITE, 0.35);
+    expect(box.querySelector('iframe')).toBeTruthy();
+    expect(thumbOf(box)).toBeNull();
+  });
+
+  it('⭐ 不在视口里 → 不请求（出视口的卡不给服务端派活）', () => {
+    inView = false;
+    const box = mountAt(SITE, 0.2);
+    expect(thumbOf(box)).toBeNull();
+    expect(box.querySelector('iframe')).toBeNull();
+    expect(box.querySelector('svg')).toBeTruthy();
+  });
+
+  it('范围只到 deck / 站点：文档、浏览器、演出、仓库卡拉远仍是占位', () => {
+    const others = [
+      { id: 'docx:a.docx', type: 'docx', title: 'a', deckFile: 'a.docx' },
+      { id: 'browse', type: 'browse', title: 'b', host: 'x.com', url: 'https://x.com' },
+      { id: 'stage:夜班', type: 'stage', title: '夜班', root: '夜班', stage: { beats: 1, cast: [] } },
+      { id: 'repo:r', type: 'repo', title: 'r' },
+    ];
+    for (const o of others) {
+      const box = mountAt(o, 0.2);
+      expect(thumbOf(box), o.type).toBeNull();
+      expect(box.querySelector('img'), o.type).toBeNull();
+    }
+    expect(Object.keys(ARTIFACT_FACES).filter(k => ARTIFACT_FACES[k].thumb).sort()).toEqual(['deck', 'site']);
+  });
+});

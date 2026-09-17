@@ -12,6 +12,8 @@ import { joinRel } from '../../../lib/paths.js';
 import { freezeWin, thawWin } from '../../../lib/frame-freeze.js';
 import { wheelTargetInFrame, hasRoomY, decideCardWheel, scrollTargetBy } from '../../../lib/card-wheel.js';
 import LiveFrame from '../LiveFrame.jsx';
+import FarThumb from './FarThumb.jsx';
+import { artifactThumbUrl } from '../../../lib/artifact-thumb.js';
 
 /**
  * ArtifactCard —— deck / 站点 / 世界共用的那张卡（2026-08-13）
@@ -45,6 +47,14 @@ import LiveFrame from '../LiveFrame.jsx';
  * ⚠️ **两道限流缺一不可**（否则二十份产物的桌面会把风扇吹起来）：
  *   1. 进视口才挂（IntersectionObserver，预加载 240px）
  *   2. 镜头拉太远就不挂（`scale < 0.35` 时预览什么都看不清，纯浪费）
+ *
+ * ## 拉远以后（09-17，问题库 iss_mu0v5pa5_3ojg）
+ *
+ * 第 2 道闸之下原来只画横线纸加形态图标。电脑上分级渲染是关的（BoardObject 的 useIsDesktop），
+ * 拉远看全貌时满屏站点卡都是空白纸，用户只能双击开窗才看得到内容。现在 deck / 站点这两张脸
+ * 带一个 `thumb`：进视口且在第 2 道闸之下时，占位上面叠一张服务端截图（FarThumb.jsx；
+ * 生成、缓存、限流见 server/lib/artifact-thumb.js）。截图不跟着每一笔实时变，但远景本来也读不清细节，
+ * 要的是认得出这是哪一件。手机 / 平板上窄到 120px 以下时整张卡换成名字（FarFace），根本走不到这里。
  */
 
 /** 卡头的牛皮色页眉与它下面那道线（09-12 印刷风，取值同官网 --paper-2 / --rule） */
@@ -112,9 +122,21 @@ function RepoTreePreview({ projectId, box }) {
   );
 }
 
+/**
+ * 站点卡的产物根与入口（活预览与远景缩略图共用）。
+ * 根站的 base 合法地是空串（扁平化后站点长在工作区根上），硬拼 `/` 会造出
+ * `/index.html` 这种前导斜杠路径 —— 服务端按绝对路径判越界直接 403，所以一律走 joinRel。
+ */
+const siteEntryOf = (o) => ({ base: o.base || o.task, entry: o.entry || 'index.html' });
+
 export const ARTIFACT_FACES = {
   deck: {
     icon: Presentation,
+    /** 远景缩略图：deck 按真实画幅截整页，竖版要整页入框所以 contain */
+    thumb: ({ o, projectId, fileVersions }) => ({
+      src: artifactThumbUrl(projectId, o.deckFile, { kind: 'deck', v: versionOfFile(fileVersions, o.deckFile) }),
+      fit: 'contain',
+    }),
     tip: '双击打开这份幻灯',
     summary: (o) => {
       const t = formatClock(o.mtime);
@@ -138,6 +160,14 @@ export const ARTIFACT_FACES = {
 
   site: {
     icon: Globe,
+    /** 远景缩略图：取景同活预览（1440 设备宽的首屏）；版本号同活预览的 ?v= */
+    thumb: ({ o, projectId, fileVersions }) => {
+      const { base, entry } = siteEntryOf(o);
+      return {
+        src: artifactThumbUrl(projectId, joinRel(base, entry), { kind: 'site', v: versionOfSitePage(fileVersions, base, entry) }),
+        fit: 'cover',
+      };
+    },
     tip: '双击打开这个站点',
     summary: (o) => (o.single ? '单页' : `站点 · ${o.pages?.length || 1} 个页面`),
     /**
@@ -150,10 +180,7 @@ export const ARTIFACT_FACES = {
     Preview: ({ o, projectId, fileVersions, box, frameRef, onActive }) => {
       const deviceW = SITE_VIEWPORTS[0].w;
       const scale = box.w / deviceW;
-      // 根站的 base 合法地是空串（扁平化后站点长在工作区根上），硬拼 `/` 会造出
-      // `/index.html` 这种前导斜杠路径 —— 服务端按绝对路径判越界直接 403
-      const base = o.base || o.task;
-      const entry = o.entry || 'index.html';
+      const { base, entry } = siteEntryOf(o);
       return (
         <LiveFrame
           title={`site-${o.id}`}
@@ -420,6 +447,21 @@ export default function ArtifactCard({
   };
   const Icon = face.icon;
   const live = inView && scale >= PREVIEW_MIN_SCALE;
+  // 远景缩略图只在「进了视口、但活预览不挂」时要（出视口的卡不发请求，见文件头「拉远以后」）
+  const far = !live && inView && face.thumb ? face.thumb({ o, projectId, fileVersions }) : null;
+  /* 没挂预览时不留一块空白 —— 空白看着像"这件东西坏了"。
+     给一张空白横线纸加形态图标（同首页那张 .ndd-shot.empty），
+     明确它只是还没显影。远景缩略图也垫着它（加载中 / 失败时露出来）。 */
+  const paper = (
+    <div style={{
+      width: '100%', height: '100%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      backgroundColor: PAPER.paper,
+      backgroundImage: 'repeating-linear-gradient(180deg, transparent 0 21px, rgba(43,33,23,0.05) 21px 22px)',
+    }}>
+      <Icon size={26} color={PAPER.pencil} />
+    </div>
+  );
 
   return (
     <div title={face.tip} style={{ display: 'flex', flexDirection: 'column' }}>
@@ -484,19 +526,9 @@ export default function ArtifactCard({
       >
         {live
           ? <face.Preview o={o} projectId={projectId} fileVersions={fileVersions} box={box} frameRef={frameRef} onActive={handleFrameActive} />
-          : (
-            /* 没挂预览时不留一块空白 —— 空白看着像"这件东西坏了"。
-               给一张空白横线纸加形态图标（同首页那张 .ndd-shot.empty），
-               明确它只是还没显影。 */
-            <div style={{
-              width: '100%', height: '100%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              backgroundColor: PAPER.paper,
-              backgroundImage: 'repeating-linear-gradient(180deg, transparent 0 21px, rgba(43,33,23,0.05) 21px 22px)',
-            }}>
-              <Icon size={26} color={PAPER.pencil} />
-            </div>
-          )}
+          : far
+            ? <FarThumb src={far.src} fit={far.fit}>{paper}</FarThumb>
+            : paper}
       </div>
     </div>
   );

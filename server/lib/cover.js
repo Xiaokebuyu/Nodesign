@@ -91,8 +91,11 @@ export async function pickCoverArtifact(sharedDir) {
  *   给了就走 http（与用户预览同源）—— 用 fetch 装内容的站点在 file:// 下
  *   封面会是一张空白页。⚠️ 这里**允许静默退回 file://**：封面是给用户看的
  *   缩略图，没有 agent 会被误导，宁可退化也别让首页卡片开天窗。
+ * @param {{ launch?: () => Promise<import('playwright').Browser> }} [opts]
+ *   launch 缺省直接开 chromium（首页封面 / 橱窗：用户在等，不排在 agent 的截图后面）。
+ *   画布远景缩略图（lib/artifact-thumb.js，09-17）传进来的是过 gatedBrowser 的那一版。
  */
-export async function renderCoverShot(cover, pctx = {}) {
+export async function renderCoverShot(cover, pctx = {}, { launch = launchPerceptionBrowser } = {}) {
   // renderable 产物（docx）没有 DOM：封面 = 第一页页图，跟画布缩略图同一份
   // LibreOffice 缓存，别把二进制包喂给 chromium（那只会触发下载弹窗）
   if (!can(cover.kind, 'browsable')) {
@@ -106,7 +109,7 @@ export async function renderCoverShot(cover, pctx = {}) {
 
   let browser;
   try {
-    browser = await launchPerceptionBrowser();
+    browser = await launch();
     const opened = await openArtifactPage(browser, {
       projectId: pctx.projectId, workspaceRoot: pctx.workspaceRoot,
       absPath: cover.absPath, viewport, deviceScaleFactor: 1, timeout: 20_000,

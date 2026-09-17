@@ -19,7 +19,7 @@ const GRID_PT = z.object({ x: z.number().min(-2000).max(2000), y: z.number().min
 export const WORLD_PT = z.object({ x: z.number().min(-1e6).max(1e6), y: z.number().min(-1e6).max(1e6) });
 
 export const NODES = z.array(z.object({
-  id: LOCAL_ID.describe('Local id to reference from edges/shapes'),
+  id: LOCAL_ID.describe('Local id to reference from edges/shapes. ASCII only (letters/digits/_/-, e.g. "n1", "lu"); the Chinese name goes in text'),
   text: z.string().min(1).max(8000),
   format: z.enum(['plain', 'md']).optional().describe('Default: md when the text carries markdown marks, else plain'),
   size: z.enum(['sm', 'md', 'lg', 'xl']).optional(),
@@ -42,8 +42,9 @@ export const SHAPES = z.array(z.object({
   around: LOCAL_ID.optional().describe('rect/ellipse/circle/underline: wrap this node instead of at/w/h'),
   w: z.number().min(0).max(200).optional(),
   h: z.number().min(0).max(200).optional(),
-  to: GRID_PT.optional(),
-  toNode: LOCAL_ID.optional(),
+  // 09-17（问题库 iss_mu2mau3u_r76j）：原来两行都没描述，line 配 d 的写法被拒
+  to: GRID_PT.optional().describe('line/arrow: end point in grid units (the start is at). line/arrow need to OR toNode; d is only for kind:"path"'),
+  toNode: LOCAL_ID.optional().describe('line/arrow: end at the center of this local node instead of a point'),
   d: z.string().max(8000).optional().describe('path kind: SVG path, UPPERCASE absolute M/L/Q/C/Z only. Coordinates are in the SAME GRID UNITS as at/w/h (1 unit = 24px; decimals fine) — one coordinate space for the whole sketch. Hand-drawn wobble is applied for you; Q/C curves are how you draw anything smooth (a crescent moon, a wave, a sail)'),
   color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(),
   width: z.number().min(1).max(12).optional(),
@@ -87,7 +88,7 @@ export const WRITE_SCHEMA = {
   place: PLACE.optional(),
   near: z.string().max(300).optional()
     .describe('Canvas id or #tag this is ABOUT — draws an annotates line to it and, unless place says otherwise, lands beside it'),
-  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it)`),
+  reply_to: z.string().max(300).optional().describe(`Thread: path of a board note (${CHALK_DIR}/…md) to answer under (lands right below it; without width it takes that note's width)`),
   say: z.string().max(60).optional()
     .describe("Your words ON THE LINE this note draws (the near line, else the reply/chain line): why they connect, in one short sentence — '只拿了它的配色，字体没用' / '比左边省 30%，但读不了'. The line type is the grammar; this is the sentence. Sketches put words on edges[].label instead"),
   text: z.string().min(1).max(8000).optional()
@@ -99,7 +100,7 @@ export const WRITE_SCHEMA = {
   relation: z.enum(BINDING_TYPE_IDS).optional()
     .describe('Line type for the near line of a single note (default annotates; flow reads anchor→note)'),
   chain: z.boolean().optional()
-    .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights)'),
+    .describe('Single note: auto reply_to the latest board note of the same tag WRITTEN BY YOU (threads never cross authors — continuation rights). Without width it takes that note\'s width'),
   open_lane: z.string().max(300).optional()
     .describe("Open a NEW thread line named by tag and land this note at its head. Value: a canvas id/#tag to BRANCH from (draws a flow line from it, lands beside it), or 'fresh' for a brand-new topic (lands in the user's view). Requires tag; continue with {tag, chain:true}."),
   tag: z.string().regex(TAG_RE, TAG_RE_MESSAGE).optional()

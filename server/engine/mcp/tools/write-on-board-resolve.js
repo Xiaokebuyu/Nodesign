@@ -111,16 +111,8 @@ export async function resolveChalkSpot(env, args, body) {
     }
   }
 
-  const em = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
-  const longest = Math.max(...body.split('\n').map(em));
-  // 宽度三档回落（2026-08-28；09-05 档位改成词）：模型点名 > 用户调出来的偏好 > 按正文估。
-  // 中间那档是「模仿用户」：他拖宽过板书就说明这个版心读着舒服，下一拍照做，
-  // 别让他反复调同一件事。判据是前端拖手柄盖的 sized:'user' 章，模型盖不出。
-  const wUnits = capW(WIDTH_UNITS[args.width] || learnedChalkWidth(board)
-    || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
-  let box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
-
   let zone = '';
+  let inheritUnits = null;   // 接楼时被接那条的宽（格数），见下面宽度回落
   let anchorId = null; let parentId = null;
   let replyRect = null; let anchorRect = null;
   let b2 = board;   // 救援入座后换新板（新座要进压上判定）
@@ -153,6 +145,10 @@ export async function resolveChalkSpot(env, args, body) {
     }
     parentId = pid2; zone = layerOf(pid2, e, known);
     replyRect = { x: e.x, y: e.y, ...estimateSizeOn(board, pid2, e) };
+    // 只认板书、只认落盘的真宽：老条目没有 w 时 estimateSizeOn 给的是估算，拿估算当「上一条的宽」
+    // 没有依据；reply_to 指到图片之类别的东西时，那张卡的宽跟版心无关。夹到 8..60 格（同 chalk-size-pref）
+    inheritUnits = pid2.startsWith(`${CHALK_DIR}/`) && Number(e.w) > 0
+      ? Math.max(8, Math.min(60, Math.round(Number(e.w) / UNIT))) : null;
   }
   if (nearRaw) {
     const a = await resolveAnchor(nearRaw, board);
@@ -171,6 +167,18 @@ export async function resolveChalkSpot(env, args, body) {
   if (pl.anchor) { placeRect = pl.anchor.rect; placeId = pl.anchor.id; if (!parentId && !anchorId) zone = pl.anchor.zone; if (pl.anchor.board) b2 = pl.anchor.board; }
   else if (pl.view && args.place?.by === 'view') { placeRect = null; placeId = null; }
   if (pl.group) { groupRect = pl.group.rect; groupTag = pl.group.tag; if (!parentId && !placeRect) zone = pl.group.zone; }
+
+  const em = (l) => [...l].reduce((n, c) => n + (/[　-鿿＀-￯]/.test(c) ? 1 : 0.62), 0);
+  const longest = Math.max(...body.split('\n').map(em));
+  // 宽度回落（2026-08-28；09-05 档位改成词）：模型点名 > 接楼继承 > 用户调出来的偏好 > 按正文估。
+  // 「用户偏好」那档是模仿用户：他拖宽过板书就说明这个版心读着舒服，下一拍照做，
+  // 别让他反复调同一件事。判据是前端拖手柄盖的 sized:'user' 章，模型盖不出。
+  // 接楼继承（09-17，问题库 iss_mthb946a_ieyw）：chain / reply_to 落在上一条正下方，但宽度原来
+  // 照旧按正文估或按偏好取，600 宽的父卡下面接出 432 宽的子卡，一条线的版心前后不齐。
+  // 接楼时调用方没点名宽度，就沿用被接那条的宽；所以这一段要等 replyRect 解出来之后再算。
+  const wUnits = capW(WIDTH_UNITS[args.width] || inheritUnits || learnedChalkWidth(board)
+    || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
+  let box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
 
   const obstacles = obstaclesOf(b2, zone);
   const vpRect = vpRectFor(zone);
