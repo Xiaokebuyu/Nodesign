@@ -16,6 +16,9 @@
 import { Events } from '../events.js';
 import { recordIssue, signatureOf } from '../../../lib/issues-store.js';
 
+/** SDK / MCP 的入参校验失败（zod 在 handler 之前拒掉，工具体没跑） */
+const INPUT_VALIDATION_RE = /MCP error -32602|Input validation error|InputValidationError/;
+
 export function makePostToolUseFailureHandler({ ctx, projectId, sessionId }) {
   return async (input, _toolUseId, _options) => {
     const tool = input?.tool_name || 'unknown';
@@ -49,12 +52,30 @@ export function makePostToolUseFailureHandler({ ctx, projectId, sessionId }) {
     } catch { /* ignore */ }
 
     let advice;
-    if (tool === 'mcp__nodesign__screenshot_canvas') {
+    if (INPUT_VALIDATION_RE.test(error)) {
+      // 入参没过 schema 校验（09-17）：调用根本没执行。原来落进兜底那句「先重试 1 次」，
+      // 问题库里 MiniMax 把 referenceImages 包成 {item:[…]} 原样连发 7 次、放弃了参考图；
+      // generate_image 那支还会把它认成「prompt 问题（400）」教去改描述词。排在 batch 之前：整批没跑，不存在「前面几步已执行」。
       advice =
-        '截图失败。常见原因：\n'
+        `${tool} 的参数没通过校验，这次调用没有执行：${error.slice(0, 300)}\n`
+        + '按报错里的 path（哪个参数）和 expected（要什么类型 / 范围）改参数再调；**原样重发会得到同样的错误**。\n'
+        + '常见：数组参数直接写成数组（不要包进 {item: …}）；对象参数写成对象（不要写成 [x, y]）；数值落在上下限之内；枚举只用报错列出的值。';
+    } else if (tool === 'mcp__nodesign__screenshot_canvas') {
+      advice =
+        '截图失败。报错里写了原因的（路径不经预览通道提供 / 会话已被回收 / 选择器没匹配到）按报错做；否则常见原因：\n'
         + '  1. 产物文件还没创建 → 先 Write 创建首版\n'
-        + '  2. playwright spawn 慢 / 失败 → 换 Read 产物文件让用户看代码\n'
-        + '  3. fullPage 截图太大 → 换 fullPage:false 截视口';
+        + '  2. 页面迟迟不就绪 → 用 waitFor 等关键元素，或调大 settleMs\n'
+        + '  3. fullPage 截图太大 → 换 fullPage:false 截视口，或用 selector 只截要看的那块';
+    } else if (tool === 'Bash' && /E2BIG|exceed the OS exec argument limit/.test(error)) {
+      // 09-13 两次（问题库 iss_mu0bznk0_n2sj）：agent 传的命令 22KB / 26KB，沙盒包装后成了 155KB 的单个参数，
+      // 超过内核单参上限 128KB。引号与非 ASCII 字符越多放大越厉害，所以二十来 KB 的内联脚本就可能撞上。
+      advice =
+        '命令太长，沙盒包装之后超过了系统对单个参数的长度上限（内联脚本二十来 KB 就可能撞到）。\n'
+        + '把脚本内容用 Write 写成文件（放在工作区或 $TMPDIR），再用 Bash 执行那个文件；别再把长内容塞进命令行。';
+    } else if (tool === 'WebFetch') {
+      advice =
+        `WebFetch 没取到这个页面：${error.slice(0, 200)}\n`
+        + '多半是对方站点不可达或拒绝抓取，重试通常没用。换一个来源；需要看页面样子、要登录、或要点击翻页时再用 browser_navigate。';
     } else if (tool === 'Bash' && /apply-seccomp|unshare\(CLONE_NEWUSER\)/.test(error)) {
       // 沙盒启动自身的偶发（2026-08-15 实测约 1-2/14）：seccomp 那步的 unshare
       // 跟运行时起线程抢跑，EINVAL。跟命令本身、跟权限都没关系 —— **原样重跑

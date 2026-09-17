@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { updateCheckMessage } from './update-message.js';
+import { updateCheckMessage, isSuspendError } from './update-message.js';
 
 describe('updateCheckMessage', () => {
   it('有更新：说版本号和在后台下', () => {
@@ -12,5 +12,16 @@ describe('updateCheckMessage', () => {
   it('相等 / 没拿到结果：已是最新', () => {
     expect(updateCheckMessage({ isUpdateAvailable: false, updateInfo: { version: '0.1.2' } }, '0.1.2')).toBe('已经是最新版本（0.1.2）。');
     expect(updateCheckMessage(null, '0.1.2')).toBe('已经是最新版本（0.1.2）。');
+  });
+});
+
+describe('isSuspendError', () => {
+  it('认系统休眠打断的请求（Error 与字符串两种形状）', () => {
+    expect(isSuspendError(new Error('net::ERR_NETWORK_IO_SUSPENDED'))).toBe(true);
+    expect(isSuspendError('Error: net::ERR_NETWORK_IO_SUSPENDED\n    at SimpleURLLoaderWrapper')).toBe(true);
+  });
+  it('真正的网络故障不算', () => {
+    expect(isSuspendError(new Error('net::ERR_CONNECTION_RESET'))).toBe(false);
+    expect(isSuspendError(undefined)).toBe(false);
   });
 });

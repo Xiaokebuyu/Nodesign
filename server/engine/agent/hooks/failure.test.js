@@ -22,3 +22,32 @@ describe('沙盒启动偶发要点破', () => {
     expect(await h({ tool_name: 'Bash', error: 'x', is_interrupt: true })).toEqual({});
   });
 });
+
+describe('按错因分流（09-17）', () => {
+  const zod = 'MCP error -32602: Input validation error: Invalid arguments for tool generate_image: [ { "expected": "array", "code": "invalid_type", "path": [ "referenceImages" ] } ]';
+  it('⭐ 入参没过校验：说明没执行、别原样重发 —— 不能落进「先重试 1 次」', async () => {
+    const text = (await run('mcp__nodesign__generate_image', zod)).hookSpecificOutput.additionalContext;
+    expect(text).toMatch(/没有执行/);
+    expect(text).toMatch(/原样重发会得到同样的错误/);
+    expect(text).not.toMatch(/重试 1/);
+    expect(text).not.toMatch(/去掉否定描述/);   // generate_image 的「400 = prompt 问题」那支不该接住它
+  });
+  it('batch 的入参校验失败也走这支（整批没跑，不是「前面几步已执行」）', async () => {
+    const text = (await run('mcp__nodesign__artifact_batch', 'MCP error -32602: Input validation error: Invalid arguments for tool artifact_batch')).hookSpecificOutput.additionalContext;
+    expect(text).toMatch(/没有执行/);
+    expect(text).not.toMatch(/不要整批重跑/);
+  });
+  it('batch 中途失败仍走 batch 那支', async () => {
+    const text = (await run('mcp__nodesign__browser_batch', 'FAILED at step 2/4 (browser_read): 选择器没匹配到元素')).hookSpecificOutput.additionalContext;
+    expect(text).toMatch(/不要整批重跑/);
+  });
+  it('Bash E2BIG：教写成文件再执行', async () => {
+    const text = (await run('Bash', 'Could not start /bin/bash: the command line plus environment exceed the OS exec argument limit (E2BIG).')).hookSpecificOutput.additionalContext;
+    expect(text).toMatch(/Write 写成文件/);
+  });
+  it('WebFetch 取不到：换来源，不教重试', async () => {
+    const text = (await run('WebFetch', 'Command failed with no output')).hookSpecificOutput.additionalContext;
+    expect(text).toMatch(/换一个来源/);
+    expect(text).not.toMatch(/先重试/);
+  });
+});

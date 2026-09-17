@@ -23,12 +23,12 @@
  *    asar 是只读虚拟包，这几件事在里面全是坑。少一层压缩换掉一整类问题。
  */
 
-import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, screen, ipcMain, Notification } from 'electron';
+import { app, BrowserWindow, Menu, Tray, dialog, shell, nativeImage, screen, ipcMain, Notification, powerMonitor } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { updateCheckMessage } from './update-message.js';
+import { updateCheckMessage, isSuspendError } from './update-message.js';
 import { resolveWindowBounds, MIN_SIZE } from './window-state.js';
 import { exportDirFrom, uniqueTarget } from './export-target.js';
 
@@ -346,15 +346,20 @@ function useUpdateFeed(name) {
   try { updater.setFeedURL(UPDATE_FEEDS[name]); } catch (e) { log(`[updater] setFeedURL(${name}) 失败：${e?.message || e}`); }
   log(`[updater] 更新源 → ${name}`);
 }
-/** 镜像这一路失败 → 切 GitHub 再来一次；已经在 GitHub 上或本周期切过 → 不再切 */
+/** 镜像这一路失败 → 切 GitHub 再来一次；已经在 GitHub 上或本周期切过 → 不再切。休眠打断的不算镜像失败 */
 function fallbackFeedOr(e) {
-  if (updateFeed !== 'r2' || feedFellBack) return false;
+  if (updateFeed !== 'r2' || feedFellBack || isSuspendError(e)) return false;
   feedFellBack = true;
   log(`[updater] 镜像不通（${e?.message || e}），退回 GitHub 再查一次`);
   useUpdateFeed('github');
   return true;
 }
 let downloadedVersion = null;   // 已下好、等退出时装的那版（退出路径据此决定装不装、装完拉不拉起）
+let recheckOnResume = false;    // 检查或下载被系统休眠打断了：唤醒后重查一次（见 isSuspendError）
+function noteSuspended(e) {
+  recheckOnResume = true;
+  log(`[updater] 被系统休眠打断（${e?.message || e}），不切源、不上报，唤醒后重查`);
+}
 
 /**
  * 更新台账（09-08 深夜站主问「首次安装点了下次更新会不会把应用删了」）：
@@ -439,9 +444,17 @@ function setupUpdater() {
     updater.on('error', (e) => {
       log(`[updater] event error [${updateFeed}] ${e?.message || e}`);
       if (feedChecking) return;   // check 的失败：checkForUpdates 的 catch 负责退路和上报
+      if (isSuspendError(e)) { noteSuspended(e); return; }
       // 下载途中镜像断了也走同一条退路
       if (fallbackFeedOr(e)) { updater.checkForUpdates().catch((e2) => log(`[updater] 退回 GitHub 后仍失败：${e2?.message || e2}`)); return; }
       reportShellIssue('bug', `更新失败[${updateFeed}]：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e));
+    });
+
+    powerMonitor.on('resume', () => {
+      if (!recheckOnResume) return;
+      recheckOnResume = false;
+      // 刚唤醒时网卡常常还没连上，隔半分钟再查
+      setTimeout(() => { log('[updater] 唤醒后重查'); checkForUpdates({ silent: true }); }, 30_000).unref?.();
     });
 
     useUpdateFeed('r2');
@@ -475,6 +488,11 @@ function checkForUpdates({ silent }) {
     // 原来只在"版本号相等"时弹"已是最新"，服务器版本比本机旧那条路什么都不说。
     dialog.showMessageBox(win, { type: 'info', message: updateCheckMessage(r, app.getVersion()) });
   }).catch((e) => {
+    if (isSuspendError(e)) {
+      noteSuspended(e);
+      if (!silent) dialog.showMessageBox(win, { type: 'info', message: '检查更新被系统休眠打断，唤醒后会自动再查一次。' });
+      return;
+    }
     reportShellIssue('bug', `更新失败[${updateFeed}]：${String(e?.message || e).slice(0, 120)}`, String(e?.stack || e));
     if (!silent) dialog.showMessageBox(win, { type: 'error', message: `检查更新失败：${e.message}` });
   });

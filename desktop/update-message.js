@@ -11,3 +11,12 @@ export function updateCheckMessage(r, current) {
   if (remote && remote !== current) return `已经是最新版本（${current}）。\n\n已发布的最新版是 ${remote}，本机装的比它新（草稿包不算发布，更新器看不见）。`;
   return `已经是最新版本（${current}）。`;
 }
+
+/**
+ * 电脑休眠打断的网络请求（09-17）：Chromium 在系统挂起时把在飞请求全部以 ERR_NETWORK_IO_SUSPENDED 结束。
+ * 问题库里 0.1.43 一台机一晚两条「更新失败[github]：net::ERR_NETWORK_IO_SUSPENDED」—— 镜像那一路先因休眠失败，
+ * 退回 GitHub 又因休眠失败，再作为故障上报。这不是更新源的问题：不切源、不上报，唤醒后重查一次。
+ */
+export function isSuspendError(e) {
+  return /ERR_NETWORK_IO_SUSPENDED/.test(String(e?.message || e || ''));
+}
