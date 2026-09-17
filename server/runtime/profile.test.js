@@ -68,7 +68,10 @@ describe('runtime/profile', { timeout: 30_000 }, () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'nd-profile-'));
     const code = `import { authEnabled, getUserById, LOCAL_OWNER } from '../auth/users-store.js'; import { can } from '../auth/tier.js';
       console.log(JSON.stringify({ enabled: authEnabled(), owner: getUserById(LOCAL_OWNER.id), sub: can(getUserById(LOCAL_OWNER.id), 'subscription') }));`;
-    const r = probe({ NODESIGN_PROFILE: 'local', NODESIGN_DATA_DIR: dir, NODESIGN_AUTH_PASSWORD: 'would-enable-in-hosted' }, code);
+    // DB_PATH 要显式给（09-17）：probe 把 VITEST 从子进程 env 里删了，store.js 的测试库闸不成立，
+    // 而 users-store.js 先 import store.js 后 import platform.js —— profile.js 的 setDefault 来不及，
+    // 库当场落回**仓库里的 server/db/nodesign.db**。这条用例断言的是登录墙与身份，跟库在哪无关。
+    const r = probe({ NODESIGN_PROFILE: 'local', NODESIGN_DATA_DIR: dir, DB_PATH: path.join(dir, 'nodesign.db'), NODESIGN_AUTH_PASSWORD: 'would-enable-in-hosted' }, code);
     expect(r.status, r.stderr).toBe(0);
     const p = r.json();
     expect(p.enabled).toBe(false);
