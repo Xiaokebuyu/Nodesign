@@ -156,9 +156,11 @@ anyway after 12s and the caption says so. Only http/https and public hosts.`,
           proxy: { server: `http://127.0.0.1:${proxyPort}`, bypass: '' },
         }), { key: projectId });
         const rasterScale = detail === 'high' ? 1 : RASTER_SCALE;
-        const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: rasterScale, colorScheme: 'light' });
-        const guard = await attachSsrfGuard(ctx, undefined, { proxied: true });
-        const page = await ctx.newPage();
+        // 浏览器 context 不能叫 ctx（09-17）：原来遮住了工具依赖里的 agent ctx，
+        // 下面的 run.screenshot_taken 从上线起一次都没发到前端
+        const browserCtx = await browser.newContext({ viewport: vp, deviceScaleFactor: rasterScale, colorScheme: 'light' });
+        const guard = await attachSsrfGuard(browserCtx, undefined, { proxied: true });
+        const page = await browserCtx.newPage();
         await guard.armPage(page);   // ⭐ 必须 await 完才导航（竞态是攻出来的）
         const diag = attachPageDiagnostics(page);
 
