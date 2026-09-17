@@ -48,7 +48,8 @@ const B_SECRET = 'B 项目的私密需求';
 
 const toolA = makeReadUserMessagesTool({ projectId: PA, sessionId: SID_A2 });
 
-describe('read_user_messages —— ⛔ 项目限定', () => {
+// 这份测试要做多次 git 提交 / 文件读写，Windows CI 上默认 5 秒不够（09-17 超时过），与 runtime/profile 测试同一做法
+describe('read_user_messages —— ⛔ 项目限定', { timeout: 30_000 }, () => {
   it('默认列表只有 A 的消息', async () => {
     const { text } = await call(toolA);
     expect(text).not.toContain(B_SECRET);
@@ -95,7 +96,7 @@ describe('read_user_messages —— ⛔ 项目限定', () => {
   });
 });
 
-describe('read_user_messages —— 输出形状', () => {
+describe('read_user_messages —— 输出形状', { timeout: 30_000 }, () => {
   it('旧→新，每条带北京时间、会话、结局、runId；注入块剥掉，附件只留件数', async () => {
     const { text } = await call(toolA);
     const order = [a1, a2, a3, a4].map((id) => text.indexOf(id));
@@ -143,7 +144,7 @@ describe('read_user_messages —— 输出形状', () => {
   });
 });
 
-describe('read_user_messages —— 过滤参数', () => {
+describe('read_user_messages —— 过滤参数', { timeout: 30_000 }, () => {
   it('sessionId 只看那一次对话', async () => {
     const { text } = await call(toolA, { sessionId: SID_A1 });
     expect(text).toContain(a1);
@@ -189,7 +190,7 @@ describe('read_user_messages —— 过滤参数', () => {
   });
 });
 
-describe('read_user_messages —— 装配', () => {
+describe('read_user_messages —— 装配', { timeout: 30_000 }, () => {
   it('两种模式都注册；readOnlyHint、检索关键词挂上；不常驻', () => {
     for (const projectMode of ['design', 'rp']) {
       const server = createNodesignMcpServer({ workspaceRoot: tmp, sharedRoot: tmp, projectId: PA, sessionId: SID_A2, projectMode });

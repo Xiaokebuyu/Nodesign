@@ -42,7 +42,8 @@ async function trashedProject(name) {
 
 afterEach(() => { process.env.NODESIGN_ROWLESS_PROJECTS = 'allow'; });
 
-describe('存在性闸：已删除的项目', () => {
+// 这份测试要做多次 git 提交 / 文件读写，Windows CI 上默认 5 秒不够（09-17 超时过），与 runtime/profile 测试同一做法
+describe('存在性闸：已删除的项目', { timeout: 30_000 }, () => {
   let p;
   beforeAll(async () => { p = await trashedProject('已删项目'); });
 
@@ -95,7 +96,7 @@ describe('存在性闸：已删除的项目', () => {
   });
 });
 
-describe('没有项目行的 pid', () => {
+describe('没有项目行的 pid', { timeout: 30_000 }, () => {
   it('⭐ 生产口径（不设放行变量）：无行 = 已删除，ensure 拒绝、不建目录', async () => {
     delete process.env.NODESIGN_ROWLESS_PROJECTS;
     const pid = 'proj_norow_strict1';
@@ -118,7 +119,7 @@ describe('没有项目行的 pid', () => {
   });
 });
 
-describe('默认查询把回收站里的项目当不存在', () => {
+describe('默认查询把回收站里的项目当不存在', { timeout: 30_000 }, () => {
   it('getProject / listProjects / countProjects / folderPathOf / getProjectByFolder', async () => {
     const folder = path.join(tmp, 'user-folder');
     const p = store.createProject({ name: '文件夹项目', ownerId: 'u_list', folderPath: folder });
@@ -140,7 +141,7 @@ describe('默认查询把回收站里的项目当不存在', () => {
   });
 });
 
-describe('项目总线：删除时停掉入座器与对账的计时器', () => {
+describe('项目总线：删除时停掉入座器与对账的计时器', { timeout: 30_000 }, () => {
   it('⭐ disposeProjectBus 之后，攒着的 file_changed 批次不再落板', async () => {
     const p = store.createProject({ name: '总线项目', ownerId: 'u_bus' });
     await ensureProjectWorkspace(p.id);
@@ -172,7 +173,7 @@ describe('项目总线：删除时停掉入座器与对账的计时器', () => {
   });
 });
 
-describe('等会话真正退出', () => {
+describe('等会话真正退出', { timeout: 30_000 }, () => {
   const SID = '99999999-2222-3333-4444-555555555555';
   const SID2 = '99999999-2222-3333-4444-666666666666';
 

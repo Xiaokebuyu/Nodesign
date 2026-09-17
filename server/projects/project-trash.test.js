@@ -34,7 +34,8 @@ async function softDelete(p, at) {
   return moved;
 }
 
-describe('保留期与目录名', () => {
+// 这份测试要做多次 git 提交 / 文件读写，Windows CI 上默认 5 秒不够（09-17 超时过），与 runtime/profile 测试同一做法
+describe('保留期与目录名', { timeout: 30_000 }, () => {
   it('NODESIGN_TRASH_DAYS：默认 7，非法回落默认，上限 365，0 允许', () => {
     expect(trash.trashRetentionDays({})).toBe(7);
     expect(trash.trashRetentionDays({ NODESIGN_TRASH_DAYS: '30' })).toBe(30);
@@ -56,7 +57,7 @@ describe('保留期与目录名', () => {
   });
 });
 
-describe('挪进回收站 / 挪回来', () => {
+describe('挪进回收站 / 挪回来', { timeout: 30_000 }, () => {
   it('⭐ 整个项目目录进 .trash/，原路径是占位文件；恢复后内容一字不差、占位文件消失', async () => {
     const p = await liveProject('挪来挪去');
     const moved = await softDelete(p);
@@ -130,7 +131,7 @@ describe('挪进回收站 / 挪回来', () => {
   });
 });
 
-describe('恢复 / 彻底删除（库 + 磁盘 + 审计）', () => {
+describe('恢复 / 彻底删除（库 + 磁盘 + 审计）', { timeout: 30_000 }, () => {
   it('⭐ 恢复：项目回到默认查询、工作区归位、记一条 restore', async () => {
     const p = await liveProject('要恢复的');
     await softDelete(p);
@@ -177,7 +178,7 @@ describe('恢复 / 彻底删除（库 + 磁盘 + 审计）', () => {
   });
 });
 
-describe('到期清理', () => {
+describe('到期清理', { timeout: 30_000 }, () => {
   it('⭐ 过了保留期的清掉、没过的留着；记 expired；无主的过期回收目录也清', async () => {
     const DAY = 86_400_000;
     const now = Date.parse('2026-10-01T00:00:00.000Z');
@@ -223,7 +224,7 @@ describe('到期清理', () => {
   });
 });
 
-describe('文件夹项目（桌面版）', () => {
+describe('文件夹项目（桌面版）', { timeout: 30_000 }, () => {
   it('⭐ 删进回收站后在同一路径再打开 = 恢复原项目，不撞唯一索引、不换 id', async () => {
     const folder = path.join(tmp, 'my-repo');
     await fs.mkdir(folder, { recursive: true });

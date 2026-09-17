@@ -85,7 +85,8 @@ beforeAll(() => {
   process.env.GIT_COMMITTER_NAME = 't'; process.env.GIT_COMMITTER_EMAIL = 't@t';
 });
 
-describe('commitWorkspace orHead', () => {
+// 这份测试要做多次 git 提交 / 文件读写，Windows CI 上默认 5 秒不够（09-17 超时过），与 runtime/profile 测试同一做法
+describe('commitWorkspace orHead', { timeout: 30_000 }, () => {
   it('⭐ 没改动：不落空提交，回当时的 HEAD；不带 orHead 仍回 null', async () => {
     const { pid, root } = await managedProject();
     const head = git(root, 'rev-parse', 'HEAD');
@@ -96,7 +97,7 @@ describe('commitWorkspace orHead', () => {
   });
 });
 
-describe('回退路由：前后各提交一次', () => {
+describe('回退路由：前后各提交一次', { timeout: 30_000 }, () => {
   it('⭐ 历史会话（临时 query）：回合里没提交的改动进了「回退前」，回退结果进了「回退后」，响应带 preRewindCommit', async () => {
     const { pid, root } = await managedProject();
     const sid = newSid();
@@ -204,7 +205,7 @@ describe('回退路由：前后各提交一次', () => {
   });
 });
 
-describe('仓库道：不往用户仓库里提交', () => {
+describe('仓库道：不往用户仓库里提交', { timeout: 30_000 }, () => {
   it('⭐ 用户仓库的 HEAD 与提交数不变，回退前的工作树拍成快照树；桌面照常两笔', async () => {
     const dir = path.join(tmp, 'repo-git');
     fs.mkdirSync(path.join(dir, 'src'), { recursive: true });

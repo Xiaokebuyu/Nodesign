@@ -57,7 +57,8 @@ async function makeProject(owner, name) {
   return p;
 }
 
-describe('DELETE /api/projects/:pid → 回收站', () => {
+// 这份测试要做多次 git 提交 / 文件读写，Windows CI 上默认 5 秒不够（09-17 超时过），与 runtime/profile 测试同一做法
+describe('DELETE /api/projects/:pid → 回收站', { timeout: 30_000 }, () => {
   it('⭐ 删除：列表里没了、单读 404、进了最近删除；目录在 .trash/；runs 留着；审计记下操作者与大小', async () => {
     const p = await makeProject('alice', '要删的项目');
     db.prepare("INSERT INTO runs (id, skill_id, brief, status, project_id, user_id) VALUES ('run_projdel_1', 's', 'b', 'succeeded', ?, 'u_alice')").run(p.id);
@@ -154,7 +155,7 @@ describe('DELETE /api/projects/:pid → 回收站', () => {
   });
 });
 
-describe('softDeleteProject：先关会话、等收尾、再挪目录', () => {
+describe('softDeleteProject：先关会话、等收尾、再挪目录', { timeout: 30_000 }, () => {
   it('⭐ 在跑的回合：会话被关掉（09-05 那行从没生效），收尾写的文件跟着进回收站，之后的写入被拒', async () => {
     const p = await makeProject('alice', '有回合在跑');
     const SID = 'abcdefab-2222-3333-4444-555555555555';
