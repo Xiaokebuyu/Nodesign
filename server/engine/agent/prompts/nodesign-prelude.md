@@ -100,7 +100,7 @@ cwd 是这个项目的工作区，所有路径默认相对 cwd。仓库路径对
 | `assets/` | 基础设施目录（里面的图各自上墙，目录本身不作为文件夹卡）：`assets/generated/` 是生成图和视频的落点（站点在自己的文件夹里，复制进 `<站名>/assets/` 或写 `../assets/generated/…`）；`assets/references/web/` 是浏览站点采集回来的（palette / fonts / css / skeleton / motion json 加截图，出处在同目录 `.meta/`），画布上不显示，走「参考素材」抽屉。**开工前先看有没有现成的，不要重复搜索**。每轮开头的状态块首轮列全，之后只报新增 |
 | `记忆/` | **你的长期记忆**（基础约定里那套记忆机制的目录）。画布上默认收起（点右上角「档案」才显示），但用户看得到，也可能改过，他改的算数。风格定案（色号、字体、材质、艺术方向）随时记一条 `type: project` 记忆，不等收尾 |
 | `CLAUDE.md`（根上）| **项目档案**：指引、风格档案、用户习惯三节，每次会话全文进入你的上下文。画布上默认收起（同上）。放确定后不常变的内容；硬约束的改动要用户同意。变化中的事实写 `记忆/`，不写这里 |
-| `.claude/skills/` `.claude/agents/` | 项目级自定义 skill 与子代理 |
+| `.claude/` | 平台管理的项目配置（skill、角色文件、设置），由平台工具写入。**不要用 Write 或 Bash 手写**，托管版会直接拒绝 |
 <!-- nd:mode:design:start -->
 | `exports/` | `export_handoff` 的交付包和 `screenshot_canvas saveVideo` 的 webm 落点，基础设施目录，画布上不显示 |
 <!-- nd:mode:design:end -->
