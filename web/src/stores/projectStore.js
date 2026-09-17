@@ -8,7 +8,8 @@
  * - getProject(id)              本地查（同步，前提：已 hydrate）
  * - createProject(...)          POST /api/projects
  * - updateProject(id, patch)    PATCH /api/projects/:id
- * - deleteProject(id)           DELETE /api/projects/:id
+ * - deleteProject(id)           DELETE /api/projects/:id（09-17 起进回收站，返回保留期）
+ * - restoreProject(id)          从回收站恢复，放回列表
  * - duplicateProject(id)        简版：新建同名+副本（P0 不深拷贝 workspace）
  * - applyRunEvent(pid, evt)     WS run.* 事件 → 本地 status patch
  *
@@ -19,12 +20,15 @@
 
 import { create } from 'zustand';
 import { Projects } from '../lib/api.js';
+import { Trash } from '../lib/api-trash.js';
 
 export const useProjectStore = create((set, get) => ({
   projects: [],
   hydrated: false,
   hydrating: false,
   error: null,
+  /** 回收站保留天数（09-17）：服务端 NODESIGN_TRASH_DAYS，随列表带回；删除确认框按它写 */
+  trashDays: 7,
 
   // V2 持久化 context 状态（用户反馈："不要搞的动不动就丢失信息"）：
   //   - 老方案：ProjectWorkspace 用 useState — mount/unmount 重置；session 切换 reset；
@@ -91,9 +95,12 @@ export const useProjectStore = create((set, get) => ({
     if (get().hydrating) return get().projects;
     set({ hydrating: true });
     try {
-      const { projects } = await Projects.list({ kind });
+      const { projects, trashRetentionDays } = await Projects.list({ kind });
       const enriched = projects.map(enrich);
-      set({ projects: enriched, hydrated: true, hydrating: false, error: null });
+      set({
+        projects: enriched, hydrated: true, hydrating: false, error: null,
+        ...(Number.isFinite(trashRetentionDays) ? { trashDays: trashRetentionDays } : {}),
+      });
       return enriched;
     } catch (err) {
       set({ hydrating: false, error: err.message });
@@ -163,9 +170,27 @@ export const useProjectStore = create((set, get) => ({
     return get().updateProject(id, { name, description, kind: 'project' });
   },
 
+  /** 删进回收站。返回服务端的 { deletedAt, purgeAfter, retentionDays, warning } */
   deleteProject: async (id) => {
-    await Projects.remove(id);
-    set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
+    const r = await Projects.remove(id);
+    set((s) => ({
+      projects: s.projects.filter((p) => p.id !== id),
+      ...(Number.isFinite(r?.retentionDays) ? { trashDays: r.retentionDays } : {}),
+    }));
+    return r;
+  },
+
+  /** 从回收站恢复（09-17）。标准项目按 updatedAt 放回原来的位置（删除不改 updatedAt） */
+  restoreProject: async (id) => {
+    const { project } = await Trash.restore(id);
+    const e = enrich(project);
+    set((s) => {
+      const rest = s.projects.filter((p) => p.id !== id);
+      if (e.kind !== 'project') return { projects: rest };
+      const at = rest.findIndex((p) => String(p.updatedAt || '') < String(e.updatedAt || ''));
+      return { projects: at < 0 ? [...rest, e] : [...rest.slice(0, at), e, ...rest.slice(at)] };
+    });
+    return e;
   },
 
   /**

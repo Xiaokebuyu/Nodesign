@@ -16,8 +16,8 @@
  * `<pid>/.browser/`，跟 chromium 的 profile 同级、在 `shared/` **外面**。
  * 理由跟 profile 一样（registry.js 里核过）：`shared/` 是 agent 的 cwd 也是
  * artifact-file 的服务根，放进去等于让 agent 能 Read 自己的浏览历史、
- * 还会被当文件服出去、还进 per-project git。删项目时 `<pid>/` 整个删掉，
- * 这里跟着走，不用另写清理。
+ * 还会被当文件服出去、还进 per-project git。删项目时 `<pid>/` 整个挪进回收站
+ * （09-17 起，到期真删），这里跟着走，不用另写清理。
  *
  * ## 两份东西，两种性质
  *
@@ -35,8 +35,11 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { getProjectWorkspace } from '../../projects/workspace.js';
+import { assertProjectLive } from '../../projects/project-gone.js';
 
 const dirOf = (projectId) => path.join(getProjectWorkspace(projectId), '.browser');
+/** 写入口用（09-17）：已删除的项目不再写 .browser/ —— mkdir 会把 `<pid>/` 建回来。两个调用点都在 try 里，抛了就是不写 */
+const liveDirOf = (projectId) => { assertProjectLive(projectId); return dirOf(projectId); };
 const STATE_FILE = 'state.json';
 const FRAME_FILE = 'last.webp';
 
@@ -55,7 +58,7 @@ export async function recordVisit(projectId, page) {
     const url = page.url();
     if (!/^https?:/.test(url)) return;      // about:blank / chrome-error 不值得记
     const title = await page.title().catch(() => '');
-    const dir = dirOf(projectId);
+    const dir = liveDirOf(projectId);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, STATE_FILE), `${JSON.stringify({
       url, title: title || null, at: new Date().toISOString(),
@@ -86,7 +89,7 @@ export async function saveFrame(projectId, buf) {
     const { default: sharp } = await import('sharp');
     const out = await sharp(buf).resize({ width: 1024, withoutEnlargement: true })
       .webp({ quality: 72 }).toBuffer();
-    const dir = dirOf(projectId);
+    const dir = liveDirOf(projectId);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, FRAME_FILE), out);
     return out.length;

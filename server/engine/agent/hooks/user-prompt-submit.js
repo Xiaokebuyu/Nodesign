@@ -45,6 +45,7 @@ import {
   KIND_DECK, KIND_SITE, ENTRY_FILE,
 } from '../../../lib/artifact-target.js';
 import { getTurnMemory, setTurnMemory, fingerprint, diffItems } from './turn-state-memory.js';
+import { takeRewindNote, renderRewindNote } from '../../../projects/rewind-note.js';
 
 /**
  * soffice 的 `-env:UserInstallation` 要的是**真的 file URL**（三斜杠 + 正斜杠）。09-08：Windows 上写成
@@ -381,8 +382,12 @@ export function makeUserPromptSubmitHandler({ ctx: _ctx, workspaceRoot, sessionI
       if (!workspaceRoot) return {};
       const sections = await collectSections({ workspaceRoot, sessionId, projectId });
       const prev = getTurnMemory(sessionId)?.sections || null;
-      const { text, next } = renderTurnState(sections, prev);
+      const { text: stateText, next } = renderTurnState(sections, prev);
       setTurnMemory(sessionId, next);
+      // 回退记录（09-17，iss_mtxwluiz_welc）：「回退前的版本在哪」只说一次，取出即删。
+      // 不进 sections —— 那边按指纹报变化，一次性的事下一轮会变成「已不存在：回退」的噪声
+      const rewind = renderRewindNote(await takeRewindNote(workspaceRoot, sessionId).catch(() => []));
+      const text = [stateText, rewind].filter(Boolean).join('\n\n');
       if (!text) return {};
       // 不 emit 业务事件 —— additionalContext 注入是私域提示，不需要前端展示
       return { hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: text } };

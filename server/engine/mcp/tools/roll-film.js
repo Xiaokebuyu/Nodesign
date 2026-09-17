@@ -18,6 +18,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { Events } from '../../agent/events.js';
 import { getProject } from '../../../projects/store.js';
+import { projectGoneMessage } from '../../../projects/project-gone.js';
 import { getUserById } from '../../../auth/users-store.js';
 import { can, localGenApproved, DENIAL } from '../../../auth/tier.js';
 import { boxConfig, runBox, sshArgs, scpArgs, localBoxEnabled, BOX_OFF_MSG } from './h3box-ssh.js';
@@ -100,7 +101,7 @@ export async function rollFilm(
     ({ content: [{ type: 'text', text }], ...(isError ? { isError: true } : {}) });
   try {
     const project = getProject(projectId);
-    if (!project) return asText('错误：项目不存在', true);
+    if (!project) return asText(projectGoneMessage(projectId), true);   // 已删除 / 不存在：让 agent 停手（09-17）
     const owner = project.ownerId ? getUserById(project.ownerId) : null;
     if (!owner) return asText('错误：找不到项目归属用户', true);
     // 档位闸 + 逐人批准（auth/tier.js）：basic 档不开本地产线；pro 档还要被站主批过

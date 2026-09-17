@@ -16,6 +16,7 @@ import { closeQuerySession, hasActiveQuerySession, getQuerySession } from '../en
 import { getSessionWorkspace, validateSessionId } from '../projects/workspace.js';
 import { jsonlExistsForSession, truncateJsonlAtMessage } from '../projects/session-jsonl.js';
 import { AsyncQueue } from '../lib/async-queue.js';
+import { saveBeforeRewind, saveAfterRewind } from '../projects/rewind-snapshot.js';
 import { getProjectBus } from '../ws/broker.js';
 import { platform } from '../runtime/platform.js';
 import { agentInheritedEnv } from '../runtime/agent-env.js';
@@ -54,8 +55,15 @@ export function mountRewindRoute(router) {
   //
   // 历史 session 也能 undo —— 之前返 410 是应用层偷懒，SDK 完全支持 resume + rewindFiles。
   //
-  // body: { userMessageId, files?=true, truncateConversation?=true }
-  // 200 { canRewind, filesChanged?, insertions?, deletions?, conversationTruncated, removedEntries }
+  // 回退前后各提交一次（09-17，问题库 iss_mtxwluiz_welc）：只在动文件的两条路径（1、2）做，见
+  // projects/rewind-snapshot.js。路径 0 不碰文件，没有要保的东西。
+  //
+  // body: { userMessageId, files?=true, truncateConversation?=true, noteSessionId? }
+  //   noteSessionId：谁接着说话（分叉时是新会话），「回退前的版本在哪」记给它，缺省 = 本会话
+  // 200 { canRewind, filesChanged?, insertions?, deletions?, conversationTruncated, removedEntries,
+  //       preRewindCommit?, preRewindTree?, preRewindNote? }
+  //   preRewindCommit：回退前那笔提交（没变化时是当时的 HEAD）；preRewindTree：仓库道用户仓库的快照树；
+  //   preRewindNote：哪部分没保存下来、为什么
   // 400 两个开关都 false（没让它做任何事）
   // 404 { code: 'JSONL_MISSING' }   jsonl 不存在（session 删了 / 部分创建）
   // 409 { code: 'REWIND_BUSY' }     同 sid 已有 rewind 进行中
@@ -77,6 +85,8 @@ export function mountRewindRoute(router) {
       }
 
       const { pid, sid } = req.params;
+      // 分叉带产物回退：记给新会话。形状不对就退回本会话，不因为这一项拒掉回退
+      const noteSid = (() => { try { validateSessionId(req.body?.noteSessionId); return req.body.noteSessionId; } catch { return sid; } })();
 
       // ── 路径 0：只回对话 ──
       // 不碰 SDK 就够了：关掉活口 query（下条消息从截断后的 jsonl resume，记忆才真的
@@ -110,6 +120,8 @@ export function mountRewindRoute(router) {
       // 路径 1：active query 在跑 —— 直接用现有 query
       const rec = getQuerySession(sid);
       if (rec?.query && !rec.abortController.signal.aborted) {
+        // 回合可能还在飞：这一轮没提交的改动此刻只在工作树里，先落一笔再让 SDK 改
+        const saved = await saveBeforeRewind(pid, sid, userMessageId);
         const result = await rec.query.rewindFiles(userMessageId);
         // 对话层同步回滚（2026-08-08「做完整」）：rewindFiles 只回文件。显示与模型
         // 记忆读的都是这份 jsonl —— 关掉活口 query（下条消息从截断后的 jsonl resume，
@@ -122,7 +134,8 @@ export function mountRewindRoute(router) {
           await new Promise((r) => setTimeout(r, 800));
           removed = await truncateJsonlAtMessage(getSessionWorkspace(pid, sid), sid, userMessageId);
         }
-        const payload = { ...result, conversationTruncated: removed != null, removedEntries: removed ?? 0 };
+        await saveAfterRewind(pid, sid, userMessageId, { saved, result, noteSessionId: noteSid });
+        const payload = { ...result, ...saved, conversationTruncated: removed != null, removedEntries: removed ?? 0 };
         emitRewindFiles(pid, sid, payload);
         return res.json(payload);
       }
@@ -152,6 +165,7 @@ export function mountRewindRoute(router) {
       let tempQuery = null;
       let drain = null;
       try {
+        const saved = await saveBeforeRewind(pid, sid, userMessageId);
         tempQuery = query({
           prompt: inputQueue,
           options: {
@@ -186,7 +200,8 @@ export function mountRewindRoute(router) {
           await new Promise((r) => setTimeout(r, 300));
           removed = await truncateJsonlAtMessage(sessionRoot, sid, userMessageId);
         }
-        const payload = { ...result, conversationTruncated: removed != null, removedEntries: removed ?? 0 };
+        await saveAfterRewind(pid, sid, userMessageId, { saved, result, noteSessionId: noteSid });
+        const payload = { ...result, ...saved, conversationTruncated: removed != null, removedEntries: removed ?? 0 };
         emitRewindFiles(pid, sid, payload);
         res.json(payload);
       } catch (err) {

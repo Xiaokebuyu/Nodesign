@@ -525,10 +525,10 @@ export const Sessions = {
    *   truncateConversation 对话回退（jsonl 截到该消息之前，模型记忆跟着回退）
    * 只回对话（files:false）不需要起 SDK 临时 query，瞬间完成。
    * ⚠️ 产物只有一份：files:true 影响这个项目的所有会话。
-   * 200 → { canRewind, filesChanged?, insertions?, deletions?, conversationTruncated, removedEntries }
+   * 200 → { canRewind, filesChanged?, …, conversationTruncated, preRewindCommit?, preRewindTree?, preRewindNote? }（09-17：回退前那笔提交 / 仓库道快照树 / 没保存的原因；noteSessionId = 这件事记给哪条会话，分叉时传新分支）
    */
-  rewind: (pid, sid, userMessageId, { files = true, truncateConversation = true } = {}) =>
-    jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/rewind`, { userMessageId, files, truncateConversation }),
+  rewind: (pid, sid, userMessageId, { files = true, truncateConversation = true, noteSessionId } = {}) =>
+    jsonRequest('POST', `/api/projects/${pid}/sessions/${sid}/rewind`, { userMessageId, files, truncateConversation, ...(noteSessionId ? { noteSessionId } : {}) }),
   /**
    * 跨项目最近 session 聚合（GET /api/sessions/recent）
    * @param {object} opts

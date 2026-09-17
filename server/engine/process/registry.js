@@ -21,6 +21,7 @@ import crypto from 'node:crypto';
 import { getWorkspaceRoot, getAgentCwd } from '../../projects/workspace.js';
 import { getProjectBus } from '../../ws/broker.js';
 import { agentInheritedEnv } from '../../runtime/agent-env.js';
+import { assertProjectLive } from '../../projects/project-gone.js';
 
 export const MAX_PER_PROJECT = 6;
 const RING_LINES = 400;
@@ -129,6 +130,7 @@ function attachStream(e, stream) {
  */
 export async function startProcess({ projectId, command, name = null, cwd = null, by = 'agent', env = {}, waitMs = 8000 }) {
   if (!projectId) throw procError('NO_PROJECT', 'No project bound.');
+  assertProjectLive(projectId);   // 已删除的项目不许再起进程（09-17，日志目录会把工作区建回来）
   if (typeof command !== 'string' || !command.trim()) throw procError('COMMAND_REQUIRED', 'command 不能为空');
   const b = bucket(projectId);
   const running = [...b.values()].filter((x) => x.status === 'running').length;
@@ -265,6 +267,25 @@ export async function removeProcess(projectId, id) {
   const dir = dirFor(projectId);
   await Promise.all([`${id}.json`, `${id}.log`].map((f) => fs.rm(path.join(dir, f), { force: true })));
   return true;
+}
+
+/**
+ * 项目被删除时停掉它的全部进程（09-17，iss_mtjex6wv_5xhn）：dev server 的 cwd 和日志句柄都在工作区里，
+ * 不停的话挪目录时 Windows 上会被占用挡住，Linux 上它继续往回收站里的日志写。登记一并摘掉。
+ * @returns {Promise<number>} 停了几个
+ */
+export async function stopProcessesForProject(projectId, reason = 'project-deleted') {
+  const b = registry.get(projectId);
+  if (!b) return 0;
+  const jobs = [];
+  for (const e of b.values()) {
+    if (e.status !== 'running') continue;
+    pushLine(e, `[nodesign] ${reason}: stopping`);
+    jobs.push(stopProcess(projectId, e.id, { timeoutMs: 2500 }).catch(() => {}));
+  }
+  await Promise.all(jobs);
+  registry.delete(projectId);
+  return jobs.length;
 }
 
 /** 服务端退出时全杀（不做跨会话存活） */

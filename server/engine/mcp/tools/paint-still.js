@@ -29,6 +29,7 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { Events } from '../../agent/events.js';
 import { getProject } from '../../../projects/store.js';
+import { projectGoneMessage } from '../../../projects/project-gone.js';
 import { getUserById } from '../../../auth/users-store.js';
 import { can, localGenApproved, DENIAL } from '../../../auth/tier.js';
 import {
@@ -184,7 +185,7 @@ export async function paintStills(
       return asText('本地生图服务器未配置（未启动或未设置 NODESIGN_H3BOX_SSH）。转告用户，改用 generate_image。', true);
     }
     const project = getProject(projectId);
-    if (!project) return asText('错误：项目不存在', true);
+    if (!project) return asText(projectGoneMessage(projectId), true);   // 已删除 / 不存在：让 agent 停手（09-17）
     const owner = project.ownerId ? getUserById(project.ownerId) : null;
     // 档位闸 + 逐人批准（auth/tier.js）：basic 档不开任何生图；pro 档还要被站主批过本地产线
     if (!can(owner, 'localGen')) return asText(DENIAL.localGenTier, true);

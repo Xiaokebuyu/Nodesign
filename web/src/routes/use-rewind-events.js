@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { Sessions } from '../lib/api.js';
 import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
+import { COMPOSER_RESTORE_EVENT } from '../lib/composer-draft.js';
+import { newId } from '../lib/helpers.js';
 
 /**
  * 「回到某条消息之前」落地后，工作台这边要跟着动的两件事（2026-08-30 从
@@ -18,6 +20,9 @@ import { sessionMessagesToDisplay } from '../lib/session-to-messages.js';
  *                            先行，WS 重连自动重 hydrate。messages 先清空，免得新
  *                            会话的历史到之前旧那条还挂在屏幕上（两条前半段一模
  *                            一样，光看内容看不出已经换了线）。
+ *   nd:composer-restore      原话放回输入框时（09-17，iss_mtxylgs4_xmmz），那条消息的附件回托盘。
+ *                            文字归 ChatComposer 接（lib/composer-draft.js）；托盘是工作台的 state，
+ *                            所以附件在这里接。按 path 去重，已在托盘里的不重复加。
  */
 export function useRewindEvents({
   projectId,
@@ -26,6 +31,7 @@ export function useRewindEvents({
   sessionIdRef,
   setCurrentSessionId,
   updateProject,
+  setInputs = null,
 }) {
   useEffect(() => {
     const onRewound = (e) => {
@@ -50,4 +56,19 @@ export function useRewindEvents({
     window.addEventListener('nd-session-forked', onForked);
     return () => window.removeEventListener('nd-session-forked', onForked);
   }, [projectId, setMessages, sessionIdRef, setCurrentSessionId, updateProject]);
+
+  useEffect(() => {
+    if (!setInputs) return undefined;
+    const onRestore = (e) => {
+      const list = (Array.isArray(e.detail?.attachments) ? e.detail.attachments : []).filter((a) => a && a.path);
+      if (!list.length) return;
+      setInputs((arr) => {
+        const have = new Set(arr.map((it) => it.path).filter(Boolean));
+        const add = list.filter((a) => !have.has(a.path)).map((a) => ({ ...a, type: 'asset', id: newId('asset') }));
+        return add.length ? [...arr, ...add] : arr;
+      });
+    };
+    window.addEventListener(COMPOSER_RESTORE_EVENT, onRestore);
+    return () => window.removeEventListener(COMPOSER_RESTORE_EVENT, onRestore);
+  }, [setInputs]);
 }

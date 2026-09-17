@@ -12,7 +12,8 @@
  *
  * 同时给 runs 表加 project_id 列（ALTER 幂等），追溯 run 归属哪个 project。
  *
- * project 删除时由调用层负责级联删 workspace 目录 + 关联 runs。
+ * project 删除（09-17 起）= 软删除：立 deleted_at、工作区进回收站，runs 保留；到期才删这一行。
+ * 默认查询（getProject / listProjects / countProjects / getProjectByFolder / folderPathOf）不返回已删除的行。
  */
 
 import db from '../engine/runs/store.js';
@@ -117,6 +118,21 @@ if (!projectsColNames.has('is_sample')) {
   console.log('[projects/store] projects.is_sample column added');
 }
 
+// 软删除（09-17，问题库 iss_mtjex6wv_5xhn）：09-02 用户在工作台删了项目，删除不可撤销、目录还被
+// 迟到的写入重建成空壳。删除改成两步：先立 deleted_at（从这一刻起默认查询视其为不存在），工作区挪进
+// 数据根下的 .trash/，保留期满才真删（projects/trash-lifecycle.js）。
+//   deleted_at  ISO 时间；NULL = 活项目
+//   trash_dir   回收目录名（只存 .trash/ 下的名字，数据根搬家不失效）；NULL = 删除时没有工作区或没挪动
+if (!projectsColNames.has('deleted_at')) {
+  db.exec('ALTER TABLE projects ADD COLUMN deleted_at TEXT');
+  db.exec('ALTER TABLE projects ADD COLUMN trash_dir TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_projects_deleted ON projects(deleted_at) WHERE deleted_at IS NOT NULL');
+  console.log('[projects/store] projects.deleted_at / trash_dir columns added');
+}
+
+/** 默认查询一律带上：已删除（在回收站里）的项目对首页、守卫、工作区层都算不存在 */
+const LIVE = 'deleted_at IS NULL';
+
 // 多用户内测（2026-07-30）：runs 计量真列 + 归属。原来 usage 全塞 metadata JSON
 // （且值全 0，absorbResult 断链），配额查询要 sum，promote 成真列
 const RUN_METRIC_COLS = [
@@ -190,6 +206,8 @@ function rowToProject(row) {
     activeSessionId: row.active_session_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    /** 回收站里的项目才有（09-17）；默认查询读不到已删除的行，所以活项目恒为 null */
+    deletedAt: row.deleted_at || null,
   };
 }
 
@@ -207,11 +225,11 @@ export function listProjects({ limit = 100, kind, owner } = {}) {
   if (owner === undefined) {
     throw new Error('listProjects: owner 必填（用户 id 或 null=全量）');
   }
-  const wheres = [];
+  const wheres = [LIVE];
   const args = [];
   if (kind) { wheres.push('kind = ?'); args.push(kind); }
   if (owner !== null) { wheres.push('owner_id = ?'); args.push(owner); }
-  const whereSql = wheres.length ? `WHERE ${wheres.join(' AND ')}` : '';
+  const whereSql = `WHERE ${wheres.join(' AND ')}`;
   const rows = db.prepare(
     `SELECT * FROM projects ${whereSql} ORDER BY updated_at DESC LIMIT ?`,
   ).all(...args, limit);
@@ -221,26 +239,83 @@ export function listProjects({ limit = 100, kind, owner } = {}) {
 /** 某人有几个项目（首页给别人作品留位置时用；owner 同样必填，理由同上） */
 export function countProjects({ kind, owner } = {}) {
   if (owner === undefined) throw new Error('countProjects: owner 必填（用户 id 或 null=全量）');
-  const wheres = [];
+  const wheres = [LIVE];
   const args = [];
   if (kind) { wheres.push('kind = ?'); args.push(kind); }
   if (owner !== null) { wheres.push('owner_id = ?'); args.push(owner); }
-  const whereSql = wheres.length ? `WHERE ${wheres.join(' AND ')}` : '';
+  const whereSql = `WHERE ${wheres.join(' AND ')}`;
   return db.prepare(`SELECT COUNT(*) c FROM projects ${whereSql}`).get(...args).c;
 }
 
-/** 读单条 */
+/** 读单条（已删除的视为不存在；回收站那头用 getProjectIncludingDeleted） */
 export function getProject(id) {
   validateProjectId(id);
-  const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  const row = db.prepare(`SELECT * FROM projects WHERE id = ? AND ${LIVE}`).get(id);
   return rowToProject(row);
 }
 
-/** 按文件夹找项目（唯一索引保证最多一条）。路径要先经 folder.js 规范化再来查。 */
+/** 按文件夹找项目（唯一索引保证最多一条）。路径要先经 folder.js 规范化再来查。已删除的不算 */
 export function getProjectByFolder(folderPath) {
   if (typeof folderPath !== 'string' || !folderPath) return null;
-  const row = db.prepare('SELECT * FROM projects WHERE folder_path = ?').get(folderPath);
+  const row = db.prepare(`SELECT * FROM projects WHERE folder_path = ? AND ${LIVE}`).get(folderPath);
   return rowToProject(row);
+}
+
+// ── 回收站（09-17）：下面这组只给删除 / 恢复 / 清理 / 存在性闸用，别拿去替代 getProject ──
+
+/** 行还在不在、删没删：'live' | 'deleted' | 'absent'。存在性闸（project-gone.js）每次写入口都问，只查一列 */
+export function projectRowState(id) {
+  validateProjectId(id);
+  const row = db.prepare('SELECT deleted_at FROM projects WHERE id = ?').get(id);
+  if (!row) return 'absent';
+  return row.deleted_at ? 'deleted' : 'live';
+}
+
+/** 读单条，已删除的也读（带 deletedAt / trashDir） */
+export function getProjectIncludingDeleted(id) {
+  validateProjectId(id);
+  const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  return row ? { ...rowToProject(row), trashDir: row.trash_dir || null } : null;
+}
+
+/** 文件夹项目被删进回收站后又在同一路径打开（folder.js 的接回顺序要先问这个） */
+export function getDeletedProjectByFolder(folderPath) {
+  if (typeof folderPath !== 'string' || !folderPath) return null;
+  const row = db.prepare('SELECT id FROM projects WHERE folder_path = ? AND deleted_at IS NOT NULL').get(folderPath);
+  return row ? getProjectIncludingDeleted(row.id) : null;
+}
+
+/** 立删除标记。只动标记，不动 updated_at（恢复后首页排序回到原位） */
+export function markProjectDeleted(id, at = new Date().toISOString()) {
+  validateProjectId(id);
+  db.prepare('UPDATE projects SET deleted_at = ?, trash_dir = NULL, active_session_id = NULL WHERE id = ?').run(at, id);
+}
+
+export function setProjectTrashDir(id, trashDir) {
+  validateProjectId(id);
+  db.prepare('UPDATE projects SET trash_dir = ? WHERE id = ?').run(trashDir || null, id);
+}
+
+export function clearProjectDeleted(id) {
+  validateProjectId(id);
+  db.prepare('UPDATE projects SET deleted_at = NULL, trash_dir = NULL WHERE id = ?').run(id);
+}
+
+/** 回收站列表。owner 同 listProjects：必填，null = 全量（管理员显式声明） */
+export function listDeletedProjects({ owner, limit = 200 } = {}) {
+  if (owner === undefined) throw new Error('listDeletedProjects: owner 必填（用户 id 或 null=全量）');
+  const own = owner === null ? '' : ' AND owner_id = ?';
+  const rows = db.prepare(
+    `SELECT * FROM projects WHERE deleted_at IS NOT NULL${own} ORDER BY deleted_at DESC LIMIT ?`,
+  ).all(...(owner === null ? [] : [owner]), limit);
+  return rows.map((r) => ({ ...rowToProject(r), trashDir: r.trash_dir || null }));
+}
+
+/** 删除时间早于 cutoff（ISO）的，给到期清理用；最早的先清 */
+export function listExpiredDeletedProjects(cutoffIso, limit = 20) {
+  return db.prepare(
+    'SELECT id FROM projects WHERE deleted_at IS NOT NULL AND deleted_at < ? ORDER BY deleted_at ASC LIMIT ?',
+  ).all(cutoffIso, limit).map((r) => r.id);
 }
 
 /** 文件夹搬家了：project.json 里的 id 认得，路径换了。只有 folder.js 的 openFolder 调。 */
@@ -257,7 +332,8 @@ export function rebindProjectFolder(projectId, folderPath) {
  */
 export function folderPathOf(projectId) {
   validateProjectId(projectId);
-  const row = db.prepare('SELECT folder_path FROM projects WHERE id = ?').get(projectId);
+  // 已删除的不认文件夹（09-17）：迟到的写入落到数据根下的占位文件上被挡住，不再写进用户的文件夹
+  const row = db.prepare(`SELECT folder_path FROM projects WHERE id = ? AND ${LIVE}`).get(projectId);
   return row?.folder_path || null;
 }
 
@@ -342,7 +418,10 @@ export function updateProject(id, patch) {
   return getProject(id);
 }
 
-/** 删除（不级联 — 调用层负责删 workspace 目录 + 关联 runs） */
+/**
+ * 硬删这一行（不级联）。09-17 起用户的「删除」走软删除（api/project-delete.js），这里只剩两个调用方：
+ * 回收站到期 / 立即彻底删除（trash-lifecycle.js），以及探针脚本收尾。runs 不跟着删（计量要留账）。
+ */
 export function deleteProject(id) {
   validateProjectId(id);
   const row = db.prepare('DELETE FROM projects WHERE id = ? RETURNING *').get(id);

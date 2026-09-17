@@ -18,6 +18,8 @@ if (!process.env.PROJECTS_DATA_DIR) {
   process.env.PROJECTS_DATA_DIR = await fs.mkdtemp(path.join(os.tmpdir(), 'nd-board-'));
 }
 const DATA_DIR = process.env.PROJECTS_DATA_DIR;
+// 这里用的是假 pid、不建项目行：放行存在性闸（09-17，projects/project-gone.js；只影响本进程）
+process.env.NODESIGN_ROWLESS_PROJECTS = 'allow';
 
 const { readBoard, patchBoard, replaceBoard, MAX_BINDINGS } =
   await import('./board-store.js');

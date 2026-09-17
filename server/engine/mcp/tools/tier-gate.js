@@ -11,6 +11,7 @@
  *   withTierGate(makeWebSearchTool({...}), 'webSearch', projectId)   // basic 档附带日上限
  */
 import { getProject } from '../../../projects/store.js';
+import { isProjectGone, projectGoneResult } from '../../../projects/project-gone.js';
 import { getUserById } from '../../../auth/users-store.js';
 import { can, webSearchDailyCap, DENIAL } from '../../../auth/tier.js';
 import { makeRateWindow } from '../../../lib/rate-window.js';
@@ -39,6 +40,9 @@ const deny = (text) => ({ content: [{ type: 'text', text }], isError: true });
  * 拆出来是为了能不起 SDK 直接测（tier-gate.test.js）。
  */
 export function tierDenial(projectId, capability, toolName) {
+  // 项目已删除时 owner 查不到，下面会报成「档位不包含生图」—— 09-02 事发时 agent 读到的正是这句，
+  // 以为是账号问题接着干。先把真实原因告诉它（09-17，iss_mtjex6wv_5xhn）
+  if (projectId && isProjectGone(projectId)) return projectGoneResult(projectId);
   return tierDenialForOwner(ownerOfProject(projectId), capability, toolName);
 }
 

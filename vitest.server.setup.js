@@ -10,3 +10,8 @@ import { join } from 'node:path';
 
 const run = process.env.ND_TEST_RUN_ID || String(process.ppid);
 process.env.DB_PATH = join(tmpdir(), `nodesign-test-${run}-${process.env.VITEST_POOL_ID || '0'}.db`);
+
+// 存在性闸的测试口子（09-17，问题库 iss_mtjex6wv_5xhn）：生产里没有项目行的 pid 一律当已删除（projects/project-gone.js），
+// 而大批服务端测试直接拿假 pid 调 ensureProjectWorkspace / patchBoard、不建项目行。这里放行「无行」，
+// 已软删除的行照拦；专测这道闸的用例自己把它关掉。生产进程不设这个变量。
+process.env.NODESIGN_ROWLESS_PROJECTS = 'allow';

@@ -5,7 +5,8 @@
  * POST   /api/projects              { name, skillId?, description? } → 创建 + ensureProjectWorkspace
  * GET    /api/projects/:pid         单项目
  * PATCH  /api/projects/:pid         { name?, skillId?, description? } 部分更新
- * DELETE /api/projects/:pid         删项目 + workspace + 关联 runs
+ * DELETE /api/projects/:pid         删进回收站（09-17 起软删除，保留期后真删；runs 保留）
+ * /api/projects/trash/*             回收站：列表 / 恢复 / 立即彻底删除 / 审计（api/project-delete.js）
  *
  * description: 可选，<= 2000 字符。仅 NoDesign 后端/前端 UI 用，agent 不感知
  * （agent 看的是项目级 instruction = workspace/.claude/CLAUDE.md）。
@@ -13,21 +14,18 @@
 
 import express from 'express';
 import {
-  listProjects, createProject, updateProject, deleteProject,
-  listRunsForProject,
+  listProjects, createProject, updateProject,
 } from '../projects/store.js';
 import { guardProject } from './_guard.js';
 import { chalkPreview } from '../lib/board-excerpt.js';
 import { taskManifest } from '../lib/artifact-target.js';
 import { countPublishedByUser } from '../lib/publish-store.js';
 import { checkQuota } from '../lib/quota.js';
-import { ensureProjectWorkspace, removeProjectWorkspace, getSharedDir, validateSessionId } from '../projects/workspace.js';
-import { removeEntriesForProject } from '../lib/showcase-store.js';
-import { disposeProjectBus, getProjectBus } from '../ws/broker.js';
+import { ensureProjectWorkspace, getSharedDir, validateSessionId } from '../projects/workspace.js';
+import { getProjectBus } from '../ws/broker.js';
 import { Events } from '../engine/agent/events.js';
-import { stopStagesForProject } from '../engine/stage/manager.js';
-import { closeQuerySession, hasActiveQuerySession } from '../engine/runs/active-runs.js';
-import { listSessionsForProject } from './sessions.js';
+import { softDeleteProject, trashRouter } from './project-delete.js';
+import { trashRetentionDays } from '../projects/project-trash.js';
 
 const router = express.Router();
 
@@ -57,7 +55,8 @@ router.get('/', (req, res, next) => {
       return res.status(400).json({ error: `kind must be project|quick|all (got ${raw})` });
     }
     const effectiveKind = raw === 'all' ? undefined : (raw || 'project');
-    res.json({ projects: listProjects({ kind: effectiveKind, owner: ownerScope(req) }) });
+    // trashRetentionDays：删除确认框要写「N 天内可在最近删除里恢复」，跟列表一趟带回去（09-17）
+    res.json({ projects: listProjects({ kind: effectiveKind, owner: ownerScope(req) }), trashRetentionDays: trashRetentionDays() });
   } catch (err) { next(err); }
 });
 
@@ -106,6 +105,9 @@ router.get('/stats', async (req, res, next) => {
     res.json({ stats, summary });
   } catch (err) { next(err); }
 });
+
+// 回收站（09-17）：必须挂在 '/:pid' 之前，否则 'trash' 会被当成项目 id
+router.use('/trash', trashRouter);
 
 const DESCRIPTION_MAX = 2000;
 
@@ -214,34 +216,9 @@ router.delete('/:pid', async (req, res, next) => {
   try {
     const project = guardProject(req, res);
     if (!project) return;
-
-    // 常驻浏览器要先关：它的 profile 就在这个工作区里（`.browser/`），不关的话
-    // chromium 攥着一个已被 rm 的 user-data-dir，而只有 2 个的常驻名额被一个
-    // 已删项目占着，直到 5 分钟空闲计时器到点。（动态 import：别把 playwright
-    // 那一层拖进这个路由文件的启动图。）
-    try {
-      const { closeFor } = await import('../engine/browse/registry.js');
-      await closeFor(req.params.pid, 'project deleted');
-    } catch { /* 没起过浏览器不该挡住删项目 */ }
-    // 进程先停（09-06）：演出进程指着这个工作区，会话的 query 也还活着；不停就是删完文件后台还在写
-    try { const n = await stopStagesForProject(req.params.pid, 'project-deleted'); if (n) console.log(`[projects] ${req.params.pid} 删除：停了 ${n} 个演出进程`); } catch { /* 没有演出进程 */ }
-    try { for (const sid of listSessionsForProject(req.params.pid)) if (hasActiveQuerySession(sid)) closeQuerySession(sid, 'project_deleted'); } catch { /* 列不出会话就算 */ }
-    // 级联：先清 workspace 文件，再删 DB row（DB row 删了找不到，先文件后 DB 顺序保险）
-    try { await removeProjectWorkspace(req.params.pid); } catch (err) {
-      console.warn(`[projects] removeWorkspace failed for ${req.params.pid}:`, err.message);
-    }
-    // 关联 runs：标记为 cancelled? 或直接 delete? MVP 直接 delete 关联 runs 行
-    const runs = listRunsForProject(req.params.pid);
-    if (runs.length) {
-      const { default: db } = await import('../engine/runs/store.js');
-      const stmt = db.prepare('DELETE FROM runs WHERE id = ?');
-      for (const r of runs) stmt.run(r.id);
-    }
-    // 橱窗卡片指着这个项目的产物，作品没了卡片留着只会点出 404
-    removeEntriesForProject(req.params.pid);
-    deleteProject(req.params.pid);
-    disposeProjectBus(req.params.pid);
-    res.status(204).end();
+    // 09-17（问题库 iss_mtjex6wv_5xhn）：删进回收站，不再直接 rm。顺序与原因见 api/project-delete.js 头注
+    const r = await softDeleteProject(project, { actor: req.user });
+    res.json({ deleted: true, ...r });
   } catch (err) { next(err); }
 });
 

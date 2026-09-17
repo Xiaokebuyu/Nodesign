@@ -13,6 +13,7 @@ import ModelStickers from './ModelStickers.jsx';
 const MODEL_STICKERS_ENABLED = false;
 import SuggestionChip from './SuggestionChip.jsx';
 import ComposerMenu from './ComposerMenu.jsx';
+import { useComposerRestore } from './use-composer-restore.js';
 import ModelPicker from './ModelPicker.jsx';
 
 /**
@@ -69,6 +70,15 @@ export default function ChatComposer({
     window.addEventListener('nd:to-main-chat', onNudge);
     return () => window.removeEventListener('nd:to-main-chat', onNudge);
   }, []);
+  // 设草稿的入口（09-17，iss_mtxylgs4_xmmz）：回退 / 发送失败时把原话放回来，走 lib/composer-draft.js 的
+  // restoreToComposer 事件。textRef 跟 text 同步，事件处理拿它判断框里现在有没有别的字。
+  const textRef = useRef(text);
+  textRef.current = text;
+  useComposerRestore(textRef, (next) => {
+    textRef.current = next;
+    setText(next);
+    requestAnimationFrame(() => { const el = ref.current; if (el) { el.focus(); el.setSelectionRange(next.length, next.length); } });
+  });
   const chatDraft = useGlobalStore(s => s.chatDraft);
   const composerFocusTick = useGlobalStore(s => s.composerFocusTick);
   const setChatDraft = useGlobalStore(s => s.setChatDraft);
@@ -125,6 +135,7 @@ export default function ChatComposer({
     if ((!trimmed && !hasAttachment) || disabled) return;
     onSend?.(trimmed);
     setText('');
+    textRef.current = '';   // 发送失败的回调可能赶在重渲染前跑：得先看到「框已经空了」才会把原话放回来
   };
 
   /**

@@ -11,6 +11,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { getProject } from '../../../projects/store.js';
+import { projectGoneMessage } from '../../../projects/project-gone.js';
 import { getUserById } from '../../../auth/users-store.js';
 import { publishSite, unpublishSite, lookupPublished } from '../../../lib/site-publish.js';
 
@@ -69,7 +70,7 @@ permission error, relay it as-is — do not retry.`,
       const asText = (text) => ({ content: [{ type: 'text', text }] });
       try {
         const project = getProject(projectId);
-        if (!project) return asText('错误：项目不存在');
+        if (!project) return asText(projectGoneMessage(projectId));   // 已删除 / 不存在：让 agent 停手（09-17）
         const owner = project.ownerId ? getUserById(project.ownerId) : null;
         if (!owner) return asText('错误：找不到项目归属用户，不能发布');
 

@@ -35,6 +35,7 @@
 import path from 'node:path';
 import { mutex } from 'async-mutex-lite';
 import { getProjectWorkspace } from '../../projects/workspace.js';
+import { assertProjectLive } from '../../projects/project-gone.js';
 import { FIDELITY_LAUNCH_ARGS } from '../mcp/tools/helpers/perception-page.js';
 import { attachSsrfGuard } from '../../lib/ssrf-guard.js';
 import { startBrowseProxy } from '../../lib/browse-proxy.js';
@@ -107,12 +108,14 @@ async function attachDesktopView(projectId) {
 
 async function launchBrowseBrowser(projectId) {
   if (desktopHostConfigured()) return attachDesktopView(projectId);
+  // 已删除的项目不起浏览器（09-17）：profile 目录的 mkdir 会把 `<pid>/` 建回来
+  assertProjectLive(projectId);
   const { chromium } = await import('playwright');
   // profile 必须落在 `<pid>/` 下、`shared/` **之外**：shared 是 agent 的 cwd 也是
   // artifact-file 的服务根 —— 放进去等于 (a) cookie jar 能被当文件服出去
   // (b) agent 能 Read 到自己的 cookie (c) 进 per-project git。
-  // 放兄弟位就都避开了，而且删项目时 removeProjectWorkspace 删的是整个 `<pid>/`
-  // （核过），profile 跟着走，不用额外写清理。
+  // 放兄弟位就都避开了，而且删项目时整个 `<pid>/` 挪进回收站（09-17 起，到期连同 profile 一起删），
+  // 不用额外写清理。
   const userDataDir = path.join(getProjectWorkspace(projectId), '.browser', 'default');
 
   // ⭐ 出网闸在**代理层**（2026-08-18 第二遍）：`--proxy-server` 之后 chromium 的

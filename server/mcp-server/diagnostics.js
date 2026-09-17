@@ -21,7 +21,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { platform } from '../runtime/platform.js';
 import { capabilitySnapshot, probeCapabilities } from '../runtime/capabilities.js';
-import { listProjects, getProject, folderPathOf } from '../projects/store.js';
+import { listProjects, getProject, getProjectIncludingDeleted, folderPathOf } from '../projects/store.js';
 import { getWorkspaceRoot, getAgentCwd } from '../projects/workspace.js';
 import { repoSummary, listTurns, repoFolderOf } from '../projects/repo.js';
 import { listProcesses, readProcessLog } from '../engine/process/registry.js';
@@ -118,7 +118,8 @@ function buildServer({ desktopState }) {
   server.registerTool('list_projects', {
     description: '本机所有项目：id、名字、模式、文件夹路径（有的话）、桌面在哪、活动会话。',
     inputSchema: { limit: z.number().int().min(1).max(200).optional() },
-  }, async ({ limit }) => text(listProjects({ limit: limit ?? 100 }).map(p => ({
+  // owner:null = 本机全量（单租户）。09-17 前漏传 owner，listProjects 的必填断言让这件工具每次都抛；回收站里的不列
+  }, async ({ limit }) => text(listProjects({ limit: limit ?? 100, owner: null }).map(p => ({
     id: p.id, name: p.name, mode: p.mode, folderPath: p.folderPath || null,
     desk: p.folderPath ? getWorkspaceRoot(p.id) : null, cwd: p.folderPath ? getAgentCwd(p.id) : null,
     folderTrust: p.folderTrust ?? null, activeSessionId: p.activeSessionId || null, updatedAt: p.updatedAt,
@@ -129,7 +130,11 @@ function buildServer({ desktopState }) {
     inputSchema: { project_id: z.string().min(1) },
   }, async ({ project_id }) => {
     const p = getProject(project_id);
-    if (!p) return text({ error: 'no such project' });
+    if (!p) {
+      // 回收站里的项目（09-17）：告诉排查的人它是被删了，不是 id 写错了
+      const gone = getProjectIncludingDeleted(project_id);
+      return text(gone?.deletedAt ? { error: 'project deleted', deletedAt: gone.deletedAt, trashDir: gone.trashDir } : { error: 'no such project' });
+    }
     const [repo, turns, processes] = await Promise.all([
       repoSummary(project_id).catch(e => ({ error: e.message })),
       listTurns(project_id, { limit: 5 }).catch(() => []),

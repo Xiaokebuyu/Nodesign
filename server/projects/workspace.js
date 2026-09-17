@@ -43,6 +43,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { mutex } from 'async-mutex-lite';
 import { validateProjectId, getProject, folderPathOf } from './store.js';
+import { assertProjectLive } from './project-gone.js';
 import { resolveModelContextWindow } from '../engine/agent/model-context.js';
 import { ensureActorSlots } from './workspace-slots.js';
 import { NODESIGN_DIR, deskRootOf, ensureFolderProjectDir, ensureGitExclude, ensureGitignore } from './workspace-layout.js';
@@ -234,6 +235,8 @@ export function getSessionMetaDir(projectId, sessionId) {
  * 线上不需要停机窗口，也不存在"迁移脚本漏了哪个项目"。
  */
 export async function ensureProjectWorkspace(projectId) {
+  // 09-17（iss_mtjex6wv_5xhn）：已删除 / 不存在的项目不许重建 —— 09-02 删完被 write_on_board 经这里整套长回来
+  assertProjectLive(projectId);
   await removeRootLegacyArtifacts(projectId);
 
   const root = getWorkspaceRoot(projectId);
@@ -728,12 +731,7 @@ export async function removeRootLegacyArtifacts(projectId) {
   console.log(`[workspace] removed legacy root artifacts for ${projectId}`);
 }
 
-// ── 删除 ──
-
-export async function removeProjectWorkspace(projectId) {
-  const root = getProjectWorkspace(projectId);
-  await fs.rm(root, { recursive: true, force: true });
-}
+// ── 删除：09-17 起整个项目目录不在这里删，删除进回收站、到期清理见 project-trash.js ──
 
 /**
  * 删一个会话留下的东西 —— **只有它的私档**（`.nd/<sid>/`）。
@@ -756,7 +754,7 @@ export async function removeSessionWorkspace(projectId, sessionId) {
  * 提交到哪个仓 —— 一个项目一个仓。两个会话同时收尾也不会打架：mutex 的 key
  * 是工作区路径，本来就串行。
  */
-export async function commitWorkspace(projectId, sessionId, message, { author = 'system' } = {}) {
+export async function commitWorkspace(projectId, sessionId, message, { author = 'system', orHead = false } = {}) {
   const sessionRoot = getWorkspaceRoot(projectId);
   if (!(await fileExists(sessionRoot))) return null;
   // git race guard：用户 PUT canvas（DirectEdit 上行）+ agent Edit canvas.html
@@ -765,7 +763,8 @@ export async function commitWorkspace(projectId, sessionId, message, { author = 
   return mutex(`git:${sessionRoot}`, async () => {
     await runGit(sessionRoot, ['add', '-A']);
     const { stdout } = await runGit(sessionRoot, ['status', '--porcelain'], { capture: true });
-    if (!stdout.trim()) return null;
+    // orHead（09-17 回退前后各提交一次，iss_mtxwluiz_welc）：没改动不落空提交，回当时的 HEAD —— 判脏和取 HEAD 在同一把锁里，中间插不进别的提交
+    if (!stdout.trim()) return orHead ? ((await runGit(sessionRoot, ['rev-parse', '--verify', '-q', 'HEAD'], { capture: true })).stdout.trim() || null) : null;
     await runGit(sessionRoot, [
       '-c', `user.email=${author}@nodesign`,
       '-c', `user.name=${author}`,

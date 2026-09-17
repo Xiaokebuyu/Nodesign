@@ -483,6 +483,7 @@ export function registerQuerySession(sessionId, { abortController, inputQueue, i
     }
   }
   const token = Symbol('querySession');
+  trackSessionExit(token, sessionId, projectId);
   activeQuerySessions.set(sessionId, {
     abortController,
     projectId,   // 这个会话属于哪个项目（09-13）：API 层按「sid + pid」取句柄的依据，见 querySessionInProject
@@ -593,6 +594,51 @@ export function getQuerySession(sessionId) {
  * @param {string} sessionId
  * @returns {boolean} true=session 已存在且 query 活着
  */
+/**
+ * 会话退出的等待表（09-17，问题库 iss_mtjex6wv_5xhn）：token → { sessionId, projectId, done, resolve }。
+ *
+ * closeQuerySession 只 abort + 同步注销就返回，SDK 子进程和回合收尾（finishTurn 会提交工作区）还在后面跑。
+ * 删项目要等它们真结束再挪目录，否则挪走之后收尾还在往原路径写。token 跟注册一一对应：
+ * 同 sid 关掉马上重开，新旧两条各有各的等待者，不会互相顶掉。
+ */
+const sessionExits = new Map();
+
+function trackSessionExit(token, sessionId, projectId) {
+  let resolve;
+  const done = new Promise((r) => { resolve = r; });
+  sessionExits.set(token, { sessionId, projectId, done, resolve });
+}
+
+function settleSessionExit(token) {
+  const w = sessionExits.get(token);
+  if (!w) return;
+  sessionExits.delete(token);
+  w.resolve();
+}
+
+/** 这个项目当前在册的会话 id（删项目时逐个关） */
+export function listQuerySessionIdsForProject(projectId) {
+  const out = [];
+  for (const [sid, rec] of activeQuerySessions) if (rec.projectId === projectId) out.push(sid);
+  return out;
+}
+
+/**
+ * 等这个项目的全部会话（含已被 close、还没走完收尾的）退出，最多 timeoutMs。
+ * @returns {Promise<{ waited: number, pending: number }>} waited=开始等时还没退出的条数，pending=超时时仍没退出的
+ */
+export async function waitForProjectSessionsExit(projectId, timeoutMs = 10_000) {
+  const waits = [...sessionExits.values()].filter((w) => w.projectId === projectId);
+  if (!waits.length) return { waited: 0, pending: 0 };
+  let settled = 0;
+  const all = Promise.all(waits.map((w) => w.done.then(() => { settled += 1; })));
+  let timer;
+  const timeout = new Promise((r) => { timer = setTimeout(r, timeoutMs); timer.unref?.(); });
+  await Promise.race([all, timeout]);
+  clearTimeout(timer);
+  return { waited: waits.length, pending: waits.length - settled };
+}
+
 /** 诊断用：全部在册的 query 会话（不含 abort 了没清的残留标记 aborted:true 也照列） */
 export function listQuerySessions() {
   return [...activeQuerySessions].map(([sessionId, rec]) => ({
@@ -710,6 +756,9 @@ export function closeQuerySession(sessionId, reason = 'user_close') {
  */
 export function unregisterQuerySession(sessionId, expectedToken = null) {
   if (!sessionId) return;
+  // 带 token 的调用只来自 runSession 的收尾（finally / init 失败），那一刻会话才算真的退出了 ——
+  // 要放在下面的身份比对之前：closeQuerySession 早已同步删掉记录，这里 rec 为空也得把等待者叫醒
+  if (expectedToken != null) settleSessionExit(expectedToken);
   const rec = activeQuerySessions.get(sessionId);
   if (!rec) return;
   // 身份比对：sid 已被新 register 占用时，旧 caller 不能误删新 entry

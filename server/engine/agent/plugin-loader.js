@@ -19,14 +19,17 @@
  *     warn 日志，**不影响其他 plugin 加载**
  *   - 三个 root 缺失（用户首次跑没装过任何用户级 plugin）→ 返空数组不报错
  *
- * 注意：本模块**只做发现**，不做格式深度校验。深度校验在 plugin-validator.js（上传时）。
- * 这里假设已装的 plugin 是合规的（validator 通过才能装到目标位置）。
+ * 注意：格式深度校验在 plugin-validator.js（上传时）。加载时只再判一件事：**组件白名单**（09-17，见
+ * pluginLoadViolations）。原来这里假设「已装的都过过 validator」，可项目级根在工作区里，agent 自己就能写，
+ * 写进去的 hooks 在下个会话由 CLI 宿主进程在沙盒外执行（09-17 探针实测）。
  */
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { readPluginOrigin, isPluginOriginRevoked } from '../../lib/plugin-origin.js';
+import { readPluginOrigin, isPluginOriginRevoked, ORIGIN_FILE } from '../../lib/plugin-origin.js';
+import { disallowedComponents } from '../../lib/plugin-components.js';
+import { recordIssue } from '../../lib/issues-store.js';
 
 import { PLUGIN_ROOT, parseFrontmatter } from './skill.js';
 import { getSharedDir } from '../../projects/workspace.js';

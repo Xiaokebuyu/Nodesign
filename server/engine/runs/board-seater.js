@@ -274,7 +274,7 @@ export function attachBoardSeater(bus, projectId) {
       console.warn('[board-seater]', projectId, err?.message || err);
     }
   };
-  bus.subscribe('*', (evt) => {
+  const unsubscribe = bus.subscribe('*', (evt) => {
     if (!evt?.runId) return;
     if (evt.type === 'run.file_changed') {
       // 两种历史载荷形状都认（Events.fileChanged 的 filePath / 旧内联对象的 path）
@@ -286,4 +286,11 @@ export function attachBoardSeater(bus, projectId) {
     }
     if (evt.type === 'run.done' || evt.type === 'run.cancelled' || evt.type === 'run.error') void flush();
   });
+  // 项目删除时由 broker.disposeProjectBus 调（09-17，iss_mtjex6wv_5xhn）：攒着的 1.5s 批次不再落板，
+  // 否则删完之后它还会 patchBoard 一次（写画布会把工作区建回来，现在是撞 PROJECT_GONE）
+  return () => {
+    unsubscribe();
+    if (timer) { clearTimeout(timer); timer = null; }
+    pending.clear();
+  };
 }

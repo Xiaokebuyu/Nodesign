@@ -25,20 +25,31 @@ export function getProjectBus(projectId) {
     // live-turn 快照折叠器：进行中 turn 的事件物化成可恢复状态，
     // WS 重连走"hydrate + ws.live_turn 快照 + 尾随"三段协议。见 live-turn.js
     attachLiveTurnTracker(bus);
-    // 服务端入座（2026-08-25 范式重做④）：本轮新产物 run 收尾一批排座
-    attachBoardSeater(bus, projectId);
-    // 诊断分接头（09-08）：API 重试 / 每轮用量 / 工具调用起止收进环形账，给本地版 MCP 诊断端点读
-    attachDiagnosticsTap(bus, projectId);
-    attachWorkspaceAudit(bus, projectId);   // run 收尾后板↔磁盘对账（lib/workspace-audit.js）
+    // 带计时器 / 会写盘的订阅者把退订函数收起来，删项目时一起停（09-17）
+    bus.__disposers = [
+      // 服务端入座（2026-08-25 范式重做④）：本轮新产物 run 收尾一批排座
+      attachBoardSeater(bus, projectId),
+      // 诊断分接头（09-08）：API 重试 / 每轮用量 / 工具调用起止收进环形账，给本地版 MCP 诊断端点读
+      attachDiagnosticsTap(bus, projectId),
+      attachWorkspaceAudit(bus, projectId),   // run 收尾后板↔磁盘对账（lib/workspace-audit.js）
+    ];
     projectBuses.set(projectId, bus);
   }
   return bus;
 }
 
 /**
- * project 删除时清理 bus（释放内存）。
- * 不影响已建立的 ws 连接 — 它们还能 publish 但不再有订阅者。
+ * project 删除时清理 bus。
+ *
+ * 09-17（问题库 iss_mtjex6wv_5xhn）之前这里只从表里摘掉 bus：入座器、对账这些订阅者还挂在旧 bus 上，
+ * 删除后仍在飞的回合一收尾，它们照样攒批、落板 —— 写画布正是把工作区重建出来的那条路。
+ * 现在先停这些订阅者和它们的计时器；已建立的 WS 连接不动（前端会离开这个项目）。
  */
 export function disposeProjectBus(projectId) {
+  const bus = projectBuses.get(projectId);
   projectBuses.delete(projectId);
+  for (const dispose of bus?.__disposers || []) {
+    try { if (typeof dispose === 'function') dispose(); } catch (err) { console.warn(`[broker] dispose ${projectId}: ${err.message}`); }
+  }
+  if (bus) bus.__disposers = [];
 }

@@ -320,6 +320,10 @@ ${DESK_CSS}
   font: 800 25px var(--display); letter-spacing: -0.02em; text-shadow: .026em .018em 0 rgba(178,58,46,0.14); }
 .ndd-head h2 svg { display: none; }
 .ndd-head .n { font: 12px var(--code); color: var(--desk-pencil); letter-spacing: 0.06em; }
+/* 「最近删除」入口（09-17 回收站）：跟项目数同一行、同一支铅笔，下划线表示能点 */
+.ndd-head .ndd-trash-link { font: inherit; color: inherit; letter-spacing: inherit; background: none; border: 0;
+  padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.ndd-head .ndd-trash-link:hover { color: var(--desk-ink); }
 /* 新人那一屏的「找找灵感」：跟上面那张空状态大卡拉开，别让精选卡顶上去 */
 .ndd-head.peer { margin-top: 56px; }
 

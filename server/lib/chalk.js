@@ -22,6 +22,7 @@ import path from 'node:path';
 import { ROLE_SLUG_RE } from '../engine/agent/cast.js';
 import { promises as fs } from 'node:fs';
 import { writeFileAtomic } from './atomic-write.js';
+import { assertRootLive } from '../projects/project-gone.js';
 
 export const CHALK_DIR = 'notes/板书';
 const FM_RE = /^---\n([\s\S]{0,800}?)\n---\n?/;
@@ -82,6 +83,8 @@ export function chalkFileName(body, now = new Date()) {
 
 /** 写一条板书到工作区；返回相对路径 */
 export async function writeChalkFile(sharedRoot, fileName, content, { overwrite = false } = {}) {
+  // write_on_board 先写板书文件再落板：项目已删除时在这一步就停，别让 mkdir 把工作区建回来（09-17）
+  assertRootLive(sharedRoot);
   const dir = path.join(sharedRoot, CHALK_DIR);
   await fs.mkdir(dir, { recursive: true });
   let name = fileName;

@@ -20,8 +20,10 @@ import path from 'node:path';
 import os from 'node:os';
 import {
   createProject, getProject, getProjectByFolder, rebindProjectFolder, updateProject,
+  getProjectIncludingDeleted, getDeletedProjectByFolder,
 } from './store.js';
 import { ensureProjectWorkspace, NODESIGN_DIR, PROJECTS_DATA_ROOT } from './workspace.js';
+import { restoreDeletedProject } from './trash-lifecycle.js';
 import { initFolderIdentity } from './workspace-layout.js';
 
 const PROJECT_ID_RE = /^proj_[a-z0-9_]{6,80}$/i;
@@ -102,6 +104,11 @@ export async function openFolder({ path: input, ownerId = null }) {
 
   let project = null;
   let created = false;
+  // 回收站里的文件夹项目（09-17）：同一个身份 / 同一个路径再打开 = 用户要回这个项目，先恢复。
+  // 不恢复的话下面会按同一个 id 或同一个路径再建一行，撞主键 / 撞 folder_path 唯一索引
+  const byId = identityId ? getProjectIncludingDeleted(identityId) : null;
+  const trashed = (byId?.deletedAt ? byId : null) || getDeletedProjectByFolder(folder);
+  if (trashed) await restoreDeletedProject(trashed.id, { actor: ownerId ? { id: ownerId } : null, reason: 'folder-reopen' });
   if (identityId) {
     const known = getProject(identityId);
     if (known) {

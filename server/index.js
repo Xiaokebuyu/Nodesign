@@ -60,6 +60,7 @@ import { setPluginOriginPolicy } from './lib/plugin-origin.js';
 import { startIssueOutbox } from './runtime/issue-outbox.js';
 import { probeCapabilities, summarizeCapabilities } from './runtime/capabilities.js';
 import { applyComponentEnv, sweepStaleComponentDirs } from './runtime/components.js';
+import { startTrashSweeper } from './projects/trash-lifecycle.js';
 
 // 启动时 dump 平台决策（让运维一眼看到 OS / HOME / claudeConfigDir / sandbox / preflight）
 // 跨平台坑排查的第一信号
@@ -123,6 +124,8 @@ app.get('/api/health', (_req, res) => {
 // 碰到 store 的脚本（invite.mjs / notice.mjs / 临时排查）都会把线上正在跑的
 // run 全标成 failed，实测误杀过真实用户的对话。
 sweepOrphanRuns();
+// 回收站到期清理（09-17，iss_mtjex6wv_5xhn）：启动 1 分钟后跑一次，之后每 6 小时；同样只在服务端进程里挂，不挂在 import 上
+startTrashSweeper();
 
 if (platform.isLocal) {
   // 本地分发版：单租户，登录墙钉死关闭（auth/users-store.js authEnabled），请求者恒为 LOCAL_OWNER。

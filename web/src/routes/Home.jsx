@@ -22,6 +22,8 @@ import { DayToggle } from './home-light.jsx';
 import { Desk } from './desk.jsx';
 import { useFeatured, FeaturedCard } from './home-featured.jsx';
 import HomeFigure from './home-figure.jsx';
+import RecentlyDeletedModal from '../components/project/RecentlyDeletedModal.jsx';
+import { useProjectDelete } from '../lib/use-project-delete.js';
 
 /**
  * Home 页 —— 进门之后的那面板子（2026-08-03 改版）
@@ -91,6 +93,7 @@ export default function Home() {
   // 产物清单：读磁盘，跟列表分开拉；拿不到就是 null，卡片那行留空不编
   const [stats, setStats] = useState(null);
   const [summary, setSummary] = useState(null);   // { published, usedToday }
+  const [trashOpen, setTrashOpen] = useState(false);   // 「最近删除」（09-17 回收站）
 
   useEffect(() => {
     if (!hydrated && !hydrating) {
@@ -167,7 +170,7 @@ export default function Home() {
 
           <div className="ndd-head">
             <h2>{t('我的项目')}<Underline w={1.6} color="var(--desk-ink)" /></h2>
-            <span className="n">{own.length} 个项目</span>
+            <span className="n">{own.length} 个项目 · <button type="button" className="ndd-trash-link" onClick={() => setTrashOpen(true)}>{t('最近删除')}</button></span>
           </div>
 
           {!hydrated && hydrating ? (
@@ -206,6 +209,7 @@ export default function Home() {
             </>
           )}
       </Desk>
+      <RecentlyDeletedModal show={trashOpen} onClose={() => setTrashOpen(false)} />
     </AppShell>
   );
 }
@@ -374,10 +378,9 @@ function ProjectCard({ project, stat, newest }) {
   // 鼠标移开时顺手把菜单关掉（触屏上 hoverProps 是空的，菜单靠点别处关）
   const { revealed, hoverProps, dismiss } = useHoverReveal({ onLeave: () => setMenuOpen(false) });
   const updateProject = useProjectStore(s => s.updateProject);
-  const deleteProject = useProjectStore(s => s.deleteProject);
+  const removeProject = useProjectDelete();
   const duplicateProject = useProjectStore(s => s.duplicateProject);
   const showToast = useGlobalStore(s => s.showToast);
-  const confirm = useGlobalStore(s => s.confirm);
   const prompt = useGlobalStore(s => s.prompt);
 
   const handleRename = async (e) => {
@@ -410,18 +413,7 @@ function ProjectCard({ project, stat, newest }) {
   const handleDelete = async (e) => {
     e.preventDefault(); e.stopPropagation();
     setMenuOpen(false);
-    if (!(await confirm({
-      title: t('删除项目'),
-      message: t('删除「{name}」？此操作不可撤销。', { name: project.name }),
-      confirmLabel: '删除',
-      danger: true,
-    }))) return;
-    try {
-      await deleteProject(project.id);
-      showToast(t('项目已删除'), 'info');
-    } catch (err) {
-      showToast(t('删除失败：{err}', { err: err.message }), 'error');
-    }
+    await removeProject(project);   // 确认框 → 进回收站 → 「已删除 · 撤销」（09-17，lib/use-project-delete.js）
   };
 
   const inv = inventory(stat);

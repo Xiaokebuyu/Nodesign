@@ -34,8 +34,10 @@ import { COLOR, CHROME, GAP, RADIUS, FONT_SIZE, FONT_SANS, FONT_KAI, FONT_MONO, 
 import { PAPER_SHADOW } from '../lib/paper.js';
 import { useProjectStore } from '../stores/projectStore.js';
 import { useGlobalStore } from '../stores/globalStore.js';
+import { useProjectDelete } from '../lib/use-project-delete.js';
 import { newId, newUserMessageId } from '../lib/helpers.js';
 import { useRewindEvents } from './use-rewind-events.js';
+import { rememberSent, restoreAfterFailedSend } from '../lib/composer-draft.js';   // 09-17 原话不丢（iss_mtxylgs4_xmmz）
 import { findElementByAnchor } from '../lib/html-utils.js';
 import { serializeForAI } from '../lib/element-semantics.js';
 import { Canvas, Turn, Assets, Exports, Sessions, PendingChanges, Browse } from '../lib/api.js';
@@ -100,7 +102,7 @@ export default function ProjectWorkspace() {
   }, [project]);
   const hydrateOne = useProjectStore(s => s.hydrateOne);
   const updateProject = useProjectStore(s => s.updateProject);
-  const deleteProject = useProjectStore(s => s.deleteProject);
+  const removeProject = useProjectDelete();
   const duplicateProject = useProjectStore(s => s.duplicateProject);
   const applyRunEvent = useProjectStore(s => s.applyRunEvent);
   // V2：context 状态从局部 useState 提到 projectStore（per-pid map）—— mount/unmount 不丢，
@@ -111,7 +113,6 @@ export default function ProjectWorkspace() {
   const systemInfo = useProjectStore(s => s.contextByProject[id]?.systemInfo || null);
   const contextUsage = useProjectStore(s => s.contextByProject[id]?.contextUsage || null);
   const showToast = useGlobalStore(s => s.showToast);
-  const confirm = useGlobalStore(s => s.confirm);
   const prompt = useGlobalStore(s => s.prompt);
   const setChatDraft = useGlobalStore(s => s.setChatDraft);
   // A4.3：维护活跃 run 的 (pid, runId)，让 AskUserQuestionView 能直接 POST /answer
@@ -420,7 +421,7 @@ export default function ProjectWorkspace() {
   const wsHydratedSidRef = useRef(null);
 
   // 「回到此处 / 从这里分叉」落地后的两件事（语义在 use-rewind-events.js）
-  useRewindEvents({ projectId: id, currentSessionId, setMessages, sessionIdRef, setCurrentSessionId, updateProject });
+  useRewindEvents({ projectId: id, currentSessionId, setMessages, sessionIdRef, setCurrentSessionId, updateProject, setInputs });
 
   // 板书控件（08-25 nd:controls 围栏）：MdInk 里的按钮点了发这个事件 —— 非触发件
   // 攒进 pending（同标注「攒着」一条路），触发件直接起轮（攒的那批靠每轮注入的
@@ -627,6 +628,7 @@ export default function ProjectWorkspace() {
       // id 用 SDK uuid 形态并同步给服务端：气泡一出现就能「回到此处」/「从这里分叉」
       const userMessageUuid = newUserMessageId();
       setMessages((ms) => [...ms, { id: userMessageUuid, role: 'user', content: bubble }]);
+      rememberSent(userMessageUuid, { text, attachments: stateAttachments });   // 回退时原话与附件放得回来
       // 跟 handleSend 同步：sidForRequest 优先用 ref（避 React 闭包陈旧）
       const sidForRequest = sessionIdRef.current ?? currentSessionId;
       try {
@@ -659,7 +661,9 @@ export default function ProjectWorkspace() {
           id: newId('msg'), role: 'assistant',
           content: `_⚠️ 发送失败：${err.message}_`,
         }]);
-        showToast(`发送失败：${err.message}`, 'error');
+        // location.state 马上要清掉：原话放回输入框、附件回托盘，不然这条就只剩内存里的气泡
+        const toast = restoreAfterFailedSend(text, `发送失败：${err.message}`, { attachments: stateAttachments });
+        showToast(toast.msg, 'error', toast.opts);
         // 失败也清 location.state 防 navigate 后退/刷新重发
         navigate(location.pathname, { replace: true, state: null });
       }
@@ -1385,6 +1389,7 @@ export default function ProjectWorkspace() {
     // 同上：气泡 id = 这条消息在 jsonl 里的 uuid，回退/分叉按钮当场可用（2026-08-30）
     const userMessageUuid = newUserMessageId();
     setMessages(ms => [...ms, { id: userMessageUuid, role: 'user', content: bubble }]);
+    rememberSent(userMessageUuid, { text: body, attachments });   // 回退时原话与附件放得回来
     try {
       // Phase A.1：优先用 ref 拿 sessionId，避开 React async 闭包陈旧。
       // 极快连发场景下 currentSessionId（useParams）还没刷过来，ref 已是最新。
@@ -1441,7 +1446,9 @@ export default function ProjectWorkspace() {
         role: 'assistant',
         content: politeLimit ? `_${err.message}_` : `_⚠️ 发送失败：${err.message}_`,
       }]);
-      showToast(politeLimit ? err.message : `发送失败：${err.message}`, politeLimit ? 'info' : 'error');
+      // 输入框在 submit 时已清空：原话放回去（他已在写下一句就不动，提示里给一键放回）；附件本来就还在托盘里
+      const toast = restoreAfterFailedSend(body, politeLimit ? err.message : `发送失败：${err.message}`);
+      showToast(toast.msg, politeLimit ? 'info' : 'error', toast.opts);
     }
   };
   // 让 handleApplyPendingEdits（在 early-return 之前定义）能查到本 closure 内最新
@@ -1906,19 +1913,8 @@ export default function ProjectWorkspace() {
   };
   const handleDelete = async () => {
     setActionsOpen(false);
-    if (!(await confirm({
-      title: '删除项目',
-      message: `删除「${project.name}」？此操作不可撤销。`,
-      confirmLabel: '删除',
-      danger: true,
-    }))) return;
-    try {
-      await deleteProject(project.id);
-      showToast('项目已删除', 'info');
-      navigate('/');
-    } catch (err) {
-      showToast(`删除失败：${err.message}`, 'error');
-    }
+    // 09-17（iss_mtjex6wv_5xhn）：进回收站，toast 上可撤销；确认框写保留期（lib/use-project-delete.js）
+    await removeProject(project, { onDeleted: () => navigate('/') });
   };
   const handleViewCode = () => {
     setActionsOpen(false);

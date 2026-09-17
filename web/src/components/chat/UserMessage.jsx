@@ -9,6 +9,7 @@ import AnnotationNote from './AnnotationNote.jsx';
 import RewindDialog from './RewindDialog.jsx';
 import { t } from '../../lib/i18n.js';
 import { useHoverReveal } from '../../lib/use-hover-reveal.js';
+import { restoreToComposer, originalTextOf, recallSent } from '../../lib/composer-draft.js';
 
 /**
  * UserMessage —— 用户消息气泡 + 悬停「回到此处」按钮。
@@ -28,6 +29,27 @@ import { useHoverReveal } from '../../lib/use-hover-reveal.js';
 // 服务端盖到 SDKUserMessage.uuid 上，气泡一出现按钮就在。判据留着兜老消息和
 // 服务端替发的那些（场务托词之类）。同一份正则在 server/api/turn.js。
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * 回退 / 分叉成功后，这条消息的原文放回输入框（09-17，问题库 iss_mtxylgs4_xmmz）。
+ * 服务端从这条消息本身起截掉对话，气泡随重拉消失 —— 不放回来，用户打的字就只剩 runs 表里有。
+ * 输入框有别的字时由输入框那头弹确认（覆盖 / 保留并接在后面，见 lib/composer-draft.js）。
+ * 附件：本页发出的那条记着，原样回托盘；刷新过页面的回不来（文件仍在项目素材里）。
+ * @returns {string} 接在成功提示后面的半句（放回去了才有）
+ */
+function putBackOriginal(message) {
+  const outcome = restoreToComposer(originalTextOf(message), { mode: 'ask', attachments: recallSent(message.id)?.attachments || null });
+  return outcome === 'filled' ? t('，原文已放回输入框') : '';
+}
+
+/**
+ * 回退前的版本存在哪（09-17，iss_mtxwluiz_welc）：服务端在 rewindFiles 前提交了一次，
+ * 响应带 preRewindCommit（仓库道另有 preRewindTree）。没保存下来的部分在 preRewindNote 里。
+ */
+function savedHint(result) {
+  const id = result?.preRewindCommit || result?.preRewindTree;
+  return id ? t('；回退前的版本已保存（{id}）').replace('{id}', id.slice(0, 7)) : '';
+}
 
 function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
   const showToast = useGlobalStore(s => s.showToast);
@@ -74,13 +96,15 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
     // iframe reload 由后端 emit 的 run.file_changed event 自动触发（ProjectWorkspace 已 case），
     // 不再依赖 onCanvasReload —— 但保留兼容调用（active query 路径同步返回时也 bump）
     if (files && onCanvasReload) onCanvasReload();
-    showToast(files
-      ? (n > 0 ? t('已回退对话，撤销了 {n} 个文件').replace('{n}', n) : t('已回退对话（没有文件改动要撤销）'))
-      : t('已回退对话，产物留在原处'), 'success');
     // 对话层已被服务端截断 → 通知 ProjectWorkspace 重拉消息（免传三层 props）
     if (result?.conversationTruncated) {
       window.dispatchEvent(new CustomEvent('nd-conversation-rewound', { detail: { sessionId } }));
     }
+    const back = result?.conversationTruncated ? putBackOriginal(message) : '';
+    showToast((files
+      ? (n > 0 ? t('已回退对话，撤销了 {n} 个文件').replace('{n}', n) : t('已回退对话（没有文件改动要撤销）'))
+      : t('已回退对话，产物留在原处')) + back + (files ? savedHint(result) : ''), 'success');
+    if (files && result?.preRewindNote) showToast(t('回退前的版本没有完整保存：{why}').replace('{why}', result.preRewindNote), 'warn');
   }
 
   /**
@@ -89,13 +113,18 @@ function UserMessage({ message, projectId, sessionId, onCanvasReload }) {
    */
   async function forkFromHere(files) {
     const { sessionId: newSid } = await Sessions.fork(projectId, sessionId, { upToMessageId: message.id });
+    let rw = null;
     if (files) {
-      await Sessions.rewind(projectId, sessionId, message.id, { files: true, truncateConversation: false });
+      // noteSessionId：「回退前的版本在哪」记给接着说话的新分支，不是原会话
+      rw = await Sessions.rewind(projectId, sessionId, message.id, { files: true, truncateConversation: false, noteSessionId: newSid });
       if (onCanvasReload) onCanvasReload();
     }
-    showToast(files ? t('已开新分支，产物也回到了那时的样子') : t('已开新分支，产物保持现在的样子'), 'success');
     // 切到新分支（ProjectWorkspace 收这条改服务端指针 + 重 hydrate）
     window.dispatchEvent(new CustomEvent('nd-session-forked', { detail: { sessionId: newSid } }));
+    // 新分支截在这条之前：原文放回输入框，改一改接着发
+    const back = putBackOriginal(message);
+    showToast((files ? t('已开新分支，产物也回到了那时的样子') : t('已开新分支，产物保持现在的样子')) + back + savedHint(rw), 'success');
+    if (rw?.preRewindNote) showToast(t('回退前的版本没有完整保存：{why}').replace('{why}', rw.preRewindNote), 'warn');
   }
 
   async function handleRewind({ files, fork }) {

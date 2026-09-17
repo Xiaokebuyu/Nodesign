@@ -156,7 +156,7 @@ export function attachWorkspaceAudit(bus, projectId, { audit = auditWorkspace, r
     confirmTimer = null;
     try { await prune(projectId); } catch (err) { console.warn('[workspace-audit] prune', projectId, err?.message || err); }
   };
-  return bus.subscribe('*', (evt) => {
+  const unsubscribe = bus.subscribe('*', (evt) => {
     if (evt?.type !== 'run.done' && evt?.type !== 'run.error') return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(async () => {
@@ -180,4 +180,11 @@ export function attachWorkspaceAudit(bus, projectId, { audit = auditWorkspace, r
     }, delayMs);
     timer.unref?.();
   });
+  // 退订连同两个计时器一起停（09-17 项目删除，iss_mtjex6wv_5xhn）：删完之后 1.5s / 10s 后的对账与剪座位不该再跑
+  return () => {
+    unsubscribe();
+    if (timer) { clearTimeout(timer); timer = null; }
+    if (confirmTimer) { clearTimeout(confirmTimer); confirmTimer = null; }
+    seatSuspects.delete(projectId);
+  };
 }
