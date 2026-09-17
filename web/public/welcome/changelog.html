@@ -44,6 +44,52 @@
     <div class="log">
       <!-- changelog:begin（由 CHANGELOG.md 生成：node web/scripts/changelog-page.mjs，别手改） -->
       <article class="log-item reveal">
+        <div class="log-date">2026-09-17<span class="log-ver">桌面 0.1.44</span></div>
+        <div class="log-body">
+          <h3>桌面版</h3>
+          <ul>
+            <li>修复部分电脑上文档预览组件无法启动、Word 文档无法预览的问题</li>
+            <li>组件目录不再允许放在安装目录内，避免更新时被删除；已放在安装目录内的组件启动时自动迁回</li>
+            <li>启动更快；启动失败时，问题报告附带本次启动的日志</li>
+            <li>退出时自动更新没有装上的，下次启动会提示，并提供安装包下载</li>
+            <li>电脑休眠打断更新下载后，唤醒时自动重新检查</li>
+            <li>缺少 Chromium 时，提示前往「设置 → 组件」安装</li>
+            <li>包含 9 月 17 日网页版的全部改进（见下方「网页版」）</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-09-17<span class="log-ver">网页版</span></div>
+        <div class="log-body">
+          <h3>安全</h3>
+          <ul>
+            <li>删除的项目进入「最近删除」，7 天内可以恢复；删除后可以立即撤销</li>
+            <li>回到某条消息或从某条消息分叉后，这条消息的原文会放回输入框；发送失败时原文同样保留</li>
+            <li>回到某条消息之前的文件版本会自动保存，Agent 可以按需取回</li>
+            <li>Agent 可以查阅你在本项目中发过的消息，用于整理之前的要求</li>
+            <li>缩小画布时，站点与演示页显示缩略图，不再是空白卡片</li>
+            <li>演出卡片上可以直接滚动正文</li>
+            <li>接着上一条书写的板书沿用上一条的宽度</li>
+            <li>文件删除后，画布上残留的卡片会自动清理</li>
+            <li>刚生成的站点与文档可以立即在旁边书写、连线</li>
+            <li>Agent 打开的浏览器窗口在本轮结束后自动收起</li>
+            <li>站点文件夹里的脚本和样式文件不再单独排在桌面上</li>
+            <li>工具参数超出范围时按允许的上限执行，不再整次失败</li>
+            <li>Word 文档支持制表位对齐；文档页图可以直接保存到项目文件夹</li>
+            <li>调试页面时，Agent 可以直接读取页面中的数值，不必每次截图</li>
+            <li>截图说明会列出页面加载失败的资源</li>
+            <li>图像生成返回实际尺寸与是否透明；生成失败时说明原因</li>
+            <li>圈选标注的截图完成后再发送给 Agent</li>
+            <li>整理文件时，文件内引用的路径同步更新</li>
+            <li>修复部分第三方模型输出中文时出现乱码的问题</li>
+            <li>加强不同用户之间的隔离：Agent 只能读取当前项目与运行所需的目录</li>
+            <li>已安装的技能包在加载时再次校验内容，不符合规定的不会加载</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
         <div class="log-date">2026-09-13<span class="log-ver">桌面 0.1.43</span></div>
         <div class="log-body">
           <h3>在浏览器中登录</h3>
