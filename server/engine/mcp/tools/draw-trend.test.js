@@ -15,7 +15,7 @@ process.env.PROJECTS_DATA_DIR = path.join(tmp, 'projects-data');
 process.env.DB_PATH = path.join(tmp, 'test.db');
 
 const run = promisify(execFile);
-const { makeDrawTrendTool } = await import('./draw-trend.js');
+const { makeTrendOp } = await import('./draw-trend.js');
 const { readBoard, patchBoard } = await import('../../../projects/board-store.js');
 const { getSharedDir, ensureProjectWorkspace, commitWorkspace } = await import('../../../projects/workspace.js');
 const { renderChalk, CHALK_DIR } = await import('../../../lib/chalk.js');
@@ -36,7 +36,7 @@ beforeAll(async () => {
     await commitWorkspace(pid, null, `beat ${v}`);
   }
   await patchBoard(pid, { objects: { [REL]: { x: 100, y: 100, w: 400, h: 300 } } });
-  call = (args) => makeDrawTrendTool({ projectId: pid, sharedRoot, sessionId: 's1', ctx: { emit() {} } }).handler(args, {});
+  call = (args) => makeTrendOp({ projectId: pid, sharedRoot, sessionId: 's1', ctx: { emit() {} } })(args);
 });
 
 describe('draw_trend', () => {

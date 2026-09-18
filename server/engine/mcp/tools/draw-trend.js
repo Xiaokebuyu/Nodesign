@@ -9,8 +9,6 @@
  * 摆在哪就还在哪）。所以每拍 set_vars 之后想让曲线长一格，再调一次就行。
  */
 
-import { tool } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
 import { readBoard, patchBoard } from '../../../projects/board-store.js';
 import { removeByTag } from '../../../projects/board-tags.js';
 import { trendSeries, trendGeometry } from '../../../lib/state-trend.js';
@@ -26,23 +24,8 @@ import { Events } from '../../agent/events.js';
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 
-export function makeDrawTrendTool({ projectId, sharedRoot, sessionId, ctx }) {
-  return tool(
-    'draw_trend',
-    `Draw a hand-inked trend line of one state-table key over the story so far — 好感度
-climbing across eight beats, HP bleeding down. The series comes from the workspace's
-git history (one commit per turn), so there is nothing to record: if the number lived
-in the state table, its past is already there. Call it again after set_vars and the
-chart redraws IN PLACE (position kept, even if the user dragged it). Needs ≥2 numeric
-points — early beats will refuse loudly, that is normal.`,
-    {
-      key: z.string().min(1).max(KEY_MAX).describe('Which state-table key to chart (must hold numbers — 8/10 counts as 8)'),
-      place: z.object({
-        by: z.string().max(300).optional().describe("Next to THIS canvas id / #tag ('view' = free ground in the user's view)"),
-        side: z.enum(['right', 'left', 'below', 'above']).optional().describe('Preferred side of `by`'),
-      }).optional().describe('WHERE, in relations. Omit it: lands under the state-table card (or where the previous chart of this key sits)'),
-    },
-    async (args) => {
+export function makeTrendOp({ projectId, sharedRoot, sessionId, ctx }) {
+  return async (args) => {
       const err = (t) => ({ content: [{ type: 'text', text: t }], isError: true });
       if (!projectId) return err('No project bound.');
       const s = await trendSeries(sharedRoot, args.key);
@@ -111,8 +94,7 @@ points — early beats will refuse loudly, that is normal.`,
       return { content: [{ type: 'text', text:
         `Trend #${tag}: ${s.points.length} points (${s.points.join(' → ')}), range ${g.min}~${g.max}, `
         + `at (${rect.x},${rect.y}) ${rect.w}x${rect.h}${prev.length ? ' — redrawn in place' : ''}.\n`
-        + `Call draw_trend again after set_vars to grow it; move/group it like any sketch (tag #${tag} — `
+        + `Run add_trend again after set_vars to grow it; move/group it like any sketch (tag #${tag} — `
         + `edit_board follow can pin it to the 状态板 group).` }] };
-    },
-  );
+  };
 }

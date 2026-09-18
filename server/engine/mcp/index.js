@@ -63,21 +63,17 @@ import { makeGetPendingChangesTool } from './tools/get-pending-changes.js';
 import { makeClearPendingChangesTool } from './tools/clear-pending-changes.js';
 import { makeGenerateImageTool } from './tools/generate-image.js';
 import { makeRemoveBackgroundTool } from './tools/remove-background.js';
-import { makePinToBoardTool } from './tools/pin-to-board.js';
 import { makeEditBoardTool } from './tools/edit-board.js';
 import { makeReadBoardTool } from './tools/read-board.js';
 import { makeWriteOnBoardTool } from './tools/write-on-board.js';
 import { makeLookAtBoardTool } from './tools/look-at-board.js';
 import { makeReadUserViewTool } from './tools/read-user-view.js';
 import { makeReadUserMessagesTool } from './tools/read-user-messages.js';
-import { makeOrganizeBoardTool } from './tools/organize-board.js';
 import { makeReadDocumentTool } from './tools/read-document.js';
 import { makeReadTavernJsonTool } from './tools/read-tavern-json.js';
 import { makeDeliverFilesTool } from './tools/deliver-files.js';
 import { makeCrystallizeSkillTool } from './tools/crystallize-skill.js';
 import { makeCastRoleTool } from './tools/cast-role.js';
-import { makeSetVarsTool } from './tools/set-vars.js';
-import { makeDrawTrendTool } from './tools/draw-trend.js';
 import { makeRollDiceTool } from './tools/roll-dice.js';
 import { makeOpenStageTool } from './tools/open-stage.js';
 import { makeStageStatusTool } from './tools/stage-status.js';
@@ -185,7 +181,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
   const writeOnBoard = makeWriteOnBoardTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx });
   const boardBatchable = [
     writeOnBoard,
-    makeEditBoardTool({ projectId, sharedRoot, sessionId, ctx }),
+    makeEditBoardTool({ projectId, sharedRoot, sessionId, ctx, mode: projectMode }),
     makeReadBoardTool({ projectId, sharedRoot }),
   ];
   const browseBatchable = [
@@ -239,8 +235,7 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // cast_role — 写一张角色卡并登记名字（2026-08-26 建，08-29 简化）。
       // 卡是数据，身体是预注册的角色位；写完当回合就能派，之后靠 SendMessage 叫醒。
       makeCastRoleTool({ workspaceRoot, sessionId, ctx, roster: roleRoster }),
-      makeSetVarsTool({ projectId, sharedRoot: workspaceRoot || sharedRoot }),
-      makeDrawTrendTool({ projectId, sharedRoot: workspaceRoot || sharedRoot, sessionId, ctx }),
+      // set_vars / draw_trend 09-18 并进 edit_board（op set_vars / add_trend，实现在 edit-board-more.js）
       // jot_memory 09-07 摘牌：它只给常驻角色写 角色/<名>/记忆.md，而角色子代理线已退役、
       // 那份文件全仓也没有读者（演出线对账 C3）。源码留在 tools/role-memory.js
       // roll_dice — 服务端真随机骰（08-28 沉浸感机制刀①）：模型编的骰运不可信，
@@ -374,9 +369,8 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // 跟 generate_image 解耦：generate_image 只生图，想透明叠加单独调本工具。
       makeRemoveBackgroundTool({ workspaceRoot, sharedRoot, projectId, ctx }),
 
-      // 工作台分区画布（2026-07-27）：agent 协助摆放 —— 把产物/文档/deck 钉进
-      // 某 session 的工作区。写 board.json（board-store 单锁）+ 广播 board.updated。
-      makePinToBoardTool({ sharedRoot, projectId, sessionId, ctx }),
+      // pin_to_board / organize_board 09-18 并进 edit_board（op pin / into_folder）。站主：「pin_to_board 并不是
+      // 很必要，完全可以作为 edit_board 中的一个参数」。画布这一族剩写 / 改 / 读 / 看四个
 
       // 关系线（2026-08-07）：agent 把「这版改自那版」「这两个是对照」这类
       // **只有它知道**的关系画到画布上。画布知道每个产物是什么，但不知道它们
@@ -394,7 +388,6 @@ export function createNodesignMcpServer({ workspaceRoot, sharedRoot, projectId, 
       // beat-gate/角色白名单里的 batch 支路全保留原样，恢复 = git 翻回这一块注册
       // （git log -S board_batch -- server/engine/mcp/index.js）+ 常驻表加回名字
       // + prelude/SKILL 把"攒一车"的教学翻回来。
-      makeOrganizeBoardTool({ projectId, ctx }),
       makeLookAtBoardTool({ projectId, ctx }),
       makeReadUserViewTool({ projectId }),
 

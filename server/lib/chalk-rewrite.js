@@ -46,7 +46,7 @@ export async function rewriteChalkBody(abs, body, entry = {}, { archive = true, 
   if (c.tag === STATE_TABLE_TAG) {
     const t = parseStateTable(String(body).replace(/\r\n?/g, '\n'));
     if (!t.ok) {
-      const ex = new Error(`这一改会把状态表写坏（${t.error === 'no-table' ? '「| 键 | 值 |」表没了' : t.error}）—— 什么都没写。改值用 set_vars；重写正文要保证那张两列表还在。`);
+      const ex = new Error(`这一改会把状态表写坏（${t.error === 'no-table' ? '「| 键 | 值 |」表没了' : t.error}）—— 什么都没写。改值用 edit_board 的 set_vars；重写正文要保证那张两列表还在。`);
       ex.code = 'STATE_TABLE';
       throw ex;
     }

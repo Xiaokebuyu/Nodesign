@@ -15,8 +15,8 @@ const TOOLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 
 /** 09-17 落地时的存量缺口（演出线、进程卡、状态表那几件） */
 const KNOWN_MISSING = new Set([
-  'cast_role', 'draw_trend', 'open_stage', 'start_process', 'read_process_log', 'stop_process',
-  'list_processes', 'jot_memory', 'roll_dice', 'set_vars', 'stage_backdrop', 'stage_status',
+  'cast_role', 'open_stage', 'start_process', 'read_process_log', 'stop_process',
+  'list_processes', 'jot_memory', 'roll_dice', 'stage_backdrop', 'stage_status',
 ]);
 
 function serverToolNames() {

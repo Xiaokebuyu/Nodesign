@@ -149,7 +149,7 @@ export const ROLE_TOOL_WHITELIST = Object.freeze([
   // 板上（MCP 短名；旧别名 create/relate/arrange/sketch/edit_sketch/finish 08-28 随注册表一起收摊）
   'write_on_board', 'read_board', 'edit_board',
   // board_batch 2026-08-30 暂停（注册表摘牌，这里的对账闸会点名）；恢复时加回
-  'look_at_board', 'read_user_view', 'organize_board', 'pin_to_board',
+  'look_at_board', 'read_user_view',
   // （jot_memory 09-07 随角色子代理线一起摘牌：那份 记忆.md 没有读者）
   // 内置
   'SendMessage', 'ToolSearch', 'Read', 'Glob', 'Grep',

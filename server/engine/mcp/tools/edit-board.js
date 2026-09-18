@@ -42,7 +42,8 @@ import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
 import { obstaclesIn, seatBacked } from '../../../lib/board-obstacles.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
-import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
+import { CHALK_DIR, trashChalkFile } from '../../../lib/chalk.js';
+import { makeMoreOps } from './edit-board-more.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
 import { settleBoard, describeSettle } from '../../../lib/topic-settle.js';
 
@@ -51,8 +52,8 @@ let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
 
 
-export function makeEditBoardTool({ projectId, sharedRoot, sessionId = null, ctx }) {
-  const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx });
+export function makeEditBoardTool({ projectId, sharedRoot, sessionId = null, ctx, mode = 'design' }) {
+  const handler = makeHandler({ projectId, sharedRoot, sessionId, ctx, mode });
   return tool(
     'edit_board',
     EDIT_BOARD_DESC,
@@ -67,7 +68,7 @@ export function makeEditBoardTool({ projectId, sharedRoot, sessionId = null, ctx
 // 端点存在性（add_edge / set_edge / write_on_board 图内边共用）09-17 起换成 lib/board-endpoint.js 的归一 + 校验：
 // 原来的 endpointReal 只问「板上有座 / 磁盘上有这个路径」，裸目录名、`X（site）` 这类写法要么拒、要么存成画不出来的端点。
 
-function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
+function makeHandler({ projectId, sharedRoot, sessionId = null, ctx, mode = 'design' }) {
   return async ({ tag: defaultTag, ops }, extra) => {
     // 署名按调用者（常驻角色改板时署它的名）——见 mcp/actor.js
     const by = byOf(extra);
@@ -190,11 +191,14 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
       if (moves.length) report.push(`· #${i + 1} set_text：它变高了，同组在它正下方的 ${moves.length} 件顺着往下挪（没压字）`);
     };
 
+    // 09-18 并进来的 pin / into_folder / set_vars / add_trend / arrange（edit-board-more.js）
+    const more = makeMoreOps({ projectId, sharedRoot, sessionId, ctx, mode });
     for (let i = 0; i < ops.length; i += 1) {
       const o = ops[i];
       const fail = (why) => report.push(`✗ #${i + 1} ${o.op}: ${why}`);
       try {
-        if (o.op === 'set_text') {
+        if (more[o.op]) { if (await more[o.op](o, { n: i + 1, fail, report: (t) => report.push(t), rid, rectOf, setObj, placeTo, sayWhere, moveHuggers, live, objects, liveZones })) ok += 1; }
+        else if (o.op === 'set_text') {
           const id = rid(o.id); const e = id && live[id];
           // 板书正门（08-27）：set_text 也认板书**文件** —— 改字不再要求重画/绕道
           // Edit。笔权按作者判：只有作者本人能改自己的话（接续权闸的同一条纪律，

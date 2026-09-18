@@ -57,9 +57,9 @@ export const PARALLEL_SAFE_TOOLS = new Set([
 
 export const SERIAL_TOOLS = new Set([
   // 写板面 / 产物 / 文件
-  'write_on_board', 'edit_board', 'organize_board', 'pin_to_board', 'draw_trend',
+  'write_on_board', 'edit_board',
   'build_docx', 'deliver_files', 'export_handoff', 'publish_site', 'crystallize_skill',
-  'expose_tweaks', 'set_vars', 'highlight', 'navigate_to_page', 'clear_pending_changes',
+  'expose_tweaks', 'highlight', 'navigate_to_page', 'clear_pending_changes',
   'jot_memory', 'cast_role', 'report_issue', 'open_stage', 'stage_backdrop', 'roll_dice',
   // 切用户正在看的那一页（setActiveDeck + 前端跳页），两个并行就是抢镜头
   'preview_deck',

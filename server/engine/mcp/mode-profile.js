@@ -37,8 +37,8 @@ export const RP_HIDDEN_TOOLS = Object.freeze(new Set([
   // 产物会话五量具
   'artifact_open', 'artifact_computer', 'artifact_find', 'artifact_motion', 'artifact_batch',
   // 黑板 RP 时代的骰与状态表（09-06 站主拍板下架）：故事在显示器上演后，骰归演出进程的 roll（含选项代掷），
-  // 状态归 vitals / panels；draw_trend 画的是板上状态表的历史，同族一起走
-  'roll_dice', 'set_vars', 'draw_trend',
+  // 状态归 vitals / panels。状态表与趋势图 09-18 并进 edit_board（op set_vars / add_trend），演出模式下由那两个 op 自己拒
+  'roll_dice',
 ]));
 
 /** 这件工具在该模式下该不该注册（false = 连名字都不给） */

@@ -179,10 +179,10 @@ on the minimap and listed with what is inside it.`,
       }
       if (board.hero && !tag) lines.push('', `★ 显式主角：${board.hero}（edit_board 的 feature/unfeature 管它）`);
 
-      // 还没入座的到货（入座器一轮封顶截流的那几件）：点名即可，位置由 pin_to_board{place} 定
+      // 还没入座的到货（入座器一轮封顶截流的那几件）：点名即可，位置由 edit_board 的 pin 定
       if (!want && !tag) {
         const pend = Array.isArray(board.pending) ? board.pending : [];
-        if (pend.length) lines.push('', `📦 ${pend.length} 件到货还没上墙：${pend.slice(0, 6).join('、')}${pend.length > 6 ? '…' : ''} —— pin_to_board{path, place:{by:…}} 请它们上来。`);
+        if (pend.length) lines.push('', `📦 ${pend.length} 件到货还没上墙：${pend.slice(0, 6).join('、')}${pend.length > 6 ? '…' : ''} —— edit_board{ops:[{op:"pin", paths:[…], to:{by:…}}]} 请它们上来。`);
       }
       // 版图（2026-08-27 空间规划）：线 = 同 tag 的纵列。这是 agent 的符号地图 ——
       // 摆放按关系（续哪条线/岔自哪条）声明，几何机器排，别按坐标猜。

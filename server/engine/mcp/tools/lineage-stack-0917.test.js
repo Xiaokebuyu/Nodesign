@@ -14,7 +14,7 @@ process.env.DB_PATH = path.join(tmp, 'test.db');
 
 const { makeReadBoardTool } = await import('./read-board.js');
 const { makeEditBoardTool } = await import('./edit-board.js');
-const { makePinToBoardTool } = await import('./pin-to-board.js');
+const { makePinOp } = await import('./pin-to-board.js');
 const { patchBoard, readBoard } = await import('../../../projects/board-store.js');
 const { ensureProjectWorkspace, getSharedDir } = await import('../../../projects/workspace.js');
 const { makeAnchorResolver } = await import('../../../lib/board-anchor.js');
@@ -123,10 +123,10 @@ describe('改写即归档用户标注（刀四）', () => {
   });
 });
 
-describe('pin_to_board', () => {
+describe('pin（09-18 起是 edit_board 的 op）', () => {
   it('钉的是叠住的旧版 → 返回说明它仍在现役版身后、要点开才看得见', async () => {
-    const pin = makePinToBoardTool({ projectId: pid, sharedRoot: root, ctx: { emit: () => {} } });
-    const res = await pin.handler({ path: 'logo-v1.png', place: { by: 'other.png', side: 'right' } }, {});
+    const pin = makePinOp({ projectId: pid, sharedRoot: root, ctx: { emit: () => {} } });
+    const res = await pin({ path: 'logo-v1.png', place: { by: 'other.png', side: 'right' } });
     expect(res.isError).toBeFalsy();
     expect(res.content[0].text).toContain('stacked behind logo-v3.png');
   });

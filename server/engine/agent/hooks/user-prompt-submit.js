@@ -169,7 +169,7 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       let spot = null;
       const pendingSeats = Array.isArray(board.pending) ? board.pending : [];
       if (pendingSeats.length) {
-        spot = `📦 ${pendingSeats.length} 件到货还没上墙（${pendingSeats.slice(0, 3).map(r => r.split('/').pop()).join('、')}${pendingSeats.length > 3 ? '…' : ''}）—— pin_to_board{path, place:{by:"<它说明的那件>"}} 请上来`;
+        spot = `📦 ${pendingSeats.length} 件到货还没上墙（${pendingSeats.slice(0, 3).map(r => r.split('/').pop()).join('、')}${pendingSeats.length > 3 ? '…' : ''}）—— edit_board{ops:[{op:"pin", paths:[…], to:{by:"<它说明的那件>"}}]} 请上来`;
       }
       const dirs = null;
       /**
@@ -307,14 +307,14 @@ async function collectSections({ workspaceRoot, sessionId, projectId }) {
       } catch (e) { console.warn('[vars] 触发器求值失败：', e.message); }
 
       parts.push(`状态表现值（${st.rel}，共 ${st.rows.length} 格）：\n${table}\n`
-        + `  改数字用 set_vars（只动那一格）；改表的结构/加说明文字才用 edit_board 的 set_text。`);
+        + `  改数字用 edit_board 的 set_vars（只动那一格）；改表的结构/加说明文字才用 set_text。`);
       sections.push({ key: 'vars', title: '状态表', text: parts.join('\n') });
     } else if (st.state === 'broken') {
       sections.push({
         key: 'vars',
         title: '状态表',
         text: `⚠️ 状态表读不出来了：${st.why}\n`
-          + `  在修好之前 set_vars 会一直拒绝（工具不会做部分写入，以免进一步破坏表结构）。`
+          + `  在修好之前 edit_board 的 set_vars 会一直拒绝（工具不会做部分写入，以免进一步破坏表结构）。`
           + `${st.rel ? ` Read 一下 ${st.rel} 看看表被改成什么样了。` : ''}`,
       });
     }

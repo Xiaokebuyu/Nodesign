@@ -40,14 +40,13 @@ export const TO = z.preprocess(
     return v;
   },
   z.strictObject({
-    by: z.string().max(300).optional()
-      .describe("Next to THIS: a canvas id / #tag / board-note path, 'user' = what the user has selected, 'view' = free ground in the user's current view"),
-    side: z.enum(['right', 'left', 'above', 'below']).optional()
-      .describe('Preferred side of `by` — a preference: if it is taken the thing goes to the nearest free side and the return says so'),
-    with: z.string().regex(TAG_RE).optional()
-      .describe('Continue THIS group: right under the last item of that #tag'),
+    // 09-18：这三句说明原来各有一整句，而 TO 被 7 个 op 各嵌一遍（JSON Schema 不共享定义），光它就占常驻
+    // 两千多字符。怎么写位置在工具说明开头讲一次就够，这里只留提示词
+    by: z.string().max(300).optional().describe("id / #tag / 'user' (their selection) / 'view' (their view)"),
+    side: z.enum(['right', 'left', 'above', 'below']).optional(),
+    with: z.string().regex(TAG_RE).optional().describe('continue this #tag group'),
   }),
-).describe("WHERE, in relations — no pixels. {by:'view'} = into the user's view");
+).describe('WHERE, as a relation (no pixels)');
 
 export const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('set_text'), id: z.string().min(1).max(300), text: z.string().min(1).max(8000).optional(), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional() }),
@@ -72,6 +71,12 @@ export const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('unfeature') }),
   z.object({ op: z.literal('transform_group'), tag: z.string().min(1).max(40), scale: z.number().min(0.3).max(3).optional(), rotate: z.number().min(-180).max(180).optional().describe('degrees clockwise') }),
   z.object({ op: z.literal('chalk_edit'), on: z.boolean().describe('true = turn ON the user-side 改板书 toggle (notes become freely draggable/editable for the user); false = back to guarded mode') }),
+  // ── 09-18 并进来的（站主：「把现有的 board 编辑工具都整合到 edit_board」；实现在 edit-board-more.js）──
+  z.object({ op: z.literal('pin'), path: z.string().min(1).max(300).optional(), paths: z.array(z.string().min(1).max(300)).min(1).max(12).optional(), to: TO.optional(), tag: z.string().max(40).optional(), as: z.enum(['row', 'column']).optional() }),
+  z.object({ op: z.literal('into_folder'), ids: z.array(z.string().min(1).max(300)).min(1).max(16), folder: z.string().max(300), rewrite_refs: z.boolean().optional() }),
+  z.object({ op: z.literal('arrange'), ids: z.array(z.string().min(1).max(300)).min(2).max(24), as: z.enum(['row', 'column', 'grid']).optional(), cols: z.number().int().min(1).max(8).optional(), to: TO.optional(), tag: z.string().max(40).optional() }),
+  z.object({ op: z.literal('set_vars'), vars: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])) }),
+  z.object({ op: z.literal('add_trend'), key: z.string().min(1).max(40), to: TO.optional() }),
 ]);
 
 /**
@@ -118,7 +123,23 @@ ops (run in order; a failing op is reported, the rest still apply):
  seats/files/lines all kept, user or you can unroll anytime; the tidy way to end an act) ·
  unroll{tag} · feature{id} / unfeature (hero) ·
  chalk_edit{on} (flip the user's 改板书 toggle — turn it ON when the session leans on
- board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming).
+ board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming) ·
+ pin{path|paths,to?,tag?,as?} (put an EXISTING file on the canvas. With to it lands on the desktop
+ there, and a file that lives in a folder — generated images live in the 生成图 folder — is really
+ MOVED to the workspace root: its .webp/.meta come along and every reference to it in pages and
+ notes is rewritten. Without to it is surfaced inside its folder. paths[] lays several out in one go) ·
+ into_folder{ids,folder} (really move files / folders into a folder, created if missing; "" =
+ workspace root; references follow) ·
+ arrange{ids,as?,cols?,to?,tag?} (lay several things out in the given order as a row / column /
+ grid (default: row up to 4, grid beyond) with machine spacing, the whole block beside \`to\` or
+ where the first one is; with tag they become one topic) ·
+ set_vars{vars} (the state table — the note tagged 状态表: set only these cells, e.g.
+ {"好感度": 5}; existing keys update, new ones append; the rest of the note stays byte-for-byte; never set_text a whole table to change one number; no table yet →
+ write one with write_on_board tag:"状态表") ·
+ add_trend{key,to?} (hand-inked trend of one numeric state-table key over the story, from git
+ history; needs ≥2 points; calling it again redraws in place).
+Same tag = one topic with its own ground (the dashed hull on the canvas). When a topic grows or
+lands on another, the other topic moves out of the way as a whole — the result says who moved.
 User-dragged items CAN be moved (the result says so when you do) — move them for a
 reason, and never tug-of-war: if the user drags it back, that placement is final.
 For brand-new content use write_on_board.`;

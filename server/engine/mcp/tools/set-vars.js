@@ -23,8 +23,6 @@
  * 谁在管这一场，谁就该能改数字。这跟 edit_board 对叙事板书的规矩是两回事。
  */
 
-import { tool } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
 import { readBoard, patchBoard } from '../../../projects/board-store.js';
 import { settleBoard, describeSettle } from '../../../lib/topic-settle.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
@@ -36,37 +34,10 @@ import {
 /** 一次最多改几个键：再多就不是"改状态"是"重建状态表"，那该用 set_text */
 const MAX_KEYS = 20;
 
-export function makeSetVarsTool({ projectId, sharedRoot }) {
-  return tool(
-    'set_vars',
-    `Update values in the board's state table — the one chalk note tagged "${STATE_TABLE_TAG}".
-
-Use this every beat for anything that changed and must be remembered: HP, 好感度, 时间,
-线索, 持有物, 进度. It edits ONLY those cells; the rest of the note (your prose, the
-layout, other tables) is left byte-for-byte alone, and the card is re-measured for you.
-
-Why not edit_board set_text: that rewrites the whole note, so changing one number means
-regenerating a dozen lines that should not change. That is where numbers get silently lost.
-
-The table is plain markdown living in a note the user can see and edit:
-
-  | 键 | 值 |
-  | --- | --- |
-  | 好感度_苏绵 | 3 |
-
-Values you set here show up at the top of your NEXT turn, so you do not have to carry
-them in your head. Keys: letters/digits/CJK/_/-/·, no spaces, max ${KEY_MAX} chars. Values are
-single-line, max ${VALUE_MAX} chars — long text belongs in the note body, not a cell.
-
-If there is no state table yet, this tool creates nothing: write one first with
-write_on_board (tag: "${STATE_TABLE_TAG}"), then set values here.`,
-    {
-      vars: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-        .describe('Keys to set, e.g. {"好感度_苏绵": 5, "时间": "戌时"}. Existing keys are updated, new ones appended.'),
-    },
-    async (args) => {
+export function makeSetVarsOp({ projectId, sharedRoot }) {
+  return async (args) => {
       const fail = (msg) => ({ content: [{ type: 'text', text: msg }], isError: true });
-      if (!projectId || !sharedRoot) return fail('没有项目工作区，set_vars 不可用。');
+      if (!projectId || !sharedRoot) return fail('没有项目工作区，状态表改不了。');
 
       const vars = args?.vars && typeof args.vars === 'object' ? args.vars : null;
       const keys = vars ? Object.keys(vars) : [];
@@ -145,8 +116,7 @@ write_on_board (tag: "${STATE_TABLE_TAG}"), then set values here.`,
       }
       lines.push(`表在 ${found.rel}，现在共 ${applied.rows.length} 格。下一轮开头你会看到它。`);
       return { content: [{ type: 'text', text: lines.join('\n') }] };
-    },
-  );
+  };
 }
 
 /** 给测试与 SKILL 用的样板表（保持和工具描述里那段一致） */

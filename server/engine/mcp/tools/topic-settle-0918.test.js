@@ -12,7 +12,6 @@ process.env.PROJECTS_DATA_DIR = path.join(tmp, 'projects-data');
 process.env.DB_PATH = path.join(tmp, 'test.db');
 
 const { makeEditBoardTool } = await import('./edit-board.js');
-const { makePinToBoardTool } = await import('./pin-to-board.js');
 const { readBoard, patchBoard } = await import('../../../projects/board-store.js');
 const { getSharedDir, ensureProjectWorkspace } = await import('../../../projects/workspace.js');
 const { renderChalk } = await import('../../../lib/chalk.js');
@@ -26,7 +25,8 @@ beforeAll(async () => {
   root = getSharedDir(pid);
   const ctx = { emit: () => {} };
   edit = (args) => makeEditBoardTool({ projectId: pid, sharedRoot: root, ctx }).handler(args, {});
-  pin = (args) => makePinToBoardTool({ projectId: pid, sharedRoot: root, ctx }).handler(args, {});
+  // 09-18 起钉东西是 edit_board 的 pin
+  pin = ({ path: p, place, tag }) => makeEditBoardTool({ projectId: pid, sharedRoot: root, ctx }).handler({ ops: [{ op: 'pin', path: p, to: place, tag }] }, {});
   await put('notes/板书/配色.md', renderChalk({ body: '主色暖橙', tag: '配色' }));
   await put('notes/板书/字体.md', renderChalk({ body: '标题宋体', tag: '字体' }));
   await put('notes/板书/字体2.md', renderChalk({ body: '正文黑体', tag: '字体' }));

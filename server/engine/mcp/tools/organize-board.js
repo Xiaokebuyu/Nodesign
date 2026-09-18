@@ -13,36 +13,13 @@
  * （停了就报哪件停的，后面的不动）。目标夹不存在就建 —— 归纳常配新夹。
  */
 
-import { tool } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
 import { moveEntry, MoveError } from '../../../projects/move-entry.js';
 import { followMoves } from '../../../lib/move-follow.js';
 import { getSharedDir } from '../../../projects/workspace.js';
 import { Events } from '../../agent/events.js';
 
-export function makeOrganizeBoardTool({ projectId, ctx }) {
-  return tool(
-    'organize_board',
-    `Tidy the workbench canvas: move artifacts (generated images, files, folders) into a folder. Same semantics as the user dragging a card into a folder — the file really moves on disk, and its canvas identity (position, relation lines) follows automatically.
-
-Use for: grouping generated images into a folder, collecting a site's materials into <site>/assets/, un-cluttering the desktop root. Sticky notes (notes/*.md) may move too, but they become plain .md file cards outside notes/ — lose the flippable sticky form.
-Not for: site roots as destination (they are artifacts, not storage — a site takes materials in its assets/ subfolder).
-
-After moving, references across the workspace (src/href in html/css/md pointing
-at the moved items) are rewritten to the new paths automatically — the count of
-rewritten spots is reported per file so you can verify. Pass rewrite_refs:false
-to move only.
-
-Batch: up to 16 items, moved in order. A name clash at the destination is skipped (that one is likely already filed) and the rest still move; any other failure stops the batch.`,
-    {
-      items: z.array(z.string().min(1)).min(1).max(16)
-        .describe('Workspace-relative paths to move (files or folders), e.g. ["assets/generated/a.png", "旧稿.html"]'),
-      into: z.string()
-        .describe('Destination folder (workspace-relative), e.g. "素材" or "观察日志/assets". Created if missing. "" = workspace root (un-nest).'),
-      rewrite_refs: z.boolean().optional()
-        .describe('Also rewrite references to the moved items across workspace text files (default true).'),
-    },
-    async ({ items, into, rewrite_refs: rewriteRefs }) => {
+export function makeIntoFolderOp({ projectId, ctx }) {
+  return async ({ items, into, rewrite_refs: rewriteRefs }) => {
       const lines = [];
       const moves = [];
       let moved = 0; let skipped = 0;
@@ -100,6 +77,5 @@ Batch: up to 16 items, moved in order. A name clash at the destination is skippe
         if (moved > 0) ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: `归纳了 ${moved} 件到 ${into || '桌面根'}` });
       } catch { /* fail-soft */ }
       return { content: [{ type: 'text', text: lines.join('\n') }] };
-    },
-  );
+  };
 }

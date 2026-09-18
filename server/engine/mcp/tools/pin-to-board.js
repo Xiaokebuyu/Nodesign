@@ -25,12 +25,10 @@
  * agent 每帮一次忙就制造一条死数据。
  */
 
-import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { moveEntry } from '../../../projects/move-entry.js';
 import { describeFollow } from '../../../lib/move-follow.js';
 import { GENERATED_DIR, GENERATED_TITLE } from '../../../lib/generated-folder.js';
 import { topicObstacles, settleBoard, describeSettle } from '../../../lib/topic-settle.js';
-import { z } from 'zod';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { pinToZone, readBoard, patchBoard } from '../../../projects/board-store.js';
@@ -42,7 +40,6 @@ import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { makeAnchorResolver, anchorMissHint } from '../../../lib/board-anchor.js';
 import { boardLineage } from '../../../lib/lineage.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
-import { PLACE } from './write-on-board-schema.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { cardIdForPath, KIND_PREFIX_RE } from '../../../lib/kinds/index.js';
 
@@ -55,44 +52,8 @@ import { cardIdForPath, KIND_PREFIX_RE } from '../../../lib/kinds/index.js';
  * @param {string} [deps.projectId]
  * @param {import('../../agent/context.js').AgentContext} [deps.ctx]
  */
-export function makePinToBoardTool({ sharedRoot, projectId, sessionId = null, ctx }) {
-  return tool(
-    'pin_to_board',
-    `Bring an item to the front of the user's canvas, at a free spot in whatever
-folder it lives in. The canvas is their desktop: whatever you write appears
-there automatically — you do NOT need this tool for your own outputs.
-Use it only to deliberately surface something:
-
-- Put a produced file where it belongs: pin_to_board{path, place:{by:"<the note it
-  illustrates>", side:"right"}} — relations only, the machine solves the spot
-- Pull a reference (an uploaded asset, a memory note, an older image) into view
-- Restore something the user dragged off-screen, when they ask for it back
-
-Folder membership follows the disk. Generated images and videos live in the
-${GENERATED_TITLE} folder (assets/generated), not on the desktop. Without \`place\` the
-item is surfaced inside whatever folder it lives in. WITH \`place\` it is brought onto the desktop, and if
-it lives in a folder the FILE IS MOVED to the workspace root first (same as the
-user dragging a card out of a folder) — canvas and disk never disagree. Its
-companions (the .webp display copy, .meta) move with it, and references to it
-across the workspace (page src/href, css url(), note anchors) are rewritten to the
-new path automatically; the result says how many.
-
-Paths are workspace-relative, exactly as they are on disk. Accepted forms:
-- any file path: 'assets/generated/hero.webp', 'notes/灵感.md', '稿件/数据.csv'
-  Under assets/ only the top level, assets/generated/ and assets/notes/ show on the canvas; deeper files (e.g. assets/references/web/…) must be copied into a folder first
-- a deck: 'deck:<path>.html'   a site: 'site:<dir>'
-  (a bare '<path>.html' is read as a deck)`,
-    {
-      path: z
-        .string()
-        .min(1)
-        .max(300)
-        .describe('Item to surface — see accepted forms in the tool description'),
-      place: PLACE.optional(),
-      tag: z.string().max(40).optional()
-        .describe('Put it in a group. Produced files (images, sites, docx) are never created by you, so this is the one place they can get a tag at all — and a tag is what follow{group_tag,target_tag} matches on, on both ends.'),
-    },
-    async ({ path: rawPath, place, tag }) => {
+export function makePinOp({ sharedRoot, projectId, sessionId = null, ctx }) {
+  return async ({ path: rawPath, place, tag }) => {
       try {
         if (!projectId) {
           return { content: [{ type: 'text', text: 'No project bound; cannot pin.' }], isError: true };
@@ -215,7 +176,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
           } catch { /* emit fail-safe */ }
           return { content: [{ type: 'text', text: `Placed ${objectId} — ${where}.${zoneId ? ` (Moved out of ${zoneId} to the workspace root; the file now lives at ${objectId.replace(/^(deck:|site:)/, '')}.${followNote})` : ''}`
             + (nextPending.length !== (boardNow.pending || []).length ? ` It is no longer waiting for a spot (${nextPending.length} still are).` : '')
-            + (tipNow ? ` It is an older version stacked behind ${tipNow}, so the user sees it only after expanding that card's ⧉ badge.` : '') }] };
+            + (tipNow ? ` It is an older version stacked behind ${tipNow}, so the user sees it only after expanding that card's ⧉ badge.` : '') }], objectId };
         }
         const { zone: placedZone, placed } = await pinToZone(projectId, { objectId, zoneId });
 
@@ -232,17 +193,17 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         const where = placedZone?.id ? `in ${placedZone.id}` : 'on the desktop';
         // 生成图文件夹里的东西不带 place 只会在文件夹窗里（09-18）：用户不打开文件夹就看不见，要说清
         const genNote = zoneId === GENERATED_DIR
-          ? ` It stays inside the ${GENERATED_TITLE} folder, so the user sees it only after opening that folder. To put it on the desktop, call again with place (this moves the file out; references follow).`
+          ? ` It stays inside the ${GENERATED_TITLE} folder, so the user sees it only after opening that folder. To put it on the desktop, pin it again with to (this moves the file out; references follow).`
           : '';
         return {
           content: [{
             type: 'text',
             text: `Surfaced ${objectId} ${where} at a free spot. The user's canvas updates live.${genNote}`,
           }],
+          objectId,
         };
       } catch (err) {
-        return { content: [{ type: 'text', text: `pin_to_board failed: ${err.message}` }], isError: true };
+        return { content: [{ type: 'text', text: `pin failed: ${err.message}` }], isError: true };
       }
-    },
-  );
+  };
 }
