@@ -11,6 +11,11 @@
  *   ③ 调用方拿到新 board（前端要用它重写 layoutRef）
  *   ④ commit 交给调用方（路由在响应后 commit；agent 工具每轮本来就落 commit）
  *
+ * 09-18 补上后半件（lib/move-follow.js，站主定「画布位置变动代表文件变动」）：
+ *   伴随件（png/webp 另一半、.meta、grounding、缩略）跟主文件一起搬；全工作区的引用与板书锚点
+ *   改到新路径。三个调用方（拖卡 / organize_board / pin_to_board）以前只有 organize_board 改引用。
+ *   批量调用方传 `follow:false`，自己攒齐 moves 之后调一次 followMoves（省得每件扫一遍工作区）。
+ *
  * 失败用 MoveError 抛（带 status），路由映射成 http 状态码，工具映射成文案。
  */
 import { promises as fs } from 'fs';
@@ -20,6 +25,7 @@ import { renameBoardPaths } from './board-store.js';
 import { taskManifest, KIND_SITE } from '../lib/artifact-target.js';
 import { RESERVED_DIRS } from '../lib/task-scan.js';
 import { CHALK_DIR } from '../lib/chalk.js';
+import { moveCompanions, followMoves } from '../lib/move-follow.js';
 
 export class MoveError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -44,10 +50,13 @@ const NO_MOVE_OUT = new Set(['exports', 'node_modules', 'agent-memory']);
  * @param {string} pid
  * @param {string} fromRaw  工作区相对路径（文件或文件夹）
  * @param {string} toRaw    目标文件夹（'' = 工作区根）
- * @param {object} [opts]   { createFolder: 目标夹不存在就 mkdir（agent 归纳常配新夹）}
- * @returns {Promise<{ok:true, from:string, to:string, moved:boolean, board?:object}>}
+ * @param {object} [opts]   { createFolder: 目标夹不存在就 mkdir（agent 归纳常配新夹）；
+ *                          follow: 搬完顺手改引用（默认 true）}
+ * @returns {Promise<{ok:true, from:string, to:string, moved:boolean, board?:object,
+ *   moves?: Array<{from,to}>, follow?: object|null, followError?: string}>}
+ *   moves 含伴随件；follow 是引用改写的结果（follow:false 时为 null）
  */
-export async function moveEntry(pid, fromRaw, toRaw, { createFolder = false } = {}) {
+export async function moveEntry(pid, fromRaw, toRaw, { createFolder = false, follow = true } = {}) {
   const root = getSharedDir(pid);
   const from = norm(fromRaw);
   const to = norm(toRaw);
@@ -108,6 +117,12 @@ export async function moveEntry(pid, fromRaw, toRaw, { createFolder = false } = 
   }
 
   await fs.rename(absFrom, path.resolve(root, nextRel));                    // ①
-  const { board } = await renameBoardPaths(pid, [[from, nextRel]]);         // ②
-  return { ok: true, from, to: nextRel, moved: true, board };               // ③
+  const extra = srcStat.isFile() ? (await moveCompanions(root, from, nextRel)).moves : [];
+  const moves = [{ from, to: nextRel }, ...extra];
+  const { board } = await renameBoardPaths(pid, moves.map((m) => [m.from, m.to]));   // ②
+  let followed = null; let followError;
+  if (follow) {
+    try { followed = await followMoves(root, moves); } catch (err) { followError = err?.message || String(err); }
+  }
+  return { ok: true, from, to: nextRel, moved: true, board, moves, follow: followed, ...(followError ? { followError } : {}) };   // ③
 }

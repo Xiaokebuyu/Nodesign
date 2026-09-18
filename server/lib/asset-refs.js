@@ -24,6 +24,7 @@
 
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { MEDIA_EXT } from './outside-media.js';
 
 /** 会被扫的文本类型（二进制不扫） */
 const SCANNABLE = /\.(html?|css|jsx?|mjs|cjs)$/i;
@@ -111,7 +112,7 @@ function splitSrcset(value) {
  *   本来就是整个工作区）。被挡下的引用不静默丢，进 unresolved。
  * @returns {Promise<{refs:string[], unresolved:Array<{from,why,snippet}>}>}
  */
-export async function collectAssetRefs({ files, baseRoot, allowPrefixes = [] }) {
+export async function collectAssetRefs({ files, baseRoot, allowPrefixes = [], allowMedia = false }) {
   const own = new Set(files.map(f => f.rel.replace(/\\/g, '/')));
   const refs = new Set();
   const unresolved = [];
@@ -126,8 +127,11 @@ export async function collectAssetRefs({ files, baseRoot, allowPrefixes = [] }) 
     unresolved.push({ from, why, snippet: s });
   };
 
+  // allowMedia（09-18）：树外的**素材文件**也收。生成图被拖出 assets/ 摆到桌面或别的文件夹后，
+  // 页面引用会被改写成 `../hero.webp`；只认 assets/ 的话导出静默丢图。页面类（html）仍挡在外面
   const allowed = (rel) => {
     if (!allowPrefixes.length) return true;
+    if (allowMedia && MEDIA_EXT.test(rel)) return true;
     return allowPrefixes.some(p => (p === '' ? true : rel === p || rel.startsWith(p)));
   };
 
@@ -161,7 +165,7 @@ export async function collectAssetRefs({ files, baseRoot, allowPrefixes = [] }) 
           if (!rel || rel.startsWith('..')) continue;          // 逃出工作区的不收
           if (own.has(rel)) continue;                          // 产物自己的页面不算素材
           if (!allowed(rel)) {
-            pushHint(f.rel, '引用落在产物树外（只有 assets/ 和产物自己的目录会进包）', cleaned);
+            pushHint(f.rel, '引用落在产物树外（只有 assets/、产物自己的目录和素材文件会进包）', cleaned);
             continue;
           }
           refs.add(rel);

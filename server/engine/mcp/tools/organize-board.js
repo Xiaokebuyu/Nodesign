@@ -16,7 +16,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { moveEntry, MoveError } from '../../../projects/move-entry.js';
-import { rewriteWorkspaceRefs } from '../../../lib/rewrite-refs.js';
+import { followMoves } from '../../../lib/move-follow.js';
 import { getSharedDir } from '../../../projects/workspace.js';
 import { Events } from '../../agent/events.js';
 
@@ -48,9 +48,10 @@ Batch: up to 16 items, moved in order. A name clash at the destination is skippe
       let moved = 0; let skipped = 0;
       for (const item of items) {
         try {
-          const out = await moveEntry(projectId, item, into, { createFolder: true });
+          // 引用改写攒到整批搬完再做一次（每件各扫一遍工作区太贵）；伴随件（webp/meta）也在 out.moves 里
+          const out = await moveEntry(projectId, item, into, { createFolder: true, follow: false });
           moved += 1;
-          if (out.moved) moves.push({ from: out.from, to: out.to });
+          if (out.moved) moves.push(...(out.moves || [{ from: out.from, to: out.to }]));
           lines.push(out.moved ? `✓ ${out.from} → ${out.to}` : `· ${out.from}（已在原地）`);
           if (out.moved) {
             try {
@@ -85,7 +86,8 @@ Batch: up to 16 items, moved in order. A name clash at the destination is skippe
       // 必须可核对；报 0 也说一声，agent 不用再自己 grep。
       if (moves.length > 0 && rewriteRefs !== false) {
         try {
-          const rw = await rewriteWorkspaceRefs(getSharedDir(projectId), moves);
+          const rw = await followMoves(getSharedDir(projectId), moves);
+          if (rw.anchors) lines.push(`板书锚点：${rw.anchors} 条跟着改到新路径`);
           lines.push(rw.hits > 0
             ? `引用改写：${rw.hits} 处 / ${rw.files} 个文件`
             : '引用改写：全工作区没有指向这些条目的文本引用（0 处）');

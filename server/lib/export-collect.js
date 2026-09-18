@@ -193,7 +193,7 @@ export async function collectCard({ workspaceRoot, cardId }) {
     throw Object.assign(new Error(`${rel} 里没有可导出的文件`), { status: 400 });
   }
 
-  // 树外引用只认 `assets/` 和产物自己的目录（旧 /exports/site 有这道闸，别丢）。
+  // 树外引用只认 `assets/`、产物自己的目录，以及树外的素材文件（09-18，拖出 assets/ 的生成图；页面仍挡）。
   // 根层产物的自有前缀是空串 = 不设闸：它的树本来就是整个工作区，这条认账。
   const ownPrefix = isTree ? (rel ? `${rel}/` : '') : (path.posix.dirname(rel) === '.' ? '' : `${path.posix.dirname(rel)}/`);
   // 只有**标记语言**产物需要跟着引用扫下去。`browsable` 正好是这条线：能用浏览器
@@ -211,7 +211,7 @@ export async function collectCard({ workspaceRoot, cardId }) {
     const scanned = new Set(files.map(f => f.rel));
     let batch = files;
     for (let round = 0; round < 4 && batch.length; round++) {
-      const r = await collectAssetRefs({ files: batch, baseRoot: workspaceRoot, allowPrefixes: allow });
+      const r = await collectAssetRefs({ files: batch, baseRoot: workspaceRoot, allowPrefixes: allow, allowMedia: true });
       refs.push(...r.refs); unresolved.push(...r.unresolved); candidates.push(...r.candidates);
       batch = [];
       for (const rr of r.refs) {

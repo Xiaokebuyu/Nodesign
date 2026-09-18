@@ -27,6 +27,7 @@
 
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { moveEntry } from '../../../projects/move-entry.js';
+import { describeFollow } from '../../../lib/move-follow.js';
 import { z } from 'zod';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -68,8 +69,10 @@ Use it only to deliberately surface something:
 Folder membership follows the disk. Without \`place\` the item is surfaced inside
 whatever folder it lives in. WITH \`place\` it is brought onto the desktop, and if
 it lives in a folder the FILE IS MOVED to the workspace root first (same as the
-user dragging a card out of a folder) — canvas and disk never disagree. References
-to it inside pages are not rewritten; pull images out before you reference them.
+user dragging a card out of a folder) — canvas and disk never disagree. Its
+companions (the .webp display copy, .meta) move with it, and references to it
+across the workspace (page src/href, css url(), note anchors) are rewritten to the
+new path automatically; the result says how many.
 
 Paths are workspace-relative, exactly as they are on disk. Accepted forms:
 - any file path: 'assets/generated/hero.webp', 'notes/灵感.md', '稿件/数据.csv'
@@ -150,6 +153,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
            * 是**真 mv**（跟用户从文件夹里拖一张卡出来同一件事），不再只改 zone 留下
            * "画布说在桌面、磁盘说在文件夹"的分叉（设计线对账 A5）。
            */
+          let followNote = '';
           if (zoneId) {
             const m = /^(deck:|site:)?(.*)$/.exec(objectId);
             const prefix = m[1] || ''; const rel = m[2];
@@ -158,6 +162,9 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
               if (out.moved) {
                 try { ctx?.emit?.({ type: 'run.file_changed', filePath: out.to, event: 'rename' }); } catch { /* */ }
                 objectId = `${prefix}${out.to}`;
+                followNote = out.followError
+                  ? ` References were NOT rewritten (${out.followError}); grep for the old path and fix them.`
+                  : ` ${describeFollow(out.follow)}.`;
               }
             } catch (err) {
               return { content: [{ type: 'text', text: `${objectId} 在「${zoneId}」里，拎到桌面要先把文件搬到工作区根，但搬不动：${err?.message || err}` }], isError: true };
@@ -202,7 +209,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
           try {
             ctx?.emit?.({ type: 'board.updated', sessionId: null, objectId, zoneId: '', summary: `已把 ${objectId} 摆到桌面上` });
           } catch { /* emit fail-safe */ }
-          return { content: [{ type: 'text', text: `Placed ${objectId} — ${where}.${zoneId ? ` (Moved out of ${zoneId} to the workspace root; the file now lives at ${objectId.replace(/^(deck:|site:)/, '')}.)` : ''}`
+          return { content: [{ type: 'text', text: `Placed ${objectId} — ${where}.${zoneId ? ` (Moved out of ${zoneId} to the workspace root; the file now lives at ${objectId.replace(/^(deck:|site:)/, '')}.${followNote})` : ''}`
             + (nextPending.length !== (boardNow.pending || []).length ? ` It is no longer waiting for a spot (${nextPending.length} still are).` : '')
             + (tipNow ? ` It is an older version stacked behind ${tipNow}, so the user sees it only after expanding that card's ⧉ badge.` : '') }] };
         }

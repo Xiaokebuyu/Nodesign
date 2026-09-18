@@ -49,6 +49,7 @@ import { prepareExportPage, injectViewportFit } from './exports/export-page.js';
 export { buildHandoffZip } from './exports/handoff.js';
 import { buildHandoffZip } from './exports/handoff.js';
 import { walkTaskFiles, loadIgnore } from '../lib/task-scan.js';
+import { bundleOutsideMedia } from '../lib/outside-media.js';
 
 const router = express.Router();
 
@@ -609,6 +610,13 @@ router.get(['/:pid/exports/site', '/:pid/sessions/:sid/exports/site'], async (re
       }
       let text;
       try { text = await fs.readFile(f.abs, 'utf8'); } catch { continue; }
+      // 树外素材（09-18：拖出 assets/ 的生成图）先收进 site/assets/_ws/，引用改到包内（lib/outside-media.js）
+      const siteRootRel = path.relative(sessionRoot, baseDir).split(path.sep).join('/');
+      const ob = bundleOutsideMedia(text, {
+        ext: path.extname(f.name).slice(1).toLowerCase(), pageRel: siteRootRel ? `${siteRootRel}/${f.rel}` : f.rel, siteRoot: siteRootRel, root: sessionRoot,
+      });
+      text = ob.text;
+      for (const x of ob.files) referenced.set(x.wsRel, x.bundleRel);
       // 先按原文收集引用（改写之后就找不回原路径了）
       for (const r of localRefsOf(text)) {
         const refAbs = path.resolve(path.dirname(f.abs), r);

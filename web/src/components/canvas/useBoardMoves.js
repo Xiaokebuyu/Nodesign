@@ -13,6 +13,17 @@ import { sizeOf } from '../../lib/board-kinds.js';
 import { FOLDER_CARD } from '../../lib/board-geometry.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 
+/**
+ * 搬家顺手改了别处的引用（09-18，服务端 lib/move-follow.js）：说一声。
+ * 自动改写用户内容必须看得见 —— 站点里的图路径变了，用户不该是最后一个知道的。
+ */
+function noteFollow(r) {
+  const f = r?.follow;
+  if (r?.followError) { useGlobalStore.getState().showToast(`文件搬过去了，但别处的引用没改成：${r.followError}`, 'error'); return; }
+  if (!f || !(f.hits || f.anchors)) return;
+  useGlobalStore.getState().showToast(`已同步改写 ${f.files} 个文件里的 ${f.hits} 处引用${f.anchors ? `、${f.anchors} 条板书锚点` : ''}`, 'info');
+}
+
 export function useBoardMoves({
   projectId, reload, scheduleSave,
   setLayout, setZones, setBindings,
@@ -90,6 +101,7 @@ export function useBoardMoves({
     }
     try {
       const r = await Assets.moveEntry(projectId, from, toDir);   // ← 目录，不是新路径
+      noteFollow(r);
       if (r?.board) {
         // 服务端已经把身份都改好了 —— 以它为准，别让本地的旧条目再写回去
         setZones(r.board.zones || {});
@@ -134,6 +146,7 @@ export function useBoardMoves({
     movingRef.current.add(from);
     try {
       const r = await Assets.moveEntry(projectId, from, toDir || '');
+      noteFollow(r);
       if (r?.board) {
         setZones(r.board.zones || {});
         setBindings(r.board.bindings || {});

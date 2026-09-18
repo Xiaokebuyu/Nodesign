@@ -25,6 +25,7 @@ import { getSharedDir } from '../projects/workspace.js';
 import { taskManifest } from './kinds/index.js';
 import { walkTaskFiles, loadIgnore } from './task-scan.js';
 import { resolveBinary } from '../runtime/capabilities.js';
+import { bundleOutsideMedia } from './outside-media.js';
 import {
   getPublished, upsertPublished, removePublished,
   countPublishedByUser, cfProjectNameFor, getByCustomDomain, slugify,
@@ -112,6 +113,7 @@ async function stageSite(pid, { taskDir, root, rootAbs }) {
   const ignore = await loadIgnore(taskDir);
   const files = await walkTaskFiles(rootAbs, { maxDepth: 6, ignore, ignoreBase: taskDir });
   let staged = 0;
+  const outside = new Map();   // 树外素材（09-18：拖出 assets/ 的生成图）→ 包内落点
   for (const f of files) {
     if (!root && f.rel === 'canvas.html') continue;          // 根站排 deck 保留名
     if (f.rel === '.nd-project.json') continue;
@@ -120,14 +122,21 @@ async function stageSite(pid, { taskDir, root, rootAbs }) {
     if (/\.(html?|css)$/i.test(f.rel)) {
       const depth = f.rel.split('/').length - 1;
       const up = '../'.repeat(depth);
-      const text = await fs.readFile(f.abs, 'utf8');
-      await fs.writeFile(dest, text.replace(/(["'(])(?:\.\.\/)+assets\//g, `$1${up}assets/`));
+      const b = bundleOutsideMedia(await fs.readFile(f.abs, 'utf8'), {
+        ext: path.extname(f.rel).slice(1).toLowerCase(), pageRel: root ? `${root}/${f.rel}` : f.rel, siteRoot: root, root: taskDir,
+      });
+      for (const x of b.files) outside.set(x.wsRel, x.bundleRel);
+      await fs.writeFile(dest, b.text.replace(/(["'(])(?:\.\.\/)+assets\//g, `$1${up}assets/`));
     } else {
       await fs.copyFile(f.abs, dest);
     }
     staged += 1;
   }
   if (!staged) throw fail(400, '站点没有可发布的文件');
+  for (const [wsRel, bundleRel] of outside) {
+    const dest = path.join(stage, ...bundleRel.split('/'));
+    try { await fs.mkdir(path.dirname(dest), { recursive: true }); await fs.copyFile(path.join(taskDir, ...wsRel.split('/')), dest); } catch { /* 中途被删：页面里本来就会裂 */ }
+  }
   // 入口：Pages 认 index.html；没有的话把第一个 html 报出来（也是"发了什么"的一部分）
   const entry = files.some(f => f.rel === 'index.html')
     ? 'index.html'

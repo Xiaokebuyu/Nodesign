@@ -20,6 +20,7 @@ import {
 } from '../projects/workspace.js';
 import { patchBoard, readBoard, reconcileBoardRenames, pruneDanglingBindings, forwardId, forwardPath, renameBoardPaths } from '../projects/board-store.js';
 import { moveEntry, MoveError } from '../projects/move-entry.js';
+import { moveCompanions, followMoves } from '../lib/move-follow.js';
 import { reconcileAutoRefsThrottled } from '../lib/auto-relations.js';
 import { taskManifest, ENTRY_FILE, KIND_SITE, docxClaimedFiles } from '../lib/artifact-target.js';
 import { RESERVED_DIRS, isReservedFile, loadIgnore } from '../lib/task-scan.js';
@@ -687,10 +688,13 @@ router.post('/:pid/rename', express.json(), async (req, res, next) => {
       return res.status(409).json({ error: `「${wanted}${ext}」已经有一个了` });
     }
 
-    // 顺序同 /move：先动磁盘，再改画布身份（物件 / 文件夹 / 归属 / 关系线端点）
+    // 顺序同 /move：先动磁盘，再改画布身份（物件 / 文件夹 / 归属 / 关系线端点）；
+    // 伴随件与引用跟着改（09-18，同 moveEntry 的后半件 lib/move-follow.js）
     await fs.rename(absFrom, path.resolve(root, nextRel));
-    const { board } = await renameBoardPaths(req.params.pid, [[from, nextRel]]);
-    res.json({ ok: true, from, to: nextRel, renamed: true, board });
+    const moves = [{ from, to: nextRel }, ...(st.isFile() ? (await moveCompanions(root, from, nextRel)).moves : [])];
+    const { board } = await renameBoardPaths(req.params.pid, moves.map((m) => [m.from, m.to]));
+    const follow = await followMoves(root, moves).catch((err) => ({ error: err?.message || String(err) }));
+    res.json({ ok: true, from, to: nextRel, renamed: true, board, follow });
     commitWorkspace(req.params.pid, null, `rename: ${from} → ${nextRel}`, { author: 'user' })
       .catch(err => console.warn('[git] rename commit failed:', err.message));
   } catch (err) { next(err); }

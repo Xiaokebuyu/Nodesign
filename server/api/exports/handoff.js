@@ -18,6 +18,7 @@ import { promises as fs } from 'fs';
 import JSZip from 'jszip';
 import { walkTaskFiles, loadIgnore } from '../../lib/task-scan.js';
 import { KIND_SITE } from '../../lib/artifact-target.js';
+import { bundleOutsideMedia } from '../../lib/outside-media.js';
 
 /**
  * 共享 handoff 打包逻辑 —— HTTP 路由 + MCP tool（export_handoff）共用。
@@ -43,8 +44,22 @@ export async function buildHandoffZip(sessionRoot, sharedRoot, { projectId, proj
       ignore: await loadIgnore(taskRootAbs),
       ignoreBase: taskRootAbs,
     });
+    // 树外素材（09-18：拖出 assets/ 的生成图）收进 design/assets/_ws/，页面引用改到包内（lib/outside-media.js）
+    const siteRoot = path.relative(taskRootAbs, artifactDirAbs).split(path.sep).join('/');
+    const outside = new Map();
     for (const f of siteFiles) {
-      try { zip.file(`design/${f.rel}`, await fs.readFile(f.abs)); } catch { /* 中途被删就跳过 */ }
+      try {
+        if (/\.(html?|css)$/i.test(f.rel)) {
+          const b = bundleOutsideMedia(await fs.readFile(f.abs, 'utf8'), {
+            ext: path.extname(f.rel).slice(1).toLowerCase(), pageRel: siteRoot ? `${siteRoot}/${f.rel}` : f.rel, siteRoot, root: taskRootAbs,
+          });
+          for (const x of b.files) outside.set(x.wsRel, x.bundleRel);
+          zip.file(`design/${f.rel}`, b.text);
+        } else zip.file(`design/${f.rel}`, await fs.readFile(f.abs));
+      } catch { /* 中途被删就跳过 */ }
+    }
+    for (const [wsRel, bundleRel] of outside) {
+      try { zip.file(`design/${bundleRel}`, await fs.readFile(path.join(taskRootAbs, ...wsRel.split('/')))); } catch { /* 同上 */ }
     }
     // 站内 html/css 的 `../../assets/` 归一（zip 布局是 design/<页面> + design/assets/）
     for (const rel of Object.keys(zip.files)) {
