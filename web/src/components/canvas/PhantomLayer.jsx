@@ -32,6 +32,12 @@ import { MARGIN_X, DESKTOP_W, ROW_GAP } from '../../lib/board-geometry.js';
  * v1 边界：幻影只排**根桌面层**。生成图片的常见落点 assets/generated/ 归属
  * 到根，命中大多数情况；落进具体文件夹的图走不到过户（幻影超时蒸发），
  * 文件夹卡的橙圈仍然指示"里面在干活"。
+ *
+ * ## 09-18：生成图住进「生成图」文件夹之后
+ *
+ * 新图不再落桌面，过户这条路走不到了。幻影改成**叠在生成图文件夹卡上**（卡还没出现就照旧
+ * 找桌面空位），图生成完（status ok）稍停一下就蒸发，文件夹卡面随清单刷新把新图排在第一格。
+ * 过户（claimPhantomSeat）留着，只是不再认领这些幻影（inFolder）。
  */
 
 /** 认领窗：过了这个时长还没等到图，认命蒸发 */
@@ -68,7 +74,10 @@ export function findPhantomSeat(obstacles, contentBottom) {
  * 上标 consumedBy —— movingRef 在同一个 memo 里就是这么用的，有先例）；
  * state 那份只管渲染。
  */
-export function usePhantoms({ stageCards, phantomsRef, obstaclesRef, contentBottomRef }) {
+/** 生成完之后在文件夹卡上停多久再蒸发（让人看见「落进去了」） */
+const PHANTOM_LAND_MS = 900;
+
+export function usePhantoms({ stageCards, phantomsRef, obstaclesRef, contentBottomRef, homeRef = null }) {
   const [phantoms, setPhantoms] = useState([]);
   /**
    * 拖动幻影用的重渲染扳机。
@@ -91,16 +100,19 @@ export function usePhantoms({ stageCards, phantomsRef, obstaclesRef, contentBott
       const cur = table.get(c.blockId);
       if (!cur) {
         const taken = [...table.values()].filter(p => !p.consumedBy).map(p => ({ ...p.seat, w: IMG_SIZE.w, h: IMG_SIZE.h }));
-        const seat = findPhantomSeat(
-          [...(obstaclesRef.current || []), ...taken],
-          contentBottomRef.current || 0,
-        );
+        // 生成图文件夹卡在桌面上：叠在它上面，一张比一张错开一点（像往文件夹里塞纸）
+        const home = homeRef?.current;
+        const k = taken.length % 4;
+        const seat = home
+          ? { x: Math.round(home.x + 12 + k * 10), y: Math.round(home.y + 8 + k * 10) }
+          : findPhantomSeat([...(obstaclesRef.current || []), ...taken], contentBottomRef.current || 0);
         table.set(c.blockId, {
           blockId: c.blockId, seat, prompt: c.prompt || '', status: c.status,
-          bornAt: now, consumedBy: null,
+          bornAt: now, consumedBy: null, inFolder: true,
         });
         changed = true;
       } else if (cur.status !== c.status || cur.prompt !== (c.prompt || cur.prompt)) {
+        if (c.status === 'ok' && cur.status !== 'ok') cur.okAt = now;
         cur.status = c.status;
         if (c.prompt) cur.prompt = c.prompt;
         changed = true;
@@ -111,6 +123,7 @@ export function usePhantoms({ stageCards, phantomsRef, obstaclesRef, contentBott
     for (const [key, p] of table) {
       const dead = p.consumedBy
         || (p.status === 'fail' && now - p.bornAt > PHANTOM_FAIL_MS)
+        || (p.inFolder && p.okAt && now - p.okAt > PHANTOM_LAND_MS)
         || now - p.bornAt > PHANTOM_TTL_MS;
       if (dead) { table.delete(key); changed = true; }
     }
@@ -125,14 +138,15 @@ export function usePhantoms({ stageCards, phantomsRef, obstaclesRef, contentBott
       const n = Date.now();
       for (const [key, p] of tbl) {
         if (p.consumedBy || n - p.bornAt > PHANTOM_TTL_MS
+          || (p.inFolder && p.okAt && n - p.okAt > PHANTOM_LAND_MS)
           || (p.status === 'fail' && n - p.bornAt > PHANTOM_FAIL_MS)) {
           tbl.delete(key); dirty = true;
         }
       }
       if (dirty) setPhantoms([...tbl.values()].filter(p => !p.consumedBy));
-    }, 5000);
+    }, [...table.values()].some(p => p.okAt) ? PHANTOM_LAND_MS + 100 : 5000);
     return () => clearTimeout(t);
-  }, [stageCards, phantomsRef, obstaclesRef, contentBottomRef]);
+  }, [stageCards, phantomsRef, obstaclesRef, contentBottomRef, homeRef]);
 
   /**
    * 挪座（2026-08-17）：**拖幻影 = 指定这张图待会儿落在哪**。
@@ -177,7 +191,7 @@ export function phantomRects(phantomsRef) {
  */
 export function claimPhantomSeat(phantomsRef, newImageId) {
   const free = [...phantomsRef.current.values()]
-    .filter(p => !p.consumedBy)
+    .filter(p => !p.consumedBy && !p.inFolder)
     .sort((a, b) => a.bornAt - b.bornAt);
   if (!free.length) return null;
   free[0].consumedBy = String(newImageId);

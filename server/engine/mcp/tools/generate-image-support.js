@@ -74,3 +74,7 @@ export async function fanOutImages(args, extra, one, pool = makeImagePool()) {
   });
   return { content, ...(failed === prompts.length ? { isError: true } : {}) };
 }
+
+/** 生成图住「生成图」文件夹（09-18）：返回里说一句，不然 agent 以为图已经摆在用户桌面上了 */
+export const GEN_FOLDER_NOTE = 'It is in the 生成图 folder on the canvas, not on the desktop; to show it on the desktop, '
+  + 'pin_to_board{path, place:{by, side}} (moves the file out, references follow).';

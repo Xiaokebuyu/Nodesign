@@ -21,11 +21,15 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { getSharedDir } from './workspace.js';
-import { renameBoardPaths } from './board-store.js';
+import { renameBoardPaths, readBoard, patchBoard } from './board-store.js';
+import { GENERATED_DIR } from '../lib/generated-folder.js';
 import { taskManifest, KIND_SITE } from '../lib/artifact-target.js';
 import { RESERVED_DIRS } from '../lib/task-scan.js';
 import { CHALK_DIR } from '../lib/chalk.js';
 import { moveCompanions, followMoves } from '../lib/move-follow.js';
+
+/** 能放回「生成图」文件夹的：图与视频（跟画布扫描的 IMAGE/VIDEO 两类对齐） */
+const MEDIA_RE = /\.(png|webp|jpe?g|gif|avif|mp4|webm|mov)$/i;
 
 export class MoveError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -78,11 +82,15 @@ export async function moveEntry(pid, fromRaw, toRaw, { createFolder = false, fol
   if (from === CHALK_DIR || from.startsWith(`${CHALK_DIR}/`)) {
     throw new MoveError(400, '板书是画布上的话，不参与搬家');
   }
+  // 生成图文件夹本身不搬（09-18）：它是生图产线的落点，搬走了下一张图又会在原处长出一个
+  if (from === GENERATED_DIR) throw new MoveError(400, '「生成图」文件夹是生成图的落点，不参与搬家');
   if (to && (RESERVED_DIRS.has(guardSeg(to)) || guardSeg(to).startsWith('.'))) {
-    // 唯一例外：把误逃的 .md 送**回**板书目录（恢复通道；organize_board 同享。
+    // 例外一：把误逃的 .md 送**回**板书目录（恢复通道；organize_board 同享。
     // 不限根层 —— groupInto 误触会把板书埋进"新建文件夹/"里，也得捞得回来）
     const isChalkReturn = to === CHALK_DIR && /\.md$/i.test(from);
-    if (!isChalkReturn) throw new MoveError(400, '不能搬进这个目录');
+    // 例外二（09-18）：图和视频可以放回「生成图」文件夹
+    const isGeneratedReturn = to === GENERATED_DIR && MEDIA_RE.test(from);
+    if (!isChalkReturn && !isGeneratedReturn) throw new MoveError(400, to === GENERATED_DIR ? '「生成图」文件夹只收图和视频' : '不能搬进这个目录');
   }
   // 搬进自己肚子里（文件夹拖到它自己的子文件夹上）—— fs.rename 会报
   // EINVAL，但那时目录树已经没法自洽了，提前拦住
@@ -111,7 +119,17 @@ export async function moveEntry(pid, fromRaw, toRaw, { createFolder = false, fol
 
   const base = path.basename(from);
   const nextRel = to ? `${to}/${base}` : base;
-  if (nextRel === from) return { ok: true, from, to: from, moved: false };
+  if (nextRel === from) {
+    // 旧板桌面上的生成图拖进「生成图」文件夹卡：文件本来就在这儿，清掉 desk 标记它就归进文件夹（09-18）
+    if (to === GENERATED_DIR) {
+      const cur = await readBoard(pid);
+      if (cur.objects?.[from]?.desk) {
+        const board = await patchBoard(pid, { objects: { [from]: { desk: false } } });
+        return { ok: true, from, to: from, moved: false, filed: true, board };
+      }
+    }
+    return { ok: true, from, to: from, moved: false };
+  }
   if (await exists(path.resolve(root, nextRel))) {
     throw new MoveError(409, `「${base}」在那儿已经有一个了`);
   }
@@ -119,7 +137,9 @@ export async function moveEntry(pid, fromRaw, toRaw, { createFolder = false, fol
   await fs.rename(absFrom, path.resolve(root, nextRel));                    // ①
   const extra = srcStat.isFile() ? (await moveCompanions(root, from, nextRel)).moves : [];
   const moves = [{ from, to: nextRel }, ...extra];
-  const { board } = await renameBoardPaths(pid, moves.map((m) => [m.from, m.to]));   // ②
+  let { board } = await renameBoardPaths(pid, moves.map((m) => [m.from, m.to]));   // ②
+  // desk 只对「留在桌面的旧生成图」有意义：搬过一次就不再是旧板存量，标记跟着清（09-18）
+  if (board?.objects?.[nextRel]?.desk) board = await patchBoard(pid, { objects: { [nextRel]: { desk: false } } });
   let followed = null; let followError;
   if (follow) {
     try { followed = await followMoves(root, moves); } catch (err) { followError = err?.message || String(err); }

@@ -6,6 +6,7 @@
  * 共用这一份归一。跟 pin_to_board 内联的那段同源同规则 —— 收敛计划里它也该
  * 迁过来（现在没动它：改稳定工具要单独一刀）。
  */
+import { isDeskPinned } from './generated-folder.js';
 
 /**
  * 座次表印出来的装饰：`browse@(48,10)640x388`、`browse@48,10`。
@@ -82,6 +83,8 @@ export function layerOf(id, entry, knownFolders) {
   // 节点一比就拒）——错标签直接落回按路径推，存量脏数据顺带自愈。
   if (entry?.kind && typeof entry.zone === 'string'
     && (entry.zone === '' || knownFolders?.has?.(entry.zone))) return entry.zone;
+  // 旧板桌面上的生成图（09-18，lib/generated-folder.js）：留在桌面。前端 useDirIndex 同一条
+  if (isDeskPinned(id, entry)) return '';
   const s = String(id);
   const c = s.indexOf(':');
   const p = (c > 0 && /^[a-z]+$/.test(s.slice(0, c))) ? s.slice(c + 1) : s;

@@ -32,6 +32,7 @@ import { promises as fs } from 'node:fs';
 import { byOf, describeBy } from '../actor.js';
 import { listRoleNames } from '../../agent/role-card.js';
 import path from 'node:path';
+import { GENERATED_DIR, GENERATED_TITLE } from '../../../lib/generated-folder.js';
 
 /** 同一"行"的 y 容差：入座算法一行内顶对齐，40 世界像素内视作同行 */
 const ROW_TOLERANCE = 40;
@@ -171,7 +172,8 @@ on the minimap and listed with what is inside it.`,
         if (folders.length) {
           lines.push('', `文件夹卡：${folders.map(f => {
             const zz = board.zones[f];
-            return coords ? `${f}@(${Math.round(zz.x)},${Math.round(zz.y)})` : f;
+            const name = f === GENERATED_DIR ? `${f}（${GENERATED_TITLE}）` : f;
+            return coords ? `${name}@(${Math.round(zz.x)},${Math.round(zz.y)})` : name;
           }).join('、')}`);
         }
       }

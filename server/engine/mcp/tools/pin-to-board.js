@@ -28,6 +28,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { moveEntry } from '../../../projects/move-entry.js';
 import { describeFollow } from '../../../lib/move-follow.js';
+import { GENERATED_DIR, GENERATED_TITLE } from '../../../lib/generated-folder.js';
 import { z } from 'zod';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -66,8 +67,9 @@ Use it only to deliberately surface something:
 - Pull a reference (an uploaded asset, a memory note, an older image) into view
 - Restore something the user dragged off-screen, when they ask for it back
 
-Folder membership follows the disk. Without \`place\` the item is surfaced inside
-whatever folder it lives in. WITH \`place\` it is brought onto the desktop, and if
+Folder membership follows the disk. Generated images and videos live in the
+${GENERATED_TITLE} folder (assets/generated), not on the desktop. Without \`place\` the
+item is surfaced inside whatever folder it lives in. WITH \`place\` it is brought onto the desktop, and if
 it lives in a folder the FILE IS MOVED to the workspace root first (same as the
 user dragging a card out of a folder) — canvas and disk never disagree. Its
 companions (the .webp display copy, .meta) move with it, and references to it
@@ -226,10 +228,14 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
         } catch { /* emit fail-safe */ }
 
         const where = placedZone?.id ? `in ${placedZone.id}` : 'on the desktop';
+        // 生成图文件夹里的东西不带 place 只会在文件夹窗里（09-18）：用户不打开文件夹就看不见，要说清
+        const genNote = zoneId === GENERATED_DIR
+          ? ` It stays inside the ${GENERATED_TITLE} folder, so the user sees it only after opening that folder. To put it on the desktop, call again with place (this moves the file out; references follow).`
+          : '';
         return {
           content: [{
             type: 'text',
-            text: `Surfaced ${objectId} ${where} at a free spot. The user's canvas updates live.`,
+            text: `Surfaced ${objectId} ${where} at a free spot. The user's canvas updates live.${genNote}`,
           }],
         };
       } catch (err) {

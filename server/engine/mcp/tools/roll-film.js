@@ -233,8 +233,8 @@ export function makeRollFilmTool(deps) {
         + 'and it is offline right now. Do not call this tool; tell the user the local lane is offline.\n\n')
     + `Generate video shots (picture + native audio) on the platform's self-hosted
 MiniMax-H3 lane (RTX 5090 server, SageAttention, Turbo 8-step, 24fps). One call =
-one batch of 1-16 shots rendered back-to-back; each finished shot lands on the
-canvas immediately. Max 12.25s per shot — longer stories are multiple shots.
+one batch of 1-16 shots rendered back-to-back; each finished shot lands in the
+生成图 folder on the canvas immediately. Max 12.25s per shot — longer stories are multiple shots.
 
 Call ONLY when the user explicitly asks for video, and align the shot list with
 the user before rolling a multi-shot batch. Roughly 3-5 minutes per shot,

@@ -341,7 +341,7 @@ export function makePaintStillTool(deps) {
         + 'and it is offline right now. Do not call this tool. Use generate_image instead, '
         + 'and tell the user the local lane is offline if they asked for it specifically.\n\n')
     + `Generate anime/illustration images on the platform's self-hosted GPU lane. One call =
-1-16 stills rendered serially; each finished image lands on the canvas
+1-16 stills rendered serially; each finished image lands in the 生成图 folder on the canvas
 immediately. Each still can also set batch=N to get N variations of the SAME
 prompt from one sampling pass — far cheaper than N separate stills, and it is
 the right way to "roll" for a good result.

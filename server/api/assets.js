@@ -21,6 +21,8 @@ import {
 import { patchBoard, readBoard, reconcileBoardRenames, pruneDanglingBindings, forwardId, forwardPath, renameBoardPaths } from '../projects/board-store.js';
 import { moveEntry, MoveError } from '../projects/move-entry.js';
 import { moveCompanions, followMoves } from '../lib/move-follow.js';
+import { GENERATED_DIR, isDeskPinned } from '../lib/generated-folder.js';
+import { ensureGeneratedFolder } from '../projects/generated-folder-migrate.js';
 import { reconcileAutoRefsThrottled } from '../lib/auto-relations.js';
 import { taskManifest, ENTRY_FILE, KIND_SITE, docxClaimedFiles } from '../lib/artifact-target.js';
 import { RESERVED_DIRS, isReservedFile, loadIgnore } from '../lib/task-scan.js';
@@ -233,6 +235,8 @@ router.get('/:pid/artifacts', async (req, res, next) => {
     await reconcileBoardRenames(req.params.pid).catch(
       (err) => console.warn('[board] 改名对账失败:', err.message));
     await pruneDanglingBindings(req.params.pid).catch(() => {});   // 悬空线 30s 节流清扫（理由见 board-store）
+    // 生成图进文件夹的存量迁移（09-18）：桌面上已经摆着的旧生成图打 desk 留在桌面；一块板只跑一次
+    await ensureGeneratedFolder(req.params.pid).catch((err) => console.warn('[board] 生成图文件夹迁移失败:', err.message));
     // 演出的老形状（根上的 stage/ + 角色/ …）收进一场戏的文件夹（09-05 晚；幂等，三次 stat 的事）
     await ensurePlays(req.params.pid).catch((err) => console.warn('[stage] 迁移失败:', err.message));
 
@@ -500,8 +504,11 @@ router.get('/:pid/artifacts', async (req, res, next) => {
     //
     // 两道闸：① 正在改名窗口里的（转发表里有）一律不碰 ② 连续两次扫描都不在
     // 才算真没了。改名、临时 mv、agent 写到一半，都活不过第二次判定。
-    const live = new Set(folders);
     const board = await readBoard(req.params.pid);
+    // 生成图文件夹（09-18，lib/generated-folder.js）：里面有不是旧板桌面件的图，它就是一个文件夹。
+    // 全是旧板桌面件（或空的）就不出这张卡，老项目的桌面原样
+    if (artifacts.some(a => a.kind === 'generated' && !isDeskPinned(a.path, board.objects?.[a.path]))) folders.push(GENERATED_DIR);
+    const live = new Set(folders);
     const suspects = Object.keys(board.zones || {}).filter(z => !live.has(z));
     const deadZones = confirmDeadZones(req.params.pid, suspects, live);
     if (deadZones.length) {

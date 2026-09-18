@@ -23,7 +23,7 @@ import { buildVariationPrompt, PRESERVE_KEYS } from './helpers/codex-imagegen.js
 import { produceImage, extForMime } from './image-produce.js';
 import { describeImageFacts } from './helpers/image-facts.js';
 import { imageRoute, relayGenerateImage } from './relay-tools.js';
-import { fanOutImages, buildOutputName, makeImagePool } from './generate-image-support.js';
+import { fanOutImages, buildOutputName, makeImagePool, GEN_FOLDER_NOTE } from './generate-image-support.js';
 
 // Thumbnail 配置（env 可调）。**原图不动**——保留 Gemini 输出的全分辨率（通常
 // 1080×1920+ PNG，6-8MB）让用户最终交付不损失质量。仅生成低清 thumbnail 给
@@ -178,8 +178,8 @@ imageSize / thinkingLevel / responseModalities / model / useGrounding are
 Gemini-gateway-only and SILENTLY IGNORED — do not spend effort on them.
 PDF referenceImages are NOT supported (images only). 'prompt' produces exactly
 ONE image; there is no "3 variations in one prompt". For a SET, pass 'prompts'
-(2-8): they are generated concurrently in one call and each lands on the canvas
-as it finishes. Images that need different aspectRatio / referenceImages: put
+(2-8): they are generated concurrently in one call and each lands in the
+生成图 folder on the canvas as it finishes. Images that need different aspectRatio / referenceImages: put
 several generate_image calls in the SAME message; they run concurrently too.
 Up to 4 images render at once per session. Do not chain single calls across
 turns one after another.
@@ -580,7 +580,7 @@ memory (记忆/, type: project) so later sessions inherit it.`,
       }
       // 下一步写在返回文里：cookbook 只在首张注入一次，第 N 张时模型手里只有这段 caption
       captionParts.push(
-        '\nNext: look at the inline image for technical defects only (duplicated figures, broken limbs, '
+        `\n${GEN_FOLDER_NOTE} Next: look at the inline image for technical defects only (duplicated figures, broken limbs, `
         + 'stray text or watermark, all-black / all-white, mush) and regenerate silently if you see one; '
         + 'taste and direction stay with the user. Then reference the file from the page and screenshot to check '
         + 'it in place. If this image will seed other pages via referenceImages, let the user confirm it first.',

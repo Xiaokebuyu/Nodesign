@@ -4,6 +4,7 @@ import { Monitor, Folder, Check } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SANS, FONT_KAI, FONT_SIZE, alpha } from '../../lib/theme.js';
 import { PAPER, PAPER_SHADOW, GRAIN } from '../../lib/paper.js';
 import { PORTAL_Z } from '../../lib/z-layers.js';
+import { GENERATED_DIR, GENERATED_TITLE } from '../../lib/generated-folder.js';
 
 /**
  * MoveToPopover —— 「移动到…」的目标选择（2026-08-13）。
@@ -109,7 +110,7 @@ export default function MoveToPopover({ x, y, folders = [], current = '', exclud
       </div>
       <div style={{ overflowY: 'auto', minHeight: 0 }}>
         {row('', '桌面', Monitor, 0)}
-        {targets.map(f => row(f, f.split('/').pop(), Folder, f.split('/').length - 1))}
+        {targets.map(f => row(f, f === GENERATED_DIR ? GENERATED_TITLE : f.split('/').pop(), Folder, f === GENERATED_DIR ? 0 : f.split('/').length - 1))}
       </div>
     </div>
   ), document.body);

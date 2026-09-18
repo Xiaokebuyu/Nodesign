@@ -204,6 +204,9 @@ export function sanitizeObject(o, size) {
     // 推断"他喜欢多宽的板书"（lib/chalk-size-pref.js）。跟 seat 是两件事 ——
     // seat 说"谁摆的位置"，sized 说"谁定的大小"，用户可以只调一个。
     ...(o.sized === 'user' ? { sized: 'user' } : {}),
+    // 旧板桌面上的生成图（2026-09-18，lib/generated-folder.js）：生成图从此住「生成图」文件夹，
+    // 迁移那一刻已经摆在桌面上的留在桌面。只收 true；清除传 false（合并语义下缺席字段会保留）
+    ...(o.desk === true ? { desk: true } : {}),
     // 座位戳（2026-09-08 埋点，board-store.patchBoard 盖）：这个座**谁在什么时候**落的、尺寸什么时候变的。
     // 「站点卡被压」案查到最后没法再往下：板上只有坐标没有先后，只能拿文件 mtime 猜。有了这三个字段，
     // 回合末的重叠审计（lib/workspace-audit.js）才能说出「谁后到 / 卡是不是先摆好又长大了」。

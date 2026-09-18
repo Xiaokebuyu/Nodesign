@@ -44,6 +44,7 @@ import { canvasIdForRel } from '../../lib/canvas-id.js';
 import { cardIdForPath, KIND_PREFIX_RE } from '../../lib/kinds/index.js';
 import { isCanvasFolder } from '../../lib/folder-claims.js';
 import { dirCardOn } from '../../lib/board-anchor.js';
+import { GENERATED_DIR, inGeneratedDir } from '../../lib/generated-folder.js';
 
 const MAX_SEATS_PER_RUN = 24;   // 一轮生成几百个文件的（构建产物漏网）也别刷爆板
 
@@ -135,13 +136,15 @@ async function seatBatch(projectId, rels, trace) {
   for (const rel of uniq) {
     const segs = rel.split('/');
     if (segs.length < 2 || !seatable(rel)) continue;
-    const top = segs[0];
-    if (RESERVED_DIRS.has(top) || zonesPatch[top] || noFolder.has(top)) continue;
+    // 生成图文件夹（09-18）：assets/ 是保留目录，但 assets/generated 在画布上是「生成图」文件夹卡
+    const gen = inGeneratedDir(rel);
+    const top = gen ? GENERATED_DIR : segs[0];
+    if ((!gen && RESERVED_DIRS.has(top)) || zonesPatch[top] || noFolder.has(top)) continue;
     if (board.zones?.[top] && Number.isFinite(board.zones[top].x)) continue;
     // 站点 / word 文件夹 / 构建目录不是文件夹卡（09-17 iss_mtp465ds_ctko）：原来不问就建，
     // 建出来的坐标前端不画，锚点解析却先认它 —— 「X（site）」被认成一层隐形文件夹。判据与 /artifacts 同一份
     // 先看板上有没有同名的目录型卡（便宜），没有再按扫描口径判（要读 manifest）
-    if (dirCardOn({ objects: live }, top) || !(await isCanvasFolder(sharedRoot, top).catch(() => false))) { noFolder.add(top); continue; }
+    if (!gen && (dirCardOn({ objects: live }, top) || !(await isCanvasFolder(sharedRoot, top).catch(() => false)))) { noFolder.add(top); continue; }
     const rootRects = Object.entries(live)
       .filter(([id, e]) => Number.isFinite(e?.x) && layerOf(id, e, known) === '')
       .map(([id, e]) => ({ x: e.x, y: e.y, ...estimateSizeOn(board, id, e) }));

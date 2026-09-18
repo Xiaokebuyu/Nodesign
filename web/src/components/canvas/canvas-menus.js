@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { canAddToContext, isFileBacked } from '../../lib/board-kinds.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { GENERATED_DIR, GENERATED_TITLE } from '../../lib/generated-folder.js';
 
 /**
  * @param {object} ctx 命中解析的结果
@@ -117,32 +118,38 @@ export function buildBoardMenu(ctx, act) {
   }
 
   if (zoneId) {
+    // 生成图文件夹（09-18）：生图产线的落点，删、改名、搬走、往里建子夹都会让产线找不到家
+    const sys = zoneId === GENERATED_DIR;
+    const zTitle = sys ? GENERATED_TITLE : (zoneId.split('/').pop() || zoneId);
     return [
       // ⚠️ 这里曾写 `focusZoneAction`（换层时代的函数，08-13 统一窗改造把定义
       // 删了、调用漏了）—— 悬空引用潜伏族第三案：右键文件夹点「进入」白屏炸
       // 了一整天没人发现（都在双击）。B3 抽菜单时因为动作句柄提前求值当场炸出。
       { id: 'enter', icon: FolderOpen, label: '进入', onClick: () => act.openFolder(zoneId) },
-      { id: 'new', icon: FolderPlus, label: '在里面新建文件夹', onClick: () => act.createFolderAt(zoneId, null) },
+      ...(sys ? [] : [{ id: 'new', icon: FolderPlus, label: '在里面新建文件夹', onClick: () => act.createFolderAt(zoneId, null) }]),
       { id: 'ask', icon: MessageSquarePlus, label: '标注给 agent', hint: '默认先攒着，一起发', onClick: () => act.setAnnotate({
         x: mx, y: my,
-        target: { kind: 'folder', id: zoneId, path: zoneId, title: zoneId.split('/').pop() || zoneId, typeLabel: '文件夹' },
+        target: { kind: 'folder', id: zoneId, path: zoneId, title: zTitle, typeLabel: '文件夹' },
       }) },
       { id: 'linkto', icon: Link2, label: '连线到…', onClick: () => act.setLinkFrom({ id: zoneId, title: act.titleOfId(zoneId) }) },
-      { id: 'rename', icon: PencilLine, label: '重命名', onClick: () => act.setRenamingId(zoneId) },
+      ...(sys ? [] : [{ id: 'rename', icon: PencilLine, label: '重命名', onClick: () => act.setRenamingId(zoneId) }]),
       // 文件夹在这之前**根本没有搬家入口**：卡片能拖，但拖只改画布坐标
-      {
-        id: 'move', icon: FolderInput, label: '移动到…',
-        onClick: () => act.setMoveTo({
-          x: mx, y: my, ids: [zoneId],
-          current: zoneId.includes('/') ? zoneId.slice(0, zoneId.lastIndexOf('/')) : '',
-          exclude: [zoneId],     // 自己和自己的子孙不能当目标
-        }),
-      },
-      { divider: true },
-      { id: 'del', icon: Trash2, label: '删除文件夹', danger: true, onClick: () => act.handleDeleteFolder(zoneId, zoneId.split('/').pop()) },
+      ...(sys ? [] : [
+        {
+          id: 'move', icon: FolderInput, label: '移动到…',
+          onClick: () => act.setMoveTo({
+            x: mx, y: my, ids: [zoneId],
+            current: zoneId.includes('/') ? zoneId.slice(0, zoneId.lastIndexOf('/')) : '',
+            exclude: [zoneId],     // 自己和自己的子孙不能当目标
+          }),
+        },
+        { divider: true },
+        { id: 'del', icon: Trash2, label: '删除文件夹', danger: true, onClick: () => act.handleDeleteFolder(zoneId, zoneId.split('/').pop()) },
+      ]),
     ];
   }
 
+  if (winIn === GENERATED_DIR) return [];   // 生成图文件夹窗的空白：没有能在这一层做的事
   if (winIn !== null) {
     // 文件夹窗里的空白：能做的只有"在这一层新建"。写字/涂鸦都是桌面那一层的
     // 动作（窗里是算出来的网格，没有"摆在哪儿"这回事）

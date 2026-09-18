@@ -4,6 +4,7 @@ import { COLOR, FONT_KAI, FONT_SIZE } from '../../lib/theme.js';
 import { FOLDER_CARD, packRow } from '../../lib/board-geometry.js';
 import { sizeOf } from '../../lib/board-kinds.js';
 import ArtifactWindow from './ArtifactWindow.jsx';
+import { GENERATED_DIR, GENERATED_TITLE } from '../../lib/generated-folder.js';
 
 /**
  * FolderWindow —— 打开一个文件夹（2026-08-13）。
@@ -76,7 +77,8 @@ export default function FolderWindow({
     id: 'folder',
     items: [
       ...(onUp ? [{ id: 'up', icon: ChevronLeft, label: '上一层', title: '回到上一层文件夹', onClick: onUp }] : []),
-      { id: 'new', icon: FolderPlus, label: '新建文件夹', title: '在这个文件夹里新建一个', onClick: () => onNewFolder?.(dir) },
+      // 生成图文件夹里不建子夹（服务端也拒：它在 assets/ 下）
+      ...(dir === GENERATED_DIR ? [] : [{ id: 'new', icon: FolderPlus, label: '新建文件夹', title: '在这个文件夹里新建一个', onClick: () => onNewFolder?.(dir) }]),
     ],
   }]), [onUp, onNewFolder, dir]);
 
@@ -100,7 +102,7 @@ export default function FolderWindow({
   return (
     <ArtifactWindow
       kind="folder"
-      title={dir.split('/').pop() || '文件夹'}
+      title={dir === GENERATED_DIR ? GENERATED_TITLE : (dir.split('/').pop() || '文件夹')}
       subtitle={dir.includes('/') ? dir : null}
       onClose={onClose}
       onToolbarGroups={onToolbarGroups}
@@ -152,6 +154,8 @@ export default function FolderWindow({
 
 /** 一层文件夹的路径 → 面包屑用的上一级（'' = 根，返回 null 表示已经在最外层）*/
 export function parentDir(dir) {
+  // 生成图文件夹住在 assets/ 下面，而 assets/ 不是用户的文件夹：它的上一层就是桌面（09-18）
+  if (dir === GENERATED_DIR) return null;
   const i = String(dir || '').lastIndexOf('/');
   return i > 0 ? dir.slice(0, i) : null;
 }

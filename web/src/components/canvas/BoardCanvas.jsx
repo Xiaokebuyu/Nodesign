@@ -56,6 +56,8 @@ import LinkPopover from './LinkPopover.jsx';
 import { AnnotateHost, useAnnotateScreenPos } from './annotate-host.jsx';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
+import { useDirIndex } from './useDirIndex.js';
+import { GENERATED_DIR } from '../../lib/generated-folder.js';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';
 import { useBoardAuthoring } from './useBoardAuthoring.js';
 import { useBoardOpen } from './useBoardOpen.js';
@@ -492,104 +494,8 @@ export default function BoardCanvas({
    *
    * 落盘之后这一趟只在"真有新东西"时跑，布局对交互免疫。
    */
-  /**
-   * 目录索引：哪一层装了哪些文件夹、哪些物件。
-   *
-   * **桌面和文件夹窗共用这一份**（2026-08-13）。两个地方各写一套"这一层装了
-   * 什么"的判据，迟早对不上 —— 而这套判据一点都不平凡：归属要沿着祖先往上找
-   * 第一个真文件夹（`notes/` `assets/` 是基础设施目录，不是用户的层），
-   * 显式 `zone` 字段还要优先。抄一遍就是抄一个必然漂移的东西。
-   */
-  const dirIndex = useMemo(() => {
-    const parentOf = (p) => { const i = p.lastIndexOf('/'); return i > 0 ? p.slice(0, i) : ''; };
-    /**
-     * 它住在哪一层。
-     *
-     * ⚠️ **不是直接取上级目录就完事**：`notes/灵感.md`、
-     * `assets/generated/星空.webp` 的上级目录压根不是"用户的文件夹"
-     * （`notes/` `assets/` 是基础设施目录，服务端的文件夹清单里没有它们）。
-     * 直接按上级目录归属的话，这些东西会落在一个**不存在的层**上 ——
-     * 看不见，也没有任何入口能进去。
-     *
-     * 所以往上走，找到第一个真的是文件夹的祖先；一个都没有就归根。
-     * 这也顺带覆盖了"文件夹层级超过扫描深度"那种情况。
-     */
-    const knownFolders = new Set(Object.keys(zonesEff));
-    const homeOf = (path) => {
-      let d = parentOf(path);
-      while (d && !knownFolders.has(d)) d = parentOf(d);
-      return d || '';
-    };
-    // 显式 zone 只给画布原生物件（没有路径）用；带路径的一律按路径推 —— 09-07
-    // 参考图案：入座器写过 zone:''，搬进文件夹后改名只换键，显式优先就把卡钉在根。
-    // 服务端 layerOf 同一条规则；两头都不认了，存量脏字段自愈。
-    const dirOf = (o) => {
-      const stored = layout[o.id];
-      if (o.native) return stored?.zone || '';        // 画布原生物件跟着字段走
-      if (typeof o.id !== 'string') return '';
-      const c = o.id.indexOf(':');
-      const path = (c > 0 && /^[a-z]+$/.test(o.id.slice(0, c))) ? o.id.slice(c + 1) : o.id;
-      return homeOf(path);
-    };
-
-    const byDir = new Map();          // 目录 → 这一层的物件
-    for (const o of objects) {
-      const d = dirOf(o);
-      if (!byDir.has(d)) byDir.set(d, []);
-      byDir.get(d).push(o);
-    }
-    const subsOf = new Map();         // 目录 → 直接子文件夹
-    for (const zid of Object.keys(zonesEff)) {
-      const p = parentOf(zid);
-      if (!subsOf.has(p)) subsOf.set(p, []);
-      subsOf.get(p).push(zid);
-    }
-    /**
-     * 里面装了什么。**只看直接子级**（跟"打开它看到的那一层"一致）。
-     *
-     * 条目带完整物件引用 `o` —— 文件夹卡面是真缩略（用户要"看一眼知道装了
-     * 什么"）。数据当场就有，一个额外请求都不用发；iframe 的账在 FolderFace
-     * 里算：视口门 + 缩放门 + 每卡上限。
-     */
-    const peekIn = (dir) => {
-      const subs = (subsOf.get(dir) || [])
-        .map(id => ({ kind: 'folder', title: id.split('/').pop(), o: null }));
-      const files = (byDir.get(dir) || [])
-        .map(o => ({ kind: o.type, title: o.title || o.name || String(o.id).split('/').pop(), o }));
-      const all = [...subs, ...files];
-      return { count: all.length, peek: all.slice(0, 4) };
-    };
-    return { dirOf, byDir, subsOf, peekIn };
-  }, [objects, zonesEff, layout]);
-
-  /**
-   * 一张文件夹卡的完整描述（名字 + 装了什么）。位置由调用方给：桌面读
-   * board.json 的坐标，文件夹窗按网格算。
-   */
-  const folderCardOf = useCallback((id, pos) => ({
-    id,
-    kind: 'folder',
-    x: pos?.x ?? 0,
-    y: pos?.y ?? 0,
-    w: FOLDER_CARD.w,
-    h: FOLDER_CARD.h,
-    /**
-     * 名字**从路径读**，不读存档里的 `title`。
-     *
-     * id 就是路径，路径的最后一段就是名字 —— 再存一份 title 就是第二个真相源，
-     * 改名之后它立刻过期（实测：`鉴赏页` 改成 `作品集`，zones 行的 title 还写着
-     * 「鉴赏页」）。服务端 tasks 给的标题优先，那是它对形态的命名，不是位置的
-     * 复制品。
-     */
-    title: taskTitles.get(id) || id.split('/').pop() || '文件夹',
-    ...dirIndex.peekIn(id),
-  }), [dirIndex, taskTitles]);
-
-  /** 文件夹窗要的那一层清单（文件夹 + 物件，位置由窗自己排） */
-  const listDir = useCallback((dir) => ({
-    folders: (dirIndex.subsOf.get(dir) || []).sort().map(id => folderCardOf(id, null)),
-    items: [...(dirIndex.byDir.get(dir) || [])].sort((a, b) => String(a.id).localeCompare(String(b.id))),
-  }), [dirIndex, folderCardOf]);
+  // 目录索引 / 文件夹卡描述 / 文件夹窗清单（09-18 抽到 useDirIndex.js）
+  const { dirIndex, folderCardOf, listDir } = useDirIndex({ objects, zonesEff, layout, taskTitles });
 
   // ⚠️ 这三条声明必须在下面那个入座 memo **之前** —— memo 依赖 lineageOpen，
   // 声明在后就是渲染时 TDZ 整页白屏（这文件的第五颗同型雷，_hook-order-check
@@ -606,6 +512,7 @@ export default function BoardCanvas({
   const occupiedForServer = useOccupiedForServer(phantomOccupied);   // + 直播板书框（lib/live-chalk-occupancy.js）
   const phantomObstaclesRef = useRef([]);
   const phantomBottomRef = useRef(0);
+  const phantomHomeRef = useRef(null);
 
   // 入座算法本体 2026-08-14 抽进 lib/board-seating.js（配单测）——语义没动，
   // 两个 ref 型依赖参数化：movingIds（搬家中不落盘）、claimSeat（幻影座位过户，
@@ -623,6 +530,7 @@ export default function BoardCanvas({
   // 幻影找座的障碍表与起排线（跟这一趟入座同一份现实）
   phantomObstaclesRef.current = [...zoneRects(folderView), ...objectRects(positioned)];
   phantomBottomRef.current = contentBottom;
+  phantomHomeRef.current = folderView.find(f => f.id === GENERATED_DIR) || null;   // 生图幻影叠在生成图文件夹卡上
   // 全目录树的物件（不止桌面这一层）—— 文件夹窗里的右键要按 id 找得到它们
   objectsRef.current = objects;
 
@@ -1230,7 +1138,7 @@ export default function BoardCanvas({
         selectGroup, commitGroup, eraseGroup, exportGraph,
       },
     );
-    setMenu({ x: e.clientX, y: e.clientY, items });
+    setMenu(items.length ? { x: e.clientX, y: e.clientY, items } : null);   // 没有能做的事就不弹空框
   }, [zoneAtPoint, createFolderAt, createNoteAt, handleAdd, handleDeleteNote, handleDeleteFolder, onAskAgent, selectGroup, commitGroup, eraseGroup, exportGraph]);
 
   // ── agent 正在写什么 → 视图跟过去（2026-08-13 从"自动展开"改剩这一半）──
@@ -1354,7 +1262,7 @@ export default function BoardCanvas({
   // 幻影表：出生（stageCards 出 image 条目）→ 找座 → 等过户 / 蒸发
   const { phantoms, moveSeat: movePhantomSeat } = usePhantoms({
     stageCards, phantomsRef,
-    obstaclesRef: phantomObstaclesRef, contentBottomRef: phantomBottomRef,
+    obstaclesRef: phantomObstaclesRef, contentBottomRef: phantomBottomRef, homeRef: phantomHomeRef,
   });
 
   // ── 铅笔精灵的台词与出场（2026-08-14 日记本批；五批收敛成单精灵层）──
@@ -1546,7 +1454,7 @@ export default function BoardCanvas({
       { id: 'grp-roll', icon: Archive, label: `收卷整组 #${tag}`, hint: '收进一张卷卡，单击展开', onClick: () => rollGroup(tag) },
       { id: 'grp-erase', icon: Eraser, label: `擦掉整组 #${tag}`, danger: true, onClick: () => eraseGroup(tag) },
     ];
-    setMenu({ x: e.clientX, y: e.clientY, items });
+    setMenu(items.length ? { x: e.clientX, y: e.clientY, items } : null);   // 没有能做的事就不弹空框
   }, [selectGroup, commitGroup, eraseGroup, exportGraph, rollGroup]);
 
   const boardToolGroups = useMemo(() => buildBoardToolGroups({
@@ -1652,7 +1560,7 @@ export default function BoardCanvas({
         renaming={renamingId === card.id}
         onRenameCommit={(v) => commitRename(card.id, v)}
         onRenameCancel={() => setRenamingId(null)}
-        onDelete={() => !wasDrag() && handleDeleteFolder(card.id, card.title)}
+        onDelete={card.id === GENERATED_DIR ? null : () => !wasDrag() && handleDeleteFolder(card.id, card.title)}
         onAnnotate={(at) => setAnnotate({
           x: at.x, y: at.y,
           target: { kind: 'folder', id: card.id, path: card.id, title: card.title, typeLabel: '文件夹' },

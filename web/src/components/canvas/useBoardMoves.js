@@ -12,6 +12,7 @@ import { joinRel } from '../../lib/paths.js';
 import { sizeOf } from '../../lib/board-kinds.js';
 import { FOLDER_CARD } from '../../lib/board-geometry.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
+import { GENERATED_DIR } from '../../lib/generated-folder.js';
 
 /**
  * 搬家顺手改了别处的引用（09-18，服务端 lib/move-follow.js）：说一声。
@@ -58,7 +59,18 @@ export function useBoardMoves({
     const base = from.split('/').pop();
     const toDir = toFolder || '';
     const to = joinRel(toDir, base);
-    if (to === from) return;
+    if (to === from) {
+      // 旧板桌面上的生成图拖进「生成图」文件夹卡（09-18）：文件本来就在那儿，服务端清掉 desk 标记，
+      // 本地坐标表也清掉（layout 只在首帧从服务端加载一次，不清就一直按桌面件画）
+      if (toDir !== GENERATED_DIR || !layoutRef.current?.[obj.id]?.desk) return;
+      try {
+        await Assets.moveEntry(projectId, from, toDir);
+        setLayout(prev => { const e = { ...(prev[obj.id] || {}) }; delete e.desk; return { ...prev, [obj.id]: e }; });
+      } catch (err) {
+        useGlobalStore.getState().showToast(`收不进去：${err.message}`, 'error');
+      }
+      return;
+    }
     movingRef.current.add(obj.id);
     const nextId = obj.id.includes(':') ? `${obj.id.split(':')[0]}:${to}` : to;
 
