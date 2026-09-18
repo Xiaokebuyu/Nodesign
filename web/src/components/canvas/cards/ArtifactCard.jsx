@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { Presentation, Globe, Map as MapIcon, FileText, Compass, Drama, FolderGit2, Folder, File } from 'lucide-react';
 import { COLOR, GAP, FONT_SIZE, FONT_SANS, FONT_MONO } from '../../../lib/theme.js';
 import { PAPER } from '../../../lib/paper.js';
@@ -13,6 +13,7 @@ import { freezeWin, thawWin } from '../../../lib/frame-freeze.js';
 import { wheelTargetInFrame, hasRoomY, decideCardWheel, scrollTargetBy } from '../../../lib/card-wheel.js';
 import LiveFrame from '../LiveFrame.jsx';
 import FarThumb from './FarThumb.jsx';
+import { DocxPickContext } from '../useFolderPicks.js';
 import { artifactThumbUrl } from '../../../lib/artifact-thumb.js';
 
 /**
@@ -211,7 +212,7 @@ export const ARTIFACT_FACES = {
     tip: '双击打开这份文档',
     summary: (o) => {
       // word 文件夹：一张卡装着几份（多版本），报个数比报"可改源重建"更有用
-      if (o.members?.length > 1) return `文档 · ${o.members.length} 份 · 窗里切换`;
+      if (o.members?.length > 1) return `文档 · ${o.members.length} 份`;   // 卡头右边另有下拉（DocxMemberPick）
       return o.sourceFile ? '文档 · 可改源重建' : '文档 · 外来文件';
     },
     // ⚠️ 必然会 404 的一种正常态：kinds/docx.js 在 agent 刚写完 token 源、
@@ -362,6 +363,27 @@ const PREVIEW_MIN_SCALE = 0.35;
  * 60fps 跑真身，一张卡就能拖垮主画布。悬停解冻、移开再冻（短延时）。
  */
 const FREEZE_AFTER_MS = 2500;
+
+/** word 目录卡卡头的下拉（09-18 站主「下拉加一下」）：选哪份，卡面缩略和双击打开的就是哪份（useFolderPicks） */
+function DocxMemberPick({ o }) {
+  const ctx = useContext(DocxPickContext);
+  const stop = (e) => e.stopPropagation();
+  return (
+    <select
+      data-board-action data-docx-pick={o.id} value={o.deckFile}
+      onChange={(e) => ctx?.setPick(o.id, e.target.value)}
+      onPointerDown={stop} onClick={stop} onDoubleClick={stop}
+      title={`这个文件夹里的 ${o.members.length} 份文档，选一份看`}
+      style={{
+        maxWidth: 160, height: 20, padding: '0 2px', flexShrink: 1, minWidth: 0,
+        border: `1px solid ${CARD_HEAD_RULE}`, borderRadius: 2, background: COLOR.bgWhite,
+        color: COLOR.text, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, cursor: 'pointer',
+      }}
+    >
+      {o.members.map((m) => <option key={m.file} value={m.file}>{m.title || m.file.split('/').pop()}</option>)}
+    </select>
+  );
+}
 const REFREEZE_AFTER_MS = 900;
 
 export default function ArtifactCard({
@@ -506,6 +528,7 @@ export default function ArtifactCard({
           fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, color: COLOR.sub,
           whiteSpace: 'nowrap', flexShrink: 0,
         }}>{face.summary(o)}</span>
+        {o.type === 'docx' && o.members?.length > 1 && !renaming && <DocxMemberPick o={o} />}
       </div>
 
       {/* 预览 = 贴在纸上的印样：自带一层薄影和一道内描边（跟首页项目卡同一套） */}

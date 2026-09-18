@@ -49,3 +49,25 @@ describe('toolbarSelect', () => {
     expect(onChange).toHaveBeenCalledWith('index.html');
   });
 });
+
+describe('word 目录卡的卡头下拉（09-18）', () => {
+  it('⭐ 选过的那份换进 deckFile（卡面缩略和双击打开都跟着走）；选的那份不在成员里就照旧', async () => {
+    const { applyDocxPick } = await import('./useFolderPicks.js');
+    const o = { id: 'docx:简历', type: 'docx', deckFile: '简历/文档.docx', members: [{ file: '简历/文档.docx' }, { file: '简历/v2.docx' }] };
+    expect(applyDocxPick(o, { 'docx:简历': '简历/v2.docx' }).deckFile).toBe('简历/v2.docx');
+    expect(applyDocxPick(o, { 'docx:简历': '简历/没了.docx' })).toBe(o);
+    expect(applyDocxPick({ ...o, members: [o.members[0]] }, { 'docx:简历': '简历/v2.docx' }).deckFile).toBe('简历/文档.docx');
+  });
+
+  it('卡头有下拉，改选调 setPick', async () => {
+    const { default: ArtifactCard } = await import('./cards/ArtifactCard.jsx');
+    const { DocxPickContext } = await import('./useFolderPicks.js');
+    const setPick = vi.fn();
+    const o = { id: 'docx:简历', type: 'docx', title: '简历', deckFile: '简历/文档.docx', members: [{ file: '简历/文档.docx', title: '文档' }, { file: '简历/v2.docx', title: 'v2' }] };
+    act(() => root.render(<DocxPickContext.Provider value={{ setPick }}><ArtifactCard o={o} projectId="p" scale={0.1} /></DocxPickContext.Provider>));
+    const sel = host.querySelector('[data-docx-pick="docx:简历"]');
+    expect([...sel.options].map((x) => x.textContent)).toEqual(['文档', 'v2']);
+    act(() => { sel.value = '简历/v2.docx'; sel.dispatchEvent(new Event('change', { bubbles: true })); });
+    expect(setPick).toHaveBeenCalledWith('docx:简历', '简历/v2.docx');
+  });
+});

@@ -57,7 +57,7 @@ import { AnnotateHost, useAnnotateScreenPos } from './annotate-host.jsx';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
 import { useDirIndex } from './useDirIndex.js';
-import { useFolderPicks } from './useFolderPicks.js';
+import { useFolderPicks, applyDocxPick, DocxPickContext } from './useFolderPicks.js';
 import { GENERATED_DIR } from '../../lib/generated-folder.js';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';
 import { useBoardAuthoring } from './useBoardAuthoring.js';
@@ -341,14 +341,15 @@ export default function BoardCanvas({
     });
   }, [projectId]);
 
+  const [folderPicks, setFolderPick, docxPick] = useFolderPicks(projectId);   // 同类收卡 / word 目录卡此刻显示哪一件（本机偏好）
   const objects = useMemo(
-    () => deriveBoardObjects({ tasks, artifacts, layout, browse, repo })
+    () => deriveBoardObjects({ tasks, artifacts, layout, browse, repo }).map(o => applyDocxPick(o, folderPicks))
       .filter(o => passesFilter(o, filter))
       .filter(o => showArchive || !isArchivePath(o.id))
       // 收卷（2026-08-27 收纳器，件在 RollLayer.jsx）：收着的组渲染层不画（卷卡替它
       // 站着）。座位仍在 layout 里 —— 服务端落位照旧把它们当障碍。
       .filter(o => { const t = o.tag || o.pos?.tag; return !t || !rolls[t]; }),
-    [tasks, artifacts, layout, browse, repo, filter, showArchive, rolls]);
+    [tasks, artifacts, layout, browse, repo, filter, showArchive, rolls, folderPicks]);
 
   const { rollGroup, unrollGroup } = useRollActions(projectId, setRolls);
 
@@ -497,7 +498,6 @@ export default function BoardCanvas({
    */
   // 目录索引 / 文件夹卡描述 / 文件夹窗清单（09-18 抽到 useDirIndex.js）
   const { dirIndex, folderCardOf, listDir } = useDirIndex({ objects, zonesEff, layout, taskTitles });
-  const [folderPicks, setFolderPick] = useFolderPicks(projectId);   // 同类收卡此刻显示哪一件（本机偏好）
 
   // ⚠️ 这三条声明必须在下面那个入座 memo **之前** —— memo 依赖 lineageOpen，
   // 声明在后就是渲染时 TDZ 整页白屏（这文件的第五颗同型雷，_hook-order-check
@@ -1584,7 +1584,7 @@ export default function BoardCanvas({
 
   // ── 渲染 ──
   return (
-    <div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', background: CANVAS.paper }}>
+    <DocxPickContext.Provider value={docxPick}><div style={{ flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden', background: CANVAS.paper }}>
       <style>{BOARD_KEYFRAMES}</style>
       {/* 视口：不滚动，镜头就是相机（2026-08-07 无限画布）
        *
@@ -2007,7 +2007,7 @@ export default function BoardCanvas({
           onClose={() => setOrchestrate(null)}
         />
       )}
-    </div>
+    </div></DocxPickContext.Provider>
   );
 }
 
