@@ -56,6 +56,7 @@ import { STAGE_EVENTS, CHAT_STREAM_EVENTS, isStaleEvent } from '../lib/event-rou
 import { usePendingEdits } from '../hooks/usePendingEdits.js';
 import { useBrowseWindow } from '../hooks/useBrowseWindow.js';
 import { onAgentBrowse, onTurnEnd } from '../lib/browse-window.js';
+import { replyHint } from '../lib/annotation-message.js';
 
 export default function ProjectWorkspace() {
   // 会话真相源收敛（2026-08-13 E1b）：**服务端指针**（projects.active_session_id）
@@ -1804,7 +1805,7 @@ export default function ProjectWorkspace() {
       const where = whereOf(t);
       const loc = where && where !== t.title ? `（${where}）` : '';
       // 板书/手写字带摘录与作者（2026-08-23）：用户在 agent 的字上回话，agent 得知道那段字
-      // 说的是什么、是不是自己写的 —— 是自己的板书就用 write_on_board reply_to 接在下面
+      // 说的是什么、是不是自己写的 —— 是自己的板书就改写那条（回应提示见 lib/annotation-message.js replyHint）
       // by 三类：'agent'（主控）/ 常驻角色 slug（rp-*）/ 其余按用户写的算。
       // ⚠️ 角色写的板书原来会落进 `t.chalk ? '用户写的'` 那一支 —— 判正好相反，
       // 主 agent 会以为那段字是用户写的。
@@ -1813,7 +1814,7 @@ export default function ProjectWorkspace() {
         : t.by === 'agent' ? '，agent 写的'
           : t.chalk ? '，用户写的' : '';
       const ex = t.excerpt ? `，原文「${t.excerpt}」` : '';
-      const hint = t.chalk && (t.by === 'agent' || isRole) ? `；回应请 write_on_board reply_to=${t.path}` : '';
+      const hint = replyHint(t, isRole);
       return `${t.typeLabel}「${t.title}」${loc}${who}${ex}${hint}`;
     }).join('、');
     await handleSend(`【画布标注】${desc}：${text}`);

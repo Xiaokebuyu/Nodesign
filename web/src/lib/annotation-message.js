@@ -5,7 +5,8 @@
  *
  *   【画布标注】板书「20260828-192124-第一章-放学后.md」（notes/板书/…md），agent 写的，
  *   原文「# 第一章 · 放学后 八月的尾巴还挂在下午五点半的天上。…」；
- *   回应请 write_on_board reply_to=notes/板书/…md：按下怀表
+ *   回应请改写这条板书（edit_board set_text id=notes/板书/…md），不在下面另开一条：按下怀表
+ *  （09-18 之前是「回应请 write_on_board reply_to=…」，历史消息里还是那样，两种都要认得）
  *
  * 这一整条**必须原样发给 agent**（它要靠里面的路径接线程、靠摘录知道那段字说了什么）。
  * 但侧边栏把它原样显示出来，用户自己那句「按下怀表」淹在一堆机械里 —— 用户报的就是这个。
@@ -18,11 +19,24 @@
  *
  * 判据：**第一个不在「」里的全角冒号**。因为标题和摘录都裹在「」里，
  * 它们内部的冒号一律在「」深度 ≥1；而描述剩下的部分（`（路径）`、`，agent 写的`、
- * `；回应请 write_on_board reply_to=<路径>`）都不含冒号。
+ * `；回应请…` 那句提示）都不含冒号 —— replyHint 必须守住这一条。
  * 找不到就返回 null —— **别猜**，原样显示总比把用户的话切掉半句强。
  */
 
 const PREFIX = '【画布标注】';
+
+/**
+ * 标注消息里给 agent 的那句回应提示（09-18）。09-17 板书树定「用户标注了哪条就改写哪条」，
+ * 这句原来还写着「回应请 write_on_board reply_to=…」，跟提示词里的改写规则正好相反。
+ * 角色写的板书 agent 没有改写权（edit_board 按作者判笔权，会被拒），仍接在下面回。
+ * ⚠️ 不许含全角冒号：parseAnnotationMessage 靠第一个不在「」里的全角冒号分开描述和用户的话。
+ */
+export function replyHint(t, isRole = false) {
+  if (!t?.chalk || !t.path) return '';
+  if (t.by === 'agent') return `；回应请改写这条板书（edit_board set_text id=${t.path}），不在下面另开一条`;
+  if (isRole) return `；回应请 write_on_board reply_to=${t.path}`;
+  return '';
+}
 
 /** 按「」深度扫一遍，回调每个深度为 0 的字符 */
 function scanTopLevel(s, onChar) {

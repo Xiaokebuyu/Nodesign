@@ -4,7 +4,7 @@
 // 摘录里有（正文随便什么字），用户的话里也有。切错的代价不对称：
 // 切多了会**把用户自己的话藏掉**，那比不折叠糟得多。所以认不出就返回 null 原样显示。
 import { describe, it, expect } from 'vitest';
-import { parseAnnotationMessage, annotationTargets } from './annotation-message.js';
+import { parseAnnotationMessage, annotationTargets, replyHint } from './annotation-message.js';
 
 const real = '【画布标注】板书「20260828-192124-第一章-放学后.md」（notes/板书/20260828-192124-第一章-放学后.md），agent 写的，原文「# 第一章 · 放学后 八月的尾巴还挂在下午五点半的天上。」；回应请 write_on_board reply_to=notes/板书/20260828-192124-第一章-放学后.md：按下怀表';
 
@@ -45,5 +45,28 @@ describe('折起来那行小字', () => {
 
   it('认不出就空数组，调用方回落通用措辞', () => {
     expect(annotationTargets('什么都没有')).toEqual([]);
+  });
+});
+
+describe('replyHint（09-18：标注板书的回应提示跟「改写那条」对齐）', () => {
+  const note = { chalk: true, by: 'agent', path: 'notes/板书/20260918-jev.md' };
+
+  it('⭐ agent 自己的板书：提示改写那条，不再是 reply_to', () => {
+    const h = replyHint(note);
+    expect(h).toContain('edit_board set_text id=notes/板书/20260918-jev.md');
+    expect(h).not.toContain('reply_to');
+  });
+
+  it('角色写的板书 agent 改不了，仍接在下面回；用户写的、不是板书的不给提示', () => {
+    expect(replyHint({ ...note, by: 'rp-alice' }, true)).toBe('；回应请 write_on_board reply_to=notes/板书/20260918-jev.md');
+    expect(replyHint({ ...note, by: 'user' })).toBe('');
+    expect(replyHint({ by: 'agent', path: 'site:落地页' })).toBe('');
+  });
+
+  it('⭐ 提示里没有全角冒号：拼成整条消息后仍能正确拆出用户的话', () => {
+    const msg = `【画布标注】板书「20260918-jev.md」（notes/板书/20260918-jev.md），agent 写的，原文「## 结论：还没有」${replyHint(note)}：细说主要用途`;
+    const r = parseAnnotationMessage(msg);
+    expect(r?.text).toBe('细说主要用途');
+    expect(r?.desc).toContain('edit_board set_text');
   });
 });
