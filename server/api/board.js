@@ -20,6 +20,7 @@ import { noteBoardDirty } from '../lib/board-dirty.js';
 import { setViewpoint, getViewpoint } from '../projects/viewpoint-store.js';
 import { exportGraph, exportGraphZip } from '../lib/board-graph-export.js';
 import { getSharedDir } from '../projects/workspace.js';
+import { ensureGeneratedFolder } from '../projects/generated-folder-migrate.js';
 
 const router = express.Router();
 
@@ -36,6 +37,9 @@ router.get('/:pid/board', async (req, res, next) => {
     // 前端只拿它把 slug 渲染得好看，任何判断仍按 slug 走。
     let roles = {};
     try { roles = Object.fromEntries(await listRoleNames(getWorkspaceRoot(req.params.pid))); } catch { /* 没有角色就是空表 */ }
+    // 生成图文件夹的旧板迁移（09-18）：前端读板和拉清单是并行的，只挂在 /artifacts 上的话读板可能
+    // 先到，旧桌面件没带上 desk 标记，头一回打开就全掉进文件夹（真浏览器验收撞到）。幂等，迁过是一次 stat
+    await ensureGeneratedFolder(req.params.pid).catch(() => {});
     res.json({ board: await readBoard(req.params.pid), roles });
   } catch (err) { next(err); }
 });

@@ -1,6 +1,6 @@
 // 文件夹归堆（09-18）：按时间按本地日历日分、按类型按认得的名字分，组内最近在前；件数少不叠。
 import { describe, it, expect } from 'vitest';
-import { stackGroups, autoAxis, timeBucketOf, latestFirst, STACK_MIN } from './folder-stacks.js';
+import { stackGroups, autoAxis, timeBucketOf, latestFirst, sameKindOf, STACK_MIN } from './folder-stacks.js';
 
 // 「现在」取本地时间下午三点，边界都按本地零点算，跟机器时区无关
 const now = new Date(2026, 8, 18, 15, 0, 0).getTime();
@@ -48,5 +48,20 @@ describe('autoAxis', () => {
 describe('latestFirst', () => {
   it('没有时间的垫底', () => {
     expect(latestFirst([img('a'), img('b', at(2026, 9, 1)), img('c', at(2026, 9, 2))]).map((x) => x.id)).toEqual(['c', 'b', 'a']);
+  });
+});
+
+describe('sameKindOf（同类收卡）', () => {
+  const site = (id, mtime) => ({ id: `site:${id}`, type: 'site', mtime });
+  it('⭐ 两件以上、清一色的站点 / 演示 / 文档才收；最近的排第一', () => {
+    const r = sameKindOf([site('a', at(2026, 9, 1)), site('b', at(2026, 9, 3))]);
+    expect(r.kind).toBe('site');
+    expect(r.members.map((m) => m.id)).toEqual(['site:b', 'site:a']);
+  });
+  it('不收：只有一件、混了别的、有子文件夹、全是图', () => {
+    expect(sameKindOf([site('a')])).toBeNull();
+    expect(sameKindOf([site('a'), { id: 'x.md', type: 'note' }])).toBeNull();
+    expect(sameKindOf([site('a'), site('b')], 1)).toBeNull();
+    expect(sameKindOf([img('a'), img('b')])).toBeNull();
   });
 });

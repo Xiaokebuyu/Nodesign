@@ -84,3 +84,18 @@ export function stackGroups(items, axis, now = Date.now()) {
     .sort((a, b) => a.rank - b.rank)
     .map(({ key, label, items: its }) => ({ key, label, items: latestFirst(its) }));
 }
+
+/**
+ * 同类收卡（09-18）：一个文件夹里只装着同一类产物（两件以上、没有子文件夹、没有别的东西），
+ * 桌面上的文件夹卡就收成那一类的一张卡，用下拉切换（cards/SameKindFace.jsx）。
+ * 只收页面类产物：图片成堆是归堆的事，下拉里列八十个文件名没法用。
+ */
+export const SAME_KINDS = new Set(['site', 'deck', 'docx']);
+
+/** @returns {{ kind: string, members: Array }|null} members 最近在前 */
+export function sameKindOf(files, subCount = 0) {
+  if (subCount || !files || files.length < 2) return null;
+  const kind = files[0]?.type;
+  if (!SAME_KINDS.has(kind) || files.some((o) => o?.type !== kind)) return null;
+  return { kind, members: latestFirst(files) };
+}

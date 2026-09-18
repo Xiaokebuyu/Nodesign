@@ -57,6 +57,7 @@ import { AnnotateHost, useAnnotateScreenPos } from './annotate-host.jsx';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
 import { useDirIndex } from './useDirIndex.js';
+import { useFolderPicks } from './useFolderPicks.js';
 import { GENERATED_DIR } from '../../lib/generated-folder.js';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';
 import { useBoardAuthoring } from './useBoardAuthoring.js';
@@ -496,6 +497,7 @@ export default function BoardCanvas({
    */
   // 目录索引 / 文件夹卡描述 / 文件夹窗清单（09-18 抽到 useDirIndex.js）
   const { dirIndex, folderCardOf, listDir } = useDirIndex({ objects, zonesEff, layout, taskTitles });
+  const [folderPicks, setFolderPick] = useFolderPicks(projectId);   // 同类收卡此刻显示哪一件（本机偏好）
 
   // ⚠️ 这三条声明必须在下面那个入座 memo **之前** —— memo 依赖 lineageOpen，
   // 声明在后就是渲染时 TDZ 整页白屏（这文件的第五颗同型雷，_hook-order-check
@@ -1542,6 +1544,9 @@ export default function BoardCanvas({
     );
   };
 
+  /** 同类收卡：打开下拉里选中的那一件（没选过或那件已经不在了就打开最近的那件） */
+  const openPicked = (card) => primaryOpenRef.current?.(card.same.members.find((m) => m.id === folderPicks[card.id]) || card.same.members[0]);
+
   const renderFolderCard = (z, winPos = null) => {
     const win = !!winPos;
     const card = win ? { ...z, x: winPos.x, y: winPos.y } : z;
@@ -1566,10 +1571,12 @@ export default function BoardCanvas({
           target: { kind: 'folder', id: card.id, path: card.id, title: card.title, typeLabel: '文件夹' },
         })}
         noteCount={noteCounts[card.id] || 0}
-        // 窗里没有拖拽（位置是算的），双击直接下钻到下一层
+        pick={folderPicks[card.id]}
+        onPick={(id) => setFolderPick(card.id, id)}
+        // 窗里没有拖拽（位置是算的），双击直接下钻到下一层；同类收卡的双击打开选中的那一件（09-18）
         gestureProps={win
-          ? { onDoubleClick: () => openFolder(card.id) }
-          : zoneGestureProps(card)}
+          ? { onDoubleClick: () => (card.same ? openPicked(card) : openFolder(card.id)) }
+          : zoneGestureProps(card, card.same ? { onOpen: () => openPicked(card) } : undefined)}
         hint={win ? '双击进去' : '双击打开 · 拖动搬走'}
       />
     );

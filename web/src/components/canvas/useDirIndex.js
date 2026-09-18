@@ -9,7 +9,7 @@
 import { useCallback, useMemo } from 'react';
 import { FOLDER_CARD } from '../../lib/board-geometry.js';
 import { GENERATED_DIR, GENERATED_TITLE, isDeskPinned } from '../../lib/generated-folder.js';
-import { latestFirst } from '../../lib/folder-stacks.js';
+import { latestFirst, sameKindOf } from '../../lib/folder-stacks.js';
 
 /**
  * @param {object} p
@@ -68,7 +68,9 @@ export function useDirIndex({ objects, zonesEff, layout, taskTitles }) {
     }
     const subsOf = new Map();         // 目录 → 直接子文件夹
     for (const zid of Object.keys(zonesEff)) {
-      const p = parentOf(zid);
+      // 挂在最近的真文件夹祖先下（09-18）：生成图文件夹是 assets/generated，直接上级 assets/ 不是用户的层，
+      // 按直接上级挂的话这张卡落进一个不存在的层 —— 桌面上看不见。服务端 zoneRects 同一条
+      const p = homeOf(zid);
       if (!subsOf.has(p)) subsOf.set(p, []);
       subsOf.get(p).push(zid);
     }
@@ -111,6 +113,8 @@ export function useDirIndex({ objects, zonesEff, layout, taskTitles }) {
      * 复制品。
      */
     title: id === GENERATED_DIR ? GENERATED_TITLE : (taskTitles.get(id) || id.split('/').pop() || '文件夹'),
+    // 同类收卡（09-18）：里面只有同一类产物时，卡面是其中一件、标题栏给下拉（生成图文件夹不收）
+    same: id === GENERATED_DIR ? null : sameKindOf(dirIndex.byDir.get(id) || [], (dirIndex.subsOf.get(id) || []).length),
     ...dirIndex.peekIn(id),
   }), [dirIndex, taskTitles]);
 

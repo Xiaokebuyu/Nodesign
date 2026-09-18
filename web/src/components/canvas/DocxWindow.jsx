@@ -7,9 +7,10 @@ import { Assets } from '../../lib/api.js';
 import { COLOR, CANVAS, GAP, FONT_SIZE, FONT_MONO, FONT_SANS } from '../../lib/theme.js';
 import { versionOfFile } from '../../lib/file-versions.js';
 import ArtifactWindow, { exportToolGroup, INK_READOUT } from './ArtifactWindow.jsx';
-import ToolbarButton, { TOOL_BTN } from '../ui/ToolbarButton.jsx';
+import ToolbarButton from '../ui/ToolbarButton.jsx';
 import DocxRegionSelect from './DocxRegionSelect.jsx';
-import { TOOL_SURFACE, PAPER_SHADOW } from '../../lib/paper.js';
+import { toolbarSelect } from '../ui/toolbar-select.jsx';
+import { PAPER_SHADOW } from '../../lib/paper.js';
 
 /**
  * DocxWindow —— word 文档的产物窗（2026-08-17，跟 DeckWindow / SiteWindow 并列的第三种）
@@ -147,38 +148,12 @@ export default function DocxWindow({
 
   const groups = useMemo(() => [
     // ⭐word 文件夹的导航：成员（多版本）切换。site 的「页」是文件、docx 文件夹
-    // 的「份」也是文件 —— 但版本不是页，翻页键留给页，切版本用选择器。
-    // 单份文档（members 空）没有这一组，窗跟原来一模一样。
-    //
-    // ⚠️ `value` 必须给：工具栏的签名守卫（CanvasFrame.sigOf）对 `node` 组只看
-    // id + value，切成员只变 node 内容的话签名不动、工具栏不重渲 —— 表现是
-    // 「选了另一份，选择器上的名字要等按一下翻页才变」（2026-08-19 实踩）。
-    (members && members.length > 1) ? {
-      id: 'member',
-      value: cur,
-      node: (
-        <select
-          value={cur}
-          onChange={(e) => setCur(e.target.value)}
-          title="这个文件夹里的文档（多版本并排放，选一份看）"
-          style={{
-            maxWidth: 180, height: 24, padding: '0 4px',
-            // 工具栏是墨面（TOOL_SURFACE），控件配色跟着它走 —— 白底 select 压在
-            // 墨面药丸上就是「一条工具栏两种物料」（SitePublishControl 踩过的同一课）
-            border: `1px solid ${TOOL_SURFACE.hair}`,
-            borderRadius: TOOL_BTN.radius, background: 'transparent', color: TOOL_SURFACE.text,
-            fontFamily: FONT_SANS, fontSize: FONT_SIZE.xs, cursor: 'pointer',
-          }}
-        >
-          {members.map(m => (
-            // 下拉列表是系统渲染的，不吃 select 的透明底 —— 选项要自带可读配色
-            <option key={m.file} value={m.file} style={{ background: COLOR.bgWhite, color: COLOR.text }}>
-              {m.title || m.file}
-            </option>
-          ))}
-        </select>
-      ),
-    } : null,
+    // 的「份」也是文件 —— 但版本不是页，翻页键留给页，切版本用选择器（ui/toolbar-select.jsx，
+    // value 必须给的那条坑写在那边）。单份文档（members 空）没有这一组，窗跟原来一模一样。
+    (members && members.length > 1) ? toolbarSelect({
+      id: 'member', value: cur, onChange: setCur, title: '这个文件夹里的文档（多版本并排放，选一份看）',
+      options: members.map(m => ({ value: m.file, label: m.title || m.file })),
+    }) : null,
     // ⭐word 特制控件：翻页。deck 的"页"是 section、站点的"页"是文件，
     // 只有文档的页是**排版算出来的** —— 改一个字号页数就变，所以页码不能存，
     // 只能每次问渲染管线。

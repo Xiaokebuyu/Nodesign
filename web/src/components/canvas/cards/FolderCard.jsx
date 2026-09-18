@@ -2,6 +2,7 @@ import { FolderOpen, Trash2, MessageSquarePlus } from 'lucide-react';
 import { COLOR, GAP, RADIUS, FONT_SANS, FONT_SIZE, CANVAS, alpha } from '../../../lib/theme.js';
 import { EASE, POP_IN } from '../../../lib/board-geometry.js';
 import FolderFace from './FolderFace.jsx';
+import SameKindFace, { SameKindPicker } from './SameKindFace.jsx';
 import NoteBadge from './NoteBadge.jsx';
 
 /**
@@ -35,12 +36,15 @@ export default function FolderCard({
   gestureProps = {},
   hint = '双击打开 · 拖动搬走',
   noteCount = 0,
+  /** 同类收卡（z.same）时选中的那一件的 id，与切换回调（useFolderPicks） */
+  pick = null, onPick,
 }) {
+  const member = z.same ? (z.same.members.find((m) => m.id === pick) || z.same.members[0]) : null;
   return (
     <div
       data-board-zone={z.id}
       {...gestureProps}
-      title={`${z.title} · ${hint}`}
+      title={`${z.title} · ${z.same ? '双击打开选中的那一份 · 拖动搬走 · 右键「进入」看全部' : hint}`}
       style={{
         position: 'absolute', left: z.x, top: z.y, width: z.w, height: z.h,
         zIndex: dragging ? 20 : 1,
@@ -63,7 +67,9 @@ export default function FolderCard({
 
       {/* 卡面：里面前几件的真缩略（FolderFace，2026-08-13 从名字清单
           升级；iframe 的三道闸 —— 视口/缩放/每卡上限 —— 在那边算） */}
-      <FolderFace z={z} projectId={projectId} fileVersions={fileVersions} scale={scale} />
+      {z.same
+        ? <SameKindFace z={z} member={member} projectId={projectId} fileVersions={fileVersions} scale={scale} />
+        : <FolderFace z={z} projectId={projectId} fileVersions={fileVersions} scale={scale} />}
 
       <div style={{
         height: 40, flexShrink: 0,
@@ -100,6 +106,7 @@ export default function FolderCard({
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
           }}>{z.title}</span>
         )}
+        {z.same && !renaming && <SameKindPicker z={z} value={member?.id} onPick={onPick} />}
         {onAnnotate && (
           <button
             data-zone-action title="标注（发给 agent / 留在画布）"

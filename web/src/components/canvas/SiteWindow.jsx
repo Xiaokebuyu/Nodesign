@@ -24,6 +24,7 @@ import CodeCanvas from './CodeCanvas.jsx';
 import SitePublishControl from './SitePublishControl.jsx';
 import { useOrchestrateEntry } from './orchestrate-entry.jsx';
 import { PAPER_SHADOW } from '../../lib/paper.js';
+import { toolbarSelect } from '../ui/toolbar-select.jsx';
 
 /**
  * SiteWindow —— 站点的最大化窗口（2026-07-28，跟 DeckWindow 并列的第二种产物窗）
@@ -594,13 +595,11 @@ export default function SiteWindow({
       ].filter(Boolean),
     },
     // 多页站点才需要页面切换；单页站点这一组是纯噪音
-    pageList.length > 1 && {
-      id: 'pages',
-      type: 'mode',
-      value: current,
-      onChange: (p) => { if (p !== current) navigateTo(p); },
-      items: pageList.map(p => ({ id: p, label: p.replace(/\.html?$/i, ''), title: p })),
-    },
+    // 页面切换是下拉（09-18 站主定；原来一排按钮，页一多就把工具栏挤爆）
+    pageList.length > 1 && toolbarSelect({
+      id: 'pages', value: current, title: '这个站点的页面', onChange: (p) => { if (p !== current) navigateTo(p); },
+      options: (pageList.includes(current) ? pageList : [current, ...pageList]).map(p => ({ value: p, label: p.replace(/\.html?$/i, '') })),
+    }),
     tab !== 'code' && {
       id: 'viewport',
       type: 'mode',

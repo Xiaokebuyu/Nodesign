@@ -32,6 +32,12 @@ describe('useDirIndex', () => {
     expect(dirIndex.dirOf(objects[2])).toBe('稿');
   });
 
+  it('⭐ 生成图文件夹卡住在桌面上（它的直接上级 assets/ 不是层）', () => {
+    const { dirIndex } = run({ objects, zonesEff, layout: {}, taskTitles: new Map() });
+    expect(dirIndex.subsOf.get('')).toContain('assets/generated');
+    expect(dirIndex.subsOf.get('assets')).toBeUndefined();
+  });
+
   it('文件夹卡的名字叫「生成图」，不叫 generated', () => {
     const { folderCardOf } = run({ objects, zonesEff, layout: {}, taskTitles: new Map() });
     expect(folderCardOf('assets/generated', null).title).toBe('生成图');

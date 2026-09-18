@@ -16,6 +16,7 @@ const { moveEntry, MoveError } = await import('./move-entry.js');
 const { readBoard } = await import('./board-store.js');
 const { layerOf } = await import('../lib/canvas-id.js');
 const { seatArtifacts } = await import('../engine/runs/board-seater.js');
+const { zoneRects } = await import('../lib/board-kind-sizes.js');
 
 let n = 0; let PID; let root;
 const w = (rel, text = 'x') => { fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true }); fs.writeFileSync(path.join(root, rel), text); };
@@ -71,5 +72,13 @@ describe('入座器', () => {
     const b = await readBoard(PID);
     expect(Number.isFinite(b.zones['assets/generated']?.x)).toBe(true);
     expect(layerOf('assets/generated/new.png', b.objects['assets/generated/new.png'], new Set(Object.keys(b.zones)))).toBe('assets/generated');
+  });
+});
+
+describe('zoneRects', () => {
+  it('⭐ 生成图文件夹卡算桌面层的障碍（直接上级 assets/ 不是层）；普通子文件夹照旧挂父层', () => {
+    const board = { zones: { 'assets/generated': { x: 0, y: 0 }, 稿: { x: 400, y: 0 }, '稿/初稿': { x: 0, y: 0 } } };
+    expect(zoneRects(board, { layer: '' }).map((z) => z.id).sort()).toEqual(['assets/generated', '稿']);
+    expect(zoneRects(board, { layer: '稿' }).map((z) => z.id)).toEqual(['稿/初稿']);
   });
 });

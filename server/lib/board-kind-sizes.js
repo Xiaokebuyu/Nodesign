@@ -57,8 +57,9 @@ export function zoneRects(board, { layer = '' } = {}) {
   for (const [path, z] of Object.entries(board?.zones || {})) {
     if (!Number.isFinite(z?.x) || !Number.isFinite(z?.y)) continue;
     if (layer !== null) {
-      const i = path.lastIndexOf('/');
-      const parent = i > 0 ? path.slice(0, i) : '';
+      // 挂在最近的真文件夹祖先下（09-18）：assets/generated 的直接上级 assets/ 不是层，它住桌面。前端 useDirIndex 同一条
+      let parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+      while (parent && !board.zones[parent]) parent = parent.includes('/') ? parent.slice(0, parent.lastIndexOf('/')) : '';
       if (parent !== layer) continue;
     }
     out.push({ id: path, x: z.x, y: z.y, ...FOLDER_CARD, folder: true });
