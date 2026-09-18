@@ -60,11 +60,11 @@ describe('PreToolUse 数值越界夹紧：顶层与嵌套', () => {
     expect(o.additionalContext).toContain('参数 nodes[0].w 传了 240，上限 120，已按 120 执行');
     expect(o.updatedInput.text).toBe('x');
   });
-  it('⭐ 下限：roll_dice n=0 → 1，edit_board 判别 union 里的 width=0 → 1', async () => {
+  it('⭐ 下限：roll_dice n=0 → 1，edit_board 判别 union 里的 cols=0 → 1', async () => {
     expect((await out('mcp__nodesign__roll_dice', { n: 0 })).updatedInput).toEqual({ n: 1 });
-    const o = await out('mcp__nodesign__edit_board', { ops: [{ op: 'set_shape', id: 's1', width: 0 }, { op: 'transform_group', tag: 't', scale: 9 }] });
-    expect(o.updatedInput.ops).toEqual([{ op: 'set_shape', id: 's1', width: 1 }, { op: 'transform_group', tag: 't', scale: 3 }]);
-    expect(o.additionalContext).toContain('参数 ops[0].width 传了 0，下限 1，已按 1 执行');
+    const o = await out('mcp__nodesign__edit_board', { ops: [{ op: 'arrange', ids: ['a', 'b'], cols: 0 }, { op: 'reflow', tag: 't', cols: 99 }] });
+    expect(o.updatedInput.ops).toEqual([{ op: 'arrange', ids: ['a', 'b'], cols: 1 }, { op: 'reflow', tag: 't', cols: 8 }]);
+    expect(o.additionalContext).toContain('参数 ops[0].cols 传了 0，下限 1，已按 1 执行');
     expect(passesZod('edit_board', o.updatedInput)).toBe(true);
   });
 });

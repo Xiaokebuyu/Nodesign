@@ -89,7 +89,6 @@ export function removeByTag(pid, tag) {
     for (const [id, b] of Object.entries(board.bindings || {})) {
       if (b.tag === t || gone.has(b.from) || gone.has(b.to)) { delete board.bindings[id]; removed += 1; }
     }
-    if (board.hero && gone.has(board.hero)) delete board.hero;
     // 擦组连卷的状态位一起清（收着的组被 erase_group 后不该留一张空卷卡）
     if (board.rolls?.[t]) { delete board.rolls[t]; if (!Object.keys(board.rolls).length) delete board.rolls; }
     await writeBoard(pid, board);

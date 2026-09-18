@@ -19,7 +19,7 @@ const dirIndexOf = (rootItems, rootFolders = []) => ({
 const seat = (over = {}) => computeDesktopSeating({
   dirIndex: dirIndexOf([]),
   zonesEff: {}, layout: {}, bindings: {}, lineageOpen: new Set(),
-  boardHero: null, folderCardOf, movingIds: new Set(), claimSeat: null,
+  folderCardOf, movingIds: new Set(), claimSeat: null,
   ...over,
 });
 
@@ -85,14 +85,14 @@ describe('computeDesktopSeating', () => {
     expect(withEmpty.positioned[0].pos).toEqual(withNone.positioned[0].pos);
   });
 
-  it('显式主角（board.hero）压过推断并标 tier', () => {
-    const r = seat({
-      dirIndex: dirIndexOf([
-        { id: 'deck:a.html', type: 'deck' },
-        { id: 'deck:b.html', type: 'deck' },
-      ]),
-      boardHero: 'deck:b.html',
-    });
+  it('主角只按关系线推：并列没有主角，手画线指着的那张当主角（显式主角 09-18 删了）', () => {
+    const dirIndex = dirIndexOf([
+      { id: 'deck:a.html', type: 'deck' },
+      { id: 'deck:b.html', type: 'deck' },
+    ]);
+    const flat = seat({ dirIndex });
+    expect(flat.positioned.every(o => o.tier === undefined)).toBe(true);
+    const r = seat({ dirIndex, bindings: { 'b:1': { type: 'ref', from: 'notes/n.md', to: 'deck:b.html', by: 'user' } } });
     expect(r.positioned.find(o => o.id === 'deck:b.html').tier).toBe('hero');
     expect(r.positioned.find(o => o.id === 'deck:a.html').tier).toBeUndefined();
   });
@@ -197,7 +197,7 @@ describe('临时座与尺寸回写（2026-09-05：服务端求解器为准）', 
   it('⭐ 产物卡把渲染尺寸回写（主角 1.5 倍那份服务端估不准）；存的一致就不写；图片不管', () => {
     const items = [{ id: 'site:x', type: 'site' }, { id: 'deck:y', type: 'deck' }, { id: 'p.png', type: 'image' }];
     const layout = { 'site:x': { x: 0, y: 0 }, 'deck:y': { x: 0, y: 900, w: 640, h: 388 }, 'p.png': { x: 0, y: 2000 } };
-    const r = seat({ dirIndex: dirIndexOf(items), layout, boardHero: 'site:x' });
+    const r = seat({ dirIndex: dirIndexOf(items), layout, bindings: { 'b:1': { type: 'ref', from: 'p.png', to: 'site:x', by: 'agent' } } });
     const hero = r.positioned.find(it => it.id === 'site:x');
     expect(hero.tier).toBe('hero');
     expect(r.sizeFixes['site:x']).toEqual(sizeOf(hero));       // 主角尺寸回写

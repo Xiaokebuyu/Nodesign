@@ -177,7 +177,6 @@ on the minimap and listed with what is inside it.`,
           }).join('、')}`);
         }
       }
-      if (board.hero && !tag) lines.push('', `★ 显式主角：${board.hero}（edit_board 的 feature/unfeature 管它）`);
 
       // 还没入座的到货（入座器一轮封顶截流的那几件）：点名即可，位置由 edit_board 的 pin 定
       if (!want && !tag) {

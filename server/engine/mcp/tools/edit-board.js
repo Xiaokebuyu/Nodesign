@@ -3,7 +3,7 @@
  *
  * 改板的唯一入口。前身 edit_sketch，08-25 这一刀吞进四件；旧名薄别名 08-28 全部
  * 收摊（exp 不为过去的会话背兼容，用户拍板）：
- *   arrange_on_board  → feature / unfeature（beside/below = move 的 to:{ref,side}）
+ *   arrange_on_board  → move 的 to:{by,side}（它的 feature / unfeature 09-18 删了：从没被调用过，主角由机器推断）
  *   finish_sketch     → commit / erase_group
  *   relate_on_board   → add_edge（它独有的"端点必须真实存在"校验下沉进共享 add_edge
  *                       —— 原来一个查一个不查是口径病，悬空线全从不查的那个进来）
@@ -27,7 +27,7 @@ import { commitStaging, removeByTag, clearTags } from '../../../projects/board-t
 import { estimateSizeOn, FOLDER_CARD } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId, tagEnvelope, bareTag } from '../../../lib/canvas-id.js';
 import { applyFollows } from '../../../lib/board-follow.js';
-import { UNIT, textBox, shapePath } from '../../../lib/sketch-layout.js';
+import { UNIT, textBox } from '../../../lib/sketch-layout.js';
 import { placeBeside, overlapIds, solvePlace, lastOfGroup, describePlacement } from '../../../lib/board-place.js';
 import { reflowGroup, pushDownAfterGrow } from '../../../lib/board-reflow.js';
 import { lineCrossings } from '../../../lib/line-route.js';
@@ -37,7 +37,6 @@ import { userAnnotationsOn, annotationNote } from '../../../lib/chalk-annotation
 import { placeByIntent, describeYield } from '../../../lib/board-yield.js';
 import { makeEndpointResolver } from '../../../lib/board-endpoint.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
-import { transformGroup } from '../../../lib/board-transform.js';
 import { OP, EDIT_BOARD_DESC } from './edit-board-schema.js';
 import { obstaclesIn, seatBacked } from '../../../lib/board-obstacles.js';
 import { getViewpoint } from '../../../projects/viewpoint-store.js';
@@ -82,7 +81,6 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx, mode = 'des
     const live = { ...board.objects };             // 调用内"当前态"
     const liveBindings = { ...board.bindings };
     const local = new Map();                       // add_node 本地句柄 → canvas id
-    let heroPatch;                                 // undefined = 不动；null = 撤；string = 立
     const chalkUnlinks = [];                       // remove 板书：patch 后再删文件
     let committed = 0; let erased = 0;
 
@@ -323,41 +321,6 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx, mode = 'des
           });
           if (o.id) local.set(o.id, id);
           report.push(`+ node ${o.id ? `${o.id}=` : ''}${id} — ${sayWhere(p)}`); ok += 1;
-        } else if (o.op === 'add_shape') {
-          // 事后圈重点（08-27 shapes 编辑面）：给**已在板上**的东西补一个手画记号。
-          // hug 让它跟着目标走 —— 之前画完的圈是死的，目标一挪就散架。
-          const refId = rid(o.around); const r = refId && rectOf(refId);
-          if (!r) { fail(`around ${o.around} 不在板上 —— ${anchorMissHint(o.around, { ...board, objects: live, zones: liveZones })}`); continue; }
-          const seed = `${refId}:m${stamp()}`;
-          let sp; let ent;
-          if (o.kind === 'underline') {
-            sp = shapePath('underline', { to: { x: Math.max(8, r.w - 4), y: 0 } }, seed);
-            ent = { x: Math.round(r.x + 2 - 6), y: Math.round(r.y + r.h - 2 - 6) };
-          } else {
-            const padPx = o.kind === 'rect' ? 8 : 14;
-            let bx = { x: r.x - padPx, y: r.y - padPx, w: r.w + padPx * 2, h: r.h + padPx * 2 };
-            if (o.kind === 'circle') { const dmax = Math.max(bx.w, bx.h); bx = { x: bx.x + (bx.w - dmax) / 2, y: bx.y + (bx.h - dmax) / 2, w: dmax, h: dmax }; }
-            sp = shapePath(o.kind, { w: bx.w, h: bx.h }, seed);
-            ent = { x: Math.round(bx.x - 6), y: Math.round(bx.y - 6) };
-          }
-          const sid = `scribble:a${stamp()}`;
-          const tag2 = o.tag || defaultTag || live[refId]?.tag || null;
-          setObj(sid, {
-            ...ent, z: 1, w: Math.round(sp.w), h: Math.round(sp.h), kind: 'scribble',
-            data: { d: sp.d, color: o.color || 'ink', width: o.width || 2 },
-            by, seat: 'agent', hug: refId,
-            ...(tag2 ? { tag: tag2 } : {}),
-            zone: layerOf(refId, live[refId], known) || '',
-          });
-          report.push(`· #${i + 1} add_shape ${o.kind} 圈住 ${refId}（id ${sid}，会跟着它走）`);
-          ok += 1;
-        } else if (o.op === 'set_shape') {
-          const id = rid(o.id); const e = id && live[id];
-          if (!e || e.kind !== 'scribble') { fail(`${o.id} 不是手画记号（scribble）`); continue; }
-          const data = { ...e.data };
-          if (o.color) data.color = o.color;
-          if (o.width) data.width = o.width;
-          setObj(id, { ...e, data }); ok += 1;
         } else if (o.op === 'add_edge') {
           // 两端先归一再校验（09-17，lib/board-endpoint.js）：认完必须是画布上画得出来的东西，否则拒并给候选
           const fe = await resolveEnd(o.from); const te = await resolveEnd(o.to);
@@ -484,7 +447,7 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx, mode = 'des
            * 可以为所有内容（包括图 站点 docx 等）设置 follow」）。
            *
            * 在这之前 tag 只能在**造东西那一刻**给（write_on_board.tag / add_node /
-           * add_shape / add_edge / 板书 frontmatter）。产物不是这么来的 —— 图是
+           * add_edge / 板书 frontmatter）。产物不是这么来的 —— 图是
            * generate_image 生的、站点是 publish_site 出的、docx 是 build_docx 打的，
            * 落板时一律没有 tag。而 follow 的两端（跟随组 group_tag、目标 target_tag）
            * **都是按 tag 找成员**，所以"给图片设 follow"以前根本无从下手。
@@ -524,41 +487,10 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx, mode = 'des
           erased += removed; ok += 1;
           for (const id of Object.keys(live)) if (live[id]?.tag === o.tag && live[id]?.kind) delete live[id];
           report.push(`· erase_group #${o.tag}：擦掉 ${removed} 件`);
-        } else if (o.op === 'roll') {
-          // 收卷（2026-08-27 收纳器）：只立状态位，成员座位一件不动 —— 前端把这组
-          // 藏进一张卷卡，展开即归位。视觉/渲染/read_board 三头减负，地皮照旧占着
-          //（落位引擎仍把它们当障碍，所以永远不会有新东西压进卷里）。
-          const members = Object.entries(live).filter(([, e]) => e?.tag === o.tag && Number.isFinite(e?.x));
-          if (!members.length) { fail(`没有带 #${o.tag} 的条目，无法收纳`); continue; }
-          if (board.rolls?.[o.tag] && !rolls[o.tag]) {
-            report.push(`· #${i + 1} roll：#${o.tag} 本来就收着（${members.length} 件）`); ok += 1; continue;
-          }
-          rolls[o.tag] = { at: new Date().toISOString(), by, ...(o.label ? { label: o.label } : {}) };
-          report.push(`· #${i + 1} roll：#${o.tag} 收进卷里（${members.length} 件，座位和文件都在，卷卡单击可展开）`);
-          ok += 1;
         } else if (o.op === 'unroll') {
           if (!board.rolls?.[o.tag] && rolls[o.tag] === undefined) { fail(`#${o.tag} 没收着`); continue; }
           rolls[o.tag] = null;
           report.push(`· #${i + 1} unroll：#${o.tag} 展开，全部归位`);
-          ok += 1;
-        } else if (o.op === 'feature') {
-          const id = rid(o.id) || normalizeCanvasId(o.id);
-          if (!id) { fail(`${o.id} 不合法`); continue; }
-          heroPatch = id; ok += 1;
-        } else if (o.op === 'unfeature') {
-          heroPatch = null; ok += 1;
-        } else if (o.op === 'transform_group') {
-          // 整组缩放/旋转（2026-08-30，拆件见 lib/board-transform.js）：涂鸦真变形，
-          // 文字/卡只换座（字号没有"转 30°"的渲染语义，硬转是藏问题）
-          if (!o.scale && !o.rotate) { fail('transform_group 要 scale 或 rotate（都不给等于没变）'); continue; }
-          const gTag2 = bareTag(o.tag);
-          const members = Object.entries(live)
-            .filter(([, e]) => e?.tag === gTag2 && Number.isFinite(e?.x))
-            .map(([id, e]) => ({ id, entry: e, ...estimateSizeOn(board, id, e) }));
-          if (!members.length) { fail(`没有 #${o.tag} 的东西`); continue; }
-          const r = transformGroup(members, { scale: o.scale || 1, rotate: o.rotate || 0 });
-          for (const [id, e] of Object.entries(r.patch)) setObj(id, e);
-          report.push(`· transform_group #${o.tag}：绕组心 (${r.center.x},${r.center.y}) ${o.scale ? `缩放 ${o.scale}×` : ''}${o.rotate ? ` 旋转 ${o.rotate}°` : ''} —— ${r.inked} 件涂鸦真变形${r.seated ? `，${r.seated} 件（文字/卡）只挪了位没变形` : ''}`);
           ok += 1;
         } else if (o.op === 'chalk_edit') {
           // 改板书开关（08-25 用户提：黑板 RP 这类板书密集会话该由 agent 帮忙打开）。
@@ -572,13 +504,12 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx, mode = 'des
       } catch (e) { fail(String(e?.message || e).slice(0, 120)); }
     }
     if (!ok) return err(`没有一条操作成功：\n${report.join('\n')}`);
-    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length || heroPatch !== undefined) {
+    if (Object.keys(objects).length || Object.keys(bindings).length || Object.keys(rolls).length || Object.keys(follows).length || Object.keys(zonesPatch).length) {
       await patchBoard(projectId, {
         objects, bindings,
         ...(Object.keys(zonesPatch).length ? { zones: zonesPatch } : {}),
         ...(Object.keys(rolls).length ? { rolls } : {}),
         ...(Object.keys(follows).length ? { follows } : {}),
-        ...(heroPatch !== undefined ? { hero: heroPatch } : {}),
       });
     }
     // 打完标签 = 这个 tag 有新成员落板，跟随线在这一刻重指并挪组（08-31；此前产物永远触发不了跟随）。fail-soft

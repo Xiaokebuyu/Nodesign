@@ -165,7 +165,7 @@ export default function BoardCanvas({
   // 派生（objects/folderView）留在本组件：它跟拖拽、影子区缠在一起。
   const {
     artifacts, tasks, folders, sessions, browse, repo, filter, filterGroup,
-    layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
+    layout, setLayout, zones, setZones, bindings, setBindings, roleNames,
     rolls, setRolls, sheets, shelf,
     guideText, fileCount,
     reload, scheduleSave, patchLayout, removeLayoutEntry,
@@ -522,12 +522,12 @@ export default function BoardCanvas({
   // 认领即在 memo 里标记，ref 用法同 movingRef 有先例）。
   const { positioned, folderView, contentBottom, seatFixes, noteFixes, sizeFixes } = useMemo(() => (
     computeDesktopSeating({
-      dirIndex, zonesEff, layout, bindings, lineageOpen, boardHero, folderCardOf, shelf,
+      dirIndex, zonesEff, layout, bindings, lineageOpen, folderCardOf, shelf,
       movingIds: movingRef.current,
       claimSeat: (id) => claimPhantomSeat(phantomsRef, id),
       occupied: phantomRects(phantomsRef),   // 生图幻影占的地方：它让不开，只能排座这边躲它
     })
-  ), [dirIndex, folderCardOf, layout, zonesEff, bindings, lineageOpen, boardHero, shelf]);
+  ), [dirIndex, folderCardOf, layout, zonesEff, bindings, lineageOpen, shelf]);
   positionedRef.current = positioned;
   folderViewRef.current = folderView;
   // 幻影找座的障碍表与起排线（跟这一趟入座同一份现实）

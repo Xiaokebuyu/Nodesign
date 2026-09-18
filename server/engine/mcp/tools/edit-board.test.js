@@ -11,6 +11,7 @@ process.env.DB_PATH = path.join(tmp, 'test.db');
 const { makeEditBoardTool } = await import('./edit-board.js');
 const { makeWriteOnBoardTool } = await import('./write-on-board.js');
 const { readBoard, patchBoard } = await import('../../../projects/board-store.js');
+const { OP } = await import('./edit-board-schema.js');
 const { getSharedDir, ensureProjectWorkspace } = await import('../../../projects/workspace.js');
 
 const pid = 'proj_editboard_test';
@@ -45,7 +46,7 @@ describe('edit_board（吞四件 + 新能力）', () => {
   it('set_edge 新端点不存在：拒这一条，其余照做', async () => {
     const board = await readBoard(pid);
     const edgeId = Object.keys(board.bindings)[0];
-    const r = await edit({ ops: [{ op: 'set_edge', id: edgeId, to: '不存在的东西' }, { op: 'unfeature' }] });
+    const r = await edit({ ops: [{ op: 'set_edge', id: edgeId, to: '不存在的东西' }, { op: 'commit' }] });
     expect(r.isError).toBeUndefined();
     expect(r.content[0].text).toContain('✗ #1');
   });
@@ -157,15 +158,8 @@ describe('edit_board（吞四件 + 新能力）', () => {
     expect((await readBoard(pid)).objects['assets/c.png'].y).toBeGreaterThanOrEqual(9000 + 176);
   });
 
-  it('feature/unfeature（吞 arrange）+ commit/erase_group（吞 finish）', async () => {
-    const r = await edit({ ops: [{ op: 'feature', id: 'assets/photo.png' }] });
-    expect(r.isError).toBeUndefined();
-    let board = await readBoard(pid);
-    expect(board.hero).toBe('assets/photo.png');
-    await edit({ ops: [{ op: 'unfeature' }] });
-    board = await readBoard(pid);
-    expect(board.hero).toBeUndefined();
-
+  it('commit/erase_group（吞 finish）', async () => {
+    let board;
     await write({ nodes: [{ id: 'x1', text: 'X' }, { id: 'x2', text: 'Y' }], tag: 'wipe' });
     const c = await edit({ ops: [{ op: 'commit', tag: 'wipe' }] });
     expect(c.content[0].text).toContain('落定');
@@ -278,19 +272,14 @@ describe('08-25 二批：chalk_edit + 挪动如实报（2026-09-05 落点改报�
   });
 });
 
-describe('shapes 编辑面（08-27）：事后圈重点 + 贴身跟随', () => {
-  it('⭐ add_shape 圈住已有节点，hug 记在案；move 节点圈跟着走', async () => {
-    await write({ nodes: [{ id: 'k1', text: '要圈的重点' }, { id: 'k2', text: '陪跑' }], tag: 'hug试' });
+describe('贴身跟随：圈着节点的记号跟着它走（add_shape 09-18 删了，记号由 write_on_board 的 shapes.around 画）', () => {
+  it('⭐ move 节点圈跟着走', async () => {
+    await write({ nodes: [{ id: 'k1', text: '要圈的重点' }, { id: 'k2', text: '陪跑' }], shapes: [{ kind: 'ellipse', around: 'k1', color: 'red' }], tag: 'hug试' });
     let board = await readBoard(pid);
-    const nid = Object.entries(board.objects).find(([, e]) => e.data?.lid === 'k1')[0];
-    const r = await edit({ ops: [{ op: 'add_shape', kind: 'ellipse', around: nid, color: 'red' }] });
-    expect(r.isError).toBeUndefined();
-    board = await readBoard(pid);
-    const [sid, sh] = Object.entries(board.objects).find(([, e]) => e.hug === nid);
-    expect(sh.kind).toBe('scribble');
-    expect(sh.data.color).toBe('red');
+    const [sid, sh] = Object.entries(board.objects).find(([, e]) => e.kind === 'scribble' && e.tag === 'hug试' && e.hug);
+    const nid = sh.hug;
+    expect(board.objects[nid].data.lid).toBe('k1');
     const rel = { dx: sh.x - board.objects[nid].x, dy: sh.y - board.objects[nid].y };
-    // 挪节点：圈按同 delta 跟走（相对位置不变）
     await edit({ ops: [{ op: 'move', id: nid, to: { by: 'assets/a.png', side: 'below' } }] });
     board = await readBoard(pid);
     expect(board.objects[sid].x - board.objects[nid].x).toBe(rel.dx);
@@ -299,27 +288,14 @@ describe('shapes 编辑面（08-27）：事后圈重点 + 贴身跟随', () => {
 
   it('⭐ reflow 不再散架：文字重排时圈着它的记号一起走', async () => {
     let board = await readBoard(pid);
-    const nid = Object.entries(board.objects).find(([, e]) => e.data?.lid === 'k1')[0];
-    const [sid] = Object.entries(board.objects).find(([, e]) => e.hug === nid);
+    const [sid, sh] = Object.entries(board.objects).find(([, e]) => e.kind === 'scribble' && e.tag === 'hug试' && e.hug);
+    const nid = sh.hug;
     const relBefore = { dx: board.objects[sid].x - board.objects[nid].x, dy: board.objects[sid].y - board.objects[nid].y };
     const r = await edit({ ops: [{ op: 'reflow', tag: 'hug试', layout: 'row' }] });
     expect(r.isError).toBeUndefined();
     board = await readBoard(pid);
     expect(board.objects[sid].x - board.objects[nid].x).toBe(relBefore.dx);
     expect(board.objects[sid].y - board.objects[nid].y).toBe(relBefore.dy);
-  });
-
-  it('set_shape 改色改粗；对非涂鸦拒', async () => {
-    const board = await readBoard(pid);
-    const [sid] = Object.entries(board.objects).find(([, e]) => e.kind === 'scribble' && e.hug);
-    const r = await edit({ ops: [{ op: 'set_shape', id: sid, color: 'brass', width: 4 }] });
-    expect(r.isError).toBeUndefined();
-    const after = await readBoard(pid);
-    expect(after.objects[sid].data.color).toBe('brass');
-    expect(after.objects[sid].data.width).toBe(4);
-    const nid = Object.entries(after.objects).find(([, e]) => e.data?.lid === 'k1')[0];
-    const r2 = await edit({ ops: [{ op: 'set_shape', id: nid, color: 'red' }] });
-    expect(r2.content[0].text).toMatch(/不是手画记号/);
   });
 });
 
@@ -435,45 +411,58 @@ describe('schema 垫片：$text 剥壳 + 关系落位', () => {
 /**
  * 收纳器（2026-08-27）：roll 只立状态位，成员座位一件不动 —— 展开即归位的根据。
  */
-describe('roll / unroll（收纳器）', () => {
-  it('⭐ 收卷：rolls 立条目、座位原样、展开后条目消失', async () => {
+describe('unroll（收纳器；09-18 起只有用户能收卷，agent 只能展开）', () => {
+  const userRolls = (tag, label) => patchBoard(pid, { rolls: { [tag]: { by: 'user', ...(label ? { label } : {}) } } });
+
+  it('⭐ 用户收起的组：unroll 清掉条目，座位原样', async () => {
     await patchBoard(pid, { objects: {
       'notes/板书/20260827-180000-第一幕a.md': { x: 50000, y: 50000, w: 300, h: 100, by: 'agent', tag: '第一幕' },
       'notes/板书/20260827-180001-第一幕b.md': { x: 50000, y: 50200, w: 300, h: 100, by: 'agent', tag: '第一幕' },
     } });
-    const r = await edit({ ops: [{ op: 'roll', tag: '第一幕', label: '开场' }] });
+    await userRolls('第一幕', '开场');
+    expect((await readBoard(pid)).rolls['第一幕']).toMatchObject({ label: '开场' });
+    const r = await edit({ ops: [{ op: 'unroll', tag: '第一幕' }] });
     expect(r.isError).toBeUndefined();
-    expect(r.content[0].text).toMatch(/收进卷里（2 件/);
-    let board = await readBoard(pid);
-    expect(board.rolls['第一幕']).toMatchObject({ label: '开场' });
-    // 座位一动不动 —— 这是「展开即归位」和「落位不落错」共同的根据
-    expect(board.objects['notes/板书/20260827-180000-第一幕a.md'].x).toBe(50000);
-    expect(board.objects['notes/板书/20260827-180001-第一幕b.md'].y).toBe(50200);
-    // 再收一遍：幂等，如实报
-    const r2 = await edit({ ops: [{ op: 'roll', tag: '第一幕' }] });
-    expect(r2.content[0].text).toMatch(/本来就收着/);
-    const r3 = await edit({ ops: [{ op: 'unroll', tag: '第一幕' }] });
-    expect(r3.isError).toBeUndefined();
-    board = await readBoard(pid);
+    const board = await readBoard(pid);
     expect(board.rolls).toBeUndefined();
     expect(board.objects['notes/板书/20260827-180000-第一幕a.md'].x).toBe(50000);
+    expect(board.objects['notes/板书/20260827-180001-第一幕b.md'].y).toBe(50200);
   });
 
-  it('空组收不了；没收着的展不开', async () => {
-    const r = await edit({ ops: [{ op: 'roll', tag: '不存在的组' }] });
+  it('没收着的展不开', async () => {
+    const r = await edit({ ops: [{ op: 'unroll', tag: '第一幕' }] });
     expect(r.isError).toBe(true);
-    const r2 = await edit({ ops: [{ op: 'unroll', tag: '第一幕' }] });
-    expect(r2.isError).toBe(true);
-    expect(r2.content[0].text).toMatch(/没收着/);
+    expect(r.content[0].text).toMatch(/没收着/);
   });
 
   it('erase_group 连卷的状态位一起清（不留空卷卡）', async () => {
     await patchBoard(pid, { objects: {
       'notes/板书/20260827-181000-废幕.md': { x: 60000, y: 60000, w: 300, h: 100, by: 'agent', tag: '废幕' },
     } });
-    await edit({ ops: [{ op: 'roll', tag: '废幕' }] });
+    await userRolls('废幕');
     expect((await readBoard(pid)).rolls?.['废幕']).toBeTruthy();
     await edit({ ops: [{ op: 'erase_group', tag: '废幕' }] });
     expect((await readBoard(pid)).rolls?.['废幕']).toBeUndefined();
+  });
+});
+
+describe('09-18 删掉的六个操作（站主：零使用的老操作删掉）', () => {
+  it('⛔ 参数表不再认 roll / feature / unfeature / add_shape / set_shape / transform_group', () => {
+    const gone = [
+      { op: 'roll', tag: 't' }, { op: 'feature', id: 'site:a' }, { op: 'unfeature' },
+      { op: 'add_shape', kind: 'rect', around: 'site:a' }, { op: 'set_shape', id: 'scribble:a' },
+      { op: 'transform_group', tag: 't', scale: 2 },
+    ];
+    for (const o of gone) expect(OP.safeParse(o).success, o.op).toBe(false);
+    expect(OP.safeParse({ op: 'unroll', tag: 't' }).success).toBe(true);
+    expect(OP.safeParse({ op: 'unfollow', group_tag: 't' }).success).toBe(true);
+  });
+
+  it('⛔ 显式主角不再认：存量 board.hero 读一次就清掉', async () => {
+    const { sanitizeBoard } = await import('../../../projects/board-sanitize.js');
+    expect(sanitizeBoard({ objects: {}, zones: {}, bindings: {}, hero: 'assets/photo.png' }).hero).toBeUndefined();
+    const { boardHeroId } = await import('../../../lib/board-hero.js');
+    const two = { objects: { 'site:a': { x: 0, y: 0 }, 'site:b': { x: 0, y: 0 } }, zones: {}, bindings: {} };
+    expect(boardHeroId({ ...two, hero: 'site:b' })).toBeNull();
   });
 });

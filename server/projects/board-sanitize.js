@@ -399,9 +399,8 @@ export function sanitizeBoard(raw) {
     const s = sanitizeBinding(b);
     if (s) { bindings[id] = s; bCount += 1; }
   }
-  // 主角覆盖（2026-08-14 agent 摆位）：显式立的主角压过前端 pickHero 的推断。
-  // 存 id 不存理由 —— 理由在会话里，画布只要知道谁站 C 位
-  const hero = typeof raw?.hero === 'string' && raw.hero.length <= 300 ? raw.hero : null;
+  // 主角覆盖（board.hero）09-18 随 edit_board 的 feature 删了：不再认，存量里的这个字段读一次就清掉。
+  // 主角只由 pickHero 按关系线推（lib/board-hero.js / web/src/lib/hero.js）
   const lanes = {};
   let lCount = 0;
   for (const [name, l] of Object.entries(raw?.lanes && typeof raw.lanes === 'object' ? raw.lanes : {})) {
@@ -483,7 +482,7 @@ export function sanitizeBoard(raw) {
     : null;
   return {
     size, zones, objects, bindings,
-    ...(hero ? { hero } : {}), ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}),
+    ...(lCount ? { lanes } : {}), ...(rCount ? { rolls } : {}),
     ...(sCount ? { sheets } : {}),
     ...(fCount ? { follows } : {}),
     ...(yCount ? { layouts } : {}),

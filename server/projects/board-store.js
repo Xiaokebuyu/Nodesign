@@ -199,18 +199,12 @@ export function patchBoard(pid, patch) {
       const clean = sanitizeBoard({ ...board, shelf: patch.shelf }).shelf;
       if (clean) board.shelf = clean; else delete board.shelf;
     }
-    // 主角覆盖：null = 撤销（回到 pickHero 自动推断），字符串 = 显式立主角
-    if (patch?.hero !== undefined) {
-      if (patch.hero === null) delete board.hero;
-      else if (typeof patch.hero === 'string' && patch.hero.length <= 300) board.hero = fwd(patch.hero);
-    }
     // 端点被删掉的线一起清掉，否则画布上留一条连向虚空的线。放在最后：
     // 这一趟才看得到本次删除的全貌（同一个 patch 里可能既删物件又加线）。
     if (removed.size) {
       for (const [id, b] of Object.entries(board.bindings)) {
         if (removed.has(b.from) || removed.has(b.to)) delete board.bindings[id];
       }
-      if (board.hero && removed.has(board.hero)) delete board.hero;
     }
     await writeBoard(pid, board);
     return board;

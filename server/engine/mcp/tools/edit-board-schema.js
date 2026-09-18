@@ -54,8 +54,6 @@ export const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('move_group'), tag: z.string().min(1).max(40), to: TO }),
   z.object({ op: z.literal('remove'), id: z.string().min(1).max(300) }),
   z.object({ op: z.literal('add_node'), id: z.string().regex(/^[A-Za-z0-9_-]{1,24}$/).optional().describe('local handle for later ops of this call. ASCII only (letters/digits/_/-, e.g. "n1"); the Chinese name goes in text'), text: z.string().min(1).max(8000), format: z.enum(['plain', 'md']).optional(), size: z.enum(['sm', 'md', 'lg', 'xl']).optional(), font: z.enum(['pen', 'kai', 'sans', 'serif', 'mono']).optional(), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), at: TO.optional().describe("Omit = into the user's view (same default as write_on_board)"), tag: z.string().max(40).optional() }),
-  z.object({ op: z.literal('add_shape'), kind: z.enum(['rect', 'ellipse', 'circle', 'underline']), around: z.string().min(1).max(300).describe('canvas id to wrap/underline — the mark HUGS it and follows when it moves'), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), width: z.number().min(1).max(12).optional(), tag: z.string().max(40).optional() }),
-  z.object({ op: z.literal('set_shape'), id: z.string().min(1).max(300), color: z.enum(['ink', 'red', 'pencil', 'brass']).optional(), width: z.number().min(1).max(12).optional() }),
   z.object({ op: z.literal('add_edge'), from: ENDPOINT.describe('canvas id as read_board prints it (site:…, docx:…, a path, a folder, a node handle) — must be something drawn on the board'), to: ENDPOINT.describe('same as from'), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), label: z.string().max(60).optional(), tag: z.string().max(40).optional() }),
   z.object({ op: z.literal('set_edge'), id: z.string().min(1).max(300), label: z.string().max(60).optional(), type: z.enum(BINDING_TYPE_IDS).optional(), material: z.enum(BINDING_MATERIALS).optional(), from: ENDPOINT.optional().describe('re-point the line: new source end'), to: ENDPOINT.optional().describe('re-point the line: new target end') }),
   z.object({ op: z.literal('remove_edge'), id: z.string().min(1).max(300) }),
@@ -65,11 +63,7 @@ export const OP = z.discriminatedUnion('op', [
   z.object({ op: z.literal('unfollow'), group_tag: z.string().min(1).max(40) }),
   z.object({ op: z.literal('commit'), tag: z.string().max(40).optional().describe('make staging solid; omit tag = everything staging') }),
   z.object({ op: z.literal('erase_group'), tag: z.string().min(1).max(40).describe('delete the whole tagged group (notes/shapes/lines; artifact cards only lose the tag)') }),
-  z.object({ op: z.literal('roll'), tag: z.string().min(1).max(40).describe('STOW a finished group: hides it behind a compact scroll card, everything kept in place (seats reserved, files intact, one click to unroll). For a scene/act/chapter that is DONE — use erase_group only to destroy'), label: z.string().max(60).optional().describe('scroll card title (default: the tag)') }),
   z.object({ op: z.literal('unroll'), tag: z.string().min(1).max(40).describe('expand a rolled group back — everything returns to its original seat') }),
-  z.object({ op: z.literal('feature'), id: z.string().min(1).max(300).describe('make this the hero of the desktop') }),
-  z.object({ op: z.literal('unfeature') }),
-  z.object({ op: z.literal('transform_group'), tag: z.string().min(1).max(40), scale: z.number().min(0.3).max(3).optional(), rotate: z.number().min(-180).max(180).optional().describe('degrees clockwise') }),
   z.object({ op: z.literal('chalk_edit'), on: z.boolean().describe('true = turn ON the user-side 改板书 toggle (notes become freely draggable/editable for the user); false = back to guarded mode') }),
   // ── 09-18 并进来的（站主：「把现有的 board 编辑工具都整合到 edit_board」；实现在 edit-board-more.js）──
   z.object({ op: z.literal('pin'), path: z.string().min(1).max(300).optional(), paths: z.array(z.string().min(1).max(300)).min(1).max(12).optional(), to: TO.optional(), tag: z.string().max(40).optional(), as: z.enum(['row', 'column']).optional() }),
@@ -100,14 +94,10 @@ ops (run in order; a failing op is reported, the rest still apply):
  remove{id} (agent-written board
  notes included: file + seat + lines go together; an artifact card whose file is already gone
  from disk — read_board marks it ⚠️ — loses only its seat) · add_node{id?,text,at:{by,side?},…} ·
- add_shape{kind,around,…} (circle/box/underline an EXISTING thing after the fact — the mark
- hugs it and follows when it moves) · set_shape{id,color?,width?} ·
  add_edge{from,to,type?,material?,label?} · set_edge{id,from?,to?,label?,type?,material?}
  (re-point a line in one op) · remove_edge{id} · reflow{tag,layout?,cols?} (re-lay a group with the
  layout it was drawn with — a grid stays a grid, a flow stays layered — using its current lines and
  sizes; its flow lines set the order. Use it after edits instead of moving members one by one) ·
- transform_group{tag,scale?,rotate?} (scale/rotate a whole tagged drawing about its center —
- scribbles truly transform; text/cards just re-seat, reported honestly) ·
  set_tag{ids,tag} (put ANYTHING already on the board into a group — images, sites, docx, cards.
  Tags are otherwise only settable when a thing is created, and produced files are never created
  by you, so this is how an artifact joins a group or becomes a follow target) ·
@@ -119,9 +109,7 @@ ops (run in order; a failing op is reported, the rest still apply):
  keep_offset:true skips even the first snap — the group stays exactly where it is and that
  becomes the baseline offset.) · unfollow{group_tag} ·
  commit{tag?} (staging → solid) · erase_group{tag} ·
- roll{tag,label?} (STOW a finished scene/act/chapter behind one compact scroll card —
- seats/files/lines all kept, user or you can unroll anytime; the tidy way to end an act) ·
- unroll{tag} · feature{id} / unfeature (hero) ·
+ unroll{tag} (expand a group the user rolled up into a scroll card) ·
  chalk_edit{on} (flip the user's 改板书 toggle — turn it ON when the session leans on
  board notes, e.g. blackboard RP, so the user can drag/edit notes without double-click arming) ·
  pin{path|paths,to?,tag?,as?} (put an EXISTING file on the canvas. With to it lands on the desktop

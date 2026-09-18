@@ -14,13 +14,13 @@ describe('board-hero 镜像', () => {
     const fe = fs.readFileSync(new URL('../../web/src/lib/hero.js', import.meta.url), 'utf8');
     expect(slice(be)).toBe(slice(fe));
   });
-  it('唯一产物卡 = 天然主角；显式 hero 覆盖；主角尺寸 1.5 倍', () => {
+  it('唯一产物卡 = 天然主角；显式 hero 不再认（09-18）；主角尺寸 1.5 倍', () => {
     const board = { objects: { 'site:a': { x: 0, y: 0 }, 'assets/x.png': { x: 0, y: 0 } }, zones: {}, bindings: {} };
     expect(boardHeroId(board)).toBe('site:a');
     expect(heroSize('site:a')).toEqual({ w: 960, h: 28 + 600 });
     const two = { objects: { 'site:a': { x: 0, y: 0 }, 'site:b': { x: 0, y: 0 } }, zones: {}, bindings: {} };
     expect(boardHeroId(two)).toBeNull();
-    expect(boardHeroId({ ...two, hero: 'site:b' })).toBe('site:b');
+    expect(boardHeroId({ ...two, hero: 'site:b' })).toBeNull();
     expect(pickHero([], {})).toBeNull();
   });
 });

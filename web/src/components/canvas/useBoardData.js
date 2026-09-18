@@ -97,7 +97,6 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
   const [shelf, setShelf] = useState(null);   // 暂存架原点（board.shelf，只读镜像）
   const [zones, setZones] = useState({});
   const [bindings, setBindings] = useState({});   // board.json 的关系表
-  const [boardHero, setBoardHero] = useState(null);   // 显式主角覆盖（agent feature 立的）
   // 卷（2026-08-27 收纳器）：tag → {at,by,label}。有条目 = 这组收着（渲染层不画，
   // 座位原样在 layout 里 —— 展开即归位）。用户收/展开走 patchBoard 的 rolls 键。
   const [rolls, setRolls] = useState({});
@@ -158,7 +157,6 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
       setLayout(b.board.objects || {});
       setBindings(b.board.bindings || {});
       setZones(b.board.zones || {});
-      setBoardHero(b.board.hero || null);
       setRolls(b.board.rolls || {});
       setSheets(b.board.sheets || {});
       setShelf(b.board.shelf || null);
@@ -231,7 +229,7 @@ export function useBoardData({ projectId, listVersion, boardVersion, readOnly = 
 
   return {
     artifacts, tasks, folders, sessions, browse, repo, filter, filterGroup,
-    layout, setLayout, zones, setZones, bindings, setBindings, boardHero, roleNames,
+    layout, setLayout, zones, setZones, bindings, setBindings, roleNames,
     rolls, setRolls, sheets, shelf,
     guideText, fileCount,
     reload, scheduleSave, patchLayout, removeLayoutEntry,

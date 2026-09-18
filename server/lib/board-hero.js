@@ -52,8 +52,9 @@ export const HERO_SCALE = 1.5;   // = web board-kinds.js HERO_SCALE
 const TYPE_RE = /^(deck|site|docx):/;
 
 /**
- * 这块板此刻的主角 id（只看桌面根层，与前端入座同口径）：board.hero 显式覆盖，
- * 否则按关系线推。谱系收叠藏起来的旧版不参与（前端在主角判断之前就把它们摘了；
+ * 这块板此刻的主角 id（只看桌面根层，与前端入座同口径），按关系线推。显式主角（board.hero，
+ * edit_board 的 feature 立的）09-18 随 feature/unfeature 一起删了：从没被调用过，生产上唯一一块
+ * 设过的板立的是张图片（图片不放大），反倒压住了自动主角。谱系收叠藏起来的旧版不参与（前端在主角判断之前就把它们摘了；
  * 09-17 起服务端也摘 —— 改自边的重罚在多数板上结果一样，并列判定时不一样）。
  */
 export function boardHeroId(board) {
@@ -66,7 +67,6 @@ export function boardHeroId(board) {
     const m = TYPE_RE.exec(id);
     if (m) items.push({ id, type: m[1] });
   }
-  if (board?.hero && items.some(it => it.id === board.hero)) return board.hero;
   return pickHero(items, board?.bindings || {});
 }
 

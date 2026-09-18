@@ -61,7 +61,6 @@ const ARTIFACT_TYPES = new Set(Object.keys(ARTIFACT_PREVIEW_H));
  * @param {object} deps.layout          物件坐标表（board.json objects 的本地态）
  * @param {object} deps.bindings        关系线表
  * @param {Set}    deps.lineageOpen     用户点开的谱系链尾
- * @param {string|null} deps.boardHero  agent 立的显式主角
  * @param {(id: string, pos: {x:number,y:number}) => object} deps.folderCardOf
  * @param {Set}    deps.movingIds       正在搬家的 id（不落盘）
  * @param {(id: string) => {x:number,y:number}|null} deps.claimSeat 幻影座位过户
@@ -73,7 +72,7 @@ const ARTIFACT_TYPES = new Set(Object.keys(ARTIFACT_PREVIEW_H));
  *        不再在内容底下另起一行。没有架（还没立过）才走老的 packRow 兜底。
  */
 export function computeDesktopSeating({
-  dirIndex, zonesEff, layout, bindings, lineageOpen, boardHero,
+  dirIndex, zonesEff, layout, bindings, lineageOpen,
   folderCardOf, movingIds, claimSeat, occupied = [], shelf = null,
 }) {
   // ── 桌面这一层（根目录）有哪些文件夹 ──
@@ -115,11 +114,9 @@ export function computeDesktopSeating({
     if (st) { it.stackCount = st.count; it.stackOpen = st.open; }
   }
 
-  // 主角判断（北极星路线1）：显式主角（board.hero）压过推断，不在本层回落自动。
+  // 主角判断（北极星路线1）：只按关系线推（显式主角 board.hero 09-18 随 edit_board 的 feature 删了）。
   // 必须在任何 sizeOf 之前标 —— 命中/排布/渲染吃的是同一个 tier。
-  const heroId = (boardHero && visItems.some(it => String(it.id) === boardHero))
-    ? boardHero
-    : pickHero(visItems.map(it => ({ id: String(it.id), type: it.type })), bindings);
+  const heroId = pickHero(visItems.map(it => ({ id: String(it.id), type: it.type })), bindings);
   if (heroId) {
     const h = visItems.find(it => String(it.id) === heroId);
     if (h) h.tier = 'hero';
