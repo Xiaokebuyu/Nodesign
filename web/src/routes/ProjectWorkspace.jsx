@@ -1730,7 +1730,7 @@ export default function ProjectWorkspace() {
    * `targets`（框选之后批量标注）走同一条路：一条消息把这几件都点名，而不是
    * 发 N 条 —— 用户说的是"这几张一起改"，拆成 N 条 agent 就得猜它们之间的关系。
    */
-  const handleAnnotate = async ({ target, targets, text, queue, toMain = false }) => {
+  const handleAnnotate = async ({ target, targets, text, queue, toMain = false, note = null }) => {
     const list = targets?.length ? targets : [target];
     // 报**路径**不是 id：`deck:主稿.html` 这种带形态前缀的东西 agent 读不出来
     const whereOf = (t) => t.path || t.id;
@@ -1749,8 +1749,10 @@ export default function ProjectWorkspace() {
      * 视觉落点是卡片上的角标，不是文档里的框）。
      */
     if (queue) {
+      const cids = [];
       for (const t of list) {
         const cid = newId('cmt');
+        cids.push(cid);
         const item = {
           id: cid,
           kind: 'comment',
@@ -1768,7 +1770,13 @@ export default function ProjectWorkspace() {
           console.warn('[pending-changes] push board note failed:', err.message);
         }
       }
-      showToast(`攒下了${list.length > 1 ? ` ${list.length} 条` : ''}，从下面那条浮钮一起发`, 'info');
+      // 撤销（09-18 站主「给标注加一个撤销功能」）：从待发队列里拿掉，画布上那段蓝字也撤掉
+      const undo = () => {
+        setComments(arr => arr.filter(c => !cids.includes(c.id)));
+        PendingChanges.clear(id, cids).catch((err) => console.warn('[pending-changes] undo failed:', err.message));
+        boardApiRef.current?.undoAnnotation?.(note);
+      };
+      showToast(`攒下了${list.length > 1 ? ` ${list.length} 条` : ''}，从下面那条浮钮一起发`, 'info', { action: { label: '撤销', onClick: undo } });
       return;
     }
 

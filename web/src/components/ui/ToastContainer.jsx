@@ -64,6 +64,7 @@ function Toast({ toast, onDismiss }) {
       }}>{toast.msg}</span>
       {toast.action && (
         <button
+          data-toast-action
           onClick={() => { try { toast.action.onClick?.(); } finally { onDismiss(); } }}
           style={{
             flexShrink: 0, padding: '2px 10px', borderRadius: RADIUS.pill,

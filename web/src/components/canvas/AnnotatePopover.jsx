@@ -19,6 +19,9 @@ import { t } from '../../lib/i18n.js';
  *   - **留在画布**（次）：落成一段画布文字 + 一条 `annotates` 关系线，
  *     agent 不知道 —— 这是给自己/给以后看的记号。
  *
+ * 09-18：前两条也在画布上落同样一段蓝字 + 关于线（annotate-host.jsx 的 leave），三条的差别只剩
+ * 「发不发给 agent、什么时候发」。
+ *
  * ## 为什么工具栏那个「标注(C)」被删了
  *
  * 在这之前同一件事有两套：工具栏的 C（点物件 → 写字 → 只留在画布）和这张纸
@@ -185,7 +188,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             用户每次都要停下来读一遍才知道按哪个。 */}
         {onKeep && (
           <button
-            onClick={keep}
+            data-annotate-action="keep" onClick={keep}
             disabled={!text.trim()}
             title={t('不发消息，只在画布上留一条连到它的标注')}
             style={plainStyle(text)}
@@ -197,7 +200,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
             一遍才知道按哪个。谁是主钮见 queueIsPrimary。 */}
         {onQueue && (
           <button
-            onClick={queue}
+            data-annotate-action="queue" onClick={queue}
             disabled={!text.trim()}
             title={sayTo
               ? `攒着的会当成场外的话发给主持人，不转给${sayTo.who}——要说给它就用右边那颗`
@@ -208,7 +211,7 @@ export default function AnnotatePopover({ x, y, target, roleTarget = null, onSub
           </button>
         )}
         <button
-          onClick={submit}
+          data-annotate-action="send" onClick={submit}
           disabled={!text.trim()}
           title={queueIsPrimary ? t('这一条不攒，现在就发给 agent 起一轮') : undefined}
           style={queueIsPrimary ? plainStyle(text) : primaryStyle(text)}

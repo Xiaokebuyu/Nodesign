@@ -86,6 +86,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
       ) : (
         <button
           key={it.id}
+          data-menu-item={it.id}
           disabled={it.disabled}
           onClick={() => { onClose(); it.onClick?.(); }}
           style={{

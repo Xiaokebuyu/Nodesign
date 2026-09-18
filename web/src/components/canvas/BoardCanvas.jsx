@@ -53,7 +53,7 @@ import { staleControlIds } from '../../lib/board-controls.js';
 import TextDraft from './TextDraft.jsx';
 import ContextMenu from './ContextMenu.jsx';
 import LinkPopover from './LinkPopover.jsx';
-import { AnnotateHost, useAnnotateScreenPos } from './annotate-host.jsx';
+import { AnnotateHost, useAnnotateScreenPos, useAnnotationInk } from './annotate-host.jsx';
 import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
 import { useDirIndex } from './useDirIndex.js';
@@ -704,41 +704,8 @@ export default function BoardCanvas({
     return o ? titleOf(o) : (id.split('/').pop() || id);   // 找不到 = 文件夹或还没摆上桌
   }, []);
 
-  /**
-   * 标注的第二个出口：**留在画布** —— 一段文字 + 一条 `annotates` 关系。
-   *
-   * **批注是关系不是自由文字**：光写一段话飘在旁边，过两天就没人知道它在说谁；
-   * 存成关系之后，被批注的东西一移动，批注跟着走，线自己重画。
-   *
-   * 2026-08-13 从工具栏的「标注(C)」搬到这儿 —— 那个工具连同它的 commentDraft
-   * 输入框一起删了，两条标注路（留在画布 / 发给 agent）收成同一张浮层的两个
-   * 按钮，见 AnnotatePopover 的说明。
-   *
-   * 落点**贴着目标右边**，不落在光标处：光标可能正压在卡上（右键菜单从卡上
-   * 弹、标注按钮就长在卡的右上角），落在那儿等于把一段字盖在产物脸上。
-   *
-   * 批量标注（框选之后右键）落**一段字 + N 条线**：一句话说的是这一组，
-   * 抄成 N 段一样的字是把同一件事记 N 遍，改一处还得改 N 处。
-   */
-  const keepAnnotation = useCallback((targetIds, fallbackAt, text) => {
-    const t = (text || '').trim();
-    const ids = (Array.isArray(targetIds) ? targetIds : [targetIds]).filter(Boolean);
-    if (!t || !ids.length) return;
-    const rects = ids.map(rectOfId).filter(Boolean);
-    // 落在整组的右边（取所有目标的最右沿、最上沿）
-    const at = rects.length
-      ? { x: Math.max(...rects.map(r => r.x + r.w)) + 24, y: Math.min(...rects.map(r => r.y)) }
-      : fallbackAt;
-    if (!at) return;
-    const noteId = handleCreateText(t, at, { color: 'blue' });   // 蓝＝用户说的话（09-17 板书树，墨是 agent 的）
-    if (!noteId) return;
-    // 文字落好了才连线 —— 端点必须真实存在，否则画布上留一条通向虚空的线
-    const stamp = `${Date.now().toString(36)}${Math.floor(performance.now() % 1000)}`;
-    const links = {};
-    ids.forEach((id, i) => { links[`b:${stamp}${i}`] = { type: 'annotates', from: noteId, to: id, by: 'user' }; });
-    setBindings(prev => ({ ...prev, ...links }));
-    Assets.patchBoard(projectId, { bindings: links }).catch(() => {});
-  }, [rectOfId, handleCreateText, projectId, setBindings]);
+  // 标注落蓝字 + 撤销（09-18 从这里搬到 annotate-host.jsx 的 useAnnotationInk）
+  const { keepAnnotation, undoAnnotation } = useAnnotationInk({ rectOfId, handleCreateText, projectId, setBindings, removeLayoutEntry });
 
   // 舞台层仍按世界坐标贴卡，夹取上界取内容外沿
   const stageBounds = {
@@ -1340,6 +1307,7 @@ export default function BoardCanvas({
       // 顶栏的「⋯」——它们是**设置**不是产物，占着画布最好的一条横带每天
       // 看却几乎不点。面板本身没动，只是换了个入口。
       openProjectPanel: (key) => setProjectPanel(key),
+      undoAnnotation,   // 撤掉一条标注落下的蓝字和它的线（09-18，攒着的标注从提示条撤销时用）
       toggleArchive,   // 档案面显隐：08-30 从画布右上角搬进「⋯」，见 RollLayer.jsx 的墓碑
       /**
        * 就地标注发出的瞬间把精灵放到目标上（E4）：真事件（run.start /
@@ -1944,7 +1912,7 @@ export default function BoardCanvas({
       {annotate && (
         <AnnotateHost
           annotate={annotate} at={annotScreen} onClose={() => setAnnotate(null)}
-          onAnnotate={onAnnotate} keepAnnotation={keepAnnotation} toWorld={camApiRef.current?.toWorld}
+          onAnnotate={onAnnotate} keepAnnotation={keepAnnotation} undoAnnotation={undoAnnotation} toWorld={camApiRef.current?.toWorld}
         />
       )}
 
