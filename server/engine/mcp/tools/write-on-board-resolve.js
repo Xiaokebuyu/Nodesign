@@ -9,7 +9,6 @@ import { readBoard } from '../../../projects/board-store.js';
 import { estimateSizeOn } from '../../../lib/board-kind-sizes.js';
 import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { UNIT, textBox, fitFor } from '../../../lib/sketch-layout.js';
-import { CARD_MAX_H } from '../../../lib/screen.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { lastOfGroup } from '../../../lib/board-place.js';
 import { heroAfterLine, heroSize } from '../../../lib/board-hero.js';
@@ -22,6 +21,7 @@ import { WIDTH_UNITS } from './write-on-board-schema.js';
 import { roleDefaultAnchor } from './write-on-board-role-anchor.js';
 import { seatArtifacts } from '../../runs/board-seater.js';
 import { learnedChalkWidth } from '../../../lib/chalk-size-pref.js';
+import { topicObstacles } from '../../../lib/topic-settle.js';
 
 /** 一次调用的环境：板、视点、锚解析、落位器。exclude = 障碍集里要剔掉的 id（自己的直播框） */
 export async function makeChalkEnv({ projectId, sharedRoot, by, exclude = [] }) {
@@ -180,12 +180,11 @@ export async function resolveChalkSpot(env, args, body) {
     || (longest <= 12 ? null : Math.max(12, Math.min(18, Math.ceil(longest * 16 / 24) + 1))));
   let box = textBox(body, args.size === 'sm' ? 'md' : (args.size || 'md'), { md: true, wUnits });
 
-  const obstacles = obstaclesOf(b2, zone);
+  // 带了话题 tag：别的话题整块地盘当障碍，别落进人家的空隙里（09-18，lib/topic-settle.js）
+  const obstacles = args.tag ? topicObstacles(obstaclesOf(b2, zone), args.tag) : obstaclesOf(b2, zone);
   const vpRect = vpRectFor(zone);
 
-  // 卡高封顶（09-05）：不再拒收。框按内容撑开，超过一卡的部分折在卡里，返回里如实报
-  // —— 一条板书说一件事，真长的内容该是产物，这句话在返回里教，不在拒收里教。
-  if (box.h > CARD_MAX_H) box = { ...box, fullH: box.h, h: CARD_MAX_H, capped: true };
+  // 卡高不封顶（09-18 折叠整个去掉）：框按内容撑开到真高。长了占的地方由话题整组让开消化（lib/topic-settle.js）
   const placed = placeNote(b2, {
     box, anchorRect: placeRect, side: args.place?.side || null, groupRect, replyRect,
     obstacles, vpRect, column: fit.column,

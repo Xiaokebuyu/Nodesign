@@ -87,7 +87,8 @@ export function obstaclesIn(board, zone = '', { objects = null, exclude = null, 
     if (skip.has(id) || !Number.isFinite(e?.x) || stacked?.has(id)) continue;
     if (layerOf(id, e, known) !== zone) continue;
     if (!seatBacked(id, e, sharedRoot)) continue;
-    rects.push({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e) });
+    // 带上 tag / hug（09-18）：planYield 的「同组整组让」靠 tag 分组，原来这里不带，整组让在生产上从没生效过
+    rects.push({ id, x: e.x, y: e.y, ...estimateSizeOn(board, id, e), ...(e.tag ? { tag: e.tag } : {}), ...(e.hug ? { hug: e.hug } : {}) });
   }
   // 浏览器才知道的占地（生图幻影）：随视点上报，同一层才算
   if (projectId) {

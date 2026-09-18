@@ -56,7 +56,7 @@ describe('工具层封顶折叠（2026-09-05：不再拒收，板书说一件事
     write1 = (a) => makeWriteOnBoardTool({ projectId: pid, sharedRoot, sessionId: 'cap', ctx }).handler(a, {});
   });
 
-  it('⭐ 写一整章 → 照写，卡高封顶在 CARD_MAX_H；⭐ 09-17 起返回里不再提折叠（尺寸是机器的事）', async () => {
+  it('⭐ 写一整章 → 照写，卡高按真高存（09-18 折叠去掉，不再封顶）；返回里不提折叠（尺寸是机器的事）', async () => {
     const before = await countObjects();
     const r = await write1({ text: long });
     expect(r.isError).toBeUndefined();
@@ -65,7 +65,7 @@ describe('工具层封顶折叠（2026-09-05：不再拒收，板书说一件事
     expect(await countObjects()).toBe(before + 1);
     const board = await readBoard(pid);
     const id = Object.keys(board.objects).filter(i => i.startsWith('notes/板书/')).sort().pop();
-    expect(board.objects[id].h).toBe(CARD_MAX_H);
+    expect(board.objects[id].h).toBeGreaterThan(CARD_MAX_H);
   });
 
   it('⭐ 反向：短板书照写、不提折叠', async () => {

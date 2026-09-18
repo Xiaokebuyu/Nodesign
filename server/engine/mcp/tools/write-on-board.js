@@ -29,7 +29,6 @@ import { layerOf, normalizeCanvasId } from '../../../lib/canvas-id.js';
 import { makeEndpointResolver } from '../../../lib/board-endpoint.js';
 import { BINDING_TYPE_IDS } from '../../../lib/binding-types.js';
 import { UNIT, SKETCH_MAX, textBox, layoutNodes, resolveTemplate, bboxOrZero, fitFor } from '../../../lib/sketch-layout.js';
-import { CARD_MAX_H } from '../../../lib/screen.js';
 import { obstaclesIn } from '../../../lib/board-obstacles.js';
 import { overlapIds } from '../../../lib/board-place.js';
 import { heroAfterLine, heroSize } from '../../../lib/board-hero.js';
@@ -49,6 +48,7 @@ import { seatArtifacts } from '../../runs/board-seater.js';
 import { applyFollows } from '../../../lib/board-follow.js';
 import { Events } from '../../agent/events.js';
 import { learnedChalkWidth } from '../../../lib/chalk-size-pref.js';
+import { settleBoard, describeSettle } from '../../../lib/topic-settle.js';
 
 let seq = 0;
 const stamp = () => `${Date.now().toString(36)}${(seq++ % 1000).toString(36)}`;
@@ -126,7 +126,7 @@ export function makePreviewer({ projectId, sharedRoot }) {
     const r = getReservation(projectId, toolUseId);
     if (!r) return;
     const box = textBox(String(text || ''), 'md', { md: true, wUnits: r.wUnits || null });
-    updateReservation(projectId, toolUseId, { h: Math.min(box.h, CARD_MAX_H) });
+    updateReservation(projectId, toolUseId, { h: box.h });   // 不封顶（09-18 折叠去掉）
   };
   return { solve, grow };
 }
@@ -274,6 +274,8 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       });
       // 跟随线：这个 tag 有人跟着（状态板之类）就自动重锚挪组（fail-soft）
       if (args.tag) { try { await applyFollows(projectId, { tag: args.tag, newId: rel }); } catch { /* */ } }
+      // 话题让开（09-18）：新来的这条让它的话题长大了，撞上的话题整组让开
+      const settled = await settleBoard(projectId, [rel], { zone, sharedRoot }).catch(() => null);
 
       const rect = { x: Math.round(placed.x), y: Math.round(placed.y), w: box.w, h: box.h };
       try {
@@ -287,6 +289,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       if (pl.groupMissing) lines.push(`（place.with:"${pl.groupMissing}" 那组还没有东西，所以这条按视口落位；它自己带了 tag 就是那组的第一条）`);
       if (args.say && !saySpent) lines.push('⚠ say 没有线可落（这条既没 near 也没 reply_to/chain）—— 话没上板。给它一个 near，或者用 edit_board add_edge{label}。');
       else if (args.say) lines.push(`Line says: 「${args.say}」`);
+      if (describeSettle(settled)) lines.push(describeSettle(settled));
       return { content: [{ type: 'text', text: [...lines, ...fuzzyNotes].join('\n') }] };
     }
 
@@ -439,6 +442,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
     const landed = Object.keys(objects).filter(id => saved.objects?.[id]).length;
     if (!landed) return err('草图被 board 拒了（内容或字段不合法）。');
     if (tag && nodes.length) { try { await applyFollows(projectId, { tag, newId: idOf.get(nodes[0].key) }); } catch { /* */ } }
+    const settled = await settleBoard(projectId, Object.keys(objects), { zone, sharedRoot }).catch(() => null);   // 话题让开（09-18）
     const world = { x: Math.round(local.x + ox), y: Math.round(local.y + oy), w: Math.round(local.w), h: Math.round(local.h) };
     try {
       ctx?.emit?.({ type: 'board.updated', sessionId: null, summary: tag ? `画了一张草图 #${tag}` : '画了一个记号' });
@@ -450,6 +454,7 @@ function makeHandler({ projectId, sharedRoot, sessionId, ctx }) {
       `Visible in the user's viewport: ${visibleIn(world, vpRect) ? 'yes' : (vpRect ? 'no (outside their view — mention where it is)' : 'unknown (no viewpoint yet)')}.`,
     ];
     lines.push(...lineCrossings(saved, { bindingIds: Object.keys(bindings) }, known));
+    if (describeSettle(settled)) lines.push(describeSettle(settled));
     if (pl.groupMissing) lines.push(`（place.with:"${pl.groupMissing}" 那组还没有东西，所以按视口落位）`);
     if (args.say) lines.push('⚠ say 只给单条板书（它拉的那根线）；一张图的线上的话写在 edges[].label 里 —— 这次的 say 没上板。');
     if (oversized) lines.push(`⚠ 这张图 ${Math.round(local.w)}x${Math.round(local.h)} 世界像素，远超一屏（建议 ≤${SKETCH_MAX.w}x${SKETCH_MAX.h}）——用户要拖着镜头看。如果你是按**像素**想的坐标：nodes/shapes（含 path 的 d）全族单位是 24px 的格，数值除以 24 重画一版会正好；确实要这么大就拆成几张 tag 图用线连。`);

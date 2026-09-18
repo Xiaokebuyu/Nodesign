@@ -24,7 +24,7 @@ import { UNIT, overlaps } from './rect.js';
 import { placeBeside } from './board-place.js';
 
 /** 不参与让路的 id 前缀：浮层与临时占位 */
-const NEVER_MOVE = /^(roll:|ph:|live:)/;
+const NEVER_MOVE = /^(roll:|ph:|live:|topic:)/;   // topic: = 别的话题整块地盘当的障碍（topic-settle.js），不是一件东西
 /** 连锁层数上限 */
 const MAX_HOPS = 3;
 /** 累计位移上限（一屏） */

@@ -44,6 +44,7 @@ import { getViewpoint } from '../../../projects/viewpoint-store.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
 import { CHALK_DIR, trashChalkFile, parseChalk, renderChalk } from '../../../lib/chalk.js';
 import { readUiConfigFile, writeUiConfig } from '../../../projects/ui-config.js';
+import { settleBoard, describeSettle } from '../../../lib/topic-settle.js';
 
 const MAX_OPS = 120;
 let seq = 0;
@@ -576,15 +577,10 @@ function makeHandler({ projectId, sharedRoot, sessionId = null, ctx }) {
         ...(heroPatch !== undefined ? { hero: heroPatch } : {}),
       });
     }
-    /**
-     * 打完标签就是"这个 tag 有新成员落板"—— 跟 write_on_board 落一条带 tag 的板书
-     * 是同一件事，跟随线该在这一刻重指并挪组（2026-08-31）。
-     *
-     * ⛔ 在这之前 applyFollows 只挂在三处：write_on_board / write_on_board(flow) /
-     * board-seater。产物（图 / 站点 / docx）走的是别的路，**永远触发不了跟随** ——
-     * 「follow 是所有组件都可用吗」的答案原来是"数据层是、触发层不是"。
-     * fail-soft：跟随失败绝不连累这次编辑本身。
-     */
+    // 打完标签 = 这个 tag 有新成员落板，跟随线在这一刻重指并挪组（08-31；此前产物永远触发不了跟随）。fail-soft
+    // 话题让开（09-18，lib/topic-settle.js）：这一批动过的东西长大 / 挪过去撞上别的话题，对方整组让开
+    const settled = Object.keys(objects).some((k) => objects[k]) ? await settleBoard(projectId, Object.keys(objects).filter((k) => objects[k])).catch(() => null) : null;
+    if (describeSettle(settled)) report.push(`· ${describeSettle(settled)}`);
     for (const [id, tag] of tagTouched) {
       if (!tag) continue;
       try { await applyFollows(projectId, { tag, newId: id }); } catch { /* */ }

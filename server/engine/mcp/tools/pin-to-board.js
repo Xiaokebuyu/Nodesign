@@ -29,6 +29,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { moveEntry } from '../../../projects/move-entry.js';
 import { describeFollow } from '../../../lib/move-follow.js';
 import { GENERATED_DIR, GENERATED_TITLE } from '../../../lib/generated-folder.js';
+import { topicObstacles, settleBoard, describeSettle } from '../../../lib/topic-settle.js';
 import { z } from 'zod';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -192,7 +193,8 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
           }
           const box = estimateSizeOn(boardNow, objectId, boardNow.objects?.[objectId] || null);
           const viewport = (vp?.camera && !(vp.layer || '')) ? vp.camera : null;
-          const obstacles = obstaclesIn(boardNow, '', { exclude: [objectId], projectId, sharedRoot });
+          const obstacles0 = obstaclesIn(boardNow, '', { exclude: [objectId], projectId, sharedRoot });
+          const obstacles = tag ? topicObstacles(obstacles0, bareTag(tag)) : obstacles0;   // 带话题：别的话题整块当障碍（09-18）
           const spot = solvePlace({ box, anchor, side: place.side || null, group, viewport, obstacles });
           const prev = boardNow.objects?.[objectId] || {};
           const nextPending = (boardNow.pending || []).filter(r => r !== objectId && `deck:${r}` !== objectId && `site:${r}` !== objectId);
@@ -205,7 +207,7 @@ Paths are workspace-relative, exactly as they are on disk. Accepted forms:
           });
           // 产物也能当跟随目标（2026-08-31）：带 tag 落板 = 这个 tag 有新成员。fail-soft。
           if (tag) { try { await applyFollows(projectId, { tag: bareTag(tag), newId: objectId }); } catch { /* */ } }
-          const where = describePlacement(spot, { anchorId, groupTag });
+          const where = describePlacement(spot, { anchorId, groupTag }) + describeSettle(await settleBoard(projectId, [objectId], { sharedRoot }).catch(() => null));
           // 钉的是改自链里的旧版（09-17）：它照旧叠在现役版身后，用户点开那张的 ⧉ 才看得见
           const tipNow = boardLineage({ ...boardNow, objects: { ...boardNow.objects, [objectId]: { ...prev, x: spot.x, y: spot.y } } }).tipOf.get(objectId);
           try {

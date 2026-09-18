@@ -5,13 +5,16 @@
  * 圆角虚线包络 + 左上角一个 #tag 小标，让人一眼看出"这几件是一张图"。**纯派生、零数据**：
  * 删了成员它自己缩，一件都不剩就没了；不吃指针事件（pointerEvents none），点空地照样拖镜头。
  * 只画 ≥2 件的 tag；草稿态（全员 staging）再淡一档。
+ *
+ * 09-18：这道包络就是话题的**地盘**（lib/topic-settle.js 的 regionOf，同一个外扩值）。两个话题的地盘
+ * 不许相交，一个长大了，撞上的整组让开 —— 画出来的和让路算的是同一块。
  */
 import { useMemo } from 'react';
 import { sizeOf } from '../../lib/board-kinds.js';
 import { CANVAS, FONT_SANS, FONT_SIZE, alpha } from '../../lib/theme.js';
 import { PAPER } from '../../lib/paper.js';
-
-const PAD = 18;
+import { BOARD_Z } from '../../lib/z-layers.js';
+import { regionOf } from '../../lib/topic-settle.js';
 
 export default function TagHullLayer({ positioned, onGrab, onMenu }) {
   const hulls = useMemo(() => {
@@ -27,9 +30,7 @@ export default function TagHullLayer({ positioned, onGrab, onMenu }) {
     const out = [];
     for (const [tag, rs] of byTag) {
       if (rs.length < 2) continue;
-      const x0 = Math.min(...rs.map(r => r.x)) - PAD; const y0 = Math.min(...rs.map(r => r.y)) - PAD;
-      const x1 = Math.max(...rs.map(r => r.x + r.w)) + PAD; const y1 = Math.max(...rs.map(r => r.y + r.h)) + PAD;
-      out.push({ tag, x: x0, y: y0, w: x1 - x0, h: y1 - y0, staging: rs.every(r => r.staging) });
+      out.push({ tag, ...regionOf(rs), staging: rs.every(r => r.staging) });
     }
     return out;
   }, [positioned]);
@@ -43,7 +44,7 @@ export default function TagHullLayer({ positioned, onGrab, onMenu }) {
           borderRadius: 16, pointerEvents: 'none',
           border: `1px dashed ${alpha(CANVAS.brass, h.staging ? 0.22 : 0.38)}`,
           background: alpha(CANVAS.brass, h.staging ? 0.018 : 0.035),
-          zIndex: 0,
+          zIndex: BOARD_Z.HULL,
         }} />
       ))}
       {hulls.map(h => (
@@ -60,6 +61,7 @@ export default function TagHullLayer({ positioned, onGrab, onMenu }) {
             position: 'absolute', left: h.x + 10, top: h.y - 9, padding: '0 6px',
             fontFamily: FONT_SANS, fontSize: FONT_SIZE.xxs, color: alpha(PAPER.ink2, 0.75),
             background: PAPER.wall, borderRadius: 6, lineHeight: '16px', zIndex: 58,
+            whiteSpace: 'nowrap',   // 世界层里绝对定位、宽度按最小内容算，不锁就一个字一行竖着排（09-18 真渲看到）
             border: `1px dashed ${alpha(CANVAS.brass, 0.3)}`,
             ...(onGrab ? { pointerEvents: 'auto', cursor: 'grab', touchAction: 'none' } : { pointerEvents: 'none' }),
           }}>#{h.tag}</span>

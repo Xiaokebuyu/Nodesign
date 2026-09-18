@@ -11,8 +11,6 @@ import { buildObjectActions } from './object-actions.js';
 import { ImageFace } from './ImageFace.jsx';
 import { TEXT_SIZE_PX, boardTextFont } from '../../../lib/text-fonts.js';
 import MdInk from './MdInk.jsx';
-import ChalkFold from './ChalkFold.jsx';
-import { useChalkFoldGate } from './use-chalk-fold-gate.js';
 import JsonInk from './JsonInk.jsx';
 import { useMeasuredSize } from './useMeasuredSize.js';
 import { splitNoteFaces, faceParts } from '../../../lib/note-faces.js';
@@ -95,9 +93,8 @@ function BoardObject({
   // board.json 里压根没有 w/h，read_board 报的是形态表猜值。涂鸦不量 —— 它的
   // w/h 就是路径包围盒，本来就是真值。
   const measured = o.type !== 'scribble';
-  // 板书中段折起（ChalkFold）：卡高恒等于天花板，展开走浮层不回写，规矩见 use-chalk-fold-gate.js
-  const { chalkCapH, onMeasuredGated } = useChalkFoldGate({ o, measured, onMeasured });
-  useMeasuredSize(rootRef, o, onMeasuredGated, [o.data?.t, o.text, o.data?.size, o.data?.format]);
+  // 板书按真高显示、真高回写（09-18 折叠整个去掉；卡变高由话题整组让开消化，见 lib/topic-settle.js）
+  useMeasuredSize(rootRef, o, measured ? onMeasured : null, [o.data?.t, o.text, o.data?.size, o.data?.format]);
   // 板书 MdInk 的 origin 要引用稳定（MdInk 已 memo：相机平移时 200 张板书别再
   // 每帧重跑 markdown 解析 —— 08-25 性能探针 17fps 案）
   const chalkOrigin = useMemo(() => ({
@@ -420,16 +417,10 @@ function BoardObject({
            pointerEvents none 让闲置板书对手势是空地；nd:controls 围栏的按钮在
            MdInk 里自己开 auto（点选项不该要求先武装板书）。 */
         <div data-text-body style={{ padding: '4px 6px', pointerEvents: 'none', userSelect: 'none' }}>
-          {/* 过长的板书把中段折起来（09-09 重启）：卡高收在 CARD_MAX_H 里，头尾都在，中缝点开看全文 */}
-          <ChalkFold
-            maxH={chalkCapH - 8}
-            lineH={TEXT_SIZE_PX.md * 1.6} contentKey={o.text || ''}
-            render={() => (
-              <MdInk
-                text={o.text || ''} fontFamily={FONT_READ} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
-                origin={chalkOrigin}
-              />
-            )}
+          {/* 09-18 折叠整个去掉（站主：「折叠有点难看」）：全文照真高铺开，长高了由话题整组让开 */}
+          <MdInk
+            text={o.text || ''} fontFamily={FONT_READ} fontSize={TEXT_SIZE_PX.md} color={PAPER.ink}
+            origin={chalkOrigin}
           />
         </div>
       )}

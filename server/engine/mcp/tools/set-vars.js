@@ -26,6 +26,7 @@
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { readBoard, patchBoard } from '../../../projects/board-store.js';
+import { settleBoard, describeSettle } from '../../../lib/topic-settle.js';
 import { rewriteChalkBody } from '../../../lib/chalk-rewrite.js';
 import {
   findStateTable, applyVars, parseStateTable, renderRows,
@@ -124,8 +125,12 @@ write_on_board (tag: "${STATE_TABLE_TAG}"), then set values here.`,
           await patchBoard(projectId, { objects: { [found.rel]: { ...entry, w: box.w, h: box.h } } });
         } catch { /* 板上尺寸没跟上不影响真相（文件已经改了），下次 reflow 会对 */ }
       }
+      // 表长高了：同组往下推 + 撞上的话题整组让开（09-18，lib/topic-settle.js；原来改表变高什么都不推）
+      const settled = board.objects?.[found.rel] && box.h > (entry.h || 0)
+        ? await settleBoard(projectId, [found.rel], { grewFrom: { [found.rel]: entry.h || 0 }, sharedRoot }).catch(() => null) : null;
 
       const lines = [];
+      if (describeSettle(settled)) lines.push(describeSettle(settled));
       if (applied.changed.length) {
         lines.push(`改了 ${applied.changed.length} 格：`
           + applied.changed.map((c) => `${c.key} ${c.from || '（空）'} → ${c.to}`).join('；'));

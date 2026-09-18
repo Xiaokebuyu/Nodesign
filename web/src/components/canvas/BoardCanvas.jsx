@@ -58,6 +58,7 @@ import MoveToPopover from './MoveToPopover.jsx';
 import FolderWindow, { parentDir } from './FolderWindow.jsx';
 import { useDirIndex } from './useDirIndex.js';
 import { useFolderPicks, applyDocxPick, DocxPickContext } from './useFolderPicks.js';
+import { useTopicSettle } from './useTopicSettle.js';
 import { GENERATED_DIR } from '../../lib/generated-folder.js';
 import { BOARD_KEYFRAMES } from './board-keyframes.js';
 import { useBoardAuthoring } from './useBoardAuthoring.js';
@@ -1446,6 +1447,7 @@ export default function BoardCanvas({
    * 窗里的差别只有三处，全在 `win` 分支里：位置是算出来的（不是 board.json 的
    * 坐标）、不参与拖拽和框选、镜头缩放固定 1（窗不跟着画布缩放）。
    */
+  const onMeasuredSettle = useTopicSettle({ layoutRef, positionedRef, folderViewRef, bindings, patchLayout, setLayout, dirtyRef, scheduleSave });   // 量出长大就让开（09-18）
   const renderObjectCard = (o, winPos = null) => {
     const win = !!winPos;
     const obj = win ? { ...o, pos: { ...winPos, z: 1 } } : o;
@@ -1462,17 +1464,15 @@ export default function BoardCanvas({
         vanishing={!win && flyingIds.has(obj.id)} grabbed={!win && dragActive && dragRef.current?.id === obj.id}
         agentActive={ringObjects.has(obj.id)}
         groupTarget={!win && dropHint?.kind === 'group' && dropHint.id === obj.id}
-        // 单选一件墨类时选中态由变换控制器画（那圈框就是它的选中框），
-        // 别再叠一道外框
+        // 单选一件墨类时选中态由变换控制器画（那圈框就是它的选中框），别再叠一道外框
         selected={!win && selectedIds.includes(obj.id) && !(obj.native && selectedIds.length === 1)}
         renaming={renamingId === obj.id}
         onRenameCommit={(v) => commitRename(obj.id, v)}
         onRenameCancel={() => setRenamingId(null)}
-        onMeasured={win ? null : patchLayout}
+        onMeasured={win ? null : onMeasuredSettle}
         onPointerDown={win ? undefined : (e) => onObjectPointerDown(e, obj)}
         wasDrag={win ? () => false : wasDrag}
-        // 板书防误触：闲置板书（编辑模式关 + 未武装）双击先武装（选中），
-        // 武装态再双击才进编辑 —— 单击已经在 board-hit 里被当成空地了
+        // 板书防误触：闲置板书（编辑模式关 + 未武装）双击先武装（选中），武装态再双击才进编辑 —— 单击已经在 board-hit 里被当成空地了
         chalkIdle={!win && !!obj.chalk && !chalkEditMode && !selectedIds.includes(obj.id)}
         controlsStale={staleControls.has(obj.id)}
         // 产物窗开着 = 桌面被盖住：底下的活预览立刻定格（IO 不认遮挡，
