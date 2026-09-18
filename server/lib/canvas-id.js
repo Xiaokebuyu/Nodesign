@@ -16,8 +16,12 @@ import { isDeskPinned } from './generated-folder.js';
  */
 const SEAT_DECOR = /\s*@\(?-?\d+\s*,\s*-?\d+\)?(?:\s*\d+x\d+)?$/;
 
+/** id 里不可能有合法的控制字符。09-03 exp 上模型往 id 中间塞 \r，报错回显的 id 看着跟正确的一样，
+ *  它照抄重试 40 次、每次多一个 \r（09-18 调查）。规整时一律剥掉 */
+export const CONTROL_CHARS = /[\u0000-\u001f\u007f]/g;
+
 export function normalizeCanvasId(raw) {
-  let id = String(raw || '').trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '');
+  let id = String(raw || '').replace(CONTROL_CHARS, '').trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '');
   id = id.replace(SEAT_DECOR, '').trim();
   if (!id || id.includes('..')) return null;
   // （doc:brand / doc:_root 映射 2026-08-24 拆除：项目文档并进根 CLAUDE.md，

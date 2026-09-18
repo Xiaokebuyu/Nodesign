@@ -7,6 +7,7 @@
 
 import { spawn } from 'node:child_process';
 import os from 'node:os';
+import { headTailBuffer } from '../../../lib/err-text.js';
 
 /**
  * 盒子总开关（2026-08-17）。
@@ -55,16 +56,16 @@ export function runBox(box, bin, args, { timeoutMs = 240_000, signal } = {}) {
       cmd = 'sshpass'; argv = ['-e', bin, ...args];
     }
     const child = spawn(cmd, argv, { stdio: ['ignore', 'pipe', 'pipe'], env });
-    let out = ''; let err = '';
+    let out = ''; const errBuf = headTailBuffer(1000, 2000);   // 报错开头（哪个节点、什么错）要留住，09-18
     child.stdout.on('data', (d) => { out = (out + d).slice(-8000); });
-    child.stderr.on('data', (d) => { err = (err + d).slice(-2000); });
+    child.stderr.on('data', (d) => { errBuf.push(d); });
     const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* */ } }, timeoutMs);
     const onAbort = () => { try { child.kill('SIGKILL'); } catch { /* */ } };
     signal?.addEventListener?.('abort', onAbort, { once: true });
     child.on('close', (code) => {
       clearTimeout(timer);
       signal?.removeEventListener?.('abort', onAbort);
-      resolve({ code, out, err });
+      resolve({ code, out, err: errBuf.text() });
     });
     child.on('error', (e) => { clearTimeout(timer); resolve({ code: -1, out, err: String(e.message) }); });
   });

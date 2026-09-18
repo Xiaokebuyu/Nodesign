@@ -12,6 +12,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { buildCodexBridgePrompt, runCodexImageGen, codexImageBudgetMs } from './helpers/codex-imagegen.js';
 import { whichBinary } from '../../../runtime/which.js';
+import { errText } from '../../../lib/err-text.js';
 
 const DEFAULT_NODESK_URL = 'https://llm-gateway-api.nodesk.tech';
 const DEFAULT_DMXAPI_BASE = 'https://www.dmxapi.cn';
@@ -168,7 +169,7 @@ export async function produceImage({
   try {
     response = await callGateway(payload, { gatewayUrl, gatewayKey, channel, channelBase, modelId, signal });
   } catch (err) {
-    throw stageError('gateway', err?.message || String(err));
+    throw stageError('gateway', errText(err));
   }
   let extracted;
   try {

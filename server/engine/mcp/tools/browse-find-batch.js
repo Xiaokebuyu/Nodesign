@@ -210,17 +210,21 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
         const step = actions[failedAt];
         out.unshift({
           type: 'text',
-          text: `FAILED at step ${failedAt + 1}/${n} (${step.name}${step.input?.action ? ` ${step.input.action}` : ''}): ${String(failText).split('\n')[0]}\n`
+          text: `FAILED at step ${failedAt + 1}/${n} (${step.name}${step.input?.action ? ` ${step.input.action}` : ''}): ${failHead(failText)}\n`
             + `Steps 1-${failedAt} already ran — do NOT re-run the whole batch; continue from the failed step.`,
         });
       }
       const wantShot = screenshotAfter === undefined ? (shotLifted || shotDefault) : screenshotAfter;
-      if (finalShot && wantShot && !lastHadImage) {
+      if (failedAt >= 0) {
+        // 失败不补截图（09-18，站主定）：CLI 对标了 isError 的结果只收文字块，补的图一张都到不了模型
+        //（生产 970 条失败结果 0 张图，这种情况出过 14 次），还让「看末尾截图」的指引落空。明说，让它自己截
+        if (finalShot && wantShot) out.push({ type: 'text', text: '[after] No screenshot: a failed result carries text only. Take one yourself to see the current state before continuing.' });
+      } else if (finalShot && wantShot && !lastHadImage) {
         const shotDef = lookup(finalShot.name);
         if (shotDef) {
           try {
             const s = await shotDef.handler(finalShot.input || {}, extra);
-            out.push({ type: 'text', text: `[after] current state${failedAt >= 0 ? ' (batch stopped early — look and replan)' : ''}:` });
+            out.push({ type: 'text', text: '[after] current state:' });
             for (const b of (s.content || [])) out.push(b);
           } catch (err) {
             out.push({ type: 'text', text: `[after] screenshot failed: ${err.message.split('\n')[0]}` });
@@ -230,6 +234,14 @@ export function makeBatchTool({ name, description, tools = [], batchable, resolv
       return { content: out, ...(failedAt >= 0 ? { isError: true } : {}) };
     },
   );
+}
+
+/**
+ * 失败头行（09-18）：原来只取第一行，edit_board 那种「没有一条操作成功：」原因在下一行，头行就只剩一个冒号
+ *（exp 5 次）。取前三个非空行，300 字封顶 —— 记账层截 120/500，头行要在截断之前把原因说完。
+ */
+export function failHead(text) {
+  return String(text ?? '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 3).join(' / ').slice(0, 300);
 }
 
 export function makeBrowserBatchTool({ tools, resolve = null }) {

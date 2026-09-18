@@ -24,6 +24,7 @@ import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { PROVIDERS, ProviderError, domainOf, runWebSearch } from './web-search-providers.js';
 import { searchRoute, relayWebSearch } from './relay-tools.js';
+import { errText } from '../../../lib/err-text.js';
 
 
 function formatMarkdown(query, provider, hits, { images = [] } = {}) {
@@ -221,7 +222,7 @@ the session, so keep it to 2-3 image queries per turn; count is fine at 5-10.`,
             : err.code === 429
               ? ' (rate limit / quota exhausted — try another provider)'
               : '')
-          : `web_search error: ${err?.message || String(err)}`;
+          : `web_search error${provider && provider !== 'auto' ? ` (${provider})` : ''}: ${errText(err)}`;
         return {
           content: [{ type: 'text', text: msg }],
           isError: true,

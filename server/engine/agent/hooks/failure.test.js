@@ -1,6 +1,6 @@
 // PostToolUseFailure 的恢复建议（2026-08-15 加沙盒偶发那条时补的测试）
 import { describe, it, expect, vi } from 'vitest';
-import { makePostToolUseFailureHandler } from './failure.js';
+import { makePostToolUseFailureHandler, failureSummary } from './failure.js';
 
 const ctx = { emit: vi.fn() };
 const run = (tool_name, error) =>
@@ -49,5 +49,24 @@ describe('按错因分流（09-17）', () => {
     const text = (await run('WebFetch', 'Command failed with no output')).hookSpecificOutput.additionalContext;
     expect(text).toMatch(/换一个来源/);
     expect(text).not.toMatch(/先重试/);
+  });
+});
+
+describe('failureSummary（09-18：问题库摘要原来截在缩进 JSON 里，看不到参数路径）', () => {
+  const zodErr = 'MCP error -32602: Input validation error: Invalid arguments for tool write_on_board: ' + JSON.stringify([
+    { expected: 'string', code: 'invalid_type', path: ['nodes', 0, 'text'], message: 'Invalid input: expected string, received undefined' },
+  ], null, 2);
+
+  it('⭐ 校验失败抽出参数路径和原因', () => {
+    expect(failureSummary(zodErr)).toBe('入参校验：nodes.0.text Invalid input: expected string, received undefined');
+  });
+
+  it('原文被截在 500 字、JSON 不完整时按字面抽路径', () => {
+    const cut = zodErr.slice(0, zodErr.indexOf('"message"') + 30);
+    expect(failureSummary(cut)).toMatch(/^入参校验：nodes\.0\.text/);
+  });
+
+  it('别的错把空白压成一个空格', () => {
+    expect(failureSummary('第一行\n\n   第二行')).toBe('第一行 第二行');
   });
 });

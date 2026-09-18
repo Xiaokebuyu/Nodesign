@@ -36,6 +36,7 @@ import {
   THUMBNAIL_MAX_DIM, THUMBNAIL_QUALITY, enqueueWarm, warmSpecsFor,
 } from '../../../lib/image-variant.js';
 import { boxConfig, shq, runBox, sshArgs, scpArgs, localBoxEnabled, BOX_OFF_MSG } from './h3box-ssh.js';
+import { headTail } from '../../../lib/err-text.js';
 
 const SSH_TIMEOUT_MS = Number(process.env.NODESIGN_H3BOX_TIMEOUT_MS) || 240_000;
 // krea2 bf16 24G 全驻卡；换模型后的首张要付一次装载（~1 分钟），给足余量
@@ -266,7 +267,7 @@ export async function paintStills(
       let failMsg = null; const bufs = [];
       if (gen.code !== 0) {
         failMsg = gen.code === 255 ? `无法连接渲染服务器（未启动或地址失效）：${(gen.err || '').slice(-300)}`
-          : `生成失败 exit ${gen.code}：${(gen.err || gen.out).slice(-500)}`;
+          : `生成失败 exit ${gen.code}：${headTail(gen.err || gen.out, 300, 500)}`;
       } else {
         const remotePaths = gen.out.split('\n').map((l) => l.trim())
           .filter((l) => l.includes('/outputs/') && /\.(png|webp|jpg)$/.test(l));

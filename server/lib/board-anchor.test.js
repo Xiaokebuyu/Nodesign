@@ -145,3 +145,11 @@ describe('同名目录是站点卡时认卡，不认文件夹坐标（09-17 iss_
     expect((await resolver()('手写字「第一拍」（text:a1）', board()))?.anchorId).toBe('text:a1');
   });
 });
+
+describe('锚点名里的控制字符（09-18）', () => {
+  it('⭐ cleanAnchorName 剥掉夹在中间的 CR', () => {
+    const CR = String.fromCharCode(13);
+    expect(cleanAnchorName(`#字${CR}体`)).toBe('字体');
+    expect(cleanAnchorName(`notes/板书/a${CR}${CR}.md`)).toBe('notes/板书/a.md');
+  });
+});

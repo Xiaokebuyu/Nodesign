@@ -19,6 +19,29 @@ import { recordIssue, signatureOf } from '../../../lib/issues-store.js';
 /** SDK / MCP 的入参校验失败（zod 在 handler 之前拒掉，工具体没跑） */
 const INPUT_VALIDATION_RE = /MCP error -32602|Input validation error|InputValidationError/;
 
+/**
+ * 问题库那一行摘要（09-18）：入参校验失败的正文是缩进的 JSON，原来截 120 字只到 `"expected": "string", "co`，
+ * 参数路径和原因都在后面（问题库 54 行、合计 92 次全是这样）。认得出校验失败就抽「路径 + 原因」，
+ * 其余把空白压成一个空格再截。detail 照旧存原文。
+ */
+export function failureSummary(error) {
+  const e = String(error || '');
+  if (INPUT_VALIDATION_RE.test(e)) {
+    try {
+      const issues = JSON.parse(e.slice(e.indexOf('[')));
+      if (Array.isArray(issues) && issues.length) {
+        return `入参校验：${issues.slice(0, 3).map((x) => `${(x.path || []).join('.') || '(根)'} ${x.message || x.code || ''}`.trim()).join('；')}`;
+      }
+    } catch { /* 原文截在 500 字、JSON 不完整：按字面抽 */ }
+    const paths = [...e.matchAll(/"path":\s*\[([^\]]*)\]/g)].map((m) => m[1].replace(/[\s"]/g, '').replace(/,/g, '.'));
+    if (paths.length) {
+      const msg = e.match(/"message":\s*"([^"]*)"/)?.[1] || '';
+      return `入参校验：${[...new Set(paths)].slice(0, 3).join('、')}${msg ? ` ${msg}` : ''}`;
+    }
+  }
+  return e.replace(/\s+/g, ' ').trim();
+}
+
 export function makePostToolUseFailureHandler({ ctx, projectId, sessionId }) {
   return async (input, _toolUseId, _options) => {
     const tool = input?.tool_name || 'unknown';
@@ -43,7 +66,7 @@ export function makePostToolUseFailureHandler({ ctx, projectId, sessionId }) {
       recordIssue({
         source: 'auto',
         toolName: tool,
-        summary: `${tool} 失败：${error.slice(0, 120)}`,
+        summary: `${tool} 失败：${failureSummary(error).slice(0, 120)}`,
         detail: cmd ? `${error}\n[cmd] ${cmd}` : error,
         projectId,
         sessionId,
@@ -100,7 +123,7 @@ export function makePostToolUseFailureHandler({ ctx, projectId, sessionId }) {
       advice =
         `${tool} 失败：${error.slice(0, 200)}\n`
         + '返回文本第一行标了失败在第几步。**不要整批重跑** —— 失败步之前的动作已经执行过了；\n'
-        + '看当前状态（返回末尾的截图），只从失败那一步起继续（单独调用或开一个新 batch）。';
+        + '失败的结果带不回截图：先单独截一张看当前状态，再只从失败那一步起继续（单独调用或开一个新 batch）。';
     } else if (tool === 'Write' || tool === 'Edit') {
       advice =
         `${tool} 失败。检查：\n`

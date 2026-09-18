@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { makeBrowserBatchTool, makeBatchTool, HALT_TEXT, BATCHABLE } from './browse-find-batch.js';
+import { makeBrowserBatchTool, makeBatchTool, HALT_TEXT, BATCHABLE, failHead } from './browse-find-batch.js';
 import { formatMatches, staleRefText } from '../../browse/refs.js';
 
 const fake = (name, shape, impl) => ({ name, description: name, inputSchema: shape, handler: impl });
@@ -75,7 +75,7 @@ describe('browser_batch', () => {
     expect(r.content.filter(b => b.type === 'image')).toHaveLength(1);
   });
 
-  it('遇错即停：失败项报错，后面的全部 halt 文案，整体 isError，仍补截图供重规划', async () => {
+  it('遇错即停：失败项报错，后面的全部 halt 文案，整体 isError；不补截图（到不了模型），明说要自己截', async () => {
     const { log, batch } = rig();
     const r = await batch.handler({ actions: [
       { name: 'browser_computer', input: { action: 'left_click' } },
@@ -83,8 +83,9 @@ describe('browser_batch', () => {
       { name: 'browser_computer', input: { action: 'type', text: 'never' } },
       { name: 'browser_find', input: { query: 'never' } },
     ] }, {});
-    expect(log).toEqual(['computer:left_click', 'computer:boom', 'shot']);
+    expect(log).toEqual(['computer:left_click', 'computer:boom']);   // 09-18：失败不再补截图
     expect(r.isError).toBe(true);
+    expect(r.content.some(b => b.type === 'image')).toBe(false);
     const texts = r.content.filter(b => b.type === 'text').map(b => b.text);
     // 头块 = 失败摘要（08-24：错误必须排最前 —— 记账层截前 120/500 字符、
     // 模型扫返回，都先看到真报错而不是成功步骤的输出）+ 别整批重跑的钉子
@@ -94,7 +95,7 @@ describe('browser_batch', () => {
     expect(texts[2]).toBe('[2/4] browser_computer boom: Error: boom');
     expect(texts[3]).toBe(`[3/4] browser_computer type: ${HALT_TEXT}`);
     expect(texts[4]).toBe(`[4/4] browser_find: ${HALT_TEXT}`);
-    expect(texts[5]).toMatch(/stopped early/);
+    expect(texts[5]).toMatch(/No screenshot: a failed result carries text only/);
   });
 
   it('最后一项已出图就不再补；screenshotAfter:false 也不补', async () => {
@@ -112,14 +113,14 @@ describe('browser_batch', () => {
       { name: 'browser_request_help', input: { reason: 'x' } },
       { name: 'browser_find', input: { query: 'x' } },
     ] }, {});
-    expect(log).toEqual(['shot']);
+    expect(log).toEqual([]);   // 失败不补截图（09-18）
     expect(r.content[0].text).toMatch(/^FAILED at step 1\/2 .*not batchable/s);
     expect(r.content[1].text).toMatch(/not batchable/);
     expect(r.content[2].text).toBe(`[2/2] browser_find: ${HALT_TEXT}`);
 
     const s = rig();
     const r2 = await s.batch.handler({ actions: [{ name: 'browser_find', input: { query: '' } }] }, {});
-    expect(s.log).toEqual(['shot']);
+    expect(s.log).toEqual([]);
     expect(r2.content[0].text).toMatch(/^FAILED at step 1\/1 .*invalid input — query/s);
     expect(r2.content[1].text).toMatch(/invalid input — query/);
   });
@@ -181,5 +182,15 @@ describe('batch 重置（2026-08-27）：resolve 运行时解析 + 诚实的 scr
     expect(log).toEqual(['w']);
     await batch.handler({ actions: [{ name: 'w', input: {} }], screenshotAfter: true }, {});
     expect(log).toEqual(['w', 'w', 'look']);
+  });
+});
+
+describe('failHead（09-18：失败头行要带上原因，不能只剩「没有一条操作成功：」）', () => {
+  it('⭐ 取前三个非空行拼一行', () => {
+    expect(failHead('没有一条操作成功：\n✗ #1 这几件不在板上：a、b\n\n· 其余')).toBe('没有一条操作成功： / ✗ #1 这几件不在板上：a、b / · 其余');
+  });
+  it('300 字封顶；空的给空', () => {
+    expect(failHead('x'.repeat(500)).length).toBe(300);
+    expect(failHead(undefined)).toBe('');
   });
 });

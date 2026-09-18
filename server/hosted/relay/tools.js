@@ -26,6 +26,7 @@ import { checkQuota, imageChargeUsd } from '../../lib/quota.js';
 import { DENIAL, can } from '../../auth/tier.js';
 import { capabilityState } from '../../runtime/capabilities.js';
 import { recordRelayUsage } from './usage.js';
+import { errText } from '../../lib/err-text.js';
 
 const REF_MAX = 8;
 /** 心跳间隔；测试用 env 调短 */
@@ -67,7 +68,7 @@ export function mountRelayTools(router, { sendError, readRawBody, produce = prod
     } catch (err) {
       const msg = err instanceof ProviderError
         ? err.message + (err.code === 401 || err.code === 403 ? '（本服务的搜索密钥已失效，请联系服务方）' : err.code === 429 ? '（搜索额度已用完，请更换服务商或稍后重试）' : '')
-        : `web_search error: ${err?.message || String(err)}`;
+        : `web_search error: ${errText(err)}`;
       sendError(res, 502, 'SEARCH_FAILED', msg);
     }
   });

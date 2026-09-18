@@ -13,6 +13,7 @@ import { relayConfig, relayTools, relayToolCall } from '../../../runtime/relay-c
 import { hasAnySearchKey } from './web-search-providers.js';
 import { localImageRoute } from './image-produce.js';
 import { relayLegBudgetMs } from './helpers/codex-imagegen.js';
+import { errText } from '../../../lib/err-text.js';
 
 /** @returns {'local' | 'relay' | null} */
 export function searchRoute() {
@@ -35,7 +36,7 @@ export async function relayWebSearch({ query, provider, count, includeImages }) 
     const r = await relayToolCall('web_search', { query, provider, count, includeImages }, { timeoutMs: 60_000 });
     return r?.error ? { error: r.error } : { providerId: r.providerId, providerNote: r.providerNote || '', hits: r.hits || [], images: r.images || [] };
   } catch (err) {
-    return { error: `web_search failed (relay ${err.code || ''}): ${err.message}` };
+    return { error: `web_search failed (relay ${err.code || ''}): ${errText(err)}` };
   }
 }
 
@@ -51,6 +52,6 @@ export async function relayGenerateImage(payload) {
     if (r?.type === 'error') return { error: `generate_image failed (relay ${r.code || ''}): ${r.error?.message || '未知错误'}` };
     return r?.error ? { error: String(r.error) } : r;
   } catch (err) {
-    return { error: `generate_image failed (relay ${err.code || ''}): ${err.message}` };
+    return { error: `generate_image failed (relay ${err.code || ''}): ${errText(err)}` };
   }
 }

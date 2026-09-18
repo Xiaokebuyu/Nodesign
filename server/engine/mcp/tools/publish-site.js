@@ -14,6 +14,7 @@ import { getProject } from '../../../projects/store.js';
 import { projectGoneMessage } from '../../../projects/project-gone.js';
 import { getUserById } from '../../../auth/users-store.js';
 import { publishSite, unpublishSite, lookupPublished } from '../../../lib/site-publish.js';
+import { errText } from '../../../lib/err-text.js';
 
 /**
  * @param {object} deps
@@ -68,11 +69,13 @@ permission error, relay it as-is — do not retry.`,
     },
     async ({ task, action, root, slug }) => {
       const asText = (text) => ({ content: [{ type: 'text', text }] });
+      // 失败要标 isError（09-18）：原来失败也走 asText，卡片显示成功、PostToolUseFailure 不触发、问题库不记
+      const asError = (text) => ({ content: [{ type: 'text', text }], isError: true });
       try {
         const project = getProject(projectId);
-        if (!project) return asText(projectGoneMessage(projectId));   // 已删除 / 不存在：让 agent 停手（09-17）
+        if (!project) return asError(projectGoneMessage(projectId));   // 已删除 / 不存在：让 agent 停手（09-17）
         const owner = project.ownerId ? getUserById(project.ownerId) : null;
-        if (!owner) return asText('错误：找不到项目归属用户，不能发布');
+        if (!owner) return asError('错误：找不到项目归属用户，不能发布');
 
         if (action === 'status') {
           const site = await lookupPublished(projectId, task);
@@ -96,7 +99,7 @@ permission error, relay it as-is — do not retry.`,
           r.warning ? `注意：${r.warning}` : null,
         ].filter(Boolean).join('\n'));
       } catch (err) {
-        return asText(`发布操作失败：${err.message}`);
+        return asError(`发布操作失败：${errText(err)}`);
       }
     },
   );

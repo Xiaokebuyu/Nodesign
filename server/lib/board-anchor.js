@@ -22,7 +22,7 @@
  *   写法变体（nameVariants）导出给线的端点归一共用（lib/board-endpoint.js）。
  */
 
-import { layerOf, normalizeCanvasId, tagEnvelope } from './canvas-id.js';
+import { layerOf, normalizeCanvasId, tagEnvelope, CONTROL_CHARS } from './canvas-id.js';
 import { estimateSizeOn, FOLDER_CARD } from './board-kind-sizes.js';
 import { KINDS } from './kinds/index.js';
 import { boardLineage } from './lineage.js';
@@ -37,7 +37,7 @@ const stem = (s) => bareOf(s).split('/').pop().replace(/\.[a-z0-9]{1,5}$/i, '').
 
 /** 自然叫法的外壳：#、引号、「（site）」这类括注、「@48,10」这类坐标尾巴 */
 export function cleanAnchorName(raw) {
-  return String(raw ?? '').trim()
+  return String(raw ?? '').replace(CONTROL_CHARS, '').trim()
     .replace(/^[#「“"'`]+|[」”"'`]+$/g, '')
     .replace(/\s*[（(][^（()）]{0,20}[)）]\s*$/, '')
     .replace(/@-?\d+(\.\d+)?,-?\d+(\.\d+)?$/, '')

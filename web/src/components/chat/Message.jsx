@@ -1301,6 +1301,37 @@ function VisionCheckerCard({ text }) {
   );
 }
 
+/**
+ * 工具失败的原因（09-18）：实时推送来的是 { message }（agent-shared.js 的 deltaToolResult），
+ * 回放来的是字符串。原来一律 JSON.stringify，实时那份显示成带字面 \n 的 {"message": …}。
+ */
+export function toolErrorText(err) {
+  if (err == null || err === '') return '';
+  if (typeof err === 'string') return err;
+  if (typeof err.message === 'string') return err.message;
+  return JSON.stringify(err, null, 2);
+}
+
+/** 失败的卡不展开也看得见原因：卡下一行红字，只取第一行（09-18 站主：「工具失败后不直接返回错误信息」） */
+function ToolErrorLine({ error, onOpen }) {
+  const line = toolErrorText(error).split('\n').find((l) => l.trim()) || '';
+  if (!line) return null;
+  return (
+    <div
+      data-tool-error-line
+      onClick={onOpen}
+      title={toolErrorText(error)}
+      style={{
+        marginTop: 2, fontFamily: FONT_MONO, fontSize: FONT_SIZE.xs, color: COLOR.error,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%',
+        cursor: onOpen ? 'pointer' : 'default',
+      }}
+    >
+      {line}
+    </div>
+  );
+}
+
 function ToolMessage({
   toolName, toolInput, toolOutput, toolError, toolImages, status, elapsed,
   agentType, taskStatus, taskSummary, taskSummaryLog, taskDescription, taskLastTool, subagentResult,
@@ -1387,6 +1418,7 @@ function ToolMessage({
             />
           )}
         </button>
+        {isError && <ToolErrorLine error={toolError} />}
         {canExpand && open && (
           <DiffView
             oldStr={String(toolInput?.old_string || '')}
@@ -1563,6 +1595,7 @@ function ToolMessage({
           }}
         />
       </button>
+      {isError && !open && <ToolErrorLine error={toolError} onOpen={() => setOpen(true)} />}
 
       {open && (
         <div style={{ marginTop: GAP.sm, display: 'flex', flexDirection: 'column', gap: GAP.sm }}>
@@ -1629,7 +1662,7 @@ function ToolMessage({
               whiteSpace: 'pre-wrap',
             }}>
               <div style={{ fontSize: FONT_SIZE.xxs, opacity: 0.8, marginBottom: GAP.xs, letterSpacing: '0.04em' }}>ERROR</div>
-              {typeof toolError === 'string' ? toolError : JSON.stringify(toolError, null, 2)}
+              {toolErrorText(toolError)}
             </div>
           )}
         </div>

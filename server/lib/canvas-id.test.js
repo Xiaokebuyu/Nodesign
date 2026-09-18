@@ -84,3 +84,11 @@ describe('normalizeCanvasId：剥座次装饰', () => {
     expect(normalizeCanvasId('deck:主稿.html')).toBe('deck:主稿.html');
   });
 });
+
+describe('id 里的控制字符（09-18：exp 上 CR 夹在 id 中间，模型照抄重试 40 次）', () => {
+  it('⭐ 规整时剥掉，夹在中间的也剥', () => {
+    const CR = String.fromCharCode(13);
+    expect(normalizeCanvasId(`notes/板书/20260903${CR}-103537${CR}-要点.md`)).toBe('notes/板书/20260903-103537-要点.md');
+    expect(normalizeCanvasId(String.fromCharCode(9) + 'site:落地页' + String.fromCharCode(0))).toBe('site:落地页');
+  });
+});

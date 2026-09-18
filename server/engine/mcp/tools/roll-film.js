@@ -23,6 +23,7 @@ import { projectGoneMessage } from '../../../projects/project-gone.js';
 import { getUserById } from '../../../auth/users-store.js';
 import { can, localGenApproved, DENIAL } from '../../../auth/tier.js';
 import { boxConfig, runBox, sshArgs, scpArgs, localBoxEnabled, BOX_OFF_MSG } from './h3box-ssh.js';
+import { headTail, headTailBuffer } from '../../../lib/err-text.js';
 
 const H3_REPO = process.env.NODESIGN_H3_REPO || '/home/wangang-dev/projects/minimax-h3-modal';
 const MODAL_BIN = process.env.NODESIGN_MODAL_BIN || path.join(os.homedir(), '.local/bin/modal');
@@ -52,16 +53,16 @@ function estCostUsd(d, backend) {
 function runModal(args, { cwd, signal, timeoutMs }) {
   return new Promise((resolve) => {
     const child = spawn(MODAL_BIN, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
-    let out = ''; let err = '';
+    let out = ''; const errBuf = headTailBuffer(1000, 4000);   // 报错开头（哪个节点、什么错）要留住，09-18
     child.stdout.on('data', (d) => { out = (out + d).slice(-8000); });
-    child.stderr.on('data', (d) => { err = (err + d).slice(-4000); });
+    child.stderr.on('data', (d) => { errBuf.push(d); });
     const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* */ } }, timeoutMs);
     const onAbort = () => { try { child.kill('SIGKILL'); } catch { /* */ } };
     signal?.addEventListener?.('abort', onAbort, { once: true });
     child.on('close', (code) => {
       clearTimeout(timer);
       signal?.removeEventListener?.('abort', onAbort);
-      resolve({ code, out, err });
+      resolve({ code, out, err: errBuf.text() });
     });
     child.on('error', (e) => { clearTimeout(timer); resolve({ code: -1, out, err: String(e.message) }); });
   });
@@ -161,7 +162,7 @@ export async function rollFilm(
         await fs.writeFile(jp, JSON.stringify([job]));
         const r = await runModal(['run', 'h3_comfy.py', '--jobs-file', jp], { cwd: H3_REPO, signal, timeoutMs: PER_SHOT_TIMEOUT_MS });
         fs.unlink(jp).catch(() => { /* */ });
-        if (r.code !== 0) failMsg = (r.err || r.out).slice(-600);
+        if (r.code !== 0) failMsg = headTail(r.err || r.out, 300, 600);
         else {
           const hits = (await fs.readdir(path.join(H3_REPO, 'outputs'))).filter((f) => f.startsWith(`${shot.jobId}_`) && f.endsWith('.mp4'));
           if (hits.length) localMp4 = path.join(H3_REPO, 'outputs', hits[0]);
@@ -184,7 +185,7 @@ export async function rollFilm(
           if (upJ.code !== 0) failMsg = `任务上传失败：${upJ.err.slice(-300)}`;
           else {
             const gen = await runBox(box, 'ssh', [...sshArgs(box), `python3 ~/h3box.py video ~/nd_jobs/${shot.jobId}.json`], { timeoutMs: PER_SHOT_TIMEOUT_MS, signal });
-            if (gen.code !== 0 || !gen.out.includes('success')) failMsg = `渲染失败（exit ${gen.code}）：${(gen.err || gen.out).slice(-600)}`;
+            if (gen.code !== 0 || !gen.out.includes('success')) failMsg = `渲染失败（exit ${gen.code}）：${headTail(gen.err || gen.out, 300, 600)}`;
             else {
               const pd = await makeServerTmpDir('nd-film-');
               const pull = await runBox(box, 'scp', [...scpArgs(box), `${box.target}:outputs/${shot.jobId}_*.mp4`, pd], { timeoutMs: 120_000, signal });
