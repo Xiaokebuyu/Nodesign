@@ -9,6 +9,7 @@
 import { useCallback, useMemo } from 'react';
 import { FOLDER_CARD } from '../../lib/board-geometry.js';
 import { GENERATED_DIR, GENERATED_TITLE, isDeskPinned } from '../../lib/generated-folder.js';
+import { latestFirst } from '../../lib/folder-stacks.js';
 
 /**
  * @param {object} p
@@ -83,7 +84,8 @@ export function useDirIndex({ objects, zonesEff, layout, taskTitles }) {
         .map(id => ({ kind: 'folder', title: id.split('/').pop(), o: null }));
       const files = (byDir.get(dir) || [])
         .map(o => ({ kind: o.type, title: o.title || o.name || String(o.id).split('/').pop(), o }));
-      const all = [...subs, ...files];
+      // 卡面先露最近的那几件（09-18 归堆那一批：「卡面显示件数与最近一件的缩略」），子文件夹排后面
+      const all = [...latestFirst(files.map(f => ({ ...f, mtime: f.o?.mtime }))), ...subs];
       return { count: all.length, peek: all.slice(0, 4) };
     };
     return { dirOf, byDir, subsOf, peekIn };

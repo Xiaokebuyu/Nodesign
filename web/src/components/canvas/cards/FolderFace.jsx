@@ -174,13 +174,14 @@ export default function FolderFace({ z, projectId, fileVersions, scale = 1 }) {
         </div>
       )}
 
-      {z.count > z.peek.length && (
-        <span style={{
+      {/* 件数一律显示（09-18，借 macOS 叠放：一眼知道里面有多少）；原来只在超过四件时给 +N */}
+      {z.count > 0 && (
+        <span data-folder-count style={{
           position: 'absolute', right: FACE_PAD + 2, bottom: FACE_PAD + 2,
           padding: '1px 5px',
           fontFamily: FONT_MONO, fontSize: FONT_SIZE.xxs, color: COLOR.sub,
           background: PAPER.paper, boxShadow: 'inset 0 0 0 1px rgba(43,33,23,0.10)',
-        }}>+{z.count - z.peek.length}</span>
+        }}>{z.count} 件</span>
       )}
     </div>
   );

@@ -1,9 +1,9 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FolderPlus, ChevronLeft } from 'lucide-react';
 import { COLOR, FONT_KAI, FONT_SIZE } from '../../lib/theme.js';
-import { FOLDER_CARD, packRow } from '../../lib/board-geometry.js';
-import { sizeOf } from '../../lib/board-kinds.js';
+import { packRow } from '../../lib/board-geometry.js';
 import ArtifactWindow from './ArtifactWindow.jsx';
+import { useFolderStacks, stackCells, PileCell, StackHeader } from './FolderStacks.jsx';
 import { GENERATED_DIR, GENERATED_TITLE } from '../../lib/generated-folder.js';
 
 /**
@@ -73,6 +73,10 @@ export default function FolderWindow({
    * React 报 "Maximum update depth exceeded"（2026-08-13 真跑撞到，
    * 检查通道二分出来的）。deck / 站点那几扇窗一直是 memo 的，所以没事。
    */
+  const { folders = [], items = [] } = list(dir) || {};
+  // 归堆（09-18，FolderStacks.jsx）：按类型 / 按时间叠成几堆，件数少不叠
+  const stacks = useFolderStacks(dir, items);
+
   const groups = useMemo(() => ([{
     id: 'folder',
     items: [
@@ -80,20 +84,16 @@ export default function FolderWindow({
       // 生成图文件夹里不建子夹（服务端也拒：它在 assets/ 下）
       ...(dir === GENERATED_DIR ? [] : [{ id: 'new', icon: FolderPlus, label: '新建文件夹', title: '在这个文件夹里新建一个', onClick: () => onNewFolder?.(dir) }]),
     ],
-  }]), [onUp, onNewFolder, dir]);
+  }, ...(stacks.toolbarGroup ? [stacks.toolbarGroup] : [])]), [onUp, onNewFolder, dir, stacks.toolbarGroup]);
 
-  const { folders = [], items = [] } = list(dir) || {};
-
-  // 文件夹在前、产物在后（跟"这一层装了什么"的直觉一致：容器先，内容后）
-  const cells = [
-    ...folders.map(z => ({ kind: 'folder', z, w: FOLDER_CARD.w, h: FOLDER_CARD.h })),
-    ...items.map((o) => { const sz = sizeOf(o); return { kind: 'object', o, w: sz.w, h: sz.h }; }),
-  ];
+  // 文件夹在前、产物在后（跟"这一层装了什么"的直觉一致：容器先，内容后）；归堆时产物换成一堆一堆
+  const innerW = Math.max(320, width) - PAD * 2;
+  const cells = stackCells({ folders, items, groups: stacks.groups, open: stacks.open, fullW: innerW });
   // packRow 按固定列宽铺（COL_W/COL_GAP 在 board-geometry 里），跟桌面上
   // 新产物自动落位用的是同一个函数 —— 两处网格长得一样不是巧合，是同一个实现
   const packed = packRow(
-    cells.map((c, i) => ({ id: String(i), w: c.w, h: c.h })),
-    { width: Math.max(320, width) - PAD * 2, xMin: PAD, yTop: PAD },
+    cells.map((c, i) => ({ id: String(i), w: c.w, h: c.h, breakBefore: c.breakBefore })),
+    { width: innerW, xMin: PAD, yTop: PAD },
   );
   const slots = new Map(packed.slots.map(s => [s.id, s]));
 
@@ -138,10 +138,11 @@ export default function FolderWindow({
           const s = slots.get(String(i)) || { x: PAD, y: PAD };
           const pos = { x: s.x, y: s.y };
           return (
-            <div key={c.kind === 'folder' ? c.z.id : c.o.id}>
-              {c.kind === 'folder'
-                ? renderFolder(c.z, pos)
-                : renderObject(c.o, pos)}
+            <div key={c.kind === 'folder' ? c.z.id : c.kind === 'pile' ? c.g.key : c.kind === 'header' ? `h:${c.g.key}` : c.o.id}>
+              {c.kind === 'folder' && renderFolder(c.z, pos)}
+              {c.kind === 'object' && renderObject(c.o, pos)}
+              {c.kind === 'pile' && <PileCell cell={c} pos={pos} renderObject={renderObject} onOpen={stacks.toggle} />}
+              {c.kind === 'header' && <StackHeader cell={c} pos={pos} onClose={stacks.toggle} />}
             </div>
           );
         })}
