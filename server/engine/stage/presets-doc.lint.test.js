@@ -14,7 +14,7 @@ describe('SKILL.md 里的写法预设表是从 preset.json 生成的', () => {
     const skill = fs.readFileSync(SKILL_FILE, 'utf8');
     expect(currentSkillSection(skill)).toBe(renderPresetsDoc());
   });
-  for (const id of ['izumi', 'literary']) {
+  for (const id of ['literary']) {
     it(`${id} 每个模块都有 hint，每个 cue 都能落成一行`, () => {
       const meta = JSON.parse(fs.readFileSync(path.join(PRESETS_DIR, id, 'preset.json'), 'utf8'));
       expect(meta.modules.filter(m => !m.hint).map(m => m.id)).toEqual([]);

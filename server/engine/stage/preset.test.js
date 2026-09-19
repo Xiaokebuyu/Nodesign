@@ -2,13 +2,14 @@ import { describe, it, expect, afterAll } from 'vitest';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import {
   loadPreset, resolvePreset, listPresets, defaultSelection, normalizeSelection, renderStyle,
-  expandMacros, importTavernPreset, saveImportedPreset, resolveAgentStyle, BUILTIN_DIR, BUILTIN_IDS,
+  expandMacros, importTavernPreset, saveImportedPreset, resolveAgentStyle, BUILTIN_DIR, BUILTIN_IDS, DEFAULT_PRESET,
 } from './preset.js';
 
 /**
- * 写法预设：内置两套要齐、勾选要合法、拼出来的「写法」一节要对、酒馆 JSON 要拆得动。
+ * 写法预设：内置的要齐、勾选要合法、拼出来的「写法」一节要对、酒馆 JSON 要拆得动。
  * 模块正文是数据不是代码，这里只钉形状（文件都在、非空、互斥组每组默认最多一个）。
  */
 const tmps = [];
@@ -25,7 +26,7 @@ async function play(files = {}) {
 afterAll(async () => { await Promise.all(tmps.map(d => fs.rm(d, { recursive: true, force: true }))); });
 
 describe('内置预设', () => {
-  it('两套都在，模块文件齐且非空，互斥组默认最多一个', async () => {
+  it('内置的都在，模块文件齐且非空，互斥组默认最多一个', async () => {
     for (const id of BUILTIN_IDS) {
       const p = await loadPreset(path.join(BUILTIN_DIR, id), { id, builtin: true });
       expect(p, id).toBeTruthy();
@@ -38,45 +39,45 @@ describe('内置预设', () => {
       for (const [g, n] of Object.entries(perGroup)) expect(n, `${id} 组 ${g} 默认开了 ${n} 个`).toBe(1);
     }
   });
-  it('Izumi 拆解：文风只默认开顺眼舒服，人称默认第三人称，篇幅默认中；不带作者人设与酒馆宏', async () => {
-    const p = await loadPreset(path.join(BUILTIN_DIR, 'izumi'));
-    const sel = defaultSelection(p);
-    expect(sel['voice-smooth']).toBe(true);
-    expect(sel['person-3']).toBe(true);
-    expect(sel['len-mid']).toBe(true);
-    expect(p.modules.filter(m => m.group === 'voice').length).toBeGreaterThanOrEqual(20);
-    for (const m of p.modules) {
-      expect(m.text, m.file).not.toMatch(/\{\{|泉此方|小此|Konata|Master/);
-    }
+  it('内置只收有授权的：只剩文学派，默认不用预设；撤下的 id 解析不到', async () => {
+    expect(BUILTIN_IDS).toEqual(['literary']);
+    expect(DEFAULT_PRESET).toBe('none');
+    const d = await play();
+    expect(await resolvePreset(d, 'izumi')).toBeNull();
+    expect(fsSync.existsSync(path.join(BUILTIN_DIR, 'izumi'))).toBe(false);
+    const sel = defaultSelection(await loadPreset(path.join(BUILTIN_DIR, 'literary')));
+    expect(sel).toEqual({ logic: true, sentence: true, emergent: true, exhaustive: false, lively: false, 'live-world': true });
   });
 });
 
 describe('勾选', () => {
   it('always 组关不掉，互斥组多勾只留一个，没提到的按默认', async () => {
-    const p = await loadPreset(path.join(BUILTIN_DIR, 'izumi'));
-    const sel = normalizeSelection(p, { 'core-writing': false, 'voice-smooth': true, 'voice-wuxia': true, 'len-mid': false, 'len-long': true });
-    expect(sel['core-writing']).toBe(true);
-    expect(sel['voice-smooth']).toBe(true);
-    expect(sel['voice-wuxia']).toBe(false);
-    expect(sel['len-long']).toBe(true);
-    expect(sel['len-mid']).toBe(false);
-    expect(sel['plot-surprise']).toBe(true);   // 默认开的没提就还是开
+    const p = await loadPreset(path.join(BUILTIN_DIR, 'literary'));
+    const sel = normalizeSelection(p, { logic: false, emergent: true, lively: true });
+    expect(sel.logic).toBe(true);
+    expect(sel.emergent).toBe(true);
+    expect(sel.lively).toBe(false);
+    const sel2 = normalizeSelection(p, { emergent: false, exhaustive: true });
+    expect(sel2.exhaustive).toBe(true);
+    expect(sel2.emergent).toBe(false);
+    expect(sel2['live-world']).toBe(true);   // 默认开的没提就还是开
   });
 });
 
 describe('拼「写法」一节', () => {
-  it('默认 Izumi：有标题、有顺眼舒服、没有没选的文风；none 是空', async () => {
+  it('文学派：有标题、有默认的写法、没有没选的写法；none 与没选都是空', async () => {
     const d = await play();
-    const r = await renderStyle(d, { preset: 'izumi' });
+    const r = await renderStyle(d, { preset: 'literary' });
     expect(r.text).toMatch(/^## 写法/);
-    expect(r.text).toContain('消除生硬');
-    expect(r.text).not.toContain('武侠风味');
-    expect(r.picked).toContain('顺眼舒服');
-    const r2 = await renderStyle(d, { preset: 'izumi', modules: { 'voice-smooth': false, 'voice-wuxia': true } });
-    expect(r2.text).toContain('武侠风味');
+    expect(r.text).toContain('文风名：涌现式叙事');
+    expect(r.text).not.toContain('文风名：活泼通俗');
+    expect(r.picked).toContain('涌现式叙事');
+    const r2 = await renderStyle(d, { preset: 'literary', modules: { emergent: false, lively: true } });
+    expect(r2.text).toContain('文风名：活泼通俗');
     expect(r2.hash).not.toBe(r.hash);
     expect((await renderStyle(d, { preset: 'none' })).text).toBe('');
-    expect((await renderStyle(d, undefined)).preset.id).toBe('izumi');   // 没选 = 默认 Izumi
+    const dflt = await renderStyle(d, undefined);   // 没选 = 不用预设
+    expect(dflt.text).toBe(''); expect(dflt.preset).toBeNull();
   });
 });
 
@@ -118,7 +119,8 @@ describe('酒馆预设导入', () => {
   it('落盘后能 resolve；丢一份原始 JSON 进 预设/ 会被 listPresets 自动拆', async () => {
     const d = await play({ '预设/丢进来的.json': JSON.stringify(ST) });
     const list = await listPresets(d);
-    expect(list.map(p => p.id)).toEqual(expect.arrayContaining(['izumi', 'literary', 'user:丢进来的']));
+    expect(list.map(p => p.id)).toEqual(expect.arrayContaining(['literary', 'user:丢进来的']));
+    expect(list.map(p => p.id)).not.toContain('izumi');
     const p = await resolvePreset(d, 'user:丢进来的');
     expect(p.modules.length).toBe(5);
     await saveImportedPreset(d, '第二份', importTavernPreset(ST, { name: '第二份' }));
@@ -132,20 +134,20 @@ describe('酒馆预设导入', () => {
 describe('agent 的预选（open_stage.style → 戏.json）', () => {
   it('on / off 差量另存 style.agent，by 只在真动过时是 agent；不存在的 id 丢掉', async () => {
     const d = await play();
-    const plain = await resolveAgentStyle(d, { preset: 'izumi' });
+    const plain = await resolveAgentStyle(d, { preset: 'literary' });
     expect(plain.by).toBe('default'); expect(plain.agent).toBeUndefined();
-    expect(plain.modules['voice-smooth']).toBe(true);
-    const r = await resolveAgentStyle(d, { preset: 'izumi', on: ['pace-slow', 'voice-wuxia', 'no-such-module'], off: ['char-psych-italic'] });
+    expect(plain.modules.emergent).toBe(true);
+    const r = await resolveAgentStyle(d, { preset: 'literary', on: ['lively', 'no-such-module'], off: ['live-world', 'logic'] });
     expect(r.by).toBe('agent');
-    expect(r.agent).toEqual({ on: ['pace-slow', 'voice-wuxia'], off: ['char-psych-italic'] });
-    expect(r.modules['pace-slow']).toBe(true); expect(r.modules['pace-skip']).toBe(false);   // 互斥组：开一个关掉默认那个
-    expect(r.modules['voice-wuxia']).toBe(true); expect(r.modules['voice-smooth']).toBe(false);
-    expect(r.modules['char-psych-italic']).toBe(false);
-    expect(r.modules['core-writing']).toBe(true);   // always 组关不掉
-    const bogus = await resolveAgentStyle(d, { preset: 'izumi', on: ['no-such-module'] });
+    expect(r.agent).toEqual({ on: ['lively'], off: ['live-world', 'logic'] });
+    expect(r.modules.lively).toBe(true); expect(r.modules.emergent).toBe(false);   // 互斥组：开一个关掉默认那个
+    expect(r.modules['live-world']).toBe(false);
+    expect(r.modules.logic).toBe(true);   // always 组关不掉
+    const bogus = await resolveAgentStyle(d, { preset: 'literary', on: ['no-such-module'] });
     expect(bogus.by).toBe('default');   // 全是假 id = 什么都没动
     // 09-07：点了名对不上要抛（D2：此前静默落 none，open_stage 还报「写法预设 nope」成功）
     await expect(resolveAgentStyle(d, { preset: 'nope' })).rejects.toMatchObject({ status: 409 });
+    await expect(resolveAgentStyle(d, { preset: 'izumi' })).rejects.toMatchObject({ status: 409 });   // 撤下的内置 id 同样对不上
     expect((await resolveAgentStyle(d, { preset: 'none' })).preset).toBe('none');
   });
   it('agent 刚拷进 预设/<名>.json 就直接指 user:<名>：resolvePreset 自己补拆，不静默落回 none', async () => {

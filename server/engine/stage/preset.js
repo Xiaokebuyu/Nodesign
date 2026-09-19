@@ -6,7 +6,8 @@
  * 拼成系统提示词里的「写法」一节 —— 那是冻结区，改选 = 下一句话到时进程重开。
  *
  * 三种来源：
- *   1. 内置：presets/izumi（拆解自泉此方的 Izumi 0828）、presets/literary（一位 RP 写手的私人预设）。
+ *   1. 内置：presets/literary（一位 RP 写手的私人预设，经作者授权收录）。
+ *      ⛔ 内置预设只收有作者授权的。没选 = none（只按设定里的规矩写，09-19 起）。
  *   2. 用户自己的：<故事>/预设/<名>/preset.json + 模块 md，形状跟内置一样，可在显示器里改正文。
  *   3. 酒馆（SillyTavern）预设 JSON：丢进 <故事>/预设/ 或从显示器上传，这里自动拆成 2 的形状 ——
  *      每个条目一个模块、启用状态照搬、{{setvar/getvar}} 宏按顺序展开。拆一次落盘，之后跟 2 同款。
@@ -22,8 +23,8 @@ import { fileURLToPath } from 'node:url';
 import { PRESET_DIR, exists } from './play.js';
 
 export const BUILTIN_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'presets');
-export const BUILTIN_IDS = ['izumi', 'literary'];
-export const DEFAULT_PRESET = 'izumi';
+export const BUILTIN_IDS = ['literary'];
+export const DEFAULT_PRESET = 'none';
 export const PRESET_META = 'preset.json';
 
 /** 读一套预设（目录里有 preset.json）。模块正文一起读进来。 */

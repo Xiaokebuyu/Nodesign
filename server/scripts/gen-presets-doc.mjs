@@ -18,7 +18,7 @@ export const PRESETS_DIR = path.join(HERE, '../engine/stage/presets');
 export const SKILL_FILE = path.join(HERE, '../engine/plugins/nodesign/skills/stage-setup/SKILL.md');
 export const START = '<!-- presets:gen:start -->';
 export const END = '<!-- presets:gen:end -->';
-const IDS = ['izumi', 'literary'];
+const IDS = ['literary'];
 
 const readMeta = (id) => JSON.parse(fs.readFileSync(path.join(PRESETS_DIR, id, 'preset.json'), 'utf8'));
 
@@ -28,7 +28,7 @@ function cueRow(m, presetId) {
   const say = m.cue.replace(/^（关）|^（默认）/, '');
   // 每行都带 preset：style.preset 是必填，照抄单元格就能过 zod（09-07 演出线对账 A3）
   const act = dflt ? `\`${m.id}\` 默认已开，不用传` : off ? `\`{ preset: "${presetId}", off: ["${m.id}"] }\`` : `\`{ preset: "${presetId}", on: ["${m.id}"] }\``;
-  return `| ${say} | ${act}${presetId === 'izumi' ? '' : `（预设 \`${presetId}\`）`} |`;
+  return `| ${say} | ${act}（预设 \`${presetId}\`） |`;
 }
 
 export function renderPresetsDoc() {
@@ -39,8 +39,8 @@ export function renderPresetsDoc() {
     '开场页会把你动过的每个开关标成「agent 预选」，玩家能改，改了以他的为准。**他没说的组别动，不传。**', '');
   out.push('## 他说的话 → 该动哪个开关', '', '| 他大概会说 | 动作 |', '|---|---|');
   for (const [id, meta] of metas) for (const m of meta.modules) if (m.cue) out.push(cueRow(m, id));
-  out.push('| 像轻小说 / 像武侠 / 像网文 / 像金庸 / 像广播剧… | `on: ["voice-<id>"]`，文风组里挑最像的一个（见下表），只开一个 |');
-  out.push('| 想要更文学的质地 / 长句 / 不要比喻 | `preset: "literary"`（文学派整套换掉 Izumi） |');
+  out.push('| 像轻小说 / 像武侠 / 像网文 / 像金庸 / 像广播剧… | 不动预设，他那句话写进设定「规矩」 |');
+  out.push('| 想要更文学的质地 / 长句 / 不要比喻 | `preset: "literary"` |');
   out.push('| 他交了自己的酒馆预设 JSON | 文件放 `<故事>/预设/<名>.json`，`preset: "user:<名>"`，⛔ 别传 on/off（条目 id 拆出来才有） |');
   out.push('| 别替我说话 / 我的角色我自己来 | 这是代笔档，写进设定「规矩」，不动预设 |');
   out.push('| 难度 / 世界顺不顺着他 | 写进设定「规矩」，不动预设 |', '');

@@ -162,12 +162,12 @@
         <p class="lede" style="margin-bottom:12px">只列你的账号现在能用的。之后在「外观」页还能换，换了下一句话起生效。</p>
         <div id="models"><p class="muted">读取中…</p></div>
         <div class="kicker">写法</div>
-        <p class="lede" style="margin-bottom:12px">对方按哪套规矩写。默认这套是从一份久经调试的中文预设拆出来的；也可以上传你自己的。展开每一组能看到具体条目。</p>
+        <p class="lede" style="margin-bottom:12px">对方按哪套规矩写。默认不用预设，只按设定里的规矩写；也可以选内置的文学派，或上传你自己的。展开每一组能看到具体条目。</p>
         ${cfg.style?.by === 'agent' ? '<p class="source" style="color:var(--accent)">标着「agent 预选」的开关是 agent 按你开场前的回答动过的，不合意就改，改了以你的为准。</p>' : ''}
         <div id="picker"></div>
         <div class="actions"><button class="btn primary big" id="go">开始</button><div class="note" id="openNote"></div></div>
       </div></div>`;
-      const style = { preset: cfg.style?.preset || 'izumi', modules: cfg.style?.modules || null };
+      const style = { preset: cfg.style?.preset || 'none', modules: cfg.style?.modules || null };
       const cardOptions = { ...(cfg.cardOptions || {}) };
       // 人物卡 + 可选条目
       const people = root.querySelector('#people');

@@ -111,7 +111,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
       cast: z.array(castSchema).min(1).max(12).describe('在场者。每个都要先有角色卡；一人=显示器画立绘，多人=画名册'),
       vitals: z.array(vitalSchema).max(8).optional().describe('状态面板显示哪些字段（好感 / 时间 / 体力…）。不需要就别传'),
       skin: z.enum(SKINS).default('paper').describe('显示器外观。留默认 paper（跟平台一致）；玩家自己会换'),
-      style: styleSchema.optional().describe('写法预设与预选。用户在开场问答里说了偏好（慢一点 / 多对白 / 第一人称 / 像轻小说 / 短一点…）就按 stage-setup 文末「写法预设的模块表」翻成 on / off 传进来，开场页把你动过的每个开关标成「agent 预选」；什么都没说就不传（默认 Izumi 全默认）。用户交了自己的酒馆预设 JSON 才传 preset: user:<名>'),
+      style: styleSchema.optional().describe('写法预设与预选。用户在开场问答里选了文学派就传 preset: literary，说了偏好就按 stage-setup 文末「写法预设的模块表」翻成 on / off 传进来，开场页把你动过的每个开关标成「agent 预选」；什么都没说就不传（默认不用预设，只按设定写）。用户交了自己的酒馆预设 JSON 才传 preset: user:<名>'),
       opening: z.string().max(6000).optional().describe('开场参考：酒馆卡的 first_mes（开场白）和 scenario 原文贴这里，{{user}} 那类占位符不用改。机器在玩家点「开始」时把它交给演出进程当第一段的底：照它的地点、时刻、气氛和头几句写，不照抄，占位符换成玩家的角色。没有就不传，进程按设定自己开场'),
       images: z.boolean().optional().describe('演出进程能不能自己配图（关键转折的插图 / 换场背景 / 立绘）。每张 $0.20 左右计入玩家每日额度、约一分钟。玩家在问答里明确说了才传；没说就不传，他在开场页自己开'),
       model: z.string().max(80).optional().describe('演出进程用哪个模型。只在玩家点名要某个模型时传，且得是他账号当前能选的（选不了会当场退回）；不传用默认，他在开场页自己挑'),
@@ -143,7 +143,7 @@ keeping scenes and memories. To wipe a story, the user deletes its folder themse
         const rt = getStageRuntime(projectId, root);
         const wasRunning = !!rt?.running;
         // 预选报**落盘后**的数（09-07 D1）：拼错的模块 id 会被静默过滤，返回文案原来报的是传进来的原始长度
-        let styleNote = '，写法由玩家开场时挑（默认 Izumi）';
+        let styleNote = '，写法由玩家开场时挑（默认不用预设）';
         if (style) {
           const cfg = await readPlayConfig(path.join(getSharedDir(projectId), root)).catch(() => null);
           const applied = cfg?.style?.agent || { on: [], off: [] };

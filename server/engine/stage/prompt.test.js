@@ -75,7 +75,7 @@ describe('拼系统提示词', () => {
     expect(r.cast[0].options.length).toBe(3);
     expect(r.styleNames).toContain('涌现式叙事');
     const h1 = frozenHash(cfg);
-    expect(frozenHash({ ...cfg, style: { preset: 'izumi' } })).not.toBe(h1);
+    expect(frozenHash({ ...cfg, style: { preset: 'none' } })).not.toBe(h1);
     expect(frozenHash({ ...cfg, cardOptions: { '晴可/opt1': false } })).not.toBe(h1);
     expect(frozenHash({ ...cfg })).toBe(h1);
     expect(r.hash).toBe(h1);
