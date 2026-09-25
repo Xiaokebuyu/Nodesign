@@ -16,9 +16,11 @@ import { Unzip, UnzipInflate, UnzipPassThrough } from 'fflate';
 /**
  * 镜像（站主 09-06：GitHub 在国内经常"通但只有几十 KB/s"）。每个镜像是一个目录前缀，里面按文件名放同一批资产
  * （manifest.json 和各个 zip），server/scripts/sync-components-mirror.sh 从 release 同步过去。
+ * 镜像放 R2（2026-09-25）：站点经 Cloudflare 回源的出站按 Carrier Peering 计费、没有免费档，R2 出站免费。
+ * 老客户端内置的站点地址 /dl/components-win64/ 由 nginx 302 到这里。
  * 清单自己的 mirrors 字段优先，其次 env NODESIGN_COMPONENTS_MIRRORS（逗号分隔），最后这份内置默认。
  */
-export const DEFAULT_MIRRORS = ['https://nodesign.xiaobuyu.trade/dl/components-win64'];
+export const DEFAULT_MIRRORS = ['https://dl.xiaobuyu.trade/components-win64'];
 const PROBE_BYTES = 512 * 1024;
 const PROBE_TIMEOUT_MS = 8000;
 /** 官方能通且吞吐不低于最快镜像的这个比例就用官方（官方永远是最新版，镜像可能落后） */
