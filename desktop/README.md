@@ -74,8 +74,8 @@ GitHub Releases 的 `latest.yml`，仓库公开所以不用 token）。Actions �
   LibreOffice 走 `msiexec /a` 抽文件，rembg 是嵌入式 Python + rembg[cpu] + 两个模型；chromium 交给
   playwright 自己装）。首启引导页（`/setup`）和设置 → 组件都走 `server/runtime/components.js`。
   ⏸ 六个组件在 Windows 上一个都没真跑过（本机只验了下载 / 校验 / 解压 / 目录形状）；换版本改工作流 env 再跑一次。
-  **镜像**：清单里 `mirrors` 指站点的 `/dl/components-win64/`（`server/scripts/sync-components-mirror.sh` 从 release 同步，
-  nginx 加一个 `/dl/` 的 location）；下载前官方与镜像各测 512KB，官方通且不比最快镜像慢太多用官方，否则用镜像。
+  **镜像**：清单里 `mirrors` 指 R2 的 `https://dl.xiaobuyu.trade/components-win64/`（`server/scripts/sync-components-mirror.sh` 从 release 同步；
+  09-25 前在站点 `/dl/`，经 Cloudflare 回源按 Carrier Peering 计费，现由 nginx 302 到 R2）；下载前官方与镜像各测 512KB，官方通且不比最快镜像慢太多用官方，否则用镜像。
   Chromium 走 playwright 自己的 CDN，探不通切 npmmirror。
 - **图标**（2026-09-17 换成 N2）：`desktop/build/icon.png`（1024 原图）、`desktop/build/icon.ico`（安装包用，48px 及以下是小尺寸版）、
   `desktop/assets/tray.png`（托盘，小尺寸版）。原图的铅笔与纸纹是 SVG 滤镜在 Chrome 里渲的，换图时直接用导出的 PNG，不要自己从 SVG 转。

@@ -1,20 +1,23 @@
 #!/usr/bin/env bash
-# 把 GitHub Release `components-win64` 的资产同步到站点的镜像目录（站主在服务器上跑；组件工作流重跑之后再跑一次）。
+# 把 GitHub Release `components-win64` 的资产同步到 R2 镜像（桶 nodesign-desktop 的 components-win64/，
+# 公网地址 https://dl.xiaobuyu.trade/components-win64/）。组件工作流重跑之后跑一次。
 #
-#   用法：server/scripts/sync-components-mirror.sh [目标目录]   默认 /var/www/nodesign-dl/components-win64
+#   用法：R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… server/scripts/sync-components-mirror.sh
 #
-# nginx 要给 /dl/ 一个 location（只需一次）：
-#   location /dl/ { alias /var/www/nodesign-dl/; autoindex off; add_header Cache-Control "public, max-age=3600"; }
-# 桌面版下载前会对官方（GitHub）和这个镜像各测 512KB 吞吐，官方通就用官方，不通或太慢就用这里
-# （server/runtime/components.js pickSource；镜像地址在清单的 mirrors 字段和 DEFAULT_MIRRORS）。
+# 为什么是 R2 不是站点目录（2026-09-25）：站点在 Cloudflare 后面，服务器发给 Cloudflare 的流量按 CDN Interconnect
+# 计费（账单名 Carrier Peering，$0.08/GiB，没有 200 GiB 免费档），组件包一个月能吃掉几十 GiB；R2 出站免费。
+# 老客户端内置的站点地址 /dl/components-win64/ 由 nginx 302 到 R2，所以不用跟着发桌面版。
+# 桌面版下载前会对官方（GitHub）和镜像各测 512KB 吞吐，官方通就用官方，不通或太慢就用镜像
+# （server/runtime/components-fetch.js pickSource；镜像地址在清单的 mirrors 字段和 DEFAULT_MIRRORS）。
 set -euo pipefail
 TAG="${COMPONENTS_TAG:-components-win64}"
-DEST="${1:-/var/www/nodesign-dl/$TAG}"
-mkdir -p "$DEST"
-echo "==> $TAG → $DEST"
-gh release download "$TAG" --repo Xiaokebuyu/Nodesign --dir "$DEST" --clobber
-# 清单自检：镜像里的文件 sha 要跟清单一致（下载半截的文件会让客户端校验失败）
-node - "$DEST" <<'JS'
+BUCKET="${R2_BUCKET:-nodesign-desktop}"
+: "${R2_ACCOUNT_ID:?要 R2_ACCOUNT_ID}" "${R2_ACCESS_KEY_ID:?要 R2_ACCESS_KEY_ID}" "${R2_SECRET_ACCESS_KEY:?要 R2_SECRET_ACCESS_KEY}"
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+echo "==> $TAG → $WORK"
+gh release download "$TAG" --repo Xiaokebuyu/Nodesign --dir "$WORK" --clobber
+# 清单自检：文件 sha 要跟清单一致（下载半截的文件会让客户端校验失败），不一致就不传
+node - "$WORK" <<'JS'
 const fs = require('node:fs'); const path = require('node:path'); const crypto = require('node:crypto');
 const dest = process.argv[2];
 const m = JSON.parse(fs.readFileSync(path.join(dest, 'manifest.json'), 'utf8'));
@@ -29,4 +32,14 @@ for (const [id, c] of Object.entries(m.components)) {
 }
 process.exit(bad ? 1 : 0);
 JS
-echo "==> 完成"
+# 新版 aws cli 默认加 CRC 校验尾，R2 不认
+export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" AWS_DEFAULT_REGION=auto \
+  AWS_REQUEST_CHECKSUM_CALCULATION=when_required AWS_RESPONSE_CHECKSUM_VALIDATION=when_required
+EP="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+# 先传 zip，清单最后换，免得清单指向还没传完的包
+for f in "$WORK"/*.zip; do
+  aws s3 cp "$f" "s3://$BUCKET/$TAG/$(basename "$f")" --endpoint-url "$EP" --content-type application/zip --only-show-errors
+  echo "↑ $(basename "$f")"
+done
+aws s3 cp "$WORK/manifest.json" "s3://$BUCKET/$TAG/manifest.json" --endpoint-url "$EP" --content-type application/json --only-show-errors
+echo "==> 完成：https://dl.xiaobuyu.trade/$TAG/manifest.json"
