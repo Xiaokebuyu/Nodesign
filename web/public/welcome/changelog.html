@@ -44,6 +44,39 @@
     <div class="log">
       <!-- changelog:begin（由 CHANGELOG.md 生成：node web/scripts/changelog-page.mjs，别手改） -->
       <article class="log-item reveal">
+        <div class="log-date">2026-09-26<span class="log-ver">桌面 0.1.45</span></div>
+        <div class="log-body">
+          <h3>桌面版</h3>
+          <ul>
+            <li>更换应用图标（安装包、任务栏与托盘）</li>
+            <li>修复内置浏览器关闭后偶发弹出「A JavaScript error occurred in the main process」错误框的问题</li>
+            <li>包含 9 月 18 日网页版的全部改进（见下方「网页版」）</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
+        <div class="log-date">2026-09-18<span class="log-ver">网页版</span></div>
+        <div class="log-body">
+          <h3>Agent 与工具</h3>
+          <ul>
+            <li>在画布上移动文件，文件本身同步移动；其他文件中引用它的位置一并更新，移动后提示更新了几处</li>
+            <li>生成的图片统一放入「生成图」文件夹，不再铺满桌面；需要时可拖到桌面上</li>
+            <li>文件夹内容较多时，按类型或时间叠放；文件夹卡片显示件数与最近一件</li>
+            <li>同一类产物放在同一个文件夹中时，画布上合为一张卡片，用下拉菜单切换；站点换页与 Word 版本切换也改为下拉菜单</li>
+            <li>同一标签的内容归为一个话题、占据一块区域，内容增多时周围的话题整体让开；板书不再折叠，按实际长度显示</li>
+            <li>Agent 摆放内容时，挡住目标位置的卡片自动让开</li>
+            <li>被新版本替换的旧版本不再占用位置，点开时临时显示在新版本旁边</li>
+            <li>标注在画布上一律留下蓝色字迹，并可以撤销</li>
+            <li>画布左下角新增颜色说明</li>
+            <li>标注某条板书后，Agent 直接改写这条板书，不再另起一条；改写前的内容自动留存</li>
+            <li>Agent 读取画布时按大纲层次查看内容</li>
+            <li>工具执行失败时，卡片上直接显示失败原因；网络错误会说明具体原因</li>
+          </ul>
+        </div>
+      </article>
+
+      <article class="log-item reveal">
         <div class="log-date">2026-09-17<span class="log-ver">桌面 0.1.44</span></div>
         <div class="log-body">
           <h3>桌面版</h3>
