@@ -2,7 +2,7 @@
  * server/engine/agent/sdk-notices.js —— 之前落进 default warn 的 SDK 消息（2026-09-13 接上）
  *
  * agent-shared.js 的两个 switch（外层 msg.type、system 的 subtype）在 default 之前先问这里；
- * 返回 true = 认识并处理了。字段口径以 sdk.d.ts 为准（SDK 0.3.269）。
+ * 返回 true = 认识并处理了。字段口径以 sdk.d.ts 为准（SDK 0.3.283）。
  *
  * 分三档：
  *   - 要让人知道的：informational（仅 warning 级且不是钩子发的才弹）、拒答两条（进问题库 + toast）
