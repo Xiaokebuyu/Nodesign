@@ -363,7 +363,7 @@ export async function installComponent(id) {
       setJob(id, { status: 'done', progress: 1 });
     } catch (err) {
       console.error(`[components] 装 ${id} 失败：${err.message}`);
-      setJob(id, { status: 'error', error: err.message });
+      // error 等收拾完再报：报早了，界面上立刻点「重装」会跟还在删的半截目录撞上（Windows 删得慢，CI 09-19 撞过）
       try {
         for (const f of fs.readdirSync(getComponentsRoot())) if (f.startsWith(`${id}.`) && f.endsWith('.download')) fs.rmSync(path.join(getComponentsRoot(), f), { force: true });
       } catch { /* */ }
@@ -377,6 +377,7 @@ export async function installComponent(id) {
         try { await rmDir(attempt, { attempts: 2 }); } catch { /* 删不掉就留着，下次装/起动再扫 */ }
         if (live && path.resolve(attempt) === path.resolve(live)) fs.rmSync(installedPath(id), { force: true });
       }
+      setJob(id, { status: 'error', error: err.message });
     }
     // 成功要用新包重开，失败也要把旧的拉回来 —— 别让一次更新把用户的抠图变成不可用
     try { holder?.start(); } catch (err) { console.warn(`[components] 拉起 ${id} 的常驻进程失败：${err.message}`); }

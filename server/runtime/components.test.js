@@ -1,5 +1,5 @@
 /** 组件管理器：对着本地起的假 release（manifest.json + 一个小 zip）跑完整管线；校验失败那条也要红得对。 */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -54,6 +54,14 @@ const srv = http.createServer((req, res) => {
 });
 await new Promise((r) => srv.listen(0, '127.0.0.1', r));
 base = `http://127.0.0.1:${srv.address().port}`;
+// 单测不出网：sourcesFor 总会拼上内置默认镜像（公网），选源时一起探测。公网慢时单个探测等满 8 秒、超过用例的 5 秒上限
+// （09-25 连红三次）；CI 上还会回 403。除了本地假 release，一律当场按连不上处理。
+const realFetch = globalThis.fetch;
+globalThis.fetch = (input, init) => {
+  const u = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
+  if (u.hostname !== '127.0.0.1') return Promise.reject(new TypeError(`fetch failed（单测不出网：${u.host}）`));
+  return realFetch(input, init);
+};
 process.env.NODESIGN_COMPONENTS_MANIFEST = `${base}/manifest.json`;
 const c = await import('./components.js');
 
@@ -68,7 +76,7 @@ const waitJob = async (id, ms = 10_000) => {
   }
 };
 
-afterAll(async () => { await new Promise((r) => srv.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }); });
+afterAll(async () => { globalThis.fetch = realFetch; await new Promise((r) => srv.close(r)); fs.rmSync(dataDir, { recursive: true, force: true }); });
 beforeEach(() => { c._resetComponents(); officialMode = 'ok'; });
 
 describe('components', () => {
@@ -283,9 +291,12 @@ describe('components', () => {
     expect(fs.readFileSync(path.join(root, 'chromium-9', 'tool-1.2', 'bin', 'hello.exe'), 'utf8')).toBe('MZ hello');
     expect(rec.parts.chromium.exe).toBe(path.join(root, 'chromium-9', 'tool-1.2', 'bin', 'hello.exe'));
     expect(c.applyComponentEnv().env.PLAYWRIGHT_BROWSERS_PATH).toBe(root);
-    // 半路一个部件的 exe 对不上 → 整个组件 error，目录清掉，临时下载文件也清掉
+    // 半路一个部件的 exe 对不上 → 整个组件 error，目录清掉，临时下载文件也清掉。
+    // 删目录放慢 150ms（Windows 删得慢）：看到 error 时收拾必须已经做完（CI 09-19 Windows 撞过报早了）
+    const realRm = fs.promises.rm;
+    const slowRm = vi.spyOn(fs.promises, 'rm').mockImplementation(async (...a) => { await new Promise((r) => setTimeout(r, 150)); return realRm(...a); });
     await c.installComponent('browser-bad');
-    const bad = await waitJob('browser-bad');
+    const bad = await waitJob('browser-bad').finally(() => slowRm.mockRestore());
     expect(bad.status).toBe('error');
     expect(bad.error).toContain('ffmpeg');
     expect(fs.existsSync(path.join(dataDir, 'components', 'browser-bad'))).toBe(false);

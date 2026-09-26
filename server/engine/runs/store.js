@@ -52,7 +52,7 @@ raw.exec('PRAGMA foreign_keys = ON');
  * 全仓几十个调用点一行不改。抹平的两处差异：
  *   1. 参数里的 undefined。better-sqlite3 当 NULL 绑，node:sqlite 抛 TypeError。可选字段传 undefined
  *      的调用点到处都是（label、metadata?.x……），靠测试盖不全，在这里统一归成 null。
- *      布尔和普通对象两边都抛，不动 —— 那是调用方的 bug，别替它藏。
+ *      布尔和普通对象不动，照引擎的口径（普通对象抛；布尔 Node 24.21 起存 0/1，之前抛）—— 别替调用方改写。
  *   2. transaction：node:sqlite 没有这个助手，BEGIN / COMMIT / ROLLBACK 手写。不支持嵌套（全仓只有一处用）。
  */
 const nullify = (v) => (v === undefined ? null : v);
