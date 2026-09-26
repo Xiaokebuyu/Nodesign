@@ -6,8 +6,8 @@
  * expires_at 往后推、给浏览器重发一次 cookie。
  *
  * authenticated_at：这条会话**真正验过身份**的时间（密码、验证码、第三方登录、重新验证）。
- * 旧 v2 token 静默换发出来的会话这一列是 null —— 偷到旧 token 的人不能靠换发拿到「刚登录过」，
- * 进而去改邮箱、改密码（account-routes.js 的 recentAuth 判据）。
+ * 09-13 至 09-27 过渡期里由旧 v2 token 静默换发出来的会话（method = legacy_upgrade）这一列是 null ——
+ * 它们不算「刚登录过」，改邮箱、改密码前要重新验证（account-routes.js 的 recentAuth 判据）。
  *
  * 由 hosted/mount.js 通过 session.installSessionBackend 注入内核。
  */
@@ -15,10 +15,7 @@
 import crypto from 'node:crypto';
 import db from '../../engine/runs/store.js';
 import { getUserById, invalidateUserCache } from '../../auth/users-store.js';
-import {
-  cookieValue, sessionCookieName, cookieBaseName, isSecureRequest,
-  cookieSerialize, cookieClear, resolveLegacyAuth, legacyCookieClears,
-} from '../../auth/session.js';
+import { cookieValue, sessionCookieName, cookieSerialize, cookieClear } from '../../auth/session.js';
 import { revokeInternalTokensFor } from '../../auth/internal-credentials.js';
 import { closeUserSockets } from '../../ws/auth-sockets.js';
 import { clientIp } from './client-ip.js';
@@ -49,7 +46,7 @@ const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
 /**
  * 建一条会话。**明文只在返回值里出现一次**。
  * @param {{ userId: string, req: object, method: string, authenticated?: boolean }} opts
- *   method：password / email_code / google / github / register / reset / legacy_upgrade
+ *   method：password / email_code / google / github / register / reset（库里还有过渡期留下的 legacy_upgrade）
  */
 export function createSession({ userId, req, method, authenticated = true, now = Date.now() }) {
   if (!userId) throw new Error('createSession: userId 必填');
@@ -63,16 +60,14 @@ export function createSession({ userId, req, method, authenticated = true, now =
 }
 
 /**
- * 建会话 + 写 cookie（https 下是 `__Host-` 名，顺手清掉旧名）。
+ * 建会话 + 写 cookie（https 下是 `__Host-` 名）。
  * 请求上已经带着一条有效会话（同一个浏览器换号登录 / 重复登录）：先吊销它，别在会话列表里留幽灵行。
  */
 export function startSession(res, opts) {
   const prior = verifySessionToken(cookieValue(opts.req?.headers?.cookie, sessionCookieName(opts.req)));
   if (prior) revokeSession(prior.session.id);
   const { sessionId, token } = createSession(opts);
-  const cookies = [cookieSerialize(token, opts.req, Math.floor(SESSION_TTL_MS / 1000))];
-  if (isSecureRequest(opts.req)) cookies.push(...legacyCookieClears());
-  res.setHeader('Set-Cookie', cookies);
+  res.setHeader('Set-Cookie', [cookieSerialize(token, opts.req, Math.floor(SESSION_TTL_MS / 1000))]);
   return sessionId;
 }
 
@@ -151,53 +146,20 @@ export function revokeUserSessions(userId, { exceptSessionId = null, now = Date.
 /** 注入内核的解析函数（session.installSessionBackend） */
 export function resolveRequest(req) {
   const hit = verifySessionToken(cookieValue(req.headers?.cookie, sessionCookieName(req)));
-  if (hit) {
-    return {
-      user: hit.user,
-      sessionId: hit.session.id,
-      kind: 'session',
-      session: hit.session,
-      onResponse: hit.shouldRefresh
-        ? (res) => { if (!res.headersSent) res.setHeader('Set-Cookie', cookieSerialize(hit.token, req, Math.floor(SESSION_TTL_MS / 1000))); }
-        : undefined,
-    };
-  }
-  // 过渡期：旧 v2 token（同名 cookie 在 https 下是旧名，http 下同名）。认得出来就换发成服务端会话，
-  // 换发出来的会话不算「刚验证过身份」。v2 最迟 30 天后自然全部过期，届时删掉这一段。
-  const legacy = resolveLegacyAuth(req);
-  if (!legacy) return null;
+  if (!hit) return null;
   return {
-    ...legacy,
-    onResponse: (res) => {
-      if (res.headersSent) return;
-      // 一次页面加载会并发打好几个接口，每个都带着旧 cookie：同一枚旧 token 一分钟内只换发一条会话，其余请求复用
-      const key = sha256(cookieValue(req.headers?.cookie, cookieBaseName()) || '');
-      const now = Date.now();
-      for (const [k, v] of legacyUpgrades) if (now - v.at > 60_000) legacyUpgrades.delete(k);
-      let hit = legacyUpgrades.get(key);
-      if (!hit) {
-        hit = { ...createSession({ userId: legacy.user.id, req, method: 'legacy_upgrade', authenticated: false }), at: now };
-        legacyUpgrades.set(key, hit);
-      }
-      res.setHeader('Set-Cookie', [
-        cookieSerialize(hit.token, req, Math.floor(SESSION_TTL_MS / 1000)),
-        ...(isSecureRequest(req) ? legacyCookieClears() : []),
-      ]);
-    },
+    user: hit.user,
+    sessionId: hit.session.id,
+    kind: 'session',
+    session: hit.session,
+    onResponse: hit.shouldRefresh
+      ? (res) => { if (!res.headersSent) res.setHeader('Set-Cookie', cookieSerialize(hit.token, req, Math.floor(SESSION_TTL_MS / 1000))); }
+      : undefined,
   };
 }
 
-/** 旧 token 的哈希 → 刚换发的会话（明文只在内存里停一分钟） */
-const legacyUpgrades = new Map();
-
 export function logoutRequest(req, res) {
   const hit = verifySessionToken(cookieValue(req.headers?.cookie, sessionCookieName(req)));
-  if (hit) {
-    revokeSession(hit.session.id);
-  } else {
-    // 过渡期旧 token 登录的：没有会话行可吊，至少把它建的连接断掉（浏览器共视通道能注入键鼠）
-    const legacy = resolveLegacyAuth(req);
-    if (legacy) closeUserSockets(legacy.user.id, { sessionId: null });
-  }
+  if (hit) revokeSession(hit.session.id);
   res.setHeader('Set-Cookie', cookieClear(req));
 }

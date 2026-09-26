@@ -13,8 +13,9 @@
  * 已发布站点在 `*.share.xiaobuyu.trade`，跟应用同站，站点脚本能写 `Domain=xiaobuyu.trade` 的同名 cookie，
  * 主站照收（下面的解析取第一个同名项）。`__Host-` 前缀的 cookie 浏览器禁止带 Domain 写入，这个面就关上了。
  * 但 `__Host-` 要求 Secure，只能在 https 上用。所以：
- *   - https 请求：只认 `__Host-<base>`；旧 v2 token 只在 NODESIGN_LEGACY_TOKEN_UNTIL 之前从 `<base>` 读（legacyAcceptedOn）
+ *   - https 请求：只认 `__Host-<base>`
  *   - http 请求（本机开发、nginx 的 127.0.0.1:8081 看画布入口）：认 `<base>`
+ * 旧 v2 token 的过渡期（09-13 至 09-27）已结束，线上会话后端不再认它；见 legacyAuth。
  * base 默认 `nd_auth`，exp 实例用 NODESIGN_SESSION_COOKIE 换名，免得同主机不同端口互相覆盖。
  *
  * ## 内部凭证
@@ -72,8 +73,7 @@ function timingSafeEq(a, b) {
 }
 
 /**
- * 旧 v2 token。线上路径已经不签发（登录一律建服务端会话）；留着给开发探针脚本（server/_probe-*.mjs）
- * 和过渡期的静默换发。
+ * 旧 v2 token。线上路径不签发也不认（登录一律建服务端会话）；只剩没装会话后端的脚本与单测用它。
  */
 export function mintToken(userId, now = Date.now()) {
   const payload = `v2.${userId}.${now + LEGACY_TTL_MS}`;
@@ -122,7 +122,7 @@ export function tokenFromCookieHeader(cookieHeader) {
  * @property {object} user
  * @property {string|null} sessionId   服务端会话 id；内部凭证 / 旧 token / 本地版为 null
  * @property {'session'|'legacy'|'internal'|'local'} kind
- * @property {(res: import('http').ServerResponse) => void} [onResponse]  需要写 cookie 时（续期 / 旧 token 换发）
+ * @property {(res: import('http').ServerResponse) => void} [onResponse]  需要写 cookie 时（续期）
  */
 let backend = null;
 
@@ -140,21 +140,12 @@ export function _resetSessionBackend() {
 }
 
 /**
- * https 下旧 v2 token 认到什么时候（NODESIGN_LEGACY_TOKEN_UNTIL，ISO 时间）。不设 = https 下不认。
- *
- * 为什么要有期限：旧 token 住在不带前缀的 `nd_auth` 里，`*.share` 子域的发布页能往这个名字投 cookie
- * （Domain=xiaobuyu.trade）。攻击者拿自己上线前的 v2 token 投进去，没登录的访客就会被换发成攻击者账号的会话
- * （fable 09-13 代码评审）。这个面只能靠缩短过渡期收窄，所以期限必须显式配置。
- * http（本机开发、127.0.0.1:8081 看画布入口）不受限：那些主机名不在 xiaobuyu.trade 下，子域投不进来。
+ * 旧 v2 token，只在没装会话后端时（脚本、单测直接起内核）、且只在 http 上认。
+ * https 一律不认：旧 token 住在不带前缀的 `nd_auth` 里，`*.share` 子域的发布页能往这个名字投 cookie
+ * （Domain=xiaobuyu.trade），认了就能让访客登进投放者的账号（fable 09-13 代码评审）。
  */
-export function legacyAcceptedOn(req, now = Date.now()) {
-  if (!isSecureRequest(req)) return true;
-  const until = Date.parse(String(process.env.NODESIGN_LEGACY_TOKEN_UNTIL || ''));
-  return Number.isFinite(until) && now < until;
-}
-
 function legacyAuth(req) {
-  if (!legacyAcceptedOn(req)) return null;
+  if (isSecureRequest(req)) return null;
   const hit = verifyLegacyToken(cookieValue(req.headers?.cookie, cookieBaseName()));
   if (!hit) return null;
   const user = getUserById(hit.userId);
@@ -192,9 +183,6 @@ export function requestAuthed(req) {
   return !!requestUser(req);
 }
 
-/** hosted 的会话后端用：旧 token 解析（带 sessions_valid_after 判据） */
-export { legacyAuth as resolveLegacyAuth };
-
 /** 退出登录：有后端交给后端（吊销会话行），否则只清 cookie */
 export function logoutRequest(req, res) {
   if (backend?.logout) return backend.logout(req, res);
@@ -213,21 +201,8 @@ export function cookieSerialize(token, req, maxAgeSec = Math.floor(LEGACY_TTL_MS
   return attrs.join('; ');
 }
 
-/**
- * 清旧名 cookie 的 Set-Cookie 列表：本主机那份 + 父域那份（NODESIGN_COOKIE_PARENT_DOMAIN，如 xiaobuyu.trade）。
- * 父域那份是子域发布页可能投进来的，只清本主机的删不掉它。投的人换个 Path 还能再投，这只是尽量清，
- * 真正的闸是 legacyAcceptedOn 的期限。
- */
-export function legacyCookieClears() {
-  const base = cookieBaseName();
-  const out = [`${base}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`];
-  const parent = String(process.env.NODESIGN_COOKIE_PARENT_DOMAIN || '').trim();
-  if (/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(parent)) out.push(`${base}=; Domain=${parent}; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
-  return out;
-}
-
-/** 清掉这个请求上的会话 cookie；https 下连旧名一起清（过渡期换发后不留两份） */
+/** 清掉这个请求上的会话 cookie */
 export function cookieClear(req) {
   if (!isSecureRequest(req)) return [`${cookieBaseName()}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`];
-  return [`__Host-${cookieBaseName()}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`, ...legacyCookieClears()];
+  return [`__Host-${cookieBaseName()}=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0`];
 }

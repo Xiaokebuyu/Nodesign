@@ -177,33 +177,15 @@ describe('cookie 与旧 token', () => {
     expect((await call('/api/ping', { cookie: `__Host-nd_auth=${value}`, https: true })).status).toBe(200);
     expect((await call('/api/ping', { cookie: `nd_auth=${value}`, https: true })).status).toBe(401);
   });
-  it('攻击：没配过渡期（NODESIGN_LEGACY_TOKEN_UNTIL）时，https 下不认旧名里的 v2 token', async () => {
+  it('09-27 过渡期结束：旧名里的 v2 token 一律不认，https 与 http 入口都是 401，也不换发会话', async () => {
     const { user } = await register();
+    process.env.NODESIGN_LEGACY_TOKEN_UNTIL = new Date(Date.now() + 86400_000).toISOString();   // 残留的配置不再起作用
+    for (const https of [true, false]) {
+      const r = await call('/api/ping', { cookie: `nd_auth=${mintToken(user.id)}`, https });
+      expect(r.status).toBe(401);
+      expect(r.headers.get('set-cookie')).toBeNull();
+    }
     delete process.env.NODESIGN_LEGACY_TOKEN_UNTIL;
-    expect((await call('/api/ping', { cookie: `nd_auth=${mintToken(user.id)}`, https: true })).status).toBe(401);
-    process.env.NODESIGN_LEGACY_TOKEN_UNTIL = new Date(Date.now() - 1000).toISOString();
-    expect((await call('/api/ping', { cookie: `nd_auth=${mintToken(user.id)}`, https: true })).status).toBe(401);
-    // http（本机入口）不受期限约束
-    expect((await call('/api/ping', { cookie: `nd_auth=${mintToken(user.id)}` })).status).toBe(200);
-    delete process.env.NODESIGN_LEGACY_TOKEN_UNTIL;
-  });
-  it('旧 v2 token：过渡期内 https 下从旧名读到、换发成 __Host- 会话，连父域那份一起清；换发出的会话不算刚验证过身份', async () => {
-    process.env.NODESIGN_LEGACY_TOKEN_UNTIL = new Date(Date.now() + 86400_000).toISOString();
-    process.env.NODESIGN_COOKIE_PARENT_DOMAIN = 'xiaobuyu.trade';
-    const { user } = await register();
-    const legacy = `nd_auth=${mintToken(user.id)}`;
-    const r = await jsonOf(await call('/api/ping', { cookie: legacy, https: true }));
-    expect(r.body).toMatchObject({ kind: 'legacy', userId: user.id });
-    expect(r.cookies[0]).toMatch(/^__Host-nd_auth=s1\./);
-    expect(r.cookies[1]).toMatch(/^nd_auth=; /);
-    expect(r.cookies.some((c) => /^nd_auth=; Domain=xiaobuyu\.trade;/.test(c))).toBe(true);
-    const upgraded = cookieHeader(r.cookies);
-    expect((await jsonOf(await call('/api/ping', { cookie: upgraded, https: true }))).body.kind).toBe('session');
-    const acct = await jsonOf(await call('/api/me/account', { cookie: upgraded, https: true }));
-    expect(acct.body.recentAuth).toBe(false);
-    expect((await call('/api/me/account/email/start', { method: 'POST', cookie: upgraded, https: true, body: { email: newEmail() } })).status).toBe(403);
-    delete process.env.NODESIGN_LEGACY_TOKEN_UNTIL;
-    delete process.env.NODESIGN_COOKIE_PARENT_DOMAIN;
   });
   it('内部凭证能过 authGuard', async () => {
     const { user } = await register();
@@ -213,9 +195,8 @@ describe('cookie 与旧 token', () => {
 });
 
 describe('找回密码', () => {
-  it('全链路：重设令牌一次性；弱密码不收；成功后旧会话、旧 v2、桌面设备、内部凭证全部失效；发通知', async () => {
+  it('全链路：重设令牌一次性；弱密码不收；成功后旧会话、桌面设备、内部凭证全部失效；发通知', async () => {
     const { email, user, cookie } = await register();
-    const legacyCookie = `nd_auth=${mintToken(user.id, Date.now() - 1000)}`;
     const internal = mintInternalCookie(user.id);
     const { token: deviceToken } = mintDevice({ userId: user.id, label: 'test' });
     expect(verifyDeviceToken(deviceToken)).not.toBeNull();
@@ -230,7 +211,6 @@ describe('找回密码', () => {
     expect((await call('/api/auth/password/reset', { method: 'POST', body: { resetToken, password: 'another-violet-9' } })).status).toBe(400);
 
     expect((await call('/api/ping', { cookie })).status).toBe(401);
-    expect((await call('/api/ping', { cookie: legacyCookie })).status).toBe(401);
     expect((await call('/api/ping', { cookie: `${internal.name}=${internal.value}` })).status).toBe(401);
     expect(verifyDeviceToken(deviceToken)).toBeNull();
     expect((await call('/api/ping', { cookie: cookieHeader(done.cookies) })).status).toBe(200);

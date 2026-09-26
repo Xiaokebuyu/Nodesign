@@ -10,10 +10,10 @@
 | `NODESIGN_SES_ACCESS_KEY_ID` / `NODESIGN_SES_SECRET_ACCESS_KEY` | 栈 `nodesign-ses` 的 SenderUser 在控制台生成的访问密钥 | 同一把即可 |
 | `NODESIGN_MAIL_PROVIDER` | 不设（钥匙齐了自动 ses） | 不设 |
 | `NODESIGN_TURNSTILE_SITE_KEY` / `NODESIGN_TURNSTILE_SECRET_KEY` | Cloudflare 控制台建的 Invisible 组件 | 同一个组件（域名一致） |
-| `NODESIGN_LEGACY_TOKEN_UNTIL` | **站主定**：旧登录状态在 https 下认到什么时候（ISO 时间）。不设 = 上线即全员重新登录一次 | 不设 |
-| `NODESIGN_COOKIE_PARENT_DOMAIN` | `xiaobuyu.trade`（换发 / 退出时连父域那份旧 cookie 一起清） | 同 |
+| ~~`NODESIGN_LEGACY_TOKEN_UNTIL`~~ | 已作废：过渡期 09-13 至 09-27 结束，兼容分支已删，代码不再读它，`.env` 里可以删掉 | — |
+| ~~`NODESIGN_COOKIE_PARENT_DOMAIN`~~ | 已作废：只用于过渡期清父域旧 cookie，随兼容分支一起删 | — |
 
-⚠️ `NODESIGN_LEGACY_TOKEN_UNTIL` 的取舍：过渡期内，能发布站点的账号（pro 档）可以从 `*.share` 子域往旧 cookie 名里投自己的旧登录状态，
+（历史记录）⚠️ `NODESIGN_LEGACY_TOKEN_UNTIL` 的取舍：过渡期内，能发布站点的账号（pro 档）可以从 `*.share` 子域往旧 cookie 名里投自己的旧登录状态，
 让没登录的访客被登进攻击者的账号（fable 09-13 代码评审，只能缩短窗口不能消除）。反过来，不给过渡期时，150 个没绑邮箱的老用户里
 忘了密码的人就再也登不回来。建议：给 14 天，同时上线「绑定邮箱」提示条，让老用户在还登着的时候把邮箱绑上。
 
