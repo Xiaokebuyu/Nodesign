@@ -89,7 +89,10 @@ async function installSkillFor(user, name) {
   expect([200, 201]).toContain(r.status);
 }
 
-describe('市场：发布即上架（09-08 站主定：初期不审核）', () => {
+// 每条用例 30 来次请求加插件安装、打包、写图，Windows CI 正常 0.3～0.5 秒一条。09-18 那次 runner 整体被拖慢
+// （同一 worker 里纯算术的 featuredSlotsFor 用了 180ms、超时计时器晚 3.8 秒才触发），第一条过了默认 5 秒，
+// 超时的用例不会被叫停、剩下的请求接着跑，beforeEach 又清表，后面两条跟着连环红。上限照仓库里文件 / git 密集测试的口径给 30 秒。
+describe('市场：发布即上架（09-08 站主定：初期不审核）', { timeout: 30_000 }, () => {
   it('新发布直接 approved，货架上立刻有；审核台仍能事后下架', async () => {
     expect(DEFAULT_PUBLISH_STATE).toBe('approved');
     const author = makeUser(); const other = makeUser(); const admin = makeUser('admin');
@@ -108,7 +111,7 @@ describe('市场：发布即上架（09-08 站主定：初期不审核）', () =
   });
 });
 
-describe('市场：发布 → 审核 → 货架 → 安装（先审后上架那条流程，DEFAULT 改回 pending 时就是它）', () => {
+describe('市场：发布 → 审核 → 货架 → 安装（先审后上架那条流程，DEFAULT 改回 pending 时就是它）', { timeout: 30_000 }, () => {
   beforeAll(() => _setPublishState('pending'));
   afterAll(() => _setPublishState(DEFAULT_PUBLISH_STATE));
   it('网页发布：从装着的 skill 打包 + 上传参考图 → pending；作者看得到，别人 404；站主审过才上架', async () => {
@@ -307,7 +310,7 @@ describe('市场：发布 → 审核 → 货架 → 安装（先审后上架那�
 });
 
 
-describe('市场 v2（09-08 晚）：作品发布 / 原地更新 / 照着来一个 / agent 注册口', () => {
+describe('市场 v2（09-08 晚）：作品发布 / 原地更新 / 照着来一个 / agent 注册口', { timeout: 30_000 }, () => {
   it('作品（无 skill）：发布 201 kind=work；安装与下载 409 NO_SKILL；同一橱窗条目再发 = 原地更新不新增', async () => {
     const author = makeUser(); const other = makeUser();
     users.set(author.id, author); users.set(other.id, other);
