@@ -47,7 +47,7 @@ const RESERVED_UPSTREAMS = new Set(RESERVED_UPSTREAM_IDS);
  *   - 订阅 Claude 行（没有 api 段：claude-sonnet-5 / claude-opus-5[1m] …）**保留**。它们是 sdkAlias 的落点、
  *     SHARED_SDK_ALIAS 的本体，用户的 API 行顶上去会让 model-context 的结构断言炸；要用官方 Claude 走
  *     「Claude 官方」那张卡（claude login 或 API Key），不是插槽。
- *   - 内置 API 行（deepseek-v4-flash-vision / kimi-k3 / glm-5.3-flash-* …）**可被同名插槽顶替**：
+ *   - 内置 API 行（deepseek-v4.1-flash / kimi-k3 / glm-5.3-flash-* …）**可被同名插槽顶替**：
  *     插槽编辑器把上游模型名直接当 id（idFromWire），用户拿自己的钥匙接「和站里同一个模型」是最常见的
  *     BYOK 场景，以前一律拒「内置模型名，换一个」等于逼他起别名、选择器里再多出一条重复的。
  *     顶替 = 表里只剩用户那行（model-context 合并时把同名内置行去掉），本机钥匙优先，跟 modelSourceFor

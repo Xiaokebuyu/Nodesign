@@ -82,7 +82,7 @@ describe('派生导出（旧签名不变）', () => {
       const sub = { role: 'user', plan: 'pro' };
       const pubSel = selectableModelsFor(pub);
       expect(pubSel.find((m) => m.id === 'claude-sonnet-5-5[1m]')?.locked).toBe(true);
-      expect(pubSel.find((m) => m.id === 'deepseek-v4-flash-vision')?.locked).toBeUndefined();
+      expect(pubSel.find((m) => m.id === 'deepseek-v4.1-flash')?.locked).toBeUndefined();
       expect(pubSel.find((m) => m.id === 'glm-5.3-flash-merge')?.locked).toBeUndefined();
       expect(allowedModelsFor(pub).map((m) => m.id)).not.toContain('claude-sonnet-5-5[1m]');
       expect(allowedModelsFor(pub).map((m) => m.id)).toContain('glm-5.3-flash-merge');
@@ -110,9 +110,9 @@ describe('派生导出（旧签名不变）', () => {
       expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5-5[1m]')).toMatch(/新建一个会话/);
       expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5-5[1m]')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
       expect(crossLaneSwitchReason('gemini-3.7-flash', 'glm-5.3-flash-merge')).toBeNull();
-      // 同为 openai-chat 的两行互切不算跨线（原先钉在 Ox 高/深想两行上，08-26 换成 glm ↔ deepseek 视觉）
-      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
-      expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5-5[1m]')).toMatch(/新建一个会话/);
+      // 同为 openai-chat 的两行互切不算跨线（原先钉在 Ox 高/深想两行上，08-26 换成 glm ↔ deepseek 视觉，10-11 那行撤了换成官方直连的 deepseek）
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4.1-flash')).toBeNull();
+      expect(crossLaneSwitchReason('deepseek-v4.1-flash', 'claude-opus-5-5[1m]')).toMatch(/新建一个会话/);
       expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
       // ⭐⭐ Merge 网关上那**两条** GLM 行的厂商（08-28 建，08-30 拆两行，09-08 上午点死 particle，晚上撤销点名，
       //   **09-08 深夜点死 zai**）。不点名时网关来回换家，缓存跟着冷（站主一轮五发两发命中 0）；目录核过 particle
@@ -157,7 +157,7 @@ describe('派生导出（旧签名不变）', () => {
   });
 
   it('spoof：API 行给 alias，订阅/未知原样返回', () => {
-    expect(resolveSdkSpoofModel('deepseek-v4-flash-vision')).toBe('claude-opus-4-7[1m]');
+    expect(resolveSdkSpoofModel('deepseek-v4.1-flash')).toBe(SHARED_SDK_ALIAS);   // 不写 sdkAlias 的行走共用别名
     expect(resolveSdkSpoofModel('gemini-3.7-flash')).toBe('claude-opus-4-6[1m]');
     expect(resolveSdkSpoofModel('claude-sonnet-5-5[1m]')).toBe('claude-sonnet-5-5[1m]');
     expect(resolveSdkSpoofModel('made-up-model')).toBe('made-up-model');
@@ -166,7 +166,7 @@ describe('派生导出（旧签名不变）', () => {
 
   it('window：查表 + pattern fallback + null', () => {
     expect(resolveModelContextWindow('gemini-3.7-flash')).toBe(1_000_000);
-    expect(resolveModelContextWindow('deepseek-v4-flash-vision')).toBe(272_000);
+    expect(resolveModelContextWindow('kimi-k3')).toBe(272_000);
     expect(resolveModelContextWindow('claude-sonnet-5')).toBe(200_000);
     expect(resolveModelContextWindow('kimi-future-model')).toBe(256_000);
     expect(resolveModelContextWindow('whatever[1m]')).toBe(1_000_000);
@@ -177,7 +177,7 @@ describe('派生导出（旧签名不变）', () => {
     expect(pickThinkingConfig('claude-sonnet-5-5[1m]')).toEqual({ type: 'adaptive', display: 'summarized' });
     expect(pickThinkingConfig('claude-opus-4-7[1m]')).toEqual({ type: 'adaptive', display: 'summarized' });
     expect(pickThinkingConfig('gemini-3.7-flash')).toEqual({ type: 'enabled', budgetTokens: 8192 });
-    expect(pickThinkingConfig('deepseek-v4-flash-vision')).toEqual({ type: 'enabled', budgetTokens: 8192 });
+    expect(pickThinkingConfig('deepseek-v4.1-flash')).toEqual({ type: 'enabled', budgetTokens: 8192 });
     expect(pickThinkingConfig('claude-haiku-4-5')).toEqual({ type: 'enabled', budgetTokens: 8192 });
   });
 });
@@ -190,7 +190,7 @@ describe('brand（模型出自谁家，08-21）', () => {
   });
 
   it('brandOfModel：认识的按表回答，不认识的回 null（调用方自己兜底，不猜）', () => {
-    expect(brandOfModel('deepseek-v4-flash-vision')).toBe('deepseek');
+    expect(brandOfModel('deepseek-v4.1-flash')).toBe('deepseek');
     // 08-26：Ox 下架，接替它的 glm 行是**公开身份**的 Z.ai 模型 → 自己的标，不再走供应商方块。
     // 'opencode' 那枚仍在 BRANDS 里留给下一个隐身行（Zen 目录一直有那类行）
     expect(brandOfModel('glm-5.3-flash-merge')).toBe('glm');
@@ -202,9 +202,9 @@ describe('brand（模型出自谁家，08-21）', () => {
   });
 
   it('⚠️ 别拿 sdkAlias 认牌子：DeepSeek 行 spoof 成 Claude 名，照 alias 认会把鲸画成星芒', () => {
-    expect(resolveSdkSpoofModel('deepseek-v4-flash-vision')).toMatch(/^claude-/);
-    expect(brandOfModel('deepseek-v4-flash-vision')).toBe('deepseek');
-    expect(brandOfModel(resolveSdkSpoofModel('deepseek-v4-flash-vision'))).toBe('claude');
+    expect(resolveSdkSpoofModel('deepseek-v4.1-flash')).toMatch(/^claude-/);
+    expect(brandOfModel('deepseek-v4.1-flash')).toBe('deepseek');
+    expect(brandOfModel(resolveSdkSpoofModel('deepseek-v4.1-flash'))).toBe('claude');
   });
 });
 
@@ -438,26 +438,27 @@ describe('共用 sdkAlias 的内置行（08-25 建；09-08 MiniMax 撤行后样�
   });
 });
 
-describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜；09-11 出口换 v4.1）', () => {
-  it('走 zenGo 上游、真名 deepseek-v4.1-flash（id 不改）、alias opus-4-7[1m]、窗口 272k、helper 是通用 helper 行', () => {
-    const r = resolveModelRoute('deepseek-v4-flash-vision');
-    expect(r.mode).toBe('api');
-    expect(r.upstream).toBe(UPSTREAMS.zenGo);
-    expect(r.upstream.baseUrl).toBe('https://opencode.ai/zen/go/v1');
-    expect(r.sdkAlias).toBe('claude-opus-4-7[1m]');   // kimi 退役腾出的 1M 名；窗口用户拍板 272k
-    expect(r.window).toBe(272_000);
-    expect(resolveModelContextWindow(r.sdkAlias)).toBeGreaterThanOrEqual(r.window);
-    expect(r.fastModel).toBe('deepseek-v4-flash-helper');   // 08-26 从 ox-alpha-helper 改过来（Ox 整族下架，那条 helper 的失效不出声）
-    expect(resolveWireModel('claude-opus-4-7')?.wireModel).toBe('deepseek-v4.1-flash');
+describe('zenGo 上的行 10-11 全撤（站主的 OpenCode Go 订阅停了，上游每一发 403）', () => {
+  it('两条可选行不在表里、独占别名 opus-4-7 腾出；helper 行 id 不变、改走 Merge 网关的 GLM；默认行照旧', () => {
+    // helper 行：全表的 fastModel 都指着它，id 不能动；出口换到全员默认行那条线（当天实测带图答对）
+    const h = resolveModelRoute('deepseek-v4-flash-helper');
+    expect(h.mode).toBe('api');
+    expect(h.upstream).toBe(UPSTREAMS.merge);
+    const hw = resolveWireModel('deepseek-v4-flash-helper');
+    expect(hw).toMatchObject({ wireModel: 'zai/glm-5.3-flash', protocol: 'openai-chat', reasoningEffort: 'low', maxImages: 8, bodyExtra: { vendors: ['zai'] } });
+    expect(priceTokens('deepseek-v4-flash-helper', { input: 1_000_000 })).toBeCloseTo(0.015, 6);
+    // 内置表里一行都不再挂在 zenGo 上（上游定义留着：本地版用户可以拿自己的钥匙配插槽）
+    expect(MODEL_ROWS.filter((m) => m.api?.upstream === 'zenGo').map((m) => m.id)).toEqual([]);
+    expect(UPSTREAMS.zenGo.baseUrl).toBe('https://opencode.ai/zen/go/v1');
+    expect(resolveWireModel('claude-opus-4-7')).toBe(null);   // 撤掉的 DeepSeek 行占过的独占别名，不再可路由
     expect(resolveWireModel('claude-opus-4-5')).toBe(null);   // 那个 200k 空名没再占
     expect(resolveWireModel('claude-sonnet-4-6[1m]')).toBe(null);   // 3.1-pro 退役腾出的名 = 现在的共用别名，不进全表反查
     expect(resolveWireModel('claude-sonnet-5')).toBe(null);   // 订阅默认名仍不可路由
-    // 08-21 深夜开闸给所有档（basic 靠 $5/天日限管着）
-    expect(SELECTABLE_MODELS.find((m) => m.id === 'deepseek-v4-flash-vision')?.gate).toBeUndefined();
-    for (const u of [{ role: 'user', plan: 'basic' }, { role: 'user', plan: 'pro' }, { role: 'admin' }]) {
-      expect(allowedModelsFor(u).map((m) => m.id)).toContain('deepseek-v4-flash-vision');
+    // 没有任何一行的 fastModel / standby 还指着撤掉的行
+    for (const m of MODEL_ROWS) {
+      expect(['deepseek-v4-flash-vision', 'glm-5.3-flash-go'], m.id).not.toContain(m.api?.fastModel);
+      expect(['deepseek-v4-flash-vision', 'glm-5.3-flash-go'], m.id).not.toContain(m.standby);
     }
-    expect(modelIsFree('deepseek-v4-flash-vision')).toBe(false);   // 付费行：走 checkQuota 的美元日限，不走免费轮次闸
     // 08-27 接替 zenGo 那条 glm 的 merge 网关行：上游真名带 vendor 前缀，共用别名（没写 sdkAlias）
     const g = resolveModelRoute('glm-5.3-flash-merge');
     expect(g.upstream).toBe(UPSTREAMS.merge);
@@ -468,7 +469,7 @@ describe('OpenCode Go · DeepSeek V4 Flash Vision 行（08-21 深夜；09-11 出
     expect(modelIsFree('glm-5.3-flash-merge')).toBe(false);
     // ⛔ 下架的名字一个都不许还查得到（留着 = 请求带着别人的钥匙打一个 401 的真名）
     // 08-27 起 glm-5.3-flash（/zen/go 那条）也在这份名单里：撤行不删干净 = 老会话拿着它继续路由
-    for (const id of ['ox-alpha', 'ox-alpha-max', 'ox-alpha-helper', 'glm-5.3-flash']) {
+    for (const id of ['ox-alpha', 'ox-alpha-max', 'ox-alpha-helper', 'glm-5.3-flash', 'deepseek-v4-flash-vision', 'glm-5.3-flash-go']) {
       expect(resolveWireModel(id), id).toBe(null);
       expect(resolveModelRoute(id).mode, id).toBe('subscription');   // 不认识的名字退回订阅通路，不瞎猜
     }

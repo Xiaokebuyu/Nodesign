@@ -166,11 +166,11 @@ describe('关门时段：内置行也能在管理台上改', () => {
   });
 
   it('给一条本来没时段的行加上关门（内置行的出厂值是空）', async () => {
-    const r = await patchHours('deepseek-v4-flash-vision', { why: '夜里不开', tz: 'Asia/Shanghai', windows: ['23:00-02:00'] });
+    const r = await patchHours('deepseek-v4.1-flash', { why: '夜里不开', tz: 'Asia/Shanghai', windows: ['23:00-02:00'] });
     expect(r.status).toBe(200);
-    const row = adminModelList(new Date(Date.UTC(2026, 8, 10, 16, 0))).find((m) => m.id === 'deepseek-v4-flash-vision');   // 北京 00:00
+    const row = adminModelList(new Date(Date.UTC(2026, 8, 10, 16, 0))).find((m) => m.id === 'deepseek-v4.1-flash');   // 北京 00:00
     expect(row.closedNow.resumesAt).toBe('2026-09-10T18:00:00.000Z');   // 北京 02:00
-    await patchHours('deepseek-v4-flash-vision', 'reset');
+    await patchHours('deepseek-v4.1-flash', 'reset');
   });
 
   it('写坏了当场 400，不落库', async () => {

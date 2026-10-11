@@ -16,7 +16,7 @@ function makeUser({ role = 'user', plan = 'basic', lifetime = null, daily = null
 /** 未知 model 名 → resolveModelRoute 判为订阅通路（走站主账号那条） */
 const SUBSCRIPTION_BODY = { model: 'claude-sonnet-5', messages: [{ role: 'user', content: '你好' }] };
 /** 表里的 API 行（deepseek 经 ingress）：订阅腿开关跟它无关 */
-const API_BODY = { model: 'deepseek-v4-flash-vision', messages: [{ role: 'user', content: '你好' }] };
+const API_BODY = { model: 'deepseek-v4.1-flash', messages: [{ role: 'user', content: '你好' }] };
 const pass = async () => ({ ok: true, level: 'strict' });
 
 beforeEach(() => { _resetSeen(); });

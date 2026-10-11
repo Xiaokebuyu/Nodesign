@@ -46,7 +46,7 @@ describe('sessionStatus', () => {
       expect(st.sessions.find((s) => s.sessionId === lone).note).toContain('没有 query');
       switchSessionToStandby(sid);
       st = sessionStatus();
-      expect(st.sessions.find((s) => s.sessionId === sid)).toMatchObject({ model: 'deepseek-v4-flash-vision', origModel: 'glm-5.3-flash-merge', switchedToStandby: true });
+      expect(st.sessions.find((s) => s.sessionId === sid)).toMatchObject({ model: 'deepseek-v4.1-flash-merge', origModel: 'glm-5.3-flash-merge', switchedToStandby: true });
     } finally { unregisterQuerySession(sid); unregisterIngressSession(sid); unregisterIngressSession(lone); }
   });
 });

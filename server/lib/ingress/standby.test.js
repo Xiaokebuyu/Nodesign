@@ -13,8 +13,8 @@ describe('模型表 standby', () => {
       if (!sb) continue;   // 订阅行没有 standby
       expect(sb).not.toBe(m.id);
     }
-    expect(standbyModelOf('glm-5.3-flash-merge')).toBe('deepseek-v4-flash-vision');
-    expect(standbyModelOf('deepseek-v4-flash-vision')).toBe('glm-5.3-flash-merge');
+    expect(standbyModelOf('glm-5.3-flash-merge')).toBe('deepseek-v4.1-flash-merge');
+    expect(standbyModelOf('deepseek-v4.1-flash')).toBe('glm-5.3-flash-merge');
     expect(standbyModelOf('claude-opus-5-5[1m]')).toBeNull();
   });
 });
@@ -24,11 +24,11 @@ describe('switchSessionToStandby：会话级换线', () => {
     registerIngressSession('sw1', 'glm-5.3-flash-merge');
     try {
       expect(resolveSessionWire('glm-5.3-flash-merge', 'sw1').wire.upstreamId).toBe('merge');
-      expect(switchSessionToStandby('sw1')).toEqual({ from: 'glm-5.3-flash-merge', to: 'deepseek-v4-flash-vision' });
+      expect(switchSessionToStandby('sw1')).toEqual({ from: 'glm-5.3-flash-merge', to: 'deepseek-v4.1-flash-merge' });
       const r = resolveSessionWire('glm-5.3-flash-merge', 'sw1');
       expect(r.role).toBe('main');
-      expect(r.wire.appModel).toBe('deepseek-v4-flash-vision');
-      expect(sessionMainModel('sw1')).toBe('deepseek-v4-flash-vision');
+      expect(r.wire.appModel).toBe('deepseek-v4.1-flash-merge');
+      expect(sessionMainModel('sw1')).toBe('deepseek-v4.1-flash-merge');
       expect(switchSessionToStandby('sw1')).toBeNull();   // 不来回跳
     } finally { unregisterIngressSession('sw1'); }
   });
@@ -53,7 +53,7 @@ describe('makeStandbySwitcher', () => {
       expect(issues[0].summary).toContain('Merge');
       expect(fs.map.has('sw3:main')).toBe(false);
       expect(notices[0].key).toBe('upstream_standby');
-      expect(notices[0].text).toContain('deepseek-v4-flash-vision');
+      expect(notices[0].text).toContain('deepseek-v4.1-flash-merge');
       expect(sw('HTTP 503')).toBe(false);
       expect(issues).toHaveLength(2);   // 第二次没得换了，告警照记
     } finally { unregisterIngressSession('sw3'); }

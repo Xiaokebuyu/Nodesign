@@ -25,13 +25,13 @@ const fake = http.createServer((req, res) => {
     return;
   }
   if (req.url === '/api/relay/whoami') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ user: { id: 'u1', username: 'a', tier: 'basic' } })); return; }
-  // 目录里放的就是桌面用户实际挑的那一行：本机没有 zenGo 的钥匙，全靠 relay 供着
+  // 目录里放一条内置 API 行：本机没有它上游的钥匙，全靠 relay 供着（10-11 前用的是 zenGo 的 DeepSeek 行，已撤）
   if (req.url === '/api/relay/models') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ models: [{ id: RELAY_MODEL, locked: false }] })); return; }
   if (req.method === 'DELETE') { res.writeHead(204); res.end(); return; }
   res.writeHead(404); res.end();
 });
 
-const RELAY_MODEL = 'deepseek-v4-flash-vision';   // 内置行，上游 zenGo，fastModel 是那条 helper 行
+const RELAY_MODEL = 'deepseek-v4.1-flash';   // 内置行，上游 deepseek 官方，fastModel 是那条 helper 行
 const TOKEN = 'ndk_test.secret';
 
 await new Promise((r) => fake.listen(0, '127.0.0.1', r));
@@ -41,7 +41,7 @@ process.env.NODESIGN_PROFILE = 'local';
 process.env.NODESIGN_RELAY_URL = RELAY_URL;
 process.env.NODESIGN_RELAY_TOKEN = TOKEN;
 // ⭐ 这一行是「本机没钥匙」的全部含义：有它就是 BYOK 自己走 ingress，没有才轮得到 relay
-delete process.env.NODESIGN_UPSTREAM_ZEN_KEY;
+delete process.env.NODESIGN_UPSTREAM_DEEPSEEK_KEY;
 
 const rc = await import('../../runtime/relay-client.js');
 const { buildEnv, releaseUpstream } = await import('./env.js');

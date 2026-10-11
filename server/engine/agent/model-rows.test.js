@@ -5,7 +5,7 @@ import { MODELS_BUILTIN, UPSTREAMS_BUILTIN, SHARED_SDK_ALIAS } from './model-tab
 
 const BASE = MODELS_BUILTIN.map(withDefaultAlias);
 const noKeys = { keyPresent: () => false };
-const VISION = 'deepseek-v4-flash-vision';   // 内置 API 行（zenGo）
+const VISION = 'deepseek-v4.1-flash';   // 内置 API 行（10-11 前这里用的是 zenGo 的 DeepSeek 行，已撤；常量名沿用）
 const HELPER = 'deepseek-v4-flash-helper';
 const api = (id, extra = {}) => ({ id, locked: false, mode: 'api', label: `L-${id}`, desc: 'd', brand: 'deepseek', window: 500_000, sdkAlias: SHARED_SDK_ALIAS, fastModel: HELPER, protocol: 'openai-chat', prices: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 0 }, ...extra });
 const cat = (models, renames = {}) => ({ ok: true, models, renames });
@@ -30,8 +30,8 @@ describe('mergeRelayRows', () => {
 
   it('本机没钥匙的内置行：被目录那份**原位**顶替（名字、窗口、别名都跟站点走），选择器顺序不乱', () => {
     const idx = BASE.findIndex((m) => m.id === VISION);
-    const r = merge(cat([api(VISION, { label: 'DeepSeek V4.1 Flash · OpenCode Go', window: 272_000, sdkAlias: 'claude-opus-4-7[1m]' })]));
-    expect(r.models[idx]).toMatchObject({ id: VISION, relay: true, select: { label: 'DeepSeek V4.1 Flash · OpenCode Go' } });
+    const r = merge(cat([api(VISION, { label: 'DeepSeek V4.1 Flash · 站点那份', window: 272_000, sdkAlias: 'claude-opus-4-7[1m]' })]));
+    expect(r.models[idx]).toMatchObject({ id: VISION, relay: true, select: { label: 'DeepSeek V4.1 Flash · 站点那份' } });
     expect(r.models[idx].api.sdkAlias).toBe('claude-opus-4-7[1m]');
     expect(r.models).toHaveLength(BASE.length);
   });

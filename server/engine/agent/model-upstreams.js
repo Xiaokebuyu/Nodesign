@@ -47,7 +47,7 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
   // （它的 /v1/messages 桥一带 tools 就 [1210]，四种写法探死）。protocol 'openai-chat'
   // 让 ingress 走 lib/ingress/openai-chat.js 的协议转换而不是透传；其余上游没有这个
   // 字段 = 透传 Anthropic。钥匙在 .env（NODESIGN_UPSTREAM_ZEN_KEY），两个入口同一把。
-  // 今天没有行挂在它上面（内置行全在下面的 zenGo）；留着的理由是这家的**免费 stealth 行只在这个
+  // 今天没有行挂在它上面（内置行原来全在下面的 zenGo，10-11 也全撤了）；留着的理由是这家的**免费 stealth 行只在这个
   // 入口有**（Ox Alpha 曾经在这儿，08-26 下架；目录里换成了 big-pickle 那一批），下次要接免费行走这条。
   zen: Object.freeze({
     label: 'OpenCode Zen',
@@ -117,6 +117,8 @@ export const UPSTREAMS_BUILTIN = Object.freeze({
     protocol: 'openai-chat',
     countTokens: false,
   }),
+  // ⛔ 10-11 起**内置表里没有任何行挂在 zenGo 上**：站主的 OpenCode Go 订阅停了（每一发 403 subscription required），两条可选行撤掉、
+  // helper 行挪到 merge。上游定义留着：本地版用户可以拿自己的 Go 钥匙配插槽（SlotEditor 的预设指着它），复牌也不用重探协议。
   zenGo: Object.freeze({
     label: 'OpenCode Zen Go',
     baseUrl: process.env.NODESIGN_UPSTREAM_ZEN_GO_URL || 'https://opencode.ai/zen/go/v1',   // 探针覆盖，同上

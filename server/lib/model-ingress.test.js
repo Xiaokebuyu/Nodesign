@@ -54,28 +54,29 @@ describe('transformForUpstream（Gemini 路：rename + strip thinking + lift）'
     expect(last.source.data).toBe(IMG.source.data);
   });
 
-  it('⭐maxImages=4 的行：第 5 张起最早的换占位文字（09-07 桌面版在 DeepSeek vision-exp 上实撞 Console Go 的 400）', async () => {
-    // 09-11 视觉行换 v4.1 后撤了上限（60 张实测不 400），机制改用同上游仍限 4 张的 glm-5.3-flash-go 钉
-    const wire = resolveWireModel('glm-5.3-flash-go');
-    expect(wire.maxImages).toBe(4);
+  it('⭐带 maxImages 的行：超出的最早几张换占位文字（09-07 桌面版在 DeepSeek vision-exp 上实撞 Console Go 的 400）', async () => {
+    // 这条机制先后钉在 vision-exp（4 张）、glm-5.3-flash-go（4 张）上，10-11 zenGo 的行全撤后改钉 Merge 的 GLM 行（8 张）
+    const wire = resolveWireModel('glm-5.3-flash-merge');
+    expect(wire.maxImages).toBe(8);
     const mk = (n) => ({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: IMG.source.data } });
-    const body = { model: 'glm-5.3-flash-go', messages: [
+    const body = { model: 'glm-5.3-flash-merge', messages: [
       { role: 'user', content: [mk(1), mk(2)] }, { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
-      { role: 'user', content: [mk(3), mk(4), mk(5), { type: 'text', text: 'q' }] },
+      { role: 'user', content: [mk(3), mk(4), mk(5), mk(6), mk(7), mk(8), mk(9), { type: 'text', text: 'q' }] },
     ] };
     await transformForUpstream(body, wire);
     const all = body.messages.flatMap((m) => m.content);
-    expect(all.filter((b) => b.type === 'image')).toHaveLength(4);
+    expect(all.filter((b) => b.type === 'image')).toHaveLength(8);
     expect(body.messages[0].content[0].type).toBe('text');
-    expect(body.messages[0].content[0].text).toContain('最多带 4 张');
+    expect(body.messages[0].content[0].text).toContain('最多带 8 张');
+    // helper 行（10-11 挪到同一条线）带同一道闸：摘要时整段对话的图都在
+    expect(resolveWireModel('deepseek-v4-flash-helper').maxImages).toBe(8);
     // 没配 maxImages 的行一张不裁
     const body2 = { model: 'claude-opus-4-6', messages: [{ role: 'user', content: [mk(1), mk(2), mk(3), mk(4), mk(5)] }] };
     await transformForUpstream(body2, resolveWireModel('claude-opus-4-6'));
     expect(body2.messages[0].content.filter((b) => b.type === 'image')).toHaveLength(5);
-    // 视觉行 09-11 起不裁
-    expect(resolveWireModel('deepseek-v4-flash-vision').maxImages).toBeNull();
-    const body3 = { model: 'deepseek-v4-flash-vision', messages: [{ role: 'user', content: [mk(1), mk(2), mk(3), mk(4), mk(5), mk(6)] }] };
-    await transformForUpstream(body3, resolveWireModel('deepseek-v4-flash-vision'));
+    expect(resolveWireModel('deepseek-v4.1-flash').maxImages).toBeNull();
+    const body3 = { model: 'deepseek-v4.1-flash', messages: [{ role: 'user', content: [mk(1), mk(2), mk(3), mk(4), mk(5), mk(6)] }] };
+    await transformForUpstream(body3, resolveWireModel('deepseek-v4.1-flash'));
     expect(body3.messages.flatMap((m) => m.content).filter((b) => b.type === 'image')).toHaveLength(6);
   });
 
@@ -283,11 +284,11 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
       expect(resolveSessionWire('deepseek-v4-flash-helper', S2)).toMatchObject({ reason: 'table', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper', reasoningEffort: 'low' } });
       expect(resolveSessionWire('claude-sonnet-5', S2)).toMatchObject({ reason: 'fallback', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper' } });
       // 别行的**独占** alias 在这个会话里是撞名雷（那是别家的钥匙）→ 改道本会话 fast
-      expect(resolveSessionWire('claude-opus-4-7[1m]', S2)).toMatchObject({ reason: 'collision', role: 'helper', collidesWith: 'deepseek-v4-flash-vision', wire: { appModel: 'deepseek-v4-flash-helper' } });
+      expect(resolveSessionWire('claude-opus-4-6[1m]', S2)).toMatchObject({ reason: 'collision', role: 'helper', collidesWith: 'gemini-3.7-flash', wire: { appModel: 'deepseek-v4-flash-helper' } });
       expect(resolveSessionWire('glm-5.3-flash-merge', null)).toMatchObject({ role: 'main' });
     } finally { unregisterIngressSession(S2); }
   });
-  // 09-08 MiniMax 撤行后样本换成 kimi-k3：同一个形状（表里不写 sdkAlias → 共用别名，fast 是 zenGo 那条 helper）
+  // 09-08 MiniMax 撤行后样本换成 kimi-k3：同一个形状（表里不写 sdkAlias → 共用别名，fast 是那条通用 helper）
   it('⭐共用别名（多行 + 外部插槽同名）：主行优先 —— alias 解成会话主行，helper 按 app id 认', () => {
     const S = 'ingress-test-shared-alias';
     registerIngressSession(S, 'kimi-k3');
@@ -297,7 +298,7 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
       expect(resolveSessionWire('claude-sonnet-4-6', S)).toMatchObject({ role: 'main', wire: { appModel: 'kimi-k3' } });
       expect(resolveSessionWire('deepseek-v4-flash-helper', S)).toMatchObject({ role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper', thinking: 'strip', protocol: 'openai-chat' } });
       // 别家的 alias 仍然不跨行：改道本会话 fast（kimi 的 helper 行），并标 collision
-      expect(resolveSessionWire('claude-opus-4-7[1m]', S)).toMatchObject({ reason: 'collision', collidesWith: 'deepseek-v4-flash-vision', wire: { appModel: 'deepseek-v4-flash-helper' } });
+      expect(resolveSessionWire('claude-opus-4-6[1m]', S)).toMatchObject({ reason: 'collision', collidesWith: 'gemini-3.7-flash', wire: { appModel: 'deepseek-v4-flash-helper' } });
       // SDK 内部 helper 的默认 Claude 名（不在表里）→ fallback 到同一个 fast 行
       expect(resolveSessionWire('claude-sonnet-5', S)).toMatchObject({ reason: 'fallback', role: 'helper', wire: { appModel: 'deepseek-v4-flash-helper' } });
       // 没注册的会话用共用别名发过来 = 查不到 = 502（fail-loud，探针必须带会话前缀）
@@ -312,8 +313,8 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
       expect(r.collidesWith).toBe('gemini-3.7-flash');
       expect(r.wire.appModel).toBe('qwen3.8-27b');
       expect(r.wire.upstreamId).toBe('qwenLocal');
-      // deepseek 行的 alias（kimi 退役后转给它）同理
-      expect(resolveSessionWire('claude-opus-4-7', SID)).toMatchObject({ reason: 'collision', collidesWith: 'deepseek-v4-flash-vision', wire: { appModel: 'qwen3.8-27b' } });
+      // opus-4-7 这个名 10-11 起没主了（占着它的 zenGo DeepSeek 行撤了）→ 不在表里的名字，走兜底而不是撞名
+      expect(resolveSessionWire('claude-opus-4-7', SID)).toMatchObject({ reason: 'fallback', wire: { appModel: 'qwen3.8-27b' } });
     } finally { unregisterIngressSession(SID); }
   });
   it('qwen 会话：不在表里的 helper 名 → fast 兜底（fallback）—— haiku 名 08-26 起没主了，也走这条', () => {
@@ -326,12 +327,12 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
       expect(resolveSessionWire('claude-haiku-4-5', SID)).toMatchObject({ reason: 'fallback', fastModel: 'qwen3.8-27b', wire: { appModel: 'qwen3.8-27b' } });
     } finally { unregisterIngressSession(SID); }
   });
-  it('gemini 会话拿 deepseek alias → 改道 gemini 自己（反向同样封）；注销后回到全表反查', () => {
+  it('gemini 会话拿 qwen 行的 alias → 改道 gemini 自己（反向同样封）；注销后回到全表反查', () => {
     registerIngressSession(SID, 'gemini-3.7-flash');
     try {
-      expect(resolveSessionWire('claude-opus-4-7[1m]', SID)).toMatchObject({ reason: 'collision', wire: { appModel: 'gemini-3.7-flash' } });
+      expect(resolveSessionWire('claude-opus-4-8[1m]', SID)).toMatchObject({ reason: 'collision', wire: { appModel: 'gemini-3.7-flash' } });
     } finally { unregisterIngressSession(SID); }
-    expect(resolveSessionWire('claude-opus-4-7[1m]', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'deepseek-v4-flash-vision' } });
+    expect(resolveSessionWire('claude-opus-4-8[1m]', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'qwen3.8-27b' } });
   });
   it('订阅模型注册 = noop（订阅会话根本不经入口）', () => {
     registerIngressSession(SID, 'claude-sonnet-5-5[1m]');

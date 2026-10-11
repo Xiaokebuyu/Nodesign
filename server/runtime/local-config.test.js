@@ -85,7 +85,7 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     const code = `
       import { resolveWireModel, resolveModelRoute, SHARED_SDK_ALIAS, MODEL_CONFIG_ERRORS, selectableModelsFor, UPSTREAMS } from '../engine/agent/model-context.js';
       import { registerIngressSession, resolveSessionWire } from '../lib/ingress/session-routes.js';
-      registerIngressSession('s1', 'kimi-k2'); registerIngressSession('s2', 'glm-5'); registerIngressSession('s3', 'deepseek-v4-flash-vision');
+      registerIngressSession('s1', 'kimi-k2'); registerIngressSession('s2', 'glm-5'); registerIngressSession('s3', 'kimi-k3');
       const bare = SHARED_SDK_ALIAS.replace(/\\[1m\\]$/, '');
       const pick = (r) => r && r.wire ? { app: r.wire.appModel, role: r.role, reason: r.reason, up: r.wire.upstreamId, proto: r.wire.protocol, wire: r.wire.wireModel } : null;
       console.log(JSON.stringify({
@@ -94,7 +94,7 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
         s1: pick(resolveSessionWire(bare, 's1')), s1full: pick(resolveSessionWire(SHARED_SDK_ALIAS, 's1')),
         s2: pick(resolveSessionWire(bare, 's2')), s2fast: pick(resolveSessionWire('kimi-k2', 's2')), s2unknown: pick(resolveSessionWire('claude-sonnet-5', 's2')),
         nosess: resolveSessionWire(bare, null).wire, byId: pick({ wire: resolveWireModel('kimi-k2'), role: 'main', reason: 'table' }),
-        s3: pick(resolveSessionWire('claude-opus-4-7', 's3')), s3helper: pick(resolveSessionWire('deepseek-v4-flash-helper', 's3')), s3collide: pick(resolveSessionWire('claude-opus-4-6', 's3')),
+        s3: pick(resolveSessionWire(bare, 's3')), s3helper: pick(resolveSessionWire('deepseek-v4-flash-helper', 's3')), s3collide: pick(resolveSessionWire('claude-opus-4-6', 's3')),
         picker: selectableModelsFor({ id: 'u', role: 'admin' }).filter((m) => ['kimi-k2', 'glm-5'].includes(m.id)).map((m) => m.id),
         relayKey: UPSTREAMS.relay.key,
       }));`;
@@ -111,8 +111,8 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     expect(o.s2unknown).toMatchObject({ app: 'kimi-k2', role: 'helper', reason: 'fallback' });
     expect(o.nosess).toBeNull();
     expect(o.byId.app).toBe('kimi-k2');
-    // 内置行：自己的 alias 解回自己、helper 行、撞名雷改道 —— 08-20 封的口子一个不松
-    expect(o.s3).toMatchObject({ app: 'deepseek-v4-flash-vision', role: 'main', reason: 'table' });
+    // 内置行：自己的 alias 解回自己、helper 行、撞名雷改道 —— 08-20 封的口子一个不松（样本 10-11 前是 zenGo 的 DeepSeek 行，已撤）
+    expect(o.s3).toMatchObject({ app: 'kimi-k3', role: 'main', reason: 'table' });
     expect(o.s3helper).toMatchObject({ app: 'deepseek-v4-flash-helper', role: 'helper', reason: 'table' });
     expect(o.s3collide).toMatchObject({ app: 'deepseek-v4-flash-helper', role: 'helper', reason: 'collision' });   // opus-4-6 是 gemini 行的独占 alias：别家的钥匙，绝不放过去
     // hosted profile（子进程没设 NODESIGN_PROFILE）下外部行也进 picker（钥匙过滤只在 local），key 在条目上
@@ -126,28 +126,28 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     writeFileSync(cfg, JSON.stringify({
       upstreams: { 'my-deepseek': { baseUrl: 'https://api.deepseek.com/v1', protocol: 'openai-chat', key: 'sk-mine' } },
       models: [
-        { id: 'deepseek-v4-flash-vision', label: '我的', window: 128000, upstream: 'my-deepseek', wireModel: 'deepseek-v4-flash-vision' },
+        { id: 'deepseek-v4.1-flash-merge', label: '我的', window: 128000, upstream: 'my-deepseek', wireModel: 'deepseek-v4.1-flash' },
         { id: 'deepseek-v4-flash-helper', label: '我的 helper', window: 128000, upstream: 'my-deepseek', wireModel: 'deepseek-v4-flash' },
       ],
     }));
     const code = `
       import { resolveModelRoute, MODEL_CONFIG_ERRORS, shadowedBuiltinModelIds, externalModelIds, selectableModelsFor, standbyModelOf, modelSourceFor } from '../engine/agent/model-context.js';
-      const r = resolveModelRoute('deepseek-v4-flash-vision');
+      const r = resolveModelRoute('deepseek-v4.1-flash-merge');
       console.log(JSON.stringify({ errors: MODEL_CONFIG_ERRORS, shadowed: shadowedBuiltinModelIds(), external: externalModelIds(),
         up: r.upstreamId, mode: r.mode, sdkAlias: r.sdkAlias,
         picker: selectableModelsFor({ id: '_anon', role: 'admin' }).filter((m) => m.id.startsWith('deepseek-v4')).map((m) => [m.id, modelSourceFor(m.id)]),
-        standby: standbyModelOf('deepseek-v4.1-flash-expires-on-0910') }));`;
+        standby: standbyModelOf('glm-5.3-flash-merge') }));`;
     const base = { ...process.env }; delete base.VITEST; delete base.DEEPSEEK_API_KEY;
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: here, env: { ...base, NODESIGN_PROFILE: 'local', NODESIGN_DATA_DIR: dir, NODESIGN_MODELS_CONFIG: cfg, DB_PATH: path.join(dir, 'x.db') }, encoding: 'utf8' });
     expect(r.status, r.stderr).toBe(0);
     const o = JSON.parse(r.stdout.trim().split('\n').pop());
     expect(o.errors).toEqual([]);
-    expect(o.shadowed.sort()).toEqual(['deepseek-v4-flash-helper', 'deepseek-v4-flash-vision']);
-    expect(o.external.sort()).toEqual(['deepseek-v4-flash-helper', 'deepseek-v4-flash-vision']);
+    expect(o.shadowed.sort()).toEqual(['deepseek-v4-flash-helper', 'deepseek-v4.1-flash-merge']);
+    expect(o.external.sort()).toEqual(['deepseek-v4-flash-helper', 'deepseek-v4.1-flash-merge']);
     expect(o).toMatchObject({ up: 'my-deepseek', mode: 'api' });
-    expect(o.standby).toBe('deepseek-v4-flash-vision');   // 内置行的 standby 指向被顶的名字 → 现在解到用户那行，断言不炸
-    expect(o.picker).toContainEqual(['deepseek-v4-flash-vision', 'local']);   // 本机钥匙优先：不走 relay
-    expect(o.picker.map(([id]) => id)).not.toContain('deepseek-v4.1-flash-expires-on-0910');   // 没顶的内置行本机没钥匙、也没 relay → 照旧藏
+    expect(o.standby).toBe('deepseek-v4.1-flash-merge');   // 内置行的 standby 指向被顶的名字 → 现在解到用户那行，断言不炸
+    expect(o.picker).toContainEqual(['deepseek-v4.1-flash-merge', 'local']);   // 本机钥匙优先：不走 relay
+    expect(o.picker.map(([id]) => id)).not.toContain('deepseek-v4.1-flash');   // 没顶的内置行本机没钥匙、也没 relay → 照旧藏
   });
 
   it('local profile：外部行进 picker 靠条目上的 key（不是 env）；keyEnv 没设的行藏掉（08-22 smoke 抓到的洞）', () => {
