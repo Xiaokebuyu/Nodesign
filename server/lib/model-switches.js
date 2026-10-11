@@ -20,6 +20,7 @@
  */
 
 import db from '../engine/runs/store.js';
+import { RENAMED_MODELS, followRename } from '../engine/agent/model-renames.js';
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS model_switches (
@@ -52,6 +53,27 @@ const qUpsertHours = db.prepare(`
   ON CONFLICT(model_id) DO UPDATE SET
     hours_json = excluded.hours_json, updated_at = excluded.updated_at, updated_by = excluded.updated_by
 `);
+
+/**
+ * 行改过名（model-renames.js）时，站主对旧 id 做过的决定跟到现名上（10-11，Claude 5 → 5.5）。
+ * 记录是按 model_id 存的：不跟的话，一条被停用的行换个名字就悄悄回到「没记录 = 启用」。
+ * 只在现名还没有记录时抄一份（站主对新名另做过决定的以新的为准）；旧记录留着不删。模块加载时跑一次，可重复跑。
+ * @param {Record<string,string>} [renames]
+ * @returns {number} 抄了几条
+ */
+export function carrySwitchesAcrossRenames(renames = RENAMED_MODELS) {
+  const copy = db.prepare(`
+    INSERT OR IGNORE INTO model_switches (model_id, enabled, note, hours_json, updated_at, updated_by)
+    SELECT ?, enabled, note, hours_json, updated_at, updated_by FROM model_switches WHERE model_id = ?
+  `);
+  let n = 0;
+  for (const oldId of Object.keys(renames)) {
+    const now = followRename(oldId, renames);
+    if (now !== oldId) n += copy.run(now, oldId).changes;
+  }
+  return n;
+}
+carrySwitchesAcrossRenames();
 
 /**
  * 这一行被站主关掉了吗。**没记录 = 启用**（表里只有被动过的行）。
