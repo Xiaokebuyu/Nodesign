@@ -37,9 +37,9 @@ const CONFIG_NAME = 'session-config.json';
  */
 const LEGACY_FALLBACK_MODEL = 'claude-sonnet-5-5[1m]';
 
-/** 全局默认模型（不含会话覆盖）。每次现读 env —— 进程内改 env 也能生效 */
+/** 全局默认模型（不含会话覆盖）。每次现读 env —— 进程内改 env 也能生效。过一道改名表：.env 里写的可能是改名前的 id（10-11） */
 export function defaultModel() {
-  return process.env.NODESIGN_MODEL || LEGACY_FALLBACK_MODEL;
+  return canonicalModelId(process.env.NODESIGN_MODEL || LEGACY_FALLBACK_MODEL);
 }
 
 // ── config 文件的读改写串行化 ──
