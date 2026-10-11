@@ -33,7 +33,7 @@ const LEVELS = ['off', 'loose', 'strict'];
 describe('isUncensoredModel', () => {
   it('只有表里带标记的行为 true，未知名字一律 false（拼错只能退回更严那档）', () => {
     expect(isUncensoredModel('qwen3.8-27b')).toBe(true);
-    for (const name of ['claude-sonnet-5[1m]', 'claude-opus-5[1m]', 'gemini-3.1-pro', 'kimi-k2.6', 'qwen3.8-27B', 'qwen', '', null, undefined]) {
+    for (const name of ['claude-sonnet-5-5[1m]', 'claude-opus-5-5[1m]', 'gemini-3.1-pro', 'kimi-k2.6', 'qwen3.8-27B', 'qwen', '', null, undefined]) {
       expect(isUncensoredModel(name), `${name} 不该是 uncensored`).toBe(false);
     }
   });

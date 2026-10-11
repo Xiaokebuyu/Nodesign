@@ -131,7 +131,7 @@ describe('站点插槽：加一行不用重启', () => {
     expect(j.enums.BRANDS).toContain('deepseek');
     expect(Object.keys(j.builtinUpstreams)).toContain('merge');
     expect(JSON.stringify(j.builtinUpstreams)).not.toMatch(/sk-|Bearer/);
-    expect(j.reservedModelIds).toContain('claude-sonnet-5[1m]');       // 订阅行不许当插槽 id
+    expect(j.reservedModelIds).toContain('claude-sonnet-5-5[1m]');       // 订阅行不许当插槽 id
     expect(j.shadowableModelIds).toContain('deepseek-v4.1-flash');     // 内置 API 行可被同名插槽顶替
   });
 });

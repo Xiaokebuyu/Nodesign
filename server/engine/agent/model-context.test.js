@@ -18,7 +18,7 @@ import {
   selectableModelsFor,
   allowedModelsFor, isModelLockedFor, defaultModelFor, modelIsFree,
   canonicalModelId, standbyModelOf,
-  UPSTREAMS, BRANDS, brandOfModel, SHARED_SDK_ALIAS,
+  UPSTREAMS, BRANDS, brandOfModel, SHARED_SDK_ALIAS, MODEL_ROWS, priceTokens,
 } from './model-context.js';
 import { MODELS_BUILTIN, SHARED_SDK_ALIAS as SHARED_FROM_TABLE } from './model-table.js';
 import { RENAMED_MODELS, followRename } from './model-renames.js';
@@ -31,8 +31,8 @@ import { decideConcurrency } from '../../lib/quota.js';
 describe('派生导出（旧签名不变）', () => {
   it('SELECTABLE_MODELS 只暴露带 select 的行；helper 行 / 摘牌行 / 删掉的行都不进 picker', () => {
     const ids = SELECTABLE_MODELS.map((m) => m.id);
-    expect(ids).toContain('claude-sonnet-5[1m]');
-    expect(ids).toContain('claude-opus-5[1m]');
+    expect(ids).toContain('claude-sonnet-5-5[1m]');
+    expect(ids).toContain('claude-opus-5-5[1m]');
     // helper 专用行（没写 select）一律不露出 —— 原来这里钉的是"没有任何 kimi"，
     // 08-25 接了 NVIDIA 的 kimi-k3（带闸的可选行）之后那条按名字写的断言就过期了，
     // 改成按**语义**钉：没有 select 的行不进清单
@@ -57,7 +57,7 @@ describe('派生导出（旧签名不变）', () => {
   it('闸门：中转 Gemini 3.7 Flash 只对 admin/获批账号露出，普通账号看不见', () => {
     const plain = selectableModelsFor({ role: 'user' }).map((m) => m.id);
     expect(plain).not.toContain('gemini-3.7-flash');
-    expect(plain).toContain('claude-sonnet-5[1m]');          // 无闸门的照常在
+    expect(plain).toContain('claude-sonnet-5-5[1m]');          // 无闸门的照常在
 
     for (const u of [{ role: 'admin' }, { role: 'user', plan: 'pro', allowLocalGen: true }]) {
       const ids = selectableModelsFor(u).map((m) => m.id);
@@ -81,13 +81,13 @@ describe('派生导出（旧签名不变）', () => {
       const pub = { role: 'user', plan: 'basic' };
       const sub = { role: 'user', plan: 'pro' };
       const pubSel = selectableModelsFor(pub);
-      expect(pubSel.find((m) => m.id === 'claude-sonnet-5[1m]')?.locked).toBe(true);
+      expect(pubSel.find((m) => m.id === 'claude-sonnet-5-5[1m]')?.locked).toBe(true);
       expect(pubSel.find((m) => m.id === 'deepseek-v4-flash-vision')?.locked).toBeUndefined();
       expect(pubSel.find((m) => m.id === 'glm-5.3-flash-merge')?.locked).toBeUndefined();
-      expect(allowedModelsFor(pub).map((m) => m.id)).not.toContain('claude-sonnet-5[1m]');
+      expect(allowedModelsFor(pub).map((m) => m.id)).not.toContain('claude-sonnet-5-5[1m]');
       expect(allowedModelsFor(pub).map((m) => m.id)).toContain('glm-5.3-flash-merge');
-      expect(isModelLockedFor(pub, 'claude-opus-5[1m]')).toBe(true);
-      expect(isModelLockedFor(sub, 'claude-opus-5[1m]')).toBe(false);
+      expect(isModelLockedFor(pub, 'claude-opus-5-5[1m]')).toBe(true);
+      expect(isModelLockedFor(sub, 'claude-opus-5-5[1m]')).toBe(false);
       expect(isModelLockedFor(pub, 'gemini-3.7-flash')).toBe(false);   // 看不见的不是 locked，是不存在
       expect(selectableModelsFor(sub).some((m) => m.locked)).toBe(false);
       expect(selectableModelsFor({ role: 'admin' }).some((m) => m.locked)).toBe(false);
@@ -97,22 +97,22 @@ describe('派生导出（旧签名不变）', () => {
       // ⚠️ 「默认行必须免费」那条老规矩 08-30 被用户拍板破了（详见下面那个 describe 的三条新规矩）
       expect(modelIsFree('qwen3.8-27b')).toBe(true);   // 09-08 起表里唯一的免费行（本地盒子，不进 picker）
       expect(modelIsFree('glm-5.3-flash-merge')).toBe(false);   // Merge 网关那条是付费行，走美元日限
-      expect(modelIsFree('claude-sonnet-5[1m]')).toBe(false);
+      expect(modelIsFree('claude-sonnet-5-5[1m]')).toBe(false);
       expect(modelIsFree('gemini-3.7-flash')).toBe(false);
       // 会话中途 openai-chat → 别的通路要拦（转换层合成的 thinking 块没 signature，回传会 400）；其它方向放行
-      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-sonnet-5[1m]')).toMatch(/新建一个会话/);
-      expect(crossLaneSwitchReason('claude-sonnet-5[1m]', 'glm-5.3-flash-merge')).toBeNull();
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-sonnet-5-5[1m]')).toMatch(/新建一个会话/);
+      expect(crossLaneSwitchReason('claude-sonnet-5-5[1m]', 'glm-5.3-flash-merge')).toBeNull();
       expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'glm-5.3-flash-merge')).toBeNull();
       // Anthropic 原生透传的行（09-08 前拿 minimax-m3 当例子，它撤了，换 gemini 这条 lament 上游的）：
       // 从 openai-chat 行切过去同样要拦；反向放行
       // 09-08 站主撤掉「openai-chat → API 透传行」的拦截（ingress 透传腿剥掉没签名的思考块）；订阅行仍拦
       expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'gemini-3.7-flash')).toBeNull();
-      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
-      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5[1m]')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5-5[1m]')).toMatch(/新建一个会话/);
+      expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'claude-opus-5-5[1m]')).not.toMatch(/Claude/);   // 话里不许写死"换到 Claude"
       expect(crossLaneSwitchReason('gemini-3.7-flash', 'glm-5.3-flash-merge')).toBeNull();
       // 同为 openai-chat 的两行互切不算跨线（原先钉在 Ox 高/深想两行上，08-26 换成 glm ↔ deepseek 视觉）
       expect(crossLaneSwitchReason('glm-5.3-flash-merge', 'deepseek-v4-flash-vision')).toBeNull();
-      expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5[1m]')).toMatch(/新建一个会话/);
+      expect(crossLaneSwitchReason('deepseek-v4-flash-vision', 'claude-opus-5-5[1m]')).toMatch(/新建一个会话/);
       expect(resolveWireModel('glm-5.3-flash-merge')?.reasoningEffort).toBe('high');
       // ⭐⭐ Merge 网关上那**两条** GLM 行的厂商（08-28 建，08-30 拆两行，09-08 上午点死 particle，晚上撤销点名，
       //   **09-08 深夜点死 zai**）。不点名时网关来回换家，缓存跟着冷（站主一轮五发两发命中 0）；目录核过 particle
@@ -145,13 +145,13 @@ describe('派生导出（旧签名不变）', () => {
 
   it('⛔ hotSwitchLaneReason：运行中订阅 ↔ API 一律拒（env 在起 query 那刻定死，硬切会拿订阅额度跑 API 模型）', () => {
     // 订阅 → API：binary 没有 ingress 地址，会拿 OAuth 把 alias（真实 Claude 名）打到 anthropic.com = 花真钱
-    expect(hotSwitchLaneReason('claude-sonnet-5[1m]', 'glm-5.3-flash-merge')).toMatch(/订阅额度/);
-    expect(hotSwitchLaneReason('claude-opus-5[1m]', 'kimi-k3')).toMatch(/新建一个会话/);
+    expect(hotSwitchLaneReason('claude-sonnet-5-5[1m]', 'glm-5.3-flash-merge')).toMatch(/订阅额度/);
+    expect(hotSwitchLaneReason('claude-opus-5-5[1m]', 'kimi-k3')).toMatch(/新建一个会话/);
     // API → 订阅：那个名字进了入口反查不到，兜底到本会话 fast 行 = 切了没生效
-    expect(hotSwitchLaneReason('kimi-k3', 'claude-sonnet-5[1m]')).toMatch(/无法切换回订阅模型/);
+    expect(hotSwitchLaneReason('kimi-k3', 'claude-sonnet-5-5[1m]')).toMatch(/无法切换回订阅模型/);
     // 同通路内互切这条闸不管（协议那条闸另外管，两条正交）
     expect(hotSwitchLaneReason('kimi-k3', 'glm-5.3-flash-merge')).toBeNull();
-    expect(hotSwitchLaneReason('claude-sonnet-5[1m]', 'claude-opus-5[1m]')).toBeNull();
+    expect(hotSwitchLaneReason('claude-sonnet-5-5[1m]', 'claude-opus-5-5[1m]')).toBeNull();
     expect(hotSwitchLaneReason('glm-5.3-flash-merge', 'glm-5.3-flash-merge')).toBeNull();
     expect(hotSwitchLaneReason(null, 'glm-5.3-flash-merge')).toBeNull();
   });
@@ -159,7 +159,7 @@ describe('派生导出（旧签名不变）', () => {
   it('spoof：API 行给 alias，订阅/未知原样返回', () => {
     expect(resolveSdkSpoofModel('deepseek-v4-flash-vision')).toBe('claude-opus-4-7[1m]');
     expect(resolveSdkSpoofModel('gemini-3.7-flash')).toBe('claude-opus-4-6[1m]');
-    expect(resolveSdkSpoofModel('claude-sonnet-5[1m]')).toBe('claude-sonnet-5[1m]');
+    expect(resolveSdkSpoofModel('claude-sonnet-5-5[1m]')).toBe('claude-sonnet-5-5[1m]');
     expect(resolveSdkSpoofModel('made-up-model')).toBe('made-up-model');
     expect(resolveSdkSpoofModel(null)).toBe(null);
   });
@@ -174,7 +174,7 @@ describe('派生导出（旧签名不变）', () => {
   });
 
   it('thinking：Sonnet5+/Opus4.6+ adaptive+summarized；API 行 enabled+budget；老模型 enabled', () => {
-    expect(pickThinkingConfig('claude-sonnet-5[1m]')).toEqual({ type: 'adaptive', display: 'summarized' });
+    expect(pickThinkingConfig('claude-sonnet-5-5[1m]')).toEqual({ type: 'adaptive', display: 'summarized' });
     expect(pickThinkingConfig('claude-opus-4-7[1m]')).toEqual({ type: 'adaptive', display: 'summarized' });
     expect(pickThinkingConfig('gemini-3.7-flash')).toEqual({ type: 'enabled', budgetTokens: 8192 });
     expect(pickThinkingConfig('deepseek-v4-flash-vision')).toEqual({ type: 'enabled', budgetTokens: 8192 });
@@ -195,7 +195,7 @@ describe('brand（模型出自谁家，08-21）', () => {
     // 'opencode' 那枚仍在 BRANDS 里留给下一个隐身行（Zen 目录一直有那类行）
     expect(brandOfModel('glm-5.3-flash-merge')).toBe('glm');
     expect(brandOfModel('ox-alpha')).toBeNull();                // 整族删了，查不到就该回 null
-    expect(brandOfModel('claude-opus-5[1m]')).toBe('claude');
+    expect(brandOfModel('claude-opus-5-5[1m]')).toBe('claude');
     expect(brandOfModel('gemini-3.7-flash')).toBe('gemini');
     expect(brandOfModel('没有这个模型')).toBeNull();
     expect(brandOfModel(undefined)).toBeNull();
@@ -210,7 +210,7 @@ describe('brand（模型出自谁家，08-21）', () => {
 
 describe('路由', () => {
   it('订阅模型 → subscription，API 模型带全套路由信息', () => {
-    expect(resolveModelRoute('claude-sonnet-5[1m]')).toEqual({ mode: 'subscription' });
+    expect(resolveModelRoute('claude-sonnet-5-5[1m]')).toEqual({ mode: 'subscription' });
     expect(resolveModelRoute(null)).toEqual({ mode: 'subscription' });
     const r = resolveModelRoute('gemini-3.7-flash');
     expect(r.mode).toBe('api');
@@ -232,7 +232,7 @@ describe('路由', () => {
   });
 
   it('本地 Qwen 行：无鉴权上游、count_tokens 由上游真答', () => {
-    const w = resolveWireModel('claude-opus-5');
+    const w = resolveWireModel('claude-opus-4-8');
     expect(w?.appModel).toBe('qwen3.8-27b');
     expect(w?.upstream.authStyle).toBe('none');
     expect(w?.upstream.keyEnv).toBe(null);
@@ -287,7 +287,7 @@ describe('repriceUsageDeltas', () => {
 
   it('⚠️ 订阅会话原样返回 —— 真跑 sonnet-4-6 不能被错记成 Gemini 的账', () => {
     const deltas = { 'claude-opus-4-6': gUsage };
-    const out = repriceUsageDeltas(deltas, 'claude-sonnet-5[1m]');
+    const out = repriceUsageDeltas(deltas, 'claude-sonnet-5-5[1m]');
     expect(out).toBe(deltas);   // 同一引用，一个字段没动
   });
 
@@ -325,21 +325,21 @@ describe('repriceUsageDeltas', () => {
 
 describe('modelSwitchRejection：三条写模型的路共用的那一个判断（08-25 收口）', () => {
   it('协议闸：跑过的 openai-chat 会话换到别的通路要拦；同通路、反向、同模型放行', () => {
-    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]' })).toMatch(/新建一个会话/);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5-5[1m]' })).toMatch(/新建一个会话/);
     expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'gemini-3.7-flash' })).toBe(null);   // 09-08 起 API 透传行放行（ingress 剥思考块）
     expect(modelSwitchRejection({ from: 'gemini-3.7-flash', to: 'glm-5.3-flash-merge' })).toBe(null);
     expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'glm-5.3-flash-merge' })).toBe(null);
   });
 
   it('⭐没跑过的会话不拦：这条闸防的是历史里没 signature 的 thinking 块，没历史就没这回事', () => {
-    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]', hasHistory: false })).toBe(null);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5-5[1m]', hasHistory: false })).toBe(null);
     // 但通路闸跟历史无关（env 定死在起 query 那一刻），running 时照拦
-    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5[1m]', hasHistory: false, running: true })).toMatch(/无法切换回订阅模型/);
+    expect(modelSwitchRejection({ from: 'glm-5.3-flash-merge', to: 'claude-sonnet-5-5[1m]', hasHistory: false, running: true })).toMatch(/无法切换回订阅模型/);
   });
 
   it('通路闸只在 running 时加判：空闲切会重启 query（换的是新 env），不该拦', () => {
-    expect(modelSwitchRejection({ from: 'claude-sonnet-5[1m]', to: 'kimi-k3' })).toBe(null);
-    expect(modelSwitchRejection({ from: 'claude-sonnet-5[1m]', to: 'kimi-k3', running: true })).toMatch(/订阅额度/);
+    expect(modelSwitchRejection({ from: 'claude-sonnet-5-5[1m]', to: 'kimi-k3' })).toBe(null);
+    expect(modelSwitchRejection({ from: 'claude-sonnet-5-5[1m]', to: 'kimi-k3', running: true })).toMatch(/订阅额度/);
   });
 
   it('缺参数一律放行（调用方还没算出 from/to 时不该误伤）', () => {
@@ -649,6 +649,16 @@ describe('改过名的行', () => {
     expect(canonicalModelId('deepseek-v4.1-flash-expires-on-0910')).toBe('deepseek-v4.1-flash');
     expect(canonicalModelId('deepseek-flash')).toBe('deepseek-v4.1-flash');   // 上午改名留下的旧 id，现在只是 wireModel
     expect(canonicalModelId('deepseek-v4.1-flash')).toBe('deepseek-v4.1-flash');
+    // 10-11 Claude 5 → 5.5：两条订阅可选行的旧 id 跟到新行，旧 id 不再是表里的行；不带 [1m] 的旧名还是行（历史账计价）
+    expect(canonicalModelId('claude-sonnet-5[1m]')).toBe('claude-sonnet-5-5[1m]');
+    expect(canonicalModelId('claude-opus-5[1m]')).toBe('claude-opus-5-5[1m]');
+    expect(MODEL_ROWS.some((r) => r.id === 'claude-sonnet-5[1m]' || r.id === 'claude-opus-5[1m]')).toBe(false);
+    expect(canonicalModelId('claude-opus-5')).toBe('claude-opus-5');
+    expect(resolveModelRoute('claude-opus-5[1m]')).toMatchObject({ mode: 'subscription' });   // 旧名不许落到 qwen 行上（它以前是 qwen 的 spoof 别名）
+    expect(resolveWireModel('claude-opus-5[1m]')).toBe(null);
+    expect(priceTokens('claude-sonnet-5[1m]', { input: 1e6, output: 1e6, cacheRead: 1e6, cacheCreate: 1e6 })).toBeCloseTo(2 + 10 + 0.1 + 4, 9);
+    expect(priceTokens('claude-opus-5-5[1m]', { input: 1e6, output: 1e6, cacheRead: 1e6, cacheCreate: 1e6 })).toBeCloseTo(4 + 20 + 0.2 + 8, 9);
+    expect(priceTokens('claude-haiku-5-5', { input: 1e6, output: 1e6, cacheRead: 1e6, cacheCreate: 1e6 })).toBeCloseTo(0.1 + 0.5 + 0.01 + 0.2, 9);
     expect(canonicalModelId('nobody-knows-this')).toBe('nobody-knows-this');
     expect(canonicalModelId(null)).toBe(null);
     expect(canonicalModelId('')).toBe('');

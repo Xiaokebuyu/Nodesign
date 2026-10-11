@@ -10,7 +10,7 @@ const deps = ({ query = { applyFlagSettings: vi.fn(async () => {}) } } = {}) => 
 describe('applySessionEffort', () => {
   it('⭐ 合法档 → 落盘 + 跑着的会话当场 applyFlagSettings（按模型换算后的档）', async () => {
     const d = deps();
-    const r = await applySessionEffort({ sid: 's1', metaDir: '/m', model: 'claude-opus-5[1m]', effort: 'xhigh' }, d);
+    const r = await applySessionEffort({ sid: 's1', metaDir: '/m', model: 'claude-opus-5-5[1m]', effort: 'xhigh' }, d);
     expect(r).toEqual({ ok: true, effort: 'xhigh', applied: true });
     expect(d.write).toHaveBeenCalledWith('/m', 'xhigh');
     expect(d.query.applyFlagSettings).toHaveBeenCalledWith({ effortLevel: 'xhigh' });
@@ -26,7 +26,7 @@ describe('applySessionEffort', () => {
   });
   it('null = 清掉，回到模型默认档（SDK 收到默认档）', async () => {
     const d = deps();
-    await applySessionEffort({ sid: 's1', metaDir: '/m', model: 'claude-opus-5[1m]', effort: null }, d);
+    await applySessionEffort({ sid: 's1', metaDir: '/m', model: 'claude-opus-5-5[1m]', effort: null }, d);
     expect(d.write).toHaveBeenCalledWith('/m', null);
     expect(d.query.applyFlagSettings).toHaveBeenCalledWith({ effortLevel: 'medium' });
   });
@@ -42,7 +42,7 @@ describe('applySessionEffort', () => {
   });
   it('live=false（同时在换模型）→ 只落盘，不把新模型的档位塞给还在跑旧模型的 query（fable P2-1）', async () => {
     const d = deps();
-    const r = await applySessionEffort({ sid: 's1', metaDir: '/m', model: 'claude-opus-5[1m]', effort: 'max', live: false }, d);
+    const r = await applySessionEffort({ sid: 's1', metaDir: '/m', model: 'claude-opus-5-5[1m]', effort: 'max', live: false }, d);
     expect(r).toEqual({ ok: true, effort: 'max', applied: false });
     expect(d.write).toHaveBeenCalledWith('/m', 'max');
     expect(d.query.applyFlagSettings).not.toHaveBeenCalled();

@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { levelFor, moderationKnobFor } from './moderation.js';
 
-const SUB = 'claude-sonnet-5[1m]';
+const SUB = 'claude-sonnet-5-5[1m]';
 const QWEN = 'qwen3.8-27b';
 const GEMINI = 'gemini-3.7-flash';   // 3.1-pro 行 08-21 深夜清掉，换同通路的 3.7 Flash 当 API 样本
 const user = (o = {}) => ({ id: 'u1', role: 'user', plan: 'pro', lifetimeCostLimitUsd: null, moderationLevel: null, moderationLevelApi: null, ...o });

@@ -158,7 +158,7 @@ describe('目录', () => {
     expect(fake.sdkAlias).toBe(resolveModelRoute('fake-anthro').sdkAlias);
     expect(JSON.stringify(j)).not.toMatch(/fake-wire-model|fake-upstream-key|baseUrl/);
     expect(j.renames).toBeTypeOf('object');
-    const sonnet = j.models.find((m) => m.id === 'claude-sonnet-5[1m]');
+    const sonnet = j.models.find((m) => m.id === 'claude-sonnet-5-5[1m]');
     expect(sonnet.locked).toBe(true);
     expect(typeof sonnet.lockReason).toBe('string');
   });
@@ -166,7 +166,7 @@ describe('目录', () => {
     const user = makeUser({ plan: 'pro' });
     const { token } = mintDevice({ userId: user.id });
     const j = await (await api(token, '/models')).json();
-    const sonnet = j.models.find((m) => m.id === 'claude-sonnet-5[1m]');
+    const sonnet = j.models.find((m) => m.id === 'claude-sonnet-5-5[1m]');
     expect(sonnet.locked).toBe(true);
     expect(sonnet.lockReason).toBe(RELAY_SUBSCRIPTION_CLOSED_REASON);
     expect(j.models.find((m) => m.id === 'fake-anthro')).toMatchObject({ id: 'fake-anthro', locked: false, mode: 'api' });
@@ -179,7 +179,7 @@ describe('会话登记', () => {
   it('basic 登记订阅模型 → 403 当场拒', async () => {
     const user = makeUser({ plan: 'basic' });
     const { token } = mintDevice({ userId: user.id });
-    const { r } = await openSession(token, 'claude-sonnet-5[1m]');
+    const { r } = await openSession(token, 'claude-sonnet-5-5[1m]');
     expect(r.status).toBe(403);
     expect((await r.json()).code).toBe('SUBSCRIPTION_CLOSED');
   });
@@ -294,10 +294,10 @@ describe('API 腿：转发 + 记账', () => {
 
 describe('订阅腿（09-08 总开关关着：pro/admin 也进不去，订阅转发函数一次都不该被调）', () => {
   it('pro 登记订阅模型 → 403 SUBSCRIPTION_CLOSED，订阅腿零调用', async () => {
-    expect(resolveModelRoute('claude-sonnet-5[1m]').mode).toBe('subscription');
+    expect(resolveModelRoute('claude-sonnet-5-5[1m]').mode).toBe('subscription');
     const user = makeUser({ plan: 'pro' });
     const { token } = mintDevice({ userId: user.id });
-    const { r } = await openSession(token, 'claude-sonnet-5[1m]');
+    const { r } = await openSession(token, 'claude-sonnet-5-5[1m]');
     expect(r.status).toBe(403);
     expect((await r.json()).code).toBe('SUBSCRIPTION_CLOSED');
     expect(subForward).not.toHaveBeenCalled();
@@ -305,7 +305,7 @@ describe('订阅腿（09-08 总开关关着：pro/admin 也进不去，订阅转
   it('admin 也一样 403', async () => {
     const user = makeUser({ role: 'admin' });
     const { token } = mintDevice({ userId: user.id });
-    const { r } = await openSession(token, 'claude-sonnet-5[1m]');
+    const { r } = await openSession(token, 'claude-sonnet-5-5[1m]');
     expect(r.status).toBe(403);
     expect(subForward).not.toHaveBeenCalled();
   });
@@ -314,10 +314,10 @@ describe('订阅腿（09-08 总开关关着：pro/admin 也进不去，订阅转
     const { token } = mintDevice({ userId: user.id });
     // 模拟"部署前登记成功"的残留会话：绕过 HTTP 登记口直接写会话表
     const sid = crypto.randomUUID();
-    const opened = openRelaySession({ sid, appModel: 'claude-sonnet-5[1m]', userId: user.id, deviceId: 'dev' });
+    const opened = openRelaySession({ sid, appModel: 'claude-sonnet-5-5[1m]', userId: user.id, deviceId: 'dev' });
     expect(opened.ok).toBe(true);
     expect(opened.session.mode).toBe('subscription');
-    const res = await infer(token, sid, { ...BODY, model: 'claude-sonnet-5[1m]' });
+    const res = await infer(token, sid, { ...BODY, model: 'claude-sonnet-5-5[1m]' });
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe('SUBSCRIPTION_CLOSED');
     expect(subForward).not.toHaveBeenCalled();
@@ -355,7 +355,7 @@ describe('记账：上游自报 0 元不算数（Zen Go 额度内报 0）', () =
 
 describe('记账：订阅腿按 Claude 表价（09-07 桌面端计费遗留：之前行上没价记 0）', () => {
   // 订阅腿 09-08 总开关关了，这条到不了记账；开关翻回 true 时自动恢复运行，不用人记得
-  (RELAY_SUBSCRIPTION_LEG_ENABLED ? it : it.skip)('onUsage 报的 token 按 claude-opus-5[1m] 的 prices 入账，不再是 0', async () => {
+  (RELAY_SUBSCRIPTION_LEG_ENABLED ? it : it.skip)('onUsage 报的 token 按 claude-opus-5-5[1m] 的 prices 入账，不再是 0', async () => {
     const subForward2 = vi.fn((_req, res, _buf, opts) => {
       opts.onUsage({ input: 1_000_000, output: 100_000, cacheRead: 2_000_000, cacheCreate: 100_000 });
       res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"sub":true}');
@@ -369,15 +369,15 @@ describe('记账：订阅腿按 Claude 表价（09-07 桌面端计费遗留：�
       const user = makeUser({ plan: 'pro' });
       const { token } = mintDevice({ userId: user.id });
       const sid = 'sid-sub-price';
-      const opened = await fetch(base2 + '/sessions', { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ sid, appModel: 'claude-opus-5[1m]' }) });
+      const opened = await fetch(base2 + '/sessions', { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ sid, appModel: 'claude-opus-5-5[1m]' }) });
       expect(opened.status).toBe(201);
-      const res = await fetch(`${base2}/__nd/${sid}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...BODY, model: 'claude-opus-5[1m]' }) });
+      const res = await fetch(`${base2}/__nd/${sid}/v1/messages`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...BODY, model: 'claude-opus-5-5[1m]' }) });
       expect(res.status).toBe(200);
       const rows = usageRows(user.id);
       expect(rows).toHaveLength(1);
       // 5 + 25×0.1 + 0.5×2 + 10×0.1 = 5 + 2.5 + 1 + 1 = 9.5
       expect(rows[0].cost_usd).toBeCloseTo(9.5, 6);
-      expect(rows[0].model).toBe('claude-opus-5[1m]');
+      expect(rows[0].model).toBe('claude-opus-5-5[1m]');
     } finally {
       await new Promise((r) => srv2.close(r));
     }

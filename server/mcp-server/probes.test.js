@@ -34,14 +34,14 @@ describe('relay_probe', () => {
       calls.push([url, init.headers.authorization]);
       const p = new URL(url).pathname;
       const body = p.endsWith('/whoami') ? { user: { username: 'u', tier: 'basic' }, capabilities: { subscription: false } }
-        : p.endsWith('/models') ? { models: [{ id: 'glm-5.3-flash-merge' }, { id: 'claude-opus-5[1m]', locked: true, lockReason: '订阅腿已关' }] } : { notice: null };
+        : p.endsWith('/models') ? { models: [{ id: 'glm-5.3-flash-merge' }, { id: 'claude-opus-5-5[1m]', locked: true, lockReason: '订阅腿已关' }] } : { notice: null };
       return { status: 200, json: async () => body };
     };
     const out = await relayProbe({ cfg: { url: 'https://site', token: 'tok' }, fetchImpl });
     expect(calls.map((c) => c[0])).toEqual(['https://site/api/relay/whoami', 'https://site/api/relay/models', 'https://site/api/relay/notice']);
     expect(calls[0][1]).toBe('Bearer tok');
     expect(out.calls['/whoami']).toMatchObject({ status: 200, user: 'u', tier: 'basic' });
-    expect(out.calls['/models'].models[1]).toEqual({ id: 'claude-opus-5[1m]', locked: true, reason: '订阅腿已关' });
+    expect(out.calls['/models'].models[1]).toEqual({ id: 'claude-opus-5-5[1m]', locked: true, reason: '订阅腿已关' });
     expect(out.verdict).toEqual(['relay 正常']);
     const bad = await relayProbe({ cfg: { url: 'https://site', token: 'x' }, fetchImpl: async () => ({ status: 401, json: async () => ({}) }) });
     expect(bad.verdict[0]).toContain('重新登录');

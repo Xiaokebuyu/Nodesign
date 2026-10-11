@@ -5,10 +5,9 @@ import { MODEL_ROWS, resolveWireModel, selectableModelsFor, effortForModel } fro
 const row = (id) => MODEL_ROWS.find((r) => r.id === id);
 
 describe('model-effort 纯函数', () => {
-  it('订阅行：Sonnet 5 / Opus 5（含 1M 名）五档可调，其余订阅行不可调', () => {
-    expect(effortChoicesFor({ id: 'claude-sonnet-5[1m]' })).toEqual(EFFORT_LEVELS);
-    expect(effortChoicesFor({ id: 'claude-opus-5' })).toEqual(EFFORT_LEVELS);
-    expect(effortChoicesFor({ id: 'claude-haiku-4-5' })).toBeNull();
+  it('订阅行：Sonnet / Opus 的 5 与 5.5（含 1M 名）五档可调，其余订阅行不可调', () => {
+    for (const id of ['claude-sonnet-5-5[1m]', 'claude-opus-5-5[1m]', 'claude-opus-5-5', 'claude-sonnet-5[1m]', 'claude-opus-5']) expect(effortChoicesFor({ id }), id).toEqual(EFFORT_LEVELS);
+    for (const id of ['claude-haiku-4-5', 'claude-haiku-5-5', 'claude-opus-4-8[1m]', 'claude-sonnet-5-50']) expect(effortChoicesFor({ id }), id).toBeNull();
   });
   it('API 行：只有写了 api.efforts 的可调，按从低到高排、丢掉非法值；只剩一档也算不可调', () => {
     expect(effortChoicesFor({ id: 'x', api: { efforts: ['max', 'low', 'bogus', 'high'] } })).toEqual(['low', 'high', 'max']);
@@ -25,7 +24,7 @@ describe('model-effort 纯函数', () => {
     expect(clampEffort('high', null)).toBeNull();
   });
   it('默认档：订阅行 medium；API 行 = 行内 reasoningEffort 换算', () => {
-    expect(defaultEffortFor({ id: 'claude-opus-5[1m]' })).toBe('medium');
+    expect(defaultEffortFor({ id: 'claude-opus-5-5[1m]' })).toBe('medium');
     expect(defaultEffortFor({ id: 'x', api: { efforts: ['low', 'high', 'max'], reasoningEffort: 'high' } })).toBe('high');
   });
   it('起会话传给 SDK：选过→换算；没选过→行默认；不可调→固定 medium（跟 09-13 之前一致）', () => {
@@ -61,10 +60,10 @@ describe('真表对账', () => {
   });
   it('选择器清单带 efforts / defaultEffort（可调的行才带）；effortForModel 认得 appModel', () => {
     const opts = selectableModelsFor({ role: 'admin', tier: 'pro' });
-    const sonnet = opts.find((o) => o.id === 'claude-sonnet-5[1m]');
+    const sonnet = opts.find((o) => o.id === 'claude-sonnet-5-5[1m]');
     if (sonnet) expect(sonnet).toMatchObject({ efforts: EFFORT_LEVELS, defaultEffort: 'medium' });
     expect(opts.some((o) => Array.isArray(o.efforts))).toBe(true);
-    expect(effortForModel('claude-opus-5[1m]', 'xhigh')).toEqual({ choices: EFFORT_LEVELS, sdk: 'xhigh' });
-    expect(row('claude-opus-5[1m]')).toBeTruthy();
+    expect(effortForModel('claude-opus-5-5[1m]', 'xhigh')).toEqual({ choices: EFFORT_LEVELS, sdk: 'xhigh' });
+    expect(row('claude-opus-5-5[1m]')).toBeTruthy();
   });
 });

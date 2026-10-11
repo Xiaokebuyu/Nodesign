@@ -23,7 +23,7 @@ vi.mock('../../lib/api-admin.js', () => ({
 /** GET /api/admin/models/slots 的形状（表单要的枚举都从服务端来，前端不另起一份） */
 const SLOTS = {
   raw: { upstreams: {}, models: [] }, errors: [], activeExternalModels: [], shadowedBuiltinModels: [],
-  reservedUpstreamIds: ['merge'], reservedModelIds: ['claude-sonnet-5[1m]'], shadowableModelIds: ['deepseek-v4.1-flash'],
+  reservedUpstreamIds: ['merge'], reservedModelIds: ['claude-sonnet-5-5[1m]'], shadowableModelIds: ['deepseek-v4.1-flash'],
   builtinUpstreams: { merge: { label: 'Merge Gateway', keyPresent: true } },
   enums: { PROTOCOLS: ['anthropic', 'openai-chat'], AUTH_STYLES: ['x-api-key', 'bearer', 'none'], THINKING_MODES: ['strip'], REASONING_EFFORTS: ['high'], BRANDS: ['deepseek', 'custom'], MAX_RETRY_BUDGET_MS: 400000 },
   updatedAt: null, updatedBy: null, readOnly: false,

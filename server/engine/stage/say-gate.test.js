@@ -36,7 +36,7 @@ beforeAll(() => {
   db.prepare('INSERT INTO users (id, username, password_hash, role, disabled, daily_cost_limit_usd) VALUES (?, ?, ?, ?, 0, 0)')
     .run(BROKE, BROKE, 'x', 'user');
   fs.mkdirSync(PLAY_ABS, { recursive: true });
-  fs.writeFileSync(path.join(PLAY_ABS, '戏.json'), JSON.stringify({ title: PLAY, cast: [{ name: '柜台小姐' }], model: 'claude-sonnet-5[1m]' }), 'utf8');
+  fs.writeFileSync(path.join(PLAY_ABS, '戏.json'), JSON.stringify({ title: PLAY, cast: [{ name: '柜台小姐' }], model: 'claude-sonnet-5-5[1m]' }), 'utf8');
 });
 
 const scenesFile = path.join(PLAY_ABS, '场景', 'main.jsonl');

@@ -14,7 +14,7 @@ const fake = http.createServer((req, res) => {
   if (mode === 'unauth' && req.url === '/api/relay/models') { setTimeout(() => { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: '设备令牌无效' }, code: 'DEVICE_TOKEN_INVALID' })); }, 50); return; }
   if (mode === 'unauth') { res.writeHead(401, { 'content-type': 'application/json' }); res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: '设备令牌无效' }, code: 'DEVICE_TOKEN_INVALID' })); return; }
   if (req.url === '/api/relay/whoami') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ user: { id: 'u1', username: 'alice', tier: 'basic' }, quota: { kind: 'daily', used: 1, limit: 5 } })); return; }
-  if (req.url === '/api/relay/models') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ models: [{ id: 'm-api', locked: false }, { id: 'claude-sonnet-5[1m]', locked: true, lockReason: '要订阅' },
+  if (req.url === '/api/relay/models') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ models: [{ id: 'm-api', locked: false }, { id: 'claude-sonnet-5-5[1m]', locked: true, lockReason: '要订阅' },
     // 09-11 目录带整行：一条拉取那一刻正好在关门时段的（本机据 unavailable 现算，锁要摘掉），一条站主停用的（锁留着）
     { id: 'm-closed', locked: true, lockReason: '关门', lockKind: 'closed', mode: 'api', unavailable: { why: '高峰', tz: 'UTC', windows: ['01:00-04:00'] } },
     { id: 'm-off', locked: true, lockReason: '停用', lockKind: 'disabled', mode: 'api' }], renames: { 'old-id': 'm-api' } })); return; }
@@ -66,9 +66,9 @@ describe('refreshRelayCatalog', () => {
     const c = await rc.refreshRelayCatalog();
     expect(c.ok).toBe(true);
     expect(c.whoami.user.username).toBe('alice');
-    expect(c.models.map((m) => m.id)).toEqual(['m-api', 'claude-sonnet-5[1m]', 'm-closed', 'm-off']);
+    expect(c.models.map((m) => m.id)).toEqual(['m-api', 'claude-sonnet-5-5[1m]', 'm-closed', 'm-off']);
     expect(rc.relayModelEntry('m-api')).toEqual({ id: 'm-api', locked: false });
-    expect(rc.relayModelEntry('claude-sonnet-5[1m]').locked).toBe(true);
+    expect(rc.relayModelEntry('claude-sonnet-5-5[1m]').locked).toBe(true);
     expect(rc.relayModelEntry('nope')).toBeNull();
     expect(seen.every((s) => s.auth === 'Bearer ndk_test.secret')).toBe(true);
   });

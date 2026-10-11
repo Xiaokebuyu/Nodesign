@@ -42,8 +42,8 @@ describe('mergeRelayRows', () => {
     const slot = Object.freeze({ id: 'mine', window: 100_000, brand: 'custom', external: true, select: { label: 'mine', desc: '' }, api: { upstream: 'x', wireModel: 'w', sdkAlias: SHARED_SDK_ALIAS, fastModel: 'mine' } });
     const withSlot = merge(cat([api('mine')]), noKeys, [...BASE, slot]);
     expect(withSlot.models.find((m) => m.id === 'mine')).toBe(slot);
-    const sub = merge(cat([{ id: 'claude-sonnet-5[1m]', locked: true, mode: 'subscription', label: 'Sonnet 5' }]));
-    expect(sub.models.find((m) => m.id === 'claude-sonnet-5[1m]')).toBe(BASE.find((m) => m.id === 'claude-sonnet-5[1m]'));
+    const sub = merge(cat([{ id: 'claude-sonnet-5-5[1m]', locked: true, mode: 'subscription', label: 'Sonnet 5' }]));
+    expect(sub.models.find((m) => m.id === 'claude-sonnet-5-5[1m]')).toBe(BASE.find((m) => m.id === 'claude-sonnet-5-5[1m]'));
   });
 
   it('⛔ sdkAlias 本地表里没有 → 这行不建（不许退回共用别名：站点会把主回合改道成 helper），报出来', () => {

@@ -48,10 +48,10 @@ describe('目录的形状', () => {
   });
 
   it('订阅行：pro 是订阅腿关着（lockKind=subscription、原因"暂不提供"），basic 是档位不够（tier）；localGen 行 basic 压根看不见', () => {
-    expect(relayCatalogFor(pro).models.find((m) => m.id === 'claude-sonnet-5[1m]'))
+    expect(relayCatalogFor(pro).models.find((m) => m.id === 'claude-sonnet-5-5[1m]'))
       .toMatchObject({ locked: true, lockReason: RELAY_SUBSCRIPTION_CLOSED_REASON, lockKind: 'subscription', mode: 'subscription' });
     const c = relayCatalogFor(basic);
-    expect(c.models.find((m) => m.id === 'claude-sonnet-5[1m]')).toMatchObject({ locked: true, lockKind: 'tier', mode: 'subscription' });
+    expect(c.models.find((m) => m.id === 'claude-sonnet-5-5[1m]')).toMatchObject({ locked: true, lockKind: 'tier', mode: 'subscription' });
     const gated = MODELS_BUILTIN.filter((r) => r.select?.gate === 'localGen').map((r) => r.id);
     expect(c.models.some((m) => gated.includes(m.id))).toBe(false);
   });

@@ -93,9 +93,9 @@ const GLM_MERGE_API = Object.freeze({
 /**
  * **共用 spoof 别名**：`sdkAlias` 不写时的默认值（model-context.js 派生时补上）。
  *
- * SDK binary 认识的 1M 名只有七个（strings 扫出来：opus-4-6/4-7/4-8/5、sonnet-4-5-20250929/4-6/5），
- * 六个已被内置行独占、sonnet-5[1m] 是订阅默认行不许被路由 —— 也就是说「一行一个独占别名」这条路
- * 已经走到头。共用别名的行（= 不写 sdkAlias 的行 + 本地分发版的全部外部插槽）**不进 WIRE_LOOKUP
+ * SDK binary 认识的 1M 名是有数的（strings 扫出来：opus-4-6/4-7/4-8/5、sonnet-4-5-20250929/4-6/5；
+ * 10-11 SDK 0.3.296 起多了 opus-5-5 / sonnet-5-5 / fable-5），订阅行自己占着的不许被路由 —— 「一行一个独占别名」这条路
+ * 08-25 就走到头了。共用别名的行（= 不写 sdkAlias 的行 + 本地分发版的全部外部插槽）**不进 WIRE_LOOKUP
  * 的 alias 键、只按 id 可查**，靠会话级路由分辨（lib/ingress/session-routes.js：一个会话只认
  * 自己那行和自己的 fast 行，主行优先）。外部插槽（runtime/local-config.js）一直是这么跑的，
  * 08-25 起内置行也走这条默认路 —— **加新模型行不用再考虑别名这件事**。
@@ -107,19 +107,29 @@ const GLM_MERGE_API = Object.freeze({
 export const SHARED_SDK_ALIAS = 'claude-sonnet-4-6[1m]';
 
 // Claude 表价（美元 / 百万 token），订阅行用；来历见下面订阅段注释
-const CLAUDE_LIST = Object.freeze({ sonnet5: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 6 }, opus5: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 10 }, haiku45: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 } });
+const CLAUDE_LIST = Object.freeze({
+  sonnet5: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 6 }, opus5: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 10 }, haiku45: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 },
+  // 5.5 三行（10-11）：SDK 0.3.296 真跑反推（每个模型冷热各一发，残差 0）。⚠️ Sonnet 5.5 的缓存读 SDK 记 $0.10，不是官方价目页的 $0.20
+  sonnet55: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 4 }, opus55: { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 8 }, haiku55: { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.2 },
+});
 export const MODELS_BUILTIN = Object.freeze([
   // ── 订阅通路（Claude 真名，零注入）──
   // `prices` = Claude 表价，跟站内订阅会话 SDK 自报的 total_cost_usd 同口径（relay 订阅腿 09-07 前因行上没价记 0，网页端与桌面版
   // 两本账对不上）。数值由生产 run_model_usage 反推 SDK 价目（Opus 5 206 行残差 4e-15、≥20 万上下文 676 行同价即不分档；Sonnet 5 117 行中 116 行相符），改价先重跑拟合。
+  // 10-11 两条可选行从 5 换到 5.5：旧 id `claude-sonnet-5[1m]` / `claude-opus-5[1m]` 不再是行，记在 model-renames.js
+  // （存量会话与偏好自动跟到 5.5）。不带 [1m] 的 5.5 名 SDK 也按 1M 窗口报（真跑 contextWindow=1000000）。
   {
-    id: 'claude-sonnet-5[1m]', window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.sonnet5,
-    select: { label: 'Sonnet 5', desc: '响应快 · 适合日常改稿与排版', gate: 'subscription' },
+    id: 'claude-sonnet-5-5[1m]', window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.sonnet55,
+    select: { label: 'Sonnet 5.5', desc: '响应快 · 适合日常改稿与排版', gate: 'subscription' },
   },
   {
-    id: 'claude-opus-5[1m]', window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.opus5,
-    select: { label: 'Opus 5', desc: '前端与审美能力更强 · 订阅额度消耗较快，建议用于重要任务', gate: 'subscription' },
+    id: 'claude-opus-5-5[1m]', window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.opus55,
+    select: { label: 'Opus 5.5', desc: '前端与审美能力更强 · 订阅额度消耗较快，建议用于重要任务', gate: 'subscription' },
   },
+  { id: 'claude-sonnet-5-5',     window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.sonnet55 },
+  { id: 'claude-opus-5-5',       window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.opus55 },
+  { id: 'claude-haiku-5-5',      window: 1_000_000, brand: 'claude', prices: CLAUDE_LIST.haiku55 },   // 订阅路的 helper / 子代理（NODESIGN_FAST_MODEL）
+  // 下面两行留着给历史账计价（SDK 上报的原始模型名）；用户已选不到
   { id: 'claude-sonnet-5',       window: 200_000, brand: 'claude', prices: CLAUDE_LIST.sonnet5 },
   { id: 'claude-opus-5',         window: 200_000, brand: 'claude', prices: CLAUDE_LIST.opus5 },
   { id: 'claude-opus-4-7[1m]',   window: 1_000_000, brand: 'claude' },
@@ -133,9 +143,10 @@ export const MODELS_BUILTIN = Object.freeze([
   // 下面两行 08-21 给 Ox 两行做过 spoof，08-26 随 Ox 下架**空出来**（行留着：SDK 认识的 1M 名是坑位不是垃圾）
   { id: 'claude-opus-4-8[1m]',   window: 1_000_000, brand: 'claude' },
   { id: 'claude-sonnet-4-5-20250929[1m]', window: 1_000_000, brand: 'claude' },
-  // 独占 alias 池现状（08-26 更新）：opus-4-6[1m]→gemini-3.7-flash、opus-4-7[1m]→deepseek-v4-flash-vision、opus-5[1m]→qwen；
-  // **空着三个**：opus-4-8[1m]、sonnet-4-5-20250929[1m]、haiku-4-5（Ox 三行 08-26 下架腾出来的）；
-  // sonnet-5[1m] 是订阅默认行不许被路由；**sonnet-4-6[1m] = SHARED_SDK_ALIAS**（共用别名，永远不许被独占）。
+  // 独占 alias 池现状（10-11 更新）：opus-4-6[1m]→gemini-3.7-flash、opus-4-7[1m]→deepseek-v4-flash-vision、opus-4-8[1m]→qwen
+  // （10-11 从 opus-5[1m] 挪过来：那个名字进了改名表，不能再是活着的行）；
+  // **空着两个**：sonnet-4-5-20250929[1m]、haiku-4-5（Ox 行 08-26 下架腾出来的）；
+  // sonnet-5-5[1m] / opus-5-5[1m] 是订阅可选行不许被路由；**sonnet-4-6[1m] = SHARED_SDK_ALIAS**（共用别名，永远不许被独占）。
   // ⚠️ 空出来不等于新行该去占：08-25 起加新行的默认写法就是**不写 sdkAlias**（走共用别名 + 会话级路由），
   // 这三个坑位留给真正需要"没会话也能按 alias 反查"的场合（探针、跨进程重放那类）。
 
@@ -185,13 +196,13 @@ export const MODELS_BUILTIN = Object.freeze([
     // `server/lib/_ingress-check.mjs` 第 6 项会真查 /slots 比对，换机后跑一次。
     api: {
       upstream: 'qwenLocal', wireModel: 'qwen3.8-27b',
-      sdkAlias: 'claude-opus-5[1m]',
+      sdkAlias: 'claude-opus-4-8[1m]',   // 10-11 前是 opus-5[1m]；⚠️ 换名后盒子没开过机，没真跑验过
       fastModel: 'qwen3.8-27b',
       thinking: 'enabled8k',
       // ⭐ 08-19 盒上体检 9/9：llama.cpp 的 /v1/messages **原生直通 tool_result 图片**
       // （中转站 Gemini 桥正是死在这一项）。原样直通比提升到顶层更忠实，故关掉 lift。
       liftImages: false,
-      prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },   // 本地盒子按租金付费，token 记 0（不然按 opus-5 虚价记账）
+      prices: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },   // 本地盒子按租金付费，token 记 0（不然按别名的虚价记账）
     },
   },
   // gemini-3.1-pro 行（中转-gemini-3.1-pro-preview，alias claude-sonnet-4-6[1m]）08-21 深夜清掉：退了 picker 后只做体检对照，

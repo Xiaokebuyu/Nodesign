@@ -29,6 +29,11 @@ export const RENAMED_MODELS = Object.freeze({
   // ⚠️ 目录名 deepseek-flash 现在只当 wireModel 用，**不再是任何一行的 id**，所以这条必须留着（上午改名后
   // 建的会话文件里存的就是它）。两条都直接指现名而不是串成 a→b→c：加载断言要求每个目标是活着的行。
   'deepseek-flash': 'deepseek-v4.1-flash',
+  // 10-11：订阅两条可选行从 Claude 5 换到 5.5（站主：Claude 系列切到 5.5）。同一个位置换了一代模型，
+  // 存量会话的 session-config 和用户记着的选择跟到新行。不带 [1m] 的 claude-sonnet-5 / claude-opus-5 不在这里：
+  // 它们还是表里的行（历史账按 SDK 上报的原始名计价）。
+  'claude-sonnet-5[1m]': 'claude-sonnet-5-5[1m]',
+  'claude-opus-5[1m]': 'claude-opus-5-5[1m]',
 });
 
 /**

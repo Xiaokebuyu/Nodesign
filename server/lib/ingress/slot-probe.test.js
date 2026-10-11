@@ -76,7 +76,7 @@ describe('probeModel', () => {
     expect(byId.text.note).toMatch(/pong/);
     expect(byId.tool_use.note).toMatch(/because/);
     expect(byId.vision.note).toMatch(/Red/);
-    const sub = await mods.probe.probeModel('claude-sonnet-5[1m]');
+    const sub = await mods.probe.probeModel('claude-sonnet-5-5[1m]');
     expect(sub.mode).toBe('subscription');
     expect(sub.checks[0].ok).toBeNull();
   }, 30_000);

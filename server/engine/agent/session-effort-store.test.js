@@ -20,8 +20,8 @@ describe('session-config.json 的 effort', () => {
     expect(JSON.parse(fs.readFileSync(path.join(dir, 'session-config.json'), 'utf8'))).not.toHaveProperty('effort');
   });
   it('⭐ 并发写模型和档位不互相吃字段（同一把锁）', async () => {
-    await Promise.all([writeSessionModelOverride(dir, 'claude-opus-5[1m]'), writeSessionEffort(dir, 'xhigh')]);
-    expect(await readSessionModelOverride(dir)).toBe('claude-opus-5[1m]');
+    await Promise.all([writeSessionModelOverride(dir, 'claude-opus-5-5[1m]'), writeSessionEffort(dir, 'xhigh')]);
+    expect(await readSessionModelOverride(dir)).toBe('claude-opus-5-5[1m]');
     expect(await readSessionEffort(dir)).toBe('xhigh');
   });
   it('文件里写坏的档位读成 null', async () => {

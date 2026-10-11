@@ -118,7 +118,7 @@ export function createAgents({ mainModel, sdkModel, fastModel } = {}) {
     || process.env.NODESIGN_FAST_MODEL
     || resolveDefaultFastModel(mainModel)
     || mainModel
-    || 'claude-haiku-4-5';
+    || 'claude-haiku-5-5';
   // sdkSpoofMain：vision-checker 用的"主 agent SDK 视角 model"。
   // 调用方未传 sdkModel 时 fallback 到 mainModel（非 Kimi 主时两者相等无害）。
   const sdkSpoofMain = sdkModel || mainModel;

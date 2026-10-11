@@ -1,7 +1,7 @@
 /**
  * 参数标签泄漏消毒钉子（2026-08-19）。
  *
- * 事故原文（会话 008fe16c，claude-opus-5[1m]，jsonl 里 tool_use.input 原样）：
+ * 事故原文（会话 008fe16c，claude-opus-5-5[1m]，jsonl 里 tool_use.input 原样）：
  * rationale 值尾部是 `…</rationale>\n<parameter name="scope">庄家（对手）`，
  * scope 键缺失。正反都钉：真泄漏要拆回来、判据不全的一律不动。
  */

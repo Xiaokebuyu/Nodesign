@@ -198,6 +198,7 @@ export function canonicalModelId(appModel) {
   return followRename(appModel, RENAMES);     // 多跳与成环在 model-renames.js 的 followRename 里
 }
 
+export const modelRenames = () => RENAMES;   // 现役改名表，给前端：浏览器里记着的选择是旧名时跟到新行，而不是当成过期掉回默认
 /**
  * 查表拿一行 —— 认现名，也认改名前的旧名。
  * ⭐ 本文件里凡是"拿 appModel 查行"的地方都走它（价钱 / 通路 / 牌子 / standby / 窗口…），

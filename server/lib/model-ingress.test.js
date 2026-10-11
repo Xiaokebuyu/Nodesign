@@ -268,8 +268,8 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
   it('qwen 会话：自己的 alias（原样 / 剥[1m]）→ 自己那行', () => {
     registerIngressSession(SID, 'qwen3.8-27b');
     try {
-      expect(resolveSessionWire('claude-opus-5[1m]', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'qwen3.8-27b' } });
-      expect(resolveSessionWire('claude-opus-5', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'qwen3.8-27b' } });
+      expect(resolveSessionWire('claude-opus-4-8[1m]', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'qwen3.8-27b' } });
+      expect(resolveSessionWire('claude-opus-4-8', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'qwen3.8-27b' } });
       expect(resolveSessionWire('qwen3.8-27b', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'qwen3.8-27b' } });
     } finally { unregisterIngressSession(SID); }
   });
@@ -334,7 +334,7 @@ describe('会话级路由 resolveSessionWire（⛔ 撞名雷封口，2026-08-20�
     expect(resolveSessionWire('claude-opus-4-7[1m]', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'deepseek-v4-flash-vision' } });
   });
   it('订阅模型注册 = noop（订阅会话根本不经入口）', () => {
-    registerIngressSession(SID, 'claude-sonnet-5[1m]');
+    registerIngressSession(SID, 'claude-sonnet-5-5[1m]');
     expect(resolveSessionWire('claude-opus-4-6', SID)).toMatchObject({ reason: 'table', wire: { appModel: 'gemini-3.7-flash' } });
     unregisterIngressSession(SID);
   });

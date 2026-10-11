@@ -59,12 +59,28 @@ export function isModelPrefStale(pref, serverOptions) {
   return !serverOptions.some((o) => o?.id === pref && !o.locked);
 }
 
+/**
+ * 本地偏好是改名前的旧 id 时，顺着服务端给的改名表找到现在那一行（10-11，Claude 5 → 5.5）。
+ * 找不到、成环、或新行这个用户选不了 → null（调用方照过期处理）。
+ * @param {string|null} pref
+ * @param {Record<string,string>|null|undefined} renames  `GET /api/me/models` 的 renames
+ * @param {Array<{id:string, locked?:boolean}>|null|undefined} serverOptions
+ * @returns {string|null}
+ */
+export function renamedModelPref(pref, renames, serverOptions) {
+  if (!pref || !renames || !serverOptions?.length) return null;
+  const seen = new Set([pref]);
+  let cur = pref;
+  while (typeof renames[cur] === 'string' && !seen.has(renames[cur])) { cur = renames[cur]; seen.add(cur); }
+  return cur !== pref && serverOptions.some((o) => o?.id === cur && !o.locked) ? cur : null;
+}
+
 /** 服务端拿不到时的兜底清单（离线 / 接口挂了也别让按钮变成死的） */
 export const FALLBACK_MODELS = [
   // ⚠️ 这条在服务端 model-table 里有个孪生（`glm-5.3-flash-rp`「· 演出」：同模型同价、厂商换成 particle），
   //    09-06 起那条 `only: 'stage'` **只在演出显示器的选择器里出现**，首页 / 画布这份清单不列它。
   //    ⛔ label / desc 跟服务端表里的 select 必须逐字一致（compactLabel 靠撞名决定按钮上印长名还是短名）。
   { id: DEFAULT_MODEL_ID, label: 'GLM-5.3-Flash · 设计', desc: '支持视觉 · 单次最多 8 张图片（更早的自动省略）· 1M 上下文 · 成本极低', brand: DEFAULT_BRAND },
-  { id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '响应快 · 适合日常改稿与排版', brand: 'claude' },
-  { id: 'claude-opus-5[1m]', label: 'Opus 5', desc: '前端与审美能力更强 · 订阅额度消耗较快，建议用于重要任务', brand: 'claude' },
+  { id: 'claude-sonnet-5-5[1m]', label: 'Sonnet 5.5', desc: '响应快 · 适合日常改稿与排版', brand: 'claude' },
+  { id: 'claude-opus-5-5[1m]', label: 'Opus 5.5', desc: '前端与审美能力更强 · 订阅额度消耗较快，建议用于重要任务', brand: 'claude' },
 ];

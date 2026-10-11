@@ -123,7 +123,7 @@ import { migrateMemoryLayout } from './memory-migration.js';
  *   旧项目 settings.json 里遗留的 230400 视为 stale default 强制迁移
  *  （mergeSettingsDefaults 内特判），用户手改过的其他值不动。
  */
-const MAIN_MODEL = process.env.NODESIGN_MODEL || 'claude-sonnet-5[1m]';   // 08-21 深夜：kimi 行删了，兜底改订阅默认行（同 session-model.js）
+const MAIN_MODEL = process.env.NODESIGN_MODEL || 'claude-sonnet-5-5[1m]';   // 08-21 深夜：kimi 行删了，兜底改订阅默认行（同 session-model.js）
 const LEGACY_DEFAULT_WINDOWS = new Set([230400]);
 
 function defaultAutoCompactWindow() {

@@ -27,15 +27,15 @@ describe('modelSourceFor（local profile）', () => {
   it('目录里有 → relay；锁着的带 lockReason 出现在清单里但 allowed 里没有', () => {
     rc._setRelayCatalog({ configured: true, ok: true, at: 1, error: null, whoami: null, models: [
       { id: apiRow.id, locked: false },
-      { id: 'claude-sonnet-5[1m]', locked: true, lockReason: '站点那边说要订阅' },
+      { id: 'claude-sonnet-5-5[1m]', locked: true, lockReason: '站点那边说要订阅' },
     ] });
     expect(mc.modelSourceFor(apiRow.id)).toBe('relay');
     const list = mc.selectableModelsFor(LOCAL_OWNER);
     expect(list.find((m) => m.id === apiRow.id)?.source).toBe('relay');
-    const sonnet = list.find((m) => m.id === 'claude-sonnet-5[1m]');
+    const sonnet = list.find((m) => m.id === 'claude-sonnet-5-5[1m]');
     expect(sonnet?.locked).toBe(true);
     expect(sonnet?.lockReason).toBe('站点那边说要订阅');
-    expect(mc.allowedModelsFor(LOCAL_OWNER).some((m) => m.id === 'claude-sonnet-5[1m]')).toBe(false);
+    expect(mc.allowedModelsFor(LOCAL_OWNER).some((m) => m.id === 'claude-sonnet-5-5[1m]')).toBe(false);
   });
   it('本机有钥匙 → local，哪怕目录里也有（本机优先）', () => {
     const env = keyEnvOf(apiRow.id);

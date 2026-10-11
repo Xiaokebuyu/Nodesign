@@ -15,7 +15,7 @@ import { act, useState } from 'react';
 const SID = '11111111-2222-4333-8444-555555555555';
 const NEW_SID = '99999999-2222-4333-8444-555555555555';
 const MSG_ID = 'aaaaaaaa-1111-4222-8333-444444444444';
-const OPTIONS = [{ id: 'claude-sonnet-5[1m]', label: 'Sonnet 5', desc: '', brand: 'claude' }];
+const OPTIONS = [{ id: 'claude-sonnet-5-5[1m]', label: 'Sonnet 5', desc: '', brand: 'claude' }];
 
 vi.mock('../../lib/api.js', async (orig) => {
   const mod = await orig();

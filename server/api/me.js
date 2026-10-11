@@ -20,7 +20,7 @@ import { listEntries, getEntry, removeEntry } from '../lib/showcase-store.js';
 import { getArtifactCover } from '../lib/cover.js';
 import { getSharedDir } from '../projects/workspace.js';
 import { getProject } from '../projects/store.js';
-import { selectableModelsFor, defaultModelFor, modelSourceFor, upstreamOf } from '../engine/agent/model-context.js';
+import { selectableModelsFor, defaultModelFor, modelSourceFor, upstreamOf, modelRenames } from '../engine/agent/model-context.js';
 import { noteOf } from '../engine/agent/model-notes.js';
 import { upstreamHealth } from '../lib/ingress/upstream-health.js';
 import { tierOf } from '../auth/tier.js';
@@ -64,7 +64,7 @@ function withHealth(options) {
 }
 
 router.get('/models', (req, res) => {
-  res.json({ options: withHealth(selectableModelsFor(req.user)), default: defaultModelFor(req.user) });
+  res.json({ options: withHealth(selectableModelsFor(req.user)), default: defaultModelFor(req.user), renames: modelRenames() });
 });
 
 /**

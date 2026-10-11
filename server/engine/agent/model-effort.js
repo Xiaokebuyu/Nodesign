@@ -5,7 +5,7 @@
  * 全从这里取。纯函数，不读模块状态。
  *
  * 两条通路：
- *   - 订阅 Claude 行：SDK 的 effort 直达 Anthropic。只给 Sonnet 5 / Opus 5（sdk.d.ts：xhigh 要 Sonnet 5 / Opus 4.7+，
+ *   - 订阅 Claude 行：SDK 的 effort 直达 Anthropic。只给 Sonnet / Opus 的 5 与 5.5（sdk.d.ts：xhigh 要 Sonnet 5 / Opus 4.7+，
  *     max 要 Opus 4.6+ / Sonnet 4.6+）。默认 medium，跟 09-13 之前 session-loop 写死的值一致。
  *   - API 行：CLI 照样把 effort 写进请求体 `output_config.effort`（09-13 探针：spoof 名下也带，
  *     applyFlagSettings 中途改了下一发就跟着变），ingress 按这一行上游收的档就近换算成 reasoning_effort。
@@ -16,8 +16,8 @@
 export const EFFORT_LEVELS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
 const RANK = Object.freeze(Object.fromEntries(EFFORT_LEVELS.map((l, i) => [l, i])));
 
-/** 订阅行里可调的：Sonnet 5 / Opus 5（含 1M 名） */
-const SUBSCRIPTION_EFFORT_ROW = /^claude-(opus-5|sonnet-5)(\[1m\])?$/;
+/** 订阅行里可调的：Sonnet / Opus 的 5 与 5.5（含 1M 名） */
+const SUBSCRIPTION_EFFORT_ROW = /^claude-(opus|sonnet)-5(-5)?(\[1m\])?$/;
 /** 订阅行默认档 */
 export const SUBSCRIPTION_DEFAULT_EFFORT = 'medium';
 /** 不可调的行起会话时传给 SDK 的值（跟 09-13 之前一致；API 行不可调时 ingress 不认请求里的 effort） */

@@ -35,7 +35,7 @@ const CONFIG_NAME = 'session-config.json';
  * 改成订阅默认行（一个不在表里的名字会被 resolveModelRoute 当订阅模型，兜底必须是真名）；
  * 正常部署 .env 里一定有 NODESIGN_MODEL，走不到这里。
  */
-const LEGACY_FALLBACK_MODEL = 'claude-sonnet-5[1m]';
+const LEGACY_FALLBACK_MODEL = 'claude-sonnet-5-5[1m]';
 
 /** 全局默认模型（不含会话覆盖）。每次现读 env —— 进程内改 env 也能生效 */
 export function defaultModel() {

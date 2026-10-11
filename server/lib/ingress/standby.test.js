@@ -15,7 +15,7 @@ describe('模型表 standby', () => {
     }
     expect(standbyModelOf('glm-5.3-flash-merge')).toBe('deepseek-v4-flash-vision');
     expect(standbyModelOf('deepseek-v4-flash-vision')).toBe('glm-5.3-flash-merge');
-    expect(standbyModelOf('claude-opus-5[1m]')).toBeNull();
+    expect(standbyModelOf('claude-opus-5-5[1m]')).toBeNull();
   });
 });
 
@@ -34,7 +34,7 @@ describe('switchSessionToStandby：会话级换线', () => {
   });
   it('没注册的会话 / 没 standby 的行 → null', () => {
     expect(switchSessionToStandby('nope')).toBeNull();
-    registerIngressSession('sw2', 'claude-opus-5[1m]');   // 订阅行不进 ingress 表
+    registerIngressSession('sw2', 'claude-opus-5-5[1m]');   // 订阅行不进 ingress 表
     expect(switchSessionToStandby('sw2')).toBeNull();
   });
 });

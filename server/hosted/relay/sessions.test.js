@@ -19,7 +19,7 @@ describe('openRelaySession', () => {
     expect(routed.role).toBe('helper');
   });
   it('订阅行：mode=subscription，且不进 ingress 会话表', () => {
-    const r = openRelaySession({ sid: SID, appModel: 'claude-sonnet-5[1m]', userId: 'u1' });
+    const r = openRelaySession({ sid: SID, appModel: 'claude-sonnet-5-5[1m]', userId: 'u1' });
     expect(r.session.mode).toBe('subscription');
     // 没登记进 ingress 表：不带会话前缀时 resolveSessionWire 走全表反查的那条路
     expect(resolveSessionWire('zzz-not-a-model', SID).wire).toBeNull();
@@ -31,7 +31,7 @@ describe('openRelaySession', () => {
   it('别人登记过的 sid → 409；自己重复登记 = 幂等更新', () => {
     openRelaySession({ sid: SID, appModel: apiModel, userId: 'u1' });
     expect(openRelaySession({ sid: SID, appModel: apiModel, userId: 'u2' }).code).toBe('SID_TAKEN');
-    const again = openRelaySession({ sid: SID, appModel: 'claude-sonnet-5[1m]', userId: 'u1' });
+    const again = openRelaySession({ sid: SID, appModel: 'claude-sonnet-5-5[1m]', userId: 'u1' });
     expect(again.ok).toBe(true);
     expect(again.session.mode).toBe('subscription');
     expect(_relaySessionCount()).toBe(1);

@@ -3,7 +3,7 @@ import { Check, Loader2, Lock, ChevronRight } from 'lucide-react';
 import { COLOR, GAP, RADIUS, SHADOW, FONT_SANS, FONT_MONO, FONT_SIZE } from '../../lib/theme.js';
 import { useGlobalStore } from '../../stores/globalStore.js';
 import { Sessions, Me } from '../../lib/api.js';
-import { FALLBACK_MODELS, isModelPrefStale } from '../../lib/models.js';
+import { FALLBACK_MODELS, isModelPrefStale, renamedModelPref } from '../../lib/models.js';
 import ModelMark from '../ui/ModelMark.jsx';
 import Popover from '../ui/Popover.jsx';
 import { t } from '../../lib/i18n.js';
@@ -161,7 +161,8 @@ export default function ModelPicker({
    */
   useEffect(() => {
     if (hasSession) return;
-    if (isModelPrefStale(modelPref, remote?.options)) setModelPref(remote.default || remote.options.find(o => !o.locked)?.id || remote.options[0].id);
+    // 行改过名（10-11 Claude 5 → 5.5）：偏好跟到新行；不是改名才当下架，落回这个用户的默认
+    if (isModelPrefStale(modelPref, remote?.options)) setModelPref(renamedModelPref(modelPref, remote.renames, remote.options) || remote.default || remote.options.find(o => !o.locked)?.id || remote.options[0].id);
   }, [hasSession, remote, modelPref, setModelPref]);
   /**
    * 现在跑的是哪个。两条路都保证是个具体模型：有会话看服务端（`remote.model`

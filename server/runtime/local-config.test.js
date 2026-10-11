@@ -41,7 +41,7 @@ describe('validateLocalConfig', () => {
         { id: 'orphan', label: '指向不存在的上游', window: 100000, upstream: 'ghost', wireModel: 'x' },
         { id: 'badfast', label: 'fast 指错', window: 100000, upstream: 'relay', wireModel: 'x', fastModel: 'nope' },
         { id: 'toolong', label: '预算超线', window: 100000, upstream: 'relay', wireModel: 'x', emptyRetries: 3, retryBudgetMs: MAX_RETRY_BUDGET_MS + 1 },
-        { id: 'extra', label: '多了字段', window: 100000, upstream: 'relay', wireModel: 'x', sdkAlias: 'claude-opus-5[1m]' },
+        { id: 'extra', label: '多了字段', window: 100000, upstream: 'relay', wireModel: 'x', sdkAlias: 'claude-opus-5-5[1m]' },
       ],
     });
     expect(Object.keys(v.upstreams).sort()).toEqual(['anth', 'relay']);
@@ -191,7 +191,7 @@ describe('外部插槽进表 + 会话优先路由（子进程）', () => {
     expect(bare.ids).toEqual([]);                                  // 什么都没配：一行都不给
     const withKey = run({ ANTHROPIC_API_KEY: 'sk-x' });
     expect(withKey.via).toBe('api_key');
-    expect(withKey.ids).toContain('claude-sonnet-5[1m]');
+    expect(withKey.ids).toContain('claude-sonnet-5-5[1m]');
     // ⏸ 站主 09-06：本地版暂不认 claude login 的登录态（platform.LOCAL_CLAUDE_LOGIN_ENABLED=false）。
     // 凭据文件在也当没配 —— 用户机器上的订阅骑进来计量外审都够不着。开关翻回去时把这两条断言换回 'login'
     writeFileSync(path.join(cfgDir, '.credentials.json'), '{}');  // claude login 落盘的样子

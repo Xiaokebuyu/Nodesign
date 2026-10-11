@@ -19,7 +19,7 @@ await import('../../auth/users-store.js');
 await import('../../projects/store.js');
 
 // 订阅行 = Claude 系列走订阅旋钮；API 行（GLM / DeepSeek 那些）走另一个，默认 off
-const CLAUDE = 'claude-sonnet-5[1m]';
+const CLAUDE = 'claude-sonnet-5-5[1m]';
 const API_ROW = 'deepseek-v4-flash-vision';
 const strictUser = { id: 'u-strict', tier: 'basic', moderation_level: 'strict' };
 
