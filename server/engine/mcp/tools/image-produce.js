@@ -123,6 +123,12 @@ export function imagePausedReason() {
   return /^(1|on|true|yes)$/i.test(v) ? '恢复时间见站内公告' : v;
 }
 
+/** 工具本体用的拒绝结果（话术跟能力闸 capability-gate.js 对 paused 说的那句逐字一致）；没停 → null */
+export function imagePausedResult(toolName) {
+  const paused = imagePausedReason();
+  return paused ? { content: [{ type: 'text', text: `${toolName} 不可用：生图通道已暂停：${paused}。把这句话原话转告用户，恢复前不要重试本工具。` }], isError: true } : null;
+}
+
 function stageError(stage, message) {
   return Object.assign(new Error(message), { stage });
 }

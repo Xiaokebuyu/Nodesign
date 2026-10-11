@@ -20,7 +20,7 @@ import {
   THUMBNAIL_MAX_DIM, THUMBNAIL_QUALITY, writeWebpSibling,   // 预热由 writeWebpSibling 顺带做
 } from '../../../lib/image-variant.js';
 import { buildVariationPrompt, PRESERVE_KEYS } from './helpers/codex-imagegen.js';
-import { produceImage, extForMime, imagePausedReason } from './image-produce.js';
+import { produceImage, extForMime, imagePausedResult } from './image-produce.js';
 import { describeImageFacts } from './helpers/image-facts.js';
 import { imageRoute, relayGenerateImage } from './relay-tools.js';
 import { fanOutImages, buildOutputName, makeImagePool, GEN_FOLDER_NOTE } from './generate-image-support.js';
@@ -388,13 +388,9 @@ memory (记忆/, type: project) so later sessions inherit it.`,
         referenceImages = [variationOf, ...(referenceImages || [])];
       }
       // 1. 选路：本机 codex / gateway，都没有但登录了站点（桌面版）就让网关替它出图（按账号记 $0.20/张）
-      const paused = imagePausedReason();
-      if (paused) {
-        return { content: [{ type: 'text', text: `generate_image 不可用：生图通道已暂停：${paused}。把这句话原话转告用户，恢复前不要重试本工具。` }], isError: true };
-      }
-      const route = imageRoute();
+      const paused = imagePausedResult('generate_image'), route = paused ? null : imageRoute();   // 站主停了生图（NODESIGN_IMAGE_PAUSED）就不选路
       if (!route) {
-        return { content: [{ type: 'text', text: 'generate_image failed: no image provider configured（codex CLI / NODESIGN_IMAGE_PROVIDER=gateway，或桌面版登录站点）.' }], isError: true };
+        return paused || { content: [{ type: 'text', text: 'generate_image failed: no image provider configured（codex CLI / NODESIGN_IMAGE_PROVIDER=gateway，或桌面版登录站点）.' }], isError: true };
       }
 
       // 输出命名 + 目录提前定：codex 分支需要先有确定的目标路径让 codex 落盘
