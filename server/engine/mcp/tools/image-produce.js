@@ -111,6 +111,18 @@ export function localImageRoute() {
   return whichBinary(process.env.NODESIGN_CODEX_BIN || 'codex') ? 'codex' : null;
 }
 
+/**
+ * 站主手动停掉生图（10-11：上游订阅到期，每一发都被拒）。NODESIGN_IMAGE_PAUSED 非空即停，值就是给用户看的理由；
+ * 写 1 / on / true 用默认那句。跟 NODESIGN_LOCAL_BOX=off 同一类：改 .env、重启生效。
+ * 三个读者：能力位（runtime/capabilities.js）、工具本体（演出背景图不过能力闸，直接调 handler）、relay 端点。
+ * @returns {string | null}
+ */
+export function imagePausedReason() {
+  const v = (process.env.NODESIGN_IMAGE_PAUSED || '').trim();
+  if (!v || /^(0|off|false|no)$/i.test(v)) return null;
+  return /^(1|on|true|yes)$/i.test(v) ? '恢复时间见站内公告' : v;
+}
+
 function stageError(stage, message) {
   return Object.assign(new Error(message), { stage });
 }

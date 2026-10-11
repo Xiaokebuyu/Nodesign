@@ -46,6 +46,8 @@ export const TOOL_CAPABILITIES = Object.freeze({
 });
 
 export function unavailableMessage(c) {
+  // 站主手动停的（probe 回 paused）不是缺东西：没有装法可给，只有理由
+  if (c.paused) return `${c.label}已暂停：${c.detail}`;
   return `本机缺 ${c.label}（${c.detail}）。装法：${c.fix}`;
 }
 
@@ -68,11 +70,14 @@ export function withCapabilityGate(toolDef) {
   if (spec.mode === 'note') {
     return { ...toolDef, description: `${toolDef.description}\n\n⚠️ ${msg} 本工具仍可用，但依赖它的步骤（页图/体检）会缺席。` };
   }
+  const [ask, then] = c.paused
+    ? ['tell the user it is paused', '恢复前不要重试本工具']
+    : ['tell the user what to install', '装好后重启 Nodesign 再试；不要重试本工具'];
   return {
     ...toolDef,
-    description: `⛔ CURRENTLY UNAVAILABLE — ${msg} Do not call this tool; tell the user what to install (原话转告，不要重试).\n\n${toolDef.description}`,
+    description: `⛔ CURRENTLY UNAVAILABLE — ${msg} Do not call this tool; ${ask} (原话转告，不要重试).\n\n${toolDef.description}`,
     handler: async () => ({
-      content: [{ type: 'text', text: `${toolDef.name} 不可用：${msg}。把这句话原话转告用户，装好后重启 Nodesign 再试；不要重试本工具。` }],
+      content: [{ type: 'text', text: `${toolDef.name} 不可用：${msg}。把这句话原话转告用户，${then}。` }],
       isError: true,
     }),
   };

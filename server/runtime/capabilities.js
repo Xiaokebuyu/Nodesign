@@ -21,6 +21,7 @@ import { isAvailable as rembgAvailable, rembgSetupHint } from '../engine/mcp/too
 // `=== 'on'`，跟那边 `!== 'off'`（默认开）的默认值正好相反，同一个变量两套读法。
 import { localBoxEnabled } from '../engine/mcp/tools/h3box-ssh.js';
 import { searchRoute, imageRoute } from '../engine/mcp/tools/relay-tools.js';
+import { imagePausedReason } from '../engine/mcp/tools/image-produce.js';
 import { whichBinary } from './which.js';
 import { checkCjkFonts } from '../lib/cjk-fonts.js';
 import { platform } from './platform.js';
@@ -81,6 +82,8 @@ export const CAPABILITY_DEFS = Object.freeze([
     fix: '桌面版：登录站点即可（网关代出图）；自己搭：npm i -g @openai/codex && codex login，或 NODESIGN_IMAGE_PROVIDER=gateway + NODESIGN_GATEWAY_KEY',
     // 选路跟工具本体同一个函数（mcp/tools/relay-tools.js）：这里说"可用"跟 generate_image 真能跑是同一个判断
     probe: () => {
+      const paused = imagePausedReason();
+      if (paused) return { available: false, paused: true, detail: paused };
       const route = imageRoute();
       if (route === 'relay') return { available: true, detail: '站点网关代出图（按账号记 $/张）' };
       if (route === 'gateway') return { available: true, detail: 'gateway（NODESIGN_GATEWAY_KEY 已配）' };
@@ -126,7 +129,7 @@ function bin(name, extra = []) {
   return p ? { available: true, detail: p, path: p } : { available: false, detail: `${name} 不在 PATH${extra.length ? '（也不在常见安装位置）' : ''}` };
 }
 
-/** id → { id, kind, level, label, uses, fix, available, detail, path? }。probeCapabilities 之前是空的 */
+/** id → { id, kind, level, label, uses, fix, available, detail, path?, paused? }。probeCapabilities 之前是空的。paused = 站主手动停的，不是缺东西 */
 const state = new Map();
 let probed = null;
 
@@ -138,7 +141,7 @@ export async function probeCapabilities({ force = false } = {}) {
       try { r = await def.probe(); } catch (err) { r = { available: false, detail: `探测出错：${err.message}` }; }
       const { probe: _p, ...meta } = def;
       const fix = typeof def.fix === 'function' ? def.fix() : def.fix;
-      state.set(def.id, Object.freeze({ ...meta, fix, available: !!r.available, detail: r.detail || '', ...(r.path ? { path: r.path } : {}) }));
+      state.set(def.id, Object.freeze({ ...meta, fix, available: !!r.available, detail: r.detail || '', ...(r.path ? { path: r.path } : {}), ...(r.paused ? { paused: true } : {}) }));
     }
     return capabilitySnapshot();
   })();

@@ -141,6 +141,22 @@ describe('POST /tools/generate_image', () => {
     expect((await post(token, '/tools/generate_image', { prompt: 'x' })).status).toBe(503);
     imageRoute = 'codex';
   });
+  it('站主停了生图（NODESIGN_IMAGE_PAUSED）→ 503 IMAGE_PAUSED 带理由，不出图不记账；撤掉开关恢复', async () => {
+    const user = makeUser({ daily: 5 });
+    const { token } = mintDevice({ userId: user.id });
+    const before = produce.mock.calls.length;
+    process.env.NODESIGN_IMAGE_PAUSED = '维护中';
+    try {
+      const r = await post(token, '/tools/generate_image', { prompt: 'x' });
+      expect(r.status).toBe(503);
+      const j = await r.json();
+      expect(j.code).toBe('IMAGE_PAUSED');
+      expect(j.error.message).toBe('站点的生图通道已暂停：维护中。原话转告用户，恢复前不要重试。');
+      expect(produce.mock.calls.length).toBe(before);
+      expect(rows(user.id)).toEqual([]);
+    } finally { delete process.env.NODESIGN_IMAGE_PAUSED; }
+    expect((await post(token, '/tools/generate_image', { prompt: 'x' })).status).toBe(200);
+  });
   it('参数校验：没 prompt 400、model 不认识 400、refs 的 mime 不支持 400', async () => {
     const { token } = mintDevice({ userId: makeUser().id });
     expect((await post(token, '/tools/generate_image', {})).status).toBe(400);

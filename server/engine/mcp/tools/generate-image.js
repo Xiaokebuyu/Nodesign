@@ -20,7 +20,7 @@ import {
   THUMBNAIL_MAX_DIM, THUMBNAIL_QUALITY, writeWebpSibling,   // 预热由 writeWebpSibling 顺带做
 } from '../../../lib/image-variant.js';
 import { buildVariationPrompt, PRESERVE_KEYS } from './helpers/codex-imagegen.js';
-import { produceImage, extForMime } from './image-produce.js';
+import { produceImage, extForMime, imagePausedReason } from './image-produce.js';
 import { describeImageFacts } from './helpers/image-facts.js';
 import { imageRoute, relayGenerateImage } from './relay-tools.js';
 import { fanOutImages, buildOutputName, makeImagePool, GEN_FOLDER_NOTE } from './generate-image-support.js';
@@ -388,6 +388,10 @@ memory (记忆/, type: project) so later sessions inherit it.`,
         referenceImages = [variationOf, ...(referenceImages || [])];
       }
       // 1. 选路：本机 codex / gateway，都没有但登录了站点（桌面版）就让网关替它出图（按账号记 $0.20/张）
+      const paused = imagePausedReason();
+      if (paused) {
+        return { content: [{ type: 'text', text: `generate_image 不可用：生图通道已暂停：${paused}。把这句话原话转告用户，恢复前不要重试本工具。` }], isError: true };
+      }
       const route = imageRoute();
       if (!route) {
         return { content: [{ type: 'text', text: 'generate_image failed: no image provider configured（codex CLI / NODESIGN_IMAGE_PROVIDER=gateway，或桌面版登录站点）.' }], isError: true };

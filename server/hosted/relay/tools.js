@@ -19,7 +19,7 @@ import { makeServerTmpDir } from '../../lib/server-tmp.js';
 import path from 'node:path';
 import { tierDenialForOwner } from '../../engine/mcp/tools/tier-gate.js';
 import { runWebSearch, ProviderError, PROVIDERS } from '../../engine/mcp/tools/web-search-providers.js';
-import { produceImage, localImageRoute } from '../../engine/mcp/tools/image-produce.js';
+import { produceImage, localImageRoute, imagePausedReason } from '../../engine/mcp/tools/image-produce.js';
 import { relayProduceBudgetMs } from '../../engine/mcp/tools/helpers/codex-imagegen.js';
 import { MODELS, DEFAULT_MODEL } from '../../engine/mcp/tools/generate-image.js';
 import { checkQuota, imageChargeUsd } from '../../lib/quota.js';
@@ -36,7 +36,8 @@ const EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'i
 
 /** /whoami 里报给客户端的"网关替你跑的工具"：站点这边有能力 且 这个账号的档位开放 */
 export function relayToolsFor(user) {
-  const has = (id) => { const c = capabilityState(id); return !c || !!c.available; };
+  // paused（站主手动停的）照样报给客户端：报 false 的话桌面版会对已登录的用户说「没登录站点」，让它调过来拿真话（下面的 IMAGE_PAUSED）
+  const has = (id) => { const c = capabilityState(id); return !c || !!c.available || !!c.paused; };
   return {
     web_search: has('webSearch') && can(user, 'webSearch'),
     generate_image: has('imageGen') && can(user, 'imageGen'),
@@ -79,6 +80,8 @@ export function mountRelayTools(router, { sendError, readRawBody, produce = prod
     const user = req.relayUser;
     const denied = tierDenialForOwner(user, 'imageGen', 'generate_image');
     if (denied) return sendError(res, 403, 'TIER_DENIED', denialText(denied));
+    const paused = imagePausedReason();
+    if (paused) return sendError(res, 503, 'IMAGE_PAUSED', `站点的生图通道已暂停：${paused}。原话转告用户，恢复前不要重试。`);
     const q = checkQuota(user);
     if (!q.ok) return sendError(res, 429, 'QUOTA_EXCEEDED', `generate_image denied: ${DENIAL.imageQuota}`, { quota: { kind: q.kind, used: q.used, limit: q.limit } });
     const route = imageRouteOf();

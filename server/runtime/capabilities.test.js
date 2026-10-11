@@ -118,4 +118,43 @@ describe('capability-gate（子进程真起工具表）', () => {
     expect(withKey.desc).toBe('ORIG');
     expect(withKey.isError).toBe(false);
   });
+
+  /**
+   * 站主手动停生图（10-11，NODESIGN_IMAGE_PAUSED）：能力位报 paused、闸的话术给理由不给装法；
+   * 工具本体自己也拦（演出背景图直接调 handler，不过能力闸）。对照组：没设开关时 codex 在 PATH 里就是可用。
+   */
+  it('NODESIGN_IMAGE_PAUSED：能力位 paused、闸说理由不说装法、工具本体直接调也拦；不设则原样', { timeout: 30_000 }, () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'nd-pause-'));
+    const fakeCodex = path.join(dir, process.platform === 'win32' ? 'codex.cmd' : 'codex');
+    writeFileSync(fakeCodex, '#!/bin/sh\n'); chmodSync(fakeCodex, 0o755);
+    const code = `
+      import { probeCapabilities, capabilityState } from './capabilities.js';
+      import { withCapabilityGate } from '../engine/mcp/capability-gate.js';
+      import { makeGenerateImageTool } from '../engine/mcp/tools/generate-image.js';
+      await probeCapabilities();
+      const gated = withCapabilityGate({ name: 'generate_image', description: 'ORIG', inputSchema: {}, handler: async () => ({ content: [{ type: 'text', text: 'ran' }] }) });
+      const called = await gated.handler({});
+      const c = capabilityState('imageGen');
+      // 工具本体只在停用时调：没停用它会真去起 codex
+      const direct = c.paused ? await makeGenerateImageTool({ workspaceRoot: ${JSON.stringify(dir)} }).handler({ prompt: 'a cat' }, {}) : null;
+      console.log(JSON.stringify({ available: c.available, paused: !!c.paused, detail: c.detail, desc: gated.description, text: called.content?.[0]?.text, isError: !!called.isError, direct: direct && { isError: !!direct.isError, text: direct.content?.[0]?.text } }));`;
+    const base = { ...process.env }; delete base.VITEST; delete base.NODESIGN_IMAGE_PAUSED; delete base.NODESIGN_IMAGE_PROVIDER; delete base.NODESIGN_CODEX_BIN;
+    const run = (extra) => {
+      const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { cwd: here, env: { ...base, NODESIGN_PROFILE: 'local', NODESIGN_DATA_DIR: dir, PATH: dir, ...extra }, encoding: 'utf8', timeout: 60_000 });
+      expect(r.status, r.stderr).toBe(0);
+      return JSON.parse(r.stdout.trim().split('\n').pop());
+    };
+    const paused = run({ NODESIGN_IMAGE_PAUSED: '维护中，恢复时间见站内公告' });
+    expect(paused).toMatchObject({ available: false, paused: true, detail: '维护中，恢复时间见站内公告', isError: true });
+    expect(paused.desc).toMatch(/^⛔ CURRENTLY UNAVAILABLE — 生图通道已暂停：维护中，恢复时间见站内公告 Do not call this tool; tell the user it is paused/);
+    expect(paused.text).toBe('generate_image 不可用：生图通道已暂停：维护中，恢复时间见站内公告。把这句话原话转告用户，恢复前不要重试本工具。');
+    expect(paused.desc + paused.text).not.toMatch(/装法|install|重启 Nodesign/);
+    expect(paused.direct).toEqual({ isError: true, text: paused.text });
+    // 1 / on 用默认理由；0 / off 等于没设
+    expect(run({ NODESIGN_IMAGE_PAUSED: '1' })).toMatchObject({ paused: true, detail: '恢复时间见站内公告' });
+    for (const off of [{}, { NODESIGN_IMAGE_PAUSED: 'off' }]) {
+      const open = run(off);
+      expect(open).toMatchObject({ available: true, paused: false, desc: 'ORIG', isError: false, text: 'ran' });
+    }
+  });
 });
